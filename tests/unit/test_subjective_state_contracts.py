@@ -5,6 +5,8 @@ from __future__ import annotations
 from typing import Any
 
 import pytest
+from hypothesis import given, settings
+from hypothesis import strategies as st
 
 from agents.models import AgentId, AgentState
 from memory.models import (
@@ -18,6 +20,34 @@ from memory.models import (
 )
 from social.models import CommunicationEnvelope, EnvelopeId
 from world.identifiers import EntityId
+
+_AGENT_IDS = st.text(
+    alphabet=st.characters(whitelist_categories=("L", "N"), whitelist_characters="-_"),
+    min_size=1,
+    max_size=24,
+)
+_CONTENTS = st.dictionaries(
+    keys=st.text(min_size=1, max_size=12),
+    values=st.one_of(st.booleans(), st.integers(-100, 100), st.text(max_size=24)),
+    max_size=3,
+)
+
+
+@given(owner=_AGENT_IDS, foreign=_AGENT_IDS, content=_CONTENTS)
+@settings(max_examples=30, deadline=None)
+def test_property_cross_owner_memory_write_fails(
+    owner: str, foreign: str, content: dict[str, Any]
+) -> None:
+    if owner == foreign:
+        return
+    store = MemoryStore(AgentId(owner))
+    record = MemoryRecord(
+        memory_id=MemoryId("m-1"),
+        owner_id=AgentId(foreign),
+        content=content,
+    )
+    with pytest.raises(OwnershipError, match="does not match"):
+        store.write(record)
 
 
 def test_memory_snapshots_are_detached_and_owner_bound() -> None:

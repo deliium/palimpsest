@@ -149,6 +149,31 @@ def test_migration_settings_accept_test_database_url_only(
     assert "hunter2" not in repr(settings)
 
 
+def test_migration_settings_reject_disagreeing_database_urls(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv(f"{SETTINGS_PREFIX}DATABASE_URL", SECRET_DSN)
+    monkeypatch.setenv(
+        f"{SETTINGS_PREFIX}TEST_DATABASE_URL",
+        "postgresql+asyncpg://palimpsest:hunter2@127.0.0.1:5432/palimpsest_test",
+    )
+    with pytest.raises(SettingsError, match="Ambiguous migration target"):
+        load_migration_settings(env_file=False)
+
+
+def test_migration_settings_accept_agreeing_database_urls(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    shared = (
+        "postgresql+asyncpg://palimpsest:hunter2@127.0.0.1:5432/palimpsest_test"
+    )
+    monkeypatch.setenv(f"{SETTINGS_PREFIX}DATABASE_URL", shared)
+    monkeypatch.setenv(f"{SETTINGS_PREFIX}TEST_DATABASE_URL", shared)
+    settings = load_migration_settings(env_file=False)
+    assert settings.database_dsn() == shared
+    assert "hunter2" not in repr(settings)
+
+
 def test_migration_settings_require_a_database_url() -> None:
     with pytest.raises(SettingsError, match="PALIMPSEST_DATABASE_URL"):
         load_migration_settings(env_file=False)

@@ -8,6 +8,8 @@ import random
 from pathlib import Path
 
 import pytest
+from hypothesis import given, settings
+from hypothesis import strategies as st
 
 from simulation.clock import LogicalClock, Tick, require_tick
 from simulation.contracts import (
@@ -33,6 +35,14 @@ from world.identifiers import WorldRevision
 
 SRC = Path(__file__).resolve().parents[2] / "src" / "simulation"
 
+_NON_EMPTY = st.text(min_size=1, max_size=24).filter(lambda value: value.strip() != "")
+_SEEDS = st.integers(min_value=0, max_value=2**31 - 1)
+_SCOPES = st.builds(
+    StreamScope,
+    namespace=_NON_EMPTY,
+    names=st.lists(_NON_EMPTY, min_size=1, max_size=4).map(tuple),
+)
+
 
 def test_boolean_and_negative_seeds_are_rejected() -> None:
     with pytest.raises(ValueError, match="non-negative integer"):
@@ -54,12 +64,51 @@ def test_named_streams_are_order_independent_and_stable() -> None:
     assert first_alpha != first_beta
 
 
+@given(seed=_SEEDS, scope=_SCOPES, count=st.integers(min_value=1, max_value=16))
+@settings(max_examples=40, deadline=None)
+def test_property_named_streams_are_deterministic(
+    seed: int, scope: StreamScope, count: int
+) -> None:
+    config = SimulationRunConfig(seed=seed)
+    assert sample_stream(config, scope, count) == sample_stream(config, scope, count)
+    assert derive_scoped_id(config, scope) == derive_scoped_id(config, scope)
+    assert derive_run_id(config) == derive_run_id(config)
+
+
+@given(
+    seed=_SEEDS,
+    left=_SCOPES,
+    right=_SCOPES,
+)
+@settings(max_examples=40, deadline=None)
+def test_property_distinct_scopes_do_not_alias(
+    seed: int, left: StreamScope, right: StreamScope
+) -> None:
+    if left == right:
+        return
+    config = SimulationRunConfig(seed=seed)
+    assert derive_scoped_id(config, left) != derive_scoped_id(config, right)
+    assert sample_stream(config, left, 4) != sample_stream(config, right, 4)
+
+
 def test_distinct_scopes_do_not_alias() -> None:
     config = SimulationRunConfig(seed=7)
     left = StreamScope(namespace="agent", names=("ab", "c"))
     right = StreamScope(namespace="agent", names=("a", "bc"))
     assert sample_stream(config, left, 4) != sample_stream(config, right, 4)
     assert derive_scoped_id(config, left) != derive_scoped_id(config, right)
+
+
+@given(seed=_SEEDS, scope=_SCOPES)
+@settings(max_examples=25, deadline=None)
+def test_property_global_rng_state_is_unchanged(
+    seed: int, scope: StreamScope
+) -> None:
+    before = random.getstate()
+    config = SimulationRunConfig(seed=seed)
+    create_named_stream(config, scope)
+    sample_stream(config, scope, 8)
+    assert random.getstate() == before
 
 
 def test_global_rng_state_is_unchanged() -> None:

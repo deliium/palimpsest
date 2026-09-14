@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import os
 import re
 from enum import StrEnum
 from pathlib import Path
@@ -242,16 +241,31 @@ def load_migration_settings(
     """Settings for Alembic. URL comes from validated settings, not alembic.ini.
 
     Integration tests may supply only ``PALIMPSEST_TEST_DATABASE_URL``.
+    When both ``PALIMPSEST_DATABASE_URL`` and ``PALIMPSEST_TEST_DATABASE_URL``
+    are present and disagree, refuse to migrate rather than guessing.
     """
-    if "database_url" in overrides or os.environ.get(f"{SETTINGS_PREFIX}DATABASE_URL"):
+    if "database_url" in overrides:
         return load_runtime_settings(env_file=env_file, **overrides)
-    test_url = os.environ.get(f"{SETTINGS_PREFIX}TEST_DATABASE_URL")
-    if test_url:
-        return load_runtime_settings(
-            env_file=env_file,
-            database_url=test_url,
-            test_database_url=test_url,
-            **overrides,
-        )
+
+    settings = load_settings(env_file=env_file, **overrides)
+    database_url = settings.database_url
+    test_database_url = settings.test_database_url
+
+    if database_url is not None and test_database_url is not None:
+        if database_url.get_secret_value() != test_database_url.get_secret_value():
+            raise SettingsError(
+                "Ambiguous migration target: PALIMPSEST_DATABASE_URL and "
+                "PALIMPSEST_TEST_DATABASE_URL disagree; refusing to migrate"
+            )
+        return settings.require_runtime_database()
+
+    if database_url is not None:
+        return settings.require_runtime_database()
+
+    if test_database_url is not None:
+        return settings.model_copy(
+            update={"database_url": test_database_url}
+        ).require_runtime_database()
+
     raise SettingsError("PALIMPSEST_DATABASE_URL is required at runtime")
 

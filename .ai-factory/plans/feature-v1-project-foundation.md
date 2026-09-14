@@ -3,6 +3,10 @@
 Branch: feature/v1-project-foundation
 Created: 2026-09-13
 
+## Roadmap Linkage
+
+Milestone: **M1 — V1 Project Foundation** (see `.ai-factory/ROADMAP.md`)
+
 ## Settings
 - Testing: yes
 - Logging: verbose
@@ -133,21 +137,21 @@ Create a Python 3.12+ modular-monolith foundation for reproducible, discrete, te
 
 ### Phase 3: API and Containers
 
-- [ ] Task 9: Bootstrap FastAPI application lifecycle and health endpoint
+- [x] Task 9: Bootstrap FastAPI application lifecycle and health endpoint
   - Deliverable: Implement an injectable `create_app(settings=None, database_factory=None)` composition root, configure logging before application events, create/store database resources during lifespan, dispose them on shutdown and partial-startup failure, and expose `GET /health` with exact payload `{"status": "ok"}` as database-independent liveness. Add `X-Request-ID` middleware that accepts only bounded safe inbound values, otherwise generates an operational ID, returns it on success/error responses, and clears context after every request.
   - Files: `src/api/app.py`, `src/api/routes/__init__.py`, `src/api/routes/health.py`, `src/api/dependencies.py`, `src/api/middleware.py`, `tests/unit/test_app_lifecycle.py`, `tests/unit/test_health.py`.
   - Expected behavior: Tests explicitly enter FastAPI lifespan while using httpx ASGI transport; app import and health routing do not connect to PostgreSQL; injected fakes prove allocation/disposal exactly once; `/health` returns JSON `200`, unsupported methods return `405`, and correlation context does not leak across concurrent success/failure requests.
   - Logging requirements: Log request start/completion at DEBUG with safe method/path/status/duration and operational request ID, app startup/shutdown at INFO, malformed inbound correlation IDs at WARNING, and unhandled failures at ERROR. Never log bodies, authorization headers, arbitrary query values, settings, or domain identifiers as request IDs.
   - Dependencies: Tasks 2 and 6-8.
 
-- [ ] Task 10: Containerize the API, migrations, PostgreSQL, and pgvector development stack
+- [x] Task 10: Containerize the API, migrations, PostgreSQL, and pgvector development stack
   - Deliverable: Create a multi-stage Dockerfile pinned to an immutable Python 3.12 slim image reference, install from `uv.lock` without re-resolution, and run Uvicorn as a non-root user on port 8000. Define modern Docker Compose v2 services using a pinned PostgreSQL 17 pgvector image, one-shot Alembic migration, and API startup after migration success; use Python rather than undeclared `curl` for the API health check. Keep development credentials explicitly non-production and document that expanded `docker compose config` output is not secret-safe.
   - Files: `Dockerfile`, `.dockerignore`, `compose.yaml`, `tests/compose/test_stack.py`.
   - Expected behavior: `docker compose config --quiet` and locked image build succeed; database health precedes migration; migration exits zero before API startup; `/health` succeeds; API runs as non-root; an opt-in smoke test uses a unique project name/host port, captures redacted logs on failure, and always removes only its own volumes/orphans. Ordinary unit/integration runs never invoke Docker.
   - Logging requirements: Route logs to stdout/stderr as structured records; service lifecycle is INFO, dependency waits are DEBUG, degraded health is WARNING, and terminal startup/migration failures are ERROR. Test log capture redacts credentials and never prints expanded environment values.
   - Dependencies: Tasks 1, 8-9.
 
-- [ ] Task 11: Document and verify the foundation contract end to end
+- [x] Task 11: Document and verify the foundation contract end to end
   - Deliverable: Document locked setup, environment precedence, safe test-database provisioning, local and Docker workflows, migration commands, exact test commands, architecture matrix/public facades, all eleven invariants, logging/redaction policy, seed/ID/clock derivation, LLM provenance/replay limits, and deferred simulation scope. Run each task's existing unit, property-based, typing, architecture, PostgreSQL/pgvector migration, wheel-install, and opt-in Compose checks; do not defer unfinished implementation or tests into this task.
   - Files: `README.md`, `docs/architecture.md`, `docs/configuration.md`, `docs/development.md`, existing tests from Tasks 1-10.
   - Expected behavior: A new contributor can install, configure, migrate, run, and test the foundation from documented commands. Checks prove the structural preconditions for the invariants, deep immutability/ownership, trust-stage separation, deterministic local primitives, lifecycle/health behavior, database/migration safety, pgvector availability, and isolated container startup; behavioral simulation enforcement remains explicitly deferred.

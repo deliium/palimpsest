@@ -310,7 +310,6 @@ source_modules = [
     "social",
     "llm",
     "simulation",
-    "api",
     "analysis",
 ]
 forbidden_modules = ["sqlalchemy", "alembic", "asyncpg"]

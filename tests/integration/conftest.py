@@ -67,8 +67,19 @@ def test_database_settings() -> Settings:
 
 @pytest.fixture(scope="session")
 def migrated_test_database(test_database_settings: Settings) -> Iterator[Settings]:
+    test_dsn = test_database_settings.database_dsn()
+    env_database_url = os.environ.get(f"{SETTINGS_PREFIX}DATABASE_URL")
+    if env_database_url and env_database_url != test_dsn:
+        log_recoverable(
+            "PALIMPSEST_DATABASE_URL differs from validated test database; "
+            "integration migrations use the test database only"
+        )
+    config = alembic_config()
+    # Bind Alembic to the validated disposable DSN so env.py does not prefer
+    # a conflicting PALIMPSEST_DATABASE_URL from the process environment.
+    config.set_main_option("sqlalchemy.url", test_dsn)
     try:
-        command.upgrade(alembic_config(), "head")
+        command.upgrade(config, "head")
     except Exception as exc:
         if _is_privilege_error(exc):
             log_recoverable("pgvector CREATE EXTENSION privilege is not available")

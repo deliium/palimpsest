@@ -31,6 +31,10 @@ class SessionLike(Protocol):
     async def close(self) -> None: ...
 
 
+class DisposableEngine(Protocol):
+    async def dispose(self) -> None: ...
+
+
 class EngineKwargs(TypedDict):
     pool_size: int
     max_overflow: int
@@ -124,7 +128,7 @@ async def check_readiness(engine: AsyncEngine) -> None:
     _LOGGER.info("database_ready")
 
 
-async def dispose_engine(engine: AsyncEngine) -> None:
+async def dispose_engine(engine: DisposableEngine) -> None:
     _LOGGER.debug("engine_disposing")
     await engine.dispose()
     _LOGGER.debug("engine_disposed")

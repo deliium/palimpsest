@@ -1,0 +1,71 @@
+# Palimpsest local development stack.
+#
+# Credentials in this file are non-production development defaults.
+# `docker compose config` expands interpolations and is not secret-safe;
+# do not paste expanded output into logs, tickets, or commits.
+
+name: palimpsest
+
+services:
+  db:
+    image: pgvector/pgvector:0.8.6-pg17@sha256:cf134a767f474095eeba57e0117be8e568e011a63f33fbf252f14c9b760f8e6f
+    environment:
+      POSTGRES_USER: palimpsest
+      POSTGRES_PASSWORD: palimpsest
+      POSTGRES_DB: palimpsest
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U palimpsest -d palimpsest"]
+      interval: 2s
+      timeout: 5s
+      retries: 20
+      start_period: 5s
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
+  migrate:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      # Host network during build so `uv sync` can reach PyPI when bridge DNS fails.
+      network: host
+    command: ["alembic", "upgrade", "head"]
+    environment:
+      PALIMPSEST_ENVIRONMENT: production
+      PALIMPSEST_LOG_LEVEL: INFO
+      PALIMPSEST_DATABASE_URL: postgresql+asyncpg://palimpsest:palimpsest@db:5432/palimpsest
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: "no"
+
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      network: host
+    environment:
+      PALIMPSEST_ENVIRONMENT: production
+      PALIMPSEST_LOG_LEVEL: INFO
+      PALIMPSEST_API_HOST: 0.0.0.0
+      PALIMPSEST_API_PORT: 8000
+      PALIMPSEST_DATABASE_URL: postgresql+asyncpg://palimpsest:palimpsest@db:5432/palimpsest
+    ports:
+      - "${PALIMPSEST_API_PUBLISH_PORT:-8000}:8000"
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "python",
+          "-c",
+          "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=2)",
+        ]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+      start_period: 5s
+
+volumes:
+  postgres_data:

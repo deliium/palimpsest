@@ -14,7 +14,12 @@ from sqlalchemy.ext.asyncio import create_async_engine
 
 from infrastructure.logging import get_logger, log_setup_failure
 from infrastructure.orm import metadata
-from infrastructure.settings import load_migration_settings, redact_secrets
+from infrastructure.settings import (
+    Settings,
+    load_migration_settings,
+    load_runtime_settings,
+    redact_secrets,
+)
 
 config = context.config
 _ = config.get_main_option("script_location")
@@ -23,8 +28,30 @@ _LOGGER = get_logger("infrastructure.migrations")
 REVISION_HEAD = "0001"
 
 
+def _settings_for_migration() -> Settings:
+    """Prefer a programmatic Config URL; otherwise load validated settings.
+
+    Integration fixtures set ``sqlalchemy.url`` to the validated disposable
+    test DSN so dual-URL environments cannot migrate the wrong database.
+    """
+    configured = config.get_main_option("sqlalchemy.url")
+    if configured:
+        _LOGGER.debug(
+            "migration_target_resolved",
+            source="alembic_config",
+            fix="integration_migration_target",
+        )
+        return load_runtime_settings(env_file=False, database_url=configured)
+    _LOGGER.debug(
+        "migration_target_resolved",
+        source="settings",
+        fix="integration_migration_target",
+    )
+    return load_migration_settings()
+
+
 def run_migrations_offline() -> None:
-    settings = load_migration_settings()
+    settings = _settings_for_migration()
     context.configure(
         url=settings.database_dsn(),
         target_metadata=target_metadata,
@@ -53,7 +80,7 @@ def _configure_connection(connection: Connection) -> None:
 
 
 async def run_async_migrations() -> None:
-    settings = load_migration_settings()
+    settings = _settings_for_migration()
     engine = create_async_engine(
         settings.database_dsn(),
         poolclass=pool.NullPool,

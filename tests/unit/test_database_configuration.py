@@ -143,7 +143,7 @@ async def test_transient_readiness_failure_does_not_connect_beyond_probe() -> No
 
 async def test_dispose_engine_is_idempotent_for_fake() -> None:
     engine = FakeEngine()
-    await dispose_engine(engine)  # type: ignore[arg-type]
+    await dispose_engine(engine)
     assert engine.disposed is True
 
 

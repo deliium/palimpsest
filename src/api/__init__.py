@@ -1,3 +1,5 @@
 """HTTP composition root. Does not mutate domain state directly."""
 
-__all__: list[str] = []
+from api.app import create_app
+
+__all__ = ["create_app"]
