@@ -33,5 +33,5 @@ COPY --from=builder --chown=palimpsest:palimpsest /app/.venv /app/.venv
 COPY --from=builder --chown=palimpsest:palimpsest /app/alembic.ini /app/alembic.ini
 COPY --from=builder --chown=palimpsest:palimpsest /app/alembic /app/alembic
 USER palimpsest
-EXPOSE 8000
-CMD ["uvicorn", "api.app:create_app", "--factory", "--host", "0.0.0.0", "--port", "8000"]
+EXPOSE 8080
+CMD ["uvicorn", "api.app:create_app", "--factory", "--host", "0.0.0.0", "--port", "8080"]

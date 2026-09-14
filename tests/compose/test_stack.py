@@ -62,7 +62,7 @@ def test_dockerfile_pins_python_digest_and_frozen_lock() -> None:
     assert "UV_PROJECT_ENVIRONMENT=/app/.venv" in text
     assert "USER palimpsest" in text
     assert "--port" in text
-    assert "8000" in text
+    assert "8080" in text
     assert "curl" not in text.lower()
 
 
@@ -82,7 +82,7 @@ def test_compose_config_quiet() -> None:
     docker = _docker()
     _LOGGER.debug("compose_config_wait")
     env = os.environ.copy()
-    env["PALIMPSEST_API_PUBLISH_PORT"] = "8000"
+    env["PALIMPSEST_API_PUBLISH_PORT"] = "8080"
     _run(
         [docker, "compose", "-f", str(COMPOSE_FILE), "config", "--quiet"],
         env=env,
@@ -173,7 +173,7 @@ def test_stack_health_and_non_root_api(
             str(COMPOSE_FILE),
             "port",
             "api",
-            "8000",
+            "8080",
         ],
         env=env,
     )

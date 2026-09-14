@@ -10,7 +10,7 @@ All application settings use the **`PALIMPSEST_`** prefix only. Environment vari
 | --- | --- |
 | `PALIMPSEST_ENVIRONMENT` | `local` (console logs), `test`, or `production` (JSON logs) |
 | `PALIMPSEST_LOG_LEVEL` | Only application log-level setting: `DEBUG`, `INFO`, `WARNING`, `ERROR` |
-| `PALIMPSEST_API_HOST` / `PALIMPSEST_API_PORT` | Bind metadata for operators; Uvicorn in Docker listens on `0.0.0.0:8000` |
+| `PALIMPSEST_API_HOST` / `PALIMPSEST_API_PORT` | Bind metadata for operators; Uvicorn in Docker listens on `0.0.0.0:8080` |
 | `PALIMPSEST_DATABASE_URL` | Async SQLAlchemy URL, **`postgresql+asyncpg://` only**. Required at runtime startup, not at import |
 | `PALIMPSEST_TEST_DATABASE_URL` | Disposable integration-test URL; database **name** must contain `palimpsest_test` and must not be `postgres` / `template0` / `template1` |
 | `PALIMPSEST_POOL_SIZE` / `PALIMPSEST_MAX_OVERFLOW` / `PALIMPSEST_POOL_TIMEOUT_SECONDS` | Async pool bounds (`pool_pre_ping` is always on) |

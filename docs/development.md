@@ -39,18 +39,39 @@ Set `PALIMPSEST_TEST_DEBUG=1` for concise test-harness DEBUG on stderr.
 Alembic does **not** store a database URL in `alembic.ini`. `alembic/env.py` loads validated settings (`PALIMPSEST_DATABASE_URL`, or the test URL for integration).
 
 ```bash
+./scripts/migrate.sh
+# or:
 export PALIMPSEST_DATABASE_URL='postgresql+asyncpg://palimpsest:palimpsest@127.0.0.1:5432/palimpsest'
 uv run --frozen --python 3.12.14 alembic upgrade head
 ```
 
 Revision `0001` runs `CREATE EXTENSION IF NOT EXISTS vector` and creates no application tables. Downgrade is a documented no-op. Never use `metadata.create_all()`.
 
+## Local run scripts
+
+Convenience wrappers live under `scripts/` (repo root as cwd):
+
+| Script | Equivalent |
+| --- | --- |
+| `./scripts/up.sh` | `docker compose up --build` |
+| `./scripts/down.sh` | `docker compose down` |
+| `./scripts/api.sh` | Compose `db` → `alembic upgrade head` → host Uvicorn `--reload` |
+| `./scripts/migrate.sh` | `uv run --frozen --python 3.12.14 alembic upgrade head` |
+
+`api.sh` and `migrate.sh` create `.env` from `.env.example` when missing and ensure a development `PALIMPSEST_DATABASE_URL` is set. They still honor an already-exported URL or an existing `.env`.
+
 ## Local API
 
-Runtime requires `PALIMPSEST_DATABASE_URL`. Factory entrypoint:
+Runtime requires `PALIMPSEST_DATABASE_URL`. Preferred:
 
 ```bash
-uv run --frozen --python 3.12.14 uvicorn api.app:create_app --factory --host 127.0.0.1 --port 8000
+./scripts/api.sh
+```
+
+Factory entrypoint without the wrapper:
+
+```bash
+uv run --frozen --python 3.12.14 uvicorn api.app:create_app --factory --host 127.0.0.1 --port 8080
 ```
 
 `GET /health` returns exactly `{"status":"ok"}` without querying PostgreSQL. Unsupported methods return 405. `X-Request-ID` is accepted when safe, otherwise generated.
@@ -58,10 +79,11 @@ uv run --frozen --python 3.12.14 uvicorn api.app:create_app --factory --host 127
 ## Docker Compose
 
 ```bash
-docker compose up --build
+./scripts/up.sh
+# or: docker compose up --build
 ```
 
-Order: database health → one-shot `alembic upgrade head` → API. The API image runs Uvicorn as uid **1001** on port 8000. Healthcheck uses Python `urllib`, not `curl`.
+Order: database health → one-shot `alembic upgrade head` → API. The API image runs Uvicorn as uid **1001** on port 8080. Healthcheck uses Python `urllib`, not `curl`.
 
 Images are digest-pinned (Python 3.12.14 slim, pgvector PostgreSQL 17). Install uses `uv sync --frozen --no-dev --no-editable`. Compose builds use `network: host` so `uv` can resolve PyPI when the Docker bridge DNS is unavailable. Manual image builds on the same hosts may need `docker build --network=host`.
 
@@ -70,6 +92,7 @@ Development passwords in `compose.yaml` are **non-production**. Expanded `docker
 ```bash
 docker compose config --quiet
 uv run --frozen --python 3.12.14 pytest -m compose
+./scripts/down.sh
 ```
 
 ## See also

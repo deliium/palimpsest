@@ -73,7 +73,7 @@ class Settings(BaseSettings):
     environment: AppEnvironment = AppEnvironment.LOCAL
     log_level: LogLevel = LogLevel.INFO
     api_host: str = "127.0.0.1"
-    api_port: Annotated[int, Field(ge=1, le=65535)] = 8000
+    api_port: Annotated[int, Field(ge=1, le=65535)] = 8080
     database_url: SecretStr | None = Field(default=None, repr=False)
     test_database_url: SecretStr | None = Field(default=None, repr=False)
     pool_size: Annotated[int, Field(ge=1)] = 5

@@ -22,13 +22,26 @@ Locked installs do not re-resolve dependencies. Copy `.env.example` to `.env` on
 ## Quick start
 
 ```bash
+# Full stack (Postgres + migrations + API) via Docker Compose
+./scripts/up.sh
+
+# Or: API on the host with Compose Postgres only (reload)
+./scripts/api.sh
+
 # Unit and architecture tests (no Docker, no PostgreSQL)
 uv run --frozen --python 3.12.14 pytest
 
-# API liveness after Compose is up
-curl -s http://127.0.0.1:8000/health
+# API liveness
+curl -s http://127.0.0.1:8080/health
 # {"status":"ok"}
 ```
+
+| Script | Purpose |
+| --- | --- |
+| `./scripts/up.sh` | `docker compose up --build` (full stack) |
+| `./scripts/api.sh` | Host Uvicorn + Compose `db`, migrate, `--reload` |
+| `./scripts/migrate.sh` | `alembic upgrade head` against configured DSN |
+| `./scripts/down.sh` | `docker compose down` (add `--volumes` to drop data) |
 
 Development credentials in `compose.yaml` are **not production**. `docker compose config` expands values and is **not secret-safe**.
 
