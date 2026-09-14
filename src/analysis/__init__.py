@@ -1,3 +1,5 @@
 """Read-only analysis ports over immutable world events and exports."""
 
-__all__: list[str] = []
+from analysis.contracts import EventSource, ExportSource
+
+__all__ = ["EventSource", "ExportSource"]

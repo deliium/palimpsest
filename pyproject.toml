@@ -73,9 +73,12 @@ packages = [
 include = [
     "/src",
     "/tests",
+    "/alembic",
+    "/alembic.ini",
     "/pyproject.toml",
     "/LICENSE",
     "/.python-version",
+    "/.env.example",
 ]
 
 [tool.pytest.ini_options]

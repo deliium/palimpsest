@@ -99,7 +99,7 @@ Create a Python 3.12+ modular-monolith foundation for reproducible, discrete, te
 
 <!-- Commit checkpoint: tasks 1-4 -->
 
-- [ ] Task 5: Establish deterministic run primitives and read-only exports
+- [x] Task 5: Establish deterministic run primitives and read-only exports
   - Deliverable: Define non-optional `SimulationRunConfig.seed`, run/export metadata, a logical tick clock, deterministic namespaced ID generation, and versioned named random-stream derivation from canonical inputs using a stable digest rather than Python `hash()`. Restrict randomness to independent `random.Random` instances; add read-only analysis event/export source protocols. Record effective seed and derivation version while documenting that exact external LLM replay requires recorded responses or deterministic stubs.
   - Files: `src/simulation/models.py`, `src/simulation/contracts.py`, `src/simulation/randomness.py`, `src/simulation/identifiers.py`, `src/simulation/clock.py`, `src/analysis/contracts.py`, affected package `__init__.py` files, `tests/unit/test_reproducibility_contracts.py`, `tests/unit/test_analysis_contracts.py`.
   - Expected behavior: The same canonical seed/scope inputs produce golden streams and IDs regardless of stream creation or agent scheduling order; distinct scopes do not alias; global RNG state remains unchanged; booleans/invalid seeds and omitted domain IDs/times are rejected; operational HTTP/log metadata cannot populate domain identifiers.
@@ -108,21 +108,21 @@ Create a Python 3.12+ modular-monolith foundation for reproducible, discrete, te
 
 ### Phase 2: Runtime Infrastructure
 
-- [ ] Task 6: Implement settings, environment handling, and structured logging
+- [x] Task 6: Implement settings, environment handling, and structured logging
   - Deliverable: Define strict Pydantic settings for environment, API, logging, async PostgreSQL URL/pool bounds, test database safety, and an optional composition-layer seed default that is always copied into explicit run configuration. Load `PALIMPSEST_` environment variables with precedence over a documented project-root `.env` lookup without requiring secrets at import time. Configure idempotent stdlib/structlog integration, console output locally, JSON elsewhere, UTC operational timestamps, exception rendering, and isolated context variables.
   - Files: `src/infrastructure/settings.py`, `src/infrastructure/logging.py`, `.env.example`, `tests/unit/test_settings.py`, `tests/unit/test_logging.py`.
   - Expected behavior: App startup clearly rejects missing runtime database configuration; invalid environments, pool bounds, seeds, and non-`postgresql+asyncpg` URLs fail; booleans are rejected as integer settings; environment overrides `.env`; credentials remain absent from model representations, validation errors, normal logs, and exceptions; repeated setup owns one handler without duplicate records.
   - Logging requirements: Emit secret-safe bootstrap details at DEBUG, major lifecycle events at INFO, recoverable inconsistencies at WARNING, and setup failures at ERROR. Preserve unrelated handlers where possible and prevent duplicate Uvicorn/application request records. Never serialize settings wholesale or log DSNs, credentials, bodies, LLM data, memories, or embeddings.
   - Dependencies: Tasks 1, 2, and 5.
 
-- [ ] Task 7: Add asynchronous SQLAlchemy database lifecycle infrastructure
+- [x] Task 7: Add asynchronous SQLAlchemy database lifecycle infrastructure
   - Deliverable: Add SQLAlchemy 2 async engine/session factories, declarative metadata with deterministic naming conventions, explicit transaction ownership, and a `SELECT 1` readiness probe. Engine construction must not connect; request session helpers close on success, roll back and close on failure, and never auto-commit application work.
   - Files: `src/infrastructure/database.py`, `src/infrastructure/orm.py`, `tests/unit/test_database_configuration.py`, `tests/integration/test_database.py`.
   - Expected behavior: Pool bounds, `pool_pre_ping`, session lifecycle, readiness, and disposal are covered; unit tests use fakes without external I/O; integration tests use only a validated disposable `PALIMPSEST_TEST_DATABASE_URL` and isolate their schema/session state.
   - Logging requirements: Log engine/session lifecycle and readiness boundaries at DEBUG, successful connectivity at INFO, transient readiness failures at WARNING, and connection/transaction failures at ERROR. Redact DSNs, credentials, SQL parameters, and vector values.
   - Dependencies: Tasks 1, 2, and 6.
 
-- [ ] Task 8: Bootstrap Alembic and the pgvector integration-test lifecycle
+- [x] Task 8: Bootstrap Alembic and the pgvector integration-test lifecycle
   - Deliverable: Configure async Alembic with model metadata imports, type comparison, and a URL supplied programmatically from validated settings rather than stored in `alembic.ini`. Add an initial migration containing `CREATE EXTENSION IF NOT EXISTS vector`, a documented no-op downgrade, and no application tables. Build a guarded integration fixture that verifies a test-database naming marker before destructive setup, handles session isolation, and requires extension-creation privilege.
   - Files: `alembic.ini`, `alembic/env.py`, `alembic/script.py.mako`, `alembic/versions/0001_enable_pgvector.py`, `tests/integration/conftest.py`, `tests/integration/test_migrations.py`.
   - Expected behavior: An empty PostgreSQL 17/pgvector database upgrades to exactly one head; a repeated `upgrade head` succeeds; `vector` exists; no simulation tables exist; `metadata.create_all()` is never used; unsafe or ambiguous database targets fail before migration; local prerequisite skipping is explicit and CI integration runs require the database.
