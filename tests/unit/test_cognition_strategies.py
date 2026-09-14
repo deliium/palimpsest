@@ -1,0 +1,43 @@
+"""Scripted and stub LLM-backed strategies share the cognition protocol."""
+
+from __future__ import annotations
+
+from agents.cognition.contracts import Perspective
+from agents.models import AgentId
+from llm.models import LLMResponse
+from tests.typecheck.cognition_strategies import (
+    ScriptedCognitionStrategy,
+    StubLLMBackedStrategy,
+)
+from world.identifiers import EntityId, WorldRevision
+from world.observations import Observation
+
+
+class _Client:
+    def complete(self, prompt: str) -> LLMResponse:
+        return LLMResponse(provider="stub", model="echo", text=prompt, token_count=1)
+
+
+def _perspective() -> Perspective:
+    agent_id = AgentId("agent-1")
+    return Perspective(
+        agent_id=agent_id,
+        observation=Observation(
+            observer_id=EntityId("ent-1"),
+            revision=WorldRevision(0),
+            payload={},
+        ),
+        memories=(),
+        beliefs=(),
+        inbox=(),
+    )
+
+
+def test_scripted_and_stub_llm_strategies_share_propose_signature() -> None:
+    perspective = _perspective()
+    scripted = ScriptedCognitionStrategy().propose(perspective)
+    stub = StubLLMBackedStrategy(_Client()).propose(perspective)
+    assert scripted.kind == "wait"
+    assert stub.kind == "wait"
+    assert scripted.actor_id == stub.actor_id == EntityId("ent-1")
+    assert stub.payload["provider"] == "stub"

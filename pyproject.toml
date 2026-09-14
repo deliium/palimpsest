@@ -1,0 +1,369 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "palimpsest"
+version = "0.1.0"
+description = "Reproducible, discrete, text-based multi-agent AI society experiments."
+license = "CC0-1.0"
+requires-python = ">=3.12"
+dependencies = [
+    "fastapi",
+    "uvicorn[standard]",
+    "pydantic>=2",
+    "pydantic-settings",
+    "sqlalchemy[asyncio]>=2",
+    "alembic",
+    "asyncpg",
+    "pgvector",
+    "structlog",
+]
+
+[dependency-groups]
+dev = [
+    "httpx",
+    "pytest",
+    "pytest-asyncio",
+    "hypothesis",
+    "pytest-cov",
+    "ruff",
+    "mypy",
+    "import-linter",
+]
+
+[tool.uv]
+package = true
+default-groups = ["dev"]
+required-environments = [
+    "sys_platform == 'linux' and platform_machine == 'x86_64'",
+    "sys_platform == 'darwin'",
+    "sys_platform == 'win32'",
+]
+
+[tool.palimpsest]
+log_level_env = "PALIMPSEST_LOG_LEVEL"
+python_version = "3.12.14"
+packages = [
+    "world",
+    "agents",
+    "memory",
+    "social",
+    "llm",
+    "simulation",
+    "api",
+    "analysis",
+    "infrastructure",
+]
+
+[tool.hatch.build.targets.wheel]
+packages = [
+    "src/world",
+    "src/agents",
+    "src/memory",
+    "src/social",
+    "src/llm",
+    "src/simulation",
+    "src/api",
+    "src/analysis",
+    "src/infrastructure",
+]
+
+[tool.hatch.build.targets.sdist]
+include = [
+    "/src",
+    "/tests",
+    "/pyproject.toml",
+    "/LICENSE",
+    "/.python-version",
+]
+
+[tool.pytest.ini_options]
+addopts = [
+    "--strict-markers",
+    "--strict-config",
+    "-m",
+    "not integration and not compose",
+]
+testpaths = ["tests"]
+markers = [
+    "unit: tests that must not require Docker or PostgreSQL",
+    "integration: tests that require a disposable PostgreSQL database",
+    "compose: opt-in Docker Compose smoke tests",
+    "architecture: import-boundary and structural checks",
+    "typecheck: fixtures consumed by static type checkers",
+]
+asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "function"
+asyncio_default_test_loop_scope = "function"
+filterwarnings = [
+    "error",
+]
+
+[tool.coverage.run]
+branch = true
+source_pkgs = [
+    "world",
+    "agents",
+    "memory",
+    "social",
+    "llm",
+    "simulation",
+    "api",
+    "analysis",
+    "infrastructure",
+]
+omit = [
+    "*/tests/*",
+]
+
+[tool.coverage.report]
+show_missing = true
+skip_empty = true
+
+[tool.ruff]
+target-version = "py312"
+src = ["src", "tests"]
+line-length = 88
+
+[tool.ruff.lint]
+select = [
+    "E",
+    "F",
+    "I",
+    "UP",
+    "B",
+    "ASYNC",
+    "RUF",
+]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**" = ["RUF012"]
+
+[tool.mypy]
+python_version = "3.12"
+mypy_path = "src"
+explicit_package_bases = true
+strict = true
+files = ["src", "tests"]
+warn_unused_ignores = true
+show_error_codes = true
+
+[[tool.mypy.overrides]]
+module = ["tests.*"]
+disallow_untyped_decorators = false
+
+[[tool.mypy.overrides]]
+module = ["asyncpg", "asyncpg.*"]
+ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+module = ["importlinter", "importlinter.*"]
+ignore_missing_imports = true
+
+[tool.importlinter]
+root_packages = [
+    "world",
+    "agents",
+    "memory",
+    "social",
+    "llm",
+    "simulation",
+    "api",
+    "analysis",
+    "infrastructure",
+]
+include_external_packages = true
+exclude_type_checking_imports = false
+
+[[tool.importlinter.contracts]]
+id = "world_does_not_import_bounded_modules"
+name = "World does not import other bounded modules"
+type = "forbidden"
+source_modules = ["world"]
+forbidden_modules = [
+    "agents",
+    "memory",
+    "social",
+    "llm",
+    "simulation",
+    "api",
+    "analysis",
+    "infrastructure",
+]
+
+[[tool.importlinter.contracts]]
+id = "base_agents_must_not_import_cognition"
+name = "Base agents must not import agents.cognition"
+type = "forbidden"
+source_modules = ["agents"]
+forbidden_modules = ["agents.cognition"]
+
+[[tool.importlinter.contracts]]
+id = "memory_and_social_are_independent"
+name = "Memory and social remain independent"
+type = "independence"
+modules = ["memory", "social"]
+
+[[tool.importlinter.contracts]]
+id = "llm_is_provider_neutral"
+name = "LLM imports no domain module"
+type = "forbidden"
+source_modules = ["llm"]
+forbidden_modules = [
+    "world",
+    "agents",
+    "memory",
+    "social",
+    "simulation",
+    "api",
+    "analysis",
+    "infrastructure",
+]
+
+[[tool.importlinter.contracts]]
+id = "infrastructure_imports_no_domain"
+name = "Infrastructure imports no domain policy"
+type = "forbidden"
+source_modules = ["infrastructure"]
+forbidden_modules = [
+    "world",
+    "agents",
+    "memory",
+    "social",
+    "llm",
+    "simulation",
+    "api",
+    "analysis",
+]
+
+[[tool.importlinter.contracts]]
+id = "simulation_does_not_import_api_or_analysis"
+name = "Simulation must not import api, analysis, or infrastructure"
+type = "forbidden"
+source_modules = ["simulation"]
+forbidden_modules = ["api", "analysis", "infrastructure"]
+
+[[tool.importlinter.contracts]]
+id = "api_does_not_import_domain_modules"
+name = "API may not import domain modules directly"
+type = "forbidden"
+source_modules = ["api"]
+forbidden_modules = [
+    "world",
+    "agents",
+    "memory",
+    "social",
+    "llm",
+    "analysis",
+]
+
+[[tool.importlinter.contracts]]
+id = "analysis_is_read_only"
+name = "Analysis may not import live aggregates or infrastructure"
+type = "forbidden"
+source_modules = ["analysis"]
+forbidden_modules = [
+    "agents",
+    "memory",
+    "social",
+    "llm",
+    "api",
+    "infrastructure",
+]
+
+[[tool.importlinter.contracts]]
+id = "private_world_authority"
+name = "world._state and world._transitions are simulation-only"
+type = "protected"
+protected_modules = ["world._state", "world._transitions"]
+allowed_importers = ["simulation", "world._state", "world._transitions"]
+as_packages = true
+
+[[tool.importlinter.contracts]]
+id = "domain_must_not_import_fastapi_stack"
+name = "Domain modules must not import FastAPI, Starlette, or Uvicorn"
+type = "forbidden"
+source_modules = [
+    "world",
+    "agents",
+    "memory",
+    "social",
+    "llm",
+    "simulation",
+    "analysis",
+    "infrastructure",
+]
+forbidden_modules = ["fastapi", "starlette", "uvicorn"]
+
+[[tool.importlinter.contracts]]
+id = "domain_must_not_import_orm_stack"
+name = "Only infrastructure may import SQLAlchemy, Alembic, or asyncpg"
+type = "forbidden"
+source_modules = [
+    "world",
+    "agents",
+    "memory",
+    "social",
+    "llm",
+    "simulation",
+    "api",
+    "analysis",
+]
+forbidden_modules = ["sqlalchemy", "alembic", "asyncpg"]
+
+[[tool.importlinter.contracts]]
+id = "no_provider_sdks"
+name = "LLM provider SDKs are forbidden"
+type = "forbidden"
+source_modules = [
+    "world",
+    "agents",
+    "memory",
+    "social",
+    "llm",
+    "simulation",
+    "api",
+    "analysis",
+    "infrastructure",
+]
+forbidden_modules = [
+    "openai",
+    "anthropic",
+    "groq",
+    "mistralai",
+    "cohere",
+    "litellm",
+    "langchain",
+    "llama_index",
+    "crewai",
+    "autogen",
+]
+
+[[tool.importlinter.contracts]]
+id = "agents_must_not_import_orchestration"
+name = "Agents package may not import orchestration or infrastructure"
+type = "forbidden"
+source_modules = ["agents"]
+forbidden_modules = ["simulation", "api", "analysis", "infrastructure"]
+
+[[tool.importlinter.contracts]]
+id = "memory_must_not_import_non_agent_layers"
+name = "Memory may not import non-agent domain layers"
+type = "forbidden"
+source_modules = ["memory"]
+forbidden_modules = ["llm", "simulation", "api", "analysis", "infrastructure"]
+
+[[tool.importlinter.contracts]]
+id = "social_must_not_import_non_agent_layers"
+name = "Social may not import non-agent domain layers"
+type = "forbidden"
+source_modules = ["social"]
+forbidden_modules = ["llm", "simulation", "api", "analysis", "infrastructure"]
+
+[[tool.importlinter.contracts]]
+id = "cognition_must_not_import_orchestration"
+name = "Cognition may not import orchestration or infrastructure"
+type = "forbidden"
+source_modules = ["agents.cognition"]
+forbidden_modules = ["simulation", "api", "analysis", "infrastructure"]
