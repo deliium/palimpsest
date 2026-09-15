@@ -72,6 +72,18 @@ RNG_ADAPTER_MODULE: Final[str] = "simulation.randomness"
 
 FASTAPI_STACK: Final[frozenset[str]] = frozenset({"fastapi", "starlette", "uvicorn"})
 ORM_STACK: Final[frozenset[str]] = frozenset({"sqlalchemy", "alembic", "asyncpg"})
+PYDANTIC_STACK: Final[frozenset[str]] = frozenset({"pydantic", "pydantic_core"})
+DOMAIN_NO_PYDANTIC: Final[frozenset[str]] = frozenset(
+    {
+        "world",
+        "agents",
+        "memory",
+        "social",
+        "llm",
+        "simulation",
+        "analysis",
+    }
+)
 PROVIDER_SDKS: Final[frozenset[str]] = frozenset(
     {
         "openai",
@@ -505,6 +517,13 @@ class _ModuleVisitor(ast.NodeVisitor):
                 imported,
                 line,
                 "SQLAlchemy/Alembic/asyncpg may only be imported by infrastructure",
+            )
+        if root in PYDANTIC_STACK and self.layer in DOMAIN_NO_PYDANTIC:
+            self._add(
+                "framework-leakage",
+                imported,
+                line,
+                "pydantic may not be imported by domain/simulation/analysis packages",
             )
         if root in PROVIDER_SDKS:
             self._add(

@@ -14,13 +14,13 @@ Palimpsest uses a modular-monolith layout of bounded packages under `src/`. Each
 
 ```text
 src/
-  world/            # agent-facing contracts + private _state/_transitions
-  agents/           # identity and subjective state
-  agents/cognition/ # CognitionStrategy leaf layer
-  memory/           # owner-bound memories/beliefs
-  social/           # communication envelopes
+  world/            # agent-facing contracts + private _state/_transitions/_operations
+  agents/           # identity, Agent, goals
+  agents/cognition/ # CognitionStrategy leaf layer (returns AgentCommand)
+  memory/           # owner-bound MemoryTrace/Belief
+  social/           # communication envelopes + Relationship
   llm/              # provider-neutral untrusted responses
-  simulation/       # seed, clock, RNG, IDs, export ports
+  simulation/       # seed, clock, RNG, IDs, admission, serialization, export ports
   analysis/         # read-only event/export protocols
   api/              # FastAPI composition root
   infrastructure/   # settings, logging, database adapters
@@ -41,7 +41,7 @@ tests/
 - ✅ `analysis` is read-only over immutable events / export contracts
 - ✅ `infrastructure` imports no domain policy
 - ❌ Domain packages must not import `infrastructure`, FastAPI, or ORM stacks
-- ❌ Non-simulation packages must not import `world._state` / `world._transitions`
+- ❌ Non-simulation packages must not import `world._state` / `world._transitions` / `world._operations`
 - ❌ Cross-module imports of private modules or transitive re-exports
 
 ## Layer/Module Communication

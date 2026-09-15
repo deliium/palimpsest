@@ -88,3 +88,14 @@ def test_world_state_is_not_the_transition_protocol() -> None:
     assert WorldTransition.__module__ == "world._transitions"
     assert WorldState.__qualname__ != WorldTransition.__qualname__
     assert World.__qualname__ != WorldState.__qualname__
+
+
+def test_public_facades_hide_authority_and_expose_codec() -> None:
+    import simulation
+    import world
+
+    assert "World" not in world.__all__
+    assert "WorldState" not in world.__all__
+    assert "encode_domain" in simulation.__all__
+    assert "decode_domain" in simulation.__all__
+    assert "DomainSerializationError" in simulation.__all__

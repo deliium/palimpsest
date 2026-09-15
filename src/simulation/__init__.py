@@ -40,10 +40,16 @@ from simulation.randomness import (
     create_rng,
     sample_stream,
 )
+from simulation.serialization import (
+    DomainSerializationError,
+    decode_domain,
+    encode_domain,
+)
 
 __all__ = [
     "DERIVATION_VERSION",
     "LLM_REPLAY_REQUIREMENT",
+    "DomainSerializationError",
     "ExportMetadata",
     "LogicalClock",
     "RunConfigurationPort",
@@ -55,6 +61,7 @@ __all__ = [
     "admit_agent_command",
     "create_named_stream",
     "create_rng",
+    "decode_domain",
     "derive_belief_id",
     "derive_entity_id",
     "derive_envelope_id",
@@ -68,6 +75,7 @@ __all__ = [
     "derive_scoped_id",
     "derive_world_id",
     "describe_run",
+    "encode_domain",
     "export_metadata",
     "log_invalid_setup",
     "log_replay_mismatch",

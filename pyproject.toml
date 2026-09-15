@@ -320,6 +320,21 @@ source_modules = [
 forbidden_modules = ["sqlalchemy", "alembic", "asyncpg"]
 
 [[tool.importlinter.contracts]]
+id = "domain_must_not_import_pydantic"
+name = "Domain, simulation, and analysis must not import Pydantic"
+type = "forbidden"
+source_modules = [
+    "world",
+    "agents",
+    "memory",
+    "social",
+    "llm",
+    "simulation",
+    "analysis",
+]
+forbidden_modules = ["pydantic", "pydantic_core"]
+
+[[tool.importlinter.contracts]]
 id = "no_provider_sdks"
 name = "LLM provider SDKs are forbidden"
 type = "forbidden"

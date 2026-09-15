@@ -10,11 +10,19 @@ Establish the modular-monolith foundation: packaging, bounded packages, typed co
 
 **Plan:** `.ai-factory/plans/feature-v1-project-foundation.md`
 
+### M1.5 — V1 Core Domain Model and Contracts
+
+**Status:** complete (branch `feature/v1-core-domain-model-contracts`)
+
+Typed objective/subjective models, closed fifteen-command trust pipeline, private world operations, immutable events, and schema-v1 serialization — still without a tick loop or behavioral resolution policy.
+
+**Plan:** `.ai-factory/plans/feature-v1-core-domain-model-contracts.md`
+
 ## Next (deferred)
 
 ### M2 — Simulation Loop (not started)
 
-Tick loop, action resolution, perception, and behavioral enforcement of invariants.
+Tick loop, action resolution, perception, and behavioral enforcement of invariants (builds on V1 contracts).
 
 ### M3 — Cognition and Providers (not started)
 

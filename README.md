@@ -2,7 +2,7 @@
 
 Reproducible, discrete, text-based multi-agent AI society experiments.
 
-This repository is a **Python 3.12+ modular monolith foundation**. It establishes package boundaries, typed contracts, configuration, persistence, an HTTP liveness API, observability, and containers. It does **not** implement a simulation loop, geography, cognition policies, or analysis metrics.
+This repository is a **Python 3.12+ modular monolith**. It establishes package boundaries, V1 typed domain contracts (world/agent models, closed action trust pipeline, schema-v1 serialization), configuration, persistence, an HTTP liveness API, observability, and containers. It does **not** implement a simulation tick loop or behavioral action-resolution policy.
 
 ## Requirements
 
@@ -58,14 +58,14 @@ Development credentials in `compose.yaml` are **not production**. `docker compos
 1. World state is authoritative.
 2. Agents receive immutable observations, never `WorldState`.
 3. Objective world state and subjective agent state remain separate.
-4. Every agent action is structured and typed.
+4. Every agent action is a closed typed command admitted by simulation before private world validation.
 5. LLM output is untrusted and cannot mutate world state directly.
-6. Objective `WorldEvent` values are immutable.
+6. Objective `WorldEvent` values are immutable closed occurrence facts.
 7. Agent memories and beliefs are mutable and may be incorrect.
 8. Memory is agent-scoped and is never shared automatically.
 9. Information crosses agent boundaries only through perception and explicit communication.
 10. Randomness is injected and derived from an explicit simulation seed.
-11. Cognition is a strategy protocol over the same world contracts.
+11. Cognition is a strategy protocol that returns `AgentCommand` over the same world contracts.
 
 See [docs/architecture.md](docs/architecture.md) for enforcement and what is still deferred.
 

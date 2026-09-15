@@ -15,7 +15,7 @@ class _FrozenSource:
         self._export = export
 
     def events(self) -> tuple[WorldEvent, ...]:
-        return self._export.events
+        return tuple(self._export.events)
 
     def export(self) -> SimulationExport:
         return self._export

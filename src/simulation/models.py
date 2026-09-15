@@ -6,6 +6,7 @@ deterministic stubs; local seed/stream derivation is not sufficient.
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from dataclasses import dataclass
 from typing import Final, Literal
 
@@ -58,7 +59,7 @@ class SimulationExport:
     """Read-only export. Events are immutable snapshots, not live aggregates."""
 
     metadata: ExportMetadata
-    events: tuple[WorldEvent, ...]
+    events: Sequence[WorldEvent]
 
     def __post_init__(self) -> None:
         from world.events import normalize_events

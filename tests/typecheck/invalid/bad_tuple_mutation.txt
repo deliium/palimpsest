@@ -1,0 +1,4 @@
+from world.actions import Wait
+
+commands = (Wait(),)
+commands[0] = Wait()

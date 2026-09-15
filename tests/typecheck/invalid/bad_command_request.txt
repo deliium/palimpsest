@@ -1,0 +1,11 @@
+from world.actions import ActionRequest, Wait
+from world.identifiers import EntityId, ProposalId, RequestId, WorldId, WorldRevision
+
+ActionRequest(
+    request_id=RequestId("r-1"),
+    proposal_id=ProposalId("p-1"),
+    world_id=WorldId("world-1"),
+    actor_id="body-1",
+    revision=WorldRevision(0),
+    command=Wait(),
+)

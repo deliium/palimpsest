@@ -2,14 +2,30 @@
 
 from __future__ import annotations
 
+from typing import assert_never
+
 from world.actions import (
     ActionProposal,
     ActionRequest,
     AgentCommand,
+    Ask,
+    Attack,
+    Drink,
+    Drop,
+    Eat,
+    Flee,
+    Give,
+    Help,
     Move,
+    Search,
+    Sleep,
+    Take,
+    Talk,
+    Tell,
     Wait,
     require_agent_command,
 )
+from world.events import EventDetails, Waited
 from world.identifiers import (
     EntityId,
     ProposalId,
@@ -59,3 +75,45 @@ def _admission_uses_agent_command() -> AgentCommand:
         keys=("k",),
     )
     return request.command
+
+
+def _exhaust_agent_command(command: AgentCommand) -> str:
+    match command:
+        case Move():
+            return "move"
+        case Search():
+            return "search"
+        case Take():
+            return "take"
+        case Drop():
+            return "drop"
+        case Give():
+            return "give"
+        case Eat():
+            return "eat"
+        case Drink():
+            return "drink"
+        case Sleep():
+            return "sleep"
+        case Talk():
+            return "talk"
+        case Ask():
+            return "ask"
+        case Tell():
+            return "tell"
+        case Help():
+            return "help"
+        case Attack():
+            return "attack"
+        case Flee():
+            return "flee"
+        case Wait():
+            return "wait"
+        case _:
+            assert_never(command)
+
+
+def _event_detail_kind(details: EventDetails) -> str:
+    if isinstance(details, Waited):
+        return details.kind
+    return details.kind

@@ -101,7 +101,14 @@ def test_wheel_contains_only_project_packages_and_imports_outside_repo(
 
     outside = tmp_path / "outside"
     outside.mkdir()
-    import_script = "; ".join(f"import {name}" for name in sorted(expected))
+    import_script = (
+        "import simulation; "
+        "from simulation import ("
+        "encode_domain, decode_domain, DomainSerializationError); "
+        "assert callable(encode_domain); assert callable(decode_domain); "
+        "assert DomainSerializationError is not None; "
+        + "; ".join(f"import {name}" for name in sorted(expected))
+    )
     completed = subprocess.run(
         [str(python), "-c", import_script],
         check=True,

@@ -1,0 +1,3 @@
+from world.identifiers import EntityId
+
+EntityId(123)

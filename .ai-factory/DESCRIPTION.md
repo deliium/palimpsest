@@ -2,12 +2,12 @@
 
 ## Overview
 
-Palimpsest is a Python 3.12+ modular monolith for reproducible, discrete, text-based multi-agent AI society experiments. The current foundation establishes package boundaries, typed domain contracts, configuration, persistence bootstrap, an HTTP liveness API, observability, and containers without implementing a simulation loop or domain simulation behavior.
+Palimpsest is a Python 3.12+ modular monolith for reproducible, discrete, text-based multi-agent AI society experiments. The current V1 surface establishes package boundaries, typed domain contracts (objective world models, subjective agent/memory/social state, closed action trust pipeline, versioned serialization), configuration, persistence bootstrap, an HTTP liveness API, observability, and containers without implementing a simulation tick loop or behavioral resolution policy.
 
 ## Core Features
 
 - Bounded packages for world authority, agents, cognition strategies, memory, social envelopes, LLM trust boundaries, simulation primitives, analysis ports, API, and infrastructure
-- Typed immutable agent-facing contracts and private world authority surfaces
+- Typed immutable agent-facing contracts, private world authority (`World` / `WorldState` / operations), and simulation admission + schema-v1 codec
 - Deterministic seed-derived RNG streams, logical clock, and namespaced IDs
 - `PALIMPSEST_` settings, structured logging, async SQLAlchemy lifecycle, Alembic + pgvector bootstrap
 - FastAPI `/health` liveness and Docker Compose development stack
