@@ -6,15 +6,7 @@ from collections.abc import Mapping
 from dataclasses import dataclass, field
 
 from world._freeze import freeze_mapping, require_non_empty
-from world.identifiers import WorldRevision
-
-
-@dataclass(frozen=True, slots=True)
-class EventId:
-    value: str
-
-    def __post_init__(self) -> None:
-        require_non_empty("EventId.value", self.value)
+from world.identifiers import EventId, WorldRevision
 
 
 @dataclass(frozen=True, slots=True)

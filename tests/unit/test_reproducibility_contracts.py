@@ -30,8 +30,8 @@ from simulation.models import (
     SimulationRunConfig,
 )
 from simulation.randomness import StreamScope, create_named_stream, sample_stream
-from world.events import EventId, WorldEvent
-from world.identifiers import WorldRevision
+from world.events import WorldEvent
+from world.identifiers import EventId, WorldRevision
 
 SRC = Path(__file__).resolve().parents[2] / "src" / "simulation"
 

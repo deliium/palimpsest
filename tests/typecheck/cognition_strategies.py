@@ -9,11 +9,8 @@ from __future__ import annotations
 from agents.cognition.contracts import CognitionStrategy, Perspective
 from llm.contracts import LLMClient
 from llm.models import LLMResponse
-from world.actions import ActionProposal, ProposalId
-
-# Imported only to prove a WorldState parameter would be a type error if added
-# to CognitionStrategy. Do not pass WorldState into propose().
-from world.identifiers import EntityId
+from world.actions import ActionProposal
+from world.identifiers import EntityId, ProposalId
 
 
 class ScriptedCognitionStrategy:

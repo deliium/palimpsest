@@ -12,23 +12,7 @@ from enum import StrEnum
 from typing import Protocol, runtime_checkable
 
 from world._freeze import freeze_mapping, require_non_empty
-from world.identifiers import EntityId, WorldRevision
-
-
-@dataclass(frozen=True, slots=True)
-class ProposalId:
-    value: str
-
-    def __post_init__(self) -> None:
-        require_non_empty("ProposalId.value", self.value)
-
-
-@dataclass(frozen=True, slots=True)
-class RequestId:
-    value: str
-
-    def __post_init__(self) -> None:
-        require_non_empty("RequestId.value", self.value)
+from world.identifiers import EntityId, ProposalId, RequestId, WorldRevision
 
 
 class OutcomeCategory(StrEnum):

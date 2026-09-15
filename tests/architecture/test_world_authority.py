@@ -9,7 +9,7 @@ import pytest
 
 import world
 from tests.architecture.boundary_checker import check_tree, format_violations
-from world._state import WorldState
+from world._state import World, WorldState
 from world._transitions import WorldTransition
 
 pytestmark = pytest.mark.architecture
@@ -24,13 +24,15 @@ FORBIDDEN_PACKAGES = (
     "api",
     "analysis",
 )
-AUTHORITY_NAMES = frozenset({"WorldState", "WorldTransition", "apply_trusted"})
+AUTHORITY_NAMES = frozenset({"World", "WorldState", "WorldTransition", "apply_trusted"})
 AUTHORITY_MODULES = frozenset({"world._state", "world._transitions"})
 
 
 def test_public_world_facade_omits_authority() -> None:
+    assert "World" not in world.__all__
     assert "WorldState" not in world.__all__
     assert "WorldTransition" not in world.__all__
+    assert "World" not in world.__dict__
     assert "WorldState" not in world.__dict__
     assert "WorldTransition" not in world.__dict__
 
@@ -67,6 +69,8 @@ def _authority_hits(path: Path) -> list[str]:
 
 
 def test_world_state_is_not_the_transition_protocol() -> None:
+    assert World.__module__ == "world._state"
     assert WorldState.__module__ == "world._state"
     assert WorldTransition.__module__ == "world._transitions"
     assert WorldState.__qualname__ != WorldTransition.__qualname__
+    assert World.__qualname__ != WorldState.__qualname__

@@ -9,7 +9,7 @@ from tests.typecheck.cognition_strategies import (
     ScriptedCognitionStrategy,
     StubLLMBackedStrategy,
 )
-from world.identifiers import EntityId, WorldRevision
+from world.identifiers import EntityId, WorldId, WorldRevision
 from world.observations import Observation
 
 
@@ -23,9 +23,9 @@ def _perspective() -> Perspective:
     return Perspective(
         agent_id=agent_id,
         observation=Observation(
+            world_id=WorldId("world-1"),
             observer_id=EntityId("ent-1"),
             revision=WorldRevision(0),
-            payload={},
         ),
         memories=(),
         beliefs=(),

@@ -5,6 +5,13 @@ layer and must not be imported from base agents modules.
 """
 
 from agents.contracts import IdentityTranslator
-from agents.models import AgentId, AgentState
+from agents.models import Agent, AgentId, Goal, GoalId, GoalStatus
 
-__all__ = ["AgentId", "AgentState", "IdentityTranslator"]
+__all__ = [
+    "Agent",
+    "AgentId",
+    "Goal",
+    "GoalId",
+    "GoalStatus",
+    "IdentityTranslator",
+]

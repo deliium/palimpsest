@@ -10,6 +10,7 @@ from dataclasses import dataclass
 from typing import Final, Literal
 
 from world.events import WorldEvent
+from world.identifiers import require_stable_id
 
 DERIVATION_VERSION: Final[str] = "v1"
 LLM_REPLAY_REQUIREMENT: Final[Literal["recorded_or_stub"]] = "recorded_or_stub"
@@ -36,8 +37,7 @@ class RunId:
     value: str
 
     def __post_init__(self) -> None:
-        if not self.value:
-            raise ValueError("RunId.value must be a non-empty string")
+        require_stable_id("RunId.value", self.value)
 
 
 @dataclass(frozen=True, slots=True)

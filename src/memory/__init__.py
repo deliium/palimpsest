@@ -12,8 +12,8 @@ from memory.models import (
     BeliefId,
     BeliefStore,
     MemoryId,
-    MemoryRecord,
     MemoryStore,
+    MemoryTrace,
 )
 
 __all__ = [
@@ -24,8 +24,8 @@ __all__ = [
     "BeliefWriter",
     "MemoryId",
     "MemoryReader",
-    "MemoryRecord",
     "MemoryStore",
+    "MemoryTrace",
     "MemoryWriter",
     "OwnershipError",
 ]

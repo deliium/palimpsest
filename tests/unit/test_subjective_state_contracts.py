@@ -5,56 +5,25 @@ from __future__ import annotations
 from typing import Any
 
 import pytest
-from hypothesis import given, settings
-from hypothesis import strategies as st
 
-from agents.models import AgentId, AgentState
-from memory.models import (
-    Belief,
-    BeliefId,
-    BeliefStore,
-    MemoryId,
-    MemoryRecord,
-    MemoryStore,
-    OwnershipError,
-)
+from agents.models import Agent, AgentId
+from memory.models import MemoryId, MemoryStore, MemoryTrace
 from social.models import CommunicationEnvelope, EnvelopeId
-from world.identifiers import EntityId
-
-_AGENT_IDS = st.text(
-    alphabet=st.characters(whitelist_categories=("L", "N"), whitelist_characters="-_"),
-    min_size=1,
-    max_size=24,
-)
-_CONTENTS = st.dictionaries(
-    keys=st.text(min_size=1, max_size=12),
-    values=st.one_of(st.booleans(), st.integers(-100, 100), st.text(max_size=24)),
-    max_size=3,
-)
-
-
-@given(owner=_AGENT_IDS, foreign=_AGENT_IDS, content=_CONTENTS)
-@settings(max_examples=30, deadline=None)
-def test_property_cross_owner_memory_write_fails(
-    owner: str, foreign: str, content: dict[str, Any]
-) -> None:
-    if owner == foreign:
-        return
-    store = MemoryStore(AgentId(owner))
-    record = MemoryRecord(
-        memory_id=MemoryId("m-1"),
-        owner_id=AgentId(foreign),
-        content=content,
-    )
-    with pytest.raises(OwnershipError, match="does not match"):
-        store.write(record)
+from world.identifiers import EntityId, WorldRevision
 
 
 def test_memory_snapshots_are_detached_and_owner_bound() -> None:
     owner = AgentId("agent-1")
     source: dict[str, Any] = {"text": "hello", "tags": ["a"]}
     store = MemoryStore(owner)
-    store.write(MemoryRecord(memory_id=MemoryId("m-1"), owner_id=owner, content=source))
+    store.write(
+        MemoryTrace(
+            memory_id=MemoryId("m-1"),
+            owner_id=owner,
+            world_revision=WorldRevision(0),
+            content=source,
+        )
+    )
     source["tags"].append("b")
     snapshot = store.snapshot()
     assert snapshot[0].content["tags"] == ("a",)
@@ -63,10 +32,13 @@ def test_memory_snapshots_are_detached_and_owner_bound() -> None:
 
 
 def test_cross_owner_memory_write_fails() -> None:
+    from memory.models import OwnershipError
+
     store = MemoryStore(AgentId("agent-1"))
-    foreign = MemoryRecord(
+    foreign = MemoryTrace(
         memory_id=MemoryId("m-1"),
         owner_id=AgentId("agent-2"),
+        world_revision=WorldRevision(0),
         content={"text": "secret"},
     )
     with pytest.raises(OwnershipError, match="does not match"):
@@ -77,9 +49,10 @@ def test_owner_id_cannot_be_reassigned() -> None:
     store = MemoryStore(AgentId("agent-1"))
     with pytest.raises(AttributeError):
         store.owner_id = AgentId("agent-2")  # type: ignore[misc]
-    record = MemoryRecord(
+    record = MemoryTrace(
         memory_id=MemoryId("m-1"),
         owner_id=AgentId("agent-1"),
+        world_revision=WorldRevision(0),
         content={},
     )
     with pytest.raises(AttributeError):
@@ -91,16 +64,18 @@ def test_memory_payloads_are_not_shared_across_stores() -> None:
     first = MemoryStore(AgentId("agent-1"))
     second = MemoryStore(AgentId("agent-2"))
     first.write(
-        MemoryRecord(
+        MemoryTrace(
             memory_id=MemoryId("m-1"),
             owner_id=AgentId("agent-1"),
+            world_revision=WorldRevision(0),
             content=payload,
         )
     )
     second.write(
-        MemoryRecord(
+        MemoryTrace(
             memory_id=MemoryId("m-2"),
             owner_id=AgentId("agent-2"),
+            world_revision=WorldRevision(0),
             content=payload,
         )
     )
@@ -109,51 +84,44 @@ def test_memory_payloads_are_not_shared_across_stores() -> None:
     assert second.snapshot()[0].content["note"] == ("shared",)
 
 
-def test_belief_store_validates_owner() -> None:
-    store = BeliefStore(AgentId("agent-1"))
-    store.write(
-        Belief(belief_id=BeliefId("b-1"), owner_id=AgentId("agent-1"), content={"k": 1})
-    )
-    with pytest.raises(OwnershipError):
-        store.write(
-            Belief(
-                belief_id=BeliefId("b-2"),
-                owner_id=AgentId("agent-2"),
-                content={"k": 2},
-            )
-        )
-    assert len(store.snapshot()) == 1
-
-
-def test_envelope_rejects_agent_state_and_memory_records() -> None:
+def test_envelope_rejects_agent_and_memory_traces() -> None:
     owner = AgentId("agent-1")
-    record = MemoryRecord(memory_id=MemoryId("m-1"), owner_id=owner, content={"t": "x"})
-    with pytest.raises(TypeError, match="cannot contain"):
+    record = MemoryTrace(
+        memory_id=MemoryId("m-1"),
+        owner_id=owner,
+        world_revision=WorldRevision(0),
+        content={"t": "x"},
+    )
+    with pytest.raises(TypeError, match="unsupported domain content type"):
         CommunicationEnvelope(
             envelope_id=EnvelopeId("e-1"),
             sender_id=owner,
             recipient_id=AgentId("agent-2"),
             payload={"memory": record},
         )
-    with pytest.raises(TypeError, match="cannot contain"):
+    with pytest.raises(TypeError, match="unsupported domain content type"):
         CommunicationEnvelope(
             envelope_id=EnvelopeId("e-2"),
             sender_id=owner,
             recipient_id=AgentId("agent-2"),
-            payload={"state": AgentState(owner)},
+            payload={"agent": Agent(agent_id=owner, name="Ada", goals=())},
         )
 
 
-def test_envelope_payload_is_frozen_and_may_name_identities() -> None:
-    source: dict[str, Any] = {"text": "hi", "about": ["topic"]}
+def test_envelope_payload_is_frozen_and_rejects_entity_wrappers() -> None:
     envelope = CommunicationEnvelope(
         envelope_id=EnvelopeId("e-1"),
         sender_id=AgentId("agent-1"),
         recipient_id=AgentId("agent-2"),
-        payload={"text": "hi", "about": ["topic"], "entity": EntityId("ent-1")},
+        payload={"text": "hi", "about": ["topic"]},
     )
-    source["about"].append("extra")
     assert envelope.payload["about"] == ("topic",)
-    assert envelope.payload["entity"] == EntityId("ent-1")
     with pytest.raises(TypeError):
         envelope.payload["text"] = "mutated"  # type: ignore[index]
+    with pytest.raises(TypeError, match="unsupported domain content type"):
+        CommunicationEnvelope(
+            envelope_id=EnvelopeId("e-3"),
+            sender_id=AgentId("agent-1"),
+            recipient_id=AgentId("agent-2"),
+            payload={"entity": EntityId("ent-1")},
+        )

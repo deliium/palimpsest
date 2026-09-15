@@ -6,8 +6,8 @@ from analysis.contracts import EventSource, ExportSource
 from simulation.contracts import make_export
 from simulation.identifiers import derive_run_id
 from simulation.models import SimulationExport, SimulationRunConfig
-from world.events import EventId, WorldEvent
-from world.identifiers import WorldRevision
+from world.events import WorldEvent
+from world.identifiers import EventId, WorldRevision
 
 
 class _FrozenSource:

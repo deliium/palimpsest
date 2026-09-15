@@ -1,43 +1,23 @@
-"""Opaque immutable communication envelopes."""
+"""Opaque immutable communication envelopes and relationships."""
 
 from __future__ import annotations
 
-from collections.abc import Mapping, Sequence, Set
+import math
+from collections.abc import Mapping
 from dataclasses import dataclass
 
 from agents.models import AgentId
-from world.identifiers import EntityId
+from world.identifiers import require_bounded_text, require_stable_id
 from world.observations import detached_mapping
 
 
-def _require_non_empty(name: str, value: str) -> str:
-    if not value:
-        raise ValueError(f"{name} must be a non-empty string")
-    return value
-
-
-def _assert_allowed_payload(value: object) -> None:
-    if isinstance(value, (str, bytes, int, float, type(None), AgentId, EntityId)):
-        return
-    if isinstance(value, bool):
-        return
-    if isinstance(value, Mapping):
-        for key, item in value.items():
-            _assert_allowed_payload(key)
-            _assert_allowed_payload(item)
-        return
-    if isinstance(value, Sequence) and not isinstance(value, (str, bytes)):
-        for item in value:
-            _assert_allowed_payload(item)
-        return
-    if isinstance(value, Set) and not isinstance(value, (str, bytes)):
-        for item in value:
-            _assert_allowed_payload(item)
-        return
-    raise TypeError(
-        f"communication envelope cannot contain {type(value).__name__}; "
-        "memory records, agent state, and mutable/custom objects are forbidden"
-    )
+def _affinity(name: str, value: object) -> float:
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        raise ValueError(f"{name} must be a finite float in [-1.0, 1.0]")
+    number = float(value)
+    if not math.isfinite(number) or number < -1.0 or number > 1.0:
+        raise ValueError(f"{name} must be a finite float in [-1.0, 1.0]")
+    return 0.0 if number == 0.0 else number
 
 
 @dataclass(frozen=True, slots=True)
@@ -45,12 +25,47 @@ class EnvelopeId:
     value: str
 
     def __post_init__(self) -> None:
-        _require_non_empty("EnvelopeId.value", self.value)
+        require_stable_id("EnvelopeId.value", self.value)
+
+
+@dataclass(frozen=True, slots=True)
+class RelationshipId:
+    """Stable identity for a directed agent relationship."""
+
+    value: str
+
+    def __post_init__(self) -> None:
+        require_stable_id("RelationshipId.value", self.value)
+
+
+@dataclass(frozen=True, slots=True)
+class Relationship:
+    """Constructor-only directed relationship between distinct agents."""
+
+    relationship_id: RelationshipId
+    source_id: AgentId
+    target_id: AgentId
+    kind: str
+    affinity: float
+
+    def __post_init__(self) -> None:
+        if type(self.relationship_id) is not RelationshipId:
+            raise TypeError("Relationship.relationship_id must be RelationshipId")
+        if type(self.source_id) is not AgentId:
+            raise TypeError("Relationship.source_id must be AgentId")
+        if type(self.target_id) is not AgentId:
+            raise TypeError("Relationship.target_id must be AgentId")
+        if self.source_id == self.target_id:
+            raise ValueError("Relationship cannot link an agent to itself")
+        require_bounded_text("Relationship.kind", self.kind, max_length=128)
+        object.__setattr__(
+            self, "affinity", _affinity("Relationship.affinity", self.affinity)
+        )
 
 
 @dataclass(frozen=True, slots=True)
 class CommunicationEnvelope:
-    """Immutable message. Payload cannot hold memories, agent state, or mutables."""
+    """Immutable message. Payload uses the closed domain content grammar."""
 
     envelope_id: EnvelopeId
     sender_id: AgentId
@@ -58,5 +73,4 @@ class CommunicationEnvelope:
     payload: Mapping[str, object]
 
     def __post_init__(self) -> None:
-        _assert_allowed_payload(self.payload)
         object.__setattr__(self, "payload", detached_mapping(self.payload))

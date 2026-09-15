@@ -2,10 +2,9 @@
 
 from __future__ import annotations
 
-from collections.abc import Sequence
 from typing import Protocol
 
-from memory.models import Belief, MemoryRecord, OwnershipError
+from memory.models import Belief, MemoryTrace, OwnershipError
 
 __all__ = [
     "BeliefReader",
@@ -17,19 +16,19 @@ __all__ = [
 
 
 class MemoryReader(Protocol):
-    def snapshot(self) -> Sequence[MemoryRecord]:
+    def snapshot(self) -> tuple[MemoryTrace, ...]:
         """Return a defensive immutable snapshot of owned memories."""
         ...
 
 
 class MemoryWriter(Protocol):
-    def write(self, record: MemoryRecord) -> None:
+    def write(self, record: MemoryTrace) -> None:
         """Persist ``record`` if it belongs to this aggregate's owner."""
         ...
 
 
 class BeliefReader(Protocol):
-    def snapshot(self) -> Sequence[Belief]:
+    def snapshot(self) -> tuple[Belief, ...]:
         """Return a defensive immutable snapshot of owned beliefs."""
         ...
 

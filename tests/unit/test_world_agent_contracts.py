@@ -2,15 +2,13 @@
 
 from __future__ import annotations
 
-from collections.abc import Mapping
 from types import MappingProxyType
-from typing import Any
 
 import pytest
 from hypothesis import given, settings
 from hypothesis import strategies as st
 
-from agents.models import AgentId, AgentState
+from agents.models import Agent, AgentId
 from world._state import WorldState
 from world._transitions import apply_trusted
 from world.actions import (
@@ -18,68 +16,84 @@ from world.actions import (
     ActionProposal,
     ActionRequest,
     OutcomeCategory,
-    ProposalId,
-    RequestId,
     accept_action_request,
 )
-from world.events import EventId, WorldEvent
-from world.identifiers import EntityId, WorldRevision
+from world.events import WorldEvent
+from world.identifiers import (
+    EntityId,
+    EventId,
+    ProposalId,
+    RequestId,
+    WorldId,
+    WorldRevision,
+)
+from world.models import AgentBody, LifeStatus, Location
 from world.observations import Observation
+from world.values import Fatigue, Health, Hunger, TemperatureCelsius, Thirst
 
 _ID_TEXT = st.text(
     alphabet=st.characters(whitelist_categories=("L", "N"), whitelist_characters="-_"),
     min_size=1,
     max_size=24,
 )
-_PAYLOADS = st.dictionaries(
-    keys=st.text(min_size=1, max_size=12),
-    values=st.one_of(
-        st.booleans(),
-        st.integers(min_value=-1000, max_value=1000),
-        st.text(max_size=24),
-    ),
-    max_size=4,
-)
+
+
+def _body(entity_id: str, location_id: str) -> AgentBody:
+    return AgentBody(
+        entity_id=EntityId(entity_id),
+        location_id=EntityId(location_id),
+        health=Health(10),
+        hunger=Hunger(0),
+        thirst=Thirst(0),
+        fatigue=Fatigue(0),
+        temperature=TemperatureCelsius(36.5),
+        inventory=(),
+        life_status=LifeStatus.ALIVE,
+    )
 
 
 @given(
     observer=_ID_TEXT,
     revision=st.integers(min_value=0, max_value=10_000),
-    payload=_PAYLOADS,
+    location_name=_ID_TEXT,
 )
 @settings(max_examples=30, deadline=None)
-def test_property_observation_payload_is_detached(
-    observer: str, revision: int, payload: dict[str, Any]
+def test_property_observation_projections_are_detached(
+    observer: str, revision: int, location_name: str
 ) -> None:
-    source = dict(payload)
+    locations = [Location(entity_id=EntityId("loc-1"), name=location_name)]
     observation = Observation(
+        world_id=WorldId("world-1"),
         observer_id=EntityId(observer),
         revision=WorldRevision(revision),
-        payload=source,
+        locations=locations,
     )
-    source.clear()
-    assert dict(observation.payload) == payload
-    with pytest.raises(TypeError):
-        observation.payload["__mut__"] = True  # type: ignore[index]
+    locations.clear()
+    assert observation.locations == (
+        Location(entity_id=EntityId("loc-1"), name=location_name),
+    )
 
 
-def test_observation_is_deeply_immutable_and_detached() -> None:
-    source: dict[str, Any] = {"nested": {"flag": True}, "items": ["a", "b"]}
+def test_observation_is_typed_partial_and_immutable() -> None:
+    body = _body("observer-1", "loc-1")
     observation = Observation(
+        world_id=WorldId("world-1"),
         observer_id=EntityId("observer-1"),
         revision=WorldRevision(1),
-        payload=source,
+        self_body=body,
+        locations=(Location(entity_id=EntityId("loc-1"), name="Camp"),),
     )
-    source["nested"]["flag"] = False
-    source["items"].append("c")
-    nested = observation.payload["nested"]
-    assert isinstance(nested, Mapping)
-    assert nested["flag"] is True
-    assert observation.payload["items"] == ("a", "b")
-    with pytest.raises(TypeError):
-        observation.payload["extra"] = "no"  # type: ignore[index]
+    assert observation.self_body == body
+    assert observation.items == ()
     with pytest.raises(AttributeError):
         observation.observer_id = EntityId("other")  # type: ignore[misc]
+    with pytest.raises(ValueError, match="must match observer_id"):
+        Observation(
+            world_id=WorldId("world-1"),
+            observer_id=EntityId("observer-1"),
+            revision=WorldRevision(1),
+            self_body=_body("other", "loc-1"),
+        )
 
 
 def test_world_event_is_detached_from_source_mapping() -> None:
@@ -151,12 +165,12 @@ def test_agent_id_is_not_an_entity_id() -> None:
     assert agent_id.value == entity_id.value
 
 
-def test_agent_state_hides_owned_collections() -> None:
-    state = AgentState(AgentId("agent-1"))
-    assert state.agent_id == AgentId("agent-1")
-    assert "beliefs" not in dir(state)
-    assert not hasattr(state, "beliefs")
-    assert not hasattr(state, "on_change")
+def test_agent_exposes_identity_without_memory_collections() -> None:
+    agent = Agent(agent_id=AgentId("agent-1"), name="Ada", goals=())
+    assert agent.agent_id == AgentId("agent-1")
+    assert agent.goals == ()
+    assert not hasattr(agent, "beliefs")
+    assert not hasattr(agent, "on_change")
 
 
 def test_booleans_are_rejected_as_revisions() -> None:
