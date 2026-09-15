@@ -10,15 +10,137 @@ from collections.abc import Mapping, Sequence
 
 from agents.contracts import IdentityTranslator
 from agents.models import AgentId
-from simulation.identifiers import derive_proposal_id, derive_request_id
-from simulation.models import SimulationRunConfig
+from simulation.clock import Tick, require_exact_nonneg_int
+from simulation.identifiers import (
+    derive_event_id,
+    derive_proposal_id,
+    derive_request_id,
+)
+from simulation.models import RunId, SimulationRunConfig
+from simulation.randomness import StreamScope
 from world.actions import (
     ActionProposal,
     ActionRequest,
     AgentCommand,
     require_agent_command,
 )
-from world.identifiers import WorldId, WorldRevision
+from world.identifiers import EventId, WorldId, WorldRevision
+
+__all__ = [
+    "admit_agent_command",
+    "canonical_admission_keys",
+    "canonical_event_keys",
+    "derive_engine_event_id",
+    "future_effect_scope",
+]
+
+
+def canonical_admission_keys(
+    *,
+    run_id: RunId,
+    world_id: WorldId,
+    tick: Tick,
+    ordinal: int,
+    agent_id: AgentId,
+) -> tuple[str, ...]:
+    """Engine-owned canonical keys for proposal/request derivation."""
+    if type(run_id) is not RunId:
+        raise TypeError("canonical_admission_keys requires RunId")
+    if type(world_id) is not WorldId:
+        raise TypeError("canonical_admission_keys requires WorldId")
+    if type(tick) is not Tick:
+        raise TypeError("canonical_admission_keys requires Tick")
+    if type(agent_id) is not AgentId:
+        raise TypeError("canonical_admission_keys requires AgentId")
+    ordinal_value = require_exact_nonneg_int("ordinal", ordinal)
+    return (
+        "engine",
+        run_id.value,
+        world_id.value,
+        f"tick:{tick.value}",
+        f"ordinal:{ordinal_value}",
+        f"agent:{agent_id.value}",
+    )
+
+
+def canonical_event_keys(
+    *,
+    run_id: RunId,
+    world_id: WorldId,
+    tick: Tick,
+    ordinal: int,
+    agent_id: AgentId,
+    sequence: int,
+) -> tuple[str, ...]:
+    """Engine-owned canonical keys for objective event derivation."""
+    sequence_value = require_exact_nonneg_int("sequence", sequence)
+    return (
+        *canonical_admission_keys(
+            run_id=run_id,
+            world_id=world_id,
+            tick=tick,
+            ordinal=ordinal,
+            agent_id=agent_id,
+        ),
+        f"event:{sequence_value}",
+    )
+
+
+def derive_engine_event_id(
+    config: SimulationRunConfig,
+    *,
+    run_id: RunId,
+    world_id: WorldId,
+    tick: Tick,
+    ordinal: int,
+    agent_id: AgentId,
+    sequence: int,
+) -> EventId:
+    return derive_event_id(
+        config,
+        *canonical_event_keys(
+            run_id=run_id,
+            world_id=world_id,
+            tick=tick,
+            ordinal=ordinal,
+            agent_id=agent_id,
+            sequence=sequence,
+        ),
+    )
+
+
+def future_effect_scope(
+    *,
+    run_id: RunId,
+    world_id: WorldId,
+    tick: Tick,
+    ordinal: int,
+    agent_id: AgentId,
+    purpose: str,
+) -> StreamScope:
+    """Canonical future random-effect scope. V1 performs no draws from it."""
+    if type(run_id) is not RunId:
+        raise TypeError("future_effect_scope requires RunId")
+    if type(world_id) is not WorldId:
+        raise TypeError("future_effect_scope requires WorldId")
+    if type(tick) is not Tick:
+        raise TypeError("future_effect_scope requires Tick")
+    if type(agent_id) is not AgentId:
+        raise TypeError("future_effect_scope requires AgentId")
+    if type(purpose) is not str or not purpose:
+        raise ValueError("purpose must be a non-empty str")
+    ordinal_value = require_exact_nonneg_int("ordinal", ordinal)
+    return StreamScope(
+        namespace="effect",
+        names=(
+            run_id.value,
+            world_id.value,
+            f"tick:{tick.value}",
+            f"ordinal:{ordinal_value}",
+            f"agent:{agent_id.value}",
+            purpose,
+        ),
+    )
 
 
 def admit_agent_command(
@@ -35,7 +157,8 @@ def admit_agent_command(
 
     Allocates deterministic proposal/request IDs, translates the agent to a
     world entity, and returns a non-authoritative bound request. Callers cannot
-    supply actor IDs or operational request metadata.
+    supply actor IDs or operational request metadata. Engine callers should pass
+    :func:`canonical_admission_keys` rather than ad-hoc keys.
     """
     if type(config) is not SimulationRunConfig:
         raise TypeError("admit_agent_command requires SimulationRunConfig")

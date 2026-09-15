@@ -1,6 +1,12 @@
 """Simulation orchestration ports and deterministic primitives."""
 
-from simulation.actions import admit_agent_command
+from simulation.actions import (
+    admit_agent_command,
+    canonical_admission_keys,
+    canonical_event_keys,
+    derive_engine_event_id,
+    future_effect_scope,
+)
 from simulation.bootstrap import (
     AgentRegistration,
     RegistrationTranslator,
@@ -17,6 +23,7 @@ from simulation.contracts import (
     log_run_configured,
     make_export,
 )
+from simulation.engine import EnginePhase, WorldEngine
 from simulation.identifiers import (
     derive_belief_id,
     derive_entity_id,
@@ -74,6 +81,7 @@ __all__ = [
     "AgentRegistration",
     "DomainSerializationError",
     "EngineDiagnosticCode",
+    "EnginePhase",
     "ExportMetadata",
     "LogicalClock",
     "ObservationBatch",
@@ -88,11 +96,15 @@ __all__ = [
     "TickResult",
     "TickToken",
     "WorldBootstrap",
+    "WorldEngine",
     "admit_agent_command",
+    "canonical_admission_keys",
+    "canonical_event_keys",
     "create_named_stream",
     "create_rng",
     "decode_domain",
     "derive_belief_id",
+    "derive_engine_event_id",
     "derive_entity_id",
     "derive_envelope_id",
     "derive_event_id",
@@ -107,6 +119,7 @@ __all__ = [
     "describe_run",
     "encode_domain",
     "export_metadata",
+    "future_effect_scope",
     "log_invalid_setup",
     "log_replay_mismatch",
     "log_run_configured",

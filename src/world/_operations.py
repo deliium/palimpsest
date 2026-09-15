@@ -7,11 +7,12 @@ not stop hostile reflection.
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from dataclasses import dataclass
 from enum import StrEnum
 from typing import Final
 
-from world._state import WorldState
+from world._state import WorldState, rebuild_world_state
 from world.actions import (
     ActionRequest,
     Ask,
@@ -31,14 +32,19 @@ from world.actions import (
     Wait,
     require_agent_command,
 )
-from world.identifiers import EntityId, RequestId, WorldId, WorldRevision
+from world.events import WorldEvent, normalize_events
+from world.identifiers import EntityId, EventId, RequestId, WorldId, WorldRevision
 from world.models import AgentBody, Item, LifeStatus, Location, Resource
 
 __all__: list[str] = [
+    "BatchItemOutcome",
+    "BatchItemStatus",
     "OperationAccepted",
     "OperationRejected",
+    "PreparedBatch",
     "RejectionCode",
     "ValidatedWorldOperation",
+    "prepare_action_batch",
     "validate_action_request",
 ]
 
@@ -488,4 +494,238 @@ def _exists_elsewhere(state: WorldState, entity_id: EntityId) -> bool:
         or entity_id in state.items
         or entity_id in state.resources
         or entity_id in state.bodies
+    )
+
+
+class BatchItemStatus(StrEnum):
+    APPLIED = "applied"
+    REJECTED = "rejected"
+    CONFLICTED = "conflicted"
+    DEFERRED_POLICY = "deferred_policy"
+
+
+@dataclass(frozen=True, slots=True)
+class BatchItemOutcome:
+    ordinal: int
+    request_id: RequestId
+    status: BatchItemStatus
+    reason: str
+    action_kind: str
+
+    def __post_init__(self) -> None:
+        if (
+            type(self.ordinal) is not int
+            or isinstance(self.ordinal, bool)
+            or self.ordinal < 0
+        ):
+            raise ValueError("BatchItemOutcome.ordinal must be a non-negative int")
+        if type(self.request_id) is not RequestId:
+            raise TypeError("BatchItemOutcome.request_id must be RequestId")
+        if type(self.status) is not BatchItemStatus:
+            raise TypeError("BatchItemOutcome.status must be BatchItemStatus")
+        if type(self.reason) is not str or not self.reason:
+            raise TypeError("BatchItemOutcome.reason must be a non-empty str")
+        if type(self.action_kind) is not str or not self.action_kind:
+            raise TypeError("BatchItemOutcome.action_kind must be a non-empty str")
+
+
+@dataclass(frozen=True, slots=True)
+class PreparedBatch:
+    """Immutable batch candidate. Does not install world authority."""
+
+    candidate_state: WorldState
+    semantic_mutation: bool
+    outcomes: tuple[BatchItemOutcome, ...]
+    events: tuple[WorldEvent, ...]
+
+    def __post_init__(self) -> None:
+        if type(self.candidate_state) is not WorldState:
+            raise TypeError("PreparedBatch.candidate_state must be WorldState")
+        if type(self.semantic_mutation) is not bool:
+            raise TypeError("PreparedBatch.semantic_mutation must be bool")
+        object.__setattr__(self, "events", normalize_events(self.events))
+
+
+class BatchPreparationError(ValueError):
+    """Invariant failure while preparing a batch candidate."""
+
+
+def prepare_action_batch(
+    *,
+    world_id: WorldId,
+    starting_state: WorldState,
+    requests: Sequence[ActionRequest],
+    event_ids: Sequence[EventId],
+) -> PreparedBatch:
+    """Prepare a candidate snapshot from ordered admitted requests.
+
+    Working mutations keep the starting revision until the end. Revision advances
+    once when any semantic mutation occurs; all emitted events use that final
+    revision. Conflict is recorded only when a request was initially applicable
+    and a prior effect invalidated it.
+    """
+    from world._rules import RuleDisposition, apply_operation, evaluate_operation
+
+    if type(world_id) is not WorldId:
+        raise TypeError("prepare_action_batch requires WorldId")
+    if type(starting_state) is not WorldState:
+        raise TypeError("prepare_action_batch requires WorldState")
+    if isinstance(requests, (set, frozenset)) or not isinstance(requests, Sequence):
+        raise TypeError("requests must be an ordered sequence")
+    if isinstance(event_ids, (set, frozenset)) or not isinstance(event_ids, Sequence):
+        raise TypeError("event_ids must be an ordered sequence")
+    request_tuple = tuple(requests)
+    event_id_tuple = tuple(event_ids)
+    if len(request_tuple) != len(event_id_tuple):
+        raise ValueError("event_ids length must match requests length")
+    seen_event_ids: set[EventId] = set()
+    for event_id in event_id_tuple:
+        if type(event_id) is not EventId:
+            raise TypeError("event_ids entries must be EventId")
+        if event_id in seen_event_ids:
+            raise BatchPreparationError("duplicate event_id in batch inputs")
+        seen_event_ids.add(event_id)
+
+    working = starting_state
+    semantic_mutation = False
+    outcomes: list[BatchItemOutcome] = []
+    pending_events: list[tuple[ActionRequest, object, EventId]] = []
+
+    for ordinal, request in enumerate(request_tuple):
+        if type(request) is not ActionRequest:
+            raise TypeError("requests entries must be ActionRequest")
+        if request.world_id != world_id:
+            raise BatchPreparationError("request world_id mismatch")
+        if request.revision != starting_state.revision:
+            raise BatchPreparationError("request revision must match starting state")
+        kind = getattr(request.command, "kind", type(request.command).__name__)
+
+        start_validation = validate_action_request(
+            world_id=world_id, state=starting_state, request=request
+        )
+        if type(start_validation) is OperationRejected:
+            outcomes.append(
+                BatchItemOutcome(
+                    ordinal=ordinal,
+                    request_id=request.request_id,
+                    status=BatchItemStatus.REJECTED,
+                    reason=start_validation.code.value,
+                    action_kind=str(kind),
+                )
+            )
+            continue
+
+        assert type(start_validation) is OperationAccepted
+        start_rule = evaluate_operation(starting_state, start_validation.operation)
+        if start_rule.disposition is RuleDisposition.REJECT:
+            outcomes.append(
+                BatchItemOutcome(
+                    ordinal=ordinal,
+                    request_id=request.request_id,
+                    status=BatchItemStatus.REJECTED,
+                    reason=start_rule.reason.value,
+                    action_kind=start_rule.action_kind,
+                )
+            )
+            continue
+        if start_rule.disposition is RuleDisposition.DEFERRED:
+            outcomes.append(
+                BatchItemOutcome(
+                    ordinal=ordinal,
+                    request_id=request.request_id,
+                    status=BatchItemStatus.DEFERRED_POLICY,
+                    reason=start_rule.reason.value,
+                    action_kind=start_rule.action_kind,
+                )
+            )
+            continue
+
+        work_validation = validate_action_request(
+            world_id=world_id, state=working, request=request
+        )
+        if type(work_validation) is OperationRejected:
+            outcomes.append(
+                BatchItemOutcome(
+                    ordinal=ordinal,
+                    request_id=request.request_id,
+                    status=BatchItemStatus.CONFLICTED,
+                    reason="conflict_with_prior",
+                    action_kind=start_rule.action_kind,
+                )
+            )
+            continue
+
+        assert type(work_validation) is OperationAccepted
+        application = apply_operation(working, work_validation.operation)
+        if application.result.disposition is RuleDisposition.REJECT:
+            outcomes.append(
+                BatchItemOutcome(
+                    ordinal=ordinal,
+                    request_id=request.request_id,
+                    status=BatchItemStatus.CONFLICTED,
+                    reason="conflict_with_prior",
+                    action_kind=application.result.action_kind,
+                )
+            )
+            continue
+        if application.result.disposition is RuleDisposition.DEFERRED:
+            outcomes.append(
+                BatchItemOutcome(
+                    ordinal=ordinal,
+                    request_id=request.request_id,
+                    status=BatchItemStatus.DEFERRED_POLICY,
+                    reason=application.result.reason.value,
+                    action_kind=application.result.action_kind,
+                )
+            )
+            continue
+
+        working = application.next_state
+        if application.result.mutates_state:
+            semantic_mutation = True
+        if application.result.emits_event:
+            assert application.event_details is not None
+            pending_events.append(
+                (request, application.event_details, event_id_tuple[ordinal])
+            )
+        outcomes.append(
+            BatchItemOutcome(
+                ordinal=ordinal,
+                request_id=request.request_id,
+                status=BatchItemStatus.APPLIED,
+                reason=application.result.reason.value,
+                action_kind=application.result.action_kind,
+            )
+        )
+
+    if semantic_mutation:
+        resulting_revision = WorldRevision(starting_state.revision.value + 1)
+        candidate = rebuild_world_state(working, revision=resulting_revision)
+    else:
+        resulting_revision = starting_state.revision
+        candidate = working
+
+    events: list[WorldEvent] = []
+    for request, details, event_id in pending_events:
+        events.append(
+            WorldEvent(
+                event_id=event_id,
+                request_id=request.request_id,
+                world_id=world_id,
+                revision=resulting_revision,
+                details=details,  # type: ignore[arg-type]
+            )
+        )
+    normalized = normalize_events(events)
+    for event in normalized:
+        if event.world_id != world_id:
+            raise BatchPreparationError("event world_id mismatch")
+        if event.revision != resulting_revision:
+            raise BatchPreparationError("event revision mismatch")
+
+    return PreparedBatch(
+        candidate_state=candidate,
+        semantic_mutation=semantic_mutation,
+        outcomes=tuple(outcomes),
+        events=normalized,
     )

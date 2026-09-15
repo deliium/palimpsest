@@ -251,3 +251,123 @@ def test_event_only_and_deferred_never_claim_mutation() -> None:
     assert move.disposition is RuleDisposition.DEFERRED
     assert move.emits_event is False
     assert move.mutates_state is False
+
+
+def test_apply_take_drop_give_mutate_inventories_deterministically() -> None:
+    from world._rules import apply_operation
+    from world.actions import ActionRequest
+    from world.events import Dropped, Given, Taken
+
+    state = _state()
+    taken = apply_operation(state, _accept(Take(EntityId("item-ground"))))
+    assert taken.result.disposition is RuleDisposition.MUTATE
+    assert taken.event_details == Taken(EntityId("item-ground"))
+    assert EntityId("item-ground") in taken.next_state.bodies[
+        EntityId("body-1")
+    ].inventory
+    assert taken.next_state.items[EntityId("item-ground")].holder_id == EntityId(
+        "body-1"
+    )
+    assert taken.next_state.revision == state.revision
+
+    working = taken.next_state
+    drop_outcome = validate_action_request(
+        world_id=WorldId("world-1"),
+        state=working,
+        request=ActionRequest(
+            request_id=RequestId("r-drop"),
+            proposal_id=ProposalId("p-drop"),
+            world_id=WorldId("world-1"),
+            actor_id=EntityId("body-1"),
+            revision=working.revision,
+            command=Drop(EntityId("item-held")),
+        ),
+    )
+    assert isinstance(drop_outcome, OperationAccepted)
+    dropped = apply_operation(working, drop_outcome.operation)
+    assert dropped.event_details == Dropped(EntityId("item-held"))
+    assert EntityId("item-held") not in dropped.next_state.bodies[
+        EntityId("body-1")
+    ].inventory
+    assert dropped.next_state.items[EntityId("item-held")].location_id == EntityId(
+        "loc-1"
+    )
+
+    given = apply_operation(
+        _state(), _accept(Give(EntityId("body-2"), EntityId("item-held")))
+    )
+    assert given.event_details == Given(EntityId("body-2"), EntityId("item-held"))
+    assert EntityId("item-held") not in given.next_state.bodies[
+        EntityId("body-1")
+    ].inventory
+    assert given.next_state.bodies[EntityId("body-2")].inventory == (
+        EntityId("item-held"),
+    )
+    assert given.next_state.items[EntityId("item-held")].holder_id == EntityId(
+        "body-2"
+    )
+
+
+def test_deferred_apply_produces_no_event_or_mutation() -> None:
+    from world._rules import apply_operation
+
+    state = _state()
+    applied = apply_operation(state, _accept(Move(EntityId("loc-2"))))
+    assert applied.result.disposition is RuleDisposition.DEFERRED
+    assert applied.event_details is None
+    assert applied.next_state is state
+
+
+def test_world_apply_take_commits_mutated_state_and_bumps_revision() -> None:
+    from world._state import World
+    from world.actions import ActionRequest, Take
+    from world.events import Taken
+    from world.identifiers import EventId
+
+    state = _state()
+    world = World(WorldId("world-1"), state)
+    result = world.apply_admitted_request(
+        ActionRequest(
+            request_id=RequestId("r-take"),
+            proposal_id=ProposalId("p-take"),
+            world_id=WorldId("world-1"),
+            actor_id=EntityId("body-1"),
+            revision=WorldRevision(1),
+            command=Take(EntityId("item-ground")),
+        ),
+        event_ids=(EventId("evt-take"),),
+    )
+    from world._transitions import TransitionResult
+    from world.actions import TransitionOutcome
+
+    assert isinstance(result, TransitionResult)
+    assert result.outcome is TransitionOutcome.APPLIED
+    assert result.events[0].details == Taken(EntityId("item-ground"))
+    assert result.resulting_revision == WorldRevision(2)
+    assert world.state.revision == WorldRevision(2)
+    assert EntityId("item-ground") in world.state.bodies[EntityId("body-1")].inventory
+
+
+def test_world_apply_deferred_move_does_not_emit_or_mutate() -> None:
+    from world._state import World
+    from world._transitions import TransitionResult
+    from world.actions import ActionRequest, TransitionOutcome
+    from world.identifiers import EventId
+
+    state = _state()
+    world = World(WorldId("world-1"), state)
+    result = world.apply_admitted_request(
+        ActionRequest(
+            request_id=RequestId("r-move"),
+            proposal_id=ProposalId("p-move"),
+            world_id=WorldId("world-1"),
+            actor_id=EntityId("body-1"),
+            revision=WorldRevision(1),
+            command=Move(EntityId("loc-2")),
+        ),
+        event_ids=(EventId("evt-move"),),
+    )
+    assert isinstance(result, TransitionResult)
+    assert result.outcome is TransitionOutcome.NOT_APPLIED
+    assert result.events == ()
+    assert world.state is state

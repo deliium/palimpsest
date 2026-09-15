@@ -88,25 +88,25 @@ The implementation must prove that an equivalent public bootstrap, seed, and ord
 
 ### Phase 2: Deterministic Resolution and Mutation
 
-- [ ] Task 5: Implement physical, event-only, and deferred V1 rule handlers.
+- [x] Task 5: Implement physical, event-only, and deferred V1 rule handlers.
   - Deliverable: Implement immutable physical effects for `Take`, `Drop`, and `Give`, including item placement, inventory/holder agreement, ownership, recipient co-location, and deterministic inventory ordering. Implement validated occurrence-only handlers for `Search`, `Talk`, `Ask`, `Tell`, and `Wait`. Implement explicit deferred-policy outcomes for `Move`, `Eat`, `Drink`, `Sleep`, `Help`, `Attack`, and `Flee` without events, mutation, or random draws. Preserve existing occurrence event detail types and validate every precondition before constructing an effect/event.
   - Files: `src/world/_rules.py`, `src/world/_transitions.py`, `src/world/_state.py`, `src/world/events.py`, `tests/unit/test_world_rules.py`, `tests/unit/test_v1_world_events.py`, `tests/unit/test_v1_world_state.py`.
   - Logging: Handlers remain pure and log-free. Effect/reason values expose only safe IDs, action kind, and changed/not-changed metadata for engine DEBUG diagnostics; never expose communication text or snapshots.
   - Dependencies: Depends on task 4.
 
-- [ ] Task 6: Implement private batch preparation, conflict provenance, and revision correlation.
+- [x] Task 6: Implement private batch preparation, conflict provenance, and revision correlation.
   - Deliverable: Add one private batch preparation operation that receives the starting snapshot and engine-ordered admitted requests, validates each request against both starting and evolving snapshots, applies successful effects to a private working snapshot, and classifies a failure as conflict only when it was initially valid and an earlier effect invalidated it. Return a fully validated immutable candidate state, semantic-mutation flag, typed private outcomes, and ordered objective events without installing state. Increment revision once for any semantic mutation; stamp all objective events in a mutating batch with the final revision and event-only batches with the unchanged starting revision. Validate event IDs, request/world correlation, and duplicate IDs before returning.
   - Files: `src/world/_state.py`, `src/world/_operations.py`, `src/world/_rules.py`, `src/world/_transitions.py`, `tests/unit/test_world_batch.py`, `tests/unit/test_v1_world_events.py`.
   - Logging: Batch preparation remains pure and log-free. Private outcomes provide stable stages/reasons for engine DEBUG logs; invariant/correlation failures raise typed exceptions for engine ERROR logging and atomic retry tests.
   - Dependencies: Depends on tasks 4 and 5.
 
-- [ ] Task 7: Centralize engine-owned deterministic admission, IDs, and RNG boundaries.
+- [x] Task 7: Centralize engine-owned deterministic admission, IDs, and RNG boundaries.
   - Deliverable: Replace caller-controlled admission keys at the engine boundary with canonical proposal/request/event identifiers derived from seed, run/world identity, tick, engine-assigned ordinal, actor, purpose, and event sequence. Keep `simulation.randomness` as the only random importer and define canonical future effect scopes, but add no unused draws or RNG-bearing rule interfaces. Prove invalid/deferred actions cannot change IDs assigned to later fixed ordinals and process-global random state cannot affect or be affected by admission/resolution.
   - Files: `src/simulation/actions.py`, `src/simulation/identifiers.py`, `src/simulation/randomness.py`, `tests/unit/test_v1_action_admission.py`, `tests/unit/test_v1_stable_identifiers.py`, `tests/unit/test_reproducibility_contracts.py`.
   - Logging: Admission helpers remain log-free. The engine may log DEBUG tick/ordinal/action kind, safe IDs, derivation version, and canonical purpose; retain the established seed diagnostic policy, never log random state/draws or command text.
   - Dependencies: Depends on tasks 1, 2, and 4.
 
-- [ ] Task 8: Implement `WorldEngine` as one atomic tick state machine.
+- [x] Task 8: Implement `WorldEngine` as one atomic tick state machine.
   - Deliverable: Add a public engine that owns one immutable internal snapshot containing private world authority, current tick/phase, current token, registrations, resolution history, and objective event history. Expose separate observation and ordered-resolution methods so cognition remains external. Enforce legal phase transitions; validate tokens and one-action-per-agent policy; assign input ordinals; admit requests; invoke private batch preparation; construct and validate the complete next engine snapshot and `TickResult`; then commit with one reference swap. Repeated observations in an open tick are identical; omitted agents produce nothing; unexpected preparation/result failures preserve the prior snapshot and permit deterministic retry. Expose only detached tick/revision/result/event/export views.
   - Files: `src/simulation/engine.py`, `src/simulation/contracts.py`, `src/simulation/__init__.py`, `tests/unit/test_world_engine.py`, `tests/unit/test_world_engine_admission.py`.
   - Logging: Follow the existing stdlib `logging.getLogger(...)` orchestration pattern routed through configured infrastructure. Define stable event names/fields; DEBUG normal phase, admission, rejection, conflict, deferred, and commit detail; INFO one successful tick commit; WARN stale/reentrant/lifecycle misuse; ERROR invariant failures and aborted candidates. Retain existing seed diagnostics and exclude communication text, observations, registrations, full IDs where current redaction applies, and private state.

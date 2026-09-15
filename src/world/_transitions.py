@@ -6,33 +6,14 @@ from collections.abc import Sequence
 from dataclasses import dataclass
 from typing import Protocol
 
-from world._state import WorldState
+from world._state import WorldState, rebuild_world_state
 from world.actions import (
     ActionOutcome,
     ActionRequest,
     TransitionOutcome,
     accept_action_request,
 )
-from world.events import (
-    Asked,
-    Attacked,
-    Dropped,
-    Drunk,
-    Eaten,
-    EventDetails,
-    Fled,
-    Given,
-    Helped,
-    Moved,
-    Searched,
-    Slept,
-    Taken,
-    Talked,
-    Told,
-    Waited,
-    WorldEvent,
-    normalize_events,
-)
+from world.events import WorldEvent, normalize_events
 from world.identifiers import EventId, RequestId, WorldId, WorldRevision
 
 __all__: list[str] = [
@@ -51,6 +32,7 @@ class TransitionResult:
     resulting_revision: WorldRevision
     outcome: TransitionOutcome
     events: tuple[WorldEvent, ...]
+    resulting_state: WorldState
 
     def __post_init__(self) -> None:
         if type(self.base_revision) is not WorldRevision:
@@ -59,8 +41,12 @@ class TransitionResult:
             raise TypeError("TransitionResult.resulting_revision must be WorldRevision")
         if type(self.outcome) is not TransitionOutcome:
             raise TypeError("TransitionResult.outcome must be TransitionOutcome")
+        if type(self.resulting_state) is not WorldState:
+            raise TypeError("TransitionResult.resulting_state must be WorldState")
         events = normalize_events(self.events)
         object.__setattr__(self, "events", events)
+        if self.resulting_state.revision != self.resulting_revision:
+            raise ValueError("resulting_state.revision must match resulting_revision")
 
 
 class WorldTransition(Protocol):
@@ -85,87 +71,55 @@ def apply_validated_operation(
     *,
     event_ids: Sequence[EventId],
 ) -> TransitionResult:
-    """Apply a private validated operation and emit closed occurrence events.
+    """Apply a private validated operation using pure V1 rule handlers.
 
-    Behavioral world mutation is deferred. Events record occurrence-only facts
-    correlated to the request, world, and resulting revision.
+    Deferred and rule-rejected outcomes emit no events and do not mutate.
+    Semantic mutations rebuild an immutable snapshot and advance revision by one.
     """
     from world import _operations as operations
+    from world._rules import RuleDisposition, apply_operation
 
     if type(operation) not in operations._OPERATION_TYPES:
         raise TypeError("apply_validated_operation requires a private operation")
-    details = _details_for(operation)
-    resulting_revision = state.revision
+    application = apply_operation(state, operation)  # type: ignore[arg-type]
+    base_revision = operation.base_revision  # type: ignore[attr-defined]
+    if application.result.disposition in {
+        RuleDisposition.REJECT,
+        RuleDisposition.DEFERRED,
+    }:
+        return TransitionResult(
+            base_revision=base_revision,
+            resulting_revision=state.revision,
+            outcome=TransitionOutcome.NOT_APPLIED,
+            events=(),
+            resulting_state=state,
+        )
     event_id_tuple = tuple(event_ids)
     if len(event_id_tuple) != 1:
-        raise ValueError("deferred transitions emit exactly one occurrence event")
+        raise ValueError("applied transitions emit exactly one occurrence event")
+    if application.result.mutates_state:
+        resulting_revision = WorldRevision(state.revision.value + 1)
+        resulting_state = rebuild_world_state(
+            application.next_state, revision=resulting_revision
+        )
+    else:
+        resulting_revision = state.revision
+        resulting_state = state
+    assert application.event_details is not None
     event = WorldEvent(
         event_id=event_id_tuple[0],
         request_id=operation.request_id,  # type: ignore[attr-defined]
         world_id=operation.world_id,  # type: ignore[attr-defined]
         revision=resulting_revision,
-        details=details,
+        details=application.event_details,
     )
     return TransitionResult(
-        base_revision=operation.base_revision,  # type: ignore[attr-defined]
+        base_revision=base_revision,
         resulting_revision=resulting_revision,
         outcome=TransitionOutcome.APPLIED,
         events=(event,),
+        resulting_state=resulting_state,
     )
-
-
-def _details_for(operation: object) -> EventDetails:
-    from world._operations import (
-        _AskOp,
-        _AttackOp,
-        _DrinkOp,
-        _DropOp,
-        _EatOp,
-        _FleeOp,
-        _GiveOp,
-        _HelpOp,
-        _MoveOp,
-        _SearchOp,
-        _SleepOp,
-        _TakeOp,
-        _TalkOp,
-        _TellOp,
-        _WaitOp,
-    )
-
-    match operation:
-        case _MoveOp(destination_id=destination_id):
-            return Moved(destination_id)
-        case _SearchOp(target_id=target_id):
-            return Searched(target_id)
-        case _TakeOp(item_id=item_id):
-            return Taken(item_id)
-        case _DropOp(item_id=item_id):
-            return Dropped(item_id)
-        case _GiveOp(recipient_id=recipient_id, item_id=item_id):
-            return Given(recipient_id, item_id)
-        case _EatOp(item_id=item_id):
-            return Eaten(item_id)
-        case _DrinkOp(source_id=source_id):
-            return Drunk(source_id)
-        case _SleepOp():
-            return Slept()
-        case _TalkOp(recipient_id=recipient_id, text=text):
-            return Talked(recipient_id, text)
-        case _AskOp(recipient_id=recipient_id, text=text):
-            return Asked(recipient_id, text)
-        case _TellOp(recipient_id=recipient_id, text=text):
-            return Told(recipient_id, text)
-        case _HelpOp(target_id=target_id):
-            return Helped(target_id)
-        case _AttackOp(target_id=target_id):
-            return Attacked(target_id)
-        case _FleeOp(threat_id=threat_id):
-            return Fled(threat_id)
-        case _WaitOp():
-            return Waited()
-        case _:
-            raise TypeError(f"unsupported operation type {type(operation).__name__}")
 
 
 def require_transition_events(

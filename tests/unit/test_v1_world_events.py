@@ -31,6 +31,8 @@ def test_event_details_are_closed_and_correlated() -> None:
 
 
 def test_transition_result_rejects_mismatched_events() -> None:
+    from world._state import WorldState
+
     event = WorldEvent(
         event_id=EventId("evt-1"),
         request_id=RequestId("r-1"),
@@ -43,6 +45,7 @@ def test_transition_result_rejects_mismatched_events() -> None:
         resulting_revision=WorldRevision(2),
         outcome=TransitionOutcome.APPLIED,
         events=(event,),
+        resulting_state=WorldState(WorldRevision(2)),
     )
     assert result.events[0].details == Waited()
     with pytest.raises(ValueError, match="request_id mismatch"):

@@ -8,7 +8,41 @@ from types import MappingProxyType
 from world.identifiers import EntityId, EventId, WorldId, WorldRevision
 from world.models import AgentBody, Item, Location, Resource, Weather
 
-__all__: list[str] = ["World", "WorldState"]
+__all__: list[str] = ["World", "WorldState", "rebuild_world_state"]
+
+
+def rebuild_world_state(
+    state: WorldState,
+    *,
+    revision: WorldRevision | None = None,
+    items: Mapping[EntityId, Item] | None = None,
+    bodies: Mapping[EntityId, AgentBody] | None = None,
+) -> WorldState:
+    """Build a new immutable snapshot with deterministic EntityId ordering."""
+    if type(state) is not WorldState:
+        raise TypeError("rebuild_world_state requires WorldState")
+    if revision is not None and type(revision) is not WorldRevision:
+        raise TypeError("revision must be WorldRevision")
+    item_src = state.items if items is None else items
+    body_src = state.bodies if bodies is None else bodies
+    return WorldState(
+        state.revision if revision is None else revision,
+        locations=tuple(
+            sorted(state.locations.values(), key=lambda value: value.entity_id.value)
+        ),
+        items=tuple(
+            sorted(item_src.values(), key=lambda value: value.entity_id.value)
+        ),
+        resources=tuple(
+            sorted(state.resources.values(), key=lambda value: value.entity_id.value)
+        ),
+        bodies=tuple(
+            sorted(body_src.values(), key=lambda value: value.entity_id.value)
+        ),
+        weather=tuple(
+            sorted(state.weather.values(), key=lambda value: value.location_id.value)
+        ),
+    )
 
 
 def _index_by_entity_id[T](
@@ -140,8 +174,8 @@ class World:
     ) -> object:
         """Validate then apply a bound request against the current snapshot.
 
-        Rechecks the base revision atomically after validation. Behavioral
-        effects remain deferred; acceptance emits occurrence-only events.
+        Rechecks the base revision atomically after validation. Rule handlers
+        decide mutation vs event-only vs deferred/rejected outcomes.
         """
         from world._operations import (
             OperationAccepted,
@@ -149,7 +183,7 @@ class World:
             RejectionCode,
             validate_action_request,
         )
-        from world._transitions import apply_validated_operation
+        from world._transitions import TransitionResult, apply_validated_operation
         from world.actions import ActionRequest
         from world.identifiers import EventId as EventIdType
 
@@ -176,9 +210,12 @@ class World:
         for event_id in event_ids:
             if type(event_id) is not EventIdType:
                 raise TypeError("event_ids entries must be EventId")
-        return apply_validated_operation(
+        result = apply_validated_operation(
             self._state, outcome.operation, event_ids=event_ids
         )
+        assert type(result) is TransitionResult
+        self._state = result.resulting_state
+        return result
 
 
 def _reject_global_id_collisions(

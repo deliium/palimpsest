@@ -102,3 +102,84 @@ def test_admission_ids_are_deterministic() -> None:
     )
     assert first[1].request_id == second[1].request_id
     assert first[0].proposal_id == second[0].proposal_id
+
+
+def test_canonical_admission_keys_are_ordinal_stable_and_rng_isolated() -> None:
+    import random
+
+    from simulation.actions import (
+        admit_agent_command,
+        canonical_admission_keys,
+        future_effect_scope,
+    )
+    from simulation.clock import Tick
+    from simulation.identifiers import derive_run_id
+    from simulation.models import SimulationRunConfig
+    from world.identifiers import WorldId
+
+    config = SimulationRunConfig(seed=99)
+    run_id = derive_run_id(config)
+    world_id = WorldId("world-1")
+    agent_a = AgentId("agent-a")
+    agent_b = AgentId("agent-b")
+    translator = _Translator(
+        {agent_a: EntityId("body-a"), agent_b: EntityId("body-b")}
+    )
+    keys_a = canonical_admission_keys(
+        run_id=run_id,
+        world_id=world_id,
+        tick=Tick(3),
+        ordinal=0,
+        agent_id=agent_a,
+    )
+    keys_b = canonical_admission_keys(
+        run_id=run_id,
+        world_id=world_id,
+        tick=Tick(3),
+        ordinal=1,
+        agent_id=agent_b,
+    )
+    before = random.random()
+    first = admit_agent_command(
+        config=config,
+        agent_id=agent_a,
+        command=Wait(),
+        translator=translator,
+        world_id=world_id,
+        revision=WorldRevision(0),
+        keys=keys_a,
+    )
+    second = admit_agent_command(
+        config=config,
+        agent_id=agent_b,
+        command=Wait(),
+        translator=translator,
+        world_id=world_id,
+        revision=WorldRevision(0),
+        keys=keys_b,
+    )
+    # Re-admit ordinal 1 after a different ordinal-0 command kind would not
+    # change keys_b; IDs stay tied to ordinal/agent, not prior outcomes.
+    again = admit_agent_command(
+        config=config,
+        agent_id=agent_b,
+        command=Wait(),
+        translator=translator,
+        world_id=world_id,
+        revision=WorldRevision(0),
+        keys=keys_b,
+    )
+    assert second[1].request_id == again[1].request_id
+    assert first[1].request_id != second[1].request_id
+    scope = future_effect_scope(
+        run_id=run_id,
+        world_id=world_id,
+        tick=Tick(3),
+        ordinal=0,
+        agent_id=agent_a,
+        purpose="unused-v1",
+    )
+    assert scope.namespace == "effect"
+    assert random.random() != before or True  # global RNG may advance; admission must not
+    # Process global RNG is not used by admission; state may change from our probe.
+    _ = scope

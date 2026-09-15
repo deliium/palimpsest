@@ -30,15 +30,29 @@ from world._operations import (
     _TellOp,
     _WaitOp,
 )
-from world._state import WorldState
-from world.models import LifeStatus
+from world._state import WorldState, rebuild_world_state
+from world.events import (
+    Asked,
+    Dropped,
+    EventDetails,
+    Given,
+    Searched,
+    Taken,
+    Talked,
+    Told,
+    Waited,
+)
+from world.identifiers import EntityId
+from world.models import AgentBody, Item, LifeStatus
 
 __all__: list[str] = [
     "COMMAND_RULE_MATRIX",
     "CommandRulePolicy",
+    "RuleApplication",
     "RuleDisposition",
     "RuleReason",
     "RuleResult",
+    "apply_operation",
     "evaluate_operation",
 ]
 
@@ -307,11 +321,8 @@ def evaluate_operation(
 
 
 def _evaluate_take(
-    state: WorldState, actor_id: object, item_id: object, kind: str
+    state: WorldState, actor_id: EntityId, item_id: EntityId, kind: str
 ) -> RuleResult:
-    from world.identifiers import EntityId
-
-    assert type(actor_id) is EntityId and type(item_id) is EntityId
     actor = state.bodies[actor_id]
     item = state.items[item_id]
     if item.location_id is None or item.holder_id is not None:
@@ -328,11 +339,8 @@ def _evaluate_take(
 
 
 def _evaluate_drop(
-    state: WorldState, actor_id: object, item_id: object, kind: str
+    state: WorldState, actor_id: EntityId, item_id: EntityId, kind: str
 ) -> RuleResult:
-    from world.identifiers import EntityId
-
-    assert type(actor_id) is EntityId and type(item_id) is EntityId
     actor = state.bodies[actor_id]
     item = state.items[item_id]
     if item.holder_id != actor_id or item_id not in actor.inventory:
@@ -348,18 +356,11 @@ def _evaluate_drop(
 
 def _evaluate_give(
     state: WorldState,
-    actor_id: object,
-    recipient_id: object,
-    item_id: object,
+    actor_id: EntityId,
+    recipient_id: EntityId,
+    item_id: EntityId,
     kind: str,
 ) -> RuleResult:
-    from world.identifiers import EntityId
-
-    assert (
-        type(actor_id) is EntityId
-        and type(recipient_id) is EntityId
-        and type(item_id) is EntityId
-    )
     actor = state.bodies[actor_id]
     recipient = state.bodies[recipient_id]
     item = state.items[item_id]
@@ -386,3 +387,170 @@ def _reject(kind: str, reason: RuleReason) -> RuleResult:
         mutates_state=False,
         action_kind=kind,
     )
+
+
+@dataclass(frozen=True, slots=True)
+class RuleApplication:
+    """Pure apply result: disposition metadata plus optional next state/details."""
+
+    result: RuleResult
+    next_state: WorldState
+    event_details: EventDetails | None
+
+    def __post_init__(self) -> None:
+        if type(self.result) is not RuleResult:
+            raise TypeError("RuleApplication.result must be RuleResult")
+        if type(self.next_state) is not WorldState:
+            raise TypeError("RuleApplication.next_state must be WorldState")
+        if self.event_details is not None and not self.result.emits_event:
+            raise ValueError("event_details require emits_event")
+        if self.event_details is None and self.result.emits_event:
+            raise ValueError("emits_event requires event_details")
+        if self.result.mutates_state and self.next_state is None:
+            raise ValueError("mutate requires next_state")
+
+
+def apply_operation(
+    state: WorldState, operation: ValidatedWorldOperation
+) -> RuleApplication:
+    """Evaluate then apply immutable physical or event-only effects.
+
+    Deferred and rejected outcomes never mutate state and never produce events.
+    Revision bumping is owned by batch preparation, not by this helper.
+    """
+    result = evaluate_operation(state, operation)
+    if result.disposition in {
+        RuleDisposition.REJECT,
+        RuleDisposition.DEFERRED,
+    }:
+        return RuleApplication(
+            result=result, next_state=state, event_details=None
+        )
+    details = _event_details_for(operation)
+    if result.disposition is RuleDisposition.EVENT_ONLY:
+        return RuleApplication(
+            result=result, next_state=state, event_details=details
+        )
+    assert result.disposition is RuleDisposition.MUTATE
+    next_state = _apply_mutation(state, operation)
+    return RuleApplication(
+        result=result, next_state=next_state, event_details=details
+    )
+
+
+def _event_details_for(operation: ValidatedWorldOperation) -> EventDetails:
+    match operation:
+        case _TakeOp(item_id=item_id):
+            return Taken(item_id)
+        case _DropOp(item_id=item_id):
+            return Dropped(item_id)
+        case _GiveOp(recipient_id=recipient_id, item_id=item_id):
+            return Given(recipient_id, item_id)
+        case _SearchOp(target_id=target_id):
+            return Searched(target_id)
+        case _TalkOp(recipient_id=recipient_id, text=text):
+            return Talked(recipient_id, text)
+        case _AskOp(recipient_id=recipient_id, text=text):
+            return Asked(recipient_id, text)
+        case _TellOp(recipient_id=recipient_id, text=text):
+            return Told(recipient_id, text)
+        case _WaitOp():
+            return Waited()
+        case _:
+            raise TypeError(
+                f"no event details for {type(operation).__name__}"
+            )
+
+
+def _apply_mutation(
+    state: WorldState, operation: ValidatedWorldOperation
+) -> WorldState:
+    match operation:
+        case _TakeOp(actor_id=actor_id, item_id=item_id):
+            return _mutate_take(state, actor_id, item_id)
+        case _DropOp(actor_id=actor_id, item_id=item_id):
+            return _mutate_drop(state, actor_id, item_id)
+        case _GiveOp(actor_id=actor_id, recipient_id=recipient_id, item_id=item_id):
+            return _mutate_give(state, actor_id, recipient_id, item_id)
+        case _:
+            raise TypeError(
+                f"mutation unsupported for {type(operation).__name__}"
+            )
+
+
+def _copy_body(body: AgentBody, *, inventory: tuple[EntityId, ...]) -> AgentBody:
+    return AgentBody(
+        entity_id=body.entity_id,
+        location_id=body.location_id,
+        health=body.health,
+        hunger=body.hunger,
+        thirst=body.thirst,
+        fatigue=body.fatigue,
+        temperature=body.temperature,
+        inventory=inventory,
+        life_status=body.life_status,
+    )
+
+
+def _mutate_take(
+    state: WorldState, actor_id: EntityId, item_id: EntityId
+) -> WorldState:
+    actor = state.bodies[actor_id]
+    item = state.items[item_id]
+    items = dict(state.items)
+    bodies = dict(state.bodies)
+    items[item_id] = Item(
+        entity_id=item.entity_id,
+        name=item.name,
+        holder_id=actor_id,
+    )
+    bodies[actor_id] = _copy_body(
+        actor, inventory=(*actor.inventory, item_id)
+    )
+    return rebuild_world_state(state, items=items, bodies=bodies)
+
+
+def _mutate_drop(
+    state: WorldState, actor_id: EntityId, item_id: EntityId
+) -> WorldState:
+    actor = state.bodies[actor_id]
+    item = state.items[item_id]
+    items = dict(state.items)
+    bodies = dict(state.bodies)
+    items[item_id] = Item(
+        entity_id=item.entity_id,
+        name=item.name,
+        location_id=actor.location_id,
+    )
+    bodies[actor_id] = _copy_body(
+        actor,
+        inventory=tuple(owned for owned in actor.inventory if owned != item_id),
+    )
+    return rebuild_world_state(state, items=items, bodies=bodies)
+
+
+def _mutate_give(
+    state: WorldState,
+    actor_id: EntityId,
+    recipient_id: EntityId,
+    item_id: EntityId,
+) -> WorldState:
+    actor = state.bodies[actor_id]
+    recipient = state.bodies[recipient_id]
+    item = state.items[item_id]
+    items = dict(state.items)
+    bodies = dict(state.bodies)
+    items[item_id] = Item(
+        entity_id=item.entity_id,
+        name=item.name,
+        holder_id=recipient_id,
+    )
+    bodies[actor_id] = _copy_body(
+        actor,
+        inventory=tuple(owned for owned in actor.inventory if owned != item_id),
+    )
+    bodies[recipient_id] = _copy_body(
+        recipient, inventory=(*recipient.inventory, item_id)
+    )
+    return rebuild_world_state(state, items=items, bodies=bodies)
+
