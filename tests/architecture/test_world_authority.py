@@ -35,10 +35,19 @@ AUTHORITY_NAMES = frozenset(
         "OperationAccepted",
         "OperationRejected",
         "ValidatedWorldOperation",
+        "project_observations",
+        "evaluate_operation",
+        "COMMAND_RULE_MATRIX",
     }
 )
 AUTHORITY_MODULES = frozenset(
-    {"world._state", "world._transitions", "world._operations"}
+    {
+        "world._state",
+        "world._transitions",
+        "world._operations",
+        "world._perception",
+        "world._rules",
+    }
 )
 
 

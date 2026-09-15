@@ -32,7 +32,7 @@ from world.actions import (
     require_agent_command,
 )
 from world.identifiers import EntityId, RequestId, WorldId, WorldRevision
-from world.models import AgentBody, Item, Location, Resource
+from world.models import AgentBody, Item, LifeStatus, Location, Resource
 
 __all__: list[str] = [
     "OperationAccepted",
@@ -49,6 +49,7 @@ class RejectionCode(StrEnum):
     STALE_REVISION = "stale_revision"
     INVALID_ACTOR_BINDING = "invalid_actor_binding"
     MISSING_ACTOR_BODY = "missing_actor_body"
+    DEAD_ACTOR = "dead_actor"
     MISSING_TARGET = "missing_target"
     WRONG_TARGET_CATEGORY = "wrong_target_category"
     MALFORMED_ENVELOPE = "malformed_envelope"
@@ -293,6 +294,10 @@ def validate_action_request(
     if type(body) is not AgentBody:
         return OperationRejected(
             code=RejectionCode.INVALID_ACTOR_BINDING, request_id=request_id
+        )
+    if body.life_status is LifeStatus.DEAD:
+        return OperationRejected(
+            code=RejectionCode.DEAD_ACTOR, request_id=request_id
         )
 
     base = (

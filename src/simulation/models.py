@@ -10,6 +10,7 @@ from collections.abc import Sequence
 from dataclasses import dataclass
 from typing import Final, Literal
 
+from simulation.clock import require_exact_nonneg_int
 from world.events import WorldEvent
 from world.identifiers import require_stable_id
 
@@ -17,10 +18,14 @@ DERIVATION_VERSION: Final[str] = "v1"
 LLM_REPLAY_REQUIREMENT: Final[Literal["recorded_or_stub"]] = "recorded_or_stub"
 
 
-def require_seed(seed: int) -> int:
-    if isinstance(seed, bool) or seed < 0:
-        raise ValueError("SimulationRunConfig.seed must be a non-negative integer")
-    return seed
+def require_seed(seed: object) -> int:
+    """Accept only exact non-boolean ``int`` seeds ``>= 0``."""
+    try:
+        return require_exact_nonneg_int("SimulationRunConfig.seed", seed)
+    except ValueError as exc:
+        raise ValueError(
+            "SimulationRunConfig.seed must be a non-negative integer"
+        ) from exc
 
 
 @dataclass(frozen=True, slots=True)

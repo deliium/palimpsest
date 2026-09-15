@@ -1,7 +1,13 @@
 """Simulation orchestration ports and deterministic primitives."""
 
 from simulation.actions import admit_agent_command
-from simulation.clock import LogicalClock, Tick, require_tick
+from simulation.bootstrap import (
+    AgentRegistration,
+    RegistrationTranslator,
+    WorldBootstrap,
+    registration_translator,
+)
+from simulation.clock import LogicalClock, Tick, require_exact_nonneg_int, require_tick
 from simulation.contracts import (
     RunConfigurationPort,
     describe_run,
@@ -26,6 +32,18 @@ from simulation.identifiers import (
     derive_world_id,
     reject_operational_identifier,
 )
+from simulation.lifecycle import (
+    ActionResolution,
+    ActionResolutionReason,
+    ActionResolutionStatus,
+    ActionSubmission,
+    EngineDiagnosticCode,
+    ObservationBatch,
+    TickEventRecord,
+    TickResult,
+    TickToken,
+    require_action_submission,
+)
 from simulation.models import (
     DERIVATION_VERSION,
     LLM_REPLAY_REQUIREMENT,
@@ -49,15 +67,27 @@ from simulation.serialization import (
 __all__ = [
     "DERIVATION_VERSION",
     "LLM_REPLAY_REQUIREMENT",
+    "ActionResolution",
+    "ActionResolutionReason",
+    "ActionResolutionStatus",
+    "ActionSubmission",
+    "AgentRegistration",
     "DomainSerializationError",
+    "EngineDiagnosticCode",
     "ExportMetadata",
     "LogicalClock",
+    "ObservationBatch",
+    "RegistrationTranslator",
     "RunConfigurationPort",
     "RunId",
     "SimulationExport",
     "SimulationRunConfig",
     "StreamScope",
     "Tick",
+    "TickEventRecord",
+    "TickResult",
+    "TickToken",
+    "WorldBootstrap",
     "admit_agent_command",
     "create_named_stream",
     "create_rng",
@@ -81,7 +111,10 @@ __all__ = [
     "log_replay_mismatch",
     "log_run_configured",
     "make_export",
+    "registration_translator",
     "reject_operational_identifier",
+    "require_action_submission",
+    "require_exact_nonneg_int",
     "require_tick",
     "sample_stream",
 ]

@@ -89,6 +89,8 @@ def test_world_public_facade_does_not_reexport_authority() -> None:
     assert "_state" not in world.__all__
     assert "_transitions" not in world.__all__
     assert "_operations" not in world.__all__
+    assert "_perception" not in world.__all__
+    assert "_rules" not in world.__all__
     assert "WorldState" not in world.__all__
     assert "WorldTransition" not in world.__all__
 
