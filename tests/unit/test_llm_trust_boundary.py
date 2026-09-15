@@ -1,17 +1,18 @@
-"""LLM output is untrusted and cannot enter the world gateway."""
+"""LLM output is untrusted and cannot enter engine submissions."""
 
 from __future__ import annotations
 
 import pytest
 
 from llm.models import LLMResponse
-from world.actions import Wait, accept_action_request, require_agent_command
+from simulation.lifecycle import require_action_submission
+from world.actions import Wait, require_agent_command
 
 
-def test_llm_response_is_rejected_by_world_gateway() -> None:
+def test_llm_response_is_rejected_as_action_submission() -> None:
     response = LLMResponse(provider="stub", model="scripted", text='{"kind": "speak"}')
-    with pytest.raises(TypeError, match="ActionRequest"):
-        accept_action_request(response)
+    with pytest.raises(TypeError, match="ActionSubmission"):
+        require_action_submission(response)
 
 
 def test_provider_shaped_mappings_are_not_commands() -> None:

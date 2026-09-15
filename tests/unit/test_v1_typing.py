@@ -41,6 +41,7 @@ def test_valid_v1_domain_contracts_typecheck() -> None:
         ("bad_entity_id.txt", "arg-type"),
         ("bad_command_request.txt", "arg-type"),
         ("bad_tuple_mutation.txt", "unused-ignore"),
+        ("bad_lifecycle_authority.txt", "return-value"),
     ],
 )
 def test_invalid_fixtures_fail_mypy(fixture: str, expected_code: str) -> None:

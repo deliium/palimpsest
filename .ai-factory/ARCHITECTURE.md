@@ -20,7 +20,7 @@ src/
   memory/           # owner-bound MemoryTrace/Belief
   social/           # communication envelopes + Relationship
   llm/              # provider-neutral untrusted responses
-  simulation/       # seed, clock, RNG, IDs, admission, serialization, export ports
+  simulation/       # WorldEngine, bootstrap, lifecycle, seed, clock, RNG, IDs, codec, export ports
   analysis/         # read-only event/export protocols
   api/              # FastAPI composition root
   infrastructure/   # settings, logging, database adapters
@@ -41,14 +41,15 @@ tests/
 - ✅ `analysis` is read-only over immutable events / export contracts
 - ✅ `infrastructure` imports no domain policy
 - ❌ Domain packages must not import `infrastructure`, FastAPI, or ORM stacks
-- ❌ Non-simulation packages must not import `world._state` / `world._transitions` / `world._operations`
+- ❌ Non-simulation packages must not import private `world._*` authority modules
+- ❌ Only `simulation.engine` / `simulation.bootstrap` and private `world._*` may import world authority internals
 - ❌ Cross-module imports of private modules or transitive re-exports
 
 ## Layer/Module Communication
 
 - Composition root (`api`) loads settings, configures logging, and owns database lifespan
-- Future simulation orchestrator consumes public contracts; world mutations stay behind private transitions
-- LLM responses stop at cognition; only typed `ActionRequest` may enter the world gateway
+- `WorldEngine` owns observation tokens, ordered admission, private batch preparation, and atomic commit
+- LLM responses stop at cognition; only typed commands enter the engine as submissions
 - Analysis consumes immutable exports/events, never live mutable repositories
 
 ## Key Principles
@@ -70,25 +71,30 @@ tests/
 ### Public facade import
 
 ```python
-from world import ActionRequest, Observation, accept_action_request
-from simulation import SimulationRunConfig, create_named_stream
+from simulation import (
+    ActionSubmission,
+    SimulationRunConfig,
+    WorldBootstrap,
+    WorldEngine,
+)
+from world import Observation, Wait
 ```
 
 ### Forbidden authority import outside simulation
 
 ```python
 # Not allowed from agents/memory/api/analysis/llm:
-from world._state import WorldState
+from world._state import WorldState  # private authority
 ```
 
 ## Anti-Patterns
 
-- Passing `LLMResponse` or `ActionProposal` into the world gateway
+- Passing `LLMResponse` into `WorldEngine` or treating `ActionRequest` as authoritative
 - Sharing mutable memory payloads across agents
 - Reading `PALIMPSEST_` secrets or opening DB connections at import time
 - Using Docker/PostgreSQL inside default unit tests
 
 ## See Also
 
-- `docs/architecture.md` — contributor-facing matrix and invariants
-- `.ai-factory/plans/feature-v1-project-foundation.md` — foundation plan
+- `docs/architecture.md` — contributor-facing matrix, WorldEngine lifecycle, and invariants
+- `.ai-factory/plans/feature-v1-world-engine.md` — world engine plan

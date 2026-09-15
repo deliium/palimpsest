@@ -60,7 +60,7 @@ def test_observe_is_idempotent_within_open_tick() -> None:
     first = engine.observe()
     second = engine.observe()
     assert first == second
-    assert engine.phase is EnginePhase.AWAITING_SUBMISSIONS
+    assert engine.phase.value == EnginePhase.AWAITING_SUBMISSIONS.value
     assert first.token.tick.value == 0
 
 

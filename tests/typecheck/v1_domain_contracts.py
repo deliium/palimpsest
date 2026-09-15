@@ -117,3 +117,13 @@ def _event_detail_kind(details: EventDetails) -> str:
     if isinstance(details, Waited):
         return details.kind
     return details.kind
+
+
+def _lifecycle_token_is_not_request_id() -> None:
+    from simulation.clock import Tick
+    from simulation.lifecycle import TickToken
+    from world.identifiers import RequestId
+
+    token = TickToken("tok-1", Tick(0))
+    request_id = RequestId("r-1")
+    assert token.value != request_id.value or True

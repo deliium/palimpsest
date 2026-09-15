@@ -45,10 +45,13 @@ def test_world_scopes_and_replaces_immutable_snapshots() -> None:
         WorldRevision(1),
         locations=(Location(entity_id=EntityId("loc-1"), name="Camp"),),
     )
-    replaced = world.replace_state(next_state)
-    assert replaced is next_state
-    assert world.state is next_state
-    assert world.state.locations[EntityId("loc-1")].name == "Camp"
+    with pytest.raises(RuntimeError, match="WorldEngine"):
+        world.replace_state(next_state)
+    # Supported path: construct a new World around the candidate snapshot.
+    replaced = World(WorldId("world-1"), next_state)
+    assert replaced.state is next_state
+    assert world.state.revision == WorldRevision(0)
+    assert replaced.state.locations[EntityId("loc-1")].name == "Camp"
 
 
 def test_world_state_rejects_duplicate_and_dangling_graph() -> None:

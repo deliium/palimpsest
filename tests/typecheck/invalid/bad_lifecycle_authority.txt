@@ -1,0 +1,6 @@
+from simulation.lifecycle import TickResult
+from world._state import WorldState
+
+
+def _bad(result: TickResult) -> WorldState:
+    return result

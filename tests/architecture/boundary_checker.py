@@ -73,7 +73,8 @@ PRIVATE_WORLD_IMPORTERS: Final[frozenset[str]] = frozenset(
         "world._operations",
         "world._perception",
         "world._rules",
-        "simulation",
+        "simulation.engine",
+        "simulation.bootstrap",
     }
 )
 RNG_ADAPTER_MODULE: Final[str] = "simulation.randomness"
@@ -597,9 +598,11 @@ def _importer_may_use_private_world(module: str) -> bool:
         or module.startswith("world._operations.")
         or module.startswith("world._perception.")
         or module.startswith("world._rules.")
+        or module.startswith("simulation.engine.")
+        or module.startswith("simulation.bootstrap.")
     ):
         return True
-    return layer_of(module) == "simulation"
+    return module in {"simulation.engine", "simulation.bootstrap"}
 
 
 def _string_list(node: ast.AST) -> set[str]:

@@ -2,7 +2,7 @@
 
 Reproducible, discrete, text-based multi-agent AI society experiments.
 
-This repository is a **Python 3.12+ modular monolith**. It establishes package boundaries, V1 typed domain contracts (world/agent models, closed action trust pipeline, schema-v1 serialization), configuration, persistence, an HTTP liveness API, observability, and containers. It does **not** implement a simulation tick loop or behavioral action-resolution policy.
+This repository is a **Python 3.12+ modular monolith**. It establishes package boundaries, V1 typed domain contracts, an authoritative deterministic `WorldEngine` tick loop (observe → ordered submissions → resolve), schema-v1 event export, configuration, persistence, an HTTP liveness API, observability, and containers. Agent cognition and LLM invocation stay outside the engine.
 
 ## Requirements
 
@@ -49,7 +49,7 @@ Development credentials in `compose.yaml` are **not production**. `docker compos
 
 | Page | Contents |
 | --- | --- |
-| [Architecture](docs/architecture.md) | Bounded packages, dependency matrix, public facades, eleven invariants, deferred scope |
+| [Architecture](docs/architecture.md) | Bounded packages, `WorldEngine` lifecycle, public facades, eleven invariants, deferred scope |
 | [Configuration](docs/configuration.md) | `PALIMPSEST_` settings, logging, redaction, seeds, identifiers, clocks |
 | [Development](docs/development.md) | Tests, migrations, local and Docker workflows, exact commands |
 
@@ -58,7 +58,7 @@ Development credentials in `compose.yaml` are **not production**. `docker compos
 1. World state is authoritative.
 2. Agents receive immutable observations, never `WorldState`.
 3. Objective world state and subjective agent state remain separate.
-4. Every agent action is a closed typed command admitted by simulation before private world validation.
+4. Every agent action is a closed typed command resolved by `WorldEngine` through private world rules.
 5. LLM output is untrusted and cannot mutate world state directly.
 6. Objective `WorldEvent` values are immutable closed occurrence facts.
 7. Agent memories and beliefs are mutable and may be incorrect.
@@ -67,7 +67,7 @@ Development credentials in `compose.yaml` are **not production**. `docker compos
 10. Randomness is injected and derived from an explicit simulation seed.
 11. Cognition is a strategy protocol that returns `AgentCommand` over the same world contracts.
 
-See [docs/architecture.md](docs/architecture.md) for enforcement and what is still deferred.
+See [docs/architecture.md](docs/architecture.md) for the engine lifecycle, enforcement, and what remains deferred.
 
 ## License
 

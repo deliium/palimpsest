@@ -187,3 +187,21 @@ def test_decode_rejects_malformed_and_unknown_input() -> None:
 def test_action_proposal_round_trip() -> None:
     proposal = ActionProposal(proposal_id=ProposalId("p-1"), command=Wait())
     assert decode_domain(encode_domain(proposal)) == proposal
+
+
+def test_lifecycle_and_bootstrap_values_are_not_serializable() -> None:
+    from simulation.bootstrap import WorldBootstrap
+    from simulation.clock import Tick
+    from simulation.lifecycle import TickToken
+    from world.identifiers import WorldId, WorldRevision
+
+    with pytest.raises(DomainSerializationError) as err:
+        encode_domain(
+            WorldBootstrap(
+                world_id=WorldId("world-1"),
+                revision=WorldRevision(0),
+            )
+        )
+    assert err.value.code == "unsupported_type"
+    with pytest.raises(DomainSerializationError):
+        encode_domain(TickToken("tok", Tick(0)))

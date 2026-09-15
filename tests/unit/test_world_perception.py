@@ -138,9 +138,10 @@ def test_observations_follow_registration_order_and_v1_policy() -> None:
     ]
     # Never expose other bodies.
     assert all(obs.self_body is not None for obs in observations)
-    assert all(
-        obs.self_body.entity_id == obs.observer_id for obs in observations
-    )
+    for obs in observations:
+        body = obs.self_body
+        assert body is not None
+        assert body.entity_id == obs.observer_id
 
 
 def test_dead_bodies_still_receive_observations() -> None:

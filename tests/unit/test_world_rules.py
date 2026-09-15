@@ -7,6 +7,7 @@ import pytest
 from world._operations import (
     OperationAccepted,
     RejectionCode,
+    ValidatedWorldOperation,
     validate_action_request,
 )
 from world._rules import (
@@ -136,8 +137,10 @@ def _state(*, include_held: bool = True) -> WorldState:
     )
 
 
-def _accept(command: object, *, actor: str = "body-1") -> object:
-    from world.actions import ActionRequest
+def _accept(
+    command: object, *, actor: str = "body-1"
+) -> ValidatedWorldOperation:
+    from world.actions import ActionRequest, require_agent_command
 
     state = _state()
     outcome = validate_action_request(
@@ -149,11 +152,12 @@ def _accept(command: object, *, actor: str = "body-1") -> object:
             world_id=WorldId("world-1"),
             actor_id=EntityId(actor),
             revision=WorldRevision(1),
-            command=command,
+            command=require_agent_command(command),
         ),
     )
     assert isinstance(outcome, OperationAccepted)
-    return outcome.operation
+    operation: ValidatedWorldOperation = outcome.operation
+    return operation
 
 
 def test_matrix_covers_all_fifteen_operation_types() -> None:
@@ -192,7 +196,7 @@ def test_dead_actor_rejected_before_command_specific_behavior(
     kind: str, command: object, _expected: RuleDisposition
 ) -> None:
     from world._operations import OperationRejected
-    from world.actions import ActionRequest
+    from world.actions import ActionRequest, require_agent_command
 
     del kind, _expected
     state = _state()
@@ -205,7 +209,7 @@ def test_dead_actor_rejected_before_command_specific_behavior(
             world_id=WorldId("world-1"),
             actor_id=EntityId("body-dead"),
             revision=WorldRevision(1),
-            command=command,
+            command=require_agent_command(command),
         ),
     )
     assert isinstance(outcome, OperationRejected)

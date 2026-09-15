@@ -7,15 +7,12 @@ from hypothesis import given, settings
 from hypothesis import strategies as st
 
 from agents.models import Agent, AgentId
-from world._state import WorldState
-from world._transitions import apply_trusted
+from simulation.lifecycle import require_action_submission
 from world.actions import (
-    ActionOutcome,
     ActionProposal,
     ActionRequest,
     TransitionOutcome,
     Wait,
-    accept_action_request,
 )
 from world.events import Waited, WorldEvent
 from world.identifiers import (
@@ -108,7 +105,7 @@ def test_world_event_is_immutable_occurrence() -> None:
         event.revision = WorldRevision(4)  # type: ignore[misc]
 
 
-def test_gateway_rejects_proposal_and_raw_mapping() -> None:
+def test_submissions_reject_proposal_and_raw_mapping() -> None:
     proposal = ActionProposal(
         proposal_id=ProposalId("p-1"),
         command=Wait(),
@@ -119,10 +116,10 @@ def test_gateway_rejects_proposal_and_raw_mapping() -> None:
         "kind": "wait",
         "revision": 1,
     }
-    with pytest.raises(TypeError, match="ActionProposal"):
-        accept_action_request(proposal)
-    with pytest.raises(TypeError, match="raw mappings"):
-        accept_action_request(mapping)
+    with pytest.raises(TypeError, match="ActionSubmission"):
+        require_action_submission(proposal)
+    with pytest.raises(TypeError, match=r"action submission|mappings"):
+        require_action_submission(mapping)
 
     request = ActionRequest(
         request_id=RequestId("r-1"),
@@ -132,24 +129,17 @@ def test_gateway_rejects_proposal_and_raw_mapping() -> None:
         revision=WorldRevision(1),
         command=Wait(),
     )
-    assert accept_action_request(request) is request
+    with pytest.raises(TypeError, match="ActionSubmission"):
+        require_action_submission(request)
 
 
-def test_trusted_transition_rejects_proposals() -> None:
-    class _Transition:
-        def apply(self, state: WorldState, request: ActionRequest) -> ActionOutcome:
-            return ActionOutcome(
-                request_id=request.request_id,
-                outcome=TransitionOutcome.APPLIED,
-                revision=state.revision,
-            )
+def test_public_facade_hides_legacy_gateway_symbols() -> None:
+    import world
 
-    proposal = ActionProposal(
-        proposal_id=ProposalId("p-1"),
-        command=Wait(),
-    )
-    with pytest.raises(TypeError, match="ActionProposal"):
-        apply_trusted(_Transition(), WorldState(WorldRevision(0)), proposal)
+    assert "WorldGateway" not in world.__all__
+    assert "accept_action_request" not in world.__all__
+    assert "ActionOutcome" not in world.__all__
+    assert "TransitionOutcome" not in world.__all__
 
 
 def test_agent_id_is_not_an_entity_id() -> None:

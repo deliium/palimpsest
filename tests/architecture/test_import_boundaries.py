@@ -93,6 +93,10 @@ def test_world_public_facade_does_not_reexport_authority() -> None:
     assert "_rules" not in world.__all__
     assert "WorldState" not in world.__all__
     assert "WorldTransition" not in world.__all__
+    assert "WorldGateway" not in world.__all__
+    assert "accept_action_request" not in world.__all__
+    assert "admit_agent_command" not in __import__("simulation").__all__
+    assert "WorldEngine" in __import__("simulation").__all__
 
 
 def test_allowlist_covers_every_bounded_layer() -> None:

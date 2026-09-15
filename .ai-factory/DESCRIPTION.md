@@ -2,13 +2,13 @@
 
 ## Overview
 
-Palimpsest is a Python 3.12+ modular monolith for reproducible, discrete, text-based multi-agent AI society experiments. The current V1 surface establishes package boundaries, typed domain contracts (objective world models, subjective agent/memory/social state, closed action trust pipeline, versioned serialization), configuration, persistence bootstrap, an HTTP liveness API, observability, and containers without implementing a simulation tick loop or behavioral resolution policy.
+Palimpsest is a Python 3.12+ modular monolith for reproducible, discrete, text-based multi-agent AI society experiments. The current V1 surface establishes package boundaries, typed domain contracts, an authoritative deterministic `WorldEngine` tick loop, schema-v1 event export, configuration, persistence bootstrap, an HTTP liveness API, observability, and containers. Agent cognition and LLM invocation remain outside the engine.
 
 ## Core Features
 
-- Bounded packages for world authority, agents, cognition strategies, memory, social envelopes, LLM trust boundaries, simulation primitives, analysis ports, API, and infrastructure
-- Typed immutable agent-facing contracts, private world authority (`World` / `WorldState` / operations), and simulation admission + schema-v1 codec
-- Deterministic seed-derived RNG streams, logical clock, and namespaced IDs
+- Bounded packages for world authority, agents, cognition strategies, memory, social envelopes, LLM trust boundaries, simulation/`WorldEngine`, analysis ports, API, and infrastructure
+- Typed immutable agent-facing contracts, private world authority (`World` / `WorldState` / rules / operations), and schema-v1 event/export codec
+- Deterministic seed-derived RNG streams, logical clock, namespaced IDs, and replay-stable tick resolution
 - `PALIMPSEST_` settings, structured logging, async SQLAlchemy lifecycle, Alembic + pgvector bootstrap
 - FastAPI `/health` liveness and Docker Compose development stack
 
@@ -25,7 +25,7 @@ Palimpsest is a Python 3.12+ modular monolith for reproducible, discrete, text-b
 
 ## Architecture Notes
 
-Modular monolith with explicit bounded packages under `src/`. Domain modules do not import infrastructure; the API composition root wires adapters. World authority (`WorldState` / transitions) is private to simulation. Cross-module imports use package facades / `__all__`. Import-linter and AST boundary checks enforce dependency rules.
+Modular monolith with explicit bounded packages under `src/`. Domain modules do not import infrastructure; the API composition root wires adapters. `simulation.WorldEngine` is the sole public mutation authority; private world modules prepare candidates only. Cross-module imports use package facades / `__all__`. Import-linter and AST boundary checks enforce dependency rules.
 
 ## Non-Functional Requirements
 

@@ -287,7 +287,8 @@ protected_modules = [
     "world._rules",
 ]
 allowed_importers = [
-    "simulation",
+    "simulation.engine",
+    "simulation.bootstrap",
     "world._state",
     "world._transitions",
     "world._operations",

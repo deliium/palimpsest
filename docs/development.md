@@ -10,6 +10,16 @@ uv sync --frozen --python 3.12.14
 
 Do not omit `--frozen` in development or containers. The reference interpreter is **3.12.14**.
 
+## WorldEngine
+
+`simulation.WorldEngine` is the sole public mutation authority. Construct it from `SimulationRunConfig` (required seed) and immutable `WorldBootstrap`, then:
+
+1. `observe()` → `ObservationBatch` with an engine-issued `TickToken`
+2. Submit an ordered sequence of `ActionSubmission(token, AgentId, AgentCommand)`
+3. `resolve_tick(...)` → `TickResult` and atomic commit to tick N+1
+
+Equivalent bootstrap + seed + ordered submissions must produce identical ticks, revisions, resolutions, objective events, and schema-1 export bytes. Lifecycle types and bootstrap are not schema-1 wire values. See [Architecture](architecture.md).
+
 ## Tests
 
 Default pytest excludes live infrastructure:

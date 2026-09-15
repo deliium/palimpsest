@@ -95,7 +95,9 @@ def test_checker_detects_private_perception_access(tmp_path: Path) -> None:
         {
             "world/__init__.py": _PUBLIC_INIT,
             "world/_perception.py": _PUBLIC_INIT,
-            "agents/__init__.py": "from world._perception import project_observations\n",
+            "agents/__init__.py": (
+                "from world._perception import project_observations\n"
+            ),
         },
     )
     report = _messages(root)

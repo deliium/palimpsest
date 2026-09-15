@@ -186,6 +186,19 @@ def _reject_duplicate_keys(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
 def _encode_top(value: object, *, path: str) -> tuple[str, dict[str, Any]]:
     if type(value) is ActionRequest:
         raise DomainSerializationError("unsupported_type", path)
+    # Lifecycle/runtime authority values are intentionally wire-ineligible.
+    value_module = getattr(type(value), "__module__", "")
+    value_name = type(value).__name__
+    if value_module.startswith("simulation.lifecycle") or value_name in {
+        "WorldBootstrap",
+        "WorldEngine",
+        "TickToken",
+        "ActionSubmission",
+        "ActionResolution",
+        "TickResult",
+        "ObservationBatch",
+    }:
+        raise DomainSerializationError("unsupported_type", path)
     if type(value) is Location:
         return "location", _encode_location(value)
     if type(value) is Item:

@@ -105,6 +105,10 @@ def test_public_facades_hide_authority_and_expose_codec() -> None:
 
     assert "World" not in world.__all__
     assert "WorldState" not in world.__all__
+    assert "WorldGateway" not in world.__all__
+    assert "accept_action_request" not in world.__all__
     assert "encode_domain" in simulation.__all__
     assert "decode_domain" in simulation.__all__
     assert "DomainSerializationError" in simulation.__all__
+    assert "WorldEngine" in simulation.__all__
+    assert "admit_agent_command" not in simulation.__all__

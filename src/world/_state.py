@@ -160,11 +160,13 @@ class World:
         return self._state
 
     def replace_state(self, new_state: WorldState) -> WorldState:
-        """Replace the current immutable snapshot and return it."""
-        if type(new_state) is not WorldState:
-            raise TypeError("World.replace_state requires WorldState")
-        self._state = new_state
-        return self._state
+        """Unsupported public mutation hook.
+
+        Objective evolution must go through :class:`simulation.engine.WorldEngine`.
+        """
+        raise RuntimeError(
+            "World.replace_state is not a supported mutation path; use WorldEngine"
+        )
 
     def apply_admitted_request(
         self,

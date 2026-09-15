@@ -463,8 +463,9 @@ class WorldEngine:
                     )
                 )
                 continue
-            request = admitted[ordinal]
-            assert request is not None
+            maybe_request = admitted[ordinal]
+            assert maybe_request is not None
+            request = maybe_request
             batch_outcome = batch_by_request[request.request_id]
             status, reason = _map_batch_outcome(batch_outcome)
             resolutions.append(

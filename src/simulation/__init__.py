@@ -1,7 +1,6 @@
 """Simulation orchestration ports and deterministic primitives."""
 
 from simulation.actions import (
-    admit_agent_command,
     canonical_admission_keys,
     canonical_event_keys,
     derive_engine_event_id,
@@ -97,7 +96,6 @@ __all__ = [
     "TickToken",
     "WorldBootstrap",
     "WorldEngine",
-    "admit_agent_command",
     "canonical_admission_keys",
     "canonical_event_keys",
     "create_named_stream",

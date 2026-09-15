@@ -180,6 +180,7 @@ def test_canonical_admission_keys_are_ordinal_stable_and_rng_isolated() -> None:
         purpose="unused-v1",
     )
     assert scope.namespace == "effect"
-    assert random.random() != before or True  # global RNG may advance; admission must not
+    # Global RNG may advance; admission must not depend on it.
+    assert random.random() != before or True
     # Process global RNG is not used by admission; state may change from our probe.
     _ = scope

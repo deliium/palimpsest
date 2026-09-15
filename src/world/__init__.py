@@ -1,11 +1,10 @@
 """Authoritative world state and agent-facing contracts.
 
-Public facade. ``world._state`` and ``world._transitions`` are private
-authority modules and must not be re-exported.
+Public facade. Private authority modules (``world._*``) and legacy gateway
+helpers are not re-exported. Objective mutation goes through ``simulation.WorldEngine``.
 """
 
 from world.actions import (
-    ActionOutcome,
     ActionProposal,
     ActionRequest,
     AgentCommand,
@@ -23,10 +22,7 @@ from world.actions import (
     Take,
     Talk,
     Tell,
-    TransitionOutcome,
     Wait,
-    WorldGateway,
-    accept_action_request,
     require_agent_command,
 )
 from world.events import (
@@ -67,7 +63,6 @@ from world.values import (
 )
 
 __all__ = [
-    "ActionOutcome",
     "ActionProposal",
     "ActionRequest",
     "AgentBody",
@@ -115,15 +110,12 @@ __all__ = [
     "TemperatureCelsius",
     "Thirst",
     "Told",
-    "TransitionOutcome",
     "Wait",
     "Waited",
     "Weather",
     "WorldEvent",
-    "WorldGateway",
     "WorldId",
     "WorldRevision",
-    "accept_action_request",
     "detached_mapping",
     "require_agent_command",
 ]
