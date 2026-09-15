@@ -24,8 +24,22 @@ FORBIDDEN_PACKAGES = (
     "api",
     "analysis",
 )
-AUTHORITY_NAMES = frozenset({"World", "WorldState", "WorldTransition", "apply_trusted"})
-AUTHORITY_MODULES = frozenset({"world._state", "world._transitions"})
+AUTHORITY_NAMES = frozenset(
+    {
+        "World",
+        "WorldState",
+        "WorldTransition",
+        "apply_trusted",
+        "apply_validated_operation",
+        "validate_action_request",
+        "OperationAccepted",
+        "OperationRejected",
+        "ValidatedWorldOperation",
+    }
+)
+AUTHORITY_MODULES = frozenset(
+    {"world._state", "world._transitions", "world._operations"}
+)
 
 
 def test_public_world_facade_omits_authority() -> None:

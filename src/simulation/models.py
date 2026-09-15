@@ -59,3 +59,8 @@ class SimulationExport:
 
     metadata: ExportMetadata
     events: tuple[WorldEvent, ...]
+
+    def __post_init__(self) -> None:
+        from world.events import normalize_events
+
+        object.__setattr__(self, "events", normalize_events(self.events))

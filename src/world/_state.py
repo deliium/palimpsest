@@ -5,7 +5,7 @@ from __future__ import annotations
 from collections.abc import Mapping, Sequence
 from types import MappingProxyType
 
-from world.identifiers import EntityId, WorldId, WorldRevision
+from world.identifiers import EntityId, EventId, WorldId, WorldRevision
 from world.models import AgentBody, Item, Location, Resource, Weather
 
 __all__: list[str] = ["World", "WorldState"]
@@ -131,6 +131,54 @@ class World:
             raise TypeError("World.replace_state requires WorldState")
         self._state = new_state
         return self._state
+
+    def apply_admitted_request(
+        self,
+        request: object,
+        *,
+        event_ids: Sequence[EventId],
+    ) -> object:
+        """Validate then apply a bound request against the current snapshot.
+
+        Rechecks the base revision atomically after validation. Behavioral
+        effects remain deferred; acceptance emits occurrence-only events.
+        """
+        from world._operations import (
+            OperationAccepted,
+            OperationRejected,
+            RejectionCode,
+            validate_action_request,
+        )
+        from world._transitions import apply_validated_operation
+        from world.actions import ActionRequest
+        from world.identifiers import EventId as EventIdType
+
+        if type(request) is not ActionRequest:
+            return OperationRejected(code=RejectionCode.WRONG_TRUST_STAGE)
+        if request.world_id != self._world_id:
+            return OperationRejected(
+                code=RejectionCode.WRONG_WORLD, request_id=request.request_id
+            )
+        if request.revision != self._state.revision:
+            return OperationRejected(
+                code=RejectionCode.STALE_REVISION, request_id=request.request_id
+            )
+        outcome = validate_action_request(
+            world_id=self._world_id, state=self._state, request=request
+        )
+        if type(outcome) is OperationRejected:
+            return outcome
+        assert type(outcome) is OperationAccepted
+        if request.revision != self._state.revision:
+            return OperationRejected(
+                code=RejectionCode.STALE_REVISION, request_id=request.request_id
+            )
+        for event_id in event_ids:
+            if type(event_id) is not EventIdType:
+                raise TypeError("event_ids entries must be EventId")
+        return apply_validated_operation(
+            self._state, outcome.operation, event_ids=event_ids
+        )
 
 
 def _reject_global_id_collisions(

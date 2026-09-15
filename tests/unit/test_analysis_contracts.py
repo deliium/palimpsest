@@ -6,8 +6,8 @@ from analysis.contracts import EventSource, ExportSource
 from simulation.contracts import make_export
 from simulation.identifiers import derive_run_id
 from simulation.models import SimulationExport, SimulationRunConfig
-from world.events import WorldEvent
-from world.identifiers import EventId, WorldRevision
+from world.events import Waited, WorldEvent
+from world.identifiers import EventId, RequestId, WorldId, WorldRevision
 
 
 class _FrozenSource:
@@ -26,9 +26,10 @@ def test_event_and_export_sources_are_read_only_snapshots() -> None:
     run_id = derive_run_id(config)
     event = WorldEvent(
         event_id=EventId("evt-1"),
+        request_id=RequestId("r-1"),
+        world_id=WorldId("world-1"),
         revision=WorldRevision(2),
-        kind="observed",
-        payload={"n": 1},
+        details=Waited(),
     )
     export = make_export(config, run_id, [event])
     source: EventSource = _FrozenSource(export)
@@ -37,5 +38,5 @@ def test_event_and_export_sources_are_read_only_snapshots() -> None:
     loaded = exports.export()
     assert loaded.metadata.seed == 3
     assert loaded.metadata.run_id == run_id
-    assert loaded.events[0].payload["n"] == 1
-    assert "WorldState" not in type(loaded).__module__
+    assert loaded.events[0].details == Waited()
+    assert isinstance(loaded.events, tuple)

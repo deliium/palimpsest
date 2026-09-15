@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-from collections.abc import Sequence
 from typing import Protocol
 
 from simulation.models import SimulationExport
@@ -12,7 +11,7 @@ from world.events import WorldEvent
 class EventSource(Protocol):
     """Yields immutable objective events. Must not expose WorldState."""
 
-    def events(self) -> Sequence[WorldEvent]:
+    def events(self) -> tuple[WorldEvent, ...]:
         """Return a detached snapshot of world events."""
         ...
 

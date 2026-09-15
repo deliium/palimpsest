@@ -58,10 +58,15 @@ ALLOWED_IMPORTS: Final[dict[str, frozenset[str]]] = {
 }
 
 PRIVATE_WORLD_MODULES: Final[frozenset[str]] = frozenset(
-    {"world._state", "world._transitions"}
+    {"world._state", "world._transitions", "world._operations"}
 )
 PRIVATE_WORLD_IMPORTERS: Final[frozenset[str]] = frozenset(
-    {"world._state", "world._transitions", "simulation"}
+    {
+        "world._state",
+        "world._transitions",
+        "world._operations",
+        "simulation",
+    }
 )
 RNG_ADAPTER_MODULE: Final[str] = "simulation.randomness"
 
@@ -559,7 +564,11 @@ def _private_world_target(imported: str) -> str | None:
 def _importer_may_use_private_world(module: str) -> bool:
     if module in PRIVATE_WORLD_MODULES:
         return True
-    if module.startswith("world._state.") or module.startswith("world._transitions."):
+    if (
+        module.startswith("world._state.")
+        or module.startswith("world._transitions.")
+        or module.startswith("world._operations.")
+    ):
         return True
     return layer_of(module) == "simulation"
 

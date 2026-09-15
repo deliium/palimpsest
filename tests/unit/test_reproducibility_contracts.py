@@ -30,8 +30,8 @@ from simulation.models import (
     SimulationRunConfig,
 )
 from simulation.randomness import StreamScope, create_named_stream, sample_stream
-from world.events import WorldEvent
-from world.identifiers import EventId, WorldRevision
+from world.events import Waited, WorldEvent
+from world.identifiers import EventId, RequestId, WorldId, WorldRevision
 
 SRC = Path(__file__).resolve().parents[2] / "src" / "simulation"
 
@@ -181,9 +181,10 @@ def test_export_records_replay_limit() -> None:
     run_id = derive_run_id(config)
     event = WorldEvent(
         event_id=EventId("evt-1"),
+        request_id=RequestId("r-1"),
+        world_id=WorldId("world-1"),
         revision=WorldRevision(0),
-        kind="tick",
-        payload={},
+        details=Waited(),
     )
     export = make_export(config, run_id, [event])
     assert export.metadata.llm_replay == LLM_REPLAY_REQUIREMENT

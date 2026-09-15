@@ -5,13 +5,19 @@ from __future__ import annotations
 import pytest
 
 from llm.models import LLMResponse
-from world.actions import accept_action_request
+from world.actions import Wait, accept_action_request, require_agent_command
 
 
 def test_llm_response_is_rejected_by_world_gateway() -> None:
     response = LLMResponse(provider="stub", model="scripted", text='{"kind": "speak"}')
     with pytest.raises(TypeError, match="ActionRequest"):
         accept_action_request(response)
+
+
+def test_provider_shaped_mappings_are_not_commands() -> None:
+    with pytest.raises(TypeError, match="raw mappings"):
+        require_agent_command({"kind": "wait"})
+    assert require_agent_command(Wait()) == Wait()
 
 
 def test_llm_response_is_frozen() -> None:

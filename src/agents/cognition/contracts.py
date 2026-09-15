@@ -9,7 +9,7 @@ from typing import Protocol
 from agents.models import AgentId
 from memory.models import Belief, MemoryTrace
 from social.models import CommunicationEnvelope
-from world.actions import ActionProposal
+from world.actions import AgentCommand
 from world.observations import Observation
 
 
@@ -85,8 +85,8 @@ class Perspective:
 
 
 class CognitionStrategy(Protocol):
-    """Produce a non-authoritative proposal from an immutable perspective."""
+    """Produce a non-authoritative command from an immutable perspective."""
 
-    def propose(self, perspective: Perspective) -> ActionProposal:
-        """Return an action proposal. Must not mutate world state."""
+    def propose(self, perspective: Perspective) -> AgentCommand:
+        """Return an agent command. Must not mutate world state."""
         ...

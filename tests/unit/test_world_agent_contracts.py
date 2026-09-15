@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-from types import MappingProxyType
-
 import pytest
 from hypothesis import given, settings
 from hypothesis import strategies as st
@@ -15,10 +13,11 @@ from world.actions import (
     ActionOutcome,
     ActionProposal,
     ActionRequest,
-    OutcomeCategory,
+    TransitionOutcome,
+    Wait,
     accept_action_request,
 )
-from world.events import WorldEvent
+from world.events import Waited, WorldEvent
 from world.identifiers import (
     EntityId,
     EventId,
@@ -96,32 +95,29 @@ def test_observation_is_typed_partial_and_immutable() -> None:
         )
 
 
-def test_world_event_is_detached_from_source_mapping() -> None:
-    payload = {"actors": [{"id": "e-1"}]}
+def test_world_event_is_immutable_occurrence() -> None:
     event = WorldEvent(
         event_id=EventId("event-1"),
+        request_id=RequestId("r-1"),
+        world_id=WorldId("world-1"),
         revision=WorldRevision(3),
-        kind="spawned",
-        payload=payload,
+        details=Waited(),
     )
-    payload["actors"][0]["id"] = "mutated"
-    assert event.payload["actors"] == ({"id": "e-1"},)
-    assert isinstance(event.payload, MappingProxyType)
+    assert event.details == Waited()
+    with pytest.raises(AttributeError):
+        event.revision = WorldRevision(4)  # type: ignore[misc]
 
 
 def test_gateway_rejects_proposal_and_raw_mapping() -> None:
     proposal = ActionProposal(
         proposal_id=ProposalId("p-1"),
-        actor_id=EntityId("actor-1"),
-        kind="speak",
-        payload={"text": "hello"},
+        command=Wait(),
     )
     mapping = {
         "request_id": "r-1",
         "actor_id": "actor-1",
-        "kind": "speak",
+        "kind": "wait",
         "revision": 1,
-        "payload": {},
     }
     with pytest.raises(TypeError, match="ActionProposal"):
         accept_action_request(proposal)
@@ -130,10 +126,11 @@ def test_gateway_rejects_proposal_and_raw_mapping() -> None:
 
     request = ActionRequest(
         request_id=RequestId("r-1"),
+        proposal_id=ProposalId("p-1"),
+        world_id=WorldId("world-1"),
         actor_id=EntityId("actor-1"),
-        kind="speak",
         revision=WorldRevision(1),
-        payload={"text": "hello"},
+        command=Wait(),
     )
     assert accept_action_request(request) is request
 
@@ -143,15 +140,13 @@ def test_trusted_transition_rejects_proposals() -> None:
         def apply(self, state: WorldState, request: ActionRequest) -> ActionOutcome:
             return ActionOutcome(
                 request_id=request.request_id,
-                category=OutcomeCategory.ACCEPTED,
+                outcome=TransitionOutcome.APPLIED,
                 revision=state.revision,
             )
 
     proposal = ActionProposal(
         proposal_id=ProposalId("p-1"),
-        actor_id=EntityId("actor-1"),
-        kind="speak",
-        payload={},
+        command=Wait(),
     )
     with pytest.raises(TypeError, match="ActionProposal"):
         apply_trusted(_Transition(), WorldState(WorldRevision(0)), proposal)
@@ -187,10 +182,9 @@ def test_empty_identifiers_are_rejected() -> None:
         ProposalId("")
 
 
-def test_outcome_category_is_explicit() -> None:
-    assert OutcomeCategory.ACCEPTED.value == "accepted"
-    assert set(OutcomeCategory) == {
-        OutcomeCategory.ACCEPTED,
-        OutcomeCategory.REJECTED,
-        OutcomeCategory.INVALID,
+def test_transition_outcome_is_closed() -> None:
+    assert TransitionOutcome.APPLIED.value == "applied"
+    assert set(TransitionOutcome) == {
+        TransitionOutcome.APPLIED,
+        TransitionOutcome.NOT_APPLIED,
     }

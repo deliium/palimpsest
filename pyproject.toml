@@ -277,10 +277,15 @@ forbidden_modules = [
 
 [[tool.importlinter.contracts]]
 id = "private_world_authority"
-name = "world._state and world._transitions are simulation-only"
+name = "world._state, world._transitions, and world._operations are simulation-only"
 type = "protected"
-protected_modules = ["world._state", "world._transitions"]
-allowed_importers = ["simulation", "world._state", "world._transitions"]
+protected_modules = ["world._state", "world._transitions", "world._operations"]
+allowed_importers = [
+    "simulation",
+    "world._state",
+    "world._transitions",
+    "world._operations",
+]
 as_packages = true
 
 [[tool.importlinter.contracts]]

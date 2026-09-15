@@ -1,5 +1,6 @@
 """Simulation orchestration ports and deterministic primitives."""
 
+from simulation.actions import admit_agent_command
 from simulation.clock import LogicalClock, Tick, require_tick
 from simulation.contracts import (
     RunConfigurationPort,
@@ -51,6 +52,7 @@ __all__ = [
     "SimulationRunConfig",
     "StreamScope",
     "Tick",
+    "admit_agent_command",
     "create_named_stream",
     "create_rng",
     "derive_belief_id",

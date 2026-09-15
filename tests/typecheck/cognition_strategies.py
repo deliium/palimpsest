@@ -9,20 +9,16 @@ from __future__ import annotations
 from agents.cognition.contracts import CognitionStrategy, Perspective
 from llm.contracts import LLMClient
 from llm.models import LLMResponse
-from world.actions import ActionProposal
-from world.identifiers import EntityId, ProposalId
+from world.actions import AgentCommand, Wait
+from world.identifiers import EntityId
 
 
 class ScriptedCognitionStrategy:
     """Deterministic strategy with no LLM dependency."""
 
-    def propose(self, perspective: Perspective) -> ActionProposal:
-        return ActionProposal(
-            proposal_id=ProposalId("scripted-1"),
-            actor_id=perspective.observation.observer_id,
-            kind="wait",
-            payload={"agent": perspective.agent_id.value},
-        )
+    def propose(self, perspective: Perspective) -> AgentCommand:
+        _ = perspective
+        return Wait()
 
 
 class StubLLMBackedStrategy:
@@ -31,14 +27,9 @@ class StubLLMBackedStrategy:
     def __init__(self, client: LLMClient) -> None:
         self._client = client
 
-    def propose(self, perspective: Perspective) -> ActionProposal:
-        response = self._client.complete(perspective.agent_id.value)
-        return ActionProposal(
-            proposal_id=ProposalId("llm-stub-1"),
-            actor_id=perspective.observation.observer_id,
-            kind="wait",
-            payload={"provider": response.provider, "model": response.model},
-        )
+    def propose(self, perspective: Perspective) -> AgentCommand:
+        _ = self._client.complete(perspective.agent_id.value)
+        return Wait()
 
 
 def _assert_strategies_match_protocol() -> None:
