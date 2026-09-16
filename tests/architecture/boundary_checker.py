@@ -26,6 +26,7 @@ BOUNDED_PACKAGES: Final[frozenset[str]] = frozenset(
         "api",
         "analysis",
         "infrastructure",
+        "persistence",
     }
 )
 
@@ -40,6 +41,7 @@ BOUNDED_LAYERS: Final[tuple[str, ...]] = (
     "api",
     "analysis",
     "infrastructure",
+    "persistence",
 )
 
 ALLOWED_IMPORTS: Final[dict[str, frozenset[str]]] = {
@@ -52,9 +54,10 @@ ALLOWED_IMPORTS: Final[dict[str, frozenset[str]]] = {
     "simulation": frozenset(
         {"world", "agents", "agents.cognition", "memory", "social", "llm"}
     ),
-    "api": frozenset({"simulation", "infrastructure"}),
+    "api": frozenset({"simulation", "infrastructure", "persistence"}),
     "analysis": frozenset({"world", "simulation"}),
     "infrastructure": frozenset(),
+    "persistence": frozenset({"simulation", "infrastructure"}),
 }
 
 PRIVATE_WORLD_MODULES: Final[frozenset[str]] = frozenset(
@@ -83,6 +86,7 @@ RNG_ADAPTER_MODULE: Final[str] = "simulation.randomness"
 
 FASTAPI_STACK: Final[frozenset[str]] = frozenset({"fastapi", "starlette", "uvicorn"})
 ORM_STACK: Final[frozenset[str]] = frozenset({"sqlalchemy", "alembic", "asyncpg"})
+ORM_ALLOWED_LAYERS: Final[frozenset[str]] = frozenset({"infrastructure", "persistence"})
 PYDANTIC_STACK: Final[frozenset[str]] = frozenset({"pydantic", "pydantic_core"})
 DOMAIN_NO_PYDANTIC: Final[frozenset[str]] = frozenset(
     {
@@ -522,12 +526,13 @@ class _ModuleVisitor(ast.NodeVisitor):
                 line,
                 "FastAPI/Starlette/Uvicorn may only be imported by api",
             )
-        if root in ORM_STACK and self.layer != "infrastructure":
+        if root in ORM_STACK and self.layer not in ORM_ALLOWED_LAYERS:
             self._add(
                 "framework-leakage",
                 imported,
                 line,
-                "SQLAlchemy/Alembic/asyncpg may only be imported by infrastructure",
+                "SQLAlchemy/Alembic/asyncpg may only be imported by "
+                "infrastructure or persistence",
             )
         if root in PYDANTIC_STACK and self.layer in DOMAIN_NO_PYDANTIC:
             self._add(

@@ -34,7 +34,7 @@ from simulation.persistence import (
     WorldSnapshot,
 )
 from simulation.serialization import DomainSerializationError, encode_domain
-from world.events import Waited, make_replayable_event
+from world.events import Waited, WorldEvent, make_replayable_event
 from world.identifiers import (
     EntityId,
     EventId,
@@ -106,7 +106,7 @@ def _manifest(*, seed: int = 7) -> RunManifest:
     )
 
 
-def _event() -> object:
+def _event() -> WorldEvent:
     return make_replayable_event(
         event_id=EventId("evt-1"),
         run_id="run-1",
@@ -304,16 +304,25 @@ def test_commit_chain_validates_and_rejects_gaps() -> None:
 
 
 def test_compute_commit_hash_is_deterministic() -> None:
-    kwargs = {
-        "predecessor_commit_hash": None,
-        "run_id": RunId("run-1"),
-        "tick": Tick(0),
-        "base_revision": WorldRevision(0),
-        "resulting_revision": WorldRevision(1),
-        "event_hashes": (PayloadHash(_HASH_A),),
-        "payload_hash": PayloadHash(_HASH_B),
-    }
-    assert compute_commit_hash(**kwargs) == compute_commit_hash(**kwargs)
+    first = compute_commit_hash(
+        predecessor_commit_hash=None,
+        run_id=RunId("run-1"),
+        tick=Tick(0),
+        base_revision=WorldRevision(0),
+        resulting_revision=WorldRevision(1),
+        event_hashes=(PayloadHash(_HASH_A),),
+        payload_hash=PayloadHash(_HASH_B),
+    )
+    second = compute_commit_hash(
+        predecessor_commit_hash=None,
+        run_id=RunId("run-1"),
+        tick=Tick(0),
+        base_revision=WorldRevision(0),
+        resulting_revision=WorldRevision(1),
+        event_hashes=(PayloadHash(_HASH_A),),
+        payload_hash=PayloadHash(_HASH_B),
+    )
+    assert first == second
 
 
 def test_hash_snapshot_excludes_integrity_field() -> None:

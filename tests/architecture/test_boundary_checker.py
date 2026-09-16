@@ -135,6 +135,49 @@ def test_checker_detects_private_replay_access(tmp_path: Path) -> None:
     assert "agents/__init__.py" in report
 
 
+def test_checker_allows_persistence_orm_and_blocks_simulation_persistence(
+    tmp_path: Path,
+) -> None:
+    allowed = _write_tree(
+        tmp_path / "allowed",
+        {
+            "persistence/__init__.py": (
+                "from __future__ import annotations\n"
+                "import sqlalchemy\n\n"
+                "__all__: list[str] = []\n"
+            ),
+            "simulation/__init__.py": _PUBLIC_INIT,
+            "infrastructure/__init__.py": _PUBLIC_INIT,
+        },
+    )
+    assert check_tree(allowed) == []
+
+    blocked = _write_tree(
+        tmp_path / "blocked",
+        {
+            "simulation/__init__.py": "import persistence\n",
+            "persistence/__init__.py": _PUBLIC_INIT,
+        },
+    )
+    report = _messages(blocked)
+    assert "import-allowlist" in _rules(blocked)
+    assert "simulation -> persistence" in report
+
+
+def test_checker_detects_persistence_importing_world(tmp_path: Path) -> None:
+    root = _write_tree(
+        tmp_path,
+        {
+            "persistence/__init__.py": "from world.events import WorldEvent\n",
+            "world/__init__.py": _PUBLIC_INIT,
+            "world/events.py": "class WorldEvent:\n    pass\n",
+        },
+    )
+    report = _messages(root)
+    assert "import-allowlist" in _rules(root)
+    assert "persistence -> world" in report
+
+
 def test_checker_detects_private_world_reexport(tmp_path: Path) -> None:
     root = _write_tree(
         tmp_path,

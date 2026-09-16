@@ -120,7 +120,7 @@ def test_commit_hash_requires_lowercase_sha256_hex() -> None:
     with pytest.raises(ValueError, match="64 lowercase"):
         require_commit_hash("x", "abc")
     with pytest.raises(ValueError, match="must be a str"):
-        require_commit_hash("x", 123)  # type: ignore[arg-type]
+        require_commit_hash("x", 123)
 
 
 def test_world_snapshot_copies_sequences_and_preserves_order() -> None:

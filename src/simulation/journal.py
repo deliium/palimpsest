@@ -78,11 +78,13 @@ _EXPECTED_TYPE_MAP: Final[dict[type | str, str]] = {
 
 __all__ = [
     "PersistenceSerializationError",
+    "bind_snapshot_commit_hash",
     "compute_commit_hash",
     "decode_persistence",
     "encode_persistence",
     "hash_snapshot",
     "hash_tick_events",
+    "hash_tick_payload",
     "hash_world_event",
     "payload_hash",
     "verify_commit_chain",
@@ -183,6 +185,13 @@ def hash_tick_events(events: Sequence[WorldEvent]) -> tuple[PayloadHash, ...]:
     return tuple(hash_world_event(event) for event in events)
 
 
+def hash_tick_payload(events: Sequence[WorldEvent]) -> PayloadHash:
+    """Canonical tick payload hash from ordered objective event hashes."""
+    event_hashes = hash_tick_events(events)
+    document = {"event_hashes": [item.value for item in event_hashes]}
+    return payload_hash(_canonical_dumps(document))
+
+
 def compute_commit_hash(
     *,
     predecessor_commit_hash: CommitHash | None,
@@ -279,6 +288,62 @@ def hash_snapshot(snapshot: WorldSnapshot) -> PayloadHash:
         raise PersistenceSerializationError("invalid_type", "$")
     body = _encode_world_snapshot(snapshot, include_integrity_hash=False)
     return payload_hash(_canonical_dumps(body))
+
+
+def bind_snapshot_commit_hash(
+    snapshot: WorldSnapshot, commit_hash: CommitHash
+) -> WorldSnapshot:
+    """Bind a checkpoint to the tick commit that produced it and rehash.
+
+    ``WorldSnapshot.predecessor_commit_hash`` is the chain cursor after the
+    producing tick so the next tick's predecessor matches on replay.
+    """
+    if type(snapshot) is not WorldSnapshot:
+        raise PersistenceSerializationError("invalid_type", "$")
+    if type(commit_hash) is not CommitHash:
+        raise PersistenceSerializationError("invalid_type", "$.commit_hash")
+    draft = WorldSnapshot(
+        snapshot_id=snapshot.snapshot_id,
+        run_id=snapshot.run_id,
+        world_id=snapshot.world_id,
+        seed=snapshot.seed,
+        config=snapshot.config,
+        registrations=snapshot.registrations,
+        locations=snapshot.locations,
+        bodies=snapshot.bodies,
+        items=snapshot.items,
+        resources=snapshot.resources,
+        weather=snapshot.weather,
+        next_tick=snapshot.next_tick,
+        revision=snapshot.revision,
+        event_schema_version=snapshot.event_schema_version,
+        projector_version=snapshot.projector_version,
+        persistence_codec_version=snapshot.persistence_codec_version,
+        derivation_version=snapshot.derivation_version,
+        integrity_hash=snapshot.integrity_hash,
+        predecessor_commit_hash=commit_hash,
+    )
+    return WorldSnapshot(
+        snapshot_id=draft.snapshot_id,
+        run_id=draft.run_id,
+        world_id=draft.world_id,
+        seed=draft.seed,
+        config=draft.config,
+        registrations=draft.registrations,
+        locations=draft.locations,
+        bodies=draft.bodies,
+        items=draft.items,
+        resources=draft.resources,
+        weather=draft.weather,
+        next_tick=draft.next_tick,
+        revision=draft.revision,
+        event_schema_version=draft.event_schema_version,
+        projector_version=draft.projector_version,
+        persistence_codec_version=draft.persistence_codec_version,
+        derivation_version=draft.derivation_version,
+        integrity_hash=hash_snapshot(draft),
+        predecessor_commit_hash=commit_hash,
+    )
 
 
 def _canonical_dumps(value: object) -> bytes:

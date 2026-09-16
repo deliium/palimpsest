@@ -105,8 +105,11 @@ def test_engine_construction_does_not_connect(monkeypatch: pytest.MonkeyPatch) -
 
 def test_metadata_uses_deterministic_naming_convention() -> None:
     assert metadata.naming_convention == NAMING_CONVENTION
-    assert metadata.tables == {}
     assert "pk_%(table_name)s" == NAMING_CONVENTION["pk"]
+    # ``persistence.orm`` registers history tables on this shared metadata when
+    # imported; emptiness is not part of the naming-convention contract.
+    for table in metadata.tables.values():
+        assert table.metadata is metadata
 
 
 async def test_session_closes_on_success_without_commit() -> None:

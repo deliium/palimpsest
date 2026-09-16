@@ -29,6 +29,7 @@ PACKAGES = (
     "api",
     "analysis",
     "infrastructure",
+    "persistence",
 )
 
 
@@ -81,6 +82,17 @@ print("ok")
     assert completed.returncode == 0, completed.stdout + completed.stderr
     assert completed.stdout.strip() == "ok"
     assert completed.stderr == ""
+
+
+def test_persistence_facade_is_side_effect_free_and_exports_factories() -> None:
+    import persistence
+
+    assert "PersistenceAdapterError" in persistence.__all__
+    assert "create_tick_journal_repository" in persistence.__all__
+    assert persistence.create_run_repository.__module__ == "persistence"
+    with pytest.raises(persistence.PersistenceAdapterError) as err:
+        persistence.create_tick_journal_repository()
+    assert err.value.code == "missing_session_factory"
 
 
 def test_world_public_facade_does_not_reexport_authority() -> None:

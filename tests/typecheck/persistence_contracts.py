@@ -84,6 +84,16 @@ class _MemoryTickJournal:
         _ = (run_id, from_tick, to_tick, limit, offset)
         return ()
 
+    async def list_tick_commits(
+        self,
+        run_id: RunId,
+        *,
+        from_tick: Tick,
+        to_tick: Tick | None,
+    ) -> tuple[TickCommit, ...]:
+        _ = (run_id, from_tick, to_tick)
+        return ()
+
 
 class _MemorySnapshots:
     async def get_latest_at_or_before(

@@ -54,6 +54,7 @@ packages = [
     "api",
     "analysis",
     "infrastructure",
+    "persistence",
 ]
 
 [tool.hatch.build.targets.wheel]
@@ -67,6 +68,7 @@ packages = [
     "src/api",
     "src/analysis",
     "src/infrastructure",
+    "src/persistence",
 ]
 
 [tool.hatch.build.targets.sdist]
@@ -115,6 +117,7 @@ source_pkgs = [
     "api",
     "analysis",
     "infrastructure",
+    "persistence",
 ]
 omit = [
     "*/tests/*",
@@ -175,6 +178,7 @@ root_packages = [
     "api",
     "analysis",
     "infrastructure",
+    "persistence",
 ]
 include_external_packages = true
 exclude_type_checking_imports = false
@@ -193,6 +197,7 @@ forbidden_modules = [
     "api",
     "analysis",
     "infrastructure",
+    "persistence",
 ]
 
 [[tool.importlinter.contracts]]
@@ -222,6 +227,7 @@ forbidden_modules = [
     "api",
     "analysis",
     "infrastructure",
+    "persistence",
 ]
 
 [[tool.importlinter.contracts]]
@@ -238,14 +244,33 @@ forbidden_modules = [
     "simulation",
     "api",
     "analysis",
+    "persistence",
 ]
 
 [[tool.importlinter.contracts]]
 id = "simulation_does_not_import_api_or_analysis"
-name = "Simulation must not import api, analysis, or infrastructure"
+name = "Simulation must not import api, analysis, infrastructure, or persistence"
 type = "forbidden"
 source_modules = ["simulation"]
-forbidden_modules = ["api", "analysis", "infrastructure"]
+forbidden_modules = ["api", "analysis", "infrastructure", "persistence"]
+
+[[tool.importlinter.contracts]]
+id = "persistence_adapter_boundaries"
+name = "Persistence may import only simulation and infrastructure"
+type = "forbidden"
+source_modules = ["persistence"]
+forbidden_modules = [
+    "world",
+    "agents",
+    "memory",
+    "social",
+    "llm",
+    "api",
+    "analysis",
+]
+# Domain types flow through public simulation contracts; only direct imports are gated.
+allow_indirect_imports = true
+
 
 [[tool.importlinter.contracts]]
 id = "api_does_not_import_domain_modules"
@@ -260,6 +285,9 @@ forbidden_modules = [
     "llm",
     "analysis",
 ]
+# Simulation/persistence adapters re-export domain DTOs; gate direct imports only.
+allow_indirect_imports = true
+
 
 [[tool.importlinter.contracts]]
 id = "analysis_is_read_only"
@@ -273,6 +301,7 @@ forbidden_modules = [
     "llm",
     "api",
     "infrastructure",
+    "persistence",
 ]
 
 [[tool.importlinter.contracts]]
@@ -317,7 +346,7 @@ forbidden_modules = ["fastapi", "starlette", "uvicorn"]
 
 [[tool.importlinter.contracts]]
 id = "domain_must_not_import_orm_stack"
-name = "Only infrastructure may import SQLAlchemy, Alembic, or asyncpg"
+name = "Only infrastructure and persistence may import SQLAlchemy, Alembic, or asyncpg"
 type = "forbidden"
 source_modules = [
     "world",
@@ -378,25 +407,25 @@ id = "agents_must_not_import_orchestration"
 name = "Agents package may not import orchestration or infrastructure"
 type = "forbidden"
 source_modules = ["agents"]
-forbidden_modules = ["simulation", "api", "analysis", "infrastructure"]
+forbidden_modules = ["simulation", "api", "analysis", "infrastructure", "persistence"]
 
 [[tool.importlinter.contracts]]
 id = "memory_must_not_import_non_agent_layers"
 name = "Memory may not import non-agent domain layers"
 type = "forbidden"
 source_modules = ["memory"]
-forbidden_modules = ["llm", "simulation", "api", "analysis", "infrastructure"]
+forbidden_modules = ["llm", "simulation", "api", "analysis", "infrastructure", "persistence"]
 
 [[tool.importlinter.contracts]]
 id = "social_must_not_import_non_agent_layers"
 name = "Social may not import non-agent domain layers"
 type = "forbidden"
 source_modules = ["social"]
-forbidden_modules = ["llm", "simulation", "api", "analysis", "infrastructure"]
+forbidden_modules = ["llm", "simulation", "api", "analysis", "infrastructure", "persistence"]
 
 [[tool.importlinter.contracts]]
 id = "cognition_must_not_import_orchestration"
 name = "Cognition may not import orchestration or infrastructure"
 type = "forbidden"
 source_modules = ["agents.cognition"]
-forbidden_modules = ["simulation", "api", "analysis", "infrastructure"]
+forbidden_modules = ["simulation", "api", "analysis", "infrastructure", "persistence"]

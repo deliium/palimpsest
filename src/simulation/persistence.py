@@ -61,6 +61,7 @@ __all__ = [
     "TickAppendRequest",
     "TickCommit",
     "TickJournalRepository",
+    "WorldEvent",
     "WorldSnapshot",
     "persistence_diagnostic_fields",
     "require_commit_hash",
@@ -540,12 +541,14 @@ class TickAppendRequest:
                 raise ValueError(
                     "TickAppendRequest.snapshot.next_tick must equal tick + 1"
                 )
-            if self.snapshot.predecessor_commit_hash != (
-                self.expected_predecessor_commit_hash
-            ):
+            # Checkpoint predecessor is this tick's commit hash (chain cursor
+            # after the producing tick), not the tick write's expected
+            # predecessor. The durable service/repository verifies equality
+            # against the computed commit hash.
+            if self.snapshot.predecessor_commit_hash is None:
                 raise ValueError(
                     "TickAppendRequest.snapshot.predecessor_commit_hash must "
-                    "match expected_predecessor_commit_hash"
+                    "equal this tick's commit hash"
                 )
 
 
@@ -679,6 +682,14 @@ class TickJournalRepository(Protocol):
         limit: int,
         offset: int,
     ) -> tuple[WorldEvent, ...]: ...
+
+    async def list_tick_commits(
+        self,
+        run_id: RunId,
+        *,
+        from_tick: Tick,
+        to_tick: Tick | None,
+    ) -> tuple[TickCommit, ...]: ...
 
 
 class SnapshotRepository(Protocol):

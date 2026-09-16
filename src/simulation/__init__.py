@@ -49,6 +49,7 @@ from simulation.journal import (
     encode_persistence,
     hash_snapshot,
     hash_tick_events,
+    hash_tick_payload,
     hash_world_event,
     payload_hash,
     verify_commit_chain,
@@ -112,6 +113,7 @@ from simulation.serialization import (
     decode_domain,
     encode_domain,
 )
+from simulation.service import DurableCommitAmbiguity, PersistentSimulationService
 
 __all__ = [
     "DERIVATION_VERSION",
@@ -126,6 +128,7 @@ __all__ = [
     "AgentRegistration",
     "CommitHash",
     "DomainSerializationError",
+    "DurableCommitAmbiguity",
     "EngineDiagnosticCode",
     "EnginePhase",
     "ExperimentId",
@@ -137,6 +140,7 @@ __all__ = [
     "ObservationBatch",
     "PayloadHash",
     "PersistenceSerializationError",
+    "PersistentSimulationService",
     "RegistrationTranslator",
     "ReplayFallbackPolicy",
     "ReplayMode",
@@ -192,6 +196,7 @@ __all__ = [
     "future_effect_scope",
     "hash_snapshot",
     "hash_tick_events",
+    "hash_tick_payload",
     "hash_world_event",
     "log_invalid_setup",
     "log_replay_mismatch",

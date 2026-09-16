@@ -60,6 +60,13 @@ class EngineDiagnosticCode(StrEnum):
     CHECKPOINT_FALLBACK = "checkpoint_fallback"
     CHECKPOINT_CORRUPT = "checkpoint_corrupt"
     PROJECTION_FAILED = "projection_failed"
+    DURABLE_PREPARE = "durable_prepare"
+    DURABLE_APPEND = "durable_append"
+    DURABLE_FINALIZE = "durable_finalize"
+    DURABLE_COMMITTED = "durable_committed"
+    DURABLE_IDEMPOTENT = "durable_idempotent_retry"
+    DURABLE_FENCED = "durable_fenced"
+    DURABLE_FAILED = "durable_failed"
 
 
 class ActionResolutionStatus(StrEnum):

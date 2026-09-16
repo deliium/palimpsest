@@ -79,6 +79,18 @@ class _EngineSnapshot:
     event_history: tuple[WorldEvent, ...]
 
 
+@dataclass(frozen=True, slots=True)
+class _PreparedTickCandidate:
+    """Detached prepare result. Not exported; no public mutation API."""
+
+    tick: Tick
+    base_revision: WorldRevision
+    resulting_revision: WorldRevision
+    result: TickResult
+    next_snapshot: _EngineSnapshot
+    events: tuple[WorldEvent, ...]
+
+
 class WorldEngine:
     """Public authority for observation and ordered tick resolution."""
 
@@ -146,17 +158,26 @@ class WorldEngine:
         snapshot: WorldSnapshot,
         *,
         events: Sequence[WorldEvent] = (),
+        committed_through_tick: Tick | None = None,
     ) -> WorldEngine:
         """Restore an engine at ``AWAITING_OBSERVATION`` from a checkpoint.
 
         Validates snapshot integrity, folds subsequent ordered events with the
         private projector, and never restores observation tokens. Does not
         expose a public state-replacement hook on ``World``.
+
+        When ``committed_through_tick`` is set, the engine tick becomes
+        ``committed_through_tick + 1`` so eventless durable ticks after the
+        last projected event advance the logical cursor.
         """
         if type(snapshot) is not WorldSnapshot:
             raise TypeError("restore_from_snapshot requires WorldSnapshot")
         if isinstance(events, (set, frozenset)) or not isinstance(events, Sequence):
             raise TypeError("events must be an ordered sequence")
+        if committed_through_tick is not None and type(committed_through_tick) is not (
+            Tick
+        ):
+            raise TypeError("committed_through_tick must be Tick or None")
 
         _LOGGER.debug(
             "%s run_id=%s snapshot_id=%s next_tick=%s revision=%s "
@@ -222,9 +243,18 @@ class WorldEngine:
 
         if normalized_events:
             last_tick = normalized_events[-1].tick
-            restored_tick = Tick(last_tick + 1)
+            event_next = Tick(last_tick + 1)
         else:
-            restored_tick = snapshot.next_tick
+            event_next = snapshot.next_tick
+
+        if committed_through_tick is None:
+            restored_tick = event_next
+        else:
+            if normalized_events and last_tick > committed_through_tick.value:
+                raise ValueError("committed_through_tick precedes last event tick")
+            restored_tick = Tick(committed_through_tick.value + 1)
+            if restored_tick.value < event_next.value:
+                raise ValueError("committed_through_tick undershoots event cursor")
 
         engine = cls.__new__(cls)
         engine._config = snapshot.config
@@ -358,6 +388,23 @@ class WorldEngine:
         self, submissions: Sequence[ActionSubmission]
     ) -> TickResult:
         """Admit ordered submissions, prepare a candidate, and commit atomically."""
+        prior = self._snapshot
+        try:
+            candidate = self._prepare_tick_candidate(submissions)
+            return self._finalize_tick_candidate(candidate)
+        except Exception:
+            self._snapshot = prior
+            _LOGGER.error(
+                "%s tick=%s",
+                EngineDiagnosticCode.CANDIDATE_ABORTED.value,
+                prior.tick.value,
+            )
+            raise
+
+    def _prepare_tick_candidate(
+        self, submissions: Sequence[ActionSubmission]
+    ) -> _PreparedTickCandidate:
+        """Build a detached tick candidate without mutating the live engine."""
         snap = self._snapshot
         if snap.phase is not EnginePhase.AWAITING_SUBMISSIONS or snap.token is None:
             _LOGGER.warning(
@@ -371,45 +418,63 @@ class WorldEngine:
             submissions, Sequence
         ):
             raise TypeError("submissions must be an ordered sequence")
-        prior = snap
-        try:
-            typed = tuple(
-                require_action_submission(item) for item in submissions
-            )
-            for submission in typed:
-                self._validate_token(submission.token, snap.token)
-            resolutions, events, candidate_world = self._resolve_ordered(
-                snap=snap, submissions=typed
-            )
-            result = TickResult(
-                tick=snap.tick,
-                resulting_tick=Tick(snap.tick.value + 1),
-                base_revision=snap.world.state.revision,
-                resulting_revision=candidate_world.state.revision,
-                resolutions=resolutions,
-                events=tuple(
-                    TickEventRecord(sequence=index, event=event)
-                    for index, event in enumerate(events)
-                ),
-            )
-            next_snapshot = _EngineSnapshot(
-                world=candidate_world,
-                tick=Tick(snap.tick.value + 1),
-                phase=EnginePhase.AWAITING_OBSERVATION,
-                token=None,
-                observation_batch=None,
-                resolution_history=(*snap.resolution_history, *resolutions),
-                event_history=(*snap.event_history, *events),
-            )
-            self._snapshot = next_snapshot
-        except Exception:
-            self._snapshot = prior
-            _LOGGER.error(
-                "%s tick=%s",
-                EngineDiagnosticCode.CANDIDATE_ABORTED.value,
-                prior.tick.value,
-            )
-            raise
+        _LOGGER.debug(
+            "%s tick=%s revision=%s submissions=%s",
+            EngineDiagnosticCode.DURABLE_PREPARE.value,
+            snap.tick.value,
+            snap.world.state.revision.value,
+            len(submissions),
+        )
+        typed = tuple(require_action_submission(item) for item in submissions)
+        for submission in typed:
+            self._validate_token(submission.token, snap.token)
+        resolutions, events, candidate_world = self._resolve_ordered(
+            snap=snap, submissions=typed
+        )
+        result = TickResult(
+            tick=snap.tick,
+            resulting_tick=Tick(snap.tick.value + 1),
+            base_revision=snap.world.state.revision,
+            resulting_revision=candidate_world.state.revision,
+            resolutions=resolutions,
+            events=tuple(
+                TickEventRecord(sequence=index, event=event)
+                for index, event in enumerate(events)
+            ),
+        )
+        next_snapshot = _EngineSnapshot(
+            world=candidate_world,
+            tick=Tick(snap.tick.value + 1),
+            phase=EnginePhase.AWAITING_OBSERVATION,
+            token=None,
+            observation_batch=None,
+            resolution_history=(*snap.resolution_history, *resolutions),
+            event_history=(*snap.event_history, *events),
+        )
+        return _PreparedTickCandidate(
+            tick=snap.tick,
+            base_revision=snap.world.state.revision,
+            resulting_revision=candidate_world.state.revision,
+            result=result,
+            next_snapshot=next_snapshot,
+            events=events,
+        )
+
+    def _finalize_tick_candidate(
+        self, candidate: _PreparedTickCandidate
+    ) -> TickResult:
+        """Infallible in-memory publish of a prepared candidate."""
+        if type(candidate) is not _PreparedTickCandidate:
+            raise TypeError("candidate must be _PreparedTickCandidate")
+        _LOGGER.debug(
+            "%s tick=%s resulting_tick=%s events=%s",
+            EngineDiagnosticCode.DURABLE_FINALIZE.value,
+            candidate.tick.value,
+            candidate.result.resulting_tick.value,
+            len(candidate.events),
+        )
+        self._snapshot = candidate.next_snapshot
+        result = candidate.result
         _LOGGER.info(
             "%s tick=%s resulting_tick=%s base_revision=%s resulting_revision=%s "
             "resolutions=%s events=%s",

@@ -1,4 +1,8 @@
-"""Declarative SQLAlchemy metadata. No tables are defined in the foundation."""
+"""Declarative SQLAlchemy metadata shared by infrastructure and persistence.
+
+Application history tables are declared in ``persistence.orm`` against this
+``Base``. Never call ``metadata.create_all()`` for schema management.
+"""
 
 from __future__ import annotations
 
@@ -19,6 +23,6 @@ metadata = MetaData(naming_convention=NAMING_CONVENTION)
 
 
 class Base(DeclarativeBase):
-    """Shared declarative base. Application tables are out of scope for v1."""
+    """Shared declarative base for infrastructure and persistence mappings."""
 
     metadata = metadata
