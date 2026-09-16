@@ -26,12 +26,15 @@ from world.actions import (
     require_agent_command,
 )
 from world.events import (
+    EVENT_SCHEMA_AUDIT_V1,
+    EVENT_SCHEMA_REPLAY_V1,
     Asked,
     Attacked,
     Dropped,
     Drunk,
     Eaten,
     EventDetails,
+    EventValidationCode,
     Fled,
     Given,
     Helped,
@@ -43,6 +46,9 @@ from world.events import (
     Told,
     Waited,
     WorldEvent,
+    event_is_replayable,
+    make_replayable_event,
+    require_replayable_event,
 )
 from world.identifiers import (
     EntityId,
@@ -63,6 +69,8 @@ from world.values import (
 )
 
 __all__ = [
+    "EVENT_SCHEMA_AUDIT_V1",
+    "EVENT_SCHEMA_REPLAY_V1",
     "ActionProposal",
     "ActionRequest",
     "AgentBody",
@@ -80,6 +88,7 @@ __all__ = [
     "EntityId",
     "EventDetails",
     "EventId",
+    "EventValidationCode",
     "Fatigue",
     "Fled",
     "Flee",
@@ -117,5 +126,8 @@ __all__ = [
     "WorldId",
     "WorldRevision",
     "detached_mapping",
+    "event_is_replayable",
+    "make_replayable_event",
     "require_agent_command",
+    "require_replayable_event",
 ]

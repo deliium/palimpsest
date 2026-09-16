@@ -1,0 +1,6 @@
+from simulation.persistence import WorldSnapshot
+from world._state import World
+
+
+def _bad(snapshot: WorldSnapshot) -> World:
+    return snapshot

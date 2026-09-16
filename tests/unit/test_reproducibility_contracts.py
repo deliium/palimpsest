@@ -30,7 +30,7 @@ from simulation.models import (
     SimulationRunConfig,
 )
 from simulation.randomness import StreamScope, create_named_stream, sample_stream
-from world.events import Waited, WorldEvent
+from world.events import Waited, make_replayable_event
 from world.identifiers import EventId, RequestId, WorldId, WorldRevision
 
 SRC = Path(__file__).resolve().parents[2] / "src" / "simulation"
@@ -179,12 +179,16 @@ def test_describe_run_omits_random_draws(caplog: pytest.LogCaptureFixture) -> No
 def test_export_records_replay_limit() -> None:
     config = SimulationRunConfig(seed=1)
     run_id = derive_run_id(config)
-    event = WorldEvent(
+    event = make_replayable_event(
         event_id=EventId("evt-1"),
-        request_id=RequestId("r-1"),
+        run_id=run_id.value,
         world_id=WorldId("world-1"),
-        revision=WorldRevision(0),
+        tick=0,
+        sequence=0,
+        request_id=RequestId("r-1"),
+        resulting_revision=WorldRevision(0),
         details=Waited(),
+        actor_id=None,
     )
     export = make_export(config, run_id, [event])
     assert export.metadata.llm_replay == LLM_REPLAY_REQUIREMENT

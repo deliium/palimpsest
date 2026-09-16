@@ -265,7 +265,9 @@ def test_apply_take_drop_give_mutate_inventories_deterministically() -> None:
     state = _state()
     taken = apply_operation(state, _accept(Take(EntityId("item-ground"))))
     assert taken.result.disposition is RuleDisposition.MUTATE
-    assert taken.event_details == Taken(EntityId("item-ground"))
+    assert taken.event_details == Taken(
+        EntityId("item-ground"), resulting_holder_id=EntityId("body-1")
+    )
     assert EntityId("item-ground") in taken.next_state.bodies[
         EntityId("body-1")
     ].inventory
@@ -289,7 +291,9 @@ def test_apply_take_drop_give_mutate_inventories_deterministically() -> None:
     )
     assert isinstance(drop_outcome, OperationAccepted)
     dropped = apply_operation(working, drop_outcome.operation)
-    assert dropped.event_details == Dropped(EntityId("item-held"))
+    assert dropped.event_details == Dropped(
+        EntityId("item-held"), resulting_location_id=EntityId("loc-1")
+    )
     assert EntityId("item-held") not in dropped.next_state.bodies[
         EntityId("body-1")
     ].inventory
@@ -300,7 +304,11 @@ def test_apply_take_drop_give_mutate_inventories_deterministically() -> None:
     given = apply_operation(
         _state(), _accept(Give(EntityId("body-2"), EntityId("item-held")))
     )
-    assert given.event_details == Given(EntityId("body-2"), EntityId("item-held"))
+    assert given.event_details == Given(
+        EntityId("body-2"),
+        EntityId("item-held"),
+        resulting_holder_id=EntityId("body-2"),
+    )
     assert EntityId("item-held") not in given.next_state.bodies[
         EntityId("body-1")
     ].inventory
@@ -340,13 +348,17 @@ def test_world_apply_take_commits_mutated_state_and_bumps_revision() -> None:
             command=Take(EntityId("item-ground")),
         ),
         event_ids=(EventId("evt-take"),),
+        run_id="run-1",
+        tick=0,
     )
     from world._transitions import TransitionResult
     from world.actions import TransitionOutcome
 
     assert isinstance(result, TransitionResult)
     assert result.outcome is TransitionOutcome.APPLIED
-    assert result.events[0].details == Taken(EntityId("item-ground"))
+    assert result.events[0].details == Taken(
+        EntityId("item-ground"), resulting_holder_id=EntityId("body-1")
+    )
     assert result.resulting_revision == WorldRevision(2)
     assert world.state.revision == WorldRevision(2)
     assert EntityId("item-ground") in world.state.bodies[EntityId("body-1")].inventory
@@ -370,6 +382,8 @@ def test_world_apply_deferred_move_does_not_emit_or_mutate() -> None:
             command=Move(EntityId("loc-2")),
         ),
         event_ids=(EventId("evt-move"),),
+        run_id="run-1",
+        tick=0,
     )
     assert isinstance(result, TransitionResult)
     assert result.outcome is TransitionOutcome.NOT_APPLIED

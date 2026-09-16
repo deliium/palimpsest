@@ -160,9 +160,11 @@ class World:
         return self._state
 
     def replace_state(self, new_state: WorldState) -> WorldState:
-        """Unsupported public mutation hook.
+        """Unsupported mutation hook — never restore or swap state here.
 
-        Objective evolution must go through :class:`simulation.engine.WorldEngine`.
+        Checkpoint restoration constructs a new ``World`` via simulation
+        bootstrap helpers. Objective evolution must go through
+        :class:`simulation.engine.WorldEngine`.
         """
         raise RuntimeError(
             "World.replace_state is not a supported mutation path; use WorldEngine"
@@ -173,6 +175,9 @@ class World:
         request: object,
         *,
         event_ids: Sequence[EventId],
+        run_id: str,
+        tick: int,
+        sequence: int = 0,
     ) -> object:
         """Validate then apply a bound request against the current snapshot.
 
@@ -213,7 +218,12 @@ class World:
             if type(event_id) is not EventIdType:
                 raise TypeError("event_ids entries must be EventId")
         result = apply_validated_operation(
-            self._state, outcome.operation, event_ids=event_ids
+            self._state,
+            outcome.operation,
+            event_ids=event_ids,
+            run_id=run_id,
+            tick=tick,
+            sequence=sequence,
         )
         assert type(result) is TransitionResult
         self._state = result.resulting_state

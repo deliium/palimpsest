@@ -285,6 +285,7 @@ protected_modules = [
     "world._operations",
     "world._perception",
     "world._rules",
+    "world._replay",
 ]
 allowed_importers = [
     "simulation.engine",
@@ -294,6 +295,7 @@ allowed_importers = [
     "world._operations",
     "world._perception",
     "world._rules",
+    "world._replay",
 ]
 as_packages = true
 

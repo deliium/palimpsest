@@ -13,8 +13,15 @@ from world.actions import (
     TransitionOutcome,
     accept_action_request,
 )
-from world.events import WorldEvent, normalize_events
-from world.identifiers import EventId, RequestId, WorldId, WorldRevision
+from world.events import WorldEvent, make_replayable_event, normalize_events
+from world.identifiers import (
+    EventId,
+    RequestId,
+    WorldId,
+    WorldRevision,
+    require_exact_nonneg_int,
+    require_stable_id,
+)
 
 __all__: list[str] = [
     "TransitionResult",
@@ -70,6 +77,9 @@ def apply_validated_operation(
     operation: object,
     *,
     event_ids: Sequence[EventId],
+    run_id: str,
+    tick: int,
+    sequence: int = 0,
 ) -> TransitionResult:
     """Apply a private validated operation using pure V1 rule handlers.
 
@@ -81,6 +91,9 @@ def apply_validated_operation(
 
     if type(operation) not in operations._OPERATION_TYPES:
         raise TypeError("apply_validated_operation requires a private operation")
+    run_id_value = require_stable_id("run_id", run_id)
+    tick_value = require_exact_nonneg_int("tick", tick)
+    sequence_value = require_exact_nonneg_int("sequence", sequence)
     application = apply_operation(state, operation)  # type: ignore[arg-type]
     base_revision = operation.base_revision  # type: ignore[attr-defined]
     if application.result.disposition in {
@@ -106,12 +119,16 @@ def apply_validated_operation(
         resulting_revision = state.revision
         resulting_state = state
     assert application.event_details is not None
-    event = WorldEvent(
+    event = make_replayable_event(
         event_id=event_id_tuple[0],
-        request_id=operation.request_id,  # type: ignore[attr-defined]
+        run_id=run_id_value,
         world_id=operation.world_id,  # type: ignore[attr-defined]
-        revision=resulting_revision,
+        tick=tick_value,
+        sequence=sequence_value,
+        request_id=operation.request_id,  # type: ignore[attr-defined]
+        resulting_revision=resulting_revision,
         details=application.event_details,
+        actor_id=operation.actor_id,  # type: ignore[attr-defined]
     )
     return TransitionResult(
         base_revision=base_revision,
@@ -136,6 +153,6 @@ def require_transition_events(
             raise ValueError("transition event world_id mismatch")
         if event.request_id != request_id:
             raise ValueError("transition event request_id mismatch")
-        if event.revision != resulting_revision:
+        if event.resulting_revision != resulting_revision:
             raise ValueError("transition event revision mismatch")
     return normalized

@@ -120,6 +120,21 @@ def test_checker_detects_private_rules_access(tmp_path: Path) -> None:
     assert "memory -> world._rules" in report
 
 
+def test_checker_detects_private_replay_access(tmp_path: Path) -> None:
+    root = _write_tree(
+        tmp_path,
+        {
+            "world/__init__.py": _PUBLIC_INIT,
+            "world/_replay.py": _PUBLIC_INIT,
+            "agents/__init__.py": "from world._replay import project_events\n",
+        },
+    )
+    report = _messages(root)
+    assert "private-world-authority" in _rules(root)
+    assert "agents -> world._replay" in report
+    assert "agents/__init__.py" in report
+
+
 def test_checker_detects_private_world_reexport(tmp_path: Path) -> None:
     root = _write_tree(
         tmp_path,

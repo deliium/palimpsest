@@ -165,6 +165,37 @@ def _materialize_world(bootstrap: WorldBootstrap) -> World:
     return World(bootstrap.world_id, state)
 
 
+def _bootstrap_from_snapshot(snapshot: object) -> WorldBootstrap:
+    """Internal: derive a WorldBootstrap view from an immutable checkpoint."""
+    from simulation.persistence import WorldSnapshot
+
+    if type(snapshot) is not WorldSnapshot:
+        raise TypeError("_bootstrap_from_snapshot requires WorldSnapshot")
+    return WorldBootstrap(
+        world_id=snapshot.world_id,
+        revision=snapshot.revision,
+        locations=snapshot.locations,
+        items=snapshot.items,
+        resources=snapshot.resources,
+        bodies=snapshot.bodies,
+        weather=snapshot.weather,
+        registrations=snapshot.registrations,
+    )
+
+
+def _materialize_projected_world(
+    *, world_id: WorldId, state: object
+) -> World:
+    """Internal: wrap a projected ``WorldState`` without a mutation hook."""
+    from world._state import World, WorldState
+
+    if type(world_id) is not WorldId:
+        raise TypeError("world_id must be WorldId")
+    if type(state) is not WorldState:
+        raise TypeError("state must be WorldState")
+    return World(world_id, state)
+
+
 def _translator_from_registrations(
     registrations: Sequence[AgentRegistration],
 ) -> RegistrationTranslator:

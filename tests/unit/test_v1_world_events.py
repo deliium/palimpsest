@@ -6,7 +6,7 @@ import pytest
 
 from world._transitions import TransitionResult, require_transition_events
 from world.actions import TransitionOutcome
-from world.events import Moved, Waited, WorldEvent, normalize_events
+from world.events import Moved, Waited, make_replayable_event, normalize_events
 from world.identifiers import (
     EntityId,
     EventId,
@@ -17,12 +17,16 @@ from world.identifiers import (
 
 
 def test_event_details_are_closed_and_correlated() -> None:
-    event = WorldEvent(
+    event = make_replayable_event(
         event_id=EventId("evt-1"),
-        request_id=RequestId("r-1"),
+        run_id="run-1",
         world_id=WorldId("world-1"),
-        revision=WorldRevision(2),
+        tick=0,
+        sequence=0,
+        request_id=RequestId("r-1"),
+        resulting_revision=WorldRevision(2),
         details=Moved(EntityId("loc-1")),
+        actor_id=EntityId("body-1"),
     )
     assert event.details.kind == "move"
     assert normalize_events([event]) == (event,)
@@ -33,12 +37,16 @@ def test_event_details_are_closed_and_correlated() -> None:
 def test_transition_result_rejects_mismatched_events() -> None:
     from world._state import WorldState
 
-    event = WorldEvent(
+    event = make_replayable_event(
         event_id=EventId("evt-1"),
-        request_id=RequestId("r-1"),
+        run_id="run-1",
         world_id=WorldId("world-1"),
-        revision=WorldRevision(2),
+        tick=0,
+        sequence=0,
+        request_id=RequestId("r-1"),
+        resulting_revision=WorldRevision(2),
         details=Waited(),
+        actor_id=EntityId("body-1"),
     )
     result = TransitionResult(
         base_revision=WorldRevision(1),

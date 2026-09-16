@@ -30,6 +30,7 @@ from world.actions import (
     Wait,
 )
 from world.events import (
+    EVENT_SCHEMA_AUDIT_V1,
     Asked,
     Attacked,
     Dropped,
@@ -45,7 +46,8 @@ from world.events import (
     Talked,
     Told,
     Waited,
-    WorldEvent,
+    event_is_replayable,
+    make_replayable_event,
 )
 from world.identifiers import (
     EntityId,
@@ -81,9 +83,13 @@ _DETAILS = (
     Moved(EntityId("loc-1")),
     Searched(),
     Searched(EntityId("item-1")),
-    Taken(EntityId("item-1")),
-    Dropped(EntityId("item-1")),
-    Given(EntityId("body-2"), EntityId("item-1")),
+    Taken(EntityId("item-1"), resulting_holder_id=EntityId("body-1")),
+    Dropped(EntityId("item-1"), resulting_location_id=EntityId("loc-1")),
+    Given(
+        EntityId("body-2"),
+        EntityId("item-1"),
+        resulting_holder_id=EntityId("body-2"),
+    ),
     Eaten(EntityId("item-1")),
     Drunk(EntityId("res-1")),
     Slept(),
@@ -105,12 +111,16 @@ def test_command_round_trips(command: object) -> None:
 
 @pytest.mark.parametrize("details", _DETAILS)
 def test_world_event_detail_round_trips(details: object) -> None:
-    event = WorldEvent(
+    event = make_replayable_event(
         event_id=EventId("evt-1"),
-        request_id=RequestId("r-1"),
+        run_id="run-1",
         world_id=WorldId("world-1"),
-        revision=WorldRevision(2),
+        tick=0,
+        sequence=0,
+        request_id=RequestId("r-1"),
+        resulting_revision=WorldRevision(2),
         details=details,  # type: ignore[arg-type]
+        actor_id=EntityId("body-1"),
     )
     assert decode_domain(encode_domain(event)) == event
 
@@ -121,18 +131,36 @@ def test_golden_canonical_documents() -> None:
         b'{"data":{"entity_id":"loc-1","name":"Camp"},'
         b'"schema_version":1,"type":"location"}'
     )
-    event = WorldEvent(
+    event = make_replayable_event(
         event_id=EventId("evt-1"),
-        request_id=RequestId("r-1"),
+        run_id="run-1",
         world_id=WorldId("world-1"),
-        revision=WorldRevision(0),
+        tick=0,
+        sequence=0,
+        request_id=RequestId("r-1"),
+        resulting_revision=WorldRevision(0),
         details=Waited(),
+        actor_id=None,
     )
     assert encode_domain(event) == (
+        b'{"data":{"actor_id":null,"details":{"kind":"wait"},"event_id":"evt-1",'
+        b'"event_type":"wait","request_id":"r-1","resulting_revision":0,'
+        b'"run_id":"run-1","schema_version":2,"sequence":0,"target_id":null,'
+        b'"tick":0,"world_id":"world-1"},"schema_version":1,"type":"world_event"}'
+    )
+
+
+def test_legacy_audit_world_event_still_decodes() -> None:
+    legacy = (
         b'{"data":{"details":{"kind":"wait"},"event_id":"evt-1",'
         b'"request_id":"r-1","revision":0,"world_id":"world-1"},'
         b'"schema_version":1,"type":"world_event"}'
     )
+    decoded = decode_domain(legacy)
+    assert decoded.schema_version == EVENT_SCHEMA_AUDIT_V1
+    assert event_is_replayable(decoded) is False
+    assert decoded.details == Waited()
+    assert decoded.resulting_revision == WorldRevision(0)
 
 
 def test_rejects_authority_and_request_types() -> None:
@@ -205,3 +233,58 @@ def test_lifecycle_and_bootstrap_values_are_not_serializable() -> None:
     assert err.value.code == "unsupported_type"
     with pytest.raises(DomainSerializationError):
         encode_domain(TickToken("tok", Tick(0)))
+
+
+def test_persistence_dtos_remain_unsupported_by_domain_codec() -> None:
+    from agents.models import AgentId
+    from simulation.bootstrap import AgentRegistration
+    from simulation.clock import Tick
+    from simulation.models import DERIVATION_VERSION, RunId, SimulationRunConfig
+    from simulation.persistence import (
+        EVENT_SCHEMA_VERSION,
+        PERSISTENCE_CODEC_VERSION,
+        PROJECTOR_VERSION,
+        PayloadHash,
+        SnapshotId,
+        WorldSnapshot,
+    )
+    from world.identifiers import EntityId, WorldId, WorldRevision
+    from world.models import AgentBody, LifeStatus, Location
+    from world.values import Fatigue, Health, Hunger, TemperatureCelsius, Thirst
+
+    snapshot = WorldSnapshot(
+        snapshot_id=SnapshotId("snap-1"),
+        run_id=RunId("run-1"),
+        world_id=WorldId("world-1"),
+        seed=1,
+        config=SimulationRunConfig(seed=1),
+        registrations=(AgentRegistration(AgentId("agent-1"), EntityId("body-1")),),
+        locations=(Location(entity_id=EntityId("loc-1"), name="Camp"),),
+        bodies=(
+            AgentBody(
+                entity_id=EntityId("body-1"),
+                location_id=EntityId("loc-1"),
+                health=Health(100),
+                hunger=Hunger(0),
+                thirst=Thirst(0),
+                fatigue=Fatigue(0),
+                temperature=TemperatureCelsius(36.5),
+                inventory=(),
+                life_status=LifeStatus.ALIVE,
+            ),
+        ),
+        items=(),
+        resources=(),
+        weather=(),
+        next_tick=Tick(0),
+        revision=WorldRevision(0),
+        event_schema_version=EVENT_SCHEMA_VERSION,
+        projector_version=PROJECTOR_VERSION,
+        persistence_codec_version=PERSISTENCE_CODEC_VERSION,
+        derivation_version=DERIVATION_VERSION,
+        integrity_hash=PayloadHash("a" * 64),
+        predecessor_commit_hash=None,
+    )
+    with pytest.raises(DomainSerializationError) as rejected:
+        encode_domain(snapshot)
+    assert rejected.value.code == "unsupported_type"

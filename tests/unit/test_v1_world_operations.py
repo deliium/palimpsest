@@ -69,6 +69,8 @@ def test_wait_request_emits_closed_transition_result() -> None:
     outcome = world.apply_admitted_request(
         _request(command=Wait()),
         event_ids=(EventId("evt-1"),),
+        run_id="run-1",
+        tick=0,
     )
     assert isinstance(outcome, TransitionResult)
     assert outcome.outcome is TransitionOutcome.APPLIED
@@ -80,7 +82,10 @@ def test_proposals_and_stale_revisions_are_rejected() -> None:
     world = _world()
     proposal = ActionProposal(proposal_id=ProposalId("p-1"), command=Wait())
     rejected = world.apply_admitted_request(
-        proposal, event_ids=(EventId("evt-1"),)
+        proposal,
+        event_ids=(EventId("evt-1"),),
+        run_id="run-1",
+        tick=0,
     )
     assert isinstance(rejected, OperationRejected)
     assert rejected.code is RejectionCode.WRONG_TRUST_STAGE
@@ -88,6 +93,8 @@ def test_proposals_and_stale_revisions_are_rejected() -> None:
     stale = world.apply_admitted_request(
         _request(command=Wait(), revision=0),
         event_ids=(EventId("evt-1"),),
+        run_id="run-1",
+        tick=0,
     )
     assert isinstance(stale, OperationRejected)
     assert stale.code is RejectionCode.STALE_REVISION
@@ -123,7 +130,10 @@ def test_cross_world_request_is_rejected() -> None:
         command=Wait(),
     )
     rejected = world.apply_admitted_request(
-        request, event_ids=(EventId("evt-1"),)
+        request,
+        event_ids=(EventId("evt-1"),),
+        run_id="run-1",
+        tick=0,
     )
     assert isinstance(rejected, OperationRejected)
     assert rejected.code is RejectionCode.WRONG_WORLD

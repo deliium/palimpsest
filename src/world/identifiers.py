@@ -18,9 +18,19 @@ __all__ = [
     "WorldId",
     "WorldRevision",
     "require_bounded_text",
+    "require_exact_nonneg_int",
     "require_ordered_unique",
     "require_stable_id",
 ]
+
+
+def require_exact_nonneg_int(name: str, value: object) -> int:
+    """Accept only exact non-boolean ``int`` values ``>= 0``."""
+    if isinstance(value, bool) or not isinstance(value, int):
+        raise ValueError(f"{name} must be a non-negative integer")
+    if value < 0:
+        raise ValueError(f"{name} must be a non-negative integer")
+    return value
 
 
 def require_stable_id(name: str, value: object) -> str:
@@ -102,7 +112,8 @@ class WorldRevision:
     value: int
 
     def __post_init__(self) -> None:
-        if isinstance(self.value, bool) or not isinstance(self.value, int):
-            raise ValueError("WorldRevision.value must be a non-negative integer")
-        if self.value < 0:
-            raise ValueError("WorldRevision.value must be a non-negative integer")
+        object.__setattr__(
+            self,
+            "value",
+            require_exact_nonneg_int("WorldRevision.value", self.value),
+        )

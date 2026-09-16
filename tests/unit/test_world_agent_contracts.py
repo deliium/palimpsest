@@ -14,7 +14,7 @@ from world.actions import (
     TransitionOutcome,
     Wait,
 )
-from world.events import Waited, WorldEvent
+from world.events import Waited, make_replayable_event
 from world.identifiers import (
     EntityId,
     EventId,
@@ -93,16 +93,20 @@ def test_observation_is_typed_partial_and_immutable() -> None:
 
 
 def test_world_event_is_immutable_occurrence() -> None:
-    event = WorldEvent(
+    event = make_replayable_event(
         event_id=EventId("event-1"),
-        request_id=RequestId("r-1"),
+        run_id="run-1",
         world_id=WorldId("world-1"),
-        revision=WorldRevision(3),
+        tick=0,
+        sequence=0,
+        request_id=RequestId("r-1"),
+        resulting_revision=WorldRevision(3),
         details=Waited(),
+        actor_id=None,
     )
     assert event.details == Waited()
     with pytest.raises(AttributeError):
-        event.revision = WorldRevision(4)  # type: ignore[misc]
+        event.resulting_revision = WorldRevision(4)  # type: ignore[misc]
 
 
 def test_submissions_reject_proposal_and_raw_mapping() -> None:

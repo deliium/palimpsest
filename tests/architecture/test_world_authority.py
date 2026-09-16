@@ -38,6 +38,8 @@ AUTHORITY_NAMES = frozenset(
         "project_observations",
         "evaluate_operation",
         "COMMAND_RULE_MATRIX",
+        "project_events",
+        "ProjectionError",
     }
 )
 AUTHORITY_MODULES = frozenset(
@@ -47,6 +49,7 @@ AUTHORITY_MODULES = frozenset(
         "world._operations",
         "world._perception",
         "world._rules",
+        "world._replay",
     }
 )
 

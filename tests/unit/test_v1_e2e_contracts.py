@@ -74,9 +74,13 @@ COMMAND_VARIANTS = (
 EVENT_DETAILS: tuple[EventDetails, ...] = (
     Moved(EntityId("loc-1")),
     Searched(),
-    Taken(EntityId("item-1")),
-    Dropped(EntityId("item-1")),
-    Given(EntityId("body-2"), EntityId("item-1")),
+    Taken(EntityId("item-1"), resulting_holder_id=EntityId("body-1")),
+    Dropped(EntityId("item-1"), resulting_location_id=EntityId("loc-1")),
+    Given(
+        EntityId("body-2"),
+        EntityId("item-1"),
+        resulting_holder_id=EntityId("body-2"),
+    ),
     Eaten(EntityId("item-1")),
     Drunk(EntityId("res-1")),
     Slept(),
@@ -188,7 +192,10 @@ def test_end_to_end_decoded_command_to_transition_boundary() -> None:
         keys=("e2e", "1"),
     )
     outcome = _world().apply_admitted_request(
-        request, event_ids=(EventId("evt-e2e"),)
+        request,
+        event_ids=(EventId("evt-e2e"),),
+        run_id="run-1",
+        tick=0,
     )
     assert isinstance(outcome, TransitionResult)
     assert outcome.outcome is TransitionOutcome.APPLIED

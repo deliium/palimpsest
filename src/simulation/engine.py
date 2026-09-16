@@ -18,15 +18,20 @@ from simulation.actions import (
     admit_agent_command,
     canonical_admission_keys,
     derive_engine_event_id,
+    run_id_for_event,
+    tick_for_event,
 )
 from simulation.bootstrap import (
     WorldBootstrap,
+    _bootstrap_from_snapshot,
+    _materialize_projected_world,
     _materialize_world,
     registration_translator,
 )
 from simulation.clock import Tick
 from simulation.contracts import make_export
 from simulation.identifiers import derive_run_id, derive_scoped_id
+from simulation.journal import hash_snapshot
 from simulation.lifecycle import (
     ActionResolution,
     ActionResolutionReason,
@@ -40,15 +45,17 @@ from simulation.lifecycle import (
     require_action_submission,
 )
 from simulation.models import RunId, SimulationExport, SimulationRunConfig
+from simulation.persistence import WorldSnapshot
 from simulation.randomness import StreamScope
 from world._operations import (
     BatchItemStatus,
     prepare_action_batch,
 )
 from world._perception import project_observations
+from world._replay import ProjectionError, project_events
 from world._state import World
 from world.actions import ActionRequest
-from world.events import WorldEvent
+from world.events import WorldEvent, normalize_events
 from world.identifiers import EventId, RequestId, WorldId, WorldRevision
 
 _LOGGER = logging.getLogger("simulation.engine")
@@ -132,6 +139,130 @@ class WorldEngine:
             tick.value,
             len(self._registrations),
         )
+
+    @classmethod
+    def restore_from_snapshot(
+        cls,
+        snapshot: WorldSnapshot,
+        *,
+        events: Sequence[WorldEvent] = (),
+    ) -> WorldEngine:
+        """Restore an engine at ``AWAITING_OBSERVATION`` from a checkpoint.
+
+        Validates snapshot integrity, folds subsequent ordered events with the
+        private projector, and never restores observation tokens. Does not
+        expose a public state-replacement hook on ``World``.
+        """
+        if type(snapshot) is not WorldSnapshot:
+            raise TypeError("restore_from_snapshot requires WorldSnapshot")
+        if isinstance(events, (set, frozenset)) or not isinstance(events, Sequence):
+            raise TypeError("events must be an ordered sequence")
+
+        _LOGGER.debug(
+            "%s run_id=%s snapshot_id=%s next_tick=%s revision=%s "
+            "event_schema_version=%s projector_version=%s event_count=%s",
+            EngineDiagnosticCode.CHECKPOINT_RESTORE.value,
+            snapshot.run_id.value,
+            snapshot.snapshot_id.value,
+            snapshot.next_tick.value,
+            snapshot.revision.value,
+            snapshot.event_schema_version,
+            snapshot.projector_version,
+            len(events) if not isinstance(events, (str, bytes)) else 0,
+        )
+
+        computed = hash_snapshot(snapshot)
+        if computed != snapshot.integrity_hash:
+            _LOGGER.error(
+                "%s code=integrity_hash_mismatch run_id=%s snapshot_id=%s "
+                "hash_prefix=%s",
+                EngineDiagnosticCode.CHECKPOINT_CORRUPT.value,
+                snapshot.run_id.value,
+                snapshot.snapshot_id.value,
+                snapshot.integrity_hash.value[:8],
+            )
+            raise ValueError("integrity_hash_mismatch")
+
+        bootstrap = _bootstrap_from_snapshot(snapshot)
+        from world._state import WorldState
+
+        base_state = WorldState(
+            snapshot.revision,
+            locations=snapshot.locations,
+            items=snapshot.items,
+            resources=snapshot.resources,
+            bodies=snapshot.bodies,
+            weather=snapshot.weather,
+        )
+        try:
+            normalized_events = normalize_events(events)
+            projected = project_events(
+                base_state,
+                normalized_events,
+                expected_run_id=snapshot.run_id.value,
+                expected_world_id=snapshot.world_id,
+            )
+        except ProjectionError as exc:
+            _LOGGER.error(
+                "%s code=%s run_id=%s snapshot_id=%s",
+                EngineDiagnosticCode.PROJECTION_FAILED.value,
+                exc.code,
+                snapshot.run_id.value,
+                snapshot.snapshot_id.value,
+            )
+            raise
+        except (TypeError, ValueError):
+            _LOGGER.error(
+                "%s code=invalid_events run_id=%s snapshot_id=%s",
+                EngineDiagnosticCode.PROJECTION_FAILED.value,
+                snapshot.run_id.value,
+                snapshot.snapshot_id.value,
+            )
+            raise
+
+        if normalized_events:
+            last_tick = normalized_events[-1].tick
+            restored_tick = Tick(last_tick + 1)
+        else:
+            restored_tick = snapshot.next_tick
+
+        engine = cls.__new__(cls)
+        engine._config = snapshot.config
+        engine._bootstrap = bootstrap
+        engine._run_id = snapshot.run_id
+        engine._translator = registration_translator(bootstrap)
+        engine._registrations = bootstrap.registrations
+        engine._engine_id = derive_scoped_id(
+            snapshot.config,
+            StreamScope(
+                namespace="engine",
+                names=(snapshot.run_id.value, snapshot.world_id.value),
+            ),
+        )
+        world = _materialize_projected_world(
+            world_id=snapshot.world_id, state=projected
+        )
+        engine._snapshot = _EngineSnapshot(
+            world=world,
+            tick=restored_tick,
+            phase=EnginePhase.AWAITING_OBSERVATION,
+            token=None,
+            observation_batch=None,
+            resolution_history=(),
+            event_history=normalized_events,
+        )
+        _LOGGER.info(
+            "%s run_id=%s snapshot_id=%s next_tick=%s revision=%s "
+            "events_applied=%s registrations=%s",
+            EngineDiagnosticCode.CHECKPOINT_RESTORE.value,
+            snapshot.run_id.value,
+            snapshot.snapshot_id.value,
+            restored_tick.value,
+            projected.revision.value,
+            len(normalized_events),
+            len(engine._registrations),
+        )
+        return engine
 
     @property
     def world_id(self) -> WorldId:
@@ -438,6 +569,8 @@ class WorldEngine:
             starting_state=snap.world.state,
             requests=batch_requests,
             event_ids=batch_event_ids,
+            run_id=run_id_for_event(self._run_id),
+            tick=tick_for_event(snap.tick),
         )
 
         # Map batch outcomes back onto full ordinal list.

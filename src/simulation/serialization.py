@@ -45,6 +45,8 @@ from world.actions import (
     require_agent_command,
 )
 from world.events import (
+    EVENT_SCHEMA_AUDIT_V1,
+    EVENT_SCHEMA_REPLAY_V1,
     Asked,
     Attacked,
     Dropped,
@@ -62,6 +64,7 @@ from world.events import (
     Waited,
     WorldEvent,
     require_event_details,
+    target_id_for_details,
 )
 from world.identifiers import (
     EntityId,
@@ -197,6 +200,23 @@ def _encode_top(value: object, *, path: str) -> tuple[str, dict[str, Any]]:
         "ActionResolution",
         "TickResult",
         "ObservationBatch",
+    }:
+        raise DomainSerializationError("unsupported_type", path)
+    # Persistence DTOs use simulation.journal codecs, not schema-v1 export.
+    if value_module == "simulation.persistence" or value_name in {
+        "WorldSnapshot",
+        "RunManifest",
+        "TickCommit",
+        "TickAppendRequest",
+        "RunCreateRequest",
+        "CommitHash",
+        "PayloadHash",
+        "SnapshotId",
+        "ExperimentId",
+        "ExperimentMetadata",
+        "ExperimentRunAssignment",
+        "ReplayRequest",
+        "ReplayResult",
     }:
         raise DomainSerializationError("unsupported_type", path)
     if type(value) is Location:
@@ -409,6 +429,8 @@ def _decode_location(data: dict[str, Any], *, path: str) -> Location:
             entity_id=EntityId(_str_field(data, "entity_id", path=path)),
             name=_str_field(data, "name", path=path),
         )
+    except DomainSerializationError:
+        raise
     except (TypeError, ValueError) as exc:
         raise DomainSerializationError("invalid_model", path) from exc
 
@@ -433,6 +455,8 @@ def _decode_item(data: dict[str, Any], *, path: str) -> Item:
             location_id=None if location is None else EntityId(location),
             holder_id=None if holder is None else EntityId(holder),
         )
+    except DomainSerializationError:
+        raise
     except (TypeError, ValueError) as exc:
         raise DomainSerializationError("invalid_model", path) from exc
 
@@ -459,6 +483,8 @@ def _decode_resource(data: dict[str, Any], *, path: str) -> Resource:
             quantity=_float_field(data, "quantity", path=path),
             unit=_str_field(data, "unit", path=path),
         )
+    except DomainSerializationError:
+        raise
     except (TypeError, ValueError) as exc:
         raise DomainSerializationError("invalid_model", path) from exc
 
@@ -481,6 +507,8 @@ def _decode_weather(data: dict[str, Any], *, path: str) -> Weather:
                 _float_field(data, "temperature", path=path)
             ),
         )
+    except DomainSerializationError:
+        raise
     except (TypeError, ValueError) as exc:
         raise DomainSerializationError("invalid_model", path) from exc
 
@@ -536,6 +564,8 @@ def _decode_agent_body(data: dict[str, Any], *, path: str) -> AgentBody:
             inventory=inventory,
             life_status=LifeStatus(_str_field(data, "life_status", path=path)),
         )
+    except DomainSerializationError:
+        raise
     except (TypeError, ValueError) as exc:
         raise DomainSerializationError("invalid_model", path) from exc
 
@@ -568,6 +598,8 @@ def _decode_goal(data: dict[str, Any], *, path: str) -> Goal:
             priority=_float_field(data, "priority", path=path),
             status=GoalStatus(_str_field(data, "status", path=path)),
         )
+    except DomainSerializationError:
+        raise
     except (TypeError, ValueError) as exc:
         raise DomainSerializationError("invalid_model", path) from exc
 
@@ -596,6 +628,8 @@ def _decode_agent(data: dict[str, Any], *, path: str) -> Agent:
             name=_str_field(data, "name", path=path),
             goals=goals,
         )
+    except DomainSerializationError:
+        raise
     except (TypeError, ValueError) as exc:
         raise DomainSerializationError("invalid_model", path) from exc
 
@@ -629,6 +663,8 @@ def _decode_memory_trace(data: dict[str, Any], *, path: str) -> MemoryTrace:
             world_revision=WorldRevision(_int_field(data, "world_revision", path=path)),
             content=_decode_content(content, path=f"{path}.content"),  # type: ignore[arg-type]
         )
+    except DomainSerializationError:
+        raise
     except (TypeError, ValueError) as exc:
         raise DomainSerializationError("invalid_model", path) from exc
 
@@ -670,6 +706,8 @@ def _decode_belief(data: dict[str, Any], *, path: str) -> Belief:
             confidence=_float_field(data, "confidence", path=path),
             evidence_memory_ids=evidence,
         )
+    except DomainSerializationError:
+        raise
     except (TypeError, ValueError) as exc:
         raise DomainSerializationError("invalid_model", path) from exc
 
@@ -700,6 +738,8 @@ def _decode_relationship(data: dict[str, Any], *, path: str) -> Relationship:
             kind=_str_field(data, "kind", path=path),
             affinity=_float_field(data, "affinity", path=path),
         )
+    except DomainSerializationError:
+        raise
     except (TypeError, ValueError) as exc:
         raise DomainSerializationError("invalid_model", path) from exc
 
@@ -727,6 +767,8 @@ def _decode_envelope(data: dict[str, Any], *, path: str) -> CommunicationEnvelop
             recipient_id=AgentId(_str_field(data, "recipient_id", path=path)),
             payload=_decode_content(payload, path=f"{path}.payload"),  # type: ignore[arg-type]
         )
+    except DomainSerializationError:
+        raise
     except (TypeError, ValueError) as exc:
         raise DomainSerializationError("invalid_model", path) from exc
 
@@ -823,6 +865,8 @@ def _decode_command(tag: str, data: dict[str, Any], *, path: str) -> object:
         if tag == "wait":
             _require_keys(data, set(), path=path)
             return Wait()
+    except DomainSerializationError:
+        raise
     except (TypeError, ValueError) as exc:
         raise DomainSerializationError("invalid_model", path) from exc
     raise DomainSerializationError("unknown_type", "$.type")
@@ -851,6 +895,8 @@ def _decode_proposal(data: dict[str, Any], *, path: str) -> ActionProposal:
             proposal_id=ProposalId(_str_field(data, "proposal_id", path=path)),
             command=require_agent_command(command),
         )
+    except DomainSerializationError:
+        raise
     except (TypeError, ValueError) as exc:
         raise DomainSerializationError("invalid_model", path) from exc
 
@@ -910,6 +956,8 @@ def _decode_observation(data: dict[str, Any], *, path: str) -> Observation:
                 data["weather"], _decode_weather, path=f"{path}.weather"
             ),
         )
+    except DomainSerializationError:
+        raise
     except (TypeError, ValueError) as exc:
         raise DomainSerializationError("invalid_model", path) from exc
 
@@ -937,16 +985,29 @@ def _encode_event_details(value: object) -> dict[str, Any]:
                 "kind": "search",
                 "target_id": None if target_id is None else target_id.value,
             }
-        case Taken(item_id=item_id):
-            return {"item_id": item_id.value, "kind": "take"}
-        case Dropped(item_id=item_id):
-            return {"item_id": item_id.value, "kind": "drop"}
-        case Given(recipient_id=recipient_id, item_id=item_id):
-            return {
+        case Taken(item_id=item_id, resulting_holder_id=resulting_holder_id):
+            payload = {"item_id": item_id.value, "kind": "take"}
+            if resulting_holder_id is not None:
+                payload["resulting_holder_id"] = resulting_holder_id.value
+            return payload
+        case Dropped(item_id=item_id, resulting_location_id=resulting_location_id):
+            payload = {"item_id": item_id.value, "kind": "drop"}
+            if resulting_location_id is not None:
+                payload["resulting_location_id"] = resulting_location_id.value
+            return payload
+        case Given(
+            recipient_id=recipient_id,
+            item_id=item_id,
+            resulting_holder_id=resulting_holder_id,
+        ):
+            payload = {
                 "item_id": item_id.value,
                 "kind": "give",
                 "recipient_id": recipient_id.value,
             }
+            if resulting_holder_id is not None:
+                payload["resulting_holder_id"] = resulting_holder_id.value
+            return payload
         case Eaten(item_id=item_id):
             return {"item_id": item_id.value, "kind": "eat"}
         case Drunk(source_id=source_id):
@@ -988,16 +1049,45 @@ def _decode_event_details(data: dict[str, Any], *, path: str) -> object:
             target = _optional_str(fields, "target_id", path=path)
             return Searched(None if target is None else EntityId(target))
         if kind == "take":
-            _require_keys(fields, {"item_id"}, path=path)
-            return Taken(EntityId(_str_field(fields, "item_id", path=path)))
+            allowed = {"item_id", "resulting_holder_id"}
+            if set(fields) - allowed or "item_id" not in fields:
+                raise DomainSerializationError("invalid_fields", path)
+            holder = (
+                EntityId(_str_field(fields, "resulting_holder_id", path=path))
+                if "resulting_holder_id" in fields
+                else None
+            )
+            return Taken(
+                EntityId(_str_field(fields, "item_id", path=path)),
+                resulting_holder_id=holder,
+            )
         if kind == "drop":
-            _require_keys(fields, {"item_id"}, path=path)
-            return Dropped(EntityId(_str_field(fields, "item_id", path=path)))
+            allowed = {"item_id", "resulting_location_id"}
+            if set(fields) - allowed or "item_id" not in fields:
+                raise DomainSerializationError("invalid_fields", path)
+            location = (
+                EntityId(_str_field(fields, "resulting_location_id", path=path))
+                if "resulting_location_id" in fields
+                else None
+            )
+            return Dropped(
+                EntityId(_str_field(fields, "item_id", path=path)),
+                resulting_location_id=location,
+            )
         if kind == "give":
-            _require_keys(fields, {"recipient_id", "item_id"}, path=path)
+            allowed = {"recipient_id", "item_id", "resulting_holder_id"}
+            missing = "recipient_id" not in fields or "item_id" not in fields
+            if set(fields) - allowed or missing:
+                raise DomainSerializationError("invalid_fields", path)
+            holder = (
+                EntityId(_str_field(fields, "resulting_holder_id", path=path))
+                if "resulting_holder_id" in fields
+                else None
+            )
             return Given(
                 EntityId(_str_field(fields, "recipient_id", path=path)),
                 EntityId(_str_field(fields, "item_id", path=path)),
+                resulting_holder_id=holder,
             )
         if kind == "eat":
             _require_keys(fields, {"item_id"}, path=path)
@@ -1039,40 +1129,122 @@ def _decode_event_details(data: dict[str, Any], *, path: str) -> object:
         if kind == "wait":
             _require_keys(fields, set(), path=path)
             return Waited()
+    except DomainSerializationError:
+        raise
     except (TypeError, ValueError) as exc:
         raise DomainSerializationError("invalid_model", path) from exc
     raise DomainSerializationError("unknown_type", f"{path}.kind")
 
 
 def _encode_world_event(value: WorldEvent) -> dict[str, Any]:
-    return {
+    payload: dict[str, Any] = {
+        "actor_id": None if value.actor_id is None else value.actor_id.value,
         "details": _encode_event_details(value.details),
         "event_id": value.event_id.value,
+        "event_type": value.event_type,
         "request_id": value.request_id.value,
-        "revision": value.revision.value,
+        "resulting_revision": value.resulting_revision.value,
+        "run_id": value.run_id,
+        "schema_version": value.schema_version,
+        "sequence": value.sequence,
+        "target_id": None if value.target_id is None else value.target_id.value,
+        "tick": value.tick,
         "world_id": value.world_id.value,
     }
+    return payload
 
 
 def _decode_world_event(data: dict[str, Any], *, path: str) -> WorldEvent:
-    _require_keys(
-        data, {"event_id", "request_id", "world_id", "revision", "details"}, path=path
-    )
-    details_raw = data["details"]
+    # Legacy schema-v1 audit shape: identity + details only.
+    legacy_keys = {"event_id", "request_id", "world_id", "revision", "details"}
+    replay_keys = {
+        "event_id",
+        "run_id",
+        "world_id",
+        "tick",
+        "sequence",
+        "request_id",
+        "resulting_revision",
+        "schema_version",
+        "details",
+        "actor_id",
+        "target_id",
+        "event_type",
+    }
+    keys = set(data)
+    details_raw = data.get("details")
     if not isinstance(details_raw, dict):
         raise DomainSerializationError("invalid_object", f"{path}.details")
+    details = require_event_details(
+        _decode_event_details(details_raw, path=f"{path}.details")
+    )
     try:
-        return WorldEvent(
+        if keys == legacy_keys or (
+            keys == legacy_keys | {"event_type"} and "schema_version" not in data
+        ):
+            _require_keys(data, legacy_keys, path=path)
+            # Legacy under-specified events remain immutable audit records.
+            return WorldEvent(
+                event_id=EventId(_str_field(data, "event_id", path=path)),
+                run_id="legacy-audit",
+                world_id=WorldId(_str_field(data, "world_id", path=path)),
+                tick=0,
+                sequence=0,
+                request_id=RequestId(_str_field(data, "request_id", path=path)),
+                resulting_revision=WorldRevision(
+                    _int_field(data, "revision", path=path)
+                ),
+                schema_version=EVENT_SCHEMA_AUDIT_V1,
+                details=details,
+                actor_id=None,
+                target_id=target_id_for_details(details),
+            )
+        required = replay_keys - {"event_type"}
+        expected = required | ({"event_type"} if "event_type" in data else set())
+        _require_keys(data, expected, path=path)
+        if keys - replay_keys:
+            raise DomainSerializationError("invalid_fields", path)
+        schema_version = _int_field(data, "schema_version", path=path)
+        if schema_version not in {EVENT_SCHEMA_AUDIT_V1, EVENT_SCHEMA_REPLAY_V1}:
+            raise DomainSerializationError("unsupported_schema_version", path)
+        actor_raw = data["actor_id"]
+        target_raw = data["target_id"]
+        if actor_raw is None:
+            actor_id = None
+        else:
+            actor_id = EntityId(_optional_actor(actor_raw, path))
+        if target_raw is None:
+            target_id = None
+        else:
+            target_id = EntityId(_optional_actor(target_raw, path))
+        event = WorldEvent(
             event_id=EventId(_str_field(data, "event_id", path=path)),
-            request_id=RequestId(_str_field(data, "request_id", path=path)),
+            run_id=_str_field(data, "run_id", path=path),
             world_id=WorldId(_str_field(data, "world_id", path=path)),
-            revision=WorldRevision(_int_field(data, "revision", path=path)),
-            details=require_event_details(
-                _decode_event_details(details_raw, path=f"{path}.details")
+            tick=_int_field(data, "tick", path=path),
+            sequence=_int_field(data, "sequence", path=path),
+            request_id=RequestId(_str_field(data, "request_id", path=path)),
+            resulting_revision=WorldRevision(
+                _int_field(data, "resulting_revision", path=path)
             ),
+            schema_version=schema_version,
+            details=details,
+            actor_id=actor_id,
+            target_id=target_id,
         )
+        if "event_type" in data and data["event_type"] != event.event_type:
+            raise DomainSerializationError("invalid_fields", f"{path}.event_type")
+        return event
     except (TypeError, ValueError) as exc:
+        if isinstance(exc, DomainSerializationError):
+            raise
         raise DomainSerializationError("invalid_model", path) from exc
+
+
+def _optional_actor(raw: object, path: str) -> str:
+    if not isinstance(raw, str):
+        raise DomainSerializationError("invalid_string", path)
+    return raw
 
 
 def _encode_export(value: SimulationExport) -> dict[str, Any]:
@@ -1120,5 +1292,7 @@ def _decode_export(data: dict[str, Any], *, path: str) -> SimulationExport:
             ),
             events=events,
         )
+    except DomainSerializationError:
+        raise
     except (TypeError, ValueError) as exc:
         raise DomainSerializationError("invalid_model", path) from exc

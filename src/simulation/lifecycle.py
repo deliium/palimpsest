@@ -56,6 +56,10 @@ class EngineDiagnosticCode(StrEnum):
     TOKEN_STALE = "token_stale"
     TOKEN_REPLAY = "token_replay"
     TOKEN_CROSS_ENGINE = "token_cross_engine"
+    CHECKPOINT_RESTORE = "checkpoint_restore"
+    CHECKPOINT_FALLBACK = "checkpoint_fallback"
+    CHECKPOINT_CORRUPT = "checkpoint_corrupt"
+    PROJECTION_FAILED = "projection_failed"
 
 
 class ActionResolutionStatus(StrEnum):
@@ -232,6 +236,10 @@ class TickEventRecord:
         )
         if type(self.event) is not WorldEvent:
             raise TypeError("TickEventRecord.event must be WorldEvent")
+        if self.event.sequence != self.sequence:
+            raise ValueError(
+                "TickEventRecord.sequence must match WorldEvent.sequence"
+            )
 
 
 @dataclass(frozen=True, slots=True)
@@ -288,9 +296,13 @@ class TickResult:
                     "ActionResolution.resulting_revision must match TickResult"
                 )
         for record in self.events:
-            if record.event.revision != self.resulting_revision:
+            if record.event.resulting_revision != self.resulting_revision:
                 raise ValueError(
                     "TickEventRecord.event.revision must match resulting_revision"
+                )
+            if record.event.tick != self.tick.value:
+                raise ValueError(
+                    "TickEventRecord.event.tick must match TickResult.tick"
                 )
 
 

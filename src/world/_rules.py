@@ -426,7 +426,7 @@ def apply_operation(
         return RuleApplication(
             result=result, next_state=state, event_details=None
         )
-    details = _event_details_for(operation)
+    details = _event_details_for(state, operation)
     if result.disposition is RuleDisposition.EVENT_ONLY:
         return RuleApplication(
             result=result, next_state=state, event_details=details
@@ -438,14 +438,19 @@ def apply_operation(
     )
 
 
-def _event_details_for(operation: ValidatedWorldOperation) -> EventDetails:
+def _event_details_for(
+    state: WorldState, operation: ValidatedWorldOperation
+) -> EventDetails:
     match operation:
-        case _TakeOp(item_id=item_id):
-            return Taken(item_id)
-        case _DropOp(item_id=item_id):
-            return Dropped(item_id)
+        case _TakeOp(actor_id=actor_id, item_id=item_id):
+            return Taken(item_id, resulting_holder_id=actor_id)
+        case _DropOp(actor_id=actor_id, item_id=item_id):
+            actor = state.bodies[actor_id]
+            return Dropped(item_id, resulting_location_id=actor.location_id)
         case _GiveOp(recipient_id=recipient_id, item_id=item_id):
-            return Given(recipient_id, item_id)
+            return Given(
+                recipient_id, item_id, resulting_holder_id=recipient_id
+            )
         case _SearchOp(target_id=target_id):
             return Searched(target_id)
         case _TalkOp(recipient_id=recipient_id, text=text):

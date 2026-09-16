@@ -6,7 +6,7 @@ from analysis.contracts import EventSource, ExportSource
 from simulation.contracts import make_export
 from simulation.identifiers import derive_run_id
 from simulation.models import SimulationExport, SimulationRunConfig
-from world.events import Waited, WorldEvent
+from world.events import Waited, WorldEvent, make_replayable_event
 from world.identifiers import EventId, RequestId, WorldId, WorldRevision
 
 
@@ -24,12 +24,16 @@ class _FrozenSource:
 def test_event_and_export_sources_are_read_only_snapshots() -> None:
     config = SimulationRunConfig(seed=3)
     run_id = derive_run_id(config)
-    event = WorldEvent(
+    event = make_replayable_event(
         event_id=EventId("evt-1"),
-        request_id=RequestId("r-1"),
+        run_id=run_id.value,
         world_id=WorldId("world-1"),
-        revision=WorldRevision(2),
+        tick=0,
+        sequence=0,
+        request_id=RequestId("r-1"),
+        resulting_revision=WorldRevision(2),
         details=Waited(),
+        actor_id=None,
     )
     export = make_export(config, run_id, [event])
     source: EventSource = _FrozenSource(export)

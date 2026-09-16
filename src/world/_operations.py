@@ -32,8 +32,21 @@ from world.actions import (
     Wait,
     require_agent_command,
 )
-from world.events import WorldEvent, normalize_events
-from world.identifiers import EntityId, EventId, RequestId, WorldId, WorldRevision
+from world.events import (
+    EventDetails,
+    WorldEvent,
+    make_replayable_event,
+    normalize_ordered_events,
+)
+from world.identifiers import (
+    EntityId,
+    EventId,
+    RequestId,
+    WorldId,
+    WorldRevision,
+    require_exact_nonneg_int,
+    require_stable_id,
+)
 from world.models import AgentBody, Item, LifeStatus, Location, Resource
 
 __all__: list[str] = [
@@ -543,7 +556,7 @@ class PreparedBatch:
             raise TypeError("PreparedBatch.candidate_state must be WorldState")
         if type(self.semantic_mutation) is not bool:
             raise TypeError("PreparedBatch.semantic_mutation must be bool")
-        object.__setattr__(self, "events", normalize_events(self.events))
+        object.__setattr__(self, "events", normalize_ordered_events(self.events))
 
 
 class BatchPreparationError(ValueError):
@@ -556,13 +569,16 @@ def prepare_action_batch(
     starting_state: WorldState,
     requests: Sequence[ActionRequest],
     event_ids: Sequence[EventId],
+    run_id: str,
+    tick: int,
 ) -> PreparedBatch:
     """Prepare a candidate snapshot from ordered admitted requests.
 
     Working mutations keep the starting revision until the end. Revision advances
     once when any semantic mutation occurs; all emitted events use that final
     revision. Conflict is recorded only when a request was initially applicable
-    and a prior effect invalidated it.
+    and a prior effect invalidated it. Intra-tick ``sequence`` is assigned in
+    emission order starting at 0.
     """
     from world._rules import RuleDisposition, apply_operation, evaluate_operation
 
@@ -570,6 +586,8 @@ def prepare_action_batch(
         raise TypeError("prepare_action_batch requires WorldId")
     if type(starting_state) is not WorldState:
         raise TypeError("prepare_action_batch requires WorldState")
+    run_id_value = require_stable_id("run_id", run_id)
+    tick_value = require_exact_nonneg_int("tick", tick)
     if isinstance(requests, (set, frozenset)) or not isinstance(requests, Sequence):
         raise TypeError("requests must be an ordered sequence")
     if isinstance(event_ids, (set, frozenset)) or not isinstance(event_ids, Sequence):
@@ -589,7 +607,7 @@ def prepare_action_batch(
     working = starting_state
     semantic_mutation = False
     outcomes: list[BatchItemOutcome] = []
-    pending_events: list[tuple[ActionRequest, object, EventId]] = []
+    pending_events: list[tuple[ActionRequest, EventDetails, EventId]] = []
 
     for ordinal, request in enumerate(request_tuple):
         if type(request) is not ActionRequest:
@@ -706,22 +724,28 @@ def prepare_action_batch(
         candidate = working
 
     events: list[WorldEvent] = []
-    for request, details, event_id in pending_events:
+    for sequence, (request, details, event_id) in enumerate(pending_events):
         events.append(
-            WorldEvent(
+            make_replayable_event(
                 event_id=event_id,
-                request_id=request.request_id,
+                run_id=run_id_value,
                 world_id=world_id,
-                revision=resulting_revision,
-                details=details,  # type: ignore[arg-type]
+                tick=tick_value,
+                sequence=sequence,
+                request_id=request.request_id,
+                resulting_revision=resulting_revision,
+                details=details,
+                actor_id=request.actor_id,
             )
         )
-    normalized = normalize_events(events)
+    normalized = normalize_ordered_events(events)
     for event in normalized:
         if event.world_id != world_id:
             raise BatchPreparationError("event world_id mismatch")
-        if event.revision != resulting_revision:
+        if event.resulting_revision != resulting_revision:
             raise BatchPreparationError("event revision mismatch")
+        if event.run_id != run_id_value or event.tick != tick_value:
+            raise BatchPreparationError("event run/tick mismatch")
 
     return PreparedBatch(
         candidate_state=candidate,

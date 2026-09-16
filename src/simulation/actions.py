@@ -31,8 +31,36 @@ __all__ = [
     "canonical_admission_keys",
     "canonical_event_keys",
     "derive_engine_event_id",
+    "event_run_id_to_run_id",
+    "event_tick_to_tick",
     "future_effect_scope",
+    "run_id_for_event",
+    "tick_for_event",
 ]
+
+
+def run_id_for_event(run_id: RunId) -> str:
+    """Convert simulation ``RunId`` to the opaque world event run identity."""
+    if type(run_id) is not RunId:
+        raise TypeError("run_id_for_event requires RunId")
+    return run_id.value
+
+
+def event_run_id_to_run_id(value: str) -> RunId:
+    """Convert an opaque world event run identity back to ``RunId``."""
+    return RunId(value)
+
+
+def tick_for_event(tick: Tick) -> int:
+    """Convert simulation ``Tick`` to the exact non-negative event tick integer."""
+    if type(tick) is not Tick:
+        raise TypeError("tick_for_event requires Tick")
+    return tick.value
+
+
+def event_tick_to_tick(value: int) -> Tick:
+    """Convert an exact non-negative event tick integer back to ``Tick``."""
+    return Tick(value)
 
 
 def canonical_admission_keys(
