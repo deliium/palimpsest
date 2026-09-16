@@ -1,6 +1,6 @@
 # Development
 
-[← Previous Page](configuration.md) · [Back to README](../README.md)
+[← Previous Page](configuration.md) · [Back to README](../README.md) · [Next → Persistence](persistence.md)
 
 ## Locked environment
 
@@ -55,7 +55,7 @@ export PALIMPSEST_DATABASE_URL='postgresql+asyncpg://palimpsest:palimpsest@127.0
 uv run --frozen --python 3.12.14 alembic upgrade head
 ```
 
-Revision `0001` runs `CREATE EXTENSION IF NOT EXISTS vector` and creates no application tables. Downgrade is a documented no-op. Never use `metadata.create_all()`.
+Revision `0001` enables `pgvector`. Revision `0002` creates the append-only simulation event store. Downgrade of `0001` is a documented no-op for the extension. Never use `metadata.create_all()`.
 
 ## Local run scripts
 

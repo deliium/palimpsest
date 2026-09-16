@@ -6,7 +6,7 @@ Palimpsest is a Python 3.12+ modular monolith for reproducible, discrete, text-b
 
 ## Core Features
 
-- Bounded packages for world authority, agents, cognition strategies, memory, social envelopes, LLM trust boundaries, simulation/`WorldEngine`, analysis ports, API, and infrastructure
+- Bounded packages for world authority, agents, cognition strategies, memory, social envelopes, LLM trust boundaries, simulation/`WorldEngine`, persistence adapters, analysis ports, API, and infrastructure
 - Typed immutable agent-facing contracts, private world authority (`World` / `WorldState` / rules / operations), and schema-v1 event/export codec
 - Deterministic seed-derived RNG streams, logical clock, namespaced IDs, and replay-stable tick resolution
 - `PALIMPSEST_` settings, structured logging, async SQLAlchemy lifecycle, Alembic + pgvector bootstrap

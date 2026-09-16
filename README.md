@@ -52,6 +52,7 @@ Development credentials in `compose.yaml` are **not production**. `docker compos
 | [Architecture](docs/architecture.md) | Bounded packages, `WorldEngine` lifecycle, public facades, eleven invariants, deferred scope |
 | [Configuration](docs/configuration.md) | `PALIMPSEST_` settings, logging, redaction, seeds, identifiers, clocks |
 | [Development](docs/development.md) | Tests, migrations, local and Docker workflows, exact commands |
+| [Persistence](docs/persistence.md) | Event store, append-only guarantees, durable ticks, replay |
 
 ## Invariants (summary)
 

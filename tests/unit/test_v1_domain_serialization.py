@@ -46,6 +46,7 @@ from world.events import (
     Talked,
     Told,
     Waited,
+    WorldEvent,
     event_is_replayable,
     make_replayable_event,
 )
@@ -157,6 +158,7 @@ def test_legacy_audit_world_event_still_decodes() -> None:
         b'"schema_version":1,"type":"world_event"}'
     )
     decoded = decode_domain(legacy)
+    assert isinstance(decoded, WorldEvent)
     assert decoded.schema_version == EVENT_SCHEMA_AUDIT_V1
     assert event_is_replayable(decoded) is False
     assert decoded.details == Waited()

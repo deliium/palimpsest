@@ -14,14 +14,15 @@ Palimpsest is a modular monolith under `src/`. Cross-module imports must target 
 | `memory` | Owner-bound `MemoryTrace` / `Belief` stores | `world`, `agents` |
 | `social` | Opaque communication envelopes and relationships | `world`, `agents` |
 | `llm` | Provider-neutral untrusted responses | *(none)* |
-| `simulation` | `WorldEngine`, bootstrap, lifecycle, seed/clock/RNG/IDs, schema-1 codec, export ports | `world`, `agents`, `agents.cognition`, `memory`, `social`, `llm` |
-| `api` | HTTP composition root | `simulation`, `infrastructure` |
+| `simulation` | `WorldEngine`, bootstrap, lifecycle, seed/clock/RNG/IDs, schema-1 codec, persistence ports, durable tick service, replay | `world`, `agents`, `agents.cognition`, `memory`, `social`, `llm` |
+| `persistence` | SQLAlchemy adapters for simulation repository ports | `simulation`, `infrastructure` |
+| `api` | HTTP composition root | `simulation`, `infrastructure`, `persistence` |
 | `analysis` | Read-only event/export sources | `world`, `simulation` |
 | `infrastructure` | Settings, logging, PostgreSQL adapters | *(none of the domain packages)* |
 
-Private world authority (`world/_state.py`, `world/_transitions.py`, `world/_operations.py`, `world/_rules.py`, `world/_perception.py`) may be imported only by `simulation.engine`, `simulation.bootstrap`, and other private `world._*` modules. They are not re-exported from `world`.
+Private world authority (`world/_state.py`, `world/_transitions.py`, `world/_operations.py`, `world/_rules.py`, `world/_perception.py`, `world/_replay.py`) may be imported only by `simulation.engine`, `simulation.bootstrap`, and other private `world._*` modules. They are not re-exported from `world`.
 
-`memory` and `social` are independent. Base `agents` must not import `agents.cognition`. `llm` imports no domain module. `simulation` must not import `api` or `analysis`. Domain packages do not import `infrastructure`.
+`memory` and `social` are independent. Base `agents` must not import `agents.cognition`. `llm` imports no domain module. `simulation` must not import `api`, `analysis`, `infrastructure`, or `persistence`. Domain packages do not import `infrastructure`. See [Persistence](persistence.md) for the durable event store and replay contract.
 
 Import-linter (`pyproject.toml`) and `tests/architecture/boundary_checker.py` enforce the allowlist, private-world authority, public facades, framework leakage, provider SDKs, and prohibited `random` / wall-clock / UUID defaults in domain code.
 
@@ -35,7 +36,8 @@ Import packages, not private modules:
 - `memory`: `MemoryTrace`, `Belief`, owner-bound stores, `OwnershipError`
 - `social`: `CommunicationEnvelope`, `Relationship`, `EnvelopeSender`
 - `llm`: `LLMClient`, `LLMResponse`
-- `simulation`: `WorldEngine`, `WorldBootstrap`, lifecycle types (`TickToken`, `ActionSubmission`, `TickResult`, …), `SimulationRunConfig`, schema-1 `encode_domain` / `decode_domain`, deterministic IDs/RNG/clock, export ports
+- `simulation`: `WorldEngine`, `WorldBootstrap`, lifecycle types, persistence DTOs/ports, `PersistentSimulationService`, `ReplayService`, schema-1 codec, deterministic IDs/RNG/clock, export ports
+- `persistence`: repository factories (`create_run_repository`, …)
 - `analysis`: `EventSource`, `ExportSource`
 - `api`: `create_app`
 - `infrastructure`: `load_settings`, `configure_logging`, `create_database_resources`

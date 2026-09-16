@@ -14,13 +14,14 @@ Palimpsest uses a modular-monolith layout of bounded packages under `src/`. Each
 
 ```text
 src/
-  world/            # agent-facing contracts + private _state/_transitions/_operations
+  world/            # agent-facing contracts + private _state/_transitions/_operations/_replay
   agents/           # identity, Agent, goals
   agents/cognition/ # CognitionStrategy leaf layer (returns AgentCommand)
   memory/           # owner-bound MemoryTrace/Belief
   social/           # communication envelopes + Relationship
   llm/              # provider-neutral untrusted responses
   simulation/       # WorldEngine, bootstrap, lifecycle, seed, clock, RNG, IDs, codec, export ports
+  persistence/      # SQLAlchemy adapters for simulation repository ports (no domain imports)
   analysis/         # read-only event/export protocols
   api/              # FastAPI composition root
   infrastructure/   # settings, logging, database adapters
@@ -36,13 +37,17 @@ tests/
 - ✅ `memory` / `social` may import `world` + `agents`; remain independent of each other
 - ✅ `llm` imports no domain module
 - ✅ `agents.cognition` may import public contracts from agents/world/memory/social/llm
-- ✅ `simulation` may import domain public contracts; must not import `api` or `analysis`
-- ✅ `api` may import `simulation` and `infrastructure`
+- ✅ `simulation` may import domain public contracts; must not import `api`, `analysis`, `infrastructure`, or `persistence`
+- ✅ `persistence` may import public `simulation` contracts and `infrastructure` only
+- ✅ `api` may import `simulation`, `infrastructure`, and `persistence`
+- ✅ `persistence` may import only public `simulation` contracts and generic `infrastructure`
+- ✅ `api` may import `simulation`, `infrastructure`, and `persistence`
 - ✅ `analysis` is read-only over immutable events / export contracts
 - ✅ `infrastructure` imports no domain policy
 - ❌ Domain packages must not import `infrastructure`, FastAPI, or ORM stacks
 - ❌ Non-simulation packages must not import private `world._*` authority modules
 - ❌ Only `simulation.engine` / `simulation.bootstrap` and private `world._*` may import world authority internals
+- ❌ Only `infrastructure` and `persistence` may import SQLAlchemy/Alembic/asyncpg
 - ❌ Cross-module imports of private modules or transitive re-exports
 
 ## Layer/Module Communication

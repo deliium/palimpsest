@@ -108,6 +108,7 @@ from simulation.randomness import (
     create_rng,
     sample_stream,
 )
+from simulation.replay import ReplayOutcome, ReplayService
 from simulation.serialization import (
     DomainSerializationError,
     decode_domain,
@@ -144,8 +145,10 @@ __all__ = [
     "RegistrationTranslator",
     "ReplayFallbackPolicy",
     "ReplayMode",
+    "ReplayOutcome",
     "ReplayRequest",
     "ReplayResult",
+    "ReplayService",
     "ReplayStatus",
     "RunConfigurationPort",
     "RunCreateRequest",
