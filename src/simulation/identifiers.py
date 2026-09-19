@@ -11,7 +11,11 @@ import hashlib
 
 from agents.models import GoalId
 from memory.models import BeliefId, MemoryId
-from simulation.models import DERIVATION_VERSION, RunId, SimulationRunConfig
+from simulation.models import (
+    DERIVATION_VERSION_V2,
+    RunId,
+    SimulationRunConfig,
+)
 from simulation.randomness import StreamScope, canonical_scope_bytes
 from social.models import EnvelopeId, RelationshipId
 from world.identifiers import (
@@ -21,11 +25,19 @@ from world.identifiers import (
     RequestId,
     WorldId,
 )
+from world.models import physical_rules_fingerprint
 
 
-def _digest(*parts: bytes) -> bytes:
+def _digest(config: SimulationRunConfig, *parts: bytes) -> bytes:
     hasher = hashlib.sha256()
-    hasher.update(DERIVATION_VERSION.encode("utf-8"))
+    hasher.update(config.derivation_version.encode("utf-8"))
+    if config.derivation_version == DERIVATION_VERSION_V2:
+        assert config.physical_rules is not None
+        fingerprint = physical_rules_fingerprint(config.physical_rules).encode(
+            "ascii"
+        )
+        hasher.update(len(fingerprint).to_bytes(4, "big"))
+        hasher.update(fingerprint)
     for part in parts:
         hasher.update(len(part).to_bytes(4, "big"))
         hasher.update(part)
@@ -47,6 +59,7 @@ def _derive_purpose_hex(
 ) -> str:
     _require_canonical_keys(keys)
     return _digest(
+        config,
         purpose,
         str(config.seed).encode("utf-8"),
         *(key.encode("utf-8") for key in keys),
@@ -55,14 +68,14 @@ def _derive_purpose_hex(
 
 def derive_run_id(config: SimulationRunConfig) -> RunId:
     """Derive a stable run id from the canonical seed and derivation version."""
-    digest = _digest(b"run", str(config.seed).encode("utf-8"))
+    digest = _digest(config, b"run", str(config.seed).encode("utf-8"))
     return RunId(digest.hex())
 
 
 def derive_scoped_id(config: SimulationRunConfig, scope: StreamScope) -> str:
     """Derive a namespaced id that does not alias distinct scopes."""
     digest = _digest(
-        b"id", str(config.seed).encode("utf-8"), canonical_scope_bytes(scope)
+        config, b"id", str(config.seed).encode("utf-8"), canonical_scope_bytes(scope)
     )
     return digest.hex()
 
@@ -117,6 +130,46 @@ def derive_belief_id(config: SimulationRunConfig, *keys: str) -> BeliefId:
 def derive_envelope_id(config: SimulationRunConfig, *keys: str) -> EnvelopeId:
     """Derive a stable communication envelope id from seed and canonical keys."""
     return EnvelopeId(_derive_purpose_hex(b"envelope", config, *keys))
+
+
+def derive_system_cause_id(
+    config: SimulationRunConfig,
+    *,
+    run_id: RunId,
+    world_id: WorldId,
+    tick: int,
+    effect_family: str,
+    entity_id: EntityId,
+    family_ordinal: int,
+) -> RequestId:
+    """Derive a deterministic system cause/request id for autonomous effects."""
+    if type(run_id) is not RunId:
+        raise TypeError("derive_system_cause_id requires RunId")
+    if type(world_id) is not WorldId:
+        raise TypeError("derive_system_cause_id requires WorldId")
+    if type(entity_id) is not EntityId:
+        raise TypeError("derive_system_cause_id requires EntityId")
+    if type(effect_family) is not str or not effect_family:
+        raise ValueError("effect_family must be a non-empty str")
+    if (
+        isinstance(tick, bool)
+        or type(tick) is not int
+        or tick < 0
+        or isinstance(family_ordinal, bool)
+        or type(family_ordinal) is not int
+        or family_ordinal < 0
+    ):
+        raise ValueError("tick and family_ordinal must be non-negative ints")
+    return derive_request_id(
+        config,
+        "system-cause",
+        run_id.value,
+        world_id.value,
+        f"tick:{tick}",
+        f"family:{effect_family}",
+        f"entity:{entity_id.value}",
+        f"ordinal:{family_ordinal}",
+    )
 
 
 def reject_operational_identifier(source: str, value: str) -> None:

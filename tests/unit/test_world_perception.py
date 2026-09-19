@@ -2,13 +2,24 @@
 
 from __future__ import annotations
 
+from tests.simulation_helpers import connected_locations, make_item, make_location, make_resource, make_weather
+
 import pytest
 
 from world._perception import project_observations
 from world._state import WorldState
 from world.identifiers import EntityId, WorldId, WorldRevision
 from world.models import AgentBody, Item, LifeStatus, Location, Resource, Weather
-from world.values import Fatigue, Health, Hunger, TemperatureCelsius, Thirst
+from world.observations import ObservationContext
+from world.values import (
+    CarryCapacity,
+    Fatigue,
+    Health,
+    Hunger,
+    TemperatureCelsius,
+    Thirst,
+    WeatherCondition,
+)
 
 
 def _body(
@@ -28,54 +39,22 @@ def _body(
         temperature=TemperatureCelsius(36.5),
         inventory=inventory,
         life_status=LifeStatus.DEAD if dead else LifeStatus.ALIVE,
+        carry_capacity=CarryCapacity(10),
     )
 
 
 def _rich_state() -> WorldState:
-    cup = Item(
-        entity_id=EntityId("item-cup"),
-        name="Cup",
-        holder_id=EntityId("body-1"),
-    )
-    rock = Item(
-        entity_id=EntityId("item-rock"),
-        name="Rock",
-        location_id=EntityId("loc-1"),
-    )
-    distant = Item(
-        entity_id=EntityId("item-far"),
-        name="Far",
-        location_id=EntityId("loc-2"),
-    )
+    cup = make_item("item-cup", name="Cup", location_id=None, holder_id="body-1")
+    rock = make_item("item-rock", name="Rock", location_id="loc-1")
+    distant = make_item("item-far", name="Far", location_id="loc-2")
     return WorldState(
         WorldRevision(3),
-        locations=(
-            Location(entity_id=EntityId("loc-1"), name="Camp"),
-            Location(entity_id=EntityId("loc-2"), name="Forest"),
-        ),
+        locations=connected_locations(("loc-1", "Camp"), ("loc-2", "Forest")),
         items=(cup, rock, distant),
         resources=(
-            Resource(
-                entity_id=EntityId("res-b"),
-                name="Berries",
-                location_id=EntityId("loc-1"),
-                quantity=2.0,
-                unit="kg",
-            ),
-            Resource(
-                entity_id=EntityId("res-a"),
-                name="Water",
-                location_id=EntityId("loc-1"),
-                quantity=1.0,
-                unit="L",
-            ),
-            Resource(
-                entity_id=EntityId("res-far"),
-                name="Ore",
-                location_id=EntityId("loc-2"),
-                quantity=5.0,
-                unit="kg",
-            ),
+            make_resource("res-b", name="Berries", location_id="loc-1", quantity=2.0, unit="kg"),
+            make_resource("res-a", name="Water", location_id="loc-1", quantity=1.0, unit="L"),
+            make_resource("res-far", name="Ore", location_id="loc-2", quantity=5.0, unit="kg"),
         ),
         bodies=(
             _body("body-1", "loc-1", inventory=(EntityId("item-cup"),)),
@@ -83,26 +62,21 @@ def _rich_state() -> WorldState:
             _body("body-dead", "loc-1", dead=True),
         ),
         weather=(
-            Weather(
-                location_id=EntityId("loc-1"),
-                condition="clear",
-                temperature=TemperatureCelsius(18),
-            ),
-            Weather(
-                location_id=EntityId("loc-2"),
-                condition="fog",
-                temperature=TemperatureCelsius(10),
-            ),
+            make_weather("loc-1", condition=WeatherCondition.CLEAR),
+            make_weather("loc-2", condition=WeatherCondition.CLOUDY),
         ),
     )
 
 
 def test_observations_follow_registration_order_and_v1_policy() -> None:
     state = _rich_state()
+    # Daytime keeps cloudy visibility above the ground-content threshold.
+    context = ObservationContext(tick=12)
     observations = project_observations(
         world_id=WorldId("world-1"),
         state=state,
         observer_ids=(EntityId("body-2"), EntityId("body-1")),
+        context=context,
     )
     assert [obs.observer_id for obs in observations] == [
         EntityId("body-2"),
@@ -112,19 +86,15 @@ def test_observations_follow_registration_order_and_v1_policy() -> None:
     assert first.self_body is not None
     assert first.self_body.entity_id == EntityId("body-2")
     assert first.locations == (
-        Location(entity_id=EntityId("loc-2"), name="Forest"),
+        make_location("loc-2", name="Forest", adjacent=("loc-1",)),
     )
     assert first.items == (
-        Item(
-            entity_id=EntityId("item-far"),
-            name="Far",
-            location_id=EntityId("loc-2"),
-        ),
+        make_item("item-far", name="Far", location_id="loc-2"),
     )
     assert [resource.entity_id for resource in first.resources] == [
         EntityId("res-far")
     ]
-    assert first.weather[0].condition == "fog"
+    assert first.weather[0].condition == WeatherCondition.CLOUDY
 
     assert second.self_body is not None
     assert second.self_body.entity_id == EntityId("body-1")

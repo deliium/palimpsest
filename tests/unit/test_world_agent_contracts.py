@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from tests.simulation_helpers import make_location
+
 import pytest
 from hypothesis import given, settings
 from hypothesis import strategies as st
@@ -25,7 +27,7 @@ from world.identifiers import (
 )
 from world.models import AgentBody, LifeStatus, Location
 from world.observations import Observation
-from world.values import Fatigue, Health, Hunger, TemperatureCelsius, Thirst
+from world.values import CarryCapacity, Fatigue, Health, Hunger, TemperatureCelsius, Thirst
 
 _ID_TEXT = st.text(
     alphabet=st.characters(whitelist_categories=("L", "N"), whitelist_characters="-_"),
@@ -45,6 +47,7 @@ def _body(entity_id: str, location_id: str) -> AgentBody:
         temperature=TemperatureCelsius(36.5),
         inventory=(),
         life_status=LifeStatus.ALIVE,
+        carry_capacity=CarryCapacity(10),
     )
 
 
@@ -57,7 +60,7 @@ def _body(entity_id: str, location_id: str) -> AgentBody:
 def test_property_observation_projections_are_detached(
     observer: str, revision: int, location_name: str
 ) -> None:
-    locations = [Location(entity_id=EntityId("loc-1"), name=location_name)]
+    locations = [make_location("loc-1", name=location_name)]
     observation = Observation(
         world_id=WorldId("world-1"),
         observer_id=EntityId(observer),
@@ -66,9 +69,8 @@ def test_property_observation_projections_are_detached(
     )
     locations.clear()
     assert observation.locations == (
-        Location(entity_id=EntityId("loc-1"), name=location_name),
+        make_location("loc-1", name=location_name),
     )
-
 
 def test_observation_is_typed_partial_and_immutable() -> None:
     body = _body("observer-1", "loc-1")
@@ -77,7 +79,7 @@ def test_observation_is_typed_partial_and_immutable() -> None:
         observer_id=EntityId("observer-1"),
         revision=WorldRevision(1),
         self_body=body,
-        locations=(Location(entity_id=EntityId("loc-1"), name="Camp"),),
+        locations=(make_location("loc-1", name="Camp"),),
     )
     assert observation.self_body == body
     assert observation.items == ()

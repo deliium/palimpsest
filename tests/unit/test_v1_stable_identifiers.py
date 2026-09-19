@@ -167,7 +167,93 @@ def test_existing_run_id_golden_vector_is_unchanged() -> None:
     )
 
 
+def test_derivation_v2_aliases_on_rules_fingerprint() -> None:
+    from world.models import PhysicalRules, default_physical_rules
+
+    left = SimulationRunConfig(seed=42, physical_rules=default_physical_rules())
+    right = SimulationRunConfig(seed=42, physical_rules=PhysicalRules(move_fatigue=6.0))
+    assert left.derivation_version == "v2"
+    assert derive_run_id(left) != derive_run_id(right)
+    assert derive_entity_id(left, "camp") != derive_entity_id(right, "camp")
+    with pytest.raises(ValueError, match="derivation-v2 requires physical_rules"):
+        SimulationRunConfig(seed=1, derivation_version="v2")
+    with pytest.raises(ValueError, match="derivation-v1 forbids physical_rules"):
+        SimulationRunConfig(
+            seed=1,
+            physical_rules=default_physical_rules(),
+            derivation_version="v1",
+        )
+
+
 def test_factories_reject_empty_key_sets() -> None:
     config = SimulationRunConfig(seed=1)
     with pytest.raises(ValueError, match="at least one key"):
         derive_entity_id(config)
+
+
+def test_system_cause_ids_are_purpose_separated() -> None:
+    from simulation.identifiers import derive_system_cause_id
+    from simulation.models import RunId
+    from world.models import default_physical_rules
+
+    config = SimulationRunConfig(seed=9, physical_rules=default_physical_rules())
+    run_id = RunId("run-abc")
+    world_id = WorldId("world-1")
+    entity = EntityId("loc-1")
+    weather = derive_system_cause_id(
+        config,
+        run_id=run_id,
+        world_id=world_id,
+        tick=5,
+        effect_family="weather",
+        entity_id=entity,
+        family_ordinal=0,
+    )
+    regen = derive_system_cause_id(
+        config,
+        run_id=run_id,
+        world_id=world_id,
+        tick=5,
+        effect_family="regeneration",
+        entity_id=entity,
+        family_ordinal=0,
+    )
+    assert weather != regen
+    assert derive_system_cause_id(
+        config,
+        run_id=run_id,
+        world_id=world_id,
+        tick=5,
+        effect_family="weather",
+        entity_id=entity,
+        family_ordinal=0,
+    ) == weather
+
+
+def test_physical_sampling_algorithms_are_deterministic() -> None:
+    import random
+
+    from simulation.randomness import (
+        sample_attack_damage,
+        sample_bernoulli,
+        sample_destination_index,
+        sample_weather_condition,
+    )
+    from world.values import WeatherCondition
+
+    left = random.Random(123)
+    right = random.Random(123)
+    assert sample_bernoulli(left, 0.75) == sample_bernoulli(right, 0.75)
+    assert sample_attack_damage(left, minimum=10, maximum_exclusive=21) == (
+        sample_attack_damage(right, minimum=10, maximum_exclusive=21)
+    )
+    assert sample_destination_index(left, 3) == sample_destination_index(right, 3)
+    transitions = {
+        WeatherCondition.CLEAR: 0.6,
+        WeatherCondition.CLOUDY: 0.3,
+        WeatherCondition.RAIN: 0.1,
+        WeatherCondition.STORM: 0.0,
+    }
+    assert sample_weather_condition(left, transitions) == sample_weather_condition(
+        right, transitions
+    )

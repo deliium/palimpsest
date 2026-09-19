@@ -32,10 +32,11 @@ from world.actions import (
     Wait,
     require_agent_command,
 )
+from world.effects import ActionCause, EventCause, require_event_cause
 from world.events import (
     EventDetails,
     WorldEvent,
-    make_replayable_event,
+    make_physical_replayable_event,
     normalize_ordered_events,
 )
 from world.identifiers import (
@@ -54,9 +55,12 @@ __all__: list[str] = [
     "BatchItemStatus",
     "OperationAccepted",
     "OperationRejected",
+    "PendingBatch",
+    "PendingEvent",
     "PreparedBatch",
     "RejectionCode",
     "ValidatedWorldOperation",
+    "finalize_pending_batch",
     "prepare_action_batch",
     "validate_action_request",
 ]
@@ -369,7 +373,7 @@ def validate_action_request(
                 return rejected
             return OperationAccepted(_EatOp(*base, item_id=item_id))
         case Drink(source_id=source_id):
-            rejected = _require_resource(state, source_id, request_id)
+            rejected = _require_item_or_resource(state, source_id, request_id)
             if rejected is not None:
                 return rejected
             return OperationAccepted(_DrinkOp(*base, source_id=source_id))
@@ -481,6 +485,20 @@ def _require_resource(
     return OperationRejected(code=RejectionCode.MISSING_TARGET, request_id=request_id)
 
 
+def _require_item_or_resource(
+    state: WorldState, entity_id: EntityId, request_id: RequestId
+) -> OperationRejected | None:
+    if entity_id in state.items and type(state.items[entity_id]) is Item:
+        return None
+    if entity_id in state.resources and type(state.resources[entity_id]) is Resource:
+        return None
+    if _exists_elsewhere(state, entity_id):
+        return OperationRejected(
+            code=RejectionCode.WRONG_TARGET_CATEGORY, request_id=request_id
+        )
+    return OperationRejected(code=RejectionCode.MISSING_TARGET, request_id=request_id)
+
+
 def _require_body(
     state: WorldState, entity_id: EntityId, request_id: RequestId
 ) -> OperationRejected | None:
@@ -543,8 +561,56 @@ class BatchItemOutcome:
 
 
 @dataclass(frozen=True, slots=True)
+class PendingEvent:
+    """Unfrozen objective detail pending final revision/event-id allocation."""
+
+    cause: EventCause
+    details: EventDetails
+
+    def __post_init__(self) -> None:
+        object.__setattr__(self, "cause", require_event_cause(self.cause))
+        from world.events import require_event_details
+
+        object.__setattr__(self, "details", require_event_details(self.details))
+
+
+@dataclass(frozen=True, slots=True)
+class PendingBatch:
+    """Action-stage candidate before revision/event finalization."""
+
+    working_state: WorldState
+    semantic_mutation: bool
+    outcomes: tuple[BatchItemOutcome, ...]
+    pending_events: tuple[PendingEvent, ...]
+
+    def __post_init__(self) -> None:
+        if type(self.working_state) is not WorldState:
+            raise TypeError("PendingBatch.working_state must be WorldState")
+        if type(self.semantic_mutation) is not bool:
+            raise TypeError("PendingBatch.semantic_mutation must be bool")
+        if isinstance(self.outcomes, (str, bytes)) or not isinstance(
+            self.outcomes, tuple
+        ):
+            raise TypeError("PendingBatch.outcomes must be a tuple")
+        for outcome in self.outcomes:
+            if type(outcome) is not BatchItemOutcome:
+                raise TypeError(
+                    "PendingBatch.outcomes entries must be BatchItemOutcome"
+                )
+        if isinstance(self.pending_events, (str, bytes)) or not isinstance(
+            self.pending_events, tuple
+        ):
+            raise TypeError("PendingBatch.pending_events must be a tuple")
+        for pending in self.pending_events:
+            if type(pending) is not PendingEvent:
+                raise TypeError(
+                    "PendingBatch.pending_events entries must be PendingEvent"
+                )
+
+
+@dataclass(frozen=True, slots=True)
 class PreparedBatch:
-    """Immutable batch candidate. Does not install world authority."""
+    """Immutable finalized batch candidate. Does not install world authority."""
 
     candidate_state: WorldState
     semantic_mutation: bool
@@ -568,46 +634,46 @@ def prepare_action_batch(
     world_id: WorldId,
     starting_state: WorldState,
     requests: Sequence[ActionRequest],
-    event_ids: Sequence[EventId],
-    run_id: str,
-    tick: int,
-) -> PreparedBatch:
-    """Prepare a candidate snapshot from ordered admitted requests.
+    resolved_effects: object | None = None,
+    rules: object | None = None,
+) -> PendingBatch:
+    """Resolve ordered requests into pending effects against one evolving state.
 
-    Working mutations keep the starting revision until the end. Revision advances
-    once when any semantic mutation occurs; all emitted events use that final
-    revision. Conflict is recorded only when a request was initially applicable
-    and a prior effect invalidated it. Intra-tick ``sequence`` is assigned in
-    emission order starting at 0.
+    Working mutations keep the starting revision. Conflict is recorded only when
+    a request was initially applicable and a prior effect invalidated it.
+    Revision, sequences, and event IDs are allocated by
+    :func:`finalize_pending_batch`.
     """
     from world._rules import RuleDisposition, apply_operation, evaluate_operation
+    from world.effects import ResolvedActionEffects
+    from world.models import PhysicalRules, default_physical_rules
 
     if type(world_id) is not WorldId:
         raise TypeError("prepare_action_batch requires WorldId")
     if type(starting_state) is not WorldState:
         raise TypeError("prepare_action_batch requires WorldState")
-    run_id_value = require_stable_id("run_id", run_id)
-    tick_value = require_exact_nonneg_int("tick", tick)
     if isinstance(requests, (set, frozenset)) or not isinstance(requests, Sequence):
         raise TypeError("requests must be an ordered sequence")
-    if isinstance(event_ids, (set, frozenset)) or not isinstance(event_ids, Sequence):
-        raise TypeError("event_ids must be an ordered sequence")
+    if (
+        resolved_effects is not None
+        and type(resolved_effects) is not ResolvedActionEffects
+    ):
+        raise TypeError(
+            "prepare_action_batch resolved_effects must be ResolvedActionEffects"
+        )
+    if rules is None:
+        physical_rules = default_physical_rules()
+    elif type(rules) is PhysicalRules:
+        physical_rules = rules
+    else:
+        raise TypeError("prepare_action_batch rules must be PhysicalRules")
     request_tuple = tuple(requests)
-    event_id_tuple = tuple(event_ids)
-    if len(request_tuple) != len(event_id_tuple):
-        raise ValueError("event_ids length must match requests length")
-    seen_event_ids: set[EventId] = set()
-    for event_id in event_id_tuple:
-        if type(event_id) is not EventId:
-            raise TypeError("event_ids entries must be EventId")
-        if event_id in seen_event_ids:
-            raise BatchPreparationError("duplicate event_id in batch inputs")
-        seen_event_ids.add(event_id)
+    resolved = resolved_effects
 
     working = starting_state
     semantic_mutation = False
     outcomes: list[BatchItemOutcome] = []
-    pending_events: list[tuple[ActionRequest, EventDetails, EventId]] = []
+    pending_events: list[PendingEvent] = []
 
     for ordinal, request in enumerate(request_tuple):
         if type(request) is not ActionRequest:
@@ -634,7 +700,12 @@ def prepare_action_batch(
             continue
 
         assert type(start_validation) is OperationAccepted
-        start_rule = evaluate_operation(starting_state, start_validation.operation)
+        start_rule = evaluate_operation(
+            starting_state,
+            start_validation.operation,
+            rules=physical_rules,
+            resolved=resolved,
+        )
         if start_rule.disposition is RuleDisposition.REJECT:
             outcomes.append(
                 BatchItemOutcome(
@@ -674,7 +745,12 @@ def prepare_action_batch(
             continue
 
         assert type(work_validation) is OperationAccepted
-        application = apply_operation(working, work_validation.operation)
+        application = apply_operation(
+            working,
+            work_validation.operation,
+            rules=physical_rules,
+            resolved=resolved,
+        )
         if application.result.disposition is RuleDisposition.REJECT:
             outcomes.append(
                 BatchItemOutcome(
@@ -702,10 +778,14 @@ def prepare_action_batch(
         if application.result.mutates_state:
             semantic_mutation = True
         if application.result.emits_event:
-            assert application.event_details is not None
-            pending_events.append(
-                (request, application.event_details, event_id_tuple[ordinal])
-            )
+            cause = ActionCause(request.request_id, request.actor_id)
+            for details in application.all_event_details():
+                pending_events.append(
+                    PendingEvent(
+                        cause=cause,
+                        details=details,
+                    )
+                )
         outcomes.append(
             BatchItemOutcome(
                 ordinal=ordinal,
@@ -716,26 +796,70 @@ def prepare_action_batch(
             )
         )
 
-    if semantic_mutation:
-        resulting_revision = WorldRevision(starting_state.revision.value + 1)
-        candidate = rebuild_world_state(working, revision=resulting_revision)
+    return PendingBatch(
+        working_state=working,
+        semantic_mutation=semantic_mutation,
+        outcomes=tuple(outcomes),
+        pending_events=tuple(pending_events),
+    )
+
+
+def finalize_pending_batch(
+    pending: PendingBatch,
+    *,
+    world_id: WorldId,
+    starting_revision: WorldRevision,
+    event_ids: Sequence[EventId],
+    run_id: str,
+    tick: int,
+) -> PreparedBatch:
+    """Advance revision at most once and freeze pending events with final facts."""
+    if type(pending) is not PendingBatch:
+        raise TypeError("finalize_pending_batch requires PendingBatch")
+    if type(world_id) is not WorldId:
+        raise TypeError("finalize_pending_batch requires WorldId")
+    if type(starting_revision) is not WorldRevision:
+        raise TypeError("finalize_pending_batch requires WorldRevision")
+    run_id_value = require_stable_id("run_id", run_id)
+    tick_value = require_exact_nonneg_int("tick", tick)
+    if isinstance(event_ids, (set, frozenset)) or not isinstance(event_ids, Sequence):
+        raise TypeError("event_ids must be an ordered sequence")
+    event_id_tuple = tuple(event_ids)
+    if len(event_id_tuple) != len(pending.pending_events):
+        raise ValueError("event_ids length must match pending_events length")
+    seen_event_ids: set[EventId] = set()
+    for event_id in event_id_tuple:
+        if type(event_id) is not EventId:
+            raise TypeError("event_ids entries must be EventId")
+        if event_id in seen_event_ids:
+            raise BatchPreparationError("duplicate event_id in batch inputs")
+        seen_event_ids.add(event_id)
+
+    if pending.semantic_mutation:
+        resulting_revision = WorldRevision(starting_revision.value + 1)
+        candidate = rebuild_world_state(
+            pending.working_state, revision=resulting_revision
+        )
     else:
-        resulting_revision = starting_state.revision
-        candidate = working
+        if pending.working_state.revision != starting_revision:
+            raise BatchPreparationError("non-mutating working revision mismatch")
+        resulting_revision = starting_revision
+        candidate = pending.working_state
 
     events: list[WorldEvent] = []
-    for sequence, (request, details, event_id) in enumerate(pending_events):
+    for sequence, (pending_event, event_id) in enumerate(
+        zip(pending.pending_events, event_id_tuple, strict=True)
+    ):
         events.append(
-            make_replayable_event(
+            make_physical_replayable_event(
                 event_id=event_id,
                 run_id=run_id_value,
                 world_id=world_id,
                 tick=tick_value,
                 sequence=sequence,
-                request_id=request.request_id,
+                cause=pending_event.cause,
                 resulting_revision=resulting_revision,
-                details=details,
-                actor_id=request.actor_id,
+                details=pending_event.details,
             )
         )
     normalized = normalize_ordered_events(events)
@@ -749,7 +873,7 @@ def prepare_action_batch(
 
     return PreparedBatch(
         candidate_state=candidate,
-        semantic_mutation=semantic_mutation,
-        outcomes=tuple(outcomes),
+        semantic_mutation=pending.semantic_mutation,
+        outcomes=pending.outcomes,
         events=normalized,
     )

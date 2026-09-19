@@ -8,7 +8,21 @@ import pytest
 from hypothesis import given, settings
 from hypothesis import strategies as st
 
-from world.values import Fatigue, Health, Hunger, TemperatureCelsius, Thirst
+from world.values import (
+    BodyCapacity,
+    CarryCapacity,
+    Fatigue,
+    Health,
+    Hunger,
+    ItemCapacity,
+    ItemLoad,
+    TemperatureCelsius,
+    Thirst,
+    UnitInterval,
+    clamp_need,
+    clamp_unit_interval,
+    round_physical,
+)
 
 _BOUNDED = st.floats(
     min_value=0.0,
@@ -74,3 +88,31 @@ def test_zero_health_is_terminal_and_zero_needs_mean_none() -> None:
     assert Hunger(0.0).value == 0.0
     assert Thirst(100.0).value == 100.0
     assert Fatigue(100.0).value == 100.0
+
+
+def test_capacity_and_load_value_objects() -> None:
+    assert BodyCapacity(1).value == 1
+    assert ItemCapacity(0).value == 0
+    assert CarryCapacity(3).value == 3
+    assert ItemLoad(2).value == 2
+    assert UnitInterval(0.5).value == 0.5
+    with pytest.raises(ValueError):
+        BodyCapacity(0)
+    with pytest.raises(ValueError):
+        ItemCapacity(-1)
+    with pytest.raises(ValueError):
+        CarryCapacity(True)  # type: ignore[arg-type]
+    with pytest.raises(ValueError):
+        ItemLoad(0)
+    with pytest.raises(ValueError):
+        UnitInterval(1.1)
+
+
+def test_round_physical_uses_ties_to_even() -> None:
+    assert round_physical(1.25) == 1.2
+    assert round_physical(1.35) == 1.4
+    assert round_physical(-0.0) == 0.0
+    assert clamp_need(150) == 100.0
+    assert clamp_need(-3) == 0.0
+    assert clamp_unit_interval(1.5) == 1.0
+    assert clamp_unit_interval(-0.2) == 0.0

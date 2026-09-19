@@ -15,32 +15,38 @@ def rebuild_world_state(
     state: WorldState,
     *,
     revision: WorldRevision | None = None,
+    locations: Mapping[EntityId, Location] | None = None,
     items: Mapping[EntityId, Item] | None = None,
+    resources: Mapping[EntityId, Resource] | None = None,
     bodies: Mapping[EntityId, AgentBody] | None = None,
+    weather: Mapping[EntityId, Weather] | None = None,
 ) -> WorldState:
     """Build a new immutable snapshot with deterministic EntityId ordering."""
     if type(state) is not WorldState:
         raise TypeError("rebuild_world_state requires WorldState")
     if revision is not None and type(revision) is not WorldRevision:
         raise TypeError("revision must be WorldRevision")
+    location_src = state.locations if locations is None else locations
     item_src = state.items if items is None else items
+    resource_src = state.resources if resources is None else resources
     body_src = state.bodies if bodies is None else bodies
+    weather_src = state.weather if weather is None else weather
     return WorldState(
         state.revision if revision is None else revision,
         locations=tuple(
-            sorted(state.locations.values(), key=lambda value: value.entity_id.value)
+            sorted(location_src.values(), key=lambda value: value.entity_id.value)
         ),
         items=tuple(
             sorted(item_src.values(), key=lambda value: value.entity_id.value)
         ),
         resources=tuple(
-            sorted(state.resources.values(), key=lambda value: value.entity_id.value)
+            sorted(resource_src.values(), key=lambda value: value.entity_id.value)
         ),
         bodies=tuple(
             sorted(body_src.values(), key=lambda value: value.entity_id.value)
         ),
         weather=tuple(
-            sorted(state.weather.values(), key=lambda value: value.location_id.value)
+            sorted(weather_src.values(), key=lambda value: value.location_id.value)
         ),
     )
 
@@ -100,10 +106,17 @@ class WorldState:
             location_index, item_index, resource_index, body_index
         )
         weather_index = _index_weather(weather, location_index)
+        _validate_topology(location_index)
+        _validate_weather_coverage(location_index, weather_index)
         _validate_graph(
             location_index=location_index,
             item_index=item_index,
             resource_index=resource_index,
+            body_index=body_index,
+        )
+        _validate_capacities(
+            location_index=location_index,
+            item_index=item_index,
             body_index=body_index,
         )
         self._revision = revision
@@ -272,6 +285,92 @@ def _index_weather(
             )
         indexed[location_id] = value
     return indexed
+
+
+def _validate_topology(location_index: Mapping[EntityId, Location]) -> None:
+    if not location_index:
+        return
+    for location_id, location in location_index.items():
+        for neighbor_id in location.adjacent:
+            neighbor = location_index.get(neighbor_id)
+            if neighbor is None:
+                raise ValueError(
+                    f"location {location_id.value!r} has dangling edge to "
+                    f"{neighbor_id.value!r}"
+                )
+            if location_id not in neighbor.adjacent:
+                raise ValueError(
+                    f"asymmetric edge between {location_id.value!r} and "
+                    f"{neighbor_id.value!r}"
+                )
+    start = next(iter(sorted(location_index, key=lambda entity: entity.value)))
+    seen: set[EntityId] = {start}
+    queue: list[EntityId] = [start]
+    while queue:
+        current = queue.pop()
+        for neighbor_id in location_index[current].adjacent:
+            if neighbor_id not in seen:
+                seen.add(neighbor_id)
+                queue.append(neighbor_id)
+    if len(seen) != len(location_index):
+        raise ValueError("world graph must be connected")
+
+
+def _validate_weather_coverage(
+    location_index: Mapping[EntityId, Location],
+    weather_index: Mapping[EntityId, Weather],
+) -> None:
+    if not location_index:
+        return
+    missing = set(location_index) - set(weather_index)
+    if missing:
+        sample = sorted(entity.value for entity in missing)[0]
+        raise ValueError(
+            f"weather coverage incomplete; missing location {sample!r}"
+        )
+
+
+def _validate_capacities(
+    *,
+    location_index: Mapping[EntityId, Location],
+    item_index: Mapping[EntityId, Item],
+    body_index: Mapping[EntityId, AgentBody],
+) -> None:
+    body_counts: dict[EntityId, int] = {}
+    for body in body_index.values():
+        body_counts[body.location_id] = body_counts.get(body.location_id, 0) + 1
+    for location_id, count in body_counts.items():
+        capacity = location_index[location_id].body_capacity.value
+        if count > capacity:
+            raise ValueError(
+                f"location {location_id.value!r} body occupancy {count} "
+                f"exceeds capacity {capacity}"
+            )
+
+    ground_counts: dict[EntityId, int] = {}
+    for item in item_index.values():
+        if item.location_id is None:
+            continue
+        ground_counts[item.location_id] = (
+            ground_counts.get(item.location_id, 0) + 1
+        )
+    for location_id, count in ground_counts.items():
+        capacity = location_index[location_id].item_capacity.value
+        if count > capacity:
+            raise ValueError(
+                f"location {location_id.value!r} ground-item occupancy {count} "
+                f"exceeds capacity {capacity}"
+            )
+
+    for body_id, body in body_index.items():
+        load = 0
+        for item_id in body.inventory:
+            load += item_index[item_id].load.value
+        if load > body.carry_capacity.value:
+            raise ValueError(
+                f"body {body_id.value!r} carry load {load} exceeds capacity "
+                f"{body.carry_capacity.value}"
+            )
 
 
 def _validate_graph(

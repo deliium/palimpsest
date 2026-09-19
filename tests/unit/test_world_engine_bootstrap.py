@@ -2,6 +2,14 @@
 
 from __future__ import annotations
 
+from tests.simulation_helpers import (
+    make_item,
+    make_location,
+    make_resource,
+    make_weather,
+    weather_for_locations,
+)
+
 import inspect
 
 import pytest
@@ -15,7 +23,7 @@ from simulation.bootstrap import (
 )
 from world.identifiers import EntityId, WorldId, WorldRevision
 from world.models import AgentBody, Item, LifeStatus, Location, Resource, Weather
-from world.values import Fatigue, Health, Hunger, TemperatureCelsius, Thirst
+from world.values import WeatherCondition, CarryCapacity, Fatigue, Health, Hunger, TemperatureCelsius, Thirst
 
 
 def _alive_body(entity_id: str, location_id: str = "loc-1") -> AgentBody:
@@ -29,6 +37,7 @@ def _alive_body(entity_id: str, location_id: str = "loc-1") -> AgentBody:
         temperature=TemperatureCelsius(36.5),
         inventory=(),
         life_status=LifeStatus.ALIVE,
+        carry_capacity=CarryCapacity(10),
     )
 
 
@@ -43,6 +52,7 @@ def _dead_body(entity_id: str, location_id: str = "loc-1") -> AgentBody:
         temperature=TemperatureCelsius(20.0),
         inventory=(),
         life_status=LifeStatus.DEAD,
+        carry_capacity=CarryCapacity(10),
     )
 
 
@@ -51,7 +61,8 @@ def _minimal_bootstrap(
     registrations: tuple[AgentRegistration, ...] | None = None,
     bodies: tuple[AgentBody, ...] | None = None,
 ) -> WorldBootstrap:
-    location = Location(entity_id=EntityId("loc-1"), name="Camp")
+    location = make_location("loc-1", name="Camp")
+    locations = (location,)
     if bodies is None:
         bodies = (_alive_body("body-1"),)
     if registrations is None:
@@ -61,8 +72,9 @@ def _minimal_bootstrap(
     return WorldBootstrap(
         world_id=WorldId("world-1"),
         revision=WorldRevision(0),
-        locations=(location,),
+        locations=locations,
         bodies=bodies,
+        weather=weather_for_locations(locations),
         registrations=registrations,
     )
 
@@ -133,18 +145,16 @@ def test_missing_body_and_cross_category_registrations_fail() -> None:
                 AgentRegistration(AgentId("agent-1"), EntityId("loc-1")),
             ),
         )
-    item = Item(
-        entity_id=EntityId("item-1"),
-        name="Rock",
-        location_id=EntityId("loc-1"),
-    )
+    item = make_item("item-1", name="Rock", location_id="loc-1")
+    locations = (make_location("loc-1", name="Camp"),)
     with pytest.raises(ValueError, match="refers to an item"):
         WorldBootstrap(
             world_id=WorldId("world-1"),
             revision=WorldRevision(0),
-            locations=(Location(entity_id=EntityId("loc-1"), name="Camp"),),
+            locations=locations,
             items=(item,),
             bodies=(_alive_body("body-1"),),
+            weather=weather_for_locations(locations),
             registrations=(
                 AgentRegistration(AgentId("agent-1"), EntityId("item-1")),
             ),
@@ -156,7 +166,7 @@ def test_unordered_containers_are_rejected() -> None:
         WorldBootstrap(
             world_id=WorldId("world-1"),
             revision=WorldRevision(0),
-            locations={Location(entity_id=EntityId("loc-1"), name="Camp")},  # type: ignore[arg-type]
+            locations={make_location("loc-1", name="Camp")},  # type: ignore[arg-type]
             bodies=(_alive_body("body-1"),),
             registrations=(
                 AgentRegistration(AgentId("agent-1"), EntityId("body-1")),
@@ -178,30 +188,16 @@ def test_materialize_world_is_internal_and_matches_bootstrap() -> None:
     bootstrap = WorldBootstrap(
         world_id=WorldId("world-1"),
         revision=WorldRevision(2),
-        locations=(Location(entity_id=EntityId("loc-1"), name="Camp"),),
+        locations=(make_location("loc-1", name="Camp"),),
         items=(
-            Item(
-                entity_id=EntityId("item-1"),
-                name="Cup",
-                location_id=EntityId("loc-1"),
-            ),
+            make_item("item-1", name="Cup", location_id="loc-1"),
         ),
         resources=(
-            Resource(
-                entity_id=EntityId("res-1"),
-                name="Water",
-                location_id=EntityId("loc-1"),
-                quantity=1.0,
-                unit="L",
-            ),
+            make_resource("res-1", name="Water", location_id="loc-1", quantity=1.0, unit="L"),
         ),
         bodies=(_alive_body("body-1"),),
         weather=(
-            Weather(
-                location_id=EntityId("loc-1"),
-                condition="clear",
-                temperature=TemperatureCelsius(22.0),
-            ),
+            make_weather("loc-1", condition=WeatherCondition.CLEAR),
         ),
         registrations=(
             AgentRegistration(AgentId("agent-1"), EntityId("body-1")),

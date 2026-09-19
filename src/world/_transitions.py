@@ -107,9 +107,12 @@ def apply_validated_operation(
             events=(),
             resulting_state=state,
         )
+    detail_tuple = application.all_event_details()
     event_id_tuple = tuple(event_ids)
-    if len(event_id_tuple) != 1:
-        raise ValueError("applied transitions emit exactly one occurrence event")
+    if len(event_id_tuple) != len(detail_tuple):
+        raise ValueError(
+            "applied transitions require one event_id per emitted detail"
+        )
     if application.result.mutates_state:
         resulting_revision = WorldRevision(state.revision.value + 1)
         resulting_state = rebuild_world_state(
@@ -118,23 +121,27 @@ def apply_validated_operation(
     else:
         resulting_revision = state.revision
         resulting_state = state
-    assert application.event_details is not None
-    event = make_replayable_event(
-        event_id=event_id_tuple[0],
-        run_id=run_id_value,
-        world_id=operation.world_id,  # type: ignore[attr-defined]
-        tick=tick_value,
-        sequence=sequence_value,
-        request_id=operation.request_id,  # type: ignore[attr-defined]
-        resulting_revision=resulting_revision,
-        details=application.event_details,
-        actor_id=operation.actor_id,  # type: ignore[attr-defined]
+    events = tuple(
+        make_replayable_event(
+            event_id=event_id,
+            run_id=run_id_value,
+            world_id=operation.world_id,  # type: ignore[attr-defined]
+            tick=tick_value,
+            sequence=sequence_value + offset,
+            request_id=operation.request_id,  # type: ignore[attr-defined]
+            resulting_revision=resulting_revision,
+            details=details,
+            actor_id=operation.actor_id,  # type: ignore[attr-defined]
+        )
+        for offset, (event_id, details) in enumerate(
+            zip(event_id_tuple, detail_tuple, strict=True)
+        )
     )
     return TransitionResult(
         base_revision=base_revision,
         resulting_revision=resulting_revision,
         outcome=TransitionOutcome.APPLIED,
-        events=(event,),
+        events=events,
         resulting_state=resulting_state,
     )
 

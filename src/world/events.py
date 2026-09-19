@@ -1,10 +1,13 @@
 """Immutable objective world events with a closed, versioned detail union.
 
-Replay-capable events (``EVENT_SCHEMA_REPLAY_V1``) carry effect-complete
-payloads and full run/tick/sequence identity so a strict projector can rebuild
-state without re-running current command rules. Legacy audit events
-(``EVENT_SCHEMA_AUDIT_V1``) remain decodable for export compatibility but are
-rejected as authoritative replay input when under-specified.
+Compatibility matrix:
+- ``EVENT_SCHEMA_AUDIT_V1`` (1): decode/export-only; never authoritative replay.
+- ``EVENT_SCHEMA_REPLAY_V2`` (2): legacy replay projector; alias
+  ``EVENT_SCHEMA_REPLAY_V1`` retained for call-site compatibility.
+- ``EVENT_SCHEMA_REPLAY_V3`` (3): physical-rules replay with effect-complete
+  payloads and explicit action/system causes. New physical runs emit v3.
+
+Runs never mix replay schema versions.
 """
 
 from __future__ import annotations
@@ -14,6 +17,13 @@ from dataclasses import dataclass, field
 from enum import StrEnum
 from typing import Final, Literal
 
+from world.effects import (
+    ActionCause,
+    DeathCause,
+    EventCause,
+    SystemCause,
+    require_event_cause,
+)
 from world.identifiers import (
     EntityId,
     EventId,
@@ -24,14 +34,25 @@ from world.identifiers import (
     require_exact_nonneg_int,
     require_stable_id,
 )
+from world.models import LifeStatus
+from world.values import WeatherCondition
 
 EVENT_SCHEMA_AUDIT_V1: Final[int] = 1
-EVENT_SCHEMA_REPLAY_V1: Final[int] = 2
+EVENT_SCHEMA_REPLAY_V2: Final[int] = 2
+EVENT_SCHEMA_REPLAY_V1: Final[int] = EVENT_SCHEMA_REPLAY_V2
+EVENT_SCHEMA_REPLAY_V3: Final[int] = 3
 SUPPORTED_EVENT_SCHEMA_VERSIONS: Final[frozenset[int]] = frozenset(
-    {EVENT_SCHEMA_AUDIT_V1, EVENT_SCHEMA_REPLAY_V1}
+    {
+        EVENT_SCHEMA_AUDIT_V1,
+        EVENT_SCHEMA_REPLAY_V2,
+        EVENT_SCHEMA_REPLAY_V3,
+    }
 )
 REPLAYABLE_EVENT_SCHEMA_VERSIONS: Final[frozenset[int]] = frozenset(
-    {EVENT_SCHEMA_REPLAY_V1}
+    {EVENT_SCHEMA_REPLAY_V2, EVENT_SCHEMA_REPLAY_V3}
+)
+PHYSICAL_REPLAY_EVENT_SCHEMA_VERSIONS: Final[frozenset[int]] = frozenset(
+    {EVENT_SCHEMA_REPLAY_V3}
 )
 
 
@@ -44,26 +65,53 @@ class EventValidationCode(StrEnum):
     INVALID_ORDERING = "invalid_event_ordering"
     MISSING_EFFECT_FACTS = "missing_effect_facts"
     INVALID_IDENTITY = "invalid_event_identity"
+    INVALID_CAUSE = "invalid_event_cause"
+    MIXED_REPLAY_SCHEMA = "mixed_replay_schema_version"
 
 
 @dataclass(frozen=True, slots=True)
 class Moved:
     destination_id: EntityId
+    resulting_location_id: EntityId | None = None
+    fatigue_delta: float | None = None
+    resulting_fatigue: float | None = None
     kind: Literal["move"] = field(default="move", init=False)
 
     def __post_init__(self) -> None:
         if type(self.destination_id) is not EntityId:
             raise TypeError("Moved.destination_id must be EntityId")
+        if self.resulting_location_id is not None and type(
+            self.resulting_location_id
+        ) is not EntityId:
+            raise TypeError("Moved.resulting_location_id must be EntityId or None")
+        _optional_finite_float("Moved.fatigue_delta", self.fatigue_delta)
+        _optional_finite_float("Moved.resulting_fatigue", self.resulting_fatigue)
 
 
 @dataclass(frozen=True, slots=True)
 class Searched:
     target_id: EntityId | None = None
+    success: bool | None = None
+    created_item_id: EntityId | None = None
+    extracted_quantity: float | None = None
+    resulting_resource_quantity: float | None = None
     kind: Literal["search"] = field(default="search", init=False)
 
     def __post_init__(self) -> None:
         if self.target_id is not None and type(self.target_id) is not EntityId:
             raise TypeError("Searched.target_id must be EntityId or None")
+        if self.success is not None and type(self.success) is not bool:
+            raise TypeError("Searched.success must be bool or None")
+        if self.created_item_id is not None and type(
+            self.created_item_id
+        ) is not EntityId:
+            raise TypeError("Searched.created_item_id must be EntityId or None")
+        _optional_finite_float("Searched.extracted_quantity", self.extracted_quantity)
+        _optional_finite_float(
+            "Searched.resulting_resource_quantity", self.resulting_resource_quantity
+        )
+        if self.success is False and self.created_item_id is not None:
+            raise ValueError("failed Searched must not carry created_item_id")
 
 
 @dataclass(frozen=True, slots=True)
@@ -123,26 +171,49 @@ class Given:
 @dataclass(frozen=True, slots=True)
 class Eaten:
     item_id: EntityId
+    hunger_delta: float | None = None
+    resulting_hunger: float | None = None
     kind: Literal["eat"] = field(default="eat", init=False)
 
     def __post_init__(self) -> None:
         if type(self.item_id) is not EntityId:
             raise TypeError("Eaten.item_id must be EntityId")
+        _optional_finite_float("Eaten.hunger_delta", self.hunger_delta)
+        _optional_finite_float("Eaten.resulting_hunger", self.resulting_hunger)
 
 
 @dataclass(frozen=True, slots=True)
 class Drunk:
     source_id: EntityId
+    consumed_item: bool | None = None
+    quantity_delta: float | None = None
+    resulting_resource_quantity: float | None = None
+    thirst_delta: float | None = None
+    resulting_thirst: float | None = None
     kind: Literal["drink"] = field(default="drink", init=False)
 
     def __post_init__(self) -> None:
         if type(self.source_id) is not EntityId:
             raise TypeError("Drunk.source_id must be EntityId")
+        if self.consumed_item is not None and type(self.consumed_item) is not bool:
+            raise TypeError("Drunk.consumed_item must be bool or None")
+        _optional_finite_float("Drunk.quantity_delta", self.quantity_delta)
+        _optional_finite_float(
+            "Drunk.resulting_resource_quantity", self.resulting_resource_quantity
+        )
+        _optional_finite_float("Drunk.thirst_delta", self.thirst_delta)
+        _optional_finite_float("Drunk.resulting_thirst", self.resulting_thirst)
 
 
 @dataclass(frozen=True, slots=True)
 class Slept:
+    fatigue_delta: float | None = None
+    resulting_fatigue: float | None = None
     kind: Literal["sleep"] = field(default="sleep", init=False)
+
+    def __post_init__(self) -> None:
+        _optional_finite_float("Slept.fatigue_delta", self.fatigue_delta)
+        _optional_finite_float("Slept.resulting_fatigue", self.resulting_fatigue)
 
 
 @dataclass(frozen=True, slots=True)
@@ -184,36 +255,189 @@ class Told:
 @dataclass(frozen=True, slots=True)
 class Helped:
     target_id: EntityId
+    health_delta: float | None = None
+    resulting_target_health: float | None = None
+    helper_fatigue_delta: float | None = None
+    resulting_helper_fatigue: float | None = None
     kind: Literal["help"] = field(default="help", init=False)
 
     def __post_init__(self) -> None:
         if type(self.target_id) is not EntityId:
             raise TypeError("Helped.target_id must be EntityId")
+        _optional_finite_float("Helped.health_delta", self.health_delta)
+        _optional_finite_float(
+            "Helped.resulting_target_health", self.resulting_target_health
+        )
+        _optional_finite_float(
+            "Helped.helper_fatigue_delta", self.helper_fatigue_delta
+        )
+        _optional_finite_float(
+            "Helped.resulting_helper_fatigue", self.resulting_helper_fatigue
+        )
 
 
 @dataclass(frozen=True, slots=True)
 class Attacked:
     target_id: EntityId
+    hit: bool | None = None
+    damage: int | None = None
+    resulting_target_health: float | None = None
     kind: Literal["attack"] = field(default="attack", init=False)
 
     def __post_init__(self) -> None:
         if type(self.target_id) is not EntityId:
             raise TypeError("Attacked.target_id must be EntityId")
+        if self.hit is not None and type(self.hit) is not bool:
+            raise TypeError("Attacked.hit must be bool or None")
+        if self.damage is not None and (
+            isinstance(self.damage, bool) or type(self.damage) is not int
+        ):
+            raise TypeError("Attacked.damage must be int or None")
+        _optional_finite_float(
+            "Attacked.resulting_target_health", self.resulting_target_health
+        )
+        if self.hit is False and self.damage is not None:
+            raise ValueError("missed Attacked must not carry damage")
 
 
 @dataclass(frozen=True, slots=True)
 class Fled:
     threat_id: EntityId | None = None
+    success: bool | None = None
+    destination_id: EntityId | None = None
+    fatigue_delta: float | None = None
+    resulting_fatigue: float | None = None
     kind: Literal["flee"] = field(default="flee", init=False)
 
     def __post_init__(self) -> None:
         if self.threat_id is not None and type(self.threat_id) is not EntityId:
             raise TypeError("Fled.threat_id must be EntityId or None")
+        if self.success is not None and type(self.success) is not bool:
+            raise TypeError("Fled.success must be bool or None")
+        if self.destination_id is not None and type(
+            self.destination_id
+        ) is not EntityId:
+            raise TypeError("Fled.destination_id must be EntityId or None")
+        _optional_finite_float("Fled.fatigue_delta", self.fatigue_delta)
+        _optional_finite_float("Fled.resulting_fatigue", self.resulting_fatigue)
+        if self.success is False and self.destination_id is not None:
+            raise ValueError("failed Fled must not carry destination_id")
 
 
 @dataclass(frozen=True, slots=True)
 class Waited:
     kind: Literal["wait"] = field(default="wait", init=False)
+
+
+@dataclass(frozen=True, slots=True)
+class WeatherChanged:
+    location_id: EntityId
+    condition: WeatherCondition
+    kind: Literal["weather_changed"] = field(default="weather_changed", init=False)
+
+    def __post_init__(self) -> None:
+        if type(self.location_id) is not EntityId:
+            raise TypeError("WeatherChanged.location_id must be EntityId")
+        if type(self.condition) is not WeatherCondition:
+            raise TypeError("WeatherChanged.condition must be WeatherCondition")
+
+
+@dataclass(frozen=True, slots=True)
+class ResourceRegenerated:
+    resource_id: EntityId
+    quantity_delta: float
+    resulting_quantity: float
+    kind: Literal["resource_regenerated"] = field(
+        default="resource_regenerated", init=False
+    )
+
+    def __post_init__(self) -> None:
+        if type(self.resource_id) is not EntityId:
+            raise TypeError("ResourceRegenerated.resource_id must be EntityId")
+        object.__setattr__(
+            self,
+            "quantity_delta",
+            _require_finite_float(
+                "ResourceRegenerated.quantity_delta", self.quantity_delta
+            ),
+        )
+        object.__setattr__(
+            self,
+            "resulting_quantity",
+            _require_finite_float(
+                "ResourceRegenerated.resulting_quantity", self.resulting_quantity
+            ),
+        )
+
+
+@dataclass(frozen=True, slots=True)
+class NeedsApplied:
+    body_id: EntityId
+    resulting_hunger: float
+    resulting_thirst: float
+    resulting_fatigue: float
+    health_delta: float
+    resulting_health: float
+    kind: Literal["needs_applied"] = field(default="needs_applied", init=False)
+
+    def __post_init__(self) -> None:
+        if type(self.body_id) is not EntityId:
+            raise TypeError("NeedsApplied.body_id must be EntityId")
+        for name in (
+            "resulting_hunger",
+            "resulting_thirst",
+            "resulting_fatigue",
+            "health_delta",
+            "resulting_health",
+        ):
+            object.__setattr__(
+                self,
+                name,
+                _require_finite_float(f"NeedsApplied.{name}", getattr(self, name)),
+            )
+
+
+@dataclass(frozen=True, slots=True)
+class ExposureApplied:
+    body_id: EntityId
+    ambient_celsius: float
+    resulting_temperature: float
+    health_delta: float
+    resulting_health: float
+    kind: Literal["exposure_applied"] = field(default="exposure_applied", init=False)
+
+    def __post_init__(self) -> None:
+        if type(self.body_id) is not EntityId:
+            raise TypeError("ExposureApplied.body_id must be EntityId")
+        for name in (
+            "ambient_celsius",
+            "resulting_temperature",
+            "health_delta",
+            "resulting_health",
+        ):
+            object.__setattr__(
+                self,
+                name,
+                _require_finite_float(f"ExposureApplied.{name}", getattr(self, name)),
+            )
+
+
+@dataclass(frozen=True, slots=True)
+class Died:
+    body_id: EntityId
+    death_cause: DeathCause
+    resulting_life_status: LifeStatus = LifeStatus.DEAD
+    kind: Literal["died"] = field(default="died", init=False)
+
+    def __post_init__(self) -> None:
+        if type(self.body_id) is not EntityId:
+            raise TypeError("Died.body_id must be EntityId")
+        if type(self.death_cause) is not DeathCause:
+            raise TypeError("Died.death_cause must be DeathCause")
+        if type(self.resulting_life_status) is not LifeStatus:
+            raise TypeError("Died.resulting_life_status must be LifeStatus")
+        if self.resulting_life_status is not LifeStatus.DEAD:
+            raise ValueError("Died.resulting_life_status must be DEAD")
 
 
 EventDetails = (
@@ -232,6 +456,11 @@ EventDetails = (
     | Attacked
     | Fled
     | Waited
+    | WeatherChanged
+    | ResourceRegenerated
+    | NeedsApplied
+    | ExposureApplied
+    | Died
 )
 
 _DETAIL_TYPES: Final[frozenset[type]] = frozenset(
@@ -251,8 +480,30 @@ _DETAIL_TYPES: Final[frozenset[type]] = frozenset(
         Attacked,
         Fled,
         Waited,
+        WeatherChanged,
+        ResourceRegenerated,
+        NeedsApplied,
+        ExposureApplied,
+        Died,
     }
 )
+
+
+def _optional_finite_float(name: str, value: float | None) -> None:
+    if value is None:
+        return
+    _require_finite_float(name, value)
+
+
+def _require_finite_float(name: str, value: object) -> float:
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        raise TypeError(f"{name} must be a finite float")
+    number = float(value)
+    if number != number or number in (float("inf"), float("-inf")):
+        raise ValueError(f"{name} must be a finite float")
+    if number == 0.0:
+        return 0.0
+    return number
 
 
 def require_event_details(value: object) -> EventDetails:
@@ -261,7 +512,7 @@ def require_event_details(value: object) -> EventDetails:
     return value  # type: ignore[return-value]
 
 
-def _payload_effect_complete(details: EventDetails) -> bool:
+def _payload_effect_complete(details: EventDetails, *, schema_version: int) -> bool:
     match details:
         case Taken(resulting_holder_id=None):
             return False
@@ -270,7 +521,82 @@ def _payload_effect_complete(details: EventDetails) -> bool:
         case Given(resulting_holder_id=None):
             return False
         case Given(recipient_id=recipient_id, resulting_holder_id=holder_id):
-            return holder_id == recipient_id
+            if holder_id != recipient_id:
+                return False
+        case _:
+            pass
+    if schema_version < EVENT_SCHEMA_REPLAY_V3:
+        return True
+    match details:
+        case Moved() as moved:
+            return (
+                moved.resulting_location_id is not None
+                and moved.fatigue_delta is not None
+                and moved.resulting_fatigue is not None
+            )
+        case Searched() as searched:
+            if searched.success is None:
+                return False
+            if searched.success:
+                return (
+                    searched.created_item_id is not None
+                    and searched.extracted_quantity is not None
+                    and searched.resulting_resource_quantity is not None
+                )
+            return True
+        case Eaten() as eaten:
+            return eaten.hunger_delta is not None and eaten.resulting_hunger is not None
+        case Drunk() as drunk:
+            return (
+                drunk.consumed_item is not None
+                and drunk.thirst_delta is not None
+                and drunk.resulting_thirst is not None
+            )
+        case Slept() as slept:
+            return (
+                slept.fatigue_delta is not None and slept.resulting_fatigue is not None
+            )
+        case Helped() as helped:
+            return (
+                helped.health_delta is not None
+                and helped.resulting_target_health is not None
+                and helped.helper_fatigue_delta is not None
+                and helped.resulting_helper_fatigue is not None
+            )
+        case Attacked() as attacked:
+            if attacked.hit is None:
+                return False
+            if attacked.hit:
+                return (
+                    attacked.damage is not None
+                    and attacked.resulting_target_health is not None
+                )
+            return True
+        case Fled() as fled:
+            if fled.success is None:
+                return False
+            if fled.success:
+                return (
+                    fled.destination_id is not None
+                    and fled.fatigue_delta is not None
+                    and fled.resulting_fatigue is not None
+                )
+            return True
+        case (
+            WeatherChanged()
+            | ResourceRegenerated()
+            | NeedsApplied()
+            | ExposureApplied()
+            | Died()
+            | Talked()
+            | Asked()
+            | Told()
+            | Waited()
+            | Taken()
+            | Dropped()
+            | Given()
+        ):
+            return True
         case _:
             return True
 
@@ -279,7 +605,7 @@ def event_is_replayable(event: WorldEvent) -> bool:
     """True only for replay-schema events with effect-complete payloads."""
     if event.schema_version not in REPLAYABLE_EVENT_SCHEMA_VERSIONS:
         return False
-    return _payload_effect_complete(event.details)
+    return _payload_effect_complete(event.details, schema_version=event.schema_version)
 
 
 def require_replayable_event(event: WorldEvent) -> WorldEvent:
@@ -288,7 +614,9 @@ def require_replayable_event(event: WorldEvent) -> WorldEvent:
         raise TypeError("require_replayable_event requires WorldEvent")
     if event.schema_version not in REPLAYABLE_EVENT_SCHEMA_VERSIONS:
         raise ValueError(EventValidationCode.NON_REPLAYABLE.value)
-    if not _payload_effect_complete(event.details):
+    if not _payload_effect_complete(
+        event.details, schema_version=event.schema_version
+    ):
         raise ValueError(EventValidationCode.MISSING_EFFECT_FACTS.value)
     return event
 
@@ -314,6 +642,14 @@ def target_id_for_details(details: EventDetails) -> EntityId | None:
             return target_id
         case Fled(threat_id=threat_id):
             return threat_id
+        case WeatherChanged(location_id=location_id):
+            return location_id
+        case ResourceRegenerated(resource_id=resource_id):
+            return resource_id
+        case NeedsApplied(body_id=body_id) | ExposureApplied(
+            body_id=body_id
+        ) | Died(body_id=body_id):
+            return body_id
         case Slept() | Waited():
             return None
         case _:
@@ -321,6 +657,26 @@ def target_id_for_details(details: EventDetails) -> EntityId | None:
                 f"{EventValidationCode.UNKNOWN_EVENT_TYPE.value}: "
                 f"{type(details).__name__}"
             )
+
+
+def request_id_for_cause(cause: EventCause) -> RequestId:
+    match cause:
+        case ActionCause(request_id=request_id):
+            return request_id
+        case SystemCause(cause_id=cause_id):
+            return cause_id
+        case _:
+            raise TypeError(EventValidationCode.INVALID_CAUSE.value)
+
+
+def actor_id_for_cause(cause: EventCause) -> EntityId | None:
+    match cause:
+        case ActionCause(actor_id=actor_id):
+            return actor_id
+        case SystemCause():
+            return None
+        case _:
+            raise TypeError(EventValidationCode.INVALID_CAUSE.value)
 
 
 @dataclass(frozen=True, slots=True)
@@ -344,6 +700,7 @@ class WorldEvent:
     details: EventDetails
     actor_id: EntityId | None = None
     target_id: EntityId | None = None
+    cause: EventCause | None = None
 
     def __post_init__(self) -> None:
         if type(self.event_id) is not EventId:
@@ -376,12 +733,24 @@ class WorldEvent:
             raise TypeError("WorldEvent.actor_id must be EntityId or None")
         if self.target_id is not None and type(self.target_id) is not EntityId:
             raise TypeError("WorldEvent.target_id must be EntityId or None")
+        if self.cause is not None:
+            cause = require_event_cause(self.cause)
+            object.__setattr__(self, "cause", cause)
+            if request_id_for_cause(cause) != self.request_id:
+                raise ValueError(EventValidationCode.INVALID_CAUSE.value)
+            expected_actor = actor_id_for_cause(cause)
+            if self.actor_id != expected_actor:
+                raise ValueError(EventValidationCode.INVALID_CAUSE.value)
+        elif self.schema_version >= EVENT_SCHEMA_REPLAY_V3:
+            raise ValueError(EventValidationCode.INVALID_CAUSE.value)
         expected_target = target_id_for_details(self.details)
         if self.target_id != expected_target:
             raise ValueError(EventValidationCode.INVALID_IDENTITY.value)
         if (
             self.schema_version in REPLAYABLE_EVENT_SCHEMA_VERSIONS
-            and not _payload_effect_complete(self.details)
+            and not _payload_effect_complete(
+                self.details, schema_version=self.schema_version
+            )
         ):
             raise ValueError(EventValidationCode.MISSING_EFFECT_FACTS.value)
 
@@ -407,7 +776,7 @@ def make_replayable_event(
     details: EventDetails,
     actor_id: EntityId | None,
 ) -> WorldEvent:
-    """Construct an authoritative replay-capable objective event."""
+    """Construct a legacy replay-v2 objective event."""
     return WorldEvent(
         event_id=event_id,
         run_id=run_id,
@@ -416,10 +785,40 @@ def make_replayable_event(
         sequence=sequence,
         request_id=request_id,
         resulting_revision=resulting_revision,
-        schema_version=EVENT_SCHEMA_REPLAY_V1,
+        schema_version=EVENT_SCHEMA_REPLAY_V2,
         details=details,
         actor_id=actor_id,
         target_id=target_id_for_details(require_event_details(details)),
+        cause=None,
+    )
+
+
+def make_physical_replayable_event(
+    *,
+    event_id: EventId,
+    run_id: str,
+    world_id: WorldId,
+    tick: int,
+    sequence: int,
+    cause: EventCause,
+    resulting_revision: WorldRevision,
+    details: EventDetails,
+) -> WorldEvent:
+    """Construct an authoritative physical replay-v3 objective event."""
+    typed_cause = require_event_cause(cause)
+    return WorldEvent(
+        event_id=event_id,
+        run_id=run_id,
+        world_id=world_id,
+        tick=tick,
+        sequence=sequence,
+        request_id=request_id_for_cause(typed_cause),
+        resulting_revision=resulting_revision,
+        schema_version=EVENT_SCHEMA_REPLAY_V3,
+        details=details,
+        actor_id=actor_id_for_cause(typed_cause),
+        target_id=target_id_for_details(require_event_details(details)),
+        cause=typed_cause,
     )
 
 
@@ -447,9 +846,16 @@ def normalize_ordered_events(events: Sequence[WorldEvent]) -> tuple[WorldEvent, 
         return normalized
     run_id = normalized[0].run_id
     tick = normalized[0].tick
+    schema_version = normalized[0].schema_version
     for index, event in enumerate(normalized):
         if event.run_id != run_id or event.tick != tick:
             raise ValueError(EventValidationCode.INVALID_ORDERING.value)
         if event.sequence != index:
             raise ValueError(EventValidationCode.INVALID_ORDERING.value)
+        if (
+            event.schema_version in REPLAYABLE_EVENT_SCHEMA_VERSIONS
+            and schema_version in REPLAYABLE_EVENT_SCHEMA_VERSIONS
+            and event.schema_version != schema_version
+        ):
+            raise ValueError(EventValidationCode.MIXED_REPLAY_SCHEMA.value)
     return normalized

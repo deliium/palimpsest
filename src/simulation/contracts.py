@@ -11,11 +11,11 @@ from collections.abc import Sequence
 from typing import Protocol
 
 from simulation.models import (
-    DERIVATION_VERSION,
     ExportMetadata,
     RunId,
     SimulationExport,
     SimulationRunConfig,
+    fingerprint_physical_rules,
 )
 from simulation.randomness import StreamScope
 from world.events import WorldEvent
@@ -37,13 +37,19 @@ def describe_run(
     scope: StreamScope | None = None,
 ) -> dict[str, str | int]:
     """Secret-safe fields for DEBUG composition logs."""
+    assert config.derivation_version is not None
     fields: dict[str, str | int] = {
         "run_id": run_id.value,
         "seed": config.seed,
-        "derivation_version": DERIVATION_VERSION,
+        "derivation_version": config.derivation_version,
     }
     if scope is not None:
         fields["stream_scope"] = f"{scope.namespace}:{','.join(scope.names)}"
+    if config.physical_rules is not None:
+        fields["rules_version"] = config.physical_rules.version
+        fields["rules_fingerprint_prefix"] = fingerprint_physical_rules(
+            config.physical_rules
+        )[:12]
     return fields
 
 
@@ -61,6 +67,31 @@ def log_run_configured(
         fields["derivation_version"],
         fields.get("stream_scope", "-"),
     )
+    log_physical_config_validated(config)
+
+
+def log_physical_config_validated(config: SimulationRunConfig) -> None:
+    """DEBUG validation summary for physical rules / derivation pairing."""
+    assert config.derivation_version is not None
+    if config.physical_rules is None:
+        _LOGGER.debug(
+            "physical_config_legacy derivation_version=%s",
+            config.derivation_version,
+        )
+        return
+    fingerprint = fingerprint_physical_rules(config.physical_rules)
+    _LOGGER.debug(
+        "physical_config_validated derivation_version=%s rules_version=%s "
+        "fingerprint_prefix=%s",
+        config.derivation_version,
+        config.physical_rules.version,
+        fingerprint[:12],
+    )
+
+
+def log_invalid_physical_config(*, code: str, path: str) -> None:
+    """ERROR diagnostic for invalid physical configuration (no payloads/seeds)."""
+    _LOGGER.error("invalid_physical_config code=%s path=%s", code, path)
 
 
 def log_replay_mismatch(
@@ -79,10 +110,11 @@ def log_invalid_setup(reason: str) -> None:
 
 
 def export_metadata(config: SimulationRunConfig, run_id: RunId) -> ExportMetadata:
+    assert config.derivation_version is not None
     return ExportMetadata(
         run_id=run_id,
         seed=config.seed,
-        derivation_version=DERIVATION_VERSION,
+        derivation_version=config.derivation_version,
     )
 
 

@@ -9,9 +9,16 @@ from __future__ import annotations
 
 import hashlib
 import random
+from collections.abc import Mapping
 from dataclasses import dataclass
 
-from simulation.models import DERIVATION_VERSION, SimulationRunConfig, require_seed
+from simulation.models import (
+    DERIVATION_VERSION_V2,
+    SimulationRunConfig,
+    require_seed,
+)
+from world.models import physical_rules_fingerprint
+from world.values import WeatherCondition
 
 
 @dataclass(frozen=True, slots=True)
@@ -45,7 +52,13 @@ def _length_prefixed(value: bytes) -> bytes:
 
 def derive_stream_seed(config: SimulationRunConfig, scope: StreamScope) -> int:
     hasher = hashlib.sha256()
-    hasher.update(DERIVATION_VERSION.encode("utf-8"))
+    hasher.update(config.derivation_version.encode("utf-8"))
+    if config.derivation_version == DERIVATION_VERSION_V2:
+        assert config.physical_rules is not None
+        fingerprint = physical_rules_fingerprint(config.physical_rules).encode(
+            "ascii"
+        )
+        hasher.update(_length_prefixed(fingerprint))
     hasher.update(_length_prefixed(b"stream"))
     hasher.update(_length_prefixed(str(config.seed).encode("utf-8")))
     hasher.update(canonical_scope_bytes(scope))
@@ -73,3 +86,76 @@ def sample_stream(
     """Draw ``count`` bounded integers from a fresh named stream."""
     rng = create_named_stream(config, scope)
     return tuple(rng.randrange(1_000_000_000) for _ in range(count))
+
+
+def sample_bernoulli(rng: random.Random, probability: float) -> bool:
+    """Bernoulli draw: ``random() < probability`` on a private stream."""
+    if type(rng) is not random.Random:
+        raise TypeError("sample_bernoulli requires random.Random")
+    if isinstance(probability, bool) or not isinstance(probability, (int, float)):
+        raise TypeError("probability must be a float in [0.0, 1.0]")
+    value = float(probability)
+    if value < 0.0 or value > 1.0:
+        raise ValueError("probability must be in [0.0, 1.0]")
+    return rng.random() < value
+
+
+def sample_attack_damage(
+    rng: random.Random, *, minimum: int, maximum_exclusive: int
+) -> int:
+    """Integer damage via ``randrange(minimum, maximum_exclusive)``."""
+    if type(rng) is not random.Random:
+        raise TypeError("sample_attack_damage requires random.Random")
+    if (
+        isinstance(minimum, bool)
+        or type(minimum) is not int
+        or isinstance(maximum_exclusive, bool)
+        or type(maximum_exclusive) is not int
+    ):
+        raise TypeError("damage bounds must be ints")
+    if minimum < 0 or maximum_exclusive <= minimum:
+        raise ValueError("damage bounds must satisfy 0 <= min < max_exclusive")
+    return rng.randrange(minimum, maximum_exclusive)
+
+
+def sample_destination_index(rng: random.Random, destination_count: int) -> int:
+    """Uniform destination selector via ``randrange(len(sorted_destinations))``."""
+    if type(rng) is not random.Random:
+        raise TypeError("sample_destination_index requires random.Random")
+    if (
+        isinstance(destination_count, bool)
+        or type(destination_count) is not int
+        or destination_count <= 0
+    ):
+        raise ValueError("destination_count must be a positive int")
+    return rng.randrange(destination_count)
+
+
+def sample_weather_condition(
+    rng: random.Random,
+    transitions: Mapping[WeatherCondition, float],
+) -> WeatherCondition:
+    """Sample weather against cumulative half-open probability intervals."""
+    if type(rng) is not random.Random:
+        raise TypeError("sample_weather_condition requires random.Random")
+    if isinstance(transitions, (str, bytes)) or not isinstance(transitions, Mapping):
+        raise TypeError("transitions must be a mapping")
+    ordered = tuple(WeatherCondition)
+    cumulative = 0.0
+    draw = rng.random()
+    for condition in ordered:
+        if condition not in transitions:
+            raise ValueError("transitions must define every WeatherCondition")
+        probability = transitions[condition]
+        if isinstance(probability, bool) or not isinstance(probability, (int, float)):
+            raise TypeError("transition probabilities must be floats")
+        probability = float(probability)
+        if probability < 0.0:
+            raise ValueError("transition probabilities must be non-negative")
+        next_cumulative = cumulative + probability
+        if cumulative <= draw < next_cumulative:
+            return condition
+        cumulative = next_cumulative
+    if abs(cumulative - 1.0) > 1e-9:
+        raise ValueError("transition probabilities must sum to 1.0")
+    return ordered[-1]

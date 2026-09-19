@@ -6,6 +6,7 @@ Bootstrap values validate at construction and never expose private ``World`` /
 
 from __future__ import annotations
 
+import logging
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
 from types import MappingProxyType
@@ -24,6 +25,8 @@ __all__ = [
     "WorldBootstrap",
     "registration_translator",
 ]
+
+_LOGGER = logging.getLogger("simulation.bootstrap")
 
 
 @dataclass(frozen=True, slots=True)
@@ -139,6 +142,19 @@ class WorldBootstrap:
                 raise ValueError("registration translator forward mismatch")
             if translator.to_agent_id(entity_id) != registration.agent_id:
                 raise ValueError("registration translator round-trip mismatch")
+        _LOGGER.debug(
+            "world_bootstrap_validated world_id=%s revision=%s "
+            "location_count=%s item_count=%s resource_count=%s body_count=%s "
+            "weather_count=%s registration_count=%s",
+            self.world_id.value,
+            self.revision.value,
+            len(locations),
+            len(items),
+            len(resources),
+            len(bodies),
+            len(weather),
+            len(registrations),
+        )
 
 
 def registration_translator(bootstrap: WorldBootstrap) -> RegistrationTranslator:

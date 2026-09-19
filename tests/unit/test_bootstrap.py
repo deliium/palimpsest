@@ -40,3 +40,25 @@ def test_default_pytest_addopts_exclude_live_infrastructure() -> None:
     text = pyproject.read_text(encoding="utf-8")
     assert "not integration and not compose" in text
     assert "--strict-markers" in text
+
+
+def test_physical_config_logging_omits_seeds_and_payloads(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    from simulation.contracts import (
+        log_invalid_physical_config,
+        log_physical_config_validated,
+    )
+    from simulation.models import SimulationRunConfig
+    from world.models import default_physical_rules
+
+    config = SimulationRunConfig(seed=99, physical_rules=default_physical_rules())
+    caplog.set_level(logging.DEBUG, logger="simulation.run")
+    log_physical_config_validated(config)
+    log_invalid_physical_config(code="derivation_rules_mismatch", path="config")
+    messages = " ".join(record.getMessage() for record in caplog.records)
+    assert "physical_config_validated" in messages
+    assert "fingerprint_prefix=" in messages
+    assert "invalid_physical_config" in messages
+    assert "99" not in messages
+    assert "seed" not in messages
