@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from tests.simulation_helpers import connected_locations, make_item, weather_for_locations
+
 import pytest
 
 from world._replay import ProjectionError, ProjectionErrorCode, project_events
@@ -23,7 +25,7 @@ from world.identifiers import (
     WorldRevision,
 )
 from world.models import AgentBody, Item, LifeStatus, Location
-from world.values import Fatigue, Health, Hunger, TemperatureCelsius, Thirst
+from world.values import CarryCapacity, Fatigue, Health, Hunger, TemperatureCelsius, Thirst
 
 _RUN = "run-1"
 _WORLD = WorldId("world-1")
@@ -44,6 +46,7 @@ def _alive(
         temperature=TemperatureCelsius(36.5),
         inventory=inventory,
         life_status=LifeStatus.ALIVE,
+        carry_capacity=CarryCapacity(10),
     )
 
 
@@ -53,12 +56,10 @@ def _base_state(
     bodies: tuple[AgentBody, ...] | None = None,
     revision: int = 0,
 ) -> WorldState:
+    locations = connected_locations(("loc-1", "Camp"), ("loc-2", "River"))
     return WorldState(
         WorldRevision(revision),
-        locations=(
-            Location(entity_id=EntityId("loc-1"), name="Camp"),
-            Location(entity_id=EntityId("loc-2"), name="River"),
-        ),
+        locations=locations,
         items=items,
         bodies=bodies
         if bodies is not None
@@ -67,7 +68,7 @@ def _base_state(
             _alive("body-2", "loc-1"),
         ),
         resources=(),
-        weather=(),
+        weather=weather_for_locations(locations),
     )
 
 
@@ -121,11 +122,7 @@ def test_event_only_wait_preserves_revision_and_items() -> None:
 
 
 def test_take_drop_give_projection_applies_recorded_effects() -> None:
-    ground = Item(
-        entity_id=EntityId("item-1"),
-        name="Rock",
-        location_id=EntityId("loc-1"),
-    )
+    ground = make_item("item-1", name="Rock", location_id="loc-1")
     state = _base_state(items=(ground,))
     take = _event(
         event_id="evt-take",

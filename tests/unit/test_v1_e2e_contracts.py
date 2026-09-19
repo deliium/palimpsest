@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from tests.simulation_helpers import make_item, make_location, make_resource, weather_for_locations
+
 import pytest
 from hypothesis import given, settings
 from hypothesis import strategies as st
@@ -51,7 +53,7 @@ from world.events import (
 )
 from world.identifiers import EntityId, EventId, WorldId, WorldRevision
 from world.models import AgentBody, Item, LifeStatus, Location, Resource
-from world.values import Fatigue, Health, Hunger, TemperatureCelsius, Thirst
+from world.values import CarryCapacity, Fatigue, Health, Hunger, TemperatureCelsius, Thirst
 
 COMMAND_VARIANTS = (
     Move(EntityId("loc-1")),
@@ -103,19 +105,20 @@ class _Translator:
 
 
 def _world() -> World:
+    locations = (make_location("loc-1", name="Camp"),)
     return World(
         WorldId("world-1"),
         WorldState(
             WorldRevision(0),
-            locations=(Location(EntityId("loc-1"), "Camp"),),
-            items=(Item(EntityId("item-1"), "Cup", location_id=EntityId("loc-1")),),
+            locations=locations,
+            items=(make_item("item-1", name="Cup", location_id="loc-1"),),
             resources=(
-                Resource(
-                    EntityId("res-1"),
-                    "Water",
-                    EntityId("loc-1"),
-                    1.0,
-                    "liters",
+                make_resource(
+                    "res-1",
+                    name="Water",
+                    location_id="loc-1",
+                    quantity=1.0,
+                    unit="liters",
                 ),
             ),
             bodies=(
@@ -129,6 +132,7 @@ def _world() -> World:
                     temperature=TemperatureCelsius(36.5),
                     inventory=(),
                     life_status=LifeStatus.ALIVE,
+                    carry_capacity=CarryCapacity(10),
                 ),
                 AgentBody(
                     entity_id=EntityId("body-2"),
@@ -140,8 +144,10 @@ def _world() -> World:
                     temperature=TemperatureCelsius(36.5),
                     inventory=(),
                     life_status=LifeStatus.ALIVE,
+                    carry_capacity=CarryCapacity(10),
                 ),
             ),
+            weather=weather_for_locations(locations),
         ),
     )
 

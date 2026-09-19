@@ -14,7 +14,7 @@ from typing import Any
 from persistence.errors import PersistenceCorruptionError
 from persistence.orm import SimulationRunOrm, TickCommitOrm, WorldEventOrm
 from simulation.journal import decode_persistence, encode_persistence, hash_snapshot
-from simulation.models import RunId, SimulationRunConfig
+from simulation.models import RunId
 from simulation.persistence import (
     PERSISTENCE_CODEC_VERSION,
     RunManifest,
@@ -150,8 +150,14 @@ def tick_commit_from_orm(row: TickCommitOrm) -> TickCommit:
 
 def manifest_from_run_orm(row: SimulationRunOrm) -> RunManifest:
     seed = nonneg_int_from_numeric(row.seed, field="seed")
+    config_data: dict[str, Any] = {"seed": seed}
+    if row.physical_rules_canonical is not None:
+        config_data["physical_rules"] = dict(row.physical_rules_canonical)
+        config_data["derivation_version"] = row.derivation_version
+        if row.physical_rules_fingerprint is not None:
+            config_data["rules_fingerprint"] = row.physical_rules_fingerprint
     data = {
-        "config": {"seed": seed},
+        "config": config_data,
         "derivation_version": row.derivation_version,
         "event_schema_version": row.event_schema_version,
         "persistence_codec_version": row.persistence_codec_version,
@@ -165,8 +171,7 @@ def manifest_from_run_orm(row: SimulationRunOrm) -> RunManifest:
         raise PersistenceCorruptionError(
             "invalid_manifest", operation="manifest_from_run_orm"
         )
-    # Keep seed/config alignment explicit for Numeric round-trips.
-    if decoded.seed != seed or decoded.config != SimulationRunConfig(seed=seed):
+    if decoded.seed != seed:
         raise PersistenceCorruptionError(
             "seed_mismatch", operation="manifest_from_run_orm"
         )

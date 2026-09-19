@@ -22,7 +22,12 @@ from simulation.models import (
     SimulationRunConfig,
     require_seed,
 )
-from world.events import EVENT_SCHEMA_REPLAY_V1, WorldEvent, normalize_events
+from world.events import (
+    EVENT_SCHEMA_REPLAY_V2,
+    EVENT_SCHEMA_REPLAY_V3,
+    WorldEvent,
+    normalize_events,
+)
 from world.identifiers import (
     WorldId,
     WorldRevision,
@@ -31,14 +36,27 @@ from world.identifiers import (
 )
 from world.models import AgentBody, Item, Location, Resource, Weather
 
-EVENT_SCHEMA_VERSION: Final[int] = EVENT_SCHEMA_REPLAY_V1
-PROJECTOR_VERSION: Final[str] = "v1"
-PERSISTENCE_CODEC_VERSION: Final[str] = "v1"
+# New-write versions for physical replay-v3 runs.
+EVENT_SCHEMA_VERSION: Final[int] = EVENT_SCHEMA_REPLAY_V3
+PROJECTOR_VERSION: Final[str] = "v2"
+PERSISTENCE_CODEC_VERSION: Final[str] = "v2"
+
+# Accepted restore/decode versions (legacy replay-v2 remains restorable).
+ACCEPTED_EVENT_SCHEMA_VERSIONS: Final[frozenset[int]] = frozenset(
+    {EVENT_SCHEMA_REPLAY_V2, EVENT_SCHEMA_REPLAY_V3}
+)
+ACCEPTED_PROJECTOR_VERSIONS: Final[frozenset[str]] = frozenset({"v1", "v2"})
+ACCEPTED_PERSISTENCE_CODEC_VERSIONS: Final[frozenset[str]] = frozenset(
+    {"v1", "v2"}
+)
 
 _SHA256_HEX_RE: Final[re.Pattern[str]] = re.compile(r"^[0-9a-f]{64}$")
 _HASH_PREFIX_LEN: Final[int] = 8
 
 __all__ = [
+    "ACCEPTED_EVENT_SCHEMA_VERSIONS",
+    "ACCEPTED_PERSISTENCE_CODEC_VERSIONS",
+    "ACCEPTED_PROJECTOR_VERSIONS",
     "EVENT_SCHEMA_VERSION",
     "PERSISTENCE_CODEC_VERSION",
     "PROJECTOR_VERSION",
@@ -66,6 +84,7 @@ __all__ = [
     "persistence_diagnostic_fields",
     "require_commit_hash",
     "require_payload_hash",
+    "schema_projector_compatible",
 ]
 
 
@@ -91,13 +110,73 @@ def _require_version_string(name: str, value: object) -> str:
     return value
 
 
-def _require_schema_version(name: str, value: object) -> int:
+def _require_accepted_schema_version(name: str, value: object) -> int:
+    version = require_exact_nonneg_int(name, value)
+    if version not in ACCEPTED_EVENT_SCHEMA_VERSIONS:
+        raise ValueError(
+            f"{name} must be an accepted event schema version "
+            f"({sorted(ACCEPTED_EVENT_SCHEMA_VERSIONS)})"
+        )
+    return version
+
+
+def _require_write_schema_version(name: str, value: object) -> int:
     version = require_exact_nonneg_int(name, value)
     if version != EVENT_SCHEMA_VERSION:
         raise ValueError(
             f"{name} must equal EVENT_SCHEMA_VERSION ({EVENT_SCHEMA_VERSION})"
         )
     return version
+
+
+def _require_accepted_projector_version(name: str, value: object) -> str:
+    version = _require_version_string(name, value)
+    if version not in ACCEPTED_PROJECTOR_VERSIONS:
+        raise ValueError(
+            f"{name} must be an accepted projector version "
+            f"({sorted(ACCEPTED_PROJECTOR_VERSIONS)})"
+        )
+    return version
+
+
+def _require_write_projector_version(name: str, value: object) -> str:
+    version = _require_version_string(name, value)
+    if version != PROJECTOR_VERSION:
+        raise ValueError(
+            f"{name} must equal PROJECTOR_VERSION ({PROJECTOR_VERSION})"
+        )
+    return version
+
+
+def _require_accepted_persistence_codec_version(name: str, value: object) -> str:
+    version = _require_version_string(name, value)
+    if version not in ACCEPTED_PERSISTENCE_CODEC_VERSIONS:
+        raise ValueError(
+            f"{name} must be an accepted persistence codec version "
+            f"({sorted(ACCEPTED_PERSISTENCE_CODEC_VERSIONS)})"
+        )
+    return version
+
+
+def _require_write_persistence_codec_version(name: str, value: object) -> str:
+    version = _require_version_string(name, value)
+    if version != PERSISTENCE_CODEC_VERSION:
+        raise ValueError(
+            f"{name} must equal PERSISTENCE_CODEC_VERSION "
+            f"({PERSISTENCE_CODEC_VERSION})"
+        )
+    return version
+
+
+def schema_projector_compatible(
+    *, event_schema_version: int, projector_version: str
+) -> bool:
+    """True when schema and projector pair without mixed-version dispatch."""
+    if event_schema_version == EVENT_SCHEMA_REPLAY_V2:
+        return projector_version == "v1"
+    if event_schema_version == EVENT_SCHEMA_REPLAY_V3:
+        return projector_version == "v2"
+    return False
 
 
 @dataclass(frozen=True, slots=True)
@@ -177,25 +256,32 @@ class RunManifest:
         object.__setattr__(
             self,
             "event_schema_version",
-            _require_schema_version(
+            _require_accepted_schema_version(
                 "RunManifest.event_schema_version", self.event_schema_version
             ),
         )
         object.__setattr__(
             self,
             "projector_version",
-            _require_version_string(
+            _require_accepted_projector_version(
                 "RunManifest.projector_version", self.projector_version
             ),
         )
         object.__setattr__(
             self,
             "persistence_codec_version",
-            _require_version_string(
+            _require_accepted_persistence_codec_version(
                 "RunManifest.persistence_codec_version",
                 self.persistence_codec_version,
             ),
         )
+        if not schema_projector_compatible(
+            event_schema_version=self.event_schema_version,
+            projector_version=self.projector_version,
+        ):
+            raise ValueError(
+                "RunManifest event schema and projector versions are incompatible"
+            )
 
 
 @dataclass(frozen=True, slots=True)
@@ -241,25 +327,32 @@ class WorldSnapshot:
         object.__setattr__(
             self,
             "event_schema_version",
-            _require_schema_version(
+            _require_accepted_schema_version(
                 "WorldSnapshot.event_schema_version", self.event_schema_version
             ),
         )
         object.__setattr__(
             self,
             "projector_version",
-            _require_version_string(
+            _require_accepted_projector_version(
                 "WorldSnapshot.projector_version", self.projector_version
             ),
         )
         object.__setattr__(
             self,
             "persistence_codec_version",
-            _require_version_string(
+            _require_accepted_persistence_codec_version(
                 "WorldSnapshot.persistence_codec_version",
                 self.persistence_codec_version,
             ),
         )
+        if not schema_projector_compatible(
+            event_schema_version=self.event_schema_version,
+            projector_version=self.projector_version,
+        ):
+            raise ValueError(
+                "WorldSnapshot event schema and projector versions are incompatible"
+            )
         object.__setattr__(
             self,
             "derivation_version",
@@ -387,21 +480,21 @@ class RunCreateRequest:
         object.__setattr__(
             self,
             "event_schema_version",
-            _require_schema_version(
+            _require_write_schema_version(
                 "RunCreateRequest.event_schema_version", self.event_schema_version
             ),
         )
         object.__setattr__(
             self,
             "projector_version",
-            _require_version_string(
+            _require_write_projector_version(
                 "RunCreateRequest.projector_version", self.projector_version
             ),
         )
         object.__setattr__(
             self,
             "persistence_codec_version",
-            _require_version_string(
+            _require_write_persistence_codec_version(
                 "RunCreateRequest.persistence_codec_version",
                 self.persistence_codec_version,
             ),

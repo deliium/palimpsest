@@ -33,8 +33,8 @@ def test_upgrade_head_is_idempotent_with_single_revision(
     config = _alembic_config(migrated_test_database.database_dsn())
     command.upgrade(config, "head")
     script = ScriptDirectory.from_config(config)
-    assert script.get_heads() == ["0002"]
-    assert script.get_current_head() == "0002"
+    assert script.get_heads() == ["0003"]
+    assert script.get_current_head() == "0003"
 
 
 async def test_vector_extension_and_event_store_tables_exist(
@@ -68,4 +68,4 @@ async def test_orm_metadata_matches_migrated_tables(
         revision = await session.execute(
             text("SELECT version_num FROM alembic_version")
         )
-        assert revision.scalar_one() == "0002"
+        assert revision.scalar_one() == "0003"

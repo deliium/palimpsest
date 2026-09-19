@@ -19,6 +19,7 @@ from simulation.bootstrap import AgentRegistration
 from simulation.clock import Tick
 from simulation.models import RunId, SimulationRunConfig
 from simulation.persistence import (
+    ACCEPTED_PERSISTENCE_CODEC_VERSIONS,
     PERSISTENCE_CODEC_VERSION,
     CommitHash,
     PayloadHash,
@@ -30,26 +31,32 @@ from simulation.persistence import (
 from simulation.serialization import (
     DomainSerializationError,
     _decode_agent_body,
+    _decode_event_cause,
     _decode_event_details,
     _decode_item,
     _decode_location,
+    _decode_physical_rules,
     _decode_resource,
     _decode_weather,
     _encode_agent_body,
+    _encode_event_cause,
     _encode_event_details,
     _encode_item,
     _encode_location,
+    _encode_physical_rules,
     _encode_resource,
     _encode_weather,
 )
 from world.events import (
-    EVENT_SCHEMA_REPLAY_V1,
+    EVENT_SCHEMA_REPLAY_V2,
+    EVENT_SCHEMA_REPLAY_V3,
     WorldEvent,
     event_is_replayable,
     require_event_details,
     require_replayable_event,
 )
 from world.identifiers import EntityId, EventId, RequestId, WorldId, WorldRevision
+from world.models import PhysicalRules, physical_rules_fingerprint
 
 _TYPE_RUN_MANIFEST: Final[str] = "run_manifest"
 _TYPE_WORLD_SNAPSHOT: Final[str] = "world_snapshot"
@@ -88,6 +95,7 @@ __all__ = [
     "hash_world_event",
     "payload_hash",
     "verify_commit_chain",
+    "verify_tick_events",
 ]
 
 
@@ -146,7 +154,10 @@ def decode_persistence(payload: bytes, expected_type: type | str) -> object:
     if set(document) != {"persistence_codec_version", "type", "data"}:
         raise PersistenceSerializationError("invalid_envelope", "$")
     version = document["persistence_codec_version"]
-    if version != PERSISTENCE_CODEC_VERSION:
+    if (
+        not isinstance(version, str)
+        or version not in ACCEPTED_PERSISTENCE_CODEC_VERSIONS
+    ):
         raise PersistenceSerializationError(
             "unsupported_version",
             "$.persistence_codec_version",
@@ -280,6 +291,84 @@ def verify_commit_chain(commits: Sequence[TickCommit]) -> None:
                     "predecessor_mismatch", f"{path}.predecessor_commit_hash"
                 )
         previous = commit
+
+
+def verify_tick_events(
+    events: Sequence[WorldEvent],
+    *,
+    expected_payload_hash: PayloadHash | None = None,
+    expected_event_hashes: Sequence[PayloadHash] | None = None,
+) -> None:
+    """Verify replayable event identity, ordering, and optional hash layers."""
+    if isinstance(events, (set, frozenset, Mapping)):
+        raise PersistenceSerializationError("invalid_sequence", "$")
+    if isinstance(events, (str, bytes, bytearray)) or not isinstance(
+        events, Sequence
+    ):
+        raise PersistenceSerializationError("invalid_sequence", "$")
+    schema_version: int | None = None
+    prior_tick: int | None = None
+    prior_sequence: int | None = None
+    for index, event in enumerate(events):
+        path = f"$[{index}]"
+        if type(event) is not WorldEvent:
+            raise PersistenceSerializationError("invalid_type", path)
+        try:
+            require_replayable_event(event)
+        except (TypeError, ValueError) as exc:
+            raise PersistenceSerializationError(
+                "non_replayable_event", path
+            ) from exc
+        if event.schema_version not in {
+            EVENT_SCHEMA_REPLAY_V2,
+            EVENT_SCHEMA_REPLAY_V3,
+        }:
+            raise PersistenceSerializationError(
+                "unsupported_version",
+                f"{path}.schema_version",
+                version=event.schema_version,
+            )
+        if schema_version is None:
+            schema_version = event.schema_version
+        elif event.schema_version != schema_version:
+            raise PersistenceSerializationError(
+                "mixed_schema_version", f"{path}.schema_version"
+            )
+        if prior_tick is None:
+            prior_tick = event.tick
+            prior_sequence = event.sequence
+            if event.sequence != 0:
+                raise PersistenceSerializationError(
+                    "sequence_gap", f"{path}.sequence"
+                )
+        elif event.tick == prior_tick:
+            if prior_sequence is None or event.sequence != prior_sequence + 1:
+                raise PersistenceSerializationError(
+                    "sequence_gap", f"{path}.sequence"
+                )
+            prior_sequence = event.sequence
+        elif event.tick < prior_tick:
+            raise PersistenceSerializationError("invalid_ordering", f"{path}.tick")
+        else:
+            if event.sequence != 0:
+                raise PersistenceSerializationError(
+                    "sequence_gap", f"{path}.sequence"
+                )
+            prior_tick = event.tick
+            prior_sequence = event.sequence
+        recomputed = hash_world_event(event)
+        if expected_event_hashes is not None:
+            if index >= len(expected_event_hashes):
+                raise PersistenceSerializationError("hash_mismatch", path)
+            if recomputed != expected_event_hashes[index]:
+                raise PersistenceSerializationError("hash_mismatch", path)
+    if expected_event_hashes is not None and len(expected_event_hashes) != len(
+        events
+    ):
+        raise PersistenceSerializationError("hash_mismatch", "$")
+    if expected_payload_hash is not None:
+        if hash_tick_payload(events) != expected_payload_hash:
+            raise PersistenceSerializationError("hash_mismatch", "$.payload_hash")
 
 
 def hash_snapshot(snapshot: WorldSnapshot) -> PayloadHash:
@@ -485,13 +574,60 @@ def _decode_run_manifest(data: dict[str, Any], *, path: str) -> RunManifest:
 
 
 def _encode_config(config: SimulationRunConfig) -> dict[str, Any]:
-    return {"seed": _encode_seed(config.seed)}
+    payload: dict[str, Any] = {"seed": _encode_seed(config.seed)}
+    if config.physical_rules is not None:
+        try:
+            payload["physical_rules"] = _encode_physical_rules(config.physical_rules)
+        except DomainSerializationError as exc:
+            raise _map_domain_error(exc) from exc
+        payload["derivation_version"] = config.derivation_version
+        payload["rules_fingerprint"] = physical_rules_fingerprint(
+            config.physical_rules
+        )
+    return payload
 
 
 def _decode_config(data: dict[str, Any], *, path: str) -> SimulationRunConfig:
-    _require_keys(data, {"seed"}, path=path)
+    keys = set(data)
+    if keys == {"seed"}:
+        try:
+            return SimulationRunConfig(seed=_nonneg_int_field(data, "seed", path=path))
+        except PersistenceSerializationError:
+            raise
+        except (TypeError, ValueError) as exc:
+            raise PersistenceSerializationError("invalid_model", path) from exc
+    allowed = {"seed", "physical_rules", "derivation_version", "rules_fingerprint"}
+    if keys - allowed or "seed" not in keys:
+        raise PersistenceSerializationError("invalid_fields", path)
+    rules: PhysicalRules | None = None
+    if "physical_rules" in data:
+        rules_raw = data["physical_rules"]
+        if not isinstance(rules_raw, dict):
+            raise PersistenceSerializationError(
+                "invalid_object", f"{path}.physical_rules"
+            )
+        try:
+            rules = _decode_physical_rules(rules_raw, path=f"{path}.physical_rules")
+        except DomainSerializationError as exc:
+            raise _map_domain_error(exc) from exc
+        if "rules_fingerprint" in data:
+            expected = _str_field(data, "rules_fingerprint", path=path)
+            actual = physical_rules_fingerprint(rules)
+            if actual != expected:
+                raise PersistenceSerializationError(
+                    "hash_mismatch", f"{path}.rules_fingerprint"
+                )
+    derivation = (
+        _str_field(data, "derivation_version", path=path)
+        if "derivation_version" in data
+        else None
+    )
     try:
-        return SimulationRunConfig(seed=_nonneg_int_field(data, "seed", path=path))
+        return SimulationRunConfig(
+            seed=_nonneg_int_field(data, "seed", path=path),
+            physical_rules=rules,
+            derivation_version=derivation,
+        )
     except PersistenceSerializationError:
         raise
     except (TypeError, ValueError) as exc:
@@ -726,7 +862,7 @@ def _encode_world_event(value: WorldEvent, *, path: str) -> dict[str, Any]:
     except (TypeError, ValueError) as exc:
         raise PersistenceSerializationError("non_replayable_event", path) from exc
     try:
-        return {
+        payload: dict[str, Any] = {
             "actor_id": None if value.actor_id is None else value.actor_id.value,
             "details": _encode_event_details(value.details),
             "event_id": value.event_id.value,
@@ -740,29 +876,31 @@ def _encode_world_event(value: WorldEvent, *, path: str) -> dict[str, Any]:
             "tick": value.tick,
             "world_id": value.world_id.value,
         }
+        if value.cause is not None:
+            payload["cause"] = _encode_event_cause(value.cause)
+        return payload
     except DomainSerializationError as exc:
         raise _map_domain_error(exc) from exc
 
 
 def _decode_world_event(data: dict[str, Any], *, path: str) -> WorldEvent:
-    _require_keys(
-        data,
-        {
-            "event_id",
-            "run_id",
-            "world_id",
-            "tick",
-            "sequence",
-            "request_id",
-            "resulting_revision",
-            "schema_version",
-            "details",
-            "actor_id",
-            "target_id",
-            "event_type",
-        },
-        path=path,
-    )
+    base_keys = {
+        "event_id",
+        "run_id",
+        "world_id",
+        "tick",
+        "sequence",
+        "request_id",
+        "resulting_revision",
+        "schema_version",
+        "details",
+        "actor_id",
+        "target_id",
+        "event_type",
+    }
+    keys = set(data)
+    if keys != base_keys and keys != base_keys | {"cause"}:
+        raise PersistenceSerializationError("invalid_fields", path)
     details_raw = data["details"]
     if not isinstance(details_raw, dict):
         raise PersistenceSerializationError("invalid_object", f"{path}.details")
@@ -774,7 +912,7 @@ def _decode_world_event(data: dict[str, Any], *, path: str) -> WorldEvent:
         except DomainSerializationError as exc:
             raise _map_domain_error(exc) from exc
         schema_version = _nonneg_int_field(data, "schema_version", path=path)
-        if schema_version != EVENT_SCHEMA_REPLAY_V1:
+        if schema_version not in {EVENT_SCHEMA_REPLAY_V2, EVENT_SCHEMA_REPLAY_V3}:
             raise PersistenceSerializationError(
                 "unsupported_version",
                 f"{path}.schema_version",
@@ -788,6 +926,19 @@ def _decode_world_event(data: dict[str, Any], *, path: str) -> WorldEvent:
         target_id = (
             None if target_raw is None else EntityId(_require_id_str(target_raw, path))
         )
+        cause = None
+        if "cause" in data:
+            cause_raw = data["cause"]
+            if not isinstance(cause_raw, dict):
+                raise PersistenceSerializationError(
+                    "invalid_object", f"{path}.cause"
+                )
+            try:
+                cause = _decode_event_cause(cause_raw, path=f"{path}.cause")
+            except DomainSerializationError as exc:
+                raise _map_domain_error(exc) from exc
+        elif schema_version >= EVENT_SCHEMA_REPLAY_V3:
+            raise PersistenceSerializationError("invalid_fields", f"{path}.cause")
         event = WorldEvent(
             event_id=EventId(_str_field(data, "event_id", path=path)),
             run_id=_str_field(data, "run_id", path=path),
@@ -802,6 +953,7 @@ def _decode_world_event(data: dict[str, Any], *, path: str) -> WorldEvent:
             details=details,
             actor_id=actor_id,
             target_id=target_id,
+            cause=cause,  # type: ignore[arg-type]
         )
         if data["event_type"] != event.event_type:
             raise PersistenceSerializationError("invalid_fields", f"{path}.event_type")

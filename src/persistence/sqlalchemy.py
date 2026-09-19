@@ -51,7 +51,11 @@ from simulation.journal import (
     hash_tick_payload,
     hash_world_event,
 )
-from simulation.models import RunId
+from simulation.models import (
+    RunId,
+    canonical_physical_rules_document,
+    fingerprint_physical_rules,
+)
 from simulation.persistence import (
     ExperimentId,
     ExperimentMetadata,
@@ -138,6 +142,19 @@ class SqlAlchemySimulationRunRepository:
                         "run_exists", operation="create_run"
                     )
                 await _insert_snapshot_graph(session, bootstrap)
+                rules = request.config.physical_rules
+                rules_version = None if rules is None else rules.version
+                rules_fingerprint = None
+                rules_canonical = None
+                if rules is not None:
+                    rules_fingerprint = fingerprint_physical_rules(rules)
+                    rules_canonical = canonical_physical_rules_document(rules)
+                    _LOGGER.debug(
+                        "[FIX] persisted physical rules metadata "
+                        "rules_version=%s fingerprint_prefix=%s",
+                        rules_version,
+                        rules_fingerprint[:12],
+                    )
                 session.add(
                     SimulationRunOrm(
                         run_id=request.run_id.value,
@@ -149,6 +166,9 @@ class SqlAlchemySimulationRunRepository:
                         projector_version=request.projector_version,
                         persistence_codec_version=request.persistence_codec_version,
                         bootstrap_snapshot_id=bootstrap.snapshot_id.value,
+                        physical_rules_version=rules_version,
+                        physical_rules_fingerprint=rules_fingerprint,
+                        physical_rules_canonical=rules_canonical,
                     )
                 )
                 if request.experiment_assignment is not None:
@@ -754,6 +774,12 @@ async def _insert_snapshot_graph(
                 snapshot_id=snapshot.snapshot_id.value,
                 entity_id=location.entity_id.value,
                 name=location.name,
+                adjacent=[item.value for item in location.adjacent],
+                body_capacity=location.body_capacity.value,
+                item_capacity=location.item_capacity.value,
+                base_temperature=location.base_temperature.value,
+                shelter_factor=location.shelter_factor.value,
+                visibility_factor=location.visibility_factor.value,
             )
         )
     for ordinal, registration in enumerate(snapshot.registrations):
@@ -779,6 +805,7 @@ async def _insert_snapshot_graph(
                 fatigue=body.fatigue.value,
                 temperature=body.temperature.value,
                 life_status=body.life_status.value,
+                carry_capacity=body.carry_capacity.value,
             )
         )
         for position, item_id in enumerate(body.inventory):
@@ -798,6 +825,8 @@ async def _insert_snapshot_graph(
                 snapshot_id=snapshot.snapshot_id.value,
                 entity_id=item.entity_id.value,
                 name=item.name,
+                kind=item.kind.value,
+                load=item.load.value,
                 location_id=(
                     None if item.location_id is None else item.location_id.value
                 ),
@@ -811,8 +840,11 @@ async def _insert_snapshot_graph(
                 snapshot_id=snapshot.snapshot_id.value,
                 entity_id=resource.entity_id.value,
                 name=resource.name,
+                kind=resource.kind.value,
                 location_id=resource.location_id.value,
                 quantity=resource.quantity,
+                maximum_quantity=resource.maximum_quantity,
+                regeneration_per_tick=resource.regeneration_per_tick,
                 unit=resource.unit,
             )
         )
@@ -822,8 +854,7 @@ async def _insert_snapshot_graph(
                 run_id=snapshot.run_id.value,
                 snapshot_id=snapshot.snapshot_id.value,
                 location_id=entry.location_id.value,
-                condition=entry.condition,
-                temperature=entry.temperature.value,
+                condition=entry.condition.value,
             )
         )
 

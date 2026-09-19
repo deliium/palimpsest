@@ -44,24 +44,36 @@ from world.actions import (
     Wait,
     require_agent_command,
 )
+from world.effects import (
+    ActionCause,
+    DeathCause,
+    SystemCause,
+    SystemEffectFamily,
+)
 from world.events import (
     EVENT_SCHEMA_AUDIT_V1,
-    EVENT_SCHEMA_REPLAY_V1,
+    EVENT_SCHEMA_REPLAY_V2,
+    EVENT_SCHEMA_REPLAY_V3,
     Asked,
     Attacked,
+    Died,
     Dropped,
     Drunk,
     Eaten,
+    ExposureApplied,
     Fled,
     Given,
     Helped,
     Moved,
+    NeedsApplied,
+    ResourceRegenerated,
     Searched,
     Slept,
     Taken,
     Talked,
     Told,
     Waited,
+    WeatherChanged,
     WorldEvent,
     require_event_details,
     target_id_for_details,
@@ -74,9 +86,33 @@ from world.identifiers import (
     WorldId,
     WorldRevision,
 )
-from world.models import AgentBody, Item, LifeStatus, Location, Resource, Weather
+from world.models import (
+    AgentBody,
+    Item,
+    LifeStatus,
+    Location,
+    PhysicalRules,
+    Resource,
+    Weather,
+    canonical_physical_rules_bytes,
+)
 from world.observations import Observation
-from world.values import Fatigue, Health, Hunger, TemperatureCelsius, Thirst
+from world.values import (
+    BodyCapacity,
+    CarryCapacity,
+    DayPhase,
+    Fatigue,
+    Health,
+    Hunger,
+    ItemCapacity,
+    ItemKind,
+    ItemLoad,
+    ResourceKind,
+    TemperatureCelsius,
+    Thirst,
+    UnitInterval,
+    WeatherCondition,
+)
 
 SCHEMA_VERSION: Final[int] = 1
 _INT64_MIN = -(2**63)
@@ -88,6 +124,7 @@ SerializableDomainValue = (
     | Resource
     | Weather
     | AgentBody
+    | PhysicalRules
     | Agent
     | Goal
     | MemoryTrace
@@ -229,6 +266,8 @@ def _encode_top(value: object, *, path: str) -> tuple[str, dict[str, Any]]:
         return "weather", _encode_weather(value)
     if type(value) is AgentBody:
         return "agent_body", _encode_agent_body(value)
+    if type(value) is PhysicalRules:
+        return "physical_rules", _encode_physical_rules(value)
     if type(value) is Agent:
         return "agent", _encode_agent(value)
     if type(value) is Goal:
@@ -269,6 +308,8 @@ def _decode_top(
         return _decode_weather(data, path=path)
     if tag == "agent_body":
         return _decode_agent_body(data, path=path)
+    if tag == "physical_rules":
+        return _decode_physical_rules(data, path=path)
     if tag == "agent":
         return _decode_agent(data, path=path)
     if tag == "goal":
@@ -419,15 +460,60 @@ def _ensure_str_key(key: object, *, path: str) -> bool:
 
 
 def _encode_location(value: Location) -> dict[str, Any]:
-    return {"entity_id": value.entity_id.value, "name": value.name}
+    return {
+        "adjacent": [item.value for item in value.adjacent],
+        "base_temperature": value.base_temperature.value,
+        "body_capacity": value.body_capacity.value,
+        "entity_id": value.entity_id.value,
+        "item_capacity": value.item_capacity.value,
+        "name": value.name,
+        "shelter_factor": value.shelter_factor.value,
+        "visibility_factor": value.visibility_factor.value,
+    }
 
 
 def _decode_location(data: dict[str, Any], *, path: str) -> Location:
-    _require_keys(data, {"entity_id", "name"}, path=path)
+    _require_keys(
+        data,
+        {
+            "adjacent",
+            "base_temperature",
+            "body_capacity",
+            "entity_id",
+            "item_capacity",
+            "name",
+            "shelter_factor",
+            "visibility_factor",
+        },
+        path=path,
+    )
+    adjacent_raw = data["adjacent"]
+    if not isinstance(adjacent_raw, list):
+        raise DomainSerializationError("invalid_array", f"{path}.adjacent")
     try:
+        adjacent = tuple(
+            EntityId(_require_list_str(item, path=f"{path}.adjacent[{index}]"))
+            for index, item in enumerate(adjacent_raw)
+        )
         return Location(
             entity_id=EntityId(_str_field(data, "entity_id", path=path)),
             name=_str_field(data, "name", path=path),
+            adjacent=adjacent,
+            body_capacity=BodyCapacity(
+                _int_field(data, "body_capacity", path=path)
+            ),
+            item_capacity=ItemCapacity(
+                _int_field(data, "item_capacity", path=path)
+            ),
+            base_temperature=TemperatureCelsius(
+                _float_field(data, "base_temperature", path=path)
+            ),
+            shelter_factor=UnitInterval(
+                _float_field(data, "shelter_factor", path=path)
+            ),
+            visibility_factor=UnitInterval(
+                _float_field(data, "visibility_factor", path=path)
+            ),
         )
     except DomainSerializationError:
         raise
@@ -439,19 +525,27 @@ def _encode_item(value: Item) -> dict[str, Any]:
     return {
         "entity_id": value.entity_id.value,
         "holder_id": None if value.holder_id is None else value.holder_id.value,
+        "kind": value.kind.value,
+        "load": value.load.value,
         "location_id": None if value.location_id is None else value.location_id.value,
         "name": value.name,
     }
 
 
 def _decode_item(data: dict[str, Any], *, path: str) -> Item:
-    _require_keys(data, {"entity_id", "name", "location_id", "holder_id"}, path=path)
+    _require_keys(
+        data,
+        {"entity_id", "name", "kind", "load", "location_id", "holder_id"},
+        path=path,
+    )
     location = _optional_str(data, "location_id", path=path)
     holder = _optional_str(data, "holder_id", path=path)
     try:
         return Item(
             entity_id=EntityId(_str_field(data, "entity_id", path=path)),
             name=_str_field(data, "name", path=path),
+            kind=ItemKind(_str_field(data, "kind", path=path)),
+            load=ItemLoad(_int_field(data, "load", path=path)),
             location_id=None if location is None else EntityId(location),
             holder_id=None if holder is None else EntityId(holder),
         )
@@ -464,23 +558,42 @@ def _decode_item(data: dict[str, Any], *, path: str) -> Item:
 def _encode_resource(value: Resource) -> dict[str, Any]:
     return {
         "entity_id": value.entity_id.value,
+        "kind": value.kind.value,
         "location_id": value.location_id.value,
+        "maximum_quantity": value.maximum_quantity,
         "name": value.name,
         "quantity": value.quantity,
+        "regeneration_per_tick": value.regeneration_per_tick,
         "unit": value.unit,
     }
 
 
 def _decode_resource(data: dict[str, Any], *, path: str) -> Resource:
     _require_keys(
-        data, {"entity_id", "name", "location_id", "quantity", "unit"}, path=path
+        data,
+        {
+            "entity_id",
+            "name",
+            "kind",
+            "location_id",
+            "quantity",
+            "maximum_quantity",
+            "regeneration_per_tick",
+            "unit",
+        },
+        path=path,
     )
     try:
         return Resource(
             entity_id=EntityId(_str_field(data, "entity_id", path=path)),
             name=_str_field(data, "name", path=path),
+            kind=ResourceKind(_str_field(data, "kind", path=path)),
             location_id=EntityId(_str_field(data, "location_id", path=path)),
             quantity=_float_field(data, "quantity", path=path),
+            maximum_quantity=_float_field(data, "maximum_quantity", path=path),
+            regeneration_per_tick=_float_field(
+                data, "regeneration_per_tick", path=path
+            ),
             unit=_str_field(data, "unit", path=path),
         )
     except DomainSerializationError:
@@ -491,21 +604,187 @@ def _decode_resource(data: dict[str, Any], *, path: str) -> Resource:
 
 def _encode_weather(value: Weather) -> dict[str, Any]:
     return {
-        "condition": value.condition,
+        "condition": value.condition.value,
         "location_id": value.location_id.value,
-        "temperature": value.temperature.value,
     }
 
 
 def _decode_weather(data: dict[str, Any], *, path: str) -> Weather:
-    _require_keys(data, {"location_id", "condition", "temperature"}, path=path)
+    _require_keys(data, {"location_id", "condition"}, path=path)
     try:
         return Weather(
             location_id=EntityId(_str_field(data, "location_id", path=path)),
-            condition=_str_field(data, "condition", path=path),
-            temperature=TemperatureCelsius(
-                _float_field(data, "temperature", path=path)
+            condition=WeatherCondition(_str_field(data, "condition", path=path)),
+        )
+    except DomainSerializationError:
+        raise
+    except (TypeError, ValueError) as exc:
+        raise DomainSerializationError("invalid_model", path) from exc
+
+
+def _encode_physical_rules(value: PhysicalRules) -> dict[str, Any]:
+    try:
+        payload = json.loads(canonical_physical_rules_bytes(value).decode("utf-8"))
+    except (TypeError, ValueError, UnicodeDecodeError, json.JSONDecodeError) as exc:
+        raise DomainSerializationError("invalid_model", "$") from exc
+    if not isinstance(payload, dict):
+        raise DomainSerializationError("invalid_model", "$")
+    return payload
+
+
+def _decode_physical_rules(data: dict[str, Any], *, path: str) -> PhysicalRules:
+    required = {
+        "attack_damage_max_exclusive",
+        "attack_damage_min",
+        "attack_hit_probability",
+        "day_end_hour",
+        "day_start_hour",
+        "day_visibility_factor",
+        "drink_thirst_relief",
+        "eat_hunger_relief",
+        "exposure_damage",
+        "exposure_high_celsius",
+        "exposure_low_celsius",
+        "fatigue_damage",
+        "flee_fatigue",
+        "flee_success_probability",
+        "help_fatigue",
+        "help_health_gain",
+        "hours_per_day",
+        "hunger_damage",
+        "metabolism_fatigue",
+        "metabolism_hunger",
+        "metabolism_thirst",
+        "move_fatigue",
+        "night_visibility_factor",
+        "phase_temperature_offset",
+        "resource_extraction_amount",
+        "search_base_probability",
+        "search_visibility_weight",
+        "sleep_fatigue_recovery",
+        "temperature_lerp_factor",
+        "thirst_damage",
+        "version",
+        "weather_period_ticks",
+        "weather_temperature_offset",
+        "weather_transitions",
+        "weather_visibility",
+    }
+    _require_keys(data, required, path=path)
+    try:
+        phase_raw = data["phase_temperature_offset"]
+        weather_vis_raw = data["weather_visibility"]
+        weather_temp_raw = data["weather_temperature_offset"]
+        transitions_raw = data["weather_transitions"]
+        if not isinstance(phase_raw, dict):
+            raise DomainSerializationError(
+                "invalid_object", f"{path}.phase_temperature_offset"
+            )
+        if not isinstance(weather_vis_raw, dict):
+            raise DomainSerializationError(
+                "invalid_object", f"{path}.weather_visibility"
+            )
+        if not isinstance(weather_temp_raw, dict):
+            raise DomainSerializationError(
+                "invalid_object", f"{path}.weather_temperature_offset"
+            )
+        if not isinstance(transitions_raw, dict):
+            raise DomainSerializationError(
+                "invalid_object", f"{path}.weather_transitions"
+            )
+        phase_offset = {
+            DayPhase(key): _float_field(
+                phase_raw, key, path=f"{path}.phase_temperature_offset"
+            )
+            for key in phase_raw
+        }
+        weather_visibility = {
+            WeatherCondition(key): _float_field(
+                weather_vis_raw, key, path=f"{path}.weather_visibility"
+            )
+            for key in weather_vis_raw
+        }
+        weather_temperature_offset = {
+            WeatherCondition(key): _float_field(
+                weather_temp_raw, key, path=f"{path}.weather_temperature_offset"
+            )
+            for key in weather_temp_raw
+        }
+        weather_transitions: dict[WeatherCondition, dict[WeatherCondition, float]] = {}
+        for source_key, row_raw in transitions_raw.items():
+            if not isinstance(row_raw, dict):
+                raise DomainSerializationError(
+                    "invalid_object",
+                    f"{path}.weather_transitions.{source_key}",
+                )
+            weather_transitions[WeatherCondition(str(source_key))] = {
+                WeatherCondition(str(target_key)): _float_field(
+                    row_raw,
+                    str(target_key),
+                    path=f"{path}.weather_transitions.{source_key}",
+                )
+                for target_key in row_raw
+            }
+        return PhysicalRules(
+            version=_str_field(data, "version", path=path),
+            hours_per_day=_int_field(data, "hours_per_day", path=path),
+            day_start_hour=_int_field(data, "day_start_hour", path=path),
+            day_end_hour=_int_field(data, "day_end_hour", path=path),
+            metabolism_hunger=_float_field(data, "metabolism_hunger", path=path),
+            metabolism_thirst=_float_field(data, "metabolism_thirst", path=path),
+            metabolism_fatigue=_float_field(data, "metabolism_fatigue", path=path),
+            hunger_damage=_float_field(data, "hunger_damage", path=path),
+            thirst_damage=_float_field(data, "thirst_damage", path=path),
+            fatigue_damage=_float_field(data, "fatigue_damage", path=path),
+            exposure_damage=_float_field(data, "exposure_damage", path=path),
+            exposure_low_celsius=_float_field(
+                data, "exposure_low_celsius", path=path
             ),
+            exposure_high_celsius=_float_field(
+                data, "exposure_high_celsius", path=path
+            ),
+            temperature_lerp_factor=_float_field(
+                data, "temperature_lerp_factor", path=path
+            ),
+            move_fatigue=_float_field(data, "move_fatigue", path=path),
+            flee_fatigue=_float_field(data, "flee_fatigue", path=path),
+            help_fatigue=_float_field(data, "help_fatigue", path=path),
+            sleep_fatigue_recovery=_float_field(
+                data, "sleep_fatigue_recovery", path=path
+            ),
+            eat_hunger_relief=_float_field(data, "eat_hunger_relief", path=path),
+            drink_thirst_relief=_float_field(data, "drink_thirst_relief", path=path),
+            help_health_gain=_float_field(data, "help_health_gain", path=path),
+            attack_hit_probability=_float_field(
+                data, "attack_hit_probability", path=path
+            ),
+            attack_damage_min=_int_field(data, "attack_damage_min", path=path),
+            attack_damage_max_exclusive=_int_field(
+                data, "attack_damage_max_exclusive", path=path
+            ),
+            flee_success_probability=_float_field(
+                data, "flee_success_probability", path=path
+            ),
+            search_base_probability=_float_field(
+                data, "search_base_probability", path=path
+            ),
+            search_visibility_weight=_float_field(
+                data, "search_visibility_weight", path=path
+            ),
+            resource_extraction_amount=_float_field(
+                data, "resource_extraction_amount", path=path
+            ),
+            weather_period_ticks=_int_field(data, "weather_period_ticks", path=path),
+            day_visibility_factor=_float_field(
+                data, "day_visibility_factor", path=path
+            ),
+            night_visibility_factor=_float_field(
+                data, "night_visibility_factor", path=path
+            ),
+            weather_visibility=weather_visibility,
+            weather_temperature_offset=weather_temperature_offset,
+            phase_temperature_offset=phase_offset,
+            weather_transitions=weather_transitions,
         )
     except DomainSerializationError:
         raise
@@ -515,6 +794,7 @@ def _decode_weather(data: dict[str, Any], *, path: str) -> Weather:
 
 def _encode_agent_body(value: AgentBody) -> dict[str, Any]:
     return {
+        "carry_capacity": value.carry_capacity.value,
         "entity_id": value.entity_id.value,
         "fatigue": value.fatigue.value,
         "health": value.health.value,
@@ -540,6 +820,7 @@ def _decode_agent_body(data: dict[str, Any], *, path: str) -> AgentBody:
             "temperature",
             "inventory",
             "life_status",
+            "carry_capacity",
         },
         path=path,
     )
@@ -563,6 +844,9 @@ def _decode_agent_body(data: dict[str, Any], *, path: str) -> AgentBody:
             ),
             inventory=inventory,
             life_status=LifeStatus(_str_field(data, "life_status", path=path)),
+            carry_capacity=CarryCapacity(
+                _int_field(data, "carry_capacity", path=path)
+            ),
         )
     except DomainSerializationError:
         raise
@@ -978,13 +1262,43 @@ def _decode_object_list(
 def _encode_event_details(value: object) -> dict[str, Any]:
     details = require_event_details(value)
     match details:
-        case Moved(destination_id=destination_id):
-            return {"destination_id": destination_id.value, "kind": "move"}
-        case Searched(target_id=target_id):
-            return {
+        case Moved(
+            destination_id=destination_id,
+            resulting_location_id=resulting_location_id,
+            fatigue_delta=fatigue_delta,
+            resulting_fatigue=resulting_fatigue,
+        ):
+            payload: dict[str, Any] = {
+                "destination_id": destination_id.value,
+                "kind": "move",
+            }
+            if resulting_location_id is not None:
+                payload["resulting_location_id"] = resulting_location_id.value
+            if fatigue_delta is not None:
+                payload["fatigue_delta"] = fatigue_delta
+            if resulting_fatigue is not None:
+                payload["resulting_fatigue"] = resulting_fatigue
+            return payload
+        case Searched(
+            target_id=target_id,
+            success=success,
+            created_item_id=created_item_id,
+            extracted_quantity=extracted_quantity,
+            resulting_resource_quantity=resulting_resource_quantity,
+        ):
+            payload = {
                 "kind": "search",
                 "target_id": None if target_id is None else target_id.value,
             }
+            if success is not None:
+                payload["success"] = success
+            if created_item_id is not None:
+                payload["created_item_id"] = created_item_id.value
+            if extracted_quantity is not None:
+                payload["extracted_quantity"] = extracted_quantity
+            if resulting_resource_quantity is not None:
+                payload["resulting_resource_quantity"] = resulting_resource_quantity
+            return payload
         case Taken(item_id=item_id, resulting_holder_id=resulting_holder_id):
             payload = {"item_id": item_id.value, "kind": "take"}
             if resulting_holder_id is not None:
@@ -1008,29 +1322,163 @@ def _encode_event_details(value: object) -> dict[str, Any]:
             if resulting_holder_id is not None:
                 payload["resulting_holder_id"] = resulting_holder_id.value
             return payload
-        case Eaten(item_id=item_id):
-            return {"item_id": item_id.value, "kind": "eat"}
-        case Drunk(source_id=source_id):
-            return {"kind": "drink", "source_id": source_id.value}
-        case Slept():
-            return {"kind": "sleep"}
+        case Eaten(
+            item_id=item_id,
+            hunger_delta=hunger_delta,
+            resulting_hunger=resulting_hunger,
+        ):
+            payload = {"item_id": item_id.value, "kind": "eat"}
+            if hunger_delta is not None:
+                payload["hunger_delta"] = hunger_delta
+            if resulting_hunger is not None:
+                payload["resulting_hunger"] = resulting_hunger
+            return payload
+        case Drunk(
+            source_id=source_id,
+            consumed_item=consumed_item,
+            quantity_delta=quantity_delta,
+            resulting_resource_quantity=resulting_resource_quantity,
+            thirst_delta=thirst_delta,
+            resulting_thirst=resulting_thirst,
+        ):
+            payload = {"kind": "drink", "source_id": source_id.value}
+            if consumed_item is not None:
+                payload["consumed_item"] = consumed_item
+            if quantity_delta is not None:
+                payload["quantity_delta"] = quantity_delta
+            if resulting_resource_quantity is not None:
+                payload["resulting_resource_quantity"] = resulting_resource_quantity
+            if thirst_delta is not None:
+                payload["thirst_delta"] = thirst_delta
+            if resulting_thirst is not None:
+                payload["resulting_thirst"] = resulting_thirst
+            return payload
+        case Slept(fatigue_delta=fatigue_delta, resulting_fatigue=resulting_fatigue):
+            payload = {"kind": "sleep"}
+            if fatigue_delta is not None:
+                payload["fatigue_delta"] = fatigue_delta
+            if resulting_fatigue is not None:
+                payload["resulting_fatigue"] = resulting_fatigue
+            return payload
         case Talked(recipient_id=recipient_id, text=text):
             return {"kind": "talk", "recipient_id": recipient_id.value, "text": text}
         case Asked(recipient_id=recipient_id, text=text):
             return {"kind": "ask", "recipient_id": recipient_id.value, "text": text}
         case Told(recipient_id=recipient_id, text=text):
             return {"kind": "tell", "recipient_id": recipient_id.value, "text": text}
-        case Helped(target_id=target_id):
-            return {"kind": "help", "target_id": target_id.value}
-        case Attacked(target_id=target_id):
-            return {"kind": "attack", "target_id": target_id.value}
-        case Fled(threat_id=threat_id):
-            return {
+        case Helped(
+            target_id=target_id,
+            health_delta=health_delta,
+            resulting_target_health=resulting_target_health,
+            helper_fatigue_delta=helper_fatigue_delta,
+            resulting_helper_fatigue=resulting_helper_fatigue,
+        ):
+            payload = {"kind": "help", "target_id": target_id.value}
+            if health_delta is not None:
+                payload["health_delta"] = health_delta
+            if resulting_target_health is not None:
+                payload["resulting_target_health"] = resulting_target_health
+            if helper_fatigue_delta is not None:
+                payload["helper_fatigue_delta"] = helper_fatigue_delta
+            if resulting_helper_fatigue is not None:
+                payload["resulting_helper_fatigue"] = resulting_helper_fatigue
+            return payload
+        case Attacked(
+            target_id=target_id,
+            hit=hit,
+            damage=damage,
+            resulting_target_health=resulting_target_health,
+        ):
+            payload = {"kind": "attack", "target_id": target_id.value}
+            if hit is not None:
+                payload["hit"] = hit
+            if damage is not None:
+                payload["damage"] = damage
+            if resulting_target_health is not None:
+                payload["resulting_target_health"] = resulting_target_health
+            return payload
+        case Fled(
+            threat_id=threat_id,
+            success=success,
+            destination_id=destination_id,
+            fatigue_delta=fatigue_delta,
+            resulting_fatigue=resulting_fatigue,
+        ):
+            payload = {
                 "kind": "flee",
                 "threat_id": None if threat_id is None else threat_id.value,
             }
+            if success is not None:
+                payload["success"] = success
+            if destination_id is not None:
+                payload["destination_id"] = destination_id.value
+            if fatigue_delta is not None:
+                payload["fatigue_delta"] = fatigue_delta
+            if resulting_fatigue is not None:
+                payload["resulting_fatigue"] = resulting_fatigue
+            return payload
         case Waited():
             return {"kind": "wait"}
+        case WeatherChanged(location_id=location_id, condition=condition):
+            return {
+                "condition": condition.value,
+                "kind": "weather_changed",
+                "location_id": location_id.value,
+            }
+        case ResourceRegenerated(
+            resource_id=resource_id,
+            quantity_delta=quantity_delta,
+            resulting_quantity=resulting_quantity,
+        ):
+            return {
+                "kind": "resource_regenerated",
+                "quantity_delta": quantity_delta,
+                "resource_id": resource_id.value,
+                "resulting_quantity": resulting_quantity,
+            }
+        case NeedsApplied(
+            body_id=body_id,
+            resulting_hunger=resulting_hunger,
+            resulting_thirst=resulting_thirst,
+            resulting_fatigue=resulting_fatigue,
+            health_delta=health_delta,
+            resulting_health=resulting_health,
+        ):
+            return {
+                "body_id": body_id.value,
+                "health_delta": health_delta,
+                "kind": "needs_applied",
+                "resulting_fatigue": resulting_fatigue,
+                "resulting_health": resulting_health,
+                "resulting_hunger": resulting_hunger,
+                "resulting_thirst": resulting_thirst,
+            }
+        case ExposureApplied(
+            body_id=body_id,
+            ambient_celsius=ambient_celsius,
+            resulting_temperature=resulting_temperature,
+            health_delta=health_delta,
+            resulting_health=resulting_health,
+        ):
+            return {
+                "ambient_celsius": ambient_celsius,
+                "body_id": body_id.value,
+                "health_delta": health_delta,
+                "kind": "exposure_applied",
+                "resulting_health": resulting_health,
+                "resulting_temperature": resulting_temperature,
+            }
+        case Died(
+            body_id=body_id,
+            death_cause=death_cause,
+            resulting_life_status=resulting_life_status,
+        ):
+            return {
+                "body_id": body_id.value,
+                "death_cause": death_cause.value,
+                "kind": "died",
+                "resulting_life_status": resulting_life_status.value,
+            }
         case _:
             raise DomainSerializationError("unsupported_type", "$")
 
@@ -1042,12 +1490,67 @@ def _decode_event_details(data: dict[str, Any], *, path: str) -> object:
     fields = {key: value for key, value in data.items() if key != "kind"}
     try:
         if kind == "move":
-            _require_keys(fields, {"destination_id"}, path=path)
-            return Moved(EntityId(_str_field(fields, "destination_id", path=path)))
+            allowed = {
+                "destination_id",
+                "resulting_location_id",
+                "fatigue_delta",
+                "resulting_fatigue",
+            }
+            if set(fields) - allowed or "destination_id" not in fields:
+                raise DomainSerializationError("invalid_fields", path)
+            resulting = (
+                EntityId(_str_field(fields, "resulting_location_id", path=path))
+                if "resulting_location_id" in fields
+                else None
+            )
+            return Moved(
+                EntityId(_str_field(fields, "destination_id", path=path)),
+                resulting_location_id=resulting,
+                fatigue_delta=(
+                    _float_field(fields, "fatigue_delta", path=path)
+                    if "fatigue_delta" in fields
+                    else None
+                ),
+                resulting_fatigue=(
+                    _float_field(fields, "resulting_fatigue", path=path)
+                    if "resulting_fatigue" in fields
+                    else None
+                ),
+            )
         if kind == "search":
-            _require_keys(fields, {"target_id"}, path=path)
+            allowed = {
+                "target_id",
+                "success",
+                "created_item_id",
+                "extracted_quantity",
+                "resulting_resource_quantity",
+            }
+            if set(fields) - allowed or "target_id" not in fields:
+                raise DomainSerializationError("invalid_fields", path)
             target = _optional_str(fields, "target_id", path=path)
-            return Searched(None if target is None else EntityId(target))
+            created = (
+                EntityId(_str_field(fields, "created_item_id", path=path))
+                if "created_item_id" in fields
+                else None
+            )
+            success = fields.get("success")
+            if success is not None and type(success) is not bool:
+                raise DomainSerializationError("invalid_bool", f"{path}.success")
+            return Searched(
+                None if target is None else EntityId(target),
+                success=success,
+                created_item_id=created,
+                extracted_quantity=(
+                    _float_field(fields, "extracted_quantity", path=path)
+                    if "extracted_quantity" in fields
+                    else None
+                ),
+                resulting_resource_quantity=(
+                    _float_field(fields, "resulting_resource_quantity", path=path)
+                    if "resulting_resource_quantity" in fields
+                    else None
+                ),
+            )
         if kind == "take":
             allowed = {"item_id", "resulting_holder_id"}
             if set(fields) - allowed or "item_id" not in fields:
@@ -1090,14 +1593,78 @@ def _decode_event_details(data: dict[str, Any], *, path: str) -> object:
                 resulting_holder_id=holder,
             )
         if kind == "eat":
-            _require_keys(fields, {"item_id"}, path=path)
-            return Eaten(EntityId(_str_field(fields, "item_id", path=path)))
+            allowed = {"item_id", "hunger_delta", "resulting_hunger"}
+            if set(fields) - allowed or "item_id" not in fields:
+                raise DomainSerializationError("invalid_fields", path)
+            return Eaten(
+                EntityId(_str_field(fields, "item_id", path=path)),
+                hunger_delta=(
+                    _float_field(fields, "hunger_delta", path=path)
+                    if "hunger_delta" in fields
+                    else None
+                ),
+                resulting_hunger=(
+                    _float_field(fields, "resulting_hunger", path=path)
+                    if "resulting_hunger" in fields
+                    else None
+                ),
+            )
         if kind == "drink":
-            _require_keys(fields, {"source_id"}, path=path)
-            return Drunk(EntityId(_str_field(fields, "source_id", path=path)))
+            allowed = {
+                "source_id",
+                "consumed_item",
+                "quantity_delta",
+                "resulting_resource_quantity",
+                "thirst_delta",
+                "resulting_thirst",
+            }
+            if set(fields) - allowed or "source_id" not in fields:
+                raise DomainSerializationError("invalid_fields", path)
+            consumed = fields.get("consumed_item")
+            if consumed is not None and type(consumed) is not bool:
+                raise DomainSerializationError(
+                    "invalid_bool", f"{path}.consumed_item"
+                )
+            return Drunk(
+                EntityId(_str_field(fields, "source_id", path=path)),
+                consumed_item=consumed,
+                quantity_delta=(
+                    _float_field(fields, "quantity_delta", path=path)
+                    if "quantity_delta" in fields
+                    else None
+                ),
+                resulting_resource_quantity=(
+                    _float_field(fields, "resulting_resource_quantity", path=path)
+                    if "resulting_resource_quantity" in fields
+                    else None
+                ),
+                thirst_delta=(
+                    _float_field(fields, "thirst_delta", path=path)
+                    if "thirst_delta" in fields
+                    else None
+                ),
+                resulting_thirst=(
+                    _float_field(fields, "resulting_thirst", path=path)
+                    if "resulting_thirst" in fields
+                    else None
+                ),
+            )
         if kind == "sleep":
-            _require_keys(fields, set(), path=path)
-            return Slept()
+            allowed = {"fatigue_delta", "resulting_fatigue"}
+            if set(fields) - allowed:
+                raise DomainSerializationError("invalid_fields", path)
+            return Slept(
+                fatigue_delta=(
+                    _float_field(fields, "fatigue_delta", path=path)
+                    if "fatigue_delta" in fields
+                    else None
+                ),
+                resulting_fatigue=(
+                    _float_field(fields, "resulting_fatigue", path=path)
+                    if "resulting_fatigue" in fields
+                    else None
+                ),
+            )
         if kind == "talk":
             _require_keys(fields, {"recipient_id", "text"}, path=path)
             return Talked(
@@ -1117,18 +1684,163 @@ def _decode_event_details(data: dict[str, Any], *, path: str) -> object:
                 _str_field(fields, "text", path=path),
             )
         if kind == "help":
-            _require_keys(fields, {"target_id"}, path=path)
-            return Helped(EntityId(_str_field(fields, "target_id", path=path)))
+            allowed = {
+                "target_id",
+                "health_delta",
+                "resulting_target_health",
+                "helper_fatigue_delta",
+                "resulting_helper_fatigue",
+            }
+            if set(fields) - allowed or "target_id" not in fields:
+                raise DomainSerializationError("invalid_fields", path)
+            return Helped(
+                EntityId(_str_field(fields, "target_id", path=path)),
+                health_delta=(
+                    _float_field(fields, "health_delta", path=path)
+                    if "health_delta" in fields
+                    else None
+                ),
+                resulting_target_health=(
+                    _float_field(fields, "resulting_target_health", path=path)
+                    if "resulting_target_health" in fields
+                    else None
+                ),
+                helper_fatigue_delta=(
+                    _float_field(fields, "helper_fatigue_delta", path=path)
+                    if "helper_fatigue_delta" in fields
+                    else None
+                ),
+                resulting_helper_fatigue=(
+                    _float_field(fields, "resulting_helper_fatigue", path=path)
+                    if "resulting_helper_fatigue" in fields
+                    else None
+                ),
+            )
         if kind == "attack":
-            _require_keys(fields, {"target_id"}, path=path)
-            return Attacked(EntityId(_str_field(fields, "target_id", path=path)))
+            allowed = {"target_id", "hit", "damage", "resulting_target_health"}
+            if set(fields) - allowed or "target_id" not in fields:
+                raise DomainSerializationError("invalid_fields", path)
+            hit = fields.get("hit")
+            if hit is not None and type(hit) is not bool:
+                raise DomainSerializationError("invalid_bool", f"{path}.hit")
+            damage = (
+                _int_field(fields, "damage", path=path) if "damage" in fields else None
+            )
+            return Attacked(
+                EntityId(_str_field(fields, "target_id", path=path)),
+                hit=hit,
+                damage=damage,
+                resulting_target_health=(
+                    _float_field(fields, "resulting_target_health", path=path)
+                    if "resulting_target_health" in fields
+                    else None
+                ),
+            )
         if kind == "flee":
-            _require_keys(fields, {"threat_id"}, path=path)
+            allowed = {
+                "threat_id",
+                "success",
+                "destination_id",
+                "fatigue_delta",
+                "resulting_fatigue",
+            }
+            if set(fields) - allowed or "threat_id" not in fields:
+                raise DomainSerializationError("invalid_fields", path)
             threat = _optional_str(fields, "threat_id", path=path)
-            return Fled(None if threat is None else EntityId(threat))
+            success = fields.get("success")
+            if success is not None and type(success) is not bool:
+                raise DomainSerializationError("invalid_bool", f"{path}.success")
+            destination = (
+                EntityId(_str_field(fields, "destination_id", path=path))
+                if "destination_id" in fields
+                else None
+            )
+            return Fled(
+                None if threat is None else EntityId(threat),
+                success=success,
+                destination_id=destination,
+                fatigue_delta=(
+                    _float_field(fields, "fatigue_delta", path=path)
+                    if "fatigue_delta" in fields
+                    else None
+                ),
+                resulting_fatigue=(
+                    _float_field(fields, "resulting_fatigue", path=path)
+                    if "resulting_fatigue" in fields
+                    else None
+                ),
+            )
         if kind == "wait":
             _require_keys(fields, set(), path=path)
             return Waited()
+        if kind == "weather_changed":
+            _require_keys(fields, {"location_id", "condition"}, path=path)
+            return WeatherChanged(
+                EntityId(_str_field(fields, "location_id", path=path)),
+                WeatherCondition(_str_field(fields, "condition", path=path)),
+            )
+        if kind == "resource_regenerated":
+            _require_keys(
+                fields,
+                {"resource_id", "quantity_delta", "resulting_quantity"},
+                path=path,
+            )
+            return ResourceRegenerated(
+                EntityId(_str_field(fields, "resource_id", path=path)),
+                _float_field(fields, "quantity_delta", path=path),
+                _float_field(fields, "resulting_quantity", path=path),
+            )
+        if kind == "needs_applied":
+            _require_keys(
+                fields,
+                {
+                    "body_id",
+                    "resulting_hunger",
+                    "resulting_thirst",
+                    "resulting_fatigue",
+                    "health_delta",
+                    "resulting_health",
+                },
+                path=path,
+            )
+            return NeedsApplied(
+                EntityId(_str_field(fields, "body_id", path=path)),
+                _float_field(fields, "resulting_hunger", path=path),
+                _float_field(fields, "resulting_thirst", path=path),
+                _float_field(fields, "resulting_fatigue", path=path),
+                _float_field(fields, "health_delta", path=path),
+                _float_field(fields, "resulting_health", path=path),
+            )
+        if kind == "exposure_applied":
+            _require_keys(
+                fields,
+                {
+                    "body_id",
+                    "ambient_celsius",
+                    "resulting_temperature",
+                    "health_delta",
+                    "resulting_health",
+                },
+                path=path,
+            )
+            return ExposureApplied(
+                EntityId(_str_field(fields, "body_id", path=path)),
+                _float_field(fields, "ambient_celsius", path=path),
+                _float_field(fields, "resulting_temperature", path=path),
+                _float_field(fields, "health_delta", path=path),
+                _float_field(fields, "resulting_health", path=path),
+            )
+        if kind == "died":
+            _require_keys(
+                fields,
+                {"body_id", "death_cause", "resulting_life_status"},
+                path=path,
+            )
+            return Died(
+                EntityId(_str_field(fields, "body_id", path=path)),
+                DeathCause(_str_field(fields, "death_cause", path=path)),
+                LifeStatus(_str_field(fields, "resulting_life_status", path=path)),
+            )
     except DomainSerializationError:
         raise
     except (TypeError, ValueError) as exc:
@@ -1151,7 +1863,60 @@ def _encode_world_event(value: WorldEvent) -> dict[str, Any]:
         "tick": value.tick,
         "world_id": value.world_id.value,
     }
+    if value.cause is not None:
+        payload["cause"] = _encode_event_cause(value.cause)
     return payload
+
+
+def _encode_event_cause(cause: object) -> dict[str, Any]:
+    match cause:
+        case ActionCause(request_id=request_id, actor_id=actor_id):
+            return {
+                "actor_id": actor_id.value,
+                "kind": "action",
+                "request_id": request_id.value,
+            }
+        case SystemCause(
+            cause_id=cause_id,
+            effect_family=effect_family,
+            entity_id=entity_id,
+            family_ordinal=family_ordinal,
+        ):
+            return {
+                "cause_id": cause_id.value,
+                "effect_family": effect_family.value,
+                "entity_id": entity_id.value,
+                "family_ordinal": family_ordinal,
+                "kind": "system",
+            }
+        case _:
+            raise DomainSerializationError("unsupported_type", "$.cause")
+
+
+def _decode_event_cause(data: dict[str, Any], *, path: str) -> object:
+    if "kind" not in data or not isinstance(data["kind"], str):
+        raise DomainSerializationError("invalid_fields", path)
+    kind = data["kind"]
+    fields = {key: value for key, value in data.items() if key != "kind"}
+    if kind == "action":
+        _require_keys(fields, {"request_id", "actor_id"}, path=path)
+        return ActionCause(
+            RequestId(_str_field(fields, "request_id", path=path)),
+            EntityId(_str_field(fields, "actor_id", path=path)),
+        )
+    if kind == "system":
+        _require_keys(
+            fields,
+            {"cause_id", "effect_family", "entity_id", "family_ordinal"},
+            path=path,
+        )
+        return SystemCause(
+            RequestId(_str_field(fields, "cause_id", path=path)),
+            SystemEffectFamily(_str_field(fields, "effect_family", path=path)),
+            EntityId(_str_field(fields, "entity_id", path=path)),
+            _int_field(fields, "family_ordinal", path=path),
+        )
+    raise DomainSerializationError("unknown_type", f"{path}.kind")
 
 
 def _decode_world_event(data: dict[str, Any], *, path: str) -> WorldEvent:
@@ -1170,6 +1935,7 @@ def _decode_world_event(data: dict[str, Any], *, path: str) -> WorldEvent:
         "actor_id",
         "target_id",
         "event_type",
+        "cause",
     }
     keys = set(data)
     details_raw = data.get("details")
@@ -1199,13 +1965,18 @@ def _decode_world_event(data: dict[str, Any], *, path: str) -> WorldEvent:
                 actor_id=None,
                 target_id=target_id_for_details(details),
             )
-        required = replay_keys - {"event_type"}
+        required = replay_keys - {"event_type", "cause"}
         expected = required | ({"event_type"} if "event_type" in data else set())
+        expected = expected | ({"cause"} if "cause" in data else set())
         _require_keys(data, expected, path=path)
         if keys - replay_keys:
             raise DomainSerializationError("invalid_fields", path)
         schema_version = _int_field(data, "schema_version", path=path)
-        if schema_version not in {EVENT_SCHEMA_AUDIT_V1, EVENT_SCHEMA_REPLAY_V1}:
+        if schema_version not in {
+            EVENT_SCHEMA_AUDIT_V1,
+            EVENT_SCHEMA_REPLAY_V2,
+            EVENT_SCHEMA_REPLAY_V3,
+        }:
             raise DomainSerializationError("unsupported_schema_version", path)
         actor_raw = data["actor_id"]
         target_raw = data["target_id"]
@@ -1217,6 +1988,12 @@ def _decode_world_event(data: dict[str, Any], *, path: str) -> WorldEvent:
             target_id = None
         else:
             target_id = EntityId(_optional_actor(target_raw, path))
+        cause = None
+        if "cause" in data:
+            cause_raw = data["cause"]
+            if not isinstance(cause_raw, dict):
+                raise DomainSerializationError("invalid_object", f"{path}.cause")
+            cause = _decode_event_cause(cause_raw, path=f"{path}.cause")
         event = WorldEvent(
             event_id=EventId(_str_field(data, "event_id", path=path)),
             run_id=_str_field(data, "run_id", path=path),
@@ -1231,6 +2008,7 @@ def _decode_world_event(data: dict[str, Any], *, path: str) -> WorldEvent:
             details=details,
             actor_id=actor_id,
             target_id=target_id,
+            cause=cause,  # type: ignore[arg-type]
         )
         if "event_type" in data and data["event_type"] != event.event_type:
             raise DomainSerializationError("invalid_fields", f"{path}.event_type")

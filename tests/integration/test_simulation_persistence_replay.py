@@ -5,6 +5,7 @@ from __future__ import annotations
 import uuid
 
 import pytest
+from tests.simulation_helpers import make_location, weather_for_locations
 from tests.unit.determinism_helpers import project_world_state
 
 from agents.models import AgentId
@@ -37,8 +38,15 @@ from simulation.replay import ReplayService
 from simulation.service import PersistentSimulationService
 from world.actions import Wait
 from world.identifiers import EntityId, WorldId, WorldRevision
-from world.models import AgentBody, LifeStatus, Location
-from world.values import Fatigue, Health, Hunger, TemperatureCelsius, Thirst
+from world.models import AgentBody, LifeStatus
+from world.values import (
+    CarryCapacity,
+    Fatigue,
+    Health,
+    Hunger,
+    TemperatureCelsius,
+    Thirst,
+)
 
 pytestmark = pytest.mark.integration
 
@@ -58,6 +66,7 @@ def _alive() -> AgentBody:
         temperature=TemperatureCelsius(36.5),
         inventory=(),
         life_status=LifeStatus.ALIVE,
+        carry_capacity=CarryCapacity(10),
     )
 
 
@@ -140,7 +149,7 @@ def _snapshot_from_engine(
 async def _wait_tick(
     service: PersistentSimulationService,
     *,
-    snapshot: WorldSnapshot | None = None,
+    checkpoint_id: SnapshotId | None = None,
 ) -> None:
     engine = service.engine
     batch = engine.observe()
@@ -149,7 +158,7 @@ async def _wait_tick(
         token=batch.token,
         command=Wait(),
     )
-    await service.resolve_tick((submission,), snapshot=snapshot)
+    await service.resolve_tick((submission,), checkpoint_id=checkpoint_id)
 
 
 async def test_live_bootstrap_and_checkpoint_replay_agree(
@@ -160,13 +169,15 @@ async def test_live_bootstrap_and_checkpoint_replay_agree(
     journal = create_tick_journal_repository(factory)
     snapshots = create_snapshot_repository(factory)
     run_id = _unique("run")
+    locations = (make_location("loc-1", name="Camp"),)
     engine = WorldEngine(
         config=SimulationRunConfig(seed=19),
         bootstrap=WorldBootstrap(
             world_id=WorldId("world-1"),
             revision=WorldRevision(0),
-            locations=(Location(entity_id=EntityId("loc-1"), name="Camp"),),
+            locations=locations,
             bodies=(_alive(),),
+            weather=weather_for_locations(locations),
             registrations=(
                 AgentRegistration(AgentId("agent-1"), EntityId("body-1")),
             ),
@@ -192,17 +203,10 @@ async def test_live_bootstrap_and_checkpoint_replay_agree(
 
     await _wait_tick(service)
     await _wait_tick(service)
-    # Mid-run checkpoint attached to tick 2 (Wait leaves objective state unchanged).
-    # Predecessor is rebound to this tick's commit hash by PersistentSimulationService.
-    mid_id = _unique("snap")
-    mid_draft = _snapshot_from_engine(
-        engine=engine,
-        snapshot_id=mid_id,
-        next_tick=Tick(engine.tick.value + 1),
-        predecessor_commit_hash=CommitHash("b" * 64),
-    )
-    await _wait_tick(service, snapshot=mid_draft)
-    mid = await snapshots.get_snapshot(SnapshotId(mid_id))
+    # Mid-run checkpoint owned by the prepared candidate (post-tick state).
+    mid_id = SnapshotId(_unique("snap"))
+    await _wait_tick(service, checkpoint_id=mid_id)
+    mid = await snapshots.get_snapshot(mid_id)
     assert mid is not None
     await _wait_tick(service)
     await _wait_tick(service)

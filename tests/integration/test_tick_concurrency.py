@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from tests.simulation_helpers import make_location, make_weather
+
 import asyncio
 import uuid
 
@@ -30,7 +32,7 @@ from simulation.persistence import (
 )
 from world.identifiers import EntityId, WorldId, WorldRevision
 from world.models import AgentBody, LifeStatus, Location
-from world.values import Fatigue, Health, Hunger, TemperatureCelsius, Thirst
+from world.values import CarryCapacity, Fatigue, Health, Hunger, TemperatureCelsius, Thirst
 
 pytestmark = pytest.mark.integration
 
@@ -49,7 +51,7 @@ def _bootstrap(run_id: str) -> WorldSnapshot:
         registrations=(
             AgentRegistration(AgentId("agent-1"), EntityId("body-1")),
         ),
-        locations=(Location(entity_id=EntityId("loc-1"), name="Camp"),),
+        locations=(make_location("loc-1", name="Camp"),),
         bodies=(
             AgentBody(
                 entity_id=EntityId("body-1"),
@@ -61,11 +63,12 @@ def _bootstrap(run_id: str) -> WorldSnapshot:
                 temperature=TemperatureCelsius(36.5),
                 inventory=(),
                 life_status=LifeStatus.ALIVE,
+                carry_capacity=CarryCapacity(10),
             ),
         ),
         items=(),
         resources=(),
-        weather=(),
+        weather=(make_weather(),),
         next_tick=Tick(0),
         revision=WorldRevision(0),
         event_schema_version=EVENT_SCHEMA_VERSION,

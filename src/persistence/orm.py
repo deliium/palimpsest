@@ -106,6 +106,13 @@ class SimulationRunOrm(Base):
     bootstrap_snapshot_id: Mapped[str] = mapped_column(
         String(_STABLE_ID_LEN), nullable=False
     )
+    physical_rules_version: Mapped[str | None] = mapped_column(Text, nullable=True)
+    physical_rules_fingerprint: Mapped[str | None] = mapped_column(
+        String(SHA256_HEX_LEN), nullable=True
+    )
+    physical_rules_canonical: Mapped[dict[str, object] | None] = mapped_column(
+        JSONB, nullable=True
+    )
 
 
 class ExperimentRunOrm(Base):
@@ -306,6 +313,15 @@ class SnapshotLocationOrm(Base):
             ondelete="RESTRICT",
         ),
         CheckConstraint("char_length(name) > 0", name="name_nonempty"),
+        CheckConstraint("body_capacity >= 1", name="body_capacity_positive"),
+        CheckConstraint("item_capacity >= 0", name="item_capacity_nonneg"),
+        CheckConstraint(
+            "shelter_factor >= 0 AND shelter_factor <= 1", name="shelter_unit"
+        ),
+        CheckConstraint(
+            "visibility_factor >= 0 AND visibility_factor <= 1",
+            name="visibility_unit",
+        ),
         Index("ix_snapshot_locations_entity", "entity_id"),
     )
 
@@ -313,6 +329,12 @@ class SnapshotLocationOrm(Base):
     snapshot_id: Mapped[str] = mapped_column(String(_STABLE_ID_LEN), nullable=False)
     entity_id: Mapped[str] = mapped_column(String(_STABLE_ID_LEN), nullable=False)
     name: Mapped[str] = mapped_column(Text, nullable=False)
+    adjacent: Mapped[list[str]] = mapped_column(JSONB, nullable=False)
+    body_capacity: Mapped[int] = mapped_column(Integer, nullable=False)
+    item_capacity: Mapped[int] = mapped_column(Integer, nullable=False)
+    base_temperature: Mapped[float] = mapped_column(Numeric, nullable=False)
+    shelter_factor: Mapped[float] = mapped_column(Numeric, nullable=False)
+    visibility_factor: Mapped[float] = mapped_column(Numeric, nullable=False)
 
 
 class SnapshotRegistrationOrm(Base):
@@ -360,6 +382,7 @@ class SnapshotBodyOrm(Base):
         CheckConstraint(
             "life_status IN ('alive', 'dead')", name="life_status_closed"
         ),
+        CheckConstraint("carry_capacity >= 1", name="carry_capacity_positive"),
         Index("ix_snapshot_bodies_location", "run_id", "snapshot_id", "location_id"),
     )
 
@@ -373,6 +396,7 @@ class SnapshotBodyOrm(Base):
     fatigue: Mapped[float] = mapped_column(Numeric, nullable=False)
     temperature: Mapped[float] = mapped_column(Numeric, nullable=False)
     life_status: Mapped[str] = mapped_column(Text, nullable=False)
+    carry_capacity: Mapped[int] = mapped_column(Integer, nullable=False)
 
 
 class SnapshotInventoryOrm(Base):
@@ -420,6 +444,8 @@ class SnapshotItemOrm(Base):
             name="one_placement",
         ),
         CheckConstraint("char_length(name) > 0", name="name_nonempty"),
+        CheckConstraint("char_length(kind) > 0", name="kind_nonempty"),
+        CheckConstraint("load >= 1", name="load_positive"),
         Index("ix_snapshot_items_location", "run_id", "snapshot_id", "location_id"),
         Index("ix_snapshot_items_holder", "run_id", "snapshot_id", "holder_id"),
     )
@@ -428,6 +454,8 @@ class SnapshotItemOrm(Base):
     snapshot_id: Mapped[str] = mapped_column(String(_STABLE_ID_LEN), nullable=False)
     entity_id: Mapped[str] = mapped_column(String(_STABLE_ID_LEN), nullable=False)
     name: Mapped[str] = mapped_column(Text, nullable=False)
+    kind: Mapped[str] = mapped_column(Text, nullable=False)
+    load: Mapped[int] = mapped_column(Integer, nullable=False)
     location_id: Mapped[str | None] = mapped_column(
         String(_STABLE_ID_LEN), nullable=True
     )
@@ -447,6 +475,13 @@ class SnapshotResourceOrm(Base):
             ondelete="RESTRICT",
         ),
         CheckConstraint("quantity >= 0", name="quantity_nonneg"),
+        CheckConstraint("maximum_quantity >= 0", name="maximum_quantity_nonneg"),
+        CheckConstraint(
+            "quantity <= maximum_quantity", name="quantity_within_maximum"
+        ),
+        CheckConstraint(
+            "regeneration_per_tick >= 0", name="regeneration_nonneg"
+        ),
         CheckConstraint("quantity::text <> 'NaN'", name="quantity_not_nan"),
         CheckConstraint(
             "quantity::float8 != 'Infinity'::float8 AND "
@@ -454,6 +489,7 @@ class SnapshotResourceOrm(Base):
             name="quantity_not_inf",
         ),
         CheckConstraint("char_length(name) > 0", name="name_nonempty"),
+        CheckConstraint("char_length(kind) > 0", name="kind_nonempty"),
         CheckConstraint("char_length(unit) > 0", name="unit_nonempty"),
         Index(
             "ix_snapshot_resources_location",
@@ -467,8 +503,11 @@ class SnapshotResourceOrm(Base):
     snapshot_id: Mapped[str] = mapped_column(String(_STABLE_ID_LEN), nullable=False)
     entity_id: Mapped[str] = mapped_column(String(_STABLE_ID_LEN), nullable=False)
     name: Mapped[str] = mapped_column(Text, nullable=False)
+    kind: Mapped[str] = mapped_column(Text, nullable=False)
     location_id: Mapped[str] = mapped_column(String(_STABLE_ID_LEN), nullable=False)
     quantity: Mapped[float] = mapped_column(Numeric, nullable=False)
+    maximum_quantity: Mapped[float] = mapped_column(Numeric, nullable=False)
+    regeneration_per_tick: Mapped[float] = mapped_column(Numeric, nullable=False)
     unit: Mapped[str] = mapped_column(Text, nullable=False)
 
 
@@ -483,16 +522,9 @@ class SnapshotWeatherOrm(Base):
             ondelete="RESTRICT",
         ),
         CheckConstraint("char_length(condition) > 0", name="condition_nonempty"),
-        CheckConstraint(
-            "temperature::text <> 'NaN' AND "
-            "temperature::float8 != 'Infinity'::float8 AND "
-            "temperature::float8 != '-Infinity'::float8",
-            name="temperature_finite",
-        ),
     )
 
     run_id: Mapped[str] = mapped_column(String(_STABLE_ID_LEN), nullable=False)
     snapshot_id: Mapped[str] = mapped_column(String(_STABLE_ID_LEN), nullable=False)
     location_id: Mapped[str] = mapped_column(String(_STABLE_ID_LEN), nullable=False)
     condition: Mapped[str] = mapped_column(Text, nullable=False)
-    temperature: Mapped[float] = mapped_column(Numeric, nullable=False)

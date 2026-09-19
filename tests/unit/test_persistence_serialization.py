@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from tests.simulation_helpers import make_location, make_weather
+
 import json
 import math
 
@@ -43,7 +45,7 @@ from world.identifiers import (
     WorldRevision,
 )
 from world.models import AgentBody, LifeStatus, Location
-from world.values import Fatigue, Health, Hunger, TemperatureCelsius, Thirst
+from world.values import CarryCapacity, Fatigue, Health, Hunger, TemperatureCelsius, Thirst
 
 _HASH_A = "a" * 64
 _HASH_B = "b" * 64
@@ -66,6 +68,7 @@ def _alive_body(
         temperature=TemperatureCelsius(36.5),
         inventory=(),
         life_status=LifeStatus.ALIVE,
+        carry_capacity=CarryCapacity(10),
     )
 
 
@@ -77,11 +80,11 @@ def _snapshot(*, seed: int = 7, integrity: str = _HASH_A) -> WorldSnapshot:
         seed=seed,
         config=SimulationRunConfig(seed=seed),
         registrations=(AgentRegistration(AgentId("agent-1"), EntityId("body-1")),),
-        locations=(Location(entity_id=EntityId("loc-1"), name="Camp"),),
+        locations=(make_location("loc-1", name="Camp"),),
         bodies=(_alive_body(),),
         items=(),
         resources=(),
-        weather=(),
+        weather=(make_weather(),),
         next_tick=Tick(0),
         revision=WorldRevision(0),
         event_schema_version=EVENT_SCHEMA_VERSION,
@@ -214,9 +217,12 @@ def test_duplicate_unknown_nonfinite_and_version_rejected() -> None:
     snapshot_doc["data"]["resources"] = [
         {
             "entity_id": "res-1",
+            "kind": "water",
             "location_id": "loc-1",
+            "maximum_quantity": 10.0,
             "name": "Water",
             "quantity": math.nan,
+            "regeneration_per_tick": 0.0,
             "unit": "L",
         }
     ]

@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from tests.simulation_helpers import make_item, make_location, make_weather, weather_for_locations
+
 import logging
 
 import pytest
@@ -31,7 +33,7 @@ from world.identifiers import (
     WorldRevision,
 )
 from world.models import AgentBody, Item, LifeStatus, Location
-from world.values import Fatigue, Health, Hunger, TemperatureCelsius, Thirst
+from world.values import CarryCapacity, Fatigue, Health, Hunger, TemperatureCelsius, Thirst
 
 _HASH_PLACEHOLDER = "a" * 64
 
@@ -52,6 +54,7 @@ def _alive(
         temperature=TemperatureCelsius(36.5),
         inventory=inventory,
         life_status=LifeStatus.ALIVE,
+        carry_capacity=CarryCapacity(10),
     )
 
 
@@ -73,11 +76,11 @@ def _make_snapshot(
         registrations=(
             AgentRegistration(AgentId("agent-1"), EntityId("body-1")),
         ),
-        locations=(Location(entity_id=EntityId("loc-1"), name="Camp"),),
+        locations=(make_location("loc-1", name="Camp"),),
         bodies=body_tuple,
         items=items,
         resources=(),
-        weather=(),
+        weather=(make_weather(),),
         next_tick=Tick(next_tick),
         revision=WorldRevision(revision),
         event_schema_version=EVENT_SCHEMA_VERSION,
@@ -124,11 +127,7 @@ def test_restore_bootstrap_only_awaits_observation() -> None:
 
 
 def test_restore_applies_events_and_advances_tick() -> None:
-    item = Item(
-        entity_id=EntityId("item-1"),
-        name="Rock",
-        location_id=EntityId("loc-1"),
-    )
+    item = make_item("item-1", name="Rock", location_id="loc-1")
     snapshot = _make_snapshot(items=(item,))
     event = make_replayable_event(
         event_id=EventId("evt-1"),
@@ -178,11 +177,13 @@ def test_restore_rejects_corrupt_integrity_hash() -> None:
 
 
 def test_world_replace_state_remains_unsupported() -> None:
+    locations = (make_location("loc-1", name="Camp"),)
     bootstrap = WorldBootstrap(
         world_id=WorldId("world-1"),
         revision=WorldRevision(0),
-        locations=(Location(entity_id=EntityId("loc-1"), name="Camp"),),
+        locations=locations,
         bodies=(_alive(),),
+        weather=weather_for_locations(locations),
         registrations=(
             AgentRegistration(AgentId("agent-1"), EntityId("body-1")),
         ),

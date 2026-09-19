@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from tests.simulation_helpers import make_location, make_weather
+
 import pytest
 
 from simulation.serialization import (
@@ -128,8 +130,10 @@ def test_world_event_detail_round_trips(details: object) -> None:
 
 def test_golden_canonical_documents() -> None:
     assert encode_domain(Wait()) == b'{"data":{},"schema_version":1,"type":"wait"}'
-    assert encode_domain(Location(EntityId("loc-1"), "Camp")) == (
-        b'{"data":{"entity_id":"loc-1","name":"Camp"},'
+    assert encode_domain(make_location("loc-1", name="Camp")) == (
+        b'{"data":{"adjacent":[],"base_temperature":20.0,"body_capacity":8,'
+        b'"entity_id":"loc-1","item_capacity":16,"name":"Camp",'
+        b'"shelter_factor":0.0,"visibility_factor":1.0},'
         b'"schema_version":1,"type":"location"}'
     )
     event = make_replayable_event(
@@ -252,7 +256,7 @@ def test_persistence_dtos_remain_unsupported_by_domain_codec() -> None:
     )
     from world.identifiers import EntityId, WorldId, WorldRevision
     from world.models import AgentBody, LifeStatus, Location
-    from world.values import Fatigue, Health, Hunger, TemperatureCelsius, Thirst
+    from world.values import CarryCapacity, Fatigue, Health, Hunger, TemperatureCelsius, Thirst
 
     snapshot = WorldSnapshot(
         snapshot_id=SnapshotId("snap-1"),
@@ -261,7 +265,7 @@ def test_persistence_dtos_remain_unsupported_by_domain_codec() -> None:
         seed=1,
         config=SimulationRunConfig(seed=1),
         registrations=(AgentRegistration(AgentId("agent-1"), EntityId("body-1")),),
-        locations=(Location(entity_id=EntityId("loc-1"), name="Camp"),),
+        locations=(make_location("loc-1", name="Camp"),),
         bodies=(
             AgentBody(
                 entity_id=EntityId("body-1"),
@@ -273,11 +277,12 @@ def test_persistence_dtos_remain_unsupported_by_domain_codec() -> None:
                 temperature=TemperatureCelsius(36.5),
                 inventory=(),
                 life_status=LifeStatus.ALIVE,
+                carry_capacity=CarryCapacity(10),
             ),
         ),
         items=(),
         resources=(),
-        weather=(),
+        weather=(make_weather(),),
         next_tick=Tick(0),
         revision=WorldRevision(0),
         event_schema_version=EVENT_SCHEMA_VERSION,

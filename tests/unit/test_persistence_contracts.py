@@ -33,7 +33,8 @@ from simulation.persistence import (
     persistence_diagnostic_fields,
     require_commit_hash,
 )
-from world.events import EVENT_SCHEMA_REPLAY_V1, Waited, make_replayable_event
+from tests.simulation_helpers import make_item, make_location, make_weather
+from world.events import Waited, make_replayable_event
 from world.identifiers import (
     EntityId,
     EventId,
@@ -41,8 +42,15 @@ from world.identifiers import (
     WorldId,
     WorldRevision,
 )
-from world.models import AgentBody, Item, LifeStatus, Location
-from world.values import Fatigue, Health, Hunger, TemperatureCelsius, Thirst
+from world.models import AgentBody, Item, LifeStatus
+from world.values import (
+    CarryCapacity,
+    Fatigue,
+    Health,
+    Hunger,
+    TemperatureCelsius,
+    Thirst,
+)
 
 _HASH_A = "a" * 64
 _HASH_B = "b" * 64
@@ -65,6 +73,7 @@ def _alive_body(
         temperature=TemperatureCelsius(36.5),
         inventory=inventory,
         life_status=LifeStatus.ALIVE,
+        carry_capacity=CarryCapacity(10),
     )
 
 
@@ -77,7 +86,7 @@ def _bootstrap_snapshot(
     registrations: tuple[AgentRegistration, ...] | None = None,
     bodies: tuple[AgentBody, ...] | None = None,
 ) -> WorldSnapshot:
-    location = Location(entity_id=EntityId("loc-1"), name="Camp")
+    location = make_location("loc-1", name="Camp")
     if bodies is None:
         bodies = (_alive_body(inventory=inventory),)
     if registrations is None:
@@ -95,7 +104,7 @@ def _bootstrap_snapshot(
         bodies=bodies,
         items=items,
         resources=(),
-        weather=(),
+        weather=(make_weather(),),
         next_tick=Tick(0),
         revision=WorldRevision(0),
         event_schema_version=EVENT_SCHEMA_VERSION,
@@ -108,9 +117,11 @@ def _bootstrap_snapshot(
 
 
 def test_version_constants_align_with_replay_schema() -> None:
-    assert EVENT_SCHEMA_VERSION == EVENT_SCHEMA_REPLAY_V1 == 2
-    assert PROJECTOR_VERSION == "v1"
-    assert PERSISTENCE_CODEC_VERSION == "v1"
+    from world.events import EVENT_SCHEMA_REPLAY_V3
+
+    assert EVENT_SCHEMA_VERSION == EVENT_SCHEMA_REPLAY_V3 == 3
+    assert PROJECTOR_VERSION == "v2"
+    assert PERSISTENCE_CODEC_VERSION == "v2"
 
 
 def test_commit_hash_requires_lowercase_sha256_hex() -> None:
@@ -124,12 +135,8 @@ def test_commit_hash_requires_lowercase_sha256_hex() -> None:
 
 
 def test_world_snapshot_copies_sequences_and_preserves_order() -> None:
-    item_a = Item(
-        entity_id=EntityId("item-a"), name="A", holder_id=EntityId("body-1")
-    )
-    item_b = Item(
-        entity_id=EntityId("item-b"), name="B", holder_id=EntityId("body-1")
-    )
+    item_a = make_item("item-a", name="A", location_id=None, holder_id="body-1")
+    item_b = make_item("item-b", name="B", location_id=None, holder_id="body-1")
     inventory = (EntityId("item-b"), EntityId("item-a"))
     bodies = [_alive_body(inventory=inventory)]
     registrations = [
@@ -157,11 +164,11 @@ def test_world_snapshot_copies_sequences_and_preserves_order() -> None:
             seed=1,
             config=SimulationRunConfig(seed=1),
             registrations={registrations[0]},  # type: ignore[arg-type]
-            locations=(Location(entity_id=EntityId("loc-1"), name="Camp"),),
+            locations=(make_location("loc-1", name="Camp"),),
             bodies=(_alive_body(),),
             items=(),
             resources=(),
-            weather=(),
+            weather=(make_weather(),),
             next_tick=Tick(0),
             revision=WorldRevision(0),
             event_schema_version=EVENT_SCHEMA_VERSION,
@@ -338,7 +345,7 @@ def test_persistence_diagnostic_fields_exclude_secrets() -> None:
         "tick": 4,
         "revision": 9,
         "record_count": 12,
-        "version": "v1",
+        "version": "v2",
         "hash_prefix": "aaaaaaaa",
     }
     assert "seed" not in fields

@@ -16,6 +16,9 @@ from simulation.journal import PersistenceSerializationError, verify_commit_chai
 from simulation.lifecycle import EngineDiagnosticCode
 from simulation.models import DERIVATION_VERSION, RunId
 from simulation.persistence import (
+    ACCEPTED_EVENT_SCHEMA_VERSIONS,
+    ACCEPTED_PERSISTENCE_CODEC_VERSIONS,
+    ACCEPTED_PROJECTOR_VERSIONS,
     EVENT_SCHEMA_VERSION,
     PERSISTENCE_CODEC_VERSION,
     PROJECTOR_VERSION,
@@ -33,6 +36,7 @@ from simulation.persistence import (
     TickJournalRepository,
     WorldEvent,
     WorldSnapshot,
+    schema_projector_compatible,
 )
 from simulation.service import PersistentSimulationService
 
@@ -378,7 +382,11 @@ class ReplayService:
             if target_tick == head_next
             else ReplayMode.READONLY
         )
-        predecessor = commits[-1].commit_hash if commits else None
+        predecessor = (
+            commits[-1].commit_hash
+            if commits
+            else snapshot.predecessor_commit_hash
+        )
         result = ReplayResult(
             run_id=run_id,
             status=ReplayStatus.OK,
@@ -470,11 +478,17 @@ def _versions_compatible(
     persistence_codec_version: str,
     derivation_version: str,
 ) -> bool:
-    return (
-        event_schema_version == EVENT_SCHEMA_VERSION
-        and projector_version == PROJECTOR_VERSION
-        and persistence_codec_version == PERSISTENCE_CODEC_VERSION
-        and derivation_version == DERIVATION_VERSION
+    if event_schema_version not in ACCEPTED_EVENT_SCHEMA_VERSIONS:
+        return False
+    if projector_version not in ACCEPTED_PROJECTOR_VERSIONS:
+        return False
+    if persistence_codec_version not in ACCEPTED_PERSISTENCE_CODEC_VERSIONS:
+        return False
+    if derivation_version not in {DERIVATION_VERSION, "v1", "v2"}:
+        return False
+    return schema_projector_compatible(
+        event_schema_version=event_schema_version,
+        projector_version=projector_version,
     )
 
 
