@@ -15,9 +15,18 @@ from typing import Final
 
 from agents.models import AgentId
 from simulation.actions import (
+    PHYSICAL_PURPOSE_ATTACK_DAMAGE,
+    PHYSICAL_PURPOSE_ATTACK_HIT,
+    PHYSICAL_PURPOSE_FLEE_DESTINATION,
+    PHYSICAL_PURPOSE_FLEE_SUCCESS,
+    PHYSICAL_PURPOSE_SEARCH_SUCCESS,
+    PHYSICAL_PURPOSE_WEATHER,
     admit_agent_command,
     canonical_admission_keys,
+    canonical_system_effect_keys,
     derive_engine_event_id,
+    physical_action_effect_scope,
+    physical_system_effect_scope,
     run_id_for_event,
     tick_for_event,
 )
@@ -30,7 +39,13 @@ from simulation.bootstrap import (
 )
 from simulation.clock import Tick
 from simulation.contracts import make_export
-from simulation.identifiers import derive_run_id, derive_scoped_id
+from simulation.identifiers import (
+    derive_entity_id,
+    derive_event_id,
+    derive_run_id,
+    derive_scoped_id,
+    derive_system_cause_id,
+)
 from simulation.journal import hash_snapshot
 from simulation.lifecycle import (
     ActionResolution,
@@ -46,17 +61,47 @@ from simulation.lifecycle import (
 )
 from simulation.models import RunId, SimulationExport, SimulationRunConfig
 from simulation.persistence import WorldSnapshot
-from simulation.randomness import StreamScope
+from simulation.randomness import (
+    StreamScope,
+    create_named_stream,
+    sample_attack_damage,
+    sample_bernoulli,
+    sample_destination_index,
+    sample_weather_condition,
+)
 from world._operations import (
     BatchItemStatus,
+    PendingBatch,
+    PendingEvent,
+    finalize_pending_batch,
     prepare_action_batch,
 )
 from world._perception import project_observations
+from world._physical import apply_autonomous_physical_step
 from world._replay import ProjectionError, project_events
+from world._rules import (
+    find_eligible_flee_destinations,
+    find_eligible_search_resource,
+)
 from world._state import World
-from world.actions import ActionRequest
-from world.events import WorldEvent, normalize_events
-from world.identifiers import EventId, RequestId, WorldId, WorldRevision
+from world.actions import ActionRequest, Attack, Flee, Search
+from world.effects import (
+    ActionCause,
+    ResolvedActionEffect,
+    ResolvedActionEffects,
+    ResolvedAttackEffect,
+    ResolvedFleeEffect,
+    ResolvedSearchEffect,
+    ResolvedSystemEffects,
+    ResolvedWeatherEffect,
+    SystemCause,
+    SystemEffectFamily,
+)
+from world.events import Died, WorldEvent, normalize_events
+from world.identifiers import EntityId, EventId, RequestId, WorldId, WorldRevision
+from world.models import LifeStatus, default_physical_rules
+from world.observations import ObservationContext
+from world.values import WeatherCondition, clamp_unit_interval
 
 _LOGGER = logging.getLogger("simulation.engine")
 
@@ -340,11 +385,39 @@ class WorldEngine:
         observer_ids = tuple(
             registration.entity_id for registration in self._registrations
         )
-        observations = project_observations(
-            world_id=self.world_id,
-            state=snap.world.state,
-            observer_ids=observer_ids,
+        rules = self._config.physical_rules
+        if rules is None:
+            rules = default_physical_rules()
+        context = ObservationContext(tick=snap.tick.value, physical_rules=rules)
+        try:
+            observations = project_observations(
+                world_id=self.world_id,
+                state=snap.world.state,
+                observer_ids=observer_ids,
+                context=context,
+            )
+        except (TypeError, ValueError) as exc:
+            _LOGGER.error(
+                "%s tick=%s code=observation_invariant reason=%s",
+                EngineDiagnosticCode.CANDIDATE_ABORTED.value,
+                snap.tick.value,
+                type(exc).__name__,
+            )
+            raise
+        visible_entities = sum(
+            len(observation.items)
+            + len(observation.resources)
+            + len(observation.visible_bodies)
+            for observation in observations
         )
+        visibility_bands = {
+            (
+                "high"
+                if (observation.visibility or 0.0) >= 0.5
+                else "low"
+            )
+            for observation in observations
+        }
         token = TickToken(
             value=derive_scoped_id(
                 self._config,
@@ -376,11 +449,16 @@ class WorldEngine:
             event_history=snap.event_history,
         )
         _LOGGER.debug(
-            "%s tick=%s observers=%s revision=%s replay=0",
+            "%s tick=%s observers=%s revision=%s replay=0 "
+            "phase=%s visibility_bands=%s visible_entities=%s hour=%s",
             EngineDiagnosticCode.OBSERVATIONS_ISSUED.value,
             snap.tick.value,
             len(observations),
             snap.world.state.revision.value,
+            context.day_phase.value,
+            ",".join(sorted(visibility_bands)) if visibility_bands else "-",
+            visible_entities,
+            context.hour,
         )
         return batch
 
@@ -475,9 +553,12 @@ class WorldEngine:
         )
         self._snapshot = candidate.next_snapshot
         result = candidate.result
+        death_count = sum(
+            1 for record in result.events if type(record.event.details) is Died
+        )
         _LOGGER.info(
             "%s tick=%s resulting_tick=%s base_revision=%s resulting_revision=%s "
-            "resolutions=%s events=%s",
+            "resolutions=%s events=%s deaths=%s",
             EngineDiagnosticCode.TICK_COMMITTED.value,
             result.tick.value,
             result.resulting_tick.value,
@@ -485,6 +566,7 @@ class WorldEngine:
             result.resulting_revision.value,
             len(result.resolutions),
             len(result.events),
+            death_count,
         )
         return result
 
@@ -525,9 +607,9 @@ class WorldEngine:
     ) -> tuple[tuple[ActionResolution, ...], tuple[WorldEvent, ...], World]:
         seen_agents: dict[AgentId, int] = {}
         admitted: list[ActionRequest | None] = []
-        event_ids: list[EventId] = []
         early_resolutions: dict[int, ActionResolution] = {}
         base_revision = snap.world.state.revision
+        request_ordinals: dict[RequestId, tuple[int, AgentId]] = {}
 
         for ordinal, submission in enumerate(submissions):
             agent_id = submission.agent_id
@@ -564,17 +646,6 @@ class WorldEngine:
                     request_id=request.request_id,
                 )
                 admitted.append(None)
-                event_ids.append(
-                    derive_engine_event_id(
-                        self._config,
-                        run_id=self._run_id,
-                        world_id=self.world_id,
-                        tick=snap.tick,
-                        ordinal=ordinal,
-                        agent_id=agent_id,
-                        sequence=0,
-                    )
-                )
                 _LOGGER.debug(
                     "%s tick=%s ordinal=%s agent=%s",
                     EngineDiagnosticCode.RESOLUTION_DUPLICATE.value,
@@ -601,17 +672,7 @@ class WorldEngine:
                 keys=keys,
             )
             admitted.append(request)
-            event_ids.append(
-                derive_engine_event_id(
-                    self._config,
-                    run_id=self._run_id,
-                    world_id=self.world_id,
-                    tick=snap.tick,
-                    ordinal=ordinal,
-                    agent_id=agent_id,
-                    sequence=0,
-                )
-            )
+            request_ordinals[request.request_id] = (ordinal, agent_id)
             _LOGGER.debug(
                 "%s tick=%s ordinal=%s kind=%s request_id=%s",
                 EngineDiagnosticCode.SUBMISSION_ADMITTED.value,
@@ -624,18 +685,177 @@ class WorldEngine:
         batch_requests = tuple(
             request for request in admitted if request is not None
         )
-        batch_event_ids = tuple(
-            event_ids[index]
-            for index, request in enumerate(admitted)
-            if request is not None
+        physical_rules = self._config.physical_rules
+        if physical_rules is None:
+            physical_rules = default_physical_rules()
+        resolved_effects = self._resolve_action_effects(
+            snap=snap,
+            batch_requests=batch_requests,
+            request_ordinals=request_ordinals,
+            rules=physical_rules,
         )
-        prepared = prepare_action_batch(
+        pending = prepare_action_batch(
             world_id=self.world_id,
             starting_state=snap.world.state,
             requests=batch_requests,
-            event_ids=batch_event_ids,
+            resolved_effects=resolved_effects,
+            rules=physical_rules,
+        )
+        _LOGGER.debug(
+            "%s tick=%s pending_actions=%s pending_events=%s mutation=%s",
+            EngineDiagnosticCode.SUBMISSION_ADMITTED.value,
+            snap.tick.value,
+            len(batch_requests),
+            len(pending.pending_events),
+            pending.semantic_mutation,
+        )
+        for outcome in pending.outcomes:
+            _LOGGER.debug(
+                "%s tick=%s ordinal=%s kind=%s request_id=%s status=%s reason=%s",
+                EngineDiagnosticCode.RESOLUTION_APPLIED.value,
+                snap.tick.value,
+                outcome.ordinal,
+                outcome.action_kind,
+                outcome.request_id.value,
+                outcome.status.value,
+                outcome.reason,
+            )
+
+        system_effects = self._resolve_system_effects(
+            snap=snap,
+            working_state=pending.working_state,
+            rules=physical_rules,
+        )
+        physical = apply_autonomous_physical_step(
+            state=pending.working_state,
+            rules=physical_rules,
+            tick=snap.tick.value,
+            hour=physical_rules.hour_for_tick(snap.tick.value),
+            day_phase=physical_rules.day_phase_for_tick(snap.tick.value),
+            resolved=system_effects,
+        )
+        family_counts = {
+            family.value: 0 for family in SystemEffectFamily
+        }
+        system_pending: list[PendingEvent] = []
+        for detail in physical.pending_details:
+            family_counts[detail.effect_family.value] += 1
+            cause_id = derive_system_cause_id(
+                self._config,
+                run_id=self._run_id,
+                world_id=self.world_id,
+                tick=snap.tick.value,
+                effect_family=detail.effect_family.value,
+                entity_id=detail.entity_id,
+                family_ordinal=detail.family_ordinal,
+            )
+            system_pending.append(
+                PendingEvent(
+                    cause=SystemCause(
+                        cause_id=cause_id,
+                        effect_family=detail.effect_family,
+                        entity_id=detail.entity_id,
+                        family_ordinal=detail.family_ordinal,
+                    ),
+                    details=detail.details,
+                )
+            )
+        _LOGGER.debug(
+            "%s tick=%s family_weather=%s family_regeneration=%s "
+            "family_combined_needs=%s family_exposure=%s "
+            "system_events=%s system_mutation=%s",
+            EngineDiagnosticCode.RESOLUTION_APPLIED.value,
+            snap.tick.value,
+            family_counts[SystemEffectFamily.WEATHER.value],
+            family_counts[SystemEffectFamily.REGENERATION.value],
+            family_counts[SystemEffectFamily.COMBINED_NEEDS.value],
+            family_counts[SystemEffectFamily.EXPOSURE.value],
+            len(system_pending),
+            physical.semantic_mutation,
+        )
+        merged = PendingBatch(
+            working_state=physical.working_state,
+            semantic_mutation=(
+                pending.semantic_mutation or physical.semantic_mutation
+            ),
+            outcomes=pending.outcomes,
+            pending_events=pending.pending_events + tuple(system_pending),
+        )
+
+        # Allocate one deterministic ID per pending event. Action events are
+        # keyed by original request identity; system events use family/entity
+        # ordinals. Contiguous tick sequences are assigned in finalize.
+        per_request_event_index: dict[RequestId, int] = {}
+        allocated_ids: list[EventId] = []
+        for pending_event in merged.pending_events:
+            cause = pending_event.cause
+            if type(cause) is ActionCause:
+                request_id = cause.request_id
+                try:
+                    ordinal, agent_id = request_ordinals[request_id]
+                except KeyError as exc:
+                    _LOGGER.error(
+                        "%s tick=%s request_id=%s",
+                        EngineDiagnosticCode.CANDIDATE_ABORTED.value,
+                        snap.tick.value,
+                        request_id.value,
+                    )
+                    raise ValueError(
+                        "pending event request_id is not admitted"
+                    ) from exc
+                local_index = per_request_event_index.get(request_id, 0)
+                per_request_event_index[request_id] = local_index + 1
+                allocated_ids.append(
+                    derive_engine_event_id(
+                        self._config,
+                        run_id=self._run_id,
+                        world_id=self.world_id,
+                        tick=snap.tick,
+                        ordinal=ordinal,
+                        agent_id=agent_id,
+                        sequence=local_index,
+                    )
+                )
+            elif type(cause) is SystemCause:
+                local_index = per_request_event_index.get(cause.cause_id, 0)
+                per_request_event_index[cause.cause_id] = local_index + 1
+                allocated_ids.append(
+                    derive_event_id(
+                        self._config,
+                        *canonical_system_effect_keys(
+                            run_id=self._run_id,
+                            world_id=self.world_id,
+                            tick=snap.tick,
+                            effect_family=cause.effect_family.value,
+                            entity_id=cause.entity_id,
+                            family_ordinal=cause.family_ordinal,
+                            sequence=local_index,
+                        ),
+                    )
+                )
+            else:
+                _LOGGER.error(
+                    "%s tick=%s code=invalid_pending_cause",
+                    EngineDiagnosticCode.CANDIDATE_ABORTED.value,
+                    snap.tick.value,
+                )
+                raise TypeError("pending event cause must be EventCause")
+
+        prepared = finalize_pending_batch(
+            merged,
+            world_id=self.world_id,
+            starting_revision=base_revision,
+            event_ids=tuple(allocated_ids),
             run_id=run_id_for_event(self._run_id),
             tick=tick_for_event(snap.tick),
+        )
+        _LOGGER.debug(
+            "%s tick=%s finalized_events=%s mutation=%s revision=%s",
+            EngineDiagnosticCode.RESOLUTION_APPLIED.value,
+            snap.tick.value,
+            len(prepared.events),
+            prepared.semantic_mutation,
+            prepared.candidate_state.revision.value,
         )
 
         # Map batch outcomes back onto full ordinal list.
@@ -684,6 +904,311 @@ class WorldEngine:
         candidate_world = World(self.world_id, prepared.candidate_state)
         return tuple(resolutions), prepared.events, candidate_world
 
+    def _resolve_system_effects(
+        self,
+        *,
+        snap: _EngineSnapshot,
+        working_state: object,
+        rules: object,
+    ) -> ResolvedSystemEffects:
+        """Pre-resolve per-location weather samples when the period elapses."""
+        from world._state import WorldState
+        from world.models import PhysicalRules
+
+        if type(rules) is not PhysicalRules:
+            raise TypeError("physical rules must be PhysicalRules")
+        if type(working_state) is not WorldState:
+            raise TypeError("working_state must be WorldState")
+        if (snap.tick.value + 1) % rules.weather_period_ticks != 0:
+            return ResolvedSystemEffects(weather_by_location={})
+        weather_by_location: dict[EntityId, ResolvedWeatherEffect] = {}
+        for location_id in sorted(
+            working_state.locations, key=lambda value: value.value
+        ):
+            current = working_state.weather[location_id].condition
+            transitions = rules.weather_transitions[current]
+            scope = physical_system_effect_scope(
+                run_id=self._run_id,
+                world_id=self.world_id,
+                tick=snap.tick,
+                entity_id=location_id,
+                purpose=PHYSICAL_PURPOSE_WEATHER,
+            )
+            condition = sample_weather_condition(
+                create_named_stream(self._config, scope),
+                transitions,
+            )
+            weather_by_location[location_id] = ResolvedWeatherEffect(
+                location_id=location_id,
+                condition=condition,
+            )
+        _LOGGER.debug(
+            "%s tick=%s weather_samples=%s",
+            EngineDiagnosticCode.RESOLUTION_APPLIED.value,
+            snap.tick.value,
+            len(weather_by_location),
+        )
+        return ResolvedSystemEffects(weather_by_location=weather_by_location)
+
+    def _resolve_action_effects(
+        self,
+        *,
+        snap: _EngineSnapshot,
+        batch_requests: tuple[ActionRequest, ...],
+        request_ordinals: dict[RequestId, tuple[int, AgentId]],
+        rules: object,
+    ) -> ResolvedActionEffects:
+        """Pre-resolve Search/Attack/Flee draws for structurally eligible requests."""
+        from world.models import PhysicalRules
+
+        if type(rules) is not PhysicalRules:
+            raise TypeError("physical rules must be PhysicalRules")
+        starting_state = snap.world.state
+        by_request: dict[RequestId, ResolvedActionEffect] = {}
+        for request in batch_requests:
+            command = request.command
+            if type(command) is Search:
+                effect = self._resolve_search_effect(
+                    snap=snap,
+                    request=request,
+                    request_ordinals=request_ordinals,
+                    rules=rules,
+                    starting_state=starting_state,
+                )
+                if effect is not None:
+                    by_request[request.request_id] = effect
+            elif type(command) is Attack:
+                effect = self._resolve_attack_effect(
+                    snap=snap,
+                    request=request,
+                    request_ordinals=request_ordinals,
+                    rules=rules,
+                    starting_state=starting_state,
+                )
+                if effect is not None:
+                    by_request[request.request_id] = effect
+            elif type(command) is Flee:
+                effect = self._resolve_flee_effect(
+                    snap=snap,
+                    request=request,
+                    request_ordinals=request_ordinals,
+                    rules=rules,
+                    starting_state=starting_state,
+                )
+                if effect is not None:
+                    by_request[request.request_id] = effect
+        return ResolvedActionEffects(by_request=by_request)
+
+    def _resolve_search_effect(
+        self,
+        *,
+        snap: _EngineSnapshot,
+        request: ActionRequest,
+        request_ordinals: dict[RequestId, tuple[int, AgentId]],
+        rules: object,
+        starting_state: object,
+    ) -> ResolvedSearchEffect | None:
+        from world._state import WorldState
+        from world.models import PhysicalRules
+
+        assert type(rules) is PhysicalRules
+        assert type(starting_state) is WorldState
+        assert type(request.command) is Search
+        resource_id = find_eligible_search_resource(
+            starting_state, request.actor_id, request.command.target_id
+        )
+        if resource_id is None:
+            return None
+        ordinal, agent_id = request_ordinals[request.request_id]
+        actor = starting_state.bodies[request.actor_id]
+        location = starting_state.locations[actor.location_id]
+        weather = starting_state.weather.get(actor.location_id)
+        condition = (
+            weather.condition if weather is not None else WeatherCondition.CLEAR
+        )
+        visibility = rules.effective_visibility(
+            location_visibility=location.visibility_factor.value,
+            phase=rules.day_phase_for_tick(snap.tick.value),
+            condition=condition,
+        )
+        probability = clamp_unit_interval(
+            rules.search_base_probability
+            + rules.search_visibility_weight * visibility
+        )
+        scope = physical_action_effect_scope(
+            run_id=self._run_id,
+            world_id=self.world_id,
+            tick=snap.tick,
+            ordinal=ordinal,
+            agent_id=agent_id,
+            purpose=PHYSICAL_PURPOSE_SEARCH_SUCCESS,
+        )
+        success = sample_bernoulli(
+            create_named_stream(self._config, scope), probability
+        )
+        created_item_id = None
+        if success:
+            created_item_id = derive_entity_id(
+                self._config,
+                "foraged-item",
+                self._run_id.value,
+                self.world_id.value,
+                f"tick:{snap.tick.value}",
+                request.request_id.value,
+            )
+        _LOGGER.debug(
+            "%s tick=%s ordinal=%s kind=search request_id=%s outcome=%s",
+            EngineDiagnosticCode.RESOLUTION_APPLIED.value,
+            snap.tick.value,
+            ordinal,
+            request.request_id.value,
+            "success" if success else "miss",
+        )
+        return ResolvedSearchEffect(
+            request_id=request.request_id,
+            success=success,
+            resource_id=resource_id,
+            created_item_id=created_item_id,
+        )
+
+    def _resolve_attack_effect(
+        self,
+        *,
+        snap: _EngineSnapshot,
+        request: ActionRequest,
+        request_ordinals: dict[RequestId, tuple[int, AgentId]],
+        rules: object,
+        starting_state: object,
+    ) -> ResolvedAttackEffect | None:
+        from world._state import WorldState
+        from world.models import PhysicalRules
+
+        assert type(rules) is PhysicalRules
+        assert type(starting_state) is WorldState
+        assert type(request.command) is Attack
+        actor = starting_state.bodies.get(request.actor_id)
+        target = starting_state.bodies.get(request.command.target_id)
+        if (
+            actor is None
+            or target is None
+            or actor.life_status is LifeStatus.DEAD
+            or target.life_status is LifeStatus.DEAD
+            or target.location_id != actor.location_id
+        ):
+            return None
+        ordinal, agent_id = request_ordinals[request.request_id]
+        hit_scope = physical_action_effect_scope(
+            run_id=self._run_id,
+            world_id=self.world_id,
+            tick=snap.tick,
+            ordinal=ordinal,
+            agent_id=agent_id,
+            purpose=PHYSICAL_PURPOSE_ATTACK_HIT,
+        )
+        hit = sample_bernoulli(
+            create_named_stream(self._config, hit_scope),
+            rules.attack_hit_probability,
+        )
+        damage = None
+        if hit:
+            damage_scope = physical_action_effect_scope(
+                run_id=self._run_id,
+                world_id=self.world_id,
+                tick=snap.tick,
+                ordinal=ordinal,
+                agent_id=agent_id,
+                purpose=PHYSICAL_PURPOSE_ATTACK_DAMAGE,
+            )
+            damage = sample_attack_damage(
+                create_named_stream(self._config, damage_scope),
+                minimum=rules.attack_damage_min,
+                maximum_exclusive=rules.attack_damage_max_exclusive,
+            )
+        _LOGGER.debug(
+            "%s tick=%s ordinal=%s kind=attack request_id=%s outcome=%s",
+            EngineDiagnosticCode.RESOLUTION_APPLIED.value,
+            snap.tick.value,
+            ordinal,
+            request.request_id.value,
+            "hit" if hit else "miss",
+        )
+        return ResolvedAttackEffect(
+            request_id=request.request_id,
+            hit=hit,
+            damage=damage,
+        )
+
+    def _resolve_flee_effect(
+        self,
+        *,
+        snap: _EngineSnapshot,
+        request: ActionRequest,
+        request_ordinals: dict[RequestId, tuple[int, AgentId]],
+        rules: object,
+        starting_state: object,
+    ) -> ResolvedFleeEffect | None:
+        from world._state import WorldState
+        from world.models import PhysicalRules
+
+        assert type(rules) is PhysicalRules
+        assert type(starting_state) is WorldState
+        assert type(request.command) is Flee
+        actor = starting_state.bodies.get(request.actor_id)
+        if actor is None or actor.life_status is LifeStatus.DEAD:
+            return None
+        threat_id = request.command.threat_id
+        if threat_id is not None:
+            threat = starting_state.bodies.get(threat_id)
+            if (
+                threat is None
+                or threat.life_status is LifeStatus.DEAD
+                or threat.location_id != actor.location_id
+            ):
+                return None
+        eligible = find_eligible_flee_destinations(starting_state, request.actor_id)
+        if not eligible:
+            return None
+        ordinal, agent_id = request_ordinals[request.request_id]
+        success_scope = physical_action_effect_scope(
+            run_id=self._run_id,
+            world_id=self.world_id,
+            tick=snap.tick,
+            ordinal=ordinal,
+            agent_id=agent_id,
+            purpose=PHYSICAL_PURPOSE_FLEE_SUCCESS,
+        )
+        success = sample_bernoulli(
+            create_named_stream(self._config, success_scope),
+            rules.flee_success_probability,
+        )
+        destination_index = None
+        if success:
+            dest_scope = physical_action_effect_scope(
+                run_id=self._run_id,
+                world_id=self.world_id,
+                tick=snap.tick,
+                ordinal=ordinal,
+                agent_id=agent_id,
+                purpose=PHYSICAL_PURPOSE_FLEE_DESTINATION,
+            )
+            destination_index = sample_destination_index(
+                create_named_stream(self._config, dest_scope),
+                len(eligible),
+            )
+        _LOGGER.debug(
+            "%s tick=%s ordinal=%s kind=flee request_id=%s outcome=%s",
+            EngineDiagnosticCode.RESOLUTION_APPLIED.value,
+            snap.tick.value,
+            ordinal,
+            request.request_id.value,
+            "success" if success else "failure",
+        )
+        return ResolvedFleeEffect(
+            request_id=request.request_id,
+            success=success,
+            destination_index=destination_index,
+        )
+
 
 def _map_batch_outcome(
     outcome: object,
@@ -713,6 +1238,14 @@ def _map_batch_outcome(
         "not_held": ActionResolutionReason.STRUCTURAL_REJECTION,
         "not_at_location": ActionResolutionReason.STRUCTURAL_REJECTION,
         "not_colocated": ActionResolutionReason.STRUCTURAL_REJECTION,
+        "not_adjacent": ActionResolutionReason.STRUCTURAL_REJECTION,
+        "no_body_capacity": ActionResolutionReason.STRUCTURAL_REJECTION,
+        "no_item_capacity": ActionResolutionReason.STRUCTURAL_REJECTION,
+        "no_carry_capacity": ActionResolutionReason.STRUCTURAL_REJECTION,
+        "resource_depleted": ActionResolutionReason.STRUCTURAL_REJECTION,
+        "wrong_kind": ActionResolutionReason.STRUCTURAL_REJECTION,
+        "missing_resolved_effect": ActionResolutionReason.STRUCTURAL_REJECTION,
+        "already_at_destination": ActionResolutionReason.STRUCTURAL_REJECTION,
         "dead_target": ActionResolutionReason.STRUCTURAL_REJECTION,
         "distinct_id_violation": ActionResolutionReason.STRUCTURAL_REJECTION,
         "malformed_envelope": ActionResolutionReason.MALFORMED_SUBMISSION,

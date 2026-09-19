@@ -7,6 +7,7 @@ Commands and proposals remain non-authoritative.
 from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
+from typing import Final
 
 from agents.contracts import IdentityTranslator
 from agents.models import AgentId
@@ -24,16 +25,33 @@ from world.actions import (
     AgentCommand,
     require_agent_command,
 )
-from world.identifiers import EventId, WorldId, WorldRevision
+from world.identifiers import EntityId, EventId, WorldId, WorldRevision
+
+# Exact purpose labels for physical-rules named streams (derivation-v2).
+PHYSICAL_PURPOSE_SEARCH_SUCCESS: Final[str] = "search_success"
+PHYSICAL_PURPOSE_ATTACK_HIT: Final[str] = "attack_hit"
+PHYSICAL_PURPOSE_ATTACK_DAMAGE: Final[str] = "attack_damage"
+PHYSICAL_PURPOSE_FLEE_SUCCESS: Final[str] = "flee_success"
+PHYSICAL_PURPOSE_FLEE_DESTINATION: Final[str] = "flee_destination"
+PHYSICAL_PURPOSE_WEATHER: Final[str] = "weather"
 
 __all__ = [
+    "PHYSICAL_PURPOSE_ATTACK_DAMAGE",
+    "PHYSICAL_PURPOSE_ATTACK_HIT",
+    "PHYSICAL_PURPOSE_FLEE_DESTINATION",
+    "PHYSICAL_PURPOSE_FLEE_SUCCESS",
+    "PHYSICAL_PURPOSE_SEARCH_SUCCESS",
+    "PHYSICAL_PURPOSE_WEATHER",
     "admit_agent_command",
     "canonical_admission_keys",
     "canonical_event_keys",
+    "canonical_system_effect_keys",
     "derive_engine_event_id",
     "event_run_id_to_run_id",
     "event_tick_to_tick",
     "future_effect_scope",
+    "physical_action_effect_scope",
+    "physical_system_effect_scope",
     "run_id_for_event",
     "tick_for_event",
 ]
@@ -146,15 +164,35 @@ def future_effect_scope(
     agent_id: AgentId,
     purpose: str,
 ) -> StreamScope:
-    """Canonical future random-effect scope. V1 performs no draws from it."""
+    """Canonical action-scoped random-effect stream identity."""
+    return physical_action_effect_scope(
+        run_id=run_id,
+        world_id=world_id,
+        tick=tick,
+        ordinal=ordinal,
+        agent_id=agent_id,
+        purpose=purpose,
+    )
+
+
+def physical_action_effect_scope(
+    *,
+    run_id: RunId,
+    world_id: WorldId,
+    tick: Tick,
+    ordinal: int,
+    agent_id: AgentId,
+    purpose: str,
+) -> StreamScope:
+    """Named stream for one agent action purpose within a tick."""
     if type(run_id) is not RunId:
-        raise TypeError("future_effect_scope requires RunId")
+        raise TypeError("physical_action_effect_scope requires RunId")
     if type(world_id) is not WorldId:
-        raise TypeError("future_effect_scope requires WorldId")
+        raise TypeError("physical_action_effect_scope requires WorldId")
     if type(tick) is not Tick:
-        raise TypeError("future_effect_scope requires Tick")
+        raise TypeError("physical_action_effect_scope requires Tick")
     if type(agent_id) is not AgentId:
-        raise TypeError("future_effect_scope requires AgentId")
+        raise TypeError("physical_action_effect_scope requires AgentId")
     if type(purpose) is not str or not purpose:
         raise ValueError("purpose must be a non-empty str")
     ordinal_value = require_exact_nonneg_int("ordinal", ordinal)
@@ -168,6 +206,72 @@ def future_effect_scope(
             f"agent:{agent_id.value}",
             purpose,
         ),
+    )
+
+
+def physical_system_effect_scope(
+    *,
+    run_id: RunId,
+    world_id: WorldId,
+    tick: Tick,
+    entity_id: EntityId,
+    purpose: str,
+) -> StreamScope:
+    """Named stream for one autonomous system purpose within a tick."""
+    if type(run_id) is not RunId:
+        raise TypeError("physical_system_effect_scope requires RunId")
+    if type(world_id) is not WorldId:
+        raise TypeError("physical_system_effect_scope requires WorldId")
+    if type(tick) is not Tick:
+        raise TypeError("physical_system_effect_scope requires Tick")
+    if type(entity_id) is not EntityId:
+        raise TypeError("physical_system_effect_scope requires EntityId")
+    if type(purpose) is not str or not purpose:
+        raise ValueError("purpose must be a non-empty str")
+    return StreamScope(
+        namespace="system-effect",
+        names=(
+            run_id.value,
+            world_id.value,
+            f"tick:{tick.value}",
+            f"entity:{entity_id.value}",
+            purpose,
+        ),
+    )
+
+
+def canonical_system_effect_keys(
+    *,
+    run_id: RunId,
+    world_id: WorldId,
+    tick: Tick,
+    effect_family: str,
+    entity_id: EntityId,
+    family_ordinal: int,
+    sequence: int,
+) -> tuple[str, ...]:
+    """Engine-owned canonical keys for autonomous system event IDs."""
+    if type(run_id) is not RunId:
+        raise TypeError("canonical_system_effect_keys requires RunId")
+    if type(world_id) is not WorldId:
+        raise TypeError("canonical_system_effect_keys requires WorldId")
+    if type(tick) is not Tick:
+        raise TypeError("canonical_system_effect_keys requires Tick")
+    if type(entity_id) is not EntityId:
+        raise TypeError("canonical_system_effect_keys requires EntityId")
+    if type(effect_family) is not str or not effect_family:
+        raise ValueError("effect_family must be a non-empty str")
+    ordinal_value = require_exact_nonneg_int("family_ordinal", family_ordinal)
+    sequence_value = require_exact_nonneg_int("sequence", sequence)
+    return (
+        "system",
+        run_id.value,
+        world_id.value,
+        f"tick:{tick.value}",
+        f"family:{effect_family}",
+        f"entity:{entity_id.value}",
+        f"ordinal:{ordinal_value}",
+        f"event:{sequence_value}",
     )
 
 

@@ -50,6 +50,7 @@ AUTHORITY_MODULES = frozenset(
         "world._perception",
         "world._rules",
         "world._replay",
+        "world._physical",
     }
 )
 

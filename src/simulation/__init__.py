@@ -21,7 +21,9 @@ from simulation.contracts import (
     RunConfigurationPort,
     describe_run,
     export_metadata,
+    log_invalid_physical_config,
     log_invalid_setup,
+    log_physical_config_validated,
     log_replay_mismatch,
     log_run_configured,
     make_export,
@@ -68,11 +70,15 @@ from simulation.lifecycle import (
 )
 from simulation.models import (
     DERIVATION_VERSION,
+    DERIVATION_VERSION_V1,
+    DERIVATION_VERSION_V2,
     LLM_REPLAY_REQUIREMENT,
     ExportMetadata,
     RunId,
     SimulationExport,
     SimulationRunConfig,
+    canonical_physical_rules_document,
+    fingerprint_physical_rules,
 )
 from simulation.persistence import (
     EVENT_SCHEMA_VERSION,
@@ -118,6 +124,8 @@ from simulation.service import DurableCommitAmbiguity, PersistentSimulationServi
 
 __all__ = [
     "DERIVATION_VERSION",
+    "DERIVATION_VERSION_V1",
+    "DERIVATION_VERSION_V2",
     "EVENT_SCHEMA_VERSION",
     "LLM_REPLAY_REQUIREMENT",
     "PERSISTENCE_CODEC_VERSION",
@@ -172,6 +180,7 @@ __all__ = [
     "WorldSnapshot",
     "canonical_admission_keys",
     "canonical_event_keys",
+    "canonical_physical_rules_document",
     "compute_commit_hash",
     "create_named_stream",
     "create_rng",
@@ -196,12 +205,15 @@ __all__ = [
     "event_run_id_to_run_id",
     "event_tick_to_tick",
     "export_metadata",
+    "fingerprint_physical_rules",
     "future_effect_scope",
     "hash_snapshot",
     "hash_tick_events",
     "hash_tick_payload",
     "hash_world_event",
+    "log_invalid_physical_config",
     "log_invalid_setup",
+    "log_physical_config_validated",
     "log_replay_mismatch",
     "log_run_configured",
     "make_export",

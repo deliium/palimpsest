@@ -19,10 +19,18 @@ from simulation.lifecycle import (
     EngineDiagnosticCode,
 )
 from simulation.models import SimulationRunConfig
-from world.actions import Move, Take, Wait
+from tests.simulation_helpers import make_item, make_location, weather_for_locations
+from world.actions import Sleep, Take, Wait
 from world.identifiers import EntityId, WorldId, WorldRevision
-from world.models import AgentBody, Item, LifeStatus, Location
-from world.values import Fatigue, Health, Hunger, TemperatureCelsius, Thirst
+from world.models import AgentBody, LifeStatus
+from world.values import (
+    CarryCapacity,
+    Fatigue,
+    Health,
+    Hunger,
+    TemperatureCelsius,
+    Thirst,
+)
 
 _ENGINE_LOGGER = "simulation.engine"
 _FORBIDDEN_LOG_FRAGMENTS = (
@@ -48,22 +56,21 @@ def _alive(entity_id: str, location_id: str = "loc-1") -> AgentBody:
         temperature=TemperatureCelsius(36.5),
         inventory=(),
         life_status=LifeStatus.ALIVE,
+        carry_capacity=CarryCapacity(10),
     )
 
 
 def _bootstrap() -> WorldBootstrap:
+    locations = (make_location("loc-1", name="Camp"),)
     return WorldBootstrap(
         world_id=WorldId("world-1"),
         revision=WorldRevision(0),
-        locations=(Location(entity_id=EntityId("loc-1"), name="Camp"),),
+        locations=locations,
         items=(
-            Item(
-                entity_id=EntityId("item-1"),
-                name="Rock",
-                location_id=EntityId("loc-1"),
-            ),
+            make_item("item-1", name="Rock", location_id="loc-1"),
         ),
         bodies=(_alive("body-1"), _alive("body-2")),
+        weather=weather_for_locations(locations),
         registrations=(
             AgentRegistration(AgentId("agent-1"), EntityId("body-1")),
             AgentRegistration(AgentId("agent-2"), EntityId("body-2")),
@@ -176,12 +183,12 @@ def test_engine_logs_debug_info_warn_error_without_payloads(
     result = engine.resolve_tick(
         (
             ActionSubmission(batch.token, AgentId("agent-1"), Take(EntityId("item-1"))),
-            ActionSubmission(batch.token, AgentId("agent-2"), Move(EntityId("loc-1"))),
+            ActionSubmission(batch.token, AgentId("agent-2"), Sleep()),
             ActionSubmission(batch.token, AgentId("agent-1"), Wait()),
         )
     )
     assert result.resolutions[0].status is ActionResolutionStatus.APPLIED
-    assert result.resolutions[1].status is ActionResolutionStatus.DEFERRED_POLICY
+    assert result.resolutions[1].status is ActionResolutionStatus.APPLIED
     assert result.resolutions[2].status is ActionResolutionStatus.DUPLICATE
 
     info_commits = [
@@ -196,7 +203,6 @@ def test_engine_logs_debug_info_warn_error_without_payloads(
     for code in (
         EngineDiagnosticCode.SUBMISSION_ADMITTED,
         EngineDiagnosticCode.RESOLUTION_APPLIED,
-        EngineDiagnosticCode.RESOLUTION_DEFERRED,
         EngineDiagnosticCode.RESOLUTION_DUPLICATE,
     ):
         assert code.value in debug_text
@@ -268,3 +274,76 @@ def test_engine_respects_palimpsest_log_level(
     assert EngineDiagnosticCode.RESOLUTION_APPLIED.value not in output
     assert EngineDiagnosticCode.TICK_COMMITTED.value not in output
     _assert_no_sensitive_payload(output)
+
+
+def test_autonomous_only_tick_applies_physiology_without_submissions(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    engine = WorldEngine(config=SimulationRunConfig(seed=21), bootstrap=_bootstrap())
+    engine.observe()
+    caplog.set_level(logging.DEBUG, logger=_ENGINE_LOGGER)
+    result = engine.resolve_tick(())
+    assert result.resolutions == ()
+    # Two living bodies → NeedsApplied + ExposureApplied each.
+    assert len(result.events) == 4
+    assert result.resulting_revision == WorldRevision(1)
+    assert engine.revision == WorldRevision(1)
+    body = engine._snapshot.world.state.bodies[EntityId("body-1")]
+    assert body.hunger.value == 2.0
+    assert body.thirst.value == 3.0
+    assert body.fatigue.value == 1.0
+    messages = _messages(caplog)
+    assert "family_combined_needs=2" in messages
+    assert "family_exposure=2" in messages
+    assert EngineDiagnosticCode.TICK_COMMITTED.value in messages
+    assert "deaths=0" in messages
+    _assert_no_sensitive_payload(messages)
+
+
+def test_wait_then_autonomous_merges_into_one_revision() -> None:
+    engine = WorldEngine(config=SimulationRunConfig(seed=22), bootstrap=_bootstrap())
+    batch = engine.observe()
+    result = engine.resolve_tick(
+        (ActionSubmission(batch.token, AgentId("agent-1"), Wait()),)
+    )
+    assert result.resolutions[0].status is ActionResolutionStatus.APPLIED
+    assert result.resulting_revision == WorldRevision(1)
+    # Wait + 2 needs + 2 exposure
+    assert len(result.events) == 5
+    assert result.events[0].event.details.kind == "wait"
+    assert all(
+        record.event.resulting_revision == WorldRevision(1)
+        for record in result.events
+    )
+
+
+def test_all_dead_autonomous_tick_is_noop() -> None:
+    locations = (make_location("loc-1", name="Camp"),)
+    dead = AgentBody(
+        entity_id=EntityId("body-1"),
+        location_id=EntityId("loc-1"),
+        health=Health(0),
+        hunger=Hunger(0),
+        thirst=Thirst(0),
+        fatigue=Fatigue(0),
+        temperature=TemperatureCelsius(36.5),
+        inventory=(),
+        life_status=LifeStatus.DEAD,
+        carry_capacity=CarryCapacity(10),
+    )
+    bootstrap = WorldBootstrap(
+        world_id=WorldId("world-1"),
+        revision=WorldRevision(0),
+        locations=locations,
+        bodies=(dead,),
+        weather=weather_for_locations(locations),
+        registrations=(
+            AgentRegistration(AgentId("agent-1"), EntityId("body-1")),
+        ),
+    )
+    engine = WorldEngine(config=SimulationRunConfig(seed=23), bootstrap=bootstrap)
+    engine.observe()
+    result = engine.resolve_tick(())
+    assert result.events == ()
+    assert result.resulting_revision == WorldRevision(0)
+    assert engine.tick.value == 1

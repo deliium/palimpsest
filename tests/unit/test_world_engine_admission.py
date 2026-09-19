@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from tests.simulation_helpers import make_location, weather_for_locations
+
 from agents.models import AgentId
 from simulation.bootstrap import AgentRegistration, WorldBootstrap
 from simulation.engine import WorldEngine
@@ -10,7 +12,7 @@ from simulation.models import SimulationRunConfig
 from world.actions import Wait
 from world.identifiers import EntityId, WorldId, WorldRevision
 from world.models import AgentBody, LifeStatus, Location
-from world.values import Fatigue, Health, Hunger, TemperatureCelsius, Thirst
+from world.values import CarryCapacity, Fatigue, Health, Hunger, TemperatureCelsius, Thirst
 
 
 def _body(entity_id: str) -> AgentBody:
@@ -24,15 +26,18 @@ def _body(entity_id: str) -> AgentBody:
         temperature=TemperatureCelsius(36.5),
         inventory=(),
         life_status=LifeStatus.ALIVE,
+        carry_capacity=CarryCapacity(10),
     )
 
 
 def _bootstrap() -> WorldBootstrap:
+    locations = (make_location("loc-1", name="Camp"),)
     return WorldBootstrap(
         world_id=WorldId("world-1"),
         revision=WorldRevision(0),
-        locations=(Location(entity_id=EntityId("loc-1"), name="Camp"),),
+        locations=locations,
         bodies=(_body("body-1"), _body("body-2")),
+        weather=weather_for_locations(locations),
         registrations=(
             AgentRegistration(AgentId("agent-1"), EntityId("body-1")),
             AgentRegistration(AgentId("agent-2"), EntityId("body-2")),

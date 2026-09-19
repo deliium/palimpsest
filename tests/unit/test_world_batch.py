@@ -2,8 +2,10 @@
 
 from __future__ import annotations
 
+from tests.simulation_helpers import make_item, make_location, weather_for_locations
 from world._operations import (
     BatchItemStatus,
+    finalize_pending_batch,
     prepare_action_batch,
 )
 from world._state import WorldState
@@ -17,8 +19,15 @@ from world.identifiers import (
     WorldId,
     WorldRevision,
 )
-from world.models import AgentBody, Item, LifeStatus, Location
-from world.values import Fatigue, Health, Hunger, TemperatureCelsius, Thirst
+from world.models import AgentBody, LifeStatus
+from world.values import (
+    CarryCapacity,
+    Fatigue,
+    Health,
+    Hunger,
+    TemperatureCelsius,
+    Thirst,
+)
 
 
 def _alive(
@@ -36,21 +45,20 @@ def _alive(
         temperature=TemperatureCelsius(36.5),
         inventory=inventory,
         life_status=LifeStatus.ALIVE,
+        carry_capacity=CarryCapacity(10),
     )
 
 
 def _state() -> WorldState:
+    locations = (make_location("loc-1", name="Camp"),)
     return WorldState(
         WorldRevision(4),
-        locations=(Location(entity_id=EntityId("loc-1"), name="Camp"),),
+        locations=locations,
         items=(
-            Item(
-                entity_id=EntityId("item-1"),
-                name="Rock",
-                location_id=EntityId("loc-1"),
-            ),
+            make_item("item-1", name="Rock", location_id="loc-1"),
         ),
         bodies=(_alive("body-1", "loc-1"), _alive("body-2", "loc-1")),
+        weather=weather_for_locations(locations),
     )
 
 
@@ -71,16 +79,28 @@ def _request(
     )
 
 
-def test_event_only_batch_retains_revision_and_stamps_events() -> None:
-    state = _state()
-    batch = prepare_action_batch(
+def _finalize(pending, *, event_ids: tuple[EventId, ...]):
+    return finalize_pending_batch(
+        pending,
         world_id=WorldId("world-1"),
-        starting_state=state,
-        requests=(_request(request_id="r1", actor="body-1", command=Wait()),),
-        event_ids=(EventId("evt-1"),),
+        starting_revision=WorldRevision(4),
+        event_ids=event_ids,
         run_id="run-1",
         tick=0,
     )
+
+
+def test_event_only_batch_retains_revision_and_stamps_events() -> None:
+    state = _state()
+    pending = prepare_action_batch(
+        world_id=WorldId("world-1"),
+        starting_state=state,
+        requests=(_request(request_id="r1", actor="body-1", command=Wait()),),
+    )
+    assert pending.semantic_mutation is False
+    assert pending.working_state.revision == WorldRevision(4)
+    assert len(pending.pending_events) == 1
+    batch = _finalize(pending, event_ids=(EventId("evt-1"),))
     assert batch.semantic_mutation is False
     assert batch.candidate_state.revision == WorldRevision(4)
     assert batch.outcomes[0].status is BatchItemStatus.APPLIED
@@ -90,16 +110,19 @@ def test_event_only_batch_retains_revision_and_stamps_events() -> None:
 
 def test_mutating_batch_increments_revision_once_for_all_events() -> None:
     state = _state()
-    batch = prepare_action_batch(
+    pending = prepare_action_batch(
         world_id=WorldId("world-1"),
         starting_state=state,
         requests=(
             _request(request_id="r1", actor="body-1", command=Take(EntityId("item-1"))),
             _request(request_id="r2", actor="body-2", command=Wait()),
         ),
-        event_ids=(EventId("evt-1"), EventId("evt-2")),
-        run_id="run-1",
-        tick=0,
+    )
+    assert pending.semantic_mutation is True
+    assert pending.working_state.revision == WorldRevision(4)
+    assert len(pending.pending_events) == 2
+    batch = _finalize(
+        pending, event_ids=(EventId("evt-1"), EventId("evt-2"))
     )
     assert batch.semantic_mutation is True
     assert batch.candidate_state.revision == WorldRevision(5)
@@ -114,17 +137,15 @@ def test_mutating_batch_increments_revision_once_for_all_events() -> None:
 
 def test_same_item_second_take_is_conflict_not_rejection() -> None:
     state = _state()
-    batch = prepare_action_batch(
+    pending = prepare_action_batch(
         world_id=WorldId("world-1"),
         starting_state=state,
         requests=(
             _request(request_id="r1", actor="body-1", command=Take(EntityId("item-1"))),
             _request(request_id="r2", actor="body-2", command=Take(EntityId("item-1"))),
         ),
-        event_ids=(EventId("evt-1"), EventId("evt-2")),
-        run_id="run-1",
-        tick=0,
     )
+    batch = _finalize(pending, event_ids=(EventId("evt-1"),))
     assert batch.outcomes[0].status is BatchItemStatus.APPLIED
     assert batch.outcomes[1].status is BatchItemStatus.CONFLICTED
     assert batch.outcomes[1].reason == "conflict_with_prior"
@@ -133,7 +154,7 @@ def test_same_item_second_take_is_conflict_not_rejection() -> None:
 
 def test_initially_invalid_drop_is_rejected_not_conflicted() -> None:
     state = _state()
-    batch = prepare_action_batch(
+    pending = prepare_action_batch(
         world_id=WorldId("world-1"),
         starting_state=state,
         requests=(
@@ -143,11 +164,99 @@ def test_initially_invalid_drop_is_rejected_not_conflicted() -> None:
                 command=Drop(EntityId("item-1")),
             ),
         ),
-        event_ids=(EventId("evt-1"),),
-        run_id="run-1",
-        tick=0,
     )
+    batch = _finalize(pending, event_ids=())
     assert batch.outcomes[0].status is BatchItemStatus.REJECTED
     assert batch.outcomes[0].reason == "not_held"
     assert batch.semantic_mutation is False
     assert batch.events == ()
+
+
+def test_attack_death_emits_two_pending_events_under_same_cause() -> None:
+    from tests.simulation_helpers import connected_locations, weather_for_locations
+    from world.actions import Attack
+    from world.effects import (
+        ActionCause,
+        DeathCause,
+        ResolvedActionEffects,
+        ResolvedAttackEffect,
+    )
+    from world.events import Attacked, Died
+
+    locations = connected_locations(("loc-1", "Camp"), ("loc-2", "Forest"))
+    state = WorldState(
+        WorldRevision(4),
+        locations=locations,
+        bodies=(
+            _alive("body-1", "loc-1"),
+            _alive("body-2", "loc-1"),
+        ),
+        weather=weather_for_locations(locations),
+    )
+    pending = prepare_action_batch(
+        world_id=WorldId("world-1"),
+        starting_state=state,
+        requests=(
+            _request(
+                request_id="r-atk",
+                actor="body-1",
+                command=Attack(EntityId("body-2")),
+            ),
+        ),
+        resolved_effects=ResolvedActionEffects(
+            {
+                RequestId("r-atk"): ResolvedAttackEffect(
+                    request_id=RequestId("r-atk"),
+                    hit=True,
+                    damage=50,
+                )
+            }
+        ),
+    )
+    assert pending.semantic_mutation is True
+    assert len(pending.pending_events) == 2
+    cause = ActionCause(RequestId("r-atk"), EntityId("body-1"))
+    assert pending.pending_events[0].cause == cause
+    assert pending.pending_events[1].cause == cause
+    assert pending.pending_events[0].details == Attacked(
+        EntityId("body-2"),
+        hit=True,
+        damage=50,
+        resulting_target_health=0.0,
+    )
+    assert pending.pending_events[1].details == Died(
+        EntityId("body-2"), DeathCause.ATTACK
+    )
+    batch = _finalize(
+        pending, event_ids=(EventId("evt-a"), EventId("evt-d"))
+    )
+    assert [event.sequence for event in batch.events] == [0, 1]
+    dead = batch.candidate_state.bodies[EntityId("body-2")]
+    assert dead.life_status is LifeStatus.DEAD
+
+
+def test_finalize_assigns_contiguous_sequences_for_one_to_many() -> None:
+    from world._operations import PendingBatch, PendingEvent
+    from world.effects import ActionCause
+
+    state = _state()
+    pending = PendingBatch(
+        working_state=state,
+        semantic_mutation=False,
+        outcomes=(),
+        pending_events=(
+            PendingEvent(
+                cause=ActionCause(RequestId("r1"), EntityId("body-1")),
+                details=Waited(),
+            ),
+            PendingEvent(
+                cause=ActionCause(RequestId("r1"), EntityId("body-1")),
+                details=Waited(),
+            ),
+        ),
+    )
+    batch = _finalize(
+        pending, event_ids=(EventId("evt-a"), EventId("evt-b"))
+    )
+    assert [event.sequence for event in batch.events] == [0, 1]
+    assert all(event.request_id == RequestId("r1") for event in batch.events)

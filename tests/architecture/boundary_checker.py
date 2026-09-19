@@ -68,6 +68,7 @@ PRIVATE_WORLD_MODULES: Final[frozenset[str]] = frozenset(
         "world._perception",
         "world._rules",
         "world._replay",
+        "world._physical",
     }
 )
 PRIVATE_WORLD_IMPORTERS: Final[frozenset[str]] = frozenset(
@@ -78,6 +79,7 @@ PRIVATE_WORLD_IMPORTERS: Final[frozenset[str]] = frozenset(
         "world._perception",
         "world._rules",
         "world._replay",
+        "world._physical",
         "simulation.engine",
         "simulation.bootstrap",
     }
@@ -606,6 +608,7 @@ def _importer_may_use_private_world(module: str) -> bool:
         or module.startswith("world._perception.")
         or module.startswith("world._rules.")
         or module.startswith("world._replay.")
+        or module.startswith("world._physical.")
         or module.startswith("simulation.engine.")
         or module.startswith("simulation.bootstrap.")
     ):
