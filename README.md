@@ -2,7 +2,7 @@
 
 Reproducible, discrete, text-based multi-agent AI society experiments.
 
-This repository is a **Python 3.12+ modular monolith**. It establishes package boundaries, V1 typed domain contracts, an authoritative deterministic `WorldEngine` tick loop (observe → ordered submissions → resolve), schema-v1 event export, configuration, persistence, an HTTP liveness API, observability, and containers. Agent cognition and LLM invocation stay outside the engine.
+This repository is a **Python 3.12+ modular monolith**. It establishes package boundaries, V1 typed domain contracts, an authoritative deterministic `WorldEngine` tick loop with V1 physical simulation rules, schema-versioned event persistence and replay, configuration, an HTTP liveness API, observability, and containers. Agent cognition and LLM invocation stay outside the engine.
 
 ## Requirements
 
@@ -49,7 +49,8 @@ Development credentials in `compose.yaml` are **not production**. `docker compos
 
 | Page | Contents |
 | --- | --- |
-| [Architecture](docs/architecture.md) | Bounded packages, `WorldEngine` lifecycle, public facades, eleven invariants, deferred scope |
+| [Architecture](docs/architecture.md) | Bounded packages, `WorldEngine` lifecycle, public facades, eleven invariants |
+| [Physical simulation](docs/physical-simulation.md) | Topology, capacities, actions, physiology, death, schema-v3, tests |
 | [Configuration](docs/configuration.md) | `PALIMPSEST_` settings, logging, redaction, seeds, identifiers, clocks |
 | [Development](docs/development.md) | Tests, migrations, local and Docker workflows, exact commands |
 | [Persistence](docs/persistence.md) | Event store, append-only guarantees, durable ticks, replay |
@@ -68,7 +69,7 @@ Development credentials in `compose.yaml` are **not production**. `docker compos
 10. Randomness is injected and derived from an explicit simulation seed.
 11. Cognition is a strategy protocol that returns `AgentCommand` over the same world contracts.
 
-See [docs/architecture.md](docs/architecture.md) for the engine lifecycle, enforcement, and what remains deferred.
+See [docs/architecture.md](docs/architecture.md) and [docs/physical-simulation.md](docs/physical-simulation.md) for the engine lifecycle and physical rules.
 
 ## License
 

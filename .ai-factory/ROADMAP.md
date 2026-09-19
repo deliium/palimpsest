@@ -2,11 +2,19 @@
 
 ## Current Milestone
 
+### M2.5 — V1 Physical Simulation
+
+**Status:** complete (plan `v1-physical-simulation-rules`)
+
+Graph topology and capacities, portable items and resources, physiology and terminal death, day/night/weather/visibility, physical action rules, schema-v3 effect-complete events, autonomous tick step, persistence migration `0003`, and property/determinism proofs. Psychological fear of death remains out of scope.
+
+**Plan:** `.ai-factory/plans/v1-physical-simulation-rules.md`
+
 ### M2 — Simulation Loop
 
 **Status:** complete (plan `feature-v1-world-engine`)
 
-Authoritative deterministic `WorldEngine` tick loop: observe → ordered submissions → resolve, private rules for Take/Drop/Give and event-only/deferred commands, schema-1 event export, and replay proofs.
+Authoritative deterministic `WorldEngine` tick loop: observe → ordered submissions → resolve, private rules, schema-versioned event export, and replay proofs.
 
 **Plan:** `.ai-factory/plans/feature-v1-world-engine.md`
 
@@ -32,6 +40,8 @@ Establish the modular-monolith foundation: packaging, bounded packages, typed co
 
 Concrete cognition policies and production LLM provider adapters behind existing ports.
 
-### M4 — Persistence and Analysis (not started)
+### M4 — Persistence and Analysis (persistence complete; analysis deferred)
 
-Domain schemas beyond pgvector bootstrap; read-only analysis metrics over immutable exports.
+**Persistence (complete, 2026-09-19):** plan `feature-event-sourcing-persistence-replay` — durable run manifests, append-only PostgreSQL event store, checkpoints, `PersistentSimulationService`, and `ReplayService` with deterministic reconstruction. Extended by M2.5 physical schema-v3 / migration `0003`. Experiment metadata is queryable; analysis metrics over exports are not claimed complete.
+
+**Still open:** read-only analysis metrics over immutable exports.

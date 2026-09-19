@@ -89,9 +89,8 @@ def _project_body(
     )
 
 
-def _project_weather(weather: Weather) -> tuple[str, str, float]:
+def _project_weather(weather: Weather) -> tuple[str, str]:
     return (
         weather.location_id.value,
-        weather.condition,
-        weather.temperature.value,
+        weather.condition.value,
     )

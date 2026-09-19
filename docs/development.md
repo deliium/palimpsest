@@ -18,7 +18,7 @@ Do not omit `--frozen` in development or containers. The reference interpreter i
 2. Submit an ordered sequence of `ActionSubmission(token, AgentId, AgentCommand)`
 3. `resolve_tick(...)` → `TickResult` and atomic commit to tick N+1
 
-Equivalent bootstrap + seed + ordered submissions must produce identical ticks, revisions, resolutions, objective events, and schema-1 export bytes. Lifecycle types and bootstrap are not schema-1 wire values. See [Architecture](architecture.md).
+Equivalent bootstrap + seed + ordered submissions must produce identical ticks, revisions, resolutions, objective events, and replay fingerprints. Physical rules and autonomous physiology participate in every committed tick. See [Architecture](architecture.md) and [Physical simulation](physical-simulation.md).
 
 ## Tests
 
@@ -32,6 +32,7 @@ uv run --frozen --python 3.12.14 pytest
 | Command | What it covers |
 | --- | --- |
 | `uv run --frozen --python 3.12.14 pytest` | Unit + architecture (no Docker, no PostgreSQL) |
+| `uv run --frozen --python 3.12.14 pytest tests/unit/physical -q` | Physical conservation, physiology, scale, seed proofs |
 | `uv run --frozen --python 3.12.14 pytest -m integration` | Disposable Postgres via `PALIMPSEST_TEST_DATABASE_URL` |
 | `uv run --frozen --python 3.12.14 pytest -m compose` | Compose file checks and optional stack smoke |
 | `uv run --frozen --python 3.12.14 ruff check src tests` | Lint |

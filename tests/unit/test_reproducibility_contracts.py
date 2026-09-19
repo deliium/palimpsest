@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import ast
+import json
 import logging
 import random
 from pathlib import Path
@@ -171,9 +172,39 @@ def test_describe_run_omits_random_draws(caplog: pytest.LogCaptureFixture) -> No
     log_invalid_setup("missing seed")
     messages = " ".join(record.getMessage() for record in caplog.records)
     assert "run_configured" in messages
+    assert "physical_config_legacy" in messages
     assert "replay_mismatch" in messages
     assert "invalid_setup" in messages
     assert str(sample_stream(config, scope, 1)[0]) not in messages
+
+
+def test_physical_rules_change_named_stream_seeds() -> None:
+    from world.models import PhysicalRules, default_physical_rules
+
+    scope = StreamScope(namespace="world", names=("weather", "loc-1"))
+    left = SimulationRunConfig(seed=9, physical_rules=default_physical_rules())
+    right = SimulationRunConfig(seed=9, physical_rules=PhysicalRules(move_fatigue=9.0))
+    assert sample_stream(left, scope, 4) != sample_stream(right, scope, 4)
+    assert sample_stream(left, scope, 4) == sample_stream(left, scope, 4)
+
+
+def test_simulation_physical_rules_facade_matches_world_helpers() -> None:
+    """Persistence must use simulation facades, not world.models imports."""
+    from simulation.models import (
+        canonical_physical_rules_document,
+        fingerprint_physical_rules,
+    )
+    from world.models import (
+        canonical_physical_rules_bytes,
+        default_physical_rules,
+        physical_rules_fingerprint,
+    )
+
+    rules = default_physical_rules()
+    assert fingerprint_physical_rules(rules) == physical_rules_fingerprint(rules)
+    assert canonical_physical_rules_document(rules) == json.loads(
+        canonical_physical_rules_bytes(rules).decode("utf-8")
+    )
 
 
 def test_export_records_replay_limit() -> None:
@@ -193,3 +224,17 @@ def test_export_records_replay_limit() -> None:
     export = make_export(config, run_id, [event])
     assert export.metadata.llm_replay == LLM_REPLAY_REQUIREMENT
     assert export.events == (event,)
+
+
+def test_mapping_order_independence_for_stream_scopes() -> None:
+    """Distinct scopes remain stable regardless of call order."""
+    from world.models import default_physical_rules
+
+    config = SimulationRunConfig(seed=3, physical_rules=default_physical_rules())
+    alpha = StreamScope(namespace="action", names=("search", "0"))
+    beta = StreamScope(namespace="action", names=("attack", "0"))
+    first = (sample_stream(config, alpha, 4), sample_stream(config, beta, 4))
+    second = (sample_stream(config, beta, 4), sample_stream(config, alpha, 4))
+    assert first[0] == second[1]
+    assert first[1] == second[0]
+    assert first[0] != first[1]

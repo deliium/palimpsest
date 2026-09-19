@@ -1,6 +1,6 @@
 # Configuration
 
-[← Previous Page](architecture.md) · [Back to README](../README.md) · [Next Page →](development.md)
+[← Previous Page](physical-simulation.md) · [Back to README](../README.md) · [Next Page →](development.md)
 
 All application settings use the **`PALIMPSEST_`** prefix only. Environment variables override a project-root `.env` file (the directory that contains `pyproject.toml`). Missing `.env` is allowed. Importing packages does not read required secrets or connect to PostgreSQL.
 
@@ -32,7 +32,7 @@ Copy `.env.example` to `.env` for local overrides. Do not commit `.env`.
 | `settings_loaded` | DEBUG | `infrastructure.settings` |
 | `engine_created`, `session_opened`, `session_closed`, `readiness_check_started`, `engine_disposing`, `engine_disposed` | DEBUG | `infrastructure.database` |
 | `request_started`, `request_completed` | DEBUG | `api.request` — `method`, `path`, `status`, `duration_ms`, `request_id` only |
-| `run_configured` | DEBUG | `simulation.run` — `run_id`, `seed`, `derivation_version`, `scope` |
+| `run_configured` | DEBUG | `simulation.run` — `run_id`, `derivation_version`, `scope` (never seed) |
 | `logging_ready` | INFO | `infrastructure.logging` |
 | `app_started`, `app_stopping`, `app_stopped` | INFO | `infrastructure.lifecycle` |
 | `database_ready` | INFO | `infrastructure.database` |
@@ -48,20 +48,22 @@ Copy `.env.example` to `.env` for local overrides. Do not commit `.env`.
 ### Correlation and provenance
 
 - `X-Request-ID`: inbound value must match `[A-Za-z0-9._-]{1,128}`; otherwise an operational hex id is generated. Echoed on success and error. Cleared after every request. **Not** a simulation id.
-- Run logs may include `run_id`, `seed`, `derivation_version`, `stream_scope`.
-- Never log: bodies, `Authorization`, arbitrary query strings, wholesale settings, DSNs, credentials, prompts, raw LLM responses, memories, beliefs, communication content, embeddings, SQL parameters, vector values, or random draws.
+- Run logs may include `run_id`, `derivation_version`, `stream_scope` (purpose labels only). **Never log seeds** or draw values.
+- Never log: bodies, `Authorization`, arbitrary query strings, wholesale settings, DSNs, credentials, prompts, raw LLM responses, memories, beliefs, communication content, embeddings, SQL parameters, vector values, **seeds**, or random draws.
 
 `PALIMPSEST_TEST_DEBUG` may print concise test-harness DEBUG lines. Tests must not configure application logging during collection.
 
 ## Seeds, IDs, and clocks
 
-- `SimulationRunConfig.seed` is required and non-negative (not a bool).
-- Named streams: `create_named_stream(config, StreamScope(namespace, names))` via SHA-256 (`v1`). Distinct name tuples do not alias. Process-global `random` is untouched.
-- `derive_run_id` / `derive_scoped_id` use the same digest scheme.
+- `SimulationRunConfig.seed` is required and non-negative (not a bool). Derivation-v2 runs also carry `PhysicalRules` (fingerprint participates in digests).
+- Named streams: `create_named_stream(config, StreamScope(namespace, names))` via SHA-256. Distinct name tuples do not alias. Process-global `random` is untouched.
+- Purpose labels for physical draws include `search_success`, `attack_hit`, `attack_damage`, `flee_success`, `flee_destination`, and `weather`.
+- `derive_run_id` / `derive_scoped_id` / `derive_system_cause_id` use the same digest scheme.
 - `LogicalClock` uses explicit `Tick` values. Domain contracts do not default to wall-clock or UUID factories.
 - Exact LLM replay needs recorded responses or stubs (`LLM_REPLAY_REQUIREMENT = recorded_or_stub`).
 
 ## See also
 
 - [Architecture](architecture.md)
+- [Physical simulation](physical-simulation.md)
 - [Development](development.md)

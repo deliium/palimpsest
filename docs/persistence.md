@@ -16,16 +16,18 @@ Authoritative history is the ordered stream of replay-capable `WorldEvent` recor
 
 | Constant | Role |
 | --- | --- |
-| `EVENT_SCHEMA_VERSION` | Replay-capable objective event envelope |
+| Event schema audit v1 | Decode/export only; not authoritative replay |
+| Event schema replay v2 | Legacy projector (inventory transfers) |
+| Event schema replay v3 | Physical runs (new writes); effect-complete + causes |
 | `PROJECTOR_VERSION` | Private world projector compatibility |
 | `PERSISTENCE_CODEC_VERSION` | Canonical JSON codec for manifests/snapshots/commits |
-| `DERIVATION_VERSION` | Deterministic ID derivation |
+| Derivation v1 / v2 | Deterministic ID/stream derivation (v2 includes rules fingerprint) |
 
-Legacy schema-v1 audit events remain decodable for export but must not enter the authoritative log.
+Runs never mix replay schema versions. Legacy schema-v1 audit events remain decodable for export but must not enter the authoritative log.
 
 ## Append-only store
 
-Alembic revision `0002` creates experiments, experiment_runs, simulation_runs, tick_commits, world_events, world_snapshots, and normalized snapshot projection tables. Triggers reject `UPDATE`/`DELETE`/`TRUNCATE` on authoritative tables. Runtime roles should omit mutation privileges beyond `INSERT`/`SELECT`.
+Alembic revision `0002` creates experiments, experiment_runs, simulation_runs, tick_commits, world_events, world_snapshots, and normalized snapshot projection tables. Revision `0003_physical_simulation_state` adds physical-rules columns on runs and normalized topology/capacity/kind/load/regen fields on snapshot projections (weather is condition-only). Triggers reject `UPDATE`/`DELETE`/`TRUNCATE` on authoritative tables. Runtime roles should omit mutation privileges beyond `INSERT`/`SELECT`.
 
 ## Durable tick window
 
@@ -41,7 +43,7 @@ Adapter failure before commit leaves the engine unchanged. Crash after commit is
 
 ## Logging
 
-Safe fields: run ID, tick/revision, record counts, version strings, hash prefixes, stable error codes. Never log seeds, full configs, event payloads, snapshot bodies, DSNs, SQL parameters, memories, or embeddings. Control verbosity with `PALIMPSEST_LOG_LEVEL`.
+Safe fields: run ID, tick/revision, record counts, version strings, hash prefixes, stable error codes. Never log seeds, full configs, event payloads, snapshot bodies, DSNs, SQL parameters, memories, embeddings, or random draws. Control verbosity with `PALIMPSEST_LOG_LEVEL`.
 
 ## Integration tests
 
@@ -50,3 +52,9 @@ Set `PALIMPSEST_TEST_DATABASE_URL` to a disposable database, then:
 ```bash
 uv run --frozen --python 3.12.14 pytest -m integration tests/integration
 ```
+
+## See also
+
+- [Physical simulation](physical-simulation.md)
+- [Architecture](architecture.md)
+- [Development](development.md)

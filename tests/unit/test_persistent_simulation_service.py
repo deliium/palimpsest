@@ -21,11 +21,19 @@ from simulation.persistence import (
     TickCommit,
 )
 from simulation.service import DurableCommitAmbiguity, PersistentSimulationService
+from tests.simulation_helpers import make_location, weather_for_locations
 from world.actions import Wait
 from world.events import WorldEvent
 from world.identifiers import EntityId, WorldId, WorldRevision
-from world.models import AgentBody, LifeStatus, Location
-from world.values import Fatigue, Health, Hunger, TemperatureCelsius, Thirst
+from world.models import AgentBody, LifeStatus
+from world.values import (
+    CarryCapacity,
+    Fatigue,
+    Health,
+    Hunger,
+    TemperatureCelsius,
+    Thirst,
+)
 
 
 def _alive(entity_id: str = "body-1") -> AgentBody:
@@ -39,17 +47,20 @@ def _alive(entity_id: str = "body-1") -> AgentBody:
         temperature=TemperatureCelsius(36.5),
         inventory=(),
         life_status=LifeStatus.ALIVE,
+        carry_capacity=CarryCapacity(10),
     )
 
 
 def _engine(*, seed: int = 11) -> WorldEngine:
+    locations = (make_location("loc-1", name="Camp"),)
     return WorldEngine(
         config=SimulationRunConfig(seed=seed),
         bootstrap=WorldBootstrap(
             world_id=WorldId("world-1"),
             revision=WorldRevision(0),
-            locations=(Location(entity_id=EntityId("loc-1"), name="Camp"),),
+            locations=locations,
             bodies=(_alive(),),
+            weather=weather_for_locations(locations),
             registrations=(
                 AgentRegistration(AgentId("agent-1"), EntityId("body-1")),
             ),
@@ -151,9 +162,11 @@ async def test_durable_empty_tick_persists_then_finalizes() -> None:
     journal = _FakeJournal()
     service = PersistentSimulationService(engine, journal)
     commit = await service.resolve_tick(())
-    assert commit.event_count == 0
+    # Autonomous physiology emits needs+exposure for the single living body.
+    assert commit.event_count == 2
     assert commit.tick == Tick(0)
     assert engine.tick == Tick(1)
+    assert engine.revision == WorldRevision(1)
     assert engine.phase is EnginePhase.AWAITING_OBSERVATION
     assert service.predecessor_commit_hash == commit.commit_hash
     assert journal.calls == 1
@@ -174,9 +187,10 @@ async def test_durable_event_only_tick_persists_events() -> None:
             ),
         )
     )
-    assert commit.event_count == 1
+    # Wait occurrence plus autonomous needs/exposure for one living body.
+    assert commit.event_count == 3
     assert engine.tick == Tick(1)
-    assert engine.revision == WorldRevision(0)
+    assert engine.revision == WorldRevision(1)
     stored = await journal.get_tick_commit(engine.run_id, Tick(0))
     assert stored is not None
     assert stored.commit_hash == commit.commit_hash
