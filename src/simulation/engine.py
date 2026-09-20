@@ -983,7 +983,9 @@ class WorldEngine:
             working_state.locations, key=lambda value: value.value
         ):
             current = working_state.weather[location_id].condition
-            transitions = rules.weather_transitions[current]
+            transitions = rules.weather_transitions
+            assert transitions is not None
+            location_transitions = transitions[current]
             scope = physical_system_effect_scope(
                 run_id=self._run_id,
                 world_id=self.world_id,
@@ -993,7 +995,7 @@ class WorldEngine:
             )
             condition = sample_weather_condition(
                 create_named_stream(self._config, scope),
-                transitions,
+                location_transitions,
             )
             weather_by_location[location_id] = ResolvedWeatherEffect(
                 location_id=location_id,
@@ -1025,35 +1027,35 @@ class WorldEngine:
         for request in batch_requests:
             command = request.command
             if type(command) is Search:
-                effect = self._resolve_search_effect(
+                search_effect = self._resolve_search_effect(
                     snap=snap,
                     request=request,
                     request_ordinals=request_ordinals,
                     rules=rules,
                     starting_state=starting_state,
                 )
-                if effect is not None:
-                    by_request[request.request_id] = effect
+                if search_effect is not None:
+                    by_request[request.request_id] = search_effect
             elif type(command) is Attack:
-                effect = self._resolve_attack_effect(
+                attack_effect = self._resolve_attack_effect(
                     snap=snap,
                     request=request,
                     request_ordinals=request_ordinals,
                     rules=rules,
                     starting_state=starting_state,
                 )
-                if effect is not None:
-                    by_request[request.request_id] = effect
+                if attack_effect is not None:
+                    by_request[request.request_id] = attack_effect
             elif type(command) is Flee:
-                effect = self._resolve_flee_effect(
+                flee_effect = self._resolve_flee_effect(
                     snap=snap,
                     request=request,
                     request_ordinals=request_ordinals,
                     rules=rules,
                     starting_state=starting_state,
                 )
-                if effect is not None:
-                    by_request[request.request_id] = effect
+                if flee_effect is not None:
+                    by_request[request.request_id] = flee_effect
         return ResolvedActionEffects(by_request=by_request)
 
     def _resolve_search_effect(

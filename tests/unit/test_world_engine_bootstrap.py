@@ -2,14 +2,6 @@
 
 from __future__ import annotations
 
-from tests.simulation_helpers import (
-    make_item,
-    make_location,
-    make_resource,
-    make_weather,
-    weather_for_locations,
-)
-
 import inspect
 
 import pytest
@@ -21,9 +13,24 @@ from simulation.bootstrap import (
     _materialize_world,
     registration_translator,
 )
+from tests.simulation_helpers import (
+    make_item,
+    make_location,
+    make_resource,
+    make_weather,
+    weather_for_locations,
+)
 from world.identifiers import EntityId, WorldId, WorldRevision
-from world.models import AgentBody, Item, LifeStatus, Location, Resource, Weather
-from world.values import WeatherCondition, CarryCapacity, Fatigue, Health, Hunger, TemperatureCelsius, Thirst
+from world.models import AgentBody, LifeStatus
+from world.values import (
+    CarryCapacity,
+    Fatigue,
+    Health,
+    Hunger,
+    TemperatureCelsius,
+    Thirst,
+    WeatherCondition,
+)
 
 
 def _alive_body(entity_id: str, location_id: str = "loc-1") -> AgentBody:
@@ -66,9 +73,7 @@ def _minimal_bootstrap(
     if bodies is None:
         bodies = (_alive_body("body-1"),)
     if registrations is None:
-        registrations = (
-            AgentRegistration(AgentId("agent-1"), EntityId("body-1")),
-        )
+        registrations = (AgentRegistration(AgentId("agent-1"), EntityId("body-1")),)
     return WorldBootstrap(
         world_id=WorldId("world-1"),
         revision=WorldRevision(0),
@@ -93,9 +98,7 @@ def test_bootstrap_accepts_ordered_public_models_and_registrations() -> None:
 def test_dead_bodies_may_be_registered() -> None:
     bootstrap = _minimal_bootstrap(
         bodies=(_dead_body("body-dead"),),
-        registrations=(
-            AgentRegistration(AgentId("ghost"), EntityId("body-dead")),
-        ),
+        registrations=(AgentRegistration(AgentId("ghost"), EntityId("body-dead")),),
     )
     assert bootstrap.bodies[0].life_status is LifeStatus.DEAD
     assert bootstrap.registrations[0].entity_id == EntityId("body-dead")
@@ -135,15 +138,11 @@ def test_duplicate_agent_or_entity_registrations_fail() -> None:
 def test_missing_body_and_cross_category_registrations_fail() -> None:
     with pytest.raises(ValueError, match="no matching body"):
         _minimal_bootstrap(
-            registrations=(
-                AgentRegistration(AgentId("agent-1"), EntityId("missing")),
-            ),
+            registrations=(AgentRegistration(AgentId("agent-1"), EntityId("missing")),),
         )
     with pytest.raises(ValueError, match="refers to a location"):
         _minimal_bootstrap(
-            registrations=(
-                AgentRegistration(AgentId("agent-1"), EntityId("loc-1")),
-            ),
+            registrations=(AgentRegistration(AgentId("agent-1"), EntityId("loc-1")),),
         )
     item = make_item("item-1", name="Rock", location_id="loc-1")
     locations = (make_location("loc-1", name="Camp"),)
@@ -155,9 +154,7 @@ def test_missing_body_and_cross_category_registrations_fail() -> None:
             items=(item,),
             bodies=(_alive_body("body-1"),),
             weather=weather_for_locations(locations),
-            registrations=(
-                AgentRegistration(AgentId("agent-1"), EntityId("item-1")),
-            ),
+            registrations=(AgentRegistration(AgentId("agent-1"), EntityId("item-1")),),
         )
 
 
@@ -168,9 +165,7 @@ def test_unordered_containers_are_rejected() -> None:
             revision=WorldRevision(0),
             locations={make_location("loc-1", name="Camp")},  # type: ignore[arg-type]
             bodies=(_alive_body("body-1"),),
-            registrations=(
-                AgentRegistration(AgentId("agent-1"), EntityId("body-1")),
-            ),
+            registrations=(AgentRegistration(AgentId("agent-1"), EntityId("body-1")),),
         )
 
 
@@ -189,19 +184,15 @@ def test_materialize_world_is_internal_and_matches_bootstrap() -> None:
         world_id=WorldId("world-1"),
         revision=WorldRevision(2),
         locations=(make_location("loc-1", name="Camp"),),
-        items=(
-            make_item("item-1", name="Cup", location_id="loc-1"),
-        ),
+        items=(make_item("item-1", name="Cup", location_id="loc-1"),),
         resources=(
-            make_resource("res-1", name="Water", location_id="loc-1", quantity=1.0, unit="L"),
+            make_resource(
+                "res-1", name="Water", location_id="loc-1", quantity=1.0, unit="L"
+            ),
         ),
         bodies=(_alive_body("body-1"),),
-        weather=(
-            make_weather("loc-1", condition=WeatherCondition.CLEAR),
-        ),
-        registrations=(
-            AgentRegistration(AgentId("agent-1"), EntityId("body-1")),
-        ),
+        weather=(make_weather("loc-1", condition=WeatherCondition.CLEAR),),
+        registrations=(AgentRegistration(AgentId("agent-1"), EntityId("body-1")),),
     )
     world = _materialize_world(bootstrap)
     assert world.world_id == bootstrap.world_id

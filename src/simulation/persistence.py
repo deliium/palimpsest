@@ -47,9 +47,7 @@ ACCEPTED_EVENT_SCHEMA_VERSIONS: Final[frozenset[int]] = frozenset(
     {EVENT_SCHEMA_REPLAY_V2, EVENT_SCHEMA_REPLAY_V3, EVENT_SCHEMA_REPLAY_V4}
 )
 ACCEPTED_PROJECTOR_VERSIONS: Final[frozenset[str]] = frozenset({"v1", "v2"})
-ACCEPTED_PERSISTENCE_CODEC_VERSIONS: Final[frozenset[str]] = frozenset(
-    {"v1", "v2"}
-)
+ACCEPTED_PERSISTENCE_CODEC_VERSIONS: Final[frozenset[str]] = frozenset({"v1", "v2"})
 
 _SHA256_HEX_RE: Final[re.Pattern[str]] = re.compile(r"^[0-9a-f]{64}$")
 _HASH_PREFIX_LEN: Final[int] = 8
@@ -143,9 +141,7 @@ def _require_accepted_projector_version(name: str, value: object) -> str:
 def _require_write_projector_version(name: str, value: object) -> str:
     version = _require_version_string(name, value)
     if version != PROJECTOR_VERSION:
-        raise ValueError(
-            f"{name} must equal PROJECTOR_VERSION ({PROJECTOR_VERSION})"
-        )
+        raise ValueError(f"{name} must equal PROJECTOR_VERSION ({PROJECTOR_VERSION})")
     return version
 
 
@@ -163,8 +159,7 @@ def _require_write_persistence_codec_version(name: str, value: object) -> str:
     version = _require_version_string(name, value)
     if version != PERSISTENCE_CODEC_VERSION:
         raise ValueError(
-            f"{name} must equal PERSISTENCE_CODEC_VERSION "
-            f"({PERSISTENCE_CODEC_VERSION})"
+            f"{name} must equal PERSISTENCE_CODEC_VERSION ({PERSISTENCE_CODEC_VERSION})"
         )
     return version
 
@@ -363,9 +358,10 @@ class WorldSnapshot:
         )
         if type(self.integrity_hash) is not PayloadHash:
             raise TypeError("WorldSnapshot.integrity_hash must be PayloadHash")
-        if self.predecessor_commit_hash is not None and type(
-            self.predecessor_commit_hash
-        ) is not CommitHash:
+        if (
+            self.predecessor_commit_hash is not None
+            and type(self.predecessor_commit_hash) is not CommitHash
+        ):
             raise TypeError(
                 "WorldSnapshot.predecessor_commit_hash must be CommitHash or None"
             )
@@ -550,12 +546,11 @@ class TickCommit:
         if type(self.resulting_revision) is not WorldRevision:
             raise TypeError("TickCommit.resulting_revision must be WorldRevision")
         if self.resulting_revision.value < self.base_revision.value:
-            raise ValueError(
-                "TickCommit.resulting_revision must be >= base_revision"
-            )
-        if self.predecessor_commit_hash is not None and type(
-            self.predecessor_commit_hash
-        ) is not CommitHash:
+            raise ValueError("TickCommit.resulting_revision must be >= base_revision")
+        if (
+            self.predecessor_commit_hash is not None
+            and type(self.predecessor_commit_hash) is not CommitHash
+        ):
             raise TypeError(
                 "TickCommit.predecessor_commit_hash must be CommitHash or None"
             )
@@ -598,9 +593,10 @@ class TickAppendRequest:
             raise TypeError(
                 "TickAppendRequest.expected_base_revision must be WorldRevision"
             )
-        if self.expected_predecessor_commit_hash is not None and type(
-            self.expected_predecessor_commit_hash
-        ) is not CommitHash:
+        if (
+            self.expected_predecessor_commit_hash is not None
+            and type(self.expected_predecessor_commit_hash) is not CommitHash
+        ):
             raise TypeError(
                 "TickAppendRequest.expected_predecessor_commit_hash must be "
                 "CommitHash or None"
@@ -713,9 +709,10 @@ class ReplayResult:
             raise TypeError("ReplayResult.mode must be ReplayMode")
         if self.snapshot_id is not None and type(self.snapshot_id) is not SnapshotId:
             raise TypeError("ReplayResult.snapshot_id must be SnapshotId or None")
-        if self.snapshot_next_tick is not None and type(
-            self.snapshot_next_tick
-        ) is not Tick:
+        if (
+            self.snapshot_next_tick is not None
+            and type(self.snapshot_next_tick) is not Tick
+        ):
             raise TypeError("ReplayResult.snapshot_next_tick must be Tick or None")
         if self.target_tick is not None and type(self.target_tick) is not Tick:
             raise TypeError("ReplayResult.target_tick must be Tick or None")
@@ -763,9 +760,7 @@ class TickJournalRepository(Protocol):
 
     async def append_tick(self, request: TickAppendRequest) -> TickCommit: ...
 
-    async def get_tick_commit(
-        self, run_id: RunId, tick: Tick
-    ) -> TickCommit | None: ...
+    async def get_tick_commit(self, run_id: RunId, tick: Tick) -> TickCommit | None: ...
 
     async def list_events(
         self,
@@ -841,9 +836,7 @@ def persistence_diagnostic_fields(
             raise TypeError("revision must be WorldRevision")
         fields["revision"] = revision.value
     if record_count is not None:
-        fields["record_count"] = require_exact_nonneg_int(
-            "record_count", record_count
-        )
+        fields["record_count"] = require_exact_nonneg_int("record_count", record_count)
     if version is not None:
         if isinstance(version, bool) or not isinstance(version, (str, int)):
             raise TypeError("version must be str or int")

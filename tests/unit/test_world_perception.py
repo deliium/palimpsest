@@ -110,9 +110,7 @@ def test_observations_follow_registration_order_and_v1_policy() -> None:
     assert not hasattr(first.locations[0], "body_capacity")
     assert [item.entity_id for item in first.items] == [EntityId("item-far")]
     assert first.items[0].placement is ObservedItemPlacement.GROUND_HERE
-    assert [resource.entity_id for resource in first.resources] == [
-        EntityId("res-far")
-    ]
+    assert [resource.entity_id for resource in first.resources] == [EntityId("res-far")]
     assert isinstance(first.resources[0], ObservedResource)
     assert not hasattr(first.resources[0], "regeneration_per_tick")
     assert first.weather_condition == WeatherCondition.CLOUDY

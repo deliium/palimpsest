@@ -84,9 +84,7 @@ class Agent:
         require_bounded_text("Agent.name", self.name)
         if isinstance(self.goals, (set, frozenset)):
             raise TypeError("Agent.goals must be an ordered sequence")
-        if isinstance(self.goals, (str, bytes)) or not isinstance(
-            self.goals, Sequence
-        ):
+        if isinstance(self.goals, (str, bytes)) or not isinstance(self.goals, Sequence):
             raise TypeError("Agent.goals must be an ordered sequence")
         goals = tuple(self.goals)
         seen: set[GoalId] = set()

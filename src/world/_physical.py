@@ -77,9 +77,7 @@ class PendingSystemDetail:
         )
         object.__setattr__(self, "details", require_event_details(self.details))
         if type(self.occurrence) is not OccurrenceContext:
-            raise TypeError(
-                "PendingSystemDetail.occurrence must be OccurrenceContext"
-            )
+            raise TypeError("PendingSystemDetail.occurrence must be OccurrenceContext")
 
 
 @dataclass(frozen=True, slots=True)
@@ -157,9 +155,7 @@ def apply_autonomous_physical_step(
     elif type(resolved) is ResolvedSystemEffects:
         system_effects = resolved
     else:
-        raise TypeError(
-            "resolved must be ResolvedSystemEffects or None"
-        )
+        raise TypeError("resolved must be ResolvedSystemEffects or None")
 
     working = state
     semantic_mutation = False
@@ -168,9 +164,7 @@ def apply_autonomous_physical_step(
         family: 0 for family in SystemEffectFamily
     }
 
-    weather_scheduled = (
-        (tick_value + 1) % rules.weather_period_ticks == 0
-    )
+    weather_scheduled = (tick_value + 1) % rules.weather_period_ticks == 0
     if weather_scheduled:
         expected = set(working.locations)
         provided = set(system_effects.weather_by_location)
@@ -184,9 +178,7 @@ def apply_autonomous_physical_step(
             prior = weather_map[location_id]
             if effect.condition is prior.condition:
                 continue
-            weather_map[location_id] = copy_weather(
-                prior, condition=effect.condition
-            )
+            weather_map[location_id] = copy_weather(prior, condition=effect.condition)
             semantic_mutation = True
             ordinal = family_ordinals[SystemEffectFamily.WEATHER]
             family_ordinals[SystemEffectFamily.WEATHER] = ordinal + 1
@@ -205,9 +197,7 @@ def apply_autonomous_physical_step(
         if semantic_mutation:
             working = rebuild_world_state(working, weather=weather_map)
     elif system_effects.weather_by_location:
-        raise ValueError(
-            "resolved weather must be empty on non-scheduled ticks"
-        )
+        raise ValueError("resolved weather must be empty on non-scheduled ticks")
 
     resources = dict(working.resources)
     resources_changed = False
@@ -215,9 +205,7 @@ def apply_autonomous_physical_step(
         resource = resources[resource_id]
         if resource.regeneration_per_tick == 0.0:
             continue
-        uncapped = round_physical(
-            resource.quantity + resource.regeneration_per_tick
-        )
+        uncapped = round_physical(resource.quantity + resource.regeneration_per_tick)
         resulting = min(uncapped, resource.maximum_quantity)
         resulting = round_physical(resulting)
         if resulting == resource.quantity:
@@ -243,7 +231,9 @@ def apply_autonomous_physical_step(
     if resources_changed:
         working = rebuild_world_state(working, resources=resources)
 
-    phase_offset = rules.phase_temperature_offset[day_phase]
+    phase_offsets = rules.phase_temperature_offset
+    assert phase_offsets is not None
+    phase_offset = phase_offsets[day_phase]
     bodies = dict(working.bodies)
     bodies_changed = False
     for body_id in sorted(bodies, key=lambda value: value.value):
@@ -259,9 +249,7 @@ def apply_autonomous_physical_step(
             clamp_need(round_physical(body.thirst.value + rules.metabolism_thirst))
         )
         fatigue = Fatigue(
-            clamp_need(
-                round_physical(body.fatigue.value + rules.metabolism_fatigue)
-            )
+            clamp_need(round_physical(body.fatigue.value + rules.metabolism_fatigue))
         )
         damage = 0.0
         if hunger.value >= 100.0:
@@ -270,9 +258,7 @@ def apply_autonomous_physical_step(
             damage += rules.thirst_damage
         if fatigue.value >= 100.0:
             damage += rules.fatigue_damage
-        resulting_health = clamp_need(
-            round_physical(body.health.value - damage)
-        )
+        resulting_health = clamp_need(round_physical(body.health.value - damage))
         health_delta = round_physical(resulting_health - body.health.value)
         died_from_needs = resulting_health <= 0.0
         if died_from_needs:
@@ -330,9 +316,11 @@ def apply_autonomous_physical_step(
             )
             continue
 
+        weather_offsets = rules.weather_temperature_offset
+        assert weather_offsets is not None
         ambient = round_physical(
             location.base_temperature.value
-            + rules.weather_temperature_offset[weather.condition]
+            + weather_offsets[weather.condition]
             + phase_offset
         )
         temperature = TemperatureCelsius(
@@ -352,9 +340,7 @@ def apply_autonomous_physical_step(
         exposed_health = clamp_need(
             round_physical(next_body.health.value - exposure_damage)
         )
-        exposure_health_delta = round_physical(
-            exposed_health - next_body.health.value
-        )
+        exposure_health_delta = round_physical(exposed_health - next_body.health.value)
         died_from_exposure = exposed_health <= 0.0
         if died_from_exposure:
             exposed_body = copy_body(

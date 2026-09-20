@@ -163,9 +163,7 @@ def _state(*, include_held: bool = True) -> WorldState:
     )
 
 
-def _accept(
-    command: object, *, actor: str = "body-1"
-) -> ValidatedWorldOperation:
+def _accept(command: object, *, actor: str = "body-1") -> ValidatedWorldOperation:
     from world.actions import ActionRequest, require_agent_command
 
     state = _state()
@@ -251,6 +249,7 @@ def test_living_actor_matrix_dispositions(
         assert result.emits_event is policy.emits_event_when_applied
         assert result.mutates_state is policy.mutates_state_when_applied
 
+
 @pytest.mark.parametrize(("kind", "command", "_expected"), _ALL_COMMAND_CASES)
 def test_dead_actor_rejected_before_command_specific_behavior(
     kind: str, command: object, _expected: RuleDisposition
@@ -332,9 +331,9 @@ def test_apply_take_drop_give_mutate_inventories_deterministically() -> None:
     assert taken.event_details == Taken(
         EntityId("item-ground"), resulting_holder_id=EntityId("body-1")
     )
-    assert EntityId("item-ground") in taken.next_state.bodies[
-        EntityId("body-1")
-    ].inventory
+    assert (
+        EntityId("item-ground") in taken.next_state.bodies[EntityId("body-1")].inventory
+    )
     assert taken.next_state.items[EntityId("item-ground")].holder_id == EntityId(
         "body-1"
     )
@@ -358,9 +357,10 @@ def test_apply_take_drop_give_mutate_inventories_deterministically() -> None:
     assert dropped.event_details == Dropped(
         EntityId("item-held"), resulting_location_id=EntityId("loc-1")
     )
-    assert EntityId("item-held") not in dropped.next_state.bodies[
-        EntityId("body-1")
-    ].inventory
+    assert (
+        EntityId("item-held")
+        not in dropped.next_state.bodies[EntityId("body-1")].inventory
+    )
     assert dropped.next_state.items[EntityId("item-held")].location_id == EntityId(
         "loc-1"
     )
@@ -373,15 +373,14 @@ def test_apply_take_drop_give_mutate_inventories_deterministically() -> None:
         EntityId("item-held"),
         resulting_holder_id=EntityId("body-2"),
     )
-    assert EntityId("item-held") not in given.next_state.bodies[
-        EntityId("body-1")
-    ].inventory
+    assert (
+        EntityId("item-held")
+        not in given.next_state.bodies[EntityId("body-1")].inventory
+    )
     assert given.next_state.bodies[EntityId("body-2")].inventory == (
         EntityId("item-held"),
     )
-    assert given.next_state.items[EntityId("item-held")].holder_id == EntityId(
-        "body-2"
-    )
+    assert given.next_state.items[EntityId("item-held")].holder_id == EntityId("body-2")
 
 
 def test_sleep_help_attack_flee_and_terminal_death() -> None:
@@ -419,9 +418,7 @@ def test_sleep_help_attack_flee_and_terminal_death() -> None:
     )
     slept = apply_operation(state, _accept(Sleep()))
     assert slept.result.disposition is RuleDisposition.MUTATE
-    assert slept.event_details == Slept(
-        fatigue_delta=-30.0, resulting_fatigue=10.0
-    )
+    assert slept.event_details == Slept(fatigue_delta=-30.0, resulting_fatigue=10.0)
     assert slept.next_state.bodies[EntityId("body-1")].fatigue.value == 10.0
 
     zero = apply_operation(_state(), _accept(Sleep()))
@@ -470,9 +467,7 @@ def test_sleep_help_attack_flee_and_terminal_death() -> None:
         damage=50,
         resulting_target_health=0.0,
     )
-    assert lethal.extra_event_details == (
-        Died(EntityId("body-2"), DeathCause.ATTACK),
-    )
+    assert lethal.extra_event_details == (Died(EntityId("body-2"), DeathCause.ATTACK),)
     assert lethal.all_event_details() == (
         lethal.event_details,
         *lethal.extra_event_details,
@@ -539,9 +534,7 @@ def test_sleep_help_attack_flee_and_terminal_death() -> None:
         ),
     )
     assert fled_fail.result.disposition is RuleDisposition.EVENT_ONLY
-    assert fled_fail.event_details == Fled(
-        threat_id=EntityId("body-2"), success=False
-    )
+    assert fled_fail.event_details == Fled(threat_id=EntityId("body-2"), success=False)
 
     fled_ok = apply_operation(
         _state(),
@@ -645,9 +638,7 @@ def test_move_rejects_non_adjacent_and_full_capacity() -> None:
             name=loc.name,
             adjacent=loc.adjacent,
             body_capacity=(
-                BodyCapacity(1)
-                if loc.entity_id.value == "loc-2"
-                else loc.body_capacity
+                BodyCapacity(1) if loc.entity_id.value == "loc-2" else loc.body_capacity
             ),
             item_capacity=loc.item_capacity,
             base_temperature=loc.base_temperature,
@@ -737,13 +728,9 @@ def test_search_miss_and_success() -> None:
             )
         }
     )
-    miss = apply_operation(
-        state, _accept(Search()), resolved=miss_resolved
-    )
+    miss = apply_operation(state, _accept(Search()), resolved=miss_resolved)
     assert miss.result.disposition is RuleDisposition.EVENT_ONLY
-    assert miss.event_details == Searched(
-        target_id=EntityId("res-1"), success=False
-    )
+    assert miss.event_details == Searched(target_id=EntityId("res-1"), success=False)
     assert miss.next_state is state
 
     success_resolved = ResolvedActionEffects(
@@ -756,9 +743,7 @@ def test_search_miss_and_success() -> None:
             )
         }
     )
-    success = apply_operation(
-        state, _accept(Search()), resolved=success_resolved
-    )
+    success = apply_operation(state, _accept(Search()), resolved=success_resolved)
     assert success.result.disposition is RuleDisposition.MUTATE
     assert isinstance(success.event_details, Searched)
     assert success.event_details.success is True
@@ -808,7 +793,7 @@ def test_eat_and_drink_consume_and_relieve_needs() -> None:
 
     drunk_res = apply_operation(state, _accept(Drink(EntityId("res-1"))))
     assert drunk_res.result.disposition is RuleDisposition.MUTATE
-    assert drunk_res.event_details is not None
+    assert isinstance(drunk_res.event_details, Drunk)
     assert drunk_res.event_details.consumed_item is False
     assert drunk_res.next_state.resources[EntityId("res-1")].quantity == 0.0
     assert drunk_res.next_state.bodies[EntityId("body-1")].thirst.value == 10.0

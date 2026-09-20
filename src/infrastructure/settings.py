@@ -268,4 +268,3 @@ def load_migration_settings(
         ).require_runtime_database()
 
     raise SettingsError("PALIMPSEST_DATABASE_URL is required at runtime")
-

@@ -52,9 +52,7 @@ def test_property_temperature_accepts_any_finite_float(value: float) -> None:
 
 @pytest.mark.parametrize("wrapper", [Health, Hunger, Thirst, Fatigue])
 @pytest.mark.parametrize("invalid", [-0.1, 100.1, math.inf, math.nan, True, "1"])
-def test_need_scalars_reject_invalid_values(
-    wrapper: type, invalid: object
-) -> None:
+def test_need_scalars_reject_invalid_values(wrapper: type, invalid: object) -> None:
     with pytest.raises(ValueError):
         wrapper(invalid)
 
@@ -101,7 +99,7 @@ def test_capacity_and_load_value_objects() -> None:
     with pytest.raises(ValueError):
         ItemCapacity(-1)
     with pytest.raises(ValueError):
-        CarryCapacity(True)  # type: ignore[arg-type]
+        CarryCapacity(True)
     with pytest.raises(ValueError):
         ItemLoad(0)
     with pytest.raises(ValueError):

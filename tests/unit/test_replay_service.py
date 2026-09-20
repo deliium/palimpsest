@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-from tests.simulation_helpers import make_location, make_weather
-
 import pytest
 
 from agents.models import AgentId
@@ -32,6 +30,7 @@ from simulation.persistence import (
     WorldSnapshot,
 )
 from simulation.replay import ReplayService
+from tests.simulation_helpers import make_location, make_weather
 from world.events import Waited, WorldEvent, make_replayable_event
 from world.identifiers import (
     EntityId,
@@ -40,8 +39,15 @@ from world.identifiers import (
     WorldId,
     WorldRevision,
 )
-from world.models import AgentBody, LifeStatus, Location
-from world.values import CarryCapacity, Fatigue, Health, Hunger, TemperatureCelsius, Thirst
+from world.models import AgentBody, LifeStatus
+from world.values import (
+    CarryCapacity,
+    Fatigue,
+    Health,
+    Hunger,
+    TemperatureCelsius,
+    Thirst,
+)
 
 pytestmark = pytest.mark.unit
 
@@ -74,9 +80,7 @@ def _snapshot(
         world_id=WorldId("world-1"),
         seed=7,
         config=SimulationRunConfig(seed=7),
-        registrations=(
-            AgentRegistration(AgentId("agent-1"), EntityId("body-1")),
-        ),
+        registrations=(AgentRegistration(AgentId("agent-1"), EntityId("body-1")),),
         locations=(make_location("loc-1", name="Camp"),),
         bodies=(_alive(),),
         items=(),
@@ -204,9 +208,7 @@ class _FakeJournal:
     async def append_tick(self, request: TickAppendRequest) -> TickCommit:
         raise NotImplementedError
 
-    async def get_tick_commit(
-        self, run_id: RunId, tick: Tick
-    ) -> TickCommit | None:
+    async def get_tick_commit(self, run_id: RunId, tick: Tick) -> TickCommit | None:
         for item in self.commits:
             if item.run_id == run_id and item.tick == tick:
                 return item

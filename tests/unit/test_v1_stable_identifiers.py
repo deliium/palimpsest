@@ -219,15 +219,18 @@ def test_system_cause_ids_are_purpose_separated() -> None:
         family_ordinal=0,
     )
     assert weather != regen
-    assert derive_system_cause_id(
-        config,
-        run_id=run_id,
-        world_id=world_id,
-        tick=5,
-        effect_family="weather",
-        entity_id=entity,
-        family_ordinal=0,
-    ) == weather
+    assert (
+        derive_system_cause_id(
+            config,
+            run_id=run_id,
+            world_id=world_id,
+            tick=5,
+            effect_family="weather",
+            entity_id=entity,
+            family_ordinal=0,
+        )
+        == weather
+    )
 
 
 def test_physical_sampling_algorithms_are_deterministic() -> None:

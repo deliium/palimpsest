@@ -102,9 +102,7 @@ def test_distinct_scopes_do_not_alias() -> None:
 
 @given(seed=_SEEDS, scope=_SCOPES)
 @settings(max_examples=25, deadline=None)
-def test_property_global_rng_state_is_unchanged(
-    seed: int, scope: StreamScope
-) -> None:
+def test_property_global_rng_state_is_unchanged(seed: int, scope: StreamScope) -> None:
     before = random.getstate()
     config = SimulationRunConfig(seed=seed)
     create_named_stream(config, scope)

@@ -122,9 +122,7 @@ def test_canonical_admission_keys_are_ordinal_stable_and_rng_isolated() -> None:
     world_id = WorldId("world-1")
     agent_a = AgentId("agent-a")
     agent_b = AgentId("agent-b")
-    translator = _Translator(
-        {agent_a: EntityId("body-a"), agent_b: EntityId("body-b")}
-    )
+    translator = _Translator({agent_a: EntityId("body-a"), agent_b: EntityId("body-b")})
     keys_a = canonical_admission_keys(
         run_id=run_id,
         world_id=world_id,

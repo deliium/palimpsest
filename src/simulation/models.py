@@ -70,9 +70,7 @@ class SimulationRunConfig:
             self.physical_rules is not None
             and type(self.physical_rules) is not PhysicalRules
         ):
-            raise TypeError(
-                "SimulationRunConfig.physical_rules must be PhysicalRules"
-            )
+            raise TypeError("SimulationRunConfig.physical_rules must be PhysicalRules")
         if self.derivation_version is None:
             resolved = (
                 DERIVATION_VERSION_V2
@@ -84,13 +82,11 @@ class SimulationRunConfig:
         object.__setattr__(self, "derivation_version", resolved)
         if resolved == DERIVATION_VERSION_V2 and self.physical_rules is None:
             raise ValueError(
-                "derivation-v2 requires physical_rules "
-                "(code=derivation_rules_mismatch)"
+                "derivation-v2 requires physical_rules (code=derivation_rules_mismatch)"
             )
         if resolved == DERIVATION_VERSION_V1 and self.physical_rules is not None:
             raise ValueError(
-                "derivation-v1 forbids physical_rules "
-                "(code=derivation_rules_mismatch)"
+                "derivation-v1 forbids physical_rules (code=derivation_rules_mismatch)"
             )
 
 

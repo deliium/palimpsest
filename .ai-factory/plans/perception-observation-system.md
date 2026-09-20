@@ -88,19 +88,19 @@ The service must account for observer location, nearby entities, effective visib
 
 ### Phase 3: Isolation Proofs and Completion
 
-- [ ] Task 7: Prove physical visibility, redaction, and noninterference.
+- [x] Task 7: Prove physical visibility, redaction, and noninterference.
   - Deliverable: Build parameterized and Hypothesis tests covering location, every weather condition, day/night boundary hours, visibility below/at/above the threshold, nearby/remote agents, held/ground/remote items, local/remote resources, exits, self knowledge, dead observers, and coarse health bands. Add paired-state noninterference tests: changing only hidden remote state or hidden fields of a nearby entity must leave the complete observation and canonical serialized bytes unchanged. Assert other agents' inventory, exact physiology, resource regeneration/capacity, remote weather/topology, and hidden identifiers cannot be recovered from public observation types.
   - Files: `tests/unit/test_world_perception.py`, `tests/unit/physical/test_physical_projection.py`, `tests/unit/physical/test_physiology.py`, `tests/unit/test_world_agent_contracts.py`, `tests/unit/test_v1_domain_serialization.py`, `tests/unit/determinism_helpers.py`.
   - Logging: Tests assert projection remains log-free and capture engine logs to prove DEBUG diagnostics contain counts/reason codes only, with no hidden values, observation reprs, or communication payloads.
   - Dependencies: Depends on tasks 3 and 6.
 
-- [ ] Task 8: Prove event, communication, routing, determinism, and authority isolation.
+- [x] Task 8: Prove event, communication, routing, determinism, and authority isolation.
   - Deliverable: Test actors, direct targets, origin/destination witnesses, visible bystanders, remote observers, and low-visibility observers for representative movement, transfer, combat/help, death, weather/resource, needs/exposure, and communication events. Verify partial event fields, private recipient-only text, “claim not truth” semantics, next-tick delivery, no rejected/duplicate/conflicted action event, eventless windows, idempotent repeated observe, no cross-agent batch routing, and live-versus-restored equality. Expand AST/import-linter checks so agents, cognition, memory, social, LLM, API, and analysis cannot import `WorldState`, private perception, or authority-bearing routing types, while approved engine/private-world imports remain narrow.
   - Files: `tests/unit/test_world_perception.py`, `tests/unit/test_world_engine.py`, `tests/unit/test_cognition_strategies.py`, `tests/unit/test_replay_service.py`, `tests/unit/test_checkpoint_restoration.py`, `tests/unit/test_simulation_replay_determinism.py`, `tests/architecture/boundary_checker.py`, `tests/architecture/test_boundary_checker.py`, `tests/architecture/test_world_authority.py`, `tests/architecture/test_import_boundaries.py`, `pyproject.toml`.
   - Logging: Capture DEBUG/INFO/WARN/ERROR behavior for projection, routing, restore, and misuse paths; assert `PALIMPSEST_LOG_LEVEL` controls verbosity and that logs omit event text, observations, memories, private state, and hidden identities. Architecture checks themselves remain log-free.
   - Dependencies: Depends on tasks 4-7.
 
-- [ ] Task 9: Document the perception boundary and complete all project gates.
+- [x] Task 9: Document the perception boundary and complete all project gates.
   - Deliverable: Run the mandatory `$aif-docs` checkpoint to document objective `WorldState` versus subjective `Observation`, the visibility/audience matrix, event timing, partial-information and provenance semantics, communication-as-claim behavior, cognition routing, replay guarantees, and the explicit boundary with memory distortion. Update project architecture artifacts if public contracts or dependency rules change, then run formatting, lint, type, unit/property, architecture, serialization, migration, and opt-in persistence checks.
   - Files: `README.md`, `docs/architecture.md`, `docs/physical-simulation.md`, `docs/development.md`, `docs/persistence.md`, `.ai-factory/DESCRIPTION.md`, `.ai-factory/ARCHITECTURE.md`.
   - Logging: Documentation records the safe structured logging policy and diagnostic levels. Verification includes assertions that no test or production log emits observations, communications, memories, credentials, or private world state.

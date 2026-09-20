@@ -21,12 +21,8 @@ def test_second_take_of_same_item_is_conflicted() -> None:
     batch = engine.observe()
     result = engine.resolve_tick(
         (
-            ActionSubmission(
-                batch.token, AgentId("agent-1"), Take(EntityId("item-1"))
-            ),
-            ActionSubmission(
-                batch.token, AgentId("agent-2"), Take(EntityId("item-1"))
-            ),
+            ActionSubmission(batch.token, AgentId("agent-1"), Take(EntityId("item-1"))),
+            ActionSubmission(batch.token, AgentId("agent-2"), Take(EntityId("item-1"))),
         )
     )
     assert result.resolutions[0].status is ActionResolutionStatus.APPLIED
@@ -34,9 +30,10 @@ def test_second_take_of_same_item_is_conflicted() -> None:
     after = engine._snapshot.world.state
     assert after.items[EntityId("item-1")].holder_id == EntityId("body-1")
     assert EntityId("item-1") not in after.bodies[EntityId("body-2")].inventory
-    assert before.items[EntityId("item-1")].entity_id == after.items[
-        EntityId("item-1")
-    ].entity_id
+    assert (
+        before.items[EntityId("item-1")].entity_id
+        == after.items[EntityId("item-1")].entity_id
+    )
 
 
 def test_move_into_full_destination_after_earlier_arrival_conflicts() -> None:
@@ -82,24 +79,18 @@ def test_move_into_full_destination_after_earlier_arrival_conflicts() -> None:
     batch = engine.observe()
     result = engine.resolve_tick(
         (
-            ActionSubmission(
-                batch.token, AgentId("agent-1"), Move(EntityId("loc-2"))
-            ),
-            ActionSubmission(
-                batch.token, AgentId("agent-2"), Move(EntityId("loc-2"))
-            ),
+            ActionSubmission(batch.token, AgentId("agent-1"), Move(EntityId("loc-2"))),
+            ActionSubmission(batch.token, AgentId("agent-2"), Move(EntityId("loc-2"))),
         )
     )
     assert result.resolutions[0].status is ActionResolutionStatus.APPLIED
     assert result.resolutions[1].status is ActionResolutionStatus.CONFLICTED
-    assert (
-        engine._snapshot.world.state.bodies[EntityId("body-1")].location_id
-        == EntityId("loc-2")
-    )
-    assert (
-        engine._snapshot.world.state.bodies[EntityId("body-2")].location_id
-        == EntityId("loc-1")
-    )
+    assert engine._snapshot.world.state.bodies[
+        EntityId("body-1")
+    ].location_id == EntityId("loc-2")
+    assert engine._snapshot.world.state.bodies[
+        EntityId("body-2")
+    ].location_id == EntityId("loc-1")
 
 
 def test_give_second_submission_same_agent_is_duplicate() -> None:
@@ -141,9 +132,8 @@ def test_give_second_submission_same_agent_is_duplicate() -> None:
     )
     assert result.resolutions[0].status is ActionResolutionStatus.APPLIED
     assert result.resolutions[1].status is ActionResolutionStatus.DUPLICATE
-    assert (
-        engine._snapshot.world.state.items[EntityId("item-1")].holder_id
-        == EntityId("body-2")
+    assert engine._snapshot.world.state.items[EntityId("item-1")].holder_id == EntityId(
+        "body-2"
     )
 
 
@@ -167,12 +157,8 @@ def test_drop_conflicts_when_earlier_drop_fills_capacity() -> None:
     batch = engine.observe()
     result = engine.resolve_tick(
         (
-            ActionSubmission(
-                batch.token, AgentId("agent-1"), Drop(EntityId("item-a"))
-            ),
-            ActionSubmission(
-                batch.token, AgentId("agent-2"), Drop(EntityId("item-b"))
-            ),
+            ActionSubmission(batch.token, AgentId("agent-1"), Drop(EntityId("item-a"))),
+            ActionSubmission(batch.token, AgentId("agent-2"), Drop(EntityId("item-b"))),
         )
     )
     assert result.resolutions[0].status is ActionResolutionStatus.APPLIED

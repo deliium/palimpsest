@@ -138,9 +138,7 @@ async def test_scaled_world_postgres_round_trip(
     live_fp = objective_fingerprint(engine)
 
     replay = ReplayService(runs, journal, snapshots)
-    outcome = await replay.replay(
-        ReplayRequest(run_id=RunId(run_id), target_tick=None)
-    )
+    outcome = await replay.replay(ReplayRequest(run_id=RunId(run_id), target_tick=None))
     assert outcome.result.status is ReplayStatus.OK
     assert outcome.engine is not None
     assert objective_fingerprint(outcome.engine) == live_fp

@@ -2,14 +2,27 @@
 
 from __future__ import annotations
 
-from tests.simulation_helpers import make_item, make_location, make_resource, make_weather, weather_for_locations
-
 import pytest
 
+from tests.simulation_helpers import (
+    make_item,
+    make_location,
+    make_resource,
+    make_weather,
+    weather_for_locations,
+)
 from world._state import World, WorldState
 from world.identifiers import EntityId, WorldId, WorldRevision
-from world.models import AgentBody, Item, LifeStatus, Location, Resource, Weather
-from world.values import WeatherCondition, CarryCapacity, Fatigue, Health, Hunger, TemperatureCelsius, Thirst
+from world.models import AgentBody, LifeStatus
+from world.values import (
+    CarryCapacity,
+    Fatigue,
+    Health,
+    Hunger,
+    TemperatureCelsius,
+    Thirst,
+    WeatherCondition,
+)
 
 
 def _alive_body(
@@ -99,15 +112,13 @@ def test_holder_and_inventory_must_agree() -> None:
         WorldRevision(0),
         locations=(location,),
         items=(item,),
-        bodies=(
-            _alive_body("body-1", "loc-1", inventory=(EntityId("item-1"),)),
-        ),
+        bodies=(_alive_body("body-1", "loc-1", inventory=(EntityId("item-1"),)),),
         resources=(
-            make_resource("res-1", name="Water", location_id="loc-1", quantity=1.0, unit="liters"),
+            make_resource(
+                "res-1", name="Water", location_id="loc-1", quantity=1.0, unit="liters"
+            ),
         ),
-        weather=(
-            make_weather("loc-1", condition=WeatherCondition.CLEAR),
-        ),
+        weather=(make_weather("loc-1", condition=WeatherCondition.CLEAR),),
     )
     assert coherent.items[EntityId("item-1")].holder_id == EntityId("body-1")
 

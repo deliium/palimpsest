@@ -343,9 +343,7 @@ def _apply_legacy_transfer(state: WorldState, event: WorldEvent) -> WorldState:
         case Taken(item_id=item_id, resulting_holder_id=holder_id):
             return _project_take(state, event, item_id=item_id, holder_id=holder_id)
         case Dropped(item_id=item_id, resulting_location_id=location_id):
-            return _project_drop(
-                state, event, item_id=item_id, location_id=location_id
-            )
+            return _project_drop(state, event, item_id=item_id, location_id=location_id)
         case Given(
             recipient_id=recipient_id,
             item_id=item_id,
@@ -547,9 +545,7 @@ def _project_eat(state: WorldState, event: WorldEvent, details: Eaten) -> WorldS
     del items[details.item_id]
     bodies[actor_id] = copy_body(
         actor,
-        inventory=tuple(
-            owned for owned in actor.inventory if owned != details.item_id
-        ),
+        inventory=tuple(owned for owned in actor.inventory if owned != details.item_id),
         hunger=Hunger(details.resulting_hunger),
     )
     try:
@@ -558,9 +554,7 @@ def _project_eat(state: WorldState, event: WorldEvent, details: Eaten) -> WorldS
         raise ProjectionError(ProjectionErrorCode.INVARIANT_FAILED) from exc
 
 
-def _project_drink(
-    state: WorldState, event: WorldEvent, details: Drunk
-) -> WorldState:
+def _project_drink(state: WorldState, event: WorldEvent, details: Drunk) -> WorldState:
     actor_id = event.actor_id
     if actor_id is None or actor_id not in state.bodies:
         raise ProjectionError(ProjectionErrorCode.ACTOR_MISSING)
@@ -592,9 +586,7 @@ def _project_drink(
         resources[details.source_id] = copy_resource(
             resource, quantity=details.resulting_resource_quantity
         )
-        bodies[actor_id] = copy_body(
-            actor, thirst=Thirst(details.resulting_thirst)
-        )
+        bodies[actor_id] = copy_body(actor, thirst=Thirst(details.resulting_thirst))
     try:
         return rebuild_world_state(
             state, items=items, bodies=bodies, resources=resources
@@ -603,9 +595,7 @@ def _project_drink(
         raise ProjectionError(ProjectionErrorCode.INVARIANT_FAILED) from exc
 
 
-def _project_sleep(
-    state: WorldState, event: WorldEvent, details: Slept
-) -> WorldState:
+def _project_sleep(state: WorldState, event: WorldEvent, details: Slept) -> WorldState:
     actor_id = event.actor_id
     if actor_id is None or actor_id not in state.bodies:
         raise ProjectionError(ProjectionErrorCode.ACTOR_MISSING)
@@ -620,9 +610,7 @@ def _project_sleep(
         raise ProjectionError(ProjectionErrorCode.INVARIANT_FAILED) from exc
 
 
-def _project_help(
-    state: WorldState, event: WorldEvent, details: Helped
-) -> WorldState:
+def _project_help(state: WorldState, event: WorldEvent, details: Helped) -> WorldState:
     actor_id = event.actor_id
     if actor_id is None or actor_id not in state.bodies:
         raise ProjectionError(ProjectionErrorCode.ACTOR_MISSING)
@@ -682,10 +670,7 @@ def _project_flee_success(
     actor_id = event.actor_id
     if actor_id is None or actor_id not in state.bodies:
         raise ProjectionError(ProjectionErrorCode.ACTOR_MISSING)
-    if (
-        details.destination_id is None
-        or details.resulting_fatigue is None
-    ):
+    if details.destination_id is None or details.resulting_fatigue is None:
         raise ProjectionError(ProjectionErrorCode.PRECONDITION_FAILED)
     if details.destination_id not in state.locations:
         raise ProjectionError(ProjectionErrorCode.TARGET_MISSING)

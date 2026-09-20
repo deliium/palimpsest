@@ -36,9 +36,7 @@ def rebuild_world_state(
         locations=tuple(
             sorted(location_src.values(), key=lambda value: value.entity_id.value)
         ),
-        items=tuple(
-            sorted(item_src.values(), key=lambda value: value.entity_id.value)
-        ),
+        items=tuple(sorted(item_src.values(), key=lambda value: value.entity_id.value)),
         resources=tuple(
             sorted(resource_src.values(), key=lambda value: value.entity_id.value)
         ),
@@ -276,9 +274,7 @@ def _index_weather(
             raise TypeError("weather entries must be Weather")
         location_id = value.location_id
         if location_id in indexed:
-            raise ValueError(
-                f"duplicate weather for location {location_id.value!r}"
-            )
+            raise ValueError(f"duplicate weather for location {location_id.value!r}")
         if location_id not in locations:
             raise ValueError(
                 f"weather references unknown location {location_id.value!r}"
@@ -325,9 +321,7 @@ def _validate_weather_coverage(
     missing = set(location_index) - set(weather_index)
     if missing:
         sample = sorted(entity.value for entity in missing)[0]
-        raise ValueError(
-            f"weather coverage incomplete; missing location {sample!r}"
-        )
+        raise ValueError(f"weather coverage incomplete; missing location {sample!r}")
 
 
 def _validate_capacities(
@@ -351,9 +345,7 @@ def _validate_capacities(
     for item in item_index.values():
         if item.location_id is None:
             continue
-        ground_counts[item.location_id] = (
-            ground_counts.get(item.location_id, 0) + 1
-        )
+        ground_counts[item.location_id] = ground_counts.get(item.location_id, 0) + 1
     for location_id, count in ground_counts.items():
         capacity = location_index[location_id].item_capacity.value
         if count > capacity:
@@ -410,8 +402,7 @@ def _validate_graph(
         holder_id = item.holder_id
         if holder_id not in body_index:
             raise ValueError(
-                f"item {item_id.value!r} references unknown holder "
-                f"{holder_id.value!r}"
+                f"item {item_id.value!r} references unknown holder {holder_id.value!r}"
             )
         owner = inventory_owners.get(item_id)
         if owner is None:

@@ -90,9 +90,7 @@ def _bootstrap_snapshot(
     if bodies is None:
         bodies = (_alive_body(inventory=inventory),)
     if registrations is None:
-        registrations = (
-            AgentRegistration(AgentId("agent-1"), EntityId("body-1")),
-        )
+        registrations = (AgentRegistration(AgentId("agent-1"), EntityId("body-1")),)
     return WorldSnapshot(
         snapshot_id=SnapshotId("snap-bootstrap"),
         run_id=RunId(run_id),
@@ -354,6 +352,6 @@ def test_persistence_diagnostic_fields_exclude_secrets() -> None:
     assert "events" not in fields
     assert "label" not in fields
     assert _HASH_A not in fields.values()
-    assert persistence_diagnostic_fields(
-        commit_hash=PayloadHash(_HASH_B)
-    ) == {"hash_prefix": "bbbbbbbb"}
+    assert persistence_diagnostic_fields(commit_hash=PayloadHash(_HASH_B)) == {
+        "hash_prefix": "bbbbbbbb"
+    }

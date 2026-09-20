@@ -198,8 +198,7 @@ COMMAND_RULE_MATRIX: Final[dict[type, CommandRulePolicy]] = {
         mutates_state_when_applied=True,
         requires_living_actor=True,
         notes=(
-            "eligible local resource + free ground slot; "
-            "mutate-or-event via resolved"
+            "eligible local resource + free ground slot; mutate-or-event via resolved"
         ),
     ),
     _TalkOp: CommandRulePolicy(
@@ -451,9 +450,10 @@ def find_eligible_search_resource(
     actor = state.bodies.get(actor_id)
     if actor is None or actor.life_status is LifeStatus.DEAD:
         return None
-    if _ground_item_count(state, actor.location_id) >= state.locations[
-        actor.location_id
-    ].item_capacity.value:
+    if (
+        _ground_item_count(state, actor.location_id)
+        >= state.locations[actor.location_id].item_capacity.value
+    ):
         return None
     if target_id is not None:
         if not _resource_search_eligible(state, actor, target_id):
@@ -529,9 +529,10 @@ def _evaluate_search(
     if target_id is not None and effect.resource_id != target_id:
         raise ValueError("resolved search resource_id must match Search target")
     actor = state.bodies[actor_id]
-    if _ground_item_count(state, actor.location_id) >= state.locations[
-        actor.location_id
-    ].item_capacity.value:
+    if (
+        _ground_item_count(state, actor.location_id)
+        >= state.locations[actor.location_id].item_capacity.value
+    ):
         return _reject(kind, RuleReason.NO_ITEM_CAPACITY)
     resource_reject = _search_resource_reject(state, actor, effect.resource_id, kind)
     if resource_reject is not None:
@@ -920,9 +921,7 @@ def apply_operation(
         RuleDisposition.REJECT,
         RuleDisposition.DEFERRED,
     }:
-        return RuleApplication(
-            result=result, next_state=state, event_details=None
-        )
+        return RuleApplication(result=result, next_state=state, event_details=None)
     if type(operation) is _SearchOp:
         return _apply_search(
             state, operation, result=result, rules=physical_rules, resolved=resolved
@@ -937,18 +936,14 @@ def apply_operation(
         )
     details = _event_details_for(state, operation, rules=physical_rules)
     if result.disposition is RuleDisposition.EVENT_ONLY:
-        return RuleApplication(
-            result=result, next_state=state, event_details=details
-        )
+        return RuleApplication(result=result, next_state=state, event_details=details)
     assert result.disposition is RuleDisposition.MUTATE
     next_state = _apply_mutation(state, operation, rules=physical_rules)
     # Recompute details from next_state for resulting physiology facts where needed.
     details = _event_details_for(
         state, operation, rules=physical_rules, next_state=next_state
     )
-    return RuleApplication(
-        result=result, next_state=next_state, event_details=details
-    )
+    return RuleApplication(result=result, next_state=next_state, event_details=details)
 
 
 def _apply_search(
@@ -1092,9 +1087,7 @@ def _apply_flee(
     if effect.destination_index >= len(eligible):
         raise ValueError("flee destination_index out of range for eligible set")
     destination_id = eligible[effect.destination_index]
-    next_state = _mutate_flee(
-        state, operation.actor_id, destination_id, rules=rules
-    )
+    next_state = _mutate_flee(state, operation.actor_id, destination_id, rules=rules)
     prior = state.bodies[operation.actor_id]
     resulting = next_state.bodies[operation.actor_id]
     return RuleApplication(
@@ -1104,9 +1097,7 @@ def _apply_flee(
             threat_id=operation.threat_id,
             success=True,
             destination_id=destination_id,
-            fatigue_delta=round_physical(
-                resulting.fatigue.value - prior.fatigue.value
-            ),
+            fatigue_delta=round_physical(resulting.fatigue.value - prior.fatigue.value),
             resulting_fatigue=resulting.fatigue.value,
         ),
     )
@@ -1121,9 +1112,7 @@ def _event_details_for(
 ) -> EventDetails:
     match operation:
         case _MoveOp(actor_id=actor_id, destination_id=destination_id):
-            resulting = (
-                next_state.bodies[actor_id] if next_state is not None else None
-            )
+            resulting = next_state.bodies[actor_id] if next_state is not None else None
             prior = state.bodies[actor_id]
             fatigue_delta = (
                 None
@@ -1146,14 +1135,10 @@ def _event_details_for(
             actor = state.bodies[actor_id]
             return Dropped(item_id, resulting_location_id=actor.location_id)
         case _GiveOp(recipient_id=recipient_id, item_id=item_id):
-            return Given(
-                recipient_id, item_id, resulting_holder_id=recipient_id
-            )
+            return Given(recipient_id, item_id, resulting_holder_id=recipient_id)
         case _EatOp(actor_id=actor_id, item_id=item_id):
             prior = state.bodies[actor_id]
-            resulting = (
-                next_state.bodies[actor_id] if next_state is not None else prior
-            )
+            resulting = next_state.bodies[actor_id] if next_state is not None else prior
             return Eaten(
                 item_id,
                 hunger_delta=round_physical(
@@ -1163,9 +1148,7 @@ def _event_details_for(
             )
         case _DrinkOp(actor_id=actor_id, source_id=source_id):
             prior = state.bodies[actor_id]
-            resulting = (
-                next_state.bodies[actor_id] if next_state is not None else prior
-            )
+            resulting = next_state.bodies[actor_id] if next_state is not None else prior
             consumed_item = source_id in state.items
             quantity_delta = None
             resulting_resource_quantity = None
@@ -1187,9 +1170,7 @@ def _event_details_for(
             )
         case _SleepOp(actor_id=actor_id):
             prior = state.bodies[actor_id]
-            resulting = (
-                next_state.bodies[actor_id] if next_state is not None else prior
-            )
+            resulting = next_state.bodies[actor_id] if next_state is not None else prior
             return Slept(
                 fatigue_delta=round_physical(
                     resulting.fatigue.value - prior.fatigue.value
@@ -1200,14 +1181,10 @@ def _event_details_for(
             prior_target = state.bodies[target_id]
             prior_helper = state.bodies[actor_id]
             resulting_target = (
-                next_state.bodies[target_id]
-                if next_state is not None
-                else prior_target
+                next_state.bodies[target_id] if next_state is not None else prior_target
             )
             resulting_helper = (
-                next_state.bodies[actor_id]
-                if next_state is not None
-                else prior_helper
+                next_state.bodies[actor_id] if next_state is not None else prior_helper
             )
             return Helped(
                 target_id,
@@ -1229,9 +1206,7 @@ def _event_details_for(
         case _WaitOp():
             return Waited()
         case _:
-            raise TypeError(
-                f"no event details for {type(operation).__name__}"
-            )
+            raise TypeError(f"no event details for {type(operation).__name__}")
 
 
 def _apply_mutation(
@@ -1258,9 +1233,7 @@ def _apply_mutation(
         case _HelpOp(actor_id=actor_id, target_id=target_id):
             return _mutate_help(state, actor_id, target_id, rules=rules)
         case _:
-            raise TypeError(
-                f"mutation unsupported for {type(operation).__name__}"
-            )
+            raise TypeError(f"mutation unsupported for {type(operation).__name__}")
 
 
 def _mutate_move(
@@ -1275,9 +1248,7 @@ def _mutate_move(
         clamp_need(round_physical(actor.fatigue.value + rules.move_fatigue))
     )
     bodies = dict(state.bodies)
-    bodies[actor_id] = copy_body(
-        actor, location_id=destination_id, fatigue=fatigue
-    )
+    bodies[actor_id] = copy_body(actor, location_id=destination_id, fatigue=fatigue)
     return rebuild_world_state(state, bodies=bodies)
 
 
@@ -1300,9 +1271,7 @@ def _mutate_drop(
     item = state.items[item_id]
     items = dict(state.items)
     bodies = dict(state.bodies)
-    items[item_id] = copy_item(
-        item, location_id=actor.location_id, holder_id=None
-    )
+    items[item_id] = copy_item(item, location_id=actor.location_id, holder_id=None)
     bodies[actor_id] = copy_body(
         actor,
         inventory=tuple(owned for owned in actor.inventory if owned != item_id),
@@ -1372,9 +1341,7 @@ def _mutate_drink(
         bodies[actor_id] = copy_body(
             actor,
             thirst=thirst,
-            inventory=tuple(
-                owned for owned in actor.inventory if owned != source_id
-            ),
+            inventory=tuple(owned for owned in actor.inventory if owned != source_id),
         )
         return rebuild_world_state(state, items=items, bodies=bodies)
     resource = state.resources[source_id]
@@ -1395,9 +1362,7 @@ def _mutate_sleep(
 ) -> WorldState:
     actor = state.bodies[actor_id]
     fatigue = Fatigue(
-        clamp_need(
-            round_physical(actor.fatigue.value - rules.sleep_fatigue_recovery)
-        )
+        clamp_need(round_physical(actor.fatigue.value - rules.sleep_fatigue_recovery))
     )
     bodies = dict(state.bodies)
     bodies[actor_id] = copy_body(actor, fatigue=fatigue)
@@ -1414,9 +1379,7 @@ def _mutate_help(
     actor = state.bodies[actor_id]
     target = state.bodies[target_id]
     health = Health(
-        clamp_need(
-            round_physical(target.health.value + rules.help_health_gain)
-        )
+        clamp_need(round_physical(target.health.value + rules.help_health_gain))
     )
     fatigue = Fatigue(
         clamp_need(round_physical(actor.fatigue.value + rules.help_fatigue))
@@ -1439,9 +1402,7 @@ def _mutate_flee(
         clamp_need(round_physical(actor.fatigue.value + rules.flee_fatigue))
     )
     bodies = dict(state.bodies)
-    bodies[actor_id] = copy_body(
-        actor, location_id=destination_id, fatigue=fatigue
-    )
+    bodies[actor_id] = copy_body(actor, location_id=destination_id, fatigue=fatigue)
     return rebuild_world_state(state, bodies=bodies)
 
 
@@ -1458,9 +1419,7 @@ def _inventory_load(state: WorldState, body: AgentBody) -> int:
 
 
 def _ground_item_count(state: WorldState, location_id: EntityId) -> int:
-    return sum(
-        1 for item in state.items.values() if item.location_id == location_id
-    )
+    return sum(1 for item in state.items.values() if item.location_id == location_id)
 
 
 def _body_count(state: WorldState, location_id: EntityId) -> int:

@@ -2,14 +2,15 @@
 
 ## Overview
 
-Palimpsest is a Python 3.12+ modular monolith for reproducible, discrete, text-based multi-agent AI society experiments. The current V1 surface establishes package boundaries, typed domain contracts, an authoritative deterministic `WorldEngine` tick loop, schema-v1 event export, configuration, persistence bootstrap, an HTTP liveness API, observability, and containers. Agent cognition and LLM invocation remain outside the engine.
+Palimpsest is a Python 3.12+ modular monolith for reproducible, discrete, text-based multi-agent AI society experiments. The current V1 surface establishes package boundaries, typed domain contracts, an authoritative deterministic `WorldEngine` tick loop with agent-specific perception, schema-versioned event persistence and replay, configuration, an HTTP liveness API, observability, and containers. Agent cognition and LLM invocation remain outside the engine.
 
 ## Core Features
 
 - Bounded packages for world authority, agents, cognition strategies, memory, social envelopes, LLM trust boundaries, simulation/`WorldEngine`, persistence adapters, analysis ports, API, and infrastructure
-- Typed immutable agent-facing contracts, private world authority (`World` / `WorldState` / rules / operations), and schema-v1 event/export codec
-- Deterministic seed-derived RNG streams, logical clock, namespaced IDs, and replay-stable tick resolution
-- `PALIMPSEST_` settings, structured logging, async SQLAlchemy lifecycle, Alembic + pgvector bootstrap
+- Typed immutable agent-facing `Observation` contracts, private world authority (`World` / `WorldState` / rules / perception / operations), and versioned event/export codecs (replay-v4 occurrence context)
+- Deterministic `PerceptionService` projecting one observation per agent from tick-start state plus prior committed events; cognition routed via `build_perspective`
+- Deterministic seed-derived RNG streams, logical clock, namespaced IDs, and live/restored observation parity
+- `PALIMPSEST_` settings, structured logging (no observation/communication payloads), async SQLAlchemy lifecycle, Alembic + pgvector bootstrap
 - FastAPI `/health` liveness and Docker Compose development stack
 
 ## Tech Stack
@@ -25,7 +26,7 @@ Palimpsest is a Python 3.12+ modular monolith for reproducible, discrete, text-b
 
 ## Architecture Notes
 
-Modular monolith with explicit bounded packages under `src/`. Domain modules do not import infrastructure; the API composition root wires adapters. `simulation.WorldEngine` is the sole public mutation authority; private world modules prepare candidates only. Cross-module imports use package facades / `__all__`. Import-linter and AST boundary checks enforce dependency rules.
+Modular monolith with explicit bounded packages under `src/`. Domain modules do not import infrastructure; the API composition root wires adapters. `simulation.WorldEngine` is the sole public mutation authority; private world modules prepare candidates and project observations only. Cognition never receives `WorldState` or another agent's observation. Cross-module imports use package facades / `__all__`. Import-linter and AST boundary checks enforce dependency rules.
 
 ## Non-Functional Requirements
 

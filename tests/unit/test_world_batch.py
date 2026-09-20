@@ -5,6 +5,8 @@ from __future__ import annotations
 from tests.simulation_helpers import make_item, make_location, weather_for_locations
 from world._operations import (
     BatchItemStatus,
+    PendingBatch,
+    PreparedBatch,
     finalize_pending_batch,
     prepare_action_batch,
 )
@@ -54,9 +56,7 @@ def _state() -> WorldState:
     return WorldState(
         WorldRevision(4),
         locations=locations,
-        items=(
-            make_item("item-1", name="Rock", location_id="loc-1"),
-        ),
+        items=(make_item("item-1", name="Rock", location_id="loc-1"),),
         bodies=(_alive("body-1", "loc-1"), _alive("body-2", "loc-1")),
         weather=weather_for_locations(locations),
     )
@@ -79,7 +79,9 @@ def _request(
     )
 
 
-def _finalize(pending, *, event_ids: tuple[EventId, ...]):
+def _finalize(
+    pending: PendingBatch, *, event_ids: tuple[EventId, ...]
+) -> PreparedBatch:
     return finalize_pending_batch(
         pending,
         world_id=WorldId("world-1"),
@@ -121,18 +123,16 @@ def test_mutating_batch_increments_revision_once_for_all_events() -> None:
     assert pending.semantic_mutation is True
     assert pending.working_state.revision == WorldRevision(4)
     assert len(pending.pending_events) == 2
-    batch = _finalize(
-        pending, event_ids=(EventId("evt-1"), EventId("evt-2"))
-    )
+    batch = _finalize(pending, event_ids=(EventId("evt-1"), EventId("evt-2")))
     assert batch.semantic_mutation is True
     assert batch.candidate_state.revision == WorldRevision(5)
     assert all(event.revision == WorldRevision(5) for event in batch.events)
     assert batch.events[0].details == Taken(
         EntityId("item-1"), resulting_holder_id=EntityId("body-1")
     )
-    assert EntityId("item-1") in batch.candidate_state.bodies[
-        EntityId("body-1")
-    ].inventory
+    assert (
+        EntityId("item-1") in batch.candidate_state.bodies[EntityId("body-1")].inventory
+    )
 
 
 def test_same_item_second_take_is_conflict_not_rejection() -> None:
@@ -227,9 +227,7 @@ def test_attack_death_emits_two_pending_events_under_same_cause() -> None:
     assert pending.pending_events[1].details == Died(
         EntityId("body-2"), DeathCause.ATTACK
     )
-    batch = _finalize(
-        pending, event_ids=(EventId("evt-a"), EventId("evt-d"))
-    )
+    batch = _finalize(pending, event_ids=(EventId("evt-a"), EventId("evt-d")))
     assert [event.sequence for event in batch.events] == [0, 1]
     dead = batch.candidate_state.bodies[EntityId("body-2")]
     assert dead.life_status is LifeStatus.DEAD
@@ -259,9 +257,7 @@ def test_finalize_assigns_contiguous_sequences_for_one_to_many() -> None:
             ),
         ),
     )
-    batch = _finalize(
-        pending, event_ids=(EventId("evt-a"), EventId("evt-b"))
-    )
+    batch = _finalize(pending, event_ids=(EventId("evt-a"), EventId("evt-b")))
     assert [event.sequence for event in batch.events] == [0, 1]
     assert all(event.request_id == RequestId("r1") for event in batch.events)
     assert all(event.occurrence == occurrence for event in batch.events)

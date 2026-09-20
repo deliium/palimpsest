@@ -30,12 +30,11 @@ from world.models import physical_rules_fingerprint
 
 def _digest(config: SimulationRunConfig, *parts: bytes) -> bytes:
     hasher = hashlib.sha256()
+    assert config.derivation_version is not None
     hasher.update(config.derivation_version.encode("utf-8"))
     if config.derivation_version == DERIVATION_VERSION_V2:
         assert config.physical_rules is not None
-        fingerprint = physical_rules_fingerprint(config.physical_rules).encode(
-            "ascii"
-        )
+        fingerprint = physical_rules_fingerprint(config.physical_rules).encode("ascii")
         hasher.update(len(fingerprint).to_bytes(4, "big"))
         hasher.update(fingerprint)
     for part in parts:
@@ -54,9 +53,7 @@ def _require_canonical_keys(keys: tuple[str, ...]) -> None:
             raise ValueError("canonical keys must be non-empty strings")
 
 
-def _derive_purpose_hex(
-    purpose: bytes, config: SimulationRunConfig, *keys: str
-) -> str:
+def _derive_purpose_hex(purpose: bytes, config: SimulationRunConfig, *keys: str) -> str:
     _require_canonical_keys(keys)
     return _digest(
         config,
@@ -110,9 +107,7 @@ def derive_goal_id(config: SimulationRunConfig, *keys: str) -> GoalId:
     return GoalId(_derive_purpose_hex(b"goal", config, *keys))
 
 
-def derive_relationship_id(
-    config: SimulationRunConfig, *keys: str
-) -> RelationshipId:
+def derive_relationship_id(config: SimulationRunConfig, *keys: str) -> RelationshipId:
     """Derive a stable relationship id from seed and canonical keys."""
     return RelationshipId(_derive_purpose_hex(b"relationship", config, *keys))
 

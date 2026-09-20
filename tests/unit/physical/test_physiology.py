@@ -24,7 +24,15 @@ from world.events import (
     WeatherChanged,
 )
 from world.identifiers import EntityId, WorldRevision
-from world.models import AgentBody, LifeStatus, PhysicalRules, copy_body
+from world.models import (
+    AgentBody,
+    LifeStatus,
+    Location,
+    PhysicalRules,
+    Resource,
+    Weather,
+    copy_body,
+)
 from world.values import (
     CarryCapacity,
     DayPhase,
@@ -40,21 +48,19 @@ from world.values import (
 
 def _state(
     *,
-    bodies=(),
-    resources=(),
-    locations=None,
-    weather=None,
+    bodies: tuple[AgentBody, ...] = (),
+    resources: tuple[Resource, ...] = (),
+    locations: tuple[Location, ...] | None = None,
+    weather: tuple[Weather, ...] | None = None,
     revision: int = 1,
-):
+) -> WorldState:
     locs = locations if locations is not None else (make_location("loc-1"),)
     return WorldState(
         WorldRevision(revision),
         locations=locs,
         resources=resources,
         bodies=bodies,
-        weather=(
-            weather if weather is not None else weather_for_locations(locs)
-        ),
+        weather=(weather if weather is not None else weather_for_locations(locs)),
     )
 
 
@@ -87,6 +93,7 @@ def test_metabolism_and_needs_damage_formulas() -> None:
     ]
     assert len(needs) == 1
     applied = needs[0].details
+    assert type(applied) is NeedsApplied
     assert applied.resulting_hunger == 100.0
     assert applied.resulting_thirst == 100.0
     assert applied.resulting_fatigue == 100.0
@@ -211,8 +218,7 @@ def test_weather_emits_only_on_change_when_scheduled() -> None:
         EntityId("loc-1"), WeatherCondition.RAIN
     )
     assert (
-        step.working_state.weather[EntityId("loc-1")].condition
-        is WeatherCondition.RAIN
+        step.working_state.weather[EntityId("loc-1")].condition is WeatherCondition.RAIN
     )
 
     same = ResolvedSystemEffects(
@@ -290,9 +296,7 @@ def test_visibility_threshold_exactly_half_hides_ground_contents() -> None:
 
     # Night * clear * base 1.0 = 0.5 — at threshold, contents remain visible.
     # Night * cloudy * base 1.0 = 0.45 — below threshold.
-    locations = (
-        make_location("loc-1", visibility_factor=1.0),
-    )
+    locations = (make_location("loc-1", visibility_factor=1.0),)
     state = _state(
         bodies=(alive_body("body-1"),),
         locations=locations,
@@ -351,9 +355,7 @@ def test_shelter_zero_and_one_temperature_paths(shelter: float) -> None:
         if type(detail.details) is ExposureApplied
     )
     ambient = round_physical(10.0 + 0.0 + 2.0)
-    expected = round_physical(
-        36.0 + 0.25 * (ambient - 36.0) * (1.0 - shelter)
-    )
+    expected = round_physical(36.0 + 0.25 * (ambient - 36.0) * (1.0 - shelter))
     assert exposure.resulting_temperature == expected
     if shelter == 1.0:
         assert exposure.resulting_temperature == 36.0

@@ -215,9 +215,7 @@ def require_agent_command(value: object) -> AgentCommand:
         raise TypeError("raw mappings are not agent commands")
     command_type = type(value)
     if command_type not in _COMMAND_TYPES:
-        raise TypeError(
-            f"unsupported agent command type {command_type.__name__}"
-        )
+        raise TypeError(f"unsupported agent command type {command_type.__name__}")
     return value  # type: ignore[return-value]
 
 
@@ -231,9 +229,7 @@ class ActionProposal:
     def __post_init__(self) -> None:
         if type(self.proposal_id) is not ProposalId:
             raise TypeError("ActionProposal.proposal_id must be ProposalId")
-        object.__setattr__(
-            self, "command", require_agent_command(self.command)
-        )
+        object.__setattr__(self, "command", require_agent_command(self.command))
 
 
 @dataclass(frozen=True, slots=True)
@@ -258,9 +254,7 @@ class ActionRequest:
             raise TypeError("ActionRequest.actor_id must be EntityId")
         if type(self.revision) is not WorldRevision:
             raise TypeError("ActionRequest.revision must be WorldRevision")
-        object.__setattr__(
-            self, "command", require_agent_command(self.command)
-        )
+        object.__setattr__(self, "command", require_agent_command(self.command))
 
 
 class TransitionOutcome(StrEnum):

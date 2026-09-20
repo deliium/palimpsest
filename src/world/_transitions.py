@@ -110,9 +110,7 @@ def apply_validated_operation(
     detail_tuple = application.all_event_details()
     event_id_tuple = tuple(event_ids)
     if len(event_id_tuple) != len(detail_tuple):
-        raise ValueError(
-            "applied transitions require one event_id per emitted detail"
-        )
+        raise ValueError("applied transitions require one event_id per emitted detail")
     if application.result.mutates_state:
         resulting_revision = WorldRevision(state.revision.value + 1)
         resulting_state = rebuild_world_state(

@@ -18,12 +18,13 @@ Authoritative history is the ordered stream of replay-capable `WorldEvent` recor
 | --- | --- |
 | Event schema audit v1 | Decode/export only; not authoritative replay |
 | Event schema replay v2 | Legacy projector (inventory transfers) |
-| Event schema replay v3 | Physical runs (new writes); effect-complete + causes |
+| Event schema replay v3 | Physical runs; effect-complete + causes (readable; no fabricated occurrence context) |
+| Event schema replay v4 | Physical runs (new writes); causes + occurrence context for perception audiences |
 | `PROJECTOR_VERSION` | Private world projector compatibility |
 | `PERSISTENCE_CODEC_VERSION` | Canonical JSON codec for manifests/snapshots/commits |
 | Derivation v1 / v2 | Deterministic ID/stream derivation (v2 includes rules fingerprint) |
 
-Runs never mix replay schema versions. Legacy schema-v1 audit events remain decodable for export but must not enter the authoritative log.
+Runs never mix replay schema versions. Legacy schema-v1 audit events remain decodable for export but must not enter the authoritative log. Alembic revision `0004` persists SQL cause/occurrence columns so restored engines reproduce the same next observation as live engines (eventful and eventless prior windows). Observation codecs round-trip every field and provenance type with exact keys.
 
 ## Append-only store
 
@@ -43,7 +44,7 @@ Adapter failure before commit leaves the engine unchanged. Crash after commit is
 
 ## Logging
 
-Safe fields: run ID, tick/revision, record counts, version strings, hash prefixes, stable error codes. Never log seeds, full configs, event payloads, snapshot bodies, DSNs, SQL parameters, memories, embeddings, or random draws. Control verbosity with `PALIMPSEST_LOG_LEVEL`.
+Safe fields: run ID, tick/revision, record counts, version strings, hash prefixes, stable error codes, perception reason codes. Never log seeds, full configs, event payloads, observation bodies, communication text, snapshot bodies, DSNs, SQL parameters, memories, embeddings, or random draws. Control verbosity with `PALIMPSEST_LOG_LEVEL`.
 
 ## Integration tests
 

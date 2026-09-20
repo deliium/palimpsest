@@ -51,9 +51,7 @@ def freeze(value: object) -> object:
         return MappingProxyType(frozen)
     if isinstance(value, Sequence):
         return tuple(freeze(item) for item in value)
-    raise TypeError(
-        f"unsupported domain content type {type(value).__name__}"
-    )
+    raise TypeError(f"unsupported domain content type {type(value).__name__}")
 
 
 def freeze_mapping(value: Mapping[str, object]) -> Mapping[str, object]:
@@ -72,9 +70,7 @@ def require_non_empty(name: str, value: str) -> str:
     return value
 
 
-def require_bounded_text(
-    name: str, value: object, *, max_length: int = 4096
-) -> str:
+def require_bounded_text(name: str, value: object, *, max_length: int = 4096) -> str:
     """Exact text: non-blank, no controls, length-bounded, preserved verbatim."""
     if not isinstance(value, str):
         raise ValueError(f"{name} must be a str")
@@ -102,9 +98,7 @@ def require_ordered_unique(
     items = tuple(values)
     for item in items:
         if type(item) is not item_type:
-            raise TypeError(
-                f"{name} items must be exact {item_type.__name__} values"
-            )
+            raise TypeError(f"{name} items must be exact {item_type.__name__} values")
     if len(set(items)) != len(items):
         raise ValueError(f"{name} must not contain duplicate values")
     return items

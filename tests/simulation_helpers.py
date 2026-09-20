@@ -74,7 +74,6 @@ def connected_locations(
     if not specs:
         return ()
     ids = [EntityId(entity_id) for entity_id, _ in specs]
-    names = [name for _, name in specs]
     locations: list[Location] = []
     for index, (entity_id, name) in enumerate(specs):
         neighbors: list[EntityId] = []
@@ -82,9 +81,7 @@ def connected_locations(
             neighbors.append(ids[index - 1])
         if index + 1 < len(ids):
             neighbors.append(ids[index + 1])
-        locations.append(
-            make_location(entity_id, name=name, adjacent=tuple(neighbors))
-        )
+        locations.append(make_location(entity_id, name=name, adjacent=tuple(neighbors)))
     return tuple(locations)
 
 
@@ -186,9 +183,7 @@ def hashed_bootstrap_snapshot(
         world_id=WorldId("world-1"),
         seed=seed,
         config=SimulationRunConfig(seed=seed),
-        registrations=(
-            AgentRegistration(AgentId("agent-1"), EntityId("body-1")),
-        ),
+        registrations=(AgentRegistration(AgentId("agent-1"), EntityId("body-1")),),
         locations=(make_location(),),
         bodies=(alive_body(inventory=inventory),),
         items=items,

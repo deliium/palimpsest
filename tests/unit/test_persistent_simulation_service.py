@@ -61,9 +61,7 @@ def _engine(*, seed: int = 11) -> WorldEngine:
             locations=locations,
             bodies=(_alive(),),
             weather=weather_for_locations(locations),
-            registrations=(
-                AgentRegistration(AgentId("agent-1"), EntityId("body-1")),
-            ),
+            registrations=(AgentRegistration(AgentId("agent-1"), EntityId("body-1")),),
         ),
         run_id=RunId("run-durable-1"),
     )
@@ -121,9 +119,7 @@ class _FakeJournal:
         self.commits[key] = built
         return built
 
-    async def get_tick_commit(
-        self, run_id: RunId, tick: Tick
-    ) -> TickCommit | None:
+    async def get_tick_commit(self, run_id: RunId, tick: Tick) -> TickCommit | None:
         return self.commits.get((run_id.value, tick.value))
 
     async def list_events(

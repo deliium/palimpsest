@@ -119,9 +119,7 @@ class SqlAlchemySimulationRunRepository:
 
     __slots__ = ("_session_factory",)
 
-    def __init__(
-        self, session_factory: async_sessionmaker[AsyncSession]
-    ) -> None:
+    def __init__(self, session_factory: async_sessionmaker[AsyncSession]) -> None:
         self._session_factory = session_factory
 
     async def create_run(self, request: RunCreateRequest) -> RunManifest:
@@ -140,9 +138,7 @@ class SqlAlchemySimulationRunRepository:
             async with session_scope(self._session_factory) as session:
                 existing = await session.get(SimulationRunOrm, request.run_id.value)
                 if existing is not None:
-                    raise PersistenceConflictError(
-                        "run_exists", operation="create_run"
-                    )
+                    raise PersistenceConflictError("run_exists", operation="create_run")
                 await _insert_snapshot_graph(session, bootstrap)
                 rules = request.config.physical_rules
                 rules_version = None if rules is None else rules.version
@@ -175,9 +171,7 @@ class SqlAlchemySimulationRunRepository:
                 )
                 if request.experiment_assignment is not None:
                     await session.flush()
-                    await _insert_assignment(
-                        session, request.experiment_assignment
-                    )
+                    await _insert_assignment(session, request.experiment_assignment)
                 await session.commit()
                 manifest = RunManifest(
                     run_id=request.run_id,
@@ -225,9 +219,7 @@ class SqlAlchemyTickJournalRepository:
 
     __slots__ = ("_session_factory",)
 
-    def __init__(
-        self, session_factory: async_sessionmaker[AsyncSession]
-    ) -> None:
+    def __init__(self, session_factory: async_sessionmaker[AsyncSession]) -> None:
         self._session_factory = session_factory
 
     async def append_tick(self, request: TickAppendRequest) -> TickCommit:
@@ -347,9 +339,7 @@ class SqlAlchemyTickJournalRepository:
         )
         return candidate
 
-    async def get_tick_commit(
-        self, run_id: RunId, tick: Tick
-    ) -> TickCommit | None:
+    async def get_tick_commit(self, run_id: RunId, tick: Tick) -> TickCommit | None:
         if type(run_id) is not RunId:
             raise TypeError("run_id must be RunId")
         if type(tick) is not Tick:
@@ -434,9 +424,7 @@ class SqlAlchemySnapshotRepository:
 
     __slots__ = ("_session_factory",)
 
-    def __init__(
-        self, session_factory: async_sessionmaker[AsyncSession]
-    ) -> None:
+    def __init__(self, session_factory: async_sessionmaker[AsyncSession]) -> None:
         self._session_factory = session_factory
 
     async def get_latest_at_or_before(
@@ -475,9 +463,7 @@ class SqlAlchemyExperimentRepository:
 
     __slots__ = ("_session_factory",)
 
-    def __init__(
-        self, session_factory: async_sessionmaker[AsyncSession]
-    ) -> None:
+    def __init__(self, session_factory: async_sessionmaker[AsyncSession]) -> None:
         self._session_factory = session_factory
 
     async def create_experiment(
@@ -582,9 +568,7 @@ async def _validate_predecessor(
 ) -> None:
     if request.tick.value == 0:
         if request.expected_predecessor_commit_hash is not None:
-            raise PersistenceConflictError(
-                "stale_predecessor", operation="append_tick"
-            )
+            raise PersistenceConflictError("stale_predecessor", operation="append_tick")
         return
     previous = await _load_commit_by_tick(
         session, request.run_id.value, request.tick.value - 1
@@ -604,18 +588,14 @@ async def _validate_predecessor(
     expected_pred = request.expected_predecessor_commit_hash
     actual_pred = previous.commit_hash
     if expected_pred is None or expected_pred.value != actual_pred:
-        raise PersistenceConflictError(
-            "predecessor_mismatch", operation="append_tick"
-        )
+        raise PersistenceConflictError("predecessor_mismatch", operation="append_tick")
 
 
 def _build_tick_commit(request: TickAppendRequest) -> TickCommit:
     events = request.events
     for index, event in enumerate(events):
         if event.sequence != index:
-            raise PersistenceConflictError(
-                "sequence_gap", operation="append_tick"
-            )
+            raise PersistenceConflictError("sequence_gap", operation="append_tick")
     payload = hash_tick_payload(events)
     event_hashes = hash_tick_events(events)
     if events:
@@ -623,13 +603,9 @@ def _build_tick_commit(request: TickAppendRequest) -> TickCommit:
     else:
         resulting_revision = request.expected_base_revision
     if resulting_revision.value < request.expected_base_revision.value:
-        raise PersistenceConflictError(
-            "revision_regression", operation="append_tick"
-        )
+        raise PersistenceConflictError("revision_regression", operation="append_tick")
     if resulting_revision.value - request.expected_base_revision.value > 1:
-        raise PersistenceConflictError(
-            "revision_delta", operation="append_tick"
-        )
+        raise PersistenceConflictError("revision_delta", operation="append_tick")
     commit_hash = compute_commit_hash(
         predecessor_commit_hash=request.expected_predecessor_commit_hash,
         run_id=request.run_id,
@@ -723,13 +699,9 @@ def _verify_snapshot_integrity(snapshot: WorldSnapshot) -> None:
 async def _insert_assignment(
     session: AsyncSession, assignment: ExperimentRunAssignment
 ) -> None:
-    experiment = await session.get(
-        ExperimentOrm, assignment.experiment_id.value
-    )
+    experiment = await session.get(ExperimentOrm, assignment.experiment_id.value)
     if experiment is None:
-        raise PersistenceNotFoundError(
-            "experiment_missing", operation="assign_run"
-        )
+        raise PersistenceNotFoundError("experiment_missing", operation="assign_run")
     run = await session.get(SimulationRunOrm, assignment.run_id.value)
     if run is None:
         raise PersistenceNotFoundError("run_missing", operation="assign_run")
@@ -869,9 +841,7 @@ async def _load_snapshot_graph(
     del session  # Normalized rows are query projections; codec payload is authority.
     payload = row.canonical_payload
     if not isinstance(payload, dict):
-        raise PersistenceCorruptionError(
-            "invalid_payload", operation="load_snapshot"
-        )
+        raise PersistenceCorruptionError("invalid_payload", operation="load_snapshot")
     return snapshot_from_canonical_payload(
         payload, expected_integrity_hash=row.integrity_hash
     )

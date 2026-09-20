@@ -2,11 +2,10 @@
 
 from __future__ import annotations
 
-from tests.simulation_helpers import make_location, make_weather
-
 import uuid
 
 import pytest
+from tests.simulation_helpers import make_location, make_weather
 
 from agents.models import AgentId
 from infrastructure.database import DatabaseResources
@@ -42,8 +41,15 @@ from world.identifiers import (
     WorldId,
     WorldRevision,
 )
-from world.models import AgentBody, LifeStatus, Location
-from world.values import CarryCapacity, Fatigue, Health, Hunger, TemperatureCelsius, Thirst
+from world.models import AgentBody, LifeStatus
+from world.values import (
+    CarryCapacity,
+    Fatigue,
+    Health,
+    Hunger,
+    TemperatureCelsius,
+    Thirst,
+)
 
 pytestmark = pytest.mark.integration
 
@@ -74,9 +80,7 @@ def _bootstrap(*, run_id: str, seed: int = 11) -> WorldSnapshot:
         world_id=WorldId("world-1"),
         seed=seed,
         config=SimulationRunConfig(seed=seed),
-        registrations=(
-            AgentRegistration(AgentId("agent-1"), EntityId("body-1")),
-        ),
+        registrations=(AgentRegistration(AgentId("agent-1"), EntityId("body-1")),),
         locations=(make_location("loc-1", name="Camp"),),
         bodies=(_alive(),),
         items=(),

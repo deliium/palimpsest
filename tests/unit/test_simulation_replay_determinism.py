@@ -53,9 +53,7 @@ def test_live_and_bootstrap_replay_share_physical_fingerprint() -> None:
     batch = live.observe()
     live.resolve_tick(
         (
-            ActionSubmission(
-                batch.token, AgentId("agent-1"), Take(EntityId("item-1"))
-            ),
+            ActionSubmission(batch.token, AgentId("agent-1"), Take(EntityId("item-1"))),
             ActionSubmission(batch.token, AgentId("agent-2"), Wait()),
         )
     )

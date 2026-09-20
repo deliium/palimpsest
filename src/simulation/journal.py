@@ -104,9 +104,7 @@ __all__ = [
 class PersistenceSerializationError(ValueError):
     """Fail-closed persistence codec error with stable metadata only."""
 
-    def __init__(
-        self, code: str, path: str, version: str | int | None = None
-    ) -> None:
+    def __init__(self, code: str, path: str, version: str | int | None = None) -> None:
         self.code = code
         self.path = path
         self.version = version
@@ -228,9 +226,7 @@ def compute_commit_hash(
     if predecessor_commit_hash is not None and type(predecessor_commit_hash) is not (
         CommitHash
     ):
-        raise PersistenceSerializationError(
-            "invalid_type", "$.predecessor_commit_hash"
-        )
+        raise PersistenceSerializationError("invalid_type", "$.predecessor_commit_hash")
     if type(tick_payload_hash) is not PayloadHash:
         raise PersistenceSerializationError("invalid_type", "$.payload_hash")
     if isinstance(event_hashes, (set, frozenset, Mapping)):
@@ -251,9 +247,7 @@ def compute_commit_hash(
         "event_hashes": ordered_hashes,
         "payload_hash": tick_payload_hash.value,
         "predecessor_commit_hash": (
-            None
-            if predecessor_commit_hash is None
-            else predecessor_commit_hash.value
+            None if predecessor_commit_hash is None else predecessor_commit_hash.value
         ),
         "resulting_revision": resulting_revision.value,
         "run_id": run_id.value,
@@ -285,9 +279,7 @@ def verify_commit_chain(commits: Sequence[TickCommit]) -> None:
             if commit.run_id != previous.run_id:
                 raise PersistenceSerializationError("run_id_mismatch", f"{path}.run_id")
             if commit.tick.value != previous.tick.value + 1:
-                raise PersistenceSerializationError(
-                    "commit_chain_gap", f"{path}.tick"
-                )
+                raise PersistenceSerializationError("commit_chain_gap", f"{path}.tick")
             if commit.predecessor_commit_hash != previous.commit_hash:
                 raise PersistenceSerializationError(
                     "predecessor_mismatch", f"{path}.predecessor_commit_hash"
@@ -304,9 +296,7 @@ def verify_tick_events(
     """Verify replayable event identity, ordering, and optional hash layers."""
     if isinstance(events, (set, frozenset, Mapping)):
         raise PersistenceSerializationError("invalid_sequence", "$")
-    if isinstance(events, (str, bytes, bytearray)) or not isinstance(
-        events, Sequence
-    ):
+    if isinstance(events, (str, bytes, bytearray)) or not isinstance(events, Sequence):
         raise PersistenceSerializationError("invalid_sequence", "$")
     schema_version: int | None = None
     prior_tick: int | None = None
@@ -318,9 +308,7 @@ def verify_tick_events(
         try:
             require_replayable_event(event)
         except (TypeError, ValueError) as exc:
-            raise PersistenceSerializationError(
-                "non_replayable_event", path
-            ) from exc
+            raise PersistenceSerializationError("non_replayable_event", path) from exc
         if event.schema_version not in {
             EVENT_SCHEMA_REPLAY_V2,
             EVENT_SCHEMA_REPLAY_V3,
@@ -341,22 +329,16 @@ def verify_tick_events(
             prior_tick = event.tick
             prior_sequence = event.sequence
             if event.sequence != 0:
-                raise PersistenceSerializationError(
-                    "sequence_gap", f"{path}.sequence"
-                )
+                raise PersistenceSerializationError("sequence_gap", f"{path}.sequence")
         elif event.tick == prior_tick:
             if prior_sequence is None or event.sequence != prior_sequence + 1:
-                raise PersistenceSerializationError(
-                    "sequence_gap", f"{path}.sequence"
-                )
+                raise PersistenceSerializationError("sequence_gap", f"{path}.sequence")
             prior_sequence = event.sequence
         elif event.tick < prior_tick:
             raise PersistenceSerializationError("invalid_ordering", f"{path}.tick")
         else:
             if event.sequence != 0:
-                raise PersistenceSerializationError(
-                    "sequence_gap", f"{path}.sequence"
-                )
+                raise PersistenceSerializationError("sequence_gap", f"{path}.sequence")
             prior_tick = event.tick
             prior_sequence = event.sequence
         recomputed = hash_world_event(event)
@@ -365,9 +347,7 @@ def verify_tick_events(
                 raise PersistenceSerializationError("hash_mismatch", path)
             if recomputed != expected_event_hashes[index]:
                 raise PersistenceSerializationError("hash_mismatch", path)
-    if expected_event_hashes is not None and len(expected_event_hashes) != len(
-        events
-    ):
+    if expected_event_hashes is not None and len(expected_event_hashes) != len(events):
         raise PersistenceSerializationError("hash_mismatch", "$")
     if expected_payload_hash is not None:
         if hash_tick_payload(events) != expected_payload_hash:
@@ -584,9 +564,7 @@ def _encode_config(config: SimulationRunConfig) -> dict[str, Any]:
         except DomainSerializationError as exc:
             raise _map_domain_error(exc) from exc
         payload["derivation_version"] = config.derivation_version
-        payload["rules_fingerprint"] = physical_rules_fingerprint(
-            config.physical_rules
-        )
+        payload["rules_fingerprint"] = physical_rules_fingerprint(config.physical_rules)
     return payload
 
 
@@ -676,9 +654,7 @@ def _encode_world_snapshot(
                 else value.predecessor_commit_hash.value
             ),
             "projector_version": value.projector_version,
-            "registrations": [
-                _encode_registration(reg) for reg in value.registrations
-            ],
+            "registrations": [_encode_registration(reg) for reg in value.registrations],
             "resources": [_encode_resource(item) for item in value.resources],
             "revision": value.revision.value,
             "run_id": value.run_id.value,
@@ -833,9 +809,7 @@ def _decode_tick_commit(data: dict[str, Any], *, path: str) -> TickCommit:
         elif isinstance(snapshot_raw, str):
             snapshot_id = SnapshotId(snapshot_raw)
         else:
-            raise PersistenceSerializationError(
-                "invalid_string", f"{path}.snapshot_id"
-            )
+            raise PersistenceSerializationError("invalid_string", f"{path}.snapshot_id")
         return TickCommit(
             run_id=RunId(_str_field(data, "run_id", path=path)),
             tick=Tick(_nonneg_int_field(data, "tick", path=path)),
@@ -897,19 +871,13 @@ def _encode_occurrence_context(value: OccurrenceContext) -> dict[str, Any]:
             else value.destination_location_id.value
         ),
         "origin_location_id": (
-            None
-            if value.origin_location_id is None
-            else value.origin_location_id.value
+            None if value.origin_location_id is None else value.origin_location_id.value
         ),
-        "private_recipient_ids": [
-            item.value for item in value.private_recipient_ids
-        ],
+        "private_recipient_ids": [item.value for item in value.private_recipient_ids],
     }
 
 
-def _decode_occurrence_context(
-    data: dict[str, Any], *, path: str
-) -> OccurrenceContext:
+def _decode_occurrence_context(data: dict[str, Any], *, path: str) -> OccurrenceContext:
     _require_keys(
         data,
         {
@@ -1007,9 +975,7 @@ def _decode_world_event(data: dict[str, Any], *, path: str) -> WorldEvent:
         if "cause" in data:
             cause_raw = data["cause"]
             if not isinstance(cause_raw, dict):
-                raise PersistenceSerializationError(
-                    "invalid_object", f"{path}.cause"
-                )
+                raise PersistenceSerializationError("invalid_object", f"{path}.cause")
             try:
                 cause = _decode_event_cause(cause_raw, path=f"{path}.cause")
             except DomainSerializationError as exc:
@@ -1027,9 +993,7 @@ def _decode_world_event(data: dict[str, Any], *, path: str) -> WorldEvent:
                 occurrence_raw, path=f"{path}.occurrence"
             )
         elif schema_version >= EVENT_SCHEMA_REPLAY_V4:
-            raise PersistenceSerializationError(
-                "invalid_fields", f"{path}.occurrence"
-            )
+            raise PersistenceSerializationError("invalid_fields", f"{path}.occurrence")
         event = WorldEvent(
             event_id=EventId(_str_field(data, "event_id", path=path)),
             run_id=_str_field(data, "run_id", path=path),
@@ -1064,9 +1028,7 @@ def _require_id_str(raw: object, path: str) -> str:
     return raw
 
 
-def _decode_object_list(
-    raw: object, decoder: Any, *, path: str
-) -> tuple[Any, ...]:
+def _decode_object_list(raw: object, decoder: Any, *, path: str) -> tuple[Any, ...]:
     if not isinstance(raw, list):
         raise PersistenceSerializationError("invalid_array", path)
     items = []

@@ -124,9 +124,7 @@ class Item:
         has_location = self.location_id is not None
         has_holder = self.holder_id is not None
         if has_location == has_holder:
-            raise ValueError(
-                "Item must have exactly one of location_id or holder_id"
-            )
+            raise ValueError("Item must have exactly one of location_id or holder_id")
         if has_location and type(self.location_id) is not EntityId:
             raise TypeError("Item.location_id must be an EntityId")
         if has_holder and type(self.holder_id) is not EntityId:
@@ -250,9 +248,7 @@ def _require_weather_matrix(
             frozen_row[target] = probability
             total += probability
         if abs(total - 1.0) > 1e-9:
-            raise ValueError(
-                f"{name}[{source.value}] probabilities must sum to 1.0"
-            )
+            raise ValueError(f"{name}[{source.value}] probabilities must sum to 1.0")
         matrix[source] = frozen_row
     return matrix
 
@@ -321,9 +317,7 @@ class PhysicalRules:
         if self.day_end_hour >= self.hours_per_day:
             raise ValueError("PhysicalRules.day_end_hour must be < hours_per_day")
         if self.day_start_hour > self.day_end_hour:
-            raise ValueError(
-                "PhysicalRules.day_start_hour must be <= day_end_hour"
-            )
+            raise ValueError("PhysicalRules.day_start_hour must be <= day_end_hour")
         for field_name in (
             "metabolism_hunger",
             "metabolism_thirst",
@@ -421,8 +415,7 @@ class PhysicalRules:
         )
         if self.attack_damage_min >= self.attack_damage_max_exclusive:
             raise ValueError(
-                "PhysicalRules.attack_damage_min must be < "
-                "attack_damage_max_exclusive"
+                "PhysicalRules.attack_damage_min must be < attack_damage_max_exclusive"
             )
         object.__setattr__(
             self,
@@ -584,10 +577,10 @@ class PhysicalRules:
             if phase is DayPhase.DAY
             else self.night_visibility_factor
         )
-        weather_factor = self.weather_visibility[condition]
-        return clamp_unit_interval(
-            location_visibility * phase_factor * weather_factor
-        )
+        weather_visibility = self.weather_visibility
+        assert weather_visibility is not None
+        weather_factor = weather_visibility[condition]
+        return clamp_unit_interval(location_visibility * phase_factor * weather_factor)
 
 
 def default_physical_rules() -> PhysicalRules:
@@ -599,6 +592,14 @@ def canonical_physical_rules_bytes(rules: PhysicalRules) -> bytes:
     """Deterministic UTF-8 JSON for replay-significant rule constants."""
     if type(rules) is not PhysicalRules:
         raise TypeError("canonical_physical_rules_bytes requires PhysicalRules")
+    weather_visibility = rules.weather_visibility
+    weather_temperature_offset = rules.weather_temperature_offset
+    phase_temperature_offset = rules.phase_temperature_offset
+    weather_transitions = rules.weather_transitions
+    assert weather_visibility is not None
+    assert weather_temperature_offset is not None
+    assert phase_temperature_offset is not None
+    assert weather_transitions is not None
     payload = {
         "attack_damage_max_exclusive": rules.attack_damage_max_exclusive,
         "attack_damage_min": rules.attack_damage_min,
@@ -624,8 +625,7 @@ def canonical_physical_rules_bytes(rules: PhysicalRules) -> bytes:
         "move_fatigue": rules.move_fatigue,
         "night_visibility_factor": rules.night_visibility_factor,
         "phase_temperature_offset": {
-            phase.value: rules.phase_temperature_offset[phase]
-            for phase in DayPhase
+            phase.value: phase_temperature_offset[phase] for phase in DayPhase
         },
         "resource_extraction_amount": rules.resource_extraction_amount,
         "search_base_probability": rules.search_base_probability,
@@ -636,18 +636,18 @@ def canonical_physical_rules_bytes(rules: PhysicalRules) -> bytes:
         "version": rules.version,
         "weather_period_ticks": rules.weather_period_ticks,
         "weather_temperature_offset": {
-            condition.value: rules.weather_temperature_offset[condition]
+            condition.value: weather_temperature_offset[condition]
             for condition in WeatherCondition
         },
         "weather_transitions": {
             source.value: {
-                target.value: rules.weather_transitions[source][target]
+                target.value: weather_transitions[source][target]
                 for target in WeatherCondition
             }
             for source in WeatherCondition
         },
         "weather_visibility": {
-            condition.value: rules.weather_visibility[condition]
+            condition.value: weather_visibility[condition]
             for condition in WeatherCondition
         },
     }

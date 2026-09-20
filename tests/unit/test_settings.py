@@ -164,9 +164,7 @@ def test_migration_settings_reject_disagreeing_database_urls(
 def test_migration_settings_accept_agreeing_database_urls(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    shared = (
-        "postgresql+asyncpg://palimpsest:hunter2@127.0.0.1:5432/palimpsest_test"
-    )
+    shared = "postgresql+asyncpg://palimpsest:hunter2@127.0.0.1:5432/palimpsest_test"
     monkeypatch.setenv(f"{SETTINGS_PREFIX}DATABASE_URL", shared)
     monkeypatch.setenv(f"{SETTINGS_PREFIX}TEST_DATABASE_URL", shared)
     settings = load_migration_settings(env_file=False)

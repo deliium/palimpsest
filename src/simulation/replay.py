@@ -61,9 +61,10 @@ class ReplayOutcome:
             raise TypeError("ReplayOutcome.result must be ReplayResult")
         if self.engine is not None and type(self.engine) is not WorldEngine:
             raise TypeError("ReplayOutcome.engine must be WorldEngine or None")
-        if self.predecessor_commit_hash is not None and type(
-            self.predecessor_commit_hash
-        ) is not CommitHash:
+        if (
+            self.predecessor_commit_hash is not None
+            and type(self.predecessor_commit_hash) is not CommitHash
+        ):
             raise TypeError(
                 "ReplayOutcome.predecessor_commit_hash must be CommitHash or None"
             )
@@ -378,14 +379,10 @@ class ReplayService:
             )
 
         mode = (
-            ReplayMode.CONTINUATION
-            if target_tick == head_next
-            else ReplayMode.READONLY
+            ReplayMode.CONTINUATION if target_tick == head_next else ReplayMode.READONLY
         )
         predecessor = (
-            commits[-1].commit_hash
-            if commits
-            else snapshot.predecessor_commit_hash
+            commits[-1].commit_hash if commits else snapshot.predecessor_commit_hash
         )
         result = ReplayResult(
             run_id=run_id,
@@ -492,9 +489,7 @@ def _versions_compatible(
     )
 
 
-def _snapshot_matches_manifest(
-    snapshot: WorldSnapshot, manifest: RunManifest
-) -> bool:
+def _snapshot_matches_manifest(snapshot: WorldSnapshot, manifest: RunManifest) -> bool:
     return (
         snapshot.event_schema_version == manifest.event_schema_version
         and snapshot.projector_version == manifest.projector_version

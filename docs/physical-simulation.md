@@ -23,6 +23,11 @@ Objective physical rules for a small discrete world (about 5–10 agents, 10–2
 - Effective visibility = clamp(location_base × phase × weather, 0, 1): day 1.0 / night 0.5; clear 1.0, cloudy 0.9, rain 0.7, storm 0.5.
 - Contents (ground items, resources, other bodies) expose only when visibility ≥ 0.5. Exits, self, weather, hour, phase, and visibility modifier always expose.
 - Weather stores condition only. Ambient = location base + weather offset + phase offset. Transitions when `(tick + 1) % 6 == 0` per location from the ordered transition matrix.
+- Agent-facing projections use dedicated observation DTOs (not objective models): exact self physiology may appear via `ObservedSelf`; nearby bodies are coarse; resource max/regen and location capacities never appear. Full matrix and audience rules: [Architecture — Perception boundary](architecture.md#perception-boundary).
+
+## Observation timing
+
+An observation for open tick `N` is projected from the tick-start snapshot plus committed occurrences from tick `N−1`. Current-tick submissions and outcomes never appear early. Eventless prior windows are empty but still carried for live/restored parity. Live and restored engines at the same tick emit equal observations (including canonical serialization).
 
 ## Actions (all applied / rejected / conflicted — none deferred)
 
@@ -46,13 +51,13 @@ Close-of-tick order for living bodies: needs (+2 hunger, +3 thirst, +1 fatigue) 
 
 ## Tick finalization
 
-Action resolution then autonomous effects accumulate pending details/causes against one evolving state. One finalizer decides mutation, advances revision at most once, assigns contiguous sequences and deterministic event IDs, and freezes schema-v3 `WorldEvent` values with action or system causes.
+Action resolution then autonomous effects accumulate pending details/causes/occurrence context against one evolving state. One finalizer decides mutation, advances revision at most once, assigns contiguous sequences and deterministic event IDs, and freezes schema-v4 `WorldEvent` values with action or system causes plus event-time audience context (origin, destination, affected entity, private recipient as applicable).
 
 ## Seeds and schemas
 
 - Named streams: run, world, tick, ordinal or system entity, purpose, derivation-v2 (rules fingerprint). Never module-global RNG or Python `hash()`.
-- **Never log seeds**, random draws, inventories, event payloads, or full snapshots.
-- Audit schema v1: decode/export only. Replay schema v2: legacy projector. Replay schema v3: physical runs (new writes). Runs do not mix replay schemas.
+- **Never log seeds**, random draws, inventories, event payloads, observation contents, communication text, or full snapshots.
+- Audit schema v1: decode/export only. Replay schema v2: legacy projector. Replay schema v3: physical runs without occurrence context (readable). Replay schema v4: physical runs with occurrence context (new writes). Runs do not mix replay schemas.
 
 ## Snapshot contents
 

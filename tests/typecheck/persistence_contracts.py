@@ -66,9 +66,7 @@ class _MemoryTickJournal:
             payload_hash=PayloadHash("b" * 64),
         )
 
-    async def get_tick_commit(
-        self, run_id: RunId, tick: Tick
-    ) -> TickCommit | None:
+    async def get_tick_commit(self, run_id: RunId, tick: Tick) -> TickCommit | None:
         _ = (run_id, tick)
         return None
 

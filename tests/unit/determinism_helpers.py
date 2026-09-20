@@ -94,3 +94,13 @@ def _project_weather(weather: Weather) -> tuple[str, str]:
         weather.location_id.value,
         weather.condition.value,
     )
+
+
+def project_observation_bytes(observation: object) -> bytes:
+    """Canonical observation bytes for noninterference equality checks."""
+    from simulation.serialization import encode_domain
+    from world.observations import Observation
+
+    if type(observation) is not Observation:
+        raise TypeError("project_observation_bytes requires Observation")
+    return encode_domain(observation)

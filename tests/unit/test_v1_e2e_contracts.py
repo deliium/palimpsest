@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-from tests.simulation_helpers import make_item, make_location, make_resource, weather_for_locations
-
 import pytest
 from hypothesis import given, settings
 from hypothesis import strategies as st
@@ -12,6 +10,12 @@ from agents.models import AgentId
 from simulation.actions import admit_agent_command
 from simulation.models import SimulationRunConfig
 from simulation.serialization import decode_domain, encode_domain
+from tests.simulation_helpers import (
+    make_item,
+    make_location,
+    make_resource,
+    weather_for_locations,
+)
 from world._operations import OperationRejected
 from world._state import World, WorldState
 from world._transitions import TransitionResult
@@ -52,8 +56,15 @@ from world.events import (
     Waited,
 )
 from world.identifiers import EntityId, EventId, WorldId, WorldRevision
-from world.models import AgentBody, Item, LifeStatus, Location, Resource
-from world.values import CarryCapacity, Fatigue, Health, Hunger, TemperatureCelsius, Thirst
+from world.models import AgentBody, LifeStatus
+from world.values import (
+    CarryCapacity,
+    Fatigue,
+    Health,
+    Hunger,
+    TemperatureCelsius,
+    Thirst,
+)
 
 COMMAND_VARIANTS = (
     Move(EntityId("loc-1")),

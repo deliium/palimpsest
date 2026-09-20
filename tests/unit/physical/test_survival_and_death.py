@@ -12,7 +12,13 @@ from world._state import WorldState
 from world.effects import DeathCause, SystemEffectFamily
 from world.events import Died, ExposureApplied, NeedsApplied
 from world.identifiers import EntityId, WorldRevision
-from world.models import AgentBody, LifeStatus, copy_body, default_physical_rules
+from world.models import (
+    AgentBody,
+    LifeStatus,
+    Location,
+    copy_body,
+    default_physical_rules,
+)
 from world.values import (
     CarryCapacity,
     DayPhase,
@@ -24,7 +30,11 @@ from world.values import (
 )
 
 
-def _state(*, bodies, locations=None) -> WorldState:
+def _state(
+    *,
+    bodies: tuple[AgentBody, ...],
+    locations: tuple[Location, ...] | None = None,
+) -> WorldState:
     locs = locations if locations is not None else (make_location("loc-1"),)
     return WorldState(
         WorldRevision(0),
@@ -87,13 +97,11 @@ def test_exposure_death_emits_died_exposure() -> None:
         hour=6,
         day_phase=DayPhase.DAY,
     )
-    died = [
-        detail
-        for detail in step.pending_details
-        if type(detail.details) is Died
-    ]
+    died = [detail for detail in step.pending_details if type(detail.details) is Died]
     assert len(died) == 1
-    assert died[0].details.death_cause is DeathCause.EXPOSURE
+    died_details = died[0].details
+    assert type(died_details) is Died
+    assert died_details.death_cause is DeathCause.EXPOSURE
     assert died[0].effect_family is SystemEffectFamily.EXPOSURE
     resulting = step.working_state.bodies[EntityId("body-1")]
     assert resulting.life_status is LifeStatus.DEAD
@@ -165,11 +173,7 @@ def test_exactly_one_died_per_body_on_needs_death() -> None:
         hour=0,
         day_phase=DayPhase.NIGHT,
     )
-    died = [
-        detail
-        for detail in step.pending_details
-        if type(detail.details) is Died
-    ]
+    died = [detail for detail in step.pending_details if type(detail.details) is Died]
     assert len(died) == 1
     # Second autonomous step on the dead body emits nothing.
     step2 = apply_autonomous_physical_step(

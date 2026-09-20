@@ -14,18 +14,18 @@ Palimpsest uses a modular-monolith layout of bounded packages under `src/`. Each
 
 ```text
 src/
-  world/            # agent-facing contracts + private _state/_transitions/_operations/_replay
+  world/            # agent-facing Observation DTOs + private _state/_perception/_rules/_replay
   agents/           # identity, Agent, goals
-  agents/cognition/ # CognitionStrategy leaf layer (returns AgentCommand)
+  agents/cognition/ # CognitionStrategy leaf layer (Perspective → AgentCommand)
   memory/           # owner-bound MemoryTrace/Belief
   social/           # communication envelopes + Relationship
   llm/              # provider-neutral untrusted responses
-  simulation/       # WorldEngine, bootstrap, lifecycle, seed, clock, RNG, IDs, codec, export ports
+  simulation/       # WorldEngine, bootstrap, lifecycle, build_perspective, codecs, replay
   persistence/      # SQLAlchemy adapters for simulation repository ports (no domain imports)
   analysis/         # read-only event/export protocols
   api/              # FastAPI composition root
   infrastructure/   # settings, logging, database adapters
-alembic/            # migrations (pgvector bootstrap)
+alembic/            # migrations (pgvector + event store + occurrence context)
 tests/
   unit/ architecture/ integration/ compose/ typecheck/
 ```
@@ -54,13 +54,14 @@ tests/
 
 - Composition root (`api`) loads settings, configures logging, and owns database lifespan
 - `WorldEngine` owns observation tokens, ordered admission, private batch preparation, and atomic commit
+- Private `PerceptionService` projects one agent-specific `Observation` from tick-start state + prior committed events; cognition receives it only via `observation_for` / `build_perspective`
 - LLM responses stop at cognition; only typed commands enter the engine as submissions
 - Analysis consumes immutable exports/events, never live mutable repositories
 
 ## Key Principles
 
-1. World state is authoritative; agents receive immutable observations only
-2. Objective and subjective state remain separate; memory is owner-scoped
+1. World state is authoritative; agents receive immutable, agent-specific observations only
+2. Objective and subjective state remain separate; perception does not form memories or beliefs
 3. Randomness and IDs derive from an explicit seed (no Python `hash()`, no global RNG)
 4. Operational metadata (HTTP request IDs, log timestamps) never become domain IDs or seeds
 5. Enforce boundaries with import-linter + AST checks, not convention alone
@@ -83,6 +84,7 @@ from simulation import (
     WorldEngine,
 )
 from world import Observation, Wait
+from simulation import build_perspective
 ```
 
 ### Forbidden authority import outside simulation
@@ -90,16 +92,18 @@ from world import Observation, Wait
 ```python
 # Not allowed from agents/memory/api/analysis/llm:
 from world._state import WorldState  # private authority
+from world._perception import PerceptionService  # private projector
 ```
 
 ## Anti-Patterns
 
 - Passing `LLMResponse` into `WorldEngine` or treating `ActionRequest` as authoritative
+- Handing an all-agent `ObservationBatch` or another agent's observation to cognition
 - Sharing mutable memory payloads across agents
 - Reading `PALIMPSEST_` secrets or opening DB connections at import time
 - Using Docker/PostgreSQL inside default unit tests
 
 ## See Also
 
-- `docs/architecture.md` — contributor-facing matrix, WorldEngine lifecycle, and invariants
-- `.ai-factory/plans/feature-v1-world-engine.md` — world engine plan
+- `docs/architecture.md` — contributor-facing matrix, WorldEngine lifecycle, perception boundary, and invariants
+- `.ai-factory/plans/perception-observation-system.md` — perception plan

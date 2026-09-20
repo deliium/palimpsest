@@ -48,11 +48,7 @@ def test_move_adds_fatigue_and_relocates() -> None:
     engine = make_engine(two_location_fixture(), seed=21)
     batch = engine.observe()
     result = engine.resolve_tick(
-        (
-            ActionSubmission(
-                batch.token, AgentId("agent-1"), Move(EntityId("loc-2"))
-            ),
-        )
+        (ActionSubmission(batch.token, AgentId("agent-1"), Move(EntityId("loc-2"))),)
     )
     assert result.resolutions[0].status is ActionResolutionStatus.APPLIED
     body = engine._snapshot.world.state.bodies[EntityId("body-1")]
@@ -66,9 +62,7 @@ def test_search_take_give_drop_round_trip() -> None:
     batch = engine.observe()
     result = engine.resolve_tick(
         (
-            ActionSubmission(
-                batch.token, AgentId("agent-1"), Take(EntityId("item-1"))
-            ),
+            ActionSubmission(batch.token, AgentId("agent-1"), Take(EntityId("item-1"))),
             ActionSubmission(batch.token, AgentId("agent-2"), Wait()),
         )
     )
@@ -92,11 +86,7 @@ def test_search_take_give_drop_round_trip() -> None:
 
     batch3 = engine.observe()
     dropped = engine.resolve_tick(
-        (
-            ActionSubmission(
-                batch3.token, AgentId("agent-2"), Drop(EntityId("item-1"))
-            ),
-        )
+        (ActionSubmission(batch3.token, AgentId("agent-2"), Drop(EntityId("item-1"))),)
     )
     assert dropped.resolutions[0].status is ActionResolutionStatus.APPLIED
     item = engine._snapshot.world.state.items[EntityId("item-1")]
@@ -143,9 +133,7 @@ def test_eat_drink_sleep_help_wait_outcomes() -> None:
             ActionSubmission(
                 batch.token, AgentId("agent-1"), Eat(EntityId("item-food"))
             ),
-            ActionSubmission(
-                batch.token, AgentId("agent-2"), Help(EntityId("body-1"))
-            ),
+            ActionSubmission(batch.token, AgentId("agent-2"), Help(EntityId("body-1"))),
         )
     )
     assert all(
@@ -206,9 +194,13 @@ def test_attack_lethal_emits_contiguous_attack_and_died(
             for record in result.events
             if type(record.event.details) is Attacked
         ]
-        if not attacked or not attacked[0].details.hit:
+        if not attacked:
             continue
-        if attacked[0].details.resulting_target_health != 0.0:
+        attacked_details = attacked[0].details
+        assert type(attacked_details) is Attacked
+        if not attacked_details.hit:
+            continue
+        if attacked_details.resulting_target_health != 0.0:
             continue
         died = [
             record.event
@@ -216,7 +208,9 @@ def test_attack_lethal_emits_contiguous_attack_and_died(
             if type(record.event.details) is Died
         ]
         assert len(died) == 1
-        assert died[0].details.death_cause is DeathCause.ATTACK
+        died_details = died[0].details
+        assert type(died_details) is Died
+        assert died_details.death_cause is DeathCause.ATTACK
         assert died[0].sequence == attacked[0].sequence + 1
         assert died[0].request_id == attacked[0].request_id
         assert (

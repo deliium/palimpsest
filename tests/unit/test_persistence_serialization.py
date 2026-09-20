@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-from tests.simulation_helpers import make_location, make_weather
-
 import json
 import math
 
@@ -36,6 +34,7 @@ from simulation.persistence import (
     WorldSnapshot,
 )
 from simulation.serialization import DomainSerializationError, encode_domain
+from tests.simulation_helpers import make_location, make_weather
 from world.events import Waited, WorldEvent, make_replayable_event
 from world.identifiers import (
     EntityId,
@@ -44,8 +43,15 @@ from world.identifiers import (
     WorldId,
     WorldRevision,
 )
-from world.models import AgentBody, LifeStatus, Location
-from world.values import CarryCapacity, Fatigue, Health, Hunger, TemperatureCelsius, Thirst
+from world.models import AgentBody, LifeStatus
+from world.values import (
+    CarryCapacity,
+    Fatigue,
+    Health,
+    Hunger,
+    TemperatureCelsius,
+    Thirst,
+)
 
 _HASH_A = "a" * 64
 _HASH_B = "b" * 64

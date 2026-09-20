@@ -8,34 +8,34 @@ import pytest
 from hypothesis import given, settings
 from hypothesis import strategies as st
 
-from tests.simulation_helpers import make_item, make_location, make_resource, make_weather
+from tests.simulation_helpers import (
+    make_item,
+    make_location,
+    make_resource,
+    make_weather,
+)
 from world._freeze import freeze
 from world.identifiers import EntityId
 from world.models import (
     AgentBody,
     Item,
     LifeStatus,
-    Location,
     PhysicalRules,
-    Resource,
     Weather,
     canonical_physical_rules_bytes,
     default_physical_rules,
     physical_rules_fingerprint,
 )
 from world.values import (
-    BodyCapacity,
     CarryCapacity,
     Fatigue,
     Health,
     Hunger,
-    ItemCapacity,
     ItemKind,
     ItemLoad,
     ResourceKind,
     TemperatureCelsius,
     Thirst,
-    UnitInterval,
     WeatherCondition,
 )
 

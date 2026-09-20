@@ -112,8 +112,22 @@ def test_public_facades_hide_authority_and_expose_codec() -> None:
     assert "WorldState" not in world.__all__
     assert "WorldGateway" not in world.__all__
     assert "accept_action_request" not in world.__all__
+    assert "PerceptionService" not in world.__all__
     assert "encode_domain" in simulation.__all__
     assert "decode_domain" in simulation.__all__
     assert "DomainSerializationError" in simulation.__all__
     assert "WorldEngine" in simulation.__all__
+    assert "build_perspective" in simulation.__all__
     assert "admit_agent_command" not in simulation.__all__
+    assert "PerceptionService" not in simulation.__all__
+
+
+def test_cognition_package_omits_world_authority_symbols() -> None:
+    import agents.cognition as cognition
+
+    assert "WorldState" not in cognition.__all__
+    assert "World" not in cognition.__all__
+    assert "Perspective" in cognition.__all__
+    assert "CognitionStrategy" in cognition.__all__
+    assert "PerceptionService" not in dir(cognition)
+    assert "ObservationBatch" not in dir(cognition)

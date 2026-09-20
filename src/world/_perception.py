@@ -122,9 +122,7 @@ def _project_one(
     location_id = body.location_id
     location = state.locations.get(location_id)
     weather = state.weather.get(location_id)
-    condition = (
-        weather.condition if weather is not None else WeatherCondition.CLEAR
-    )
+    condition = weather.condition if weather is not None else WeatherCondition.CLEAR
     visibility = 1.0
     if location is not None:
         visibility = context.physical_rules.effective_visibility(
@@ -152,9 +150,7 @@ def _project_one(
             location_id=location_id,
             include_ground=content_visible,
         ),
-        resources=(
-            _sorted_resources(state, location_id) if content_visible else ()
-        ),
+        resources=(_sorted_resources(state, location_id) if content_visible else ()),
         exits=_sorted_exits(state, location_id),
         visible_bodies=(
             _sorted_visible_bodies(state, location_id, observer_id)
@@ -173,9 +169,7 @@ def _project_one(
 def _copy_observer_ids(values: Sequence[EntityId]) -> tuple[EntityId, ...]:
     if isinstance(values, (set, frozenset)):
         raise TypeError("observer_ids must be an ordered sequence")
-    if isinstance(values, (str, bytes, bytearray)) or not isinstance(
-        values, Sequence
-    ):
+    if isinstance(values, (str, bytes, bytearray)) or not isinstance(values, Sequence):
         raise TypeError("observer_ids must be an ordered sequence")
     copied = tuple(values)
     seen: set[EntityId] = set()
@@ -193,9 +187,7 @@ def _copy_prior_events(
 ) -> tuple[WorldEvent, ...]:
     if isinstance(values, (set, frozenset)):
         raise TypeError("prior_events must be an ordered sequence")
-    if isinstance(values, (str, bytes, bytearray)) or not isinstance(
-        values, Sequence
-    ):
+    if isinstance(values, (str, bytes, bytearray)) or not isinstance(values, Sequence):
         raise TypeError("prior_events must be an ordered sequence")
     copied = tuple(values)
     seen: set[object] = set()
@@ -221,14 +213,10 @@ def _sorted_locations(
     location = state.locations.get(location_id)
     if location is None:
         return ()
-    return (
-        ObservedLocation(entity_id=location.entity_id, name=location.name),
-    )
+    return (ObservedLocation(entity_id=location.entity_id, name=location.name),)
 
 
-def _sorted_exits(
-    state: WorldState, location_id: EntityId
-) -> tuple[VisibleExit, ...]:
+def _sorted_exits(state: WorldState, location_id: EntityId) -> tuple[VisibleExit, ...]:
     location = state.locations.get(location_id)
     if location is None:
         return ()
@@ -237,9 +225,7 @@ def _sorted_exits(
         destination = state.locations.get(destination_id)
         if destination is None:
             continue
-        exits.append(
-            VisibleExit(destination_id=destination_id, name=destination.name)
-        )
+        exits.append(VisibleExit(destination_id=destination_id, name=destination.name))
     exits.sort(key=lambda value: value.destination_id.value)
     return tuple(exits)
 
@@ -342,9 +328,7 @@ def _project_event_window(
         occurrence = event.occurrence
         assert occurrence is not None
         if _is_communication(event):
-            communication = _project_communication(
-                event, observer_id=observer_id
-            )
+            communication = _project_communication(event, observer_id=observer_id)
             if communication is not None:
                 communications.append(communication)
             continue

@@ -142,9 +142,10 @@ class Moved:
     def __post_init__(self) -> None:
         if type(self.destination_id) is not EntityId:
             raise TypeError("Moved.destination_id must be EntityId")
-        if self.resulting_location_id is not None and type(
-            self.resulting_location_id
-        ) is not EntityId:
+        if (
+            self.resulting_location_id is not None
+            and type(self.resulting_location_id) is not EntityId
+        ):
             raise TypeError("Moved.resulting_location_id must be EntityId or None")
         _optional_finite_float("Moved.fatigue_delta", self.fatigue_delta)
         _optional_finite_float("Moved.resulting_fatigue", self.resulting_fatigue)
@@ -164,9 +165,10 @@ class Searched:
             raise TypeError("Searched.target_id must be EntityId or None")
         if self.success is not None and type(self.success) is not bool:
             raise TypeError("Searched.success must be bool or None")
-        if self.created_item_id is not None and type(
-            self.created_item_id
-        ) is not EntityId:
+        if (
+            self.created_item_id is not None
+            and type(self.created_item_id) is not EntityId
+        ):
             raise TypeError("Searched.created_item_id must be EntityId or None")
         _optional_finite_float("Searched.extracted_quantity", self.extracted_quantity)
         _optional_finite_float(
@@ -187,9 +189,10 @@ class Taken:
     def __post_init__(self) -> None:
         if type(self.item_id) is not EntityId:
             raise TypeError("Taken.item_id must be EntityId")
-        if self.resulting_holder_id is not None and type(
-            self.resulting_holder_id
-        ) is not EntityId:
+        if (
+            self.resulting_holder_id is not None
+            and type(self.resulting_holder_id) is not EntityId
+        ):
             raise TypeError("Taken.resulting_holder_id must be EntityId or None")
 
 
@@ -204,9 +207,10 @@ class Dropped:
     def __post_init__(self) -> None:
         if type(self.item_id) is not EntityId:
             raise TypeError("Dropped.item_id must be EntityId")
-        if self.resulting_location_id is not None and type(
-            self.resulting_location_id
-        ) is not EntityId:
+        if (
+            self.resulting_location_id is not None
+            and type(self.resulting_location_id) is not EntityId
+        ):
             raise TypeError("Dropped.resulting_location_id must be EntityId or None")
 
 
@@ -224,9 +228,10 @@ class Given:
             raise TypeError("Given.recipient_id must be EntityId")
         if type(self.item_id) is not EntityId:
             raise TypeError("Given.item_id must be EntityId")
-        if self.resulting_holder_id is not None and type(
-            self.resulting_holder_id
-        ) is not EntityId:
+        if (
+            self.resulting_holder_id is not None
+            and type(self.resulting_holder_id) is not EntityId
+        ):
             raise TypeError("Given.resulting_holder_id must be EntityId or None")
 
 
@@ -330,9 +335,7 @@ class Helped:
         _optional_finite_float(
             "Helped.resulting_target_health", self.resulting_target_health
         )
-        _optional_finite_float(
-            "Helped.helper_fatigue_delta", self.helper_fatigue_delta
-        )
+        _optional_finite_float("Helped.helper_fatigue_delta", self.helper_fatigue_delta)
         _optional_finite_float(
             "Helped.resulting_helper_fatigue", self.resulting_helper_fatigue
         )
@@ -376,9 +379,10 @@ class Fled:
             raise TypeError("Fled.threat_id must be EntityId or None")
         if self.success is not None and type(self.success) is not bool:
             raise TypeError("Fled.success must be bool or None")
-        if self.destination_id is not None and type(
-            self.destination_id
-        ) is not EntityId:
+        if (
+            self.destination_id is not None
+            and type(self.destination_id) is not EntityId
+        ):
             raise TypeError("Fled.destination_id must be EntityId or None")
         _optional_finite_float("Fled.fatigue_delta", self.fatigue_delta)
         _optional_finite_float("Fled.resulting_fatigue", self.resulting_fatigue)
@@ -676,9 +680,7 @@ def require_replayable_event(event: WorldEvent) -> WorldEvent:
         raise TypeError("require_replayable_event requires WorldEvent")
     if event.schema_version not in REPLAYABLE_EVENT_SCHEMA_VERSIONS:
         raise ValueError(EventValidationCode.NON_REPLAYABLE.value)
-    if not _payload_effect_complete(
-        event.details, schema_version=event.schema_version
-    ):
+    if not _payload_effect_complete(event.details, schema_version=event.schema_version):
         raise ValueError(EventValidationCode.MISSING_EFFECT_FACTS.value)
     return event
 
@@ -696,9 +698,11 @@ def target_id_for_details(details: EventDetails) -> EntityId | None:
             return recipient_id
         case Drunk(source_id=source_id):
             return source_id
-        case Talked(recipient_id=recipient_id) | Asked(
-            recipient_id=recipient_id
-        ) | Told(recipient_id=recipient_id):
+        case (
+            Talked(recipient_id=recipient_id)
+            | Asked(recipient_id=recipient_id)
+            | Told(recipient_id=recipient_id)
+        ):
             return recipient_id
         case Helped(target_id=target_id) | Attacked(target_id=target_id):
             return target_id
@@ -708,9 +712,11 @@ def target_id_for_details(details: EventDetails) -> EntityId | None:
             return location_id
         case ResourceRegenerated(resource_id=resource_id):
             return resource_id
-        case NeedsApplied(body_id=body_id) | ExposureApplied(
-            body_id=body_id
-        ) | Died(body_id=body_id):
+        case (
+            NeedsApplied(body_id=body_id)
+            | ExposureApplied(body_id=body_id)
+            | Died(body_id=body_id)
+        ):
             return body_id
         case Slept() | Waited():
             return None
@@ -810,9 +816,7 @@ class WorldEvent:
             self.occurrence is not None
             and type(self.occurrence) is not OccurrenceContext
         ):
-            raise TypeError(
-                "WorldEvent.occurrence must be OccurrenceContext or None"
-            )
+            raise TypeError("WorldEvent.occurrence must be OccurrenceContext or None")
         if self.schema_version >= EVENT_SCHEMA_REPLAY_V4:
             if self.occurrence is None:
                 raise ValueError(EventValidationCode.INVALID_OCCURRENCE_CONTEXT.value)
@@ -923,26 +927,28 @@ def build_occurrence_context(
         raise TypeError("destination_location_id must be EntityId or None")
     match typed:
         case Moved(destination_id=destination_id, resulting_location_id=resulting):
-            dest = destination_location_id or resulting or destination_id
+            moved_dest = destination_location_id or resulting or destination_id
             return OccurrenceContext(
                 origin_location_id=origin_location_id,
-                destination_location_id=dest,
+                destination_location_id=moved_dest,
                 affected_entity_ids=(),
                 private_recipient_ids=(),
             )
         case Fled(destination_id=destination_id) as fled:
-            dest = destination_location_id
+            fled_dest = destination_location_id
             if fled.success and destination_id is not None:
-                dest = destination_location_id or destination_id
+                fled_dest = destination_location_id or destination_id
             return OccurrenceContext(
                 origin_location_id=origin_location_id,
-                destination_location_id=dest,
+                destination_location_id=fled_dest,
                 affected_entity_ids=(),
                 private_recipient_ids=(),
             )
-        case Talked(recipient_id=recipient_id) | Asked(
-            recipient_id=recipient_id
-        ) | Told(recipient_id=recipient_id):
+        case (
+            Talked(recipient_id=recipient_id)
+            | Asked(recipient_id=recipient_id)
+            | Told(recipient_id=recipient_id)
+        ):
             return OccurrenceContext(
                 origin_location_id=origin_location_id,
                 destination_location_id=None,
@@ -956,8 +962,10 @@ def build_occurrence_context(
                 affected_entity_ids=(target_id,),
                 private_recipient_ids=(),
             )
-        case Died(body_id=body_id) | NeedsApplied(body_id=body_id) | ExposureApplied(
-            body_id=body_id
+        case (
+            Died(body_id=body_id)
+            | NeedsApplied(body_id=body_id)
+            | ExposureApplied(body_id=body_id)
         ):
             return OccurrenceContext(
                 origin_location_id=origin_location_id,

@@ -32,9 +32,7 @@ def test_replay_with_rng_and_rules_patched_to_fail(
     batch = live.observe()
     live.resolve_tick(
         (
-            ActionSubmission(
-                batch.token, AgentId("agent-1"), Take(EntityId("item-1"))
-            ),
+            ActionSubmission(batch.token, AgentId("agent-1"), Take(EntityId("item-1"))),
             ActionSubmission(batch.token, AgentId("agent-2"), Wait()),
         )
     )
@@ -50,9 +48,7 @@ def test_replay_with_rng_and_rules_patched_to_fail(
 
     monkeypatch.setattr("simulation.randomness.create_named_stream", _boom)
     monkeypatch.setattr("simulation.randomness.sample_stream", _boom)
-    monkeypatch.setattr(
-        "world._physical.apply_autonomous_physical_step", _rules_boom
-    )
+    monkeypatch.setattr("world._physical.apply_autonomous_physical_step", _rules_boom)
 
     restored = restore_from_fixture_events(fixture, seed=55, events=events)
     assert objective_fingerprint(restored) == live_fp
@@ -66,11 +62,7 @@ def test_live_bootstrap_and_checkpoint_fingerprints_agree() -> None:
     live = make_engine(fixture, seed=56)
     batch = live.observe()
     live.resolve_tick(
-        (
-            ActionSubmission(
-                batch.token, AgentId("agent-1"), Take(EntityId("item-1"))
-            ),
-        )
+        (ActionSubmission(batch.token, AgentId("agent-1"), Take(EntityId("item-1"))),)
     )
     run_wait_ticks(live, 1)
     events = tuple(live.export_events().events)
@@ -121,9 +113,13 @@ def test_attack_events_are_effect_complete_for_projection() -> None:
             for record in result.events
             if type(record.event.details) is Attacked
         ]
-        if not attacked or not attacked[0].details.hit:
+        if not attacked:
             continue
-        if attacked[0].details.resulting_target_health != 0.0:
+        attacked_details = attacked[0].details
+        assert type(attacked_details) is Attacked
+        if not attacked_details.hit:
+            continue
+        if attacked_details.resulting_target_health != 0.0:
             continue
         died = [
             record.event
@@ -147,16 +143,12 @@ def test_taken_event_carries_resulting_holder() -> None:
     engine = make_engine(fixture, seed=57)
     batch = engine.observe()
     result = engine.resolve_tick(
-        (
-            ActionSubmission(
-                batch.token, AgentId("agent-1"), Take(EntityId("item-1"))
-            ),
-        )
+        (ActionSubmission(batch.token, AgentId("agent-1"), Take(EntityId("item-1"))),)
     )
     taken = next(
-        record.event
-        for record in result.events
-        if type(record.event.details) is Taken
+        record.event for record in result.events if type(record.event.details) is Taken
     )
-    assert taken.details.resulting_holder_id == EntityId("body-1")
+    taken_details = taken.details
+    assert type(taken_details) is Taken
+    assert taken_details.resulting_holder_id == EntityId("body-1")
     assert snapshot_from_engine(engine).integrity_hash.value

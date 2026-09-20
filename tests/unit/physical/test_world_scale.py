@@ -7,6 +7,7 @@ import logging
 import pytest
 
 from agents.models import AgentId
+from simulation.engine import WorldEngine
 from simulation.lifecycle import ActionSubmission, EngineDiagnosticCode
 from tests.physical_helpers import (
     checkpoint_restore,
@@ -26,7 +27,7 @@ pytestmark = pytest.mark.unit
 _ENGINE_LOGGER = "simulation.engine"
 
 
-def _mixed_scenario(engine, *, agents: int, locations: int) -> None:
+def _mixed_scenario(engine: WorldEngine, *, agents: int, locations: int) -> None:
     """Run a mixed movement/search/take/wait/autonomous sequence."""
     batch = engine.observe()
     submissions: list[ActionSubmission] = []
@@ -39,9 +40,7 @@ def _mixed_scenario(engine, *, agents: int, locations: int) -> None:
         )
     )
     if agents > 1:
-        submissions.append(
-            ActionSubmission(batch.token, AgentId("agent-01"), Search())
-        )
+        submissions.append(ActionSubmission(batch.token, AgentId("agent-01"), Search()))
     if agents > 2 and locations > 1:
         submissions.append(
             ActionSubmission(
@@ -52,9 +51,7 @@ def _mixed_scenario(engine, *, agents: int, locations: int) -> None:
         )
     for index in range(3, min(agents, 5)):
         submissions.append(
-            ActionSubmission(
-                batch.token, AgentId(f"agent-{index:02d}"), Wait()
-            )
+            ActionSubmission(batch.token, AgentId(f"agent-{index:02d}"), Wait())
         )
     engine.resolve_tick(tuple(submissions))
     run_wait_ticks(engine, 2)

@@ -52,12 +52,11 @@ def _length_prefixed(value: bytes) -> bytes:
 
 def derive_stream_seed(config: SimulationRunConfig, scope: StreamScope) -> int:
     hasher = hashlib.sha256()
+    assert config.derivation_version is not None
     hasher.update(config.derivation_version.encode("utf-8"))
     if config.derivation_version == DERIVATION_VERSION_V2:
         assert config.physical_rules is not None
-        fingerprint = physical_rules_fingerprint(config.physical_rules).encode(
-            "ascii"
-        )
+        fingerprint = physical_rules_fingerprint(config.physical_rules).encode("ascii")
         hasher.update(_length_prefixed(fingerprint))
     hasher.update(_length_prefixed(b"stream"))
     hasher.update(_length_prefixed(str(config.seed).encode("utf-8")))

@@ -36,7 +36,7 @@ Import packages, not private modules:
 - `memory`: `MemoryTrace`, `Belief`, owner-bound stores, `OwnershipError`
 - `social`: `CommunicationEnvelope`, `Relationship`, `EnvelopeSender`
 - `llm`: `LLMClient`, `LLMResponse`
-- `simulation`: `WorldEngine`, `WorldBootstrap`, lifecycle types, persistence DTOs/ports, `PersistentSimulationService`, `ReplayService`, codecs, deterministic IDs/RNG/clock, export ports
+- `simulation`: `WorldEngine`, `WorldBootstrap`, lifecycle types, `build_perspective`, persistence DTOs/ports, `PersistentSimulationService`, `ReplayService`, codecs, deterministic IDs/RNG/clock, export ports
 - `persistence`: repository factories (`create_run_repository`, …)
 - `analysis`: `EventSource`, `ExportSource`
 - `api`: `create_app`
@@ -58,14 +58,45 @@ observe() → ObservationBatch + TickToken
 - Ordered input position is resolution priority. Conflicts arise only when an initially valid action is invalidated by an earlier effect.
 - At most one action per registered agent per tick; omitted agents produce nothing; empty submissions still run autonomous physiology.
 - All fifteen commands have explicit applied / rejected / conflicted behavior (no deferred physical policy). Details: [Physical simulation](physical-simulation.md).
-- New physical runs emit schema-v3 replay events. Schema-1 export remains available as an audit artifact where applicable.
+- New physical runs emit schema-v4 replay events (effect-complete + causes + occurrence context). Schema-v3 remains readable; schema-1 export remains an audit artifact where applicable.
+
+## Perception boundary
+
+Objective `WorldState` stays private. Agent-facing cognition sees only immutable, agent-specific `Observation` values produced by private `world._perception.PerceptionService` and routed by the engine.
+
+| Concern | Contract |
+| --- | --- |
+| Input | Tick-start snapshot + committed events from tick `N−1` (never the still-open tick) |
+| Output | Exactly one detached `Observation` per registered observer; repeated `observe()` in one open tick is equal |
+| Routing | `WorldEngine.observation_for(AgentId)` or `ObservationBatch.for_observer`; cognition uses `build_perspective` |
+| Forbidden to cognition | `WorldState`, `World`, engine snapshots, private projectors, raw `WorldEvent`, another agent's observation, all-agent batches |
+
+### Field access matrix
+
+| Access | Examples |
+| --- | --- |
+| Always self-known | Self physiology/inventory, hour, day phase, visibility, local weather condition, current location id/name, adjacent exits |
+| Visibility-gated (≥ 0.5) | Local ground items, resources (quantity only), coarse nearby bodies, public occurrence facts for local bystanders |
+| Participant-only | Extra occurrence fields for actors/targets (still redacted; no cause IDs or replay payloads) |
+| Recipient-only | Communication text to sender + intended recipient |
+| Omitted | Location capacities/shelter, resource max/regen, other-agent inventory/exact needs, remote weather/topology, request/system cause IDs |
+
+Other bodies expose coarse health bands only. Perception never invents facts, never treats uttered text as objective truth, and never creates `MemoryTrace` or `Belief` values. Social `inbox` remains a separate out-of-band channel; observed communications live on `Observation.communications` with narrow provenance (source kind + tick/event correlation).
+
+### Event audience and timing
+
+Committed events carry versioned occurrence context (origin, destination, affected entity, private recipient) so audience decisions do not guess from `target_id` or post-tick state. Actors and targets may receive participant details; visible local bystanders get public action facts; remote or low-visibility observers get nothing. Rejected, duplicate, and conflicted outcomes emit no world events and therefore no observed occurrences.
+
+### Logging
+
+Projection code is log-free. Engine orchestration may log DEBUG counts, tick/revision, visibility bands, and stable reason codes. Never log observation payloads, communication text, memories, private state, hidden identities, seeds, or credentials. Verbosity follows `PALIMPSEST_LOG_LEVEL`.
 
 ## Eleven invariants
 
 These are encoded as types and import rules, and enforced by `WorldEngine` for objective evolution.
 
 1. **World state is authoritative.** Mutations commit only through `WorldEngine`; private world modules prepare candidates and never commit independently.
-2. **Agents receive immutable observations, never `WorldState`.** `WorldState` is absent from public `world` exports.
+2. **Agents receive immutable observations, never `WorldState`.** `WorldState` is absent from public `world` exports. Each agent receives only its own observation via trusted routing.
 3. **Objective and subjective state stay separate.** `Agent` / goals / memories / beliefs are not world aggregates.
 4. **Actions are structured and typed.** Fifteen closed `AgentCommand` variants; cognition returns commands; the engine admits and resolves them.
 5. **LLM output is untrusted.** `LLMResponse` cannot mutate world state.

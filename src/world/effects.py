@@ -93,9 +93,7 @@ class SystemCause:
         object.__setattr__(
             self,
             "family_ordinal",
-            require_exact_nonneg_int(
-                "SystemCause.family_ordinal", self.family_ordinal
-            ),
+            require_exact_nonneg_int("SystemCause.family_ordinal", self.family_ordinal),
         )
 
 
@@ -208,14 +206,10 @@ class ResolvedWeatherEffect:
         if type(self.location_id) is not EntityId:
             raise TypeError("ResolvedWeatherEffect.location_id must be EntityId")
         if type(self.condition) is not WeatherCondition:
-            raise TypeError(
-                "ResolvedWeatherEffect.condition must be WeatherCondition"
-            )
+            raise TypeError("ResolvedWeatherEffect.condition must be WeatherCondition")
 
 
-ResolvedActionEffect = (
-    ResolvedSearchEffect | ResolvedAttackEffect | ResolvedFleeEffect
-)
+ResolvedActionEffect = ResolvedSearchEffect | ResolvedAttackEffect | ResolvedFleeEffect
 
 _ACTION_EFFECT_TYPES: Final[frozenset[type]] = frozenset(
     {ResolvedSearchEffect, ResolvedAttackEffect, ResolvedFleeEffect}
@@ -244,9 +238,7 @@ class ResolvedActionEffects:
         frozen: dict[RequestId, ResolvedActionEffect] = {}
         for key, value in self.by_request.items():
             if type(key) is not RequestId:
-                raise TypeError(
-                    "ResolvedActionEffects keys must be RequestId"
-                )
+                raise TypeError("ResolvedActionEffects keys must be RequestId")
             effect = require_resolved_action_effect(value)
             if effect.request_id != key:
                 raise ValueError(
@@ -289,21 +281,16 @@ class ResolvedSystemEffects:
         frozen: dict[EntityId, ResolvedWeatherEffect] = {}
         for key, value in self.weather_by_location.items():
             if type(key) is not EntityId:
-                raise TypeError(
-                    "ResolvedSystemEffects weather keys must be EntityId"
-                )
+                raise TypeError("ResolvedSystemEffects weather keys must be EntityId")
             if type(value) is not ResolvedWeatherEffect:
                 raise TypeError(
-                    "ResolvedSystemEffects weather values must be "
-                    "ResolvedWeatherEffect"
+                    "ResolvedSystemEffects weather values must be ResolvedWeatherEffect"
                 )
             if value.location_id != key:
                 raise ValueError(
                     "ResolvedSystemEffects weather key must equal location_id"
                 )
             if key in frozen:
-                raise ValueError(
-                    "ResolvedSystemEffects weather keys must be unique"
-                )
+                raise ValueError("ResolvedSystemEffects weather keys must be unique")
             frozen[key] = value
         object.__setattr__(self, "weather_by_location", frozen)

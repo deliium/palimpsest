@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 from tests.simulation_helpers import make_item, make_location, weather_for_locations
-
 from world._operations import (
     OperationRejected,
     RejectionCode,
@@ -21,8 +20,15 @@ from world.identifiers import (
     WorldId,
     WorldRevision,
 )
-from world.models import AgentBody, Item, LifeStatus, Location
-from world.values import CarryCapacity, Fatigue, Health, Hunger, TemperatureCelsius, Thirst
+from world.models import AgentBody, LifeStatus
+from world.values import (
+    CarryCapacity,
+    Fatigue,
+    Health,
+    Hunger,
+    TemperatureCelsius,
+    Thirst,
+)
 
 
 def _body(entity_id: str, location_id: str) -> AgentBody:
@@ -46,9 +52,7 @@ def _world() -> World:
         WorldRevision(1),
         locations=locations,
         bodies=(_body("body-1", "loc-1"), _body("body-2", "loc-1")),
-        items=(
-            make_item("item-1", name="Rock", location_id="loc-1"),
-        ),
+        items=(make_item("item-1", name="Rock", location_id="loc-1"),),
         weather=weather_for_locations(locations),
     )
     return World(WorldId("world-1"), state)

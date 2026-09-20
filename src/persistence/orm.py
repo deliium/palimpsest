@@ -253,9 +253,7 @@ class TickCommitOrm(Base):
     commit_hash: Mapped[str] = mapped_column(String(SHA256_HEX_LEN), nullable=False)
     idempotency_key: Mapped[str] = mapped_column(String(_STABLE_ID_LEN), nullable=False)
     event_count: Mapped[int] = mapped_column(Integer, nullable=False)
-    payload_hash: Mapped[str] = mapped_column(
-        String(SHA256_HEX_LEN), nullable=False
-    )
+    payload_hash: Mapped[str] = mapped_column(String(SHA256_HEX_LEN), nullable=False)
     snapshot_id: Mapped[str | None] = mapped_column(
         String(_STABLE_ID_LEN), nullable=True
     )
@@ -381,9 +379,7 @@ class SnapshotBodyOrm(Base):
             name="fk_snapshot_bodies_snapshot",
             ondelete="RESTRICT",
         ),
-        CheckConstraint(
-            "life_status IN ('alive', 'dead')", name="life_status_closed"
-        ),
+        CheckConstraint("life_status IN ('alive', 'dead')", name="life_status_closed"),
         CheckConstraint("carry_capacity >= 1", name="carry_capacity_positive"),
         Index("ix_snapshot_bodies_location", "run_id", "snapshot_id", "location_id"),
     )
@@ -461,9 +457,7 @@ class SnapshotItemOrm(Base):
     location_id: Mapped[str | None] = mapped_column(
         String(_STABLE_ID_LEN), nullable=True
     )
-    holder_id: Mapped[str | None] = mapped_column(
-        String(_STABLE_ID_LEN), nullable=True
-    )
+    holder_id: Mapped[str | None] = mapped_column(String(_STABLE_ID_LEN), nullable=True)
 
 
 class SnapshotResourceOrm(Base):
@@ -478,12 +472,8 @@ class SnapshotResourceOrm(Base):
         ),
         CheckConstraint("quantity >= 0", name="quantity_nonneg"),
         CheckConstraint("maximum_quantity >= 0", name="maximum_quantity_nonneg"),
-        CheckConstraint(
-            "quantity <= maximum_quantity", name="quantity_within_maximum"
-        ),
-        CheckConstraint(
-            "regeneration_per_tick >= 0", name="regeneration_nonneg"
-        ),
+        CheckConstraint("quantity <= maximum_quantity", name="quantity_within_maximum"),
+        CheckConstraint("regeneration_per_tick >= 0", name="regeneration_nonneg"),
         CheckConstraint("quantity::text <> 'NaN'", name="quantity_not_nan"),
         CheckConstraint(
             "quantity::float8 != 'Infinity'::float8 AND "

@@ -131,6 +131,7 @@ async def test_correlation_context_does_not_leak_across_concurrent_requests(
 ) -> None:
     seen: dict[str, str] = {}
     engine = FakeEngine()
+
     def factory(_settings: Settings) -> DatabaseResourcesLike:
         return FakeResources(engine=engine)
 

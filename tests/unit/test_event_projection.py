@@ -2,10 +2,13 @@
 
 from __future__ import annotations
 
-from tests.simulation_helpers import connected_locations, make_item, weather_for_locations
-
 import pytest
 
+from tests.simulation_helpers import (
+    connected_locations,
+    make_item,
+    weather_for_locations,
+)
 from world._replay import ProjectionError, ProjectionErrorCode, project_events
 from world._state import WorldState
 from world.events import (
@@ -24,8 +27,15 @@ from world.identifiers import (
     WorldId,
     WorldRevision,
 )
-from world.models import AgentBody, Item, LifeStatus, Location
-from world.values import CarryCapacity, Fatigue, Health, Hunger, TemperatureCelsius, Thirst
+from world.models import AgentBody, Item, LifeStatus
+from world.values import (
+    CarryCapacity,
+    Fatigue,
+    Health,
+    Hunger,
+    TemperatureCelsius,
+    Thirst,
+)
 
 _RUN = "run-1"
 _WORLD = WorldId("world-1")
@@ -96,9 +106,10 @@ def _event(
 
 def test_empty_events_returns_same_state() -> None:
     state = _base_state()
-    assert project_events(
-        state, (), expected_run_id=_RUN, expected_world_id=_WORLD
-    ) is state
+    assert (
+        project_events(state, (), expected_run_id=_RUN, expected_world_id=_WORLD)
+        is state
+    )
 
 
 def test_event_only_wait_preserves_revision_and_items() -> None:
@@ -161,9 +172,7 @@ def test_take_drop_give_projection_applies_recorded_effects() -> None:
         tick=2,
         sequence=0,
         revision=3,
-        details=Dropped(
-            EntityId("item-1"), resulting_location_id=EntityId("loc-1")
-        ),
+        details=Dropped(EntityId("item-1"), resulting_location_id=EntityId("loc-1")),
         actor_id="body-2",
     )
     after_drop = project_events(

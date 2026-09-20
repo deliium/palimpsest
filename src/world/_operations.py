@@ -304,9 +304,7 @@ def validate_action_request(
             code=RejectionCode.MALFORMED_ENVELOPE, request_id=request_id
         )
     if request.world_id != world_id:
-        return OperationRejected(
-            code=RejectionCode.WRONG_WORLD, request_id=request_id
-        )
+        return OperationRejected(code=RejectionCode.WRONG_WORLD, request_id=request_id)
     if request.revision != state.revision:
         return OperationRejected(
             code=RejectionCode.STALE_REVISION, request_id=request_id
@@ -321,9 +319,7 @@ def validate_action_request(
             code=RejectionCode.INVALID_ACTOR_BINDING, request_id=request_id
         )
     if body.life_status is LifeStatus.DEAD:
-        return OperationRejected(
-            code=RejectionCode.DEAD_ACTOR, request_id=request_id
-        )
+        return OperationRejected(code=RejectionCode.DEAD_ACTOR, request_id=request_id)
 
     base = (
         request.request_id,
@@ -336,9 +332,7 @@ def validate_action_request(
             rejected = _require_location(state, destination_id, request_id)
             if rejected is not None:
                 return rejected
-            return OperationAccepted(
-                _MoveOp(*base, destination_id=destination_id)
-            )
+            return OperationAccepted(_MoveOp(*base, destination_id=destination_id))
         case Search(target_id=target_id):
             if target_id is not None:
                 rejected = _require_any_entity(state, target_id, request_id)
@@ -786,9 +780,7 @@ def prepare_action_batch(
         if application.result.emits_event:
             cause = ActionCause(request.request_id, request.actor_id)
             actor_body = state_before.bodies.get(request.actor_id)
-            origin_location_id = (
-                None if actor_body is None else actor_body.location_id
-            )
+            origin_location_id = None if actor_body is None else actor_body.location_id
             for details in application.all_event_details():
                 pending_events.append(
                     PendingEvent(

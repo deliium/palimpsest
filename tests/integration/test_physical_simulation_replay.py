@@ -132,9 +132,7 @@ async def test_physical_live_bootstrap_and_checkpoint_replay(
     batch = engine.observe()
     await service.resolve_tick(
         (
-            ActionSubmission(
-                batch.token, AgentId("agent-1"), Take(EntityId("item-1"))
-            ),
+            ActionSubmission(batch.token, AgentId("agent-1"), Take(EntityId("item-1"))),
             ActionSubmission(batch.token, AgentId("agent-2"), Wait()),
         )
     )
@@ -151,9 +149,7 @@ async def test_physical_live_bootstrap_and_checkpoint_replay(
     live_fp = objective_fingerprint(engine)
 
     replay = ReplayService(runs, journal, snapshots)
-    head = await replay.replay(
-        ReplayRequest(run_id=RunId(run_id), target_tick=None)
-    )
+    head = await replay.replay(ReplayRequest(run_id=RunId(run_id), target_tick=None))
     assert head.result.status is ReplayStatus.OK
     assert head.engine is not None
     assert objective_fingerprint(head.engine) == live_fp

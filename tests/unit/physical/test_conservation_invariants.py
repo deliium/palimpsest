@@ -37,11 +37,7 @@ def test_take_preserves_item_identity_and_load() -> None:
     before = engine._snapshot.world.state
     batch = engine.observe()
     result = engine.resolve_tick(
-        (
-            ActionSubmission(
-                batch.token, AgentId("agent-1"), Take(EntityId("item-1"))
-            ),
-        )
+        (ActionSubmission(batch.token, AgentId("agent-1"), Take(EntityId("item-1"))),)
     )
     assert result.resolutions[0].status is ActionResolutionStatus.APPLIED
     after = engine._snapshot.world.state
@@ -176,11 +172,7 @@ def test_eat_consumes_item_identity_from_index_and_inventory() -> None:
     before = engine._snapshot.world.state
     batch = engine.observe()
     result = engine.resolve_tick(
-        (
-            ActionSubmission(
-                batch.token, AgentId("agent-1"), Eat(EntityId("item-food"))
-            ),
-        )
+        (ActionSubmission(batch.token, AgentId("agent-1"), Eat(EntityId("item-food"))),)
     )
     assert result.resolutions[0].status is ActionResolutionStatus.APPLIED
     after = engine._snapshot.world.state
@@ -207,11 +199,7 @@ def test_take_rejects_over_carry_capacity_without_item_move() -> None:
     engine = make_engine(world, seed=15)
     batch = engine.observe()
     result = engine.resolve_tick(
-        (
-            ActionSubmission(
-                batch.token, AgentId("agent-1"), Take(EntityId("item-1"))
-            ),
-        )
+        (ActionSubmission(batch.token, AgentId("agent-1"), Take(EntityId("item-1"))),)
     )
     assert result.resolutions[0].status is ActionResolutionStatus.REJECTED
     after = engine._snapshot.world.state

@@ -85,8 +85,7 @@ def _event_fingerprint(
     return (
         tuple(event.event_id.value for event in export.events),
         tuple(
-            (event.tick, event.sequence, event.event_type)
-            for event in export.events
+            (event.tick, event.sequence, event.event_type) for event in export.events
         ),
     )
 
@@ -178,9 +177,7 @@ async def test_live_bootstrap_and_checkpoint_replay_agree(
             locations=locations,
             bodies=(_alive(),),
             weather=weather_for_locations(locations),
-            registrations=(
-                AgentRegistration(AgentId("agent-1"), EntityId("body-1")),
-            ),
+            registrations=(AgentRegistration(AgentId("agent-1"), EntityId("body-1")),),
         ),
         run_id=RunId(run_id),
     )
@@ -215,9 +212,7 @@ async def test_live_bootstrap_and_checkpoint_replay_agree(
     assert engine.tick == Tick(5)
 
     replay = ReplayService(runs, journal, snapshots)
-    head = await replay.replay(
-        ReplayRequest(run_id=RunId(run_id), target_tick=None)
-    )
+    head = await replay.replay(ReplayRequest(run_id=RunId(run_id), target_tick=None))
     assert head.result.status is ReplayStatus.OK
     assert head.result.mode is ReplayMode.CONTINUATION
     assert head.engine is not None

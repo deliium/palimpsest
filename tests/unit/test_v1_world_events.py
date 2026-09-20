@@ -173,7 +173,9 @@ def test_died_and_system_cause_are_closed() -> None:
     )
     assert event.actor_id is None
     assert event.target_id == EntityId("body-1")
-    assert event.details.death_cause is DeathCause.COMBINED_NEEDS
+    died_details = event.details
+    assert type(died_details) is Died
+    assert died_details.death_cause is DeathCause.COMBINED_NEEDS
     assert event.occurrence is not None
     assert event.occurrence.affected_entity_ids == (EntityId("body-1"),)
 
@@ -186,7 +188,9 @@ def test_attack_miss_and_weather_payloads() -> None:
         details=Attacked(EntityId("body-2"), hit=False),
         tick=1,
     )
-    assert miss.details.hit is False
+    miss_details = miss.details
+    assert type(miss_details) is Attacked
+    assert miss_details.hit is False
     weather_cause = SystemCause(
         RequestId("sys-w"),
         SystemEffectFamily.WEATHER,
@@ -200,7 +204,9 @@ def test_attack_miss_and_weather_payloads() -> None:
         tick=5,
         revision=2,
     )
-    assert weather.details.condition is WeatherCondition.RAIN
+    weather_details = weather.details
+    assert type(weather_details) is WeatherChanged
+    assert weather_details.condition is WeatherCondition.RAIN
     assert weather.occurrence is not None
     assert weather.occurrence.origin_location_id == EntityId("loc-1")
 

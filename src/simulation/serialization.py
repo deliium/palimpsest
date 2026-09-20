@@ -516,12 +516,8 @@ def _decode_location(data: dict[str, Any], *, path: str) -> Location:
             entity_id=EntityId(_str_field(data, "entity_id", path=path)),
             name=_str_field(data, "name", path=path),
             adjacent=adjacent,
-            body_capacity=BodyCapacity(
-                _int_field(data, "body_capacity", path=path)
-            ),
-            item_capacity=ItemCapacity(
-                _int_field(data, "item_capacity", path=path)
-            ),
+            body_capacity=BodyCapacity(_int_field(data, "body_capacity", path=path)),
+            item_capacity=ItemCapacity(_int_field(data, "item_capacity", path=path)),
             base_temperature=TemperatureCelsius(
                 _float_field(data, "base_temperature", path=path)
             ),
@@ -754,9 +750,7 @@ def _decode_physical_rules(data: dict[str, Any], *, path: str) -> PhysicalRules:
             thirst_damage=_float_field(data, "thirst_damage", path=path),
             fatigue_damage=_float_field(data, "fatigue_damage", path=path),
             exposure_damage=_float_field(data, "exposure_damage", path=path),
-            exposure_low_celsius=_float_field(
-                data, "exposure_low_celsius", path=path
-            ),
+            exposure_low_celsius=_float_field(data, "exposure_low_celsius", path=path),
             exposure_high_celsius=_float_field(
                 data, "exposure_high_celsius", path=path
             ),
@@ -861,9 +855,7 @@ def _decode_agent_body(data: dict[str, Any], *, path: str) -> AgentBody:
             ),
             inventory=inventory,
             life_status=LifeStatus(_str_field(data, "life_status", path=path)),
-            carry_capacity=CarryCapacity(
-                _int_field(data, "carry_capacity", path=path)
-            ),
+            carry_capacity=CarryCapacity(_int_field(data, "carry_capacity", path=path)),
         )
     except DomainSerializationError:
         raise
@@ -1093,9 +1085,11 @@ def _encode_command(value: object) -> dict[str, Any]:
             return {"source_id": source_id.value}
         case Sleep() | Wait():
             return {}
-        case Talk(recipient_id=recipient_id, text=text) | Ask(
-            recipient_id=recipient_id, text=text
-        ) | Tell(recipient_id=recipient_id, text=text):
+        case (
+            Talk(recipient_id=recipient_id, text=text)
+            | Ask(recipient_id=recipient_id, text=text)
+            | Tell(recipient_id=recipient_id, text=text)
+        ):
             return {"recipient_id": recipient_id.value, "text": text}
         case Help(target_id=target_id) | Attack(target_id=target_id):
             return {"target_id": target_id.value}
@@ -1223,13 +1217,9 @@ def _encode_observation(value: Observation) -> dict[str, Any]:
         else _encode_observed_self(value.self_body),
         "tick": value.tick,
         "visibility": value.visibility,
-        "visible_bodies": [
-            _encode_visible_body(item) for item in value.visible_bodies
-        ],
+        "visible_bodies": [_encode_visible_body(item) for item in value.visible_bodies],
         "weather_condition": (
-            None
-            if value.weather_condition is None
-            else value.weather_condition.value
+            None if value.weather_condition is None else value.weather_condition.value
         ),
         "world_id": value.world_id.value,
     }
@@ -1357,9 +1347,7 @@ def _encode_observed_item(value: ObservedItem) -> dict[str, Any]:
 
 
 def _decode_observed_item(data: dict[str, Any], *, path: str) -> ObservedItem:
-    _require_keys(
-        data, {"entity_id", "name", "kind", "load", "placement"}, path=path
-    )
+    _require_keys(data, {"entity_id", "name", "kind", "load", "placement"}, path=path)
     try:
         return ObservedItem(
             entity_id=EntityId(_str_field(data, "entity_id", path=path)),
@@ -1383,9 +1371,7 @@ def _encode_observed_resource(value: ObservedResource) -> dict[str, Any]:
 
 
 def _decode_observed_resource(data: dict[str, Any], *, path: str) -> ObservedResource:
-    _require_keys(
-        data, {"entity_id", "name", "kind", "quantity", "unit"}, path=path
-    )
+    _require_keys(data, {"entity_id", "name", "kind", "quantity", "unit"}, path=path)
     try:
         return ObservedResource(
             entity_id=EntityId(_str_field(data, "entity_id", path=path)),
@@ -1454,9 +1440,7 @@ def _decode_observed_self(data: dict[str, Any], *, path: str) -> ObservedSelf:
             ),
             inventory=inventory,
             life_status=LifeStatus(_str_field(data, "life_status", path=path)),
-            carry_capacity=CarryCapacity(
-                _int_field(data, "carry_capacity", path=path)
-            ),
+            carry_capacity=CarryCapacity(_int_field(data, "carry_capacity", path=path)),
         )
     except DomainSerializationError:
         raise
@@ -1612,9 +1596,7 @@ def _encode_observed_communication(value: ObservedCommunication) -> dict[str, An
 def _decode_observed_communication(
     data: dict[str, Any], *, path: str
 ) -> ObservedCommunication:
-    _require_keys(
-        data, {"provenance", "speaker_id", "listener_id", "text"}, path=path
-    )
+    _require_keys(data, {"provenance", "speaker_id", "listener_id", "text"}, path=path)
     provenance_raw = data["provenance"]
     if not isinstance(provenance_raw, dict):
         raise DomainSerializationError("invalid_object", f"{path}.provenance")
@@ -1639,9 +1621,7 @@ def _optional_entity_id(value: object, *, path: str) -> EntityId | None:
     return EntityId(value)
 
 
-def _decode_occurrence_context(
-    data: dict[str, Any], *, path: str
-) -> OccurrenceContext:
+def _decode_occurrence_context(data: dict[str, Any], *, path: str) -> OccurrenceContext:
     _require_keys(
         data,
         {
@@ -1667,9 +1647,7 @@ def _decode_occurrence_context(
             ),
             affected_entity_ids=tuple(
                 EntityId(
-                    _require_str_item(
-                        item, path=f"{path}.affected_entity_ids[{index}]"
-                    )
+                    _require_str_item(item, path=f"{path}.affected_entity_ids[{index}]")
                 )
                 for index, item in enumerate(affected_raw)
             ),
@@ -1694,9 +1672,7 @@ def _require_str_item(value: object, *, path: str) -> str:
     return value
 
 
-def _decode_object_list(
-    raw: object, decoder: Any, *, path: str
-) -> tuple[Any, ...]:
+def _decode_object_list(raw: object, decoder: Any, *, path: str) -> tuple[Any, ...]:
     if not isinstance(raw, list):
         raise DomainSerializationError("invalid_array", path)
     items = []
@@ -2070,9 +2046,7 @@ def _decode_event_details(data: dict[str, Any], *, path: str) -> object:
                 raise DomainSerializationError("invalid_fields", path)
             consumed = fields.get("consumed_item")
             if consumed is not None and type(consumed) is not bool:
-                raise DomainSerializationError(
-                    "invalid_bool", f"{path}.consumed_item"
-                )
+                raise DomainSerializationError("invalid_bool", f"{path}.consumed_item")
             return Drunk(
                 EntityId(_str_field(fields, "source_id", path=path)),
                 consumed_item=consumed,
@@ -2468,9 +2442,7 @@ def _decode_world_event(data: dict[str, Any], *, path: str) -> WorldEvent:
         if "occurrence" in data:
             occurrence_raw = data["occurrence"]
             if not isinstance(occurrence_raw, dict):
-                raise DomainSerializationError(
-                    "invalid_object", f"{path}.occurrence"
-                )
+                raise DomainSerializationError("invalid_object", f"{path}.occurrence")
             occurrence = _decode_occurrence_context(
                 occurrence_raw, path=f"{path}.occurrence"
             )

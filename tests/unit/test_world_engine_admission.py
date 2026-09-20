@@ -2,17 +2,23 @@
 
 from __future__ import annotations
 
-from tests.simulation_helpers import make_location, weather_for_locations
-
 from agents.models import AgentId
 from simulation.bootstrap import AgentRegistration, WorldBootstrap
 from simulation.engine import WorldEngine
 from simulation.lifecycle import ActionSubmission
 from simulation.models import SimulationRunConfig
+from tests.simulation_helpers import make_location, weather_for_locations
 from world.actions import Wait
 from world.identifiers import EntityId, WorldId, WorldRevision
-from world.models import AgentBody, LifeStatus, Location
-from world.values import CarryCapacity, Fatigue, Health, Hunger, TemperatureCelsius, Thirst
+from world.models import AgentBody, LifeStatus
+from world.values import (
+    CarryCapacity,
+    Fatigue,
+    Health,
+    Hunger,
+    TemperatureCelsius,
+    Thirst,
+)
 
 
 def _body(entity_id: str) -> AgentBody:

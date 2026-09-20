@@ -41,11 +41,7 @@ def test_move_to_non_adjacent_is_rejected() -> None:
     before_loc = engine._snapshot.world.state.bodies[EntityId("body-1")].location_id
     batch = engine.observe()
     result = engine.resolve_tick(
-        (
-            ActionSubmission(
-                batch.token, AgentId("agent-1"), Move(EntityId("loc-3"))
-            ),
-        )
+        (ActionSubmission(batch.token, AgentId("agent-1"), Move(EntityId("loc-3"))),)
     )
     assert result.resolutions[0].status is ActionResolutionStatus.REJECTED
     assert (
@@ -114,27 +110,17 @@ def test_help_cannot_revive_dead_target() -> None:
     engine = make_engine(world, seed=34)
     batch = engine.observe()
     result = engine.resolve_tick(
-        (
-            ActionSubmission(
-                batch.token, AgentId("agent-1"), Help(EntityId("body-2"))
-            ),
-        )
+        (ActionSubmission(batch.token, AgentId("agent-1"), Help(EntityId("body-2"))),)
     )
     assert result.resolutions[0].status is ActionResolutionStatus.REJECTED
-    assert (
-        engine._snapshot.world.state.bodies[EntityId("body-2")].health.value == 0.0
-    )
+    assert engine._snapshot.world.state.bodies[EntityId("body-2")].health.value == 0.0
 
 
 def test_attack_self_is_rejected() -> None:
     engine = make_engine(two_location_fixture(item_on_ground=False), seed=35)
     batch = engine.observe()
     result = engine.resolve_tick(
-        (
-            ActionSubmission(
-                batch.token, AgentId("agent-1"), Attack(EntityId("body-1"))
-            ),
-        )
+        (ActionSubmission(batch.token, AgentId("agent-1"), Attack(EntityId("body-1"))),)
     )
     assert result.resolutions[0].status is ActionResolutionStatus.REJECTED
 
@@ -153,20 +139,14 @@ def test_drink_depleted_resource_quantity_half_rejected() -> None:
         )
     )
     assert result.resolutions[0].status is ActionResolutionStatus.REJECTED
-    assert (
-        engine._snapshot.world.state.resources[EntityId("res-water")].quantity == 0.5
-    )
+    assert engine._snapshot.world.state.resources[EntityId("res-water")].quantity == 0.5
 
 
 def test_drop_unowned_item_is_rejected() -> None:
     engine = make_engine(two_location_fixture(), seed=37)
     batch = engine.observe()
     result = engine.resolve_tick(
-        (
-            ActionSubmission(
-                batch.token, AgentId("agent-1"), Drop(EntityId("item-1"))
-            ),
-        )
+        (ActionSubmission(batch.token, AgentId("agent-1"), Drop(EntityId("item-1"))),)
     )
     assert result.resolutions[0].status is ActionResolutionStatus.REJECTED
 
@@ -186,11 +166,7 @@ def test_dead_actor_actions_are_rejected() -> None:
     engine = make_engine(world, seed=38)
     batch = engine.observe()
     result = engine.resolve_tick(
-        (
-            ActionSubmission(
-                batch.token, AgentId("agent-1"), Take(EntityId("item-1"))
-            ),
-        )
+        (ActionSubmission(batch.token, AgentId("agent-1"), Take(EntityId("item-1"))),)
     )
     assert result.resolutions[0].status is ActionResolutionStatus.DEAD_ACTOR
     assert engine._snapshot.world.state.items[EntityId("item-1")].holder_id is None

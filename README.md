@@ -49,8 +49,8 @@ Development credentials in `compose.yaml` are **not production**. `docker compos
 
 | Page | Contents |
 | --- | --- |
-| [Architecture](docs/architecture.md) | Bounded packages, `WorldEngine` lifecycle, public facades, eleven invariants |
-| [Physical simulation](docs/physical-simulation.md) | Topology, capacities, actions, physiology, death, schema-v3, tests |
+| [Architecture](docs/architecture.md) | Bounded packages, `WorldEngine` lifecycle, perception boundary, eleven invariants |
+| [Physical simulation](docs/physical-simulation.md) | Topology, capacities, actions, physiology, death, schema-v4, tests |
 | [Configuration](docs/configuration.md) | `PALIMPSEST_` settings, logging, redaction, seeds, identifiers, clocks |
 | [Development](docs/development.md) | Tests, migrations, local and Docker workflows, exact commands |
 | [Persistence](docs/persistence.md) | Event store, append-only guarantees, durable ticks, replay |
@@ -58,7 +58,7 @@ Development credentials in `compose.yaml` are **not production**. `docker compos
 ## Invariants (summary)
 
 1. World state is authoritative.
-2. Agents receive immutable observations, never `WorldState`.
+2. Agents receive immutable, agent-specific observations, never `WorldState`.
 3. Objective world state and subjective agent state remain separate.
 4. Every agent action is a closed typed command resolved by `WorldEngine` through private world rules.
 5. LLM output is untrusted and cannot mutate world state directly.

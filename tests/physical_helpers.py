@@ -244,9 +244,7 @@ def grid_locations(
     """Build a connected path of ``count`` locations."""
     if count < 1:
         raise ValueError("count must be >= 1")
-    specs = tuple(
-        (f"loc-{index:02d}", f"Place-{index:02d}") for index in range(count)
-    )
+    specs = tuple((f"loc-{index:02d}", f"Place-{index:02d}") for index in range(count))
     locations = connected_locations(*specs)
     return tuple(
         make_location(
@@ -276,9 +274,7 @@ def scaled_fixture(
         for index in range(agents)
     )
     registrations = tuple(
-        AgentRegistration(
-            AgentId(f"agent-{index:02d}"), EntityId(f"body-{index:02d}")
-        )
+        AgentRegistration(AgentId(f"agent-{index:02d}"), EntityId(f"body-{index:02d}"))
         for index in range(agents)
     )
     items = tuple(
@@ -466,9 +462,7 @@ def restore_from_fixture_events(
 ) -> WorldEngine:
     """Bootstrap replay path: fixture snapshot + projected events."""
     engine = make_engine(fixture, seed=seed, rules=rules)
-    snap = snapshot_from_engine(
-        engine, snapshot_id="snap-bootstrap", next_tick=Tick(0)
-    )
+    snap = snapshot_from_engine(engine, snapshot_id="snap-bootstrap", next_tick=Tick(0))
     return WorldEngine.restore_from_snapshot(snap, events=events)
 
 

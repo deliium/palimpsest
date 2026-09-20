@@ -100,9 +100,10 @@ class PersistentSimulationService:
             raise TypeError("PersistentSimulationService requires WorldEngine")
         self._engine = engine
         self._journal = journal
-        if predecessor_commit_hash is not None and type(
-            predecessor_commit_hash
-        ) is not CommitHash:
+        if (
+            predecessor_commit_hash is not None
+            and type(predecessor_commit_hash) is not CommitHash
+        ):
             raise TypeError("predecessor_commit_hash must be CommitHash or None")
         self._predecessor_commit_hash = predecessor_commit_hash
         self._fenced = False
@@ -250,16 +251,13 @@ class PersistentSimulationService:
                 candidate_owned.revision.value,
                 candidate_owned.integrity_hash.value[:8],
             )
-            bound_snapshot = bind_snapshot_commit_hash(
-                candidate_owned, expected_commit
-            )
+            bound_snapshot = bind_snapshot_commit_hash(candidate_owned, expected_commit)
         elif snapshot is not None:
             if type(snapshot) is not WorldSnapshot:
                 raise TypeError("snapshot must be WorldSnapshot or None")
             if hash_snapshot(snapshot) != snapshot.integrity_hash:
                 _LOGGER.error(
-                    "%s code=checkpoint_integrity_mismatch run_id=%s "
-                    "snapshot_id=%s",
+                    "%s code=checkpoint_integrity_mismatch run_id=%s snapshot_id=%s",
                     EngineDiagnosticCode.CHECKPOINT_CORRUPT.value,
                     self._engine.run_id.value,
                     snapshot.snapshot_id.value,
@@ -306,9 +304,7 @@ class PersistentSimulationService:
                 candidate_owned.snapshot_id.value,
                 candidate_owned.integrity_hash.value[:8],
             )
-            bound_snapshot = bind_snapshot_commit_hash(
-                candidate_owned, expected_commit
-            )
+            bound_snapshot = bind_snapshot_commit_hash(candidate_owned, expected_commit)
         request = TickAppendRequest(
             run_id=self._engine.run_id,
             tick=candidate.tick,

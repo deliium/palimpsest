@@ -199,9 +199,7 @@ def _bootstrap_from_snapshot(snapshot: object) -> WorldBootstrap:
     )
 
 
-def _materialize_projected_world(
-    *, world_id: WorldId, state: object
-) -> World:
+def _materialize_projected_world(*, world_id: WorldId, state: object) -> World:
     """Internal: wrap a projected ``WorldState`` without a mutation hook."""
     from world._state import World, WorldState
 
@@ -221,13 +219,11 @@ def _translator_from_registrations(
     for registration in order:
         if registration.agent_id in forward:
             raise ValueError(
-                f"duplicate agent_id in registrations "
-                f"{registration.agent_id.value!r}"
+                f"duplicate agent_id in registrations {registration.agent_id.value!r}"
             )
         if registration.entity_id in reverse:
             raise ValueError(
-                f"duplicate entity_id in registrations "
-                f"{registration.entity_id.value!r}"
+                f"duplicate entity_id in registrations {registration.entity_id.value!r}"
             )
         forward[registration.agent_id] = registration.entity_id
         reverse[registration.entity_id] = registration.agent_id

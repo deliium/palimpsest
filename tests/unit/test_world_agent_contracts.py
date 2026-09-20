@@ -154,6 +154,23 @@ def test_perception_field_access_matrix_is_closed() -> None:
     }
 
 
+def test_visible_body_omits_inventory_and_exact_physiology_fields() -> None:
+    from world.observations import VisibleBody
+
+    fields = set(VisibleBody.__dataclass_fields__)
+    assert fields == {"entity_id", "life_status", "coarse_health"}
+    for forbidden in (
+        "inventory",
+        "hunger",
+        "thirst",
+        "fatigue",
+        "temperature",
+        "health",
+        "carry_capacity",
+    ):
+        assert forbidden not in fields
+
+
 def test_occurrence_and_communication_require_prior_tick_and_unique_sources() -> None:
     provenance = ObservationProvenance(
         source_kind=ObservationSourceKind.OCCURRENCE,
@@ -242,13 +259,18 @@ def test_held_item_must_match_self_inventory() -> None:
         load=ItemLoad(1),
         placement=ObservedItemPlacement.HELD_BY_SELF,
     )
-    assert Observation(
-        world_id=WorldId("world-1"),
-        observer_id=EntityId("observer-1"),
-        revision=WorldRevision(1),
-        self_body=body,
-        items=(item,),
-    ).items[0].placement is ObservedItemPlacement.HELD_BY_SELF
+    assert (
+        Observation(
+            world_id=WorldId("world-1"),
+            observer_id=EntityId("observer-1"),
+            revision=WorldRevision(1),
+            self_body=body,
+            items=(item,),
+        )
+        .items[0]
+        .placement
+        is ObservedItemPlacement.HELD_BY_SELF
+    )
     with pytest.raises(ValueError, match=r"ObservedSelf\.inventory"):
         Observation(
             world_id=WorldId("world-1"),
