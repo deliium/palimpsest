@@ -36,6 +36,7 @@ AUTHORITY_NAMES = frozenset(
         "OperationRejected",
         "ValidatedWorldOperation",
         "project_observations",
+        "PerceptionService",
         "evaluate_operation",
         "COMMAND_RULE_MATRIX",
         "project_events",

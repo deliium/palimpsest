@@ -66,9 +66,7 @@ def _bootstrap() -> WorldBootstrap:
         world_id=WorldId("world-1"),
         revision=WorldRevision(0),
         locations=locations,
-        items=(
-            make_item("item-1", name="Rock", location_id="loc-1"),
-        ),
+        items=(make_item("item-1", name="Rock", location_id="loc-1"),),
         bodies=(_alive("body-1"), _alive("body-2")),
         weather=weather_for_locations(locations),
         registrations=(
@@ -106,6 +104,97 @@ def test_observe_is_idempotent_within_open_tick() -> None:
     assert first == second
     assert engine.phase.value == EnginePhase.AWAITING_SUBMISSIONS.value
     assert first.token.tick.value == 0
+
+
+def test_observation_for_routes_registered_agent_only(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    engine = WorldEngine(config=SimulationRunConfig(seed=7), bootstrap=_bootstrap())
+    with pytest.raises(RuntimeError, match="open observation batch"):
+        engine.observation_for(AgentId("agent-1"))
+    batch = engine.observe()
+    caplog.set_level(logging.DEBUG, logger=_ENGINE_LOGGER)
+    first = engine.observation_for(AgentId("agent-1"))
+    second = engine.observation_for(AgentId("agent-1"))
+    other = engine.observation_for(AgentId("agent-2"))
+    assert first == second
+    assert first.observer_id == EntityId("body-1")
+    assert other.observer_id == EntityId("body-2")
+    assert first == batch.for_observer(EntityId("body-1"))
+    assert first != other
+    with pytest.raises(KeyError, match="unknown agent_id"):
+        engine.observation_for(AgentId("missing"))
+    messages = _messages(caplog)
+    assert EngineDiagnosticCode.OBSERVATION_ROUTED.value in messages
+    _assert_no_sensitive_payload(messages)
+
+
+def test_prior_tick_events_appear_only_on_next_observe() -> None:
+    from world.actions import Talk
+
+    engine = WorldEngine(config=SimulationRunConfig(seed=8), bootstrap=_bootstrap())
+    batch0 = engine.observe()
+    assert all(observation.occurrences == () for observation in batch0.observations)
+    assert all(observation.communications == () for observation in batch0.observations)
+    result = engine.resolve_tick(
+        (
+            ActionSubmission(
+                batch0.token,
+                AgentId("agent-1"),
+                Talk(EntityId("body-2"), "hello-agent"),
+            ),
+        )
+    )
+    assert result.events
+    assert all(record.event.tick == 0 for record in result.events)
+    batch1 = engine.observe()
+    speaker = engine.observation_for(AgentId("agent-1"))
+    listener = engine.observation_for(AgentId("agent-2"))
+    assert speaker.communications
+    assert listener.communications
+    assert speaker.communications[0].text == "hello-agent"
+    assert listener.communications[0].text == "hello-agent"
+    assert all(
+        occurrence.provenance.source_tick == 0
+        for occurrence in (*speaker.occurrences, *listener.occurrences)
+    )
+    # Open tick has not committed yet; outcomes stay out of the observation.
+    assert batch1.tick.value == 1
+    assert engine._snapshot.prior_event_window
+    assert all(event.tick == 0 for event in engine._snapshot.prior_event_window)
+
+
+def test_eventless_tick_carries_empty_prior_window() -> None:
+    locations = (make_location("loc-1", name="Camp"),)
+    dead = AgentBody(
+        entity_id=EntityId("body-1"),
+        location_id=EntityId("loc-1"),
+        health=Health(0),
+        hunger=Hunger(0),
+        thirst=Thirst(0),
+        fatigue=Fatigue(0),
+        temperature=TemperatureCelsius(36.5),
+        inventory=(),
+        life_status=LifeStatus.DEAD,
+        carry_capacity=CarryCapacity(10),
+    )
+    bootstrap = WorldBootstrap(
+        world_id=WorldId("world-1"),
+        revision=WorldRevision(0),
+        locations=locations,
+        bodies=(dead,),
+        weather=weather_for_locations(locations),
+        registrations=(AgentRegistration(AgentId("agent-1"), EntityId("body-1")),),
+    )
+    engine = WorldEngine(config=SimulationRunConfig(seed=9), bootstrap=bootstrap)
+    engine.observe()
+    result = engine.resolve_tick(())
+    assert result.events == ()
+    engine.observe()
+    assert engine._snapshot.prior_event_window == ()
+    observation = engine.observation_for(AgentId("agent-1"))
+    assert observation.occurrences == ()
+    assert observation.communications == ()
 
 
 def test_resolve_wait_and_take_advances_tick_and_revision(
@@ -152,9 +241,7 @@ def test_duplicate_submission_and_stale_token() -> None:
             (ActionSubmission(batch.token, AgentId("agent-1"), Wait()),)
         )
     # Engine remains usable after failed resolve with prior snapshot preserved.
-    engine.resolve_tick(
-        (ActionSubmission(batch2.token, AgentId("agent-2"), Wait()),)
-    )
+    engine.resolve_tick((ActionSubmission(batch2.token, AgentId("agent-2"), Wait()),))
 
 
 def test_engine_logs_debug_info_warn_error_without_payloads(
@@ -210,9 +297,7 @@ def test_engine_logs_debug_info_warn_error_without_payloads(
     stale = batch.token
     next_batch = engine.observe()
     with pytest.raises(ValueError, match=r"stale|mismatch"):
-        engine.resolve_tick(
-            (ActionSubmission(stale, AgentId("agent-1"), Wait()),)
-        )
+        engine.resolve_tick((ActionSubmission(stale, AgentId("agent-1"), Wait()),))
     assert any(
         record.levelno == logging.WARNING
         and EngineDiagnosticCode.TOKEN_STALE.value in record.getMessage()
@@ -256,9 +341,7 @@ def test_engine_respects_palimpsest_log_level(
     with pytest.raises(RuntimeError, match="open observation token"):
         engine.resolve_tick(())
     batch = engine.observe()
-    engine.resolve_tick(
-        (ActionSubmission(batch.token, AgentId("agent-1"), Wait()),)
-    )
+    engine.resolve_tick((ActionSubmission(batch.token, AgentId("agent-1"), Wait()),))
     next_batch = engine.observe()
     with pytest.raises(ValueError, match=r"stale|mismatch"):
         engine.resolve_tick(
@@ -312,8 +395,7 @@ def test_wait_then_autonomous_merges_into_one_revision() -> None:
     assert len(result.events) == 5
     assert result.events[0].event.details.kind == "wait"
     assert all(
-        record.event.resulting_revision == WorldRevision(1)
-        for record in result.events
+        record.event.resulting_revision == WorldRevision(1) for record in result.events
     )
 
 
@@ -337,9 +419,7 @@ def test_all_dead_autonomous_tick_is_noop() -> None:
         locations=locations,
         bodies=(dead,),
         weather=weather_for_locations(locations),
-        registrations=(
-            AgentRegistration(AgentId("agent-1"), EntityId("body-1")),
-        ),
+        registrations=(AgentRegistration(AgentId("agent-1"), EntityId("body-1")),),
     )
     engine = WorldEngine(config=SimulationRunConfig(seed=23), bootstrap=bootstrap)
     engine.observe()

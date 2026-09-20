@@ -65,7 +65,11 @@ class Relationship:
 
 @dataclass(frozen=True, slots=True)
 class CommunicationEnvelope:
-    """Immutable message. Payload uses the closed domain content grammar."""
+    """Immutable out-of-band message. Payload uses the closed domain content grammar.
+
+    Envelopes are social mail, not perception claims. Observed communications
+    remain on ``Observation.communications`` and must not be auto-copied here.
+    """
 
     envelope_id: EnvelopeId
     sender_id: AgentId

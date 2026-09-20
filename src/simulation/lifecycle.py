@@ -17,6 +17,7 @@ from simulation.clock import Tick, require_exact_nonneg_int
 from world.actions import AgentCommand, require_agent_command
 from world.events import WorldEvent, normalize_events
 from world.identifiers import (
+    EntityId,
     RequestId,
     WorldRevision,
     require_stable_id,
@@ -42,6 +43,7 @@ class EngineDiagnosticCode(StrEnum):
 
     BOOTSTRAP_VALIDATED = "bootstrap_validated"
     OBSERVATIONS_ISSUED = "observations_issued"
+    OBSERVATION_ROUTED = "observation_routed"
     SUBMISSION_ADMITTED = "submission_admitted"
     SUBMISSION_REJECTED = "submission_rejected"
     RESOLUTION_APPLIED = "resolution_applied"
@@ -143,6 +145,19 @@ class ObservationBatch:
             _copy_observations("ObservationBatch.observations", self.observations),
         )
 
+    def for_observer(self, observer_id: EntityId) -> Observation:
+        """Return the single observation addressed to ``observer_id``.
+
+        Trusted orchestration uses this (or ``WorldEngine.observation_for``)
+        instead of handing the full batch to cognition.
+        """
+        if type(observer_id) is not EntityId:
+            raise TypeError("ObservationBatch.for_observer requires EntityId")
+        for observation in self.observations:
+            if observation.observer_id == observer_id:
+                return observation
+        raise KeyError(f"no observation for observer_id {observer_id.value!r}")
+
 
 @dataclass(frozen=True, slots=True)
 class ActionSubmission:
@@ -157,9 +172,7 @@ class ActionSubmission:
             raise TypeError("ActionSubmission.token must be TickToken")
         if type(self.agent_id) is not AgentId:
             raise TypeError("ActionSubmission.agent_id must be AgentId")
-        object.__setattr__(
-            self, "command", require_agent_command(self.command)
-        )
+        object.__setattr__(self, "command", require_agent_command(self.command))
 
 
 def require_action_submission(value: object) -> ActionSubmission:
@@ -197,19 +210,13 @@ class ActionResolution:
         )
         if type(self.agent_id) is not AgentId:
             raise TypeError("ActionResolution.agent_id must be AgentId")
-        object.__setattr__(
-            self, "command", require_agent_command(self.command)
-        )
+        object.__setattr__(self, "command", require_agent_command(self.command))
         if type(self.status) is not ActionResolutionStatus:
-            raise TypeError(
-                "ActionResolution.status must be ActionResolutionStatus"
-            )
+            raise TypeError("ActionResolution.status must be ActionResolutionStatus")
         if self.status not in _STATUS_TYPES:
             raise ValueError("ActionResolution.status must be a closed status")
         if type(self.reason) is not ActionResolutionReason:
-            raise TypeError(
-                "ActionResolution.reason must be ActionResolutionReason"
-            )
+            raise TypeError("ActionResolution.reason must be ActionResolutionReason")
         if self.reason not in _REASON_TYPES:
             raise ValueError("ActionResolution.reason must be a closed reason")
         if type(self.tick) is not Tick:
@@ -217,9 +224,7 @@ class ActionResolution:
         if type(self.base_revision) is not WorldRevision:
             raise TypeError("ActionResolution.base_revision must be WorldRevision")
         if type(self.resulting_revision) is not WorldRevision:
-            raise TypeError(
-                "ActionResolution.resulting_revision must be WorldRevision"
-            )
+            raise TypeError("ActionResolution.resulting_revision must be WorldRevision")
         if type(self.request_id) is not RequestId:
             raise TypeError("ActionResolution.request_id must be RequestId")
         if self.resulting_revision.value < self.base_revision.value:
@@ -244,9 +249,7 @@ class TickEventRecord:
         if type(self.event) is not WorldEvent:
             raise TypeError("TickEventRecord.event must be WorldEvent")
         if self.event.sequence != self.sequence:
-            raise ValueError(
-                "TickEventRecord.sequence must match WorldEvent.sequence"
-            )
+            raise ValueError("TickEventRecord.sequence must match WorldEvent.sequence")
 
 
 @dataclass(frozen=True, slots=True)
@@ -266,21 +269,15 @@ class TickResult:
         if type(self.resulting_tick) is not Tick:
             raise TypeError("TickResult.resulting_tick must be Tick")
         if self.resulting_tick.value != self.tick.value + 1:
-            raise ValueError(
-                "TickResult.resulting_tick must be exactly tick + 1"
-            )
+            raise ValueError("TickResult.resulting_tick must be exactly tick + 1")
         if type(self.base_revision) is not WorldRevision:
             raise TypeError("TickResult.base_revision must be WorldRevision")
         if type(self.resulting_revision) is not WorldRevision:
             raise TypeError("TickResult.resulting_revision must be WorldRevision")
         if self.resulting_revision.value < self.base_revision.value:
-            raise ValueError(
-                "TickResult.resulting_revision must be >= base_revision"
-            )
+            raise ValueError("TickResult.resulting_revision must be >= base_revision")
         if self.resulting_revision.value > self.base_revision.value + 1:
-            raise ValueError(
-                "TickResult.resulting_revision may advance by at most one"
-            )
+            raise ValueError("TickResult.resulting_revision may advance by at most one")
         object.__setattr__(
             self,
             "resolutions",
@@ -295,9 +292,7 @@ class TickResult:
             if resolution.tick != self.tick:
                 raise ValueError("ActionResolution.tick must match TickResult.tick")
             if resolution.base_revision != self.base_revision:
-                raise ValueError(
-                    "ActionResolution.base_revision must match TickResult"
-                )
+                raise ValueError("ActionResolution.base_revision must match TickResult")
             if resolution.resulting_revision != self.resulting_revision:
                 raise ValueError(
                     "ActionResolution.resulting_revision must match TickResult"

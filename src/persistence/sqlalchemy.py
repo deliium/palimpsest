@@ -37,8 +37,10 @@ from persistence.orm import (
 from persistence.readers import (
     advisory_lock_keys,
     canonical_payload_dict,
+    event_cause_payload,
     event_details_payload,
     event_from_orm,
+    event_occurrence_payload,
     manifest_from_run_orm,
     snapshot_from_canonical_payload,
     tick_commit_from_orm,
@@ -704,6 +706,8 @@ def _event_orm(event: WorldEvent) -> WorldEventOrm:
         actor_id=None if event.actor_id is None else event.actor_id.value,
         target_id=None if event.target_id is None else event.target_id.value,
         details=event_details_payload(event),
+        cause=event_cause_payload(event),
+        occurrence=event_occurrence_payload(event),
         payload_hash=hash_world_event(event).value,
     )
 

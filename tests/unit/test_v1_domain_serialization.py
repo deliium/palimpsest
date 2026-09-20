@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-from tests.simulation_helpers import make_location, make_weather
-
 import pytest
 
 from simulation.serialization import (
@@ -11,6 +9,7 @@ from simulation.serialization import (
     decode_domain,
     encode_domain,
 )
+from tests.simulation_helpers import make_location, make_weather
 from world._state import WorldState
 from world.actions import (
     ActionProposal,
@@ -60,7 +59,6 @@ from world.identifiers import (
     WorldId,
     WorldRevision,
 )
-from world.models import Location
 
 _COMMANDS = (
     Move(EntityId("loc-1")),
@@ -189,7 +187,7 @@ def test_rejects_authority_and_request_types() -> None:
 
 def test_decode_rejects_malformed_and_unknown_input() -> None:
     with pytest.raises(DomainSerializationError) as bom:
-        decode_domain(b"\xef\xbb\xbf{\"data\":{},\"schema_version\":1,\"type\":\"wait\"}")
+        decode_domain(b'\xef\xbb\xbf{"data":{},"schema_version":1,"type":"wait"}')
     assert bom.value.code == "bom_forbidden"
 
     with pytest.raises(DomainSerializationError) as trailing:
@@ -221,6 +219,123 @@ def test_decode_rejects_malformed_and_unknown_input() -> None:
 def test_action_proposal_round_trip() -> None:
     proposal = ActionProposal(proposal_id=ProposalId("p-1"), command=Wait())
     assert decode_domain(encode_domain(proposal)) == proposal
+
+
+def test_observation_round_trips_with_occurrences_and_communications() -> None:
+    from world.models import LifeStatus
+    from world.observations import (
+        CoarseHealth,
+        Observation,
+        ObservationAudienceRole,
+        ObservationProvenance,
+        ObservationSourceKind,
+        ObservedCommunication,
+        ObservedItem,
+        ObservedItemPlacement,
+        ObservedLocation,
+        ObservedOccurrence,
+        ObservedResource,
+        ObservedSelf,
+        VisibleBody,
+        VisibleExit,
+    )
+    from world.values import (
+        CarryCapacity,
+        DayPhase,
+        Fatigue,
+        Health,
+        Hunger,
+        ItemKind,
+        ItemLoad,
+        ResourceKind,
+        TemperatureCelsius,
+        Thirst,
+        WeatherCondition,
+    )
+
+    provenance = ObservationProvenance(
+        source_kind=ObservationSourceKind.OCCURRENCE,
+        source_tick=0,
+        source_event_id=EventId("evt-1"),
+    )
+    observation = Observation(
+        world_id=WorldId("world-1"),
+        observer_id=EntityId("body-1"),
+        revision=WorldRevision(1),
+        tick=1,
+        self_body=ObservedSelf(
+            entity_id=EntityId("body-1"),
+            location_id=EntityId("loc-1"),
+            health=Health(90),
+            hunger=Hunger(2),
+            thirst=Thirst(3),
+            fatigue=Fatigue(1),
+            temperature=TemperatureCelsius(36.5),
+            inventory=(EntityId("item-1"),),
+            life_status=LifeStatus.ALIVE,
+            carry_capacity=CarryCapacity(10),
+        ),
+        locations=(ObservedLocation(EntityId("loc-1"), "Camp"),),
+        items=(
+            ObservedItem(
+                entity_id=EntityId("item-1"),
+                name="Ration",
+                kind=ItemKind.FOOD,
+                load=ItemLoad(1),
+                placement=ObservedItemPlacement.HELD_BY_SELF,
+            ),
+        ),
+        resources=(
+            ObservedResource(
+                entity_id=EntityId("res-1"),
+                name="Spring",
+                kind=ResourceKind.WATER,
+                quantity=4.0,
+                unit="unit",
+            ),
+        ),
+        exits=(VisibleExit(EntityId("loc-2"), "Trail"),),
+        visible_bodies=(
+            VisibleBody(
+                entity_id=EntityId("body-2"),
+                life_status=LifeStatus.ALIVE,
+                coarse_health=CoarseHealth.STABLE,
+            ),
+        ),
+        occurrences=(
+            ObservedOccurrence(
+                provenance=provenance,
+                kind="move",
+                audience_role=ObservationAudienceRole.WITNESS,
+                actor_id=EntityId("body-2"),
+                other_entity_id=None,
+                destination_id=EntityId("loc-1"),
+                success=True,
+                public_facts={"destination_id": "loc-1"},
+            ),
+        ),
+        communications=(
+            ObservedCommunication(
+                provenance=ObservationProvenance(
+                    source_kind=ObservationSourceKind.COMMUNICATION,
+                    source_tick=0,
+                    source_event_id=EventId("evt-talk"),
+                ),
+                speaker_id=EntityId("body-2"),
+                listener_id=EntityId("body-1"),
+                text="claim-text",
+            ),
+        ),
+        hour=7,
+        day_phase=DayPhase.DAY,
+        visibility=1.0,
+        weather_condition=WeatherCondition.CLEAR,
+    )
+    encoded = encode_domain(observation)
+    decoded = decode_domain(encoded)
+    assert decoded == observation
+    assert encode_domain(decoded) == encoded
+    assert b"claim-text" in encoded
 
 
 def test_lifecycle_and_bootstrap_values_are_not_serializable() -> None:
@@ -255,8 +370,15 @@ def test_persistence_dtos_remain_unsupported_by_domain_codec() -> None:
         WorldSnapshot,
     )
     from world.identifiers import EntityId, WorldId, WorldRevision
-    from world.models import AgentBody, LifeStatus, Location
-    from world.values import CarryCapacity, Fatigue, Health, Hunger, TemperatureCelsius, Thirst
+    from world.models import AgentBody, LifeStatus
+    from world.values import (
+        CarryCapacity,
+        Fatigue,
+        Health,
+        Hunger,
+        TemperatureCelsius,
+        Thirst,
+    )
 
     snapshot = WorldSnapshot(
         snapshot_id=SnapshotId("snap-1"),

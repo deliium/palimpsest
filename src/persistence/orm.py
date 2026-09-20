@@ -299,6 +299,8 @@ class WorldEventOrm(Base):
     actor_id: Mapped[str | None] = mapped_column(String(_STABLE_ID_LEN), nullable=True)
     target_id: Mapped[str | None] = mapped_column(String(_STABLE_ID_LEN), nullable=True)
     details: Mapped[dict[str, object]] = mapped_column(JSONB, nullable=False)
+    cause: Mapped[dict[str, object] | None] = mapped_column(JSONB, nullable=True)
+    occurrence: Mapped[dict[str, object] | None] = mapped_column(JSONB, nullable=True)
     payload_hash: Mapped[str] = mapped_column(String(SHA256_HEX_LEN), nullable=False)
 
 

@@ -76,7 +76,7 @@ from world._operations import (
     finalize_pending_batch,
     prepare_action_batch,
 )
-from world._perception import project_observations
+from world._perception import PerceptionService
 from world._physical import apply_autonomous_physical_step
 from world._replay import ProjectionError, project_events
 from world._rules import (
@@ -100,7 +100,7 @@ from world.effects import (
 from world.events import Died, WorldEvent, normalize_events
 from world.identifiers import EntityId, EventId, RequestId, WorldId, WorldRevision
 from world.models import LifeStatus, default_physical_rules
-from world.observations import ObservationContext
+from world.observations import Observation, ObservationContext
 from world.values import WeatherCondition, clamp_unit_interval
 
 _LOGGER = logging.getLogger("simulation.engine")
@@ -122,6 +122,7 @@ class _EngineSnapshot:
     observation_batch: ObservationBatch | None
     resolution_history: tuple[ActionResolution, ...]
     event_history: tuple[WorldEvent, ...]
+    prior_event_window: tuple[WorldEvent, ...]
 
 
 @dataclass(frozen=True, slots=True)
@@ -143,6 +144,7 @@ class WorldEngine:
         "_bootstrap",
         "_config",
         "_engine_id",
+        "_perception",
         "_registrations",
         "_run_id",
         "_snapshot",
@@ -171,6 +173,7 @@ class WorldEngine:
             raise TypeError("start_tick must be Tick")
         self._translator = registration_translator(bootstrap)
         self._registrations = bootstrap.registrations
+        self._perception = PerceptionService()
         world = _materialize_world(bootstrap)
         self._engine_id = derive_scoped_id(
             config,
@@ -187,6 +190,7 @@ class WorldEngine:
             observation_batch=None,
             resolution_history=(),
             event_history=(),
+            prior_event_window=(),
         )
         _LOGGER.debug(
             "%s world_id=%s revision=%s tick=%s registrations=%s",
@@ -307,6 +311,7 @@ class WorldEngine:
         engine._run_id = snapshot.run_id
         engine._translator = registration_translator(bootstrap)
         engine._registrations = bootstrap.registrations
+        engine._perception = PerceptionService()
         engine._engine_id = derive_scoped_id(
             snapshot.config,
             StreamScope(
@@ -325,6 +330,9 @@ class WorldEngine:
             observation_batch=None,
             resolution_history=(),
             event_history=normalized_events,
+            prior_event_window=_prior_event_window_for_tick(
+                normalized_events, observation_tick=restored_tick.value
+            ),
         )
         _LOGGER.info(
             "%s run_id=%s snapshot_id=%s next_tick=%s revision=%s "
@@ -360,18 +368,23 @@ class WorldEngine:
         return self._run_id
 
     def observe(self) -> ObservationBatch:
-        """Issue or replay the immutable observation batch for the open tick."""
+        """Issue or replay the immutable observation batch for the open tick.
+
+        Projection uses only the tick-start world snapshot and the committed
+        tick ``N-1`` occurrence window. Current-tick outcomes never appear.
+        """
         snap = self._snapshot
         if (
             snap.phase is EnginePhase.AWAITING_SUBMISSIONS
             and snap.observation_batch is not None
         ):
             _LOGGER.debug(
-                "%s tick=%s observers=%s revision=%s replay=1",
+                "%s tick=%s observers=%s revision=%s prior_events=%s replay=1",
                 EngineDiagnosticCode.OBSERVATIONS_ISSUED.value,
                 snap.tick.value,
                 len(snap.observation_batch.observations),
                 snap.world.state.revision.value,
+                len(snap.prior_event_window),
             )
             return snap.observation_batch
         if snap.phase is not EnginePhase.AWAITING_OBSERVATION:
@@ -389,12 +402,14 @@ class WorldEngine:
         if rules is None:
             rules = default_physical_rules()
         context = ObservationContext(tick=snap.tick.value, physical_rules=rules)
+        prior_events = snap.prior_event_window
         try:
-            observations = project_observations(
+            observations = self._perception.project(
                 world_id=self.world_id,
                 state=snap.world.state,
                 observer_ids=observer_ids,
                 context=context,
+                prior_events=prior_events,
             )
         except (TypeError, ValueError) as exc:
             _LOGGER.error(
@@ -404,6 +419,12 @@ class WorldEngine:
                 type(exc).__name__,
             )
             raise
+        projected_occurrences = sum(
+            len(observation.occurrences) for observation in observations
+        )
+        projected_communications = sum(
+            len(observation.communications) for observation in observations
+        )
         visible_entities = sum(
             len(observation.items)
             + len(observation.resources)
@@ -411,11 +432,7 @@ class WorldEngine:
             for observation in observations
         )
         visibility_bands = {
-            (
-                "high"
-                if (observation.visibility or 0.0) >= 0.5
-                else "low"
-            )
+            ("high" if (observation.visibility or 0.0) >= 0.5 else "low")
             for observation in observations
         }
         token = TickToken(
@@ -447,14 +464,20 @@ class WorldEngine:
             observation_batch=batch,
             resolution_history=snap.resolution_history,
             event_history=snap.event_history,
+            prior_event_window=snap.prior_event_window,
         )
         _LOGGER.debug(
             "%s tick=%s observers=%s revision=%s replay=0 "
-            "phase=%s visibility_bands=%s visible_entities=%s hour=%s",
+            "prior_events=%s projected_occurrences=%s "
+            "projected_communications=%s phase=%s visibility_bands=%s "
+            "visible_entities=%s hour=%s",
             EngineDiagnosticCode.OBSERVATIONS_ISSUED.value,
             snap.tick.value,
             len(observations),
             snap.world.state.revision.value,
+            len(prior_events),
+            projected_occurrences,
+            projected_communications,
             context.day_phase.value,
             ",".join(sorted(visibility_bands)) if visibility_bands else "-",
             visible_entities,
@@ -462,9 +485,49 @@ class WorldEngine:
         )
         return batch
 
-    def resolve_tick(
-        self, submissions: Sequence[ActionSubmission]
-    ) -> TickResult:
+    def observation_for(self, agent_id: AgentId) -> Observation:
+        """Return the open-tick observation for one registered agent.
+
+        Trusted orchestration must use this addressable route instead of
+        handing the full ``ObservationBatch`` to cognition.
+        """
+        if type(agent_id) is not AgentId:
+            raise TypeError("observation_for requires AgentId")
+        snap = self._snapshot
+        batch = snap.observation_batch
+        if batch is None or snap.phase is not EnginePhase.AWAITING_SUBMISSIONS:
+            _LOGGER.warning(
+                "%s reason=observation_route_closed phase=%s tick=%s",
+                EngineDiagnosticCode.LIFECYCLE_MISUSE.value,
+                snap.phase.value,
+                snap.tick.value,
+            )
+            raise RuntimeError("observation_for requires an open observation batch")
+        try:
+            entity_id = self._translator.to_entity_id(agent_id)
+            observation = batch.for_observer(entity_id)
+        except KeyError:
+            _LOGGER.warning(
+                "%s reason=observation_route_unknown agent=%s tick=%s",
+                EngineDiagnosticCode.LIFECYCLE_MISUSE.value,
+                agent_id.value,
+                snap.tick.value,
+            )
+            raise
+        _LOGGER.debug(
+            "%s tick=%s agent=%s entity=%s revision=%s "
+            "occurrences=%s communications=%s",
+            EngineDiagnosticCode.OBSERVATION_ROUTED.value,
+            snap.tick.value,
+            agent_id.value,
+            entity_id.value,
+            batch.revision.value,
+            len(observation.occurrences),
+            len(observation.communications),
+        )
+        return observation
+
+    def resolve_tick(self, submissions: Sequence[ActionSubmission]) -> TickResult:
         """Admit ordered submissions, prepare a candidate, and commit atomically."""
         prior = self._snapshot
         try:
@@ -528,6 +591,7 @@ class WorldEngine:
             observation_batch=None,
             resolution_history=(*snap.resolution_history, *resolutions),
             event_history=(*snap.event_history, *events),
+            prior_event_window=events,
         )
         return _PreparedTickCandidate(
             tick=snap.tick,
@@ -538,9 +602,7 @@ class WorldEngine:
             events=events,
         )
 
-    def _finalize_tick_candidate(
-        self, candidate: _PreparedTickCandidate
-    ) -> TickResult:
+    def _finalize_tick_candidate(self, candidate: _PreparedTickCandidate) -> TickResult:
         """Infallible in-memory publish of a prepared candidate."""
         if type(candidate) is not _PreparedTickCandidate:
             raise TypeError("candidate must be _PreparedTickCandidate")
@@ -682,9 +744,7 @@ class WorldEngine:
                 request.request_id.value,
             )
 
-        batch_requests = tuple(
-            request for request in admitted if request is not None
-        )
+        batch_requests = tuple(request for request in admitted if request is not None)
         physical_rules = self._config.physical_rules
         if physical_rules is None:
             physical_rules = default_physical_rules()
@@ -734,9 +794,7 @@ class WorldEngine:
             day_phase=physical_rules.day_phase_for_tick(snap.tick.value),
             resolved=system_effects,
         )
-        family_counts = {
-            family.value: 0 for family in SystemEffectFamily
-        }
+        family_counts = {family.value: 0 for family in SystemEffectFamily}
         system_pending: list[PendingEvent] = []
         for detail in physical.pending_details:
             family_counts[detail.effect_family.value] += 1
@@ -776,9 +834,7 @@ class WorldEngine:
         )
         merged = PendingBatch(
             working_state=physical.working_state,
-            semantic_mutation=(
-                pending.semantic_mutation or physical.semantic_mutation
-            ),
+            semantic_mutation=(pending.semantic_mutation or physical.semantic_mutation),
             outcomes=pending.outcomes,
             pending_events=pending.pending_events + tuple(system_pending),
         )
@@ -1024,17 +1080,14 @@ class WorldEngine:
         actor = starting_state.bodies[request.actor_id]
         location = starting_state.locations[actor.location_id]
         weather = starting_state.weather.get(actor.location_id)
-        condition = (
-            weather.condition if weather is not None else WeatherCondition.CLEAR
-        )
+        condition = weather.condition if weather is not None else WeatherCondition.CLEAR
         visibility = rules.effective_visibility(
             location_visibility=location.visibility_factor.value,
             phase=rules.day_phase_for_tick(snap.tick.value),
             condition=condition,
         )
         probability = clamp_unit_interval(
-            rules.search_base_probability
-            + rules.search_visibility_weight * visibility
+            rules.search_base_probability + rules.search_visibility_weight * visibility
         )
         scope = physical_action_effect_scope(
             run_id=self._run_id,
@@ -1281,4 +1334,22 @@ def _log_resolution(
         ordinal,
         request_id,
         status.value,
+    )
+
+
+def _prior_event_window_for_tick(
+    events: Sequence[WorldEvent], *, observation_tick: int
+) -> tuple[WorldEvent, ...]:
+    """Select committed events from tick ``observation_tick - 1`` only.
+
+    Legacy events without occurrence context are omitted (never fabricated)
+    so restored engines remain observable without inventing audience data.
+    """
+    prior_tick = observation_tick - 1
+    if prior_tick < 0:
+        return ()
+    return tuple(
+        event
+        for event in events
+        if event.tick == prior_tick and event.occurrence is not None
     )

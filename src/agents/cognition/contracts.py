@@ -1,4 +1,14 @@
-"""Architecture-neutral cognition strategy protocol."""
+"""Architecture-neutral cognition strategy protocol.
+
+``Perspective`` is the sole propose() input. Strategies receive one agent's
+observation plus separate subjective memories/beliefs and an optional
+out-of-band social inbox. They must not accept ``WorldState``, ``World``,
+engine snapshots, raw event batches, or another agent's observation.
+
+Social ``inbox`` envelopes are out-of-band mail. Delivered communication
+claims live on ``Observation.communications`` and are never auto-copied into
+the inbox (orchestration must avoid duplicate delivery semantics).
+"""
 
 from __future__ import annotations
 
@@ -36,7 +46,11 @@ def _owned_tuple(
 
 @dataclass(frozen=True, slots=True)
 class Perspective:
-    """Immutable cognition context. Contains no LLM, store, or world authority."""
+    """Immutable cognition context. Contains no LLM, store, or world authority.
+
+    ``inbox`` is out-of-band social mail addressed to ``agent_id``. Perceived
+    communication claims remain on ``observation.communications`` only.
+    """
 
     agent_id: AgentId
     observation: Observation
@@ -71,15 +85,17 @@ class Perspective:
         )
         if isinstance(self.inbox, (set, frozenset)):
             raise TypeError("Perspective.inbox must be an ordered sequence")
-        if isinstance(self.inbox, (str, bytes)) or not isinstance(
-            self.inbox, Sequence
-        ):
+        if isinstance(self.inbox, (str, bytes)) or not isinstance(self.inbox, Sequence):
             raise TypeError("Perspective.inbox must be an ordered sequence")
         inbox = tuple(self.inbox)
         for envelope in inbox:
             if type(envelope) is not CommunicationEnvelope:
                 raise TypeError(
                     "Perspective.inbox entries must be CommunicationEnvelope"
+                )
+            if envelope.recipient_id != self.agent_id:
+                raise ValueError(
+                    "Perspective.inbox envelope recipient_id must match agent_id"
                 )
         object.__setattr__(self, "inbox", inbox)
 

@@ -1,0 +1,11 @@
+from agents.cognition.contracts import Perspective
+from world._state import WorldState
+from world.actions import AgentCommand, Wait
+
+
+def propose(perspective: Perspective) -> AgentCommand:
+    return Wait()
+
+
+def _bad(state: WorldState) -> AgentCommand:
+    return propose(state)

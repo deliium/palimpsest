@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-from tests.simulation_helpers import make_item, make_location, make_weather, weather_for_locations
-
 import logging
 
 import pytest
@@ -23,6 +21,12 @@ from simulation.persistence import (
     SnapshotId,
     WorldSnapshot,
 )
+from tests.simulation_helpers import (
+    make_item,
+    make_location,
+    make_weather,
+    weather_for_locations,
+)
 from world._state import World
 from world.events import Taken, Waited, make_replayable_event
 from world.identifiers import (
@@ -32,8 +36,15 @@ from world.identifiers import (
     WorldId,
     WorldRevision,
 )
-from world.models import AgentBody, Item, LifeStatus, Location
-from world.values import CarryCapacity, Fatigue, Health, Hunger, TemperatureCelsius, Thirst
+from world.models import AgentBody, Item, LifeStatus
+from world.values import (
+    CarryCapacity,
+    Fatigue,
+    Health,
+    Hunger,
+    TemperatureCelsius,
+    Thirst,
+)
 
 _HASH_PLACEHOLDER = "a" * 64
 
@@ -73,9 +84,7 @@ def _make_snapshot(
         world_id=WorldId("world-1"),
         seed=seed,
         config=SimulationRunConfig(seed=seed),
-        registrations=(
-            AgentRegistration(AgentId("agent-1"), EntityId("body-1")),
-        ),
+        registrations=(AgentRegistration(AgentId("agent-1"), EntityId("body-1")),),
         locations=(make_location("loc-1", name="Camp"),),
         bodies=body_tuple,
         items=items,
@@ -124,6 +133,180 @@ def test_restore_bootstrap_only_awaits_observation() -> None:
     batch = engine.observe()
     assert batch.token is not None
     assert batch.tick == Tick(0)
+
+
+def test_live_and_restored_observations_match_with_prior_events() -> None:
+    from simulation.lifecycle import ActionSubmission
+    from simulation.serialization import encode_domain
+    from world.actions import Talk
+
+    locations = (make_location("loc-1", name="Camp"),)
+    bootstrap = WorldBootstrap(
+        world_id=WorldId("world-1"),
+        revision=WorldRevision(0),
+        locations=locations,
+        bodies=(_alive("body-1"), _alive("body-2")),
+        weather=weather_for_locations(locations),
+        registrations=(
+            AgentRegistration(AgentId("agent-1"), EntityId("body-1")),
+            AgentRegistration(AgentId("agent-2"), EntityId("body-2")),
+        ),
+    )
+    config = SimulationRunConfig(seed=41)
+    live = WorldEngine(config=config, bootstrap=bootstrap, run_id=RunId("run-live-obs"))
+    batch0 = live.observe()
+    result = live.resolve_tick(
+        (
+            ActionSubmission(
+                batch0.token,
+                AgentId("agent-1"),
+                Talk(EntityId("body-2"), "parity-claim"),
+            ),
+        )
+    )
+    live_batch = live.observe()
+    live_obs = live.observation_for(AgentId("agent-2"))
+    assert live_obs.communications
+    assert live_obs.communications[0].text == "parity-claim"
+
+    snapshot = _make_snapshot(
+        seed=config.seed,
+        next_tick=0,
+        revision=0,
+        bodies=(_alive("body-1"), _alive("body-2")),
+    )
+    # Align run/world/registrations with the live engine bootstrap.
+    snapshot = WorldSnapshot(
+        snapshot_id=snapshot.snapshot_id,
+        run_id=live.run_id,
+        world_id=bootstrap.world_id,
+        seed=config.seed,
+        config=config,
+        registrations=bootstrap.registrations,
+        locations=bootstrap.locations,
+        bodies=bootstrap.bodies,
+        items=(),
+        resources=(),
+        weather=bootstrap.weather,
+        next_tick=Tick(0),
+        revision=WorldRevision(0),
+        event_schema_version=EVENT_SCHEMA_VERSION,
+        projector_version=PROJECTOR_VERSION,
+        persistence_codec_version=PERSISTENCE_CODEC_VERSION,
+        derivation_version=config.derivation_version or DERIVATION_VERSION,
+        integrity_hash=PayloadHash(_HASH_PLACEHOLDER),
+        predecessor_commit_hash=None,
+    )
+    snapshot = WorldSnapshot(
+        snapshot_id=snapshot.snapshot_id,
+        run_id=snapshot.run_id,
+        world_id=snapshot.world_id,
+        seed=snapshot.seed,
+        config=snapshot.config,
+        registrations=snapshot.registrations,
+        locations=snapshot.locations,
+        bodies=snapshot.bodies,
+        items=snapshot.items,
+        resources=snapshot.resources,
+        weather=snapshot.weather,
+        next_tick=snapshot.next_tick,
+        revision=snapshot.revision,
+        event_schema_version=snapshot.event_schema_version,
+        projector_version=snapshot.projector_version,
+        persistence_codec_version=snapshot.persistence_codec_version,
+        derivation_version=snapshot.derivation_version,
+        integrity_hash=hash_snapshot(snapshot),
+        predecessor_commit_hash=None,
+    )
+    events = tuple(record.event for record in result.events)
+    restored = WorldEngine.restore_from_snapshot(snapshot, events=events)
+    assert restored.tick == Tick(1)
+    assert restored._snapshot.prior_event_window
+    restored_batch = restored.observe()
+    restored_obs = restored.observation_for(AgentId("agent-2"))
+    assert restored_batch.observations == live_batch.observations
+    assert restored_obs == live_obs
+    assert encode_domain(restored_obs) == encode_domain(live_obs)
+
+
+def test_restore_eventless_prior_window_matches_live() -> None:
+    locations = (make_location("loc-1", name="Camp"),)
+    dead = AgentBody(
+        entity_id=EntityId("body-1"),
+        location_id=EntityId("loc-1"),
+        health=Health(0),
+        hunger=Hunger(0),
+        thirst=Thirst(0),
+        fatigue=Fatigue(0),
+        temperature=TemperatureCelsius(36.5),
+        inventory=(),
+        life_status=LifeStatus.DEAD,
+        carry_capacity=CarryCapacity(10),
+    )
+    bootstrap = WorldBootstrap(
+        world_id=WorldId("world-1"),
+        revision=WorldRevision(0),
+        locations=locations,
+        bodies=(dead,),
+        weather=weather_for_locations(locations),
+        registrations=(AgentRegistration(AgentId("agent-1"), EntityId("body-1")),),
+    )
+    config = SimulationRunConfig(seed=42)
+    live = WorldEngine(config=config, bootstrap=bootstrap, run_id=RunId("run-dead"))
+    live.observe()
+    live.resolve_tick(())
+    live_obs = live.observe().observations[0]
+
+    snapshot = _make_snapshot(seed=config.seed, bodies=(dead,))
+    snapshot = WorldSnapshot(
+        snapshot_id=snapshot.snapshot_id,
+        run_id=live.run_id,
+        world_id=bootstrap.world_id,
+        seed=config.seed,
+        config=config,
+        registrations=bootstrap.registrations,
+        locations=bootstrap.locations,
+        bodies=bootstrap.bodies,
+        items=(),
+        resources=(),
+        weather=bootstrap.weather,
+        next_tick=Tick(0),
+        revision=WorldRevision(0),
+        event_schema_version=EVENT_SCHEMA_VERSION,
+        projector_version=PROJECTOR_VERSION,
+        persistence_codec_version=PERSISTENCE_CODEC_VERSION,
+        derivation_version=config.derivation_version or DERIVATION_VERSION,
+        integrity_hash=PayloadHash(_HASH_PLACEHOLDER),
+        predecessor_commit_hash=None,
+    )
+    snapshot = WorldSnapshot(
+        snapshot_id=snapshot.snapshot_id,
+        run_id=snapshot.run_id,
+        world_id=snapshot.world_id,
+        seed=snapshot.seed,
+        config=snapshot.config,
+        registrations=snapshot.registrations,
+        locations=snapshot.locations,
+        bodies=snapshot.bodies,
+        items=snapshot.items,
+        resources=snapshot.resources,
+        weather=snapshot.weather,
+        next_tick=snapshot.next_tick,
+        revision=snapshot.revision,
+        event_schema_version=snapshot.event_schema_version,
+        projector_version=snapshot.projector_version,
+        persistence_codec_version=snapshot.persistence_codec_version,
+        derivation_version=snapshot.derivation_version,
+        integrity_hash=hash_snapshot(snapshot),
+        predecessor_commit_hash=None,
+    )
+    restored = WorldEngine.restore_from_snapshot(
+        snapshot, events=(), committed_through_tick=Tick(0)
+    )
+    assert restored.tick == Tick(1)
+    assert restored._snapshot.prior_event_window == ()
+    restored_obs = restored.observe().observations[0]
+    assert restored_obs == live_obs
 
 
 def test_restore_applies_events_and_advances_tick() -> None:
@@ -184,9 +367,7 @@ def test_world_replace_state_remains_unsupported() -> None:
         locations=locations,
         bodies=(_alive(),),
         weather=weather_for_locations(locations),
-        registrations=(
-            AgentRegistration(AgentId("agent-1"), EntityId("body-1")),
-        ),
+        registrations=(AgentRegistration(AgentId("agent-1"), EntityId("body-1")),),
     )
     engine = WorldEngine(
         config=SimulationRunConfig(seed=1),

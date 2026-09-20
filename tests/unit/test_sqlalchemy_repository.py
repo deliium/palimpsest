@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-from tests.simulation_helpers import make_location, make_weather
-
 from decimal import Decimal
 
 import pytest
@@ -38,6 +36,7 @@ from simulation.persistence import (
     SnapshotId,
     WorldSnapshot,
 )
+from tests.simulation_helpers import make_location, make_weather
 from world.events import Waited, make_replayable_event
 from world.identifiers import (
     EntityId,
@@ -46,8 +45,15 @@ from world.identifiers import (
     WorldId,
     WorldRevision,
 )
-from world.models import AgentBody, LifeStatus, Location
-from world.values import CarryCapacity, Fatigue, Health, Hunger, TemperatureCelsius, Thirst
+from world.models import AgentBody, LifeStatus
+from world.values import (
+    CarryCapacity,
+    Fatigue,
+    Health,
+    Hunger,
+    TemperatureCelsius,
+    Thirst,
+)
 
 pytestmark = pytest.mark.unit
 
@@ -74,9 +80,7 @@ def _snapshot(*, seed: int = 7) -> WorldSnapshot:
         world_id=WorldId("world-1"),
         seed=seed,
         config=SimulationRunConfig(seed=seed),
-        registrations=(
-            AgentRegistration(AgentId("agent-1"), EntityId("body-1")),
-        ),
+        registrations=(AgentRegistration(AgentId("agent-1"), EntityId("body-1")),),
         locations=(make_location("loc-1", name="Camp"),),
         bodies=(_alive(),),
         items=(),
@@ -176,19 +180,63 @@ def test_event_from_orm_rebuilds_replayable_event() -> None:
         actor_id=event.actor_id.value if event.actor_id else None,
         target_id=None,
         details=event_details_payload(event),
+        cause=None,
+        occurrence=None,
         payload_hash=hash_world_event(event).value,
     )
     rebuilt = event_from_orm(row)
     assert rebuilt == event
 
 
+def test_event_from_orm_preserves_physical_cause_and_occurrence() -> None:
+    from persistence.readers import event_cause_payload, event_occurrence_payload
+    from world.effects import ActionCause
+    from world.events import build_occurrence_context, make_physical_replayable_event
+
+    details = Waited()
+    event = make_physical_replayable_event(
+        event_id=EventId("evt-phys-1"),
+        run_id="run-1",
+        world_id=WorldId("world-1"),
+        tick=0,
+        sequence=0,
+        cause=ActionCause(RequestId("req-1"), EntityId("body-1")),
+        resulting_revision=WorldRevision(1),
+        details=details,
+        occurrence=build_occurrence_context(
+            details, origin_location_id=EntityId("loc-1")
+        ),
+    )
+    row = WorldEventOrm(
+        run_id=event.run_id,
+        tick=event.tick,
+        sequence=event.sequence,
+        event_id=event.event_id.value,
+        world_id=event.world_id.value,
+        request_id=event.request_id.value,
+        resulting_revision=event.resulting_revision.value,
+        schema_version=event.schema_version,
+        event_type=event.event_type,
+        actor_id=event.actor_id.value if event.actor_id else None,
+        target_id=None,
+        details=event_details_payload(event),
+        cause=event_cause_payload(event),
+        occurrence=event_occurrence_payload(event),
+        payload_hash=hash_world_event(event).value,
+    )
+    rebuilt = event_from_orm(row)
+    assert rebuilt == event
+    assert rebuilt.cause == event.cause
+    assert rebuilt.occurrence == event.occurrence
+    assert event_cause_payload(event) is not None
+    assert event_occurrence_payload(event) is not None
+
+
 def test_snapshot_integrity_mismatch_is_corruption() -> None:
     snapshot = _snapshot()
     payload = canonical_payload_dict(snapshot)
     with pytest.raises(PersistenceCorruptionError):
-        snapshot_from_canonical_payload(
-            payload, expected_integrity_hash="b" * 64
-        )
+        snapshot_from_canonical_payload(payload, expected_integrity_hash="b" * 64)
 
 
 def test_repository_factories_require_session_factory() -> None:

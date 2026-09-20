@@ -1,6 +1,7 @@
 """Type-check fixtures: both strategies share CognitionStrategy.propose.
 
-These classes must type-check. They must not accept WorldState, an LLM
+These classes must type-check. They must not accept WorldState, World,
+engine snapshots, ObservationBatch, raw WorldEvent batches, an LLM
 client, a repository, or a social graph in ``propose``.
 """
 
@@ -11,13 +12,15 @@ from llm.contracts import LLMClient
 from llm.models import LLMResponse
 from world.actions import AgentCommand, Wait
 from world.identifiers import EntityId
+from world.observations import Observation
 
 
 class ScriptedCognitionStrategy:
     """Deterministic strategy with no LLM dependency."""
 
     def propose(self, perspective: Perspective) -> AgentCommand:
-        _ = perspective
+        observation: Observation = perspective.observation
+        _ = observation.observer_id
         return Wait()
 
 

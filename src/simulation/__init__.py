@@ -80,6 +80,11 @@ from simulation.models import (
     canonical_physical_rules_document,
     fingerprint_physical_rules,
 )
+from simulation.perception import (
+    PerspectiveOwnershipCode,
+    PerspectiveOwnershipError,
+    build_perspective,
+)
 from simulation.persistence import (
     EVENT_SCHEMA_VERSION,
     PERSISTENCE_CODEC_VERSION,
@@ -150,6 +155,8 @@ __all__ = [
     "PayloadHash",
     "PersistenceSerializationError",
     "PersistentSimulationService",
+    "PerspectiveOwnershipCode",
+    "PerspectiveOwnershipError",
     "RegistrationTranslator",
     "ReplayFallbackPolicy",
     "ReplayMode",
@@ -178,6 +185,7 @@ __all__ = [
     "WorldBootstrap",
     "WorldEngine",
     "WorldSnapshot",
+    "build_perspective",
     "canonical_admission_keys",
     "canonical_event_keys",
     "canonical_physical_rules_document",

@@ -25,8 +25,10 @@ from simulation.persistence import (
 __all__ = [
     "advisory_lock_keys",
     "canonical_payload_dict",
+    "event_cause_payload",
     "event_details_payload",
     "event_from_orm",
+    "event_occurrence_payload",
     "manifest_from_run_orm",
     "nonneg_int_from_numeric",
     "snapshot_from_canonical_payload",
@@ -89,19 +91,48 @@ def _decode_envelope(
 
 def event_details_payload(event: object) -> dict[str, Any]:
     """Encoded details object for the world_events.details JSONB column."""
-    envelope = canonical_payload_dict(event)
-    data = envelope.get("data")
-    if not isinstance(data, dict):
-        raise PersistenceCorruptionError("invalid_payload", operation="event_details")
+    data = _event_envelope_data(event)
     details = data.get("details")
     if not isinstance(details, dict):
         raise PersistenceCorruptionError("invalid_payload", operation="event_details")
     return details
 
 
+def event_cause_payload(event: object) -> dict[str, Any] | None:
+    """Encoded cause object for world_events.cause, or None when absent."""
+    data = _event_envelope_data(event)
+    if "cause" not in data:
+        return None
+    cause = data["cause"]
+    if not isinstance(cause, dict):
+        raise PersistenceCorruptionError("invalid_payload", operation="event_cause")
+    return cause
+
+
+def event_occurrence_payload(event: object) -> dict[str, Any] | None:
+    """Encoded occurrence context for world_events.occurrence, or None."""
+    data = _event_envelope_data(event)
+    if "occurrence" not in data:
+        return None
+    occurrence = data["occurrence"]
+    if not isinstance(occurrence, dict):
+        raise PersistenceCorruptionError(
+            "invalid_payload", operation="event_occurrence"
+        )
+    return occurrence
+
+
+def _event_envelope_data(event: object) -> dict[str, Any]:
+    envelope = canonical_payload_dict(event)
+    data = envelope.get("data")
+    if not isinstance(data, dict):
+        raise PersistenceCorruptionError("invalid_payload", operation="event_envelope")
+    return data
+
+
 def event_from_orm(row: WorldEventOrm) -> object:
     """Rebuild a detached WorldEvent from a stored row via the journal codec."""
-    data = {
+    data: dict[str, Any] = {
         "actor_id": row.actor_id,
         "details": dict(row.details),
         "event_id": row.event_id,
@@ -117,6 +148,10 @@ def event_from_orm(row: WorldEventOrm) -> object:
         "tick": nonneg_int_from_numeric(row.tick, field="tick"),
         "world_id": row.world_id,
     }
+    if row.cause is not None:
+        data["cause"] = dict(row.cause)
+    if row.occurrence is not None:
+        data["occurrence"] = dict(row.occurrence)
     return _decode_envelope(_TYPE_WORLD_EVENT, data, _TYPE_WORLD_EVENT)
 
 
