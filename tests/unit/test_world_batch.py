@@ -238,8 +238,10 @@ def test_attack_death_emits_two_pending_events_under_same_cause() -> None:
 def test_finalize_assigns_contiguous_sequences_for_one_to_many() -> None:
     from world._operations import PendingBatch, PendingEvent
     from world.effects import ActionCause
+    from world.events import OccurrenceContext
 
     state = _state()
+    occurrence = OccurrenceContext(origin_location_id=EntityId("loc-1"))
     pending = PendingBatch(
         working_state=state,
         semantic_mutation=False,
@@ -248,10 +250,12 @@ def test_finalize_assigns_contiguous_sequences_for_one_to_many() -> None:
             PendingEvent(
                 cause=ActionCause(RequestId("r1"), EntityId("body-1")),
                 details=Waited(),
+                occurrence=occurrence,
             ),
             PendingEvent(
                 cause=ActionCause(RequestId("r1"), EntityId("body-1")),
                 details=Waited(),
+                occurrence=occurrence,
             ),
         ),
     )
@@ -260,3 +264,4 @@ def test_finalize_assigns_contiguous_sequences_for_one_to_many() -> None:
     )
     assert [event.sequence for event in batch.events] == [0, 1]
     assert all(event.request_id == RequestId("r1") for event in batch.events)
+    assert all(event.occurrence == occurrence for event in batch.events)

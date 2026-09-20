@@ -35,7 +35,9 @@ from world.actions import (
 from world.effects import ActionCause, EventCause, require_event_cause
 from world.events import (
     EventDetails,
+    OccurrenceContext,
     WorldEvent,
+    build_occurrence_context,
     make_physical_replayable_event,
     normalize_ordered_events,
 )
@@ -566,12 +568,15 @@ class PendingEvent:
 
     cause: EventCause
     details: EventDetails
+    occurrence: OccurrenceContext
 
     def __post_init__(self) -> None:
         object.__setattr__(self, "cause", require_event_cause(self.cause))
         from world.events import require_event_details
 
         object.__setattr__(self, "details", require_event_details(self.details))
+        if type(self.occurrence) is not OccurrenceContext:
+            raise TypeError("PendingEvent.occurrence must be OccurrenceContext")
 
 
 @dataclass(frozen=True, slots=True)
@@ -745,6 +750,7 @@ def prepare_action_batch(
             continue
 
         assert type(work_validation) is OperationAccepted
+        state_before = working
         application = apply_operation(
             working,
             work_validation.operation,
@@ -779,11 +785,19 @@ def prepare_action_batch(
             semantic_mutation = True
         if application.result.emits_event:
             cause = ActionCause(request.request_id, request.actor_id)
+            actor_body = state_before.bodies.get(request.actor_id)
+            origin_location_id = (
+                None if actor_body is None else actor_body.location_id
+            )
             for details in application.all_event_details():
                 pending_events.append(
                     PendingEvent(
                         cause=cause,
                         details=details,
+                        occurrence=build_occurrence_context(
+                            details,
+                            origin_location_id=origin_location_id,
+                        ),
                     )
                 )
         outcomes.append(
@@ -860,6 +874,7 @@ def finalize_pending_batch(
                 cause=pending_event.cause,
                 resulting_revision=resulting_revision,
                 details=pending_event.details,
+                occurrence=pending_event.occurrence,
             )
         )
     normalized = normalize_ordered_events(events)

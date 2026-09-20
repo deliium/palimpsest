@@ -6,7 +6,8 @@ current command validation or behavioral rules. Log-free: callers map
 
 Compatibility:
 - Replay schema v2: legacy take/drop/give mutations only.
-- Replay schema v3: effect-complete physical projector for all mutating kinds.
+- Replay schema v3/v4: effect-complete physical projector for all mutating kinds.
+  Schema v4 additionally carries occurrence context (ignored by state projection).
 Runs never mix replay schema versions.
 """
 
@@ -21,6 +22,7 @@ from world._state import WorldState, rebuild_world_state
 from world.events import (
     EVENT_SCHEMA_REPLAY_V2,
     EVENT_SCHEMA_REPLAY_V3,
+    EVENT_SCHEMA_REPLAY_V4,
     Asked,
     Attacked,
     Died,
@@ -159,6 +161,7 @@ def project_events(
         if event.schema_version not in {
             EVENT_SCHEMA_REPLAY_V2,
             EVENT_SCHEMA_REPLAY_V3,
+            EVENT_SCHEMA_REPLAY_V4,
         }:
             raise ProjectionError(ProjectionErrorCode.UNSUPPORTED_SCHEMA)
 

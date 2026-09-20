@@ -44,8 +44,10 @@ def test_exits_visible_below_content_threshold() -> None:
     assert len(obs.exits) == 1
     assert obs.exits[0].destination_id == EntityId("loc-2")
     assert obs.resources == ()
-    # Ground rock hidden; no held inventory.
-    assert all(item.holder_id is not None for item in obs.items)
+    # Ground rock hidden; held inventory would use ObservedItemPlacement.
+    assert all(
+        item.placement.value == "held_by_self" for item in obs.items
+    )
 
 
 def test_held_inventory_remains_visible_in_darkness() -> None:

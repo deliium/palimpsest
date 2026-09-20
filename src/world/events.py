@@ -5,9 +5,12 @@ Compatibility matrix:
 - ``EVENT_SCHEMA_REPLAY_V2`` (2): legacy replay projector; alias
   ``EVENT_SCHEMA_REPLAY_V1`` retained for call-site compatibility.
 - ``EVENT_SCHEMA_REPLAY_V3`` (3): physical-rules replay with effect-complete
-  payloads and explicit action/system causes. New physical runs emit v3.
+  payloads and explicit action/system causes; no occurrence context.
+- ``EVENT_SCHEMA_REPLAY_V4`` (4): physical replay plus explicit occurrence
+  context for perception audience decisions. New physical runs emit v4.
 
-Runs never mix replay schema versions.
+Runs never mix replay schema versions. ``WorldEvent.target_id`` retains detail
+counterparty semantics and is never treated as an occurrence location.
 """
 
 from __future__ import annotations
@@ -32,6 +35,7 @@ from world.identifiers import (
     WorldRevision,
     require_bounded_text,
     require_exact_nonneg_int,
+    require_ordered_unique,
     require_stable_id,
 )
 from world.models import LifeStatus
@@ -41,19 +45,26 @@ EVENT_SCHEMA_AUDIT_V1: Final[int] = 1
 EVENT_SCHEMA_REPLAY_V2: Final[int] = 2
 EVENT_SCHEMA_REPLAY_V1: Final[int] = EVENT_SCHEMA_REPLAY_V2
 EVENT_SCHEMA_REPLAY_V3: Final[int] = 3
+EVENT_SCHEMA_REPLAY_V4: Final[int] = 4
 SUPPORTED_EVENT_SCHEMA_VERSIONS: Final[frozenset[int]] = frozenset(
     {
         EVENT_SCHEMA_AUDIT_V1,
         EVENT_SCHEMA_REPLAY_V2,
         EVENT_SCHEMA_REPLAY_V3,
+        EVENT_SCHEMA_REPLAY_V4,
     }
 )
 REPLAYABLE_EVENT_SCHEMA_VERSIONS: Final[frozenset[int]] = frozenset(
-    {EVENT_SCHEMA_REPLAY_V2, EVENT_SCHEMA_REPLAY_V3}
+    {
+        EVENT_SCHEMA_REPLAY_V2,
+        EVENT_SCHEMA_REPLAY_V3,
+        EVENT_SCHEMA_REPLAY_V4,
+    }
 )
 PHYSICAL_REPLAY_EVENT_SCHEMA_VERSIONS: Final[frozenset[int]] = frozenset(
-    {EVENT_SCHEMA_REPLAY_V3}
+    {EVENT_SCHEMA_REPLAY_V3, EVENT_SCHEMA_REPLAY_V4}
 )
+CURRENT_PHYSICAL_EVENT_SCHEMA_VERSION: Final[int] = EVENT_SCHEMA_REPLAY_V4
 
 
 class EventValidationCode(StrEnum):
@@ -67,6 +78,57 @@ class EventValidationCode(StrEnum):
     INVALID_IDENTITY = "invalid_event_identity"
     INVALID_CAUSE = "invalid_event_cause"
     MIXED_REPLAY_SCHEMA = "mixed_replay_schema_version"
+    INVALID_OCCURRENCE_CONTEXT = "invalid_occurrence_context"
+
+
+@dataclass(frozen=True, slots=True)
+class OccurrenceContext:
+    """Event-time perception audience facts.
+
+    Captured at emission time so live and restored engines can decide
+    origin/destination witnesses, participants, affected entities, and private
+    recipients without consulting a later world state. Text remains in detail
+    payloads; this context only records privacy routing metadata.
+    """
+
+    origin_location_id: EntityId | None = None
+    destination_location_id: EntityId | None = None
+    affected_entity_ids: Sequence[EntityId] = ()
+    private_recipient_ids: Sequence[EntityId] = ()
+
+    def __post_init__(self) -> None:
+        if (
+            self.origin_location_id is not None
+            and type(self.origin_location_id) is not EntityId
+        ):
+            raise TypeError(
+                "OccurrenceContext.origin_location_id must be EntityId or None"
+            )
+        if (
+            self.destination_location_id is not None
+            and type(self.destination_location_id) is not EntityId
+        ):
+            raise TypeError(
+                "OccurrenceContext.destination_location_id must be EntityId or None"
+            )
+        object.__setattr__(
+            self,
+            "affected_entity_ids",
+            require_ordered_unique(
+                "OccurrenceContext.affected_entity_ids",
+                self.affected_entity_ids,
+                item_type=EntityId,
+            ),
+        )
+        object.__setattr__(
+            self,
+            "private_recipient_ids",
+            require_ordered_unique(
+                "OccurrenceContext.private_recipient_ids",
+                self.private_recipient_ids,
+                item_type=EntityId,
+            ),
+        )
 
 
 @dataclass(frozen=True, slots=True)
@@ -701,6 +763,7 @@ class WorldEvent:
     actor_id: EntityId | None = None
     target_id: EntityId | None = None
     cause: EventCause | None = None
+    occurrence: OccurrenceContext | None = None
 
     def __post_init__(self) -> None:
         if type(self.event_id) is not EventId:
@@ -743,6 +806,18 @@ class WorldEvent:
                 raise ValueError(EventValidationCode.INVALID_CAUSE.value)
         elif self.schema_version >= EVENT_SCHEMA_REPLAY_V3:
             raise ValueError(EventValidationCode.INVALID_CAUSE.value)
+        if (
+            self.occurrence is not None
+            and type(self.occurrence) is not OccurrenceContext
+        ):
+            raise TypeError(
+                "WorldEvent.occurrence must be OccurrenceContext or None"
+            )
+        if self.schema_version >= EVENT_SCHEMA_REPLAY_V4:
+            if self.occurrence is None:
+                raise ValueError(EventValidationCode.INVALID_OCCURRENCE_CONTEXT.value)
+        elif self.occurrence is not None:
+            raise ValueError(EventValidationCode.INVALID_OCCURRENCE_CONTEXT.value)
         expected_target = target_id_for_details(self.details)
         if self.target_id != expected_target:
             raise ValueError(EventValidationCode.INVALID_IDENTITY.value)
@@ -803,9 +878,12 @@ def make_physical_replayable_event(
     cause: EventCause,
     resulting_revision: WorldRevision,
     details: EventDetails,
+    occurrence: OccurrenceContext,
 ) -> WorldEvent:
-    """Construct an authoritative physical replay-v3 objective event."""
+    """Construct an authoritative physical replay-v4 objective event."""
     typed_cause = require_event_cause(cause)
+    if type(occurrence) is not OccurrenceContext:
+        raise TypeError("occurrence must be OccurrenceContext")
     return WorldEvent(
         event_id=event_id,
         run_id=run_id,
@@ -814,12 +892,140 @@ def make_physical_replayable_event(
         sequence=sequence,
         request_id=request_id_for_cause(typed_cause),
         resulting_revision=resulting_revision,
-        schema_version=EVENT_SCHEMA_REPLAY_V3,
+        schema_version=EVENT_SCHEMA_REPLAY_V4,
         details=details,
         actor_id=actor_id_for_cause(typed_cause),
         target_id=target_id_for_details(require_event_details(details)),
         cause=typed_cause,
+        occurrence=occurrence,
     )
+
+
+def build_occurrence_context(
+    details: EventDetails,
+    *,
+    origin_location_id: EntityId | None,
+    destination_location_id: EntityId | None = None,
+) -> OccurrenceContext:
+    """Derive event-time occurrence context from details and known locations.
+
+    ``origin_location_id`` is the actor/body location at emission (or the
+    system location for weather/regeneration). Destination is supplied for
+    movement/flee success; otherwise taken from movement details when present.
+    """
+    typed = require_event_details(details)
+    if origin_location_id is not None and type(origin_location_id) is not EntityId:
+        raise TypeError("origin_location_id must be EntityId or None")
+    if (
+        destination_location_id is not None
+        and type(destination_location_id) is not EntityId
+    ):
+        raise TypeError("destination_location_id must be EntityId or None")
+    match typed:
+        case Moved(destination_id=destination_id, resulting_location_id=resulting):
+            dest = destination_location_id or resulting or destination_id
+            return OccurrenceContext(
+                origin_location_id=origin_location_id,
+                destination_location_id=dest,
+                affected_entity_ids=(),
+                private_recipient_ids=(),
+            )
+        case Fled(destination_id=destination_id) as fled:
+            dest = destination_location_id
+            if fled.success and destination_id is not None:
+                dest = destination_location_id or destination_id
+            return OccurrenceContext(
+                origin_location_id=origin_location_id,
+                destination_location_id=dest,
+                affected_entity_ids=(),
+                private_recipient_ids=(),
+            )
+        case Talked(recipient_id=recipient_id) | Asked(
+            recipient_id=recipient_id
+        ) | Told(recipient_id=recipient_id):
+            return OccurrenceContext(
+                origin_location_id=origin_location_id,
+                destination_location_id=None,
+                affected_entity_ids=(),
+                private_recipient_ids=(recipient_id,),
+            )
+        case Helped(target_id=target_id) | Attacked(target_id=target_id):
+            return OccurrenceContext(
+                origin_location_id=origin_location_id,
+                destination_location_id=None,
+                affected_entity_ids=(target_id,),
+                private_recipient_ids=(),
+            )
+        case Died(body_id=body_id) | NeedsApplied(body_id=body_id) | ExposureApplied(
+            body_id=body_id
+        ):
+            return OccurrenceContext(
+                origin_location_id=origin_location_id,
+                destination_location_id=None,
+                affected_entity_ids=(body_id,),
+                private_recipient_ids=(),
+            )
+        case WeatherChanged(location_id=location_id):
+            return OccurrenceContext(
+                origin_location_id=location_id,
+                destination_location_id=None,
+                affected_entity_ids=(location_id,),
+                private_recipient_ids=(),
+            )
+        case ResourceRegenerated(resource_id=resource_id):
+            return OccurrenceContext(
+                origin_location_id=origin_location_id,
+                destination_location_id=None,
+                affected_entity_ids=(resource_id,),
+                private_recipient_ids=(),
+            )
+        case Searched(created_item_id=created_item_id, target_id=target_id):
+            affected: list[EntityId] = []
+            if target_id is not None:
+                affected.append(target_id)
+            if created_item_id is not None:
+                affected.append(created_item_id)
+            return OccurrenceContext(
+                origin_location_id=origin_location_id,
+                destination_location_id=None,
+                affected_entity_ids=tuple(affected),
+                private_recipient_ids=(),
+            )
+        case Taken(item_id=item_id) | Dropped(item_id=item_id) | Eaten(item_id=item_id):
+            return OccurrenceContext(
+                origin_location_id=origin_location_id,
+                destination_location_id=None,
+                affected_entity_ids=(item_id,),
+                private_recipient_ids=(),
+            )
+        case Given(recipient_id=recipient_id, item_id=item_id):
+            return OccurrenceContext(
+                origin_location_id=origin_location_id,
+                destination_location_id=None,
+                affected_entity_ids=(item_id, recipient_id),
+                private_recipient_ids=(),
+            )
+        case Drunk(source_id=source_id):
+            return OccurrenceContext(
+                origin_location_id=origin_location_id,
+                destination_location_id=None,
+                affected_entity_ids=(source_id,),
+                private_recipient_ids=(),
+            )
+        case Slept() | Waited():
+            return OccurrenceContext(
+                origin_location_id=origin_location_id,
+                destination_location_id=None,
+                affected_entity_ids=(),
+                private_recipient_ids=(),
+            )
+        case _:
+            return OccurrenceContext(
+                origin_location_id=origin_location_id,
+                destination_location_id=destination_location_id,
+                affected_entity_ids=(),
+                private_recipient_ids=(),
+            )
 
 
 def normalize_events(events: Sequence[WorldEvent]) -> tuple[WorldEvent, ...]:

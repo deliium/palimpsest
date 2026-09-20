@@ -54,6 +54,7 @@ from world.events import (
     EVENT_SCHEMA_AUDIT_V1,
     EVENT_SCHEMA_REPLAY_V2,
     EVENT_SCHEMA_REPLAY_V3,
+    EVENT_SCHEMA_REPLAY_V4,
     Asked,
     Attacked,
     Died,
@@ -66,6 +67,7 @@ from world.events import (
     Helped,
     Moved,
     NeedsApplied,
+    OccurrenceContext,
     ResourceRegenerated,
     Searched,
     Slept,
@@ -96,7 +98,22 @@ from world.models import (
     Weather,
     canonical_physical_rules_bytes,
 )
-from world.observations import Observation
+from world.observations import (
+    CoarseHealth,
+    Observation,
+    ObservationAudienceRole,
+    ObservationProvenance,
+    ObservationSourceKind,
+    ObservedCommunication,
+    ObservedItem,
+    ObservedItemPlacement,
+    ObservedLocation,
+    ObservedOccurrence,
+    ObservedResource,
+    ObservedSelf,
+    VisibleBody,
+    VisibleExit,
+)
 from world.values import (
     BodyCapacity,
     CarryCapacity,
@@ -1187,15 +1204,33 @@ def _decode_proposal(data: dict[str, Any], *, path: str) -> ActionProposal:
 
 def _encode_observation(value: Observation) -> dict[str, Any]:
     return {
-        "items": [_encode_item(item) for item in value.items],
-        "locations": [_encode_location(item) for item in value.locations],
+        "communications": [
+            _encode_observed_communication(item) for item in value.communications
+        ],
+        "day_phase": None if value.day_phase is None else value.day_phase.value,
+        "exits": [_encode_visible_exit(item) for item in value.exits],
+        "hour": value.hour,
+        "items": [_encode_observed_item(item) for item in value.items],
+        "locations": [_encode_observed_location(item) for item in value.locations],
         "observer_id": value.observer_id.value,
-        "resources": [_encode_resource(item) for item in value.resources],
+        "occurrences": [
+            _encode_observed_occurrence(item) for item in value.occurrences
+        ],
+        "resources": [_encode_observed_resource(item) for item in value.resources],
         "revision": value.revision.value,
         "self_body": None
         if value.self_body is None
-        else _encode_agent_body(value.self_body),
-        "weather": [_encode_weather(item) for item in value.weather],
+        else _encode_observed_self(value.self_body),
+        "tick": value.tick,
+        "visibility": value.visibility,
+        "visible_bodies": [
+            _encode_visible_body(item) for item in value.visible_bodies
+        ],
+        "weather_condition": (
+            None
+            if value.weather_condition is None
+            else value.weather_condition.value
+        ),
         "world_id": value.world_id.value,
     }
 
@@ -1207,11 +1242,19 @@ def _decode_observation(data: dict[str, Any], *, path: str) -> Observation:
             "world_id",
             "observer_id",
             "revision",
+            "tick",
             "self_body",
             "locations",
             "items",
             "resources",
-            "weather",
+            "exits",
+            "visible_bodies",
+            "occurrences",
+            "communications",
+            "hour",
+            "day_phase",
+            "visibility",
+            "weather_condition",
         },
         path=path,
     )
@@ -1221,29 +1264,434 @@ def _decode_observation(data: dict[str, Any], *, path: str) -> Observation:
         if self_body_raw is not None:
             if not isinstance(self_body_raw, dict):
                 raise DomainSerializationError("invalid_object", f"{path}.self_body")
-            self_body = _decode_agent_body(self_body_raw, path=f"{path}.self_body")
+            self_body = _decode_observed_self(self_body_raw, path=f"{path}.self_body")
+        day_phase_raw = data["day_phase"]
+        day_phase = None
+        if day_phase_raw is not None:
+            if not isinstance(day_phase_raw, str):
+                raise DomainSerializationError("invalid_enum", f"{path}.day_phase")
+            day_phase = DayPhase(day_phase_raw)
+        weather_raw = data["weather_condition"]
+        weather_condition = None
+        if weather_raw is not None:
+            if not isinstance(weather_raw, str):
+                raise DomainSerializationError(
+                    "invalid_enum", f"{path}.weather_condition"
+                )
+            weather_condition = WeatherCondition(weather_raw)
         return Observation(
             world_id=WorldId(_str_field(data, "world_id", path=path)),
             observer_id=EntityId(_str_field(data, "observer_id", path=path)),
             revision=WorldRevision(_int_field(data, "revision", path=path)),
+            tick=_int_field(data, "tick", path=path),
             self_body=self_body,
             locations=_decode_object_list(
-                data["locations"], _decode_location, path=f"{path}.locations"
+                data["locations"],
+                _decode_observed_location,
+                path=f"{path}.locations",
             ),
             items=_decode_object_list(
-                data["items"], _decode_item, path=f"{path}.items"
+                data["items"], _decode_observed_item, path=f"{path}.items"
             ),
             resources=_decode_object_list(
-                data["resources"], _decode_resource, path=f"{path}.resources"
+                data["resources"],
+                _decode_observed_resource,
+                path=f"{path}.resources",
             ),
-            weather=_decode_object_list(
-                data["weather"], _decode_weather, path=f"{path}.weather"
+            exits=_decode_object_list(
+                data["exits"], _decode_visible_exit, path=f"{path}.exits"
+            ),
+            visible_bodies=_decode_object_list(
+                data["visible_bodies"],
+                _decode_visible_body,
+                path=f"{path}.visible_bodies",
+            ),
+            occurrences=_decode_object_list(
+                data["occurrences"],
+                _decode_observed_occurrence,
+                path=f"{path}.occurrences",
+            ),
+            communications=_decode_object_list(
+                data["communications"],
+                _decode_observed_communication,
+                path=f"{path}.communications",
+            ),
+            hour=None if data["hour"] is None else _int_field(data, "hour", path=path),
+            day_phase=day_phase,
+            visibility=(
+                None
+                if data["visibility"] is None
+                else _float_field(data, "visibility", path=path)
+            ),
+            weather_condition=weather_condition,
+        )
+    except DomainSerializationError:
+        raise
+    except (TypeError, ValueError) as exc:
+        raise DomainSerializationError("invalid_model", path) from exc
+
+
+def _encode_observed_location(value: ObservedLocation) -> dict[str, Any]:
+    return {"entity_id": value.entity_id.value, "name": value.name}
+
+
+def _decode_observed_location(data: dict[str, Any], *, path: str) -> ObservedLocation:
+    _require_keys(data, {"entity_id", "name"}, path=path)
+    try:
+        return ObservedLocation(
+            entity_id=EntityId(_str_field(data, "entity_id", path=path)),
+            name=_str_field(data, "name", path=path),
+        )
+    except (TypeError, ValueError) as exc:
+        raise DomainSerializationError("invalid_model", path) from exc
+
+
+def _encode_observed_item(value: ObservedItem) -> dict[str, Any]:
+    return {
+        "entity_id": value.entity_id.value,
+        "kind": value.kind.value,
+        "load": value.load.value,
+        "name": value.name,
+        "placement": value.placement.value,
+    }
+
+
+def _decode_observed_item(data: dict[str, Any], *, path: str) -> ObservedItem:
+    _require_keys(
+        data, {"entity_id", "name", "kind", "load", "placement"}, path=path
+    )
+    try:
+        return ObservedItem(
+            entity_id=EntityId(_str_field(data, "entity_id", path=path)),
+            name=_str_field(data, "name", path=path),
+            kind=ItemKind(_str_field(data, "kind", path=path)),
+            load=ItemLoad(_int_field(data, "load", path=path)),
+            placement=ObservedItemPlacement(_str_field(data, "placement", path=path)),
+        )
+    except (TypeError, ValueError) as exc:
+        raise DomainSerializationError("invalid_model", path) from exc
+
+
+def _encode_observed_resource(value: ObservedResource) -> dict[str, Any]:
+    return {
+        "entity_id": value.entity_id.value,
+        "kind": value.kind.value,
+        "name": value.name,
+        "quantity": value.quantity,
+        "unit": value.unit,
+    }
+
+
+def _decode_observed_resource(data: dict[str, Any], *, path: str) -> ObservedResource:
+    _require_keys(
+        data, {"entity_id", "name", "kind", "quantity", "unit"}, path=path
+    )
+    try:
+        return ObservedResource(
+            entity_id=EntityId(_str_field(data, "entity_id", path=path)),
+            name=_str_field(data, "name", path=path),
+            kind=ResourceKind(_str_field(data, "kind", path=path)),
+            quantity=_float_field(data, "quantity", path=path),
+            unit=_str_field(data, "unit", path=path),
+        )
+    except (TypeError, ValueError) as exc:
+        raise DomainSerializationError("invalid_model", path) from exc
+
+
+def _encode_observed_self(value: ObservedSelf) -> dict[str, Any]:
+    return {
+        "carry_capacity": value.carry_capacity.value,
+        "entity_id": value.entity_id.value,
+        "fatigue": value.fatigue.value,
+        "health": value.health.value,
+        "hunger": value.hunger.value,
+        "inventory": [item.value for item in value.inventory],
+        "life_status": value.life_status.value,
+        "location_id": value.location_id.value,
+        "temperature": value.temperature.value,
+        "thirst": value.thirst.value,
+    }
+
+
+def _decode_observed_self(data: dict[str, Any], *, path: str) -> ObservedSelf:
+    _require_keys(
+        data,
+        {
+            "entity_id",
+            "location_id",
+            "health",
+            "hunger",
+            "thirst",
+            "fatigue",
+            "temperature",
+            "inventory",
+            "life_status",
+            "carry_capacity",
+        },
+        path=path,
+    )
+    inventory_raw = data["inventory"]
+    if not isinstance(inventory_raw, list):
+        raise DomainSerializationError("invalid_array", f"{path}.inventory")
+    try:
+        inventory_items: list[EntityId] = []
+        for index, item in enumerate(inventory_raw):
+            if not isinstance(item, str):
+                raise DomainSerializationError(
+                    "invalid_string", f"{path}.inventory[{index}]"
+                )
+            inventory_items.append(EntityId(item))
+        inventory = tuple(inventory_items)
+        return ObservedSelf(
+            entity_id=EntityId(_str_field(data, "entity_id", path=path)),
+            location_id=EntityId(_str_field(data, "location_id", path=path)),
+            health=Health(_float_field(data, "health", path=path)),
+            hunger=Hunger(_float_field(data, "hunger", path=path)),
+            thirst=Thirst(_float_field(data, "thirst", path=path)),
+            fatigue=Fatigue(_float_field(data, "fatigue", path=path)),
+            temperature=TemperatureCelsius(
+                _float_field(data, "temperature", path=path)
+            ),
+            inventory=inventory,
+            life_status=LifeStatus(_str_field(data, "life_status", path=path)),
+            carry_capacity=CarryCapacity(
+                _int_field(data, "carry_capacity", path=path)
             ),
         )
     except DomainSerializationError:
         raise
     except (TypeError, ValueError) as exc:
         raise DomainSerializationError("invalid_model", path) from exc
+
+
+def _encode_visible_exit(value: VisibleExit) -> dict[str, Any]:
+    return {"destination_id": value.destination_id.value, "name": value.name}
+
+
+def _decode_visible_exit(data: dict[str, Any], *, path: str) -> VisibleExit:
+    _require_keys(data, {"destination_id", "name"}, path=path)
+    try:
+        return VisibleExit(
+            destination_id=EntityId(_str_field(data, "destination_id", path=path)),
+            name=_str_field(data, "name", path=path),
+        )
+    except (TypeError, ValueError) as exc:
+        raise DomainSerializationError("invalid_model", path) from exc
+
+
+def _encode_visible_body(value: VisibleBody) -> dict[str, Any]:
+    return {
+        "coarse_health": value.coarse_health.value,
+        "entity_id": value.entity_id.value,
+        "life_status": value.life_status.value,
+    }
+
+
+def _decode_visible_body(data: dict[str, Any], *, path: str) -> VisibleBody:
+    _require_keys(data, {"entity_id", "life_status", "coarse_health"}, path=path)
+    try:
+        return VisibleBody(
+            entity_id=EntityId(_str_field(data, "entity_id", path=path)),
+            life_status=LifeStatus(_str_field(data, "life_status", path=path)),
+            coarse_health=CoarseHealth(_str_field(data, "coarse_health", path=path)),
+        )
+    except (TypeError, ValueError) as exc:
+        raise DomainSerializationError("invalid_model", path) from exc
+
+
+def _encode_provenance(value: ObservationProvenance) -> dict[str, Any]:
+    return {
+        "source_event_id": (
+            None if value.source_event_id is None else value.source_event_id.value
+        ),
+        "source_kind": value.source_kind.value,
+        "source_tick": value.source_tick,
+    }
+
+
+def _decode_provenance(data: dict[str, Any], *, path: str) -> ObservationProvenance:
+    _require_keys(data, {"source_kind", "source_tick", "source_event_id"}, path=path)
+    event_raw = data["source_event_id"]
+    try:
+        source_event_id = None
+        if event_raw is not None:
+            if not isinstance(event_raw, str):
+                raise DomainSerializationError(
+                    "invalid_string", f"{path}.source_event_id"
+                )
+            source_event_id = EventId(event_raw)
+        return ObservationProvenance(
+            source_kind=ObservationSourceKind(
+                _str_field(data, "source_kind", path=path)
+            ),
+            source_tick=_int_field(data, "source_tick", path=path),
+            source_event_id=source_event_id,
+        )
+    except (TypeError, ValueError) as exc:
+        raise DomainSerializationError("invalid_model", path) from exc
+
+
+def _encode_observed_occurrence(value: ObservedOccurrence) -> dict[str, Any]:
+    return {
+        "actor_id": None if value.actor_id is None else value.actor_id.value,
+        "audience_role": value.audience_role.value,
+        "destination_id": (
+            None if value.destination_id is None else value.destination_id.value
+        ),
+        "kind": value.kind,
+        "other_entity_id": (
+            None if value.other_entity_id is None else value.other_entity_id.value
+        ),
+        "provenance": _encode_provenance(value.provenance),
+        "public_facts": dict(value.public_facts),
+        "success": value.success,
+    }
+
+
+def _decode_observed_occurrence(
+    data: dict[str, Any], *, path: str
+) -> ObservedOccurrence:
+    _require_keys(
+        data,
+        {
+            "provenance",
+            "kind",
+            "audience_role",
+            "actor_id",
+            "other_entity_id",
+            "destination_id",
+            "success",
+            "public_facts",
+        },
+        path=path,
+    )
+    provenance_raw = data["provenance"]
+    if not isinstance(provenance_raw, dict):
+        raise DomainSerializationError("invalid_object", f"{path}.provenance")
+    facts_raw = data["public_facts"]
+    if not isinstance(facts_raw, dict):
+        raise DomainSerializationError("invalid_object", f"{path}.public_facts")
+    try:
+        actor_raw = data["actor_id"]
+        other_raw = data["other_entity_id"]
+        destination_raw = data["destination_id"]
+        success_raw = data["success"]
+        if success_raw is not None and type(success_raw) is not bool:
+            raise DomainSerializationError("invalid_bool", f"{path}.success")
+        return ObservedOccurrence(
+            provenance=_decode_provenance(provenance_raw, path=f"{path}.provenance"),
+            kind=_str_field(data, "kind", path=path),
+            audience_role=ObservationAudienceRole(
+                _str_field(data, "audience_role", path=path)
+            ),
+            actor_id=_optional_entity_id(actor_raw, path=f"{path}.actor_id"),
+            other_entity_id=_optional_entity_id(
+                other_raw, path=f"{path}.other_entity_id"
+            ),
+            destination_id=_optional_entity_id(
+                destination_raw, path=f"{path}.destination_id"
+            ),
+            success=success_raw,
+            public_facts=facts_raw,
+        )
+    except DomainSerializationError:
+        raise
+    except (TypeError, ValueError) as exc:
+        raise DomainSerializationError("invalid_model", path) from exc
+
+
+def _encode_observed_communication(value: ObservedCommunication) -> dict[str, Any]:
+    return {
+        "listener_id": value.listener_id.value,
+        "provenance": _encode_provenance(value.provenance),
+        "speaker_id": value.speaker_id.value,
+        "text": value.text,
+    }
+
+
+def _decode_observed_communication(
+    data: dict[str, Any], *, path: str
+) -> ObservedCommunication:
+    _require_keys(
+        data, {"provenance", "speaker_id", "listener_id", "text"}, path=path
+    )
+    provenance_raw = data["provenance"]
+    if not isinstance(provenance_raw, dict):
+        raise DomainSerializationError("invalid_object", f"{path}.provenance")
+    try:
+        return ObservedCommunication(
+            provenance=_decode_provenance(provenance_raw, path=f"{path}.provenance"),
+            speaker_id=EntityId(_str_field(data, "speaker_id", path=path)),
+            listener_id=EntityId(_str_field(data, "listener_id", path=path)),
+            text=_str_field(data, "text", path=path),
+        )
+    except DomainSerializationError:
+        raise
+    except (TypeError, ValueError) as exc:
+        raise DomainSerializationError("invalid_model", path) from exc
+
+
+def _optional_entity_id(value: object, *, path: str) -> EntityId | None:
+    if value is None:
+        return None
+    if not isinstance(value, str):
+        raise DomainSerializationError("invalid_string", path)
+    return EntityId(value)
+
+
+def _decode_occurrence_context(
+    data: dict[str, Any], *, path: str
+) -> OccurrenceContext:
+    _require_keys(
+        data,
+        {
+            "origin_location_id",
+            "destination_location_id",
+            "affected_entity_ids",
+            "private_recipient_ids",
+        },
+        path=path,
+    )
+    affected_raw = data["affected_entity_ids"]
+    private_raw = data["private_recipient_ids"]
+    if not isinstance(affected_raw, list) or not isinstance(private_raw, list):
+        raise DomainSerializationError("invalid_array", path)
+    try:
+        return OccurrenceContext(
+            origin_location_id=_optional_entity_id(
+                data["origin_location_id"], path=f"{path}.origin_location_id"
+            ),
+            destination_location_id=_optional_entity_id(
+                data["destination_location_id"],
+                path=f"{path}.destination_location_id",
+            ),
+            affected_entity_ids=tuple(
+                EntityId(
+                    _require_str_item(
+                        item, path=f"{path}.affected_entity_ids[{index}]"
+                    )
+                )
+                for index, item in enumerate(affected_raw)
+            ),
+            private_recipient_ids=tuple(
+                EntityId(
+                    _require_str_item(
+                        item, path=f"{path}.private_recipient_ids[{index}]"
+                    )
+                )
+                for index, item in enumerate(private_raw)
+            ),
+        )
+    except DomainSerializationError:
+        raise
+    except (TypeError, ValueError) as exc:
+        raise DomainSerializationError("invalid_model", path) from exc
+
+
+def _require_str_item(value: object, *, path: str) -> str:
+    if not isinstance(value, str):
+        raise DomainSerializationError("invalid_string", path)
+    return value
 
 
 def _decode_object_list(
@@ -1865,6 +2313,25 @@ def _encode_world_event(value: WorldEvent) -> dict[str, Any]:
     }
     if value.cause is not None:
         payload["cause"] = _encode_event_cause(value.cause)
+    if value.occurrence is not None:
+        payload["occurrence"] = {
+            "affected_entity_ids": [
+                item.value for item in value.occurrence.affected_entity_ids
+            ],
+            "destination_location_id": (
+                None
+                if value.occurrence.destination_location_id is None
+                else value.occurrence.destination_location_id.value
+            ),
+            "origin_location_id": (
+                None
+                if value.occurrence.origin_location_id is None
+                else value.occurrence.origin_location_id.value
+            ),
+            "private_recipient_ids": [
+                item.value for item in value.occurrence.private_recipient_ids
+            ],
+        }
     return payload
 
 
@@ -1936,6 +2403,7 @@ def _decode_world_event(data: dict[str, Any], *, path: str) -> WorldEvent:
         "target_id",
         "event_type",
         "cause",
+        "occurrence",
     }
     keys = set(data)
     details_raw = data.get("details")
@@ -1965,9 +2433,10 @@ def _decode_world_event(data: dict[str, Any], *, path: str) -> WorldEvent:
                 actor_id=None,
                 target_id=target_id_for_details(details),
             )
-        required = replay_keys - {"event_type", "cause"}
+        required = replay_keys - {"event_type", "cause", "occurrence"}
         expected = required | ({"event_type"} if "event_type" in data else set())
         expected = expected | ({"cause"} if "cause" in data else set())
+        expected = expected | ({"occurrence"} if "occurrence" in data else set())
         _require_keys(data, expected, path=path)
         if keys - replay_keys:
             raise DomainSerializationError("invalid_fields", path)
@@ -1976,6 +2445,7 @@ def _decode_world_event(data: dict[str, Any], *, path: str) -> WorldEvent:
             EVENT_SCHEMA_AUDIT_V1,
             EVENT_SCHEMA_REPLAY_V2,
             EVENT_SCHEMA_REPLAY_V3,
+            EVENT_SCHEMA_REPLAY_V4,
         }:
             raise DomainSerializationError("unsupported_schema_version", path)
         actor_raw = data["actor_id"]
@@ -1994,6 +2464,16 @@ def _decode_world_event(data: dict[str, Any], *, path: str) -> WorldEvent:
             if not isinstance(cause_raw, dict):
                 raise DomainSerializationError("invalid_object", f"{path}.cause")
             cause = _decode_event_cause(cause_raw, path=f"{path}.cause")
+        occurrence = None
+        if "occurrence" in data:
+            occurrence_raw = data["occurrence"]
+            if not isinstance(occurrence_raw, dict):
+                raise DomainSerializationError(
+                    "invalid_object", f"{path}.occurrence"
+                )
+            occurrence = _decode_occurrence_context(
+                occurrence_raw, path=f"{path}.occurrence"
+            )
         event = WorldEvent(
             event_id=EventId(_str_field(data, "event_id", path=path)),
             run_id=_str_field(data, "run_id", path=path),
@@ -2009,6 +2489,7 @@ def _decode_world_event(data: dict[str, Any], *, path: str) -> WorldEvent:
             actor_id=actor_id,
             target_id=target_id,
             cause=cause,  # type: ignore[arg-type]
+            occurrence=occurrence,
         )
         if "event_type" in data and data["event_type"] != event.event_type:
             raise DomainSerializationError("invalid_fields", f"{path}.event_type")

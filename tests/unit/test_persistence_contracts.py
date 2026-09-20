@@ -117,9 +117,9 @@ def _bootstrap_snapshot(
 
 
 def test_version_constants_align_with_replay_schema() -> None:
-    from world.events import EVENT_SCHEMA_REPLAY_V3
+    from world.events import EVENT_SCHEMA_REPLAY_V4
 
-    assert EVENT_SCHEMA_VERSION == EVENT_SCHEMA_REPLAY_V3 == 3
+    assert EVENT_SCHEMA_VERSION == EVENT_SCHEMA_REPLAY_V4 == 4
     assert PROJECTOR_VERSION == "v2"
     assert PERSISTENCE_CODEC_VERSION == "v2"
 

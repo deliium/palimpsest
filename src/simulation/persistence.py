@@ -25,6 +25,7 @@ from simulation.models import (
 from world.events import (
     EVENT_SCHEMA_REPLAY_V2,
     EVENT_SCHEMA_REPLAY_V3,
+    EVENT_SCHEMA_REPLAY_V4,
     WorldEvent,
     normalize_events,
 )
@@ -36,14 +37,14 @@ from world.identifiers import (
 )
 from world.models import AgentBody, Item, Location, Resource, Weather
 
-# New-write versions for physical replay-v3 runs.
-EVENT_SCHEMA_VERSION: Final[int] = EVENT_SCHEMA_REPLAY_V3
+# New-write versions for physical replay-v4 runs (occurrence context).
+EVENT_SCHEMA_VERSION: Final[int] = EVENT_SCHEMA_REPLAY_V4
 PROJECTOR_VERSION: Final[str] = "v2"
 PERSISTENCE_CODEC_VERSION: Final[str] = "v2"
 
-# Accepted restore/decode versions (legacy replay-v2 remains restorable).
+# Accepted restore/decode versions (legacy replay-v2/v3 remain restorable).
 ACCEPTED_EVENT_SCHEMA_VERSIONS: Final[frozenset[int]] = frozenset(
-    {EVENT_SCHEMA_REPLAY_V2, EVENT_SCHEMA_REPLAY_V3}
+    {EVENT_SCHEMA_REPLAY_V2, EVENT_SCHEMA_REPLAY_V3, EVENT_SCHEMA_REPLAY_V4}
 )
 ACCEPTED_PROJECTOR_VERSIONS: Final[frozenset[str]] = frozenset({"v1", "v2"})
 ACCEPTED_PERSISTENCE_CODEC_VERSIONS: Final[frozenset[str]] = frozenset(
@@ -174,7 +175,7 @@ def schema_projector_compatible(
     """True when schema and projector pair without mixed-version dispatch."""
     if event_schema_version == EVENT_SCHEMA_REPLAY_V2:
         return projector_version == "v1"
-    if event_schema_version == EVENT_SCHEMA_REPLAY_V3:
+    if event_schema_version in {EVENT_SCHEMA_REPLAY_V3, EVENT_SCHEMA_REPLAY_V4}:
         return projector_version == "v2"
     return False
 

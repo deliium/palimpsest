@@ -50,6 +50,8 @@ from simulation.serialization import (
 from world.events import (
     EVENT_SCHEMA_REPLAY_V2,
     EVENT_SCHEMA_REPLAY_V3,
+    EVENT_SCHEMA_REPLAY_V4,
+    OccurrenceContext,
     WorldEvent,
     event_is_replayable,
     require_event_details,
@@ -322,6 +324,7 @@ def verify_tick_events(
         if event.schema_version not in {
             EVENT_SCHEMA_REPLAY_V2,
             EVENT_SCHEMA_REPLAY_V3,
+            EVENT_SCHEMA_REPLAY_V4,
         }:
             raise PersistenceSerializationError(
                 "unsupported_version",
@@ -878,9 +881,74 @@ def _encode_world_event(value: WorldEvent, *, path: str) -> dict[str, Any]:
         }
         if value.cause is not None:
             payload["cause"] = _encode_event_cause(value.cause)
+        if value.occurrence is not None:
+            payload["occurrence"] = _encode_occurrence_context(value.occurrence)
         return payload
     except DomainSerializationError as exc:
         raise _map_domain_error(exc) from exc
+
+
+def _encode_occurrence_context(value: OccurrenceContext) -> dict[str, Any]:
+    return {
+        "affected_entity_ids": [item.value for item in value.affected_entity_ids],
+        "destination_location_id": (
+            None
+            if value.destination_location_id is None
+            else value.destination_location_id.value
+        ),
+        "origin_location_id": (
+            None
+            if value.origin_location_id is None
+            else value.origin_location_id.value
+        ),
+        "private_recipient_ids": [
+            item.value for item in value.private_recipient_ids
+        ],
+    }
+
+
+def _decode_occurrence_context(
+    data: dict[str, Any], *, path: str
+) -> OccurrenceContext:
+    _require_keys(
+        data,
+        {
+            "origin_location_id",
+            "destination_location_id",
+            "affected_entity_ids",
+            "private_recipient_ids",
+        },
+        path=path,
+    )
+    origin_raw = data["origin_location_id"]
+    destination_raw = data["destination_location_id"]
+    affected_raw = data["affected_entity_ids"]
+    private_raw = data["private_recipient_ids"]
+    if not isinstance(affected_raw, list) or not isinstance(private_raw, list):
+        raise PersistenceSerializationError("invalid_array", path)
+    try:
+        return OccurrenceContext(
+            origin_location_id=(
+                None
+                if origin_raw is None
+                else EntityId(_require_id_str(origin_raw, path))
+            ),
+            destination_location_id=(
+                None
+                if destination_raw is None
+                else EntityId(_require_id_str(destination_raw, path))
+            ),
+            affected_entity_ids=tuple(
+                EntityId(_require_id_str(item, f"{path}.affected_entity_ids"))
+                for item in affected_raw
+            ),
+            private_recipient_ids=tuple(
+                EntityId(_require_id_str(item, f"{path}.private_recipient_ids"))
+                for item in private_raw
+            ),
+        )
+    except (TypeError, ValueError) as exc:
+        raise PersistenceSerializationError("malformed_id", path) from exc
 
 
 def _decode_world_event(data: dict[str, Any], *, path: str) -> WorldEvent:
@@ -899,7 +967,12 @@ def _decode_world_event(data: dict[str, Any], *, path: str) -> WorldEvent:
         "event_type",
     }
     keys = set(data)
-    if keys != base_keys and keys != base_keys | {"cause"}:
+    allowed = {
+        frozenset(base_keys),
+        frozenset(base_keys | {"cause"}),
+        frozenset(base_keys | {"cause", "occurrence"}),
+    }
+    if keys not in allowed:
         raise PersistenceSerializationError("invalid_fields", path)
     details_raw = data["details"]
     if not isinstance(details_raw, dict):
@@ -912,7 +985,11 @@ def _decode_world_event(data: dict[str, Any], *, path: str) -> WorldEvent:
         except DomainSerializationError as exc:
             raise _map_domain_error(exc) from exc
         schema_version = _nonneg_int_field(data, "schema_version", path=path)
-        if schema_version not in {EVENT_SCHEMA_REPLAY_V2, EVENT_SCHEMA_REPLAY_V3}:
+        if schema_version not in {
+            EVENT_SCHEMA_REPLAY_V2,
+            EVENT_SCHEMA_REPLAY_V3,
+            EVENT_SCHEMA_REPLAY_V4,
+        }:
             raise PersistenceSerializationError(
                 "unsupported_version",
                 f"{path}.schema_version",
@@ -939,6 +1016,20 @@ def _decode_world_event(data: dict[str, Any], *, path: str) -> WorldEvent:
                 raise _map_domain_error(exc) from exc
         elif schema_version >= EVENT_SCHEMA_REPLAY_V3:
             raise PersistenceSerializationError("invalid_fields", f"{path}.cause")
+        occurrence = None
+        if "occurrence" in data:
+            occurrence_raw = data["occurrence"]
+            if not isinstance(occurrence_raw, dict):
+                raise PersistenceSerializationError(
+                    "invalid_object", f"{path}.occurrence"
+                )
+            occurrence = _decode_occurrence_context(
+                occurrence_raw, path=f"{path}.occurrence"
+            )
+        elif schema_version >= EVENT_SCHEMA_REPLAY_V4:
+            raise PersistenceSerializationError(
+                "invalid_fields", f"{path}.occurrence"
+            )
         event = WorldEvent(
             event_id=EventId(_str_field(data, "event_id", path=path)),
             run_id=_str_field(data, "run_id", path=path),
@@ -954,6 +1045,7 @@ def _decode_world_event(data: dict[str, Any], *, path: str) -> WorldEvent:
             actor_id=actor_id,
             target_id=target_id,
             cause=cause,  # type: ignore[arg-type]
+            occurrence=occurrence,
         )
         if data["event_type"] != event.event_type:
             raise PersistenceSerializationError("invalid_fields", f"{path}.event_type")

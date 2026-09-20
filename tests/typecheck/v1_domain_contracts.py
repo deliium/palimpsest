@@ -113,6 +113,50 @@ def _exhaust_agent_command(command: AgentCommand) -> str:
             assert_never(command)
 
 
+def _observation_uses_redacted_projections() -> None:
+    from world.models import LifeStatus
+    from world.observations import (
+        Observation,
+        ObservedLocation,
+        ObservedSelf,
+        VisibleBody,
+        VisibleExit,
+    )
+    from world.values import (
+        CarryCapacity,
+        Fatigue,
+        Health,
+        Hunger,
+        TemperatureCelsius,
+        Thirst,
+    )
+
+    self_body = ObservedSelf(
+        entity_id=EntityId("body-1"),
+        location_id=EntityId("loc-1"),
+        health=Health(10),
+        hunger=Hunger(0),
+        thirst=Thirst(0),
+        fatigue=Fatigue(0),
+        temperature=TemperatureCelsius(36.5),
+        inventory=(),
+        life_status=LifeStatus.ALIVE,
+        carry_capacity=CarryCapacity(10),
+    )
+    observation = Observation(
+        world_id=WorldId("world-1"),
+        observer_id=EntityId("body-1"),
+        revision=WorldRevision(0),
+        self_body=self_body,
+        locations=(ObservedLocation(entity_id=EntityId("loc-1"), name="Camp"),),
+        exits=(VisibleExit(destination_id=EntityId("loc-2"), name="Forest"),),
+        visible_bodies=(),
+    )
+    assert isinstance(observation.locations[0], ObservedLocation)
+    assert not hasattr(observation.locations[0], "body_capacity")
+    _ = VisibleBody
+
+
 def _event_detail_kind(details: EventDetails) -> str:
     if isinstance(details, Waited):
         return details.kind

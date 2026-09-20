@@ -758,6 +758,7 @@ class WorldEngine:
                         family_ordinal=detail.family_ordinal,
                     ),
                     details=detail.details,
+                    occurrence=detail.occurrence,
                 )
             )
         _LOGGER.debug(

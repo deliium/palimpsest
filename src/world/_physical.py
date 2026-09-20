@@ -19,8 +19,10 @@ from world.events import (
     EventDetails,
     ExposureApplied,
     NeedsApplied,
+    OccurrenceContext,
     ResourceRegenerated,
     WeatherChanged,
+    build_occurrence_context,
     require_event_details,
 )
 from world.identifiers import EntityId, require_exact_nonneg_int
@@ -57,6 +59,7 @@ class PendingSystemDetail:
     entity_id: EntityId
     family_ordinal: int
     details: EventDetails
+    occurrence: OccurrenceContext
 
     def __post_init__(self) -> None:
         if type(self.effect_family) is not SystemEffectFamily:
@@ -73,6 +76,10 @@ class PendingSystemDetail:
             ),
         )
         object.__setattr__(self, "details", require_event_details(self.details))
+        if type(self.occurrence) is not OccurrenceContext:
+            raise TypeError(
+                "PendingSystemDetail.occurrence must be OccurrenceContext"
+            )
 
 
 @dataclass(frozen=True, slots=True)
@@ -98,6 +105,25 @@ class PendingSystemStep:
                     "PendingSystemStep.pending_details entries must be "
                     "PendingSystemDetail"
                 )
+
+
+def _pending_system(
+    *,
+    effect_family: SystemEffectFamily,
+    entity_id: EntityId,
+    family_ordinal: int,
+    details: EventDetails,
+    origin_location_id: EntityId | None,
+) -> PendingSystemDetail:
+    return PendingSystemDetail(
+        effect_family=effect_family,
+        entity_id=entity_id,
+        family_ordinal=family_ordinal,
+        details=details,
+        occurrence=build_occurrence_context(
+            details, origin_location_id=origin_location_id
+        ),
+    )
 
 
 def apply_autonomous_physical_step(
@@ -165,7 +191,7 @@ def apply_autonomous_physical_step(
             ordinal = family_ordinals[SystemEffectFamily.WEATHER]
             family_ordinals[SystemEffectFamily.WEATHER] = ordinal + 1
             pending.append(
-                PendingSystemDetail(
+                _pending_system(
                     effect_family=SystemEffectFamily.WEATHER,
                     entity_id=location_id,
                     family_ordinal=ordinal,
@@ -173,6 +199,7 @@ def apply_autonomous_physical_step(
                         location_id=location_id,
                         condition=effect.condition,
                     ),
+                    origin_location_id=location_id,
                 )
             )
         if semantic_mutation:
@@ -201,7 +228,7 @@ def apply_autonomous_physical_step(
         ordinal = family_ordinals[SystemEffectFamily.REGENERATION]
         family_ordinals[SystemEffectFamily.REGENERATION] = ordinal + 1
         pending.append(
-            PendingSystemDetail(
+            _pending_system(
                 effect_family=SystemEffectFamily.REGENERATION,
                 entity_id=resource_id,
                 family_ordinal=ordinal,
@@ -210,6 +237,7 @@ def apply_autonomous_physical_step(
                     quantity_delta=round_physical(resulting - resource.quantity),
                     resulting_quantity=resulting,
                 ),
+                origin_location_id=resource.location_id,
             )
         )
     if resources_changed:
@@ -270,7 +298,7 @@ def apply_autonomous_physical_step(
         needs_ordinal = family_ordinals[SystemEffectFamily.COMBINED_NEEDS]
         family_ordinals[SystemEffectFamily.COMBINED_NEEDS] = needs_ordinal + 1
         pending.append(
-            PendingSystemDetail(
+            _pending_system(
                 effect_family=SystemEffectFamily.COMBINED_NEEDS,
                 entity_id=body_id,
                 family_ordinal=needs_ordinal,
@@ -282,13 +310,14 @@ def apply_autonomous_physical_step(
                     health_delta=health_delta,
                     resulting_health=next_body.health.value,
                 ),
+                origin_location_id=body.location_id,
             )
         )
         if died_from_needs:
             death_ordinal = family_ordinals[SystemEffectFamily.COMBINED_NEEDS]
             family_ordinals[SystemEffectFamily.COMBINED_NEEDS] = death_ordinal + 1
             pending.append(
-                PendingSystemDetail(
+                _pending_system(
                     effect_family=SystemEffectFamily.COMBINED_NEEDS,
                     entity_id=body_id,
                     family_ordinal=death_ordinal,
@@ -296,6 +325,7 @@ def apply_autonomous_physical_step(
                         body_id=body_id,
                         death_cause=DeathCause.COMBINED_NEEDS,
                     ),
+                    origin_location_id=body.location_id,
                 )
             )
             continue
@@ -343,7 +373,7 @@ def apply_autonomous_physical_step(
         exposure_ordinal = family_ordinals[SystemEffectFamily.EXPOSURE]
         family_ordinals[SystemEffectFamily.EXPOSURE] = exposure_ordinal + 1
         pending.append(
-            PendingSystemDetail(
+            _pending_system(
                 effect_family=SystemEffectFamily.EXPOSURE,
                 entity_id=body_id,
                 family_ordinal=exposure_ordinal,
@@ -354,13 +384,14 @@ def apply_autonomous_physical_step(
                     health_delta=exposure_health_delta,
                     resulting_health=exposed_body.health.value,
                 ),
+                origin_location_id=body.location_id,
             )
         )
         if died_from_exposure:
             death_ordinal = family_ordinals[SystemEffectFamily.EXPOSURE]
             family_ordinals[SystemEffectFamily.EXPOSURE] = death_ordinal + 1
             pending.append(
-                PendingSystemDetail(
+                _pending_system(
                     effect_family=SystemEffectFamily.EXPOSURE,
                     entity_id=body_id,
                     family_ordinal=death_ordinal,
@@ -368,6 +399,7 @@ def apply_autonomous_physical_step(
                         body_id=body_id,
                         death_cause=DeathCause.EXPOSURE,
                     ),
+                    origin_location_id=body.location_id,
                 )
             )
 
