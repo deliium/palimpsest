@@ -1,0 +1,33 @@
+from agents.cognition.models import CognitiveLoopInput, InternalAgentState
+from agents.models import AgentId
+from llm.models import LLMResult, StructuredOutput
+from world._state import WorldState
+from world.actions import AgentCommand
+
+
+class DecisionOutput(StructuredOutput):
+    kind: str
+
+
+def accept_loop_input(value: CognitiveLoopInput) -> None:
+    return None
+
+
+def accept_command(value: AgentCommand) -> None:
+    return None
+
+
+def _bad_world_state(state: WorldState) -> None:
+    accept_loop_input(state)
+
+
+def _bad_mapping(payload: dict[str, object]) -> None:
+    accept_command(payload)
+
+
+def _bad_llm_result(result: LLMResult[DecisionOutput]) -> None:
+    accept_command(result)
+
+
+def _unused() -> None:
+    _ = (AgentId, InternalAgentState)

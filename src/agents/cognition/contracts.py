@@ -1,26 +1,96 @@
-"""Architecture-neutral cognition strategy protocol.
+"""Architecture-neutral cognition strategy and async component protocols.
 
-``Perspective`` is the sole propose() input. Strategies receive one agent's
-observation plus separate subjective memories/beliefs and an optional
-out-of-band social inbox. They must not accept ``WorldState``, ``World``,
-engine snapshots, raw event batches, or another agent's observation.
-
-Social ``inbox`` envelopes are out-of-band mail. Delivered communication
-claims live on ``Observation.communications`` and are never auto-copied into
-the inbox (orchestration must avoid duplicate delivery semantics).
+``Perspective`` remains the sole ``CognitionStrategy.propose()`` input.
+``CognitiveLoop`` uses narrow async stage protocols with typed Task-1
+artifacts. Components must not accept ``WorldState``, ``World``, engine
+snapshots, raw event batches, repositories, mutable writers, or another
+agent's observation.
 """
 
 from __future__ import annotations
 
 from collections.abc import Sequence
 from dataclasses import dataclass
+from enum import StrEnum
 from typing import Protocol
 
+from agents.cognition.models import (
+    ActionPlan,
+    CognitiveLoopInput,
+    InterpretedPerception,
+    MemoryUpdateIntent,
+    MotivationEvaluation,
+    PossibleFutures,
+    RetrievedMemoryContext,
+    SelectedIntention,
+    SelfBeliefState,
+    SituationModel,
+)
 from agents.models import AgentId
 from memory.models import Belief, MemoryTrace
 from social.models import CommunicationEnvelope
 from world.actions import AgentCommand
 from world.observations import Observation
+
+__all__ = [
+    "CognitionContractError",
+    "CognitionContractErrorCode",
+    "CognitionStrategy",
+    "FutureImagination",
+    "IntentionSelector",
+    "MemoryRetriever",
+    "MemoryUpdateHook",
+    "MotivationEvaluator",
+    "PerceptionInterpreter",
+    "Perspective",
+    "Planner",
+    "SelfStateProjector",
+    "SituationModeler",
+]
+
+
+class CognitionContractErrorCode(StrEnum):
+    """Stable contract failure codes (no payload or exception text)."""
+
+    TYPE_MISMATCH = "type_mismatch"
+    OWNERSHIP = "ownership"
+    INVALID_SEQUENCE = "invalid_sequence"
+
+
+class CognitionContractError(Exception):
+    """Fail-closed boundary error exposing only safe identifiers."""
+
+    def __init__(
+        self,
+        code: CognitionContractErrorCode,
+        *,
+        component: str,
+        ordinal: int | None = None,
+    ) -> None:
+        if type(code) is not CognitionContractErrorCode:
+            raise TypeError("code must be CognitionContractErrorCode")
+        component_name = component.strip()
+        if not component_name:
+            raise ValueError("component must be non-blank")
+        self.code = code
+        self.component = component_name
+        self.ordinal = ordinal
+        parts = [f"code={code.value}", f"component={component_name}"]
+        if ordinal is not None:
+            parts.append(f"ordinal={ordinal}")
+        super().__init__(",".join(parts))
+
+    def log_fields(self) -> dict[str, object]:
+        fields: dict[str, object] = {
+            "code": self.code.value,
+            "component": self.component,
+        }
+        if self.ordinal is not None:
+            fields["ordinal"] = self.ordinal
+        return fields
+
+    def __repr__(self) -> str:
+        return f"CognitionContractError({self})"
 
 
 def _owned_tuple(
@@ -106,3 +176,102 @@ class CognitionStrategy(Protocol):
     def propose(self, perspective: Perspective) -> AgentCommand:
         """Return an agent command. Must not mutate world state."""
         ...
+
+
+class PerceptionInterpreter(Protocol):
+    """Interpret one observation into structured perception claims."""
+
+    async def interpret(self, loop_input: CognitiveLoopInput) -> InterpretedPerception:
+        """Return interpreted perception for ``loop_input.agent_id`` only."""
+        ...
+
+
+class MemoryRetriever(Protocol):
+    """Read-only owner-scoped memory/belief retrieval."""
+
+    async def retrieve(
+        self,
+        loop_input: CognitiveLoopInput,
+        perception: InterpretedPerception,
+    ) -> RetrievedMemoryContext:
+        """Return references only; must not mutate memory stores."""
+        ...
+
+
+class SituationModeler(Protocol):
+    """Build a situation model from perception and memory context."""
+
+    async def model(
+        self,
+        loop_input: CognitiveLoopInput,
+        perception: InterpretedPerception,
+        memory: RetrievedMemoryContext,
+    ) -> SituationModel: ...
+
+
+class SelfStateProjector(Protocol):
+    """Project self/belief identifiers for the owning agent."""
+
+    async def project(
+        self,
+        loop_input: CognitiveLoopInput,
+        situation: SituationModel,
+        memory: RetrievedMemoryContext,
+    ) -> SelfBeliefState: ...
+
+
+class FutureImagination(Protocol):
+    """Produce bounded imagined futures (placeholder or later LLM-backed)."""
+
+    async def imagine(
+        self,
+        loop_input: CognitiveLoopInput,
+        situation: SituationModel,
+        self_state: SelfBeliefState,
+    ) -> PossibleFutures: ...
+
+
+class MotivationEvaluator(Protocol):
+    """Score closed motives from situation, self-state, and futures."""
+
+    async def evaluate(
+        self,
+        loop_input: CognitiveLoopInput,
+        situation: SituationModel,
+        self_state: SelfBeliefState,
+        futures: PossibleFutures,
+    ) -> MotivationEvaluation: ...
+
+
+class IntentionSelector(Protocol):
+    """Select one closed intention from motivation scores."""
+
+    async def select(
+        self,
+        loop_input: CognitiveLoopInput,
+        motivation: MotivationEvaluation,
+    ) -> SelectedIntention: ...
+
+
+class Planner(Protocol):
+    """Construct a fresh closed ``AgentCommand`` plan from the intention."""
+
+    async def plan(
+        self,
+        loop_input: CognitiveLoopInput,
+        intention: SelectedIntention,
+        futures: PossibleFutures,
+    ) -> ActionPlan: ...
+
+
+class MemoryUpdateHook(Protocol):
+    """Return post-cognition memory/belief write intents (no store mutation)."""
+
+    async def propose_updates(
+        self,
+        loop_input: CognitiveLoopInput,
+        plan: ActionPlan,
+        perception: InterpretedPerception,
+        memory: RetrievedMemoryContext,
+        intention: SelectedIntention,
+    ) -> tuple[MemoryUpdateIntent, ...]: ...

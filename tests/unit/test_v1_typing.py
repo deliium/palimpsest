@@ -40,6 +40,11 @@ def test_valid_cognition_strategies_typecheck() -> None:
     assert completed.returncode == 0, completed.stdout + completed.stderr
 
 
+def test_valid_cognitive_loop_typecheck() -> None:
+    completed = _run_mypy(TYPECHECK / "cognitive_loop.py")
+    assert completed.returncode == 0, completed.stdout + completed.stderr
+
+
 def test_valid_llm_providers_typecheck() -> None:
     completed = _run_mypy(TYPECHECK / "llm_providers.py")
     assert completed.returncode == 0, completed.stdout + completed.stderr
@@ -59,6 +64,7 @@ def test_valid_persistence_contracts_typecheck() -> None:
         ("bad_lifecycle_authority.txt", "return-value"),
         ("bad_persistence_authority.txt", "return-value"),
         ("bad_cognition_authority.txt", "arg-type"),
+        ("bad_cognitive_loop_authority.txt", "arg-type"),
         ("bad_llm_result_as_command.txt", "return-value"),
     ],
 )
