@@ -233,6 +233,11 @@ class SemanticBeliefEvidenceOrm(Base):
             "contribution >= 0.0 AND contribution <= 1.0",
             name="ck_sem_belief_ev_contribution",
         ),
+        CheckConstraint(
+            "testimony_decision IS NULL OR testimony_decision IN "
+            "('accept', 'discount', 'contradict', 'defer')",
+            name="ck_sem_belief_ev_testimony_decision",
+        ),
     )
 
     run_id: Mapped[str] = mapped_column(String(_STABLE_ID_LEN), nullable=False)
@@ -244,6 +249,36 @@ class SemanticBeliefEvidenceOrm(Base):
     lineage_root_id: Mapped[str] = mapped_column(String(_STABLE_ID_LEN), nullable=False)
     stance: Mapped[str] = mapped_column(String(16), nullable=False)
     contribution: Mapped[float] = mapped_column(Float, nullable=False)
+    testimony_decision: Mapped[str | None] = mapped_column(String(16), nullable=True)
+    testimony_hop_count: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    testimony_trust: Mapped[float | None] = mapped_column(Float, nullable=True)
+    testimony_trust_confidence: Mapped[float | None] = mapped_column(
+        Float, nullable=True
+    )
+    testimony_sender_confidence: Mapped[float | None] = mapped_column(
+        Float, nullable=True
+    )
+    testimony_receiver_confidence: Mapped[float | None] = mapped_column(
+        Float, nullable=True
+    )
+    testimony_context_relevance: Mapped[float | None] = mapped_column(
+        Float, nullable=True
+    )
+    testimony_hop_attenuation: Mapped[float | None] = mapped_column(
+        Float, nullable=True
+    )
+    testimony_base_contribution: Mapped[float | None] = mapped_column(
+        Float, nullable=True
+    )
+    testimony_adjusted_contribution: Mapped[float | None] = mapped_column(
+        Float, nullable=True
+    )
+    testimony_confidence_delta: Mapped[float | None] = mapped_column(
+        Float, nullable=True
+    )
+    testimony_policy_version: Mapped[str | None] = mapped_column(
+        String(_MAX_POLICY), nullable=True
+    )
 
 
 class DirectedRelationshipOrm(Base):

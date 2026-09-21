@@ -67,6 +67,10 @@ from persistence.memory_orm import (
     MemoryRelationOrm,
     MemoryTraceOrm,
 )
+from persistence.transmission_mapping import (
+    transmission_from_row,
+    transmission_to_columns,
+)
 
 __all__ = [
     "SqlAlchemyMemoryService",
@@ -753,6 +757,7 @@ class SqlAlchemyMemoryService:
                         speaker_id=(
                             None if row.speaker_id is None else EntityId(row.speaker_id)
                         ),
+                        transmission=transmission_from_row(row),
                     ),
                     created_tick=int(row.created_tick),
                     source_tick=int(row.source_tick),
@@ -880,6 +885,7 @@ class SqlAlchemyMemoryService:
                     if trace.provenance.speaker_id is None
                     else trace.provenance.speaker_id.value
                 ),
+                **transmission_to_columns(trace.provenance.transmission),
                 created_tick=trace.created_tick,
                 source_tick=trace.source_tick,
                 last_access_tick=trace.last_access_tick,

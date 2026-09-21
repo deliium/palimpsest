@@ -65,6 +65,10 @@ from persistence.subjective_orm import (
     SemanticBeliefRevisionOrm,
     SubjectiveOperationOrm,
 )
+from persistence.transmission_mapping import (
+    applied_factors_from_row,
+    applied_factors_to_columns,
+)
 from simulation.subjective_state import (
     SubjectiveApplyReceipt,
     SubjectiveMutationBatch,
@@ -947,6 +951,7 @@ class SqlAlchemySubjectiveStateService:
                     lineage_root_id=item.lineage_root_id.value,
                     stance=item.stance.value,
                     contribution=item.contribution,
+                    **applied_factors_to_columns(item.applied_factors),
                 )
             )
         await session.flush()
@@ -1243,6 +1248,7 @@ def _evidence_bundle_from_rows(
             contribution=float(row.contribution),
             ordinal=int(row.ordinal),
             lineage_root_id=MemoryId(row.lineage_root_id),
+            applied_factors=applied_factors_from_row(row),
         )
         if contribution.stance is EvidenceStance.SUPPORTING:
             supporting.append(contribution)

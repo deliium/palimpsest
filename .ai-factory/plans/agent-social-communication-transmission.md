@@ -98,7 +98,7 @@ Rationale: This feature completes the cognition-to-social-action path and connec
 
 ### Phase 3: Durability, Measurement, and Scenarios
 
-- [ ] Task 7: Persist communicated provenance and confidence history atomically.
+- [x] Task 7: Persist communicated provenance and confidence history atomically.
 
   Deliverable: Add migration `0008` and SQLAlchemy mappings for transmission metadata on memory traces and belief evidence, including immediate source, parent communication correlation, ordered source chain, hop count, action kind, confidence-at-send/receipt, transmission-root correlation, and applied confidence factors/delta. Update in-memory and PostgreSQL adapters, subjective serialization, analysis evidence loading, transaction fingerprints, idempotency, and rollback behavior. Keep subjective records outside authoritative event history, preserve owner isolation, and reject cross-owner memory lineage even when communication source metadata references another agent.
 
@@ -108,7 +108,7 @@ Rationale: This feature completes the cognition-to-social-action path and connec
 
   Dependencies: Tasks 3, 4, and 6.
 
-- [ ] Task 8: Add read-only rumor-propagation and cross-hop distortion analysis.
+- [x] Task 8: Add read-only rumor-propagation and cross-hop distortion analysis.
 
   Deliverable: Add immutable analysis DTOs and a service that joins communication events with communicated traces/reconstructions after the fact to build transmission graphs. Report transmission root, ordered source chain, unique agents reached, branch/fan-out counts, maximum and per-record hop counts, timing, per-hop structured additions/losses/changes, cumulative distortion, sender/receiver confidence and deltas, provenance continuity, and unresolved/forged declared links. Derive metrics generically from communication and memory evidence; do not define rumor/myth/tradition categories and never feed analysis results back into live cognition. Extend persistence evidence loaders only through public read-only contracts.
 
@@ -118,7 +118,7 @@ Rationale: This feature completes the cognition-to-social-action path and connec
 
   Dependencies: Tasks 3, 4, and 7.
 
-- [ ] Task 9: Prove multi-agent spreading, distortion, privacy, and boundaries with deterministic scenarios and documentation.
+- [x] Task 9: Prove multi-agent spreading, distortion, privacy, and boundaries with deterministic scenarios and documentation.
 
   Deliverable: Add an in-memory Alice -> Bob -> Carol scenario that begins with Alice's direct observation, records Alice's owner-scoped memory and reconstruction, emits a grounded `Tell`, records Bob's communicated trace, applies configurable trust-weighted belief handling, reconstructs with deterministic distortion, retells to Carol, and verifies the complete transmission chain without shared memories. Cover all `talk`/`ask`/`tell` actions; denied remote/dead/invisible recipients; next-tick private delivery; no bystander leakage; no automatic answer or belief update; low/high trust outcomes; repeated reports from one root not counting as independent corroboration; per-hop confidence changes; gradual scripted distortion; deterministic replay; persistence round trips; malformed/forged lineage rejection; and payload-free logs. Add Hypothesis coverage for bounded hop/distortion schedules and architecture tests forbidding cognition/memory access to objective event stores. Update contributor-facing architecture and memory documentation, including the distinction between objective delivery, declared testimony, owner-scoped derivation, and read-only analysis.
 

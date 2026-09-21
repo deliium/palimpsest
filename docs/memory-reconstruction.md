@@ -103,9 +103,9 @@ Configured on `MemoryScoringPolicy` / `MemoryRetentionPolicy` / reconstruction p
 
 Tie-break remains `score DESC, created_tick DESC, memory_id ASC`.
 
-## Persistence (Alembic `0006` / `0007`)
+## Persistence (Alembic `0006` / `0007` / `0008`)
 
-Reconstruction provenance tables (`0006`) stay under `SUBJECTIVE_MEMORY_TABLES`. Semantic belief and directed relationship tables (`0007`) live under `SUBJECTIVE_AGENT_TABLES`. Belief evidence references owned `memory_traces` only — never `world_events`.
+Reconstruction provenance tables (`0006`) stay under `SUBJECTIVE_MEMORY_TABLES`. Semantic belief and directed relationship tables (`0007`) live under `SUBJECTIVE_AGENT_TABLES`. Revision `0008` adds communicated transmission metadata on `memory_traces` and applied testimony factors on `semantic_belief_evidence`. Belief evidence references owned `memory_traces` only — never `world_events`.
 
 | Table | Mutability |
 | --- | --- |

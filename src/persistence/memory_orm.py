@@ -173,6 +173,22 @@ class MemoryTraceOrm(Base):
             "observed_source_id",
             postgresql_where=text("observed_source_id IS NOT NULL"),
         ),
+        Index(
+            "ix_memory_traces_scope_transmission_root",
+            "run_id",
+            "owner_id",
+            "transmission_root_id",
+            postgresql_where=text("transmission_root_id IS NOT NULL"),
+        ),
+        CheckConstraint(
+            "transmission_action_kind IS NULL OR "
+            "transmission_action_kind IN ('talk', 'ask', 'tell')",
+            name="transmission_action_kind_closed",
+        ),
+        CheckConstraint(
+            "transmission_hop_count IS NULL OR transmission_hop_count >= 0",
+            name="transmission_hop_nonneg",
+        ),
     )
 
     run_id: Mapped[str] = mapped_column(String(_STABLE_ID_LEN), nullable=False)
@@ -188,6 +204,34 @@ class MemoryTraceOrm(Base):
     )
     speaker_id: Mapped[str | None] = mapped_column(
         String(_STABLE_ID_LEN), nullable=True
+    )
+    transmission_communication_id: Mapped[str | None] = mapped_column(
+        String(_STABLE_ID_LEN), nullable=True
+    )
+    transmission_action_kind: Mapped[str | None] = mapped_column(
+        String(8), nullable=True
+    )
+    transmission_hop_count: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    transmission_sender_confidence: Mapped[float | None] = mapped_column(
+        Float, nullable=True
+    )
+    transmission_receiver_confidence: Mapped[float | None] = mapped_column(
+        Float, nullable=True
+    )
+    transmission_content_fingerprint: Mapped[str | None] = mapped_column(
+        String(_STABLE_ID_LEN), nullable=True
+    )
+    transmission_parent_communication_id: Mapped[str | None] = mapped_column(
+        String(_STABLE_ID_LEN), nullable=True
+    )
+    transmission_source_agent_chain: Mapped[list[str] | None] = mapped_column(
+        ARRAY(Text), nullable=True
+    )
+    transmission_root_id: Mapped[str | None] = mapped_column(
+        String(_STABLE_ID_LEN), nullable=True
+    )
+    transmission_policy_version: Mapped[str | None] = mapped_column(
+        String(_MAX_POLICY_ID_CHARS), nullable=True
     )
     created_tick: Mapped[int] = mapped_column(BigInteger, nullable=False)
     source_tick: Mapped[int] = mapped_column(BigInteger, nullable=False)

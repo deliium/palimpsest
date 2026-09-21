@@ -12,7 +12,7 @@
 
 ## Objective history
 
-Authoritative history is the ordered stream of replay-capable `WorldEvent` records plus per-tick commit rows (including eventless ticks). Payloads store committed effects, not instructions to re-run current rules. Subjective episodic memory, reconstruction provenance, semantic beliefs, and directed relationships live in separate tables (Alembic `0005`/`0006`/`0007`) and are never joined into objective replay. LLM transcripts remain outside both streams; cognition replay still needs recorded provider responses or stubs.
+Authoritative history is the ordered stream of replay-capable `WorldEvent` records plus per-tick commit rows (including eventless ticks). Payloads store committed effects, not instructions to re-run current rules. Subjective episodic memory, reconstruction provenance, semantic beliefs, directed relationships, and transmission provenance live in separate tables (Alembic `0005`/`0006`/`0007`/`0008`) and are never joined into objective replay. LLM transcripts remain outside both streams; cognition replay still needs recorded provider responses or stubs.
 
 ## Episodic memory (subjective)
 
@@ -66,7 +66,7 @@ Relationship dimensions are only: trust, fear, affection, debt, respect, resentm
 | Derivation v1 / v2 | Deterministic ID/stream derivation (v2 includes rules fingerprint) |
 | Subjective codec v1 | Semantic beliefs, relationship profiles, mutation receipts (non-authoritative) |
 
-Runs never mix replay schema versions. Legacy schema-v1 audit events remain decodable for export but must not enter the authoritative log. Alembic revision `0004` persists SQL cause/occurrence columns so restored engines reproduce the same next observation as live engines (eventful and eventless prior windows). Revision `0005` adds owner-scoped episodic memory tables. Revision `0006` adds reconstruction/derivation provenance with selective immutability. Revision `0007` adds semantic belief and directed relationship tables. Observation codecs round-trip every field and provenance type with exact keys.
+Runs never mix replay schema versions. Legacy schema-v1 audit events remain decodable for export but must not enter the authoritative log. Alembic revision `0004` persists SQL cause/occurrence columns so restored engines reproduce the same next observation as live engines (eventful and eventless prior windows). Revision `0005` adds owner-scoped episodic memory tables. Revision `0006` adds reconstruction/derivation provenance with selective immutability. Revision `0007` adds semantic belief and directed relationship tables. Revision `0008` adds communicated transmission metadata and testimony-factor columns. Observation codecs round-trip every field and provenance type with exact keys.
 
 ## Append-only store
 

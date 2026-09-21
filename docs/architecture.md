@@ -22,7 +22,7 @@ Palimpsest is a modular monolith under `src/`. Cross-module imports must target 
 
 Private world authority (`world/_state.py`, `world/_transitions.py`, `world/_operations.py`, `world/_rules.py`, `world/_physical.py`, `world/_perception.py`, `world/_replay.py`) may be imported only by `simulation.engine`, `simulation.bootstrap`, and other private `world._*` modules. They are not re-exported from `world`.
 
-`memory` and `social` are independent (no cross-imports). Base `agents` must not import `agents.cognition`. `llm` imports no domain module. `simulation` must not import `api`, `analysis`, `infrastructure`, or `persistence`. Domain packages do not import `infrastructure`. `persistence` may import public `memory` and `social` facades for durable subjective adapters (intentional). `analysis` may import `memory` read-only contracts for drift analysis. Subjective beliefs, self-model projections, and relationship profiles never become `WorldEvent` variants or enter `AUTHORITATIVE_TABLES`. See [Persistence](persistence.md) and [Memory reconstruction](memory-reconstruction.md).
+`memory` and `social` are independent (no cross-imports). Base `agents` must not import `agents.cognition`. `llm` imports no domain module. `simulation` must not import `api`, `analysis`, `infrastructure`, or `persistence`. Domain packages do not import `infrastructure`. `persistence` may import public `memory` and `social` facades for durable subjective adapters (intentional). `analysis` may import `memory` read-only contracts for drift and social-transmission analysis. Subjective beliefs, self-model projections, and relationship profiles never become `WorldEvent` variants or enter `AUTHORITATIVE_TABLES`. See [Persistence](persistence.md), [Memory reconstruction](memory-reconstruction.md), and [Social communication](social-communication.md).
 
 Import-linter (`pyproject.toml`) and `tests/architecture/boundary_checker.py` enforce the allowlist, private-world authority, public facades, framework leakage, provider SDKs, and prohibited `random` / wall-clock / UUID defaults in domain code.
 
@@ -126,6 +126,7 @@ Production PostgreSQL privilege design for `CREATE EXTENSION` is deferred; devel
 
 - [Cognition and agent runtime](cognition-runtime.md)
 - [Memory reconstruction](memory-reconstruction.md)
+- [Social communication](social-communication.md)
 - [LLM providers](llm-providers.md)
 - [Physical simulation](physical-simulation.md)
 - [Configuration](configuration.md)

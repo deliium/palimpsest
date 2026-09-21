@@ -20,6 +20,7 @@ from analysis.memory_drift import (
     resolve_objective_link,
 )
 from analysis.models import (
+    SOCIAL_TRANSMISSION_METRIC_VERSION,
     ChainNodeKind,
     ComparisonStatus,
     DriftDelta,
@@ -30,10 +31,17 @@ from analysis.models import (
     ReconstructionChain,
     ReconstructionChainNode,
     ReconstructionEvidence,
+    SocialTransmissionReport,
     StructuredFactSet,
     SubjectiveDerivationEdge,
+    TransmissionDistortion,
+    TransmissionHopRecord,
 )
 from analysis.service import MemoryDriftAnalysisService
+from analysis.social_transmission import (
+    SocialTransmissionAnalysisService,
+    build_social_transmission_report,
+)
 from analysis.sources import (
     InMemoryMemoryEvidenceSource,
     InMemoryObjectiveEventSource,
@@ -43,6 +51,7 @@ from analysis.sources import (
 __all__ = [
     "DRIFT_METRIC_VERSION",
     "EVENT_FACT_PROJECTOR_VERSION",
+    "SOCIAL_TRANSMISSION_METRIC_VERSION",
     "ChainNodeKind",
     "ComparisonStatus",
     "DriftDelta",
@@ -60,9 +69,14 @@ __all__ = [
     "ReconstructionChain",
     "ReconstructionChainNode",
     "ReconstructionEvidence",
+    "SocialTransmissionAnalysisService",
+    "SocialTransmissionReport",
     "StructuredFactSet",
     "SubjectiveDerivationEdge",
+    "TransmissionDistortion",
+    "TransmissionHopRecord",
     "build_reconstruction_chains",
+    "build_social_transmission_report",
     "compare_fact_sets",
     "cumulative_drift",
     "evidence_from_reconstructed_memory",

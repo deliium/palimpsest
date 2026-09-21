@@ -48,6 +48,7 @@ from persistence.memory_orm import (
 )
 from persistence.orm import ExperimentRunOrm, WorldEventOrm
 from persistence.readers import event_from_orm
+from persistence.transmission_mapping import transmission_from_row
 
 __all__ = [
     "PersistedAnalysisSnapshot",
@@ -495,6 +496,7 @@ async def _assemble_traces(
                     speaker_id=(
                         None if row.speaker_id is None else EntityId(row.speaker_id)
                     ),
+                    transmission=transmission_from_row(row),
                 ),
                 created_tick=int(row.created_tick),
                 source_tick=int(row.source_tick),

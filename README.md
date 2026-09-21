@@ -51,12 +51,13 @@ Development credentials in `compose.yaml` are **not production**. `docker compos
 | --- | --- |
 | [Architecture](docs/architecture.md) | Bounded packages, `WorldEngine` lifecycle, perception boundary, eleven invariants |
 | [Cognition and agent runtime](docs/cognition-runtime.md) | `CognitiveLoop`, drives/goals, subjective imagination/motivation/intention, `AgentRuntime`, metadata-only logs |
-| [Memory reconstruction](docs/memory-reconstruction.md) | Subjective recall, reconsolidation, lineage, drift analysis, Alembic `0006`/`0007`, safe logging |
+| [Memory reconstruction](docs/memory-reconstruction.md) | Subjective recall, reconsolidation, lineage, drift analysis, Alembic `0006`/`0007`/`0008`, safe logging |
+| [Social communication](docs/social-communication.md) | Talk/Ask/Tell delivery vs testimony, owner-scoped traces, trust-weighted beliefs, transmission analysis |
 | [LLM providers](docs/llm-providers.md) | Structured `LLMProvider`, modes, retries, prompts, local OpenAI-compatible config, fakes |
 | [Physical simulation](docs/physical-simulation.md) | Topology, capacities, actions, physiology, death, schema-v4, tests |
 | [Configuration](docs/configuration.md) | `PALIMPSEST_` settings (including `PALIMPSEST_LLM_*`), logging, redaction, seeds, identifiers, clocks |
-| [Development](docs/development.md) | Tests, migrations (head `0007`), local and Docker workflows, exact commands |
-| [Persistence](docs/persistence.md) | Event store, Alembic through `0007`, episodic + subjective agent models, replay |
+| [Development](docs/development.md) | Tests, migrations (head `0008`), local and Docker workflows, exact commands |
+| [Persistence](docs/persistence.md) | Event store, Alembic through `0008`, episodic + subjective agent models, replay |
 
 ## Invariants (summary)
 

@@ -15,6 +15,7 @@ from world.identifiers import require_exact_nonneg_int, require_stable_id
 __all__ = [
     "DRIFT_METRIC_VERSION",
     "EVENT_FACT_PROJECTOR_VERSION",
+    "SOCIAL_TRANSMISSION_METRIC_VERSION",
     "ChainNodeKind",
     "ComparisonStatus",
     "DriftDelta",
@@ -25,8 +26,11 @@ __all__ = [
     "ReconstructionChain",
     "ReconstructionChainNode",
     "ReconstructionEvidence",
+    "SocialTransmissionReport",
     "StructuredFactSet",
     "SubjectiveDerivationEdge",
+    "TransmissionDistortion",
+    "TransmissionHopRecord",
 ]
 
 DRIFT_METRIC_VERSION: Final[str] = "1"
@@ -497,4 +501,136 @@ class ReconstructionEvidence:
             f"source_count={len(self.source_memory_ids)}, "
             f"generation={self.generation}, "
             f"content_available={self.content_available})"
+        )
+
+
+SOCIAL_TRANSMISSION_METRIC_VERSION: Final[str] = "1"
+
+
+@dataclass(frozen=True, slots=True)
+class TransmissionHopRecord:
+    """One hop in a transmission chain (metadata only)."""
+
+    communication_id: str
+    event_id: str | None
+    speaker_id: str
+    listener_id: str | None
+    action_kind: str
+    hop_count: int
+    tick: int
+    sender_confidence: float | None
+    receiver_confidence: float | None
+    transmission_root_id: str
+    concept_count: int
+    relation_count: int
+
+    def __post_init__(self) -> None:
+        object.__setattr__(
+            self,
+            "communication_id",
+            require_stable_id(
+                "TransmissionHopRecord.communication_id", self.communication_id
+            ),
+        )
+        object.__setattr__(
+            self,
+            "hop_count",
+            require_exact_nonneg_int("TransmissionHopRecord.hop_count", self.hop_count),
+        )
+        object.__setattr__(
+            self,
+            "tick",
+            require_exact_nonneg_int("TransmissionHopRecord.tick", self.tick),
+        )
+
+    def __repr__(self) -> str:
+        return (
+            f"TransmissionHopRecord(communication_id={self.communication_id!r}, "
+            f"hop_count={self.hop_count}, action_kind={self.action_kind!r}, "
+            f"tick={self.tick})"
+        )
+
+
+@dataclass(frozen=True, slots=True)
+class TransmissionDistortion:
+    """Per-hop structured additions/losses/changes without payload text."""
+
+    from_communication_id: str
+    to_communication_id: str
+    concepts_added: int
+    concepts_removed: int
+    relations_added: int
+    relations_removed: int
+    cumulative_change: int
+
+    def __repr__(self) -> str:
+        return (
+            f"TransmissionDistortion("
+            f"from={self.from_communication_id!r}, to={self.to_communication_id!r}, "
+            f"cumulative_change={self.cumulative_change})"
+        )
+
+
+@dataclass(frozen=True, slots=True)
+class SocialTransmissionReport:
+    """Read-only transmission graph metrics for one experiment run."""
+
+    experiment_id: str
+    run_id: str
+    metric_version: str
+    transmission_root_id: str
+    hops: tuple[TransmissionHopRecord, ...]
+    distortions: tuple[TransmissionDistortion, ...]
+    unique_agent_count: int
+    branch_count: int
+    fan_out_count: int
+    max_hop_count: int
+    unresolved_link_count: int
+    event_count: int
+    trace_count: int
+
+    def __post_init__(self) -> None:
+        object.__setattr__(
+            self,
+            "experiment_id",
+            require_stable_id(
+                "SocialTransmissionReport.experiment_id", self.experiment_id
+            ),
+        )
+        object.__setattr__(
+            self,
+            "run_id",
+            require_stable_id("SocialTransmissionReport.run_id", self.run_id),
+        )
+        object.__setattr__(
+            self,
+            "transmission_root_id",
+            require_stable_id(
+                "SocialTransmissionReport.transmission_root_id",
+                self.transmission_root_id,
+            ),
+        )
+        object.__setattr__(
+            self,
+            "unique_agent_count",
+            require_exact_nonneg_int(
+                "SocialTransmissionReport.unique_agent_count", self.unique_agent_count
+            ),
+        )
+        object.__setattr__(
+            self,
+            "max_hop_count",
+            require_exact_nonneg_int(
+                "SocialTransmissionReport.max_hop_count", self.max_hop_count
+            ),
+        )
+
+    def __repr__(self) -> str:
+        return (
+            f"SocialTransmissionReport(experiment_id={self.experiment_id!r}, "
+            f"run_id={self.run_id!r}, root={self.transmission_root_id!r}, "
+            f"hop_count={len(self.hops)}, max_hop={self.max_hop_count}, "
+            f"unique_agents={self.unique_agent_count}, "
+            f"unresolved={self.unresolved_link_count}, "
+            f"metric_version={self.metric_version!r})"
         )
