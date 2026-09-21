@@ -259,3 +259,100 @@ def test_checker_rejects_global_random_outside_adapter(tmp_path: Path) -> None:
         },
     )
     assert "nondeterministic-call" in _rules(leaked_adapter)
+
+
+def test_checker_rejects_provider_sdk_imports(tmp_path: Path) -> None:
+    root = _write_tree(
+        tmp_path,
+        {
+            "llm/__init__.py": "import openai\n",
+        },
+    )
+    report = _messages(root)
+    assert "provider-sdk" in _rules(root)
+    assert "llm -> openai" in report
+
+
+def test_checker_rejects_llm_importing_world_or_infrastructure(tmp_path: Path) -> None:
+    world_leak = _write_tree(
+        tmp_path / "world_leak",
+        {
+            "llm/__init__.py": "from world.actions import Wait\n",
+            "world/__init__.py": _PUBLIC_INIT,
+            "world/actions.py": "class Wait:\n    pass\n",
+        },
+    )
+    world_report = _messages(world_leak)
+    assert "import-allowlist" in _rules(world_leak)
+    assert "llm -> world" in world_report
+
+    infra_leak = _write_tree(
+        tmp_path / "infra_leak",
+        {
+            "llm/__init__.py": "from infrastructure.logging import configure_logging\n",
+            "infrastructure/__init__.py": _PUBLIC_INIT,
+            "infrastructure/logging.py": "def configure_logging() -> None:\n    pass\n",
+        },
+    )
+    infra_report = _messages(infra_leak)
+    assert "import-allowlist" in _rules(infra_leak)
+    assert "llm -> infrastructure" in infra_report
+
+
+def test_checker_rejects_llm_wall_clock_and_random(tmp_path: Path) -> None:
+    clock = _write_tree(
+        tmp_path / "clock",
+        {
+            "llm/__init__.py": (
+                "import time\n\ndef stamp() -> float:\n    return time.monotonic()\n"
+            ),
+        },
+    )
+    assert "nondeterministic-call" in _rules(clock)
+
+    rng = _write_tree(
+        tmp_path / "rng",
+        {
+            "llm/__init__.py": (
+                "import random\n\ndef jitter() -> float:\n    return random.random()\n"
+            ),
+        },
+    )
+    assert "nondeterministic-call" in _rules(rng)
+
+
+def test_checker_rejects_llm_unsafe_logging(tmp_path: Path) -> None:
+    sensitive = _write_tree(
+        tmp_path / "sensitive",
+        {
+            "llm/__init__.py": (
+                "import logging\n"
+                "_LOG = logging.getLogger('llm.test')\n"
+                "_LOG.info('leak agent_id=%s prompt=%s', 'a', 'secret')\n"
+            ),
+        },
+    )
+    sensitive_report = _messages(sensitive)
+    assert "unsafe-logging" in _rules(sensitive)
+    assert "agent_id" in sensitive_report
+    assert "prompt" in sensitive_report
+
+    exc_info = _write_tree(
+        tmp_path / "exc",
+        {
+            "llm/__init__.py": (
+                "import logging\n"
+                "_LOG = logging.getLogger('llm.test')\n"
+                "_LOG.error('boom', exc_info=True)\n"
+            ),
+        },
+    )
+    assert "unsafe-logging" in _rules(exc_info)
+
+    structlog_leak = _write_tree(
+        tmp_path / "structlog",
+        {
+            "llm/__init__.py": "import structlog\n",
+        },
+    )
+    assert "unsafe-logging" in _rules(structlog_leak)

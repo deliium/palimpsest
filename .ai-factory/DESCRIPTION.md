@@ -2,37 +2,38 @@
 
 ## Overview
 
-Palimpsest is a Python 3.12+ modular monolith for reproducible, discrete, text-based multi-agent AI society experiments. The current V1 surface establishes package boundaries, typed domain contracts, an authoritative deterministic `WorldEngine` tick loop with agent-specific perception, schema-versioned event persistence and replay, configuration, an HTTP liveness API, observability, and containers. Agent cognition and LLM invocation remain outside the engine.
+Palimpsest is a Python 3.12+ modular monolith for reproducible, discrete, text-based multi-agent AI society experiments. The current V1 surface establishes package boundaries, typed domain contracts, an authoritative deterministic `WorldEngine` tick loop with agent-specific perception, schema-versioned event persistence and replay, configuration, an HTTP liveness API, observability, and containers. A provider-neutral async LLM boundary returns only strict structured output plus normalized metadata; agent cognition policy and runtime provider composition remain deferred.
 
 ## Core Features
 
 - Bounded packages for world authority, agents, cognition strategies, memory, social envelopes, LLM trust boundaries, simulation/`WorldEngine`, persistence adapters, analysis ports, API, and infrastructure
 - Typed immutable agent-facing `Observation` contracts, private world authority (`World` / `WorldState` / rules / perception / operations), and versioned event/export codecs (replay-v4 occurrence context)
 - Deterministic `PerceptionService` projecting one observation per agent from tick-start state plus prior committed events; cognition routed via `build_perspective`
+- Async `LLMProvider` with immutable `LLMRequest`/`LLMResult`, strict `StructuredOutput`, versioned prompt resources, and a configurable OpenAI-compatible HTTP adapter (no vendor SDKs)
 - Deterministic seed-derived RNG streams, logical clock, namespaced IDs, and live/restored observation parity
-- `PALIMPSEST_` settings, structured logging (no observation/communication payloads), async SQLAlchemy lifecycle, Alembic + pgvector bootstrap
-- FastAPI `/health` liveness and Docker Compose development stack
+- `PALIMPSEST_` settings (including disabled-by-default `PALIMPSEST_LLM_*`), structured logging (no observation/communication/LLM payloads), async SQLAlchemy lifecycle, Alembic + pgvector bootstrap
+- FastAPI `/health` liveness and Docker Compose development stack (API does not yet own LLM provider lifecycle)
 
 ## Tech Stack
 
 - **Programming language:** Python >=3.12 (reference pin 3.12.14)
 - **Package manager / build:** uv + Hatchling (`src` layout, committed `uv.lock`)
 - **Framework:** FastAPI + Uvicorn
-- **Validation:** Pydantic v2 + pydantic-settings
+- **Validation:** Pydantic v2 + pydantic-settings (LLM structured-output contracts only; domain packages stay Pydantic-free)
 - **Database:** PostgreSQL 17 with pgvector
 - **ORM / migrations:** SQLAlchemy 2 async + Alembic + asyncpg
-- **Logging:** structlog
+- **Logging:** structlog (infrastructure); stdlib logging inside `llm` (metadata-only)
 - **HTTP client:** httpx (runtime; OpenAI-compatible LLM transport and tests)
 - **Testing:** pytest, pytest-asyncio, Hypothesis, import-linter, Ruff, mypy
 
 ## Architecture Notes
 
-Modular monolith with explicit bounded packages under `src/`. Domain modules do not import infrastructure; the API composition root wires adapters. `simulation.WorldEngine` is the sole public mutation authority; private world modules prepare candidates and project observations only. Cognition never receives `WorldState` or another agent's observation. Cross-module imports use package facades / `__all__`. Import-linter and AST boundary checks enforce dependency rules.
+Modular monolith with explicit bounded packages under `src/`. Domain modules do not import infrastructure; the API composition root wires adapters. `simulation.WorldEngine` is the sole public mutation authority; private world modules prepare candidates and project observations only. Cognition never receives `WorldState` or another agent's observation. The `llm` package is import-closed against world/simulation/API/infrastructure, forbids vendor SDKs, and never converts results into commands—future cognition must translate validated decision schemas into fresh `AgentCommand` values and use normal admission. Cross-module imports use package facades / `__all__`. Import-linter and AST boundary checks enforce dependency rules.
 
 ## Non-Functional Requirements
 
-- **Logging:** Configurable via `PALIMPSEST_LOG_LEVEL`; structured, secret-safe, UTC operational timestamps
-- **Error handling:** Fail closed on invalid settings and ambiguous migration targets
+- **Logging:** Configurable via `PALIMPSEST_LOG_LEVEL`; structured, secret-safe, UTC operational timestamps; LLM logs stay metadata-only
+- **Error handling:** Fail closed on invalid settings and ambiguous migration targets; LLM errors expose only safe codes/status/attempts
 - **Security:** Credentials are `SecretStr`; DSNs/prompts/bodies are never logged; non-root container user
-- **Reproducibility:** Explicit simulation seeds; no global RNG or wall-clock domain defaults
-- **Testing:** Unit/architecture by default; integration and Compose are opt-in markers
+- **Reproducibility:** Explicit simulation seeds; no global RNG or wall-clock domain defaults; LLM retries use injected sleep/monotonic clocks
+- **Testing:** Unit/architecture by default; integration and Compose are opt-in markers; LLM tests are network-free with deterministic fakes

@@ -1,4 +1,9 @@
-"""Application settings. Importing this module does not read secrets or connect."""
+"""Application settings. Importing this module does not read secrets or connect.
+
+LLM settings (``PALIMPSEST_LLM_*``) are disabled by default. A future cognition
+consumer owns mapping these values into ``llm.factory`` and provider lifecycle;
+this module never imports ``llm`` and never opens sockets.
+"""
 
 from __future__ import annotations
 
@@ -296,8 +301,12 @@ class Settings(BaseSettings):
     def llm_enabled(self) -> bool:
         return self.llm_adapter_kind is not LlmAdapterKind.DISABLED
 
-    def bootstrap_fields(self) -> dict[str, str | int | float | bool]:
-        """Secret-safe DEBUG details. No DSN, credentials, endpoints, or dumps."""
+    def bootstrap_fields(self) -> dict[str, str | int | bool]:
+        """Secret-safe DEBUG details: booleans, enums, and counts only.
+
+        Never includes endpoints, credentials, models, rejected inputs, or
+        wholesale settings dumps.
+        """
         return {
             "environment": self.environment.value,
             "log_level": self.log_level.value,
@@ -315,7 +324,6 @@ class Settings(BaseSettings):
             "has_llm_base_url": self.llm_base_url is not None,
             "has_llm_api_key": self.llm_api_key is not None,
             "llm_max_attempts": self.llm_max_attempts,
-            "llm_per_attempt_timeout_seconds": self.llm_per_attempt_timeout_seconds,
             "has_llm_total_deadline": self.llm_total_deadline_seconds is not None,
             "llm_max_request_bytes": self.llm_max_request_bytes,
             "llm_max_response_bytes": self.llm_max_response_bytes,

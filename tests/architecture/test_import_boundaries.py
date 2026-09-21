@@ -114,3 +114,16 @@ def test_world_public_facade_does_not_reexport_authority() -> None:
 
 def test_allowlist_covers_every_bounded_layer() -> None:
     assert set(ALLOWED_IMPORTS) == set(PACKAGES)
+
+
+def test_llm_layer_is_provider_neutral_and_import_closed() -> None:
+    assert ALLOWED_IMPORTS["llm"] == frozenset()
+    import llm
+
+    assert "WorldEngine" not in llm.__all__
+    assert "ActionSubmission" not in llm.__all__
+    assert "to_agent_command" not in llm.__all__
+    assert "OpenAICompatibleProvider" in llm.__all__
+    assert "StructuredOutput" in llm.__all__
+    assert "LLMProvider" in llm.__all__
+    assert "create_llm_provider" in llm.__all__

@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import ast
 import logging
+import re
 from collections.abc import Iterable, Iterator
 from dataclasses import dataclass
 from pathlib import Path
@@ -112,6 +113,65 @@ PROVIDER_SDKS: Final[frozenset[str]] = frozenset(
         "llama_index",
         "crewai",
         "autogen",
+    }
+)
+LLM_FORBIDDEN_BOUNDED: Final[frozenset[str]] = frozenset(
+    {
+        "world",
+        "agents",
+        "memory",
+        "social",
+        "simulation",
+        "api",
+        "analysis",
+        "infrastructure",
+        "persistence",
+    }
+)
+LOG_METHODS: Final[frozenset[str]] = frozenset(
+    {
+        "debug",
+        "info",
+        "warning",
+        "warn",
+        "error",
+        "exception",
+        "critical",
+        "log",
+    }
+)
+SENSITIVE_LOG_TOKENS: Final[frozenset[str]] = frozenset(
+    {
+        "prompt",
+        "content",
+        "body",
+        "schema",
+        "messages",
+        "output",
+        "payload",
+        "api_key",
+        "authorization",
+        "endpoint",
+        "url",
+        "headers",
+        "header",
+        "exception",
+        "traceback",
+        "exc",
+        "agent_id",
+        "run_id",
+        "world_id",
+        "raw",
+        "secret",
+        "password",
+        "credential",
+        "text",
+        "response",
+        "request_body",
+        "response_body",
+        "variables",
+        "template",
+        "rendered",
     }
 )
 FORBIDDEN_RANDOM_FUNCS: Final[frozenset[str]] = frozenset(
@@ -315,6 +375,7 @@ class _ModuleVisitor(ast.NodeVisitor):
 
     def visit_Call(self, node: ast.Call) -> None:
         self._check_call(node)
+        self._check_logging_call(node)
         self.generic_visit(node)
 
     def visit_FunctionDef(self, node: ast.FunctionDef) -> None:
@@ -397,6 +458,47 @@ class _ModuleVisitor(ast.NodeVisitor):
                         "UUID factories cannot provide domain identifiers",
                     )
         self._check_default_factory(node)
+
+    def _check_logging_call(self, node: ast.Call) -> None:
+        """LLM must use stdlib metadata-only logs without sensitive fields."""
+        if self.layer != "llm":
+            return
+        method = _log_method_name(node.func)
+        if method is None:
+            return
+        if method == "exception":
+            self._add(
+                "unsafe-logging",
+                method,
+                node.lineno,
+                "logger.exception is forbidden in llm; log safe codes only",
+            )
+        for keyword in node.keywords:
+            if keyword.arg == "exc_info" and not _is_false_constant(keyword.value):
+                self._add(
+                    "unsafe-logging",
+                    "exc_info",
+                    node.lineno,
+                    "exc_info logging is forbidden in llm modules",
+                )
+            if keyword.arg == "extra" and keyword.value is not None:
+                for token in _mapping_keys(keyword.value):
+                    if _is_sensitive_log_token(token):
+                        self._add(
+                            "unsafe-logging",
+                            token,
+                            node.lineno,
+                            "sensitive log extra field is forbidden in llm",
+                        )
+        for arg in node.args:
+            if isinstance(arg, ast.Constant) and isinstance(arg.value, str):
+                for token in _sensitive_tokens_in_message(arg.value):
+                    self._add(
+                        "unsafe-logging",
+                        token,
+                        node.lineno,
+                        "sensitive log message field is forbidden in llm",
+                    )
 
     def _check_default_factory(self, node: ast.Call) -> None:
         if self.layer not in DOMAIN_LAYERS:
@@ -549,6 +651,13 @@ class _ModuleVisitor(ast.NodeVisitor):
                 line,
                 "LLM provider SDKs are forbidden; llm must stay provider-neutral",
             )
+        if root == "structlog" and self.layer == "llm":
+            self._add(
+                "unsafe-logging",
+                imported,
+                line,
+                "llm must use stdlib logging only; structlog is forbidden",
+            )
 
     def _check_private_world(self, imported: str, line: int) -> None:
         target = _private_world_target(imported)
@@ -645,6 +754,46 @@ def _attr_chain(node: ast.AST) -> list[str] | None:
         parts.reverse()
         return parts
     return None
+
+
+def _log_method_name(func: ast.AST) -> str | None:
+    if isinstance(func, ast.Attribute) and func.attr in LOG_METHODS:
+        return func.attr
+    if isinstance(func, ast.Name) and func.id in LOG_METHODS:
+        return func.id
+    return None
+
+
+def _is_false_constant(node: ast.AST) -> bool:
+    return isinstance(node, ast.Constant) and node.value is False
+
+
+def _mapping_keys(node: ast.AST) -> set[str]:
+    keys: set[str] = set()
+    if isinstance(node, ast.Dict):
+        for key in node.keys:
+            if isinstance(key, ast.Constant) and isinstance(key.value, str):
+                keys.add(key.value)
+    return keys
+
+
+def _is_sensitive_log_token(token: str) -> bool:
+    normalized = token.strip().lower().replace("-", "_")
+    return normalized in SENSITIVE_LOG_TOKENS
+
+
+def _sensitive_tokens_in_message(message: str) -> set[str]:
+    found: set[str] = set()
+    lowered = message.lower()
+    for token in SENSITIVE_LOG_TOKENS:
+        # Match whole field names such as "agent_id=%s", not "has_api_key=%s".
+        pattern = re.compile(rf"(?<![a-z0-9_]){re.escape(token)}=")
+        if pattern.search(lowered) is not None:
+            found.add(token)
+        pattern_colon = re.compile(rf"(?<![a-z0-9_]){re.escape(token)}:")
+        if pattern_colon.search(lowered) is not None:
+            found.add(token)
+    return found
 
 
 def _cycles(src_root: Path, edges: dict[str, set[str]]) -> list[BoundaryViolation]:

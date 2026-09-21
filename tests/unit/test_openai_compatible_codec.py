@@ -126,6 +126,82 @@ def test_encode_json_schema_mode_wire_shape() -> None:
     assert set(schema["required"]) == {"kind", "note"}
 
 
+def test_encode_exact_wire_bodies_for_all_modes() -> None:
+    """Pin exact OpenAI-compatible wire shapes for the three capability modes."""
+    options = EffectiveOptions(temperature=0.0, max_output_tokens=64)
+    request = _request()
+
+    schema_body = encode_chat_completions_body(
+        request,
+        model="gpt-test",
+        mode=StructuredOutputMode.JSON_SCHEMA,
+        options=options,
+    )
+    assert schema_body == {
+        "model": "gpt-test",
+        "messages": [
+            {"role": "system", "content": "System rules."},
+            {"role": "user", "content": "Choose an action."},
+        ],
+        "n": 1,
+        "temperature": 0.0,
+        "max_tokens": 64,
+        "response_format": {
+            "type": "json_schema",
+            "json_schema": {
+                "name": "_Decision",
+                "strict": True,
+                "schema": schema_body["response_format"]["json_schema"]["schema"],  # type: ignore[index]
+            },
+        },
+    }
+    schema = schema_body["response_format"]["json_schema"]["schema"]  # type: ignore[index]
+    assert isinstance(schema, dict)
+    assert schema["type"] == "object"
+    assert schema["additionalProperties"] is False
+
+    object_body = encode_chat_completions_body(
+        request,
+        model="local-model",
+        mode=StructuredOutputMode.JSON_OBJECT,
+        options=options,
+    )
+    instruction = object_body["messages"][-1]  # type: ignore[index]
+    assert object_body == {
+        "model": "local-model",
+        "messages": [
+            {"role": "system", "content": "System rules."},
+            {"role": "user", "content": "Choose an action."},
+            instruction,
+        ],
+        "n": 1,
+        "temperature": 0.0,
+        "max_tokens": 64,
+        "response_format": {"type": "json_object"},
+    }
+    assert instruction["role"] == "system"
+    assert "JSON object" in instruction["content"]
+
+    prompt_body = encode_chat_completions_body(
+        request,
+        model="local-model",
+        mode=StructuredOutputMode.PROMPT_ONLY,
+        options=options,
+    )
+    assert prompt_body == {
+        "model": "local-model",
+        "messages": [
+            {"role": "system", "content": "System rules."},
+            {"role": "user", "content": "Choose an action."},
+            instruction,
+        ],
+        "n": 1,
+        "temperature": 0.0,
+        "max_tokens": 64,
+    }
+    assert "response_format" not in prompt_body
+
+
 def test_encode_json_object_and_prompt_only_add_instruction() -> None:
     base = _request()
     options = EffectiveOptions(temperature=0.5)
@@ -437,6 +513,35 @@ def test_decode_rejects_oversized_content() -> None:
         )
     assert captured.value.code is LLMErrorCode.PROVIDER_PROTOCOL
     assert captured.value.retryable is False
+
+
+@pytest.mark.parametrize(
+    ("finish_reason", "code"),
+    [
+        ("max_tokens", LLMErrorCode.INCOMPLETE),
+        ("stop_sequence", LLMErrorCode.INCOMPLETE),
+        ("unknown_vendor_reason", LLMErrorCode.INCOMPLETE),
+        (123, LLMErrorCode.PROVIDER_PROTOCOL),
+        (None, LLMErrorCode.PROVIDER_PROTOCOL),
+    ],
+)
+def test_decode_rejects_non_standard_finish_constants(
+    finish_reason: object,
+    code: LLMErrorCode,
+) -> None:
+    body = _success_body('{"kind":"a"}', finish_reason="stop")
+    body["choices"][0]["finish_reason"] = finish_reason  # type: ignore[index]
+    with pytest.raises(LLMError) as captured:
+        decode_chat_completions_response(
+            body,
+            response_model=_Decision,
+            provider_name="p",
+            model_name="m",
+        )
+    assert captured.value.code is code
+    assert captured.value.retryable is False
+    assert "max_tokens" not in repr(captured.value)
+    assert "unknown_vendor_reason" not in repr(captured.value)
 
 
 def test_codec_is_log_free_and_has_no_network_imports() -> None:

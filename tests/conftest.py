@@ -8,6 +8,7 @@ concise DEBUG diagnostics when ``PALIMPSEST_TEST_DEBUG`` is truthy.
 from __future__ import annotations
 
 import os
+import socket
 import subprocess
 import sys
 from collections.abc import Iterator
@@ -134,11 +135,42 @@ def _install_postgres_guard(monkeypatch: pytest.MonkeyPatch) -> None:
             monkeypatch.setattr(module, "connect", _block_postgres)
 
 
+def _install_inprocess_network_guard(
+    monkeypatch: pytest.MonkeyPatch, *, nodeid: str
+) -> None:
+    """Block in-process TCP connects for unit tests.
+
+    Covers direct ``socket`` connects in the pytest process only. Does **not**
+    cover subprocesses. Compatible with ``httpx.MockTransport`` and
+    ``httpx.ASGITransport`` (neither opens real sockets).
+    """
+    original_connect = socket.socket.connect
+    original_create_connection = socket.create_connection
+
+    def blocked_connect(self: socket.socket, address: Any) -> None:
+        raise RuntimeError(
+            f"Unit test {nodeid} attempted an in-process network connect to "
+            f"{address!r}. Use MockTransport/ASGITransport; this guard does "
+            "not cover subprocesses."
+        )
+
+    def blocked_create_connection(*_args: Any, **_kwargs: Any) -> Any:
+        raise RuntimeError(
+            f"Unit test {nodeid} attempted socket.create_connection. "
+            "Use MockTransport/ASGITransport; this guard does not cover "
+            "subprocesses."
+        )
+
+    monkeypatch.setattr(socket.socket, "connect", blocked_connect)
+    monkeypatch.setattr(socket, "create_connection", blocked_create_connection)
+    del original_connect, original_create_connection
+
+
 @pytest.fixture(autouse=True)
 def _forbid_live_infrastructure_in_unit_tests(
     request: pytest.FixtureRequest, monkeypatch: pytest.MonkeyPatch
 ) -> Iterator[None]:
-    """Prevent unit tests from invoking Docker or opening PostgreSQL connections."""
+    """Prevent unit tests from invoking Docker, PostgreSQL, or live sockets."""
     if request.node.get_closest_marker("integration") is not None:
         yield
         return
@@ -148,4 +180,5 @@ def _forbid_live_infrastructure_in_unit_tests(
 
     _install_subprocess_guard(monkeypatch, request.node.nodeid)
     _install_postgres_guard(monkeypatch)
+    _install_inprocess_network_guard(monkeypatch, nodeid=request.node.nodeid)
     yield

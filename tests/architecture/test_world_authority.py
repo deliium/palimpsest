@@ -131,3 +131,22 @@ def test_cognition_package_omits_world_authority_symbols() -> None:
     assert "CognitionStrategy" in cognition.__all__
     assert "PerceptionService" not in dir(cognition)
     assert "ObservationBatch" not in dir(cognition)
+
+
+def test_llm_package_cannot_reach_world_authority_or_engine() -> None:
+    import llm
+    import simulation
+
+    assert "World" not in dir(llm)
+    assert "WorldState" not in dir(llm)
+    assert "WorldEngine" not in dir(llm)
+    assert "ActionSubmission" not in dir(llm)
+    assert "ActionRequest" not in dir(llm)
+    assert "admit_agent_command" not in dir(llm)
+    assert "to_agent_command" not in dir(llm)
+    assert "LLMResult" in llm.__all__
+    assert "StructuredOutput" in llm.__all__
+    # Future cognition must translate StructuredOutput → AgentCommand explicitly.
+    assert "admit_agent_command" not in simulation.__all__
+    assert "WorldEngine" in simulation.__all__
+    assert "ActionSubmission" in simulation.__all__

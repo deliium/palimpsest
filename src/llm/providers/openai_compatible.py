@@ -211,6 +211,7 @@ class OpenAICompatibleProvider:
             raise LLMError(LLMErrorCode.CLOSED, retryable=False)
 
         effective = resolve_effective_options(self._defaults, request.options)
+        encode_error: LLMError | None = None
         try:
             body = encode_chat_completions_body(
                 request,
@@ -219,15 +220,26 @@ class OpenAICompatibleProvider:
                 options=effective,
             )
         except LLMError as exc:
-            _log_terminal(exc, llm_request_id=request.context.llm_request_id)
-            raise _with_attempts(exc, attempts=1) from None
+            encode_error = _with_attempts(exc, attempts=1)
+        if encode_error is not None:
+            _log_terminal(
+                encode_error,
+                llm_request_id=request.context.llm_request_id,
+            )
+            raise encode_error
 
+        prepare_error: LLMError | None = None
         try:
             payload = _encode_request_bytes(body, max_bytes=self._max_request_bytes)
             headers = self._build_headers(request.context.llm_request_id)
         except LLMError as exc:
-            _log_terminal(exc, llm_request_id=request.context.llm_request_id)
-            raise _with_attempts(exc, attempts=1) from None
+            prepare_error = _with_attempts(exc, attempts=1)
+        if prepare_error is not None:
+            _log_terminal(
+                prepare_error,
+                llm_request_id=request.context.llm_request_id,
+            )
+            raise prepare_error
 
         llm_request_id = request.context.llm_request_id
         _LOG.debug(
@@ -267,6 +279,7 @@ class OpenAICompatibleProvider:
                 attempt,
             )
 
+            pending: LLMError | None = None
             try:
                 result = await self._attempt(
                     request,
@@ -292,25 +305,28 @@ class OpenAICompatibleProvider:
                         started=started,
                     )
                     if delay is None:
-                        exhausted = retry_exhausted(error)
-                        _log_terminal(exhausted, llm_request_id=llm_request_id)
-                        raise exhausted from None
-                    _LOG.debug(
-                        "retry_scheduled llm_request_id=%s attempt=%s "
-                        "code=%s delay_seconds=%s",
-                        llm_request_id,
-                        attempt,
-                        error.code.value,
-                        delay,
-                    )
-                    await self._sleep(delay)
-                    continue
-                if self._policy_retryable(error):
-                    exhausted = retry_exhausted(error)
-                    _log_terminal(exhausted, llm_request_id=llm_request_id)
-                    raise exhausted from None
-                _log_terminal(error, llm_request_id=llm_request_id)
-                raise error from None
+                        pending = retry_exhausted(error)
+                        _log_terminal(pending, llm_request_id=llm_request_id)
+                    else:
+                        _LOG.debug(
+                            "retry_scheduled llm_request_id=%s attempt=%s "
+                            "code=%s delay_seconds=%s",
+                            llm_request_id,
+                            attempt,
+                            error.code.value,
+                            delay,
+                        )
+                        await self._sleep(delay)
+                        continue
+                elif self._policy_retryable(error):
+                    pending = retry_exhausted(error)
+                    _log_terminal(pending, llm_request_id=llm_request_id)
+                else:
+                    pending = error
+                    _log_terminal(pending, llm_request_id=llm_request_id)
+            if pending is not None:
+                # Raise outside the ``except`` so ``__context__`` stays empty.
+                raise pending
 
             usage = result.metadata.usage
             _LOG.info(

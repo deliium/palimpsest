@@ -196,6 +196,8 @@ def test_llm_defaults_are_disabled() -> None:
     assert bootstrap["llm_enabled"] is False
     assert bootstrap["has_llm_api_key"] is False
     assert "llm_base_url" not in bootstrap
+    assert "llm_per_attempt_timeout_seconds" not in bootstrap
+    assert "llm_model" not in bootstrap
     assert LOCAL_LLM_URL not in str(bootstrap)
 
 
@@ -227,6 +229,14 @@ def test_llm_accepts_local_http_and_remote_https() -> None:
     assert local.llm_base_url.get_secret_value() == LOCAL_LLM_URL
     assert local.llm_temperature == 0.0
 
+    ipv6 = load_settings(
+        env_file=False,
+        llm_adapter_kind=LlmAdapterKind.OPENAI_COMPATIBLE,
+        llm_model="llama3.2",
+        llm_base_url="http://[::1]:11434/v1",
+    )
+    assert ipv6.llm_enabled() is True
+
     remote = load_settings(
         env_file=False,
         llm_adapter_kind=LlmAdapterKind.OPENAI_COMPATIBLE,
@@ -238,6 +248,11 @@ def test_llm_accepts_local_http_and_remote_https() -> None:
     assert remote.llm_send_correlation_header is True
     assert remote.llm_api_key is not None
     assert remote.llm_api_key.get_secret_value() == LLM_SECRET_KEY
+    bootstrap = remote.bootstrap_fields()
+    assert bootstrap["has_llm_api_key"] is True
+    assert bootstrap["has_llm_model"] is True
+    assert "gpt-4o-mini" not in str(bootstrap)
+    assert REMOTE_LLM_URL not in str(bootstrap)
 
 
 @pytest.mark.parametrize(
@@ -249,6 +264,7 @@ def test_llm_accepts_local_http_and_remote_https() -> None:
         "http://127.0.0.1/v2",
         "http://user:pass@127.0.0.1/v1",
         "http://user%3Apass@127.0.0.1/v1",
+        "http://127.0.0.1%40evil.example/v1",
         "http://127.0.0.1/v1?x=1",
         "http://127.0.0.1/v1#frag",
         "https://api.example.com/v1?key=sekrit",

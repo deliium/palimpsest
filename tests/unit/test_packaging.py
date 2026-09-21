@@ -64,6 +64,7 @@ def _without_repo_pythonpath() -> dict[str, str]:
 def _offline_env() -> dict[str, str]:
     env = _without_repo_pythonpath()
     env["UV_OFFLINE"] = "1"
+    env["UV_PYTHON_DOWNLOADS"] = "never"
     env["PIP_NO_INDEX"] = "1"
     env["PIP_DISABLE_PIP_VERSION_CHECK"] = "1"
     return env
@@ -120,16 +121,25 @@ def test_wheel_contains_only_project_packages_and_imports_outside_repo(
 
     venv_dir = tmp_path / "venv"
     subprocess.run(
-        ["uv", "venv", "--python", "3.12.14", str(venv_dir)],
+        ["uv", "venv", "--python", sys.executable, str(venv_dir)],
         check=True,
         capture_output=True,
         text=True,
         env=_offline_env(),
     )
     python = venv_dir / "bin" / "python"
-    # Full project import check needs runtime deps; not a --no-deps probe.
+    # Full project import check needs runtime deps already present offline;
+    # never download interpreters/backends. Prompt packaging uses --no-deps.
     subprocess.run(
-        ["uv", "pip", "install", str(wheels[0]), "--python", str(python)],
+        [
+            "uv",
+            "pip",
+            "install",
+            "--offline",
+            "--python",
+            str(python),
+            str(wheels[0]),
+        ],
         check=True,
         capture_output=True,
         text=True,

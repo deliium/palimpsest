@@ -2,13 +2,18 @@
 
 Importing this module does not configure logging. Operational timestamps
 are UTC metadata and must never become simulation IDs or seeds.
+
+Defense-in-depth redaction here is not the LLM provider's primary safety
+mechanism; adapters must already emit metadata-only fields.
 """
 
 from __future__ import annotations
 
 import logging
+import re
 import sys
 import threading
+from collections.abc import Mapping, Sequence
 from typing import Final, TextIO, cast
 
 import structlog
@@ -21,7 +26,9 @@ OWNED_HANDLER_NAME: Final[str] = "palimpsest"
 _LOCK = threading.Lock()
 _SENSITIVE_KEYS: Final[frozenset[str]] = frozenset(
     {
+        "api_key",
         "authorization",
+        "base_url",
         "body",
         "credential",
         "credentials",
@@ -29,32 +36,94 @@ _SENSITIVE_KEYS: Final[frozenset[str]] = frozenset(
         "dsn",
         "embedding",
         "embeddings",
-        "memory",
+        "endpoint",
+        "endpoint_url",
+        "headers",
+        "llm_api_key",
+        "llm_base_url",
         "memories",
+        "memory",
+        "messages",
+        "output",
         "password",
         "prompt",
         "raw_response",
+        "request_body",
+        "response_body",
+        "schema",
+        "schemas",
         "secret",
         "settings",
         "test_database_url",
         "token",
+        "url",
+        "validated_output",
+        "variables",
     }
 )
+_SENSITIVE_SUBSTRINGS: Final[tuple[str, ...]] = (
+    "authorization",
+    "embedding",
+    "password",
+    "secret",
+)
+_API_KEY_IN_TEXT: Final[re.Pattern[str]] = re.compile(
+    r"(?i)\b(sk-[A-Za-z0-9\-_]{8,}|bearer\s+[A-Za-z0-9\-._~+/]+=*)"
+)
+
+
+def _key_is_sensitive(key: str) -> bool:
+    lowered = key.lower()
+    # Boolean presence diagnostics such as ``has_llm_api_key`` stay visible.
+    if lowered.startswith("has_"):
+        return False
+    if lowered in _SENSITIVE_KEYS:
+        return True
+    if "api_key" in lowered or any(part in lowered for part in _SENSITIVE_SUBSTRINGS):
+        return True
+    # Match credential-like ``*_token`` keys without redacting usage ``*_tokens``.
+    return lowered.endswith("_token") and not lowered.endswith("_tokens")
+
+
+def _redact_string(value: str) -> str:
+    redacted = redact_secrets(value)
+    return _API_KEY_IN_TEXT.sub("***", redacted)
+
+
+def _redact_value(value: object) -> object:
+    """Redact strings and nested containers without claiming primary safety."""
+    if isinstance(value, Settings):
+        return value.bootstrap_fields()
+    if isinstance(value, Mapping):
+        return {
+            key: (
+                "***"
+                if _key_is_sensitive(str(key))
+                else _redact_value(item)
+            )
+            for key, item in value.items()
+        }
+    if isinstance(value, tuple):
+        return tuple(_redact_value(item) for item in value)
+    if isinstance(value, list):
+        return [_redact_value(item) for item in value]
+    if isinstance(value, Sequence) and not isinstance(value, (str, bytes, bytearray)):
+        return [_redact_value(item) for item in value]
+    if isinstance(value, str):
+        return _redact_string(value)
+    if isinstance(value, (bytes, bytearray)):
+        return b"***"
+    return value
 
 
 def _redact_event(
     _logger: WrappedLogger, _method: str, event_dict: EventDict
 ) -> EventDict:
     for key, value in list(event_dict.items()):
-        lowered = key.lower()
-        if lowered in _SENSITIVE_KEYS or any(
-            part in lowered for part in ("password", "secret", "token", "embedding")
-        ):
+        if _key_is_sensitive(key):
             event_dict[key] = "***"
-        elif isinstance(value, Settings):
-            event_dict[key] = value.bootstrap_fields()
-        elif isinstance(value, str):
-            event_dict[key] = redact_secrets(value)
+        else:
+            event_dict[key] = _redact_value(value)
     return event_dict
 
 

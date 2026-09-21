@@ -123,7 +123,7 @@ Raw provider bytes, text, mappings, headers, and exceptions may exist only insid
 
 ### Phase 4: Deterministic Tests and Trust Gates
 
-- [ ] Task 7: Provide a deterministic scripted provider for network-free tests.
+- [x] Task 7: Provide a deterministic scripted provider for network-free tests.
   - Add a reusable fake implementing the exact public `LLMProvider` contract with per-`llm_request_id` queues and explicit invocation ordinals. Reject duplicate concurrently active IDs, unexpected IDs, exhausted scripts, and response models incompatible with scripted `StructuredOutput` values.
   - Script validated outputs or typed failures only; retry behavior remains owned by the real provider rather than duplicated in the fake.
   - Defensively copy scripted values and recorded safe metadata so caller mutation cannot alter history. Do not retain credentials, rendered prompt content, schemas, or output dumps in generic call records.
@@ -132,7 +132,7 @@ Raw provider bytes, text, mappings, headers, and exceptions may exist only insid
   - Logging: fakes emit no payload logs; unexpected-call messages identify only safe correlation/model metadata and stable test failure codes.
   - Dependencies: Tasks 1-3.
 
-- [ ] Task 8: Complete the network-free interoperability, validation, packaging, and redaction matrix.
+- [x] Task 8: Complete the network-free interoperability, validation, packaging, and redaction matrix.
   - Cover exact wire bodies for OpenAI-compatible JSON Schema/JSON object/prompt-only modes and local Ollama/vLLM endpoint profiles without requiring vendor SDKs or live services.
   - Test option precedence, `temperature=0`, path-prefix preservation, IPv6/local URLs, disabled redirects/proxies, missing optional metadata, envelope failures, duplicate JSON keys, non-standard constants, response limits, retry matrix/backoff/exhaustion, cancellation, owned/injected closure, and generation after close.
   - Prove concurrent calls cannot consume each other's scripts and that local run/agent/tick context remains unchanged across attempts but absent from all outbound headers and bodies.
@@ -143,7 +143,7 @@ Raw provider bytes, text, mappings, headers, and exceptions may exist only insid
   - Logging: capture and assert the full safe event/level matrix in this task. A socket guard must not break `ASGITransport`, and it must not be claimed to cover subprocesses.
   - Dependencies: Tasks 3-7.
 
-- [ ] Task 9: Finalize architecture, action-admission, and project-context guarantees.
+- [x] Task 9: Finalize architecture, action-admission, and project-context guarantees.
   - Keep vendor SDKs prohibited and assert provider/prompt modules cannot import `world`, `agents`, `simulation`, `persistence`, `api`, or `infrastructure`, private authority modules, or nondeterministic clocks/randomness.
   - Verify public provider signatures cannot accept `World`, `WorldState`, `WorldEngine`, `ActionSubmission`, `ActionRequest`, or mutable world aggregates.
   - Extend trust tests so `LLMResult`, `StructuredOutput`, model dumps, raw strings, mappings, and provider-shaped authority payloads are rejected by `require_agent_command`, `ActionSubmission`, admission, and world-operation boundaries.

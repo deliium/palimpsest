@@ -229,3 +229,69 @@ async def test_logs_never_include_local_run_agent_tick(
     assert "secret prompt" not in joined
     assert "http://llm.test" not in joined
     assert "log-safe-corr" in joined
+    assert '{"kind":"ok"}' not in joined
+
+
+async def test_local_context_absent_from_headers_bodies_across_modes() -> None:
+    """run/agent/tick stay local for every structured-output mode on the wire."""
+    captured: list[httpx.Request] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        captured.append(request)
+        return httpx.Response(200, content=_success_json())
+
+    for mode in (
+        StructuredOutputMode.JSON_SCHEMA,
+        StructuredOutputMode.JSON_OBJECT,
+        StructuredOutputMode.PROMPT_ONLY,
+    ):
+        captured.clear()
+        clock = _Clock()
+        client = httpx.AsyncClient(
+            transport=httpx.MockTransport(handler),
+            base_url="http://127.0.0.1:11434/v1/",
+            follow_redirects=False,
+            trust_env=False,
+        )
+        provider = OpenAICompatibleProvider(
+            base_url="http://127.0.0.1:11434/v1/",
+            model="local-ollama",
+            mode=mode,
+            sleep=clock.sleep,
+            monotonic=clock.monotonic,
+            api_key=None,
+            client=client,
+            provider_name="ollama",
+            send_correlation_header=False,
+            retry=RetryPolicy(max_attempts=1),
+        )
+        context = LLMRequestContext(
+            run_id="run-mode-local",
+            agent_id="agent-mode-local",
+            tick=321,
+            llm_request_id="mode-corr",
+        )
+        try:
+            await provider.generate(
+                LLMRequest.create(
+                    messages=(LLMMessage(role=MessageRole.USER, content="hi"),),
+                    response_model=_Decision,
+                    context=context,
+                )
+            )
+        finally:
+            await client.aclose()
+
+        assert len(captured) == 1
+        outbound = captured[0]
+        assert outbound.url.path == "/v1/chat/completions"
+        blob = outbound.content.decode("utf-8") + " ".join(
+            f"{key}:{value}" for key, value in outbound.headers.multi_items()
+        )
+        assert "run-mode-local" not in blob
+        assert "agent-mode-local" not in blob
+        assert "321" not in blob
+        assert "mode-corr" not in blob
+        assert context.run_id == "run-mode-local"
+        assert context.agent_id == "agent-mode-local"
+        assert context.tick == 321

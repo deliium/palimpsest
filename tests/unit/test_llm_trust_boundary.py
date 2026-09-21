@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import pytest
 
+from agents.models import AgentId
 from llm.models import (
     FinishReason,
     LLMResult,
@@ -12,12 +13,35 @@ from llm.models import (
     require_structured_output_type,
     validate_structured_output,
 )
-from simulation.lifecycle import require_action_submission
-from world.actions import Wait, require_agent_command
+from simulation.actions import admit_agent_command
+from simulation.clock import Tick
+from simulation.lifecycle import ActionSubmission, TickToken, require_action_submission
+from simulation.models import SimulationRunConfig
+from world._operations import OperationRejected, RejectionCode, validate_action_request
+from world._state import WorldState
+from world.actions import (
+    ActionRequest,
+    Wait,
+    accept_action_request,
+    require_agent_command,
+)
+from world.identifiers import EntityId, ProposalId, RequestId, WorldId, WorldRevision
 
 
 class _DecisionOutput(StructuredOutput):
     kind: str
+
+
+class _Translator:
+    def __init__(self, mapping: dict[AgentId, EntityId]) -> None:
+        self._forward = mapping
+        self._reverse = {entity: agent for agent, entity in mapping.items()}
+
+    def to_entity_id(self, agent_id: AgentId) -> EntityId:
+        return self._forward[agent_id]
+
+    def to_agent_id(self, entity_id: EntityId) -> AgentId:
+        return self._reverse[entity_id]
 
 
 def _result() -> LLMResult[_DecisionOutput]:
@@ -31,6 +55,32 @@ def _result() -> LLMResult[_DecisionOutput]:
     )
 
 
+def _untrusted_values() -> list[object]:
+    output = _DecisionOutput(kind="wait")
+    result = _result()
+    return [
+        result,
+        output,
+        output.model_dump(),
+        output.model_dump_json(),
+        '{"kind":"wait"}',
+        {"kind": "wait"},
+        {
+            "request_id": "r-1",
+            "proposal_id": "p-1",
+            "world_id": "world-1",
+            "actor_id": "body-1",
+            "revision": 0,
+            "command": {"kind": "wait"},
+        },
+        {
+            "token": "tick-1",
+            "agent_id": "agent-1",
+            "command": {"kind": "wait"},
+        },
+    ]
+
+
 def test_llm_result_is_rejected_as_action_submission() -> None:
     with pytest.raises(TypeError, match="ActionSubmission"):
         require_action_submission(_result())
@@ -42,6 +92,63 @@ def test_structured_output_is_rejected_as_agent_command() -> None:
     with pytest.raises(TypeError, match="raw mappings"):
         require_agent_command({"kind": "wait"})
     assert require_agent_command(Wait()) == Wait()
+
+
+def test_provider_shaped_payloads_rejected_by_command_and_submission_gates() -> None:
+    token = TickToken(value="tok-1", tick=Tick(0))
+    for value in _untrusted_values():
+        with pytest.raises(TypeError):
+            require_agent_command(value)
+        with pytest.raises(TypeError):
+            require_action_submission(value)
+        with pytest.raises(TypeError):
+            ActionSubmission(token=token, agent_id=AgentId("agent-1"), command=value)  # type: ignore[arg-type]
+
+
+def test_provider_shaped_payloads_rejected_by_admission() -> None:
+    config = SimulationRunConfig(seed=9)
+    agent_id = AgentId("agent-1")
+    translator = _Translator({agent_id: EntityId("body-1")})
+    for value in _untrusted_values():
+        with pytest.raises(TypeError):
+            admit_agent_command(
+                config=config,
+                agent_id=agent_id,
+                command=value,
+                translator=translator,
+                world_id=WorldId("world-1"),
+                revision=WorldRevision(0),
+                keys=("llm-trust",),
+            )
+
+
+def test_provider_shaped_payloads_rejected_by_world_operation_boundary() -> None:
+    for value in _untrusted_values():
+        with pytest.raises(TypeError):
+            accept_action_request(value)
+
+    empty = WorldState(WorldRevision(0))
+    for value in _untrusted_values():
+        outcome = validate_action_request(
+            world_id=WorldId("world-1"),
+            state=empty,
+            request=value,
+        )
+        assert isinstance(outcome, OperationRejected)
+        assert outcome.code is RejectionCode.WRONG_TRUST_STAGE
+        # Never log world or model payloads in authority trust proofs.
+
+
+def test_action_request_still_required_for_gateway() -> None:
+    request = ActionRequest(
+        request_id=RequestId("r-1"),
+        proposal_id=ProposalId("p-1"),
+        world_id=WorldId("world-1"),
+        actor_id=EntityId("body-1"),
+        revision=WorldRevision(0),
+        command=Wait(),
+    )
+    assert accept_action_request(request) is request
 
 
 def test_structured_output_repr_hides_payload() -> None:
