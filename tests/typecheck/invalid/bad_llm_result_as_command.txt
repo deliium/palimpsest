@@ -1,0 +1,10 @@
+from llm.models import LLMResult, StructuredOutput
+from world.actions import AgentCommand
+
+
+class DecisionOutput(StructuredOutput):
+    kind: str
+
+
+def _as_command(result: LLMResult[DecisionOutput]) -> AgentCommand:
+    return result.output

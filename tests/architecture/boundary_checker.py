@@ -96,7 +96,6 @@ DOMAIN_NO_PYDANTIC: Final[frozenset[str]] = frozenset(
         "agents",
         "memory",
         "social",
-        "llm",
         "simulation",
         "analysis",
     }

@@ -370,7 +370,6 @@ source_modules = [
     "agents",
     "memory",
     "social",
-    "llm",
     "simulation",
     "analysis",
 ]

@@ -1,6 +1,77 @@
-"""Provider-neutral LLM ports and untrusted response data."""
+"""Provider-neutral LLM ports and untrusted structured results."""
 
-from llm.contracts import LLMClient
-from llm.models import LLMResponse
+from llm.contracts import LLMProvider
+from llm.errors import (
+    LLMError,
+    LLMErrorCode,
+    error_from_http_status,
+    error_from_httpx,
+    error_from_validation_failure,
+    retry_exhausted,
+)
+from llm.models import (
+    EffectiveOptions,
+    FinishReason,
+    LLMMessage,
+    LLMRequest,
+    LLMRequestContext,
+    LLMRequestOptions,
+    LLMResult,
+    LLMResultMetadata,
+    MessageRole,
+    PromptReference,
+    ProviderDefaults,
+    RetryPolicy,
+    StructuredOutput,
+    StructuredOutputMode,
+    TokenUsage,
+    require_structured_output_type,
+    resolve_effective_options,
+    validate_structured_output,
+)
+from llm.prompts import (
+    LoadedPrompt,
+    PromptError,
+    PromptReason,
+    PromptTemplate,
+    RenderedPrompt,
+    canonical_rendered_digest,
+    load_prompt,
+    render_prompt,
+)
 
-__all__ = ["LLMClient", "LLMResponse"]
+__all__ = [
+    "EffectiveOptions",
+    "FinishReason",
+    "LLMError",
+    "LLMErrorCode",
+    "LLMMessage",
+    "LLMProvider",
+    "LLMRequest",
+    "LLMRequestContext",
+    "LLMRequestOptions",
+    "LLMResult",
+    "LLMResultMetadata",
+    "LoadedPrompt",
+    "MessageRole",
+    "PromptError",
+    "PromptReason",
+    "PromptReference",
+    "PromptTemplate",
+    "ProviderDefaults",
+    "RenderedPrompt",
+    "RetryPolicy",
+    "StructuredOutput",
+    "StructuredOutputMode",
+    "TokenUsage",
+    "canonical_rendered_digest",
+    "error_from_http_status",
+    "error_from_httpx",
+    "error_from_validation_failure",
+    "load_prompt",
+    "render_prompt",
+    "require_structured_output_type",
+    "resolve_effective_options",
+    "retry_exhausted",
+    "validate_structured_output",
+]

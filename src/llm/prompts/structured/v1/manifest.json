@@ -1,0 +1,21 @@
+{
+  "name": "structured",
+  "version": "v1",
+  "messages": [
+    {
+      "role": "system",
+      "template": "system.txt",
+      "sha256": "28e6bb3d869577c566c2529fad0ae3b12523d3de25626f6f252e7cd7cfe10d2e"
+    },
+    {
+      "role": "user",
+      "template": "user.txt",
+      "sha256": "aa34bb53fb7082d83926ff26feafd31e0318aac665de56c0c7a2221ae28b8203"
+    }
+  ],
+  "variables": [
+    "schema_name",
+    "schema_json",
+    "request"
+  ]
+}

@@ -8,7 +8,6 @@ import pytest
 
 from agents.cognition.contracts import Perspective
 from agents.models import AgentId
-from llm.models import LLMResponse
 from simulation.bootstrap import (
     AgentRegistration,
     WorldBootstrap,
@@ -23,10 +22,7 @@ from simulation.perception import (
 )
 from social.models import CommunicationEnvelope, EnvelopeId
 from tests.simulation_helpers import make_location, weather_for_locations
-from tests.typecheck.cognition_strategies import (
-    ScriptedCognitionStrategy,
-    StubLLMBackedStrategy,
-)
+from tests.typecheck.cognition_strategies import ScriptedCognitionStrategy
 from world.actions import Wait
 from world.identifiers import EntityId, WorldId, WorldRevision
 from world.models import AgentBody, LifeStatus
@@ -39,11 +35,6 @@ from world.values import (
     TemperatureCelsius,
     Thirst,
 )
-
-
-class _Client:
-    def complete(self, prompt: str) -> LLMResponse:
-        return LLMResponse(provider="stub", model="echo", text=prompt, token_count=1)
 
 
 def _alive(entity_id: str) -> AgentBody:
@@ -76,7 +67,7 @@ def _bootstrap() -> WorldBootstrap:
     )
 
 
-def test_scripted_and_stub_llm_strategies_share_propose_signature() -> None:
+def test_scripted_cognition_strategy_propose_signature() -> None:
     agent_id = AgentId("agent-1")
     perspective = Perspective(
         agent_id=agent_id,
@@ -90,11 +81,8 @@ def test_scripted_and_stub_llm_strategies_share_propose_signature() -> None:
         inbox=(),
     )
     scripted = ScriptedCognitionStrategy().propose(perspective)
-    stub = StubLLMBackedStrategy(_Client()).propose(perspective)
     assert scripted == Wait()
-    assert stub == Wait()
     assert type(scripted) is Wait
-    assert type(stub) is Wait
 
 
 def test_build_perspective_pairs_agent_with_own_observation(

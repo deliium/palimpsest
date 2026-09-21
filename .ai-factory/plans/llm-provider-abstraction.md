@@ -51,7 +51,7 @@ Raw provider bytes, text, mappings, headers, and exceptions may exist only insid
 
 ### Phase 1: Provider-Neutral Contracts
 
-- [ ] Task 1: Define strict async request/result contracts and enable their architecture boundary.
+- [x] Task 1: Define strict async request/result contracts and enable their architecture boundary.
   - Replace `LLMClient`/`LLMResponse` with a generic async `LLMProvider` protocol and immutable `LLMRequest[T]`/`LLMResult[T]` contracts in `src/llm/contracts.py` and `src/llm/models.py`.
   - Define `StructuredOutput` as the required Pydantic base with `strict=True`, `extra="forbid"`, `frozen=True`, and `allow_inf_nan=False`; reject permissive subclasses, unsupported unconstrained schemas, instances supplied instead of model classes, and validation results whose exact type differs from the requested model.
   - Define ordered immutable `LLMMessage` values using the V1 portable roles `system` and `user`, bounded non-blank content, a safe prompt name/version/digest reference, immutable request options, and `LLMRequestContext` with bounded non-blank `run_id`, `agent_id`, non-negative non-boolean `tick`, and header-safe `llm_request_id`.
@@ -62,7 +62,7 @@ Raw provider bytes, text, mappings, headers, and exceptions may exist only insid
   - Logging: contracts and validation models remain log-free. Their representations must not expose prompt content, output values, or credentials; only explicitly safe identifiers may appear in diagnostics.
   - Dependencies: none.
 
-- [ ] Task 2: Define safe errors, effective-option precedence, capability modes, and retry policy.
+- [x] Task 2: Define safe errors, effective-option precedence, capability modes, and retry policy.
   - Add explicit provider-neutral errors for configuration, timeout, connection, authentication/authorization, rate limit, upstream failure, provider protocol, output format, output schema, refusal/filtering, incomplete generation, closed provider, and retry exhaustion.
   - Public errors expose only stable code, retryability, total attempts, and optional status. Convert Pydantic and `httpx` failures without retaining bodies, URLs, offending inputs, raw exception text, unsafe causes/context, or `ValidationError` details.
   - Define immutable provider defaults, per-request options, and one `EffectiveOptions` resolution rule: a non-`None` request value overrides provider defaults; otherwise use the configured default or omit the field. Preserve valid falsey values such as `temperature=0`.
@@ -76,7 +76,7 @@ Raw provider bytes, text, mappings, headers, and exceptions may exist only insid
 
 ### Phase 2: Versioned Prompt Infrastructure
 
-- [ ] Task 3: Implement immutable, package-safe versioned prompt resources.
+- [x] Task 3: Implement immutable, package-safe versioned prompt resources.
   - Create `src/llm/prompts/` as the `importlib.resources.files("llm.prompts")` anchor and add a neutral V1 structured-generation prompt under `src/llm/prompts/structured/v1/` without cognition policy.
   - Define a strict manifest with prompt name, version, ordered role/template entries, required variable names, and template SHA-256 digests. Restrict names/versions to safe single path segments and reject traversal, unknown fields, duplicate roles, missing resources, and digest mismatches.
   - Use UTF-8 and an explicit LF/final-newline policy. Define a canonical rendered digest over prompt name, version, ordered roles, and rendered bytes; pin expected V1 resource and rendered digests in tests so published versions cannot change silently.

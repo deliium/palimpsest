@@ -211,6 +211,32 @@ def test_checker_detects_type_checking_private_world_import(tmp_path: Path) -> N
     assert "agents -> world._state" in report
 
 
+
+def test_checker_allows_pydantic_in_llm_but_not_world(tmp_path: Path) -> None:
+    allowed = _write_tree(
+        tmp_path / "allowed",
+        {
+            "llm/__init__.py": (
+                "from __future__ import annotations\n"
+                "from pydantic import BaseModel\n\n"
+                "class Payload(BaseModel):\n"
+                "    kind: str\n"
+            ),
+        },
+    )
+    assert check_tree(allowed) == []
+
+    blocked = _write_tree(
+        tmp_path / "blocked",
+        {
+            "world/__init__.py": "from pydantic import BaseModel\n",
+        },
+    )
+    report = _messages(blocked)
+    assert "framework-leakage" in _rules(blocked)
+    assert "world -> pydantic" in report
+
+
 def test_checker_rejects_global_random_outside_adapter(tmp_path: Path) -> None:
     forbidden = _write_tree(
         tmp_path / "forbidden",
