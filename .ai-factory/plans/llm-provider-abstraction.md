@@ -89,7 +89,7 @@ Raw provider bytes, text, mappings, headers, and exceptions may exist only insid
 
 ### Phase 3: OpenAI-Compatible V1 Provider
 
-- [ ] Task 4: Build a pure OpenAI-compatible structured-output codec.
+- [x] Task 4: Build a pure OpenAI-compatible structured-output codec.
   - Add a provider-private codec that converts typed requests and effective options into an OpenAI-compatible `chat/completions` body without network access or provider SDKs.
   - Implement explicit `json_schema`, `json_object`, and `prompt_only` modes. Emit the standard OpenAI `response_format` shape for applicable modes, include deterministic JSON instructions in weaker modes, and preflight schema compatibility before transport.
   - Force one completion and decode exactly one assistant choice. Reject zero/multiple choices, null/non-string/multipart content, tool/function calls, error-shaped success bodies, refusals, filtering, and incomplete finish reasons according to Task 2 policy.
@@ -99,7 +99,7 @@ Raw provider bytes, text, mappings, headers, and exceptions may exist only insid
   - Logging: the pure codec is log-free. Safe failures use Task 2 codes and never expose provider content, headers, schemas, or rejected values.
   - Dependencies: Tasks 1-3.
 
-- [ ] Task 5: Implement bounded async HTTP transport, retries, lifecycle, correlation, and metadata-only logs.
+- [x] Task 5: Implement bounded async HTTP transport, retries, lifecycle, correlation, and metadata-only logs.
   - Implement `OpenAICompatibleProvider` with `httpx.AsyncClient`, moving `httpx` into runtime dependencies and updating `uv.lock` before production imports are introduced.
   - Require `base_url` to include any API prefix and normalize only its trailing slash; append relative `chat/completions` so `/v1/` is preserved. Disable redirects and ambient proxy/environment behavior for owned clients.
   - Send only optional bearer credentials and, when enabled, the validated opaque `llm_request_id` header. Never send `run_id`, `agent_id`, tick, HTTP request IDs, world IDs, or authority identifiers upstream.
@@ -111,7 +111,7 @@ Raw provider bytes, text, mappings, headers, and exceptions may exist only insid
   - Logging: assert `DEBUG` start/attempt/retry details, `INFO` success metadata, `WARNING` retryable safe codes, and `ERROR` terminal safe codes in the same task as instrumentation. Use safe usage names that cannot be confused with authentication tokens.
   - Dependencies: Tasks 2 and 4.
 
-- [ ] Task 6: Add typed settings and a standalone provider factory without premature runtime composition.
+- [x] Task 6: Add typed settings and a standalone provider factory without premature runtime composition.
   - Extend `src/infrastructure/settings.py` with disabled-by-default `PALIMPSEST_LLM_*` settings for adapter kind, model, base URL, optional API key, structured-output mode, temperature, timeouts, attempt limits, byte limits, and correlation-header behavior.
   - Validate exact HTTP(S) scheme, required host/model when enabled, allowed local HTTP endpoints, `/v1` paths, no userinfo (including encoded userinfo), query, or fragment, and non-blank API keys. Reject booleans for numeric settings and enforce finite/bounded values.
   - Prevent full endpoints, path/query values, keys, and rejected inputs from appearing in `repr`, `str`, `SettingsError`, logging projections, or validation details. Build safe settings errors from Pydantic errors with input/context excluded and expose only boolean/enum/count diagnostics through `bootstrap_fields()`.

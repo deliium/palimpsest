@@ -18,11 +18,11 @@ dependencies = [
     "asyncpg",
     "pgvector",
     "structlog",
+    "httpx>=0.28.1",
 ]
 
 [dependency-groups]
 dev = [
-    "httpx",
     "pytest",
     "pytest-asyncio",
     "hypothesis",

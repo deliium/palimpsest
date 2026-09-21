@@ -22,7 +22,8 @@ Palimpsest is a Python 3.12+ modular monolith for reproducible, discrete, text-b
 - **Database:** PostgreSQL 17 with pgvector
 - **ORM / migrations:** SQLAlchemy 2 async + Alembic + asyncpg
 - **Logging:** structlog
-- **Testing:** pytest, pytest-asyncio, Hypothesis, httpx, import-linter, Ruff, mypy
+- **HTTP client:** httpx (runtime; OpenAI-compatible LLM transport and tests)
+- **Testing:** pytest, pytest-asyncio, Hypothesis, import-linter, Ruff, mypy
 
 ## Architecture Notes
 

@@ -9,6 +9,12 @@ from llm.errors import (
     error_from_validation_failure,
     retry_exhausted,
 )
+from llm.factory import (
+    DisabledLLMProvider,
+    ProviderAdapterKind,
+    ProviderFactoryConfig,
+    create_llm_provider,
+)
 from llm.models import (
     EffectiveOptions,
     FinishReason,
@@ -39,8 +45,11 @@ from llm.prompts import (
     load_prompt,
     render_prompt,
 )
+from llm.providers import CORRELATION_HEADER_NAME, OpenAICompatibleProvider
 
 __all__ = [
+    "CORRELATION_HEADER_NAME",
+    "DisabledLLMProvider",
     "EffectiveOptions",
     "FinishReason",
     "LLMError",
@@ -54,17 +63,21 @@ __all__ = [
     "LLMResultMetadata",
     "LoadedPrompt",
     "MessageRole",
+    "OpenAICompatibleProvider",
     "PromptError",
     "PromptReason",
     "PromptReference",
     "PromptTemplate",
+    "ProviderAdapterKind",
     "ProviderDefaults",
+    "ProviderFactoryConfig",
     "RenderedPrompt",
     "RetryPolicy",
     "StructuredOutput",
     "StructuredOutputMode",
     "TokenUsage",
     "canonical_rendered_digest",
+    "create_llm_provider",
     "error_from_http_status",
     "error_from_httpx",
     "error_from_validation_failure",

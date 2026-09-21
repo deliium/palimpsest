@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import math
 import re
 from enum import StrEnum
 from pathlib import Path
@@ -22,6 +23,16 @@ _CREDENTIALS_IN_URL = re.compile(r"(://[^:/?#]+:)([^@]+)(@)")
 _PASSWORD_ASSIGNMENT = re.compile(
     r"(?i)(password|secret|token|api[_-]?key)\s*[:=]\s*\S+"
 )
+_HTTP_URL = re.compile(r"https?://[^\s'\"\\]+")
+_LLM_MODEL_RE: Final[re.Pattern[str]] = re.compile(
+    r"^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+)
+_LOCAL_HTTP_HOSTS: Final[frozenset[str]] = frozenset(
+    {"localhost", "127.0.0.1", "::1"}
+)
+_DEFAULT_LLM_MAX_REQUEST_BYTES: Final[int] = 1_048_576
+_DEFAULT_LLM_MAX_RESPONSE_BYTES: Final[int] = 1_048_576
+_DEFAULT_LLM_MAX_HEADER_BYTES: Final[int] = 8_192
 
 
 class SettingsError(Exception):
@@ -41,6 +52,21 @@ class LogLevel(StrEnum):
     ERROR = "ERROR"
 
 
+class LlmAdapterKind(StrEnum):
+    """Settings-side adapter selector. Aligns with ``llm.factory`` kinds."""
+
+    DISABLED = "disabled"
+    OPENAI_COMPATIBLE = "openai_compatible"
+
+
+class LlmStructuredOutputMode(StrEnum):
+    """Settings-side structured-output mode. Aligns with ``llm`` modes."""
+
+    JSON_SCHEMA = "json_schema"
+    JSON_OBJECT = "json_object"
+    PROMPT_ONLY = "prompt_only"
+
+
 def redact_secrets(text: str) -> str:
     """Strip URL credentials and DSN-like values from diagnostic text."""
     redacted = _CREDENTIALS_IN_URL.sub(r"\1***\2", text)
@@ -50,6 +76,7 @@ def redact_secrets(text: str) -> str:
         redacted,
     )
     redacted = re.sub(r"postgresql://[^\s'\"\\]+", "postgresql://***", redacted)
+    redacted = _HTTP_URL.sub("http(s)://***", redacted)
     return _PASSWORD_ASSIGNMENT.sub(r"\1=***", redacted)
 
 
@@ -59,8 +86,31 @@ def _reject_bool(value: object) -> object:
     return value
 
 
+def _settings_error_from_validation(exc: ValidationError) -> SettingsError:
+    """Build a SettingsError without Pydantic input values or context."""
+    parts: list[str] = []
+    for err in exc.errors(
+        include_url=False,
+        include_context=False,
+        include_input=False,
+    ):
+        loc = ".".join(str(item) for item in err.get("loc", ()))
+        msg = str(err.get("msg", "invalid value"))
+        if loc:
+            parts.append(f"{loc}: {msg}")
+        else:
+            parts.append(msg)
+    message = "; ".join(parts) if parts else "invalid settings"
+    return SettingsError(redact_secrets(message))
+
+
 class Settings(BaseSettings):
-    """Typed configuration. Instantiate via ``load_settings``; not at import time."""
+    """Typed configuration. Instantiate via ``load_settings``; not at import time.
+
+    LLM fields are disabled by default. A future cognition consumer owns
+    settings-to-``llm.factory`` mapping and provider lifecycle; this module
+    does not construct providers.
+    """
 
     model_config = SettingsConfigDict(
         env_prefix=SETTINGS_PREFIX,
@@ -81,18 +131,46 @@ class Settings(BaseSettings):
     pool_timeout_seconds: Annotated[float, Field(gt=0)] = 30.0
     default_run_seed: int | None = None
 
+    llm_adapter_kind: LlmAdapterKind = LlmAdapterKind.DISABLED
+    llm_model: str | None = Field(default=None, repr=False)
+    llm_base_url: SecretStr | None = Field(default=None, repr=False)
+    llm_api_key: SecretStr | None = Field(default=None, repr=False)
+    llm_structured_output_mode: LlmStructuredOutputMode = (
+        LlmStructuredOutputMode.JSON_SCHEMA
+    )
+    llm_temperature: float | None = None
+    llm_max_attempts: Annotated[int, Field(ge=1)] = 3
+    llm_per_attempt_timeout_seconds: Annotated[float, Field(gt=0)] = 30.0
+    llm_total_deadline_seconds: float | None = None
+    llm_max_request_bytes: Annotated[int, Field(ge=1)] = _DEFAULT_LLM_MAX_REQUEST_BYTES
+    llm_max_response_bytes: Annotated[int, Field(ge=1)] = (
+        _DEFAULT_LLM_MAX_RESPONSE_BYTES
+    )
+    llm_max_header_bytes: Annotated[int, Field(ge=1)] = _DEFAULT_LLM_MAX_HEADER_BYTES
+    llm_send_correlation_header: bool = False
+
     @field_validator(
         "api_port",
         "pool_size",
         "max_overflow",
         "default_run_seed",
+        "llm_max_attempts",
+        "llm_max_request_bytes",
+        "llm_max_response_bytes",
+        "llm_max_header_bytes",
         mode="before",
     )
     @classmethod
     def reject_boolean_integers(cls, value: object) -> object:
         return _reject_bool(value)
 
-    @field_validator("pool_timeout_seconds", mode="before")
+    @field_validator(
+        "pool_timeout_seconds",
+        "llm_temperature",
+        "llm_per_attempt_timeout_seconds",
+        "llm_total_deadline_seconds",
+        mode="before",
+    )
     @classmethod
     def reject_boolean_floats(cls, value: object) -> object:
         return _reject_bool(value)
@@ -104,6 +182,70 @@ class Settings(BaseSettings):
             raise ValueError("default_run_seed must be a non-negative integer")
         return value
 
+    @field_validator("llm_temperature")
+    @classmethod
+    def validate_llm_temperature(cls, value: float | None) -> float | None:
+        if value is None:
+            return None
+        if isinstance(value, bool) or not isinstance(value, (int, float)):
+            raise ValueError("llm_temperature must be a finite number")
+        number = float(value)
+        if not math.isfinite(number):
+            raise ValueError("llm_temperature must be finite")
+        if number < 0.0 or number > 2.0:
+            raise ValueError("llm_temperature out of range")
+        return number
+
+    @field_validator("llm_per_attempt_timeout_seconds")
+    @classmethod
+    def validate_llm_per_attempt_timeout(cls, value: float) -> float:
+        if not math.isfinite(float(value)):
+            raise ValueError("llm_per_attempt_timeout_seconds must be finite")
+        return float(value)
+
+    @field_validator("llm_total_deadline_seconds")
+    @classmethod
+    def validate_llm_total_deadline(cls, value: float | None) -> float | None:
+        if value is None:
+            return None
+        number = float(value)
+        if not math.isfinite(number):
+            raise ValueError("llm_total_deadline_seconds must be finite")
+        if number <= 0.0:
+            raise ValueError("llm_total_deadline_seconds must be > 0")
+        return number
+
+    @field_validator("llm_model")
+    @classmethod
+    def validate_llm_model(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        if not isinstance(value, str):
+            raise ValueError("llm_model must be a string")
+        if not value or value.strip() != value or not value.strip():
+            raise ValueError("llm_model must be a non-blank string")
+        if _LLM_MODEL_RE.fullmatch(value) is None:
+            raise ValueError("llm_model contains unsupported characters")
+        return value
+
+    @field_validator("llm_api_key")
+    @classmethod
+    def validate_llm_api_key(cls, value: SecretStr | None) -> SecretStr | None:
+        if value is None:
+            return None
+        raw = value.get_secret_value()
+        if not raw or raw.strip() != raw or not raw.strip():
+            raise ValueError("llm_api_key must be a non-blank string")
+        return value
+
+    @field_validator("llm_base_url")
+    @classmethod
+    def validate_llm_base_url_shape(cls, value: SecretStr | None) -> SecretStr | None:
+        if value is None:
+            return None
+        _validate_llm_base_url(value.get_secret_value())
+        return value
+
     @model_validator(mode="after")
     def validate_database_urls(self) -> Settings:
         if self.database_url is not None:
@@ -112,6 +254,22 @@ class Settings(BaseSettings):
             raw = self.test_database_url.get_secret_value()
             _validate_asyncpg_url(raw)
             _validate_disposable_test_database(raw)
+        return self
+
+    @model_validator(mode="after")
+    def validate_llm_when_enabled(self) -> Settings:
+        if self.llm_adapter_kind is LlmAdapterKind.DISABLED:
+            return self
+        if self.llm_base_url is None:
+            raise ValueError(
+                "PALIMPSEST_LLM_BASE_URL is required when the LLM adapter is enabled"
+            )
+        if self.llm_model is None:
+            raise ValueError(
+                "PALIMPSEST_LLM_MODEL is required when the LLM adapter is enabled"
+            )
+        # Re-validate so enablement cannot skip URL/host checks.
+        _validate_llm_base_url(self.llm_base_url.get_secret_value())
         return self
 
     def require_runtime_database(self) -> Settings:
@@ -135,8 +293,11 @@ class Settings(BaseSettings):
     def json_logs(self) -> bool:
         return self.environment != AppEnvironment.LOCAL
 
-    def bootstrap_fields(self) -> dict[str, str | int | bool]:
-        """Secret-safe DEBUG details. No DSN, credentials, or wholesale dump."""
+    def llm_enabled(self) -> bool:
+        return self.llm_adapter_kind is not LlmAdapterKind.DISABLED
+
+    def bootstrap_fields(self) -> dict[str, str | int | float | bool]:
+        """Secret-safe DEBUG details. No DSN, credentials, endpoints, or dumps."""
         return {
             "environment": self.environment.value,
             "log_level": self.log_level.value,
@@ -147,6 +308,20 @@ class Settings(BaseSettings):
             "has_database_url": self.database_url is not None,
             "has_test_database_url": self.test_database_url is not None,
             "has_default_run_seed": self.default_run_seed is not None,
+            "llm_adapter_kind": self.llm_adapter_kind.value,
+            "llm_enabled": self.llm_enabled(),
+            "llm_structured_output_mode": self.llm_structured_output_mode.value,
+            "has_llm_model": self.llm_model is not None,
+            "has_llm_base_url": self.llm_base_url is not None,
+            "has_llm_api_key": self.llm_api_key is not None,
+            "llm_max_attempts": self.llm_max_attempts,
+            "llm_per_attempt_timeout_seconds": self.llm_per_attempt_timeout_seconds,
+            "has_llm_total_deadline": self.llm_total_deadline_seconds is not None,
+            "llm_max_request_bytes": self.llm_max_request_bytes,
+            "llm_max_response_bytes": self.llm_max_response_bytes,
+            "llm_max_header_bytes": self.llm_max_header_bytes,
+            "llm_send_correlation_header": self.llm_send_correlation_header,
+            "has_llm_temperature": self.llm_temperature is not None,
         }
 
     def __repr__(self) -> str:
@@ -157,7 +332,10 @@ class Settings(BaseSettings):
             f"api_host={self.api_host!r}, "
             f"api_port={self.api_port}, "
             "database_url=SecretStr('**********'), "
-            f"pool_size={self.pool_size})"
+            f"pool_size={self.pool_size}, "
+            f"llm_adapter_kind={self.llm_adapter_kind.value!r}, "
+            f"llm_enabled={self.llm_enabled()}, "
+            f"has_llm_api_key={self.llm_api_key is not None})"
         )
 
     def __str__(self) -> str:
@@ -167,6 +345,38 @@ class Settings(BaseSettings):
 def _validate_asyncpg_url(url: str) -> None:
     if not url.startswith(_ASYNC_SCHEME):
         raise ValueError("database URL must use postgresql+asyncpg")
+
+
+def _validate_llm_base_url(url: str) -> None:
+    """Validate LLM base URL without embedding the URL in error messages."""
+    if not isinstance(url, str) or not url or url.strip() != url:
+        raise ValueError("LLM base URL is invalid")
+    if "://" not in url:
+        raise ValueError("LLM base URL scheme is invalid")
+    scheme, remainder = url.split("://", 1)
+    if scheme not in {"http", "https"}:
+        raise ValueError("LLM base URL scheme is invalid")
+    authority = remainder.split("/", 1)[0]
+    if "@" in authority or "%40" in authority.lower():
+        raise ValueError("LLM base URL must not include userinfo")
+    if "?" in url or "#" in url:
+        raise ValueError("LLM base URL must not include query or fragment")
+
+    parsed = urlparse(url)
+    if parsed.scheme != scheme:
+        raise ValueError("LLM base URL scheme is invalid")
+    if parsed.username is not None or parsed.password is not None:
+        raise ValueError("LLM base URL must not include userinfo")
+    if parsed.query or parsed.fragment:
+        raise ValueError("LLM base URL must not include query or fragment")
+    hostname = parsed.hostname
+    if hostname is None or not hostname:
+        raise ValueError("LLM base URL host is required")
+    path = parsed.path or ""
+    if path.rstrip("/") != "/v1":
+        raise ValueError("LLM base URL path must be /v1")
+    if scheme == "http" and hostname.lower() not in _LOCAL_HTTP_HOSTS:
+        raise ValueError("LLM HTTP base URL must target an allowed local endpoint")
 
 
 def database_name_from_url(url: str) -> str:
@@ -221,7 +431,7 @@ def load_settings(
             **overrides,
         )
     except ValidationError as exc:
-        raise SettingsError(redact_secrets(str(exc))) from None
+        raise _settings_error_from_validation(exc) from None
 
 
 def load_runtime_settings(

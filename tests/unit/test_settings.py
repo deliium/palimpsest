@@ -11,6 +11,8 @@ from infrastructure.settings import (
     LOG_LEVEL_ENV,
     SETTINGS_PREFIX,
     AppEnvironment,
+    LlmAdapterKind,
+    LlmStructuredOutputMode,
     LogLevel,
     SettingsError,
     load_migration_settings,
@@ -23,6 +25,9 @@ from simulation.models import SimulationRunConfig
 pytestmark = pytest.mark.unit
 
 SECRET_DSN = "postgresql+asyncpg://palimpsest:hunter2@127.0.0.1:5432/palimpsest"
+LLM_SECRET_KEY = "sk-live-hunter2-endpoint"
+LOCAL_LLM_URL = "http://127.0.0.1:11434/v1"
+REMOTE_LLM_URL = "https://api.example.com/v1"
 
 
 @pytest.fixture(autouse=True)
@@ -175,3 +180,141 @@ def test_migration_settings_accept_agreeing_database_urls(
 def test_migration_settings_require_a_database_url() -> None:
     with pytest.raises(SettingsError, match="PALIMPSEST_DATABASE_URL"):
         load_migration_settings(env_file=False)
+
+
+def test_llm_defaults_are_disabled() -> None:
+    settings = load_settings(env_file=False)
+    assert settings.llm_adapter_kind is LlmAdapterKind.DISABLED
+    assert settings.llm_enabled() is False
+    assert settings.llm_model is None
+    assert settings.llm_base_url is None
+    assert settings.llm_api_key is None
+    assert settings.llm_structured_output_mode is LlmStructuredOutputMode.JSON_SCHEMA
+    assert settings.llm_send_correlation_header is False
+    bootstrap = settings.bootstrap_fields()
+    assert bootstrap["llm_adapter_kind"] == "disabled"
+    assert bootstrap["llm_enabled"] is False
+    assert bootstrap["has_llm_api_key"] is False
+    assert "llm_base_url" not in bootstrap
+    assert LOCAL_LLM_URL not in str(bootstrap)
+
+
+def test_llm_enabled_requires_model_and_base_url() -> None:
+    with pytest.raises(SettingsError, match="PALIMPSEST_LLM_BASE_URL"):
+        load_settings(
+            env_file=False,
+            llm_adapter_kind=LlmAdapterKind.OPENAI_COMPATIBLE,
+            llm_model="llama3.2",
+        )
+    with pytest.raises(SettingsError, match="PALIMPSEST_LLM_MODEL"):
+        load_settings(
+            env_file=False,
+            llm_adapter_kind=LlmAdapterKind.OPENAI_COMPATIBLE,
+            llm_base_url=LOCAL_LLM_URL,
+        )
+
+
+def test_llm_accepts_local_http_and_remote_https() -> None:
+    local = load_settings(
+        env_file=False,
+        llm_adapter_kind=LlmAdapterKind.OPENAI_COMPATIBLE,
+        llm_model="llama3.2",
+        llm_base_url=LOCAL_LLM_URL,
+        llm_temperature=0,
+    )
+    assert local.llm_enabled() is True
+    assert local.llm_base_url is not None
+    assert local.llm_base_url.get_secret_value() == LOCAL_LLM_URL
+    assert local.llm_temperature == 0.0
+
+    remote = load_settings(
+        env_file=False,
+        llm_adapter_kind=LlmAdapterKind.OPENAI_COMPATIBLE,
+        llm_model="gpt-4o-mini",
+        llm_base_url=REMOTE_LLM_URL,
+        llm_api_key=LLM_SECRET_KEY,
+        llm_send_correlation_header=True,
+    )
+    assert remote.llm_send_correlation_header is True
+    assert remote.llm_api_key is not None
+    assert remote.llm_api_key.get_secret_value() == LLM_SECRET_KEY
+
+
+@pytest.mark.parametrize(
+    "url",
+    [
+        "ftp://127.0.0.1/v1",
+        "http://example.com/v1",
+        "http://127.0.0.1/v1/chat/completions",
+        "http://127.0.0.1/v2",
+        "http://user:pass@127.0.0.1/v1",
+        "http://user%3Apass@127.0.0.1/v1",
+        "http://127.0.0.1/v1?x=1",
+        "http://127.0.0.1/v1#frag",
+        "https://api.example.com/v1?key=sekrit",
+    ],
+)
+def test_llm_base_url_rejects_unsafe_shapes(url: str) -> None:
+    with pytest.raises(SettingsError) as exc_info:
+        load_settings(
+            env_file=False,
+            llm_adapter_kind=LlmAdapterKind.OPENAI_COMPATIBLE,
+            llm_model="llama3.2",
+            llm_base_url=url,
+        )
+    message = str(exc_info.value)
+    assert url not in message
+    assert "sekrit" not in message
+    assert "user:pass" not in message
+
+
+def test_llm_rejects_blank_api_key_and_boolean_numerics() -> None:
+    with pytest.raises(SettingsError, match="non-blank"):
+        load_settings(
+            env_file=False,
+            llm_adapter_kind=LlmAdapterKind.OPENAI_COMPATIBLE,
+            llm_model="llama3.2",
+            llm_base_url=LOCAL_LLM_URL,
+            llm_api_key="   ",
+        )
+    with pytest.raises(SettingsError, match="booleans"):
+        load_settings(env_file=False, llm_max_attempts=True)
+    with pytest.raises(SettingsError, match="booleans"):
+        load_settings(env_file=False, llm_temperature=True)
+    with pytest.raises(SettingsError, match="booleans"):
+        load_settings(env_file=False, llm_per_attempt_timeout_seconds=False)
+
+
+def test_llm_secrets_absent_from_repr_bootstrap_and_errors() -> None:
+    settings = load_settings(
+        env_file=False,
+        llm_adapter_kind=LlmAdapterKind.OPENAI_COMPATIBLE,
+        llm_model="llama3.2",
+        llm_base_url=LOCAL_LLM_URL,
+        llm_api_key=LLM_SECRET_KEY,
+    )
+    dumped = settings.model_dump()
+    bootstrap = settings.bootstrap_fields()
+    for surface in (repr(settings), str(settings), str(dumped), str(bootstrap)):
+        assert LLM_SECRET_KEY not in surface
+        assert LOCAL_LLM_URL not in surface
+        assert "11434" not in surface
+
+    with pytest.raises(SettingsError) as exc_info:
+        load_settings(
+            env_file=False,
+            llm_adapter_kind=LlmAdapterKind.OPENAI_COMPATIBLE,
+            llm_model="llama3.2",
+            llm_base_url=f"http://leak:{LLM_SECRET_KEY}@127.0.0.1/v1",
+        )
+    assert LLM_SECRET_KEY not in str(exc_info.value)
+    assert "leak" not in str(exc_info.value)
+
+
+def test_settings_error_excludes_validation_input_values() -> None:
+    with pytest.raises(SettingsError) as exc_info:
+        load_settings(env_file=False, llm_max_attempts="not-an-int-sekrit")
+    message = str(exc_info.value)
+    assert "not-an-int-sekrit" not in message
+    assert "input_value" not in message
+    assert "pydantic.dev" not in message
