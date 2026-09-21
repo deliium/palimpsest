@@ -36,7 +36,17 @@ from agents.cognition.models import (
     require_confidence,
 )
 from agents.models import AgentId, GoalId
-from memory.models import Belief, BeliefId, MemoryId, MemoryTrace
+from memory.models import (
+    Belief,
+    BeliefId,
+    ConceptMention,
+    MemoryId,
+    MemoryProvenance,
+    MemorySituationContext,
+    MemorySourceKind,
+    MemoryTrace,
+    MentionId,
+)
 from world.actions import Wait, require_agent_command
 from world.identifiers import EntityId, WorldId, WorldRevision
 from world.models import LifeStatus
@@ -204,14 +214,31 @@ def test_action_plan_rejects_mappings_and_subclasses() -> None:
         ActionPlan(owner_id=AgentId("agent-1"), command=FakeWait(), confidence=1.0)
 
 
+def _memory_trace(*, owner: AgentId, memory_id: str = "mem-1") -> MemoryTrace:
+    return MemoryTrace(
+        memory_id=MemoryId(memory_id),
+        owner_id=owner,
+        world_revision=WorldRevision(0),
+        concepts=(ConceptMention(mention_id=MentionId("c-1"), concept="note"),),
+        entities=(),
+        relations=(),
+        context=MemorySituationContext(),
+        emotional_salience=0.0,
+        confidence=1.0,
+        provenance=MemoryProvenance(
+            kind=MemorySourceKind.DIRECT_OBSERVATION,
+            source_tick=0,
+        ),
+        created_tick=0,
+        source_tick=0,
+        last_access_tick=0,
+        access_count=0,
+    )
+
+
 def test_memory_update_intent_owner_and_kind() -> None:
     agent = AgentId("agent-1")
-    memory = MemoryTrace(
-        memory_id=MemoryId("mem-1"),
-        owner_id=agent,
-        world_revision=WorldRevision(0),
-        content={"kind": "note"},
-    )
+    memory = _memory_trace(owner=agent)
     intent = MemoryUpdateIntent(
         owner_id=agent,
         kind=MemoryUpdateKind.WRITE_MEMORY,
@@ -222,12 +249,7 @@ def test_memory_update_intent_owner_and_kind() -> None:
         MemoryUpdateIntent(
             owner_id=agent,
             kind=MemoryUpdateKind.WRITE_MEMORY,
-            memory=MemoryTrace(
-                memory_id=MemoryId("mem-2"),
-                owner_id=AgentId("other"),
-                world_revision=WorldRevision(0),
-                content={},
-            ),
+            memory=_memory_trace(owner=AgentId("other"), memory_id="mem-2"),
         )
     belief = Belief(
         belief_id=BeliefId("bel-1"),

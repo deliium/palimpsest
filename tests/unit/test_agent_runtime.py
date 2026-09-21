@@ -16,9 +16,14 @@ from memory.models import (
     Belief,
     BeliefId,
     BeliefStore,
+    ConceptMention,
     MemoryId,
+    MemoryProvenance,
+    MemorySituationContext,
+    MemorySourceKind,
     MemoryStore,
     MemoryTrace,
+    MentionId,
 )
 from simulation.agent_runtime import (
     AgentRuntime,
@@ -287,7 +292,22 @@ async def test_memory_updates_apply_after_success() -> None:
                         memory_id=MemoryId("mem-1"),
                         owner_id=loop_input.agent_id,
                         world_revision=WorldRevision(0),
-                        content={"kind": "note"},
+                        concepts=(
+                            ConceptMention(mention_id=MentionId("c-1"), concept="note"),
+                        ),
+                        entities=(),
+                        relations=(),
+                        context=MemorySituationContext(),
+                        emotional_salience=0.0,
+                        confidence=1.0,
+                        provenance=MemoryProvenance(
+                            kind=MemorySourceKind.DIRECT_OBSERVATION,
+                            source_tick=0,
+                        ),
+                        created_tick=0,
+                        source_tick=0,
+                        last_access_tick=0,
+                        access_count=0,
                     ),
                 ),
                 MemoryUpdateIntent(

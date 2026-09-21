@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-from typing import Any
-
 import pytest
 from hypothesis import given, settings
 from hypothesis import strategies as st
@@ -13,9 +11,14 @@ from memory.models import (
     Belief,
     BeliefId,
     BeliefStore,
+    ConceptMention,
     MemoryId,
+    MemoryProvenance,
+    MemorySituationContext,
+    MemorySourceKind,
     MemoryStore,
     MemoryTrace,
+    MentionId,
     OwnershipError,
 )
 from social.models import Relationship, RelationshipId
@@ -26,31 +29,51 @@ _AGENT_IDS = st.text(
     min_size=1,
     max_size=24,
 )
-_CONTENTS = st.dictionaries(
-    keys=st.text(
-        alphabet=st.characters(whitelist_categories=("L", "N")),
-        min_size=1,
-        max_size=12,
-    ),
-    values=st.one_of(st.booleans(), st.integers(-100, 100), st.text(max_size=24)),
-    max_size=3,
+_CONCEPTS = st.text(
+    alphabet=st.characters(whitelist_categories=("L", "N")),
+    min_size=1,
+    max_size=12,
 )
 
 
-@given(owner=_AGENT_IDS, foreign=_AGENT_IDS, content=_CONTENTS)
+def _trace(
+    *,
+    memory_id: str = "m-1",
+    owner: str = "agent-1",
+    revision: int = 0,
+    concept: str = "note",
+    tick: int = 0,
+) -> MemoryTrace:
+    return MemoryTrace(
+        memory_id=MemoryId(memory_id),
+        owner_id=AgentId(owner),
+        world_revision=WorldRevision(revision),
+        concepts=(ConceptMention(mention_id=MentionId("c-1"), concept=concept),),
+        entities=(),
+        relations=(),
+        context=MemorySituationContext(),
+        emotional_salience=0.0,
+        confidence=1.0,
+        provenance=MemoryProvenance(
+            kind=MemorySourceKind.DIRECT_OBSERVATION,
+            source_tick=tick,
+        ),
+        created_tick=tick,
+        source_tick=tick,
+        last_access_tick=tick,
+        access_count=0,
+    )
+
+
+@given(owner=_AGENT_IDS, foreign=_AGENT_IDS, concept=_CONCEPTS)
 @settings(max_examples=30, deadline=None)
 def test_property_cross_owner_memory_write_fails(
-    owner: str, foreign: str, content: dict[str, Any]
+    owner: str, foreign: str, concept: str
 ) -> None:
     if owner == foreign:
         return
     store = MemoryStore(AgentId(owner))
-    record = MemoryTrace(
-        memory_id=MemoryId("m-1"),
-        owner_id=AgentId(foreign),
-        world_revision=WorldRevision(0),
-        content=content,
-    )
+    record = _trace(owner=foreign, concept=concept)
     with pytest.raises(OwnershipError, match="does not match"):
         store.write(record)
 
@@ -58,37 +81,49 @@ def test_property_cross_owner_memory_write_fails(
 def test_memory_store_preserves_insertion_order_and_last_write_wins() -> None:
     owner = AgentId("agent-1")
     store = MemoryStore(owner)
-    store.write(
-        MemoryTrace(
-            memory_id=MemoryId("m-1"),
-            owner_id=owner,
-            world_revision=WorldRevision(0),
-            content={"n": 1},
-        )
-    )
-    store.write(
-        MemoryTrace(
-            memory_id=MemoryId("m-2"),
-            owner_id=owner,
-            world_revision=WorldRevision(1),
-            content={"n": 2},
-        )
-    )
-    store.write(
-        MemoryTrace(
-            memory_id=MemoryId("m-1"),
-            owner_id=owner,
-            world_revision=WorldRevision(2),
-            content={"n": 3},
-        )
-    )
+    store.write(_trace(memory_id="m-1", revision=0, concept="one", tick=0))
+    store.write(_trace(memory_id="m-2", revision=1, concept="two", tick=1))
+    store.write(_trace(memory_id="m-1", revision=2, concept="three", tick=2))
     snapshot = store.snapshot()
     assert [trace.memory_id for trace in snapshot] == [
         MemoryId("m-1"),
         MemoryId("m-2"),
     ]
-    assert snapshot[0].content["n"] == 3
+    assert snapshot[0].concepts[0].concept == "three"
     assert snapshot[0].world_revision == WorldRevision(2)
+
+
+def test_memory_trace_rejects_duplicate_and_overlapping_mention_ids() -> None:
+    with pytest.raises(ValueError, match="duplicate_mention_id"):
+        MemoryTrace(
+            memory_id=MemoryId("m-1"),
+            owner_id=AgentId("agent-1"),
+            world_revision=WorldRevision(0),
+            concepts=(
+                ConceptMention(mention_id=MentionId("c-1"), concept="a"),
+                ConceptMention(mention_id=MentionId("c-1"), concept="b"),
+            ),
+            entities=(),
+            relations=(),
+            context=MemorySituationContext(),
+            emotional_salience=0.0,
+            confidence=1.0,
+            provenance=MemoryProvenance(
+                kind=MemorySourceKind.DIRECT_OBSERVATION,
+                source_tick=0,
+            ),
+            created_tick=0,
+            source_tick=0,
+            last_access_tick=0,
+            access_count=0,
+        )
+
+
+def test_memory_trace_repr_omits_payload_text() -> None:
+    trace = _trace(concept="secret-label")
+    rendered = repr(trace)
+    assert "secret-label" not in rendered
+    assert "concept_count=1" in rendered
 
 
 def test_belief_requires_confidence_and_evidence_tuple() -> None:

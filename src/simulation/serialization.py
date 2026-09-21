@@ -11,7 +11,23 @@ from collections.abc import Mapping, Sequence
 from typing import Any, Final
 
 from agents.models import Agent, AgentId, Goal, GoalId, GoalStatus
-from memory.models import Belief, BeliefId, MemoryId, MemoryTrace
+from memory.models import (
+    Belief,
+    BeliefId,
+    ConceptMention,
+    EntityMention,
+    MemoryEmbedding,
+    MemoryId,
+    MemoryLineage,
+    MemoryProvenance,
+    MemoryRelation,
+    MemorySituationContext,
+    MemorySourceKind,
+    MemoryTrace,
+    MentionId,
+    RelationEndpoint,
+    RelationEndpointKind,
+)
 from simulation.models import (
     LLM_REPLAY_REQUIREMENT,
     ExportMetadata,
@@ -935,31 +951,319 @@ def _ensure_dict(value: object, *, path: str) -> bool:
 
 def _encode_memory_trace(value: MemoryTrace) -> dict[str, Any]:
     return {
-        "content": _encode_content(dict(value.content), path="$.content"),
+        "access_count": value.access_count,
+        "concepts": [
+            {"concept": item.concept, "mention_id": item.mention_id.value}
+            for item in value.concepts
+        ],
+        "confidence": value.confidence,
+        "context": {
+            "location_id": (
+                None
+                if value.context.location_id is None
+                else value.context.location_id.value
+            ),
+            "tags": list(value.context.tags),
+        },
+        "created_tick": value.created_tick,
+        "emotional_salience": value.emotional_salience,
+        "entities": [
+            {
+                "entity_id": (None if item.entity_id is None else item.entity_id.value),
+                "label": item.label,
+                "mention_id": item.mention_id.value,
+            }
+            for item in value.entities
+        ],
+        "embedding": (
+            None
+            if value.embedding is None
+            else {
+                "model": value.embedding.model,
+                "vector": list(value.embedding.vector),
+                "version": value.embedding.version,
+            }
+        ),
+        "expires_at_tick": value.expires_at_tick,
+        "forgotten_at_tick": value.forgotten_at_tick,
+        "last_access_tick": value.last_access_tick,
+        "lineage": {
+            "generation": value.lineage.generation,
+            "supersedes_memory_id": (
+                None
+                if value.lineage.supersedes_memory_id is None
+                else value.lineage.supersedes_memory_id.value
+            ),
+        },
         "memory_id": value.memory_id.value,
         "owner_id": value.owner_id.value,
+        "provenance": {
+            "kind": value.provenance.kind.value,
+            "observed_source_id": (
+                None
+                if value.provenance.observed_source_id is None
+                else value.provenance.observed_source_id.value
+            ),
+            "source_tick": value.provenance.source_tick,
+            "speaker_id": (
+                None
+                if value.provenance.speaker_id is None
+                else value.provenance.speaker_id.value
+            ),
+        },
+        "relations": [
+            {
+                "object": {
+                    "kind": item.object.kind.value,
+                    "mention_id": item.object.mention_id.value,
+                },
+                "predicate": item.predicate,
+                "relation_id": item.relation_id.value,
+                "subject": {
+                    "kind": item.subject.kind.value,
+                    "mention_id": item.subject.mention_id.value,
+                },
+            }
+            for item in value.relations
+        ],
+        "source_tick": value.source_tick,
         "world_revision": value.world_revision.value,
     }
 
 
 def _decode_memory_trace(data: dict[str, Any], *, path: str) -> MemoryTrace:
     _require_keys(
-        data, {"memory_id", "owner_id", "world_revision", "content"}, path=path
+        data,
+        {
+            "access_count",
+            "concepts",
+            "confidence",
+            "context",
+            "created_tick",
+            "emotional_salience",
+            "entities",
+            "embedding",
+            "expires_at_tick",
+            "forgotten_at_tick",
+            "last_access_tick",
+            "lineage",
+            "memory_id",
+            "owner_id",
+            "provenance",
+            "relations",
+            "source_tick",
+            "world_revision",
+        },
+        path=path,
     )
-    content = data["content"]
-    if not isinstance(content, dict):
-        raise DomainSerializationError("invalid_object", f"{path}.content")
+    concepts_raw = data["concepts"]
+    entities_raw = data["entities"]
+    relations_raw = data["relations"]
+    context_raw = data["context"]
+    provenance_raw = data["provenance"]
+    lineage_raw = data["lineage"]
+    if not isinstance(concepts_raw, list):
+        raise DomainSerializationError("invalid_array", f"{path}.concepts")
+    if not isinstance(entities_raw, list):
+        raise DomainSerializationError("invalid_array", f"{path}.entities")
+    if not isinstance(relations_raw, list):
+        raise DomainSerializationError("invalid_array", f"{path}.relations")
+    if not isinstance(context_raw, dict):
+        raise DomainSerializationError("invalid_object", f"{path}.context")
+    if not isinstance(provenance_raw, dict):
+        raise DomainSerializationError("invalid_object", f"{path}.provenance")
+    if not isinstance(lineage_raw, dict):
+        raise DomainSerializationError("invalid_object", f"{path}.lineage")
     try:
+        concepts = tuple(
+            _decode_concept_mention(item, path=f"{path}.concepts[{index}]")
+            for index, item in enumerate(concepts_raw)
+        )
+        entities = tuple(
+            _decode_entity_mention(item, path=f"{path}.entities[{index}]")
+            for index, item in enumerate(entities_raw)
+        )
+        relations = tuple(
+            _decode_memory_relation(item, path=f"{path}.relations[{index}]")
+            for index, item in enumerate(relations_raw)
+        )
+        _require_keys(context_raw, {"location_id", "tags"}, path=f"{path}.context")
+        tags_raw = context_raw["tags"]
+        if not isinstance(tags_raw, list):
+            raise DomainSerializationError("invalid_array", f"{path}.context.tags")
+        decoded_tags: list[str] = []
+        for index, tag in enumerate(tags_raw):
+            tag_path = f"{path}.context.tags." + str(index)
+            decoded_tags.append(_str_field({"tag": tag}, "tag", path=tag_path))
+        tags = tuple(decoded_tags)
+        _require_keys(
+            provenance_raw,
+            {"kind", "observed_source_id", "source_tick", "speaker_id"},
+            path=f"{path}.provenance",
+        )
+        kind_raw = _str_field(provenance_raw, "kind", path=f"{path}.provenance")
+        try:
+            kind = MemorySourceKind(kind_raw)
+        except ValueError as exc:
+            raise DomainSerializationError(
+                "invalid_enum", f"{path}.provenance.kind"
+            ) from exc
+        observed_raw = provenance_raw["observed_source_id"]
+        observed_source_id = None
+        if observed_raw is not None:
+            if not isinstance(observed_raw, str):
+                raise DomainSerializationError(
+                    "invalid_string", f"{path}.provenance.observed_source_id"
+                )
+            observed_source_id = EventId(observed_raw)
+        _require_keys(
+            lineage_raw,
+            {"generation", "supersedes_memory_id"},
+            path=f"{path}.lineage",
+        )
+        supersedes_raw = lineage_raw["supersedes_memory_id"]
+        supersedes = None
+        if supersedes_raw is not None:
+            if not isinstance(supersedes_raw, str):
+                raise DomainSerializationError(
+                    "invalid_string", f"{path}.lineage.supersedes_memory_id"
+                )
+            supersedes = MemoryId(supersedes_raw)
+        expires_raw = data["expires_at_tick"]
+        forgotten_raw = data["forgotten_at_tick"]
+        expires_at_tick = (
+            None
+            if expires_raw is None
+            else _int_field(data, "expires_at_tick", path=path)
+        )
+        forgotten_at_tick = (
+            None
+            if forgotten_raw is None
+            else _int_field(data, "forgotten_at_tick", path=path)
+        )
+        embedding = _decode_memory_embedding(
+            data["embedding"], path=f"{path}.embedding"
+        )
         return MemoryTrace(
             memory_id=MemoryId(_str_field(data, "memory_id", path=path)),
             owner_id=AgentId(_str_field(data, "owner_id", path=path)),
             world_revision=WorldRevision(_int_field(data, "world_revision", path=path)),
-            content=_decode_content(content, path=f"{path}.content"),  # type: ignore[arg-type]
+            concepts=concepts,
+            entities=entities,
+            relations=relations,
+            context=MemorySituationContext(
+                location_id=_optional_entity_id(
+                    context_raw["location_id"], path=f"{path}.context.location_id"
+                ),
+                tags=tags,
+            ),
+            emotional_salience=_float_field(data, "emotional_salience", path=path),
+            confidence=_float_field(data, "confidence", path=path),
+            provenance=MemoryProvenance(
+                kind=kind,
+                source_tick=_int_field(
+                    provenance_raw, "source_tick", path=f"{path}.provenance"
+                ),
+                observed_source_id=observed_source_id,
+                speaker_id=_optional_entity_id(
+                    provenance_raw["speaker_id"],
+                    path=f"{path}.provenance.speaker_id",
+                ),
+            ),
+            created_tick=_int_field(data, "created_tick", path=path),
+            source_tick=_int_field(data, "source_tick", path=path),
+            last_access_tick=_int_field(data, "last_access_tick", path=path),
+            access_count=_int_field(data, "access_count", path=path),
+            expires_at_tick=expires_at_tick,
+            forgotten_at_tick=forgotten_at_tick,
+            lineage=MemoryLineage(
+                supersedes_memory_id=supersedes,
+                generation=_int_field(
+                    lineage_raw, "generation", path=f"{path}.lineage"
+                ),
+            ),
+            embedding=embedding,
         )
     except DomainSerializationError:
         raise
     except (TypeError, ValueError) as exc:
         raise DomainSerializationError("invalid_model", path) from exc
+
+
+def _decode_memory_embedding(raw: object, *, path: str) -> MemoryEmbedding | None:
+    if raw is None:
+        return None
+    if not isinstance(raw, dict):
+        raise DomainSerializationError("invalid_object", path)
+    _require_keys(raw, {"model", "vector", "version"}, path=path)
+    vector_raw = raw["vector"]
+    if not isinstance(vector_raw, list):
+        raise DomainSerializationError("invalid_array", f"{path}.vector")
+    vector: list[float] = []
+    for index, item in enumerate(vector_raw):
+        if isinstance(item, bool) or not isinstance(item, (int, float)):
+            raise DomainSerializationError(
+                "invalid_float", f"{path}.vector." + str(index)
+            )
+        number = float(item)
+        if not math.isfinite(number):
+            raise DomainSerializationError(
+                "non_finite_float", f"{path}.vector." + str(index)
+            )
+        vector.append(0.0 if number == 0.0 else number)
+    return MemoryEmbedding(
+        vector=tuple(vector),
+        model=_str_field(raw, "model", path=path),
+        version=_str_field(raw, "version", path=path),
+    )
+
+
+def _decode_concept_mention(raw: object, *, path: str) -> ConceptMention:
+    if not isinstance(raw, dict):
+        raise DomainSerializationError("invalid_object", path)
+    _require_keys(raw, {"concept", "mention_id"}, path=path)
+    return ConceptMention(
+        mention_id=MentionId(_str_field(raw, "mention_id", path=path)),
+        concept=_str_field(raw, "concept", path=path),
+    )
+
+
+def _decode_entity_mention(raw: object, *, path: str) -> EntityMention:
+    if not isinstance(raw, dict):
+        raise DomainSerializationError("invalid_object", path)
+    _require_keys(raw, {"entity_id", "label", "mention_id"}, path=path)
+    return EntityMention(
+        mention_id=MentionId(_str_field(raw, "mention_id", path=path)),
+        label=_str_field(raw, "label", path=path),
+        entity_id=_optional_entity_id(raw["entity_id"], path=f"{path}.entity_id"),
+    )
+
+
+def _decode_relation_endpoint(raw: object, *, path: str) -> RelationEndpoint:
+    if not isinstance(raw, dict):
+        raise DomainSerializationError("invalid_object", path)
+    _require_keys(raw, {"kind", "mention_id"}, path=path)
+    kind_raw = _str_field(raw, "kind", path=path)
+    try:
+        kind = RelationEndpointKind(kind_raw)
+    except ValueError as exc:
+        raise DomainSerializationError("invalid_enum", f"{path}.kind") from exc
+    return RelationEndpoint(
+        kind=kind,
+        mention_id=MentionId(_str_field(raw, "mention_id", path=path)),
+    )
+
+
+def _decode_memory_relation(raw: object, *, path: str) -> MemoryRelation:
+    if not isinstance(raw, dict):
+        raise DomainSerializationError("invalid_object", path)
+    _require_keys(raw, {"object", "predicate", "relation_id", "subject"}, path=path)
+    return MemoryRelation(
+        relation_id=MentionId(_str_field(raw, "relation_id", path=path)),
+        predicate=_str_field(raw, "predicate", path=path),
+        subject=_decode_relation_endpoint(raw["subject"], path=f"{path}.subject"),
+        object=_decode_relation_endpoint(raw["object"], path=f"{path}.object"),
+    )
 
 
 def _encode_belief(value: Belief) -> dict[str, Any]:
