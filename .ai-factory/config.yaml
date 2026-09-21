@@ -183,33 +183,27 @@ workflow:
   # Default: normal
   verify_mode: normal
 
-  # ---------------------------------------------------------------------------
-  # /aif-plan preference defaults
-  # When a key is set to a concrete value (not `ask`), /aif-plan uses it and
-  # does NOT ask that question. Use `ask` to keep the interactive prompt.
-  # ---------------------------------------------------------------------------
-
   # Default testing preference for new plans
   # Options: ask, yes, no
   # Default: ask
-  plan_testing: ask
+  plan_testing: yes
 
   # Default logging level for new plans
   # Options: ask, verbose, standard, minimal
   # Default: ask (when asking, skill still recommends verbose)
-  plan_logging: ask
+  plan_logging: verbose
 
   # Default documentation policy for new plans
   # Options: ask, yes, no
   # yes => mandatory /aif-docs checkpoint in /aif-implement
   # no  => WARN [docs] only
   # Default: ask
-  plan_docs: ask
+  plan_docs: yes
 
   # Default roadmap milestone linkage for new plans
   # Options: ask, true, false  (YAML strings, not booleans)
   # Default: ask (when ROADMAP exists)
-  plan_link_roadmap: ask
+  plan_link_roadmap: true
 
   # Milestone selection when plan_link_roadmap is true
   # Options: auto, or a milestone heading from ROADMAP.md
@@ -240,7 +234,7 @@ git:
   # If false, /aif-plan full still creates a full plan but stays on the
   # current branch (or uses a slug-named full plan in no-git mode)
   # Default: true when git is enabled
-  create_branches: true
+  create_branches: false
 
   # Branch name prefix for new features
   # Applies only when create_branches = true
@@ -252,7 +246,7 @@ git:
   #   - /aif-commit ends after successful local commit
   #   - no "Push to remote?" prompt is shown
   # Default: false
-  skip_push_after_commit: false
+  skip_push_after_commit: true
 
 # =============================================================================
 # Rules Configuration

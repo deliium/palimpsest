@@ -183,6 +183,40 @@ workflow:
   # Default: normal
   verify_mode: normal
 
+  # ---------------------------------------------------------------------------
+  # /aif-plan preference defaults
+  # When a key is set to a concrete value (not `ask`), /aif-plan uses it and
+  # does NOT ask that question. Use `ask` to keep the interactive prompt.
+  # ---------------------------------------------------------------------------
+
+  # Default testing preference for new plans
+  # Options: ask, yes, no
+  # Default: ask
+  plan_testing: ask
+
+  # Default logging level for new plans
+  # Options: ask, verbose, standard, minimal
+  # Default: ask (when asking, skill still recommends verbose)
+  plan_logging: ask
+
+  # Default documentation policy for new plans
+  # Options: ask, yes, no
+  # yes => mandatory /aif-docs checkpoint in /aif-implement
+  # no  => WARN [docs] only
+  # Default: ask
+  plan_docs: ask
+
+  # Default roadmap milestone linkage for new plans
+  # Options: ask, true, false  (YAML strings, not booleans)
+  # Default: ask (when ROADMAP exists)
+  plan_link_roadmap: ask
+
+  # Milestone selection when plan_link_roadmap is true
+  # Options: auto, or a milestone heading from ROADMAP.md
+  # (e.g. "M3 — Cognition and Providers")
+  # Default: auto (first incomplete milestone; no question)
+  plan_default_milestone: auto
+
 # =============================================================================
 # Git Settings
 # =============================================================================

@@ -40,7 +40,7 @@ Bash: printenv HANDOFF_BRANCH_NAME || true
 
 The Handoff coordinator already manages status transitions and DB writes directly. Do NOT call MCP tools (`handoff_sync_status`, `handoff_push_plan`). Instead:
 
-- **No interactive questions:** Do not use `AskUserQuestion` — use sensible defaults (verbose logging, yes to tests, yes to docs, skip roadmap linkage).
+- **No interactive questions:** Do not use `AskUserQuestion` — prefer `workflow.plan_*` defaults from config when present; otherwise use sensible defaults (verbose logging, yes to tests, yes to docs). For roadmap: if `workflow.plan_link_roadmap` is true (or unset in Handoff), apply `plan_default_milestone` / auto-pick; if explicitly false, skip linkage.
 - **Mode default:** If mode is not specified, default to `fast`.
 - **Plan annotation (MANDATORY):** If `HANDOFF_TASK_ID` is non-empty, you MUST insert `<!-- handoff:task:<HANDOFF_TASK_ID> -->` as the very first line of the plan file, before the title. This annotation links the plan to its Handoff task for bidirectional sync. **Omitting this annotation when HANDOFF_TASK_ID is set is a bug — verify before completing.**
 
@@ -90,6 +90,21 @@ Preserve the `<!-- handoff:task:<id> -->` annotation on the first line when rewr
 - **Language:** `language.ui` for AskUserQuestion prompts, `language.artifacts` for generated plan files, and `language.technical_terms` for human-readable technical terminology in plan artifacts
 - **Git:** `git.enabled`, `git.base_branch`, `git.create_branches`, and `git.branch_prefix`
 - **Workflow:** `workflow.plan_id_format` — controls full-mode plan filename shape. Allowed values: `slug` (default), `timestamp`, `uuid`, `sequential`. Only `slug` and `sequential` are active; `timestamp` and `uuid` are **reserved** and currently behave like `slug` (with an `INFO` log). The `sequential` value writes plan files as `<NNNN>_<plan_file_stem>.md` (see Step 1.2 for the canonical stem and the algorithm). Treat any unknown value as `slug` and emit `WARN [aif-plan] unknown workflow.plan_id_format=<value>; falling back to slug`.
+- **Plan preference defaults (optional):** when present and not `ask`, these skip the matching preference questions in Step 1.3 / Fast Mode Step 1:
+  - `workflow.plan_testing` — `ask` | `yes` | `no`
+  - `workflow.plan_logging` — `ask` | `verbose` | `standard` | `minimal`
+  - `workflow.plan_docs` — `ask` | `yes` | `no`
+  - `workflow.plan_link_roadmap` — `ask` | `true` | `false` (string values in YAML)
+  - `workflow.plan_default_milestone` — `auto` (first incomplete milestone) or a milestone heading from ROADMAP.md. Used only when linkage is on (`true`).
+
+If a plan-preference key is **missing, empty, or `ask`**, keep asking that question (current interactive behavior). If it is set to an invalid value, emit `WARN [aif-plan] invalid workflow.<key>=<value>; asking instead` and fall back to asking.
+
+When `plan_link_roadmap: true` and the roadmap artifact exists:
+1. If `plan_default_milestone` is a non-empty, non-`auto` string — use it as the milestone name (still write a 1-sentence rationale).
+2. Else (`auto`, empty, `ask`, or unset) — pick the first incomplete / not-started milestone from the roadmap without asking.
+3. If no incomplete milestone exists — set linkage to skip and emit `WARN [aif-plan] no incomplete roadmap milestone; skipping linkage`.
+
+Log applied defaults: `INFO [aif-plan] using plan defaults from config: testing=<…> logging=<…> docs=<…> link_roadmap=<…> milestone=<…|auto|skipped|ask>`.
 
 If config.yaml doesn't exist, use defaults:
 
@@ -136,7 +151,7 @@ Use this context when:
 
 **Read `.ai-factory/skill-context/aif-plan/SKILL.md`** — MANDATORY if the file exists.
 
-This file contains project-specific rules accumulated by `$aif-evolve` from patches,
+This file contains project-specific rules accumulated by `/aif-evolve` from patches,
 codebase conventions, and tech-stack analysis. These rules are tailored to the current project.
 
 **How to apply skill-context rules:**
@@ -158,11 +173,11 @@ If any rule is violated — fix the output before presenting it to the user.
 **OPTIONAL (recommended):** Read the resolved roadmap artifact if it exists (`paths.roadmap`, default: `.ai-factory/ROADMAP.md`):
 
 - Use it to link this plan to a specific milestone (when applicable)
-- This reduces ambiguity in `$aif-implement` milestone completion and `$aif-verify` roadmap gates
+- This reduces ambiguity in `/aif-implement` milestone completion and `/aif-verify` roadmap gates
 
 **OPTIONAL (recommended):** Read the resolved research path if it exists:
 
-- Treat `## Active Summary (input for $aif-plan)` as an additional requirements source
+- Treat `## Active Summary (input for /aif-plan)` as an additional requirements source
 - Carry over constraints/decisions into tasks and plan settings
 - Prefer the summary over raw notes; use `## Sessions` only when you need deeper rationale
 - If the user omitted the feature description, use `Active Summary -> Topic:` as the default description
@@ -278,7 +293,7 @@ This step produces two distinct values:
 - `branch_name` — the git branch (only when `git.enabled = true` and `git.create_branches = true`)
 - `plan_file_stem` — the filename stem under `<configured plans dir>/` (with or without a `NNNN_` prefix)
 
-Both are derived in a fixed order so the producer here and the branch-based consumers in `$aif-implement` / `$aif-improve` / `$aif-verify` / `$aif-rules-check` always agree on the filename.
+Both are derived in a fixed order so the producer here and the branch-based consumers in `/aif-implement` / `/aif-improve` / `/aif-verify` / `/aif-rules-check` always agree on the filename.
 
 #### 1.2.a — Resolve the canonical `plan_file_stem`
 
@@ -345,7 +360,7 @@ Implementation notes:
 - The 4-digit `[0-9][0-9][0-9][0-9]` glob is **strict by contract**: the format supports `0001`..`9999` only. The error in step 3 enforces this.
 - **`--parallel` scope (TL;DR — source-worktree scoped):**
   - **Where the prefix is computed:** the source worktree's `<configured plans dir>`
-    (the repo where `$aif-plan` was invoked) — i.e. exactly here, in Step 1.2.c.
+    (the repo where `/aif-plan` was invoked) — i.e. exactly here, in Step 1.2.c.
   - **When it is computed:** **before** the optional `cd <WORKTREE>` in Step 1.4.
   - **Where the plan file is written:** the same relative `<configured plans dir>/<NNNN>_<plan_file_stem>.md`
     path inside the target worktree, so the prefix and destination directory stay consistent.
@@ -357,7 +372,7 @@ Implementation notes:
 Rules:
 
 - Numbering is **derived from existing files** in `<configured plans dir>`. Deleting or moving a numbered plan out of the directory can free that number for reuse on the next run — keep plans in place if you rely on stable cross-references.
-- **Archived plans are excluded from numbering.** Plans moved to `paths.archive/plans/` by `$aif-archive` are not in `<configured plans dir>` and therefore not counted. Archiving the highest-numbered plan frees that number for reuse.
+- **Archived plans are excluded from numbering.** Plans moved to `paths.archive/plans/` by `/aif-archive` are not in `<configured plans dir>` and therefore not counted. Archiving the highest-numbered plan frees that number for reuse.
 - Numbering is **bounded** — 9999 is a hard cap; the algorithm errors instead of writing `10000_…` so consumer globs (also 4-digit) cannot drift out of contract.
 - The prefix lives only on the plan file. The git branch (when present) stays `<branch_prefix><slug>` without a number.
 - This setting is ignored for fast plans (`paths.plan` is a single file) and fix plans (`paths.fix_plan` is a single file).
@@ -366,49 +381,54 @@ Logging: `INFO [aif-plan] resolved plan file: <path> (format=<value>)`.
 
 ### Step 1.3: Ask About Preferences
 
-**IMPORTANT: Always ask the user before proceeding:**
+**Resolve config defaults first** (from Step 0). For each preference below, if a valid config default exists, apply it silently and **do not** include that item in `AskUserQuestion`. Only ask for preferences that are still unresolved.
+
+**IMPORTANT:** Ask the user only for unresolved items before proceeding. If every preference is resolved from config (and no open-ended constraints question is needed), skip `AskUserQuestion` entirely and continue.
+
+When asking, use only the unresolved subset of:
 
 ```
 AskUserQuestion: Before we start, a few questions:
 
-1. Should I write tests for this feature?
+1. Should I write tests for this feature?          # skip if workflow.plan_testing is set
    a. Yes, write tests
    b. No, skip tests
 
-2. Logging level for implementation:
+2. Logging level for implementation:              # skip if workflow.plan_logging is set
    a. Verbose (recommended) - detailed DEBUG logs for development
    b. Standard - INFO level, key events only
    c. Minimal - only WARN/ERROR
 
-3. Documentation policy after implementation?
+3. Documentation policy after implementation?     # skip if workflow.plan_docs is set
    a. Yes — mandatory docs checkpoint at completion (recommended)
    b. No — warn-only (`WARN [docs]`), no mandatory checkpoint
 
 4. Roadmap milestone linkage (only if the resolved roadmap artifact exists):
+   # skip entirely if workflow.plan_link_roadmap is set (true/false);
+   # when true, also skip "which milestone" per plan_default_milestone / auto-pick rules in Step 0
    a. Link this plan to a milestone
-   b. Skip — no linkage (allowed; `$aif-verify --strict` should report WARN, not fail, for missing linkage alone)
+   b. Skip — no linkage (allowed; `/aif-verify --strict` should report WARN, not fail, for missing linkage alone)
 
 5. Any specific requirements or constraints?
 ```
 
-**Default to verbose logging.** AI-generated code benefits greatly from extensive logging because:
+**Default to verbose logging** when the logging preference is still unresolved (no config value and interactive choice pending). AI-generated code benefits greatly from extensive logging because:
 
 - Subtle bugs are common and hard to trace without logs
 - Users can always remove logs later
 - Missing logs during development wastes debugging time
 
-Store all preferences — they will be used in the plan file and passed to `$aif-implement`.
+Store all preferences — they will be used in the plan file and passed to `/aif-implement`.
 
 Docs policy semantics:
 
-- `Docs: yes` → `$aif-implement` MUST show a mandatory documentation checkpoint and route docs changes through `$aif-docs`
-- `Docs: no` (or unset) → `$aif-implement` emits `WARN [docs]` and continues without a mandatory docs checkpoint
+- `Docs: yes` → `/aif-implement` MUST show a mandatory documentation checkpoint and route docs changes through `/aif-docs`
+- `Docs: no` (or unset) → `/aif-implement` emits `WARN [docs]` and continues without a mandatory docs checkpoint
 
-**If the resolved roadmap artifact exists and the user chose milestone linkage:**
+**If the resolved roadmap artifact exists and linkage is enabled** (user chose link, or `workflow.plan_link_roadmap: true`):
 
-- Read the resolved roadmap artifact and list candidate milestones (prefer unchecked items)
-- Ask the user to pick one milestone (or type a custom one)
-- Store the selected milestone name and a 1-sentence rationale for inclusion in the plan file
+- Apply `workflow.plan_default_milestone` / auto-pick rules from Step 0 when those defaults cover milestone selection — do **not** ask which milestone.
+- Otherwise: read the resolved roadmap artifact and list candidate milestones (prefer unchecked / incomplete items), ask the user to pick one milestone (or type a custom one), and store the selected milestone name plus a 1-sentence rationale for inclusion in the plan file.
 
 ### Step 1.4: Optional Branch / Worktree Setup
 
@@ -417,7 +437,7 @@ Docs policy semantics:
 - Skip this entire step. Branch validation already happened in Step 0.
 - The plan file path uses `HANDOFF_BRANCH_NAME` (slashes replaced by `-`) as the stem.
 - Do **NOT** run `git checkout`, `git pull`, `git checkout -b`, or `git worktree add`.
-- Treat `--parallel` as disabled: do not create a worktree and do not auto-invoke `$aif-implement`.
+- Treat `--parallel` as disabled: do not create a worktree and do not auto-invoke `/aif-implement`.
 
 **If `git.enabled = false` or `git.create_branches = false`:**
 
@@ -474,8 +494,8 @@ Parallel worktree created!
   Directory: <worktree-path>
 
 To manage worktrees later:
-  $aif-plan --list
-  $aif-plan --cleanup <branch-name>
+  /aif-plan --list
+  /aif-plan --cleanup <branch-name>
 ```
 
 Continue to Step 2.
@@ -499,21 +519,24 @@ If branch already exists, ask user:
 
 ### Step 1: Ask About Preferences
 
-Ask a shorter set of questions:
+Resolve `workflow.plan_*` defaults from Step 0 the same way as full mode. Ask only unresolved items:
 
 ```
 AskUserQuestion: Before we start:
 
-1. Should I include tests in the plan?
+1. Should I include tests in the plan?            # skip if workflow.plan_testing is set
    a. Yes, include tests
    b. No, skip tests
 
 2. Any specific requirements or constraints?
 
 3. Roadmap milestone linkage (only if the resolved roadmap artifact exists):
+   # skip if workflow.plan_link_roadmap is set; auto-pick milestone per Step 0 when linking
    a. Link this plan to a milestone
-   b. Skip — no linkage (allowed; `$aif-verify --strict` should report WARN, not fail, for missing linkage alone)
+   b. Skip — no linkage (allowed; `/aif-verify --strict` should report WARN, not fail, for missing linkage alone)
 ```
+
+If all of the above are resolved from config, skip `AskUserQuestion` and continue.
 
 **Plan file:** Always the resolved `paths.plan` file (default: `.ai-factory/PLAN.md`).
 
@@ -626,12 +649,12 @@ If the resolved roadmap artifact exists:
 If research content influenced this plan:
 
 - Include `## Research Context` by copying only the `Active Summary` (do not paste full `Sessions`)
-- Include `Source: <resolved research path> (Active Summary, Updated: <research Updated timestamp>, SHA256: <sha256 of copied Active Summary>)` so `$aif-implement`, `$aif-verify`, `$aif-improve`, and related consumers know the exact committed research revision
+- Include `Source: <resolved research path> (Active Summary, Updated: <research Updated timestamp>, SHA256: <sha256 of copied Active Summary>)` so `/aif-implement`, `/aif-verify`, `/aif-improve`, and related consumers know the exact committed research revision
 - Compute the hash from the normalized copied Active Summary exactly as described in Step 0: exclude the `Source:` line and comments, preserve line order, trim trailing spaces, use LF line endings, and end with exactly one final newline. Feed the normalized text to `shasum -a 256` or `sha256sum` through stdin / inline shell input, never through a temp file, and copy the first output field.
 - Treat the copied `Research Context` as the plan-owned authoritative requirements copy. A later change to `RESEARCH.md` must not override these requirements without an explicit drift warning and user-requested rebase/refinement.
 - Keep it compact; it should be readable as a one-screen requirements snapshot
 
-If the resolved research path exists but did not influence this plan, do not include `## Research Context`. An existing `RESEARCH.md` for topic A plus an explicit `$aif-plan` request for unrelated topic B must produce an unlinked plan for topic B.
+If the resolved research path exists but did not influence this plan, do not include `## Research Context`. An existing `RESEARCH.md` for topic A plus an explicit `/aif-plan` request for unrelated topic B must produce an unlinked plan for topic B.
 
 Use the canonical template in `references/TASK-FORMAT.md` (Plan File Template).
 
@@ -646,12 +669,12 @@ The canonical template defines the required sections and ordering only. Render a
 
 ### Step 6: Next Steps
 
-**Full mode + parallel (`--parallel`):** Automatically invoke `$aif-implement` — the whole point of parallel is autonomous end-to-end execution in an isolated worktree. If `HANDOFF_BRANCH_PREPARED = 1`, treat `--parallel` as disabled and do not auto-invoke `$aif-implement`.
+**Full mode + parallel (`--parallel`):** Automatically invoke `/aif-implement` — the whole point of parallel is autonomous end-to-end execution in an isolated worktree. If `HANDOFF_BRANCH_PREPARED = 1`, treat `--parallel` as disabled and do not auto-invoke `/aif-implement`.
 
 ```
-$aif-implement
+/aif-implement
 
-CONTEXT FROM $aif-plan:
+CONTEXT FROM /aif-plan:
 - Plan file: <configured plans dir>/<resolved-plan-file>      # see Step 1.2 / Step 5 for the exact stem
 - Testing: yes/no
 - Logging: verbose/standard/minimal
@@ -667,7 +690,7 @@ Plan created with [N] tasks.
 Plan file: <configured plans dir>/<resolved-plan-file>      # see Step 1.2 / Step 5 for the exact stem
 
 To start implementation, run:
-$aif-implement
+/aif-implement
 
 To view tasks:
 /tasks (or use TaskList)
@@ -680,7 +703,7 @@ Plan created with [N] tasks.
 Plan file: <resolved fast plan path>
 
 To start implementation, run:
-$aif-implement
+/aif-implement
 
 To view tasks:
 /tasks (or use TaskList)
@@ -771,7 +794,7 @@ Use canonical examples in `references/TASK-FORMAT.md`:
 6. **Include file paths** — Help implementer know where to work
 7. **Commit checkpoints for large plans** — 5+ tasks need commit plan with checkpoints every 3-5 tasks
 8. **Plan file location** – Fast mode: `paths.plan`. Full mode: `paths.plans/<plan_file_stem>.md` by default (`plan_file_stem` = handoff/branch/slug per Step 1.2.a), or `paths.plans/<NNNN>_<plan_file_stem>.md` when `workflow.plan_id_format = sequential` (see Step 1.2.c for the numbering rule and Handoff override). `timestamp` and `uuid` are reserved values and currently fall back to `slug`.
-9. **Ownership boundary** – This command owns plan files only (the resolved fast plan path and files under `paths.plans`). Use owner commands (`$aif-roadmap`, `$aif-rules`, `$aif-explore`) for their artifacts.
+9. **Ownership boundary** – This command owns plan files only (the resolved fast plan path and files under `paths.plans`). Use owner commands (`/aif-roadmap`, `/aif-rules`, `/aif-explore`) for their artifacts.
 10. **Roadmap linkage (when available)** — If the resolved roadmap artifact exists, include a `## Roadmap Linkage` section in the plan (or explicitly state it was skipped).
 
 ## Plan File Handling
@@ -779,7 +802,7 @@ Use canonical examples in `references/TASK-FORMAT.md`:
 **Fast mode (`paths.plan`, default: `.ai-factory/PLAN.md`)**
 
 - Temporary plan for quick work
-- `$aif-implement` may offer deletion after completion
+- `/aif-implement` may offer deletion after completion
 
 **Full mode (`paths.plans/<plan_file_stem>.md` — default)**
 
