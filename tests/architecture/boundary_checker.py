@@ -58,7 +58,7 @@ ALLOWED_IMPORTS: Final[dict[str, frozenset[str]]] = {
     "api": frozenset({"simulation", "infrastructure", "persistence"}),
     "analysis": frozenset({"world", "simulation"}),
     "infrastructure": frozenset(),
-    "persistence": frozenset({"simulation", "infrastructure"}),
+    "persistence": frozenset({"simulation", "infrastructure", "memory"}),
 }
 
 PRIVATE_WORLD_MODULES: Final[frozenset[str]] = frozenset(

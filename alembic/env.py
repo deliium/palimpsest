@@ -12,7 +12,8 @@ from sqlalchemy import pool
 from sqlalchemy.engine import Connection
 from sqlalchemy.ext.asyncio import create_async_engine
 
-# Register append-only simulation tables on the shared metadata.
+# Register simulation and subjective memory tables on the shared metadata.
+import persistence.memory_orm as _persistence_memory_orm  # noqa: F401
 import persistence.orm as _persistence_orm  # noqa: F401
 from infrastructure.logging import get_logger, log_setup_failure
 from infrastructure.orm import metadata
@@ -27,7 +28,7 @@ config = context.config
 _ = config.get_main_option("script_location")
 target_metadata = metadata
 _LOGGER = get_logger("infrastructure.migrations")
-REVISION_HEAD = "0002"
+REVISION_HEAD = "0005"
 
 
 def _settings_for_migration() -> Settings:

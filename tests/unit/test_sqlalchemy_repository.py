@@ -249,3 +249,14 @@ def test_repository_factories_require_session_factory() -> None:
         create_snapshot_repository()
     with pytest.raises(PersistenceAdapterError):
         create_experiment_repository()
+
+
+def test_subjective_memory_orm_registers_outside_authoritative_set() -> None:
+    import persistence.memory_orm as memory_orm
+    from infrastructure.orm import metadata
+    from persistence.memory_orm import SUBJECTIVE_MEMORY_TABLES
+    from persistence.orm import AUTHORITATIVE_TABLES
+
+    assert set(SUBJECTIVE_MEMORY_TABLES).isdisjoint(AUTHORITATIVE_TABLES)
+    assert set(SUBJECTIVE_MEMORY_TABLES) <= set(metadata.tables)
+    assert hasattr(memory_orm, "MemoryTraceOrm")

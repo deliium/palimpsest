@@ -15,7 +15,14 @@ from enum import StrEnum
 from typing import Final
 
 from agents.models import AgentId, GoalId
-from memory.models import Belief, BeliefId, MemoryId, MemoryTrace
+from memory.models import (
+    Belief,
+    BeliefId,
+    MemoryAccessReceipt,
+    MemoryId,
+    MemoryRankedHit,
+    MemoryTrace,
+)
 from world.actions import AgentCommand, require_agent_command
 from world.identifiers import (
     EntityId,
@@ -401,13 +408,22 @@ class InterpretedPerception:
 
 @dataclass(frozen=True, slots=True)
 class RetrievedMemoryContext:
-    """Owner-scoped memory/belief references without payload dumps."""
+    """Owner-scoped memory/belief retrieval with optional ranked snapshots.
+
+    Ranked hits and pending access receipts support deferred application after
+    successful cognition. Operational logs must never serialize hit payloads.
+    """
 
     owner_id: AgentId
     memory_ids: tuple[MemoryId, ...]
     belief_ids: tuple[BeliefId, ...]
     confidence: float
     decision_metadata: DecisionMetadata = DecisionMetadata()
+    ranked_hits: tuple[MemoryRankedHit, ...] = ()
+    pending_accesses: tuple[MemoryAccessReceipt, ...] = ()
+    candidate_count: int = 0
+    retrieval_tick: int | None = None
+    scoring_policy_version: str | None = None
 
     def __post_init__(self) -> None:
         if type(self.owner_id) is not AgentId:
@@ -437,12 +453,83 @@ class RetrievedMemoryContext:
             raise TypeError(
                 "RetrievedMemoryContext.decision_metadata must be DecisionMetadata"
             )
+        if isinstance(self.ranked_hits, (set, frozenset, Mapping)):
+            raise TypeError("RetrievedMemoryContext.ranked_hits must be ordered")
+        if isinstance(self.ranked_hits, (str, bytes)) or not isinstance(
+            self.ranked_hits, Sequence
+        ):
+            raise TypeError("RetrievedMemoryContext.ranked_hits must be ordered")
+        hits = tuple(self.ranked_hits)
+        if len(hits) > _MAX_MEMORY_REFS:
+            raise ValueError(
+                "RetrievedMemoryContext.ranked_hits exceeds maximum length"
+            )
+        hit_ids: list[MemoryId] = []
+        for hit in hits:
+            if type(hit) is not MemoryRankedHit:
+                raise TypeError(
+                    "RetrievedMemoryContext.ranked_hits entries must be MemoryRankedHit"
+                )
+            if hit.trace.owner_id != self.owner_id:
+                raise ValueError("RetrievedMemoryContext ranked hit owner mismatch")
+            hit_ids.append(hit.trace.memory_id)
+        object.__setattr__(self, "ranked_hits", hits)
+        if memories and hit_ids and tuple(hit_ids) != memories:
+            # When both are populated they must agree in order.
+            raise ValueError("RetrievedMemoryContext memory_ids/ranked_hits mismatch")
+        if isinstance(self.pending_accesses, (set, frozenset, Mapping)):
+            raise TypeError("RetrievedMemoryContext.pending_accesses must be ordered")
+        if isinstance(self.pending_accesses, (str, bytes)) or not isinstance(
+            self.pending_accesses, Sequence
+        ):
+            raise TypeError("RetrievedMemoryContext.pending_accesses must be ordered")
+        accesses = tuple(self.pending_accesses)
+        if len(accesses) > _MAX_MEMORY_REFS:
+            raise ValueError(
+                "RetrievedMemoryContext.pending_accesses exceeds maximum length"
+            )
+        for receipt in accesses:
+            if type(receipt) is not MemoryAccessReceipt:
+                raise TypeError(
+                    "RetrievedMemoryContext.pending_accesses entries must be "
+                    "MemoryAccessReceipt"
+                )
+        object.__setattr__(self, "pending_accesses", accesses)
+        object.__setattr__(
+            self,
+            "candidate_count",
+            require_exact_nonneg_int(
+                "RetrievedMemoryContext.candidate_count", self.candidate_count
+            ),
+        )
+        if self.retrieval_tick is not None:
+            object.__setattr__(
+                self,
+                "retrieval_tick",
+                require_exact_nonneg_int(
+                    "RetrievedMemoryContext.retrieval_tick", self.retrieval_tick
+                ),
+            )
+        if self.scoring_policy_version is not None:
+            object.__setattr__(
+                self,
+                "scoring_policy_version",
+                require_bounded_text(
+                    "RetrievedMemoryContext.scoring_policy_version",
+                    self.scoring_policy_version,
+                    max_length=_MAX_COMPONENT_VERSION_CHARS,
+                ),
+            )
 
     def __repr__(self) -> str:
         return (
             f"RetrievedMemoryContext(owner_id={self.owner_id.value!r}, "
             f"memory_count={len(self.memory_ids)}, "
-            f"belief_count={len(self.belief_ids)}, confidence={self.confidence})"
+            f"belief_count={len(self.belief_ids)}, "
+            f"hit_count={len(self.ranked_hits)}, "
+            f"pending_access_count={len(self.pending_accesses)}, "
+            f"candidate_count={self.candidate_count}, "
+            f"confidence={self.confidence})"
         )
 
 
@@ -969,6 +1056,7 @@ class CognitiveLoopResult:
     memory_update_intents: tuple[MemoryUpdateIntent, ...]
     final_confidence: float
     internal_state: InternalAgentState
+    pending_accesses: tuple[MemoryAccessReceipt, ...] = ()
 
     def __post_init__(self) -> None:
         object.__setattr__(
@@ -1011,6 +1099,20 @@ class CognitiveLoopResult:
             if intent.owner_id != self.agent_id:
                 raise ValueError("memory update intent owner must match agent_id")
         object.__setattr__(self, "memory_update_intents", intents)
+        if isinstance(self.pending_accesses, (set, frozenset, Mapping)):
+            raise TypeError("CognitiveLoopResult.pending_accesses must be ordered")
+        if isinstance(self.pending_accesses, (str, bytes)) or not isinstance(
+            self.pending_accesses, Sequence
+        ):
+            raise TypeError("CognitiveLoopResult.pending_accesses must be ordered")
+        accesses = tuple(self.pending_accesses)
+        for receipt in accesses:
+            if type(receipt) is not MemoryAccessReceipt:
+                raise TypeError(
+                    "CognitiveLoopResult.pending_accesses entries must be "
+                    "MemoryAccessReceipt"
+                )
+        object.__setattr__(self, "pending_accesses", accesses)
         object.__setattr__(
             self,
             "final_confidence",
@@ -1032,6 +1134,7 @@ class CognitiveLoopResult:
             f"command_type={type(self.command).__name__}, "
             f"boundary_count={len(self.boundary_records)}, "
             f"memory_update_count={len(self.memory_update_intents)}, "
+            f"pending_access_count={len(self.pending_accesses)}, "
             f"final_confidence={self.final_confidence})"
         )
 
@@ -1069,6 +1172,7 @@ def diagnostic_projection(
             "command_type": type(value.command).__name__,
             "boundary_count": len(value.boundary_records),
             "memory_update_count": len(value.memory_update_intents),
+            "pending_access_count": len(value.pending_accesses),
             "final_confidence": value.final_confidence,
             "invocation_count": value.internal_state.invocation_count,
         }

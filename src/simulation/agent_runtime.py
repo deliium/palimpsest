@@ -23,8 +23,20 @@ from agents.cognition.models import (
     MemoryUpdateKind,
 )
 from agents.models import Agent, AgentId
-from memory.contracts import BeliefReader, BeliefWriter, MemoryReader, MemoryWriter
-from memory.models import Belief, MemoryTrace
+from memory.contracts import (
+    BeliefReader,
+    BeliefWriter,
+    MemoryReader,
+    MemoryService,
+    MemoryWriter,
+)
+from memory.models import (
+    Belief,
+    MemoryAccessReceipt,
+    MemoryMutationBatch,
+    MemoryTrace,
+)
+from memory.service import MemoryServiceError
 from simulation.bootstrap import RegistrationTranslator
 from simulation.lifecycle import ActionSubmission, TickToken, require_action_submission
 from simulation.perception import build_perspective
@@ -66,6 +78,7 @@ class AgentRuntimeErrorCode(StrEnum):
     COGNITION_FAILED = "cognition_failed"
     INVALID_UPDATE = "invalid_update"
     INVALID_INPUT = "invalid_input"
+    MEMORY_APPLY_FAILED = "memory_apply_failed"
 
 
 class AgentRuntimeError(Exception):
@@ -192,6 +205,7 @@ class AgentRuntime:
         "_last_observation_key",
         "_loop",
         "_memory_reader",
+        "_memory_service",
         "_memory_writer",
         "_processed_invocations",
         "_status",
@@ -208,6 +222,7 @@ class AgentRuntime:
         memory_writer: MemoryWriter,
         belief_reader: BeliefReader,
         belief_writer: BeliefWriter,
+        memory_service: MemoryService | None = None,
         inbox_source: InboxSource | None = None,
         invocation_id_source: InvocationIdSource | None = None,
     ) -> None:
@@ -224,6 +239,7 @@ class AgentRuntime:
         self._memory_writer = memory_writer
         self._belief_reader = belief_reader
         self._belief_writer = belief_writer
+        self._memory_service = memory_service
         self._inbox = inbox_source if inbox_source is not None else EmptyInbox()
         self._invocation_ids = (
             invocation_id_source
@@ -465,13 +481,18 @@ class AgentRuntime:
 
         command = require_agent_command(loop_result.command)
         intents = loop_result.memory_update_intents
-        _prevalidate_updates(agent_id, intents)
-        for intent in intents:
-            _apply_update(
-                intent,
-                memory_writer=self._memory_writer,
-                belief_writer=self._belief_writer,
-            )
+        _prevalidate_updates(
+            agent_id,
+            intents,
+            observation=observation,
+        )
+        await self._apply_memory_side_effects(
+            agent_id=agent_id,
+            tick=tick,
+            invocation_id=invocation_id,
+            intents=intents,
+            pending_accesses=loop_result.pending_accesses,
+        )
 
         submission = ActionSubmission(
             token=token,
@@ -491,6 +512,7 @@ class AgentRuntime:
                     "invocation_id": invocation_id,
                     "status": self._status.value,
                     "memory_update_count": len(intents),
+                    "pending_access_count": len(loop_result.pending_accesses),
                     "command_type": type(command).__name__,
                     "boundary_count": len(loop_result.boundary_records),
                 }
@@ -505,6 +527,90 @@ class AgentRuntime:
             terminal=False,
         )
 
+    async def _apply_memory_side_effects(
+        self,
+        *,
+        agent_id: AgentId,
+        tick: int,
+        invocation_id: str,
+        intents: Sequence[MemoryUpdateIntent],
+        pending_accesses: Sequence[MemoryAccessReceipt],
+    ) -> None:
+        writes: list[MemoryTrace] = []
+        for intent in intents:
+            if intent.kind is MemoryUpdateKind.WRITE_MEMORY:
+                assert intent.memory is not None
+                writes.append(intent.memory)
+            elif intent.kind is MemoryUpdateKind.WRITE_BELIEF:
+                assert intent.belief is not None
+                self._belief_writer.write(intent.belief)
+
+        if self._memory_service is not None:
+            if self._memory_service.scope.owner_id != agent_id:
+                raise AgentRuntimeError(
+                    AgentRuntimeErrorCode.OWNERSHIP,
+                    agent_id=agent_id.value,
+                    invocation_id=invocation_id,
+                    tick=tick,
+                )
+            batch = MemoryMutationBatch(
+                writes=tuple(writes),
+                accesses=tuple(pending_accesses),
+                operation_id=invocation_id,
+            )
+            try:
+                applied = await self._memory_service.apply(batch)
+            except MemoryServiceError as exc:
+                _LOG.error(
+                    "runtime_memory_apply_failed",
+                    extra={
+                        "runtime": {
+                            "code": AgentRuntimeErrorCode.MEMORY_APPLY_FAILED.value,
+                            "agent_id": agent_id.value,
+                            "tick": tick,
+                            "invocation_id": invocation_id,
+                            "reason_code": exc.code.value,
+                        }
+                    },
+                )
+                raise AgentRuntimeError(
+                    AgentRuntimeErrorCode.MEMORY_APPLY_FAILED,
+                    agent_id=agent_id.value,
+                    invocation_id=invocation_id,
+                    tick=tick,
+                ) from None
+            _LOG.debug(
+                "runtime_memory_apply_complete",
+                extra={
+                    "runtime": {
+                        "agent_id": agent_id.value,
+                        "tick": tick,
+                        "invocation_id": invocation_id,
+                        "write_count": applied.written_count,
+                        "access_count": applied.access_applied_count,
+                        "access_idempotent_count": applied.access_idempotent_count,
+                        "status": "ok",
+                    }
+                },
+            )
+            return
+
+        if pending_accesses:
+            _LOG.warning(
+                "runtime_pending_accesses_dropped",
+                extra={
+                    "runtime": {
+                        "agent_id": agent_id.value,
+                        "tick": tick,
+                        "invocation_id": invocation_id,
+                        "access_count": len(pending_accesses),
+                        "reason_code": "memory_service_absent",
+                    }
+                },
+            )
+        for write in writes:
+            self._memory_writer.write(write)
+
 
 def _is_dead_self(observation: Observation) -> bool:
     self_body = observation.self_body
@@ -512,7 +618,10 @@ def _is_dead_self(observation: Observation) -> bool:
 
 
 def _prevalidate_updates(
-    agent_id: AgentId, intents: Sequence[MemoryUpdateIntent]
+    agent_id: AgentId,
+    intents: Sequence[MemoryUpdateIntent],
+    *,
+    observation: Observation,
 ) -> None:
     for intent in intents:
         if type(intent) is not MemoryUpdateIntent:
@@ -531,6 +640,21 @@ def _prevalidate_updates(
                     AgentRuntimeErrorCode.INVALID_UPDATE,
                     agent_id=agent_id.value,
                 )
+            if intent.memory.owner_id != agent_id:
+                raise AgentRuntimeError(
+                    AgentRuntimeErrorCode.OWNERSHIP,
+                    agent_id=agent_id.value,
+                )
+            if intent.memory.created_tick != observation.tick:
+                raise AgentRuntimeError(
+                    AgentRuntimeErrorCode.INVALID_UPDATE,
+                    agent_id=agent_id.value,
+                )
+            if intent.memory.world_revision != observation.revision:
+                raise AgentRuntimeError(
+                    AgentRuntimeErrorCode.INVALID_UPDATE,
+                    agent_id=agent_id.value,
+                )
         elif intent.kind is MemoryUpdateKind.WRITE_BELIEF:
             if type(intent.belief) is not Belief:
                 raise AgentRuntimeError(
@@ -542,17 +666,3 @@ def _prevalidate_updates(
                 AgentRuntimeErrorCode.INVALID_UPDATE,
                 agent_id=agent_id.value,
             )
-
-
-def _apply_update(
-    intent: MemoryUpdateIntent,
-    *,
-    memory_writer: MemoryWriter,
-    belief_writer: BeliefWriter,
-) -> None:
-    if intent.kind is MemoryUpdateKind.WRITE_MEMORY:
-        assert intent.memory is not None
-        memory_writer.write(intent.memory)
-    elif intent.kind is MemoryUpdateKind.WRITE_BELIEF:
-        assert intent.belief is not None
-        belief_writer.write(intent.belief)

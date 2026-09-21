@@ -8,6 +8,12 @@ from __future__ import annotations
 
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
+from memory.contracts import MemoryService
+from memory.models import (
+    MemoryRetentionPolicy,
+    MemoryScope,
+    MemoryScoringPolicy,
+)
 from persistence.errors import (
     PersistenceAdapterError,
     PersistenceConflictError,
@@ -27,6 +33,7 @@ __all__ = [
     "PersistenceCorruptionError",
     "PersistenceNotFoundError",
     "create_experiment_repository",
+    "create_memory_service",
     "create_run_repository",
     "create_snapshot_repository",
     "create_tick_journal_repository",
@@ -83,3 +90,25 @@ def create_experiment_repository(
     from persistence.sqlalchemy import create_experiment_repository as impl
 
     return impl(session_factory)
+
+
+def create_memory_service(
+    *,
+    scope: MemoryScope,
+    session_factory: async_sessionmaker[AsyncSession] | None = None,
+    scoring_policy: MemoryScoringPolicy,
+    retention_policy: MemoryRetentionPolicy | None = None,
+) -> MemoryService:
+    """Build an owner-scoped durable ``MemoryService`` (no unscoped admin API)."""
+    if session_factory is None:
+        raise PersistenceAdapterError(
+            "missing_session_factory", operation="create_memory_service"
+        )
+    from persistence.memory_sqlalchemy import create_sqlalchemy_memory_service as impl
+
+    return impl(
+        scope=scope,
+        session_factory=session_factory,
+        scoring_policy=scoring_policy,
+        retention_policy=retention_policy,
+    )

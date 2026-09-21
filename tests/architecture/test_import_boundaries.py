@@ -89,6 +89,7 @@ def test_persistence_facade_is_side_effect_free_and_exports_factories() -> None:
 
     assert "PersistenceAdapterError" in persistence.__all__
     assert "create_tick_journal_repository" in persistence.__all__
+    assert "create_memory_service" in persistence.__all__
     assert persistence.create_run_repository.__module__ == "persistence"
     with pytest.raises(persistence.PersistenceAdapterError) as err:
         persistence.create_tick_journal_repository()

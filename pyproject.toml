@@ -256,19 +256,18 @@ forbidden_modules = ["api", "analysis", "infrastructure", "persistence"]
 
 [[tool.importlinter.contracts]]
 id = "persistence_adapter_boundaries"
-name = "Persistence may import only simulation and infrastructure"
+name = "Persistence may import only simulation, infrastructure, and memory"
 type = "forbidden"
 source_modules = ["persistence"]
 forbidden_modules = [
     "world",
     "agents",
-    "memory",
     "social",
     "llm",
     "api",
     "analysis",
 ]
-# Domain types flow through public simulation contracts; only direct imports are gated.
+# Domain types flow through public simulation/memory contracts; only direct imports are gated.
 allow_indirect_imports = true
 
 

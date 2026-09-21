@@ -28,6 +28,7 @@ from tests.fakes.llm import (
     ScriptedFailure,
     ScriptedSuccess,
 )
+from tests.fakes.memory import FakeMemoryCallRecord, FakeMemoryService
 
 __all__ = [
     "FakeCallRecord",
@@ -40,7 +41,9 @@ __all__ = [
     "FakeLLMFailureCode",
     "FakeLLMProvider",
     "FakeLLMProviderError",
+    "FakeMemoryCallRecord",
     "FakeMemoryRetriever",
+    "FakeMemoryService",
     "FakeMemoryUpdateHook",
     "FakeMotivationEvaluator",
     "FakePerceptionInterpreter",

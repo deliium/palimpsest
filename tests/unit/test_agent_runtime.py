@@ -284,6 +284,7 @@ async def test_memory_updates_apply_after_success() -> None:
             intention: SelectedIntention,
         ) -> tuple[MemoryUpdateIntent, ...]:
             _ = plan, perception, memory, intention
+            obs = loop_input.observation
             return (
                 MemoryUpdateIntent(
                     owner_id=loop_input.agent_id,
@@ -291,7 +292,7 @@ async def test_memory_updates_apply_after_success() -> None:
                     memory=MemoryTrace(
                         memory_id=MemoryId("mem-1"),
                         owner_id=loop_input.agent_id,
-                        world_revision=WorldRevision(0),
+                        world_revision=obs.revision,
                         concepts=(
                             ConceptMention(mention_id=MentionId("c-1"), concept="note"),
                         ),
@@ -302,11 +303,11 @@ async def test_memory_updates_apply_after_success() -> None:
                         confidence=1.0,
                         provenance=MemoryProvenance(
                             kind=MemorySourceKind.DIRECT_OBSERVATION,
-                            source_tick=0,
+                            source_tick=obs.tick,
                         ),
-                        created_tick=0,
-                        source_tick=0,
-                        last_access_tick=0,
+                        created_tick=obs.tick,
+                        source_tick=obs.tick,
+                        last_access_tick=obs.tick,
                         access_count=0,
                     ),
                 ),

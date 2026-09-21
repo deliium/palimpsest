@@ -33,6 +33,7 @@ from agents.cognition.loop import (
     CognitiveLoopError,
     CognitiveLoopFailure,
 )
+from agents.cognition.memory import ScopedMemoryRetriever
 from agents.cognition.models import (
     BOUNDARY_SCHEMA_VERSION,
     ActionPlan,
@@ -106,6 +107,7 @@ __all__ = [
     "Planner",
     "PossibleFutures",
     "RetrievedMemoryContext",
+    "ScopedMemoryRetriever",
     "SelectedIntention",
     "SelfBeliefState",
     "SelfStateProjector",

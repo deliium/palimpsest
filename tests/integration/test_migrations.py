@@ -12,11 +12,13 @@ from sqlalchemy import text
 
 from infrastructure.database import DatabaseResources, session_scope
 from infrastructure.settings import Settings
+from persistence.memory_orm import SUBJECTIVE_MEMORY_TABLES
 from persistence.orm import AUTHORITATIVE_TABLES
 
 pytestmark = pytest.mark.integration
 
 ROOT = Path(__file__).resolve().parents[2]
+_EXPECTED_HEAD = "0005"
 
 
 def _alembic_config(database_url: str | None = None) -> Config:
@@ -33,8 +35,8 @@ def test_upgrade_head_is_idempotent_with_single_revision(
     config = _alembic_config(migrated_test_database.database_dsn())
     command.upgrade(config, "head")
     script = ScriptDirectory.from_config(config)
-    assert script.get_heads() == ["0003"]
-    assert script.get_current_head() == "0003"
+    assert script.get_heads() == [_EXPECTED_HEAD]
+    assert script.get_current_head() == _EXPECTED_HEAD
 
 
 async def test_vector_extension_and_event_store_tables_exist(
@@ -54,18 +56,45 @@ async def test_vector_extension_and_event_store_tables_exist(
         )
         found = set(tables.scalars().all())
         assert set(AUTHORITATIVE_TABLES).issubset(found)
+        assert set(SUBJECTIVE_MEMORY_TABLES).issubset(found)
 
 
 async def test_orm_metadata_matches_migrated_tables(
     database_resources: DatabaseResources,
 ) -> None:
+    import persistence.memory_orm
     import persistence.orm  # noqa: F401
     from infrastructure.orm import metadata
 
-    expected = set(AUTHORITATIVE_TABLES)
+    expected = set(AUTHORITATIVE_TABLES) | set(SUBJECTIVE_MEMORY_TABLES)
     assert expected <= set(metadata.tables)
     async with session_scope(database_resources.session_factory) as session:
         revision = await session.execute(
             text("SELECT version_num FROM alembic_version")
         )
-        assert revision.scalar_one() == "0003"
+        assert revision.scalar_one() == _EXPECTED_HEAD
+
+
+async def test_subjective_memory_tables_are_not_authoritative() -> None:
+    overlap = set(SUBJECTIVE_MEMORY_TABLES) & set(AUTHORITATIVE_TABLES)
+    assert not overlap
+
+
+async def test_subjective_memory_tables_lack_append_only_triggers(
+    database_resources: DatabaseResources,
+) -> None:
+    async with session_scope(database_resources.session_factory) as session:
+        for table in SUBJECTIVE_MEMORY_TABLES:
+            result = await session.execute(
+                text(
+                    """
+                    SELECT tgname FROM pg_trigger t
+                    JOIN pg_class c ON c.oid = t.tgrelid
+                    WHERE c.relname = :table
+                      AND NOT t.tgisinternal
+                      AND tgname LIKE 'trg_%_reject_%'
+                    """
+                ),
+                {"table": table},
+            )
+            assert result.scalars().all() == []

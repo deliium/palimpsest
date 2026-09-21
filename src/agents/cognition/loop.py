@@ -455,6 +455,7 @@ class CognitiveLoop:
             memory_update_intents=updates,
             final_confidence=plan.confidence,
             internal_state=next_state,
+            pending_accesses=memory.pending_accesses,
         )
         _LOG.debug(
             "cognitive_loop_complete",
@@ -464,6 +465,7 @@ class CognitiveLoop:
                     "agent_id": agent_id,
                     "boundary_count": len(records),
                     "memory_update_count": len(updates),
+                    "pending_access_count": len(memory.pending_accesses),
                     "final_confidence": plan.confidence,
                     "command_type": type(command).__name__,
                 }
