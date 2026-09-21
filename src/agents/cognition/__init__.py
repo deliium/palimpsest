@@ -1,5 +1,15 @@
 """Cognitive strategy protocols and immutable stage artifacts."""
 
+from agents.cognition.communication import (
+    COMMUNICATED_MEMORY_POLICY_VERSION,
+    SOCIAL_MESSAGE_POLICY_VERSION,
+    CommunicatedMemoryUpdateHook,
+    CompositeMemoryUpdateHook,
+    DeterministicSocialMessagePolicy,
+    SocialMessageDecision,
+    build_communicated_memory_trace,
+    receiver_confidence_for_transmission,
+)
 from agents.cognition.contracts import (
     CognitionContractError,
     CognitionContractErrorCode,
@@ -117,6 +127,7 @@ from agents.cognition.reconstruction import (
 
 __all__ = [
     "BOUNDARY_SCHEMA_VERSION",
+    "COMMUNICATED_MEMORY_POLICY_VERSION",
     "COMPONENT_VERSION",
     "DEFAULT_SELF_MODEL_POLICY",
     "DELIBERATION_POLICY_VERSION",
@@ -125,6 +136,7 @@ __all__ = [
     "MOTIVATION_POLICY_VERSION",
     "PLANNER_POLICY_VERSION",
     "SAFE_SOCIAL_PHRASE",
+    "SOCIAL_MESSAGE_POLICY_VERSION",
     "ActionDirection",
     "ActionPlan",
     "CognitionContractError",
@@ -137,11 +149,14 @@ __all__ = [
     "CognitiveLoopInput",
     "CognitiveLoopResult",
     "CommandPlanner",
+    "CommunicatedMemoryUpdateHook",
     "ComponentBoundaryRecord",
     "ComponentKind",
     "ComponentStatus",
+    "CompositeMemoryUpdateHook",
     "CounterpartBinding",
     "DecisionMetadata",
+    "DeterministicSocialMessagePolicy",
     "DirectSelfStateProjector",
     "DirectSituationModeler",
     "DriveEffect",
@@ -192,6 +207,7 @@ __all__ = [
     "SituationModel",
     "SituationModeler",
     "SocialEffect",
+    "SocialMessageDecision",
     "StableIntentionSelector",
     "StableMotivationEvaluator",
     "SubjectiveRevisionHook",
@@ -203,11 +219,13 @@ __all__ = [
     "WaitFallbackPlanner",
     "action_direction_for_intention",
     "activate_drives",
+    "build_communicated_memory_trace",
     "default_cognitive_loop",
     "derive_need_pressures",
     "diagnostic_projection",
     "intention_for_action_direction",
     "project_legacy_self_belief_state",
     "project_self_model",
+    "receiver_confidence_for_transmission",
     "require_confidence",
 ]

@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from world.communications import origin_utterance
+
 import pytest
 from hypothesis import given, settings
 from hypothesis import strategies as st
@@ -224,10 +226,11 @@ def test_occurrence_and_communication_require_prior_tick_and_unique_sources() ->
         ),
         speaker_id=EntityId("speaker-1"),
         listener_id=EntityId("observer-1"),
-        text="hello",
+        utterance=origin_utterance(text="hello", speaker_id=EntityId("speaker-1")),
+        action_kind="talk",
     )
     assert ObservedCommunication.__doc__ is not None
-    assert "assert that X is true" in ObservedCommunication.__doc__
+    assert "does not assert that the content is true" in ObservedCommunication.__doc__
     bundled = Observation(
         world_id=WorldId("world-1"),
         observer_id=EntityId("observer-1"),
@@ -236,7 +239,7 @@ def test_occurrence_and_communication_require_prior_tick_and_unique_sources() ->
         occurrences=(occurrence,),
         communications=(communication,),
     )
-    assert bundled.communications[0].text == "hello"
+    assert bundled.communications[0].utterance.content.text == "hello"
 
 
 def test_held_item_must_match_self_inventory() -> None:

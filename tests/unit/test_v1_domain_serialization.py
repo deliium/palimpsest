@@ -30,6 +30,7 @@ from world.actions import (
     Tell,
     Wait,
 )
+from world.communications import origin_utterance
 from world.events import (
     EVENT_SCHEMA_AUDIT_V1,
     Asked,
@@ -70,9 +71,18 @@ _COMMANDS = (
     Eat(EntityId("item-1")),
     Drink(EntityId("res-1")),
     Sleep(),
-    Talk(EntityId("body-2"), "hello"),
-    Ask(EntityId("body-2"), "where?"),
-    Tell(EntityId("body-2"), "north"),
+    Talk(
+        EntityId("body-2"),
+        origin_utterance(text="hello", speaker_id=EntityId("body-1")),
+    ),
+    Ask(
+        EntityId("body-2"),
+        origin_utterance(text="where?", speaker_id=EntityId("body-1")),
+    ),
+    Tell(
+        EntityId("body-2"),
+        origin_utterance(text="north", speaker_id=EntityId("body-1")),
+    ),
     Help(EntityId("body-2")),
     Attack(EntityId("body-2")),
     Flee(),
@@ -94,9 +104,18 @@ _DETAILS = (
     Eaten(EntityId("item-1")),
     Drunk(EntityId("res-1")),
     Slept(),
-    Talked(EntityId("body-2"), "hello"),
-    Asked(EntityId("body-2"), "where?"),
-    Told(EntityId("body-2"), "north"),
+    Talked(
+        EntityId("body-2"),
+        origin_utterance(text="hello", speaker_id=EntityId("body-1")),
+    ),
+    Asked(
+        EntityId("body-2"),
+        origin_utterance(text="where?", speaker_id=EntityId("body-1")),
+    ),
+    Told(
+        EntityId("body-2"),
+        origin_utterance(text="north", speaker_id=EntityId("body-1")),
+    ),
     Helped(EntityId("body-2")),
     Attacked(EntityId("body-2")),
     Fled(),
@@ -323,7 +342,10 @@ def test_observation_round_trips_with_occurrences_and_communications() -> None:
                 ),
                 speaker_id=EntityId("body-2"),
                 listener_id=EntityId("body-1"),
-                text="claim-text",
+                utterance=origin_utterance(
+                    text="claim-text", speaker_id=EntityId("body-2")
+                ),
+                action_kind="talk",
             ),
         ),
         hour=7,
@@ -659,3 +681,138 @@ def test_ambiguous_agent_payload_without_version_is_rejected() -> None:
             b'"schema_version":1,"type":"agent"}'
         )
     assert rejected.value.code == "unsupported_schema_version"
+
+
+def test_legacy_v4_text_communication_decodes_to_unreferenced_utterance() -> None:
+    payload = (
+        b'{"data":{"actor_id":"body-1","cause":{"actor_id":"body-1","kind":"action",'
+        b'"request_id":"r-1"},"details":{"kind":"talk","recipient_id":"body-2",'
+        b'"text":"hello-legacy"},"event_id":"evt-talk","event_type":"talk",'
+        b'"occurrence":{"affected_entity_ids":["body-1","body-2"],'
+        b'"destination_location_id":null,"origin_location_id":"loc-1",'
+        b'"private_recipient_ids":["body-2"]},'
+        b'"request_id":"r-1","resulting_revision":1,"run_id":"run-1",'
+        b'"schema_version":4,"sequence":0,"target_id":"body-2","tick":1,'
+        b'"world_id":"world-1"},"schema_version":1,"type":"world_event"}'
+    )
+    decoded = decode_domain(payload)
+    assert isinstance(decoded, WorldEvent)
+    assert decoded.schema_version == 4
+    assert type(decoded.details) is Talked
+    utterance = decoded.details.utterance
+    assert utterance.content.text == "hello-legacy"
+    assert utterance.declared.source_basis.value == "unreferenced"
+    assert utterance.declared.communication_id.value == "legacy-evt-talk"
+    assert utterance.declared.immediate_source_id == EntityId("body-1")
+    assert utterance.declared.hop_count == 0
+
+
+def test_legacy_text_command_decodes_to_structured_utterance() -> None:
+    payload = (
+        b'{"data":{"recipient_id":"body-2","text":"ping"},'
+        b'"schema_version":1,"type":"talk"}'
+    )
+    decoded = decode_domain(payload)
+    assert isinstance(decoded, Talk)
+    assert decoded.utterance.content.text == "ping"
+    assert decoded.utterance.declared.source_basis.value == "unreferenced"
+
+
+def test_v5_rejects_text_only_communication_and_forged_source() -> None:
+    text_only = (
+        b'{"data":{"actor_id":"body-1","cause":{"actor_id":"body-1","kind":"action",'
+        b'"request_id":"r-1"},"details":{"kind":"talk","recipient_id":"body-2",'
+        b'"text":"nope"},"event_id":"evt-talk","event_type":"talk",'
+        b'"occurrence":{"affected_entity_ids":["body-1","body-2"],'
+        b'"destination_location_id":null,"origin_location_id":"loc-1",'
+        b'"private_recipient_ids":["body-2"]},'
+        b'"request_id":"r-1","resulting_revision":1,"run_id":"run-1",'
+        b'"schema_version":5,"sequence":0,"target_id":"body-2","tick":1,'
+        b'"world_id":"world-1"},"schema_version":1,"type":"world_event"}'
+    )
+    with pytest.raises(DomainSerializationError) as text_err:
+        decode_domain(text_only)
+    assert text_err.value.code == "invalid_fields"
+
+    forged = (
+        b'{"data":{"actor_id":"body-1","cause":{"actor_id":"body-1","kind":"action",'
+        b'"request_id":"r-1"},"details":{"kind":"talk","recipient_id":"body-2",'
+        b'"utterance":{"content":{"concepts":[],"relations":[],"text":"x"},'
+        b'"declared":{"communication_id":"comm-1","hop_count":0,'
+        b'"immediate_source_id":"body-9","parent_communication_id":null,'
+        b'"sender_confidence":1.0,"source_agent_chain":["body-9"],'
+        b'"source_basis":"unreferenced"}}},'
+        b'"event_id":"evt-talk","event_type":"talk",'
+        b'"occurrence":{"affected_entity_ids":["body-1","body-2"],'
+        b'"destination_location_id":null,"origin_location_id":"loc-1",'
+        b'"private_recipient_ids":["body-2"]},'
+        b'"request_id":"r-1","resulting_revision":1,"run_id":"run-1",'
+        b'"schema_version":5,"sequence":0,"target_id":"body-2","tick":1,'
+        b'"world_id":"world-1"},"schema_version":1,"type":"world_event"}'
+    )
+    with pytest.raises(DomainSerializationError) as forged_err:
+        decode_domain(forged)
+    assert forged_err.value.code == "forged_declared_source"
+
+
+def test_malformed_lineage_and_unsupported_schema_fail_closed() -> None:
+    malformed = (
+        b'{"data":{"actor_id":"body-1","cause":{"actor_id":"body-1","kind":"action",'
+        b'"request_id":"r-1"},"details":{"kind":"talk","recipient_id":"body-2",'
+        b'"utterance":{"content":{"concepts":[],"relations":[],"text":"x"},'
+        b'"declared":{"communication_id":"comm-1","hop_count":2,'
+        b'"immediate_source_id":"body-1","parent_communication_id":"comm-0",'
+        b'"sender_confidence":1.0,"source_agent_chain":["body-1"],'
+        b'"source_basis":"unreferenced"}}},'
+        b'"event_id":"evt-talk","event_type":"talk",'
+        b'"occurrence":{"affected_entity_ids":["body-1","body-2"],'
+        b'"destination_location_id":null,"origin_location_id":"loc-1",'
+        b'"private_recipient_ids":["body-2"]},'
+        b'"request_id":"r-1","resulting_revision":1,"run_id":"run-1",'
+        b'"schema_version":5,"sequence":0,"target_id":"body-2","tick":1,'
+        b'"world_id":"world-1"},"schema_version":1,"type":"world_event"}'
+    )
+    with pytest.raises(DomainSerializationError) as lineage_err:
+        decode_domain(malformed)
+    assert lineage_err.value.code == "invalid_model"
+
+    unsupported = (
+        b'{"data":{"actor_id":null,"details":{"kind":"wait"},"event_id":"evt-1",'
+        b'"event_type":"wait","request_id":"r-1","resulting_revision":0,'
+        b'"run_id":"run-1","schema_version":99,"sequence":0,"target_id":null,'
+        b'"tick":0,"world_id":"world-1"},"schema_version":1,"type":"world_event"}'
+    )
+    with pytest.raises(DomainSerializationError) as schema_err:
+        decode_domain(unsupported)
+    assert schema_err.value.code == "unsupported_schema_version"
+
+
+def test_physical_v5_communication_round_trips_without_text_field() -> None:
+    from world.effects import ActionCause
+    from world.events import OccurrenceContext, make_physical_replayable_event
+
+    utterance = origin_utterance(text="structured", speaker_id=EntityId("body-1"))
+    event = make_physical_replayable_event(
+        event_id=EventId("evt-v5"),
+        run_id="run-1",
+        world_id=WorldId("world-1"),
+        tick=2,
+        sequence=0,
+        cause=ActionCause(RequestId("r-v5"), EntityId("body-1")),
+        resulting_revision=WorldRevision(3),
+        details=Talked(EntityId("body-2"), utterance),
+        occurrence=OccurrenceContext(
+            origin_location_id=EntityId("loc-1"),
+            destination_location_id=None,
+            affected_entity_ids=(EntityId("body-1"), EntityId("body-2")),
+            private_recipient_ids=(EntityId("body-2"),),
+        ),
+    )
+    assert event.schema_version == 5
+    encoded = encode_domain(event)
+    assert b'"text":"structured"' in encoded
+    assert b'"utterance"' in encoded
+    # Wire format must not use the legacy sibling text field beside utterance.
+    assert b'"recipient_id":"body-2","text"' not in encoded
+    assert b'"kind":"talk","recipient_id":"body-2","utterance"' in encoded
+    assert decode_domain(encoded) == event

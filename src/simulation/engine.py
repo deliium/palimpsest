@@ -760,6 +760,7 @@ class WorldEngine:
             requests=batch_requests,
             resolved_effects=resolved_effects,
             rules=physical_rules,
+            tick=snap.tick.value,
         )
         _LOGGER.debug(
             "%s tick=%s pending_actions=%s pending_events=%s mutation=%s",
@@ -1304,6 +1305,8 @@ def _map_batch_outcome(
         "already_at_destination": ActionResolutionReason.STRUCTURAL_REJECTION,
         "dead_target": ActionResolutionReason.STRUCTURAL_REJECTION,
         "distinct_id_violation": ActionResolutionReason.STRUCTURAL_REJECTION,
+        "communication_invisible": ActionResolutionReason.STRUCTURAL_REJECTION,
+        "communication_source_mismatch": ActionResolutionReason.STRUCTURAL_REJECTION,
         "malformed_envelope": ActionResolutionReason.MALFORMED_SUBMISSION,
         "wrong_trust_stage": ActionResolutionReason.MALFORMED_SUBMISSION,
         "wrong_world": ActionResolutionReason.STRUCTURAL_REJECTION,

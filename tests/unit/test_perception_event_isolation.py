@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from world.communications import origin_utterance
+
 import logging
 
 import pytest
@@ -297,12 +299,12 @@ def test_communication_is_claim_only_and_private() -> None:
     talk = _action_event(
         event_id="evt-talk",
         sequence=0,
-        details=Talked(EntityId("body-2"), "secret-claim"),
+        details=Talked(EntityId("body-2"), origin_utterance(text="secret-claim", speaker_id=EntityId("body-1"))),
         actor="body-1",
     )
     speaker, listener, remote, dead = _project((talk,))
-    assert speaker.communications[0].text == "secret-claim"
-    assert listener.communications[0].text == "secret-claim"
+    assert speaker.communications[0].utterance.content.text == "secret-claim"
+    assert listener.communications[0].utterance.content.text == "secret-claim"
     assert remote.communications == ()
     assert dead.communications == ()
     assert speaker.communications[0].provenance.source_kind is (
@@ -428,20 +430,20 @@ def test_next_tick_delivers_prior_talk_only() -> None:
             ActionSubmission(
                 batch.token,
                 AgentId("agent-1"),
-                Talk(EntityId("body-2"), "next-tick-only"),
+                Talk(EntityId("body-2"), origin_utterance(text="next-tick-only", speaker_id=EntityId("body-1"))),
             ),
         )
     )
     engine.observe()
     listener = engine.observation_for(AgentId("agent-2"))
     assert listener.communications
-    assert listener.communications[0].text == "next-tick-only"
+    assert listener.communications[0].utterance.content.text == "next-tick-only"
     batch2 = engine.observe()
     engine.resolve_tick((ActionSubmission(batch2.token, AgentId("agent-2"), Wait()),))
     engine.observe()
     later = engine.observation_for(AgentId("agent-2"))
     assert all(
-        communication.text != "next-tick-only" for communication in later.communications
+        communication.utterance.content.text != "next-tick-only" for communication in later.communications
     )
 
 

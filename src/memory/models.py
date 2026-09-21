@@ -34,6 +34,7 @@ __all__ = [
     "Belief",
     "BeliefId",
     "BeliefStore",
+    "CommunicatedTransmissionMeta",
     "ConceptMention",
     "EntityId",
     "EntityMention",
@@ -313,17 +314,118 @@ class MemorySituationContext:
 
 
 @dataclass(frozen=True, slots=True)
+class CommunicatedTransmissionMeta:
+    """Owner-scoped transmission metadata for a communicated memory trace.
+
+    Captures speaker-declared lineage and world-verified delivery correlation.
+    Does not copy sender memory, reconstruction, belief, or relationship IDs.
+    """
+
+    communication_id: str
+    action_kind: str
+    hop_count: int
+    sender_confidence: float
+    receiver_confidence: float
+    content_fingerprint: str
+    parent_communication_id: str | None = None
+    source_agent_chain: tuple[EntityId, ...] = ()
+    policy_version: str = "communicated-memory.v1"
+
+    def __post_init__(self) -> None:
+        object.__setattr__(
+            self,
+            "communication_id",
+            require_stable_id(
+                "CommunicatedTransmissionMeta.communication_id",
+                self.communication_id,
+            ),
+        )
+        if self.action_kind not in {"talk", "ask", "tell"}:
+            raise ValueError("CommunicatedTransmissionMeta.action_kind: unsupported")
+        hop = require_exact_nonneg_int(
+            "CommunicatedTransmissionMeta.hop_count", self.hop_count
+        )
+        object.__setattr__(self, "hop_count", hop)
+        object.__setattr__(
+            self,
+            "sender_confidence",
+            _unit_interval(
+                "CommunicatedTransmissionMeta.sender_confidence",
+                self.sender_confidence,
+            ),
+        )
+        object.__setattr__(
+            self,
+            "receiver_confidence",
+            _unit_interval(
+                "CommunicatedTransmissionMeta.receiver_confidence",
+                self.receiver_confidence,
+            ),
+        )
+        object.__setattr__(
+            self,
+            "content_fingerprint",
+            require_stable_id(
+                "CommunicatedTransmissionMeta.content_fingerprint",
+                self.content_fingerprint,
+            ),
+        )
+        if self.parent_communication_id is not None:
+            object.__setattr__(
+                self,
+                "parent_communication_id",
+                require_stable_id(
+                    "CommunicatedTransmissionMeta.parent_communication_id",
+                    self.parent_communication_id,
+                ),
+            )
+        chain = require_ordered_unique(
+            "CommunicatedTransmissionMeta.source_agent_chain",
+            self.source_agent_chain,
+            item_type=EntityId,
+        )
+        if not chain:
+            raise ValueError("CommunicatedTransmissionMeta.source_agent_chain: empty")
+        if hop != len(chain) - 1:
+            raise ValueError(
+                "CommunicatedTransmissionMeta.hop_count: chain_mismatch"
+            )
+        object.__setattr__(self, "source_agent_chain", chain)
+        object.__setattr__(
+            self,
+            "policy_version",
+            require_bounded_text(
+                "CommunicatedTransmissionMeta.policy_version",
+                self.policy_version,
+                max_length=64,
+            ),
+        )
+
+    def __repr__(self) -> str:
+        return (
+            f"CommunicatedTransmissionMeta("
+            f"communication_id={self.communication_id!r}, "
+            f"action_kind={self.action_kind!r}, "
+            f"hop_count={self.hop_count}, "
+            f"chain_count={len(self.source_agent_chain)}, "
+            f"policy_version={self.policy_version!r})"
+        )
+
+
+@dataclass(frozen=True, slots=True)
 class MemoryProvenance:
     """Direct observation versus communicated claim, with opaque correlation.
 
     ``observed_source_id`` is correlation metadata copied from a redacted
     observation only. It never grants dereference of objective events or state.
+    ``transmission`` holds communicated lineage when ``kind`` is COMMUNICATED.
     """
 
     kind: MemorySourceKind
     source_tick: int
     observed_source_id: EventId | None = None
     speaker_id: EntityId | None = None
+    transmission: CommunicatedTransmissionMeta | None = None
 
     def __post_init__(self) -> None:
         if type(self.kind) is not MemorySourceKind:
@@ -340,9 +442,16 @@ class MemoryProvenance:
             raise TypeError("MemoryProvenance.observed_source_id: invalid_type")
         if self.speaker_id is not None and type(self.speaker_id) is not EntityId:
             raise TypeError("MemoryProvenance.speaker_id: invalid_type")
+        if (
+            self.transmission is not None
+            and type(self.transmission) is not CommunicatedTransmissionMeta
+        ):
+            raise TypeError("MemoryProvenance.transmission: invalid_type")
         if self.kind is MemorySourceKind.DIRECT_OBSERVATION:
             if self.speaker_id is not None:
                 raise ValueError("MemoryProvenance.speaker_id: forbidden_for_direct")
+            if self.transmission is not None:
+                raise ValueError("MemoryProvenance.transmission: forbidden_for_direct")
         elif self.kind is MemorySourceKind.COMMUNICATED:
             if self.speaker_id is None:
                 raise ValueError(
@@ -356,7 +465,8 @@ class MemoryProvenance:
             f"MemoryProvenance(kind={self.kind.value!r}, "
             f"source_tick={self.source_tick}, "
             f"has_source={self.observed_source_id is not None}, "
-            f"has_speaker={self.speaker_id is not None})"
+            f"has_speaker={self.speaker_id is not None}, "
+            f"has_transmission={self.transmission is not None})"
         )
 
 

@@ -7,7 +7,11 @@ Compatibility matrix:
 - ``EVENT_SCHEMA_REPLAY_V3`` (3): physical-rules replay with effect-complete
   payloads and explicit action/system causes; no occurrence context.
 - ``EVENT_SCHEMA_REPLAY_V4`` (4): physical replay plus explicit occurrence
-  context for perception audience decisions. New physical runs emit v4.
+  context for perception audience decisions.
+- ``EVENT_SCHEMA_REPLAY_V5`` (5): physical replay plus structured communication
+  payloads (Talked/Asked/Told). New physical runs emit v5. Replay-v2/v3/v4
+  text-only communication records decode into unreferenced structured
+  utterances; new writes use only this schema.
 
 Runs never mix replay schema versions. ``WorldEvent.target_id`` retains detail
 counterparty semantics and is never treated as an occurrence location.
@@ -20,6 +24,7 @@ from dataclasses import dataclass, field
 from enum import StrEnum
 from typing import Final, Literal
 
+from world.communications import StructuredUtterance, confidence_band
 from world.effects import (
     ActionCause,
     DeathCause,
@@ -33,7 +38,6 @@ from world.identifiers import (
     RequestId,
     WorldId,
     WorldRevision,
-    require_bounded_text,
     require_exact_nonneg_int,
     require_ordered_unique,
     require_stable_id,
@@ -46,12 +50,14 @@ EVENT_SCHEMA_REPLAY_V2: Final[int] = 2
 EVENT_SCHEMA_REPLAY_V1: Final[int] = EVENT_SCHEMA_REPLAY_V2
 EVENT_SCHEMA_REPLAY_V3: Final[int] = 3
 EVENT_SCHEMA_REPLAY_V4: Final[int] = 4
+EVENT_SCHEMA_REPLAY_V5: Final[int] = 5
 SUPPORTED_EVENT_SCHEMA_VERSIONS: Final[frozenset[int]] = frozenset(
     {
         EVENT_SCHEMA_AUDIT_V1,
         EVENT_SCHEMA_REPLAY_V2,
         EVENT_SCHEMA_REPLAY_V3,
         EVENT_SCHEMA_REPLAY_V4,
+        EVENT_SCHEMA_REPLAY_V5,
     }
 )
 REPLAYABLE_EVENT_SCHEMA_VERSIONS: Final[frozenset[int]] = frozenset(
@@ -59,12 +65,17 @@ REPLAYABLE_EVENT_SCHEMA_VERSIONS: Final[frozenset[int]] = frozenset(
         EVENT_SCHEMA_REPLAY_V2,
         EVENT_SCHEMA_REPLAY_V3,
         EVENT_SCHEMA_REPLAY_V4,
+        EVENT_SCHEMA_REPLAY_V5,
     }
 )
 PHYSICAL_REPLAY_EVENT_SCHEMA_VERSIONS: Final[frozenset[int]] = frozenset(
-    {EVENT_SCHEMA_REPLAY_V3, EVENT_SCHEMA_REPLAY_V4}
+    {
+        EVENT_SCHEMA_REPLAY_V3,
+        EVENT_SCHEMA_REPLAY_V4,
+        EVENT_SCHEMA_REPLAY_V5,
+    }
 )
-CURRENT_PHYSICAL_EVENT_SCHEMA_VERSION: Final[int] = EVENT_SCHEMA_REPLAY_V4
+CURRENT_PHYSICAL_EVENT_SCHEMA_VERSION: Final[int] = EVENT_SCHEMA_REPLAY_V5
 
 
 class EventValidationCode(StrEnum):
@@ -286,37 +297,60 @@ class Slept:
 @dataclass(frozen=True, slots=True)
 class Talked:
     recipient_id: EntityId
-    text: str
+    utterance: StructuredUtterance
     kind: Literal["talk"] = field(default="talk", init=False)
 
     def __post_init__(self) -> None:
         if type(self.recipient_id) is not EntityId:
             raise TypeError("Talked.recipient_id must be EntityId")
-        require_bounded_text("Talked.text", self.text)
+        if type(self.utterance) is not StructuredUtterance:
+            raise TypeError("Talked.utterance must be StructuredUtterance")
+
+    def __repr__(self) -> str:
+        return (
+            f"Talked(recipient_id={self.recipient_id.value!r}, "
+            f"hop_count={self.utterance.declared.hop_count}, "
+            f"confidence_band="
+            f"{confidence_band(self.utterance.declared.sender_confidence)!r})"
+        )
 
 
 @dataclass(frozen=True, slots=True)
 class Asked:
     recipient_id: EntityId
-    text: str
+    utterance: StructuredUtterance
     kind: Literal["ask"] = field(default="ask", init=False)
 
     def __post_init__(self) -> None:
         if type(self.recipient_id) is not EntityId:
             raise TypeError("Asked.recipient_id must be EntityId")
-        require_bounded_text("Asked.text", self.text)
+        if type(self.utterance) is not StructuredUtterance:
+            raise TypeError("Asked.utterance must be StructuredUtterance")
+
+    def __repr__(self) -> str:
+        return (
+            f"Asked(recipient_id={self.recipient_id.value!r}, "
+            f"hop_count={self.utterance.declared.hop_count})"
+        )
 
 
 @dataclass(frozen=True, slots=True)
 class Told:
     recipient_id: EntityId
-    text: str
+    utterance: StructuredUtterance
     kind: Literal["tell"] = field(default="tell", init=False)
 
     def __post_init__(self) -> None:
         if type(self.recipient_id) is not EntityId:
             raise TypeError("Told.recipient_id must be EntityId")
-        require_bounded_text("Told.text", self.text)
+        if type(self.utterance) is not StructuredUtterance:
+            raise TypeError("Told.utterance must be StructuredUtterance")
+
+    def __repr__(self) -> str:
+        return (
+            f"Told(recipient_id={self.recipient_id.value!r}, "
+            f"hop_count={self.utterance.declared.hop_count})"
+        )
 
 
 @dataclass(frozen=True, slots=True)
@@ -884,7 +918,7 @@ def make_physical_replayable_event(
     details: EventDetails,
     occurrence: OccurrenceContext,
 ) -> WorldEvent:
-    """Construct an authoritative physical replay-v4 objective event."""
+    """Construct an authoritative physical replay-v5 objective event."""
     typed_cause = require_event_cause(cause)
     if type(occurrence) is not OccurrenceContext:
         raise TypeError("occurrence must be OccurrenceContext")
@@ -896,7 +930,7 @@ def make_physical_replayable_event(
         sequence=sequence,
         request_id=request_id_for_cause(typed_cause),
         resulting_revision=resulting_revision,
-        schema_version=EVENT_SCHEMA_REPLAY_V4,
+        schema_version=CURRENT_PHYSICAL_EVENT_SCHEMA_VERSION,
         details=details,
         actor_id=actor_id_for_cause(typed_cause),
         target_id=target_id_for_details(require_event_details(details)),

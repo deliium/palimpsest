@@ -27,9 +27,10 @@ from agents.cognition.models import (
     intention_for_action_direction,
     require_confidence,
 )
-from agents.models import DriveKind
+from agents.models import AgentId, DriveKind
 from world.actions import (
     AgentCommand,
+    Ask,
     Drink,
     Eat,
     Flee,
@@ -38,10 +39,14 @@ from world.actions import (
     Search,
     Sleep,
     Talk,
+    Tell,
     Wait,
 )
+from world.communications import (
+    observation_allows_communication_target,
+)
 from world.identifiers import EntityId
-from world.observations import Observation
+from world.observations import CONTENT_VISIBILITY_THRESHOLD, Observation
 from world.values import ItemKind, ResourceKind
 
 __all__ = [
@@ -231,7 +236,11 @@ class CommandPlanner:
                 },
             )
         else:
-            compiled = _compile_command(future, loop_input.observation)
+            compiled = _compile_command(
+                future,
+                loop_input.observation,
+                owner_id=owner,
+            )
             if compiled is None:
                 used_fallback = True
                 _LOG.warning(
@@ -259,6 +268,8 @@ class CommandPlanner:
             Search,
             Move,
             Talk,
+            Ask,
+            Tell,
             Help,
         }:
             _LOG.error(
@@ -357,7 +368,7 @@ def _is_feasible(
     if direction is ActionDirection.FLEE:
         return True
     if direction is ActionDirection.COMMUNICATE:
-        return _has_social_target(observation, target_entity_id)
+        return _has_communication_target(observation, target_entity_id)
     if direction is ActionDirection.HELP:
         return _has_social_target(observation, target_entity_id)
     if direction is ActionDirection.ATTACK:
@@ -387,6 +398,31 @@ def _has_food(observation: Observation, target_entity_id: str | None) -> bool:
             if target_entity_id is None or item.entity_id.value == target_entity_id:
                 return True
     return False
+
+
+def _has_communication_target(
+    observation: Observation, target_entity_id: str | None
+) -> bool:
+    """Feasibility aligned with world communication eligibility (no private import)."""
+    if target_entity_id is None:
+        return any(
+            observation_allows_communication_target(
+                visibility=observation.visibility,
+                visible_body_ids=tuple(
+                    body.entity_id for body in observation.visible_bodies
+                ),
+                recipient_id=body.entity_id,
+                visibility_threshold=CONTENT_VISIBILITY_THRESHOLD,
+            )
+            for body in observation.visible_bodies
+        )
+    recipient = EntityId(target_entity_id)
+    return observation_allows_communication_target(
+        visibility=observation.visibility,
+        visible_body_ids=tuple(body.entity_id for body in observation.visible_bodies),
+        recipient_id=recipient,
+        visibility_threshold=CONTENT_VISIBILITY_THRESHOLD,
+    )
 
 
 def _has_social_target(observation: Observation, target_entity_id: str | None) -> bool:
@@ -745,7 +781,11 @@ def _resolve_future(
 
 
 def _compile_command(
-    future: ImaginedFuture, observation: Observation
+    future: ImaginedFuture,
+    observation: Observation,
+    *,
+    owner_id: AgentId,
+    memory: object | None = None,
 ) -> AgentCommand | None:
     direction = future.direction
     target = future.target_entity_id
@@ -791,10 +831,32 @@ def _compile_command(
             threat = None
         return Flee(threat_id=threat)
     if direction is ActionDirection.COMMUNICATE:
-        recipient = _resolve_social_entity(target, observation)
-        if recipient is None:
+        from agents.cognition.communication import DeterministicSocialMessagePolicy
+        from agents.cognition.models import DecisionMetadata, RetrievedMemoryContext
+
+        preferred = None if target is None else EntityId(target)
+        speaker = (
+            observation.self_body.entity_id
+            if observation.self_body is not None
+            else observation.observer_id
+        )
+        empty_memory = RetrievedMemoryContext(
+            owner_id=owner_id,
+            memory_ids=(),
+            belief_ids=(),
+            confidence=1.0,
+            decision_metadata=DecisionMetadata(candidate_count=0),
+        )
+        decision = DeterministicSocialMessagePolicy().select(
+            owner_id=owner_id,
+            speaker_id=speaker,
+            observation=observation,
+            memory=empty_memory if memory is None else memory,
+            preferred_recipient_id=preferred,
+        )
+        if decision is None:
             return None
-        return Talk(recipient_id=recipient, text=SAFE_SOCIAL_PHRASE)
+        return decision.command
     if direction is ActionDirection.HELP:
         helped = _resolve_social_entity(target, observation)
         if helped is None:
@@ -825,6 +887,36 @@ def _resolve_entity(
     for item in sorted(observation.items, key=lambda entry: entry.entity_id.value):
         if item.kind is item_kind:
             return item.entity_id
+    return None
+
+
+def _resolve_visible_body(
+    target: str | None, observation: Observation
+) -> EntityId | None:
+    if target is not None:
+        entity = EntityId(target)
+        if any(body.entity_id == entity for body in observation.visible_bodies):
+            if observation_allows_communication_target(
+                visibility=observation.visibility,
+                visible_body_ids=tuple(
+                    body.entity_id for body in observation.visible_bodies
+                ),
+                recipient_id=entity,
+                visibility_threshold=CONTENT_VISIBILITY_THRESHOLD,
+            ):
+                return entity
+        return None
+    bodies = sorted(observation.visible_bodies, key=lambda body: body.entity_id.value)
+    for body in bodies:
+        if observation_allows_communication_target(
+            visibility=observation.visibility,
+            visible_body_ids=tuple(
+                item.entity_id for item in observation.visible_bodies
+            ),
+            recipient_id=body.entity_id,
+            visibility_threshold=CONTENT_VISIBILITY_THRESHOLD,
+        ):
+            return body.entity_id
     return None
 
 

@@ -16,7 +16,7 @@ resources (local quantity)   VISIBILITY_GATED (≥0.5)
 other bodies (coarse)        VISIBILITY_GATED (≥0.5)
 public occurrence facts      VISIBILITY_GATED or PARTICIPANT_ONLY
 participant occurrence detail PARTICIPANT_ONLY
-communication text           RECIPIENT_ONLY (+ sender)
+communication payload          RECIPIENT_ONLY (+ sender)
 location capacities/shelter  OMITTED
 resource max / regeneration  OMITTED
 other-agent inventory/needs  OMITTED
@@ -33,8 +33,10 @@ from __future__ import annotations
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
 from enum import StrEnum
+from typing import Literal
 
-from world._freeze import freeze_mapping, require_bounded_text, require_non_empty
+from world._freeze import freeze_mapping, require_non_empty
+from world.communications import StructuredUtterance
 from world.identifiers import (
     EntityId,
     EventId,
@@ -471,14 +473,17 @@ class ObservedOccurrence:
 class ObservedCommunication:
     """Delivered utterance claim with source provenance.
 
-    Semantics: entity A communicated text X to entity B. Perception does not
-    assert that X is true and does not create memories or beliefs.
+    Semantics: entity A communicated structured content to entity B. Perception
+    does not assert that the content is true and does not create memories or
+    beliefs. ``speaker_id``, ``listener_id``, and ``provenance`` are
+    world-verified delivery fields; ``utterance.declared`` is speaker testimony.
     """
 
     provenance: ObservationProvenance
     speaker_id: EntityId
     listener_id: EntityId
-    text: str
+    utterance: StructuredUtterance
+    action_kind: Literal["talk", "ask", "tell"]
 
     def __post_init__(self) -> None:
         if type(self.provenance) is not ObservationProvenance:
@@ -493,10 +498,25 @@ class ObservedCommunication:
             raise TypeError("ObservedCommunication.speaker_id must be EntityId")
         if type(self.listener_id) is not EntityId:
             raise TypeError("ObservedCommunication.listener_id must be EntityId")
-        object.__setattr__(
-            self,
-            "text",
-            require_bounded_text("ObservedCommunication.text", self.text),
+        if type(self.utterance) is not StructuredUtterance:
+            raise TypeError(
+                "ObservedCommunication.utterance must be StructuredUtterance"
+            )
+        if self.action_kind not in {"talk", "ask", "tell"}:
+            raise ValueError("ObservedCommunication.action_kind: unsupported")
+
+    def __repr__(self) -> str:
+        event_id = (
+            None
+            if self.provenance.source_event_id is None
+            else self.provenance.source_event_id.value
+        )
+        return (
+            f"ObservedCommunication(speaker_id={self.speaker_id.value!r}, "
+            f"listener_id={self.listener_id.value!r}, "
+            f"action_kind={self.action_kind!r}, "
+            f"hop_count={self.utterance.declared.hop_count}, "
+            f"event_id={event_id!r})"
         )
 
 

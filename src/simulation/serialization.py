@@ -39,6 +39,7 @@ from memory.codec import (
 from memory.models import (
     Belief,
     BeliefId,
+    CommunicatedTransmissionMeta,
     ConceptMention,
     EntityMention,
     MemoryEmbedding,
@@ -89,6 +90,15 @@ from world.actions import (
     Wait,
     require_agent_command,
 )
+from world.communications import (
+    CommunicationContent,
+    CommunicationId,
+    CommunicationRelation,
+    CommunicationSourceBasis,
+    DeclaredTransmission,
+    StructuredUtterance,
+    legacy_text_utterance,
+)
 from world.effects import (
     ActionCause,
     DeathCause,
@@ -100,6 +110,7 @@ from world.events import (
     EVENT_SCHEMA_REPLAY_V2,
     EVENT_SCHEMA_REPLAY_V3,
     EVENT_SCHEMA_REPLAY_V4,
+    EVENT_SCHEMA_REPLAY_V5,
     Asked,
     Attacked,
     Died,
@@ -1360,6 +1371,38 @@ def _encode_memory_trace(value: MemoryTrace) -> dict[str, Any]:
                 if value.provenance.speaker_id is None
                 else value.provenance.speaker_id.value
             ),
+            **(
+                {}
+                if value.provenance.transmission is None
+                else {
+                    "transmission": {
+                        "action_kind": value.provenance.transmission.action_kind,
+                        "communication_id": (
+                            value.provenance.transmission.communication_id
+                        ),
+                        "content_fingerprint": (
+                            value.provenance.transmission.content_fingerprint
+                        ),
+                        "hop_count": value.provenance.transmission.hop_count,
+                        "parent_communication_id": (
+                            value.provenance.transmission.parent_communication_id
+                        ),
+                        "policy_version": (
+                            value.provenance.transmission.policy_version
+                        ),
+                        "receiver_confidence": (
+                            value.provenance.transmission.receiver_confidence
+                        ),
+                        "sender_confidence": (
+                            value.provenance.transmission.sender_confidence
+                        ),
+                        "source_agent_chain": [
+                            item.value
+                            for item in value.provenance.transmission.source_agent_chain
+                        ],
+                    }
+                }
+            ),
         },
         "relations": [
             {
@@ -1459,6 +1502,7 @@ def _decode_memory_trace(data: dict[str, Any], *, path: str) -> MemoryTrace:
             provenance_raw,
             {"kind", "observed_source_id", "source_tick", "speaker_id"},
             path=f"{path}.provenance",
+            optional={"transmission"},
         )
         kind_raw = _str_field(provenance_raw, "kind", path=f"{path}.provenance")
         try:
@@ -1475,6 +1519,19 @@ def _decode_memory_trace(data: dict[str, Any], *, path: str) -> MemoryTrace:
                     "invalid_string", f"{path}.provenance.observed_source_id"
                 )
             observed_source_id = EventId(observed_raw)
+        transmission = None
+        if (
+            "transmission" in provenance_raw
+            and provenance_raw["transmission"] is not None
+        ):
+            transmission_raw = provenance_raw["transmission"]
+            if not isinstance(transmission_raw, dict):
+                raise DomainSerializationError(
+                    "invalid_object", f"{path}.provenance.transmission"
+                )
+            transmission = _decode_communicated_transmission(
+                transmission_raw, path=f"{path}.provenance.transmission"
+            )
         _require_keys(
             lineage_raw,
             {"generation", "supersedes_memory_id"},
@@ -1554,6 +1611,7 @@ def _decode_memory_trace(data: dict[str, Any], *, path: str) -> MemoryTrace:
                     provenance_raw["speaker_id"],
                     path=f"{path}.provenance.speaker_id",
                 ),
+                transmission=transmission,
             ),
             created_tick=_int_field(data, "created_tick", path=path),
             source_tick=_int_field(data, "source_tick", path=path),
@@ -1943,11 +2001,14 @@ def _encode_command(value: object) -> dict[str, Any]:
         case Sleep() | Wait():
             return {}
         case (
-            Talk(recipient_id=recipient_id, text=text)
-            | Ask(recipient_id=recipient_id, text=text)
-            | Tell(recipient_id=recipient_id, text=text)
+            Talk(recipient_id=recipient_id, utterance=utterance)
+            | Ask(recipient_id=recipient_id, utterance=utterance)
+            | Tell(recipient_id=recipient_id, utterance=utterance)
         ):
-            return {"recipient_id": recipient_id.value, "text": text}
+            return {
+                "recipient_id": recipient_id.value,
+                "utterance": _encode_structured_utterance(utterance),
+            }
         case Help(target_id=target_id) | Attack(target_id=target_id):
             return {"target_id": target_id.value}
         case Flee(threat_id=threat_id):
@@ -1987,22 +2048,19 @@ def _decode_command(tag: str, data: dict[str, Any], *, path: str) -> object:
             _require_keys(data, set(), path=path)
             return Sleep()
         if tag == "talk":
-            _require_keys(data, {"recipient_id", "text"}, path=path)
             return Talk(
                 EntityId(_str_field(data, "recipient_id", path=path)),
-                _str_field(data, "text", path=path),
+                _decode_command_utterance(data, path=path),
             )
         if tag == "ask":
-            _require_keys(data, {"recipient_id", "text"}, path=path)
             return Ask(
                 EntityId(_str_field(data, "recipient_id", path=path)),
-                _str_field(data, "text", path=path),
+                _decode_command_utterance(data, path=path),
             )
         if tag == "tell":
-            _require_keys(data, {"recipient_id", "text"}, path=path)
             return Tell(
                 EntityId(_str_field(data, "recipient_id", path=path)),
-                _str_field(data, "text", path=path),
+                _decode_command_utterance(data, path=path),
             )
         if tag == "help":
             _require_keys(data, {"target_id"}, path=path)
@@ -2340,6 +2398,217 @@ def _decode_visible_body(data: dict[str, Any], *, path: str) -> VisibleBody:
         raise DomainSerializationError("invalid_model", path) from exc
 
 
+def _encode_structured_utterance(value: StructuredUtterance) -> dict[str, Any]:
+    return {
+        "content": {
+            "concepts": list(value.content.concepts),
+            "relations": [
+                {
+                    "object": relation.object,
+                    "predicate": relation.predicate,
+                    "subject": relation.subject,
+                }
+                for relation in value.content.relations
+            ],
+            "text": value.content.text,
+        },
+        "declared": {
+            "communication_id": value.declared.communication_id.value,
+            "hop_count": value.declared.hop_count,
+            "immediate_source_id": value.declared.immediate_source_id.value,
+            "parent_communication_id": (
+                None
+                if value.declared.parent_communication_id is None
+                else value.declared.parent_communication_id.value
+            ),
+            "sender_confidence": value.declared.sender_confidence,
+            "source_agent_chain": [
+                item.value for item in value.declared.source_agent_chain
+            ],
+            "source_basis": value.declared.source_basis.value,
+        },
+    }
+
+
+def _decode_structured_utterance(data: object, *, path: str) -> StructuredUtterance:
+    if not isinstance(data, dict):
+        raise DomainSerializationError("invalid_object", path)
+    _require_keys(data, {"content", "declared"}, path=path)
+    content_raw = data["content"]
+    declared_raw = data["declared"]
+    if not isinstance(content_raw, dict):
+        raise DomainSerializationError("invalid_object", f"{path}.content")
+    if not isinstance(declared_raw, dict):
+        raise DomainSerializationError("invalid_object", f"{path}.declared")
+    _require_keys(
+        content_raw,
+        {"text", "concepts", "relations"},
+        path=f"{path}.content",
+    )
+    _require_keys(
+        declared_raw,
+        {
+            "communication_id",
+            "immediate_source_id",
+            "parent_communication_id",
+            "source_agent_chain",
+            "hop_count",
+            "sender_confidence",
+            "source_basis",
+        },
+        path=f"{path}.declared",
+    )
+    concepts_raw = content_raw["concepts"]
+    relations_raw = content_raw["relations"]
+    chain_raw = declared_raw["source_agent_chain"]
+    if not isinstance(concepts_raw, list):
+        raise DomainSerializationError("invalid_array", f"{path}.content.concepts")
+    if not isinstance(relations_raw, list):
+        raise DomainSerializationError("invalid_array", f"{path}.content.relations")
+    if not isinstance(chain_raw, list):
+        raise DomainSerializationError(
+            "invalid_array", f"{path}.declared.source_agent_chain"
+        )
+    try:
+        relations: list[CommunicationRelation] = []
+        for index, item in enumerate(relations_raw):
+            item_path = f"{path}.content.relations[{index}]"
+            if not isinstance(item, dict):
+                raise DomainSerializationError("invalid_object", item_path)
+            _require_keys(item, {"subject", "predicate", "object"}, path=item_path)
+            relations.append(
+                CommunicationRelation(
+                    subject=_str_field(item, "subject", path=item_path),
+                    predicate=_str_field(item, "predicate", path=item_path),
+                    object=_str_field(item, "object", path=item_path),
+                )
+            )
+        concepts: list[str] = []
+        for index, item in enumerate(concepts_raw):
+            if not isinstance(item, str):
+                raise DomainSerializationError(
+                    "invalid_model", f"{path}.content.concepts[{index}]"
+                )
+            concepts.append(item)
+        parent_raw = declared_raw["parent_communication_id"]
+        if parent_raw is None:
+            parent_id = None
+        elif isinstance(parent_raw, str):
+            parent_id = CommunicationId(parent_raw)
+        else:
+            raise DomainSerializationError(
+                "invalid_model", f"{path}.declared.parent_communication_id"
+            )
+        return StructuredUtterance(
+            content=CommunicationContent(
+                text=_str_field(content_raw, "text", path=f"{path}.content"),
+                concepts=tuple(concepts),
+                relations=tuple(relations),
+            ),
+            declared=DeclaredTransmission(
+                communication_id=CommunicationId(
+                    _str_field(
+                        declared_raw,
+                        "communication_id",
+                        path=f"{path}.declared",
+                    )
+                ),
+                immediate_source_id=EntityId(
+                    _str_field(
+                        declared_raw, "immediate_source_id", path=f"{path}.declared"
+                    )
+                ),
+                parent_communication_id=parent_id,
+                source_agent_chain=tuple(EntityId(str(item)) for item in chain_raw),
+                hop_count=_int_field(
+                    declared_raw, "hop_count", path=f"{path}.declared"
+                ),
+                sender_confidence=_float_field(
+                    declared_raw, "sender_confidence", path=f"{path}.declared"
+                ),
+                source_basis=CommunicationSourceBasis(
+                    _str_field(declared_raw, "source_basis", path=f"{path}.declared")
+                ),
+            ),
+        )
+    except DomainSerializationError:
+        raise
+    except (TypeError, ValueError) as exc:
+        raise DomainSerializationError("invalid_model", path) from exc
+
+
+def _decode_command_utterance(
+    data: Mapping[str, Any], *, path: str
+) -> StructuredUtterance:
+    """Decode command utterance; accept legacy text-only payloads."""
+    has_utterance = "utterance" in data
+    has_text = "text" in data
+    if has_utterance and has_text:
+        raise DomainSerializationError("invalid_fields", path)
+    if "recipient_id" not in data:
+        raise DomainSerializationError("invalid_fields", path)
+    if has_utterance:
+        _require_keys(data, {"recipient_id", "utterance"}, path=path)
+        return _decode_structured_utterance(data["utterance"], path=f"{path}.utterance")
+    if has_text:
+        _require_keys(data, {"recipient_id", "text"}, path=path)
+        return legacy_text_utterance(
+            text=_str_field(data, "text", path=path),
+            speaker_id=EntityId("legacy-speaker"),
+            event_id="legacy-command",
+        )
+    raise DomainSerializationError("invalid_fields", path)
+
+
+def _decode_event_communication_utterance(
+    fields: Mapping[str, Any],
+    *,
+    path: str,
+    schema_version: int | None,
+    speaker_id: EntityId | None,
+    event_id: str | None,
+) -> StructuredUtterance:
+    """Decode talk/ask/tell event payload with V5 structured / legacy text paths."""
+    has_utterance = "utterance" in fields
+    has_text = "text" in fields
+    if has_utterance and has_text:
+        raise DomainSerializationError("invalid_fields", path)
+    if schema_version == EVENT_SCHEMA_REPLAY_V5:
+        if not has_utterance or has_text:
+            raise DomainSerializationError("invalid_fields", path)
+        if set(fields) - {"recipient_id", "utterance"}:
+            raise DomainSerializationError("invalid_fields", path)
+        utterance = _decode_structured_utterance(
+            fields["utterance"], path=f"{path}.utterance"
+        )
+        if (
+            speaker_id is not None
+            and utterance.declared.immediate_source_id != speaker_id
+        ):
+            raise DomainSerializationError("forged_declared_source", path)
+        return utterance
+    # Audit and replay-v2/v3/v4: prefer text-only legacy; allow structured when present.
+    if has_utterance:
+        if set(fields) - {"recipient_id", "utterance"}:
+            raise DomainSerializationError("invalid_fields", path)
+        return _decode_structured_utterance(
+            fields["utterance"], path=f"{path}.utterance"
+        )
+    if has_text:
+        if set(fields) - {"recipient_id", "text"}:
+            raise DomainSerializationError("invalid_fields", path)
+        if speaker_id is None:
+            raise DomainSerializationError("missing_speaker", path)
+        if event_id is None:
+            raise DomainSerializationError("missing_event_id", path)
+        return legacy_text_utterance(
+            text=_str_field(fields, "text", path=path),
+            speaker_id=speaker_id,
+            event_id=event_id,
+        )
+    raise DomainSerializationError("invalid_fields", path)
+
+
 def _encode_provenance(value: ObservationProvenance) -> dict[str, Any]:
     return {
         "source_event_id": (
@@ -2443,26 +2712,100 @@ def _decode_observed_occurrence(
 
 def _encode_observed_communication(value: ObservedCommunication) -> dict[str, Any]:
     return {
+        "action_kind": value.action_kind,
         "listener_id": value.listener_id.value,
         "provenance": _encode_provenance(value.provenance),
         "speaker_id": value.speaker_id.value,
-        "text": value.text,
+        "utterance": _encode_structured_utterance(value.utterance),
     }
 
 
 def _decode_observed_communication(
     data: dict[str, Any], *, path: str
 ) -> ObservedCommunication:
-    _require_keys(data, {"provenance", "speaker_id", "listener_id", "text"}, path=path)
+    has_utterance = "utterance" in data
+    has_text = "text" in data
+    if has_utterance and has_text:
+        raise DomainSerializationError("invalid_fields", path)
+    required = {"provenance", "speaker_id", "listener_id", "action_kind"}
+    if has_utterance:
+        required = required | {"utterance"}
+    elif has_text:
+        required = required | {"text"}
+    else:
+        raise DomainSerializationError("invalid_fields", path)
+    _require_keys(data, required, path=path)
     provenance_raw = data["provenance"]
     if not isinstance(provenance_raw, dict):
         raise DomainSerializationError("invalid_object", f"{path}.provenance")
+    action_kind = _str_field(data, "action_kind", path=path)
+    if action_kind not in {"talk", "ask", "tell"}:
+        raise DomainSerializationError("invalid_model", f"{path}.action_kind")
     try:
+        speaker_id = EntityId(_str_field(data, "speaker_id", path=path))
+        provenance = _decode_provenance(provenance_raw, path=f"{path}.provenance")
+        if has_utterance:
+            utterance = _decode_structured_utterance(
+                data["utterance"], path=f"{path}.utterance"
+            )
+        else:
+            event_token = (
+                "legacy-observation"
+                if provenance.source_event_id is None
+                else provenance.source_event_id.value
+            )
+            utterance = legacy_text_utterance(
+                text=_str_field(data, "text", path=path),
+                speaker_id=speaker_id,
+                event_id=event_token,
+            )
         return ObservedCommunication(
-            provenance=_decode_provenance(provenance_raw, path=f"{path}.provenance"),
-            speaker_id=EntityId(_str_field(data, "speaker_id", path=path)),
+            provenance=provenance,
+            speaker_id=speaker_id,
             listener_id=EntityId(_str_field(data, "listener_id", path=path)),
-            text=_str_field(data, "text", path=path),
+            utterance=utterance,
+            action_kind=action_kind,  # type: ignore[arg-type]
+        )
+    except DomainSerializationError:
+        raise
+    except (TypeError, ValueError) as exc:
+        raise DomainSerializationError("invalid_model", path) from exc
+
+
+def _decode_communicated_transmission(
+    data: dict[str, Any], *, path: str
+) -> CommunicatedTransmissionMeta:
+    _require_keys(
+        data,
+        {
+            "communication_id",
+            "action_kind",
+            "hop_count",
+            "sender_confidence",
+            "receiver_confidence",
+            "content_fingerprint",
+            "parent_communication_id",
+            "source_agent_chain",
+            "policy_version",
+        },
+        path=path,
+    )
+    chain_raw = data["source_agent_chain"]
+    if not isinstance(chain_raw, list):
+        raise DomainSerializationError("invalid_array", f"{path}.source_agent_chain")
+    try:
+        parent_raw = data["parent_communication_id"]
+        parent_id = None if parent_raw is None else str(parent_raw)
+        return CommunicatedTransmissionMeta(
+            communication_id=_str_field(data, "communication_id", path=path),
+            action_kind=_str_field(data, "action_kind", path=path),
+            hop_count=_int_field(data, "hop_count", path=path),
+            sender_confidence=_float_field(data, "sender_confidence", path=path),
+            receiver_confidence=_float_field(data, "receiver_confidence", path=path),
+            content_fingerprint=_str_field(data, "content_fingerprint", path=path),
+            parent_communication_id=parent_id,
+            source_agent_chain=tuple(EntityId(str(item)) for item in chain_raw),
+            policy_version=_str_field(data, "policy_version", path=path),
         )
     except DomainSerializationError:
         raise
@@ -2641,12 +2984,24 @@ def _encode_event_details(value: object) -> dict[str, Any]:
             if resulting_fatigue is not None:
                 payload["resulting_fatigue"] = resulting_fatigue
             return payload
-        case Talked(recipient_id=recipient_id, text=text):
-            return {"kind": "talk", "recipient_id": recipient_id.value, "text": text}
-        case Asked(recipient_id=recipient_id, text=text):
-            return {"kind": "ask", "recipient_id": recipient_id.value, "text": text}
-        case Told(recipient_id=recipient_id, text=text):
-            return {"kind": "tell", "recipient_id": recipient_id.value, "text": text}
+        case Talked(recipient_id=recipient_id, utterance=utterance):
+            return {
+                "kind": "talk",
+                "recipient_id": recipient_id.value,
+                "utterance": _encode_structured_utterance(utterance),
+            }
+        case Asked(recipient_id=recipient_id, utterance=utterance):
+            return {
+                "kind": "ask",
+                "recipient_id": recipient_id.value,
+                "utterance": _encode_structured_utterance(utterance),
+            }
+        case Told(recipient_id=recipient_id, utterance=utterance):
+            return {
+                "kind": "tell",
+                "recipient_id": recipient_id.value,
+                "utterance": _encode_structured_utterance(utterance),
+            }
         case Helped(
             target_id=target_id,
             health_delta=health_delta,
@@ -2764,7 +3119,14 @@ def _encode_event_details(value: object) -> dict[str, Any]:
             raise DomainSerializationError("unsupported_type", "$")
 
 
-def _decode_event_details(data: dict[str, Any], *, path: str) -> object:
+def _decode_event_details(
+    data: dict[str, Any],
+    *,
+    path: str,
+    schema_version: int | None = None,
+    speaker_id: EntityId | None = None,
+    event_id: str | None = None,
+) -> object:
     if "kind" not in data or not isinstance(data["kind"], str):
         raise DomainSerializationError("invalid_fields", path)
     kind = data["kind"]
@@ -2945,22 +3307,43 @@ def _decode_event_details(data: dict[str, Any], *, path: str) -> object:
                 ),
             )
         if kind == "talk":
-            _require_keys(fields, {"recipient_id", "text"}, path=path)
+            if "recipient_id" not in fields:
+                raise DomainSerializationError("invalid_fields", path)
             return Talked(
                 EntityId(_str_field(fields, "recipient_id", path=path)),
-                _str_field(fields, "text", path=path),
+                _decode_event_communication_utterance(
+                    fields,
+                    path=path,
+                    schema_version=schema_version,
+                    speaker_id=speaker_id,
+                    event_id=event_id,
+                ),
             )
         if kind == "ask":
-            _require_keys(fields, {"recipient_id", "text"}, path=path)
+            if "recipient_id" not in fields:
+                raise DomainSerializationError("invalid_fields", path)
             return Asked(
                 EntityId(_str_field(fields, "recipient_id", path=path)),
-                _str_field(fields, "text", path=path),
+                _decode_event_communication_utterance(
+                    fields,
+                    path=path,
+                    schema_version=schema_version,
+                    speaker_id=speaker_id,
+                    event_id=event_id,
+                ),
             )
         if kind == "tell":
-            _require_keys(fields, {"recipient_id", "text"}, path=path)
+            if "recipient_id" not in fields:
+                raise DomainSerializationError("invalid_fields", path)
             return Told(
                 EntityId(_str_field(fields, "recipient_id", path=path)),
-                _str_field(fields, "text", path=path),
+                _decode_event_communication_utterance(
+                    fields,
+                    path=path,
+                    schema_version=schema_version,
+                    speaker_id=speaker_id,
+                    event_id=event_id,
+                ),
             )
         if kind == "help":
             allowed = {
@@ -3240,17 +3623,24 @@ def _decode_world_event(data: dict[str, Any], *, path: str) -> WorldEvent:
     details_raw = data.get("details")
     if not isinstance(details_raw, dict):
         raise DomainSerializationError("invalid_object", f"{path}.details")
-    details = require_event_details(
-        _decode_event_details(details_raw, path=f"{path}.details")
-    )
     try:
         if keys == legacy_keys or (
             keys == legacy_keys | {"event_type"} and "schema_version" not in data
         ):
             _require_keys(data, legacy_keys, path=path)
+            event_id_value = _str_field(data, "event_id", path=path)
+            details = require_event_details(
+                _decode_event_details(
+                    details_raw,
+                    path=f"{path}.details",
+                    schema_version=EVENT_SCHEMA_AUDIT_V1,
+                    speaker_id=EntityId("legacy-audit-speaker"),
+                    event_id=event_id_value,
+                )
+            )
             # Legacy under-specified events remain immutable audit records.
             return WorldEvent(
-                event_id=EventId(_str_field(data, "event_id", path=path)),
+                event_id=EventId(event_id_value),
                 run_id="legacy-audit",
                 world_id=WorldId(_str_field(data, "world_id", path=path)),
                 tick=0,
@@ -3277,6 +3667,7 @@ def _decode_world_event(data: dict[str, Any], *, path: str) -> WorldEvent:
             EVENT_SCHEMA_REPLAY_V2,
             EVENT_SCHEMA_REPLAY_V3,
             EVENT_SCHEMA_REPLAY_V4,
+            EVENT_SCHEMA_REPLAY_V5,
         }:
             raise DomainSerializationError("unsupported_schema_version", path)
         actor_raw = data["actor_id"]
@@ -3289,6 +3680,16 @@ def _decode_world_event(data: dict[str, Any], *, path: str) -> WorldEvent:
             target_id = None
         else:
             target_id = EntityId(_optional_actor(target_raw, path))
+        event_id_value = _str_field(data, "event_id", path=path)
+        details = require_event_details(
+            _decode_event_details(
+                details_raw,
+                path=f"{path}.details",
+                schema_version=schema_version,
+                speaker_id=actor_id,
+                event_id=event_id_value,
+            )
+        )
         cause = None
         if "cause" in data:
             cause_raw = data["cause"]
@@ -3304,7 +3705,7 @@ def _decode_world_event(data: dict[str, Any], *, path: str) -> WorldEvent:
                 occurrence_raw, path=f"{path}.occurrence"
             )
         event = WorldEvent(
-            event_id=EventId(_str_field(data, "event_id", path=path)),
+            event_id=EventId(event_id_value),
             run_id=_str_field(data, "run_id", path=path),
             world_id=WorldId(_str_field(data, "world_id", path=path)),
             tick=_int_field(data, "tick", path=path),

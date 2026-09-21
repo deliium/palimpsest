@@ -32,6 +32,7 @@ from world.actions import (
     Wait,
     require_agent_command,
 )
+from world.communications import StructuredUtterance
 from world.effects import ActionCause, EventCause, require_event_cause
 from world.events import (
     EventDetails,
@@ -160,7 +161,7 @@ class _TalkOp:
     world_id: WorldId
     base_revision: WorldRevision
     recipient_id: EntityId
-    text: str
+    utterance: StructuredUtterance
 
 
 @dataclass(frozen=True, slots=True)
@@ -170,7 +171,7 @@ class _AskOp:
     world_id: WorldId
     base_revision: WorldRevision
     recipient_id: EntityId
-    text: str
+    utterance: StructuredUtterance
 
 
 @dataclass(frozen=True, slots=True)
@@ -180,7 +181,7 @@ class _TellOp:
     world_id: WorldId
     base_revision: WorldRevision
     recipient_id: EntityId
-    text: str
+    utterance: StructuredUtterance
 
 
 @dataclass(frozen=True, slots=True)
@@ -375,7 +376,7 @@ def validate_action_request(
             return OperationAccepted(_DrinkOp(*base, source_id=source_id))
         case Sleep():
             return OperationAccepted(_SleepOp(*base))
-        case Talk(recipient_id=recipient_id, text=text):
+        case Talk(recipient_id=recipient_id, utterance=utterance):
             if recipient_id == request.actor_id:
                 return OperationRejected(
                     code=RejectionCode.DISTINCT_ID_VIOLATION, request_id=request_id
@@ -384,9 +385,9 @@ def validate_action_request(
             if rejected is not None:
                 return rejected
             return OperationAccepted(
-                _TalkOp(*base, recipient_id=recipient_id, text=text)
+                _TalkOp(*base, recipient_id=recipient_id, utterance=utterance)
             )
-        case Ask(recipient_id=recipient_id, text=text):
+        case Ask(recipient_id=recipient_id, utterance=utterance):
             if recipient_id == request.actor_id:
                 return OperationRejected(
                     code=RejectionCode.DISTINCT_ID_VIOLATION, request_id=request_id
@@ -395,9 +396,9 @@ def validate_action_request(
             if rejected is not None:
                 return rejected
             return OperationAccepted(
-                _AskOp(*base, recipient_id=recipient_id, text=text)
+                _AskOp(*base, recipient_id=recipient_id, utterance=utterance)
             )
-        case Tell(recipient_id=recipient_id, text=text):
+        case Tell(recipient_id=recipient_id, utterance=utterance):
             if recipient_id == request.actor_id:
                 return OperationRejected(
                     code=RejectionCode.DISTINCT_ID_VIOLATION, request_id=request_id
@@ -406,7 +407,7 @@ def validate_action_request(
             if rejected is not None:
                 return rejected
             return OperationAccepted(
-                _TellOp(*base, recipient_id=recipient_id, text=text)
+                _TellOp(*base, recipient_id=recipient_id, utterance=utterance)
             )
         case Help(target_id=target_id):
             if target_id == request.actor_id:
@@ -635,6 +636,7 @@ def prepare_action_batch(
     requests: Sequence[ActionRequest],
     resolved_effects: object | None = None,
     rules: object | None = None,
+    tick: int | None = None,
 ) -> PendingBatch:
     """Resolve ordered requests into pending effects against one evolving state.
 
@@ -704,6 +706,7 @@ def prepare_action_batch(
             start_validation.operation,
             rules=physical_rules,
             resolved=resolved,
+            tick=tick,
         )
         if start_rule.disposition is RuleDisposition.REJECT:
             outcomes.append(
@@ -750,6 +753,7 @@ def prepare_action_batch(
             work_validation.operation,
             rules=physical_rules,
             resolved=resolved,
+            tick=tick,
         )
         if application.result.disposition is RuleDisposition.REJECT:
             outcomes.append(

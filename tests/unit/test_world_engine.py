@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from world.communications import origin_utterance
+
 import io
 import logging
 from collections.abc import Iterator
@@ -141,7 +143,7 @@ def test_prior_tick_events_appear_only_on_next_observe() -> None:
             ActionSubmission(
                 batch0.token,
                 AgentId("agent-1"),
-                Talk(EntityId("body-2"), "hello-agent"),
+                Talk(EntityId("body-2"), origin_utterance(text="hello-agent", speaker_id=EntityId("body-1"))),
             ),
         )
     )
@@ -152,8 +154,8 @@ def test_prior_tick_events_appear_only_on_next_observe() -> None:
     listener = engine.observation_for(AgentId("agent-2"))
     assert speaker.communications
     assert listener.communications
-    assert speaker.communications[0].text == "hello-agent"
-    assert listener.communications[0].text == "hello-agent"
+    assert speaker.communications[0].utterance.content.text == "hello-agent"
+    assert listener.communications[0].utterance.content.text == "hello-agent"
     assert all(
         occurrence.provenance.source_tick == 0
         for occurrence in (*speaker.occurrences, *listener.occurrences)

@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from world.communications import origin_utterance
+
 import logging
 
 import pytest
@@ -259,7 +261,7 @@ async def test_planner_compiles_drink_eat_sleep_move_flee_talk_help(
         ),
     )
     assert type(talk_plan.command) is Talk
-    assert talk_plan.command.text == SAFE_SOCIAL_PHRASE
+    assert talk_plan.command.utterance.content.text == SAFE_SOCIAL_PHRASE
     messages = " ".join(record.getMessage() for record in caplog.records)
     assert "planner_complete" in messages
     assert PLANNER_POLICY_VERSION

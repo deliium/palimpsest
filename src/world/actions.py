@@ -11,13 +11,13 @@ from dataclasses import dataclass, field
 from enum import StrEnum
 from typing import Final, Literal, Protocol, runtime_checkable
 
+from world.communications import StructuredUtterance, confidence_band
 from world.identifiers import (
     EntityId,
     ProposalId,
     RequestId,
     WorldId,
     WorldRevision,
-    require_bounded_text,
 )
 
 
@@ -102,37 +102,60 @@ class Sleep:
 @dataclass(frozen=True, slots=True)
 class Talk:
     recipient_id: EntityId
-    text: str
+    utterance: StructuredUtterance
     kind: Literal["talk"] = field(default="talk", init=False)
 
     def __post_init__(self) -> None:
         if type(self.recipient_id) is not EntityId:
             raise TypeError("Talk.recipient_id must be EntityId")
-        require_bounded_text("Talk.text", self.text)
+        if type(self.utterance) is not StructuredUtterance:
+            raise TypeError("Talk.utterance must be StructuredUtterance")
+
+    def __repr__(self) -> str:
+        return (
+            f"Talk(recipient_id={self.recipient_id.value!r}, "
+            f"hop_count={self.utterance.declared.hop_count}, "
+            f"confidence_band="
+            f"{confidence_band(self.utterance.declared.sender_confidence)!r})"
+        )
 
 
 @dataclass(frozen=True, slots=True)
 class Ask:
     recipient_id: EntityId
-    text: str
+    utterance: StructuredUtterance
     kind: Literal["ask"] = field(default="ask", init=False)
 
     def __post_init__(self) -> None:
         if type(self.recipient_id) is not EntityId:
             raise TypeError("Ask.recipient_id must be EntityId")
-        require_bounded_text("Ask.text", self.text)
+        if type(self.utterance) is not StructuredUtterance:
+            raise TypeError("Ask.utterance must be StructuredUtterance")
+
+    def __repr__(self) -> str:
+        return (
+            f"Ask(recipient_id={self.recipient_id.value!r}, "
+            f"hop_count={self.utterance.declared.hop_count})"
+        )
 
 
 @dataclass(frozen=True, slots=True)
 class Tell:
     recipient_id: EntityId
-    text: str
+    utterance: StructuredUtterance
     kind: Literal["tell"] = field(default="tell", init=False)
 
     def __post_init__(self) -> None:
         if type(self.recipient_id) is not EntityId:
             raise TypeError("Tell.recipient_id must be EntityId")
-        require_bounded_text("Tell.text", self.text)
+        if type(self.utterance) is not StructuredUtterance:
+            raise TypeError("Tell.utterance must be StructuredUtterance")
+
+    def __repr__(self) -> str:
+        return (
+            f"Tell(recipient_id={self.recipient_id.value!r}, "
+            f"hop_count={self.utterance.declared.hop_count})"
+        )
 
 
 @dataclass(frozen=True, slots=True)

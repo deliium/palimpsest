@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from world.communications import origin_utterance
+
 import logging
 
 import pytest
@@ -160,14 +162,14 @@ def test_live_and_restored_observations_match_with_prior_events() -> None:
             ActionSubmission(
                 batch0.token,
                 AgentId("agent-1"),
-                Talk(EntityId("body-2"), "parity-claim"),
+                Talk(EntityId("body-2"), origin_utterance(text="parity-claim", speaker_id=EntityId("body-1"))),
             ),
         )
     )
     live_batch = live.observe()
     live_obs = live.observation_for(AgentId("agent-2"))
     assert live_obs.communications
-    assert live_obs.communications[0].text == "parity-claim"
+    assert live_obs.communications[0].utterance.content.text == "parity-claim"
 
     snapshot = _make_snapshot(
         seed=config.seed,

@@ -386,7 +386,8 @@ def _project_communication(
         ),
         speaker_id=speaker_id,
         listener_id=listener_id,
-        text=details.text,
+        utterance=details.utterance,
+        action_kind=details.kind,
     )
 
 

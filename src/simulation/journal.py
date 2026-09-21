@@ -51,6 +51,7 @@ from world.events import (
     EVENT_SCHEMA_REPLAY_V2,
     EVENT_SCHEMA_REPLAY_V3,
     EVENT_SCHEMA_REPLAY_V4,
+    EVENT_SCHEMA_REPLAY_V5,
     OccurrenceContext,
     WorldEvent,
     event_is_replayable,
@@ -313,6 +314,7 @@ def verify_tick_events(
             EVENT_SCHEMA_REPLAY_V2,
             EVENT_SCHEMA_REPLAY_V3,
             EVENT_SCHEMA_REPLAY_V4,
+            EVENT_SCHEMA_REPLAY_V5,
         }:
             raise PersistenceSerializationError(
                 "unsupported_version",
@@ -946,17 +948,12 @@ def _decode_world_event(data: dict[str, Any], *, path: str) -> WorldEvent:
     if not isinstance(details_raw, dict):
         raise PersistenceSerializationError("invalid_object", f"{path}.details")
     try:
-        try:
-            details = require_event_details(
-                _decode_event_details(details_raw, path=f"{path}.details")
-            )
-        except DomainSerializationError as exc:
-            raise _map_domain_error(exc) from exc
         schema_version = _nonneg_int_field(data, "schema_version", path=path)
         if schema_version not in {
             EVENT_SCHEMA_REPLAY_V2,
             EVENT_SCHEMA_REPLAY_V3,
             EVENT_SCHEMA_REPLAY_V4,
+            EVENT_SCHEMA_REPLAY_V5,
         }:
             raise PersistenceSerializationError(
                 "unsupported_version",
@@ -971,6 +968,18 @@ def _decode_world_event(data: dict[str, Any], *, path: str) -> WorldEvent:
         target_id = (
             None if target_raw is None else EntityId(_require_id_str(target_raw, path))
         )
+        try:
+            details = require_event_details(
+                _decode_event_details(
+                    details_raw,
+                    path=f"{path}.details",
+                    schema_version=schema_version,
+                    speaker_id=actor_id,
+                    event_id=_str_field(data, "event_id", path=path),
+                )
+            )
+        except DomainSerializationError as exc:
+            raise _map_domain_error(exc) from exc
         cause = None
         if "cause" in data:
             cause_raw = data["cause"]

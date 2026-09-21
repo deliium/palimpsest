@@ -653,6 +653,10 @@ class SubjectiveRevisionHook:
 
 def default_cognitive_loop() -> CognitiveLoop:
     """Build a CognitiveLoop wired with deterministic V1 cognition policies."""
+    from agents.cognition.communication import (
+        CommunicatedMemoryUpdateHook,
+        CompositeMemoryUpdateHook,
+    )
     from agents.cognition.deliberation import (
         CommandPlanner,
         MultiCriteriaIntentionSelector,
@@ -670,5 +674,10 @@ def default_cognitive_loop() -> CognitiveLoop:
         motivation=MotivationAppraisal(),
         intention=MultiCriteriaIntentionSelector(),
         planner=CommandPlanner(),
-        memory_updates=EmptyMemoryUpdateHook(),
+        memory_updates=CompositeMemoryUpdateHook(
+            (
+                CommunicatedMemoryUpdateHook(),
+                SubjectiveRevisionHook(),
+            )
+        ),
     )

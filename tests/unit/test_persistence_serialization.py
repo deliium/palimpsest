@@ -358,6 +358,78 @@ def test_error_messages_omit_seeds_and_payload_bodies() -> None:
     assert err.value.code == "invalid_int"
 
 
+def test_persistence_accepts_v5_and_legacy_v4_text_talk() -> None:
+    from world.communications import origin_utterance
+    from world.effects import ActionCause
+    from world.events import (
+        EVENT_SCHEMA_REPLAY_V4,
+        OccurrenceContext,
+        Talked,
+        make_physical_replayable_event,
+    )
+
+    utterance = origin_utterance(text="hi", speaker_id=EntityId("body-1"))
+    v5 = make_physical_replayable_event(
+        event_id=EventId("evt-v5"),
+        run_id="run-1",
+        world_id=WorldId("world-1"),
+        tick=0,
+        sequence=0,
+        cause=ActionCause(RequestId("r-1"), EntityId("body-1")),
+        resulting_revision=WorldRevision(1),
+        details=Talked(EntityId("body-2"), utterance),
+        occurrence=OccurrenceContext(
+            origin_location_id=EntityId("loc-1"),
+            destination_location_id=None,
+            affected_entity_ids=(EntityId("body-1"), EntityId("body-2")),
+            private_recipient_ids=(EntityId("body-2"),),
+        ),
+    )
+    assert v5.schema_version == EVENT_SCHEMA_VERSION == 5
+    encoded = encode_persistence(v5)
+    assert decode_persistence(encoded, WorldEvent) == v5
+    assert b'"utterance"' in encoded
+
+    legacy_data = {
+        "actor_id": "body-1",
+        "cause": {"actor_id": "body-1", "kind": "action", "request_id": "r-1"},
+        "details": {
+            "kind": "talk",
+            "recipient_id": "body-2",
+            "text": "legacy-hi",
+        },
+        "event_id": "evt-legacy",
+        "event_type": "talk",
+        "occurrence": {
+            "affected_entity_ids": ["body-1", "body-2"],
+            "destination_location_id": None,
+            "origin_location_id": "loc-1",
+            "private_recipient_ids": ["body-2"],
+        },
+        "request_id": "r-1",
+        "resulting_revision": 1,
+        "run_id": "run-1",
+        "schema_version": EVENT_SCHEMA_REPLAY_V4,
+        "sequence": 0,
+        "target_id": "body-2",
+        "tick": 0,
+        "world_id": "world-1",
+    }
+    legacy_envelope = {
+        "data": legacy_data,
+        "persistence_codec_version": PERSISTENCE_CODEC_VERSION,
+        "type": "world_event",
+    }
+    legacy_bytes = json.dumps(
+        legacy_envelope, separators=(",", ":"), sort_keys=True
+    ).encode()
+    decoded = decode_persistence(legacy_bytes, WorldEvent)
+    assert decoded.schema_version == EVENT_SCHEMA_REPLAY_V4
+    assert type(decoded.details) is Talked
+    assert decoded.details.utterance.content.text == "legacy-hi"
+    assert decoded.details.utterance.declared.source_basis.value == "unreferenced"
+
+
 def test_encode_domain_rejects_persistence_types() -> None:
     with pytest.raises(DomainSerializationError) as rejected:
         encode_domain(_snapshot())

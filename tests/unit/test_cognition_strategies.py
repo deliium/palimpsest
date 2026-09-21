@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from world.communications import origin_utterance
+
 import logging
 
 import pytest
@@ -165,7 +167,7 @@ def test_inbox_is_out_of_band_not_derived_from_communications() -> None:
             ActionSubmission(
                 batch.token,
                 AgentId("agent-1"),
-                Talk(EntityId("body-2"), "claim-only"),
+                Talk(EntityId("body-2"), origin_utterance(text="claim-only", speaker_id=EntityId("body-1"))),
             ),
         )
     )
@@ -180,7 +182,7 @@ def test_inbox_is_out_of_band_not_derived_from_communications() -> None:
         inbox=(),
     )
     assert perspective.inbox == ()
-    assert perspective.observation.communications[0].text == "claim-only"
+    assert perspective.observation.communications[0].utterance.content.text == "claim-only"
 
 
 def test_build_perspective_carries_goals_drives_and_counterpart_bindings(

@@ -1,4 +1,4 @@
-"""Schema-v4 physical event payloads, causes, and compatibility matrix."""
+"""Schema-v5 physical event payloads, causes, and compatibility matrix."""
 
 from __future__ import annotations
 
@@ -6,6 +6,7 @@ import pytest
 
 from world._transitions import TransitionResult, require_transition_events
 from world.actions import TransitionOutcome
+from world.communications import origin_utterance
 from world.effects import (
     ActionCause,
     DeathCause,
@@ -19,7 +20,7 @@ from world.events import (
     EVENT_SCHEMA_AUDIT_V1,
     EVENT_SCHEMA_REPLAY_V1,
     EVENT_SCHEMA_REPLAY_V2,
-    EVENT_SCHEMA_REPLAY_V4,
+    EVENT_SCHEMA_REPLAY_V5,
     Attacked,
     Died,
     EventValidationCode,
@@ -149,7 +150,7 @@ def test_physical_replay_v4_requires_cause_and_effect_facts() -> None:
         resulting_fatigue=5.0,
     )
     event = _physical_event(event_id="evt-1", cause=cause, details=complete)
-    assert event.schema_version == EVENT_SCHEMA_REPLAY_V4
+    assert event.schema_version == EVENT_SCHEMA_REPLAY_V5
     assert event.cause == cause
     assert event.request_id == cause.request_id
     assert event.occurrence is not None
@@ -237,12 +238,16 @@ def test_communication_occurrence_marks_private_recipient() -> None:
     from world.events import Talked
 
     cause = ActionCause(RequestId("r-talk"), EntityId("body-1"))
-    details = Talked(EntityId("body-2"), "hello")
+    details = Talked(
+        EntityId("body-2"),
+        origin_utterance(text="hello", speaker_id=EntityId("body-1")),
+    )
     event = _physical_event(event_id="evt-talk", cause=cause, details=details)
     assert event.occurrence is not None
     assert event.occurrence.private_recipient_ids == (EntityId("body-2"),)
     assert event.target_id == EntityId("body-2")
     assert event.occurrence.origin_location_id == EntityId("loc-1")
+    assert event.schema_version == EVENT_SCHEMA_REPLAY_V5
 
 
 def test_audit_schema_is_non_replayable() -> None:

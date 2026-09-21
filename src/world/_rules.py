@@ -31,6 +31,7 @@ from world._operations import (
     _WaitOp,
 )
 from world._state import WorldState, rebuild_world_state
+from world.communications import StructuredUtterance
 from world.effects import (
     DeathCause,
     ResolvedActionEffects,
@@ -69,6 +70,7 @@ from world.models import (
     copy_resource,
     default_physical_rules,
 )
+from world.observations import CONTENT_VISIBILITY_THRESHOLD
 from world.values import (
     Fatigue,
     Health,
@@ -77,6 +79,7 @@ from world.values import (
     ItemLoad,
     ResourceKind,
     Thirst,
+    WeatherCondition,
     clamp_need,
     round_physical,
 )
@@ -123,6 +126,8 @@ class RuleReason(StrEnum):
     ALREADY_AT_DESTINATION = "already_at_destination"
     DEFERRED_POLICY = "deferred_policy"
     STRUCTURAL_OK = "structural_ok"
+    COMMUNICATION_INVISIBLE = "communication_invisible"
+    COMMUNICATION_SOURCE_MISMATCH = "communication_source_mismatch"
 
 
 @dataclass(frozen=True, slots=True)
@@ -206,21 +211,30 @@ COMMAND_RULE_MATRIX: Final[dict[type, CommandRulePolicy]] = {
         emits_event_when_applied=True,
         mutates_state_when_applied=False,
         requires_living_actor=True,
-        notes="recipient body must exist; dead recipient still allowed as occurrence",
+        notes=(
+            "living colocated recipient; visibility threshold; "
+            "declared immediate source must match actor; event-only"
+        ),
     ),
     _AskOp: CommandRulePolicy(
         disposition=RuleDisposition.EVENT_ONLY,
         emits_event_when_applied=True,
         mutates_state_when_applied=False,
         requires_living_actor=True,
-        notes="recipient body must exist; dead recipient still allowed as occurrence",
+        notes=(
+            "living colocated recipient; visibility threshold; "
+            "declared immediate source must match actor; event-only; no auto-answer"
+        ),
     ),
     _TellOp: CommandRulePolicy(
         disposition=RuleDisposition.EVENT_ONLY,
         emits_event_when_applied=True,
         mutates_state_when_applied=False,
         requires_living_actor=True,
-        notes="recipient body must exist; dead recipient still allowed as occurrence",
+        notes=(
+            "living colocated recipient; visibility threshold; "
+            "declared immediate source must match actor; event-only; no truth inference"
+        ),
     ),
     _WaitOp: CommandRulePolicy(
         disposition=RuleDisposition.EVENT_ONLY,
@@ -321,6 +335,7 @@ def evaluate_operation(
     *,
     rules: PhysicalRules | None = None,
     resolved: ResolvedActionEffects | None = None,
+    tick: int | None = None,
 ) -> RuleResult:
     """Evaluate a validated operation against an immutable snapshot.
 
@@ -423,7 +438,43 @@ def evaluate_operation(
                 request_id=operation.request_id,
                 resolved=resolved,
             )
-        case _TalkOp() | _AskOp() | _TellOp() | _WaitOp():
+        case _TalkOp(
+            actor_id=actor_id, recipient_id=recipient_id, utterance=utterance
+        ):
+            return _evaluate_communication(
+                state,
+                actor_id,
+                recipient_id,
+                utterance,
+                kind,
+                rules=_require_rules(rules),
+                tick=tick,
+            )
+        case _AskOp(
+            actor_id=actor_id, recipient_id=recipient_id, utterance=utterance
+        ):
+            return _evaluate_communication(
+                state,
+                actor_id,
+                recipient_id,
+                utterance,
+                kind,
+                rules=_require_rules(rules),
+                tick=tick,
+            )
+        case _TellOp(
+            actor_id=actor_id, recipient_id=recipient_id, utterance=utterance
+        ):
+            return _evaluate_communication(
+                state,
+                actor_id,
+                recipient_id,
+                utterance,
+                kind,
+                rules=_require_rules(rules),
+                tick=tick,
+            )
+        case _WaitOp():
             return RuleResult(
                 disposition=RuleDisposition.EVENT_ONLY,
                 reason=RuleReason.OCCURRENCE,
@@ -851,6 +902,49 @@ def _flee_structural_reject(
     return None
 
 
+def _evaluate_communication(
+    state: WorldState,
+    actor_id: EntityId,
+    recipient_id: EntityId,
+    utterance: StructuredUtterance,
+    kind: str,
+    *,
+    rules: PhysicalRules,
+    tick: int | None,
+) -> RuleResult:
+    """Versioned communication eligibility (living, colocated, visible)."""
+    if type(utterance) is not StructuredUtterance:
+        raise TypeError("utterance must be StructuredUtterance")
+    if utterance.declared.immediate_source_id != actor_id:
+        return _reject(kind, RuleReason.COMMUNICATION_SOURCE_MISMATCH)
+    recipient = state.bodies[recipient_id]
+    if recipient.life_status is LifeStatus.DEAD:
+        return _reject(kind, RuleReason.DEAD_TARGET)
+    actor = state.bodies[actor_id]
+    if recipient.location_id != actor.location_id:
+        return _reject(kind, RuleReason.NOT_COLOCATED)
+    location = state.locations[actor.location_id]
+    weather = state.weather.get(actor.location_id)
+    condition = (
+        weather.condition if weather is not None else WeatherCondition.CLEAR
+    )
+    tick_value = 0 if tick is None else tick
+    visibility = rules.effective_visibility(
+        location_visibility=location.visibility_factor.value,
+        phase=rules.day_phase_for_tick(tick_value),
+        condition=condition,
+    )
+    if visibility < CONTENT_VISIBILITY_THRESHOLD:
+        return _reject(kind, RuleReason.COMMUNICATION_INVISIBLE)
+    return RuleResult(
+        disposition=RuleDisposition.EVENT_ONLY,
+        reason=RuleReason.OCCURRENCE,
+        emits_event=True,
+        mutates_state=False,
+        action_kind=kind,
+    )
+
+
 def _reject(kind: str, reason: RuleReason) -> RuleResult:
     return RuleResult(
         disposition=RuleDisposition.REJECT,
@@ -905,6 +999,7 @@ def apply_operation(
     *,
     rules: PhysicalRules | None = None,
     resolved: ResolvedActionEffects | None = None,
+    tick: int | None = None,
 ) -> RuleApplication:
     """Evaluate then apply immutable physical or event-only effects.
 
@@ -915,7 +1010,11 @@ def apply_operation(
     if resolved is not None and type(resolved) is not ResolvedActionEffects:
         raise TypeError("apply_operation resolved must be ResolvedActionEffects")
     result = evaluate_operation(
-        state, operation, rules=physical_rules, resolved=resolved
+        state,
+        operation,
+        rules=physical_rules,
+        resolved=resolved,
+        tick=tick,
     )
     if result.disposition in {
         RuleDisposition.REJECT,
@@ -1197,12 +1296,12 @@ def _event_details_for(
                 ),
                 resulting_helper_fatigue=resulting_helper.fatigue.value,
             )
-        case _TalkOp(recipient_id=recipient_id, text=text):
-            return Talked(recipient_id, text)
-        case _AskOp(recipient_id=recipient_id, text=text):
-            return Asked(recipient_id, text)
-        case _TellOp(recipient_id=recipient_id, text=text):
-            return Told(recipient_id, text)
+        case _TalkOp(recipient_id=recipient_id, utterance=utterance):
+            return Talked(recipient_id, utterance)
+        case _AskOp(recipient_id=recipient_id, utterance=utterance):
+            return Asked(recipient_id, utterance)
+        case _TellOp(recipient_id=recipient_id, utterance=utterance):
+            return Told(recipient_id, utterance)
         case _WaitOp():
             return Waited()
         case _:

@@ -134,6 +134,22 @@ class ReplayService:
                 persistence_codec_version=manifest.persistence_codec_version,
             )
 
+        compatibility_path = (
+            "current"
+            if manifest.event_schema_version == EVENT_SCHEMA_VERSION
+            else "legacy_compatible"
+        )
+        _LOGGER.debug(
+            "replay_versions_accepted run_id=%s event_schema_version=%s "
+            "projector_version=%s persistence_codec_version=%s "
+            "compatibility_path=%s",
+            run_id.value,
+            manifest.event_schema_version,
+            manifest.projector_version,
+            manifest.persistence_codec_version,
+            compatibility_path,
+        )
+
         head_next = await self._durable_head_next_tick(run_id)
         if request.target_tick is None:
             target_tick = head_next

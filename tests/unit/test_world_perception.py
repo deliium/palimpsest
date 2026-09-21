@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from world.communications import origin_utterance
+
 import pytest
 
 from tests.simulation_helpers import (
@@ -246,9 +248,9 @@ def test_perception_service_projects_prior_events_by_audience() -> None:
         sequence=1,
         cause=ActionCause(RequestId("r-talk"), EntityId("body-1")),
         resulting_revision=WorldRevision(1),
-        details=Talked(EntityId("body-dead"), "psst"),
+        details=Talked(EntityId("body-dead"), origin_utterance(text="psst", speaker_id=EntityId("body-1"))),
         occurrence=build_occurrence_context(
-            Talked(EntityId("body-dead"), "psst"),
+            Talked(EntityId("body-dead"), origin_utterance(text="psst", speaker_id=EntityId("body-1"))),
             origin_location_id=EntityId("loc-1"),
         ),
     )
@@ -266,7 +268,7 @@ def test_perception_service_projects_prior_events_by_audience() -> None:
         prior_events=(move, talk),
     )
     assert body1.occurrences[0].audience_role is ObservationAudienceRole.ACTOR
-    assert body1.communications[0].text == "psst"
+    assert body1.communications[0].utterance.content.text == "psst"
     assert body1.communications[0].provenance.source_kind is (
         ObservationSourceKind.COMMUNICATION
     )
@@ -274,4 +276,4 @@ def test_perception_service_projects_prior_events_by_audience() -> None:
     assert body2.occurrences[0].audience_role is ObservationAudienceRole.WITNESS
     assert body2.communications == ()
     assert dead.communications[0].listener_id == EntityId("body-dead")
-    assert dead.communications[0].text == "psst"
+    assert dead.communications[0].utterance.content.text == "psst"
