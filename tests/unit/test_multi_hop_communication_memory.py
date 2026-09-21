@@ -242,3 +242,135 @@ def test_alice_bob_carol_transmission_chain(caplog: pytest.LogCaptureFixture) ->
         concepts=("spring",),
     )
     assert distorted.declared.hop_count == 2
+
+
+def test_talk_and_ask_actions_from_social_policy() -> None:
+    from tests.cognition_helpers import build_reconstruction
+    from world.actions import Ask, Talk
+
+    alice = EntityId("body-alice")
+    bob = EntityId("body-bob")
+    obs = Observation(
+        observer_id=alice,
+        world_id=WorldId("world-1"),
+        revision=WorldRevision(1),
+        tick=1,
+        self_body=_self("body-alice"),
+        visible_bodies=(
+            VisibleBody(
+                entity_id=bob,
+                life_status=LifeStatus.ALIVE,
+                coarse_health=CoarseHealth.STABLE,
+            ),
+        ),
+        visibility=1.0,
+    )
+    empty = RetrievedMemoryContext(
+        owner_id=AgentId("agent-alice"),
+        memory_ids=(),
+        belief_ids=(),
+        confidence=1.0,
+        decision_metadata=DecisionMetadata(candidate_count=0),
+    )
+    talk = DeterministicSocialMessagePolicy().select(
+        owner_id=AgentId("agent-alice"),
+        speaker_id=alice,
+        observation=obs,
+        memory=empty,
+        preferred_recipient_id=bob,
+    )
+    assert talk is not None
+    assert type(talk.command) is Talk
+    assert talk.action_kind == "talk"
+
+    low_recon = build_reconstruction(
+        concepts=("water",),
+        confidence=0.4,
+        reconstruction_id="recon-uncertain",
+        owner="agent-alice",
+    )
+    ask_memory = RetrievedMemoryContext(
+        owner_id=AgentId("agent-alice"),
+        memory_ids=(),
+        belief_ids=(),
+        confidence=0.4,
+        decision_metadata=DecisionMetadata(candidate_count=1),
+        reconstructions=(low_recon,),
+    )
+    ask = DeterministicSocialMessagePolicy().select(
+        owner_id=AgentId("agent-alice"),
+        speaker_id=alice,
+        observation=obs,
+        memory=ask_memory,
+        preferred_recipient_id=bob,
+    )
+    assert ask is not None
+    assert type(ask.command) is Ask
+    assert ask.action_kind == "ask"
+
+
+def test_same_root_reports_do_not_share_memory_lineage() -> None:
+    alice = EntityId("body-alice")
+    bob = EntityId("body-bob")
+    origin = origin_utterance(
+        text="secret-payload",
+        speaker_id=alice,
+        communication_id="comm-root-dup",
+        concepts=("water",),
+    )
+    first = ObservedCommunication(
+        provenance=ObservationProvenance(
+            source_kind=ObservationSourceKind.COMMUNICATION,
+            source_tick=1,
+            source_event_id=EventId("evt-dup-1"),
+        ),
+        speaker_id=alice,
+        listener_id=bob,
+        utterance=origin,
+        action_kind="tell",
+    )
+    second = ObservedCommunication(
+        provenance=ObservationProvenance(
+            source_kind=ObservationSourceKind.COMMUNICATION,
+            source_tick=2,
+            source_event_id=EventId("evt-dup-2"),
+        ),
+        speaker_id=alice,
+        listener_id=bob,
+        utterance=origin_utterance(
+            text="secret-payload",
+            speaker_id=alice,
+            communication_id="comm-root-dup-b",
+            concepts=("water",),
+            sender_confidence=0.8,
+        ),
+        action_kind="tell",
+    )
+    t1 = build_communicated_memory_trace(
+        owner_id=AgentId("agent-bob"),
+        observation_tick=2,
+        observation_revision=WorldRevision(1),
+        message=first,
+        location_id=EntityId("loc-1"),
+    )
+    t2 = build_communicated_memory_trace(
+        owner_id=AgentId("agent-bob"),
+        observation_tick=3,
+        observation_revision=WorldRevision(2),
+        message=second,
+        location_id=EntityId("loc-1"),
+    )
+    assert t1.memory_id != t2.memory_id
+    assert t1.lineage.source_memory_ids == ()
+    assert t2.lineage.source_memory_ids == ()
+    assert t1.provenance.transmission is not None
+    assert t2.provenance.transmission is not None
+    hop = retell_utterance(
+        prior=origin,
+        speaker_id=bob,
+        communication_id="comm-hop-dup",
+        sender_confidence=0.7,
+    )
+    assert hop.declared.hop_count == 1
+    assert "secret-payload" not in repr(t1)
+    assert "secret-payload" not in repr(t2)

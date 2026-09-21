@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-from world.communications import origin_utterance
-
 import logging
 
 import pytest

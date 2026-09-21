@@ -192,3 +192,50 @@ def test_legacy_belief_codec_unchanged() -> None:
     assert envelope["type"] == "belief"
     assert envelope["schema_version"] == 1
     assert SUBJECTIVE_SCHEMA_VERSION == "subjective-v1"
+
+
+def test_applied_testimony_factors_round_trip() -> None:
+    from memory.beliefs import AppliedTestimonyFactors, CommunicatedEvidenceDecision
+
+    factors = AppliedTestimonyFactors(
+        decision=CommunicatedEvidenceDecision.DISCOUNT,
+        hop_count=1,
+        trust=0.4,
+        trust_confidence=0.7,
+        sender_confidence=0.8,
+        receiver_confidence=0.6,
+        context_relevance=0.5,
+        hop_attenuation=0.9,
+        base_contribution=0.3,
+        adjusted_contribution=0.2,
+        confidence_delta=-0.1,
+        policy_version="testimony.v1",
+    )
+    raw = encode_subjective(factors)
+    assert decode_subjective(raw) == factors
+    payload = json.loads(raw.decode("utf-8"))
+    assert payload["type"] == "applied_testimony_factors"
+    assert "proposition" not in raw.decode("utf-8")
+
+
+def test_communicated_transmission_meta_round_trip() -> None:
+    from memory.models import CommunicatedTransmissionMeta
+    from world.identifiers import EntityId
+
+    meta = CommunicatedTransmissionMeta(
+        communication_id="comm-1",
+        action_kind="tell",
+        hop_count=1,
+        sender_confidence=0.8,
+        receiver_confidence=0.7,
+        content_fingerprint="fp-comm-1",
+        parent_communication_id="comm-root",
+        source_agent_chain=(EntityId("body-a"), EntityId("body-b")),
+        transmission_root_id="comm-root",
+        policy_version="communicated-memory.v1",
+    )
+    raw = encode_subjective(meta)
+    assert decode_subjective(raw) == meta
+    payload = json.loads(raw.decode("utf-8"))
+    assert payload["type"] == "communicated_transmission_meta"
+    assert "fp-comm-1" not in payload["type"]

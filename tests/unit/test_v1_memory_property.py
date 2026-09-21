@@ -227,3 +227,73 @@ def test_bounded_edit_sequences_are_deterministic_and_measurable(
         assert delta.comparison_status.value == "complete"
 
     __import__("asyncio").run(_run())
+
+
+@given(
+    hop_count=st.integers(min_value=0, max_value=5),
+    confidence=st.floats(
+        min_value=0.0, max_value=1.0, allow_nan=False, allow_infinity=False
+    ),
+)
+@settings(max_examples=40, deadline=None)
+def test_retell_hop_schedule_is_bounded(hop_count: int, confidence: float) -> None:
+    from world.communications import origin_utterance, retell_utterance
+    from world.identifiers import EntityId
+
+    speaker = EntityId("body-0")
+    utterance = origin_utterance(
+        text="signal",
+        speaker_id=speaker,
+        communication_id="comm-root-prop",
+        sender_confidence=confidence,
+        concepts=("signal",),
+    )
+    for hop in range(1, hop_count + 1):
+        next_speaker = EntityId(f"body-{hop}")
+        utterance = retell_utterance(
+            prior=utterance,
+            speaker_id=next_speaker,
+            communication_id=f"comm-hop-{hop}",
+            sender_confidence=max(0.0, confidence - 0.05 * hop),
+            text="signal" if hop % 2 == 0 else "signal-maybe",
+        )
+        assert utterance.declared.hop_count == hop
+        assert len(utterance.declared.source_agent_chain) == hop + 1
+        assert utterance.declared.hop_count <= 5
+
+
+@given(
+    hop=st.integers(min_value=0, max_value=4),
+    trust=st.floats(
+        min_value=0.0, max_value=1.0, allow_nan=False, allow_infinity=False
+    ),
+)
+@settings(max_examples=30, deadline=None)
+def test_testimony_hop_attenuation_is_monotonic(hop: int, trust: float) -> None:
+    from memory.belief_formation import (
+        DEFAULT_BELIEF_FORMATION_POLICY,
+        evaluate_communicated_testimony,
+    )
+
+    near = evaluate_communicated_testimony(
+        sender_confidence=0.9,
+        receiver_confidence=0.8,
+        trust=trust,
+        trust_confidence=0.7,
+        hop_count=hop,
+        context_relevance=0.6,
+        base_contribution=0.4,
+        policy=DEFAULT_BELIEF_FORMATION_POLICY,
+    )
+    far = evaluate_communicated_testimony(
+        sender_confidence=0.9,
+        receiver_confidence=0.8,
+        trust=trust,
+        trust_confidence=0.7,
+        hop_count=hop + 1,
+        context_relevance=0.6,
+        base_contribution=0.4,
+        policy=DEFAULT_BELIEF_FORMATION_POLICY,
+    )
+    assert far.hop_attenuation <= near.hop_attenuation
+    assert far.adjusted_contribution <= near.adjusted_contribution + 1e-9

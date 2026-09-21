@@ -24,6 +24,7 @@ from agents.cognition.models import (
 )
 from agents.models import AgentId
 from memory.models import (
+    BeliefId,
     CommunicatedTransmissionMeta,
     ConceptMention,
     EntityMention,
@@ -531,6 +532,7 @@ class DeterministicSocialMessagePolicy:
         memory: RetrievedMemoryContext,
         preferred_recipient_id: EntityId | None = None,
         snapshot_memories: Sequence[MemoryTrace] = (),
+        selected_belief_ids: Sequence[BeliefId] = (),
     ) -> SocialMessageDecision | None:
         recipients = _eligible_recipients(observation)
         candidate_count = len(recipients)
@@ -550,8 +552,14 @@ class DeterministicSocialMessagePolicy:
         recipient = preferred_recipient_id
         if recipient is None or recipient not in recipients:
             recipient = recipients[0]
+        selected_ids = frozenset(selected_belief_ids)
         beliefs = sorted(
-            (b for b in memory.semantic_beliefs if b.owner_id == owner_id),
+            (
+                b
+                for b in memory.semantic_beliefs
+                if b.owner_id == owner_id
+                and (not selected_ids or b.belief_id in selected_ids)
+            ),
             key=lambda item: (
                 -item.confidence.confidence,
                 item.belief_id.value,
@@ -565,9 +573,10 @@ class DeterministicSocialMessagePolicy:
             owner_id=owner_id,
             snapshot_memories=snapshot_memories,
         )
-        # Prefer tell from beliefs, ask under uncertainty, retell owned
-        # communicated traces, then reconstruction tell, else talk fallback.
-        if beliefs and beliefs[0].confidence.confidence >= 0.5:
+        # Tell from beliefs only when the caller selected specific belief IDs
+        # (share-intent). Bare COMMUNICATE stays talk/ask/retell/recon grounded.
+        decision: SocialMessageDecision | None = None
+        if selected_ids and beliefs and beliefs[0].confidence.confidence >= 0.5:
             claim = beliefs[0]
             conf = claim.confidence.confidence
             utterance = origin_utterance(
@@ -587,72 +596,100 @@ class DeterministicSocialMessagePolicy:
                 fallback=False,
                 candidate_count=candidate_count,
             )
-        elif reconstructions and reconstructions[0].confidence < 0.55:
-            recon = reconstructions[0]
-            utterance = origin_utterance(
-                text=_SAFE_ASK_TEXT,
-                speaker_id=speaker_id,
-                communication_id=f"plan-ask-{recon.reconstruction_id.value}",
-                sender_confidence=max(0.2, 1.0 - recon.confidence),
-                source_basis=CommunicationSourceBasis.RECONSTRUCTED_MEMORY,
-                concepts=tuple(item.concept for item in recon.concepts[:4]),
+            _LOG.debug(
+                "social_message_belief_testify",
+                extra={
+                    "cognition": {
+                        "owner_id": owner_id.value,
+                        "policy_version": SOCIAL_MESSAGE_POLICY_VERSION,
+                        "reason_code": "selected_belief_testify",
+                        "selected_belief_count": len(selected_ids),
+                        "confidence_band": confidence_band(conf),
+                    }
+                },
             )
-            decision = SocialMessageDecision(
-                command=Ask(recipient_id=recipient, utterance=utterance),
-                action_kind="ask",
-                source_basis=CommunicationSourceBasis.RECONSTRUCTED_MEMORY,
-                hop_count=0,
-                sender_confidence=utterance.declared.sender_confidence,
-                fallback=False,
-                candidate_count=candidate_count,
+        elif not selected_ids and beliefs and beliefs[0].confidence.confidence >= 0.5:
+            _LOG.debug(
+                "social_message_belief_skipped",
+                extra={
+                    "cognition": {
+                        "owner_id": owner_id.value,
+                        "policy_version": SOCIAL_MESSAGE_POLICY_VERSION,
+                        "reason_code": "belief_testify_requires_selection",
+                        "belief_count": len(beliefs),
+                    }
+                },
             )
-        else:
-            retell = _try_retell_from_communicated(
-                owner_id=owner_id,
-                speaker_id=speaker_id,
-                recipient_id=recipient,
-                traces=communicated,
-                candidate_count=candidate_count,
-            )
-            if retell is not None:
-                decision = retell
-            elif reconstructions:
+
+        if decision is None:
+            if reconstructions and reconstructions[0].confidence < 0.55:
                 recon = reconstructions[0]
-                concepts = tuple(item.concept for item in recon.concepts[:4])
                 utterance = origin_utterance(
-                    text=_SAFE_TELL_TEXT if not concepts else concepts[0],
+                    text=_SAFE_ASK_TEXT,
                     speaker_id=speaker_id,
-                    communication_id=f"plan-retell-{recon.reconstruction_id.value}",
-                    sender_confidence=recon.confidence,
+                    communication_id=f"plan-ask-{recon.reconstruction_id.value}",
+                    sender_confidence=max(0.2, 1.0 - recon.confidence),
                     source_basis=CommunicationSourceBasis.RECONSTRUCTED_MEMORY,
-                    concepts=concepts,
+                    concepts=tuple(item.concept for item in recon.concepts[:4]),
                 )
                 decision = SocialMessageDecision(
-                    command=Tell(recipient_id=recipient, utterance=utterance),
-                    action_kind="tell",
+                    command=Ask(recipient_id=recipient, utterance=utterance),
+                    action_kind="ask",
                     source_basis=CommunicationSourceBasis.RECONSTRUCTED_MEMORY,
                     hop_count=0,
-                    sender_confidence=recon.confidence,
+                    sender_confidence=utterance.declared.sender_confidence,
                     fallback=False,
                     candidate_count=candidate_count,
                 )
             else:
-                utterance = origin_utterance(
-                    text=_SAFE_TALK_TEXT,
+                retell = _try_retell_from_communicated(
+                    owner_id=owner_id,
                     speaker_id=speaker_id,
-                    communication_id="plan-social-1",
-                    sender_confidence=1.0,
-                    source_basis=CommunicationSourceBasis.UNREFERENCED,
-                )
-                decision = SocialMessageDecision(
-                    command=Talk(recipient_id=recipient, utterance=utterance),
-                    action_kind="talk",
-                    source_basis=CommunicationSourceBasis.UNREFERENCED,
-                    hop_count=0,
-                    sender_confidence=1.0,
-                    fallback=True,
+                    recipient_id=recipient,
+                    traces=communicated,
                     candidate_count=candidate_count,
                 )
+                if retell is not None:
+                    decision = retell
+                elif reconstructions:
+                    recon = reconstructions[0]
+                    concepts = tuple(item.concept for item in recon.concepts[:4])
+                    utterance = origin_utterance(
+                        text=_SAFE_TELL_TEXT if not concepts else concepts[0],
+                        speaker_id=speaker_id,
+                        communication_id=(
+                            f"plan-retell-{recon.reconstruction_id.value}"
+                        ),
+                        sender_confidence=recon.confidence,
+                        source_basis=CommunicationSourceBasis.RECONSTRUCTED_MEMORY,
+                        concepts=concepts,
+                    )
+                    decision = SocialMessageDecision(
+                        command=Tell(recipient_id=recipient, utterance=utterance),
+                        action_kind="tell",
+                        source_basis=CommunicationSourceBasis.RECONSTRUCTED_MEMORY,
+                        hop_count=0,
+                        sender_confidence=recon.confidence,
+                        fallback=False,
+                        candidate_count=candidate_count,
+                    )
+                else:
+                    utterance = origin_utterance(
+                        text=_SAFE_TALK_TEXT,
+                        speaker_id=speaker_id,
+                        communication_id="plan-social-1",
+                        sender_confidence=1.0,
+                        source_basis=CommunicationSourceBasis.UNREFERENCED,
+                    )
+                    decision = SocialMessageDecision(
+                        command=Talk(recipient_id=recipient, utterance=utterance),
+                        action_kind="talk",
+                        source_basis=CommunicationSourceBasis.UNREFERENCED,
+                        hop_count=0,
+                        sender_confidence=1.0,
+                        fallback=True,
+                        candidate_count=candidate_count,
+                    )
         _LOG.debug(
             "social_message_selected",
             extra={

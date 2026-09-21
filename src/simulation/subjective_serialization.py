@@ -16,6 +16,7 @@ from typing import Any, Final
 from agents.cognition.models import SelfModel, SelfRelevantBelief
 from agents.models import AgentId, GoalId
 from memory.beliefs import (
+    AppliedTestimonyFactors,
     BeliefActivationState,
     BeliefConfidenceState,
     BeliefPolicyRef,
@@ -24,10 +25,11 @@ from memory.beliefs import (
     ClaimSubject,
     ClaimSubjectKind,
     ClaimValue,
+    CommunicatedEvidenceDecision,
     SemanticBelief,
     SemanticClaim,
 )
-from memory.models import BeliefId
+from memory.models import BeliefId, CommunicatedTransmissionMeta, EntityId
 from simulation.subjective_state import SubjectiveApplyReceipt
 from social.models import RelationshipId
 from social.relationships import (
@@ -40,7 +42,6 @@ from social.relationships import (
     RelationshipPolicyRef,
     RelationshipRevisionId,
 )
-from world.identifiers import EntityId
 from world.models import LifeStatus
 
 __all__ = [
@@ -182,6 +183,10 @@ def _encode_top(value: object, *, path: str) -> tuple[str, dict[str, Any]]:
         return "subjective_apply_receipt", _encode_receipt(value)
     if type(value) is SelfModel:
         return "self_model", _encode_self_model(value)
+    if type(value) is AppliedTestimonyFactors:
+        return "applied_testimony_factors", _encode_applied_factors(value)
+    if type(value) is CommunicatedTransmissionMeta:
+        return "communicated_transmission_meta", _encode_transmission_meta(value)
     raise SubjectiveSerializationError("unsupported_type", path)
 
 
@@ -194,7 +199,136 @@ def _decode_top(tag: str, data: dict[str, Any], *, path: str) -> object:
         return _decode_receipt(data, path=path)
     if tag == "self_model":
         return _decode_self_model(data, path=path)
+    if tag == "applied_testimony_factors":
+        return _decode_applied_factors(data, path=path)
+    if tag == "communicated_transmission_meta":
+        return _decode_transmission_meta(data, path=path)
     raise SubjectiveSerializationError("unsupported_type", path)
+
+
+def _encode_applied_factors(value: AppliedTestimonyFactors) -> dict[str, Any]:
+    return {
+        "adjusted_contribution": value.adjusted_contribution,
+        "base_contribution": value.base_contribution,
+        "confidence_delta": value.confidence_delta,
+        "context_relevance": value.context_relevance,
+        "decision": value.decision.value,
+        "hop_attenuation": value.hop_attenuation,
+        "hop_count": value.hop_count,
+        "policy_version": value.policy_version,
+        "receiver_confidence": value.receiver_confidence,
+        "sender_confidence": value.sender_confidence,
+        "trust": value.trust,
+        "trust_confidence": value.trust_confidence,
+    }
+
+
+def _decode_applied_factors(
+    data: dict[str, Any], *, path: str
+) -> AppliedTestimonyFactors:
+    _require_keys(
+        data,
+        {
+            "adjusted_contribution",
+            "base_contribution",
+            "confidence_delta",
+            "context_relevance",
+            "decision",
+            "hop_attenuation",
+            "hop_count",
+            "policy_version",
+            "receiver_confidence",
+            "sender_confidence",
+            "trust",
+            "trust_confidence",
+        },
+        path=path,
+    )
+    try:
+        decision = CommunicatedEvidenceDecision(_str_field(data, "decision", path=path))
+        return AppliedTestimonyFactors(
+            decision=decision,
+            hop_count=_int_field(data, "hop_count", path=path),
+            trust=_float_field(data, "trust", path=path),
+            trust_confidence=_float_field(data, "trust_confidence", path=path),
+            sender_confidence=_float_field(data, "sender_confidence", path=path),
+            receiver_confidence=_float_field(data, "receiver_confidence", path=path),
+            context_relevance=_float_field(data, "context_relevance", path=path),
+            hop_attenuation=_float_field(data, "hop_attenuation", path=path),
+            base_contribution=_float_field(data, "base_contribution", path=path),
+            adjusted_contribution=_float_field(
+                data, "adjusted_contribution", path=path
+            ),
+            confidence_delta=_float_field(data, "confidence_delta", path=path),
+            policy_version=_str_field(data, "policy_version", path=path),
+        )
+    except SubjectiveSerializationError:
+        raise
+    except (TypeError, ValueError) as exc:
+        raise SubjectiveSerializationError("invalid_model", path) from exc
+
+
+def _encode_transmission_meta(value: CommunicatedTransmissionMeta) -> dict[str, Any]:
+    return {
+        "action_kind": value.action_kind,
+        "communication_id": value.communication_id,
+        "content_fingerprint": value.content_fingerprint,
+        "hop_count": value.hop_count,
+        "parent_communication_id": value.parent_communication_id,
+        "policy_version": value.policy_version,
+        "receiver_confidence": value.receiver_confidence,
+        "sender_confidence": value.sender_confidence,
+        "source_agent_chain": [item.value for item in value.source_agent_chain],
+        "transmission_root_id": value.transmission_root_id,
+    }
+
+
+def _decode_transmission_meta(
+    data: dict[str, Any], *, path: str
+) -> CommunicatedTransmissionMeta:
+    _require_keys(
+        data,
+        {
+            "action_kind",
+            "communication_id",
+            "content_fingerprint",
+            "hop_count",
+            "policy_version",
+            "receiver_confidence",
+            "sender_confidence",
+            "source_agent_chain",
+            "transmission_root_id",
+        },
+        path=path,
+        optional={"parent_communication_id"},
+    )
+    chain_raw = data["source_agent_chain"]
+    if not isinstance(chain_raw, list):
+        raise SubjectiveSerializationError(
+            "invalid_array", f"{path}.source_agent_chain"
+        )
+    parent = data.get("parent_communication_id")
+    if parent is not None and not isinstance(parent, str):
+        raise SubjectiveSerializationError(
+            "invalid_string", f"{path}.parent_communication_id"
+        )
+    try:
+        return CommunicatedTransmissionMeta(
+            communication_id=_str_field(data, "communication_id", path=path),
+            action_kind=_str_field(data, "action_kind", path=path),
+            hop_count=_int_field(data, "hop_count", path=path),
+            sender_confidence=_float_field(data, "sender_confidence", path=path),
+            receiver_confidence=_float_field(data, "receiver_confidence", path=path),
+            content_fingerprint=_str_field(data, "content_fingerprint", path=path),
+            parent_communication_id=parent,
+            source_agent_chain=tuple(EntityId(str(item)) for item in chain_raw),
+            transmission_root_id=_str_field(data, "transmission_root_id", path=path),
+            policy_version=_str_field(data, "policy_version", path=path),
+        )
+    except SubjectiveSerializationError:
+        raise
+    except (TypeError, ValueError) as exc:
+        raise SubjectiveSerializationError("invalid_model", path) from exc
 
 
 def _encode_claim_subject(subject: ClaimSubject) -> dict[str, Any]:

@@ -5,8 +5,7 @@ from __future__ import annotations
 from typing import Any
 
 from memory.beliefs import AppliedTestimonyFactors, CommunicatedEvidenceDecision
-from memory.models import CommunicatedTransmissionMeta
-from world.identifiers import EntityId
+from memory.models import CommunicatedTransmissionMeta, EntityId
 
 __all__ = [
     "applied_factors_from_row",

@@ -1,47 +1,55 @@
-# Architecture: Structured Modules (Bounded Packages)
+# Architecture: Structured Modules (Technical Layer / Bounded Packages)
 
 ## Overview
 
-Palimpsest uses a modular-monolith layout of bounded packages under `src/`. Each package owns a clear responsibility and public facade. This matches the foundation's need for enforceable trust boundaries (world authority vs agent-facing contracts, untrusted LLM output, deterministic simulation primitives, subjective reconstructive memory vs objective events) without introducing microservices.
+Palimpsest uses a modular-monolith layout of bounded packages under `src/`. Each package owns a clear responsibility and a public facade (`__init__.py` / `__all__`). This is Structured Modules organized by technical concern at package granularity (world authority, cognition, memory, social, simulation, persistence, analysis), adapted to Python research-simulation needs rather than Controllers/Services folders.
+
+The layout exists to keep trust boundaries machine-checkable: `WorldEngine` is the only objective mutation authority; agents receive immutable observations only; cognition and memory stay owner-scoped and never dereference `WorldEvent` stores; LLM output is shape-validated and non-authoritative; read-only `analysis` may join objective events with subjective evidence after the fact.
 
 ## Decision Rationale
 
-- **Project type:** Research / simulation foundation (contracts-first)
-- **Tech stack:** Python, FastAPI, SQLAlchemy async, PostgreSQL/pgvector
-- **Key factor:** Hard dependency and trust-stage boundaries must be machine-checkable before simulation behavior exists
+- **Project type:** Research / multi-agent society simulation (contracts-first)
+- **Tech stack:** Python ≥3.12, FastAPI, SQLAlchemy async, PostgreSQL/pgvector, uv
+- **Key factor:** Hard dependency and trust-stage boundaries must be enforceable before and during simulation behavior (import-linter + AST checks)
+- **Organization variant:** Technical Layer at package level — adapted to existing bounded packages (not Controllers/Services/Repositories folders)
 
 ## Folder Structure
 
 ```text
 src/
-  world/            # agent-facing Observation DTOs + private _state/_perception/_rules/_replay
-  agents/           # identity, Agent, goals
-  agents/cognition/ # CognitiveLoop + stage protocols; ImaginationEngine/MotivationAppraisal/deliberation; LLMMemoryReconstructor
-  memory/           # owner-scoped MemoryTrace + semantic beliefs + MemoryService + reconstructive recall
-  social/           # communication envelopes + directed relationship profiles
-  llm/              # provider-neutral StructuredOutput / LLMResult (no vendor SDKs)
-  llm/prompts/      # immutable versioned prompt package resources (incl. reconstructive_memory)
-  llm/providers/    # OpenAI-compatible HTTP adapter + pure codec
-  simulation/       # WorldEngine, AgentRuntime, SubjectiveStateService, bootstrap, lifecycle, codecs, replay
-  persistence/      # SQLAlchemy adapters for simulation ports + MemoryService + subjective agent models
-  analysis/         # read-only events/exports + MemoryDriftAnalysisService
-  api/              # FastAPI composition root (no LLM provider wiring yet)
-  infrastructure/   # settings (incl. PALIMPSEST_LLM_*), logging, database adapters
-alembic/            # migrations (pgvector + event store + occurrence + episodic + reconstruction + subjective)
+  world/                 # agent-facing Observation/commands/events + communications.py
+                         # private _state/_perception/_rules/_operations/_replay (authority)
+  agents/                # identity, Agent, goals
+  agents/cognition/      # CognitiveLoop, stage protocols, imagination/motivation/deliberation
+                         # communication.py (communicated memory + social-message policy)
+  memory/                # owner-scoped MemoryTrace, semantic beliefs, recall, formation
+  social/                # envelopes + directed relationship profiles (no friend/enemy labels)
+  llm/                   # provider-neutral StructuredOutput / LLMResult (no vendor SDKs)
+  llm/prompts/           # immutable versioned prompt package resources
+  llm/providers/         # OpenAI-compatible HTTP adapter + pure codec
+  simulation/            # WorldEngine, AgentRuntime, SubjectiveStateService, codecs, replay
+  persistence/           # SQLAlchemy adapters (simulation, memory, subjective, analysis loaders)
+                         # transmission_mapping.py (EntityId via memory.models — never world)
+  analysis/              # read-only MemoryDriftAnalysisService + SocialTransmissionAnalysisService
+  api/                   # FastAPI composition root (no LLM provider wiring yet)
+  infrastructure/        # settings (PALIMPSEST_*), logging, database adapters
+alembic/versions/        # migrations through 0008 (social transmission provenance)
+docs/                    # contributor docs (architecture, memory, social-communication, …)
 tests/
   unit/ architecture/ integration/ compose/ typecheck/ fakes/
 ```
 
 ## Dependency Rules
 
-- ✅ `world` imports no other bounded module
+- ✅ `world` imports no other bounded module (structured communication lives in `world.communications`)
 - ✅ Base `agents` may import agent-facing `world` only; never `agents.cognition`
 - ✅ `memory` / `social` may import `world` + `agents`; remain independent of each other
 - ✅ `llm` imports no domain, simulation, API, persistence, or infrastructure module
 - ✅ `llm` uses stdlib `logging` only (metadata allowlist; no `exc_info` / structlog / payload fields)
 - ✅ `agents.cognition` may import public contracts from agents/world/memory/social/llm
 - ✅ `simulation` may import domain public contracts; must not import `api`, `analysis`, `infrastructure`, or `persistence`
-- ✅ `persistence` may import public `simulation` contracts, public `memory` and `social` facades, and `infrastructure` (intentional persistence → social for relationship durability)
+- ✅ `persistence` may import public `simulation` contracts, public `memory` and `social` facades, and `infrastructure`
+- ✅ `persistence` identity types for subjective/transmission mapping come from `memory.models` (re-exported `EntityId`) — never import `world` from persistence
 - ✅ `api` may import `simulation`, `infrastructure`, and `persistence`
 - ✅ `analysis` is read-only; may import `world`, `simulation`, and `memory` contracts (not live infra/agents)
 - ✅ `infrastructure` imports no domain policy
@@ -52,34 +60,41 @@ tests/
 - ❌ Vendor LLM SDKs (`openai`, `anthropic`, …) are forbidden everywhere in `src/`
 - ❌ Cross-module imports of private modules or transitive re-exports
 - ❌ Agents, cognition, memory, reconstruction protocols, and runtime composition must not import, receive, or dereference `WorldEvent`, event repositories, replay services, snapshots, or private world state (opaque `EventId` only)
+- ❌ Cognition must not feed analysis results back into live planning or memory formation
 
 ## Layer/Module Communication
 
 - Composition root (`api`) loads settings, configures logging, and owns database lifespan
-- LLM settings exist under `PALIMPSEST_LLM_*`; factory construction stays standalone in `llm.factory` until a cognition consumer owns lifecycle composition (API/`compose.yaml` unchanged)
+- LLM settings exist under `PALIMPSEST_LLM_*`; factory construction stays standalone in `llm.factory` until a cognition consumer owns lifecycle composition
 - `WorldEngine` owns observation tokens, ordered admission, private batch preparation, and atomic commit
+- Communication (`Talk` / `Ask` / `Tell`) is event-only: world verifies delivery eligibility and records `Talked` / `Asked` / `Told`; content truth is never world-owned. Declared lineage on `StructuredUtterance` is speaker testimony. Writes use event schema **replay-v5**; legacy replay-v2/v3/v4 text-only records decode into an explicit unreferenced structured form
+- Private communication eligibility policy (living sender/recipient, colocation/range, visibility) is shared by admission and perception; delivery is recipient-private on the next observation window
 - `AgentRuntime` owns per-agent cognition invocation, deferred subjective commits (episodic + beliefs + relationships) via `SubjectiveStateService`, and `ActionSubmission` construction from an engine-issued token; cognition never sees `TickToken` or `WorldState`
-- Owner-scoped episodic memory uses structured `MemoryTrace` values and reconstructive `MemoryService.recall`; durable adapter is `persistence.create_memory_service(scope=..., ...)`; semantic beliefs and directed relationships use `persistence.create_subjective_state_service(...)`; all subjective tables (`0005`–`0007`) stay outside append-only authoritative history
+- Communicated observations become **fresh** owner-scoped `MemoryTrace` values with `CommunicatedTransmissionMeta` (never copy sender memory/reconstruction/belief/relationship state). `DeterministicSocialMessagePolicy` selects talk/ask/tell from subjective evidence; belief-grounded `Tell` requires explicit selected belief IDs (bare `COMMUNICATE` does not auto-testify)
+- Trust-aware belief updates treat testimony as evidence (`accept` / `discount` / `contradict` / `defer`); cognition projects relationship trust into neutral floats so `memory` stays independent of `social`
+- Owner-scoped episodic memory uses structured `MemoryTrace` values and reconstructive `MemoryService.recall`; durable adapter is `persistence.create_memory_service(scope=..., ...)`; semantic beliefs and directed relationships use `persistence.create_subjective_state_service(...)`; subjective tables (`0005`–`0008`) stay outside append-only authoritative history
 - Emergent `SelfModel` is a deterministic projection over owner-relevant semantic beliefs — no predefined personality traits, archetypes, or role classes
-- Directed relationship profiles are independent `source → target` assessments across fixed low-level dimensions; no friend/enemy/leader/group/morality/culture labels
+- Directed relationship profiles are independent `source → target` assessments across fixed low-level dimensions; no friend/enemy/leader/group/morality/culture/rumor labels
 - Private `PerceptionService` projects one agent-specific `Observation` from tick-start state + prior committed events; cognition receives it only via `observation_for` / `AgentRuntime` / `build_perspective`
 - Async `LLMProvider.generate(LLMRequest[T]) -> LLMResult[T]` returns only strict `StructuredOutput` plus normalized metadata; raw provider text/mappings never leave the adapter
-- Structurally valid LLM output remains non-authoritative. Cognition must translate an exact decision schema into a fresh `AgentCommand`, then use normal `ActionSubmission` / admission / world-operation gates. LLM reconstruction similarly requires semantic validation against `RecallEvidence` before becoming a `ReconstructedMemory`
-- Analysis consumes immutable exports/events and may join subjective reconstruction evidence after the fact for drift metrics; it never feeds objective events into agents, memory, or reconstructors
+- Structurally valid LLM output remains non-authoritative. Cognition must translate an exact decision schema into a fresh `AgentCommand`, then use normal `ActionSubmission` / admission / world-operation gates
+- Analysis consumes immutable exports/events and may join subjective reconstruction **and** communicated-transmission evidence after the fact (`MemoryDriftAnalysisService`, `SocialTransmissionAnalysisService`); it never feeds objective events or analysis reports into agents, memory, or reconstructors
 
 ## Key Principles
 
 1. World state is authoritative; agents receive immutable, agent-specific observations only
-2. Objective and subjective state remain separate; perception does not form memories or beliefs; reconstruction is explicitly subjective
-3. Randomness and IDs derive from an explicit seed (no Python `hash()`, no global RNG)
-4. Operational metadata (HTTP request IDs, log timestamps) never become domain IDs or seeds
-5. Enforce boundaries with import-linter + AST checks, not convention alone
-6. LLM validation proves shape only—never truth, policy, actor identity, or world authority
+2. Objective and subjective state remain separate; perception does not form memories or beliefs; reconstruction and testimony evaluation are explicitly subjective
+3. A delivered utterance proves delivery, not truth; declared lineage is distrustable testimony
+4. Randomness and IDs derive from an explicit seed (no Python `hash()`, no global RNG)
+5. Operational metadata (HTTP request IDs, log timestamps) never become domain IDs or seeds
+6. Enforce boundaries with import-linter + AST checks, not convention alone
+7. LLM validation proves shape only—never truth, policy, actor identity, or world authority
+8. Logs expose IDs, counts, hops, confidence bands, and reason codes — never message text, propositions, narratives, prompts, or fingerprints as payload surrogates
 
 ## Code Organization Note
 
-- **New Features:** Follow the bounded-package rules and facades in this document and `docs/architecture.md`
-- **Existing Code:** Documented structure matches the implemented foundation, including reconstructive memory
+- **New Features:** Follow the bounded-package rules and facades in this document and `docs/architecture.md` where practical
+- **Existing Code:** Document the current structure as-is (including reconstructive memory and social transmission). When modifying existing code, prefer these conventions without forcing unrelated rewrites
 - **Interoperability:** Wire infrastructure only at the API/composition boundary; do not allocate LLM providers in API lifespan until cognition consumers own them
 
 ## Code Examples
@@ -92,12 +107,14 @@ from simulation import (
     SimulationRunConfig,
     WorldBootstrap,
     WorldEngine,
+    build_perspective,
 )
-from world import Observation, Wait
-from simulation import build_perspective
+from world import Observation, Talk, Tell, Wait
+from world.communications import origin_utterance, retell_utterance
 from llm import LLMProvider, LLMRequest, LLMResult, StructuredOutput
 from memory import MemoryRecallRequest, MemoryService, DeterministicMemoryReconstructor
-from analysis import MemoryDriftAnalysisService
+from analysis import MemoryDriftAnalysisService, SocialTransmissionAnalysisService
+from agents.cognition import DeterministicSocialMessagePolicy
 ```
 
 ### Forbidden authority import outside simulation
@@ -108,12 +125,22 @@ from world._state import WorldState  # private authority
 from world._perception import PerceptionService  # private projector
 ```
 
-### Forbidden objective events in subjective recall
+### Forbidden objective events in subjective paths
 
 ```python
-# Not allowed — reconstructors and MemoryService never take WorldEvent:
+# Not allowed — reconstructors, MemoryService, and cognition never take WorldEvent:
 reconstructor.reconstruct(world_event)  # no such API
 MemoryRecallRequest(..., world_event=...)  # does not exist
+# SocialTransmissionAnalysisService may join events only under analysis/
+```
+
+### Forbidden persistence → world import
+
+```python
+# Not allowed in persistence adapters:
+from world.identifiers import EntityId
+# Use the memory facade re-export instead:
+from memory.models import EntityId, CommunicatedTransmissionMeta
 ```
 
 ### Forbidden LLM trust bypass
@@ -130,18 +157,24 @@ llm_result.to_agent_command()               # does not exist
 - Passing `LLMResult` / `StructuredOutput` / model dumps into `WorldEngine`, `ActionSubmission`, admission, or world operations
 - Treating `ActionRequest` as authoritative without private world validation
 - Handing an all-agent `ObservationBatch` or another agent's observation to cognition
-- Sharing mutable memory payloads across agents
+- Sharing mutable memory payloads across agents, or copying sender `MemoryTrace` / reconstruction IDs into a listener's lineage
+- Treating delivered `Tell` content or declared source chains as world-verified truth
+- Auto-upgrading bare `COMMUNICATE` to belief-grounded `Tell` without explicit selected belief IDs
+- Equating repeated reports that share one transmission root with independent corroboration
 - Injecting `WorldEvent` or event repositories into agents, cognition, `MemoryService`, or reconstruction policies
+- Feeding `SocialTransmissionAnalysisService` / drift reports back into live cognition
 - Treating reconstructions as objective truth or correcting agents against ground truth during recall
 - Destructively overwriting source traces when reconsolidating
 - Reading `PALIMPSEST_` secrets or opening DB connections at import time
-- Importing vendor LLM SDKs or logging prompt/output/schema/endpoint/memory/narrative content
+- Importing vendor LLM SDKs or logging prompt/output/schema/endpoint/memory/narrative/communication content
 - Using Docker/PostgreSQL inside default unit tests
 
 ## See Also
 
 - `docs/architecture.md` — contributor-facing matrix, WorldEngine lifecycle, perception boundary, and invariants
 - `docs/memory-reconstruction.md` — reconstructive recall, reconsolidation, drift analysis, logging allowlists
+- `docs/social-communication.md` — objective delivery vs declared testimony vs owner-scoped derivation vs analysis
+- `.ai-factory/plans/agent-social-communication-transmission.md` — social communication and transmission plan
 - `.ai-factory/plans/reconstructive-memory-reconsolidation.md` — reconstructive memory plan
 - `.ai-factory/plans/v1-agent-runtime-cognitive-loop.md` — cognitive loop and AgentRuntime plan
 - `.ai-factory/plans/llm-provider-abstraction.md` — provider-neutral LLM boundary plan

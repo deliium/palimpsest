@@ -367,7 +367,9 @@ def retell_utterance(
     text: str | None = None,
     concepts: Sequence[str] | None = None,
     relations: Sequence[CommunicationRelation] | None = None,
-    source_basis: CommunicationSourceBasis = CommunicationSourceBasis.RECONSTRUCTED_MEMORY,
+    source_basis: CommunicationSourceBasis = (
+        CommunicationSourceBasis.RECONSTRUCTED_MEMORY
+    ),
 ) -> StructuredUtterance:
     """Append the current speaker as a new hop without copying prior identity."""
     if type(prior) is not StructuredUtterance:
@@ -376,7 +378,7 @@ def retell_utterance(
         raise TypeError("speaker_id must be EntityId")
     if speaker_id in prior.declared.source_agent_chain:
         raise ValueError("retell_utterance: speaker_already_in_chain")
-    chain = tuple(prior.declared.source_agent_chain) + (speaker_id,)
+    chain = (*prior.declared.source_agent_chain, speaker_id)
     confidence = (
         prior.declared.sender_confidence
         if sender_confidence is None

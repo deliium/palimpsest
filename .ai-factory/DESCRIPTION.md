@@ -15,7 +15,7 @@ Palimpsest is a Python 3.12+ modular monolith for reproducible, discrete, text-b
 - Semantic beliefs with append-only revisions/evidence, asymmetric relationship dimensions (no friend/enemy/leader labels), and atomic owner-scoped subjective commits
 - Async `LLMProvider` with immutable `LLMRequest`/`LLMResult`, strict `StructuredOutput`, versioned prompt resources (including `reconstructive_memory/v1`), and a configurable OpenAI-compatible HTTP adapter (no vendor SDKs)
 - Deterministic seed-derived RNG streams, logical clock, namespaced IDs, and live/restored observation parity
-- `PALIMPSEST_` settings (including disabled-by-default `PALIMPSEST_LLM_*`), structured logging (no observation/communication/memory/belief/relationship/LLM payloads), async SQLAlchemy lifecycle, Alembic + pgvector bootstrap (migration head `0007`)
+- `PALIMPSEST_` settings (including disabled-by-default `PALIMPSEST_LLM_*`), structured logging (no observation/communication/memory/belief/relationship/LLM payloads), async SQLAlchemy lifecycle, Alembic + pgvector bootstrap (migration head `0008`)
 - FastAPI `/health` liveness and Docker Compose development stack (API does not yet own LLM provider lifecycle)
 
 ## Tech Stack
@@ -32,7 +32,13 @@ Palimpsest is a Python 3.12+ modular monolith for reproducible, discrete, text-b
 
 ## Architecture Notes
 
-Modular monolith with explicit bounded packages under `src/`. Domain modules do not import infrastructure; the API composition root wires adapters. `simulation.WorldEngine` is the sole public mutation authority; private world modules prepare candidates and project observations only. Cognition never receives `WorldState` or another agent's observation. Agents, memory, cognition, and reconstruction APIs may carry opaque `EventId` correlation only — never `WorldEvent` or event stores. Read-only `analysis` may join objective events with subjective reconstruction evidence after the fact. The `llm` package is import-closed against world/simulation/API/infrastructure, forbids vendor SDKs, and never converts results into commands—future cognition must translate validated decision schemas into fresh `AgentCommand` values and use normal admission. Cross-module imports use package facades / `__all__`. Import-linter and AST boundary checks enforce dependency rules.
+Modular monolith with explicit bounded packages under `src/`. Domain modules do not import infrastructure; the API composition root wires adapters. `simulation.WorldEngine` is the sole public mutation authority; private world modules prepare candidates and project observations only. Cognition never receives `WorldState` or another agent's observation. Agents, memory, cognition, and reconstruction APIs may carry opaque `EventId` correlation only — never `WorldEvent` or event stores. Structured `Talk`/`Ask`/`Tell` proves delivery only; declared lineage is testimony; each receiver forms a fresh communicated `MemoryTrace`. Read-only `analysis` may join objective events with subjective reconstruction and social-transmission evidence after the fact. The `llm` package is import-closed against world/simulation/API/infrastructure, forbids vendor SDKs, and never converts results into commands—future cognition must translate validated decision schemas into fresh `AgentCommand` values and use normal admission. Cross-module imports use package facades / `__all__`. Import-linter and AST boundary checks enforce dependency rules.
+
+## Architecture
+
+Detailed architecture guidelines live in `.ai-factory/ARCHITECTURE.md`.
+
+**Pattern:** Structured Modules (Technical Layer / Bounded Packages)
 
 ## Non-Functional Requirements
 

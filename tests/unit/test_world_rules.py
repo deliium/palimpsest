@@ -69,9 +69,30 @@ _ALL_COMMAND_CASES = [
     ("eat", Eat(EntityId("item-food")), RuleDisposition.MUTATE),
     ("drink", Drink(EntityId("res-1")), RuleDisposition.MUTATE),
     ("sleep", Sleep(), RuleDisposition.MUTATE),
-    ("talk", Talk(EntityId("body-2"), origin_utterance(text="hi", speaker_id=EntityId("body-1"))), RuleDisposition.EVENT_ONLY),
-    ("ask", Ask(EntityId("body-2"), origin_utterance(text="why", speaker_id=EntityId("body-1"))), RuleDisposition.EVENT_ONLY),
-    ("tell", Tell(EntityId("body-2"), origin_utterance(text="news", speaker_id=EntityId("body-1"))), RuleDisposition.EVENT_ONLY),
+    (
+        "talk",
+        Talk(
+            EntityId("body-2"),
+            origin_utterance(text="hi", speaker_id=EntityId("body-1")),
+        ),
+        RuleDisposition.EVENT_ONLY,
+    ),
+    (
+        "ask",
+        Ask(
+            EntityId("body-2"),
+            origin_utterance(text="why", speaker_id=EntityId("body-1")),
+        ),
+        RuleDisposition.EVENT_ONLY,
+    ),
+    (
+        "tell",
+        Tell(
+            EntityId("body-2"),
+            origin_utterance(text="news", speaker_id=EntityId("body-1")),
+        ),
+        RuleDisposition.EVENT_ONLY,
+    ),
     ("help", Help(EntityId("body-2")), RuleDisposition.MUTATE),
     ("attack", Attack(EntityId("body-2")), RuleDisposition.MUTATE),
     ("flee", Flee(), RuleDisposition.MUTATE),

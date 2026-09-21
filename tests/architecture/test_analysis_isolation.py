@@ -115,3 +115,24 @@ def test_only_analysis_layer_may_join_both_source_capabilities() -> None:
             text = path.read_text(encoding="utf-8")
             assert "ObjectiveEventSource" not in text
             assert "class MemoryDriftAnalysisService" not in text
+
+
+def test_social_transmission_service_holds_both_ports() -> None:
+    from analysis.social_transmission import SocialTransmissionAnalysisService
+
+    signature = inspect.signature(SocialTransmissionAnalysisService.__init__)
+    params = set(signature.parameters)
+    assert "memory" in params
+    assert "events" in params
+    hints = SocialTransmissionAnalysisService.__init__.__annotations__
+    text = " ".join(str(value) for value in hints.values())
+    assert "MemoryEvidenceSource" in text
+    assert "ObjectiveEventSource" in text
+    for path in (SRC / "agents" / "cognition").rglob("*.py"):
+        body = path.read_text(encoding="utf-8")
+        assert "SocialTransmissionAnalysisService" not in body
+        assert "ObjectiveEventSource" not in body
+    for path in (SRC / "memory").rglob("*.py"):
+        body = path.read_text(encoding="utf-8")
+        assert "SocialTransmissionAnalysisService" not in body
+        assert "ObjectiveEventSource" not in body

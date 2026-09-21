@@ -43,9 +43,7 @@ def _action_kind(details: object) -> str:
 
 
 def _communication_events(events: Sequence[WorldEvent]) -> tuple[WorldEvent, ...]:
-    return tuple(
-        event for event in events if type(event.details) in _COMM_DETAILS
-    )
+    return tuple(event for event in events if type(event.details) in _COMM_DETAILS)
 
 
 def _hop_from_event(event: WorldEvent) -> TransmissionHopRecord:
@@ -58,8 +56,7 @@ def _hop_from_event(event: WorldEvent) -> TransmissionHopRecord:
         if declared.hop_count == 0
         else (
             declared.parent_communication_id.value
-            if declared.parent_communication_id is not None
-            and declared.hop_count == 1
+            if declared.parent_communication_id is not None and declared.hop_count == 1
             else declared.communication_id.value
         )
     )
@@ -198,9 +195,7 @@ def build_social_transmission_report(
             "transmission_root_id", transmission_root_id
         )
         hop_list = tuple(
-            hop
-            for hop in hop_list
-            if hop.transmission_root_id == transmission_root_id
+            hop for hop in hop_list if hop.transmission_root_id == transmission_root_id
         )
     agents: set[str] = set()
     for hop in hop_list:
