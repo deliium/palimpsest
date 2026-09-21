@@ -382,9 +382,7 @@ class OpenAICompatibleProvider:
         except LLMError as exc:
             raise _AttemptFailure(_with_attempts(exc, attempts=attempts)) from None
         except httpx.HTTPError as exc:
-            raise _AttemptFailure(
-                error_from_httpx(exc, attempts=attempts)
-            ) from None
+            raise _AttemptFailure(error_from_httpx(exc, attempts=attempts)) from None
 
         if status < 200 or status >= 300:
             raise _AttemptFailure(

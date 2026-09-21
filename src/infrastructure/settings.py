@@ -32,9 +32,7 @@ _HTTP_URL = re.compile(r"https?://[^\s'\"\\]+")
 _LLM_MODEL_RE: Final[re.Pattern[str]] = re.compile(
     r"^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
 )
-_LOCAL_HTTP_HOSTS: Final[frozenset[str]] = frozenset(
-    {"localhost", "127.0.0.1", "::1"}
-)
+_LOCAL_HTTP_HOSTS: Final[frozenset[str]] = frozenset({"localhost", "127.0.0.1", "::1"})
 _DEFAULT_LLM_MAX_REQUEST_BYTES: Final[int] = 1_048_576
 _DEFAULT_LLM_MAX_RESPONSE_BYTES: Final[int] = 1_048_576
 _DEFAULT_LLM_MAX_HEADER_BYTES: Final[int] = 8_192

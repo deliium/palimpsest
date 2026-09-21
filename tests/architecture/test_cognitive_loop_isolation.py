@@ -89,7 +89,7 @@ def test_cognition_tree_satisfies_allowlist() -> None:
     violations = [
         item
         for item in check_tree(SRC_ROOT)
-        if "agents/cognition" in item.path.as_posix()
+        if "agents/cognition" in item.file.as_posix()
     ]
     assert violations == [], format_violations(violations)
 

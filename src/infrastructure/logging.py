@@ -96,11 +96,7 @@ def _redact_value(value: object) -> object:
         return value.bootstrap_fields()
     if isinstance(value, Mapping):
         return {
-            key: (
-                "***"
-                if _key_is_sensitive(str(key))
-                else _redact_value(item)
-            )
+            key: ("***" if _key_is_sensitive(str(key)) else _redact_value(item))
             for key, item in value.items()
         }
     if isinstance(value, tuple):

@@ -129,14 +129,14 @@ async def test_lifecycle_start_process_and_submission(
     caplog: pytest.LogCaptureFixture,
 ) -> None:
     runtime, _, _ = _runtime()
-    assert runtime.status is AgentRuntimeStatus.CREATED
+    assert runtime.status.value == AgentRuntimeStatus.CREATED.value
     with pytest.raises(AgentRuntimeError) as not_started:
         await runtime.process_observation(_self(), token=_token())
     assert not_started.value.code is AgentRuntimeErrorCode.NOT_STARTED
 
     caplog.set_level(logging.INFO, logger="simulation.agent_runtime")
     runtime.start()
-    assert runtime.status is AgentRuntimeStatus.ACTIVE
+    assert runtime.status.value == AgentRuntimeStatus.ACTIVE.value
     with pytest.raises(AgentRuntimeError) as again:
         runtime.start()
     assert again.value.code is AgentRuntimeErrorCode.ALREADY_STARTED

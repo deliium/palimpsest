@@ -23,7 +23,6 @@ from llm.models import (
     StructuredOutput,
     StructuredOutputMode,
 )
-from llm.providers import openai_compatible as provider_module
 from llm.providers.openai_compatible import OpenAICompatibleProvider
 
 pytestmark = pytest.mark.unit
@@ -333,7 +332,7 @@ async def test_owned_client_closed_exactly_once(
         kwargs["transport"] = transport
         return _TrackingClient(**kwargs)
 
-    monkeypatch.setattr(provider_module.httpx, "AsyncClient", factory)
+    monkeypatch.setattr(httpx, "AsyncClient", factory)
 
     clock = _Clock()
     provider = OpenAICompatibleProvider(
@@ -490,7 +489,7 @@ async def test_owned_client_sets_trust_env_false_and_no_redirects(
         kwargs["transport"] = transport
         return real(**kwargs)
 
-    monkeypatch.setattr(provider_module.httpx, "AsyncClient", factory)
+    monkeypatch.setattr(httpx, "AsyncClient", factory)
     clock = _Clock()
     provider = OpenAICompatibleProvider(
         base_url="http://llm.test/v1",
@@ -568,9 +567,7 @@ async def test_option_precedence_temperature_zero_on_wire() -> None:
         retry=RetryPolicy(max_attempts=1),
     )
     try:
-        await provider.generate(
-            _request(options=LLMRequestOptions(temperature=0.0))
-        )
+        await provider.generate(_request(options=LLMRequestOptions(temperature=0.0)))
     finally:
         await client.aclose()
 
@@ -817,6 +814,8 @@ async def test_full_safe_event_level_matrix(
 
     by_prefix: dict[str, list[tuple[int, str]]] = {}
     for record in caplog_llm.records:
+        if record.name != "llm.openai_compatible":
+            continue
         message = record.getMessage()
         prefix = message.split(" ", 1)[0]
         by_prefix.setdefault(prefix, []).append((record.levelno, message))

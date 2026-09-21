@@ -16,9 +16,9 @@ from llm.models import (
 
 
 def test_structured_output_mode_values() -> None:
-    assert StructuredOutputMode.JSON_SCHEMA == "json_schema"
-    assert StructuredOutputMode.JSON_OBJECT == "json_object"
-    assert StructuredOutputMode.PROMPT_ONLY == "prompt_only"
+    assert StructuredOutputMode.JSON_SCHEMA.value == "json_schema"
+    assert StructuredOutputMode.JSON_OBJECT.value == "json_object"
+    assert StructuredOutputMode.PROMPT_ONLY.value == "prompt_only"
 
 
 def test_resolve_prefers_non_none_request_including_temperature_zero() -> None:
@@ -74,7 +74,7 @@ def test_provider_defaults_reuse_request_option_validation() -> None:
     with pytest.raises(ValueError, match="temperature"):
         ProviderDefaults(temperature=3.0)
     with pytest.raises(TypeError, match="max_output_tokens"):
-        ProviderDefaults(max_output_tokens=True)  # type: ignore[arg-type]
+        ProviderDefaults(max_output_tokens=True)
 
 
 def test_retry_policy_max_attempts_is_total_attempts() -> None:

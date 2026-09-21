@@ -101,12 +101,8 @@ def test_llm_modules_do_not_import_forbidden_or_private_targets() -> None:
                     continue
                 hits.extend(_forbidden_import_hits(path, node.lineno, module))
                 for alias in node.names:
-                    imported = (
-                        f"{module}.{alias.name}" if module else alias.name
-                    )
-                    hits.extend(
-                        _forbidden_import_hits(path, node.lineno, imported)
-                    )
+                    imported = f"{module}.{alias.name}" if module else alias.name
+                    hits.extend(_forbidden_import_hits(path, node.lineno, imported))
     assert hits == []
 
 
@@ -126,8 +122,7 @@ def test_llm_modules_avoid_nondeterministic_clocks_and_randomness() -> None:
     violations = [
         item
         for item in check_tree(SRC_ROOT)
-        if item.source_module.startswith("llm")
-        and item.rule == "nondeterministic-call"
+        if item.source_module.startswith("llm") and item.rule == "nondeterministic-call"
     ]
     assert violations == [], format_violations(violations)
 

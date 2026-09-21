@@ -395,17 +395,13 @@ def render_prompt(
     messages: list[LLMMessage] = []
     digest_parts: list[tuple[str, str]] = []
     for entry in loaded.templates:
-        content = _substitute(
-            entry.text, string_values, trusted_name=loaded.name
-        )
+        content = _substitute(entry.text, string_values, trusted_name=loaded.name)
         message = LLMMessage(role=entry.role, content=content)
         messages.append(message)
         digest_parts.append((entry.role.value, content))
 
     digest = canonical_rendered_digest(loaded.name, loaded.version, digest_parts)
-    reference = PromptReference(
-        name=loaded.name, version=loaded.version, digest=digest
-    )
+    reference = PromptReference(name=loaded.name, version=loaded.version, digest=digest)
     rendered = RenderedPrompt(messages=tuple(messages), reference=reference)
     _LOG.debug(
         "prompt_rendered name=%s version=%s digest=%s",

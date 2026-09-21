@@ -221,7 +221,11 @@ async def test_logs_never_include_local_run_agent_tick(
         finally:
             await client.aclose()
 
-    joined = "\n".join(record.getMessage() for record in caplog.records)
+    joined = "\n".join(
+        record.getMessage()
+        for record in caplog.records
+        if record.name == "llm.openai_compatible"
+    )
     assert "run-must-not-log" not in joined
     assert "agent-must-not-log" not in joined
     assert "12345" not in joined

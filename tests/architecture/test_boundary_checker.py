@@ -211,7 +211,6 @@ def test_checker_detects_type_checking_private_world_import(tmp_path: Path) -> N
     assert "agents -> world._state" in report
 
 
-
 def test_checker_allows_pydantic_in_llm_but_not_world(tmp_path: Path) -> None:
     allowed = _write_tree(
         tmp_path / "allowed",

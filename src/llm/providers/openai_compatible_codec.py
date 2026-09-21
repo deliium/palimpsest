@@ -400,9 +400,7 @@ def _strictify_object_node(node: dict[str, Any]) -> dict[str, Any]:
         node["additionalProperties"] = False
         node["required"] = sorted(properties.keys())
         node["properties"] = {
-            key: _strictify_object_node(value)
-            if isinstance(value, dict)
-            else value
+            key: _strictify_object_node(value) if isinstance(value, dict) else value
             for key, value in properties.items()
         }
         if "type" not in node:

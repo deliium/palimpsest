@@ -174,7 +174,7 @@ def test_permissive_structured_output_subclass_is_rejected() -> None:
 
         class _Loose(StructuredOutput):
             model_config = StructuredOutput.model_config.copy()
-            model_config["extra"] = "allow"  # type: ignore[index]
+            model_config["extra"] = "allow"
             kind: str
 
 

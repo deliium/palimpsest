@@ -222,7 +222,7 @@ class _ScriptQueue:
                 ordinal=ordinal,
             )
         seen.add(ordinal)
-        if type(entry) is ScriptedStageFailure:
+        if isinstance(entry, ScriptedStageFailure):
             self.calls.append(
                 FakeCognitionCallRecord(
                     invocation_id=invocation_id,
@@ -233,6 +233,7 @@ class _ScriptQueue:
                 )
             )
             raise RuntimeError(entry.code)
+        assert isinstance(entry, ScriptedStageSuccess)
         output = deepcopy(entry.output)
         self.calls.append(
             FakeCognitionCallRecord(
