@@ -257,123 +257,138 @@ class SqlAlchemyMemoryService:
                 raise MemoryServiceError(MemoryServiceErrorCode.INVALID_BATCH)
 
         async with session_scope(self._session_factory) as session:
-            referenced_ids = {write.memory_id for write in batch.writes} | {
-                access.memory_id for access in batch.accesses
-            }
-            for record in batch.reconstructions:
-                referenced_ids.update(record.source_memory_ids)
-            for write in batch.writes:
-                referenced_ids.update(write.lineage.source_memory_ids)
+            result = await self.apply_in_session(session, batch, commit=True)
+        return result
 
-            existing_traces = await self._load_traces_by_ids(session, referenced_ids)
-            existing_hashes = await self._load_reconstruction_hashes(
-                session,
-                {item.reconstruction_id for item in batch.reconstructions}
-                | {
-                    write.lineage.reconstruction_id
-                    for write in batch.writes
-                    if write.lineage.reconstruction_id is not None
+    async def apply_in_session(
+        self,
+        session: AsyncSession,
+        batch: MemoryMutationBatch,
+        *,
+        commit: bool = False,
+    ) -> MemoryApplyResult:
+        """Apply a mutation batch using an external session (optional commit)."""
+        if type(batch) is not MemoryMutationBatch:
+            raise MemoryServiceError(MemoryServiceErrorCode.INVALID_BATCH)
+        referenced_ids = {write.memory_id for write in batch.writes} | {
+            access.memory_id for access in batch.accesses
+        }
+        for record in batch.reconstructions:
+            referenced_ids.update(record.source_memory_ids)
+        for write in batch.writes:
+            referenced_ids.update(write.lineage.source_memory_ids)
+
+        existing_traces = await self._load_traces_by_ids(session, referenced_ids)
+        existing_hashes = await self._load_reconstruction_hashes(
+            session,
+            {item.reconstruction_id for item in batch.reconstructions}
+            | {
+                write.lineage.reconstruction_id
+                for write in batch.writes
+                if write.lineage.reconstruction_id is not None
+            },
+        )
+        try:
+            prepared = prepare_memory_mutation(
+                batch,
+                scope=self._scope,
+                existing_traces=existing_traces,
+                existing_reconstruction_hashes=existing_hashes,
+            )
+        except MemoryServiceError as exc:
+            _LOG.error(
+                "memory_apply_rejected",
+                extra={
+                    "operation": "apply",
+                    "run_id": self._scope.run_id.value,
+                    "owner_id": self._scope.owner_id.value,
+                    "reason_code": exc.code.value,
+                    "write_count": len(batch.writes),
+                    "reconstruction_count": len(batch.reconstructions),
                 },
             )
-            try:
-                prepared = prepare_memory_mutation(
-                    batch,
-                    scope=self._scope,
-                    existing_traces=existing_traces,
-                    existing_reconstruction_hashes=existing_hashes,
-                )
-            except MemoryServiceError as exc:
-                _LOG.error(
-                    "memory_apply_rejected",
-                    extra={
-                        "operation": "apply",
-                        "run_id": self._scope.run_id.value,
-                        "owner_id": self._scope.owner_id.value,
-                        "reason_code": exc.code.value,
-                        "write_count": len(batch.writes),
-                        "reconstruction_count": len(batch.reconstructions),
-                    },
-                )
-                raise
+            raise
 
+        for access in batch.accesses:
+            row = await session.get(
+                MemoryTraceOrm,
+                (
+                    self._scope.run_id.value,
+                    self._scope.owner_id.value,
+                    access.memory_id.value,
+                ),
+                with_for_update=True,
+            )
+            if row is None:
+                raise MemoryServiceError(MemoryServiceErrorCode.NOT_FOUND)
+
+        written = 0
+        applied = 0
+        idempotent = 0
+        reconstruction_written = 0
+        try:
+            source_needed: set[MemoryId] = set()
+            for record in prepared.reconstructions_to_insert:
+                source_needed.update(record.source_memory_ids)
+            early_writes = [
+                write
+                for write in prepared.writes_to_insert
+                if write.memory_id in source_needed
+            ]
+            late_writes = [
+                write
+                for write in prepared.writes_to_insert
+                if write.memory_id not in source_needed
+            ]
+            for write in early_writes:
+                await self._insert_trace(session, write)
+                written += 1
+            for record in prepared.reconstructions_to_insert:
+                await self._insert_reconstruction(
+                    session,
+                    record,
+                    payload_sha256=prepared.reconstruction_hashes[
+                        record.reconstruction_id
+                    ],
+                )
+                reconstruction_written += 1
+            for write in late_writes:
+                await self._insert_trace(session, write)
+                written += 1
             for access in batch.accesses:
-                row = await session.get(
-                    MemoryTraceOrm,
-                    (
-                        self._scope.run_id.value,
-                        self._scope.owner_id.value,
-                        access.memory_id.value,
-                    ),
-                    with_for_update=True,
-                )
-                if row is None:
-                    raise MemoryServiceError(MemoryServiceErrorCode.NOT_FOUND)
-
-            written = 0
-            applied = 0
-            idempotent = 0
-            reconstruction_written = 0
-            try:
-                # Insert non-derived source writes first so reconstruction FKs resolve.
-                source_needed: set[MemoryId] = set()
-                for record in prepared.reconstructions_to_insert:
-                    source_needed.update(record.source_memory_ids)
-                early_writes = [
-                    write
-                    for write in prepared.writes_to_insert
-                    if write.memory_id in source_needed
-                ]
-                late_writes = [
-                    write
-                    for write in prepared.writes_to_insert
-                    if write.memory_id not in source_needed
-                ]
-                for write in early_writes:
-                    await self._insert_trace(session, write)
-                    written += 1
-                for record in prepared.reconstructions_to_insert:
-                    await self._insert_reconstruction(
-                        session,
-                        record,
-                        payload_sha256=prepared.reconstruction_hashes[
-                            record.reconstruction_id
-                        ],
+                inserted = await self._try_record_access(session, access)
+                if inserted:
+                    applied += 1
+                else:
+                    idempotent += 1
+                    _LOG.warning(
+                        "memory_access_idempotent",
+                        extra={
+                            "operation": "apply",
+                            "run_id": self._scope.run_id.value,
+                            "owner_id": self._scope.owner_id.value,
+                            "reason_code": "duplicate_access",
+                        },
                     )
-                    reconstruction_written += 1
-                for write in late_writes:
-                    await self._insert_trace(session, write)
-                    written += 1
-                for access in batch.accesses:
-                    inserted = await self._try_record_access(session, access)
-                    if inserted:
-                        applied += 1
-                    else:
-                        idempotent += 1
-                        _LOG.warning(
-                            "memory_access_idempotent",
-                            extra={
-                                "operation": "apply",
-                                "run_id": self._scope.run_id.value,
-                                "owner_id": self._scope.owner_id.value,
-                                "reason_code": "duplicate_access",
-                            },
-                        )
+            if commit:
                 await session.commit()
-            except MemoryServiceError:
+        except MemoryServiceError:
+            if commit:
                 await session.rollback()
-                raise
-            except IntegrityError:
+            raise
+        except IntegrityError:
+            if commit:
                 await session.rollback()
-                _LOG.error(
-                    "memory_apply_rollback",
-                    extra={
-                        "operation": "apply",
-                        "run_id": self._scope.run_id.value,
-                        "owner_id": self._scope.owner_id.value,
-                        "reason_code": MemoryServiceErrorCode.CONFLICT.value,
-                    },
-                )
-                raise MemoryServiceError(MemoryServiceErrorCode.CONFLICT) from None
+            _LOG.error(
+                "memory_apply_rollback",
+                extra={
+                    "operation": "apply",
+                    "run_id": self._scope.run_id.value,
+                    "owner_id": self._scope.owner_id.value,
+                    "reason_code": MemoryServiceErrorCode.CONFLICT.value,
+                },
+            )
+            raise MemoryServiceError(MemoryServiceErrorCode.CONFLICT) from None
 
         _LOG.debug(
             "memory_apply_complete",

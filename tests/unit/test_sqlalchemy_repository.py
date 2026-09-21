@@ -270,3 +270,16 @@ def test_subjective_memory_orm_registers_outside_authoritative_set() -> None:
     assert "memory_reconstructions" in SUBJECTIVE_MEMORY_TABLES
     assert "memory_reconstruction_sources" in SUBJECTIVE_MEMORY_TABLES
     assert "memory_derivation_sources" in SUBJECTIVE_MEMORY_TABLES
+
+
+def test_subjective_agent_tables_register_outside_authoritative_set() -> None:
+    import persistence.subjective_orm as subjective_orm
+    from infrastructure.orm import metadata
+    from persistence.orm import AUTHORITATIVE_TABLES
+    from persistence.subjective_orm import SUBJECTIVE_AGENT_TABLES
+
+    assert set(SUBJECTIVE_AGENT_TABLES).isdisjoint(AUTHORITATIVE_TABLES)
+    assert set(SUBJECTIVE_AGENT_TABLES) <= set(metadata.tables)
+    assert hasattr(subjective_orm, "SemanticBeliefOrm")
+    assert "semantic_beliefs" in SUBJECTIVE_AGENT_TABLES
+    assert "directed_relationships" in SUBJECTIVE_AGENT_TABLES

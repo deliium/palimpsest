@@ -14,18 +14,27 @@ from infrastructure.database import DatabaseResources, session_scope
 from infrastructure.settings import Settings
 from persistence.memory_orm import SUBJECTIVE_MEMORY_TABLES
 from persistence.orm import AUTHORITATIVE_TABLES
+from persistence.subjective_orm import SUBJECTIVE_AGENT_TABLES
 
 pytestmark = pytest.mark.integration
 
 ROOT = Path(__file__).resolve().parents[2]
-_EXPECTED_HEAD = "0006"
+_EXPECTED_HEAD = "0007"
 
 # Mutable lifecycle tables keep access/forgetting updates; reconstruction and
 # fragment tables are append-only. Trace content uses a selective trigger.
-_MUTABLE_SUBJECTIVE_TABLES = frozenset({"memory_traces", "memory_access_ops"})
-_APPEND_ONLY_SUBJECTIVE_TABLES = frozenset(SUBJECTIVE_MEMORY_TABLES) - (
-    _MUTABLE_SUBJECTIVE_TABLES
+# Belief/relationship heads are mutable; revision/evidence tables are append-only.
+_MUTABLE_SUBJECTIVE_TABLES = frozenset(
+    {
+        "memory_traces",
+        "memory_access_ops",
+        "semantic_beliefs",
+        "directed_relationships",
+    }
 )
+_APPEND_ONLY_SUBJECTIVE_TABLES = (
+    frozenset(SUBJECTIVE_MEMORY_TABLES) | frozenset(SUBJECTIVE_AGENT_TABLES)
+) - _MUTABLE_SUBJECTIVE_TABLES
 
 
 def _alembic_config(database_url: str | None = None) -> Config:
@@ -64,16 +73,22 @@ async def test_vector_extension_and_event_store_tables_exist(
         found = set(tables.scalars().all())
         assert set(AUTHORITATIVE_TABLES).issubset(found)
         assert set(SUBJECTIVE_MEMORY_TABLES).issubset(found)
+        assert set(SUBJECTIVE_AGENT_TABLES).issubset(found)
 
 
 async def test_orm_metadata_matches_migrated_tables(
     database_resources: DatabaseResources,
 ) -> None:
     import persistence.memory_orm
-    import persistence.orm  # noqa: F401
+    import persistence.orm
+    import persistence.subjective_orm  # noqa: F401
     from infrastructure.orm import metadata
 
-    expected = set(AUTHORITATIVE_TABLES) | set(SUBJECTIVE_MEMORY_TABLES)
+    expected = (
+        set(AUTHORITATIVE_TABLES)
+        | set(SUBJECTIVE_MEMORY_TABLES)
+        | set(SUBJECTIVE_AGENT_TABLES)
+    )
     assert expected <= set(metadata.tables)
     async with session_scope(database_resources.session_factory) as session:
         revision = await session.execute(
@@ -84,6 +99,11 @@ async def test_orm_metadata_matches_migrated_tables(
 
 async def test_subjective_memory_tables_are_not_authoritative() -> None:
     overlap = set(SUBJECTIVE_MEMORY_TABLES) & set(AUTHORITATIVE_TABLES)
+    assert not overlap
+
+
+async def test_subjective_agent_tables_are_not_authoritative() -> None:
+    overlap = set(SUBJECTIVE_AGENT_TABLES) & set(AUTHORITATIVE_TABLES)
     assert not overlap
 
 

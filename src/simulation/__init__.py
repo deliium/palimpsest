@@ -135,6 +135,12 @@ from simulation.serialization import (
     encode_domain,
 )
 from simulation.service import DurableCommitAmbiguity, PersistentSimulationService
+from simulation.subjective_serialization import (
+    SUBJECTIVE_SCHEMA_VERSION,
+    SubjectiveSerializationError,
+    decode_subjective,
+    encode_subjective,
+)
 from simulation.subjective_state import (
     InMemorySubjectiveStateService,
     SubjectiveApplyReceipt,
@@ -152,6 +158,7 @@ __all__ = [
     "LLM_REPLAY_REQUIREMENT",
     "PERSISTENCE_CODEC_VERSION",
     "PROJECTOR_VERSION",
+    "SUBJECTIVE_SCHEMA_VERSION",
     "ActionResolution",
     "ActionResolutionReason",
     "ActionResolutionStatus",
@@ -202,6 +209,7 @@ __all__ = [
     "StreamScope",
     "SubjectiveApplyReceipt",
     "SubjectiveMutationBatch",
+    "SubjectiveSerializationError",
     "SubjectiveStateError",
     "SubjectiveStateErrorCode",
     "Tick",
@@ -223,6 +231,7 @@ __all__ = [
     "create_rng",
     "decode_domain",
     "decode_persistence",
+    "decode_subjective",
     "derive_belief_id",
     "derive_engine_event_id",
     "derive_entity_id",
@@ -239,6 +248,7 @@ __all__ = [
     "describe_run",
     "encode_domain",
     "encode_persistence",
+    "encode_subjective",
     "event_run_id_to_run_id",
     "event_tick_to_tick",
     "export_metadata",

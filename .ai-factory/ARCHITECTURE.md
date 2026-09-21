@@ -17,17 +17,17 @@ src/
   world/            # agent-facing Observation DTOs + private _state/_perception/_rules/_replay
   agents/           # identity, Agent, goals
   agents/cognition/ # CognitiveLoop + stage protocols/defaults; LLMMemoryReconstructor
-  memory/           # owner-scoped MemoryTrace/Belief + MemoryService + reconstructive recall
-  social/           # communication envelopes + Relationship
+  memory/           # owner-scoped MemoryTrace + semantic beliefs + MemoryService + reconstructive recall
+  social/           # communication envelopes + directed relationship profiles
   llm/              # provider-neutral StructuredOutput / LLMResult (no vendor SDKs)
   llm/prompts/      # immutable versioned prompt package resources (incl. reconstructive_memory)
   llm/providers/    # OpenAI-compatible HTTP adapter + pure codec
-  simulation/       # WorldEngine, AgentRuntime, bootstrap, lifecycle, codecs, replay
-  persistence/      # SQLAlchemy adapters for simulation ports + MemoryService
+  simulation/       # WorldEngine, AgentRuntime, SubjectiveStateService, bootstrap, lifecycle, codecs, replay
+  persistence/      # SQLAlchemy adapters for simulation ports + MemoryService + subjective agent models
   analysis/         # read-only events/exports + MemoryDriftAnalysisService
   api/              # FastAPI composition root (no LLM provider wiring yet)
   infrastructure/   # settings (incl. PALIMPSEST_LLM_*), logging, database adapters
-alembic/            # migrations (pgvector + event store + occurrence + episodic + reconstruction)
+alembic/            # migrations (pgvector + event store + occurrence + episodic + reconstruction + subjective)
 tests/
   unit/ architecture/ integration/ compose/ typecheck/ fakes/
 ```
@@ -41,7 +41,7 @@ tests/
 - ✅ `llm` uses stdlib `logging` only (metadata allowlist; no `exc_info` / structlog / payload fields)
 - ✅ `agents.cognition` may import public contracts from agents/world/memory/social/llm
 - ✅ `simulation` may import domain public contracts; must not import `api`, `analysis`, `infrastructure`, or `persistence`
-- ✅ `persistence` may import public `simulation` contracts, public `memory` contracts, and `infrastructure`
+- ✅ `persistence` may import public `simulation` contracts, public `memory` and `social` facades, and `infrastructure` (intentional persistence → social for relationship durability)
 - ✅ `api` may import `simulation`, `infrastructure`, and `persistence`
 - ✅ `analysis` is read-only; may import `world`, `simulation`, and `memory` contracts (not live infra/agents)
 - ✅ `infrastructure` imports no domain policy
@@ -58,8 +58,10 @@ tests/
 - Composition root (`api`) loads settings, configures logging, and owns database lifespan
 - LLM settings exist under `PALIMPSEST_LLM_*`; factory construction stays standalone in `llm.factory` until a cognition consumer owns lifecycle composition (API/`compose.yaml` unchanged)
 - `WorldEngine` owns observation tokens, ordered admission, private batch preparation, and atomic commit
-- `AgentRuntime` owns per-agent cognition invocation, deferred memory/reconsolidation apply, and `ActionSubmission` construction from an engine-issued token; cognition never sees `TickToken` or `WorldState`
-- Owner-scoped episodic memory uses structured `MemoryTrace` values and reconstructive `MemoryService.recall`; durable adapter is `persistence.create_memory_service(scope=..., ...)`; subjective tables (including `0006` reconstruction provenance) are outside append-only authoritative history
+- `AgentRuntime` owns per-agent cognition invocation, deferred subjective commits (episodic + beliefs + relationships) via `SubjectiveStateService`, and `ActionSubmission` construction from an engine-issued token; cognition never sees `TickToken` or `WorldState`
+- Owner-scoped episodic memory uses structured `MemoryTrace` values and reconstructive `MemoryService.recall`; durable adapter is `persistence.create_memory_service(scope=..., ...)`; semantic beliefs and directed relationships use `persistence.create_subjective_state_service(...)`; all subjective tables (`0005`–`0007`) stay outside append-only authoritative history
+- Emergent `SelfModel` is a deterministic projection over owner-relevant semantic beliefs — no predefined personality traits, archetypes, or role classes
+- Directed relationship profiles are independent `source → target` assessments across fixed low-level dimensions; no friend/enemy/leader/group/morality/culture labels
 - Private `PerceptionService` projects one agent-specific `Observation` from tick-start state + prior committed events; cognition receives it only via `observation_for` / `AgentRuntime` / `build_perspective`
 - Async `LLMProvider.generate(LLMRequest[T]) -> LLMResult[T]` returns only strict `StructuredOutput` plus normalized metadata; raw provider text/mappings never leave the adapter
 - Structurally valid LLM output remains non-authoritative. Cognition must translate an exact decision schema into a fresh `AgentCommand`, then use normal `ActionSubmission` / admission / world-operation gates. LLM reconstruction similarly requires semantic validation against `RecallEvidence` before becoming a `ReconstructedMemory`

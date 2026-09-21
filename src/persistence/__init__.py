@@ -30,7 +30,10 @@ from simulation.persistence import (
 )
 
 if TYPE_CHECKING:
+    from memory.belief_formation import BeliefFormationPolicy
     from persistence.analysis_sqlalchemy import SqlAlchemyAnalysisEvidenceLoader
+    from simulation.subjective_state import SubjectiveStateService
+    from social.relationships import RelationshipFormationPolicy
 
 __all__ = [
     "PersistenceAdapterError",
@@ -42,6 +45,7 @@ __all__ = [
     "create_memory_service",
     "create_run_repository",
     "create_snapshot_repository",
+    "create_subjective_state_service",
     "create_tick_journal_repository",
 ]
 
@@ -132,4 +136,35 @@ def create_memory_service(
         session_factory=session_factory,
         scoring_policy=scoring_policy,
         retention_policy=retention_policy,
+    )
+
+
+def create_subjective_state_service(
+    *,
+    scope: MemoryScope,
+    session_factory: async_sessionmaker[AsyncSession] | None = None,
+    memory_service: MemoryService,
+    belief_policy: BeliefFormationPolicy | None = None,
+    relationship_policy: RelationshipFormationPolicy | None = None,
+) -> SubjectiveStateService:
+    """Build an owner-scoped durable ``SubjectiveStateService``."""
+    if session_factory is None:
+        raise PersistenceAdapterError(
+            "missing_session_factory", operation="create_subjective_state_service"
+        )
+    from persistence.memory_sqlalchemy import SqlAlchemyMemoryService
+    from persistence.subjective_sqlalchemy import (
+        create_sqlalchemy_subjective_state_service as impl,
+    )
+
+    if type(memory_service) is not SqlAlchemyMemoryService:
+        raise PersistenceAdapterError(
+            "invalid_memory_service", operation="create_subjective_state_service"
+        )
+    return impl(
+        scope=scope,
+        session_factory=session_factory,
+        memory_service=memory_service,
+        belief_policy=belief_policy,
+        relationship_policy=relationship_policy,
     )

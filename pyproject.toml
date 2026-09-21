@@ -256,18 +256,18 @@ forbidden_modules = ["api", "analysis", "infrastructure", "persistence"]
 
 [[tool.importlinter.contracts]]
 id = "persistence_adapter_boundaries"
-name = "Persistence may import only simulation, infrastructure, and memory"
+name = "Persistence may import only simulation, infrastructure, memory, and social"
 type = "forbidden"
 source_modules = ["persistence"]
 forbidden_modules = [
     "world",
     "agents",
-    "social",
     "llm",
     "api",
     "analysis",
 ]
-# Domain types flow through public simulation/memory contracts; only direct imports are gated.
+# Domain types flow through public simulation/memory/social contracts; only direct imports are gated.
+# Intentional persistence -> social for subjective relationship persistence.
 allow_indirect_imports = true
 
 

@@ -11,18 +11,18 @@ Palimpsest is a modular monolith under `src/`. Cross-module imports must target 
 | `world` | Opaque IDs, typed observations, closed commands, immutable events. Private `World` / `WorldState` / operations / rules / physical / transitions | *(none)* |
 | `agents` | Agent identity, goals, and subjective `Agent` contracts | `world` (agent-facing only) |
 | `agents.cognition` | Async `CognitiveLoop`, stage protocols, reconstructive memory stage, `LLMMemoryReconstructor`; sync `CognitionStrategy` retained | `world`, `agents`, `memory`, `social`, `llm` |
-| `memory` | Owner-scoped episodic `MemoryTrace` / `Belief`, `MemoryService`, reconstructive recall, scoring/decay | `world`, `agents` (opaque `EventId` only — never `WorldEvent`) |
-| `social` | Opaque communication envelopes and relationships | `world`, `agents` |
+| `memory` | Owner-scoped episodic `MemoryTrace`, semantic beliefs/revisions, `MemoryService`, reconstructive recall, scoring/decay | `world`, `agents` (opaque `EventId` only — never `WorldEvent`) |
+| `social` | Opaque communication envelopes and directed relationship profiles (trust/fear/affection/debt/respect/resentment/familiarity/dependency) | `world`, `agents` |
 | `llm` | Provider-neutral structured `LLMProvider` / `LLMResult` | *(none)* |
-| `simulation` | `WorldEngine`, `AgentRuntime`, bootstrap, lifecycle, seed/clock/RNG/IDs, codecs, persistence ports, durable tick service, replay | `world`, `agents`, `agents.cognition`, `memory`, `social`, `llm` |
-| `persistence` | SQLAlchemy adapters for simulation repositories and owner-scoped memory | `simulation`, `infrastructure`, `memory` |
+| `simulation` | `WorldEngine`, `AgentRuntime`, bootstrap, lifecycle, seed/clock/RNG/IDs, codecs, `SubjectiveStateService`, persistence ports, durable tick service, replay | `world`, `agents`, `agents.cognition`, `memory`, `social`, `llm` |
+| `persistence` | SQLAlchemy adapters for simulation repositories, owner-scoped memory, and subjective agent models | `simulation`, `infrastructure`, `memory`, `social` |
 | `api` | HTTP composition root | `simulation`, `infrastructure`, `persistence` |
 | `analysis` | Read-only events/exports + experiment memory-drift joins | `world`, `simulation`, `memory` (read-only contracts) |
 | `infrastructure` | Settings, logging, PostgreSQL adapters | *(none of the domain packages)* |
 
 Private world authority (`world/_state.py`, `world/_transitions.py`, `world/_operations.py`, `world/_rules.py`, `world/_physical.py`, `world/_perception.py`, `world/_replay.py`) may be imported only by `simulation.engine`, `simulation.bootstrap`, and other private `world._*` modules. They are not re-exported from `world`.
 
-`memory` and `social` are independent. Base `agents` must not import `agents.cognition`. `llm` imports no domain module. `simulation` must not import `api`, `analysis`, `infrastructure`, or `persistence`. Domain packages do not import `infrastructure`. `analysis` may import `memory` read-only contracts for drift analysis. See [Persistence](persistence.md) and [Memory reconstruction](memory-reconstruction.md).
+`memory` and `social` are independent (no cross-imports). Base `agents` must not import `agents.cognition`. `llm` imports no domain module. `simulation` must not import `api`, `analysis`, `infrastructure`, or `persistence`. Domain packages do not import `infrastructure`. `persistence` may import public `memory` and `social` facades for durable subjective adapters (intentional). `analysis` may import `memory` read-only contracts for drift analysis. Subjective beliefs, self-model projections, and relationship profiles never become `WorldEvent` variants or enter `AUTHORITATIVE_TABLES`. See [Persistence](persistence.md) and [Memory reconstruction](memory-reconstruction.md).
 
 Import-linter (`pyproject.toml`) and `tests/architecture/boundary_checker.py` enforce the allowlist, private-world authority, public facades, framework leakage, provider SDKs, and prohibited `random` / wall-clock / UUID defaults in domain code.
 
@@ -32,12 +32,12 @@ Import packages, not private modules:
 
 - `world`: IDs, values, objective models, closed commands, `Observation`, causes/effects, `ActionProposal`, `ActionRequest` (non-authoritative), `WorldEvent`, `detached_mapping`
 - `agents`: `AgentId`, `Agent`, `Goal`, `IdentityTranslator`
-- `agents.cognition`: `CognitiveLoop`, stage protocols/defaults, `CognitionStrategy`, `Perspective`, `LLMMemoryReconstructor`
-- `memory`: `MemoryTrace`, `MemoryService`, recall/reconstruction contracts, scoring/decay policies, `Belief`, owner-bound stores, `OwnershipError`
-- `social`: `CommunicationEnvelope`, `Relationship`, `EnvelopeSender`
+- `agents.cognition`: `CognitiveLoop`, stage protocols/defaults, `CognitionStrategy`, `Perspective`, `SelfModel`, `SubjectiveSnapshot`, `LLMMemoryReconstructor`
+- `memory`: `MemoryTrace`, `MemoryService`, semantic belief contracts, recall/reconstruction, scoring/decay policies, legacy `Belief`, owner-bound stores, `OwnershipError`
+- `social`: `CommunicationEnvelope`, directed relationship profiles/revisions, legacy `Relationship`, `EnvelopeSender`
 - `llm`: `LLMProvider`, `LLMRequest`, `LLMResult`, `StructuredOutput`, prompts (incl. `reconstructive_memory/v1`), factory
-- `simulation`: `WorldEngine`, `AgentRuntime`, `WorldBootstrap`, lifecycle types, `build_perspective`, persistence DTOs/ports, `PersistentSimulationService`, `ReplayService`, codecs, deterministic IDs/RNG/clock, export ports
-- `persistence`: repository factories and `create_memory_service` (always requires `MemoryScope`)
+- `simulation`: `WorldEngine`, `AgentRuntime`, `WorldBootstrap`, lifecycle types, `build_perspective`, `SubjectiveStateService`, persistence DTOs/ports, `PersistentSimulationService`, `ReplayService`, codecs (incl. subjective-v1), deterministic IDs/RNG/clock, export ports
+- `persistence`: repository factories, `create_memory_service`, and `create_subjective_state_service` (always require owner scope)
 - `analysis`: `EventSource`, `ExportSource`, `MemoryDriftAnalysisService`, drift/chain DTOs
 - `api`: `create_app`
 - `infrastructure`: `load_settings`, `configure_logging`, `create_database_resources`

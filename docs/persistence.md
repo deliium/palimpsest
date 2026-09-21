@@ -5,14 +5,14 @@
 ## Boundaries
 
 - `simulation` owns immutable DTOs, repository **ports**, journal codecs, `PersistentSimulationService`, and `ReplayService`.
-- `persistence` implements simulation repository ports and the owner-scoped `MemoryService` with async SQLAlchemy. It may import public `simulation` contracts, public `memory` contracts, and generic `infrastructure`.
+- `persistence` implements simulation repository ports, the owner-scoped `MemoryService`, and the durable `SubjectiveStateService` with async SQLAlchemy. It may import public `simulation` contracts, public `memory` and `social` facades, and generic `infrastructure`.
 - Domain packages and `simulation` never import SQLAlchemy. `infrastructure` stays domain-neutral.
-- Memory adapters must not import `world.events`, private world authority, event ORM classes, or replay readers.
+- Memory and subjective adapters must not import `world.events`, private world authority, event ORM classes, or replay readers.
 - `analysis` may read subjective memory evidence and objective events independently for drift metrics; that join is never available to memory/cognition/runtime APIs.
 
 ## Objective history
 
-Authoritative history is the ordered stream of replay-capable `WorldEvent` records plus per-tick commit rows (including eventless ticks). Payloads store committed effects, not instructions to re-run current rules. Subjective episodic memory and reconstruction provenance live in separate tables (Alembic `0005`/`0006`) and are never joined into objective replay. LLM transcripts remain outside both streams; cognition replay still needs recorded provider responses or stubs.
+Authoritative history is the ordered stream of replay-capable `WorldEvent` records plus per-tick commit rows (including eventless ticks). Payloads store committed effects, not instructions to re-run current rules. Subjective episodic memory, reconstruction provenance, semantic beliefs, and directed relationships live in separate tables (Alembic `0005`/`0006`/`0007`) and are never joined into objective replay. LLM transcripts remain outside both streams; cognition replay still needs recorded provider responses or stubs.
 
 ## Episodic memory (subjective)
 
@@ -37,6 +37,22 @@ Authoritative history is the ordered stream of replay-capable `WorldEvent` recor
 
 All of the above are listed in `SUBJECTIVE_MEMORY_TABLES` and are **outside** `AUTHORITATIVE_TABLES` / objective replay. No objective-event foreign key. Atomic `MemoryMutationBatch` applies reconstruction + edges + optional derived trace + access receipts in one transaction (in-memory and PostgreSQL).
 
+## Subjective agent models (`0007`)
+
+| Table | Role | Mutability |
+| --- | --- | --- |
+| `semantic_beliefs` | Owner-scoped canonical claims + activation state | Mutable header; content keyed by revisions |
+| `semantic_belief_revisions` | Append-only revision history (confidence, policy, tick) | Append-only trigger |
+| `semantic_belief_evidence` | Support/contradiction rows referencing `memory_traces` | Append-only trigger |
+| `directed_relationships` | Independent `source_id → target_id` profiles | Mutable header |
+| `relationship_revisions` | Append-only per-profile revision history | Append-only trigger |
+| `relationship_dimension_evidence` | Per-dimension evidence with opaque memory refs | Append-only trigger |
+| `subjective_operations` | Idempotent owner-scoped batch receipts | Insert for new ops; conflict on reuse |
+
+All of the above are listed in `SUBJECTIVE_AGENT_TABLES` and are **outside** `AUTHORITATIVE_TABLES`. Belief evidence FKs target `memory_traces`, never `world_events`. `Alice → Bob` and `Bob → Alice` persist independently. Durable commits go through `persistence.create_subjective_state_service(...)` (one transaction with episodic mutations). Subjective-v1 codecs live under `simulation` and remain separate from schema-v1 legacy `belief` / `relationship` decoding.
+
+Relationship dimensions are only: trust, fear, affection, debt, respect, resentment, familiarity, dependency. No friend/enemy/leader/group/morality/culture labels are stored.
+
 ## Versions
 
 | Constant | Role |
@@ -48,8 +64,9 @@ All of the above are listed in `SUBJECTIVE_MEMORY_TABLES` and are **outside** `A
 | `PROJECTOR_VERSION` | Private world projector compatibility |
 | `PERSISTENCE_CODEC_VERSION` | Canonical JSON codec for manifests/snapshots/commits |
 | Derivation v1 / v2 | Deterministic ID/stream derivation (v2 includes rules fingerprint) |
+| Subjective codec v1 | Semantic beliefs, relationship profiles, mutation receipts (non-authoritative) |
 
-Runs never mix replay schema versions. Legacy schema-v1 audit events remain decodable for export but must not enter the authoritative log. Alembic revision `0004` persists SQL cause/occurrence columns so restored engines reproduce the same next observation as live engines (eventful and eventless prior windows). Revision `0005` adds owner-scoped episodic memory tables. Revision `0006` adds reconstruction/derivation provenance with selective immutability. Observation codecs round-trip every field and provenance type with exact keys.
+Runs never mix replay schema versions. Legacy schema-v1 audit events remain decodable for export but must not enter the authoritative log. Alembic revision `0004` persists SQL cause/occurrence columns so restored engines reproduce the same next observation as live engines (eventful and eventless prior windows). Revision `0005` adds owner-scoped episodic memory tables. Revision `0006` adds reconstruction/derivation provenance with selective immutability. Revision `0007` adds semantic belief and directed relationship tables. Observation codecs round-trip every field and provenance type with exact keys.
 
 ## Append-only store
 
@@ -69,7 +86,7 @@ Adapter failure before commit leaves the engine unchanged. Crash after commit is
 
 ## Logging
 
-Safe fields: run ID, tick/revision, record counts, version strings, hash prefixes, stable error codes, perception reason codes, reconstruction IDs, policy versions, reconsolidation counts. Never log seeds, full configs, event payloads, observation bodies, communication text, snapshot bodies, DSNs, SQL parameters, memories, reconstructions/narratives, embeddings, or random draws. Control verbosity with `PALIMPSEST_LOG_LEVEL`.
+Safe fields: run ID, tick/revision, record counts, version strings, hash prefixes, stable error codes, perception reason codes, reconstruction IDs, policy versions, reconsolidation counts, belief/relationship operation IDs and dimension-change counts. Never log seeds, full configs, event payloads, observation bodies, communication text, snapshot bodies, DSNs, SQL parameters, memories, belief claims/values, relationship assessments, reconstructions/narratives, embeddings, or random draws. Control verbosity with `PALIMPSEST_LOG_LEVEL`.
 
 ## Integration tests
 

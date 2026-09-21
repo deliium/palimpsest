@@ -27,12 +27,14 @@ Each stage is a narrow async protocol under `agents.cognition`. Components are c
 
 | Type | Role |
 | --- | --- |
-| `CognitiveLoopInput` | One `Observation` + owning `AgentId` + immutable `InternalAgentState` |
-| Stage artifacts | Frozen perception/memory/situation/self/futures/motivation/intention/`ActionPlan` |
-| `CognitiveLoopResult` | Exact closed `AgentCommand` + ordered boundary records + memory-update intents |
-| `MemoryUpdateIntent` | Post-cognition write intents (`WRITE_MEMORY` / `WRITE_BELIEF`); stores are not mutated inside the loop |
+| `CognitiveLoopInput` | One `Observation` + owning `AgentId` + immutable `InternalAgentState` + frozen `SubjectiveSnapshot` |
+| `SubjectiveSnapshot` | Owner-scoped semantic beliefs + directed relationships observed by every stage |
+| Stage artifacts | Frozen perception/memory/situation/`SelfModel`/futures/motivation/intention/`ActionPlan` |
+| `SelfModel` | Deterministic projection of self-relevant semantic beliefs (no predefined traits/roles) |
+| `CognitiveLoopResult` | Exact closed `AgentCommand` + ordered boundary records + subjective update intents |
+| `MemoryUpdateIntent` | Post-cognition intents (`WRITE_MEMORY` / `WRITE_BELIEF` / `REVISE_BELIEF` / `REVISE_RELATIONSHIP`); stores are not mutated inside the loop |
 
-The synchronous `CognitionStrategy.propose(Perspective)` contract remains for existing callers. Prefer `CognitiveLoop` when async LLM-backed stages are needed later.
+Every cognition invocation sees one frozen owner snapshot. Proposed belief and relationship revisions become visible only on the next invocation after an atomic commit. The synchronous `CognitionStrategy.propose(Perspective)` contract remains for existing callers. Prefer `CognitiveLoop` when async LLM-backed stages are needed later.
 
 ## Placeholders and fakes
 
@@ -49,12 +51,12 @@ Details: [Memory reconstruction](memory-reconstruction.md).
 `simulation.AgentRuntime` is the trusted composition boundary:
 
 1. `start()` → `ACTIVE`
-2. `process_observation(observation, token=TickToken)` builds a perspective (ownership check), runs cognition, applies validated memory intents / pending access receipts / optional reconsolidation, returns `ActionSubmission(token, agent_id, command)`
+2. `process_observation(observation, token=TickToken)` builds a perspective with a frozen subjective snapshot (ownership check), runs cognition, then commits episodic writes/accesses/reconstructions plus belief and relationship revisions through one owner-scoped `SubjectiveStateService` batch
 3. Dead self in the observation → `TERMINAL` (no cognition, no submission)
-4. Cognition failure → no submission and no memory mutation (including no reconsolidation)
-5. Memory updates describe the committed observation and internal decision process — not uncommitted action outcomes
+4. Cognition failure → no submission and no subjective mutation (including no reconsolidation)
+5. Subjective updates describe the committed observation and internal decision process — not uncommitted action outcomes
 
-Cognition never sees `TickToken`, `WorldState`, or private world modules. Only simulation constructs submissions; engine admission still derives actor/request/world/revision authority.
+`SubjectiveStateService` prevalidates intents, applies copy-then-swap (in-memory) or one PostgreSQL transaction (durable), and rolls back every subjective change on any adapter failure. Retries with the same operation ID are idempotent. Cognition never sees `TickToken`, `WorldState`, or private world modules. Only simulation constructs submissions; engine admission still derives actor/request/world/revision authority.
 
 ## Logging (metadata only)
 
@@ -65,7 +67,7 @@ Cognition never sees `TickToken`, `WorldState`, or private world modules. Only s
 | `agents.cognition.reconstruction` | DEBUG/INFO/WARN LLM reconstruct path | reconstruction/request IDs, tick, prompt/policy versions, counts, fallback flags |
 | `simulation.agent_runtime` | DEBUG lifecycle/cognition/apply; INFO start/terminal/`runtime_reconsolidation_committed`; WARN/ERROR codes | run/agent/tick/invocation/status/counts |
 
-**Never log:** observations, memories, beliefs, reconstructions/narratives, communications, cognitive artifact bodies, prompts, provider outputs, command arguments, seeds, or credentials.
+**Never log:** observations, memories, belief claims/values, self-model propositions, relationship dimension values, reconstructions/narratives, communications, cognitive artifact bodies, prompts, provider outputs, command arguments, seeds, or credentials. Logs may include run/owner/invocation IDs, ticks, policy versions, counts, statuses, and stable reason codes only.
 
 Safe example:
 
