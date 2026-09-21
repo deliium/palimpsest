@@ -31,6 +31,7 @@ from memory.models import (
 )
 
 __all__ = [
+    "apply_belief_confidence_decay",
     "cosine_similarity",
     "logical_age_ticks",
     "matches_filters",
@@ -475,3 +476,30 @@ def collect_ancestry_ids(
                 raise ValueError("collect_ancestry_ids: dangling_source")
             stack.append(source)
     return tuple(ordered)
+
+
+def apply_belief_confidence_decay(
+    state: object,
+    *,
+    elapsed_ticks: int,
+    half_life_ticks: int,
+) -> object:
+    """Decay belief confidence masses toward uncertainty using logical ticks.
+
+    Thin scoring-layer wrapper around the versioned formation-policy decay so
+    callers can quantize decay without importing formation internals.
+    """
+    from memory.belief_formation import (
+        BeliefFormationPolicy,
+        apply_confidence_decay,
+    )
+    from memory.beliefs import BeliefConfidenceState
+
+    if type(state) is not BeliefConfidenceState:
+        raise TypeError("apply_belief_confidence_decay: invalid_state")
+    policy = BeliefFormationPolicy(
+        policy_id="score-decay",
+        version="1",
+        decay_half_life_ticks=half_life_ticks,
+    )
+    return apply_confidence_decay(state, elapsed_ticks=elapsed_ticks, policy=policy)

@@ -644,6 +644,14 @@ class Belief:
         )
         object.__setattr__(self, "evidence_memory_ids", evidence)
 
+    def __repr__(self) -> str:
+        return (
+            f"Belief(belief_id={self.belief_id.value!r}, "
+            f"owner_id={self.owner_id.value!r}, "
+            f"confidence={self.confidence}, "
+            f"evidence_count={len(self.evidence_memory_ids)})"
+        )
+
 
 class MemoryStore:
     """Mutable memory aggregate bound to a single owner."""

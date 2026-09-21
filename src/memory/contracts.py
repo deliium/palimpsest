@@ -4,8 +4,15 @@ from __future__ import annotations
 
 from typing import Protocol, runtime_checkable
 
+from memory.beliefs import (
+    BeliefRevisionRequest,
+    BeliefRevisionResult,
+    SemanticBelief,
+    SemanticBeliefHistory,
+)
 from memory.models import (
     Belief,
+    BeliefId,
     MemoryApplyResult,
     MemoryForgetRequest,
     MemoryForgetResult,
@@ -30,6 +37,9 @@ __all__ = [
     "MemoryService",
     "MemoryWriter",
     "OwnershipError",
+    "SemanticBeliefReader",
+    "SemanticBeliefService",
+    "SemanticBeliefWriter",
 ]
 
 
@@ -54,6 +64,43 @@ class BeliefReader(Protocol):
 class BeliefWriter(Protocol):
     def write(self, belief: Belief) -> None:
         """Persist ``belief`` if it belongs to this aggregate's owner."""
+        ...
+
+
+class SemanticBeliefReader(Protocol):
+    def snapshot(self) -> tuple[SemanticBelief, ...]:
+        """Return a defensive immutable snapshot of owned semantic beliefs."""
+        ...
+
+    def history(self, belief_id: BeliefId) -> SemanticBeliefHistory | None:
+        """Return append-only revision history for one owned belief."""
+        ...
+
+
+class SemanticBeliefWriter(Protocol):
+    def write(self, history: SemanticBeliefHistory) -> None:
+        """Persist ``history`` if it belongs to this aggregate's owner."""
+        ...
+
+
+@runtime_checkable
+class SemanticBeliefService(Protocol):
+    """Owner-bound semantic belief formation and revision service."""
+
+    async def revise(self, request: BeliefRevisionRequest) -> BeliefRevisionResult:
+        """Form or revise a belief; same operation ID retries are idempotent."""
+        ...
+
+    async def get(self, belief_id: BeliefId) -> SemanticBelief | None:
+        """Fetch one scoped belief head; foreign/missing IDs are indistinguishable."""
+        ...
+
+    async def history(self, belief_id: BeliefId) -> SemanticBeliefHistory | None:
+        """Return complete append-only history for one scoped belief."""
+        ...
+
+    async def snapshot(self) -> tuple[SemanticBelief, ...]:
+        """Return all semantic belief heads for this owner scope."""
         ...
 
 

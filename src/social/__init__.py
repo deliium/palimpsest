@@ -1,17 +1,81 @@
-"""Typed communication envelopes between agents."""
+"""Typed communication envelopes and subjective relationship profiles."""
 
-from social.contracts import EnvelopeSender
+from social.contracts import (
+    EnvelopeSender,
+    RelationshipReader,
+    RelationshipService,
+    RelationshipWriter,
+)
 from social.models import (
     CommunicationEnvelope,
     EnvelopeId,
     Relationship,
     RelationshipId,
 )
+from social.relationships import (
+    DEFAULT_RELATIONSHIP_POLICY,
+    DirectedRelationshipProfile,
+    RelationshipActivationState,
+    RelationshipConfidence,
+    RelationshipDimension,
+    RelationshipDimensionState,
+    RelationshipEvidenceItem,
+    RelationshipFormationPolicy,
+    RelationshipHistory,
+    RelationshipInteractionSignal,
+    RelationshipPolicyRef,
+    RelationshipProfileStore,
+    RelationshipRevision,
+    RelationshipRevisionId,
+    RelationshipRevisionRequest,
+    RelationshipRevisionResult,
+    RelationshipSignalKind,
+    apply_relationship_decay,
+    merge_relationship_revision,
+    profile_id_for,
+    project_legacy_relationship,
+    revision_id_for_relationship,
+    signals_to_dimension_deltas,
+)
+from social.service import (
+    InMemoryRelationshipService,
+    RelationshipServiceError,
+    RelationshipServiceErrorCode,
+)
 
 __all__ = [
+    "DEFAULT_RELATIONSHIP_POLICY",
     "CommunicationEnvelope",
+    "DirectedRelationshipProfile",
     "EnvelopeId",
     "EnvelopeSender",
+    "InMemoryRelationshipService",
     "Relationship",
+    "RelationshipActivationState",
+    "RelationshipConfidence",
+    "RelationshipDimension",
+    "RelationshipDimensionState",
+    "RelationshipEvidenceItem",
+    "RelationshipFormationPolicy",
+    "RelationshipHistory",
     "RelationshipId",
+    "RelationshipInteractionSignal",
+    "RelationshipPolicyRef",
+    "RelationshipProfileStore",
+    "RelationshipReader",
+    "RelationshipRevision",
+    "RelationshipRevisionId",
+    "RelationshipRevisionRequest",
+    "RelationshipRevisionResult",
+    "RelationshipService",
+    "RelationshipServiceError",
+    "RelationshipServiceErrorCode",
+    "RelationshipSignalKind",
+    "RelationshipWriter",
+    "apply_relationship_decay",
+    "merge_relationship_revision",
+    "profile_id_for",
+    "project_legacy_relationship",
+    "revision_id_for_relationship",
+    "signals_to_dimension_deltas",
 ]

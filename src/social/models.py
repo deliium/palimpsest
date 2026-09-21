@@ -62,6 +62,13 @@ class Relationship:
             self, "affinity", _affinity("Relationship.affinity", self.affinity)
         )
 
+    def __repr__(self) -> str:
+        return (
+            f"Relationship(relationship_id={self.relationship_id.value!r}, "
+            f"source_id={self.source_id.value!r}, "
+            f"target_id={self.target_id.value!r})"
+        )
+
 
 @dataclass(frozen=True, slots=True)
 class CommunicationEnvelope:
