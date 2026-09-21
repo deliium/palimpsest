@@ -176,3 +176,55 @@ def test_permissive_structured_output_subclass_is_rejected() -> None:
             model_config = StructuredOutput.model_config.copy()
             model_config["extra"] = "allow"  # type: ignore[index]
             kind: str
+
+
+def test_cognitive_artifacts_rejected_by_command_and_submission_gates() -> None:
+    from agents.cognition.models import (
+        ActionPlan,
+        CognitiveLoopResult,
+        ComponentBoundaryRecord,
+        ComponentKind,
+        ComponentStatus,
+        DecisionMetadata,
+        IntentionCode,
+        InternalAgentState,
+        MotivationCode,
+        SelectedIntention,
+    )
+
+    agent = AgentId("agent-1")
+    plan = ActionPlan(owner_id=agent, command=Wait(), confidence=1.0)
+    intention = SelectedIntention(
+        owner_id=agent,
+        intention=IntentionCode.WAIT,
+        source_motive=MotivationCode.WAIT,
+        confidence=1.0,
+    )
+    record = ComponentBoundaryRecord(
+        invocation_id="inv-1",
+        component_kind=ComponentKind.PLANNING,
+        component_version="v1",
+        ordinal=7,
+        status=ComponentStatus.COMPLETED,
+        confidence=1.0,
+        input_artifact=intention,
+        output_artifact=plan,
+        decision_metadata=DecisionMetadata(),
+    )
+    result = CognitiveLoopResult(
+        invocation_id="inv-1",
+        agent_id=agent,
+        command=Wait(),
+        boundary_records=(record,),
+        memory_update_intents=(),
+        final_confidence=1.0,
+        internal_state=InternalAgentState(owner_id=agent),
+    )
+    token = TickToken(value="tok-cogs", tick=Tick(0))
+    for value in (plan, intention, record, result, {"kind": "wait"}):
+        with pytest.raises(TypeError):
+            require_agent_command(value)
+        with pytest.raises(TypeError):
+            require_action_submission(value)
+        with pytest.raises(TypeError):
+            ActionSubmission(token=token, agent_id=agent, command=value)  # type: ignore[arg-type]

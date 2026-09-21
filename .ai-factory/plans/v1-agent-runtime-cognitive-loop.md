@@ -85,7 +85,7 @@ V1 includes deterministic placeholder memory retrieval and future-imagination co
 
 ### Phase 2: Deterministic Baseline and Runtime Lifecycle
 
-- [ ] Task 4: Add deterministic placeholder components and reusable cognition fakes.
+- [x] Task 4: Add deterministic placeholder components and reusable cognition fakes.
   - Create `src/agents/cognition/defaults.py` with minimal deterministic V1 implementations: literal observation interpretation, owner-scoped pass-through or empty memory retrieval, direct situation/self-state construction, bounded placeholder future generation, stable motivation/intention selection, and a safe `Wait` fallback planner.
   - Keep placeholder behavior explicit and replaceable; do not pretend empty retrieval or simple futures are production memory/imagination quality, and do not import or invoke a real LLM.
   - Create `tests/fakes/cognition.py` and update `tests/fakes/__init__.py` with scriptable per-stage fakes keyed by deterministic invocation/stage ordinals, typed outcomes/failures, defensive copies, and metadata-only call records.
@@ -93,7 +93,7 @@ V1 includes deterministic placeholder memory retrieval and future-imagination co
   - Logging requirements: defaults stay log-free and deterministic. Fakes may record component name, invocation ID, ordinal, status, and counts for assertions, but never payload bodies; harness failures expose stable safe codes.
   - Dependencies: Tasks 1-3.
 
-- [ ] Task 5: Implement the per-agent `AgentRuntime` lifecycle and memory update hooks.
+- [x] Task 5: Implement the per-agent `AgentRuntime` lifecycle and memory update hooks.
   - Create `src/simulation/agent_runtime.py` with explicit runtime states such as created, active, and terminal, plus immutable step/submission results. Inject the owning `Agent`, identity translator, `CognitiveLoop`, memory/belief readers and writers or a narrow subjective-state adapter, inbox source, and deterministic invocation-ID source through public contracts.
   - Implement alive-agent start, processing of exactly one own `Observation`, existing `build_perspective` ownership checks where needed, cognition invocation, post-cognition memory update hooks, exact command validation, and construction of one `ActionSubmission` from a caller-supplied engine token.
   - Keep the token and submission machinery outside `CognitiveLoop`; the loop receives only its observation/internal state input. Do not expose `WorldEngine`, `WorldState`, private world modules, action admission, proposal IDs, revisions, or another agent's observation to cognition.
@@ -104,7 +104,7 @@ V1 includes deterministic placeholder memory retrieval and future-imagination co
   - Logging requirements: use metadata-only DEBUG logs for lifecycle transitions and component invocation boundaries, INFO for runtime start and terminal transition, WARN for rejected duplicate/invalid lifecycle calls, and ERROR for closed failure codes. Include run/agent/tick/invocation/component/status/count metadata only; never log observations, memories, beliefs, inbox/communications, cognitive artifacts, prompts, command payloads, seeds, credentials, or raw exceptions.
   - Dependencies: Tasks 1-4.
 
-- [ ] Task 6: Integrate `AgentRuntime` with `WorldEngine` through normal observation and admission paths.
+- [x] Task 6: Integrate `AgentRuntime` with `WorldEngine` through normal observation and admission paths.
   - Add `tests/integration/test_agent_runtime_world_engine.py` using an in-memory bootstrapped `WorldEngine`, deterministic IDs/clocks, placeholder or fake cognitive components, and no real LLM, network, Docker, or PostgreSQL dependency.
   - Exercise `engine.observe()` / `engine.observation_for(agent_id)` -> runtime processing -> exact `ActionSubmission` -> `engine.resolve_tick()` for one and multiple agents in registration order.
   - Prove each runtime sees only its own observation and state, generated commands follow the existing exact-class trust boundary, and engine admission still derives actor/request/world/revision authority rather than accepting it from cognition.
