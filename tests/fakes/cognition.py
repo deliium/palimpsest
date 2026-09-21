@@ -25,7 +25,7 @@ from agents.cognition.models import (
     PossibleFutures,
     RetrievedMemoryContext,
     SelectedIntention,
-    SelfBeliefState,
+    SelfModel,
     SituationModel,
 )
 
@@ -124,7 +124,7 @@ _STAGE_OUTPUT_TYPES: Final[Mapping[ComponentKind, type | tuple[type, ...]]] = {
     ComponentKind.PERCEPTION: InterpretedPerception,
     ComponentKind.MEMORY_RETRIEVAL: RetrievedMemoryContext,
     ComponentKind.SITUATION: SituationModel,
-    ComponentKind.SELF_STATE: SelfBeliefState,
+    ComponentKind.SELF_STATE: SelfModel,
     ComponentKind.FUTURES: PossibleFutures,
     ComponentKind.MOTIVATION: MotivationEvaluation,
     ComponentKind.INTENTION: SelectedIntention,
@@ -368,10 +368,10 @@ class FakeSelfStateProjector:
         loop_input: CognitiveLoopInput,
         situation: SituationModel,
         memory: RetrievedMemoryContext,
-    ) -> SelfBeliefState:
+    ) -> SelfModel:
         _ = loop_input, situation, memory
         output = self._queue.consume(invocation_id=_active_invocation(), ordinal=3)
-        assert type(output) is SelfBeliefState
+        assert type(output) is SelfModel
         return output
 
 
@@ -392,7 +392,7 @@ class FakeFutureImagination:
         self,
         loop_input: CognitiveLoopInput,
         situation: SituationModel,
-        self_state: SelfBeliefState,
+        self_state: SelfModel,
     ) -> PossibleFutures:
         _ = loop_input, situation, self_state
         output = self._queue.consume(invocation_id=_active_invocation(), ordinal=4)
@@ -417,7 +417,7 @@ class FakeMotivationEvaluator:
         self,
         loop_input: CognitiveLoopInput,
         situation: SituationModel,
-        self_state: SelfBeliefState,
+        self_state: SelfModel,
         futures: PossibleFutures,
     ) -> MotivationEvaluation:
         _ = loop_input, situation, self_state, futures

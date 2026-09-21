@@ -6,6 +6,10 @@ They never import or invoke an LLM provider.
 
 from __future__ import annotations
 
+import logging
+from collections.abc import Callable
+from typing import Final
+
 from agents.cognition.loop import CognitiveLoop
 from agents.cognition.models import (
     ActionPlan,
@@ -15,6 +19,7 @@ from agents.cognition.models import (
     IntentionCode,
     InterpretedPerception,
     MemoryUpdateIntent,
+    MemoryUpdateKind,
     MotivationCode,
     MotivationEvaluation,
     MotivationScore,
@@ -22,12 +27,17 @@ from agents.cognition.models import (
     PossibleFutures,
     RetrievedMemoryContext,
     SelectedIntention,
-    SelfBeliefState,
+    SelfModel,
     SituationClaimCode,
     SituationModel,
+    project_self_model,
 )
+from memory.beliefs import SemanticBelief
+from memory.models import BeliefId
 from world.actions import Wait
 from world.models import LifeStatus
+
+_LOG: Final[logging.Logger] = logging.getLogger("agents.cognition.defaults")
 
 __all__ = [
     "DirectSelfStateProjector",
@@ -38,6 +48,7 @@ __all__ = [
     "PlaceholderFutureImagination",
     "StableIntentionSelector",
     "StableMotivationEvaluator",
+    "SubjectiveRevisionHook",
     "WaitFallbackPlanner",
     "default_cognitive_loop",
 ]
@@ -109,12 +120,18 @@ class EmptyMemoryRetriever:
         perception: InterpretedPerception,
     ) -> RetrievedMemoryContext:
         _ = perception
+        semantic: tuple[SemanticBelief, ...] = ()
+        belief_ids: tuple[BeliefId, ...] = ()
+        if loop_input.snapshot is not None:
+            semantic = loop_input.snapshot.semantic_beliefs
+            belief_ids = tuple(item.belief_id for item in semantic)
         return RetrievedMemoryContext(
             owner_id=loop_input.agent_id,
             memory_ids=(),
-            belief_ids=(),
+            belief_ids=belief_ids,
             confidence=1.0,
             decision_metadata=DecisionMetadata(candidate_count=0),
+            semantic_beliefs=semantic,
         )
 
 
@@ -154,29 +171,42 @@ class DirectSituationModeler:
 
 
 class DirectSelfStateProjector:
-    """Project life status and empty belief/goal id sets from the situation."""
+    """Project an emergent ``SelfModel`` from semantic beliefs and situation."""
 
     async def project(
         self,
         loop_input: CognitiveLoopInput,
         situation: SituationModel,
         memory: RetrievedMemoryContext,
-    ) -> SelfBeliefState:
+    ) -> SelfModel:
         life_status = None
         if SituationClaimCode.TERMINAL_SELF in situation.claim_codes:
             life_status = LifeStatus.DEAD
         elif SituationClaimCode.LOCAL_SCENE in situation.claim_codes:
             life_status = LifeStatus.ALIVE
-        return SelfBeliefState(
+        beliefs = memory.semantic_beliefs
+        if not beliefs and loop_input.snapshot is not None:
+            beliefs = loop_input.snapshot.semantic_beliefs
+        model = project_self_model(
             owner_id=loop_input.agent_id,
             life_status=life_status,
-            belief_ids=memory.belief_ids,
+            beliefs=beliefs,
             goal_ids=(),
-            confidence=1.0,
-            decision_metadata=DecisionMetadata(
-                candidate_count=len(memory.belief_ids),
-            ),
         )
+        _LOG.debug(
+            "self_model_projected",
+            extra={
+                "stage": "self_state",
+                "version": model.policy_version,
+                "owner_id": loop_input.agent_id.value,
+                "tick": situation.tick,
+                "candidate_count": model.candidate_count,
+                "selected_count": len(model.beliefs),
+                "aggregate_confidence": model.confidence,
+                "status": "complete",
+            },
+        )
+        return model
 
 
 class PlaceholderFutureImagination:
@@ -186,7 +216,7 @@ class PlaceholderFutureImagination:
         self,
         loop_input: CognitiveLoopInput,
         situation: SituationModel,
-        self_state: SelfBeliefState,
+        self_state: SelfModel,
     ) -> PossibleFutures:
         _ = self_state
         futures: list[ImaginedFuture] = []
@@ -240,7 +270,7 @@ class StableMotivationEvaluator:
         self,
         loop_input: CognitiveLoopInput,
         situation: SituationModel,
-        self_state: SelfBeliefState,
+        self_state: SelfModel,
         futures: PossibleFutures,
     ) -> MotivationEvaluation:
         _ = self_state, futures
@@ -378,6 +408,234 @@ class EmptyMemoryUpdateHook:
     ) -> tuple[MemoryUpdateIntent, ...]:
         _ = loop_input, plan, perception, memory, intention
         return ()
+
+
+class SubjectiveRevisionHook:
+    """Propose deferred semantic-belief and relationship revisions from episodes.
+
+    Uses only the frozen snapshot and current-tick owned traces. Never mutates
+    stores; revisions become visible on the next cognition invocation after a
+    successful commit boundary.
+    """
+
+    __slots__ = ("_belief_policy", "_relationship_policy", "_resolve_counterpart")
+
+    def __init__(
+        self,
+        *,
+        belief_policy: object | None = None,
+        relationship_policy: object | None = None,
+        resolve_counterpart: Callable[..., object] | None = None,
+    ) -> None:
+        from memory.belief_formation import (
+            DEFAULT_BELIEF_FORMATION_POLICY,
+            BeliefFormationPolicy,
+        )
+        from social.relationships import (
+            DEFAULT_RELATIONSHIP_POLICY,
+            RelationshipFormationPolicy,
+        )
+
+        if belief_policy is None:
+            belief_policy = DEFAULT_BELIEF_FORMATION_POLICY
+        elif type(belief_policy) is not BeliefFormationPolicy:
+            raise TypeError("belief_policy must be BeliefFormationPolicy")
+        if relationship_policy is None:
+            relationship_policy = DEFAULT_RELATIONSHIP_POLICY
+        elif type(relationship_policy) is not RelationshipFormationPolicy:
+            raise TypeError("relationship_policy must be RelationshipFormationPolicy")
+        self._belief_policy = belief_policy
+        self._relationship_policy = relationship_policy
+        self._resolve_counterpart: Callable[..., object] | None = resolve_counterpart
+
+    async def propose_updates(
+        self,
+        loop_input: CognitiveLoopInput,
+        plan: ActionPlan,
+        perception: InterpretedPerception,
+        memory: RetrievedMemoryContext,
+        intention: SelectedIntention,
+    ) -> tuple[MemoryUpdateIntent, ...]:
+        _ = plan, intention
+        from agents.models import AgentId
+        from memory.belief_formation import (
+            BeliefEvidenceCandidate,
+            belief_id_for_claim,
+            bundle_from_candidates,
+            extract_evidence_candidates,
+            lineage_root_for_trace,
+        )
+        from memory.beliefs import (
+            BeliefRevisionRequest,
+            SemanticClaim,
+            canonical_claim_identity,
+            canonical_subject_predicate_key,
+        )
+        from memory.models import MemorySourceKind, MemoryTrace
+        from social.relationships import (
+            RelationshipInteractionSignal,
+            RelationshipRevisionRequest,
+            RelationshipSignalKind,
+        )
+
+        tick = perception.tick
+        owner = loop_input.agent_id
+        traces: list[MemoryTrace] = []
+        if loop_input.snapshot is not None:
+            for trace in loop_input.snapshot.memories:
+                if trace.created_tick == tick or trace.source_tick == tick:
+                    traces.append(trace)
+        if memory.reconsolidation is not None:
+            derived = memory.reconsolidation.derived_trace
+            if type(derived) is MemoryTrace and derived.owner_id == owner:
+                traces.append(derived)
+
+        if not traces:
+            return ()
+
+        seen: set[str] = set()
+        unique_traces: list[MemoryTrace] = []
+        for trace in traces:
+            if trace.owner_id != owner:
+                _LOG.error(
+                    "subjective_revision_ownership",
+                    extra={
+                        "cognition": {
+                            "owner_id": owner.value,
+                            "tick": tick,
+                            "reason_code": "ownership",
+                        }
+                    },
+                )
+                raise ValueError("foreign-owner trace rejected")
+            if trace.memory_id.value in seen:
+                continue
+            seen.add(trace.memory_id.value)
+            unique_traces.append(trace)
+
+        index = {trace.memory_id: trace for trace in unique_traces}
+        candidates = extract_evidence_candidates(
+            unique_traces,
+            owner_id=owner,
+            policy=self._belief_policy,
+            trace_index=index,
+        )
+        groups: dict[str, list[BeliefEvidenceCandidate]] = {}
+        claim_for_key: dict[str, SemanticClaim] = {}
+        for candidate in candidates:
+            key = canonical_subject_predicate_key(candidate.claim)
+            groups.setdefault(key, []).append(candidate)
+            existing = claim_for_key.get(key)
+            if existing is None or canonical_claim_identity(
+                candidate.claim
+            ) < canonical_claim_identity(existing):
+                claim_for_key[key] = candidate.claim
+
+        intents: list[MemoryUpdateIntent] = []
+        op_base = f"subj:{owner.value}:t{tick}"
+        for index_key, key in enumerate(sorted(groups)):
+            claim = claim_for_key[key]
+            evidence = bundle_from_candidates(groups[key], target_claim=claim)
+            if evidence.total_count == 0:
+                continue
+            belief_key = belief_id_for_claim(owner_id=owner, claim=claim)
+            intents.append(
+                MemoryUpdateIntent(
+                    owner_id=owner,
+                    kind=MemoryUpdateKind.REVISE_SEMANTIC_BELIEF,
+                    belief_revision=BeliefRevisionRequest(
+                        owner_id=owner,
+                        operation_id=(
+                            f"{op_base}:belief:{index_key}:{belief_key.value}"
+                        ),
+                        logical_tick=tick,
+                        claim=claim,
+                        evidence=evidence,
+                        policy=self._belief_policy.as_ref(),
+                        belief_id=belief_key,
+                    ),
+                )
+            )
+
+        signals_by_target: dict[str, list[RelationshipInteractionSignal]] = {}
+        resolver = self._resolve_counterpart
+        for trace in unique_traces:
+            if resolver is None:
+                break
+            root = lineage_root_for_trace(trace, index)
+            kind = RelationshipSignalKind.PROXIMITY
+            if trace.provenance.kind is MemorySourceKind.COMMUNICATED:
+                kind = RelationshipSignalKind.COMMUNICATION
+            counterparts: list[AgentId] = []
+            if trace.provenance.speaker_id is not None:
+                resolved = resolver(trace.provenance.speaker_id)
+                if type(resolved) is AgentId and resolved != owner:
+                    counterparts.append(resolved)
+            for entity in trace.entities:
+                if entity.entity_id is None:
+                    continue
+                resolved = resolver(entity.entity_id)
+                if type(resolved) is AgentId and resolved != owner:
+                    counterparts.append(resolved)
+            for counterpart in counterparts:
+                signal = RelationshipInteractionSignal(
+                    counterpart_id=counterpart,
+                    kind=kind,
+                    strength=min(1.0, max(0.05, trace.confidence * 0.5)),
+                    memory_ref=trace.memory_id.value,
+                    lineage_root_ref=root.value,
+                    source_tick=trace.source_tick,
+                )
+                signals_by_target.setdefault(counterpart.value, []).append(signal)
+
+        for target_key, signals in sorted(signals_by_target.items()):
+            target = AgentId(target_key)
+            deduped: list[RelationshipInteractionSignal] = []
+            seen_sig: set[tuple[str, str]] = set()
+            for signal in signals:
+                sig_key = (signal.kind.value, signal.lineage_root_ref)
+                if sig_key in seen_sig:
+                    continue
+                seen_sig.add(sig_key)
+                deduped.append(signal)
+            if not deduped:
+                continue
+            intents.append(
+                MemoryUpdateIntent(
+                    owner_id=owner,
+                    kind=MemoryUpdateKind.REVISE_RELATIONSHIP,
+                    relationship_revision=RelationshipRevisionRequest(
+                        source_id=owner,
+                        target_id=target,
+                        operation_id=f"{op_base}:rel:{target_key}",
+                        logical_tick=tick,
+                        signals=tuple(deduped),
+                        policy=self._relationship_policy.as_ref(),
+                    ),
+                )
+            )
+
+        _LOG.debug(
+            "subjective_revisions_proposed",
+            extra={
+                "cognition": {
+                    "owner_id": owner.value,
+                    "tick": tick,
+                    "trace_count": len(unique_traces),
+                    "belief_intent_count": sum(
+                        1
+                        for item in intents
+                        if item.kind is MemoryUpdateKind.REVISE_SEMANTIC_BELIEF
+                    ),
+                    "relationship_intent_count": sum(
+                        1
+                        for item in intents
+                        if item.kind is MemoryUpdateKind.REVISE_RELATIONSHIP
+                    ),
+                }
+            },
+        )
+        return tuple(intents)
 
 
 def default_cognitive_loop() -> CognitiveLoop:

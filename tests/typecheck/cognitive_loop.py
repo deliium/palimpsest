@@ -34,7 +34,7 @@ from agents.cognition.models import (
     PossibleFutures,
     RetrievedMemoryContext,
     SelectedIntention,
-    SelfBeliefState,
+    SelfModel,
     SituationClaimCode,
     SituationModel,
 )
@@ -110,14 +110,17 @@ class ScriptedSelfStateProjector:
         loop_input: CognitiveLoopInput,
         situation: SituationModel,
         memory: RetrievedMemoryContext,
-    ) -> SelfBeliefState:
+    ) -> SelfModel:
         _ = situation, memory
-        return SelfBeliefState(
+        return SelfModel(
             owner_id=loop_input.agent_id,
+            policy_id="self-model-projection",
+            policy_version="1",
             life_status=LifeStatus.ALIVE,
-            belief_ids=(),
+            beliefs=(),
             goal_ids=(),
             confidence=1.0,
+            candidate_count=0,
         )
 
 
@@ -126,7 +129,7 @@ class ScriptedFutureImagination:
         self,
         loop_input: CognitiveLoopInput,
         situation: SituationModel,
-        self_state: SelfBeliefState,
+        self_state: SelfModel,
     ) -> PossibleFutures:
         _ = situation, self_state
         return PossibleFutures(
@@ -147,7 +150,7 @@ class ScriptedMotivationEvaluator:
         self,
         loop_input: CognitiveLoopInput,
         situation: SituationModel,
-        self_state: SelfBeliefState,
+        self_state: SelfModel,
         futures: PossibleFutures,
     ) -> MotivationEvaluation:
         _ = situation, self_state, futures

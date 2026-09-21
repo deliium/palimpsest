@@ -56,6 +56,9 @@ def build_perspective(
     memories: Sequence[MemoryTrace] = (),
     beliefs: Sequence[Belief] = (),
     inbox: Sequence[CommunicationEnvelope] = (),
+    semantic_beliefs: Sequence[object] = (),
+    relationships: Sequence[object] = (),
+    snapshot_revision: int = 0,
 ) -> Perspective:
     """Pair one ``AgentId`` with exactly its registered entity observation.
 
@@ -129,24 +132,35 @@ def build_perspective(
                 "inbox envelope recipient_id must match perspective agent",
             )
 
+    from memory.beliefs import SemanticBelief
+    from social.relationships import DirectedRelationshipProfile
+
     perspective = Perspective(
         agent_id=agent_id,
         observation=observation,
         memories=tuple(memories),
         beliefs=tuple(beliefs),
         inbox=tuple(inbox),
+        semantic_beliefs=tuple(semantic_beliefs),  # type: ignore[arg-type]
+        relationships=tuple(relationships),  # type: ignore[arg-type]
+        snapshot_revision=snapshot_revision,
     )
+    _ = SemanticBelief, DirectedRelationshipProfile
     _LOGGER.debug(
         "perspective_built agent=%s entity=%s tick=%s revision=%s "
-        "memories=%s beliefs=%s inbox=%s communications=%s occurrences=%s",
+        "memories=%s beliefs=%s semantic_beliefs=%s relationships=%s "
+        "inbox=%s communications=%s occurrences=%s snapshot_revision=%s",
         agent_id.value,
         expected_entity_id.value,
         observation.tick,
         observation.revision.value,
         len(perspective.memories),
         len(perspective.beliefs),
+        len(perspective.semantic_beliefs),
+        len(perspective.relationships),
         len(perspective.inbox),
         len(observation.communications),
         len(observation.occurrences),
+        perspective.snapshot_revision,
     )
     return perspective

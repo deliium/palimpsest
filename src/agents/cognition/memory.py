@@ -17,6 +17,7 @@ from agents.cognition.models import (
     InterpretedPerception,
     RetrievedMemoryContext,
 )
+from memory.beliefs import SemanticBelief
 from memory.contracts import BeliefReader, MemoryService
 from memory.models import (
     Belief,
@@ -99,12 +100,22 @@ class ScopedMemoryRetriever:
         tags = tuple(code.value for code in perception.claim_codes[:16])
         beliefs: tuple[Belief, ...] = ()
         belief_ids: tuple[BeliefId, ...] = ()
+        semantic_beliefs: tuple[SemanticBelief, ...] = ()
+        if loop_input.snapshot is not None:
+            semantic_beliefs = loop_input.snapshot.semantic_beliefs
+            for semantic_belief in semantic_beliefs:
+                if semantic_belief.owner_id != loop_input.agent_id:
+                    raise ValueError("foreign-owner semantic belief snapshot rejected")
         if self._belief_reader is not None:
             beliefs = self._belief_reader.snapshot()
             for belief in beliefs:
                 if belief.owner_id != loop_input.agent_id:
                     raise ValueError("foreign-owner belief snapshot rejected")
             belief_ids = tuple(belief.belief_id for belief in beliefs)
+        elif semantic_beliefs:
+            belief_ids = tuple(
+                semantic_belief.belief_id for semantic_belief in semantic_beliefs
+            )
 
         retrieve = MemoryRetrieveRequest(
             current_tick=perception.tick,
@@ -248,4 +259,5 @@ class ScopedMemoryRetriever:
             reconstructions=result.reconstructions,
             reconsolidation=result.reconsolidation,
             reconstruction_policy_version=policy.version,
+            semantic_beliefs=semantic_beliefs,
         )

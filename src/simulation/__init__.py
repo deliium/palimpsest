@@ -135,6 +135,14 @@ from simulation.serialization import (
     encode_domain,
 )
 from simulation.service import DurableCommitAmbiguity, PersistentSimulationService
+from simulation.subjective_state import (
+    InMemorySubjectiveStateService,
+    SubjectiveApplyReceipt,
+    SubjectiveMutationBatch,
+    SubjectiveStateError,
+    SubjectiveStateErrorCode,
+    subjective_operation_id,
+)
 
 __all__ = [
     "DERIVATION_VERSION",
@@ -165,6 +173,7 @@ __all__ = [
     "ExperimentRepository",
     "ExperimentRunAssignment",
     "ExportMetadata",
+    "InMemorySubjectiveStateService",
     "LogicalClock",
     "ObservationBatch",
     "PayloadHash",
@@ -191,6 +200,10 @@ __all__ = [
     "SnapshotId",
     "SnapshotRepository",
     "StreamScope",
+    "SubjectiveApplyReceipt",
+    "SubjectiveMutationBatch",
+    "SubjectiveStateError",
+    "SubjectiveStateErrorCode",
     "Tick",
     "TickAppendRequest",
     "TickCommit",
@@ -252,6 +265,7 @@ __all__ = [
     "require_tick",
     "run_id_for_event",
     "sample_stream",
+    "subjective_operation_id",
     "tick_for_event",
     "verify_commit_chain",
 ]

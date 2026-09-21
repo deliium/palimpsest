@@ -15,6 +15,14 @@ from enum import StrEnum
 from typing import Final
 
 from agents.models import AgentId, GoalId
+from memory.beliefs import (
+    BeliefActivationState,
+    BeliefValueKind,
+    ClaimSubjectKind,
+    SemanticBelief,
+    SemanticClaim,
+    canonical_claim_identity,
+)
 from memory.models import (
     Belief,
     BeliefId,
@@ -39,6 +47,7 @@ from world.observations import Observation
 
 __all__ = [
     "BOUNDARY_SCHEMA_VERSION",
+    "DEFAULT_SELF_MODEL_POLICY",
     "ActionPlan",
     "CognitionFailureReason",
     "CognitiveLoopInput",
@@ -61,9 +70,15 @@ __all__ = [
     "RetrievedMemoryContext",
     "SelectedIntention",
     "SelfBeliefState",
+    "SelfModel",
+    "SelfModelProjectionPolicy",
+    "SelfRelevantBelief",
     "SituationClaimCode",
     "SituationModel",
+    "SubjectiveSnapshot",
     "diagnostic_projection",
+    "project_legacy_self_belief_state",
+    "project_self_model",
     "require_confidence",
 ]
 
@@ -159,10 +174,12 @@ class IntentionCode(StrEnum):
 
 
 class MemoryUpdateKind(StrEnum):
-    """Closed memory/belief update intent kinds."""
+    """Closed subjective update intent kinds (memory, belief, relationship)."""
 
     WRITE_MEMORY = "write_memory"
     WRITE_BELIEF = "write_belief"
+    REVISE_SEMANTIC_BELIEF = "revise_semantic_belief"
+    REVISE_RELATIONSHIP = "revise_relationship"
 
 
 def require_confidence(name: str, value: object) -> float:
@@ -310,6 +327,108 @@ class InternalAgentState:
 
 
 @dataclass(frozen=True, slots=True)
+class SubjectiveSnapshot:
+    """One frozen owner-scoped subjective view for a cognition invocation."""
+
+    owner_id: AgentId
+    revision: int
+    memories: tuple[MemoryTrace, ...]
+    legacy_beliefs: tuple[Belief, ...]
+    semantic_beliefs: tuple[SemanticBelief, ...]
+    relationships: tuple[object, ...] = ()
+
+    def __post_init__(self) -> None:
+        if type(self.owner_id) is not AgentId:
+            raise TypeError("SubjectiveSnapshot.owner_id must be AgentId")
+        object.__setattr__(
+            self,
+            "revision",
+            require_exact_nonneg_int("SubjectiveSnapshot.revision", self.revision),
+        )
+        if isinstance(self.memories, (set, frozenset, Mapping)):
+            raise TypeError("SubjectiveSnapshot.memories must be ordered")
+        if isinstance(self.memories, (str, bytes)) or not isinstance(
+            self.memories, Sequence
+        ):
+            raise TypeError("SubjectiveSnapshot.memories must be ordered")
+        memories = tuple(self.memories)
+        seen_memory: set[str] = set()
+        for memory in memories:
+            if type(memory) is not MemoryTrace:
+                raise TypeError(
+                    "SubjectiveSnapshot.memories entries must be MemoryTrace"
+                )
+            if memory.owner_id != self.owner_id:
+                raise ValueError("SubjectiveSnapshot.memories: ownership")
+            if memory.memory_id.value in seen_memory:
+                raise ValueError("SubjectiveSnapshot.memories: duplicate")
+            seen_memory.add(memory.memory_id.value)
+        object.__setattr__(self, "memories", memories)
+        if isinstance(self.legacy_beliefs, (set, frozenset, Mapping)):
+            raise TypeError("SubjectiveSnapshot.legacy_beliefs must be ordered")
+        if isinstance(self.legacy_beliefs, (str, bytes)) or not isinstance(
+            self.legacy_beliefs, Sequence
+        ):
+            raise TypeError("SubjectiveSnapshot.legacy_beliefs must be ordered")
+        legacy = tuple(self.legacy_beliefs)
+        seen_legacy: set[str] = set()
+        for legacy_belief in legacy:
+            if type(legacy_belief) is not Belief:
+                raise TypeError(
+                    "SubjectiveSnapshot.legacy_beliefs entries must be Belief"
+                )
+            if legacy_belief.owner_id != self.owner_id:
+                raise ValueError("SubjectiveSnapshot.legacy_beliefs: ownership")
+            if legacy_belief.belief_id.value in seen_legacy:
+                raise ValueError("SubjectiveSnapshot.legacy_beliefs: duplicate")
+            seen_legacy.add(legacy_belief.belief_id.value)
+        object.__setattr__(self, "legacy_beliefs", legacy)
+        if isinstance(self.semantic_beliefs, (set, frozenset, Mapping)):
+            raise TypeError("SubjectiveSnapshot.semantic_beliefs must be ordered")
+        if isinstance(self.semantic_beliefs, (str, bytes)) or not isinstance(
+            self.semantic_beliefs, Sequence
+        ):
+            raise TypeError("SubjectiveSnapshot.semantic_beliefs must be ordered")
+        semantic = tuple(self.semantic_beliefs)
+        for semantic_belief in semantic:
+            if type(semantic_belief) is not SemanticBelief:
+                raise TypeError(
+                    "SubjectiveSnapshot.semantic_beliefs entries must be SemanticBelief"
+                )
+            if semantic_belief.owner_id != self.owner_id:
+                raise ValueError("SubjectiveSnapshot.semantic_beliefs: ownership")
+        object.__setattr__(self, "semantic_beliefs", semantic)
+        if isinstance(self.relationships, (set, frozenset, Mapping)):
+            raise TypeError("SubjectiveSnapshot.relationships must be ordered")
+        if isinstance(self.relationships, (str, bytes)) or not isinstance(
+            self.relationships, Sequence
+        ):
+            raise TypeError("SubjectiveSnapshot.relationships must be ordered")
+        relationships = tuple(self.relationships)
+        from social.relationships import DirectedRelationshipProfile
+
+        for profile in relationships:
+            if type(profile) is not DirectedRelationshipProfile:
+                raise TypeError(
+                    "SubjectiveSnapshot.relationships entries must be "
+                    "DirectedRelationshipProfile"
+                )
+            if profile.source_id != self.owner_id:
+                raise ValueError("SubjectiveSnapshot.relationships: ownership")
+        object.__setattr__(self, "relationships", relationships)
+
+    def __repr__(self) -> str:
+        return (
+            f"SubjectiveSnapshot(owner_id={self.owner_id.value!r}, "
+            f"revision={self.revision}, "
+            f"memory_count={len(self.memories)}, "
+            f"legacy_belief_count={len(self.legacy_beliefs)}, "
+            f"semantic_belief_count={len(self.semantic_beliefs)}, "
+            f"relationship_count={len(self.relationships)})"
+        )
+
+
+@dataclass(frozen=True, slots=True)
 class CognitiveLoopInput:
     """Sole loop input: one owned observation plus immutable internal state.
 
@@ -320,6 +439,7 @@ class CognitiveLoopInput:
     agent_id: AgentId
     observation: Observation
     internal_state: InternalAgentState
+    snapshot: SubjectiveSnapshot | None = None
 
     def __post_init__(self) -> None:
         if type(self.agent_id) is not AgentId:
@@ -332,12 +452,21 @@ class CognitiveLoopInput:
             )
         if self.internal_state.owner_id != self.agent_id:
             raise ValueError("InternalAgentState.owner_id must match agent_id")
+        if self.snapshot is not None:
+            if type(self.snapshot) is not SubjectiveSnapshot:
+                raise TypeError(
+                    "CognitiveLoopInput.snapshot must be SubjectiveSnapshot"
+                )
+            if self.snapshot.owner_id != self.agent_id:
+                raise ValueError("SubjectiveSnapshot.owner_id must match agent_id")
 
     def __repr__(self) -> str:
+        snap_rev = None if self.snapshot is None else self.snapshot.revision
         return (
             f"CognitiveLoopInput(agent_id={self.agent_id.value!r}, "
             f"tick={self.observation.tick}, "
-            f"revision={self.observation.revision.value})"
+            f"revision={self.observation.revision.value}, "
+            f"snapshot_revision={snap_rev})"
         )
 
 
@@ -431,6 +560,7 @@ class RetrievedMemoryContext:
     reconstructions: tuple[ReconstructedMemory, ...] = ()
     reconsolidation: ReconsolidationIntent | None = None
     reconstruction_policy_version: str | None = None
+    semantic_beliefs: tuple[SemanticBelief, ...] = ()
 
     def __post_init__(self) -> None:
         if type(self.owner_id) is not AgentId:
@@ -567,12 +697,41 @@ class RetrievedMemoryContext:
                     max_length=_MAX_COMPONENT_VERSION_CHARS,
                 ),
             )
+        if isinstance(self.semantic_beliefs, (set, frozenset, Mapping)):
+            raise TypeError("RetrievedMemoryContext.semantic_beliefs must be ordered")
+        if isinstance(self.semantic_beliefs, (str, bytes)) or not isinstance(
+            self.semantic_beliefs, Sequence
+        ):
+            raise TypeError("RetrievedMemoryContext.semantic_beliefs must be ordered")
+        semantic = tuple(self.semantic_beliefs)
+        if len(semantic) > _MAX_MEMORY_REFS:
+            raise ValueError(
+                "RetrievedMemoryContext.semantic_beliefs exceeds maximum length"
+            )
+        seen_belief_ids: set[str] = set()
+        for belief_item in semantic:
+            if type(belief_item) is not SemanticBelief:
+                raise TypeError(
+                    "RetrievedMemoryContext.semantic_beliefs entries must be "
+                    "SemanticBelief"
+                )
+            if belief_item.owner_id != self.owner_id:
+                raise ValueError(
+                    "RetrievedMemoryContext semantic belief owner mismatch"
+                )
+            if belief_item.belief_id.value in seen_belief_ids:
+                raise ValueError(
+                    "RetrievedMemoryContext.semantic_beliefs: duplicate_belief_id"
+                )
+            seen_belief_ids.add(belief_item.belief_id.value)
+        object.__setattr__(self, "semantic_beliefs", semantic)
 
     def __repr__(self) -> str:
         return (
             f"RetrievedMemoryContext(owner_id={self.owner_id.value!r}, "
             f"memory_count={len(self.memory_ids)}, "
             f"belief_count={len(self.belief_ids)}, "
+            f"semantic_belief_count={len(self.semantic_beliefs)}, "
             f"hit_count={len(self.ranked_hits)}, "
             f"reconstruction_count={len(self.reconstructions)}, "
             f"pending_access_count={len(self.pending_accesses)}, "
@@ -626,7 +785,11 @@ class SituationModel:
 
 @dataclass(frozen=True, slots=True)
 class SelfBeliefState:
-    """Projected self/belief identifiers for the owning agent."""
+    """Legacy projected self/belief identifiers for the owning agent.
+
+    Prefer :class:`SelfModel` for emergent self-understanding. This type remains
+    for schema compatibility and lossy projection helpers.
+    """
 
     owner_id: AgentId
     life_status: LifeStatus | None
@@ -670,6 +833,284 @@ class SelfBeliefState:
             f"belief_count={len(self.belief_ids)}, "
             f"goal_count={len(self.goal_ids)}, confidence={self.confidence})"
         )
+
+
+@dataclass(frozen=True, slots=True)
+class SelfModelProjectionPolicy:
+    """Versioned policy for selecting self-relevant semantic beliefs."""
+
+    policy_id: str
+    version: str
+    min_confidence: float = 0.2
+    require_active: bool = True
+    max_beliefs: int = 32
+
+    def __post_init__(self) -> None:
+        object.__setattr__(
+            self,
+            "policy_id",
+            require_bounded_text(
+                "SelfModelProjectionPolicy.policy_id",
+                self.policy_id,
+                max_length=_MAX_COMPONENT_VERSION_CHARS,
+            ),
+        )
+        object.__setattr__(
+            self,
+            "version",
+            require_bounded_text(
+                "SelfModelProjectionPolicy.version",
+                self.version,
+                max_length=_MAX_COMPONENT_VERSION_CHARS,
+            ),
+        )
+        object.__setattr__(
+            self,
+            "min_confidence",
+            require_confidence(
+                "SelfModelProjectionPolicy.min_confidence", self.min_confidence
+            ),
+        )
+        if type(self.require_active) is not bool:
+            raise TypeError("SelfModelProjectionPolicy.require_active: invalid_type")
+        object.__setattr__(
+            self,
+            "max_beliefs",
+            require_exact_nonneg_int(
+                "SelfModelProjectionPolicy.max_beliefs", self.max_beliefs
+            ),
+        )
+        if self.max_beliefs < 1 or self.max_beliefs > _MAX_MEMORY_REFS:
+            raise ValueError("SelfModelProjectionPolicy.max_beliefs: out_of_bounds")
+
+    def __repr__(self) -> str:
+        return (
+            f"SelfModelProjectionPolicy(policy_id={self.policy_id!r}, "
+            f"version={self.version!r}, max_beliefs={self.max_beliefs})"
+        )
+
+
+DEFAULT_SELF_MODEL_POLICY: Final[SelfModelProjectionPolicy] = SelfModelProjectionPolicy(
+    policy_id="self-model-projection", version="1"
+)
+
+
+@dataclass(frozen=True, slots=True)
+class SelfRelevantBelief:
+    """One ordered self-relevant belief selected into a ``SelfModel``."""
+
+    belief_id: BeliefId
+    claim: SemanticClaim
+    confidence: float
+
+    def __post_init__(self) -> None:
+        if type(self.belief_id) is not BeliefId:
+            raise TypeError("SelfRelevantBelief.belief_id: invalid_type")
+        if type(self.claim) is not SemanticClaim:
+            raise TypeError("SelfRelevantBelief.claim: invalid_type")
+        object.__setattr__(
+            self,
+            "confidence",
+            require_confidence("SelfRelevantBelief.confidence", self.confidence),
+        )
+
+    def __repr__(self) -> str:
+        return (
+            f"SelfRelevantBelief(belief_id={self.belief_id.value!r}, "
+            f"confidence={self.confidence})"
+        )
+
+
+@dataclass(frozen=True, slots=True)
+class SelfModel:
+    """Emergent self-model projected from owner-scoped semantic beliefs."""
+
+    owner_id: AgentId
+    policy_id: str
+    policy_version: str
+    life_status: LifeStatus | None
+    beliefs: tuple[SelfRelevantBelief, ...]
+    goal_ids: tuple[GoalId, ...]
+    confidence: float
+    candidate_count: int
+    decision_metadata: DecisionMetadata = DecisionMetadata()
+
+    def __post_init__(self) -> None:
+        if type(self.owner_id) is not AgentId:
+            raise TypeError("SelfModel.owner_id must be AgentId")
+        if self.life_status is not None and type(self.life_status) is not LifeStatus:
+            raise TypeError("SelfModel.life_status must be LifeStatus or None")
+        object.__setattr__(
+            self,
+            "policy_id",
+            require_bounded_text(
+                "SelfModel.policy_id",
+                self.policy_id,
+                max_length=_MAX_COMPONENT_VERSION_CHARS,
+            ),
+        )
+        object.__setattr__(
+            self,
+            "policy_version",
+            require_bounded_text(
+                "SelfModel.policy_version",
+                self.policy_version,
+                max_length=_MAX_COMPONENT_VERSION_CHARS,
+            ),
+        )
+        if isinstance(self.beliefs, (set, frozenset, Mapping)):
+            raise TypeError("SelfModel.beliefs must be ordered")
+        if isinstance(self.beliefs, (str, bytes)) or not isinstance(
+            self.beliefs, Sequence
+        ):
+            raise TypeError("SelfModel.beliefs must be ordered")
+        beliefs = tuple(self.beliefs)
+        if len(beliefs) > _MAX_MEMORY_REFS:
+            raise ValueError("SelfModel.beliefs exceeds maximum length")
+        seen: set[str] = set()
+        for item in beliefs:
+            if type(item) is not SelfRelevantBelief:
+                raise TypeError("SelfModel.beliefs entries must be SelfRelevantBelief")
+            if item.belief_id.value in seen:
+                raise ValueError("SelfModel.beliefs: duplicate_belief_id")
+            seen.add(item.belief_id.value)
+        object.__setattr__(self, "beliefs", beliefs)
+        object.__setattr__(
+            self,
+            "goal_ids",
+            require_ordered_unique(
+                "SelfModel.goal_ids", self.goal_ids, item_type=GoalId
+            ),
+        )
+        object.__setattr__(
+            self,
+            "confidence",
+            require_confidence("SelfModel.confidence", self.confidence),
+        )
+        object.__setattr__(
+            self,
+            "candidate_count",
+            require_exact_nonneg_int("SelfModel.candidate_count", self.candidate_count),
+        )
+        if type(self.decision_metadata) is not DecisionMetadata:
+            raise TypeError("SelfModel.decision_metadata must be DecisionMetadata")
+
+    @property
+    def belief_ids(self) -> tuple[BeliefId, ...]:
+        return tuple(item.belief_id for item in self.beliefs)
+
+    def __repr__(self) -> str:
+        return (
+            f"SelfModel(owner_id={self.owner_id.value!r}, "
+            f"policy_version={self.policy_version!r}, "
+            f"belief_count={len(self.beliefs)}, "
+            f"candidate_count={self.candidate_count}, "
+            f"goal_count={len(self.goal_ids)}, confidence={self.confidence})"
+        )
+
+
+def _claim_references_owner(claim: SemanticClaim, owner_id: AgentId) -> bool:
+    subject = claim.subject
+    if (
+        subject.kind is ClaimSubjectKind.AGENT
+        and subject.agent_id is not None
+        and subject.agent_id == owner_id
+    ):
+        return True
+    value = claim.value
+    if (
+        value.kind is BeliefValueKind.AGENT
+        and value.agent_id is not None
+        and value.agent_id == owner_id
+    ):
+        return True
+    return False
+
+
+def project_self_model(
+    *,
+    owner_id: AgentId,
+    life_status: LifeStatus | None,
+    beliefs: Sequence[SemanticBelief],
+    goal_ids: Sequence[GoalId] = (),
+    policy: SelfModelProjectionPolicy | None = None,
+) -> SelfModel:
+    """Deterministically project an emergent ``SelfModel`` from semantic beliefs."""
+    if type(owner_id) is not AgentId:
+        raise TypeError("project_self_model: invalid_owner")
+    if policy is None:
+        policy = DEFAULT_SELF_MODEL_POLICY
+    elif type(policy) is not SelfModelProjectionPolicy:
+        raise TypeError("project_self_model: invalid_policy")
+    if life_status is not None and type(life_status) is not LifeStatus:
+        raise TypeError("project_self_model: invalid_life_status")
+
+    candidates: list[SemanticBelief] = []
+    for belief in beliefs:
+        if type(belief) is not SemanticBelief:
+            raise TypeError("project_self_model: invalid_belief")
+        if belief.owner_id != owner_id:
+            continue
+        if policy.require_active and belief.activation_state is not (
+            BeliefActivationState.ACTIVE
+        ):
+            continue
+        if belief.confidence.confidence < policy.min_confidence:
+            continue
+        if not _claim_references_owner(belief.claim, owner_id):
+            continue
+        candidates.append(belief)
+
+    candidates.sort(
+        key=lambda item: (
+            -item.confidence.confidence,
+            item.belief_id.value,
+            canonical_claim_identity(item.claim),
+        )
+    )
+    selected = candidates[: policy.max_beliefs]
+    selected_refs = tuple(
+        SelfRelevantBelief(
+            belief_id=item.belief_id,
+            claim=item.claim,
+            confidence=item.confidence.confidence,
+        )
+        for item in selected
+    )
+    if selected_refs:
+        aggregate = sum(item.confidence for item in selected_refs) / len(selected_refs)
+    else:
+        aggregate = 1.0 if not candidates else 0.0
+    # Quantize via require_confidence bounds.
+    aggregate = float(require_confidence("SelfModel.confidence", aggregate))
+    return SelfModel(
+        owner_id=owner_id,
+        policy_id=policy.policy_id,
+        policy_version=policy.version,
+        life_status=life_status,
+        beliefs=selected_refs,
+        goal_ids=tuple(goal_ids),
+        confidence=aggregate,
+        candidate_count=len(candidates),
+        decision_metadata=DecisionMetadata(
+            candidate_count=len(candidates),
+            selection_codes=tuple(item.belief_id.value for item in selected_refs),
+        ),
+    )
+
+
+def project_legacy_self_belief_state(model: SelfModel) -> SelfBeliefState:
+    """Lossy projection onto legacy ``SelfBeliefState`` (IDs only)."""
+    if type(model) is not SelfModel:
+        raise TypeError("project_legacy_self_belief_state: invalid_type")
+    return SelfBeliefState(
+        owner_id=model.owner_id,
+        life_status=model.life_status,
+        belief_ids=model.belief_ids,
+        goal_ids=model.goal_ids,
+        confidence=model.confidence,
+        decision_metadata=model.decision_metadata,
+    )
 
 
 @dataclass(frozen=True, slots=True)
@@ -892,12 +1333,14 @@ class ActionPlan:
 
 @dataclass(frozen=True, slots=True)
 class MemoryUpdateIntent:
-    """Post-cognition memory/belief write intent (not an applied mutation)."""
+    """Post-cognition subjective write intent (not an applied mutation)."""
 
     owner_id: AgentId
     kind: MemoryUpdateKind
     memory: MemoryTrace | None = None
     belief: Belief | None = None
+    belief_revision: object | None = None
+    relationship_revision: object | None = None
 
     def __post_init__(self) -> None:
         if type(self.owner_id) is not AgentId:
@@ -907,17 +1350,57 @@ class MemoryUpdateIntent:
         if self.kind is MemoryUpdateKind.WRITE_MEMORY:
             if type(self.memory) is not MemoryTrace:
                 raise TypeError("WRITE_MEMORY requires MemoryTrace")
-            if self.belief is not None:
-                raise ValueError("WRITE_MEMORY must not carry belief")
+            if (
+                self.belief is not None
+                or self.belief_revision is not None
+                or self.relationship_revision is not None
+            ):
+                raise ValueError("WRITE_MEMORY must not carry other payloads")
             if self.memory.owner_id != self.owner_id:
                 raise ValueError("MemoryTrace.owner_id must match intent owner_id")
         elif self.kind is MemoryUpdateKind.WRITE_BELIEF:
             if type(self.belief) is not Belief:
                 raise TypeError("WRITE_BELIEF requires Belief")
-            if self.memory is not None:
-                raise ValueError("WRITE_BELIEF must not carry memory")
+            if (
+                self.memory is not None
+                or self.belief_revision is not None
+                or self.relationship_revision is not None
+            ):
+                raise ValueError("WRITE_BELIEF must not carry other payloads")
             if self.belief.owner_id != self.owner_id:
                 raise ValueError("Belief.owner_id must match intent owner_id")
+        elif self.kind is MemoryUpdateKind.REVISE_SEMANTIC_BELIEF:
+            from memory.beliefs import BeliefRevisionRequest
+
+            if type(self.belief_revision) is not BeliefRevisionRequest:
+                raise TypeError("REVISE_SEMANTIC_BELIEF requires BeliefRevisionRequest")
+            if (
+                self.memory is not None
+                or self.belief is not None
+                or self.relationship_revision is not None
+            ):
+                raise ValueError("REVISE_SEMANTIC_BELIEF must not carry other payloads")
+            if self.belief_revision.owner_id != self.owner_id:
+                raise ValueError(
+                    "BeliefRevisionRequest.owner_id must match intent owner_id"
+                )
+        elif self.kind is MemoryUpdateKind.REVISE_RELATIONSHIP:
+            from social.relationships import RelationshipRevisionRequest
+
+            if type(self.relationship_revision) is not RelationshipRevisionRequest:
+                raise TypeError(
+                    "REVISE_RELATIONSHIP requires RelationshipRevisionRequest"
+                )
+            if (
+                self.memory is not None
+                or self.belief is not None
+                or self.belief_revision is not None
+            ):
+                raise ValueError("REVISE_RELATIONSHIP must not carry other payloads")
+            if self.relationship_revision.source_id != self.owner_id:
+                raise ValueError(
+                    "RelationshipRevisionRequest.source_id must match intent owner_id"
+                )
         else:  # pragma: no cover - closed enum
             raise ValueError("unsupported MemoryUpdateKind")
 
@@ -934,6 +1417,7 @@ _STAGE_OUTPUT_TYPES: Final[frozenset[type]] = frozenset(
         RetrievedMemoryContext,
         SituationModel,
         SelfBeliefState,
+        SelfModel,
         PossibleFutures,
         MotivationEvaluation,
         SelectedIntention,

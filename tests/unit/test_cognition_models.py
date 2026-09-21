@@ -452,3 +452,40 @@ def test_self_belief_state_goal_ids() -> None:
     )
     assert state.goal_ids[0] == GoalId("goal-1")
     assert "bel-1" not in repr(state)
+
+
+def test_self_model_repr_omits_claim_payload() -> None:
+    from agents.cognition.models import SelfModel, SelfRelevantBelief
+    from memory.beliefs import (
+        BeliefValueKind,
+        ClaimSubject,
+        ClaimSubjectKind,
+        ClaimValue,
+        SemanticClaim,
+    )
+
+    secret = "finds-food-effectively"
+    model = SelfModel(
+        owner_id=AgentId("agent-1"),
+        policy_id="self-model-projection",
+        policy_version="1",
+        life_status=LifeStatus.ALIVE,
+        beliefs=(
+            SelfRelevantBelief(
+                belief_id=BeliefId("bel-1"),
+                claim=SemanticClaim(
+                    subject=ClaimSubject(
+                        kind=ClaimSubjectKind.AGENT, agent_id=AgentId("agent-1")
+                    ),
+                    predicate=secret,
+                    value=ClaimValue(kind=BeliefValueKind.TEXT, text_value="yes"),
+                ),
+                confidence=0.8,
+            ),
+        ),
+        goal_ids=(GoalId("goal-1"),),
+        confidence=0.8,
+        candidate_count=1,
+    )
+    assert secret not in repr(model)
+    assert "yes" not in repr(model)

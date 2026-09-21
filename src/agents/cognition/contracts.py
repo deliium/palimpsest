@@ -23,12 +23,15 @@ from agents.cognition.models import (
     PossibleFutures,
     RetrievedMemoryContext,
     SelectedIntention,
-    SelfBeliefState,
+    SelfModel,
     SituationModel,
+    SubjectiveSnapshot,
 )
 from agents.models import AgentId
+from memory.beliefs import SemanticBelief
 from memory.models import Belief, MemoryTrace
 from social.models import CommunicationEnvelope
+from social.relationships import DirectedRelationshipProfile
 from world.actions import AgentCommand
 from world.observations import Observation
 
@@ -127,6 +130,9 @@ class Perspective:
     memories: tuple[MemoryTrace, ...]
     beliefs: tuple[Belief, ...]
     inbox: tuple[CommunicationEnvelope, ...]
+    semantic_beliefs: tuple[SemanticBelief, ...] = ()
+    relationships: tuple[DirectedRelationshipProfile, ...] = ()
+    snapshot_revision: int = 0
 
     def __post_init__(self) -> None:
         if type(self.agent_id) is not AgentId:
@@ -153,6 +159,43 @@ class Perspective:
                 owner_id=self.agent_id,
             ),
         )
+        object.__setattr__(
+            self,
+            "semantic_beliefs",
+            _owned_tuple(
+                "Perspective.semantic_beliefs",
+                self.semantic_beliefs,
+                model_type=SemanticBelief,
+                owner_id=self.agent_id,
+            ),
+        )
+        if isinstance(self.relationships, (set, frozenset)):
+            raise TypeError("Perspective.relationships must be an ordered sequence")
+        if isinstance(self.relationships, (str, bytes)) or not isinstance(
+            self.relationships, Sequence
+        ):
+            raise TypeError("Perspective.relationships must be an ordered sequence")
+        relationships = tuple(self.relationships)
+        for profile in relationships:
+            if type(profile) is not DirectedRelationshipProfile:
+                raise TypeError(
+                    "Perspective.relationships entries must be "
+                    "DirectedRelationshipProfile"
+                )
+            if profile.source_id != self.agent_id:
+                raise ValueError(
+                    "Perspective.relationships source_id must match agent_id"
+                )
+        object.__setattr__(self, "relationships", relationships)
+        from world.identifiers import require_exact_nonneg_int
+
+        object.__setattr__(
+            self,
+            "snapshot_revision",
+            require_exact_nonneg_int(
+                "Perspective.snapshot_revision", self.snapshot_revision
+            ),
+        )
         if isinstance(self.inbox, (set, frozenset)):
             raise TypeError("Perspective.inbox must be an ordered sequence")
         if isinstance(self.inbox, (str, bytes)) or not isinstance(self.inbox, Sequence):
@@ -168,6 +211,28 @@ class Perspective:
                     "Perspective.inbox envelope recipient_id must match agent_id"
                 )
         object.__setattr__(self, "inbox", inbox)
+
+    def to_snapshot(self) -> SubjectiveSnapshot:
+        """Freeze this perspective into a ``SubjectiveSnapshot``."""
+        return SubjectiveSnapshot(
+            owner_id=self.agent_id,
+            revision=self.snapshot_revision,
+            memories=self.memories,
+            legacy_beliefs=self.beliefs,
+            semantic_beliefs=self.semantic_beliefs,
+            relationships=self.relationships,
+        )
+
+    def __repr__(self) -> str:
+        return (
+            f"Perspective(agent_id={self.agent_id.value!r}, "
+            f"memory_count={len(self.memories)}, "
+            f"belief_count={len(self.beliefs)}, "
+            f"semantic_belief_count={len(self.semantic_beliefs)}, "
+            f"relationship_count={len(self.relationships)}, "
+            f"inbox_count={len(self.inbox)}, "
+            f"snapshot_revision={self.snapshot_revision})"
+        )
 
 
 class CognitionStrategy(Protocol):
@@ -210,14 +275,14 @@ class SituationModeler(Protocol):
 
 
 class SelfStateProjector(Protocol):
-    """Project self/belief identifiers for the owning agent."""
+    """Project an emergent self-model from owner-scoped beliefs."""
 
     async def project(
         self,
         loop_input: CognitiveLoopInput,
         situation: SituationModel,
         memory: RetrievedMemoryContext,
-    ) -> SelfBeliefState: ...
+    ) -> SelfModel: ...
 
 
 class FutureImagination(Protocol):
@@ -227,7 +292,7 @@ class FutureImagination(Protocol):
         self,
         loop_input: CognitiveLoopInput,
         situation: SituationModel,
-        self_state: SelfBeliefState,
+        self_state: SelfModel,
     ) -> PossibleFutures: ...
 
 
@@ -238,7 +303,7 @@ class MotivationEvaluator(Protocol):
         self,
         loop_input: CognitiveLoopInput,
         situation: SituationModel,
-        self_state: SelfBeliefState,
+        self_state: SelfModel,
         futures: PossibleFutures,
     ) -> MotivationEvaluation: ...
 

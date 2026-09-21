@@ -29,6 +29,7 @@ from memory.contracts import (
     MemoryReader,
     MemoryService,
     MemoryWriter,
+    SemanticBeliefReader,
 )
 from memory.models import (
     Belief,
@@ -40,6 +41,13 @@ from memory.service import MemoryServiceError
 from simulation.bootstrap import RegistrationTranslator
 from simulation.lifecycle import ActionSubmission, TickToken, require_action_submission
 from simulation.perception import build_perspective
+from simulation.subjective_state import (
+    SubjectiveMutationBatch,
+    SubjectiveStateError,
+    SubjectiveStateService,
+    subjective_operation_id,
+)
+from social.contracts import RelationshipReader
 from social.models import CommunicationEnvelope
 from world.actions import require_agent_command
 from world.identifiers import require_stable_id
@@ -79,6 +87,7 @@ class AgentRuntimeErrorCode(StrEnum):
     INVALID_UPDATE = "invalid_update"
     INVALID_INPUT = "invalid_input"
     MEMORY_APPLY_FAILED = "memory_apply_failed"
+    SUBJECTIVE_APPLY_FAILED = "subjective_apply_failed"
 
 
 class AgentRuntimeError(Exception):
@@ -208,7 +217,10 @@ class AgentRuntime:
         "_memory_service",
         "_memory_writer",
         "_processed_invocations",
+        "_relationship_reader",
+        "_semantic_belief_reader",
         "_status",
+        "_subjective_state",
         "_translator",
     )
 
@@ -223,6 +235,9 @@ class AgentRuntime:
         belief_reader: BeliefReader,
         belief_writer: BeliefWriter,
         memory_service: MemoryService | None = None,
+        semantic_belief_reader: SemanticBeliefReader | None = None,
+        relationship_reader: RelationshipReader | None = None,
+        subjective_state: SubjectiveStateService | None = None,
         inbox_source: InboxSource | None = None,
         invocation_id_source: InvocationIdSource | None = None,
     ) -> None:
@@ -240,6 +255,9 @@ class AgentRuntime:
         self._belief_reader = belief_reader
         self._belief_writer = belief_writer
         self._memory_service = memory_service
+        self._semantic_belief_reader = semantic_belief_reader
+        self._relationship_reader = relationship_reader
+        self._subjective_state = subjective_state
         self._inbox = inbox_source if inbox_source is not None else EmptyInbox()
         self._invocation_ids = (
             invocation_id_source
@@ -376,15 +394,28 @@ class AgentRuntime:
                 tick=tick,
             )
 
-        # Ownership check via existing perspective builder.
+        # Ownership check via existing perspective builder; freeze snapshot.
         try:
-            build_perspective(
+            semantic_beliefs = (
+                ()
+                if self._semantic_belief_reader is None
+                else self._semantic_belief_reader.snapshot()
+            )
+            relationships = (
+                ()
+                if self._relationship_reader is None
+                else self._relationship_reader.snapshot()
+            )
+            perspective = build_perspective(
                 agent_id=agent_id,
                 observation=observation,
                 translator=self._translator,
                 memories=self._memory_reader.snapshot(),
                 beliefs=self._belief_reader.snapshot(),
                 inbox=self._inbox.envelopes_for(agent_id),
+                semantic_beliefs=semantic_beliefs,
+                relationships=relationships,
+                snapshot_revision=self._internal_state.invocation_count,
             )
         except TypeError:
             raise
@@ -404,6 +435,22 @@ class AgentRuntime:
                 agent_id=agent_id.value,
                 tick=tick,
             ) from None
+
+        snapshot = perspective.to_snapshot()
+        _LOG.debug(
+            "runtime_snapshot_frozen",
+            extra={
+                "runtime": {
+                    "agent_id": agent_id.value,
+                    "tick": tick,
+                    "snapshot_revision": snapshot.revision,
+                    "memory_count": len(snapshot.memories),
+                    "legacy_belief_count": len(snapshot.legacy_beliefs),
+                    "semantic_belief_count": len(snapshot.semantic_beliefs),
+                    "relationship_count": len(snapshot.relationships),
+                }
+            },
+        )
 
         if _is_dead_self(observation):
             self._status = AgentRuntimeStatus.TERMINAL
@@ -454,6 +501,7 @@ class AgentRuntime:
             agent_id=agent_id,
             observation=observation,
             internal_state=self._internal_state,
+            snapshot=snapshot,
         )
         try:
             loop_result = await self._loop.run(loop_input, invocation_id=invocation_id)
@@ -481,6 +529,25 @@ class AgentRuntime:
 
         command = require_agent_command(loop_result.command)
         intents = loop_result.memory_update_intents
+        kind_counts = {
+            "write_memory": 0,
+            "write_belief": 0,
+            "revise_semantic_belief": 0,
+            "revise_relationship": 0,
+        }
+        for intent in intents:
+            kind_counts[intent.kind.value] = kind_counts.get(intent.kind.value, 0) + 1
+        _LOG.debug(
+            "runtime_intent_counts",
+            extra={
+                "runtime": {
+                    "agent_id": agent_id.value,
+                    "tick": tick,
+                    "invocation_id": invocation_id,
+                    "intent_counts": kind_counts,
+                }
+            },
+        )
         _prevalidate_updates(
             agent_id,
             intents,
@@ -538,9 +605,13 @@ class AgentRuntime:
         pending_accesses: Sequence[MemoryAccessReceipt],
         pending_reconsolidation: object | None = None,
     ) -> None:
+        from memory.beliefs import BeliefRevisionRequest
         from memory.models import ReconsolidationIntent, ReconstructionRecord
+        from social.relationships import RelationshipRevisionRequest
 
         writes: list[MemoryTrace] = []
+        belief_revisions: list[BeliefRevisionRequest] = []
+        relationship_revisions: list[RelationshipRevisionRequest] = []
         for intent in intents:
             if intent.kind is MemoryUpdateKind.WRITE_MEMORY:
                 assert intent.memory is not None
@@ -548,6 +619,19 @@ class AgentRuntime:
             elif intent.kind is MemoryUpdateKind.WRITE_BELIEF:
                 assert intent.belief is not None
                 self._belief_writer.write(intent.belief)
+            elif intent.kind is MemoryUpdateKind.REVISE_SEMANTIC_BELIEF:
+                assert type(intent.belief_revision) is BeliefRevisionRequest
+                belief_revisions.append(intent.belief_revision)
+            elif intent.kind is MemoryUpdateKind.REVISE_RELATIONSHIP:
+                assert type(intent.relationship_revision) is RelationshipRevisionRequest
+                relationship_revisions.append(intent.relationship_revision)
+            else:  # pragma: no cover - closed enum
+                raise AgentRuntimeError(
+                    AgentRuntimeErrorCode.INVALID_UPDATE,
+                    agent_id=agent_id.value,
+                    invocation_id=invocation_id,
+                    tick=tick,
+                )
 
         reconsolidation_count = 0
         reconstructions: tuple[ReconstructionRecord, ...] = ()
@@ -577,8 +661,83 @@ class AgentRuntime:
             writes.append(derived)
             reconsolidation_count = 1
             reconstructions = (pending_reconsolidation.record,)
-        else:
-            reconstructions = ()
+
+        if self._subjective_state is not None:
+            if self._subjective_state.scope.owner_id != agent_id:
+                raise AgentRuntimeError(
+                    AgentRuntimeErrorCode.OWNERSHIP,
+                    agent_id=agent_id.value,
+                    invocation_id=invocation_id,
+                    tick=tick,
+                )
+            subjective_batch = SubjectiveMutationBatch(
+                operation_id=subjective_operation_id(
+                    owner_id=agent_id, invocation_id=invocation_id
+                ),
+                logical_tick=tick,
+                memory_writes=tuple(writes),
+                memory_accesses=tuple(pending_accesses),
+                reconstructions=reconstructions,
+                belief_revisions=tuple(belief_revisions),
+                relationship_revisions=tuple(relationship_revisions),
+                expected_revision=self._subjective_state.revision,
+            )
+            try:
+                receipt = await self._subjective_state.commit(subjective_batch)
+            except SubjectiveStateError as exc:
+                _LOG.error(
+                    "runtime_subjective_apply_failed",
+                    extra={
+                        "runtime": {
+                            "code": AgentRuntimeErrorCode.SUBJECTIVE_APPLY_FAILED.value,
+                            "agent_id": agent_id.value,
+                            "tick": tick,
+                            "invocation_id": invocation_id,
+                            "reason_code": exc.code.value,
+                            "adapter": exc.adapter,
+                        }
+                    },
+                )
+                raise AgentRuntimeError(
+                    AgentRuntimeErrorCode.SUBJECTIVE_APPLY_FAILED,
+                    agent_id=agent_id.value,
+                    invocation_id=invocation_id,
+                    tick=tick,
+                ) from None
+            _LOG.debug(
+                "runtime_subjective_apply_complete",
+                extra={
+                    "runtime": {
+                        "agent_id": agent_id.value,
+                        "tick": tick,
+                        "invocation_id": invocation_id,
+                        "revision": receipt.revision,
+                        "memory_write_count": receipt.memory_written_count,
+                        "belief_revision_count": receipt.belief_revision_count,
+                        "relationship_revision_count": (
+                            receipt.relationship_revision_count
+                        ),
+                        "idempotent": receipt.idempotent,
+                        "status": "ok",
+                    }
+                },
+            )
+            return
+
+        if belief_revisions or relationship_revisions:
+            _LOG.debug(
+                "runtime_deferred_subjective_intents",
+                extra={
+                    "runtime": {
+                        "agent_id": agent_id.value,
+                        "tick": tick,
+                        "invocation_id": invocation_id,
+                        "deferred_count": (
+                            len(belief_revisions) + len(relationship_revisions)
+                        ),
+                    }
+                },
+            )
 
         if self._memory_service is not None:
             if self._memory_service.scope.owner_id != agent_id:
@@ -588,14 +747,14 @@ class AgentRuntime:
                     invocation_id=invocation_id,
                     tick=tick,
                 )
-            batch = MemoryMutationBatch(
+            memory_batch = MemoryMutationBatch(
                 writes=tuple(writes),
                 accesses=tuple(pending_accesses),
                 reconstructions=reconstructions,
                 operation_id=invocation_id,
             )
             try:
-                applied = await self._memory_service.apply(batch)
+                applied = await self._memory_service.apply(memory_batch)
             except MemoryServiceError as exc:
                 _LOG.error(
                     "runtime_memory_apply_failed",
@@ -709,6 +868,42 @@ def _prevalidate_updates(
                 )
         elif intent.kind is MemoryUpdateKind.WRITE_BELIEF:
             if type(intent.belief) is not Belief:
+                raise AgentRuntimeError(
+                    AgentRuntimeErrorCode.INVALID_UPDATE,
+                    agent_id=agent_id.value,
+                )
+        elif intent.kind is MemoryUpdateKind.REVISE_SEMANTIC_BELIEF:
+            from memory.beliefs import BeliefRevisionRequest
+
+            if type(intent.belief_revision) is not BeliefRevisionRequest:
+                raise AgentRuntimeError(
+                    AgentRuntimeErrorCode.INVALID_UPDATE,
+                    agent_id=agent_id.value,
+                )
+            if intent.belief_revision.owner_id != agent_id:
+                raise AgentRuntimeError(
+                    AgentRuntimeErrorCode.OWNERSHIP,
+                    agent_id=agent_id.value,
+                )
+            if intent.belief_revision.logical_tick != observation.tick:
+                raise AgentRuntimeError(
+                    AgentRuntimeErrorCode.INVALID_UPDATE,
+                    agent_id=agent_id.value,
+                )
+        elif intent.kind is MemoryUpdateKind.REVISE_RELATIONSHIP:
+            from social.relationships import RelationshipRevisionRequest
+
+            if type(intent.relationship_revision) is not RelationshipRevisionRequest:
+                raise AgentRuntimeError(
+                    AgentRuntimeErrorCode.INVALID_UPDATE,
+                    agent_id=agent_id.value,
+                )
+            if intent.relationship_revision.source_id != agent_id:
+                raise AgentRuntimeError(
+                    AgentRuntimeErrorCode.OWNERSHIP,
+                    agent_id=agent_id.value,
+                )
+            if intent.relationship_revision.logical_tick != observation.tick:
                 raise AgentRuntimeError(
                     AgentRuntimeErrorCode.INVALID_UPDATE,
                     agent_id=agent_id.value,

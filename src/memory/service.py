@@ -89,6 +89,27 @@ class InMemoryMemoryService:
     def scope(self) -> MemoryScope:
         return self._scope
 
+    def capture_transaction_state(self) -> object:
+        """Return a deep-enough copy of mutable state for copy-then-swap."""
+        return (
+            dict(self._records),
+            dict(self._reconstructions),
+            dict(self._derivation_edges),
+            set(self._access_ops),
+        )
+
+    def restore_transaction_state(self, state: object) -> None:
+        """Restore mutable state captured by :meth:`capture_transaction_state`."""
+        from typing import Any, cast
+
+        records, reconstructions, edges, access_ops = cast(
+            tuple[Any, Any, Any, Any], state
+        )
+        self._records = dict(records)
+        self._reconstructions = dict(reconstructions)
+        self._derivation_edges = dict(edges)
+        self._access_ops = set(access_ops)
+
     async def retrieve(self, request: MemoryRetrieveRequest) -> MemoryRetrieveResult:
         if type(request) is not MemoryRetrieveRequest:
             _LOG.error(

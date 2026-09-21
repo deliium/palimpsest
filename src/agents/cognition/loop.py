@@ -40,7 +40,7 @@ from agents.cognition.models import (
     PossibleFutures,
     RetrievedMemoryContext,
     SelectedIntention,
-    SelfBeliefState,
+    SelfModel,
     SituationModel,
 )
 from world.actions import require_agent_command
@@ -383,7 +383,7 @@ class CognitiveLoop:
             ordinal=3,
             input_artifact=situation,
             awaitable=self._self_state.project(loop_input, situation, memory),
-            expected_type=SelfBeliefState,
+            expected_type=SelfModel,
         )
         futures = await run_stage(
             kind=ComponentKind.FUTURES,

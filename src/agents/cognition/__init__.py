@@ -24,6 +24,7 @@ from agents.cognition.defaults import (
     PlaceholderFutureImagination,
     StableIntentionSelector,
     StableMotivationEvaluator,
+    SubjectiveRevisionHook,
     WaitFallbackPlanner,
     default_cognitive_loop,
 )
@@ -36,6 +37,7 @@ from agents.cognition.loop import (
 from agents.cognition.memory import ScopedMemoryRetriever
 from agents.cognition.models import (
     BOUNDARY_SCHEMA_VERSION,
+    DEFAULT_SELF_MODEL_POLICY,
     ActionPlan,
     CognitionFailureReason,
     CognitiveLoopInput,
@@ -58,9 +60,14 @@ from agents.cognition.models import (
     RetrievedMemoryContext,
     SelectedIntention,
     SelfBeliefState,
+    SelfModel,
+    SelfModelProjectionPolicy,
+    SelfRelevantBelief,
     SituationClaimCode,
     SituationModel,
     diagnostic_projection,
+    project_legacy_self_belief_state,
+    project_self_model,
     require_confidence,
 )
 from agents.cognition.reconstruction import (
@@ -71,6 +78,7 @@ from agents.cognition.reconstruction import (
 __all__ = [
     "BOUNDARY_SCHEMA_VERSION",
     "COMPONENT_VERSION",
+    "DEFAULT_SELF_MODEL_POLICY",
     "ActionPlan",
     "CognitionContractError",
     "CognitionContractErrorCode",
@@ -116,14 +124,20 @@ __all__ = [
     "ScopedMemoryRetriever",
     "SelectedIntention",
     "SelfBeliefState",
+    "SelfModel",
+    "SelfModelProjectionPolicy",
+    "SelfRelevantBelief",
     "SelfStateProjector",
     "SituationClaimCode",
     "SituationModel",
     "SituationModeler",
     "StableIntentionSelector",
     "StableMotivationEvaluator",
+    "SubjectiveRevisionHook",
     "WaitFallbackPlanner",
     "default_cognitive_loop",
     "diagnostic_projection",
+    "project_legacy_self_belief_state",
+    "project_self_model",
     "require_confidence",
 ]
