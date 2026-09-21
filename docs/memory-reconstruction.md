@@ -2,7 +2,7 @@
 
 [← Cognition and agent runtime](cognition-runtime.md) · [Back to README](../README.md) · [Next Page →](llm-providers.md)
 
-Agent recall is **subjective reconstruction**, not literal replay of stored traces. Downstream cognition consumes `ReconstructedMemory` episodes; ranked source traces remain scientific evidence only.
+Downstream cognition consumes `ReconstructedMemory` episodes as subjective experience evidence for imagination and risk appraisal; ranked source traces remain scientific evidence only. Reconstructions may be inaccurate — different remembered concepts can change subjective risk without changing world truth.
 
 ## Pipeline
 

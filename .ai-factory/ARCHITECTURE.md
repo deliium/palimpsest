@@ -16,7 +16,7 @@ Palimpsest uses a modular-monolith layout of bounded packages under `src/`. Each
 src/
   world/            # agent-facing Observation DTOs + private _state/_perception/_rules/_replay
   agents/           # identity, Agent, goals
-  agents/cognition/ # CognitiveLoop + stage protocols/defaults; LLMMemoryReconstructor
+  agents/cognition/ # CognitiveLoop + stage protocols; ImaginationEngine/MotivationAppraisal/deliberation; LLMMemoryReconstructor
   memory/           # owner-scoped MemoryTrace + semantic beliefs + MemoryService + reconstructive recall
   social/           # communication envelopes + directed relationship profiles
   llm/              # provider-neutral StructuredOutput / LLMResult (no vendor SDKs)

@@ -4,7 +4,7 @@
 
 Provider-neutral structured generation lives in the `llm` package. Public results are only structurally validated Pydantic values plus normalized metadata. They are **not** agent commands, action submissions, or world authority.
 
-API lifespan, FastAPI dependencies, workers, and `compose.yaml` do **not** own a provider yet. Map settings → `ProviderFactoryConfig` in a cognition composition root (for example beside `AgentRuntime`), own lifecycle, translate an exact validated decision schema into a fresh `AgentCommand`, then use normal simulation admission. See [Cognition and agent runtime](cognition-runtime.md). Milestone **M3** remains open until richer cognition policies land.
+API lifespan, FastAPI dependencies, workers, and `compose.yaml` do **not** own a provider yet. Map settings → `ProviderFactoryConfig` in a cognition composition root (for example beside `AgentRuntime`), own lifecycle, translate an exact validated decision schema into a fresh `AgentCommand`, then use normal simulation admission. See [Cognition and agent runtime](cognition-runtime.md). Deterministic V1 imagination/motivation/intention policies are production; the **M3 providers** slice (API/`compose` lifecycle) remains open.
 
 ## Public request / result API
 

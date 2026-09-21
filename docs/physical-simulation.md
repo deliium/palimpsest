@@ -2,7 +2,7 @@
 
 [← LLM providers](llm-providers.md) · [Back to README](../README.md) · [Next Page →](configuration.md)
 
-Objective physical rules for a small discrete world (about 5–10 agents, 10–20 locations, several resource kinds). Psychological fear of death, beliefs, goals, and emotional responses are **not** implemented.
+Objective physical rules for a small discrete world (about 5–10 agents, 10–20 locations, several resource kinds). Physical death is authoritative in `WorldEngine`. Subjective fear-of-death appraisal, beliefs, goals, and drive activations live in cognition only — they never rewrite physical rules or declare an agent dead. See [Cognition and agent runtime](cognition-runtime.md).
 
 ## Topology and capacities
 

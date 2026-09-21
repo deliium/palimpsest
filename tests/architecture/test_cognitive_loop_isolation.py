@@ -153,6 +153,49 @@ def test_no_command_conversion_helpers() -> None:
                 assert node.name not in FORBIDDEN_CONVERSION_NAMES, path.name
 
 
+def test_imagined_futures_are_not_agent_commands() -> None:
+    from typing import get_args
+
+    import world.actions as world_actions
+    from agents.cognition.models import ActionPlan, ImaginedFuture
+    from agents.models import AgentId
+    from world.actions import Wait, require_agent_command
+
+    future = ImaginedFuture(
+        future_id="future-1",
+        claim_codes=(),
+        confidence=1.0,
+    )
+    with pytest.raises(TypeError):
+        require_agent_command(future)
+    with pytest.raises(TypeError):
+        ActionPlan(
+            owner_id=AgentId("agent-1"),
+            command=future,  # type: ignore[arg-type]
+            confidence=1.0,
+        )
+    plan = ActionPlan(owner_id=AgentId("agent-1"), command=Wait(), confidence=1.0)
+    assert type(plan.command) is Wait
+    assert not hasattr(future, "to_agent_command")
+    assert not hasattr(future, "as_agent_command")
+    assert ImaginedFuture not in get_args(world_actions.AgentCommand)
+
+
+def test_facade_exports_production_deliberation_policies() -> None:
+    for name in (
+        "ImaginationEngine",
+        "MotivationAppraisal",
+        "MultiCriteriaIntentionSelector",
+        "CommandPlanner",
+        "IMAGINATION_POLICY_VERSION",
+        "MOTIVATION_POLICY_VERSION",
+        "DELIBERATION_POLICY_VERSION",
+        "PLANNER_POLICY_VERSION",
+    ):
+        assert name in cognition.__all__
+        assert getattr(cognition, name) is not None
+
+
 def test_boundary_record_forbids_sensitive_field_names() -> None:
     for field_name in ComponentBoundaryRecord.__dataclass_fields__:
         assert field_name not in FORBIDDEN_FIELD_NAMES

@@ -10,7 +10,7 @@ Palimpsest is a modular monolith under `src/`. Cross-module imports must target 
 | --- | --- | --- |
 | `world` | Opaque IDs, typed observations, closed commands, immutable events. Private `World` / `WorldState` / operations / rules / physical / transitions | *(none)* |
 | `agents` | Agent identity, goals, and subjective `Agent` contracts | `world` (agent-facing only) |
-| `agents.cognition` | Async `CognitiveLoop`, stage protocols, reconstructive memory stage, `LLMMemoryReconstructor`; sync `CognitionStrategy` retained | `world`, `agents`, `memory`, `social`, `llm` |
+| `agents.cognition` | Async `CognitiveLoop`, stage protocols, reconstructive memory stage, `LLMMemoryReconstructor`, production subjective imagination/motivation/deliberation policies; sync `CognitionStrategy` retained | `world`, `agents`, `memory`, `social`, `llm` |
 | `memory` | Owner-scoped episodic `MemoryTrace`, semantic beliefs/revisions, `MemoryService`, reconstructive recall, scoring/decay | `world`, `agents` (opaque `EventId` only — never `WorldEvent`) |
 | `social` | Opaque communication envelopes and directed relationship profiles (trust/fear/affection/debt/respect/resentment/familiarity/dependency) | `world`, `agents` |
 | `llm` | Provider-neutral structured `LLMProvider` / `LLMResult` | *(none)* |
@@ -32,7 +32,7 @@ Import packages, not private modules:
 
 - `world`: IDs, values, objective models, closed commands, `Observation`, causes/effects, `ActionProposal`, `ActionRequest` (non-authoritative), `WorldEvent`, `detached_mapping`
 - `agents`: `AgentId`, `Agent`, `Goal`, `IdentityTranslator`
-- `agents.cognition`: `CognitiveLoop`, stage protocols/defaults, `CognitionStrategy`, `Perspective`, `SelfModel`, `SubjectiveSnapshot`, `LLMMemoryReconstructor`
+- `agents.cognition`: `CognitiveLoop`, stage protocols/defaults, production `ImaginationEngine` / `MotivationAppraisal` / `MultiCriteriaIntentionSelector` / `CommandPlanner`, `CognitionStrategy`, `Perspective`, `SelfModel`, `SubjectiveSnapshot`, `LLMMemoryReconstructor`
 - `memory`: `MemoryTrace`, `MemoryService`, semantic belief contracts, recall/reconstruction, scoring/decay policies, legacy `Belief`, owner-bound stores, `OwnershipError`
 - `social`: `CommunicationEnvelope`, directed relationship profiles/revisions, legacy `Relationship`, `EnvelopeSender`
 - `llm`: `LLMProvider`, `LLMRequest`, `LLMResult`, `StructuredOutput`, prompts (incl. `reconstructive_memory/v1`), factory
@@ -118,7 +118,7 @@ These are encoded as types and import rules, and enforced by `WorldEngine` for o
 
 ## Deferred scope
 
-No fear-of-death psychology, analysis metrics over cognition receipts, Anthropic-native adapters, pathfinding beyond one adjacent edge, crafting, diseases, revival, or multi-tick sleeping state. Reconstructive recall and append-only reconsolidation are **implemented** (see [Memory reconstruction](memory-reconstruction.md)); LLM-backed reconstruction remains optional and provider lifecycle is not wired into the API/`compose` composition root yet. No Kafka, Kubernetes, Celery, or extra vector databases.
+No Anthropic-native adapters, pathfinding beyond one adjacent edge, crafting, diseases, revival, or multi-tick sleeping state. Psychological **fear of death** is implemented as subjective opportunity foreclosure inside cognition (see [Cognition and agent runtime](cognition-runtime.md)); it does not alter physical death rules. Reconstructive recall and append-only reconsolidation are **implemented** (see [Memory reconstruction](memory-reconstruction.md)); LLM-backed reconstruction remains optional and provider lifecycle is not wired into the API/`compose` composition root yet. No Kafka, Kubernetes, Celery, or extra vector databases.
 
 Production PostgreSQL privilege design for `CREATE EXTENSION` is deferred; development credentials may create `vector`.
 
