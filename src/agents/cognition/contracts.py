@@ -332,13 +332,14 @@ class SelfStateProjector(Protocol):
 
 
 class FutureImagination(Protocol):
-    """Produce bounded imagined futures (placeholder or later LLM-backed)."""
+    """Produce bounded imagined futures from subjective evidence only."""
 
     async def imagine(
         self,
         loop_input: CognitiveLoopInput,
         situation: SituationModel,
         self_state: SelfModel,
+        memory: RetrievedMemoryContext,
     ) -> PossibleFutures: ...
 
 
@@ -355,12 +356,13 @@ class MotivationEvaluator(Protocol):
 
 
 class IntentionSelector(Protocol):
-    """Select one closed intention from motivation scores."""
+    """Select one closed intention from motivation appraisals and futures."""
 
     async def select(
         self,
         loop_input: CognitiveLoopInput,
         motivation: MotivationEvaluation,
+        futures: PossibleFutures,
     ) -> SelectedIntention: ...
 
 

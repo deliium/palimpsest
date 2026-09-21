@@ -108,9 +108,9 @@ async def test_loop_runs_exact_stage_order_once(
             return await super().project(loop_input, situation, memory)
 
     class TrackingFutures(ScriptedFutureImagination):
-        async def imagine(self, loop_input, situation, self_state):  # type: ignore[no-untyped-def]
+        async def imagine(self, loop_input, situation, self_state, memory):  # type: ignore[no-untyped-def]
             calls.append("futures")
-            return await super().imagine(loop_input, situation, self_state)
+            return await super().imagine(loop_input, situation, self_state, memory)
 
     class TrackingMotivation(ScriptedMotivationEvaluator):
         async def evaluate(self, loop_input, situation, self_state, futures):  # type: ignore[no-untyped-def]
@@ -118,9 +118,9 @@ async def test_loop_runs_exact_stage_order_once(
             return await super().evaluate(loop_input, situation, self_state, futures)
 
     class TrackingIntention(ScriptedIntentionSelector):
-        async def select(self, loop_input, motivation):  # type: ignore[no-untyped-def]
+        async def select(self, loop_input, motivation, futures):  # type: ignore[no-untyped-def]
             calls.append("intention")
-            return await super().select(loop_input, motivation)
+            return await super().select(loop_input, motivation, futures)
 
     class TrackingPlanner(ScriptedPlanner):
         async def plan(self, loop_input, intention, futures):  # type: ignore[no-untyped-def]
@@ -243,7 +243,7 @@ async def test_component_exception_short_circuits() -> None:
 @pytest.mark.asyncio
 async def test_cancellation_records_cancelled_boundary() -> None:
     class CancelIntention(ScriptedIntentionSelector):
-        async def select(self, loop_input, motivation):  # type: ignore[no-untyped-def]
+        async def select(self, loop_input, motivation, futures):  # type: ignore[no-untyped-def]
             raise asyncio.CancelledError
 
     with pytest.raises(CognitiveLoopError) as exc_info:

@@ -28,6 +28,20 @@ from agents.cognition.defaults import (
     WaitFallbackPlanner,
     default_cognitive_loop,
 )
+from agents.cognition.deliberation import (
+    DELIBERATION_POLICY_VERSION,
+    PLANNER_POLICY_VERSION,
+    SAFE_SOCIAL_PHRASE,
+    CommandPlanner,
+    MultiCriteriaIntentionSelector,
+)
+from agents.cognition.imagination import (
+    MIN_BELIEF_CONFIDENCE,
+    ImaginationEngine,
+)
+from agents.cognition.imagination import (
+    POLICY_VERSION as IMAGINATION_POLICY_VERSION,
+)
 from agents.cognition.loop import (
     COMPONENT_VERSION,
     CognitiveLoop,
@@ -88,6 +102,14 @@ from agents.cognition.models import (
     project_self_model,
     require_confidence,
 )
+from agents.cognition.motivation import (
+    POLICY_VERSION as MOTIVATION_POLICY_VERSION,
+)
+from agents.cognition.motivation import (
+    MotivationAppraisal,
+    activate_drives,
+    derive_need_pressures,
+)
 from agents.cognition.reconstruction import (
     LLMMemoryReconstructor,
     ReconstructedMemoryCandidate,
@@ -97,6 +119,12 @@ __all__ = [
     "BOUNDARY_SCHEMA_VERSION",
     "COMPONENT_VERSION",
     "DEFAULT_SELF_MODEL_POLICY",
+    "DELIBERATION_POLICY_VERSION",
+    "IMAGINATION_POLICY_VERSION",
+    "MIN_BELIEF_CONFIDENCE",
+    "MOTIVATION_POLICY_VERSION",
+    "PLANNER_POLICY_VERSION",
+    "SAFE_SOCIAL_PHRASE",
     "ActionDirection",
     "ActionPlan",
     "CognitionContractError",
@@ -108,6 +136,7 @@ __all__ = [
     "CognitiveLoopFailure",
     "CognitiveLoopInput",
     "CognitiveLoopResult",
+    "CommandPlanner",
     "ComponentBoundaryRecord",
     "ComponentKind",
     "ComponentStatus",
@@ -122,6 +151,7 @@ __all__ = [
     "FutureImagination",
     "FutureSourceRef",
     "GoalEffect",
+    "ImaginationEngine",
     "ImaginedFuture",
     "IntentionCode",
     "IntentionSelector",
@@ -134,10 +164,12 @@ __all__ = [
     "MemoryUpdateIntent",
     "MemoryUpdateKind",
     "MortalityOpportunityForeclosure",
+    "MotivationAppraisal",
     "MotivationCode",
     "MotivationEvaluation",
     "MotivationEvaluator",
     "MotivationScore",
+    "MultiCriteriaIntentionSelector",
     "OptionSpaceChange",
     "OwnerSafeSocialIdentity",
     "PerceivedNeedPressures",
@@ -170,7 +202,9 @@ __all__ = [
     "UncertaintyBand",
     "WaitFallbackPlanner",
     "action_direction_for_intention",
+    "activate_drives",
     "default_cognitive_loop",
+    "derive_need_pressures",
     "diagnostic_projection",
     "intention_for_action_direction",
     "project_legacy_self_belief_state",

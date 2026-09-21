@@ -1,7 +1,9 @@
-"""Deterministic V1 placeholder cognition components.
+"""Deterministic V1 cognition stage defaults.
 
-These are explicit stand-ins, not production memory or imagination quality.
-They never import or invoke an LLM provider.
+Production imagination, motivation appraisal, intention selection, and
+command planning are wired by ``default_cognitive_loop()``. Perception,
+situation, self-state, and empty-memory helpers remain literal stand-ins
+for retrieval quality and never import or invoke an LLM provider.
 """
 
 from __future__ import annotations
@@ -225,8 +227,9 @@ class PlaceholderFutureImagination:
         loop_input: CognitiveLoopInput,
         situation: SituationModel,
         self_state: SelfModel,
+        memory: RetrievedMemoryContext | None = None,
     ) -> PossibleFutures:
-        _ = self_state
+        _ = self_state, memory
         futures: list[ImaginedFuture] = []
         if SituationClaimCode.TERMINAL_SELF in situation.claim_codes:
             futures.append(
@@ -354,7 +357,9 @@ class StableIntentionSelector:
         self,
         loop_input: CognitiveLoopInput,
         motivation: MotivationEvaluation,
+        futures: PossibleFutures | None = None,
     ) -> SelectedIntention:
+        _ = futures
         if not motivation.scores:
             intention = IntentionCode.WAIT
             source = MotivationCode.WAIT
@@ -647,16 +652,23 @@ class SubjectiveRevisionHook:
 
 
 def default_cognitive_loop() -> CognitiveLoop:
-    """Build a CognitiveLoop wired with deterministic V1 placeholders."""
+    """Build a CognitiveLoop wired with deterministic V1 cognition policies."""
+    from agents.cognition.deliberation import (
+        CommandPlanner,
+        MultiCriteriaIntentionSelector,
+    )
+    from agents.cognition.imagination import ImaginationEngine
+    from agents.cognition.motivation import MotivationAppraisal
+
     _ = _COMPONENT_VERSION
     return CognitiveLoop(
         perception=LiteralPerceptionInterpreter(),
         memory=EmptyMemoryRetriever(),
         situation=DirectSituationModeler(),
         self_state=DirectSelfStateProjector(),
-        futures=PlaceholderFutureImagination(),
-        motivation=StableMotivationEvaluator(),
-        intention=StableIntentionSelector(),
-        planner=WaitFallbackPlanner(),
+        futures=ImaginationEngine(),
+        motivation=MotivationAppraisal(),
+        intention=MultiCriteriaIntentionSelector(),
+        planner=CommandPlanner(),
         memory_updates=EmptyMemoryUpdateHook(),
     )

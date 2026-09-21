@@ -393,8 +393,9 @@ class FakeFutureImagination:
         loop_input: CognitiveLoopInput,
         situation: SituationModel,
         self_state: SelfModel,
+        memory: RetrievedMemoryContext,
     ) -> PossibleFutures:
-        _ = loop_input, situation, self_state
+        _ = loop_input, situation, self_state, memory
         output = self._queue.consume(invocation_id=_active_invocation(), ordinal=4)
         assert type(output) is PossibleFutures
         return output
@@ -443,8 +444,9 @@ class FakeIntentionSelector:
         self,
         loop_input: CognitiveLoopInput,
         motivation: MotivationEvaluation,
+        futures: PossibleFutures,
     ) -> SelectedIntention:
-        _ = loop_input, motivation
+        _ = loop_input, motivation, futures
         output = self._queue.consume(invocation_id=_active_invocation(), ordinal=6)
         assert type(output) is SelectedIntention
         return output

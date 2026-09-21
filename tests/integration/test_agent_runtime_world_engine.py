@@ -1,6 +1,8 @@
 """In-memory AgentRuntime ↔ WorldEngine observation/admission integration.
 
-No PostgreSQL, Docker, network, or real LLM. Uses placeholder/fake cognition.
+No PostgreSQL, Docker, network, or real LLM. Default cognition uses the
+production subjective policies; intentional failure/injection cases still
+constructor-inject placeholder stages and fixed planners.
 """
 
 from __future__ import annotations
@@ -140,6 +142,8 @@ def _loop_with_command(command: object) -> CognitiveLoop:
 async def test_multi_agent_observe_process_resolve_in_registration_order(
     caplog: pytest.LogCaptureFixture,
 ) -> None:
+    from world.actions import require_agent_command
+
     bootstrap = _bootstrap(("agent-1", "body-1"), ("agent-2", "body-2"))
     engine = WorldEngine(config=SimulationRunConfig(seed=21), bootstrap=bootstrap)
     runtimes = {
@@ -159,7 +163,9 @@ async def test_multi_agent_observe_process_resolve_in_registration_order(
             observation, token=batch.token
         )
         assert step.submission is not None
-        assert type(step.submission.command) is Wait
+        # Production policies may Help/Talk/etc. when another body is visible;
+        # admission still requires an exact closed AgentCommand.
+        assert require_agent_command(step.submission.command) is step.submission.command
         submissions.append(step.submission)
 
     assert [item.agent_id.value for item in submissions] == ["agent-1", "agent-2"]

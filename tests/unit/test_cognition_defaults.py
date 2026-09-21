@@ -112,6 +112,54 @@ async def test_defaults_are_deterministic_and_owner_scoped() -> None:
     assert type(perception) is InterpretedPerception
     assert perception.owner_id == AgentId("agent-1")
     assert PerceptionClaimCode.SELF_ALIVE in perception.claim_codes
+    futures = first.boundary_records[4].output_artifact
+    from agents.cognition.models import PossibleFutures
+
+    assert type(futures) is PossibleFutures
+    assert len(futures.futures) >= 1
+
+
+@pytest.mark.asyncio
+async def test_default_loop_critical_thirst_drinks_when_water_visible() -> None:
+    from world.actions import Drink
+    from world.observations import ObservedResource
+    from world.values import ResourceKind
+
+    agent = AgentId("agent-1")
+    loop_input = CognitiveLoopInput(
+        agent_id=agent,
+        observation=Observation(
+            world_id=WorldId("world-1"),
+            observer_id=EntityId("body-1"),
+            revision=WorldRevision(0),
+            tick=1,
+            self_body=ObservedSelf(
+                entity_id=EntityId("body-1"),
+                location_id=EntityId("loc-1"),
+                health=Health(100),
+                hunger=Hunger(0),
+                thirst=Thirst(90),
+                fatigue=Fatigue(0),
+                temperature=TemperatureCelsius(36.5),
+                inventory=(),
+                life_status=LifeStatus.ALIVE,
+                carry_capacity=CarryCapacity(10),
+            ),
+            resources=(
+                ObservedResource(
+                    entity_id=EntityId("water-1"),
+                    name="spring",
+                    kind=ResourceKind.WATER,
+                    quantity=4.0,
+                    unit="L",
+                ),
+            ),
+        ),
+        internal_state=InternalAgentState(owner_id=agent),
+    )
+    result = await default_cognitive_loop().run(loop_input, invocation_id="inv-drink")
+    assert type(result.command) is Drink
+    assert result.command.source_id == EntityId("water-1")
 
 
 @pytest.mark.asyncio

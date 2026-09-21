@@ -389,7 +389,7 @@ class CognitiveLoop:
             kind=ComponentKind.FUTURES,
             ordinal=4,
             input_artifact=self_state,
-            awaitable=self._futures.imagine(loop_input, situation, self_state),
+            awaitable=self._futures.imagine(loop_input, situation, self_state, memory),
             expected_type=PossibleFutures,
         )
         motivation = await run_stage(
@@ -405,7 +405,7 @@ class CognitiveLoop:
             kind=ComponentKind.INTENTION,
             ordinal=6,
             input_artifact=motivation,
-            awaitable=self._intention.select(loop_input, motivation),
+            awaitable=self._intention.select(loop_input, motivation, futures),
             expected_type=SelectedIntention,
         )
         plan = await run_stage(

@@ -130,8 +130,9 @@ class ScriptedFutureImagination:
         loop_input: CognitiveLoopInput,
         situation: SituationModel,
         self_state: SelfModel,
+        memory: RetrievedMemoryContext,
     ) -> PossibleFutures:
-        _ = situation, self_state
+        _ = situation, self_state, memory
         return PossibleFutures(
             owner_id=loop_input.agent_id,
             futures=(
@@ -166,8 +167,9 @@ class ScriptedIntentionSelector:
         self,
         loop_input: CognitiveLoopInput,
         motivation: MotivationEvaluation,
+        futures: PossibleFutures,
     ) -> SelectedIntention:
-        _ = motivation
+        _ = motivation, futures
         return SelectedIntention(
             owner_id=loop_input.agent_id,
             intention=IntentionCode.WAIT,
