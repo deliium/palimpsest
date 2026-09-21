@@ -34,11 +34,17 @@ Establish the modular-monolith foundation: packaging, bounded packages, typed co
 
 **Plan:** `.ai-factory/plans/feature-v1-project-foundation.md`
 
-## Next (deferred)
+## Next
 
-### M3 — Cognition and Providers (not started)
+### M3 — Cognition and Providers (in progress)
 
-Concrete cognition policies and production LLM provider adapters behind existing ports.
+**Delivered (2026-09-21):**
+- Explicit async `CognitiveLoop` + per-agent `AgentRuntime` (plan `v1-agent-runtime-cognitive-loop`)
+- Owner-scoped episodic `MemoryService`, structured `MemoryTrace`, deferred access apply, Alembic `0005` / SQLAlchemy adapter (plan `v1-episodic-memory-traces`)
+
+**Still open:**
+- Richer production cognition policies beyond V1 placeholders
+- LLM provider lifecycle composition in API / `compose.yaml` (factory ports exist)
 
 ### M4 — Persistence and Analysis (persistence complete; analysis deferred)
 

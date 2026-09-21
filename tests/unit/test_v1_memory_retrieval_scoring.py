@@ -21,7 +21,7 @@ from memory.models import (
     MemoryTrace,
     MentionId,
 )
-from memory.scoring import cosine_similarity, matches_filters, rank_traces
+from memory.scoring import cosine_similarity, matches_filters, rank_traces, score_trace
 from world.identifiers import EntityId, WorldRevision
 
 
@@ -166,3 +166,121 @@ def test_matches_filters_require_active() -> None:
     forgotten = replace(forgotten, forgotten_at_tick=3)
     assert matches_filters(forgotten, MemoryQueryFilters(require_active=True)) is False
     assert matches_filters(forgotten, MemoryQueryFilters(require_active=False)) is True
+
+
+def test_all_six_score_components_and_disabled_weights() -> None:
+    location = EntityId("loc-1")
+    related = EntityId("body-2")
+    near = MemoryEmbedding(vector=(1.0, 0.0), model="fake", version="1")
+    base = _trace(
+        memory_id="m-1",
+        created_tick=0,
+        salience=1.0,
+        access_count=8,
+        location="loc-1",
+        entity="body-2",
+        embedding=near,
+    )
+    context = MemoryQueryContext(
+        location_id=location,
+        tags=("camp",),
+        related_entity_ids=(related,),
+    )
+    full = MemoryScoringPolicy(
+        policy_id="all",
+        version="1",
+        weights=MemoryScoreWeights(
+            semantic_relevance=1.0,
+            recency=1.0,
+            emotional_salience=1.0,
+            current_context_overlap=1.0,
+            social_relevance=1.0,
+            access_history=1.0,
+        ),
+        access_history_mode=AccessHistoryMode.FAMILIARITY,
+        embedding_dimension=2,
+    )
+    assert set(full.weights.enabled_components()) == {
+        "semantic_relevance",
+        "recency",
+        "emotional_salience",
+        "current_context_overlap",
+        "social_relevance",
+        "access_history",
+    }
+    score, breakdown, _, _ = score_trace(
+        base,
+        policy=full,
+        current_tick=0,
+        context=context,
+        query_embedding=near,
+        trace_embedding=near,
+    )
+    assert score == pytest.approx(1.0)
+    assert breakdown.semantic_relevance == pytest.approx(1.0)
+    assert breakdown.recency == pytest.approx(1.0)
+    assert breakdown.emotional_salience == pytest.approx(1.0)
+    assert breakdown.current_context_overlap == pytest.approx(1.0)
+    assert breakdown.social_relevance == pytest.approx(1.0)
+    assert breakdown.access_history == pytest.approx(1.0)
+
+    disabled = MemoryScoringPolicy(
+        policy_id="recency-only",
+        version="1",
+        weights=MemoryScoreWeights(
+            semantic_relevance=0.0,
+            recency=1.0,
+            emotional_salience=0.0,
+            current_context_overlap=0.0,
+            social_relevance=0.0,
+            access_history=0.0,
+        ),
+    )
+    assert disabled.weights.enabled_components() == ("recency",)
+    only_recency, only_breakdown, _, _ = score_trace(
+        base,
+        policy=disabled,
+        current_tick=0,
+        context=context,
+        query_embedding=near,
+        trace_embedding=near,
+    )
+    assert only_recency == pytest.approx(1.0)
+    assert only_breakdown.semantic_relevance == pytest.approx(0.0)
+    assert only_recency == pytest.approx(
+        disabled.weights.recency * only_breakdown.recency
+    )
+
+
+def test_context_overlap_and_social_relevance_drive_ranking() -> None:
+    matching = _trace(
+        memory_id="m-match",
+        created_tick=0,
+        location="loc-1",
+        entity="body-2",
+    )
+    other = _trace(memory_id="m-other", created_tick=0)
+    policy = MemoryScoringPolicy(
+        policy_id="context",
+        version="1",
+        weights=MemoryScoreWeights(
+            current_context_overlap=1.0,
+            social_relevance=1.0,
+        ),
+    )
+    hits, _ = rank_traces(
+        (other, matching),
+        policy=policy,
+        current_tick=0,
+        filters=MemoryQueryFilters(),
+        context=MemoryQueryContext(
+            location_id=EntityId("loc-1"),
+            tags=("camp",),
+            related_entity_ids=(EntityId("body-2"),),
+        ),
+        query_embedding=None,
+        embeddings=None,
+        limit=2,
+    )
+    assert [hit.trace.memory_id.value for hit in hits] == ["m-match", "m-other"]
+    assert hits[0].score > hits[1].score

@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from dataclasses import replace
+
 import pytest
 
 from agents.models import AgentId
@@ -12,6 +14,7 @@ from memory.models import (
     MemoryId,
     MemoryMutationBatch,
     MemoryProvenance,
+    MemoryQueryContext,
     MemoryQueryFilters,
     MemoryRetentionPolicy,
     MemoryRetrieveRequest,
@@ -141,3 +144,66 @@ async def test_access_idempotent_and_forget() -> None:
         )
     )
     assert active.candidate_count == 0
+
+
+@pytest.mark.asyncio
+async def test_foreign_owner_adversarial_scores_do_not_leak() -> None:
+    """Foreign higher scores with the same memory_id must not leak on retrieve."""
+    policy = MemoryScoringPolicy(
+        policy_id="default",
+        version="1",
+        weights=MemoryScoreWeights(emotional_salience=1.0, recency=1.0),
+    )
+    alice = InMemoryMemoryService(
+        MemoryScope(run_id=MemoryRunId("run-1"), owner_id=AgentId("alice"))
+    )
+    bob = InMemoryMemoryService(
+        MemoryScope(run_id=MemoryRunId("run-1"), owner_id=AgentId("bob"))
+    )
+    alice_trace = replace(
+        _trace(memory_id="shared", owner="alice", tick=1),
+        emotional_salience=0.1,
+    )
+    bob_trace = replace(
+        _trace(memory_id="shared", owner="bob", tick=9),
+        emotional_salience=1.0,
+    )
+    await alice.apply(MemoryMutationBatch(writes=(alice_trace,)))
+    await bob.apply(MemoryMutationBatch(writes=(bob_trace,)))
+
+    alice_hits = await alice.retrieve(
+        MemoryRetrieveRequest(
+            current_tick=10,
+            scoring_policy=policy,
+            filters=MemoryQueryFilters(),
+            context=MemoryQueryContext(),
+            limit=10,
+        )
+    )
+    assert [hit.trace.memory_id.value for hit in alice_hits.hits] == ["shared"]
+    assert alice_hits.hits[0].trace.owner_id.value == "alice"
+    assert alice_hits.hits[0].trace.emotional_salience == 0.1
+    assert await alice.get(MemoryId("shared")) is not None
+    assert (await alice.get(MemoryId("shared"))).owner_id.value == "alice"  # type: ignore[union-attr]
+    assert await bob.get(MemoryId("missing-for-alice")) is None
+
+
+@pytest.mark.asyncio
+async def test_atomic_batch_rejects_partial_writes() -> None:
+    service = InMemoryMemoryService(
+        MemoryScope(run_id=MemoryRunId("run-1"), owner_id=AgentId("agent-1"))
+    )
+    await service.apply(
+        MemoryMutationBatch(writes=(_trace(memory_id="m-1", owner="agent-1"),))
+    )
+    with pytest.raises(MemoryServiceError) as exc:
+        await service.apply(
+            MemoryMutationBatch(
+                writes=(
+                    _trace(memory_id="m-2", owner="agent-1"),
+                    _trace(memory_id="m-1", owner="agent-1"),
+                )
+            )
+        )
+    assert exc.value.code is MemoryServiceErrorCode.CONFLICT
+    assert await service.get(MemoryId("m-2")) is None
