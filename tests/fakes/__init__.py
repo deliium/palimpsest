@@ -28,7 +28,13 @@ from tests.fakes.llm import (
     ScriptedFailure,
     ScriptedSuccess,
 )
-from tests.fakes.memory import FakeMemoryCallRecord, FakeMemoryService
+from tests.fakes.memory import (
+    FakeEmbedder,
+    FakeEmbedderCallRecord,
+    FakeLogicalTickSource,
+    FakeMemoryCallRecord,
+    FakeMemoryService,
+)
 
 __all__ = [
     "FakeCallRecord",
@@ -36,11 +42,14 @@ __all__ = [
     "FakeCognitionCallRecord",
     "FakeCognitionFailureCode",
     "FakeCognitionHarnessError",
+    "FakeEmbedder",
+    "FakeEmbedderCallRecord",
     "FakeFutureImagination",
     "FakeIntentionSelector",
     "FakeLLMFailureCode",
     "FakeLLMProvider",
     "FakeLLMProviderError",
+    "FakeLogicalTickSource",
     "FakeMemoryCallRecord",
     "FakeMemoryRetriever",
     "FakeMemoryService",

@@ -5,12 +5,23 @@
 ## Boundaries
 
 - `simulation` owns immutable DTOs, repository **ports**, journal codecs, `PersistentSimulationService`, and `ReplayService`.
-- `persistence` implements those ports with async SQLAlchemy. It may import only public `simulation` contracts and generic `infrastructure`.
+- `persistence` implements simulation repository ports and the owner-scoped `MemoryService` with async SQLAlchemy. It may import public `simulation` contracts, public `memory` contracts, and generic `infrastructure`.
 - Domain packages and `simulation` never import SQLAlchemy. `infrastructure` stays domain-neutral.
+- Memory adapters must not import `world.events`, private world authority, event ORM classes, or replay readers.
 
 ## Objective history
 
-Authoritative history is the ordered stream of replay-capable `WorldEvent` records plus per-tick commit rows (including eventless ticks). Payloads store committed effects, not instructions to re-run current rules. Subjective memory and LLM transcripts are outside this stream; cognition replay still needs recorded provider responses or stubs.
+Authoritative history is the ordered stream of replay-capable `WorldEvent` records plus per-tick commit rows (including eventless ticks). Payloads store committed effects, not instructions to re-run current rules. Subjective episodic memory is stored in separate mutable tables (Alembic `0005`) and is never joined into objective replay. LLM transcripts remain outside both streams; cognition replay still needs recorded provider responses or stubs.
+
+## Episodic memory (subjective)
+
+- `MemoryTrace` is a fragmentary structured record (concepts, entity mentions, relations, context, salience, confidence, provenance). It is not a chat transcript and does not require a sentence.
+- Normal services bind `MemoryScope(run_id, owner_id)` via `persistence.create_memory_service(...)`. There is no unscoped admin API.
+- Structured filters reduce candidates before optional pgvector cosine scoring. Retrieval works without embeddings.
+- Scoring uses a versioned `MemoryScoringPolicy` with quantized scores and tie-break `score DESC, created_tick DESC, memory_id ASC` shared by Python and SQL adapters.
+- Decay/forgetting use explicit simulation ticks only (no wall clocks). Soft-forget excludes traces from retrieval; V1 does not hard-delete.
+- Domain serialization uses type `episodic_memory_trace` (`trace_version=1`). Legacy `memory_trace` / arbitrary `content` payloads are rejected.
+- Safe log fields: operation, run/owner IDs, tick, policy version, enabled components, candidate/result/update counts, stable reason codes. Never log fragments, query text, vectors, communications, or SQL parameters.
 
 ## Versions
 
@@ -24,7 +35,7 @@ Authoritative history is the ordered stream of replay-capable `WorldEvent` recor
 | `PERSISTENCE_CODEC_VERSION` | Canonical JSON codec for manifests/snapshots/commits |
 | Derivation v1 / v2 | Deterministic ID/stream derivation (v2 includes rules fingerprint) |
 
-Runs never mix replay schema versions. Legacy schema-v1 audit events remain decodable for export but must not enter the authoritative log. Alembic revision `0004` persists SQL cause/occurrence columns so restored engines reproduce the same next observation as live engines (eventful and eventless prior windows). Observation codecs round-trip every field and provenance type with exact keys.
+Runs never mix replay schema versions. Legacy schema-v1 audit events remain decodable for export but must not enter the authoritative log. Alembic revision `0004` persists SQL cause/occurrence columns so restored engines reproduce the same next observation as live engines (eventful and eventless prior windows). Revision `0005` adds owner-scoped episodic memory tables (mutable; not append-only). Observation codecs round-trip every field and provenance type with exact keys.
 
 ## Append-only store
 

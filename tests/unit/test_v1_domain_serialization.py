@@ -417,3 +417,96 @@ def test_persistence_dtos_remain_unsupported_by_domain_codec() -> None:
     with pytest.raises(DomainSerializationError) as rejected:
         encode_domain(snapshot)
     assert rejected.value.code == "unsupported_type"
+
+
+def test_episodic_memory_trace_round_trip_and_golden() -> None:
+    from agents.models import AgentId
+    from memory.models import (
+        ConceptMention,
+        MemoryId,
+        MemoryProvenance,
+        MemorySituationContext,
+        MemorySourceKind,
+        MemoryTrace,
+        MentionId,
+    )
+
+    trace = MemoryTrace(
+        memory_id=MemoryId("mem-1"),
+        owner_id=AgentId("agent-1"),
+        world_revision=WorldRevision(0),
+        concepts=(ConceptMention(mention_id=MentionId("c1"), concept="campfire"),),
+        entities=(),
+        relations=(),
+        context=MemorySituationContext(),
+        emotional_salience=0.5,
+        confidence=0.9,
+        provenance=MemoryProvenance(
+            kind=MemorySourceKind.DIRECT_OBSERVATION,
+            source_tick=1,
+        ),
+        created_tick=1,
+        source_tick=1,
+        last_access_tick=1,
+        access_count=0,
+    )
+    encoded = encode_domain(trace)
+    assert encoded == (
+        b'{"data":{"access_count":0,"concepts":[{"concept":"campfire",'
+        b'"mention_id":"c1"}],"confidence":0.9,"context":{"location_id":null,'
+        b'"tags":[]},"created_tick":1,"embedding":null,"emotional_salience":0.5,'
+        b'"entities":[],"expires_at_tick":null,"forgotten_at_tick":null,'
+        b'"last_access_tick":1,"lineage":{"generation":0,'
+        b'"supersedes_memory_id":null},"memory_id":"mem-1","owner_id":"agent-1",'
+        b'"provenance":{"kind":"direct_observation","observed_source_id":null,'
+        b'"source_tick":1,"speaker_id":null},"relations":[],"source_tick":1,'
+        b'"trace_version":1,"world_revision":0},"schema_version":1,'
+        b'"type":"episodic_memory_trace"}'
+    )
+    assert decode_domain(encoded) == trace
+
+
+def test_legacy_memory_trace_type_is_rejected() -> None:
+    legacy = (
+        b'{"data":{"content":{"text":"secret-memory"},"memory_id":"mem-1",'
+        b'"owner_id":"agent-1"},"schema_version":1,"type":"memory_trace"}'
+    )
+    with pytest.raises(DomainSerializationError) as rejected:
+        decode_domain(legacy)
+    assert rejected.value.code == "unsupported_legacy_memory_trace"
+    assert "secret-memory" not in str(rejected.value)
+
+
+def test_episodic_memory_rejects_unknown_fields_and_content() -> None:
+    with pytest.raises(DomainSerializationError) as unknown:
+        decode_domain(
+            b'{"data":{"access_count":0,"concepts":[],"confidence":0.9,'
+            b'"context":{"location_id":null,"tags":[]},"created_tick":1,'
+            b'"embedding":null,"emotional_salience":0.5,"entities":[],'
+            b'"expires_at_tick":null,"forgotten_at_tick":null,'
+            b'"last_access_tick":1,"lineage":{"generation":0,'
+            b'"supersedes_memory_id":null},"memory_id":"mem-1",'
+            b'"owner_id":"agent-1","provenance":{"kind":"direct_observation",'
+            b'"observed_source_id":null,"source_tick":1,"speaker_id":null},'
+            b'"relations":[],"source_tick":1,"trace_version":1,'
+            b'"world_revision":0,"extra":1},"schema_version":1,'
+            b'"type":"episodic_memory_trace"}'
+        )
+    assert unknown.value.code == "invalid_fields"
+
+    with pytest.raises(DomainSerializationError) as content:
+        decode_domain(
+            b'{"data":{"access_count":0,"concepts":[],"confidence":0.9,'
+            b'"content":{"text":"nope"},"context":{"location_id":null,"tags":[]},'
+            b'"created_tick":1,"embedding":null,"emotional_salience":0.5,'
+            b'"entities":[],"expires_at_tick":null,"forgotten_at_tick":null,'
+            b'"last_access_tick":1,"lineage":{"generation":0,'
+            b'"supersedes_memory_id":null},"memory_id":"mem-1",'
+            b'"owner_id":"agent-1","provenance":{"kind":"direct_observation",'
+            b'"observed_source_id":null,"source_tick":1,"speaker_id":null},'
+            b'"relations":[],"source_tick":1,"trace_version":1,'
+            b'"world_revision":0},"schema_version":1,'
+            b'"type":"episodic_memory_trace"}'
+        )
+    assert content.value.code == "unsupported_legacy_memory_payload"
+    assert "nope" not in str(content.value)

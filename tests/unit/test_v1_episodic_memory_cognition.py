@@ -18,11 +18,14 @@ from agents.cognition.defaults import (
 from agents.cognition.loop import CognitiveLoop
 from agents.cognition.memory import ScopedMemoryRetriever
 from agents.cognition.models import (
+    ActionPlan,
     CognitiveLoopInput,
     InternalAgentState,
     InterpretedPerception,
     MemoryUpdateIntent,
     MemoryUpdateKind,
+    PossibleFutures,
+    SelectedIntention,
 )
 from agents.models import Agent, AgentId
 from memory.models import (
@@ -275,8 +278,11 @@ async def test_runtime_applies_service_batch_after_successful_cognition() -> Non
 async def test_failed_cognition_does_not_mutate_memory_service() -> None:
     class BoomPlanner:
         async def plan(
-            self, loop_input: object, intention: object, futures: object
-        ) -> object:
+            self,
+            loop_input: CognitiveLoopInput,
+            intention: SelectedIntention,
+            futures: PossibleFutures,
+        ) -> ActionPlan:
             _ = loop_input, intention, futures
             raise RuntimeError("planner boom")
 

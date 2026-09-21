@@ -17,17 +17,17 @@ src/
   world/            # agent-facing Observation DTOs + private _state/_perception/_rules/_replay
   agents/           # identity, Agent, goals
   agents/cognition/ # CognitiveLoop + stage protocols/defaults; CognitionStrategy retained
-  memory/           # owner-bound MemoryTrace/Belief
+  memory/           # owner-scoped episodic MemoryTrace/Belief + MemoryService
   social/           # communication envelopes + Relationship
   llm/              # provider-neutral StructuredOutput / LLMResult (no vendor SDKs)
   llm/prompts/      # immutable versioned prompt package resources
   llm/providers/    # OpenAI-compatible HTTP adapter + pure codec
   simulation/       # WorldEngine, AgentRuntime, bootstrap, lifecycle, codecs, replay
-  persistence/      # SQLAlchemy adapters for simulation repository ports (no domain imports)
+  persistence/      # SQLAlchemy adapters for simulation ports + MemoryService
   analysis/         # read-only event/export protocols
   api/              # FastAPI composition root (no LLM provider wiring yet)
   infrastructure/   # settings (incl. PALIMPSEST_LLM_*), logging, database adapters
-alembic/            # migrations (pgvector + event store + occurrence context)
+alembic/            # migrations (pgvector + event store + occurrence + episodic memory)
 tests/
   unit/ architecture/ integration/ compose/ typecheck/ fakes/
 ```
@@ -41,7 +41,7 @@ tests/
 - ✅ `llm` uses stdlib `logging` only (metadata allowlist; no `exc_info` / structlog / payload fields)
 - ✅ `agents.cognition` may import public contracts from agents/world/memory/social/llm
 - ✅ `simulation` may import domain public contracts; must not import `api`, `analysis`, `infrastructure`, or `persistence`
-- ✅ `persistence` may import public `simulation` contracts and `infrastructure` only
+- ✅ `persistence` may import public `simulation` contracts, public `memory` contracts, and `infrastructure`
 - ✅ `api` may import `simulation`, `infrastructure`, and `persistence`
 - ✅ `analysis` is read-only over immutable events / export contracts
 - ✅ `infrastructure` imports no domain policy
@@ -57,7 +57,8 @@ tests/
 - Composition root (`api`) loads settings, configures logging, and owns database lifespan
 - LLM settings exist under `PALIMPSEST_LLM_*`; factory construction stays standalone in `llm.factory` until a cognition consumer owns lifecycle composition (API/`compose.yaml` unchanged)
 - `WorldEngine` owns observation tokens, ordered admission, private batch preparation, and atomic commit
-- `AgentRuntime` owns per-agent cognition invocation and `ActionSubmission` construction from an engine-issued token; cognition never sees `TickToken` or `WorldState`
+- `AgentRuntime` owns per-agent cognition invocation, deferred memory apply, and `ActionSubmission` construction from an engine-issued token; cognition never sees `TickToken` or `WorldState`
+- Owner-scoped episodic memory uses structured `MemoryTrace` values; durable adapter is `persistence.create_memory_service(scope=..., ...)`; mutable subjective tables are outside append-only authoritative history
 - Private `PerceptionService` projects one agent-specific `Observation` from tick-start state + prior committed events; cognition receives it only via `observation_for` / `AgentRuntime` / `build_perspective`
 - Async `LLMProvider.generate(LLMRequest[T]) -> LLMResult[T]` returns only strict `StructuredOutput` plus normalized metadata; raw provider text/mappings never leave the adapter
 - Structurally valid LLM output remains non-authoritative. Cognition must translate an exact decision schema into a fresh `AgentCommand`, then use normal `ActionSubmission` / admission / world-operation gates

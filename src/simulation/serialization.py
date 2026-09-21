@@ -148,6 +148,8 @@ from world.values import (
 )
 
 SCHEMA_VERSION: Final[int] = 1
+EPISODIC_MEMORY_TRACE_VERSION: Final[int] = 1
+EPISODIC_MEMORY_TRACE_TYPE: Final[str] = "episodic_memory_trace"
 _INT64_MIN = -(2**63)
 _INT64_MAX = 2**63 - 1
 
@@ -306,7 +308,7 @@ def _encode_top(value: object, *, path: str) -> tuple[str, dict[str, Any]]:
     if type(value) is Goal:
         return "goal", _encode_goal(value)
     if type(value) is MemoryTrace:
-        return "memory_trace", _encode_memory_trace(value)
+        return EPISODIC_MEMORY_TRACE_TYPE, _encode_memory_trace(value)
     if type(value) is Belief:
         return "belief", _encode_belief(value)
     if type(value) is Relationship:
@@ -348,6 +350,8 @@ def _decode_top(
     if tag == "goal":
         return _decode_goal(data, path=path)
     if tag == "memory_trace":
+        raise DomainSerializationError("unsupported_legacy_memory_trace", path)
+    if tag == EPISODIC_MEMORY_TRACE_TYPE:
         return _decode_memory_trace(data, path=path)
     if tag == "belief":
         return _decode_belief(data, path=path)
@@ -1027,11 +1031,14 @@ def _encode_memory_trace(value: MemoryTrace) -> dict[str, Any]:
             for item in value.relations
         ],
         "source_tick": value.source_tick,
+        "trace_version": EPISODIC_MEMORY_TRACE_VERSION,
         "world_revision": value.world_revision.value,
     }
 
 
 def _decode_memory_trace(data: dict[str, Any], *, path: str) -> MemoryTrace:
+    if "content" in data:
+        raise DomainSerializationError("unsupported_legacy_memory_payload", path)
     _require_keys(
         data,
         {
@@ -1052,10 +1059,16 @@ def _decode_memory_trace(data: dict[str, Any], *, path: str) -> MemoryTrace:
             "provenance",
             "relations",
             "source_tick",
+            "trace_version",
             "world_revision",
         },
         path=path,
     )
+    trace_version = _int_field(data, "trace_version", path=path)
+    if trace_version != EPISODIC_MEMORY_TRACE_VERSION:
+        raise DomainSerializationError(
+            "unsupported_trace_version", f"{path}.trace_version"
+        )
     concepts_raw = data["concepts"]
     entities_raw = data["entities"]
     relations_raw = data["relations"]

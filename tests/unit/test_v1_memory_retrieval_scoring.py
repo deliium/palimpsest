@@ -36,7 +36,7 @@ def _trace(
     entity: str | None = None,
     embedding: MemoryEmbedding | None = None,
 ) -> MemoryTrace:
-    entities = ()
+    entities: tuple[EntityMention, ...] = ()
     if entity is not None:
         entities = (
             EntityMention(

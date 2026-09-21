@@ -103,3 +103,44 @@ def test_create_memory_service_requires_scope_and_session() -> None:
     )
     assert isinstance(service, SqlAlchemyMemoryService)
     assert service.scope == scope
+
+
+_FORBIDDEN_NONDET = frozenset({"random", "secrets", "uuid", "time", "datetime"})
+
+
+def test_memory_and_adapter_avoid_nondeterministic_clocks_and_randomness() -> None:
+    roots = (
+        SRC / "memory",
+        SRC / "persistence" / "memory_sqlalchemy.py",
+        SRC / "persistence" / "memory_orm.py",
+        SRC / "agents" / "cognition" / "memory.py",
+    )
+    for root in roots:
+        paths = [root] if root.is_file() else list(root.rglob("*.py"))
+        for path in paths:
+            imported = _imported_modules(path)
+            overlap = {
+                name.split(".", 1)[0]
+                for name in imported
+                if name.split(".", 1)[0] in _FORBIDDEN_NONDET
+            }
+            assert not overlap, f"{path.relative_to(SRC)} imports {sorted(overlap)}"
+
+
+def test_memory_paths_do_not_import_objective_event_authority() -> None:
+    forbidden = {
+        "world.events",
+        "world._state",
+        "simulation.replay",
+        "simulation.journal",
+        "persistence.orm",
+        "persistence.readers",
+        "persistence.sqlalchemy",
+    }
+    paths = list((SRC / "memory").rglob("*.py"))
+    paths.append(SRC / "persistence" / "memory_sqlalchemy.py")
+    paths.append(SRC / "agents" / "cognition" / "memory.py")
+    for path in paths:
+        imported = _imported_modules(path)
+        overlap = imported & forbidden
+        assert not overlap, f"{path.relative_to(SRC)} imports {sorted(overlap)}"

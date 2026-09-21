@@ -11,11 +11,11 @@ Palimpsest is a modular monolith under `src/`. Cross-module imports must target 
 | `world` | Opaque IDs, typed observations, closed commands, immutable events. Private `World` / `WorldState` / operations / rules / physical / transitions | *(none)* |
 | `agents` | Agent identity, goals, and subjective `Agent` contracts | `world` (agent-facing only) |
 | `agents.cognition` | Async `CognitiveLoop`, stage protocols, scientific boundary records; sync `CognitionStrategy` retained | `world`, `agents`, `memory`, `social`, `llm` |
-| `memory` | Owner-bound `MemoryTrace` / `Belief` stores | `world`, `agents` |
+| `memory` | Owner-scoped episodic `MemoryTrace` / `Belief`, `MemoryService`, scoring/decay | `world`, `agents` |
 | `social` | Opaque communication envelopes and relationships | `world`, `agents` |
 | `llm` | Provider-neutral structured `LLMProvider` / `LLMResult` | *(none)* |
 | `simulation` | `WorldEngine`, `AgentRuntime`, bootstrap, lifecycle, seed/clock/RNG/IDs, codecs, persistence ports, durable tick service, replay | `world`, `agents`, `agents.cognition`, `memory`, `social`, `llm` |
-| `persistence` | SQLAlchemy adapters for simulation repository ports | `simulation`, `infrastructure` |
+| `persistence` | SQLAlchemy adapters for simulation repositories and owner-scoped memory | `simulation`, `infrastructure`, `memory` |
 | `api` | HTTP composition root | `simulation`, `infrastructure`, `persistence` |
 | `analysis` | Read-only event/export sources | `world`, `simulation` |
 | `infrastructure` | Settings, logging, PostgreSQL adapters | *(none of the domain packages)* |
@@ -33,11 +33,11 @@ Import packages, not private modules:
 - `world`: IDs, values, objective models, closed commands, `Observation`, causes/effects, `ActionProposal`, `ActionRequest` (non-authoritative), `WorldEvent`, `detached_mapping`
 - `agents`: `AgentId`, `Agent`, `Goal`, `IdentityTranslator`
 - `agents.cognition`: `CognitiveLoop`, stage protocols/defaults, `CognitionStrategy`, `Perspective`
-- `memory`: `MemoryTrace`, `Belief`, owner-bound stores, `OwnershipError`
+- `memory`: `MemoryTrace`, `MemoryService`, scoring/decay policies, `Belief`, owner-bound stores, `OwnershipError`
 - `social`: `CommunicationEnvelope`, `Relationship`, `EnvelopeSender`
 - `llm`: `LLMProvider`, `LLMRequest`, `LLMResult`, `StructuredOutput`, prompts, factory
 - `simulation`: `WorldEngine`, `AgentRuntime`, `WorldBootstrap`, lifecycle types, `build_perspective`, persistence DTOs/ports, `PersistentSimulationService`, `ReplayService`, codecs, deterministic IDs/RNG/clock, export ports
-- `persistence`: repository factories (`create_run_repository`, …)
+- `persistence`: repository factories and `create_memory_service` (always requires `MemoryScope`)
 - `analysis`: `EventSource`, `ExportSource`
 - `api`: `create_app`
 - `infrastructure`: `load_settings`, `configure_logging`, `create_database_resources`
@@ -102,7 +102,7 @@ These are encoded as types and import rules, and enforced by `WorldEngine` for o
 5. **LLM output is untrusted.** Structurally validated `LLMResult` / `StructuredOutput` cannot mutate world state or become commands without an explicit cognition translation step.
 6. **`WorldEvent` is immutable.** Closed occurrence details; no open payloads. Rejected/conflicted/duplicate outcomes emit no world events.
 7. **Memories and beliefs may be wrong.** They are mutable owner-bound aggregates (`MemoryTrace` / `Belief`).
-8. **Memory is agent-scoped.** Stores reject cross-owner writes; nothing shares memory automatically.
+8. **Memory is agent- and run-scoped.** Normal `MemoryService` instances bind one `MemoryScope(run_id, owner_id)`. Stores reject cross-owner writes; retrieval never joins objective events.
 9. **Information crosses agents only via perception and explicit communication.** Envelopes cannot carry memory traces or `Agent` values.
 10. **Randomness is injected from an explicit seed.** `SimulationRunConfig.seed` is required; only `simulation.randomness` may use `random.Random` instances. Seeds are never logged.
 11. **Cognition is a strategy protocol.** `CognitionStrategy.propose(perspective)` returns `AgentCommand` and has no LLM, repository, `WorldState`, or mutation capability in its signature.
@@ -116,7 +116,7 @@ These are encoded as types and import rules, and enforced by `WorldEngine` for o
 
 ## Deferred scope
 
-No fear-of-death psychology, production memory retrieval, analysis metrics over cognition receipts, Anthropic-native adapters, pathfinding beyond one adjacent edge, crafting, diseases, revival, or multi-tick sleeping state. Provider lifecycle is not wired into the API/`compose` composition root yet. No Kafka, Kubernetes, Celery, or extra vector databases.
+No fear-of-death psychology, generative memory reconstruction/reconsolidation, analysis metrics over cognition receipts, Anthropic-native adapters, pathfinding beyond one adjacent edge, crafting, diseases, revival, or multi-tick sleeping state. V1 episodic placeholders and structured retrieval are not production imagination quality. Provider lifecycle is not wired into the API/`compose` composition root yet. No Kafka, Kubernetes, Celery, or extra vector databases.
 
 Production PostgreSQL privilege design for `CREATE EXTENSION` is deferred; development credentials may create `vector`.
 

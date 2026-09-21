@@ -36,18 +36,21 @@ The synchronous `CognitionStrategy.propose(Perspective)` contract remains for ex
 
 ## Placeholders and fakes
 
-`agents.cognition.defaults.default_cognitive_loop()` wires deterministic V1 placeholders (literal perception, empty memory retrieval, stable motive/intention selection, `Wait` planner). These are **not** production memory or imagination quality and never call an LLM.
+`agents.cognition.defaults.default_cognitive_loop()` wires deterministic V1 placeholders (literal perception, empty memory retrieval unless a `MemoryService` is injected, stable motive/intention selection, `Wait` planner). These are **not** production memory or imagination quality and never call an LLM.
 
-`tests/fakes/cognition.py` provides scriptable per-stage fakes keyed by `(invocation_id, ordinal)` with metadata-only call records. Use `invocation_context(...)` around scripted runs.
+`agents.cognition.memory.ScopedMemoryRetriever` derives an owner-scoped query from the loop input, calls a bound `MemoryService.retrieve()`, and maps ranked snapshots into `RetrievedMemoryContext` plus pending access receipts. `AgentRuntime` applies receipts and write intents atomically through `MemoryService.apply()` only after cognition succeeds.
+
+`tests/fakes/cognition.py` and `tests/fakes/memory.py` provide scriptable fakes (including `FakeEmbedder` / `FakeLogicalTickSource`) with metadata-only call records.
 
 ## AgentRuntime
 
 `simulation.AgentRuntime` is the trusted composition boundary:
 
 1. `start()` → `ACTIVE`
-2. `process_observation(observation, token=TickToken)` builds a perspective (ownership check), runs cognition, applies validated memory intents, returns `ActionSubmission(token, agent_id, command)`
+2. `process_observation(observation, token=TickToken)` builds a perspective (ownership check), runs cognition, applies validated memory intents / pending access receipts, returns `ActionSubmission(token, agent_id, command)`
 3. Dead self in the observation → `TERMINAL` (no cognition, no submission)
 4. Cognition failure → no submission and no memory mutation
+5. Memory updates describe the committed observation and internal decision process — not uncommitted action outcomes
 
 Cognition never sees `TickToken`, `WorldState`, or private world modules. Only simulation constructs submissions; engine admission still derives actor/request/world/revision authority.
 

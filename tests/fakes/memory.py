@@ -7,6 +7,7 @@ from enum import StrEnum
 
 from memory.models import (
     MemoryApplyResult,
+    MemoryEmbedding,
     MemoryForgetRequest,
     MemoryForgetResult,
     MemoryId,
@@ -18,6 +19,9 @@ from memory.models import (
 )
 
 __all__ = [
+    "FakeEmbedder",
+    "FakeEmbedderCallRecord",
+    "FakeLogicalTickSource",
     "FakeMemoryCallRecord",
     "FakeMemoryService",
 ]
@@ -25,6 +29,8 @@ __all__ = [
 
 class FakeMemoryFailureCode(StrEnum):
     FOREIGN_OWNER = "foreign_owner"
+    UNKNOWN_EMBED_KEY = "unknown_embed_key"
+    DIMENSION_MISMATCH = "dimension_mismatch"
 
 
 @dataclass(frozen=True, slots=True)
@@ -42,6 +48,98 @@ class FakeMemoryCallRecord:
             f"FakeMemoryCallRecord(operation={self.operation!r}, "
             f"owner_id={self.owner_id!r}, write_count={self.write_count}, "
             f"access_count={self.access_count}, result_count={self.result_count})"
+        )
+
+
+@dataclass(frozen=True, slots=True)
+class FakeEmbedderCallRecord:
+    key: str
+    dimension: int
+    status: str
+
+    def __repr__(self) -> str:
+        return (
+            f"FakeEmbedderCallRecord(key={self.key!r}, "
+            f"dimension={self.dimension}, status={self.status!r})"
+        )
+
+
+class FakeLogicalTickSource:
+    """Explicit logical tick source; never reads wall clocks."""
+
+    def __init__(self, initial: int = 0) -> None:
+        if isinstance(initial, bool) or not isinstance(initial, int) or initial < 0:
+            raise ValueError("FakeLogicalTickSource: invalid_initial_tick")
+        self._tick = initial
+
+    def current(self) -> int:
+        return self._tick
+
+    def advance(self, steps: int = 1) -> int:
+        if isinstance(steps, bool) or not isinstance(steps, int) or steps < 1:
+            raise ValueError("FakeLogicalTickSource: invalid_steps")
+        self._tick += steps
+        return self._tick
+
+    def __repr__(self) -> str:
+        return f"FakeLogicalTickSource(tick={self._tick})"
+
+
+class FakeEmbedder:
+    """Scriptable embedder keyed by canonical strings; metadata-only call history."""
+
+    def __init__(
+        self,
+        *,
+        vectors: dict[str, tuple[float, ...]],
+        model: str = "fake",
+        version: str = "1",
+    ) -> None:
+        if not vectors:
+            raise ValueError("FakeEmbedder: empty_vectors")
+        dims = {len(vector) for vector in vectors.values()}
+        if len(dims) != 1:
+            raise ValueError("FakeEmbedder: inconsistent_dimensions")
+        self._vectors = {key: tuple(vector) for key, vector in vectors.items()}
+        self._dimension = next(iter(dims))
+        self._model = model
+        self._version = version
+        self.calls: list[FakeEmbedderCallRecord] = []
+
+    @property
+    def dimension(self) -> int:
+        return self._dimension
+
+    def embed(self, key: str, *, dimension: int | None = None) -> MemoryEmbedding:
+        expected = self._dimension if dimension is None else dimension
+        if expected != self._dimension:
+            self.calls.append(
+                FakeEmbedderCallRecord(
+                    key=key,
+                    dimension=expected,
+                    status=FakeMemoryFailureCode.DIMENSION_MISMATCH.value,
+                )
+            )
+            raise ValueError(FakeMemoryFailureCode.DIMENSION_MISMATCH.value)
+        vector = self._vectors.get(key)
+        if vector is None:
+            self.calls.append(
+                FakeEmbedderCallRecord(
+                    key=key,
+                    dimension=expected,
+                    status=FakeMemoryFailureCode.UNKNOWN_EMBED_KEY.value,
+                )
+            )
+            raise ValueError(FakeMemoryFailureCode.UNKNOWN_EMBED_KEY.value)
+        self.calls.append(
+            FakeEmbedderCallRecord(key=key, dimension=expected, status="ok")
+        )
+        return MemoryEmbedding(vector=vector, model=self._model, version=self._version)
+
+    def __repr__(self) -> str:
+        return (
+            f"FakeEmbedder(dimension={self._dimension}, "
+            f"key_count={len(self._vectors)}, call_count={len(self.calls)})"
         )
 
 

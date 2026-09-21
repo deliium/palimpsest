@@ -50,12 +50,12 @@ Development credentials in `compose.yaml` are **not production**. `docker compos
 | Page | Contents |
 | --- | --- |
 | [Architecture](docs/architecture.md) | Bounded packages, `WorldEngine` lifecycle, perception boundary, eleven invariants |
-| [Cognition and agent runtime](docs/cognition-runtime.md) | `CognitiveLoop` stages, `AgentRuntime`, placeholders/fakes, metadata-only logs |
+| [Cognition and agent runtime](docs/cognition-runtime.md) | `CognitiveLoop` stages, `AgentRuntime`, episodic memory hooks, placeholders/fakes, metadata-only logs |
 | [LLM providers](docs/llm-providers.md) | Structured `LLMProvider`, modes, retries, prompts, local OpenAI-compatible config, fakes |
 | [Physical simulation](docs/physical-simulation.md) | Topology, capacities, actions, physiology, death, schema-v4, tests |
 | [Configuration](docs/configuration.md) | `PALIMPSEST_` settings (including `PALIMPSEST_LLM_*`), logging, redaction, seeds, identifiers, clocks |
 | [Development](docs/development.md) | Tests, migrations, local and Docker workflows, exact commands |
-| [Persistence](docs/persistence.md) | Event store, append-only guarantees, durable ticks, replay |
+| [Persistence](docs/persistence.md) | Event store, Alembic through `0005`, owner-scoped episodic memory, durable ticks, replay |
 
 ## Invariants (summary)
 
@@ -66,7 +66,7 @@ Development credentials in `compose.yaml` are **not production**. `docker compos
 5. LLM output is untrusted and cannot mutate world state directly (structurally validated `LLMResult` still requires explicit cognition translation).
 6. Objective `WorldEvent` values are immutable closed occurrence facts.
 7. Agent memories and beliefs are mutable and may be incorrect.
-8. Memory is agent-scoped and is never shared automatically.
+8. Memory is agent- and run-scoped and is never shared automatically.
 9. Information crosses agent boundaries only through perception and explicit communication.
 10. Randomness is injected and derived from an explicit simulation seed.
 11. Cognition is a strategy protocol that returns `AgentCommand` over the same world contracts.
