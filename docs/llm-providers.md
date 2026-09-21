@@ -1,10 +1,10 @@
 # LLM Providers
 
-[← Previous Page](architecture.md) · [Back to README](../README.md) · [Next Page →](physical-simulation.md)
+[← Previous Page](cognition-runtime.md) · [Back to README](../README.md) · [Next Page →](physical-simulation.md)
 
 Provider-neutral structured generation lives in the `llm` package. Public results are only structurally validated Pydantic values plus normalized metadata. They are **not** agent commands, action submissions, or world authority.
 
-API lifespan, FastAPI dependencies, workers, and `compose.yaml` do **not** own a provider yet. A future cognition consumer must map settings → `ProviderFactoryConfig`, own lifecycle, translate an exact validated decision schema into a fresh `AgentCommand`, then use normal simulation admission. Milestone **M3** remains open until cognition policies land.
+API lifespan, FastAPI dependencies, workers, and `compose.yaml` do **not** own a provider yet. Map settings → `ProviderFactoryConfig` in a cognition composition root (for example beside `AgentRuntime`), own lifecycle, translate an exact validated decision schema into a fresh `AgentCommand`, then use normal simulation admission. See [Cognition and agent runtime](cognition-runtime.md). Milestone **M3** remains open until richer cognition policies land.
 
 ## Public request / result API
 
@@ -142,5 +142,6 @@ Logger: `llm.openai_compatible` (stdlib). Prompt loader may emit DEBUG reason co
 ## See also
 
 - [Architecture](architecture.md)
+- [Cognition and agent runtime](cognition-runtime.md)
 - [Configuration](configuration.md)
 - [Development](development.md)

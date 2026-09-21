@@ -2,13 +2,14 @@
 
 ## Overview
 
-Palimpsest is a Python 3.12+ modular monolith for reproducible, discrete, text-based multi-agent AI society experiments. The current V1 surface establishes package boundaries, typed domain contracts, an authoritative deterministic `WorldEngine` tick loop with agent-specific perception, schema-versioned event persistence and replay, configuration, an HTTP liveness API, observability, and containers. A provider-neutral async LLM boundary returns only strict structured output plus normalized metadata; agent cognition policy and runtime provider composition remain deferred.
+Palimpsest is a Python 3.12+ modular monolith for reproducible, discrete, text-based multi-agent AI society experiments. The current V1 surface establishes package boundaries, typed domain contracts, an authoritative deterministic `WorldEngine` tick loop with agent-specific perception, an explicit async `CognitiveLoop` and per-agent `AgentRuntime`, schema-versioned event persistence and replay, configuration, an HTTP liveness API, observability, and containers. A provider-neutral async LLM boundary returns only strict structured output plus normalized metadata; richer cognition policies and runtime provider composition in the API remain deferred.
 
 ## Core Features
 
-- Bounded packages for world authority, agents, cognition strategies, memory, social envelopes, LLM trust boundaries, simulation/`WorldEngine`, persistence adapters, analysis ports, API, and infrastructure
+- Bounded packages for world authority, agents, cognition strategies/`CognitiveLoop`, memory, social envelopes, LLM trust boundaries, simulation/`WorldEngine`/`AgentRuntime`, persistence adapters, analysis ports, API, and infrastructure
 - Typed immutable agent-facing `Observation` contracts, private world authority (`World` / `WorldState` / rules / perception / operations), and versioned event/export codecs (replay-v4 occurrence context)
-- Deterministic `PerceptionService` projecting one observation per agent from tick-start state plus prior committed events; cognition routed via `build_perspective`
+- Deterministic `PerceptionService` projecting one observation per agent from tick-start state plus prior committed events; cognition routed via `AgentRuntime` / `build_perspective`
+- Explicit async cognitive pipeline with replaceable stage protocols, scientific boundary records, deterministic placeholders/fakes, and fail-closed runtime lifecycle
 - Async `LLMProvider` with immutable `LLMRequest`/`LLMResult`, strict `StructuredOutput`, versioned prompt resources, and a configurable OpenAI-compatible HTTP adapter (no vendor SDKs)
 - Deterministic seed-derived RNG streams, logical clock, namespaced IDs, and live/restored observation parity
 - `PALIMPSEST_` settings (including disabled-by-default `PALIMPSEST_LLM_*`), structured logging (no observation/communication/LLM payloads), async SQLAlchemy lifecycle, Alembic + pgvector bootstrap

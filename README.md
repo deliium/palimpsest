@@ -2,7 +2,7 @@
 
 Reproducible, discrete, text-based multi-agent AI society experiments.
 
-This repository is a **Python 3.12+ modular monolith**. It establishes package boundaries, V1 typed domain contracts, an authoritative deterministic `WorldEngine` tick loop with V1 physical simulation rules, schema-versioned event persistence and replay, configuration, an HTTP liveness API, observability, and containers. Agent cognition and LLM invocation stay outside the engine.
+This repository is a **Python 3.12+ modular monolith**. It establishes package boundaries, V1 typed domain contracts, an authoritative deterministic `WorldEngine` tick loop with V1 physical simulation rules, an explicit cognitive loop and per-agent runtime, schema-versioned event persistence and replay, configuration, an HTTP liveness API, observability, and containers. LLM invocation stays outside the engine behind a provider-neutral structured boundary.
 
 ## Requirements
 
@@ -50,6 +50,7 @@ Development credentials in `compose.yaml` are **not production**. `docker compos
 | Page | Contents |
 | --- | --- |
 | [Architecture](docs/architecture.md) | Bounded packages, `WorldEngine` lifecycle, perception boundary, eleven invariants |
+| [Cognition and agent runtime](docs/cognition-runtime.md) | `CognitiveLoop` stages, `AgentRuntime`, placeholders/fakes, metadata-only logs |
 | [LLM providers](docs/llm-providers.md) | Structured `LLMProvider`, modes, retries, prompts, local OpenAI-compatible config, fakes |
 | [Physical simulation](docs/physical-simulation.md) | Topology, capacities, actions, physiology, death, schema-v4, tests |
 | [Configuration](docs/configuration.md) | `PALIMPSEST_` settings (including `PALIMPSEST_LLM_*`), logging, redaction, seeds, identifiers, clocks |

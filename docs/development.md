@@ -15,9 +15,11 @@ Do not omit `--frozen` in development or containers. The reference interpreter i
 `simulation.WorldEngine` is the sole public mutation authority. Construct it from `SimulationRunConfig` (required seed) and immutable `WorldBootstrap`, then:
 
 1. `observe()` → `ObservationBatch` with an engine-issued `TickToken` (projections from tick-start state + prior committed window)
-2. Route one observation per agent via `observation_for(AgentId)` / `build_perspective` before cognition
+2. Route one observation per agent via `observation_for(AgentId)` / `AgentRuntime` (or `build_perspective` + `CognitiveLoop`)
 3. Submit an ordered sequence of `ActionSubmission(token, AgentId, AgentCommand)`
 4. `resolve_tick(...)` → `TickResult` and atomic commit to tick N+1
+
+`AgentRuntime` owns per-agent start/active/terminal lifecycle, cognition invocation, memory-update hooks, and submission construction from the engine token. See [Cognition and agent runtime](cognition-runtime.md).
 
 Equivalent bootstrap + seed + ordered submissions must produce identical ticks, revisions, resolutions, objective events, observations, and replay fingerprints. Physical rules and autonomous physiology participate in every committed tick. Perception never invents facts or forms memories. See [Architecture](architecture.md) and [Physical simulation](physical-simulation.md).
 
@@ -37,6 +39,8 @@ uv run --frozen --python 3.12.14 pytest
 | `uv run --frozen --python 3.12.14 pytest tests/unit/test_openai_compatible*.py tests/unit/test_llm_*.py tests/unit/test_fake_llm_provider.py -q` | Provider codec/transport, prompts, factory, fake |
 | `uv run --frozen --python 3.12.14 pytest tests/architecture/test_llm_provider_isolation.py -q` | LLM import/signature/logging isolation |
 | `uv run --frozen --python 3.12.14 pytest tests/unit/test_world_perception*.py tests/unit/test_perception_event_isolation.py -q` | Visibility, noninterference, event audience, routing isolation |
+| `uv run --frozen --python 3.12.14 pytest tests/unit/test_cognition_*.py tests/unit/test_agent_runtime.py tests/architecture/test_cognitive_loop_isolation.py -q` | Cognition models/loop/defaults/runtime isolation |
+| `uv run --frozen --python 3.12.14 pytest -m integration tests/integration/test_agent_runtime_world_engine.py -q` | In-memory AgentRuntime ↔ WorldEngine (no Postgres) |
 | `uv run --frozen --python 3.12.14 pytest -m integration` | Disposable Postgres via `PALIMPSEST_TEST_DATABASE_URL` |
 | `uv run --frozen --python 3.12.14 pytest -m compose` | Compose file checks and optional stack smoke |
 | `uv run --frozen --python 3.12.14 ruff check src tests` | Lint |
@@ -113,5 +117,6 @@ uv run --frozen --python 3.12.14 pytest -m compose
 ## See also
 
 - [Architecture](architecture.md)
+- [Cognition and agent runtime](cognition-runtime.md)
 - [LLM providers](llm-providers.md)
 - [Configuration](configuration.md)

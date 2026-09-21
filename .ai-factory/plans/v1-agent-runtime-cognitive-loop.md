@@ -115,7 +115,7 @@ V1 includes deterministic placeholder memory retrieval and future-imagination co
 
 ### Phase 3: Enforcement, Verification, and Documentation
 
-- [ ] Task 7: Strengthen architecture, privacy, and deterministic behavior gates for cognition/runtime.
+- [x] Task 7: Strengthen architecture, privacy, and deterministic behavior gates for cognition/runtime.
   - Add `tests/architecture/test_cognitive_loop_isolation.py` and extend `tests/architecture/test_world_authority.py`, `tests/architecture/test_import_boundaries.py`, `tests/architecture/test_llm_provider_isolation.py`, and `tests/architecture/boundary_checker.py` only where needed.
   - Enforce that cognition imports no simulation/infrastructure/persistence/API/analysis or private world authority; stage signatures omit world state, engine/tick authority, repositories, and mutable writers; no generic mapping or `LLMResult` conversion helper can produce commands; and only trusted simulation code constructs submissions.
   - Enforce metadata-only logging and artifact schemas: no chain-of-thought/rationale field, raw prompt/output, credentials, endpoint, arbitrary exception, full observation, memory/belief content, or communication body in diagnostics.
@@ -124,7 +124,7 @@ V1 includes deterministic placeholder memory retrieval and future-imagination co
   - Logging requirements: test all configured log levels and `PALIMPSEST_LOG_LEVEL` control. Architecture and privacy failures should identify only file/symbol/field names; they must not print captured sensitive values.
   - Dependencies: Tasks 1-6.
 
-- [ ] Task 8: Document the V1 cognitive pipeline, runtime lifecycle, and extension boundaries.
+- [x] Task 8: Document the V1 cognitive pipeline, runtime lifecycle, and extension boundaries.
   - Update `README.md`, `docs/architecture.md`, `docs/llm-providers.md`, and `docs/development.md` with the explicit stage sequence, async replacement model, runtime/engine trust boundary, typed action flow, memory-hook timing, death/terminal semantics, scientific artifact policy, deterministic fake usage, and exact test commands.
   - Update `.ai-factory/DESCRIPTION.md` and `.ai-factory/ARCHITECTURE.md` through the mandatory `/aif-docs` checkpoint so they no longer describe cognition/runtime composition as wholly deferred. Update `.ai-factory/ROADMAP.md` through its owner workflow only after implementation and verification establish the delivered M3 scope.
   - State clearly that V1 placeholders are not production memory/imagination, no real LLM is required by tests, cognitive artifacts are returned but not durably persisted, hidden chain-of-thought is neither requested nor stored, and all world mutation remains in `WorldEngine`.

@@ -129,8 +129,11 @@ def test_cognition_package_omits_world_authority_symbols() -> None:
     assert "World" not in cognition.__all__
     assert "Perspective" in cognition.__all__
     assert "CognitionStrategy" in cognition.__all__
+    assert "CognitiveLoop" in cognition.__all__
     assert "PerceptionService" not in dir(cognition)
     assert "ObservationBatch" not in dir(cognition)
+    assert "TickToken" not in dir(cognition)
+    assert "ActionSubmission" not in cognition.__all__
 
 
 def test_llm_package_cannot_reach_world_authority_or_engine() -> None:

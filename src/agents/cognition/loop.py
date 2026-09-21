@@ -10,7 +10,7 @@ import logging
 from asyncio import CancelledError
 from collections.abc import Awaitable
 from dataclasses import dataclass
-from typing import Final, TypeVar, cast
+from typing import Any, Final, TypeVar, cast
 
 from agents.cognition.contracts import (
     FutureImagination,
@@ -314,8 +314,9 @@ class CognitiveLoop:
                 )
                 output_artifact: object = intents
             else:
-                confidence = float(getattr(output, "confidence"))
-                metadata_obj = getattr(output, "decision_metadata")
+                typed = cast(Any, output)
+                confidence = float(typed.confidence)
+                metadata_obj = typed.decision_metadata
                 if type(metadata_obj) is not DecisionMetadata:
                     fail(
                         reason=CognitionFailureReason.INVALID_OUTPUT,

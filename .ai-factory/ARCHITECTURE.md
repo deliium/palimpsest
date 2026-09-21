@@ -16,13 +16,13 @@ Palimpsest uses a modular-monolith layout of bounded packages under `src/`. Each
 src/
   world/            # agent-facing Observation DTOs + private _state/_perception/_rules/_replay
   agents/           # identity, Agent, goals
-  agents/cognition/ # CognitionStrategy leaf layer (Perspective → AgentCommand)
+  agents/cognition/ # CognitiveLoop + stage protocols/defaults; CognitionStrategy retained
   memory/           # owner-bound MemoryTrace/Belief
   social/           # communication envelopes + Relationship
   llm/              # provider-neutral StructuredOutput / LLMResult (no vendor SDKs)
   llm/prompts/      # immutable versioned prompt package resources
   llm/providers/    # OpenAI-compatible HTTP adapter + pure codec
-  simulation/       # WorldEngine, bootstrap, lifecycle, build_perspective, codecs, replay
+  simulation/       # WorldEngine, AgentRuntime, bootstrap, lifecycle, codecs, replay
   persistence/      # SQLAlchemy adapters for simulation repository ports (no domain imports)
   analysis/         # read-only event/export protocols
   api/              # FastAPI composition root (no LLM provider wiring yet)
@@ -57,9 +57,10 @@ tests/
 - Composition root (`api`) loads settings, configures logging, and owns database lifespan
 - LLM settings exist under `PALIMPSEST_LLM_*`; factory construction stays standalone in `llm.factory` until a cognition consumer owns lifecycle composition (API/`compose.yaml` unchanged)
 - `WorldEngine` owns observation tokens, ordered admission, private batch preparation, and atomic commit
-- Private `PerceptionService` projects one agent-specific `Observation` from tick-start state + prior committed events; cognition receives it only via `observation_for` / `build_perspective`
+- `AgentRuntime` owns per-agent cognition invocation and `ActionSubmission` construction from an engine-issued token; cognition never sees `TickToken` or `WorldState`
+- Private `PerceptionService` projects one agent-specific `Observation` from tick-start state + prior committed events; cognition receives it only via `observation_for` / `AgentRuntime` / `build_perspective`
 - Async `LLMProvider.generate(LLMRequest[T]) -> LLMResult[T]` returns only strict `StructuredOutput` plus normalized metadata; raw provider text/mappings never leave the adapter
-- Structurally valid LLM output remains non-authoritative. Future cognition must translate an exact decision schema into a fresh `AgentCommand`, then use normal `ActionSubmission` / admission / world-operation gates
+- Structurally valid LLM output remains non-authoritative. Cognition must translate an exact decision schema into a fresh `AgentCommand`, then use normal `ActionSubmission` / admission / world-operation gates
 - Analysis consumes immutable exports/events, never live mutable repositories
 
 ## Key Principles
@@ -123,5 +124,6 @@ llm_result.to_agent_command()               # does not exist
 ## See Also
 
 - `docs/architecture.md` — contributor-facing matrix, WorldEngine lifecycle, perception boundary, and invariants
+- `.ai-factory/plans/v1-agent-runtime-cognitive-loop.md` — cognitive loop and AgentRuntime plan
 - `.ai-factory/plans/llm-provider-abstraction.md` — provider-neutral LLM boundary plan
 - `.ai-factory/plans/perception-observation-system.md` — perception plan

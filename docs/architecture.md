@@ -1,6 +1,6 @@
 # Architecture
 
-[Back to README](../README.md) · [Next Page →](llm-providers.md)
+[Back to README](../README.md) · [Next Page →](cognition-runtime.md)
 
 Palimpsest is a modular monolith under `src/`. Cross-module imports must target a package `__init__.py` facade or names listed in `__all__`. Private modules (leading `_`) are not cross-boundary APIs.
 
@@ -10,11 +10,11 @@ Palimpsest is a modular monolith under `src/`. Cross-module imports must target 
 | --- | --- | --- |
 | `world` | Opaque IDs, typed observations, closed commands, immutable events. Private `World` / `WorldState` / operations / rules / physical / transitions | *(none)* |
 | `agents` | Agent identity, goals, and subjective `Agent` contracts | `world` (agent-facing only) |
-| `agents.cognition` | Strategy protocol; returns non-authoritative `AgentCommand` | `world`, `agents`, `memory`, `social`, `llm` |
+| `agents.cognition` | Async `CognitiveLoop`, stage protocols, scientific boundary records; sync `CognitionStrategy` retained | `world`, `agents`, `memory`, `social`, `llm` |
 | `memory` | Owner-bound `MemoryTrace` / `Belief` stores | `world`, `agents` |
 | `social` | Opaque communication envelopes and relationships | `world`, `agents` |
 | `llm` | Provider-neutral structured `LLMProvider` / `LLMResult` | *(none)* |
-| `simulation` | `WorldEngine`, bootstrap, lifecycle, seed/clock/RNG/IDs, codecs, persistence ports, durable tick service, replay | `world`, `agents`, `agents.cognition`, `memory`, `social`, `llm` |
+| `simulation` | `WorldEngine`, `AgentRuntime`, bootstrap, lifecycle, seed/clock/RNG/IDs, codecs, persistence ports, durable tick service, replay | `world`, `agents`, `agents.cognition`, `memory`, `social`, `llm` |
 | `persistence` | SQLAlchemy adapters for simulation repository ports | `simulation`, `infrastructure` |
 | `api` | HTTP composition root | `simulation`, `infrastructure`, `persistence` |
 | `analysis` | Read-only event/export sources | `world`, `simulation` |
@@ -32,11 +32,11 @@ Import packages, not private modules:
 
 - `world`: IDs, values, objective models, closed commands, `Observation`, causes/effects, `ActionProposal`, `ActionRequest` (non-authoritative), `WorldEvent`, `detached_mapping`
 - `agents`: `AgentId`, `Agent`, `Goal`, `IdentityTranslator`
-- `agents.cognition`: `CognitionStrategy` (`propose` → `AgentCommand`), `Perspective`
+- `agents.cognition`: `CognitiveLoop`, stage protocols/defaults, `CognitionStrategy`, `Perspective`
 - `memory`: `MemoryTrace`, `Belief`, owner-bound stores, `OwnershipError`
 - `social`: `CommunicationEnvelope`, `Relationship`, `EnvelopeSender`
 - `llm`: `LLMProvider`, `LLMRequest`, `LLMResult`, `StructuredOutput`, prompts, factory
-- `simulation`: `WorldEngine`, `WorldBootstrap`, lifecycle types, `build_perspective`, persistence DTOs/ports, `PersistentSimulationService`, `ReplayService`, codecs, deterministic IDs/RNG/clock, export ports
+- `simulation`: `WorldEngine`, `AgentRuntime`, `WorldBootstrap`, lifecycle types, `build_perspective`, persistence DTOs/ports, `PersistentSimulationService`, `ReplayService`, codecs, deterministic IDs/RNG/clock, export ports
 - `persistence`: repository factories (`create_run_repository`, …)
 - `analysis`: `EventSource`, `ExportSource`
 - `api`: `create_app`
@@ -116,12 +116,13 @@ These are encoded as types and import rules, and enforced by `WorldEngine` for o
 
 ## Deferred scope
 
-No agent cognition loop inside the engine, fear-of-death psychology, memory retrieval algorithms, analysis metrics, Anthropic-native adapters, pathfinding beyond one adjacent edge, crafting, diseases, revival, or multi-tick sleeping state. Provider lifecycle is not wired into the API/`compose` composition root yet. No Kafka, Kubernetes, Celery, or extra vector databases.
+No fear-of-death psychology, production memory retrieval, analysis metrics over cognition receipts, Anthropic-native adapters, pathfinding beyond one adjacent edge, crafting, diseases, revival, or multi-tick sleeping state. Provider lifecycle is not wired into the API/`compose` composition root yet. No Kafka, Kubernetes, Celery, or extra vector databases.
 
 Production PostgreSQL privilege design for `CREATE EXTENSION` is deferred; development credentials may create `vector`.
 
 ## See also
 
+- [Cognition and agent runtime](cognition-runtime.md)
 - [LLM providers](llm-providers.md)
 - [Physical simulation](physical-simulation.md)
 - [Configuration](configuration.md)
