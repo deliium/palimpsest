@@ -456,6 +456,24 @@ def test_episodic_memory_trace_round_trip_and_golden() -> None:
         b'"mention_id":"c1"}],"confidence":0.9,"context":{"location_id":null,'
         b'"tags":[]},"created_tick":1,"embedding":null,"emotional_salience":0.5,'
         b'"entities":[],"expires_at_tick":null,"forgotten_at_tick":null,'
+        b'"last_access_tick":1,"lineage":{"generation":0,"reconstruction_id":null,'
+        b'"source_memory_ids":[],"supersedes_memory_id":null},"memory_id":"mem-1",'
+        b'"owner_id":"agent-1","provenance":{"kind":"direct_observation",'
+        b'"observed_source_id":null,"source_tick":1,"speaker_id":null},'
+        b'"relations":[],"source_tick":1,"trace_version":1,"world_revision":0},'
+        b'"schema_version":1,"type":"episodic_memory_trace"}'
+    )
+    assert decode_domain(encoded) == trace
+
+
+def test_legacy_lineage_without_sources_still_decodes() -> None:
+    from memory.models import MemoryTrace
+
+    legacy = (
+        b'{"data":{"access_count":0,"concepts":[{"concept":"campfire",'
+        b'"mention_id":"c1"}],"confidence":0.9,"context":{"location_id":null,'
+        b'"tags":[]},"created_tick":1,"embedding":null,"emotional_salience":0.5,'
+        b'"entities":[],"expires_at_tick":null,"forgotten_at_tick":null,'
         b'"last_access_tick":1,"lineage":{"generation":0,'
         b'"supersedes_memory_id":null},"memory_id":"mem-1","owner_id":"agent-1",'
         b'"provenance":{"kind":"direct_observation","observed_source_id":null,'
@@ -463,7 +481,47 @@ def test_episodic_memory_trace_round_trip_and_golden() -> None:
         b'"trace_version":1,"world_revision":0},"schema_version":1,'
         b'"type":"episodic_memory_trace"}'
     )
-    assert decode_domain(encoded) == trace
+    decoded = decode_domain(legacy)
+    assert isinstance(decoded, MemoryTrace)
+    assert decoded.lineage.source_memory_ids == ()
+    assert decoded.lineage.reconstruction_id is None
+
+
+def test_reconstructed_memory_round_trip_and_payload_hash() -> None:
+    from agents.models import AgentId
+    from memory.codec import reconstructed_memory_payload_sha256
+    from memory.models import (
+        ConceptMention,
+        MemoryId,
+        MemorySituationContext,
+        MentionId,
+        ReconstructedMemory,
+        ReconstructionId,
+    )
+
+    reconstructed = ReconstructedMemory(
+        reconstruction_id=ReconstructionId("recon-1"),
+        owner_id=AgentId("agent-1"),
+        narrative="subjective campfire",
+        concepts=(ConceptMention(mention_id=MentionId("c1"), concept="campfire"),),
+        entities=(),
+        relations=(),
+        context=MemorySituationContext(),
+        confidence=0.7,
+        emotional_salience=0.4,
+        source_memory_ids=(MemoryId("mem-1"),),
+        generation=1,
+        reconstructed_at_tick=3,
+        policy_id="recall",
+        policy_version="1",
+        used_provider=False,
+        fallback_used=False,
+    )
+    encoded = encode_domain(reconstructed)
+    assert decode_domain(encoded) == reconstructed
+    digest = reconstructed_memory_payload_sha256(reconstructed)
+    assert len(digest) == 64
+    assert all(ch in "0123456789abcdef" for ch in digest)
 
 
 def test_legacy_memory_trace_type_is_rejected() -> None:
@@ -478,6 +536,7 @@ def test_legacy_memory_trace_type_is_rejected() -> None:
 
 
 def test_episodic_memory_rejects_unknown_fields_and_content() -> None:
+    # Invalid fields still rejected for unknown top-level keys.
     with pytest.raises(DomainSerializationError) as unknown:
         decode_domain(
             b'{"data":{"access_count":0,"concepts":[],"confidence":0.9,'
@@ -485,6 +544,7 @@ def test_episodic_memory_rejects_unknown_fields_and_content() -> None:
             b'"embedding":null,"emotional_salience":0.5,"entities":[],'
             b'"expires_at_tick":null,"forgotten_at_tick":null,'
             b'"last_access_tick":1,"lineage":{"generation":0,'
+            b'"reconstruction_id":null,"source_memory_ids":[],'
             b'"supersedes_memory_id":null},"memory_id":"mem-1",'
             b'"owner_id":"agent-1","provenance":{"kind":"direct_observation",'
             b'"observed_source_id":null,"source_tick":1,"speaker_id":null},'
@@ -501,6 +561,7 @@ def test_episodic_memory_rejects_unknown_fields_and_content() -> None:
             b'"created_tick":1,"embedding":null,"emotional_salience":0.5,'
             b'"entities":[],"expires_at_tick":null,"forgotten_at_tick":null,'
             b'"last_access_tick":1,"lineage":{"generation":0,'
+            b'"reconstruction_id":null,"source_memory_ids":[],'
             b'"supersedes_memory_id":null},"memory_id":"mem-1",'
             b'"owner_id":"agent-1","provenance":{"kind":"direct_observation",'
             b'"observed_source_id":null,"source_tick":1,"speaker_id":null},'

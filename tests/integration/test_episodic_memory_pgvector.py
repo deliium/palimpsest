@@ -339,3 +339,88 @@ async def test_conflicting_write_rolls_back_batch(
             )
         )
     assert await service.get(MemoryId("m2")) is None
+
+
+async def test_sql_reconsolidation_idempotent_and_leaves_source_unchanged(
+    database_resources: DatabaseResources,
+) -> None:
+    from memory.models import (
+        MemoryLineage,
+        ReconstructedMemory,
+        ReconstructionId,
+        ReconstructionRecord,
+    )
+
+    run_id = await _prepare_run(database_resources)
+    policy = _policy()
+    service = create_memory_service(
+        scope=MemoryScope(run_id=MemoryRunId(run_id), owner_id=AgentId("agent-1")),
+        session_factory=database_resources.session_factory,
+        scoring_policy=policy,
+    )
+    root = _trace(memory_id="m-root", owner_id="agent-1", tick=1)
+    await service.apply(MemoryMutationBatch(writes=(root,)))
+    reconstructed = ReconstructedMemory(
+        reconstruction_id=ReconstructionId("recon-sql"),
+        owner_id=AgentId("agent-1"),
+        narrative="subjective sql recall",
+        concepts=root.concepts,
+        entities=(),
+        relations=(),
+        context=MemorySituationContext(),
+        confidence=0.6,
+        emotional_salience=0.3,
+        source_memory_ids=(MemoryId("m-root"),),
+        generation=1,
+        reconstructed_at_tick=2,
+        policy_id="recall",
+        policy_version="1",
+        used_provider=False,
+        fallback_used=False,
+    )
+    derived = MemoryTrace(
+        memory_id=MemoryId("m-derived"),
+        owner_id=AgentId("agent-1"),
+        world_revision=WorldRevision(0),
+        concepts=reconstructed.concepts,
+        entities=(),
+        relations=(),
+        context=MemorySituationContext(),
+        emotional_salience=0.3,
+        confidence=0.6,
+        provenance=root.provenance,
+        created_tick=2,
+        source_tick=1,
+        last_access_tick=2,
+        access_count=0,
+        lineage=MemoryLineage(
+            supersedes_memory_id=MemoryId("m-root"),
+            generation=1,
+            source_memory_ids=(MemoryId("m-root"),),
+            reconstruction_id=ReconstructionId("recon-sql"),
+        ),
+    )
+    record = ReconstructionRecord(
+        reconstruction_id=ReconstructionId("recon-sql"),
+        run_id=MemoryRunId(run_id),
+        owner_id=AgentId("agent-1"),
+        source_memory_ids=(MemoryId("m-root"),),
+        reconstructed=reconstructed,
+        created_tick=2,
+        policy_id="recall",
+        policy_version="1",
+        used_provider=False,
+        fallback_used=False,
+    )
+    batch = MemoryMutationBatch(writes=(derived,), reconstructions=(record,))
+    first = await service.apply(batch)
+    second = await service.apply(batch)
+    assert first.reconstruction_written_count == 1
+    assert second.reconstruction_idempotent_count == 1
+    stored_root = await service.get(MemoryId("m-root"))
+    assert stored_root is not None
+    assert stored_root.concepts == root.concepts
+    assert stored_root.forgotten_at_tick is None
+    stored_derived = await service.get(MemoryId("m-derived"))
+    assert stored_derived is not None
+    assert stored_derived.lineage.reconstruction_id == ReconstructionId("recon-sql")

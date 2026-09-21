@@ -19,6 +19,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from infrastructure.database import session_scope
 from memory.contracts import MemoryService
+from memory.errors import MemoryServiceError, MemoryServiceErrorCode
 from memory.models import (
     AgentId,
     ConceptMention,
@@ -35,6 +36,8 @@ from memory.models import (
     MemoryMutationBatch,
     MemoryProvenance,
     MemoryQueryFilters,
+    MemoryRecallRequest,
+    MemoryRecallResult,
     MemoryRelation,
     MemoryRetentionPolicy,
     MemoryRetrieveRequest,
@@ -45,17 +48,22 @@ from memory.models import (
     MemorySourceKind,
     MemoryTrace,
     MentionId,
+    ReconstructionId,
+    ReconstructionRecord,
     RelationEndpoint,
     RelationEndpointKind,
     WorldRevision,
 )
+from memory.mutation import prepare_memory_mutation
 from memory.scoring import rank_traces, should_forget
-from memory.service import MemoryServiceError, MemoryServiceErrorCode
 from persistence.errors import PersistenceAdapterError
 from persistence.memory_orm import (
     MemoryAccessOpOrm,
     MemoryConceptOrm,
+    MemoryDerivationSourceOrm,
     MemoryEntityMentionOrm,
+    MemoryReconstructionOrm,
+    MemoryReconstructionSourceOrm,
     MemoryRelationOrm,
     MemoryTraceOrm,
 )
@@ -108,6 +116,7 @@ class SqlAlchemyMemoryService:
     """Async PostgreSQL episodic memory bound to one :class:`MemoryScope`."""
 
     __slots__ = (
+        "_orchestrator",
         "_retention_policy",
         "_scope",
         "_scoring_policy",
@@ -126,6 +135,9 @@ class SqlAlchemyMemoryService:
         self._session_factory = session_factory
         self._scoring_policy = scoring_policy
         self._retention_policy = retention_policy
+        from memory.reconstruction import MemoryRecallOrchestrator
+
+        self._orchestrator = MemoryRecallOrchestrator()
         _LOG.info(
             "memory_service_created",
             extra={
@@ -213,6 +225,14 @@ class SqlAlchemyMemoryService:
             scoring_policy_version=request.scoring_policy.version,
         )
 
+    async def recall(self, request: MemoryRecallRequest) -> MemoryRecallResult:
+        if type(request) is not MemoryRecallRequest:
+            raise MemoryServiceError(MemoryServiceErrorCode.INVALID_REQUEST)
+        for belief in request.beliefs:
+            if belief.owner_id != self._scope.owner_id:
+                raise MemoryServiceError(MemoryServiceErrorCode.OWNERSHIP)
+        return await self._orchestrator.recall(self, request)
+
     async def apply(self, batch: MemoryMutationBatch) -> MemoryApplyResult:
         if type(batch) is not MemoryMutationBatch:
             raise MemoryServiceError(MemoryServiceErrorCode.INVALID_BATCH)
@@ -237,26 +257,45 @@ class SqlAlchemyMemoryService:
                 raise MemoryServiceError(MemoryServiceErrorCode.INVALID_BATCH)
 
         async with session_scope(self._session_factory) as session:
+            referenced_ids = {write.memory_id for write in batch.writes} | {
+                access.memory_id for access in batch.accesses
+            }
+            for record in batch.reconstructions:
+                referenced_ids.update(record.source_memory_ids)
             for write in batch.writes:
-                existing = await session.get(
-                    MemoryTraceOrm,
-                    (
-                        self._scope.run_id.value,
-                        self._scope.owner_id.value,
-                        write.memory_id.value,
-                    ),
+                referenced_ids.update(write.lineage.source_memory_ids)
+
+            existing_traces = await self._load_traces_by_ids(session, referenced_ids)
+            existing_hashes = await self._load_reconstruction_hashes(
+                session,
+                {item.reconstruction_id for item in batch.reconstructions}
+                | {
+                    write.lineage.reconstruction_id
+                    for write in batch.writes
+                    if write.lineage.reconstruction_id is not None
+                },
+            )
+            try:
+                prepared = prepare_memory_mutation(
+                    batch,
+                    scope=self._scope,
+                    existing_traces=existing_traces,
+                    existing_reconstruction_hashes=existing_hashes,
                 )
-                if existing is not None:
-                    _LOG.error(
-                        "memory_apply_conflict",
-                        extra={
-                            "operation": "apply",
-                            "run_id": self._scope.run_id.value,
-                            "owner_id": self._scope.owner_id.value,
-                            "reason_code": MemoryServiceErrorCode.CONFLICT.value,
-                        },
-                    )
-                    raise MemoryServiceError(MemoryServiceErrorCode.CONFLICT)
+            except MemoryServiceError as exc:
+                _LOG.error(
+                    "memory_apply_rejected",
+                    extra={
+                        "operation": "apply",
+                        "run_id": self._scope.run_id.value,
+                        "owner_id": self._scope.owner_id.value,
+                        "reason_code": exc.code.value,
+                        "write_count": len(batch.writes),
+                        "reconstruction_count": len(batch.reconstructions),
+                    },
+                )
+                raise
+
             for access in batch.accesses:
                 row = await session.get(
                     MemoryTraceOrm,
@@ -269,14 +308,39 @@ class SqlAlchemyMemoryService:
                 )
                 if row is None:
                     raise MemoryServiceError(MemoryServiceErrorCode.NOT_FOUND)
-                if access.access_tick < row.created_tick:
-                    raise MemoryServiceError(MemoryServiceErrorCode.INVALID_BATCH)
 
             written = 0
             applied = 0
             idempotent = 0
+            reconstruction_written = 0
             try:
-                for write in batch.writes:
+                # Insert non-derived source writes first so reconstruction FKs resolve.
+                source_needed: set[MemoryId] = set()
+                for record in prepared.reconstructions_to_insert:
+                    source_needed.update(record.source_memory_ids)
+                early_writes = [
+                    write
+                    for write in prepared.writes_to_insert
+                    if write.memory_id in source_needed
+                ]
+                late_writes = [
+                    write
+                    for write in prepared.writes_to_insert
+                    if write.memory_id not in source_needed
+                ]
+                for write in early_writes:
+                    await self._insert_trace(session, write)
+                    written += 1
+                for record in prepared.reconstructions_to_insert:
+                    await self._insert_reconstruction(
+                        session,
+                        record,
+                        payload_sha256=prepared.reconstruction_hashes[
+                            record.reconstruction_id
+                        ],
+                    )
+                    reconstruction_written += 1
+                for write in late_writes:
                     await self._insert_trace(session, write)
                     written += 1
                 for access in batch.accesses:
@@ -320,23 +384,54 @@ class SqlAlchemyMemoryService:
                 "write_count": written,
                 "access_count": applied,
                 "access_idempotent_count": idempotent,
+                "reconstruction_written_count": reconstruction_written,
+                "reconstruction_idempotent_count": (
+                    prepared.reconstruction_idempotent_count
+                ),
                 "status": "ok",
             },
         )
-        _LOG.info(
-            "memory_apply_counts",
-            extra={
-                "operation": "apply",
-                "run_id": self._scope.run_id.value,
-                "owner_id": self._scope.owner_id.value,
-                "write_count": written,
-                "access_count": applied,
-            },
-        )
+        if reconstruction_written:
+            _LOG.info(
+                "memory_reconsolidation_committed",
+                extra={
+                    "operation": "apply",
+                    "run_id": self._scope.run_id.value,
+                    "owner_id": self._scope.owner_id.value,
+                    "reconstruction_written_count": reconstruction_written,
+                    "write_count": written,
+                },
+            )
+        elif prepared.reconstruction_idempotent_count:
+            _LOG.warning(
+                "memory_reconsolidation_idempotent",
+                extra={
+                    "operation": "apply",
+                    "run_id": self._scope.run_id.value,
+                    "owner_id": self._scope.owner_id.value,
+                    "reason_code": "duplicate_reconstruction",
+                    "reconstruction_idempotent_count": (
+                        prepared.reconstruction_idempotent_count
+                    ),
+                },
+            )
+        else:
+            _LOG.info(
+                "memory_apply_counts",
+                extra={
+                    "operation": "apply",
+                    "run_id": self._scope.run_id.value,
+                    "owner_id": self._scope.owner_id.value,
+                    "write_count": written,
+                    "access_count": applied,
+                },
+            )
         return MemoryApplyResult(
             written_count=written,
             access_applied_count=applied,
             access_idempotent_count=idempotent,
+            reconstruction_written_count=reconstruction_written,
+            reconstruction_idempotent_count=prepared.reconstruction_idempotent_count,
         )
 
     async def get(self, memory_id: MemoryId) -> MemoryTrace | None:
@@ -571,6 +666,36 @@ class SqlAlchemyMemoryService:
                 )
             )
 
+        derivation_rows: Sequence[MemoryDerivationSourceOrm] = (
+            (
+                await session.execute(
+                    select(MemoryDerivationSourceOrm)
+                    .where(
+                        MemoryDerivationSourceOrm.run_id == self._scope.run_id.value,
+                        MemoryDerivationSourceOrm.owner_id
+                        == self._scope.owner_id.value,
+                        MemoryDerivationSourceOrm.derived_memory_id.in_(memory_ids),
+                    )
+                    .order_by(
+                        MemoryDerivationSourceOrm.derived_memory_id,
+                        MemoryDerivationSourceOrm.ordinal,
+                    )
+                )
+            )
+            .scalars()
+            .all()
+        )
+        sources_by: dict[str, list[MemoryId]] = {mid: [] for mid in memory_ids}
+        reconstruction_by: dict[str, ReconstructionId | None] = {
+            mid: None for mid in memory_ids
+        }
+        for edge in derivation_rows:
+            sources_by[edge.derived_memory_id].append(MemoryId(edge.source_memory_id))
+            if edge.reconstruction_id is not None:
+                reconstruction_by[edge.derived_memory_id] = ReconstructionId(
+                    edge.reconstruction_id
+                )
+
         assembled: list[MemoryTrace] = []
         for row in rows:
             embedding = None
@@ -582,6 +707,8 @@ class SqlAlchemyMemoryService:
                     model=row.embedding_model or "",
                     version=row.embedding_version or "",
                 )
+            source_memory_ids = tuple(sources_by[row.memory_id])
+            reconstruction_id = reconstruction_by[row.memory_id]
             assembled.append(
                 MemoryTrace(
                     memory_id=MemoryId(row.memory_id),
@@ -633,11 +760,80 @@ class SqlAlchemyMemoryService:
                             else MemoryId(row.supersedes_memory_id)
                         ),
                         generation=int(row.generation),
+                        source_memory_ids=source_memory_ids,
+                        reconstruction_id=reconstruction_id,
                     ),
                     embedding=embedding,
                 )
             )
         return tuple(assembled)
+
+    async def _load_traces_by_ids(
+        self, session: AsyncSession, memory_ids: set[MemoryId]
+    ) -> dict[MemoryId, MemoryTrace]:
+        if not memory_ids:
+            return {}
+        stmt = select(MemoryTraceOrm).where(
+            MemoryTraceOrm.run_id == self._scope.run_id.value,
+            MemoryTraceOrm.owner_id == self._scope.owner_id.value,
+            MemoryTraceOrm.memory_id.in_([item.value for item in memory_ids]),
+        )
+        rows = list((await session.execute(stmt)).scalars().all())
+        assembled = await self._assemble_traces(session, rows)
+        return {trace.memory_id: trace for trace in assembled}
+
+    async def _load_reconstruction_hashes(
+        self, session: AsyncSession, reconstruction_ids: set[ReconstructionId]
+    ) -> dict[ReconstructionId, str]:
+        if not reconstruction_ids:
+            return {}
+        stmt = select(MemoryReconstructionOrm).where(
+            MemoryReconstructionOrm.run_id == self._scope.run_id.value,
+            MemoryReconstructionOrm.owner_id == self._scope.owner_id.value,
+            MemoryReconstructionOrm.reconstruction_id.in_(
+                [item.value for item in reconstruction_ids]
+            ),
+        )
+        rows = list((await session.execute(stmt)).scalars().all())
+        return {
+            ReconstructionId(row.reconstruction_id): row.payload_sha256 for row in rows
+        }
+
+    async def _insert_reconstruction(
+        self,
+        session: AsyncSession,
+        record: ReconstructionRecord,
+        *,
+        payload_sha256: str,
+    ) -> None:
+        session.add(
+            MemoryReconstructionOrm(
+                run_id=self._scope.run_id.value,
+                owner_id=self._scope.owner_id.value,
+                reconstruction_id=record.reconstruction_id.value,
+                created_tick=record.created_tick,
+                generation=record.reconstructed.generation,
+                policy_id=record.policy_id,
+                policy_version=record.policy_version,
+                used_provider=record.used_provider,
+                fallback_used=record.fallback_used,
+                prompt_version=record.prompt_version,
+                schema_version=record.schema_version,
+                payload_sha256=payload_sha256,
+            )
+        )
+        await session.flush()
+        for ordinal, source_id in enumerate(record.source_memory_ids):
+            session.add(
+                MemoryReconstructionSourceOrm(
+                    run_id=self._scope.run_id.value,
+                    owner_id=self._scope.owner_id.value,
+                    reconstruction_id=record.reconstruction_id.value,
+                    source_memory_id=source_id.value,
+                    ordinal=ordinal,
+                )
+            )
+        await session.flush()
 
     async def _insert_trace(self, session: AsyncSession, trace: MemoryTrace) -> None:
         embedding = None
@@ -735,6 +931,24 @@ class SqlAlchemyMemoryService:
                     object_mention_id=relation.object.mention_id.value,
                 )
             )
+        if trace.lineage.source_memory_ids:
+            reconstruction_value = (
+                None
+                if trace.lineage.reconstruction_id is None
+                else trace.lineage.reconstruction_id.value
+            )
+            for ordinal, source_id in enumerate(trace.lineage.source_memory_ids):
+                session.add(
+                    MemoryDerivationSourceOrm(
+                        run_id=self._scope.run_id.value,
+                        owner_id=self._scope.owner_id.value,
+                        derived_memory_id=trace.memory_id.value,
+                        source_memory_id=source_id.value,
+                        ordinal=ordinal,
+                        reconstruction_id=reconstruction_value,
+                    )
+                )
+        await session.flush()
 
     async def _try_record_access(
         self, session: AsyncSession, access: MemoryAccessReceipt

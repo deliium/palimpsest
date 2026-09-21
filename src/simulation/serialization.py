@@ -11,6 +11,12 @@ from collections.abc import Mapping, Sequence
 from typing import Any, Final
 
 from agents.models import Agent, AgentId, Goal, GoalId, GoalStatus
+from memory.codec import (
+    RECONSTRUCTED_MEMORY_TYPE,
+    RECONSTRUCTION_RECORD_TYPE,
+    encode_reconstructed_memory,
+    encode_reconstruction_record,
+)
 from memory.models import (
     Belief,
     BeliefId,
@@ -21,10 +27,14 @@ from memory.models import (
     MemoryLineage,
     MemoryProvenance,
     MemoryRelation,
+    MemoryRunId,
     MemorySituationContext,
     MemorySourceKind,
     MemoryTrace,
     MentionId,
+    ReconstructedMemory,
+    ReconstructionId,
+    ReconstructionRecord,
     RelationEndpoint,
     RelationEndpointKind,
 )
@@ -163,6 +173,8 @@ SerializableDomainValue = (
     | Agent
     | Goal
     | MemoryTrace
+    | ReconstructedMemory
+    | ReconstructionRecord
     | Belief
     | Relationship
     | CommunicationEnvelope
@@ -309,6 +321,10 @@ def _encode_top(value: object, *, path: str) -> tuple[str, dict[str, Any]]:
         return "goal", _encode_goal(value)
     if type(value) is MemoryTrace:
         return EPISODIC_MEMORY_TRACE_TYPE, _encode_memory_trace(value)
+    if type(value) is ReconstructedMemory:
+        return RECONSTRUCTED_MEMORY_TYPE, encode_reconstructed_memory(value)
+    if type(value) is ReconstructionRecord:
+        return RECONSTRUCTION_RECORD_TYPE, encode_reconstruction_record(value)
     if type(value) is Belief:
         return "belief", _encode_belief(value)
     if type(value) is Relationship:
@@ -353,6 +369,10 @@ def _decode_top(
         raise DomainSerializationError("unsupported_legacy_memory_trace", path)
     if tag == EPISODIC_MEMORY_TRACE_TYPE:
         return _decode_memory_trace(data, path=path)
+    if tag == RECONSTRUCTED_MEMORY_TYPE:
+        return _decode_reconstructed_memory(data, path=path)
+    if tag == RECONSTRUCTION_RECORD_TYPE:
+        return _decode_reconstruction_record(data, path=path)
     if tag == "belief":
         return _decode_belief(data, path=path)
     if tag == "relationship":
@@ -393,8 +413,16 @@ _COMMAND_TAGS: Final[frozenset[str]] = frozenset(
 )
 
 
-def _require_keys(data: Mapping[str, Any], keys: set[str], *, path: str) -> None:
-    if set(data) != keys:
+def _require_keys(
+    data: Mapping[str, Any],
+    keys: set[str],
+    *,
+    path: str,
+    optional: set[str] | None = None,
+) -> None:
+    allowed = keys if optional is None else keys | optional
+    present = set(data)
+    if not keys.issubset(present) or not present.issubset(allowed):
         raise DomainSerializationError("invalid_fields", path)
 
 
@@ -993,6 +1021,14 @@ def _encode_memory_trace(value: MemoryTrace) -> dict[str, Any]:
         "last_access_tick": value.last_access_tick,
         "lineage": {
             "generation": value.lineage.generation,
+            "reconstruction_id": (
+                None
+                if value.lineage.reconstruction_id is None
+                else value.lineage.reconstruction_id.value
+            ),
+            "source_memory_ids": [
+                item.value for item in value.lineage.source_memory_ids
+            ],
             "supersedes_memory_id": (
                 None
                 if value.lineage.supersedes_memory_id is None
@@ -1133,6 +1169,7 @@ def _decode_memory_trace(data: dict[str, Any], *, path: str) -> MemoryTrace:
             lineage_raw,
             {"generation", "supersedes_memory_id"},
             path=f"{path}.lineage",
+            optional={"source_memory_ids", "reconstruction_id"},
         )
         supersedes_raw = lineage_raw["supersedes_memory_id"]
         supersedes = None
@@ -1142,6 +1179,31 @@ def _decode_memory_trace(data: dict[str, Any], *, path: str) -> MemoryTrace:
                     "invalid_string", f"{path}.lineage.supersedes_memory_id"
                 )
             supersedes = MemoryId(supersedes_raw)
+        source_memory_ids: tuple[MemoryId, ...] = ()
+        if "source_memory_ids" in lineage_raw:
+            sources_raw = lineage_raw["source_memory_ids"]
+            if not isinstance(sources_raw, list):
+                raise DomainSerializationError(
+                    "invalid_array", f"{path}.lineage.source_memory_ids"
+                )
+            decoded_sources: list[MemoryId] = []
+            for index, item in enumerate(sources_raw):
+                if not isinstance(item, str):
+                    raise DomainSerializationError(
+                        "invalid_string",
+                        f"{path}.lineage.source_memory_ids." + str(index),
+                    )
+                decoded_sources.append(MemoryId(item))
+            source_memory_ids = tuple(decoded_sources)
+        reconstruction_id = None
+        if "reconstruction_id" in lineage_raw:
+            reconstruction_raw = lineage_raw["reconstruction_id"]
+            if reconstruction_raw is not None:
+                if not isinstance(reconstruction_raw, str):
+                    raise DomainSerializationError(
+                        "invalid_string", f"{path}.lineage.reconstruction_id"
+                    )
+                reconstruction_id = ReconstructionId(reconstruction_raw)
         expires_raw = data["expires_at_tick"]
         forgotten_raw = data["forgotten_at_tick"]
         expires_at_tick = (
@@ -1194,6 +1256,8 @@ def _decode_memory_trace(data: dict[str, Any], *, path: str) -> MemoryTrace:
                 generation=_int_field(
                     lineage_raw, "generation", path=f"{path}.lineage"
                 ),
+                source_memory_ids=source_memory_ids,
+                reconstruction_id=reconstruction_id,
             ),
             embedding=embedding,
         )
@@ -1229,6 +1293,172 @@ def _decode_memory_embedding(raw: object, *, path: str) -> MemoryEmbedding | Non
         model=_str_field(raw, "model", path=path),
         version=_str_field(raw, "version", path=path),
     )
+
+
+def _decode_reconstructed_memory(
+    data: dict[str, Any], *, path: str
+) -> ReconstructedMemory:
+    _require_keys(
+        data,
+        {
+            "concepts",
+            "confidence",
+            "context",
+            "emotional_salience",
+            "entities",
+            "fallback_used",
+            "generation",
+            "narrative",
+            "owner_id",
+            "policy_id",
+            "policy_version",
+            "prompt_version",
+            "reconstructed_at_tick",
+            "reconstruction_id",
+            "relations",
+            "schema_version",
+            "source_memory_ids",
+            "used_provider",
+        },
+        path=path,
+    )
+    concepts_raw = data["concepts"]
+    entities_raw = data["entities"]
+    relations_raw = data["relations"]
+    context_raw = data["context"]
+    sources_raw = data["source_memory_ids"]
+    if not isinstance(concepts_raw, list):
+        raise DomainSerializationError("invalid_array", f"{path}.concepts")
+    if not isinstance(entities_raw, list):
+        raise DomainSerializationError("invalid_array", f"{path}.entities")
+    if not isinstance(relations_raw, list):
+        raise DomainSerializationError("invalid_array", f"{path}.relations")
+    if not isinstance(context_raw, dict):
+        raise DomainSerializationError("invalid_object", f"{path}.context")
+    if not isinstance(sources_raw, list):
+        raise DomainSerializationError("invalid_array", f"{path}.source_memory_ids")
+    try:
+        _require_keys(context_raw, {"location_id", "tags"}, path=f"{path}.context")
+        tags_raw = context_raw["tags"]
+        if not isinstance(tags_raw, list):
+            raise DomainSerializationError("invalid_array", f"{path}.context.tags")
+        tags = tuple(
+            _str_field({"tag": tag}, "tag", path=f"{path}.context.tags." + str(index))
+            for index, tag in enumerate(tags_raw)
+        )
+        decoded_sources: list[MemoryId] = []
+        for index, item in enumerate(sources_raw):
+            if not isinstance(item, str):
+                raise DomainSerializationError(
+                    "invalid_string", f"{path}.source_memory_ids." + str(index)
+                )
+            decoded_sources.append(MemoryId(item))
+        return ReconstructedMemory(
+            reconstruction_id=ReconstructionId(
+                _str_field(data, "reconstruction_id", path=path)
+            ),
+            owner_id=AgentId(_str_field(data, "owner_id", path=path)),
+            narrative=_str_field(data, "narrative", path=path),
+            concepts=tuple(
+                _decode_concept_mention(item, path=f"{path}.concepts[{index}]")
+                for index, item in enumerate(concepts_raw)
+            ),
+            entities=tuple(
+                _decode_entity_mention(item, path=f"{path}.entities[{index}]")
+                for index, item in enumerate(entities_raw)
+            ),
+            relations=tuple(
+                _decode_memory_relation(item, path=f"{path}.relations[{index}]")
+                for index, item in enumerate(relations_raw)
+            ),
+            context=MemorySituationContext(
+                location_id=_optional_entity_id(
+                    context_raw["location_id"], path=f"{path}.context.location_id"
+                ),
+                tags=tags,
+            ),
+            confidence=_float_field(data, "confidence", path=path),
+            emotional_salience=_float_field(data, "emotional_salience", path=path),
+            source_memory_ids=tuple(decoded_sources),
+            generation=_int_field(data, "generation", path=path),
+            reconstructed_at_tick=_int_field(data, "reconstructed_at_tick", path=path),
+            policy_id=_str_field(data, "policy_id", path=path),
+            policy_version=_str_field(data, "policy_version", path=path),
+            used_provider=_bool_field(data, "used_provider", path=path),
+            fallback_used=_bool_field(data, "fallback_used", path=path),
+            prompt_version=_optional_str(data, "prompt_version", path=path),
+            schema_version=_optional_str(data, "schema_version", path=path),
+        )
+    except DomainSerializationError:
+        raise
+    except (TypeError, ValueError) as exc:
+        raise DomainSerializationError("invalid_model", path) from exc
+
+
+def _decode_reconstruction_record(
+    data: dict[str, Any], *, path: str
+) -> ReconstructionRecord:
+    _require_keys(
+        data,
+        {
+            "created_tick",
+            "fallback_used",
+            "owner_id",
+            "policy_id",
+            "policy_version",
+            "prompt_version",
+            "reconstructed",
+            "reconstruction_id",
+            "run_id",
+            "schema_version",
+            "source_memory_ids",
+            "used_provider",
+        },
+        path=path,
+    )
+    reconstructed_raw = data["reconstructed"]
+    sources_raw = data["source_memory_ids"]
+    if not isinstance(reconstructed_raw, dict):
+        raise DomainSerializationError("invalid_object", f"{path}.reconstructed")
+    if not isinstance(sources_raw, list):
+        raise DomainSerializationError("invalid_array", f"{path}.source_memory_ids")
+    try:
+        decoded_sources: list[MemoryId] = []
+        for index, item in enumerate(sources_raw):
+            if not isinstance(item, str):
+                raise DomainSerializationError(
+                    "invalid_string", f"{path}.source_memory_ids." + str(index)
+                )
+            decoded_sources.append(MemoryId(item))
+        return ReconstructionRecord(
+            reconstruction_id=ReconstructionId(
+                _str_field(data, "reconstruction_id", path=path)
+            ),
+            run_id=MemoryRunId(_str_field(data, "run_id", path=path)),
+            owner_id=AgentId(_str_field(data, "owner_id", path=path)),
+            source_memory_ids=tuple(decoded_sources),
+            reconstructed=_decode_reconstructed_memory(
+                reconstructed_raw, path=f"{path}.reconstructed"
+            ),
+            created_tick=_int_field(data, "created_tick", path=path),
+            policy_id=_str_field(data, "policy_id", path=path),
+            policy_version=_str_field(data, "policy_version", path=path),
+            used_provider=_bool_field(data, "used_provider", path=path),
+            fallback_used=_bool_field(data, "fallback_used", path=path),
+            prompt_version=_optional_str(data, "prompt_version", path=path),
+            schema_version=_optional_str(data, "schema_version", path=path),
+        )
+    except DomainSerializationError:
+        raise
+    except (TypeError, ValueError) as exc:
+        raise DomainSerializationError("invalid_model", path) from exc
+
+
+def _bool_field(data: Mapping[str, Any], key: str, *, path: str) -> bool:
+    value = data[key]
+    if type(value) is not bool:
+        raise DomainSerializationError("invalid_bool", f"{path}.{key}")
+    return value
 
 
 def _decode_concept_mention(raw: object, *, path: str) -> ConceptMention:

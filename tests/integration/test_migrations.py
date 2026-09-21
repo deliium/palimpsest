@@ -18,7 +18,14 @@ from persistence.orm import AUTHORITATIVE_TABLES
 pytestmark = pytest.mark.integration
 
 ROOT = Path(__file__).resolve().parents[2]
-_EXPECTED_HEAD = "0005"
+_EXPECTED_HEAD = "0006"
+
+# Mutable lifecycle tables keep access/forgetting updates; reconstruction and
+# fragment tables are append-only. Trace content uses a selective trigger.
+_MUTABLE_SUBJECTIVE_TABLES = frozenset({"memory_traces", "memory_access_ops"})
+_APPEND_ONLY_SUBJECTIVE_TABLES = frozenset(SUBJECTIVE_MEMORY_TABLES) - (
+    _MUTABLE_SUBJECTIVE_TABLES
+)
 
 
 def _alembic_config(database_url: str | None = None) -> Config:
@@ -80,11 +87,11 @@ async def test_subjective_memory_tables_are_not_authoritative() -> None:
     assert not overlap
 
 
-async def test_subjective_memory_tables_lack_append_only_triggers(
+async def test_mutable_subjective_tables_lack_full_reject_triggers(
     database_resources: DatabaseResources,
 ) -> None:
     async with session_scope(database_resources.session_factory) as session:
-        for table in SUBJECTIVE_MEMORY_TABLES:
+        for table in sorted(_MUTABLE_SUBJECTIVE_TABLES):
             result = await session.execute(
                 text(
                     """
@@ -92,9 +99,50 @@ async def test_subjective_memory_tables_lack_append_only_triggers(
                     JOIN pg_class c ON c.oid = t.tgrelid
                     WHERE c.relname = :table
                       AND NOT t.tgisinternal
-                      AND tgname LIKE 'trg_%_reject_%'
+                      AND tgname LIKE 'trg_%_reject_mutation'
                     """
                 ),
                 {"table": table},
             )
             assert result.scalars().all() == []
+
+
+async def test_append_only_subjective_tables_have_reject_triggers(
+    database_resources: DatabaseResources,
+) -> None:
+    async with session_scope(database_resources.session_factory) as session:
+        for table in sorted(_APPEND_ONLY_SUBJECTIVE_TABLES):
+            result = await session.execute(
+                text(
+                    """
+                    SELECT tgname FROM pg_trigger t
+                    JOIN pg_class c ON c.oid = t.tgrelid
+                    WHERE c.relname = :table
+                      AND NOT t.tgisinternal
+                      AND tgname = :tgname
+                    """
+                ),
+                {
+                    "table": table,
+                    "tgname": f"trg_{table}_reject_mutation",
+                },
+            )
+            assert result.scalars().all() == [f"trg_{table}_reject_mutation"]
+
+
+async def test_memory_traces_have_selective_content_immutability(
+    database_resources: DatabaseResources,
+) -> None:
+    async with session_scope(database_resources.session_factory) as session:
+        result = await session.execute(
+            text(
+                """
+                SELECT tgname FROM pg_trigger t
+                JOIN pg_class c ON c.oid = t.tgrelid
+                WHERE c.relname = 'memory_traces'
+                  AND NOT t.tgisinternal
+                  AND tgname = 'trg_memory_traces_reject_content_mutation'
+                """
+            )
+        )
+        assert result.scalars().all() == ["trg_memory_traces_reject_content_mutation"]

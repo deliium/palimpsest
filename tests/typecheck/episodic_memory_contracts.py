@@ -3,20 +3,28 @@
 from __future__ import annotations
 
 from agents.models import AgentId
-from memory.contracts import MemoryService
+from memory.contracts import MemoryReconstructor, MemoryService
 from memory.models import (
     MemoryApplyResult,
     MemoryForgetRequest,
     MemoryForgetResult,
     MemoryId,
     MemoryMutationBatch,
+    MemoryRecallContext,
+    MemoryRecallRequest,
+    MemoryRecallResult,
+    MemoryReconstructionPolicy,
     MemoryRetrieveRequest,
     MemoryRetrieveResult,
     MemoryRunId,
     MemoryScope,
     MemoryScoreWeights,
     MemoryScoringPolicy,
+    MemorySituationContext,
     MemoryTrace,
+    RecallEvidence,
+    ReconstructedMemory,
+    ReconstructionId,
 )
 
 
@@ -40,6 +48,9 @@ class _StubMemoryService:
             scoring_policy_version="1",
         )
 
+    async def recall(self, request: MemoryRecallRequest) -> MemoryRecallResult:
+        raise NotImplementedError(type(request).__name__)
+
     async def apply(self, batch: MemoryMutationBatch) -> MemoryApplyResult:
         _ = batch
         return MemoryApplyResult(
@@ -60,8 +71,18 @@ class _StubMemoryService:
         return MemoryForgetResult(forgotten_count=0, examined_count=0)
 
 
+class _StubReconstructor:
+    async def reconstruct(self, evidence: RecallEvidence) -> ReconstructedMemory:
+        _ = evidence
+        raise NotImplementedError
+
+
 def _service_is_protocol() -> MemoryService:
     return _StubMemoryService()
+
+
+def _reconstructor_is_protocol() -> MemoryReconstructor:
+    return _StubReconstructor()
 
 
 def _policy() -> MemoryScoringPolicy:
@@ -70,3 +91,19 @@ def _policy() -> MemoryScoringPolicy:
         version="1",
         weights=MemoryScoreWeights(recency=1.0),
     )
+
+
+def _recall_evidence() -> RecallEvidence:
+    return RecallEvidence(
+        owner_id=AgentId("agent-1"),
+        current_tick=0,
+        reconstruction_id=ReconstructionId("recon-1"),
+        policy=MemoryReconstructionPolicy(policy_id="recall", version="1"),
+        sources=(),
+        beliefs=(),
+        recall_context=MemoryRecallContext(),
+    )
+
+
+def _empty_context() -> MemorySituationContext:
+    return MemorySituationContext()

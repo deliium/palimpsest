@@ -2,6 +2,10 @@
 
 Uses ``infrastructure.orm.Base`` / shared metadata. Importing this module
 registers tables; it does not connect, migrate, or configure logging.
+
+Subjective episodic-memory and reconstruction tables live in
+``persistence.memory_orm`` and are intentionally excluded from
+``AUTHORITATIVE_TABLES`` / objective replay.
 """
 
 from __future__ import annotations

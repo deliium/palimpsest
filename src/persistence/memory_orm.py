@@ -43,13 +43,19 @@ SUBJECTIVE_MEMORY_TABLES: Final[tuple[str, ...]] = (
     "memory_entity_mentions",
     "memory_relations",
     "memory_access_ops",
+    "memory_reconstructions",
+    "memory_reconstruction_sources",
+    "memory_derivation_sources",
 )
 
 __all__ = [
     "SUBJECTIVE_MEMORY_TABLES",
     "MemoryAccessOpOrm",
     "MemoryConceptOrm",
+    "MemoryDerivationSourceOrm",
     "MemoryEntityMentionOrm",
+    "MemoryReconstructionOrm",
+    "MemoryReconstructionSourceOrm",
     "MemoryRelationOrm",
     "MemoryTraceOrm",
 ]
@@ -159,6 +165,13 @@ class MemoryTraceOrm(Base):
             "ix_memory_traces_context_tags",
             "context_tags",
             postgresql_using="gin",
+        ),
+        Index(
+            "ix_memory_traces_scope_observed_source",
+            "run_id",
+            "owner_id",
+            "observed_source_id",
+            postgresql_where=text("observed_source_id IS NOT NULL"),
         ),
     )
 
@@ -383,3 +396,195 @@ class MemoryAccessOpOrm(Base):
     operation_id: Mapped[str] = mapped_column(String(_STABLE_ID_LEN), nullable=False)
     memory_id: Mapped[str] = mapped_column(String(_STABLE_ID_LEN), nullable=False)
     access_tick: Mapped[int] = mapped_column(BigInteger, nullable=False)
+
+
+class MemoryReconstructionOrm(Base):
+    """Append-only reconstruction record (scientific, non-authoritative)."""
+
+    __tablename__ = "memory_reconstructions"
+    __table_args__ = (
+        PrimaryKeyConstraint("run_id", "owner_id", "reconstruction_id"),
+        ForeignKeyConstraint(
+            ["run_id"],
+            ["simulation_runs.run_id"],
+            name="fk_memory_reconstructions_run",
+            ondelete="RESTRICT",
+        ),
+        CheckConstraint("created_tick >= 0", name="reconstruction_created_tick_nonneg"),
+        CheckConstraint("generation >= 1", name="reconstruction_generation_positive"),
+        CheckConstraint(
+            "char_length(policy_id) > 0 AND char_length(policy_id) <= "
+            f"{_MAX_POLICY_ID_CHARS}",
+            name="reconstruction_policy_id_bounded",
+        ),
+        CheckConstraint(
+            "char_length(policy_version) > 0 AND char_length(policy_version) <= "
+            f"{_MAX_POLICY_ID_CHARS}",
+            name="reconstruction_policy_version_bounded",
+        ),
+        CheckConstraint(
+            "char_length(payload_sha256) = 64",
+            name="reconstruction_payload_sha256_len",
+        ),
+        Index(
+            "ix_memory_reconstructions_scope_tick",
+            "run_id",
+            "owner_id",
+            "created_tick",
+        ),
+    )
+
+    run_id: Mapped[str] = mapped_column(String(_STABLE_ID_LEN), nullable=False)
+    owner_id: Mapped[str] = mapped_column(String(_STABLE_ID_LEN), nullable=False)
+    reconstruction_id: Mapped[str] = mapped_column(
+        String(_STABLE_ID_LEN), nullable=False
+    )
+    created_tick: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    generation: Mapped[int] = mapped_column(Integer, nullable=False)
+    policy_id: Mapped[str] = mapped_column(String(_MAX_POLICY_ID_CHARS), nullable=False)
+    policy_version: Mapped[str] = mapped_column(
+        String(_MAX_POLICY_ID_CHARS), nullable=False
+    )
+    used_provider: Mapped[bool] = mapped_column(Boolean, nullable=False)
+    fallback_used: Mapped[bool] = mapped_column(Boolean, nullable=False)
+    prompt_version: Mapped[str | None] = mapped_column(
+        String(_MAX_POLICY_ID_CHARS), nullable=True
+    )
+    schema_version: Mapped[str | None] = mapped_column(
+        String(_MAX_POLICY_ID_CHARS), nullable=True
+    )
+    payload_sha256: Mapped[str] = mapped_column(String(64), nullable=False)
+
+
+class MemoryReconstructionSourceOrm(Base):
+    """Ordered direct source edges for one reconstruction record."""
+
+    __tablename__ = "memory_reconstruction_sources"
+    __table_args__ = (
+        PrimaryKeyConstraint(
+            "run_id", "owner_id", "reconstruction_id", "source_memory_id"
+        ),
+        UniqueConstraint(
+            "run_id",
+            "owner_id",
+            "reconstruction_id",
+            "ordinal",
+            name="uq_memory_reconstruction_sources_ordinal",
+        ),
+        ForeignKeyConstraint(
+            ["run_id", "owner_id", "reconstruction_id"],
+            [
+                "memory_reconstructions.run_id",
+                "memory_reconstructions.owner_id",
+                "memory_reconstructions.reconstruction_id",
+            ],
+            name="fk_memory_reconstruction_sources_record",
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["run_id", "owner_id", "source_memory_id"],
+            [
+                "memory_traces.run_id",
+                "memory_traces.owner_id",
+                "memory_traces.memory_id",
+            ],
+            name="fk_memory_reconstruction_sources_trace",
+            ondelete="RESTRICT",
+        ),
+        CheckConstraint("ordinal >= 0", name="reconstruction_source_ordinal_nonneg"),
+        Index(
+            "ix_memory_reconstruction_sources_source",
+            "run_id",
+            "owner_id",
+            "source_memory_id",
+        ),
+    )
+
+    run_id: Mapped[str] = mapped_column(String(_STABLE_ID_LEN), nullable=False)
+    owner_id: Mapped[str] = mapped_column(String(_STABLE_ID_LEN), nullable=False)
+    reconstruction_id: Mapped[str] = mapped_column(
+        String(_STABLE_ID_LEN), nullable=False
+    )
+    source_memory_id: Mapped[str] = mapped_column(
+        String(_STABLE_ID_LEN), nullable=False
+    )
+    ordinal: Mapped[int] = mapped_column(Integer, nullable=False)
+
+
+class MemoryDerivationSourceOrm(Base):
+    """Ordered direct source edges for a derived memory trace."""
+
+    __tablename__ = "memory_derivation_sources"
+    __table_args__ = (
+        PrimaryKeyConstraint(
+            "run_id", "owner_id", "derived_memory_id", "source_memory_id"
+        ),
+        UniqueConstraint(
+            "run_id",
+            "owner_id",
+            "derived_memory_id",
+            "ordinal",
+            name="uq_memory_derivation_sources_ordinal",
+        ),
+        ForeignKeyConstraint(
+            ["run_id", "owner_id", "derived_memory_id"],
+            [
+                "memory_traces.run_id",
+                "memory_traces.owner_id",
+                "memory_traces.memory_id",
+            ],
+            name="fk_memory_derivation_sources_derived",
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["run_id", "owner_id", "source_memory_id"],
+            [
+                "memory_traces.run_id",
+                "memory_traces.owner_id",
+                "memory_traces.memory_id",
+            ],
+            name="fk_memory_derivation_sources_source",
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["run_id", "owner_id", "reconstruction_id"],
+            [
+                "memory_reconstructions.run_id",
+                "memory_reconstructions.owner_id",
+                "memory_reconstructions.reconstruction_id",
+            ],
+            name="fk_memory_derivation_sources_reconstruction",
+            ondelete="RESTRICT",
+        ),
+        CheckConstraint("ordinal >= 0", name="derivation_source_ordinal_nonneg"),
+        CheckConstraint(
+            "derived_memory_id <> source_memory_id",
+            name="derivation_source_no_self",
+        ),
+        Index(
+            "ix_memory_derivation_sources_source",
+            "run_id",
+            "owner_id",
+            "source_memory_id",
+        ),
+        Index(
+            "ix_memory_derivation_sources_derived",
+            "run_id",
+            "owner_id",
+            "derived_memory_id",
+            "ordinal",
+        ),
+    )
+
+    run_id: Mapped[str] = mapped_column(String(_STABLE_ID_LEN), nullable=False)
+    owner_id: Mapped[str] = mapped_column(String(_STABLE_ID_LEN), nullable=False)
+    derived_memory_id: Mapped[str] = mapped_column(
+        String(_STABLE_ID_LEN), nullable=False
+    )
+    source_memory_id: Mapped[str] = mapped_column(
+        String(_STABLE_ID_LEN), nullable=False
+    )
+    ordinal: Mapped[int] = mapped_column(Integer, nullable=False)
+    reconstruction_id: Mapped[str | None] = mapped_column(
+        String(_STABLE_ID_LEN), nullable=True
+    )

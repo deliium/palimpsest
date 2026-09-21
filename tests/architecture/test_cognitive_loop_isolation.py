@@ -110,7 +110,29 @@ def test_cognition_modules_forbid_orchestration_and_private_world() -> None:
                     hits.append(f"{path.name}:{node.module}")
                 if node.module.startswith("world._"):
                     hits.append(f"{path.name}:{node.module}")
+                if node.module in {
+                    "world.events",
+                    "simulation.replay",
+                    "simulation.journal",
+                }:
+                    hits.append(f"{path.name}:{node.module}")
+                for alias in node.names:
+                    if alias.name in {
+                        "WorldEvent",
+                        "ObjectiveEventSource",
+                        "ReplayService",
+                    }:
+                        hits.append(f"{path.name}:{alias.name}")
     assert hits == []
+
+
+def test_cognition_reconstruction_signature_omits_world_event() -> None:
+    from agents.cognition.reconstruction import LLMMemoryReconstructor
+
+    hints = LLMMemoryReconstructor.reconstruct.__annotations__
+    text = " ".join(str(value) for value in hints.values())
+    assert "WorldEvent" not in text
+    assert "RecallEvidence" in text
 
 
 def test_cognition_facade_exports_loop_not_authority() -> None:

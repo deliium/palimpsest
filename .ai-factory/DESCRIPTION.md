@@ -2,17 +2,18 @@
 
 ## Overview
 
-Palimpsest is a Python 3.12+ modular monolith for reproducible, discrete, text-based multi-agent AI society experiments. The current V1 surface establishes package boundaries, typed domain contracts, an authoritative deterministic `WorldEngine` tick loop with agent-specific perception, an explicit async `CognitiveLoop` and per-agent `AgentRuntime`, owner-scoped episodic `MemoryService` (in-memory and PostgreSQL/pgvector), schema-versioned event persistence and replay, configuration, an HTTP liveness API, observability, and containers. A provider-neutral async LLM boundary returns only strict structured output plus normalized metadata; richer cognition policies and runtime provider composition in the API remain deferred.
+Palimpsest is a Python 3.12+ modular monolith for reproducible, discrete, text-based multi-agent AI society experiments. The current V1 surface establishes package boundaries, typed domain contracts, an authoritative deterministic `WorldEngine` tick loop with agent-specific perception, an explicit async `CognitiveLoop` and per-agent `AgentRuntime`, owner-scoped episodic `MemoryService` with reconstructive recall and append-only reconsolidation (in-memory and PostgreSQL/pgvector), schema-versioned event persistence and replay, experiment-only memory-drift analysis, configuration, an HTTP liveness API, observability, and containers. A provider-neutral async LLM boundary returns only strict structured output plus normalized metadata; richer cognition policies and runtime provider composition in the API remain deferred.
 
 ## Core Features
 
-- Bounded packages for world authority, agents, cognition strategies/`CognitiveLoop`, memory, social envelopes, LLM trust boundaries, simulation/`WorldEngine`/`AgentRuntime`, persistence adapters, analysis ports, API, and infrastructure
+- Bounded packages for world authority, agents, cognition strategies/`CognitiveLoop`, memory (including reconstructive recall), social envelopes, LLM trust boundaries, simulation/`WorldEngine`/`AgentRuntime`, persistence adapters, analysis ports (events + drift), API, and infrastructure
 - Typed immutable agent-facing `Observation` contracts, private world authority (`World` / `WorldState` / rules / perception / operations), and versioned event/export codecs (replay-v4 occurrence context)
 - Deterministic `PerceptionService` projecting one observation per agent from tick-start state plus prior committed events; cognition routed via `AgentRuntime` / `build_perspective`
-- Explicit async cognitive pipeline with replaceable stage protocols, scientific boundary records, deterministic placeholders/fakes, and fail-closed runtime lifecycle
-- Async `LLMProvider` with immutable `LLMRequest`/`LLMResult`, strict `StructuredOutput`, versioned prompt resources, and a configurable OpenAI-compatible HTTP adapter (no vendor SDKs)
+- Explicit async cognitive pipeline with replaceable stage protocols, scientific boundary records, reconstructive memory stage, deterministic placeholders/fakes, and fail-closed runtime lifecycle
+- Subjective reconstructive recall (`MemoryRecallRequest` → `ReconstructedMemory`) with deterministic and optional LLM-backed policies; non-destructive reconsolidation and lineage outside authoritative replay
+- Async `LLMProvider` with immutable `LLMRequest`/`LLMResult`, strict `StructuredOutput`, versioned prompt resources (including `reconstructive_memory/v1`), and a configurable OpenAI-compatible HTTP adapter (no vendor SDKs)
 - Deterministic seed-derived RNG streams, logical clock, namespaced IDs, and live/restored observation parity
-- `PALIMPSEST_` settings (including disabled-by-default `PALIMPSEST_LLM_*`), structured logging (no observation/communication/LLM payloads), async SQLAlchemy lifecycle, Alembic + pgvector bootstrap
+- `PALIMPSEST_` settings (including disabled-by-default `PALIMPSEST_LLM_*`), structured logging (no observation/communication/memory/LLM payloads), async SQLAlchemy lifecycle, Alembic + pgvector bootstrap (migration head `0006`)
 - FastAPI `/health` liveness and Docker Compose development stack (API does not yet own LLM provider lifecycle)
 
 ## Tech Stack
@@ -29,12 +30,12 @@ Palimpsest is a Python 3.12+ modular monolith for reproducible, discrete, text-b
 
 ## Architecture Notes
 
-Modular monolith with explicit bounded packages under `src/`. Domain modules do not import infrastructure; the API composition root wires adapters. `simulation.WorldEngine` is the sole public mutation authority; private world modules prepare candidates and project observations only. Cognition never receives `WorldState` or another agent's observation. The `llm` package is import-closed against world/simulation/API/infrastructure, forbids vendor SDKs, and never converts results into commands—future cognition must translate validated decision schemas into fresh `AgentCommand` values and use normal admission. Cross-module imports use package facades / `__all__`. Import-linter and AST boundary checks enforce dependency rules.
+Modular monolith with explicit bounded packages under `src/`. Domain modules do not import infrastructure; the API composition root wires adapters. `simulation.WorldEngine` is the sole public mutation authority; private world modules prepare candidates and project observations only. Cognition never receives `WorldState` or another agent's observation. Agents, memory, cognition, and reconstruction APIs may carry opaque `EventId` correlation only — never `WorldEvent` or event stores. Read-only `analysis` may join objective events with subjective reconstruction evidence after the fact. The `llm` package is import-closed against world/simulation/API/infrastructure, forbids vendor SDKs, and never converts results into commands—future cognition must translate validated decision schemas into fresh `AgentCommand` values and use normal admission. Cross-module imports use package facades / `__all__`. Import-linter and AST boundary checks enforce dependency rules.
 
 ## Non-Functional Requirements
 
-- **Logging:** Configurable via `PALIMPSEST_LOG_LEVEL`; structured, secret-safe, UTC operational timestamps; LLM logs stay metadata-only
+- **Logging:** Configurable via `PALIMPSEST_LOG_LEVEL`; structured, secret-safe, UTC operational timestamps; LLM and memory/reconstruction logs stay metadata-only
 - **Error handling:** Fail closed on invalid settings and ambiguous migration targets; LLM errors expose only safe codes/status/attempts
 - **Security:** Credentials are `SecretStr`; DSNs/prompts/bodies are never logged; non-root container user
-- **Reproducibility:** Explicit simulation seeds; no global RNG or wall-clock domain defaults; LLM retries use injected sleep/monotonic clocks
+- **Reproducibility:** Explicit simulation seeds; no global RNG or wall-clock domain defaults; LLM retries use injected sleep/monotonic clocks; exact external LLM reconstructive recall needs recorded outputs or stubs
 - **Testing:** Unit/architecture by default; integration and Compose are opt-in markers; LLM tests are network-free with deterministic fakes

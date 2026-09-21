@@ -35,8 +35,15 @@ from tests.fakes.memory import (
     FakeMemoryCallRecord,
     FakeMemoryService,
 )
+from tests.fakes.scripted_reconstructor import (
+    SCRIPTED_DRIFT_SCHEDULE_VERSION,
+    DriftEdit,
+    ScriptedDriftReconstructor,
+)
 
 __all__ = [
+    "SCRIPTED_DRIFT_SCHEDULE_VERSION",
+    "DriftEdit",
     "FakeCallRecord",
     "FakeClock",
     "FakeCognitionCallRecord",
@@ -59,6 +66,7 @@ __all__ = [
     "FakePlanner",
     "FakeSelfStateProjector",
     "FakeSituationModeler",
+    "ScriptedDriftReconstructor",
     "ScriptedFailure",
     "ScriptedStageFailure",
     "ScriptedStageSuccess",

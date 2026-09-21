@@ -136,11 +136,26 @@ def test_memory_paths_do_not_import_objective_event_authority() -> None:
         "persistence.orm",
         "persistence.readers",
         "persistence.sqlalchemy",
+        "analysis.contracts",
+        "analysis.service",
     }
     paths = list((SRC / "memory").rglob("*.py"))
     paths.append(SRC / "persistence" / "memory_sqlalchemy.py")
     paths.append(SRC / "agents" / "cognition" / "memory.py")
+    paths.append(SRC / "agents" / "cognition" / "reconstruction.py")
     for path in paths:
         imported = _imported_modules(path)
         overlap = imported & forbidden
         assert not overlap, f"{path.relative_to(SRC)} imports {sorted(overlap)}"
+
+
+def test_memory_may_import_opaque_event_id_only() -> None:
+    models = SRC / "memory" / "models.py"
+    imported = _imported_modules(models)
+    assert "world.identifiers" in imported or any(
+        name.startswith("world.identifiers") for name in imported
+    )
+    assert "world.events" not in imported
+    text = models.read_text(encoding="utf-8")
+    assert "EventId" in text
+    assert "from world.events" not in text

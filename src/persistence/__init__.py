@@ -6,6 +6,8 @@ migrations, or configure logging.
 
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
+
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from memory.contracts import MemoryService
@@ -27,11 +29,15 @@ from simulation.persistence import (
     TickJournalRepository,
 )
 
+if TYPE_CHECKING:
+    from persistence.analysis_sqlalchemy import SqlAlchemyAnalysisEvidenceLoader
+
 __all__ = [
     "PersistenceAdapterError",
     "PersistenceConflictError",
     "PersistenceCorruptionError",
     "PersistenceNotFoundError",
+    "create_analysis_evidence_loader",
     "create_experiment_repository",
     "create_memory_service",
     "create_run_repository",
@@ -88,6 +94,21 @@ def create_experiment_repository(
             "missing_session_factory", operation="create_experiment_repository"
         )
     from persistence.sqlalchemy import create_experiment_repository as impl
+
+    return impl(session_factory)
+
+
+def create_analysis_evidence_loader(
+    session_factory: async_sessionmaker[AsyncSession] | None = None,
+) -> SqlAlchemyAnalysisEvidenceLoader:
+    """Build a read-only experiment analysis evidence loader (SELECT only)."""
+    if session_factory is None:
+        raise PersistenceAdapterError(
+            "missing_session_factory", operation="create_analysis_evidence_loader"
+        )
+    from persistence.analysis_sqlalchemy import (
+        create_analysis_evidence_loader as impl,
+    )
 
     return impl(session_factory)
 

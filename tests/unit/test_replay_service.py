@@ -12,6 +12,7 @@ from simulation.journal import (
     hash_snapshot,
     hash_tick_events,
     hash_tick_payload,
+    hash_world_event,
 )
 from simulation.models import DERIVATION_VERSION, RunId, SimulationRunConfig
 from simulation.persistence import (
@@ -403,3 +404,141 @@ async def test_commit_gap_is_stream_discontinuity() -> None:
         )
     )
     assert outcome.result.status is ReplayStatus.STREAM_DISCONTINUITY
+
+
+@pytest.mark.asyncio
+async def test_subjective_memory_activity_does_not_alter_replay_event_hashes() -> None:
+    """Reconsolidation is outside AUTHORITATIVE_TABLES; replay digests stay fixed."""
+    from memory.models import (
+        ConceptMention,
+        MemoryId,
+        MemoryLineage,
+        MemoryMutationBatch,
+        MemoryProvenance,
+        MemoryRunId,
+        MemoryScope,
+        MemorySituationContext,
+        MemorySourceKind,
+        MemoryTrace,
+        MentionId,
+        ReconstructedMemory,
+        ReconstructionId,
+        ReconstructionRecord,
+    )
+    from memory.service import InMemoryMemoryService
+
+    snapshot = _snapshot()
+    event = make_replayable_event(
+        event_id=EventId("evt-1"),
+        run_id="run-1",
+        world_id=WorldId("world-1"),
+        tick=0,
+        sequence=0,
+        request_id=RequestId("req-1"),
+        resulting_revision=WorldRevision(1),
+        details=Waited(),
+        actor_id=EntityId("body-1"),
+    )
+    before_hash = hash_world_event(event)
+    before_payload = hash_tick_payload((event,))
+
+    scope = MemoryScope(run_id=MemoryRunId("run-1"), owner_id=AgentId("agent-1"))
+    memory = InMemoryMemoryService(scope)
+    root = MemoryTrace(
+        memory_id=MemoryId("m-root"),
+        owner_id=AgentId("agent-1"),
+        world_revision=WorldRevision(0),
+        concepts=(ConceptMention(mention_id=MentionId("c-1"), concept="gate"),),
+        entities=(),
+        relations=(),
+        context=MemorySituationContext(),
+        emotional_salience=0.4,
+        confidence=0.9,
+        provenance=MemoryProvenance(
+            kind=MemorySourceKind.DIRECT_OBSERVATION,
+            source_tick=0,
+            observed_source_id=EventId("evt-1"),
+        ),
+        created_tick=0,
+        source_tick=0,
+        last_access_tick=0,
+        access_count=0,
+    )
+    reconstructed = ReconstructedMemory(
+        reconstruction_id=ReconstructionId("recon-1"),
+        owner_id=AgentId("agent-1"),
+        narrative="subjective drift",
+        concepts=root.concepts,
+        entities=(),
+        relations=(),
+        context=MemorySituationContext(),
+        confidence=0.5,
+        emotional_salience=0.2,
+        source_memory_ids=(root.memory_id,),
+        generation=1,
+        reconstructed_at_tick=1,
+        policy_id="recall",
+        policy_version="1",
+        used_provider=False,
+        fallback_used=False,
+    )
+    derived = MemoryTrace(
+        memory_id=MemoryId("m-derived"),
+        owner_id=AgentId("agent-1"),
+        world_revision=WorldRevision(0),
+        concepts=reconstructed.concepts,
+        entities=(),
+        relations=(),
+        context=MemorySituationContext(),
+        emotional_salience=0.2,
+        confidence=0.5,
+        provenance=root.provenance,
+        created_tick=1,
+        source_tick=0,
+        last_access_tick=1,
+        access_count=0,
+        lineage=MemoryLineage(
+            supersedes_memory_id=root.memory_id,
+            generation=1,
+            source_memory_ids=(root.memory_id,),
+            reconstruction_id=ReconstructionId("recon-1"),
+        ),
+    )
+    await memory.apply(MemoryMutationBatch(writes=(root,)))
+    await memory.apply(
+        MemoryMutationBatch(
+            writes=(derived,),
+            reconstructions=(
+                ReconstructionRecord(
+                    reconstruction_id=ReconstructionId("recon-1"),
+                    run_id=MemoryRunId("run-1"),
+                    owner_id=AgentId("agent-1"),
+                    source_memory_ids=(root.memory_id,),
+                    reconstructed=reconstructed,
+                    created_tick=1,
+                    policy_id="recall",
+                    policy_version="1",
+                    used_provider=False,
+                    fallback_used=False,
+                ),
+            ),
+        )
+    )
+
+    assert hash_world_event(event) == before_hash
+    assert hash_tick_payload((event,)) == before_payload
+    assert event.resulting_revision == WorldRevision(1)
+
+    service = ReplayService(
+        _FakeRuns(_manifest()),
+        _FakeJournal(),
+        _FakeSnapshots([snapshot]),
+    )
+    first = await service.replay(
+        ReplayRequest(run_id=RunId("run-1"), target_tick=Tick(0))
+    )
+    second = await service.replay(
+        ReplayRequest(run_id=RunId("run-1"), target_tick=Tick(0))
+    )
+    assert first.result.status is second.result.status
+    assert first.result.status is ReplayStatus.OK

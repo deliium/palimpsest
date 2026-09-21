@@ -355,3 +355,64 @@ def test_checker_rejects_llm_unsafe_logging(tmp_path: Path) -> None:
         },
     )
     assert "unsafe-logging" in _rules(structlog_leak)
+
+
+def test_checker_detects_world_event_import_in_memory(tmp_path: Path) -> None:
+    root = _write_tree(
+        tmp_path,
+        {
+            "memory/__init__.py": "from world.events import WorldEvent\n",
+            "world/__init__.py": _PUBLIC_INIT,
+            "world/events.py": "class WorldEvent:\n    pass\n",
+        },
+    )
+    report = _messages(root)
+    assert "subjective-objective-boundary" in _rules(root)
+    assert "WorldEvent" in report or "world.events" in report
+
+
+def test_checker_allows_opaque_event_id_in_memory(tmp_path: Path) -> None:
+    root = _write_tree(
+        tmp_path,
+        {
+            "memory/__init__.py": "from world.identifiers import EventId\n",
+            "world/__init__.py": _PUBLIC_INIT,
+            "world/identifiers.py": "class EventId:\n    pass\n",
+            "agents/__init__.py": _PUBLIC_INIT,
+        },
+    )
+    assert "subjective-objective-boundary" not in _rules(root)
+
+
+def test_checker_detects_replay_import_in_cognition(tmp_path: Path) -> None:
+    root = _write_tree(
+        tmp_path,
+        {
+            "agents/__init__.py": _PUBLIC_INIT,
+            "agents/cognition/__init__.py": (
+                "from simulation.replay import ReplayService\n"
+            ),
+            "simulation/__init__.py": _PUBLIC_INIT,
+            "simulation/replay.py": "class ReplayService:\n    pass\n",
+            "world/__init__.py": _PUBLIC_INIT,
+            "memory/__init__.py": _PUBLIC_INIT,
+            "social/__init__.py": _PUBLIC_INIT,
+            "llm/__init__.py": _PUBLIC_INIT,
+        },
+    )
+    assert "subjective-objective-boundary" in _rules(root)
+
+
+def test_analysis_may_import_memory_contracts(tmp_path: Path) -> None:
+    root = _write_tree(
+        tmp_path,
+        {
+            "analysis/__init__.py": "from memory.models import MemoryTrace\n",
+            "memory/__init__.py": _PUBLIC_INIT,
+            "memory/models.py": "class MemoryTrace:\n    pass\n",
+            "world/__init__.py": _PUBLIC_INIT,
+            "simulation/__init__.py": _PUBLIC_INIT,
+            "agents/__init__.py": _PUBLIC_INIT,
+        },
+    )
+    assert "import-allowlist" not in _rules(root)

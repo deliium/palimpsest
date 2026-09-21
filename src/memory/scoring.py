@@ -2,16 +2,22 @@
 
 No wall clocks, global RNG, Python ``hash()``, or logging. Scores are finite
 floats quantized at :data:`memory.models.SCORE_QUANTUM`.
+
+Recency age semantics default to ``STORAGE`` (``current_tick - created_tick``)
+to preserve historical scoring behavior. Callers may select ``EPISODE``
+(``current_tick - source_tick``) via :class:`MemoryScoringPolicy`.
 """
 
 from __future__ import annotations
 
 import math
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 
 from memory.models import (
     AccessHistoryMode,
+    MemoryAgeSemantics,
     MemoryEmbedding,
+    MemoryId,
     MemoryQueryContext,
     MemoryQueryFilters,
     MemoryRankedHit,
@@ -26,6 +32,7 @@ from memory.models import (
 
 __all__ = [
     "cosine_similarity",
+    "logical_age_ticks",
     "matches_filters",
     "rank_traces",
     "retention_strength",
@@ -65,6 +72,24 @@ def cosine_similarity(left: Sequence[float], right: Sequence[float]) -> float:
     elif raw > 1.0:
         raw = 1.0
     return (raw + 1.0) * 0.5
+
+
+def logical_age_ticks(
+    trace: MemoryTrace,
+    *,
+    current_tick: int,
+    age_semantics: MemoryAgeSemantics,
+) -> int:
+    """Return non-negative logical age under the selected semantics."""
+    if type(trace) is not MemoryTrace:
+        raise TypeError("logical_age_ticks: invalid_trace")
+    if type(age_semantics) is not MemoryAgeSemantics:
+        raise TypeError("logical_age_ticks: invalid_semantics")
+    if age_semantics is MemoryAgeSemantics.EPISODE:
+        return max(0, current_tick - trace.source_tick)
+    if age_semantics is MemoryAgeSemantics.STORAGE:
+        return max(0, current_tick - trace.created_tick)
+    raise ValueError("logical_age_ticks: unsupported_semantics")
 
 
 def matches_filters(trace: MemoryTrace, filters: MemoryQueryFilters) -> bool:
@@ -161,7 +186,9 @@ def score_trace(
                 raise ValueError("score_trace: embedding_dimension_mismatch")
             semantic = cosine_similarity(query_embedding.vector, trace_embedding.vector)
 
-    age = max(0, current_tick - trace.created_tick)
+    age = logical_age_ticks(
+        trace, current_tick=current_tick, age_semantics=policy.age_semantics
+    )
     recency = 1.0 / (1.0 + float(age))
     salience = trace.emotional_salience
     context_overlap = _context_overlap(trace, context)
@@ -184,6 +211,13 @@ def score_trace(
         + policy.weights.social_relevance * breakdown.social_relevance
         + policy.weights.access_history * breakdown.access_history
     )
+    if policy.generation_influence > 0.0:
+        generation_factor = float(trace.lineage.generation) / (
+            1.0 + float(trace.lineage.generation)
+        )
+        weighted = (
+            1.0 - policy.generation_influence
+        ) * weighted + policy.generation_influence * generation_factor
     score = quantize_score(min(1.0, max(0.0, weighted)))
     matched_concepts, matched_entities = _matched_mentions(trace, context)
     return score, breakdown, matched_concepts, matched_entities
@@ -241,6 +275,8 @@ def rank_traces(
         )
     # score DESC, created_tick DESC, memory_id ASC
     scored.sort(key=lambda item: (-item[0], -item[1], item[2]))
+    if policy.ancestry_dedup:
+        scored = _ancestry_dedup(scored)
     hits: list[MemoryRankedHit] = []
     for index, item in enumerate(scored[:limit], start=1):
         score, _created, _mid, trace, breakdown, matched_c, matched_e = item
@@ -299,6 +335,69 @@ def should_forget(
     return strength < policy.forget_threshold
 
 
+def _ancestry_dedup(
+    scored: list[
+        tuple[
+            float,
+            int,
+            str,
+            MemoryTrace,
+            MemoryScoreBreakdown,
+            tuple[MentionId, ...],
+            tuple[MentionId, ...],
+        ]
+    ],
+) -> list[
+    tuple[
+        float,
+        int,
+        str,
+        MemoryTrace,
+        MemoryScoreBreakdown,
+        tuple[MentionId, ...],
+        tuple[MentionId, ...],
+    ]
+]:
+    """Prefer higher-generation descendants over direct ancestors in the result set.
+
+    Dropped ancestors remain available via direct fetch; they are only removed
+    from the ranked retrieval window.
+    """
+    score_by_id = {item[2]: item[0] for item in scored}
+    descendants: dict[str, set[str]] = {item[2]: set() for item in scored}
+    for item in scored:
+        trace = item[3]
+        mid = item[2]
+        for source in trace.lineage.source_memory_ids:
+            if source.value in descendants:
+                descendants[source.value].add(mid)
+        if (
+            trace.lineage.supersedes_memory_id is not None
+            and trace.lineage.supersedes_memory_id.value in descendants
+        ):
+            descendants[trace.lineage.supersedes_memory_id.value].add(mid)
+
+    keep: list[
+        tuple[
+            float,
+            int,
+            str,
+            MemoryTrace,
+            MemoryScoreBreakdown,
+            tuple[MentionId, ...],
+            tuple[MentionId, ...],
+        ]
+    ] = []
+    for item in scored:
+        mid = item[2]
+        ancestor_score = item[0]
+        child_ids = descendants.get(mid, set())
+        if any(score_by_id[child] >= ancestor_score for child in child_ids):
+            continue
+        keep.append(item)
+    return keep
+
+
 def _context_overlap(trace: MemoryTrace, context: MemoryQueryContext) -> float:
     score = 0.0
     parts = 0
@@ -352,3 +451,27 @@ def _matched_mentions(
         if item.entity_id is not None and item.entity_id in related
     )
     return concept_ids, entity_ids
+
+
+def collect_ancestry_ids(
+    traces: Mapping[MemoryId, MemoryTrace],
+    root_id: MemoryId,
+) -> tuple[MemoryId, ...]:
+    """Traverse direct source edges depth-first; reject cycles with a reason code."""
+    if root_id not in traces:
+        raise ValueError("collect_ancestry_ids: unknown_root")
+    ordered: list[MemoryId] = []
+    seen: set[str] = set()
+    stack = [root_id]
+    while stack:
+        current = stack.pop()
+        if current.value in seen:
+            raise ValueError("collect_ancestry_ids: cycle")
+        seen.add(current.value)
+        ordered.append(current)
+        trace = traces[current]
+        for source in reversed(trace.lineage.source_memory_ids):
+            if source not in traces:
+                raise ValueError("collect_ancestry_ids: dangling_source")
+            stack.append(source)
+    return tuple(ordered)

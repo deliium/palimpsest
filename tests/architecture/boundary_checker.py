@@ -56,7 +56,7 @@ ALLOWED_IMPORTS: Final[dict[str, frozenset[str]]] = {
         {"world", "agents", "agents.cognition", "memory", "social", "llm"}
     ),
     "api": frozenset({"simulation", "infrastructure", "persistence"}),
-    "analysis": frozenset({"world", "simulation"}),
+    "analysis": frozenset({"world", "simulation", "memory"}),
     "infrastructure": frozenset(),
     "persistence": frozenset({"simulation", "infrastructure", "memory"}),
 }
@@ -85,6 +85,48 @@ PRIVATE_WORLD_IMPORTERS: Final[frozenset[str]] = frozenset(
         "simulation.bootstrap",
     }
 )
+
+# Subjective layers may carry opaque EventId correlation but must never import
+# WorldEvent payloads, event/journal/replay readers, or private world authority.
+SUBJECTIVE_OBJECTIVE_FORBIDDEN_LAYERS: Final[frozenset[str]] = frozenset(
+    {
+        "agents",
+        "agents.cognition",
+        "memory",
+    }
+)
+SUBJECTIVE_OBJECTIVE_FORBIDDEN_MODULES: Final[frozenset[str]] = frozenset(
+    {
+        "world.events",
+        "simulation.replay",
+        "simulation.journal",
+        "persistence.readers",
+        "persistence.orm",
+        "persistence.sqlalchemy",
+        "analysis.contracts",
+        "analysis.service",
+        "analysis.sources",
+        "analysis.memory_drift",
+    }
+)
+SUBJECTIVE_OBJECTIVE_FORBIDDEN_NAMES: Final[frozenset[str]] = frozenset(
+    {
+        "WorldEvent",
+        "ObjectiveEventSource",
+        "EventSource",
+        "ReplayService",
+        "TickJournalRepository",
+        "WorldState",
+        "WorldEngine",
+    }
+)
+# Opaque correlation ids remain allowed via world.identifiers.EventId.
+SUBJECTIVE_OBJECTIVE_ALLOWED_NAMES: Final[frozenset[str]] = frozenset(
+    {
+        "EventId",
+    }
+)
+
 RNG_ADAPTER_MODULE: Final[str] = "simulation.randomness"
 
 FASTAPI_STACK: Final[frozenset[str]] = frozenset({"fastapi", "starlette", "uvicorn"})
@@ -607,6 +649,44 @@ class _ModuleVisitor(ast.NodeVisitor):
             )
         self._check_private_world(imported, line)
         self._check_cross_package_private(imported, line)
+        self._check_subjective_objective_boundary(imported, line)
+
+    def _check_subjective_objective_boundary(self, imported: str, line: int) -> None:
+        if self.layer not in SUBJECTIVE_OBJECTIVE_FORBIDDEN_LAYERS:
+            return
+        root_and_module = imported
+        for forbidden in SUBJECTIVE_OBJECTIVE_FORBIDDEN_MODULES:
+            if root_and_module == forbidden or root_and_module.startswith(
+                f"{forbidden}."
+            ):
+                # Allow EventId leaf imports only from world.identifiers.
+                leaf = imported.rsplit(".", 1)[-1]
+                if (
+                    forbidden == "world.events"
+                    and leaf in SUBJECTIVE_OBJECTIVE_ALLOWED_NAMES
+                ):
+                    continue
+                if leaf in SUBJECTIVE_OBJECTIVE_ALLOWED_NAMES and forbidden.startswith(
+                    "world."
+                ):
+                    continue
+                self._add(
+                    "subjective-objective-boundary",
+                    imported,
+                    line,
+                    "agents/cognition/memory may not import objective event "
+                    "authority, replay/journal readers, or analysis join ports; "
+                    "opaque EventId remains allowed via world.identifiers",
+                )
+                return
+        leaf = imported.rsplit(".", 1)[-1]
+        if leaf in SUBJECTIVE_OBJECTIVE_FORBIDDEN_NAMES:
+            self._add(
+                "subjective-objective-boundary",
+                imported,
+                line,
+                f"subjective layer must not import {leaf}",
+            )
 
     def _check_random_import(self, imported: str, line: int) -> None:
         self._random_module_aliases.add("random")

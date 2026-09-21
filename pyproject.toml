@@ -290,18 +290,19 @@ allow_indirect_imports = true
 
 [[tool.importlinter.contracts]]
 id = "analysis_is_read_only"
-name = "Analysis may not import live aggregates or infrastructure"
+name = "Analysis may import memory contracts read-only; not live infra or agents"
 type = "forbidden"
 source_modules = ["analysis"]
 forbidden_modules = [
     "agents",
-    "memory",
     "social",
     "llm",
     "api",
     "infrastructure",
     "persistence",
 ]
+# memory -> agents is transitive; gate direct agents imports only.
+allow_indirect_imports = true
 
 [[tool.importlinter.contracts]]
 id = "private_world_authority"
@@ -373,6 +374,12 @@ source_modules = [
     "analysis",
 ]
 forbidden_modules = ["pydantic", "pydantic_core"]
+# Cognition may import the provider-neutral llm facade (ARCHITECTURE.md).
+# llm owns the only allowed Pydantic surface; cognition must not import pydantic
+# directly.
+ignore_imports = [
+    "agents.cognition.reconstruction -> llm",
+]
 
 [[tool.importlinter.contracts]]
 id = "no_provider_sdks"
@@ -429,3 +436,18 @@ name = "Cognition may not import orchestration or infrastructure"
 type = "forbidden"
 source_modules = ["agents.cognition"]
 forbidden_modules = ["simulation", "api", "analysis", "infrastructure", "persistence"]
+
+[[tool.importlinter.contracts]]
+id = "subjective_layers_forbid_objective_event_modules"
+name = "Agents, cognition, and memory must not import objective event or replay modules"
+type = "forbidden"
+source_modules = ["agents", "agents.cognition", "memory"]
+forbidden_modules = [
+    "world.events",
+    "simulation.replay",
+    "simulation.journal",
+    "persistence.readers",
+    "persistence.orm",
+    "persistence.sqlalchemy",
+    "analysis",
+]

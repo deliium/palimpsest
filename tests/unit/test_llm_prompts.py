@@ -210,3 +210,25 @@ def test_public_exports_available_from_llm_package() -> None:
     assert callable(render_prompt)
     assert callable(canonical_rendered_digest)
     assert PromptReason.DIGEST_MISMATCH.value == "digest_mismatch"
+
+
+def test_reconstructive_memory_prompt_loads_with_pinned_digests() -> None:
+    loaded = load_prompt("reconstructive_memory", "v1")
+    assert loaded.name == "reconstructive_memory"
+    assert loaded.version == "v1"
+    assert loaded.variables == ("schema_name", "schema_json", "evidence_json")
+    assert {item.sha256 for item in loaded.templates} == {
+        "72a32a4a4f63bb9a08a39f992b47dffe12fc63a85c237ea5357c2dc6f0bc7638",
+        "d3a917668f2b46613c2b91c2ce1ef79b39a1145354b76874ac7b13918ce0ae6e",
+    }
+    rendered = render_prompt(
+        "reconstructive_memory",
+        "v1",
+        {
+            "schema_name": "ReconstructedMemoryCandidate",
+            "schema_json": "{}",
+            "evidence_json": "{}",
+        },
+    )
+    assert rendered.reference.name == "reconstructive_memory"
+    assert len(rendered.messages) == 2

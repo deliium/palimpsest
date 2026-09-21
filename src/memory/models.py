@@ -39,6 +39,7 @@ __all__ = [
     "EntityMention",
     "EventId",
     "MemoryAccessReceipt",
+    "MemoryAgeSemantics",
     "MemoryApplyResult",
     "MemoryEmbedding",
     "MemoryForgetRequest",
@@ -50,6 +51,10 @@ __all__ = [
     "MemoryQueryContext",
     "MemoryQueryFilters",
     "MemoryRankedHit",
+    "MemoryRecallContext",
+    "MemoryRecallRequest",
+    "MemoryRecallResult",
+    "MemoryReconstructionPolicy",
     "MemoryRelation",
     "MemoryRetentionPolicy",
     "MemoryRetrieveRequest",
@@ -65,21 +70,33 @@ __all__ = [
     "MemoryTrace",
     "MentionId",
     "OwnershipError",
+    "RecallEvidence",
+    "RecallSourceEvidence",
+    "ReconsolidationIntent",
+    "ReconstructedMemory",
+    "ReconstructionFallbackMode",
+    "ReconstructionId",
+    "ReconstructionRecord",
     "RelationEndpoint",
     "RelationEndpointKind",
     "WorldRevision",
     "diagnostic_projection",
     "normalize_score_weights",
     "quantize_score",
+    "validate_reconstructed_memory",
 ]
 
 _MAX_CONCEPT_CHARS: Final[int] = 256
 _MAX_LABEL_CHARS: Final[int] = 256
 _MAX_PREDICATE_CHARS: Final[int] = 128
 _MAX_CONTEXT_TAG_CHARS: Final[int] = 128
+_MAX_NARRATIVE_CHARS: Final[int] = 4096
 _MAX_MENTIONS: Final[int] = 256
 _MAX_RELATIONS: Final[int] = 256
 _MAX_CONTEXT_TAGS: Final[int] = 64
+_MAX_LINEAGE_SOURCES: Final[int] = 256
+_MAX_RECALL_BELIEFS: Final[int] = 64
+_MAX_RECALL_SOURCES: Final[int] = 64
 
 
 class OwnershipError(PermissionError):
@@ -344,11 +361,32 @@ class MemoryProvenance:
 
 
 @dataclass(frozen=True, slots=True)
+class ReconstructionId:
+    """Caller-supplied stable identity for one reconstruction invocation."""
+
+    value: str
+
+    def __post_init__(self) -> None:
+        require_stable_id("ReconstructionId.value", self.value)
+
+    def __repr__(self) -> str:
+        return f"ReconstructionId(value={self.value!r})"
+
+
+@dataclass(frozen=True, slots=True)
 class MemoryLineage:
-    """Reserved reconsolidation lineage; V1 does not apply reconstruction policy."""
+    """Non-destructive derivation lineage for a persisted trace.
+
+    ``supersedes_memory_id`` is the principal predecessor for compatibility; it
+    never authorizes replacing or deactivating that parent. Ordered
+    ``source_memory_ids`` list every direct source. ``reconstruction_id`` names
+    the producing reconstruction when this trace was derived.
+    """
 
     supersedes_memory_id: MemoryId | None = None
     generation: int = 0
+    source_memory_ids: tuple[MemoryId, ...] = ()
+    reconstruction_id: ReconstructionId | None = None
 
     def __post_init__(self) -> None:
         if (
@@ -361,11 +399,38 @@ class MemoryLineage:
             "generation",
             require_exact_nonneg_int("MemoryLineage.generation", self.generation),
         )
+        sources = require_ordered_unique(
+            "MemoryLineage.source_memory_ids",
+            self.source_memory_ids,
+            item_type=MemoryId,
+        )
+        if len(sources) > _MAX_LINEAGE_SOURCES:
+            raise ValueError("MemoryLineage.source_memory_ids: exceeds_max_length")
+        object.__setattr__(self, "source_memory_ids", sources)
+        if (
+            self.reconstruction_id is not None
+            and type(self.reconstruction_id) is not ReconstructionId
+        ):
+            raise TypeError("MemoryLineage.reconstruction_id: invalid_type")
+        if self.reconstruction_id is not None and not sources:
+            raise ValueError(
+                "MemoryLineage.source_memory_ids: required_for_reconstruction"
+            )
+        if sources and self.generation < 1:
+            raise ValueError("MemoryLineage.generation: derived_requires_positive")
+        if (
+            self.supersedes_memory_id is not None
+            and sources
+            and self.supersedes_memory_id not in sources
+        ):
+            raise ValueError("MemoryLineage.supersedes_memory_id: not_in_sources")
 
     def __repr__(self) -> str:
         return (
             f"MemoryLineage(has_supersedes={self.supersedes_memory_id is not None}, "
-            f"generation={self.generation})"
+            f"generation={self.generation}, "
+            f"source_count={len(self.source_memory_ids)}, "
+            f"has_reconstruction={self.reconstruction_id is not None})"
         )
 
 
@@ -517,6 +582,9 @@ class MemoryTrace:
             and self.lineage.supersedes_memory_id == self.memory_id
         ):
             raise ValueError("MemoryLineage.supersedes_memory_id: self_reference")
+        for source_id in self.lineage.source_memory_ids:
+            if source_id == self.memory_id:
+                raise ValueError("MemoryLineage.source_memory_ids: self_reference")
 
     def __repr__(self) -> str:
         return (
@@ -655,6 +723,17 @@ class AccessHistoryMode(StrEnum):
 
     FAMILIARITY = "familiarity"
     NOVELTY = "novelty"
+
+
+class MemoryAgeSemantics(StrEnum):
+    """Which logical age a scoring/reconstruction policy applies.
+
+    ``EPISODE`` uses ``current_tick - source_tick``.
+    ``STORAGE`` uses ``current_tick - created_tick``.
+    """
+
+    EPISODE = "episode"
+    STORAGE = "storage"
 
 
 # Stable aliases for documentation and diagnostics allowlists.
@@ -839,6 +918,9 @@ class MemoryScoringPolicy:
     weights: MemoryScoreWeights
     access_history_mode: AccessHistoryMode = AccessHistoryMode.FAMILIARITY
     embedding_dimension: int | None = None
+    age_semantics: MemoryAgeSemantics = MemoryAgeSemantics.STORAGE
+    generation_influence: float = 0.0
+    ancestry_dedup: bool = False
 
     def __post_init__(self) -> None:
         object.__setattr__(
@@ -865,6 +947,17 @@ class MemoryScoringPolicy:
             raise ValueError("MemoryScoringPolicy.weights: no_active_weights")
         if type(self.access_history_mode) is not AccessHistoryMode:
             raise TypeError("MemoryScoringPolicy.access_history_mode: invalid_type")
+        if type(self.age_semantics) is not MemoryAgeSemantics:
+            raise TypeError("MemoryScoringPolicy.age_semantics: invalid_type")
+        if type(self.ancestry_dedup) is not bool:
+            raise TypeError("MemoryScoringPolicy.ancestry_dedup: invalid_type")
+        object.__setattr__(
+            self,
+            "generation_influence",
+            _unit_interval(
+                "MemoryScoringPolicy.generation_influence", self.generation_influence
+            ),
+        )
         if self.embedding_dimension is not None:
             dim = require_exact_nonneg_int(
                 "MemoryScoringPolicy.embedding_dimension", self.embedding_dimension
@@ -888,7 +981,9 @@ class MemoryScoringPolicy:
         return (
             f"MemoryScoringPolicy(policy_id={self.policy_id!r}, "
             f"version={self.version!r}, "
-            f"enabled={list(self.weights.enabled_components())})"
+            f"enabled={list(self.weights.enabled_components())}, "
+            f"age_semantics={self.age_semantics.value!r}, "
+            f"ancestry_dedup={self.ancestry_dedup})"
         )
 
 
@@ -1405,10 +1500,11 @@ class MemoryRetrieveResult:
 
 @dataclass(frozen=True, slots=True)
 class MemoryMutationBatch:
-    """Atomic batch of create and access updates applied after cognition."""
+    """Atomic batch of create, reconsolidation, and access updates."""
 
     writes: tuple[MemoryTrace, ...] = ()
     accesses: tuple[MemoryAccessReceipt, ...] = ()
+    reconstructions: tuple[ReconstructionRecord, ...] = ()
     operation_id: str | None = None
 
     def __post_init__(self) -> None:
@@ -1429,6 +1525,18 @@ class MemoryMutationBatch:
             max_items=_MAX_BATCH_ITEMS,
         )
         object.__setattr__(self, "accesses", accesses)
+        reconstructions = _require_ordered_models(
+            "MemoryMutationBatch.reconstructions",
+            self.reconstructions,
+            model_type=ReconstructionRecord,
+            max_items=_MAX_BATCH_ITEMS,
+        )
+        object.__setattr__(self, "reconstructions", reconstructions)
+        reconstruction_ids = [item.reconstruction_id.value for item in reconstructions]
+        if len(set(reconstruction_ids)) != len(reconstruction_ids):
+            raise ValueError(
+                "MemoryMutationBatch.reconstructions: duplicate_reconstruction_id"
+            )
         if self.operation_id is not None:
             object.__setattr__(
                 self,
@@ -1443,7 +1551,8 @@ class MemoryMutationBatch:
     def __repr__(self) -> str:
         return (
             f"MemoryMutationBatch(write_count={len(self.writes)}, "
-            f"access_count={len(self.accesses)})"
+            f"access_count={len(self.accesses)}, "
+            f"reconstruction_count={len(self.reconstructions)})"
         )
 
 
@@ -1454,6 +1563,8 @@ class MemoryApplyResult:
     written_count: int
     access_applied_count: int
     access_idempotent_count: int
+    reconstruction_written_count: int = 0
+    reconstruction_idempotent_count: int = 0
 
     def __post_init__(self) -> None:
         object.__setattr__(
@@ -1478,12 +1589,31 @@ class MemoryApplyResult:
                 self.access_idempotent_count,
             ),
         )
+        object.__setattr__(
+            self,
+            "reconstruction_written_count",
+            require_exact_nonneg_int(
+                "MemoryApplyResult.reconstruction_written_count",
+                self.reconstruction_written_count,
+            ),
+        )
+        object.__setattr__(
+            self,
+            "reconstruction_idempotent_count",
+            require_exact_nonneg_int(
+                "MemoryApplyResult.reconstruction_idempotent_count",
+                self.reconstruction_idempotent_count,
+            ),
+        )
 
     def __repr__(self) -> str:
         return (
             f"MemoryApplyResult(written_count={self.written_count}, "
             f"access_applied_count={self.access_applied_count}, "
-            f"access_idempotent_count={self.access_idempotent_count})"
+            f"access_idempotent_count={self.access_idempotent_count}, "
+            f"reconstruction_written_count={self.reconstruction_written_count}, "
+            f"reconstruction_idempotent_count="
+            f"{self.reconstruction_idempotent_count})"
         )
 
 
@@ -1571,6 +1701,19 @@ _SAFE_DIAGNOSTIC_KEYS: Final[frozenset[str]] = frozenset(
         "duration_ms",
         "reason_code",
         "status",
+        "reconstruction_id",
+        "request_id",
+        "invocation_id",
+        "generation",
+        "source_count",
+        "belief_count",
+        "edge_count",
+        "fallback_used",
+        "used_provider",
+        "prompt_version",
+        "schema_version",
+        "model_version",
+        "reconsolidation_count",
     }
 )
 
@@ -1599,3 +1742,845 @@ def diagnostic_projection(metadata: Mapping[str, object]) -> dict[str, object]:
             continue
         raise ValueError("diagnostic_projection: invalid_value_type")
     return out
+
+
+# ---------------------------------------------------------------------------
+# Reconstructive recall, derivation, and reconsolidation contracts
+# ---------------------------------------------------------------------------
+
+
+class ReconstructionFallbackMode(StrEnum):
+    """Behavior when an optional provider path fails closed."""
+
+    DETERMINISTIC = "deterministic"
+    REJECT = "reject"
+
+
+@dataclass(frozen=True, slots=True)
+class MemoryReconstructionPolicy:
+    """Versioned reconstruction policy (independent of transport)."""
+
+    policy_id: str
+    version: str
+    age_semantics: MemoryAgeSemantics = MemoryAgeSemantics.EPISODE
+    allow_provider: bool = False
+    fallback_mode: ReconstructionFallbackMode = ReconstructionFallbackMode.DETERMINISTIC
+    reconsolidate: bool = False
+    max_source_traces: int = 16
+    max_beliefs: int = 32
+    max_narrative_chars: int = _MAX_NARRATIVE_CHARS
+    ancestry_dedup: bool = False
+    generation_weight: float = 0.0
+
+    def __post_init__(self) -> None:
+        object.__setattr__(
+            self,
+            "policy_id",
+            require_bounded_text(
+                "MemoryReconstructionPolicy.policy_id",
+                self.policy_id,
+                max_length=_MAX_POLICY_ID_CHARS,
+            ),
+        )
+        object.__setattr__(
+            self,
+            "version",
+            require_bounded_text(
+                "MemoryReconstructionPolicy.version",
+                self.version,
+                max_length=_MAX_POLICY_ID_CHARS,
+            ),
+        )
+        if type(self.age_semantics) is not MemoryAgeSemantics:
+            raise TypeError("MemoryReconstructionPolicy.age_semantics: invalid_type")
+        if type(self.allow_provider) is not bool:
+            raise TypeError("MemoryReconstructionPolicy.allow_provider: invalid_type")
+        if type(self.fallback_mode) is not ReconstructionFallbackMode:
+            raise TypeError("MemoryReconstructionPolicy.fallback_mode: invalid_type")
+        if type(self.reconsolidate) is not bool:
+            raise TypeError("MemoryReconstructionPolicy.reconsolidate: invalid_type")
+        if type(self.ancestry_dedup) is not bool:
+            raise TypeError("MemoryReconstructionPolicy.ancestry_dedup: invalid_type")
+        max_sources = require_exact_nonneg_int(
+            "MemoryReconstructionPolicy.max_source_traces", self.max_source_traces
+        )
+        if max_sources < 1 or max_sources > _MAX_RECALL_SOURCES:
+            raise ValueError(
+                "MemoryReconstructionPolicy.max_source_traces: out_of_range"
+            )
+        object.__setattr__(self, "max_source_traces", max_sources)
+        max_beliefs = require_exact_nonneg_int(
+            "MemoryReconstructionPolicy.max_beliefs", self.max_beliefs
+        )
+        if max_beliefs < 1 or max_beliefs > _MAX_RECALL_BELIEFS:
+            raise ValueError("MemoryReconstructionPolicy.max_beliefs: out_of_range")
+        object.__setattr__(self, "max_beliefs", max_beliefs)
+        max_narrative = require_exact_nonneg_int(
+            "MemoryReconstructionPolicy.max_narrative_chars", self.max_narrative_chars
+        )
+        if max_narrative < 1 or max_narrative > _MAX_NARRATIVE_CHARS:
+            raise ValueError(
+                "MemoryReconstructionPolicy.max_narrative_chars: out_of_range"
+            )
+        object.__setattr__(self, "max_narrative_chars", max_narrative)
+        object.__setattr__(
+            self,
+            "generation_weight",
+            _unit_interval(
+                "MemoryReconstructionPolicy.generation_weight", self.generation_weight
+            ),
+        )
+
+    def __repr__(self) -> str:
+        return (
+            f"MemoryReconstructionPolicy(policy_id={self.policy_id!r}, "
+            f"version={self.version!r}, "
+            f"age_semantics={self.age_semantics.value!r}, "
+            f"allow_provider={self.allow_provider}, "
+            f"reconsolidate={self.reconsolidate})"
+        )
+
+
+@dataclass(frozen=True, slots=True)
+class MemoryRecallContext:
+    """Subjective current-context signals available to reconstruction.
+
+    These are agent-facing inputs only. They never grant world authority or
+    cross-owner memory access.
+    """
+
+    location_id: EntityId | None = None
+    tags: tuple[str, ...] = ()
+    related_entity_ids: tuple[EntityId, ...] = ()
+    emotional_significance: float = 0.0
+    social_significance: float = 0.0
+
+    def __post_init__(self) -> None:
+        if self.location_id is not None and type(self.location_id) is not EntityId:
+            raise TypeError("MemoryRecallContext.location_id: invalid_type")
+        object.__setattr__(
+            self,
+            "tags",
+            _require_ordered_unique_text(
+                "MemoryRecallContext.tags",
+                self.tags,
+                max_length=_MAX_CONTEXT_TAG_CHARS,
+                max_items=_MAX_CONTEXT_TAGS,
+            ),
+        )
+        object.__setattr__(
+            self,
+            "related_entity_ids",
+            require_ordered_unique(
+                "MemoryRecallContext.related_entity_ids",
+                self.related_entity_ids,
+                item_type=EntityId,
+            ),
+        )
+        if len(self.related_entity_ids) > _MAX_MENTIONS:
+            raise ValueError(
+                "MemoryRecallContext.related_entity_ids: exceeds_max_length"
+            )
+        object.__setattr__(
+            self,
+            "emotional_significance",
+            _unit_interval(
+                "MemoryRecallContext.emotional_significance",
+                self.emotional_significance,
+            ),
+        )
+        object.__setattr__(
+            self,
+            "social_significance",
+            _unit_interval(
+                "MemoryRecallContext.social_significance",
+                self.social_significance,
+            ),
+        )
+
+    def __repr__(self) -> str:
+        return (
+            f"MemoryRecallContext(has_location={self.location_id is not None}, "
+            f"tag_count={len(self.tags)}, "
+            f"related_count={len(self.related_entity_ids)})"
+        )
+
+
+@dataclass(frozen=True, slots=True)
+class RecallSourceEvidence:
+    """Normalized ranked source evidence; never includes WorldEvent content."""
+
+    memory_id: MemoryId
+    owner_id: AgentId
+    rank: int
+    score: float
+    concepts: tuple[ConceptMention, ...]
+    entities: tuple[EntityMention, ...]
+    relations: tuple[MemoryRelation, ...]
+    context: MemorySituationContext
+    emotional_salience: float
+    confidence: float
+    source_confidence: float
+    episode_age_ticks: int
+    storage_age_ticks: int
+    generation: int
+    provenance_kind: MemorySourceKind
+    observed_source_id: EventId | None = None
+
+    def __post_init__(self) -> None:
+        if type(self.memory_id) is not MemoryId:
+            raise TypeError("RecallSourceEvidence.memory_id: invalid_type")
+        if type(self.owner_id) is not AgentId:
+            raise TypeError("RecallSourceEvidence.owner_id: invalid_type")
+        rank = require_exact_nonneg_int("RecallSourceEvidence.rank", self.rank)
+        if rank < 1:
+            raise ValueError("RecallSourceEvidence.rank: must_be_positive")
+        object.__setattr__(self, "rank", rank)
+        object.__setattr__(
+            self, "score", _unit_interval("RecallSourceEvidence.score", self.score)
+        )
+        concepts = _require_ordered_models(
+            "RecallSourceEvidence.concepts",
+            self.concepts,
+            model_type=ConceptMention,
+            max_items=_MAX_MENTIONS,
+        )
+        entities = _require_ordered_models(
+            "RecallSourceEvidence.entities",
+            self.entities,
+            model_type=EntityMention,
+            max_items=_MAX_MENTIONS,
+        )
+        relations = _require_ordered_models(
+            "RecallSourceEvidence.relations",
+            self.relations,
+            model_type=MemoryRelation,
+            max_items=_MAX_RELATIONS,
+        )
+        object.__setattr__(self, "concepts", concepts)
+        object.__setattr__(self, "entities", entities)
+        object.__setattr__(self, "relations", relations)
+        if type(self.context) is not MemorySituationContext:
+            raise TypeError("RecallSourceEvidence.context: invalid_type")
+        object.__setattr__(
+            self,
+            "emotional_salience",
+            _unit_interval(
+                "RecallSourceEvidence.emotional_salience", self.emotional_salience
+            ),
+        )
+        object.__setattr__(
+            self,
+            "confidence",
+            _unit_interval("RecallSourceEvidence.confidence", self.confidence),
+        )
+        object.__setattr__(
+            self,
+            "source_confidence",
+            _unit_interval(
+                "RecallSourceEvidence.source_confidence", self.source_confidence
+            ),
+        )
+        object.__setattr__(
+            self,
+            "episode_age_ticks",
+            require_exact_nonneg_int(
+                "RecallSourceEvidence.episode_age_ticks", self.episode_age_ticks
+            ),
+        )
+        object.__setattr__(
+            self,
+            "storage_age_ticks",
+            require_exact_nonneg_int(
+                "RecallSourceEvidence.storage_age_ticks", self.storage_age_ticks
+            ),
+        )
+        object.__setattr__(
+            self,
+            "generation",
+            require_exact_nonneg_int(
+                "RecallSourceEvidence.generation", self.generation
+            ),
+        )
+        if type(self.provenance_kind) is not MemorySourceKind:
+            raise TypeError("RecallSourceEvidence.provenance_kind: invalid_type")
+        if (
+            self.observed_source_id is not None
+            and type(self.observed_source_id) is not EventId
+        ):
+            raise TypeError("RecallSourceEvidence.observed_source_id: invalid_type")
+
+    def __repr__(self) -> str:
+        return (
+            f"RecallSourceEvidence(memory_id={self.memory_id.value!r}, "
+            f"rank={self.rank}, score={self.score}, "
+            f"generation={self.generation})"
+        )
+
+
+@dataclass(frozen=True, slots=True)
+class RecallEvidence:
+    """Bounded canonical evidence DTO for a reconstructor.
+
+    Contains only agent-available subjective inputs. Objective WorldEvent
+    payloads and repositories are intentionally absent from this type.
+    """
+
+    owner_id: AgentId
+    current_tick: int
+    reconstruction_id: ReconstructionId
+    policy: MemoryReconstructionPolicy
+    sources: tuple[RecallSourceEvidence, ...]
+    beliefs: tuple[Belief, ...]
+    recall_context: MemoryRecallContext
+    derived_memory_id: MemoryId | None = None
+
+    def __post_init__(self) -> None:
+        if type(self.owner_id) is not AgentId:
+            raise TypeError("RecallEvidence.owner_id: invalid_type")
+        object.__setattr__(
+            self,
+            "current_tick",
+            require_exact_nonneg_int("RecallEvidence.current_tick", self.current_tick),
+        )
+        if type(self.reconstruction_id) is not ReconstructionId:
+            raise TypeError("RecallEvidence.reconstruction_id: invalid_type")
+        if type(self.policy) is not MemoryReconstructionPolicy:
+            raise TypeError("RecallEvidence.policy: invalid_type")
+        sources = _require_ordered_models(
+            "RecallEvidence.sources",
+            self.sources,
+            model_type=RecallSourceEvidence,
+            max_items=_MAX_RECALL_SOURCES,
+        )
+        if len(sources) > self.policy.max_source_traces:
+            raise ValueError("RecallEvidence.sources: exceeds_policy_max")
+        object.__setattr__(self, "sources", sources)
+        seen_ranks: set[int] = set()
+        seen_ids: set[str] = set()
+        for source in sources:
+            if source.owner_id != self.owner_id:
+                raise ValueError("RecallEvidence.sources: owner_mismatch")
+            if source.rank in seen_ranks:
+                raise ValueError("RecallEvidence.sources: duplicate_rank")
+            seen_ranks.add(source.rank)
+            mid = source.memory_id.value
+            if mid in seen_ids:
+                raise ValueError("RecallEvidence.sources: duplicate_memory_id")
+            seen_ids.add(mid)
+        for index, source in enumerate(sources, start=1):
+            if source.rank != index:
+                raise ValueError("RecallEvidence.sources: rank_not_dense")
+        beliefs = _require_ordered_models(
+            "RecallEvidence.beliefs",
+            self.beliefs,
+            model_type=Belief,
+            max_items=_MAX_RECALL_BELIEFS,
+        )
+        if len(beliefs) > self.policy.max_beliefs:
+            raise ValueError("RecallEvidence.beliefs: exceeds_policy_max")
+        object.__setattr__(self, "beliefs", beliefs)
+        belief_ids: set[str] = set()
+        for belief in beliefs:
+            if belief.owner_id != self.owner_id:
+                raise ValueError("RecallEvidence.beliefs: owner_mismatch")
+            bid = belief.belief_id.value
+            if bid in belief_ids:
+                raise ValueError("RecallEvidence.beliefs: duplicate_belief_id")
+            belief_ids.add(bid)
+        if type(self.recall_context) is not MemoryRecallContext:
+            raise TypeError("RecallEvidence.recall_context: invalid_type")
+        if self.derived_memory_id is not None:
+            if type(self.derived_memory_id) is not MemoryId:
+                raise TypeError("RecallEvidence.derived_memory_id: invalid_type")
+            if self.derived_memory_id.value in seen_ids:
+                raise ValueError("RecallEvidence.derived_memory_id: not_fresh")
+
+    def __repr__(self) -> str:
+        return (
+            f"RecallEvidence(owner_id={self.owner_id.value!r}, "
+            f"current_tick={self.current_tick}, "
+            f"source_count={len(self.sources)}, "
+            f"belief_count={len(self.beliefs)}, "
+            f"policy_version={self.policy.version!r})"
+        )
+
+
+@dataclass(frozen=True, slots=True)
+class MemoryRecallRequest:
+    """Public recall input composed around lower-level retrieval."""
+
+    retrieve: MemoryRetrieveRequest
+    reconstruction_id: ReconstructionId
+    reconstruction_policy: MemoryReconstructionPolicy
+    beliefs: tuple[Belief, ...] = ()
+    recall_context: MemoryRecallContext = MemoryRecallContext()
+    derived_memory_id: MemoryId | None = None
+
+    def __post_init__(self) -> None:
+        if type(self.retrieve) is not MemoryRetrieveRequest:
+            raise TypeError("MemoryRecallRequest.retrieve: invalid_type")
+        if type(self.reconstruction_id) is not ReconstructionId:
+            raise TypeError("MemoryRecallRequest.reconstruction_id: invalid_type")
+        if type(self.reconstruction_policy) is not MemoryReconstructionPolicy:
+            raise TypeError("MemoryRecallRequest.reconstruction_policy: invalid_type")
+        beliefs = _require_ordered_models(
+            "MemoryRecallRequest.beliefs",
+            self.beliefs,
+            model_type=Belief,
+            max_items=_MAX_RECALL_BELIEFS,
+        )
+        if len(beliefs) > self.reconstruction_policy.max_beliefs:
+            raise ValueError("MemoryRecallRequest.beliefs: exceeds_policy_max")
+        object.__setattr__(self, "beliefs", beliefs)
+        belief_ids: set[str] = set()
+        for belief in beliefs:
+            bid = belief.belief_id.value
+            if bid in belief_ids:
+                raise ValueError("MemoryRecallRequest.beliefs: duplicate_belief_id")
+            belief_ids.add(bid)
+        if type(self.recall_context) is not MemoryRecallContext:
+            raise TypeError("MemoryRecallRequest.recall_context: invalid_type")
+        if (
+            self.derived_memory_id is not None
+            and type(self.derived_memory_id) is not MemoryId
+        ):
+            raise TypeError("MemoryRecallRequest.derived_memory_id: invalid_type")
+        if self.reconstruction_policy.reconsolidate and self.derived_memory_id is None:
+            raise ValueError(
+                "MemoryRecallRequest.derived_memory_id: required_for_reconsolidate"
+            )
+        if (
+            self.derived_memory_id is not None
+            and not self.reconstruction_policy.reconsolidate
+        ):
+            raise ValueError(
+                "MemoryRecallRequest.derived_memory_id: reconsolidate_disabled"
+            )
+
+    def __repr__(self) -> str:
+        return (
+            f"MemoryRecallRequest(reconstruction_id={self.reconstruction_id.value!r}, "
+            f"current_tick={self.retrieve.current_tick}, "
+            f"policy_version={self.reconstruction_policy.version!r}, "
+            f"belief_count={len(self.beliefs)}, "
+            f"reconsolidate={self.reconstruction_policy.reconsolidate})"
+        )
+
+
+@dataclass(frozen=True, slots=True)
+class ReconstructedMemory:
+    """Subjective reconstructed episode; never objective world authority."""
+
+    reconstruction_id: ReconstructionId
+    owner_id: AgentId
+    narrative: str
+    concepts: tuple[ConceptMention, ...]
+    entities: tuple[EntityMention, ...]
+    relations: tuple[MemoryRelation, ...]
+    context: MemorySituationContext
+    confidence: float
+    emotional_salience: float
+    source_memory_ids: tuple[MemoryId, ...]
+    generation: int
+    reconstructed_at_tick: int
+    policy_id: str
+    policy_version: str
+    used_provider: bool
+    fallback_used: bool
+    prompt_version: str | None = None
+    schema_version: str | None = None
+
+    def __post_init__(self) -> None:
+        if type(self.reconstruction_id) is not ReconstructionId:
+            raise TypeError("ReconstructedMemory.reconstruction_id: invalid_type")
+        if type(self.owner_id) is not AgentId:
+            raise TypeError("ReconstructedMemory.owner_id: invalid_type")
+        object.__setattr__(
+            self,
+            "narrative",
+            require_bounded_text(
+                "ReconstructedMemory.narrative",
+                self.narrative,
+                max_length=_MAX_NARRATIVE_CHARS,
+            ),
+        )
+        concepts = _require_ordered_models(
+            "ReconstructedMemory.concepts",
+            self.concepts,
+            model_type=ConceptMention,
+            max_items=_MAX_MENTIONS,
+        )
+        entities = _require_ordered_models(
+            "ReconstructedMemory.entities",
+            self.entities,
+            model_type=EntityMention,
+            max_items=_MAX_MENTIONS,
+        )
+        relations = _require_ordered_models(
+            "ReconstructedMemory.relations",
+            self.relations,
+            model_type=MemoryRelation,
+            max_items=_MAX_RELATIONS,
+        )
+        object.__setattr__(self, "concepts", concepts)
+        object.__setattr__(self, "entities", entities)
+        object.__setattr__(self, "relations", relations)
+        if type(self.context) is not MemorySituationContext:
+            raise TypeError("ReconstructedMemory.context: invalid_type")
+        object.__setattr__(
+            self,
+            "confidence",
+            _unit_interval("ReconstructedMemory.confidence", self.confidence),
+        )
+        object.__setattr__(
+            self,
+            "emotional_salience",
+            _unit_interval(
+                "ReconstructedMemory.emotional_salience", self.emotional_salience
+            ),
+        )
+        sources = require_ordered_unique(
+            "ReconstructedMemory.source_memory_ids",
+            self.source_memory_ids,
+            item_type=MemoryId,
+        )
+        if not sources:
+            raise ValueError("ReconstructedMemory.source_memory_ids: empty")
+        if len(sources) > _MAX_RECALL_SOURCES:
+            raise ValueError(
+                "ReconstructedMemory.source_memory_ids: exceeds_max_length"
+            )
+        object.__setattr__(self, "source_memory_ids", sources)
+        generation = require_exact_nonneg_int(
+            "ReconstructedMemory.generation", self.generation
+        )
+        if generation < 1:
+            raise ValueError("ReconstructedMemory.generation: must_be_positive")
+        object.__setattr__(self, "generation", generation)
+        object.__setattr__(
+            self,
+            "reconstructed_at_tick",
+            require_exact_nonneg_int(
+                "ReconstructedMemory.reconstructed_at_tick",
+                self.reconstructed_at_tick,
+            ),
+        )
+        object.__setattr__(
+            self,
+            "policy_id",
+            require_bounded_text(
+                "ReconstructedMemory.policy_id",
+                self.policy_id,
+                max_length=_MAX_POLICY_ID_CHARS,
+            ),
+        )
+        object.__setattr__(
+            self,
+            "policy_version",
+            require_bounded_text(
+                "ReconstructedMemory.policy_version",
+                self.policy_version,
+                max_length=_MAX_POLICY_ID_CHARS,
+            ),
+        )
+        if type(self.used_provider) is not bool:
+            raise TypeError("ReconstructedMemory.used_provider: invalid_type")
+        if type(self.fallback_used) is not bool:
+            raise TypeError("ReconstructedMemory.fallback_used: invalid_type")
+        if self.prompt_version is not None:
+            object.__setattr__(
+                self,
+                "prompt_version",
+                require_bounded_text(
+                    "ReconstructedMemory.prompt_version",
+                    self.prompt_version,
+                    max_length=_MAX_POLICY_ID_CHARS,
+                ),
+            )
+        if self.schema_version is not None:
+            object.__setattr__(
+                self,
+                "schema_version",
+                require_bounded_text(
+                    "ReconstructedMemory.schema_version",
+                    self.schema_version,
+                    max_length=_MAX_POLICY_ID_CHARS,
+                ),
+            )
+        concept_ids = {item.mention_id.value: item for item in concepts}
+        entity_ids = {item.mention_id.value: item for item in entities}
+        if len(concept_ids) != len(concepts):
+            raise ValueError("ReconstructedMemory.concepts: duplicate_mention_id")
+        if len(entity_ids) != len(entities):
+            raise ValueError("ReconstructedMemory.entities: duplicate_mention_id")
+        if set(concept_ids) & set(entity_ids):
+            raise ValueError("ReconstructedMemory.mentions: overlapping_mention_id")
+        relation_ids: set[str] = set()
+        for relation in relations:
+            rid = relation.relation_id.value
+            if rid in relation_ids:
+                raise ValueError("ReconstructedMemory.relations: duplicate_relation_id")
+            relation_ids.add(rid)
+            if rid in concept_ids or rid in entity_ids:
+                raise ValueError(
+                    "ReconstructedMemory.relations: relation_id_collides_mention"
+                )
+            _validate_endpoint(
+                "ReconstructedMemory.relations.subject",
+                relation.subject,
+                concept_ids=concept_ids,
+                entity_ids=entity_ids,
+            )
+            _validate_endpoint(
+                "ReconstructedMemory.relations.object",
+                relation.object,
+                concept_ids=concept_ids,
+                entity_ids=entity_ids,
+            )
+
+    def __repr__(self) -> str:
+        return (
+            f"ReconstructedMemory(reconstruction_id={self.reconstruction_id.value!r}, "
+            f"owner_id={self.owner_id.value!r}, "
+            f"source_count={len(self.source_memory_ids)}, "
+            f"generation={self.generation}, "
+            f"used_provider={self.used_provider}, "
+            f"fallback_used={self.fallback_used})"
+        )
+
+
+def validate_reconstructed_memory(
+    reconstructed: ReconstructedMemory,
+    *,
+    evidence: RecallEvidence,
+) -> ReconstructedMemory:
+    """Semantic gate: reject unknown sources/beliefs and foreign owners.
+
+    Structurally valid output remains subjective and non-authoritative. Errors
+    expose field names and stable reason codes only.
+    """
+    if type(reconstructed) is not ReconstructedMemory:
+        raise TypeError("validate_reconstructed_memory: invalid_type")
+    if type(evidence) is not RecallEvidence:
+        raise TypeError("validate_reconstructed_memory: invalid_evidence_type")
+    if reconstructed.owner_id != evidence.owner_id:
+        raise ValueError("ReconstructedMemory.owner_id: owner_mismatch")
+    if reconstructed.reconstruction_id != evidence.reconstruction_id:
+        raise ValueError("ReconstructedMemory.reconstruction_id: mismatch")
+    if reconstructed.policy_id != evidence.policy.policy_id:
+        raise ValueError("ReconstructedMemory.policy_id: mismatch")
+    if reconstructed.policy_version != evidence.policy.version:
+        raise ValueError("ReconstructedMemory.policy_version: mismatch")
+    if len(reconstructed.narrative) > evidence.policy.max_narrative_chars:
+        raise ValueError("ReconstructedMemory.narrative: exceeds_policy_max")
+    allowed_sources = {item.memory_id for item in evidence.sources}
+    if not reconstructed.source_memory_ids:
+        raise ValueError("ReconstructedMemory.source_memory_ids: empty")
+    for source_id in reconstructed.source_memory_ids:
+        if source_id not in allowed_sources:
+            raise ValueError("ReconstructedMemory.source_memory_ids: unknown_source")
+    expected_generation = 1 + max(
+        (item.generation for item in evidence.sources), default=-1
+    )
+    if evidence.sources and reconstructed.generation != expected_generation:
+        raise ValueError("ReconstructedMemory.generation: not_dense")
+    if reconstructed.reconstructed_at_tick != evidence.current_tick:
+        raise ValueError("ReconstructedMemory.reconstructed_at_tick: mismatch")
+    return reconstructed
+
+
+@dataclass(frozen=True, slots=True)
+class ReconstructionRecord:
+    """Append-only scientific record of one reconstruction."""
+
+    reconstruction_id: ReconstructionId
+    run_id: MemoryRunId
+    owner_id: AgentId
+    source_memory_ids: tuple[MemoryId, ...]
+    reconstructed: ReconstructedMemory
+    created_tick: int
+    policy_id: str
+    policy_version: str
+    used_provider: bool
+    fallback_used: bool
+    prompt_version: str | None = None
+    schema_version: str | None = None
+
+    def __post_init__(self) -> None:
+        if type(self.reconstruction_id) is not ReconstructionId:
+            raise TypeError("ReconstructionRecord.reconstruction_id: invalid_type")
+        if type(self.run_id) is not MemoryRunId:
+            raise TypeError("ReconstructionRecord.run_id: invalid_type")
+        if type(self.owner_id) is not AgentId:
+            raise TypeError("ReconstructionRecord.owner_id: invalid_type")
+        sources = require_ordered_unique(
+            "ReconstructionRecord.source_memory_ids",
+            self.source_memory_ids,
+            item_type=MemoryId,
+        )
+        if not sources:
+            raise ValueError("ReconstructionRecord.source_memory_ids: empty")
+        object.__setattr__(self, "source_memory_ids", sources)
+        if type(self.reconstructed) is not ReconstructedMemory:
+            raise TypeError("ReconstructionRecord.reconstructed: invalid_type")
+        if self.reconstructed.reconstruction_id != self.reconstruction_id:
+            raise ValueError("ReconstructionRecord.reconstruction_id: mismatch")
+        if self.reconstructed.owner_id != self.owner_id:
+            raise ValueError("ReconstructionRecord.owner_id: mismatch")
+        if self.reconstructed.source_memory_ids != sources:
+            raise ValueError("ReconstructionRecord.source_memory_ids: mismatch")
+        object.__setattr__(
+            self,
+            "created_tick",
+            require_exact_nonneg_int(
+                "ReconstructionRecord.created_tick", self.created_tick
+            ),
+        )
+        if self.created_tick != self.reconstructed.reconstructed_at_tick:
+            raise ValueError("ReconstructionRecord.created_tick: mismatch")
+        object.__setattr__(
+            self,
+            "policy_id",
+            require_bounded_text(
+                "ReconstructionRecord.policy_id",
+                self.policy_id,
+                max_length=_MAX_POLICY_ID_CHARS,
+            ),
+        )
+        object.__setattr__(
+            self,
+            "policy_version",
+            require_bounded_text(
+                "ReconstructionRecord.policy_version",
+                self.policy_version,
+                max_length=_MAX_POLICY_ID_CHARS,
+            ),
+        )
+        if self.policy_id != self.reconstructed.policy_id:
+            raise ValueError("ReconstructionRecord.policy_id: mismatch")
+        if self.policy_version != self.reconstructed.policy_version:
+            raise ValueError("ReconstructionRecord.policy_version: mismatch")
+        if type(self.used_provider) is not bool:
+            raise TypeError("ReconstructionRecord.used_provider: invalid_type")
+        if type(self.fallback_used) is not bool:
+            raise TypeError("ReconstructionRecord.fallback_used: invalid_type")
+        if self.used_provider != self.reconstructed.used_provider:
+            raise ValueError("ReconstructionRecord.used_provider: mismatch")
+        if self.fallback_used != self.reconstructed.fallback_used:
+            raise ValueError("ReconstructionRecord.fallback_used: mismatch")
+        if self.prompt_version is not None:
+            object.__setattr__(
+                self,
+                "prompt_version",
+                require_bounded_text(
+                    "ReconstructionRecord.prompt_version",
+                    self.prompt_version,
+                    max_length=_MAX_POLICY_ID_CHARS,
+                ),
+            )
+        if self.schema_version is not None:
+            object.__setattr__(
+                self,
+                "schema_version",
+                require_bounded_text(
+                    "ReconstructionRecord.schema_version",
+                    self.schema_version,
+                    max_length=_MAX_POLICY_ID_CHARS,
+                ),
+            )
+
+    def __repr__(self) -> str:
+        return (
+            f"ReconstructionRecord(reconstruction_id={self.reconstruction_id.value!r}, "
+            f"run_id={self.run_id.value!r}, "
+            f"owner_id={self.owner_id.value!r}, "
+            f"source_count={len(self.source_memory_ids)}, "
+            f"created_tick={self.created_tick})"
+        )
+
+
+@dataclass(frozen=True, slots=True)
+class ReconsolidationIntent:
+    """Deferred append-only reconsolidation plan (no mutation yet)."""
+
+    record: ReconstructionRecord
+    derived_trace: MemoryTrace
+
+    def __post_init__(self) -> None:
+        if type(self.record) is not ReconstructionRecord:
+            raise TypeError("ReconsolidationIntent.record: invalid_type")
+        if type(self.derived_trace) is not MemoryTrace:
+            raise TypeError("ReconsolidationIntent.derived_trace: invalid_type")
+        if self.derived_trace.owner_id != self.record.owner_id:
+            raise ValueError("ReconsolidationIntent.derived_trace: owner_mismatch")
+        lineage = self.derived_trace.lineage
+        if lineage.reconstruction_id != self.record.reconstruction_id:
+            raise ValueError(
+                "ReconsolidationIntent.derived_trace: reconstruction_mismatch"
+            )
+        if lineage.source_memory_ids != self.record.source_memory_ids:
+            raise ValueError("ReconsolidationIntent.derived_trace: sources_mismatch")
+        if lineage.generation != self.record.reconstructed.generation:
+            raise ValueError("ReconsolidationIntent.derived_trace: generation_mismatch")
+        if self.derived_trace.memory_id in self.record.source_memory_ids:
+            raise ValueError("ReconsolidationIntent.derived_trace: not_fresh")
+
+    def __repr__(self) -> str:
+        return (
+            f"ReconsolidationIntent(reconstruction_id="
+            f"{self.record.reconstruction_id.value!r}, "
+            f"derived_memory_id={self.derived_trace.memory_id.value!r})"
+        )
+
+
+@dataclass(frozen=True, slots=True)
+class MemoryRecallResult:
+    """Recall output: reconstructed episodes plus scientific retrieve metadata."""
+
+    reconstructions: tuple[ReconstructedMemory, ...]
+    pending_accesses: tuple[MemoryAccessReceipt, ...]
+    evidence: RecallEvidence
+    reconsolidation: ReconsolidationIntent | None = None
+
+    def __post_init__(self) -> None:
+        reconstructions = _require_ordered_models(
+            "MemoryRecallResult.reconstructions",
+            self.reconstructions,
+            model_type=ReconstructedMemory,
+            max_items=_MAX_RECALL_SOURCES,
+        )
+        object.__setattr__(self, "reconstructions", reconstructions)
+        accesses = _require_ordered_models(
+            "MemoryRecallResult.pending_accesses",
+            self.pending_accesses,
+            model_type=MemoryAccessReceipt,
+            max_items=_MAX_QUERY_LIMIT,
+        )
+        object.__setattr__(self, "pending_accesses", accesses)
+        if type(self.evidence) is not RecallEvidence:
+            raise TypeError("MemoryRecallResult.evidence: invalid_type")
+        for item in reconstructions:
+            if item.owner_id != self.evidence.owner_id:
+                raise ValueError("MemoryRecallResult.reconstructions: owner_mismatch")
+            if item.reconstruction_id != self.evidence.reconstruction_id:
+                raise ValueError(
+                    "MemoryRecallResult.reconstructions: reconstruction_mismatch"
+                )
+        if self.reconsolidation is not None:
+            if type(self.reconsolidation) is not ReconsolidationIntent:
+                raise TypeError("MemoryRecallResult.reconsolidation: invalid_type")
+            if (
+                self.reconsolidation.record.reconstruction_id
+                != self.evidence.reconstruction_id
+            ):
+                raise ValueError(
+                    "MemoryRecallResult.reconsolidation: reconstruction_mismatch"
+                )
+
+    def __repr__(self) -> str:
+        return (
+            f"MemoryRecallResult(reconstruction_count={len(self.reconstructions)}, "
+            f"pending_access_count={len(self.pending_accesses)}, "
+            f"has_reconsolidation={self.reconsolidation is not None})"
+        )

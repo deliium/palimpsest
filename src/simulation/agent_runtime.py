@@ -492,6 +492,7 @@ class AgentRuntime:
             invocation_id=invocation_id,
             intents=intents,
             pending_accesses=loop_result.pending_accesses,
+            pending_reconsolidation=loop_result.pending_reconsolidation,
         )
 
         submission = ActionSubmission(
@@ -535,7 +536,10 @@ class AgentRuntime:
         invocation_id: str,
         intents: Sequence[MemoryUpdateIntent],
         pending_accesses: Sequence[MemoryAccessReceipt],
+        pending_reconsolidation: object | None = None,
     ) -> None:
+        from memory.models import ReconsolidationIntent, ReconstructionRecord
+
         writes: list[MemoryTrace] = []
         for intent in intents:
             if intent.kind is MemoryUpdateKind.WRITE_MEMORY:
@@ -544,6 +548,37 @@ class AgentRuntime:
             elif intent.kind is MemoryUpdateKind.WRITE_BELIEF:
                 assert intent.belief is not None
                 self._belief_writer.write(intent.belief)
+
+        reconsolidation_count = 0
+        reconstructions: tuple[ReconstructionRecord, ...] = ()
+        if pending_reconsolidation is not None:
+            if type(pending_reconsolidation) is not ReconsolidationIntent:
+                raise AgentRuntimeError(
+                    AgentRuntimeErrorCode.INVALID_UPDATE,
+                    agent_id=agent_id.value,
+                    invocation_id=invocation_id,
+                    tick=tick,
+                )
+            if pending_reconsolidation.record.owner_id != agent_id:
+                raise AgentRuntimeError(
+                    AgentRuntimeErrorCode.OWNERSHIP,
+                    agent_id=agent_id.value,
+                    invocation_id=invocation_id,
+                    tick=tick,
+                )
+            derived = pending_reconsolidation.derived_trace
+            if derived.owner_id != agent_id:
+                raise AgentRuntimeError(
+                    AgentRuntimeErrorCode.OWNERSHIP,
+                    agent_id=agent_id.value,
+                    invocation_id=invocation_id,
+                    tick=tick,
+                )
+            writes.append(derived)
+            reconsolidation_count = 1
+            reconstructions = (pending_reconsolidation.record,)
+        else:
+            reconstructions = ()
 
         if self._memory_service is not None:
             if self._memory_service.scope.owner_id != agent_id:
@@ -556,6 +591,7 @@ class AgentRuntime:
             batch = MemoryMutationBatch(
                 writes=tuple(writes),
                 accesses=tuple(pending_accesses),
+                reconstructions=reconstructions,
                 operation_id=invocation_id,
             )
             try:
@@ -589,10 +625,26 @@ class AgentRuntime:
                         "write_count": applied.written_count,
                         "access_count": applied.access_applied_count,
                         "access_idempotent_count": applied.access_idempotent_count,
+                        "reconstruction_written_count": (
+                            applied.reconstruction_written_count
+                        ),
+                        "reconsolidation_count": reconsolidation_count,
                         "status": "ok",
                     }
                 },
             )
+            if reconsolidation_count:
+                _LOG.info(
+                    "runtime_reconsolidation_committed",
+                    extra={
+                        "runtime": {
+                            "agent_id": agent_id.value,
+                            "tick": tick,
+                            "invocation_id": invocation_id,
+                            "reconsolidation_count": reconsolidation_count,
+                        }
+                    },
+                )
             return
 
         if pending_accesses:

@@ -456,6 +456,7 @@ class CognitiveLoop:
             final_confidence=plan.confidence,
             internal_state=next_state,
             pending_accesses=memory.pending_accesses,
+            pending_reconsolidation=memory.reconsolidation,
         )
         _LOG.debug(
             "cognitive_loop_complete",
@@ -466,6 +467,8 @@ class CognitiveLoop:
                     "boundary_count": len(records),
                     "memory_update_count": len(updates),
                     "pending_access_count": len(memory.pending_accesses),
+                    "reconstruction_count": len(memory.reconstructions),
+                    "pending_write_count": 1 if memory.reconsolidation else 0,
                     "final_confidence": plan.confidence,
                     "command_type": type(command).__name__,
                 }

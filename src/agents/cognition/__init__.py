@@ -63,6 +63,10 @@ from agents.cognition.models import (
     diagnostic_projection,
     require_confidence,
 )
+from agents.cognition.reconstruction import (
+    LLMMemoryReconstructor,
+    ReconstructedMemoryCandidate,
+)
 
 __all__ = [
     "BOUNDARY_SCHEMA_VERSION",
@@ -91,6 +95,7 @@ __all__ = [
     "IntentionSelector",
     "InternalAgentState",
     "InterpretedPerception",
+    "LLMMemoryReconstructor",
     "LiteralPerceptionInterpreter",
     "MemoryRetriever",
     "MemoryUpdateHook",
@@ -106,6 +111,7 @@ __all__ = [
     "PlaceholderFutureImagination",
     "Planner",
     "PossibleFutures",
+    "ReconstructedMemoryCandidate",
     "RetrievedMemoryContext",
     "ScopedMemoryRetriever",
     "SelectedIntention",

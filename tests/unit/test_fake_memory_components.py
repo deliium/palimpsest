@@ -4,7 +4,22 @@ from __future__ import annotations
 
 import pytest
 
-from tests.fakes.memory import FakeEmbedder, FakeLogicalTickSource
+from agents.models import AgentId
+from memory.errors import MemoryServiceError
+from memory.models import (
+    ConceptMention,
+    MemoryId,
+    MemoryMutationBatch,
+    MemoryProvenance,
+    MemoryRunId,
+    MemoryScope,
+    MemorySituationContext,
+    MemorySourceKind,
+    MemoryTrace,
+    MentionId,
+)
+from tests.fakes.memory import FakeEmbedder, FakeLogicalTickSource, FakeMemoryService
+from world.identifiers import WorldRevision
 
 pytestmark = pytest.mark.unit
 
@@ -30,3 +45,35 @@ def test_fake_logical_tick_source_advances_without_wall_clock() -> None:
     assert "datetime" not in repr(clock).lower()
     with pytest.raises(ValueError):
         FakeLogicalTickSource(initial=-1)
+
+
+@pytest.mark.asyncio
+async def test_fake_memory_service_rejects_duplicate_memory_ids() -> None:
+    service = FakeMemoryService(
+        MemoryScope(run_id=MemoryRunId("run-1"), owner_id=AgentId("agent-1"))
+    )
+    trace = MemoryTrace(
+        memory_id=MemoryId("m-1"),
+        owner_id=AgentId("agent-1"),
+        world_revision=WorldRevision(0),
+        concepts=(ConceptMention(mention_id=MentionId("c-1"), concept="gate"),),
+        entities=(),
+        relations=(),
+        context=MemorySituationContext(),
+        emotional_salience=0.5,
+        confidence=0.9,
+        provenance=MemoryProvenance(
+            kind=MemorySourceKind.DIRECT_OBSERVATION,
+            source_tick=1,
+        ),
+        created_tick=1,
+        source_tick=1,
+        last_access_tick=1,
+        access_count=0,
+    )
+    await service.apply(MemoryMutationBatch(writes=(trace,)))
+    with pytest.raises(MemoryServiceError, match="conflict"):
+        await service.apply(MemoryMutationBatch(writes=(trace,)))
+    stored = await service.get(MemoryId("m-1"))
+    assert stored is not None
+    assert stored.access_count == 0

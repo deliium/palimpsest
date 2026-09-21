@@ -1,5 +1,75 @@
-"""Read-only analysis ports over immutable world events and exports."""
+"""Read-only analysis ports over immutable world events, exports, and memory."""
 
-from analysis.contracts import EventSource, ExportSource
+from analysis.contracts import (
+    EventSource,
+    ExportSource,
+    MemoryEvidenceSource,
+    ObjectiveEventSource,
+)
+from analysis.memory_drift import (
+    DRIFT_METRIC_VERSION,
+    EVENT_FACT_PROJECTOR_VERSION,
+    build_reconstruction_chains,
+    compare_fact_sets,
+    cumulative_drift,
+    evidence_from_reconstructed_memory,
+    project_memory_trace,
+    project_reconstructed_memory,
+    project_reconstruction_evidence,
+    project_world_event,
+    resolve_objective_link,
+)
+from analysis.models import (
+    ChainNodeKind,
+    ComparisonStatus,
+    DriftDelta,
+    DriftStep,
+    FactAvailability,
+    MemoryDriftReport,
+    ObjectiveLinkStatus,
+    ReconstructionChain,
+    ReconstructionChainNode,
+    ReconstructionEvidence,
+    StructuredFactSet,
+    SubjectiveDerivationEdge,
+)
+from analysis.service import MemoryDriftAnalysisService
+from analysis.sources import (
+    InMemoryMemoryEvidenceSource,
+    InMemoryObjectiveEventSource,
+    reconstruction_evidence_from_durable,
+)
 
-__all__ = ["EventSource", "ExportSource"]
+__all__ = [
+    "DRIFT_METRIC_VERSION",
+    "EVENT_FACT_PROJECTOR_VERSION",
+    "ChainNodeKind",
+    "ComparisonStatus",
+    "DriftDelta",
+    "DriftStep",
+    "EventSource",
+    "ExportSource",
+    "FactAvailability",
+    "InMemoryMemoryEvidenceSource",
+    "InMemoryObjectiveEventSource",
+    "MemoryDriftAnalysisService",
+    "MemoryDriftReport",
+    "MemoryEvidenceSource",
+    "ObjectiveEventSource",
+    "ObjectiveLinkStatus",
+    "ReconstructionChain",
+    "ReconstructionChainNode",
+    "ReconstructionEvidence",
+    "StructuredFactSet",
+    "SubjectiveDerivationEdge",
+    "build_reconstruction_chains",
+    "compare_fact_sets",
+    "cumulative_drift",
+    "evidence_from_reconstructed_memory",
+    "project_memory_trace",
+    "project_reconstructed_memory",
+    "project_reconstruction_evidence",
+    "project_world_event",
+    "reconstruction_evidence_from_durable",
+    "resolve_objective_link",
+]

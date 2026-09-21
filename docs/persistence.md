@@ -8,10 +8,11 @@
 - `persistence` implements simulation repository ports and the owner-scoped `MemoryService` with async SQLAlchemy. It may import public `simulation` contracts, public `memory` contracts, and generic `infrastructure`.
 - Domain packages and `simulation` never import SQLAlchemy. `infrastructure` stays domain-neutral.
 - Memory adapters must not import `world.events`, private world authority, event ORM classes, or replay readers.
+- `analysis` may read subjective memory evidence and objective events independently for drift metrics; that join is never available to memory/cognition/runtime APIs.
 
 ## Objective history
 
-Authoritative history is the ordered stream of replay-capable `WorldEvent` records plus per-tick commit rows (including eventless ticks). Payloads store committed effects, not instructions to re-run current rules. Subjective episodic memory is stored in separate mutable tables (Alembic `0005`) and is never joined into objective replay. LLM transcripts remain outside both streams; cognition replay still needs recorded provider responses or stubs.
+Authoritative history is the ordered stream of replay-capable `WorldEvent` records plus per-tick commit rows (including eventless ticks). Payloads store committed effects, not instructions to re-run current rules. Subjective episodic memory and reconstruction provenance live in separate tables (Alembic `0005`/`0006`) and are never joined into objective replay. LLM transcripts remain outside both streams; cognition replay still needs recorded provider responses or stubs.
 
 ## Episodic memory (subjective)
 
@@ -20,8 +21,21 @@ Authoritative history is the ordered stream of replay-capable `WorldEvent` recor
 - Structured filters reduce candidates before optional pgvector cosine scoring. Retrieval works without embeddings.
 - Scoring uses a versioned `MemoryScoringPolicy` with quantized scores and tie-break `score DESC, created_tick DESC, memory_id ASC` shared by Python and SQL adapters.
 - Decay/forgetting use explicit simulation ticks only (no wall clocks). Soft-forget excludes traces from retrieval; V1 does not hard-delete.
-- Domain serialization uses type `episodic_memory_trace` (`trace_version=1`). Legacy `memory_trace` / arbitrary `content` payloads are rejected.
-- Safe log fields: operation, run/owner IDs, tick, policy version, enabled components, candidate/result/update counts, stable reason codes. Never log fragments, query text, vectors, communications, or SQL parameters.
+- Reconstructive recall (`MemoryService.recall`) returns `ReconstructedMemory`; optional reconsolidation appends provenance without mutating source content. See [Memory reconstruction](memory-reconstruction.md).
+- Domain serialization uses type `episodic_memory_trace` (`trace_version=1`) plus reconstruction/lineage codecs. Legacy `memory_trace` / arbitrary `content` payloads are rejected.
+- Safe log fields: operation, run/owner/reconstruction IDs, tick, policy version, enabled components, candidate/result/update/reconsolidation counts, stable reason codes. Never log fragments, narratives, query text, vectors, communications, or SQL parameters.
+
+## Reconstruction provenance (`0006`)
+
+| Table | Role | Mutability |
+| --- | --- | --- |
+| `memory_reconstructions` | Reconstruction records (policy/prompt metadata + payload hash) | Append-only trigger |
+| `memory_reconstruction_sources` | Ordered source edges per reconstruction | Append-only trigger |
+| `memory_derivation_sources` | Derived trace → parents + producing reconstruction (incl. `supersedes_memory_id` backfill) | Append-only trigger |
+| Fragment tables | Concept/entity/relation rows | Append-only trigger |
+| `memory_traces` | Trace content vs access/forget metadata | **Selective** content immutability; access/forgetting still mutable |
+
+All of the above are listed in `SUBJECTIVE_MEMORY_TABLES` and are **outside** `AUTHORITATIVE_TABLES` / objective replay. No objective-event foreign key. Atomic `MemoryMutationBatch` applies reconstruction + edges + optional derived trace + access receipts in one transaction (in-memory and PostgreSQL).
 
 ## Versions
 
@@ -35,11 +49,11 @@ Authoritative history is the ordered stream of replay-capable `WorldEvent` recor
 | `PERSISTENCE_CODEC_VERSION` | Canonical JSON codec for manifests/snapshots/commits |
 | Derivation v1 / v2 | Deterministic ID/stream derivation (v2 includes rules fingerprint) |
 
-Runs never mix replay schema versions. Legacy schema-v1 audit events remain decodable for export but must not enter the authoritative log. Alembic revision `0004` persists SQL cause/occurrence columns so restored engines reproduce the same next observation as live engines (eventful and eventless prior windows). Revision `0005` adds owner-scoped episodic memory tables (mutable; not append-only). Observation codecs round-trip every field and provenance type with exact keys.
+Runs never mix replay schema versions. Legacy schema-v1 audit events remain decodable for export but must not enter the authoritative log. Alembic revision `0004` persists SQL cause/occurrence columns so restored engines reproduce the same next observation as live engines (eventful and eventless prior windows). Revision `0005` adds owner-scoped episodic memory tables. Revision `0006` adds reconstruction/derivation provenance with selective immutability. Observation codecs round-trip every field and provenance type with exact keys.
 
 ## Append-only store
 
-Alembic revision `0002` creates experiments, experiment_runs, simulation_runs, tick_commits, world_events, world_snapshots, and normalized snapshot projection tables. Revision `0003_physical_simulation_state` adds physical-rules columns on runs and normalized topology/capacity/kind/load/regen fields on snapshot projections (weather is condition-only). Triggers reject `UPDATE`/`DELETE`/`TRUNCATE` on authoritative tables. Runtime roles should omit mutation privileges beyond `INSERT`/`SELECT`.
+Alembic revision `0002` creates experiments, experiment_runs, simulation_runs, tick_commits, world_events, world_snapshots, and normalized snapshot projection tables. Revision `0003_physical_simulation_state` adds physical-rules columns on runs and normalized topology/capacity/kind/load/regen fields on snapshot projections (weather is condition-only). Triggers reject `UPDATE`/`DELETE`/`TRUNCATE` on authoritative tables. Runtime roles should omit mutation privileges beyond `INSERT`/`SELECT`. Subjective reconstruction tables use their own append-only / selective triggers and are not part of that authoritative set.
 
 ## Durable tick window
 
@@ -47,15 +61,15 @@ Alembic revision `0002` creates experiments, experiment_runs, simulation_runs, t
 2. Append tick commit + events (+ optional snapshot) in one PostgreSQL transaction with advisory lock, predecessor checks, idempotency key, and commit-hash chain.
 3. Finalize by swapping the in-memory snapshot only after commit success.
 
-Adapter failure before commit leaves the engine unchanged. Crash after commit is recovered by replaying persisted history.
+Adapter failure before commit leaves the engine unchanged. Crash after commit is recovered by replaying persisted history. Subjective reconsolidation commits are separate memory-service transactions and cannot alter objective hashes.
 
 ## Replay
 
-`ReplayService` loads a run, selects a verified checkpoint at or before the target tick, validates versions and commit continuity, folds subsequent events, and accounts for eventless ticks via `committed_through_tick`. Recovery at the durable head is `CONTINUATION` (may `open_durable`); earlier targets are `READONLY`.
+`ReplayService` loads a run, selects a verified checkpoint at or before the target tick, validates versions and commit continuity, folds subsequent events, and accounts for eventless ticks via `committed_through_tick`. Recovery at the durable head is `CONTINUATION` (may `open_durable`); earlier targets are `READONLY`. Subjective reconstructions do not participate in objective replay folding. Exact LLM reconstructive recall still requires recorded responses or deterministic stubs.
 
 ## Logging
 
-Safe fields: run ID, tick/revision, record counts, version strings, hash prefixes, stable error codes, perception reason codes. Never log seeds, full configs, event payloads, observation bodies, communication text, snapshot bodies, DSNs, SQL parameters, memories, embeddings, or random draws. Control verbosity with `PALIMPSEST_LOG_LEVEL`.
+Safe fields: run ID, tick/revision, record counts, version strings, hash prefixes, stable error codes, perception reason codes, reconstruction IDs, policy versions, reconsolidation counts. Never log seeds, full configs, event payloads, observation bodies, communication text, snapshot bodies, DSNs, SQL parameters, memories, reconstructions/narratives, embeddings, or random draws. Control verbosity with `PALIMPSEST_LOG_LEVEL`.
 
 ## Integration tests
 
@@ -67,6 +81,7 @@ uv run --frozen --python 3.12.14 pytest -m integration tests/integration
 
 ## See also
 
+- [Memory reconstruction](memory-reconstruction.md)
 - [Physical simulation](physical-simulation.md)
 - [Architecture](architecture.md)
 - [Development](development.md)

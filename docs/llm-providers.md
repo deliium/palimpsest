@@ -1,6 +1,6 @@
 # LLM Providers
 
-[← Previous Page](cognition-runtime.md) · [Back to README](../README.md) · [Next Page →](physical-simulation.md)
+[← Previous Page](memory-reconstruction.md) · [Back to README](../README.md) · [Next Page →](physical-simulation.md)
 
 Provider-neutral structured generation lives in the `llm` package. Public results are only structurally validated Pydantic values plus normalized metadata. They are **not** agent commands, action submissions, or world authority.
 
@@ -143,5 +143,6 @@ Logger: `llm.openai_compatible` (stdlib). Prompt loader may emit DEBUG reason co
 
 - [Architecture](architecture.md)
 - [Cognition and agent runtime](cognition-runtime.md)
+- [Memory reconstruction](memory-reconstruction.md)
 - [Configuration](configuration.md)
 - [Development](development.md)

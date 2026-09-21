@@ -11,17 +11,22 @@ from memory.models import (
     MemoryForgetResult,
     MemoryId,
     MemoryMutationBatch,
+    MemoryRecallRequest,
+    MemoryRecallResult,
     MemoryRetrieveRequest,
     MemoryRetrieveResult,
     MemoryScope,
     MemoryTrace,
     OwnershipError,
+    RecallEvidence,
+    ReconstructedMemory,
 )
 
 __all__ = [
     "BeliefReader",
     "BeliefWriter",
     "MemoryReader",
+    "MemoryReconstructor",
     "MemoryService",
     "MemoryWriter",
     "OwnershipError",
@@ -53,6 +58,19 @@ class BeliefWriter(Protocol):
 
 
 @runtime_checkable
+class MemoryReconstructor(Protocol):
+    """Pure reconstruction policy over bounded recall evidence.
+
+    Implementations must not accept ``WorldEvent``, event repositories, or
+    other world authority. Output remains subjective and non-authoritative.
+    """
+
+    async def reconstruct(self, evidence: RecallEvidence) -> ReconstructedMemory:
+        """Project ``evidence`` into one validated reconstructed episode."""
+        ...
+
+
+@runtime_checkable
 class MemoryService(Protocol):
     """Owner-bound asynchronous episodic memory service.
 
@@ -68,6 +86,10 @@ class MemoryService(Protocol):
 
     async def retrieve(self, request: MemoryRetrieveRequest) -> MemoryRetrieveResult:
         """Rank scoped traces; return snapshots and pending access receipts."""
+        ...
+
+    async def recall(self, request: MemoryRecallRequest) -> MemoryRecallResult:
+        """Owner-scoped reconstructive recall over retrieved evidence."""
         ...
 
     async def apply(self, batch: MemoryMutationBatch) -> MemoryApplyResult:

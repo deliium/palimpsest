@@ -365,3 +365,29 @@ async def test_logs_omit_payloads(caplog: pytest.LogCaptureFixture) -> None:
     assert "Observation(" not in messages
     assert "Camp" not in messages
     assert "Wait(" not in messages
+
+
+def test_agent_runtime_omits_world_event_and_replay_imports() -> None:
+    import ast
+    from pathlib import Path
+
+    path = (
+        Path(__file__).resolve().parents[2] / "src" / "simulation" / "agent_runtime.py"
+    )
+    tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
+    imported: set[str] = set()
+    names: set[str] = set()
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Import):
+            for alias in node.names:
+                imported.add(alias.name)
+        elif isinstance(node, ast.ImportFrom) and node.module is not None:
+            imported.add(node.module)
+            for alias in node.names:
+                names.add(alias.name)
+    assert "world.events" not in imported
+    assert "simulation.replay" not in imported
+    assert "simulation.journal" not in imported
+    assert "WorldEvent" not in names
+    assert "ReplayService" not in names
+    assert "ObjectiveEventSource" not in names

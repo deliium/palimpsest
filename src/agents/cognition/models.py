@@ -22,6 +22,8 @@ from memory.models import (
     MemoryId,
     MemoryRankedHit,
     MemoryTrace,
+    ReconsolidationIntent,
+    ReconstructedMemory,
 )
 from world.actions import AgentCommand, require_agent_command
 from world.identifiers import (
@@ -408,10 +410,12 @@ class InterpretedPerception:
 
 @dataclass(frozen=True, slots=True)
 class RetrievedMemoryContext:
-    """Owner-scoped memory/belief retrieval with optional ranked snapshots.
+    """Owner-scoped reconstructive recall with scientific source metadata.
 
-    Ranked hits and pending access receipts support deferred application after
-    successful cognition. Operational logs must never serialize hit payloads.
+    ``reconstructions`` are the remembered episodes for downstream cognition.
+    Ranked hits and pending access receipts remain scientific evidence only and
+    must never be treated as the remembered episode itself. Operational logs
+    must never serialize reconstruction or hit payloads.
     """
 
     owner_id: AgentId
@@ -424,6 +428,9 @@ class RetrievedMemoryContext:
     candidate_count: int = 0
     retrieval_tick: int | None = None
     scoring_policy_version: str | None = None
+    reconstructions: tuple[ReconstructedMemory, ...] = ()
+    reconsolidation: ReconsolidationIntent | None = None
+    reconstruction_policy_version: str | None = None
 
     def __post_init__(self) -> None:
         if type(self.owner_id) is not AgentId:
@@ -520,6 +527,46 @@ class RetrievedMemoryContext:
                     max_length=_MAX_COMPONENT_VERSION_CHARS,
                 ),
             )
+        if isinstance(self.reconstructions, (set, frozenset, Mapping)):
+            raise TypeError("RetrievedMemoryContext.reconstructions must be ordered")
+        if isinstance(self.reconstructions, (str, bytes)) or not isinstance(
+            self.reconstructions, Sequence
+        ):
+            raise TypeError("RetrievedMemoryContext.reconstructions must be ordered")
+        reconstructions = tuple(self.reconstructions)
+        if len(reconstructions) > _MAX_MEMORY_REFS:
+            raise ValueError(
+                "RetrievedMemoryContext.reconstructions exceeds maximum length"
+            )
+        for item in reconstructions:
+            if type(item) is not ReconstructedMemory:
+                raise TypeError(
+                    "RetrievedMemoryContext.reconstructions entries must be "
+                    "ReconstructedMemory"
+                )
+            if item.owner_id != self.owner_id:
+                raise ValueError("RetrievedMemoryContext reconstruction owner mismatch")
+        object.__setattr__(self, "reconstructions", reconstructions)
+        if self.reconsolidation is not None:
+            if type(self.reconsolidation) is not ReconsolidationIntent:
+                raise TypeError(
+                    "RetrievedMemoryContext.reconsolidation must be "
+                    "ReconsolidationIntent"
+                )
+            if self.reconsolidation.record.owner_id != self.owner_id:
+                raise ValueError(
+                    "RetrievedMemoryContext reconsolidation owner mismatch"
+                )
+        if self.reconstruction_policy_version is not None:
+            object.__setattr__(
+                self,
+                "reconstruction_policy_version",
+                require_bounded_text(
+                    "RetrievedMemoryContext.reconstruction_policy_version",
+                    self.reconstruction_policy_version,
+                    max_length=_MAX_COMPONENT_VERSION_CHARS,
+                ),
+            )
 
     def __repr__(self) -> str:
         return (
@@ -527,7 +574,9 @@ class RetrievedMemoryContext:
             f"memory_count={len(self.memory_ids)}, "
             f"belief_count={len(self.belief_ids)}, "
             f"hit_count={len(self.ranked_hits)}, "
+            f"reconstruction_count={len(self.reconstructions)}, "
             f"pending_access_count={len(self.pending_accesses)}, "
+            f"has_reconsolidation={self.reconsolidation is not None}, "
             f"candidate_count={self.candidate_count}, "
             f"confidence={self.confidence})"
         )
@@ -1057,6 +1106,7 @@ class CognitiveLoopResult:
     final_confidence: float
     internal_state: InternalAgentState
     pending_accesses: tuple[MemoryAccessReceipt, ...] = ()
+    pending_reconsolidation: ReconsolidationIntent | None = None
 
     def __post_init__(self) -> None:
         object.__setattr__(
@@ -1113,6 +1163,14 @@ class CognitiveLoopResult:
                     "MemoryAccessReceipt"
                 )
         object.__setattr__(self, "pending_accesses", accesses)
+        if self.pending_reconsolidation is not None:
+            if type(self.pending_reconsolidation) is not ReconsolidationIntent:
+                raise TypeError(
+                    "CognitiveLoopResult.pending_reconsolidation must be "
+                    "ReconsolidationIntent"
+                )
+            if self.pending_reconsolidation.record.owner_id != self.agent_id:
+                raise ValueError("pending_reconsolidation owner must match agent_id")
         object.__setattr__(
             self,
             "final_confidence",

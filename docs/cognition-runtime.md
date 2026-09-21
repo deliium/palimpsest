@@ -1,6 +1,6 @@
 # Cognition and agent runtime
 
-[← Previous Page](architecture.md) · [Back to README](../README.md) · [Next Page →](llm-providers.md)
+[← Previous Page](architecture.md) · [Back to README](../README.md) · [Next Page →](memory-reconstruction.md)
 
 V1 adds an explicit async cognitive pipeline and a per-agent runtime on top of observation, command, `WorldEngine`, and provider-neutral LLM boundaries. World mutation remains exclusively in `WorldEngine`.
 
@@ -38,7 +38,9 @@ The synchronous `CognitionStrategy.propose(Perspective)` contract remains for ex
 
 `agents.cognition.defaults.default_cognitive_loop()` wires deterministic V1 placeholders (literal perception, empty memory retrieval unless a `MemoryService` is injected, stable motive/intention selection, `Wait` planner). These are **not** production memory or imagination quality and never call an LLM.
 
-`agents.cognition.memory.ScopedMemoryRetriever` derives an owner-scoped query from the loop input, calls a bound `MemoryService.retrieve()`, and maps ranked snapshots into `RetrievedMemoryContext` plus pending access receipts. `AgentRuntime` applies receipts and write intents atomically through `MemoryService.apply()` only after cognition succeeds.
+`agents.cognition.memory.ScopedMemoryRetriever` builds current context/beliefs, calls bound `MemoryService.recall()`, and maps results into `RetrievedMemoryContext`: **`reconstructions` are the remembered episodes**; ranked hits and pending access receipts are scientific metadata only. Optional `ReconsolidationIntent` stays pending until `AgentRuntime` applies it with access receipts via `MemoryService.apply()` after the whole loop succeeds. Inject `LLMMemoryReconstructor` only when provider-backed reconstruction is desired; the default path is deterministic and provider-free.
+
+Details: [Memory reconstruction](memory-reconstruction.md).
 
 `tests/fakes/cognition.py` and `tests/fakes/memory.py` provide scriptable fakes (including `FakeEmbedder` / `FakeLogicalTickSource`) with metadata-only call records.
 
@@ -47,9 +49,9 @@ The synchronous `CognitionStrategy.propose(Perspective)` contract remains for ex
 `simulation.AgentRuntime` is the trusted composition boundary:
 
 1. `start()` → `ACTIVE`
-2. `process_observation(observation, token=TickToken)` builds a perspective (ownership check), runs cognition, applies validated memory intents / pending access receipts, returns `ActionSubmission(token, agent_id, command)`
+2. `process_observation(observation, token=TickToken)` builds a perspective (ownership check), runs cognition, applies validated memory intents / pending access receipts / optional reconsolidation, returns `ActionSubmission(token, agent_id, command)`
 3. Dead self in the observation → `TERMINAL` (no cognition, no submission)
-4. Cognition failure → no submission and no memory mutation
+4. Cognition failure → no submission and no memory mutation (including no reconsolidation)
 5. Memory updates describe the committed observation and internal decision process — not uncommitted action outcomes
 
 Cognition never sees `TickToken`, `WorldState`, or private world modules. Only simulation constructs submissions; engine admission still derives actor/request/world/revision authority.
@@ -59,9 +61,11 @@ Cognition never sees `TickToken`, `WorldState`, or private world modules. Only s
 | Logger | Levels | Allowed fields |
 | --- | --- | --- |
 | `agents.cognition.loop` | DEBUG stage start/complete; ERROR failure codes | invocation/agent ids, component/version, ordinal, status, confidence, counts |
-| `simulation.agent_runtime` | DEBUG lifecycle/cognition; INFO start/terminal; WARN/ERROR codes | run/agent/tick/invocation/status/counts |
+| `agents.cognition.memory` | DEBUG `memory_recall_mapped`; ERROR ownership codes | owner/tick, policy versions, source/reconstruction/pending counts, provider/fallback flags |
+| `agents.cognition.reconstruction` | DEBUG/INFO/WARN LLM reconstruct path | reconstruction/request IDs, tick, prompt/policy versions, counts, fallback flags |
+| `simulation.agent_runtime` | DEBUG lifecycle/cognition/apply; INFO start/terminal/`runtime_reconsolidation_committed`; WARN/ERROR codes | run/agent/tick/invocation/status/counts |
 
-**Never log:** observations, memories, beliefs, communications, cognitive artifact bodies, prompts, provider outputs, command arguments, seeds, or credentials.
+**Never log:** observations, memories, beliefs, reconstructions/narratives, communications, cognitive artifact bodies, prompts, provider outputs, command arguments, seeds, or credentials.
 
 Safe example:
 
@@ -89,7 +93,7 @@ Integration coverage is in-memory (no PostgreSQL/Docker/network/LLM).
 
 ## Deferred
 
-- Production LLM-backed cognition stages
+- Production LLM-backed cognition stages (beyond optional reconstructive recall)
 - Durable cognition-artifact persistence
 - Concurrent agent execution
 - General M4 analysis metrics over cognition receipts
@@ -98,5 +102,6 @@ Integration coverage is in-memory (no PostgreSQL/Docker/network/LLM).
 ## See Also
 
 - [Architecture](architecture.md)
+- [Memory reconstruction](memory-reconstruction.md)
 - [LLM providers](llm-providers.md)
 - [Development](development.md)

@@ -185,3 +185,128 @@ async def test_concurrent_same_operation_id_applies_once(
     loaded = await service.get(MemoryId("shared"))
     assert loaded is not None
     assert loaded.access_count == 1
+
+
+async def test_concurrent_reconsolidation_idempotent(
+    database_resources: DatabaseResources,
+) -> None:
+    from memory.models import (
+        MemoryLineage,
+        ReconstructedMemory,
+        ReconstructionId,
+        ReconstructionRecord,
+    )
+
+    run_id = _unique("mem-recon")
+    runs = create_run_repository(database_resources.session_factory)
+    bootstrap = _bootstrap(run_id=run_id)
+    await runs.create_run(
+        RunCreateRequest(
+            run_id=RunId(run_id),
+            world_id=WorldId("world-1"),
+            seed=bootstrap.seed,
+            config=bootstrap.config,
+            bootstrap=bootstrap,
+        )
+    )
+    policy = MemoryScoringPolicy(
+        policy_id="default",
+        version="1",
+        weights=MemoryScoreWeights(recency=1.0),
+    )
+    service = create_memory_service(
+        scope=MemoryScope(run_id=MemoryRunId(run_id), owner_id=AgentId("agent-1")),
+        session_factory=database_resources.session_factory,
+        scoring_policy=policy,
+    )
+    root = MemoryTrace(
+        memory_id=MemoryId("m-root"),
+        owner_id=AgentId("agent-1"),
+        world_revision=WorldRevision(0),
+        concepts=(ConceptMention(mention_id=MentionId("c1"), concept="signal"),),
+        entities=(),
+        relations=(),
+        context=MemorySituationContext(),
+        emotional_salience=0.4,
+        confidence=0.8,
+        provenance=MemoryProvenance(
+            kind=MemorySourceKind.DIRECT_OBSERVATION,
+            source_tick=1,
+        ),
+        created_tick=1,
+        source_tick=1,
+        last_access_tick=1,
+        access_count=0,
+    )
+    await service.apply(MemoryMutationBatch(writes=(root,)))
+    reconstructed = ReconstructedMemory(
+        reconstruction_id=ReconstructionId("recon-conc"),
+        owner_id=AgentId("agent-1"),
+        narrative="concurrent subjective",
+        concepts=root.concepts,
+        entities=(),
+        relations=(),
+        context=MemorySituationContext(),
+        confidence=0.5,
+        emotional_salience=0.3,
+        source_memory_ids=(MemoryId("m-root"),),
+        generation=1,
+        reconstructed_at_tick=2,
+        policy_id="recall",
+        policy_version="1",
+        used_provider=False,
+        fallback_used=False,
+    )
+    derived = MemoryTrace(
+        memory_id=MemoryId("m-derived"),
+        owner_id=AgentId("agent-1"),
+        world_revision=WorldRevision(0),
+        concepts=reconstructed.concepts,
+        entities=(),
+        relations=(),
+        context=MemorySituationContext(),
+        emotional_salience=0.3,
+        confidence=0.5,
+        provenance=root.provenance,
+        created_tick=2,
+        source_tick=1,
+        last_access_tick=2,
+        access_count=0,
+        lineage=MemoryLineage(
+            supersedes_memory_id=MemoryId("m-root"),
+            generation=1,
+            source_memory_ids=(MemoryId("m-root"),),
+            reconstruction_id=ReconstructionId("recon-conc"),
+        ),
+    )
+    batch = MemoryMutationBatch(
+        writes=(derived,),
+        reconstructions=(
+            ReconstructionRecord(
+                reconstruction_id=ReconstructionId("recon-conc"),
+                run_id=MemoryRunId(run_id),
+                owner_id=AgentId("agent-1"),
+                source_memory_ids=(MemoryId("m-root"),),
+                reconstructed=reconstructed,
+                created_tick=2,
+                policy_id="recall",
+                policy_version="1",
+                used_provider=False,
+                fallback_used=False,
+            ),
+        ),
+    )
+
+    async def _once() -> tuple[int, int]:
+        result = await service.apply(batch)
+        return (
+            result.reconstruction_written_count,
+            result.reconstruction_idempotent_count,
+        )
+
+    outcomes = await asyncio.gather(*(_once() for _ in range(6)))
+    assert sum(item[0] for item in outcomes) == 1
+    assert sum(item[1] for item in outcomes) == 5
+    loaded = await service.get(MemoryId("m-root"))
+    assert loaded is not None
+    assert loaded.concepts == root.concepts

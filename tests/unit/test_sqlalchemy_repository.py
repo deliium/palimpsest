@@ -9,6 +9,7 @@ import pytest
 from agents.models import AgentId
 from persistence import (
     PersistenceAdapterError,
+    create_analysis_evidence_loader,
     create_experiment_repository,
     create_run_repository,
     create_snapshot_repository,
@@ -249,6 +250,9 @@ def test_repository_factories_require_session_factory() -> None:
         create_snapshot_repository()
     with pytest.raises(PersistenceAdapterError):
         create_experiment_repository()
+    with pytest.raises(PersistenceAdapterError) as analysis_err:
+        create_analysis_evidence_loader()
+    assert analysis_err.value.code == "missing_session_factory"
 
 
 def test_subjective_memory_orm_registers_outside_authoritative_set() -> None:
@@ -260,3 +264,9 @@ def test_subjective_memory_orm_registers_outside_authoritative_set() -> None:
     assert set(SUBJECTIVE_MEMORY_TABLES).isdisjoint(AUTHORITATIVE_TABLES)
     assert set(SUBJECTIVE_MEMORY_TABLES) <= set(metadata.tables)
     assert hasattr(memory_orm, "MemoryTraceOrm")
+    assert hasattr(memory_orm, "MemoryReconstructionOrm")
+    assert hasattr(memory_orm, "MemoryReconstructionSourceOrm")
+    assert hasattr(memory_orm, "MemoryDerivationSourceOrm")
+    assert "memory_reconstructions" in SUBJECTIVE_MEMORY_TABLES
+    assert "memory_reconstruction_sources" in SUBJECTIVE_MEMORY_TABLES
+    assert "memory_derivation_sources" in SUBJECTIVE_MEMORY_TABLES

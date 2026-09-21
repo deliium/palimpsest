@@ -8,9 +8,9 @@ from __future__ import annotations
 
 import logging
 from dataclasses import replace
-from enum import StrEnum
 from typing import Final
 
+from memory.errors import MemoryServiceError, MemoryServiceErrorCode
 from memory.models import (
     MemoryAccessReceipt,
     MemoryApplyResult,
@@ -19,11 +19,17 @@ from memory.models import (
     MemoryForgetResult,
     MemoryId,
     MemoryMutationBatch,
+    MemoryRecallRequest,
+    MemoryRecallResult,
     MemoryRetrieveRequest,
     MemoryRetrieveResult,
     MemoryScope,
     MemoryTrace,
+    ReconstructionId,
+    ReconstructionRecord,
 )
+from memory.mutation import prepare_memory_mutation
+from memory.reconstruction import MemoryRecallOrchestrator
 from memory.scoring import rank_traces, should_forget
 
 __all__ = [
@@ -35,39 +41,41 @@ __all__ = [
 _LOG: Final[logging.Logger] = logging.getLogger("memory.service")
 
 
-class MemoryServiceErrorCode(StrEnum):
-    """Stable ERROR/WARN reason codes for the memory application boundary."""
-
-    CONFLICT = "conflict"
-    OWNERSHIP = "ownership"
-    NOT_FOUND = "not_found"
-    INVALID_BATCH = "invalid_batch"
-    INVALID_REQUEST = "invalid_request"
-
-
-class MemoryServiceError(ValueError):
-    """Fail-closed service error with a stable reason code only."""
-
-    def __init__(self, code: MemoryServiceErrorCode) -> None:
-        self.code = code
-        super().__init__(code.value)
-
-
 class InMemoryMemoryService:
     """Pure in-process episodic memory service bound to one :class:`MemoryScope`."""
 
     __slots__ = (
         "_access_ops",
+        "_derivation_edges",
+        "_orchestrator",
+        "_reconstructions",
         "_records",
         "_scope",
     )
 
-    def __init__(self, scope: MemoryScope) -> None:
+    def __init__(
+        self,
+        scope: MemoryScope,
+        *,
+        reconstructor: object | None = None,
+    ) -> None:
         if type(scope) is not MemoryScope:
             raise TypeError("InMemoryMemoryService requires MemoryScope")
         self._scope = scope
         self._records: dict[MemoryId, MemoryTrace] = {}
+        self._reconstructions: dict[ReconstructionId, ReconstructionRecord] = {}
+        self._derivation_edges: dict[
+            MemoryId, tuple[tuple[MemoryId, ...], ReconstructionId | None]
+        ] = {}
         self._access_ops: set[tuple[str, str]] = set()
+        from memory.contracts import MemoryReconstructor
+
+        typed: MemoryReconstructor | None
+        if reconstructor is None:
+            typed = None
+        else:
+            typed = reconstructor  # type: ignore[assignment]
+        self._orchestrator = MemoryRecallOrchestrator(typed)
         _LOG.info(
             "memory_service_created",
             extra={
@@ -142,61 +150,101 @@ class InMemoryMemoryService:
             scoring_policy_version=request.scoring_policy.version,
         )
 
-    async def apply(self, batch: MemoryMutationBatch) -> MemoryApplyResult:
-        if type(batch) is not MemoryMutationBatch:
-            raise MemoryServiceError(MemoryServiceErrorCode.INVALID_BATCH)
-        for write in batch.writes:
-            if write.owner_id != self._scope.owner_id:
+    async def recall(self, request: MemoryRecallRequest) -> MemoryRecallResult:
+        if type(request) is not MemoryRecallRequest:
+            _LOG.error(
+                "memory_recall_invalid",
+                extra={
+                    "operation": "recall",
+                    "run_id": self._scope.run_id.value,
+                    "owner_id": self._scope.owner_id.value,
+                    "reason_code": MemoryServiceErrorCode.INVALID_REQUEST.value,
+                },
+            )
+            raise MemoryServiceError(MemoryServiceErrorCode.INVALID_REQUEST)
+        for belief in request.beliefs:
+            if belief.owner_id != self._scope.owner_id:
                 _LOG.error(
-                    "memory_apply_ownership",
+                    "memory_recall_ownership",
                     extra={
-                        "operation": "apply",
+                        "operation": "recall",
                         "run_id": self._scope.run_id.value,
                         "owner_id": self._scope.owner_id.value,
                         "reason_code": MemoryServiceErrorCode.OWNERSHIP.value,
                     },
                 )
                 raise MemoryServiceError(MemoryServiceErrorCode.OWNERSHIP)
-            if write.memory_id in self._records:
-                _LOG.error(
-                    "memory_apply_conflict",
-                    extra={
-                        "operation": "apply",
-                        "run_id": self._scope.run_id.value,
-                        "owner_id": self._scope.owner_id.value,
-                        "reason_code": MemoryServiceErrorCode.CONFLICT.value,
-                    },
-                )
-                raise MemoryServiceError(MemoryServiceErrorCode.CONFLICT)
-        for access in batch.accesses:
-            if access.memory_id not in self._records:
-                raise MemoryServiceError(MemoryServiceErrorCode.NOT_FOUND)
-            existing = self._records[access.memory_id]
-            if existing.owner_id != self._scope.owner_id:
-                raise MemoryServiceError(MemoryServiceErrorCode.OWNERSHIP)
-            if access.access_tick < existing.created_tick:
-                raise MemoryServiceError(MemoryServiceErrorCode.INVALID_BATCH)
+        return await self._orchestrator.recall(self, request)
 
-        written = 0
+    async def apply(self, batch: MemoryMutationBatch) -> MemoryApplyResult:
+        if type(batch) is not MemoryMutationBatch:
+            raise MemoryServiceError(MemoryServiceErrorCode.INVALID_BATCH)
+        from memory.codec import reconstructed_memory_payload_sha256
+
+        existing_hashes = {
+            reconstruction_id: reconstructed_memory_payload_sha256(record.reconstructed)
+            for reconstruction_id, record in self._reconstructions.items()
+        }
+        try:
+            prepared = prepare_memory_mutation(
+                batch,
+                scope=self._scope,
+                existing_traces=self._records,
+                existing_reconstruction_hashes=existing_hashes,
+            )
+        except MemoryServiceError as exc:
+            _LOG.error(
+                "memory_apply_rejected",
+                extra={
+                    "operation": "apply",
+                    "run_id": self._scope.run_id.value,
+                    "owner_id": self._scope.owner_id.value,
+                    "reason_code": exc.code.value,
+                    "write_count": len(batch.writes),
+                    "access_count": len(batch.accesses),
+                    "reconstruction_count": len(batch.reconstructions),
+                },
+            )
+            raise
+
+        records = dict(self._records)
+        reconstructions = dict(self._reconstructions)
+        derivation_edges = dict(self._derivation_edges)
+        access_ops = set(self._access_ops)
+
+        for record in prepared.reconstructions_to_insert:
+            reconstructions[record.reconstruction_id] = record
+        for write in prepared.writes_to_insert:
+            records[write.memory_id] = write
+            if write.lineage.source_memory_ids:
+                derivation_edges[write.memory_id] = (
+                    write.lineage.source_memory_ids,
+                    write.lineage.reconstruction_id,
+                )
+
         applied = 0
         idempotent = 0
-        for write in batch.writes:
-            self._records[write.memory_id] = write
-            written += 1
         for access in batch.accesses:
             key = (access.operation_id, access.memory_id.value)
-            if key in self._access_ops:
+            if key in access_ops:
                 idempotent += 1
                 continue
-            current = self._records[access.memory_id]
-            updated = replace(
+            current = records[access.memory_id]
+            records[access.memory_id] = replace(
                 current,
                 last_access_tick=max(current.last_access_tick, access.access_tick),
                 access_count=current.access_count + 1,
             )
-            self._records[access.memory_id] = updated
-            self._access_ops.add(key)
+            access_ops.add(key)
             applied += 1
+
+        self._records = records
+        self._reconstructions = reconstructions
+        self._derivation_edges = derivation_edges
+        self._access_ops = access_ops
+
+        written = len(prepared.writes_to_insert)
+        reconstruction_written = len(prepared.reconstructions_to_insert)
         _LOG.debug(
             "memory_apply_complete",
             extra={
@@ -205,23 +253,55 @@ class InMemoryMemoryService:
                 "owner_id": self._scope.owner_id.value,
                 "write_count": written,
                 "access_count": applied,
+                "access_idempotent_count": idempotent,
+                "reconstruction_written_count": reconstruction_written,
+                "reconstruction_idempotent_count": (
+                    prepared.reconstruction_idempotent_count
+                ),
                 "status": "ok",
             },
         )
-        _LOG.info(
-            "memory_apply_counts",
-            extra={
-                "operation": "apply",
-                "run_id": self._scope.run_id.value,
-                "owner_id": self._scope.owner_id.value,
-                "write_count": written,
-                "access_count": applied,
-            },
-        )
+        if reconstruction_written:
+            _LOG.info(
+                "memory_reconsolidation_committed",
+                extra={
+                    "operation": "apply",
+                    "run_id": self._scope.run_id.value,
+                    "owner_id": self._scope.owner_id.value,
+                    "reconstruction_written_count": reconstruction_written,
+                    "write_count": written,
+                },
+            )
+        elif prepared.reconstruction_idempotent_count:
+            _LOG.warning(
+                "memory_reconsolidation_idempotent",
+                extra={
+                    "operation": "apply",
+                    "run_id": self._scope.run_id.value,
+                    "owner_id": self._scope.owner_id.value,
+                    "reason_code": "duplicate_reconstruction",
+                    "reconstruction_idempotent_count": (
+                        prepared.reconstruction_idempotent_count
+                    ),
+                },
+            )
+        else:
+            _LOG.info(
+                "memory_apply_counts",
+                extra={
+                    "operation": "apply",
+                    "run_id": self._scope.run_id.value,
+                    "owner_id": self._scope.owner_id.value,
+                    "write_count": written,
+                    "access_count": applied,
+                },
+            )
         return MemoryApplyResult(
             written_count=written,
             access_applied_count=applied,
             access_idempotent_count=idempotent,
+            reconstruction_written_count=reconstruction_written,
+            reconstruction_idempotent_count=prepared.reconstruction_idempotent_count,
         )
 
     async def get(self, memory_id: MemoryId) -> MemoryTrace | None:
@@ -230,11 +310,33 @@ class InMemoryMemoryService:
         trace = self._records.get(memory_id)
         if trace is None or trace.owner_id != self._scope.owner_id:
             return None
-        return trace
+        return self._with_lineage_edges(trace)
 
     async def snapshot(self) -> tuple[MemoryTrace, ...]:
         return tuple(
-            trace for trace in self._records.values() if trace.forgotten_at_tick is None
+            self._with_lineage_edges(trace)
+            for trace in self._records.values()
+            if trace.forgotten_at_tick is None
+        )
+
+    def _with_lineage_edges(self, trace: MemoryTrace) -> MemoryTrace:
+        edges = self._derivation_edges.get(trace.memory_id)
+        if edges is None:
+            return trace
+        sources, reconstruction_id = edges
+        lineage = trace.lineage
+        if (
+            lineage.source_memory_ids == sources
+            and lineage.reconstruction_id == reconstruction_id
+        ):
+            return trace
+        return replace(
+            trace,
+            lineage=replace(
+                lineage,
+                source_memory_ids=sources,
+                reconstruction_id=reconstruction_id,
+            ),
         )
 
     async def forget(self, request: MemoryForgetRequest) -> MemoryForgetResult:

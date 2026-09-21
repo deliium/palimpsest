@@ -2,7 +2,7 @@
 
 Reproducible, discrete, text-based multi-agent AI society experiments.
 
-This repository is a **Python 3.12+ modular monolith**. It establishes package boundaries, V1 typed domain contracts, an authoritative deterministic `WorldEngine` tick loop with V1 physical simulation rules, an explicit cognitive loop and per-agent runtime, schema-versioned event persistence and replay, configuration, an HTTP liveness API, observability, and containers. LLM invocation stays outside the engine behind a provider-neutral structured boundary.
+This repository is a **Python 3.12+ modular monolith**. It establishes package boundaries, V1 typed domain contracts, an authoritative deterministic `WorldEngine` tick loop with V1 physical simulation rules, an explicit cognitive loop and per-agent runtime, schema-versioned event persistence and replay, configuration, an HTTP liveness API, observability, and containers. LLM invocation stays outside the engine behind a provider-neutral structured boundary. Agent recall is reconstructive and subjective; optional reconsolidation is append-only and never mutates objective history.
 
 ## Requirements
 
@@ -50,12 +50,13 @@ Development credentials in `compose.yaml` are **not production**. `docker compos
 | Page | Contents |
 | --- | --- |
 | [Architecture](docs/architecture.md) | Bounded packages, `WorldEngine` lifecycle, perception boundary, eleven invariants |
-| [Cognition and agent runtime](docs/cognition-runtime.md) | `CognitiveLoop` stages, `AgentRuntime`, episodic memory hooks, placeholders/fakes, metadata-only logs |
+| [Cognition and agent runtime](docs/cognition-runtime.md) | `CognitiveLoop` stages, `AgentRuntime`, reconstructive recall hooks, placeholders/fakes, metadata-only logs |
+| [Memory reconstruction](docs/memory-reconstruction.md) | Subjective recall, reconsolidation, lineage, drift analysis, Alembic `0006`, safe logging |
 | [LLM providers](docs/llm-providers.md) | Structured `LLMProvider`, modes, retries, prompts, local OpenAI-compatible config, fakes |
 | [Physical simulation](docs/physical-simulation.md) | Topology, capacities, actions, physiology, death, schema-v4, tests |
 | [Configuration](docs/configuration.md) | `PALIMPSEST_` settings (including `PALIMPSEST_LLM_*`), logging, redaction, seeds, identifiers, clocks |
-| [Development](docs/development.md) | Tests, migrations, local and Docker workflows, exact commands |
-| [Persistence](docs/persistence.md) | Event store, Alembic through `0005`, owner-scoped episodic memory, durable ticks, replay |
+| [Development](docs/development.md) | Tests, migrations (head `0006`), local and Docker workflows, exact commands |
+| [Persistence](docs/persistence.md) | Event store, Alembic through `0006`, episodic memory + reconstruction provenance, replay |
 
 ## Invariants (summary)
 

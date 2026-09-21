@@ -166,6 +166,22 @@ def test_ranked_hit_and_batch_validation() -> None:
         MemoryMutationBatch(writes=(_trace(), _trace()))
 
 
+def test_memory_lineage_defaults_remain_root_compatible() -> None:
+    from memory.models import MemoryLineage, ReconstructionId
+
+    root = MemoryLineage()
+    assert root.generation == 0
+    assert root.source_memory_ids == ()
+    assert root.reconstruction_id is None
+    derived = MemoryLineage(
+        supersedes_memory_id=MemoryId("m-0"),
+        source_memory_ids=(MemoryId("m-0"),),
+        generation=1,
+        reconstruction_id=ReconstructionId("recon-1"),
+    )
+    assert derived.source_memory_ids == (MemoryId("m-0"),)
+
+
 def test_diagnostic_projection_allowlist() -> None:
     safe = diagnostic_projection(
         {

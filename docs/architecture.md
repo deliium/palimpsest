@@ -10,19 +10,19 @@ Palimpsest is a modular monolith under `src/`. Cross-module imports must target 
 | --- | --- | --- |
 | `world` | Opaque IDs, typed observations, closed commands, immutable events. Private `World` / `WorldState` / operations / rules / physical / transitions | *(none)* |
 | `agents` | Agent identity, goals, and subjective `Agent` contracts | `world` (agent-facing only) |
-| `agents.cognition` | Async `CognitiveLoop`, stage protocols, scientific boundary records; sync `CognitionStrategy` retained | `world`, `agents`, `memory`, `social`, `llm` |
-| `memory` | Owner-scoped episodic `MemoryTrace` / `Belief`, `MemoryService`, scoring/decay | `world`, `agents` |
+| `agents.cognition` | Async `CognitiveLoop`, stage protocols, reconstructive memory stage, `LLMMemoryReconstructor`; sync `CognitionStrategy` retained | `world`, `agents`, `memory`, `social`, `llm` |
+| `memory` | Owner-scoped episodic `MemoryTrace` / `Belief`, `MemoryService`, reconstructive recall, scoring/decay | `world`, `agents` (opaque `EventId` only — never `WorldEvent`) |
 | `social` | Opaque communication envelopes and relationships | `world`, `agents` |
 | `llm` | Provider-neutral structured `LLMProvider` / `LLMResult` | *(none)* |
 | `simulation` | `WorldEngine`, `AgentRuntime`, bootstrap, lifecycle, seed/clock/RNG/IDs, codecs, persistence ports, durable tick service, replay | `world`, `agents`, `agents.cognition`, `memory`, `social`, `llm` |
 | `persistence` | SQLAlchemy adapters for simulation repositories and owner-scoped memory | `simulation`, `infrastructure`, `memory` |
 | `api` | HTTP composition root | `simulation`, `infrastructure`, `persistence` |
-| `analysis` | Read-only event/export sources | `world`, `simulation` |
+| `analysis` | Read-only events/exports + experiment memory-drift joins | `world`, `simulation`, `memory` (read-only contracts) |
 | `infrastructure` | Settings, logging, PostgreSQL adapters | *(none of the domain packages)* |
 
 Private world authority (`world/_state.py`, `world/_transitions.py`, `world/_operations.py`, `world/_rules.py`, `world/_physical.py`, `world/_perception.py`, `world/_replay.py`) may be imported only by `simulation.engine`, `simulation.bootstrap`, and other private `world._*` modules. They are not re-exported from `world`.
 
-`memory` and `social` are independent. Base `agents` must not import `agents.cognition`. `llm` imports no domain module. `simulation` must not import `api`, `analysis`, `infrastructure`, or `persistence`. Domain packages do not import `infrastructure`. See [Persistence](persistence.md) for the durable event store and replay contract.
+`memory` and `social` are independent. Base `agents` must not import `agents.cognition`. `llm` imports no domain module. `simulation` must not import `api`, `analysis`, `infrastructure`, or `persistence`. Domain packages do not import `infrastructure`. `analysis` may import `memory` read-only contracts for drift analysis. See [Persistence](persistence.md) and [Memory reconstruction](memory-reconstruction.md).
 
 Import-linter (`pyproject.toml`) and `tests/architecture/boundary_checker.py` enforce the allowlist, private-world authority, public facades, framework leakage, provider SDKs, and prohibited `random` / wall-clock / UUID defaults in domain code.
 
@@ -32,15 +32,17 @@ Import packages, not private modules:
 
 - `world`: IDs, values, objective models, closed commands, `Observation`, causes/effects, `ActionProposal`, `ActionRequest` (non-authoritative), `WorldEvent`, `detached_mapping`
 - `agents`: `AgentId`, `Agent`, `Goal`, `IdentityTranslator`
-- `agents.cognition`: `CognitiveLoop`, stage protocols/defaults, `CognitionStrategy`, `Perspective`
-- `memory`: `MemoryTrace`, `MemoryService`, scoring/decay policies, `Belief`, owner-bound stores, `OwnershipError`
+- `agents.cognition`: `CognitiveLoop`, stage protocols/defaults, `CognitionStrategy`, `Perspective`, `LLMMemoryReconstructor`
+- `memory`: `MemoryTrace`, `MemoryService`, recall/reconstruction contracts, scoring/decay policies, `Belief`, owner-bound stores, `OwnershipError`
 - `social`: `CommunicationEnvelope`, `Relationship`, `EnvelopeSender`
-- `llm`: `LLMProvider`, `LLMRequest`, `LLMResult`, `StructuredOutput`, prompts, factory
+- `llm`: `LLMProvider`, `LLMRequest`, `LLMResult`, `StructuredOutput`, prompts (incl. `reconstructive_memory/v1`), factory
 - `simulation`: `WorldEngine`, `AgentRuntime`, `WorldBootstrap`, lifecycle types, `build_perspective`, persistence DTOs/ports, `PersistentSimulationService`, `ReplayService`, codecs, deterministic IDs/RNG/clock, export ports
 - `persistence`: repository factories and `create_memory_service` (always requires `MemoryScope`)
-- `analysis`: `EventSource`, `ExportSource`
+- `analysis`: `EventSource`, `ExportSource`, `MemoryDriftAnalysisService`, drift/chain DTOs
 - `api`: `create_app`
 - `infrastructure`: `load_settings`, `configure_logging`, `create_database_resources`
+
+**Forbidden in agents / memory / cognition / reconstruction APIs:** `WorldEvent` values, event repositories, replay services, snapshots, or private world state. Opaque `EventId` correlation on provenance is allowed. Only `analysis` may join objective events with subjective reconstruction evidence after the fact.
 
 ## WorldEngine lifecycle
 
@@ -102,7 +104,7 @@ These are encoded as types and import rules, and enforced by `WorldEngine` for o
 5. **LLM output is untrusted.** Structurally validated `LLMResult` / `StructuredOutput` cannot mutate world state or become commands without an explicit cognition translation step.
 6. **`WorldEvent` is immutable.** Closed occurrence details; no open payloads. Rejected/conflicted/duplicate outcomes emit no world events.
 7. **Memories and beliefs may be wrong.** They are mutable owner-bound aggregates (`MemoryTrace` / `Belief`).
-8. **Memory is agent- and run-scoped.** Normal `MemoryService` instances bind one `MemoryScope(run_id, owner_id)`. Stores reject cross-owner writes; retrieval never joins objective events.
+8. **Memory is agent- and run-scoped.** Normal `MemoryService` instances bind one `MemoryScope(run_id, owner_id)`. Stores reject cross-owner writes; retrieval/recall never joins objective events. Remembered episodes are reconstructed (`ReconstructedMemory`), not raw traces.
 9. **Information crosses agents only via perception and explicit communication.** Envelopes cannot carry memory traces or `Agent` values.
 10. **Randomness is injected from an explicit seed.** `SimulationRunConfig.seed` is required; only `simulation.randomness` may use `random.Random` instances. Seeds are never logged.
 11. **Cognition is a strategy protocol.** `CognitionStrategy.propose(perspective)` returns `AgentCommand` and has no LLM, repository, `WorldState`, or mutation capability in its signature.
@@ -116,13 +118,14 @@ These are encoded as types and import rules, and enforced by `WorldEngine` for o
 
 ## Deferred scope
 
-No fear-of-death psychology, generative memory reconstruction/reconsolidation, analysis metrics over cognition receipts, Anthropic-native adapters, pathfinding beyond one adjacent edge, crafting, diseases, revival, or multi-tick sleeping state. V1 episodic placeholders and structured retrieval are not production imagination quality. Provider lifecycle is not wired into the API/`compose` composition root yet. No Kafka, Kubernetes, Celery, or extra vector databases.
+No fear-of-death psychology, analysis metrics over cognition receipts, Anthropic-native adapters, pathfinding beyond one adjacent edge, crafting, diseases, revival, or multi-tick sleeping state. Reconstructive recall and append-only reconsolidation are **implemented** (see [Memory reconstruction](memory-reconstruction.md)); LLM-backed reconstruction remains optional and provider lifecycle is not wired into the API/`compose` composition root yet. No Kafka, Kubernetes, Celery, or extra vector databases.
 
 Production PostgreSQL privilege design for `CREATE EXTENSION` is deferred; development credentials may create `vector`.
 
 ## See also
 
 - [Cognition and agent runtime](cognition-runtime.md)
+- [Memory reconstruction](memory-reconstruction.md)
 - [LLM providers](llm-providers.md)
 - [Physical simulation](physical-simulation.md)
 - [Configuration](configuration.md)

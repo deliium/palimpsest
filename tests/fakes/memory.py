@@ -5,18 +5,27 @@ from __future__ import annotations
 from dataclasses import dataclass
 from enum import StrEnum
 
+from memory.codec import reconstructed_memory_payload_sha256
 from memory.models import (
+    MemoryAccessReceipt,
     MemoryApplyResult,
     MemoryEmbedding,
     MemoryForgetRequest,
     MemoryForgetResult,
     MemoryId,
     MemoryMutationBatch,
+    MemoryRecallRequest,
+    MemoryRecallResult,
     MemoryRetrieveRequest,
     MemoryRetrieveResult,
     MemoryScope,
     MemoryTrace,
+    ReconstructionId,
+    ReconstructionRecord,
 )
+from memory.mutation import prepare_memory_mutation
+from memory.reconstruction import MemoryRecallOrchestrator
+from memory.scoring import rank_traces
 
 __all__ = [
     "FakeEmbedder",
@@ -149,16 +158,41 @@ class FakeMemoryService:
     def __init__(self, scope: MemoryScope) -> None:
         self._scope = scope
         self._records: dict[MemoryId, MemoryTrace] = {}
+        self._reconstructions: dict[ReconstructionId, ReconstructionRecord] = {}
         self.calls: list[FakeMemoryCallRecord] = []
+        self._orchestrator = MemoryRecallOrchestrator()
 
     @property
     def scope(self) -> MemoryScope:
         return self._scope
 
     async def retrieve(self, request: MemoryRetrieveRequest) -> MemoryRetrieveResult:
-        active = [
-            trace for trace in self._records.values() if trace.forgotten_at_tick is None
-        ]
+        embeddings = {
+            trace.memory_id.value: trace.embedding
+            for trace in self._records.values()
+            if trace.embedding is not None
+        }
+        hits, candidate_count = rank_traces(
+            tuple(self._records.values()),
+            policy=request.scoring_policy,
+            current_tick=request.current_tick,
+            filters=request.filters,
+            context=request.context,
+            query_embedding=request.query_embedding,
+            embeddings=embeddings,
+            limit=request.limit,
+        )
+        operation_id = request.operation_id or (
+            f"retrieve:{request.current_tick}:{request.scoring_policy.version}"
+        )
+        pending = tuple(
+            MemoryAccessReceipt(
+                memory_id=hit.trace.memory_id,
+                access_tick=request.current_tick,
+                operation_id=operation_id,
+            )
+            for hit in hits
+        )
         self.calls.append(
             FakeMemoryCallRecord(
                 operation="retrieve",
@@ -166,25 +200,48 @@ class FakeMemoryService:
                 owner_id=self._scope.owner_id.value,
                 tick=request.current_tick,
                 write_count=0,
-                access_count=0,
-                result_count=min(len(active), request.limit),
+                access_count=len(pending),
+                result_count=len(hits),
             )
         )
         return MemoryRetrieveResult(
-            hits=(),
-            pending_accesses=(),
-            candidate_count=len(active),
+            hits=hits,
+            pending_accesses=pending,
+            candidate_count=candidate_count,
             retrieval_tick=request.current_tick,
             scoring_policy_version=request.scoring_policy.version,
         )
 
+    async def recall(self, request: MemoryRecallRequest) -> MemoryRecallResult:
+        self.calls.append(
+            FakeMemoryCallRecord(
+                operation="recall",
+                run_id=self._scope.run_id.value,
+                owner_id=self._scope.owner_id.value,
+                tick=request.retrieve.current_tick,
+                write_count=0,
+                access_count=0,
+                result_count=0,
+            )
+        )
+        return await self._orchestrator.recall(self, request)
+
     async def apply(self, batch: MemoryMutationBatch) -> MemoryApplyResult:
-        written = 0
-        for write in batch.writes:
-            if write.owner_id != self._scope.owner_id:
-                raise ValueError(FakeMemoryFailureCode.FOREIGN_OWNER.value)
+        existing_hashes = {
+            reconstruction_id: reconstructed_memory_payload_sha256(record.reconstructed)
+            for reconstruction_id, record in self._reconstructions.items()
+        }
+        prepared = prepare_memory_mutation(
+            batch,
+            scope=self._scope,
+            existing_traces=self._records,
+            existing_reconstruction_hashes=existing_hashes,
+        )
+        for record in prepared.reconstructions_to_insert:
+            self._reconstructions[record.reconstruction_id] = record
+        for write in prepared.writes_to_insert:
             self._records[write.memory_id] = write
-            written += 1
+        written = len(prepared.writes_to_insert)
         self.calls.append(
             FakeMemoryCallRecord(
                 operation="apply",
@@ -200,6 +257,8 @@ class FakeMemoryService:
             written_count=written,
             access_applied_count=len(batch.accesses),
             access_idempotent_count=0,
+            reconstruction_written_count=len(prepared.reconstructions_to_insert),
+            reconstruction_idempotent_count=prepared.reconstruction_idempotent_count,
         )
 
     async def get(self, memory_id: MemoryId) -> MemoryTrace | None:

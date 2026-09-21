@@ -1,0 +1,21 @@
+{
+  "name": "reconstructive_memory",
+  "version": "v1",
+  "messages": [
+    {
+      "role": "system",
+      "template": "system.txt",
+      "sha256": "72a32a4a4f63bb9a08a39f992b47dffe12fc63a85c237ea5357c2dc6f0bc7638"
+    },
+    {
+      "role": "user",
+      "template": "user.txt",
+      "sha256": "d3a917668f2b46613c2b91c2ce1ef79b39a1145354b76874ac7b13918ce0ae6e"
+    }
+  ],
+  "variables": [
+    "schema_name",
+    "schema_json",
+    "evidence_json"
+  ]
+}
