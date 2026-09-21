@@ -41,9 +41,10 @@ Establish the modular-monolith foundation: packaging, bounded packages, typed co
 **Delivered (2026-09-21):**
 - Explicit async `CognitiveLoop` + per-agent `AgentRuntime` (plan `v1-agent-runtime-cognitive-loop`)
 - Owner-scoped episodic `MemoryService`, structured `MemoryTrace`, deferred access apply, Alembic `0005` / SQLAlchemy adapter (plan `v1-episodic-memory-traces`)
+- Semantic beliefs, emergent `SelfModel`, directed relationship profiles, atomic subjective commit, Alembic `0007` (plan `semantic-beliefs-self-model-relationships`)
 
 **Still open:**
-- Richer production cognition policies beyond V1 placeholders
+- Richer production cognition policies beyond V1 placeholders (beliefs/self/relationships landed; imagination/motivation/goal policies still evolving)
 - LLM provider lifecycle composition in API / `compose.yaml` (factory ports exist)
 
 ### M4 — Persistence and Analysis (persistence complete; analysis deferred)

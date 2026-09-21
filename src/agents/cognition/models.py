@@ -14,7 +14,14 @@ from dataclasses import dataclass
 from enum import StrEnum
 from typing import Final
 
-from agents.models import AgentId, GoalId
+from agents.models import (
+    AgentId,
+    DriveKind,
+    DriveProfile,
+    Goal,
+    GoalId,
+    default_drive_profile,
+)
 from memory.beliefs import (
     BeliefActivationState,
     BeliefValueKind,
@@ -33,6 +40,7 @@ from memory.models import (
     ReconsolidationIntent,
     ReconstructedMemory,
 )
+from social.models import CommunicationEnvelope
 from world.actions import AgentCommand, require_agent_command
 from world.identifiers import (
     EntityId,
@@ -48,6 +56,7 @@ from world.observations import Observation
 __all__ = [
     "BOUNDARY_SCHEMA_VERSION",
     "DEFAULT_SELF_MODEL_POLICY",
+    "ActionDirection",
     "ActionPlan",
     "CognitionFailureReason",
     "CognitiveLoopInput",
@@ -55,16 +64,25 @@ __all__ = [
     "ComponentBoundaryRecord",
     "ComponentKind",
     "ComponentStatus",
+    "CounterpartBinding",
     "DecisionMetadata",
+    "DriveEffect",
+    "FutureAppraisal",
+    "FutureSourceRef",
+    "GoalEffect",
     "ImaginedFuture",
     "IntentionCode",
     "InternalAgentState",
     "InterpretedPerception",
     "MemoryUpdateIntent",
     "MemoryUpdateKind",
+    "MortalityOpportunityForeclosure",
     "MotivationCode",
     "MotivationEvaluation",
     "MotivationScore",
+    "OptionSpaceChange",
+    "OwnerSafeSocialIdentity",
+    "PerceivedNeedPressures",
     "PerceptionClaimCode",
     "PossibleFutures",
     "RetrievedMemoryContext",
@@ -75,11 +93,19 @@ __all__ = [
     "SelfRelevantBelief",
     "SituationClaimCode",
     "SituationModel",
+    "SocialEffect",
+    "SubjectiveRisk",
+    "SubjectiveRiskKind",
     "SubjectiveSnapshot",
+    "SubjectiveUncertainty",
+    "UncertaintyBand",
+    "action_direction_for_intention",
     "diagnostic_projection",
+    "intention_for_action_direction",
     "project_legacy_self_belief_state",
     "project_self_model",
     "require_confidence",
+    "require_signed_unit",
 ]
 
 BOUNDARY_SCHEMA_VERSION: Final[int] = 1
@@ -90,6 +116,16 @@ _MAX_FUTURES: Final[int] = 32
 _MAX_MOTIVES: Final[int] = 32
 _MAX_MEMORY_REFS: Final[int] = 256
 _MAX_CLAIM_CODES: Final[int] = 64
+_MAX_EFFECTS: Final[int] = 32
+_MAX_RISKS: Final[int] = 16
+_MAX_SOURCE_REFS: Final[int] = 64
+_MAX_APPRAISALS: Final[int] = 32
+_EFFECT_QUANTUM: Final[float] = 1e-6
+_MORTALITY_WEIGHT_GOAL: Final[float] = 0.30
+_MORTALITY_WEIGHT_ATTACHMENT: Final[float] = 0.20
+_MORTALITY_WEIGHT_SAFETY: Final[float] = 0.20
+_MORTALITY_WEIGHT_AUTONOMY: Final[float] = 0.15
+_MORTALITY_WEIGHT_OPTIONS: Final[float] = 0.15
 
 
 class ComponentKind(StrEnum):
@@ -163,7 +199,7 @@ class MotivationCode(StrEnum):
 
 
 class IntentionCode(StrEnum):
-    """Closed intention labels selected from motivations."""
+    """Closed intention labels selected from motivations or directions."""
 
     WAIT = "wait"
     MOVE = "move"
@@ -171,6 +207,46 @@ class IntentionCode(StrEnum):
     REST = "rest"
     COMMUNICATE = "communicate"
     SURVIVE = "survive"
+    DRINK = "drink"
+    EAT = "eat"
+    SLEEP = "sleep"
+    FLEE = "flee"
+    HELP = "help"
+    ATTACK = "attack"
+
+
+class ActionDirection(StrEnum):
+    """Closed actionable directions compatible with world command kinds."""
+
+    WAIT = "wait"
+    MOVE = "move"
+    SEARCH = "search"
+    DRINK = "drink"
+    EAT = "eat"
+    SLEEP = "sleep"
+    FLEE = "flee"
+    COMMUNICATE = "communicate"
+    HELP = "help"
+    ATTACK = "attack"
+
+
+class SubjectiveRiskKind(StrEnum):
+    """Closed subjective risk categories for imagined futures."""
+
+    PHYSICAL_HARM = "physical_harm"
+    RESOURCE_LOSS = "resource_loss"
+    SOCIAL_COST = "social_cost"
+    AUTONOMY_LOSS = "autonomy_loss"
+    GOAL_FORECLOSURE = "goal_foreclosure"
+    UNKNOWN = "unknown"
+
+
+class UncertaintyBand(StrEnum):
+    """Closed uncertainty magnitude bands."""
+
+    LOW = "low"
+    MEDIUM = "medium"
+    HIGH = "high"
 
 
 class MemoryUpdateKind(StrEnum):
@@ -190,6 +266,117 @@ def require_confidence(name: str, value: object) -> float:
     if not math.isfinite(number) or number < 0.0 or number > 1.0:
         raise ValueError(f"{name} must be a finite float in [0.0, 1.0]")
     return 0.0 if number == 0.0 else number
+
+
+def require_signed_unit(name: str, value: object) -> float:
+    """Accept a finite signed unit value in ``[-1.0, 1.0]``; reject booleans."""
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        raise ValueError(f"{name}: not_signed_unit")
+    number = float(value)
+    if not math.isfinite(number) or number < -1.0 or number > 1.0:
+        raise ValueError(f"{name}: not_signed_unit")
+    return 0.0 if number == 0.0 else number
+
+
+def _quantize_unit(value: float) -> float:
+    steps = round(value / _EFFECT_QUANTUM)
+    quantized = steps * _EFFECT_QUANTUM
+    if quantized < 0.0:
+        quantized = 0.0
+    elif quantized > 1.0:
+        quantized = 1.0
+    return 0.0 if quantized == 0.0 else quantized
+
+
+def _require_positive_int(name: str, value: object) -> int:
+    number = require_exact_nonneg_int(name, value)
+    if number < 1:
+        raise ValueError(f"{name}: must_be_positive")
+    return number
+
+
+def _require_ordered_model_tuple[T](
+    name: str,
+    values: Sequence[object],
+    *,
+    model_type: type[T],
+    max_items: int,
+) -> tuple[T, ...]:
+    if isinstance(values, (set, frozenset, Mapping)):
+        raise TypeError(f"{name}: not_ordered")
+    if isinstance(values, (str, bytes, bytearray)) or not isinstance(values, Sequence):
+        raise TypeError(f"{name}: not_ordered")
+    items = tuple(values)
+    if len(items) > max_items:
+        raise ValueError(f"{name}: exceeds_max_length")
+    for item in items:
+        if type(item) is not model_type:
+            raise TypeError(f"{name}: invalid_entry_type")
+    return items  # type: ignore[return-value]
+
+
+def _require_stable_id_tuple(
+    name: str, values: Sequence[object], *, max_items: int
+) -> tuple[str, ...]:
+    if isinstance(values, (set, frozenset, Mapping)):
+        raise TypeError(f"{name}: not_ordered")
+    if isinstance(values, (str, bytes, bytearray)) or not isinstance(values, Sequence):
+        raise TypeError(f"{name}: not_ordered")
+    items = tuple(values)
+    if len(items) > max_items:
+        raise ValueError(f"{name}: exceeds_max_length")
+    seen: set[str] = set()
+    out: list[str] = []
+    for item in items:
+        text = require_stable_id(name, item)
+        if text in seen:
+            raise ValueError(f"{name}: duplicate")
+        seen.add(text)
+        out.append(text)
+    return tuple(out)
+
+
+_DIRECTION_FOR_INTENTION: Final[Mapping[IntentionCode, ActionDirection]] = {
+    IntentionCode.WAIT: ActionDirection.WAIT,
+    IntentionCode.MOVE: ActionDirection.MOVE,
+    IntentionCode.SEARCH: ActionDirection.SEARCH,
+    IntentionCode.REST: ActionDirection.SLEEP,
+    IntentionCode.COMMUNICATE: ActionDirection.COMMUNICATE,
+    IntentionCode.SURVIVE: ActionDirection.FLEE,
+    IntentionCode.DRINK: ActionDirection.DRINK,
+    IntentionCode.EAT: ActionDirection.EAT,
+    IntentionCode.SLEEP: ActionDirection.SLEEP,
+    IntentionCode.FLEE: ActionDirection.FLEE,
+    IntentionCode.HELP: ActionDirection.HELP,
+    IntentionCode.ATTACK: ActionDirection.ATTACK,
+}
+
+_INTENTION_FOR_DIRECTION: Final[Mapping[ActionDirection, IntentionCode]] = {
+    ActionDirection.WAIT: IntentionCode.WAIT,
+    ActionDirection.MOVE: IntentionCode.MOVE,
+    ActionDirection.SEARCH: IntentionCode.SEARCH,
+    ActionDirection.DRINK: IntentionCode.DRINK,
+    ActionDirection.EAT: IntentionCode.EAT,
+    ActionDirection.SLEEP: IntentionCode.SLEEP,
+    ActionDirection.FLEE: IntentionCode.FLEE,
+    ActionDirection.COMMUNICATE: IntentionCode.COMMUNICATE,
+    ActionDirection.HELP: IntentionCode.HELP,
+    ActionDirection.ATTACK: IntentionCode.ATTACK,
+}
+
+
+def action_direction_for_intention(intention: IntentionCode) -> ActionDirection:
+    """Map a closed intention code onto a command-compatible action direction."""
+    if type(intention) is not IntentionCode:
+        raise TypeError("action_direction_for_intention: invalid_type")
+    return _DIRECTION_FOR_INTENTION[intention]
+
+
+def intention_for_action_direction(direction: ActionDirection) -> IntentionCode:
+    """Map a closed action direction onto an intention code."""
+    if type(direction) is not ActionDirection:
+        raise TypeError("intention_for_action_direction: invalid_type")
+    return _INTENTION_FOR_DIRECTION[direction]
 
 
 def _require_component_version(value: object) -> str:
@@ -327,6 +514,88 @@ class InternalAgentState:
 
 
 @dataclass(frozen=True, slots=True)
+class CounterpartBinding:
+    """Owner-safe AgentId/EntityId pair for one visible or communicative counterpart."""
+
+    agent_id: AgentId
+    entity_id: EntityId
+
+    def __post_init__(self) -> None:
+        if type(self.agent_id) is not AgentId:
+            raise TypeError("CounterpartBinding.agent_id: invalid_type")
+        if type(self.entity_id) is not EntityId:
+            raise TypeError("CounterpartBinding.entity_id: invalid_type")
+
+    def __repr__(self) -> str:
+        return (
+            f"CounterpartBinding(agent_id={self.agent_id.value!r}, "
+            f"entity_id={self.entity_id.value!r})"
+        )
+
+
+@dataclass(frozen=True, slots=True)
+class OwnerSafeSocialIdentity:
+    """Minimal identity projection for applying directed relationships.
+
+    Contains only the owner binding plus counterparts derived from visible or
+    communicative entities. Never embeds the full registration map.
+    """
+
+    owner_id: AgentId
+    owner_entity_id: EntityId
+    counterparts: tuple[CounterpartBinding, ...] = ()
+
+    def __post_init__(self) -> None:
+        if type(self.owner_id) is not AgentId:
+            raise TypeError("OwnerSafeSocialIdentity.owner_id: invalid_type")
+        if type(self.owner_entity_id) is not EntityId:
+            raise TypeError("OwnerSafeSocialIdentity.owner_entity_id: invalid_type")
+        if isinstance(self.counterparts, (set, frozenset, Mapping)):
+            raise TypeError("OwnerSafeSocialIdentity.counterparts: not_ordered")
+        if isinstance(self.counterparts, (str, bytes)) or not isinstance(
+            self.counterparts, Sequence
+        ):
+            raise TypeError("OwnerSafeSocialIdentity.counterparts: not_ordered")
+        counterparts = tuple(self.counterparts)
+        seen_agents: set[str] = set()
+        seen_entities: set[str] = set()
+        previous_entity: str | None = None
+        for binding in counterparts:
+            if type(binding) is not CounterpartBinding:
+                raise TypeError(
+                    "OwnerSafeSocialIdentity.counterparts: invalid_entry_type"
+                )
+            if binding.agent_id == self.owner_id:
+                raise ValueError("OwnerSafeSocialIdentity.counterparts: owner_listed")
+            if binding.entity_id == self.owner_entity_id:
+                raise ValueError("OwnerSafeSocialIdentity.counterparts: owner_entity")
+            if binding.agent_id.value in seen_agents:
+                raise ValueError(
+                    "OwnerSafeSocialIdentity.counterparts: duplicate_agent"
+                )
+            if binding.entity_id.value in seen_entities:
+                raise ValueError(
+                    "OwnerSafeSocialIdentity.counterparts: duplicate_entity"
+                )
+            if (
+                previous_entity is not None
+                and binding.entity_id.value < previous_entity
+            ):
+                raise ValueError("OwnerSafeSocialIdentity.counterparts: unordered")
+            previous_entity = binding.entity_id.value
+            seen_agents.add(binding.agent_id.value)
+            seen_entities.add(binding.entity_id.value)
+        object.__setattr__(self, "counterparts", counterparts)
+
+    def __repr__(self) -> str:
+        return (
+            f"OwnerSafeSocialIdentity(owner_id={self.owner_id.value!r}, "
+            f"owner_entity_id={self.owner_entity_id.value!r}, "
+            f"counterpart_count={len(self.counterparts)})"
+        )
+
+
+@dataclass(frozen=True, slots=True)
 class SubjectiveSnapshot:
     """One frozen owner-scoped subjective view for a cognition invocation."""
 
@@ -336,6 +605,10 @@ class SubjectiveSnapshot:
     legacy_beliefs: tuple[Belief, ...]
     semantic_beliefs: tuple[SemanticBelief, ...]
     relationships: tuple[object, ...] = ()
+    goals: tuple[Goal, ...] = ()
+    drives: DriveProfile | None = None
+    inbox: tuple[CommunicationEnvelope, ...] = ()
+    social_identity: OwnerSafeSocialIdentity | None = None
 
     def __post_init__(self) -> None:
         if type(self.owner_id) is not AgentId:
@@ -416,15 +689,63 @@ class SubjectiveSnapshot:
             if profile.source_id != self.owner_id:
                 raise ValueError("SubjectiveSnapshot.relationships: ownership")
         object.__setattr__(self, "relationships", relationships)
+        if isinstance(self.goals, (set, frozenset, Mapping)):
+            raise TypeError("SubjectiveSnapshot.goals: not_ordered")
+        if isinstance(self.goals, (str, bytes)) or not isinstance(self.goals, Sequence):
+            raise TypeError("SubjectiveSnapshot.goals: not_ordered")
+        goals = tuple(self.goals)
+        seen_goals: set[str] = set()
+        for goal in goals:
+            if type(goal) is not Goal:
+                raise TypeError("SubjectiveSnapshot.goals: invalid_entry_type")
+            if goal.owner_id != self.owner_id:
+                raise ValueError("SubjectiveSnapshot.goals: ownership")
+            if goal.goal_id.value in seen_goals:
+                raise ValueError("SubjectiveSnapshot.goals: duplicate")
+            seen_goals.add(goal.goal_id.value)
+        object.__setattr__(self, "goals", goals)
+        if self.drives is None:
+            object.__setattr__(self, "drives", default_drive_profile(self.owner_id))
+        else:
+            if type(self.drives) is not DriveProfile:
+                raise TypeError("SubjectiveSnapshot.drives: invalid_type")
+            if self.drives.owner_id != self.owner_id:
+                raise ValueError("SubjectiveSnapshot.drives: ownership")
+        if isinstance(self.inbox, (set, frozenset, Mapping)):
+            raise TypeError("SubjectiveSnapshot.inbox: not_ordered")
+        if isinstance(self.inbox, (str, bytes)) or not isinstance(self.inbox, Sequence):
+            raise TypeError("SubjectiveSnapshot.inbox: not_ordered")
+        inbox = tuple(self.inbox)
+        for envelope in inbox:
+            if type(envelope) is not CommunicationEnvelope:
+                raise TypeError("SubjectiveSnapshot.inbox: invalid_entry_type")
+            if envelope.recipient_id != self.owner_id:
+                raise ValueError("SubjectiveSnapshot.inbox: ownership")
+        object.__setattr__(self, "inbox", inbox)
+        if self.social_identity is not None:
+            if type(self.social_identity) is not OwnerSafeSocialIdentity:
+                raise TypeError("SubjectiveSnapshot.social_identity: invalid_type")
+            if self.social_identity.owner_id != self.owner_id:
+                raise ValueError("SubjectiveSnapshot.social_identity: ownership")
 
     def __repr__(self) -> str:
+        drive_count = 0 if self.drives is None else len(self.drives.dispositions)
+        counterpart_count = (
+            0
+            if self.social_identity is None
+            else len(self.social_identity.counterparts)
+        )
         return (
             f"SubjectiveSnapshot(owner_id={self.owner_id.value!r}, "
             f"revision={self.revision}, "
             f"memory_count={len(self.memories)}, "
             f"legacy_belief_count={len(self.legacy_beliefs)}, "
             f"semantic_belief_count={len(self.semantic_beliefs)}, "
-            f"relationship_count={len(self.relationships)})"
+            f"relationship_count={len(self.relationships)}, "
+            f"goal_count={len(self.goals)}, "
+            f"drive_count={drive_count}, "
+            f"inbox_count={len(self.inbox)}, "
+            f"counterpart_count={counterpart_count})"
         )
 
 
@@ -1114,12 +1435,427 @@ def project_legacy_self_belief_state(model: SelfModel) -> SelfBeliefState:
 
 
 @dataclass(frozen=True, slots=True)
+class PerceivedNeedPressures:
+    """Physiology-derived need pressures in unit interval form."""
+
+    hunger: float
+    thirst: float
+    fatigue: float
+    health: float
+    confidence: float
+
+    def __post_init__(self) -> None:
+        object.__setattr__(
+            self,
+            "hunger",
+            require_confidence("PerceivedNeedPressures.hunger", self.hunger),
+        )
+        object.__setattr__(
+            self,
+            "thirst",
+            require_confidence("PerceivedNeedPressures.thirst", self.thirst),
+        )
+        object.__setattr__(
+            self,
+            "fatigue",
+            require_confidence("PerceivedNeedPressures.fatigue", self.fatigue),
+        )
+        object.__setattr__(
+            self,
+            "health",
+            require_confidence("PerceivedNeedPressures.health", self.health),
+        )
+        object.__setattr__(
+            self,
+            "confidence",
+            require_confidence("PerceivedNeedPressures.confidence", self.confidence),
+        )
+
+    def __repr__(self) -> str:
+        return f"PerceivedNeedPressures(confidence={self.confidence})"
+
+
+@dataclass(frozen=True, slots=True)
+class DriveEffect:
+    """Expected signed effect on one independent drive."""
+
+    kind: DriveKind
+    delta: float
+    confidence: float
+
+    def __post_init__(self) -> None:
+        if type(self.kind) is not DriveKind:
+            raise TypeError("DriveEffect.kind: invalid_type")
+        object.__setattr__(
+            self, "delta", require_signed_unit("DriveEffect.delta", self.delta)
+        )
+        object.__setattr__(
+            self,
+            "confidence",
+            require_confidence("DriveEffect.confidence", self.confidence),
+        )
+
+    def __repr__(self) -> str:
+        return f"DriveEffect(kind={self.kind.value!r})"
+
+
+@dataclass(frozen=True, slots=True)
+class GoalEffect:
+    """Expected signed progress effect on one active goal."""
+
+    goal_id: GoalId
+    progress_delta: float
+    confidence: float
+
+    def __post_init__(self) -> None:
+        if type(self.goal_id) is not GoalId:
+            raise TypeError("GoalEffect.goal_id: invalid_type")
+        object.__setattr__(
+            self,
+            "progress_delta",
+            require_signed_unit("GoalEffect.progress_delta", self.progress_delta),
+        )
+        object.__setattr__(
+            self,
+            "confidence",
+            require_confidence("GoalEffect.confidence", self.confidence),
+        )
+
+    def __repr__(self) -> str:
+        return f"GoalEffect(goal_id={self.goal_id.value!r})"
+
+
+@dataclass(frozen=True, slots=True)
+class SocialEffect:
+    """Expected signed affinity effect toward one counterpart (or anonymous)."""
+
+    counterpart_id: AgentId | None
+    affinity_delta: float
+    confidence: float
+
+    def __post_init__(self) -> None:
+        if self.counterpart_id is not None and type(self.counterpart_id) is not AgentId:
+            raise TypeError("SocialEffect.counterpart_id: invalid_type")
+        object.__setattr__(
+            self,
+            "affinity_delta",
+            require_signed_unit("SocialEffect.affinity_delta", self.affinity_delta),
+        )
+        object.__setattr__(
+            self,
+            "confidence",
+            require_confidence("SocialEffect.confidence", self.confidence),
+        )
+
+    def __repr__(self) -> str:
+        counterpart = None if self.counterpart_id is None else self.counterpart_id.value
+        return f"SocialEffect(counterpart_id={counterpart!r})"
+
+
+@dataclass(frozen=True, slots=True)
+class SubjectiveRisk:
+    """Typed subjective risk estimate for one imagined future."""
+
+    kind: SubjectiveRiskKind
+    severity: float
+    likelihood: float
+    confidence: float
+
+    def __post_init__(self) -> None:
+        if type(self.kind) is not SubjectiveRiskKind:
+            raise TypeError("SubjectiveRisk.kind: invalid_type")
+        object.__setattr__(
+            self,
+            "severity",
+            require_confidence("SubjectiveRisk.severity", self.severity),
+        )
+        object.__setattr__(
+            self,
+            "likelihood",
+            require_confidence("SubjectiveRisk.likelihood", self.likelihood),
+        )
+        object.__setattr__(
+            self,
+            "confidence",
+            require_confidence("SubjectiveRisk.confidence", self.confidence),
+        )
+
+    def __repr__(self) -> str:
+        return f"SubjectiveRisk(kind={self.kind.value!r})"
+
+
+@dataclass(frozen=True, slots=True)
+class SubjectiveUncertainty:
+    """Epistemic/aleatory uncertainty with a closed magnitude band."""
+
+    epistemic: float = 0.0
+    aleatory: float = 0.0
+    band: UncertaintyBand = UncertaintyBand.LOW
+
+    def __post_init__(self) -> None:
+        object.__setattr__(
+            self,
+            "epistemic",
+            require_confidence("SubjectiveUncertainty.epistemic", self.epistemic),
+        )
+        object.__setattr__(
+            self,
+            "aleatory",
+            require_confidence("SubjectiveUncertainty.aleatory", self.aleatory),
+        )
+        if type(self.band) is not UncertaintyBand:
+            raise TypeError("SubjectiveUncertainty.band: invalid_type")
+
+    def __repr__(self) -> str:
+        return f"SubjectiveUncertainty(band={self.band.value!r})"
+
+
+@dataclass(frozen=True, slots=True)
+class OptionSpaceChange:
+    """Expected change in perceived future option space."""
+
+    retained_options_ratio: float = 1.0
+    foreclosed_ratio: float = 0.0
+
+    def __post_init__(self) -> None:
+        object.__setattr__(
+            self,
+            "retained_options_ratio",
+            require_confidence(
+                "OptionSpaceChange.retained_options_ratio", self.retained_options_ratio
+            ),
+        )
+        object.__setattr__(
+            self,
+            "foreclosed_ratio",
+            require_confidence(
+                "OptionSpaceChange.foreclosed_ratio", self.foreclosed_ratio
+            ),
+        )
+
+    def __repr__(self) -> str:
+        return (
+            f"OptionSpaceChange(retained_options_ratio={self.retained_options_ratio}, "
+            f"foreclosed_ratio={self.foreclosed_ratio})"
+        )
+
+
+@dataclass(frozen=True, slots=True)
+class MortalityOpportunityForeclosure:
+    """Anticipatory fear of death as opportunity foreclosure (no death_penalty).
+
+    ``composite`` is derived deterministically as a quantized weighted sum of the
+    component unit values, scaled by ``death_probability``:
+
+    ``composite = quantize(death_probability * (
+        0.30 * outstanding_goal_value
+        + 0.20 * attachment_loss
+        + 0.20 * safety_activation
+        + 0.15 * autonomy_loss
+        + 0.15 * option_space.foreclosed_ratio
+    ))``
+
+    Component weights sum to ``1.0``. Callers may pass any ``composite``; it is
+    always overwritten with the derived value.
+    """
+
+    death_probability: float
+    outstanding_goal_value: float
+    attachment_loss: float
+    safety_activation: float
+    autonomy_loss: float
+    option_space: OptionSpaceChange
+    composite: float = 0.0
+
+    def __post_init__(self) -> None:
+        object.__setattr__(
+            self,
+            "death_probability",
+            require_confidence(
+                "MortalityOpportunityForeclosure.death_probability",
+                self.death_probability,
+            ),
+        )
+        object.__setattr__(
+            self,
+            "outstanding_goal_value",
+            require_confidence(
+                "MortalityOpportunityForeclosure.outstanding_goal_value",
+                self.outstanding_goal_value,
+            ),
+        )
+        object.__setattr__(
+            self,
+            "attachment_loss",
+            require_confidence(
+                "MortalityOpportunityForeclosure.attachment_loss",
+                self.attachment_loss,
+            ),
+        )
+        object.__setattr__(
+            self,
+            "safety_activation",
+            require_confidence(
+                "MortalityOpportunityForeclosure.safety_activation",
+                self.safety_activation,
+            ),
+        )
+        object.__setattr__(
+            self,
+            "autonomy_loss",
+            require_confidence(
+                "MortalityOpportunityForeclosure.autonomy_loss",
+                self.autonomy_loss,
+            ),
+        )
+        if type(self.option_space) is not OptionSpaceChange:
+            raise TypeError(
+                "MortalityOpportunityForeclosure.option_space: invalid_type"
+            )
+        weighted = (
+            _MORTALITY_WEIGHT_GOAL * self.outstanding_goal_value
+            + _MORTALITY_WEIGHT_ATTACHMENT * self.attachment_loss
+            + _MORTALITY_WEIGHT_SAFETY * self.safety_activation
+            + _MORTALITY_WEIGHT_AUTONOMY * self.autonomy_loss
+            + _MORTALITY_WEIGHT_OPTIONS * self.option_space.foreclosed_ratio
+        )
+        object.__setattr__(
+            self,
+            "composite",
+            _quantize_unit(self.death_probability * weighted),
+        )
+
+    def __repr__(self) -> str:
+        return (
+            f"MortalityOpportunityForeclosure("
+            f"death_probability={self.death_probability}, "
+            f"composite={self.composite})"
+        )
+
+
+@dataclass(frozen=True, slots=True)
+class FutureSourceRef:
+    """Ordered unique subjective provenance IDs (no payloads)."""
+
+    belief_ids: tuple[str, ...] = ()
+    memory_ids: tuple[str, ...] = ()
+    relationship_ids: tuple[str, ...] = ()
+
+    def __post_init__(self) -> None:
+        object.__setattr__(
+            self,
+            "belief_ids",
+            _require_stable_id_tuple(
+                "FutureSourceRef.belief_ids",
+                self.belief_ids,
+                max_items=_MAX_SOURCE_REFS,
+            ),
+        )
+        object.__setattr__(
+            self,
+            "memory_ids",
+            _require_stable_id_tuple(
+                "FutureSourceRef.memory_ids",
+                self.memory_ids,
+                max_items=_MAX_SOURCE_REFS,
+            ),
+        )
+        object.__setattr__(
+            self,
+            "relationship_ids",
+            _require_stable_id_tuple(
+                "FutureSourceRef.relationship_ids",
+                self.relationship_ids,
+                max_items=_MAX_SOURCE_REFS,
+            ),
+        )
+
+    def __repr__(self) -> str:
+        return (
+            f"FutureSourceRef(belief_count={len(self.belief_ids)}, "
+            f"memory_count={len(self.memory_ids)}, "
+            f"relationship_count={len(self.relationship_ids)})"
+        )
+
+
+def _require_drive_effects(
+    name: str, values: Sequence[object]
+) -> tuple[DriveEffect, ...]:
+    effects = _require_ordered_model_tuple(
+        name, values, model_type=DriveEffect, max_items=_MAX_EFFECTS
+    )
+    seen: set[DriveKind] = set()
+    for effect in effects:
+        if effect.kind in seen:
+            raise ValueError(f"{name}: duplicate_kind")
+        seen.add(effect.kind)
+    return effects
+
+
+def _require_goal_effects(
+    name: str, values: Sequence[object]
+) -> tuple[GoalEffect, ...]:
+    effects = _require_ordered_model_tuple(
+        name, values, model_type=GoalEffect, max_items=_MAX_EFFECTS
+    )
+    seen: set[str] = set()
+    for effect in effects:
+        if effect.goal_id.value in seen:
+            raise ValueError(f"{name}: duplicate_goal_id")
+        seen.add(effect.goal_id.value)
+    return effects
+
+
+def _require_social_effects(
+    name: str, values: Sequence[object]
+) -> tuple[SocialEffect, ...]:
+    effects = _require_ordered_model_tuple(
+        name, values, model_type=SocialEffect, max_items=_MAX_EFFECTS
+    )
+    seen: set[str | None] = set()
+    for effect in effects:
+        key = None if effect.counterpart_id is None else effect.counterpart_id.value
+        if key in seen:
+            raise ValueError(f"{name}: duplicate_counterpart")
+        seen.add(key)
+    return effects
+
+
+def _require_risks(name: str, values: Sequence[object]) -> tuple[SubjectiveRisk, ...]:
+    risks = _require_ordered_model_tuple(
+        name, values, model_type=SubjectiveRisk, max_items=_MAX_RISKS
+    )
+    seen: set[SubjectiveRiskKind] = set()
+    for risk in risks:
+        if risk.kind in seen:
+            raise ValueError(f"{name}: duplicate_kind")
+        seen.add(risk.kind)
+    return risks
+
+
+@dataclass(frozen=True, slots=True)
 class ImaginedFuture:
-    """One bounded imagined future identified by closed claim codes."""
+    """One bounded imagined future with independent effect and risk vectors.
+
+    Legacy construction ``ImaginedFuture(future_id, claim_codes, confidence)``
+    remains valid: new fields default to safe empty/neutral values.
+    """
 
     future_id: str
     claim_codes: tuple[SituationClaimCode, ...]
     confidence: float
+    direction: ActionDirection = ActionDirection.WAIT
+    target_entity_id: str | None = None
+    target_agent_id: AgentId | None = None
+    horizon_ticks: int = 1
+    drive_effects: tuple[DriveEffect, ...] = ()
+    goal_effects: tuple[GoalEffect, ...] = ()
+    social_effects: tuple[SocialEffect, ...] = ()
+    risks: tuple[SubjectiveRisk, ...] = ()
+    uncertainty: SubjectiveUncertainty = SubjectiveUncertainty()
+    mortality: MortalityOpportunityForeclosure | None = None
+    subjective_probability: float | None = None
+    source_refs: FutureSourceRef = FutureSourceRef()
 
     def __post_init__(self) -> None:
         object.__setattr__(
@@ -1141,11 +1877,78 @@ class ImaginedFuture:
             "confidence",
             require_confidence("ImaginedFuture.confidence", self.confidence),
         )
+        if type(self.direction) is not ActionDirection:
+            raise TypeError("ImaginedFuture.direction: invalid_type")
+        if self.target_entity_id is not None:
+            object.__setattr__(
+                self,
+                "target_entity_id",
+                require_stable_id(
+                    "ImaginedFuture.target_entity_id", self.target_entity_id
+                ),
+            )
+        if self.target_agent_id is not None and type(self.target_agent_id) is not (
+            AgentId
+        ):
+            raise TypeError("ImaginedFuture.target_agent_id: invalid_type")
+        object.__setattr__(
+            self,
+            "horizon_ticks",
+            _require_positive_int("ImaginedFuture.horizon_ticks", self.horizon_ticks),
+        )
+        object.__setattr__(
+            self,
+            "drive_effects",
+            _require_drive_effects("ImaginedFuture.drive_effects", self.drive_effects),
+        )
+        object.__setattr__(
+            self,
+            "goal_effects",
+            _require_goal_effects("ImaginedFuture.goal_effects", self.goal_effects),
+        )
+        object.__setattr__(
+            self,
+            "social_effects",
+            _require_social_effects(
+                "ImaginedFuture.social_effects", self.social_effects
+            ),
+        )
+        object.__setattr__(
+            self,
+            "risks",
+            _require_risks("ImaginedFuture.risks", self.risks),
+        )
+        if type(self.uncertainty) is not SubjectiveUncertainty:
+            raise TypeError("ImaginedFuture.uncertainty: invalid_type")
+        if self.mortality is not None and type(self.mortality) is not (
+            MortalityOpportunityForeclosure
+        ):
+            raise TypeError("ImaginedFuture.mortality: invalid_type")
+        if self.subjective_probability is None:
+            object.__setattr__(self, "subjective_probability", self.confidence)
+        else:
+            object.__setattr__(
+                self,
+                "subjective_probability",
+                require_confidence(
+                    "ImaginedFuture.subjective_probability",
+                    self.subjective_probability,
+                ),
+            )
+        if type(self.source_refs) is not FutureSourceRef:
+            raise TypeError("ImaginedFuture.source_refs: invalid_type")
 
     def __repr__(self) -> str:
         return (
             f"ImaginedFuture(future_id={self.future_id!r}, "
-            f"claim_count={len(self.claim_codes)}, confidence={self.confidence})"
+            f"direction={self.direction.value!r}, "
+            f"claim_count={len(self.claim_codes)}, "
+            f"drive_effect_count={len(self.drive_effects)}, "
+            f"goal_effect_count={len(self.goal_effects)}, "
+            f"social_effect_count={len(self.social_effects)}, "
+            f"risk_count={len(self.risks)}, "
+            f"horizon_ticks={self.horizon_ticks}, "
+            f"confidence={self.confidence})"
         )
 
 
@@ -1216,13 +2019,91 @@ class MotivationScore:
 
 
 @dataclass(frozen=True, slots=True)
+class FutureAppraisal:
+    """Per-future appraisal retaining independent effect and risk vectors."""
+
+    future_id: str
+    drive_effects: tuple[DriveEffect, ...] = ()
+    goal_effects: tuple[GoalEffect, ...] = ()
+    risks: tuple[SubjectiveRisk, ...] = ()
+    mortality: MortalityOpportunityForeclosure | None = None
+    uncertainty: SubjectiveUncertainty = SubjectiveUncertainty()
+    support_drive_count: int = 0
+    support_goal_count: int = 0
+    support_social_count: int = 0
+
+    def __post_init__(self) -> None:
+        object.__setattr__(
+            self,
+            "future_id",
+            require_stable_id("FutureAppraisal.future_id", self.future_id),
+        )
+        object.__setattr__(
+            self,
+            "drive_effects",
+            _require_drive_effects("FutureAppraisal.drive_effects", self.drive_effects),
+        )
+        object.__setattr__(
+            self,
+            "goal_effects",
+            _require_goal_effects("FutureAppraisal.goal_effects", self.goal_effects),
+        )
+        object.__setattr__(
+            self,
+            "risks",
+            _require_risks("FutureAppraisal.risks", self.risks),
+        )
+        if self.mortality is not None and type(self.mortality) is not (
+            MortalityOpportunityForeclosure
+        ):
+            raise TypeError("FutureAppraisal.mortality: invalid_type")
+        if type(self.uncertainty) is not SubjectiveUncertainty:
+            raise TypeError("FutureAppraisal.uncertainty: invalid_type")
+        object.__setattr__(
+            self,
+            "support_drive_count",
+            require_exact_nonneg_int(
+                "FutureAppraisal.support_drive_count", self.support_drive_count
+            ),
+        )
+        object.__setattr__(
+            self,
+            "support_goal_count",
+            require_exact_nonneg_int(
+                "FutureAppraisal.support_goal_count", self.support_goal_count
+            ),
+        )
+        object.__setattr__(
+            self,
+            "support_social_count",
+            require_exact_nonneg_int(
+                "FutureAppraisal.support_social_count", self.support_social_count
+            ),
+        )
+
+    def __repr__(self) -> str:
+        return (
+            f"FutureAppraisal(future_id={self.future_id!r}, "
+            f"drive_effect_count={len(self.drive_effects)}, "
+            f"goal_effect_count={len(self.goal_effects)}, "
+            f"risk_count={len(self.risks)}, "
+            f"support_drive_count={self.support_drive_count}, "
+            f"support_goal_count={self.support_goal_count}, "
+            f"support_social_count={self.support_social_count})"
+        )
+
+
+@dataclass(frozen=True, slots=True)
 class MotivationEvaluation:
-    """Ordered motive scores for intention selection."""
+    """Ordered motive scores plus independent future appraisals."""
 
     owner_id: AgentId
     scores: tuple[MotivationScore, ...]
     confidence: float
     decision_metadata: DecisionMetadata = DecisionMetadata()
+    appraisals: tuple[FutureAppraisal, ...] = ()
+    active_drive_kinds: tuple[DriveKind, ...] = ()
+    active_goal_ids: tuple[GoalId, ...] = ()
 
     def __post_init__(self) -> None:
         if type(self.owner_id) is not AgentId:
@@ -1255,11 +2136,45 @@ class MotivationEvaluation:
             raise TypeError(
                 "MotivationEvaluation.decision_metadata must be DecisionMetadata"
             )
+        appraisals = _require_ordered_model_tuple(
+            "MotivationEvaluation.appraisals",
+            self.appraisals,
+            model_type=FutureAppraisal,
+            max_items=_MAX_APPRAISALS,
+        )
+        seen_futures: set[str] = set()
+        for appraisal in appraisals:
+            if appraisal.future_id in seen_futures:
+                raise ValueError("MotivationEvaluation.appraisals: duplicate_future_id")
+            seen_futures.add(appraisal.future_id)
+        object.__setattr__(self, "appraisals", appraisals)
+        object.__setattr__(
+            self,
+            "active_drive_kinds",
+            _require_ordered_enum(
+                "MotivationEvaluation.active_drive_kinds",
+                self.active_drive_kinds,
+                enum_type=DriveKind,
+            ),
+        )
+        object.__setattr__(
+            self,
+            "active_goal_ids",
+            require_ordered_unique(
+                "MotivationEvaluation.active_goal_ids",
+                self.active_goal_ids,
+                item_type=GoalId,
+            ),
+        )
 
     def __repr__(self) -> str:
         return (
             f"MotivationEvaluation(owner_id={self.owner_id.value!r}, "
-            f"score_count={len(self.scores)}, confidence={self.confidence})"
+            f"score_count={len(self.scores)}, "
+            f"appraisal_count={len(self.appraisals)}, "
+            f"active_drive_count={len(self.active_drive_kinds)}, "
+            f"active_goal_count={len(self.active_goal_ids)}, "
+            f"confidence={self.confidence})"
         )
 
 
@@ -1272,6 +2187,9 @@ class SelectedIntention:
     source_motive: MotivationCode | None
     confidence: float
     decision_metadata: DecisionMetadata = DecisionMetadata()
+    selected_future_id: str | None = None
+    direction: ActionDirection | None = None
+    appraisal_future_ids: tuple[str, ...] = ()
 
     def __post_init__(self) -> None:
         if type(self.owner_id) is not AgentId:
@@ -1294,11 +2212,35 @@ class SelectedIntention:
             raise TypeError(
                 "SelectedIntention.decision_metadata must be DecisionMetadata"
             )
+        if self.selected_future_id is not None:
+            object.__setattr__(
+                self,
+                "selected_future_id",
+                require_stable_id(
+                    "SelectedIntention.selected_future_id", self.selected_future_id
+                ),
+            )
+        if self.direction is not None and type(self.direction) is not ActionDirection:
+            raise TypeError("SelectedIntention.direction: invalid_type")
+        object.__setattr__(
+            self,
+            "appraisal_future_ids",
+            _require_stable_id_tuple(
+                "SelectedIntention.appraisal_future_ids",
+                self.appraisal_future_ids,
+                max_items=_MAX_APPRAISALS,
+            ),
+        )
 
     def __repr__(self) -> str:
+        direction = None if self.direction is None else self.direction.value
         return (
             f"SelectedIntention(owner_id={self.owner_id.value!r}, "
-            f"intention={self.intention.value!r}, confidence={self.confidence})"
+            f"intention={self.intention.value!r}, "
+            f"selected_future_id={self.selected_future_id!r}, "
+            f"direction={direction!r}, "
+            f"appraisal_count={len(self.appraisal_future_ids)}, "
+            f"confidence={self.confidence})"
         )
 
 

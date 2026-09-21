@@ -255,3 +255,64 @@ async def test_empty_observation_defaults_to_wait() -> None:
     situation = result.boundary_records[2].output_artifact
     assert type(situation) is SituationModel
     assert SituationClaimCode.IDLE in situation.claim_codes
+
+
+@pytest.mark.asyncio
+async def test_direct_self_state_projector_passes_active_goal_ids() -> None:
+    from agents.cognition.models import (
+        RetrievedMemoryContext,
+        SubjectiveSnapshot,
+    )
+    from agents.models import Goal, GoalId, GoalStatus
+
+    agent = AgentId("agent-1")
+    snapshot = SubjectiveSnapshot(
+        owner_id=agent,
+        revision=1,
+        memories=(),
+        legacy_beliefs=(),
+        semantic_beliefs=(),
+        goals=(
+            Goal(
+                goal_id=GoalId("goal-active"),
+                owner_id=agent,
+                description="secret-active",
+                priority=0.8,
+                status=GoalStatus.ACTIVE,
+            ),
+            Goal(
+                goal_id=GoalId("goal-done"),
+                owner_id=agent,
+                description="secret-done",
+                priority=0.2,
+                status=GoalStatus.COMPLETED,
+            ),
+        ),
+    )
+    loop_input = CognitiveLoopInput(
+        agent_id=agent,
+        observation=Observation(
+            world_id=WorldId("world-1"),
+            observer_id=EntityId("body-1"),
+            revision=WorldRevision(0),
+            tick=1,
+            self_body=_alive_self(),
+        ),
+        internal_state=InternalAgentState(owner_id=agent),
+        snapshot=snapshot,
+    )
+    situation = SituationModel(
+        owner_id=agent,
+        tick=1,
+        claim_codes=(SituationClaimCode.LOCAL_SCENE,),
+        confidence=1.0,
+    )
+    memory = RetrievedMemoryContext(
+        owner_id=agent,
+        memory_ids=(),
+        belief_ids=(),
+        confidence=1.0,
+    )
+    model = await DirectSelfStateProjector().project(loop_input, situation, memory)
+    assert model.goal_ids == (GoalId("goal-active"),)
+    assert "secret-active" not in repr(model)

@@ -20,6 +20,7 @@ from agents.cognition.models import (
     InterpretedPerception,
     MemoryUpdateIntent,
     MotivationEvaluation,
+    OwnerSafeSocialIdentity,
     PossibleFutures,
     RetrievedMemoryContext,
     SelectedIntention,
@@ -27,7 +28,7 @@ from agents.cognition.models import (
     SituationModel,
     SubjectiveSnapshot,
 )
-from agents.models import AgentId
+from agents.models import AgentId, DriveProfile, Goal, default_drive_profile
 from memory.beliefs import SemanticBelief
 from memory.models import Belief, MemoryTrace
 from social.models import CommunicationEnvelope
@@ -133,6 +134,9 @@ class Perspective:
     semantic_beliefs: tuple[SemanticBelief, ...] = ()
     relationships: tuple[DirectedRelationshipProfile, ...] = ()
     snapshot_revision: int = 0
+    goals: tuple[Goal, ...] = ()
+    drives: DriveProfile | None = None
+    social_identity: OwnerSafeSocialIdentity | None = None
 
     def __post_init__(self) -> None:
         if type(self.agent_id) is not AgentId:
@@ -211,6 +215,35 @@ class Perspective:
                     "Perspective.inbox envelope recipient_id must match agent_id"
                 )
         object.__setattr__(self, "inbox", inbox)
+        if isinstance(self.goals, (set, frozenset)):
+            raise TypeError("Perspective.goals: not_ordered")
+        if isinstance(self.goals, (str, bytes)) or not isinstance(self.goals, Sequence):
+            raise TypeError("Perspective.goals: not_ordered")
+        goals = tuple(self.goals)
+        seen_goals: set[str] = set()
+        for goal in goals:
+            if type(goal) is not Goal:
+                raise TypeError("Perspective.goals: invalid_entry_type")
+            if goal.owner_id != self.agent_id:
+                raise ValueError("Perspective.goals: ownership")
+            if goal.goal_id.value in seen_goals:
+                raise ValueError("Perspective.goals: duplicate")
+            seen_goals.add(goal.goal_id.value)
+        object.__setattr__(self, "goals", goals)
+        if self.drives is None:
+            object.__setattr__(self, "drives", default_drive_profile(self.agent_id))
+        else:
+            if type(self.drives) is not DriveProfile:
+                raise TypeError("Perspective.drives: invalid_type")
+            if self.drives.owner_id != self.agent_id:
+                raise ValueError("Perspective.drives: ownership")
+        if self.social_identity is not None:
+            if type(self.social_identity) is not OwnerSafeSocialIdentity:
+                raise TypeError("Perspective.social_identity: invalid_type")
+            if self.social_identity.owner_id != self.agent_id:
+                raise ValueError("Perspective.social_identity: ownership")
+            if self.social_identity.owner_entity_id != self.observation.observer_id:
+                raise ValueError("Perspective.social_identity: entity_mismatch")
 
     def to_snapshot(self) -> SubjectiveSnapshot:
         """Freeze this perspective into a ``SubjectiveSnapshot``."""
@@ -221,16 +254,29 @@ class Perspective:
             legacy_beliefs=self.beliefs,
             semantic_beliefs=self.semantic_beliefs,
             relationships=self.relationships,
+            goals=self.goals,
+            drives=self.drives,
+            inbox=self.inbox,
+            social_identity=self.social_identity,
         )
 
     def __repr__(self) -> str:
+        drive_count = 0 if self.drives is None else len(self.drives.dispositions)
+        counterpart_count = (
+            0
+            if self.social_identity is None
+            else len(self.social_identity.counterparts)
+        )
         return (
             f"Perspective(agent_id={self.agent_id.value!r}, "
             f"memory_count={len(self.memories)}, "
             f"belief_count={len(self.beliefs)}, "
             f"semantic_belief_count={len(self.semantic_beliefs)}, "
             f"relationship_count={len(self.relationships)}, "
+            f"goal_count={len(self.goals)}, "
+            f"drive_count={drive_count}, "
             f"inbox_count={len(self.inbox)}, "
+            f"counterpart_count={counterpart_count}, "
             f"snapshot_revision={self.snapshot_revision})"
         )
 

@@ -15,6 +15,7 @@ from agents.cognition.models import (
     ComponentBoundaryRecord,
     ComponentKind,
     ComponentStatus,
+    CounterpartBinding,
     DecisionMetadata,
     ImaginedFuture,
     IntentionCode,
@@ -25,6 +26,7 @@ from agents.cognition.models import (
     MotivationCode,
     MotivationEvaluation,
     MotivationScore,
+    OwnerSafeSocialIdentity,
     PerceptionClaimCode,
     PossibleFutures,
     RetrievedMemoryContext,
@@ -32,6 +34,7 @@ from agents.cognition.models import (
     SelfBeliefState,
     SituationClaimCode,
     SituationModel,
+    SubjectiveSnapshot,
     diagnostic_projection,
     require_confidence,
 )
@@ -489,3 +492,327 @@ def test_self_model_repr_omits_claim_payload() -> None:
     )
     assert secret not in repr(model)
     assert "yes" not in repr(model)
+
+
+def test_subjective_snapshot_carries_goals_drives_and_inbox() -> None:
+    from agents.models import (
+        DriveKind,
+        Goal,
+        GoalId,
+        GoalOutcome,
+        GoalOutcomeKind,
+        GoalStatus,
+        default_drive_profile,
+    )
+    from social.models import CommunicationEnvelope, EnvelopeId
+
+    owner = AgentId("agent-1")
+    goal = Goal(
+        goal_id=GoalId("goal-1"),
+        owner_id=owner,
+        description="secret-goal-text",
+        priority=0.7,
+        status=GoalStatus.ACTIVE,
+        outcome=GoalOutcome(
+            kind=GoalOutcomeKind.SATISFY_DRIVE, drive_kind=DriveKind.THIRST
+        ),
+    )
+    inbox = (
+        CommunicationEnvelope(
+            envelope_id=EnvelopeId("env-1"),
+            sender_id=AgentId("agent-2"),
+            recipient_id=owner,
+            payload={"text": "secret-inbox"},
+        ),
+    )
+    identity = OwnerSafeSocialIdentity(
+        owner_id=owner,
+        owner_entity_id=EntityId("body-1"),
+        counterparts=(
+            CounterpartBinding(
+                agent_id=AgentId("agent-2"),
+                entity_id=EntityId("body-2"),
+            ),
+        ),
+    )
+    snapshot = SubjectiveSnapshot(
+        owner_id=owner,
+        revision=3,
+        memories=(),
+        legacy_beliefs=(),
+        semantic_beliefs=(),
+        goals=(goal,),
+        drives=default_drive_profile(owner),
+        inbox=inbox,
+        social_identity=identity,
+    )
+    assert snapshot.goals[0].goal_id == GoalId("goal-1")
+    assert snapshot.drives is not None
+    assert len(snapshot.drives.dispositions) == 11
+    assert snapshot.inbox[0].envelope_id.value == "env-1"
+    assert snapshot.social_identity is not None
+    assert snapshot.social_identity.counterparts[0].agent_id.value == "agent-2"
+    text = repr(snapshot)
+    assert "secret-goal-text" not in text
+    assert "secret-inbox" not in text
+
+
+def test_subjective_snapshot_rejects_foreign_goals_and_drives() -> None:
+    from agents.models import Goal, GoalId, GoalStatus, default_drive_profile
+
+    owner = AgentId("agent-1")
+    with pytest.raises(ValueError, match="ownership"):
+        SubjectiveSnapshot(
+            owner_id=owner,
+            revision=0,
+            memories=(),
+            legacy_beliefs=(),
+            semantic_beliefs=(),
+            goals=(
+                Goal(
+                    goal_id=GoalId("goal-x"),
+                    owner_id=AgentId("agent-2"),
+                    description="x",
+                    priority=0.1,
+                    status=GoalStatus.ACTIVE,
+                ),
+            ),
+        )
+    with pytest.raises(ValueError, match="ownership"):
+        SubjectiveSnapshot(
+            owner_id=owner,
+            revision=0,
+            memories=(),
+            legacy_beliefs=(),
+            semantic_beliefs=(),
+            drives=default_drive_profile(AgentId("agent-2")),
+        )
+
+
+def test_require_signed_unit_bounds() -> None:
+    from agents.cognition.models import require_signed_unit
+
+    assert require_signed_unit("d", -1) == -1.0
+    assert require_signed_unit("d", 1.0) == 1.0
+    assert require_signed_unit("d", 0) == 0.0
+    with pytest.raises(ValueError, match="not_signed_unit"):
+        require_signed_unit("d", -1.1)
+    with pytest.raises(ValueError, match="not_signed_unit"):
+        require_signed_unit("d", True)
+
+
+def test_perceived_need_pressures_and_effect_vectors() -> None:
+    from agents.cognition.models import (
+        ActionDirection,
+        DriveEffect,
+        FutureAppraisal,
+        FutureSourceRef,
+        GoalEffect,
+        MortalityOpportunityForeclosure,
+        OptionSpaceChange,
+        PerceivedNeedPressures,
+        SocialEffect,
+        SubjectiveRisk,
+        SubjectiveRiskKind,
+        SubjectiveUncertainty,
+        UncertaintyBand,
+        action_direction_for_intention,
+        intention_for_action_direction,
+    )
+    from agents.models import DriveKind
+
+    pressures = PerceivedNeedPressures(
+        hunger=0.8,
+        thirst=0.2,
+        fatigue=0.1,
+        health=0.9,
+        confidence=0.7,
+    )
+    assert "0.8" not in repr(pressures) or "confidence=" in repr(pressures)
+    assert pressures.hunger == 0.8
+
+    drive = DriveEffect(kind=DriveKind.THIRST, delta=-0.5, confidence=0.9)
+    goal = GoalEffect(goal_id=GoalId("goal-1"), progress_delta=0.25, confidence=0.8)
+    social = SocialEffect(
+        counterpart_id=AgentId("agent-2"), affinity_delta=0.1, confidence=0.6
+    )
+    risk = SubjectiveRisk(
+        kind=SubjectiveRiskKind.PHYSICAL_HARM,
+        severity=0.7,
+        likelihood=0.4,
+        confidence=0.5,
+    )
+    assert drive.kind is DriveKind.THIRST
+    assert goal.goal_id.value == "goal-1"
+    assert social.counterpart_id is not None
+    assert risk.kind is SubjectiveRiskKind.PHYSICAL_HARM
+    assert "delta" not in repr(drive)
+    assert "-0.5" not in repr(drive)
+
+    mortality = MortalityOpportunityForeclosure(
+        death_probability=0.5,
+        outstanding_goal_value=1.0,
+        attachment_loss=0.0,
+        safety_activation=0.0,
+        autonomy_loss=0.0,
+        option_space=OptionSpaceChange(
+            retained_options_ratio=0.5, foreclosed_ratio=0.5
+        ),
+        composite=0.99,
+    )
+    # composite = 0.5 * (0.30*1 + 0.15*0.5) = 0.5 * 0.375 = 0.1875
+    assert mortality.composite == pytest.approx(0.1875)
+    assert "1.0" not in repr(mortality) or "death_probability" in repr(mortality)
+
+    future = ImaginedFuture(
+        future_id="drink-well",
+        claim_codes=(SituationClaimCode.RESOURCE_PRESENT,),
+        confidence=0.6,
+        direction=ActionDirection.DRINK,
+        target_entity_id="well-1",
+        horizon_ticks=2,
+        drive_effects=(drive,),
+        goal_effects=(goal,),
+        social_effects=(social,),
+        risks=(risk,),
+        uncertainty=SubjectiveUncertainty(
+            epistemic=0.3, aleatory=0.1, band=UncertaintyBand.MEDIUM
+        ),
+        mortality=mortality,
+        source_refs=FutureSourceRef(belief_ids=("bel-1",), memory_ids=("mem-1",)),
+    )
+    assert future.subjective_probability == 0.6
+    assert future.direction is ActionDirection.DRINK
+    text = repr(future)
+    assert "drink-well" in text
+    assert "well-1" not in text
+    assert "-0.5" not in text
+    assert "PHYSICAL_HARM" not in text or "risk_count=1" in text
+
+    legacy = ImaginedFuture(
+        future_id="idle",
+        claim_codes=(SituationClaimCode.IDLE,),
+        confidence=1.0,
+    )
+    assert legacy.direction is ActionDirection.WAIT
+    assert legacy.subjective_probability == 1.0
+    assert legacy.drive_effects == ()
+
+    appraisal = FutureAppraisal(
+        future_id="drink-well",
+        drive_effects=(drive,),
+        goal_effects=(goal,),
+        risks=(risk,),
+        mortality=mortality,
+        support_drive_count=1,
+        support_goal_count=1,
+        support_social_count=1,
+    )
+    evaluation = MotivationEvaluation(
+        owner_id=AgentId("agent-1"),
+        scores=(MotivationScore(motive=MotivationCode.SURVIVE, score=0.8),),
+        confidence=0.8,
+        appraisals=(appraisal,),
+        active_drive_kinds=(DriveKind.THIRST,),
+        active_goal_ids=(GoalId("goal-1"),),
+    )
+    assert len(evaluation.appraisals) == 1
+    assert "goal-1" not in repr(evaluation) or "active_goal_count=1" in repr(evaluation)
+    assert "-0.5" not in repr(appraisal)
+
+    selected = SelectedIntention(
+        owner_id=AgentId("agent-1"),
+        intention=IntentionCode.DRINK,
+        source_motive=MotivationCode.SURVIVE,
+        confidence=0.8,
+        selected_future_id="drink-well",
+        direction=ActionDirection.DRINK,
+        appraisal_future_ids=("drink-well",),
+    )
+    assert selected.direction is ActionDirection.DRINK
+    assert action_direction_for_intention(IntentionCode.REST) is ActionDirection.SLEEP
+    assert intention_for_action_direction(ActionDirection.FLEE) is IntentionCode.FLEE
+
+
+def test_imagined_future_rejects_duplicate_effects_and_bad_bounds() -> None:
+    from agents.cognition.models import ActionDirection, DriveEffect
+    from agents.models import DriveKind
+
+    with pytest.raises(ValueError, match="duplicate_kind"):
+        ImaginedFuture(
+            future_id="f1",
+            claim_codes=(SituationClaimCode.IDLE,),
+            confidence=0.5,
+            drive_effects=(
+                DriveEffect(kind=DriveKind.HUNGER, delta=0.1, confidence=1.0),
+                DriveEffect(kind=DriveKind.HUNGER, delta=-0.1, confidence=1.0),
+            ),
+        )
+    with pytest.raises(ValueError, match="not_signed_unit"):
+        DriveEffect(kind=DriveKind.HUNGER, delta=1.5, confidence=1.0)
+    with pytest.raises(ValueError, match="must_be_positive"):
+        ImaginedFuture(
+            future_id="f1",
+            claim_codes=(SituationClaimCode.IDLE,),
+            confidence=0.5,
+            direction=ActionDirection.WAIT,
+            horizon_ticks=0,
+        )
+    with pytest.raises(ValueError, match="duplicate"):
+        from agents.cognition.models import FutureSourceRef
+
+        FutureSourceRef(belief_ids=("bel-1", "bel-1"))
+
+
+def test_mortality_composite_has_no_death_penalty_constant() -> None:
+    from agents.cognition.models import (
+        MortalityOpportunityForeclosure,
+        OptionSpaceChange,
+    )
+
+    low = MortalityOpportunityForeclosure(
+        death_probability=1.0,
+        outstanding_goal_value=0.0,
+        attachment_loss=0.0,
+        safety_activation=0.0,
+        autonomy_loss=0.0,
+        option_space=OptionSpaceChange(foreclosed_ratio=0.0),
+    )
+    high = MortalityOpportunityForeclosure(
+        death_probability=1.0,
+        outstanding_goal_value=1.0,
+        attachment_loss=1.0,
+        safety_activation=1.0,
+        autonomy_loss=1.0,
+        option_space=OptionSpaceChange(foreclosed_ratio=1.0),
+    )
+    assert low.composite == 0.0
+    assert high.composite == pytest.approx(1.0)
+    assert high.composite <= 1.0
+    # Same death probability, different opportunity values => different fear.
+    mid = MortalityOpportunityForeclosure(
+        death_probability=1.0,
+        outstanding_goal_value=1.0,
+        attachment_loss=0.0,
+        safety_activation=0.0,
+        autonomy_loss=0.0,
+        option_space=OptionSpaceChange(foreclosed_ratio=0.0),
+    )
+    assert mid.composite == pytest.approx(0.30)
+    assert mid.composite != high.composite
+
+
+def test_validation_errors_expose_field_and_reason_codes_only() -> None:
+    from agents.cognition.models import DriveEffect, SocialEffect
+    from agents.models import DriveKind
+
+    with pytest.raises(ValueError) as exc_drive:
+        DriveEffect(kind=DriveKind.HUNGER, delta=2.0, confidence=1.0)
+    assert "DriveEffect.delta" in str(exc_drive.value)
+    assert "not_signed_unit" in str(exc_drive.value)
+    assert "2.0" not in str(exc_drive.value)
+
+    with pytest.raises(TypeError) as exc_social:
+        SocialEffect(counterpart_id="agent-2", affinity_delta=0.1, confidence=1.0)  # type: ignore[arg-type]
+    assert "counterpart_id" in str(exc_social.value)
+    assert "invalid_type" in str(exc_social.value)

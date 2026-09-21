@@ -32,6 +32,7 @@ from agents.cognition.models import (
     SituationModel,
     project_self_model,
 )
+from agents.models import GoalId, GoalStatus
 from memory.beliefs import SemanticBelief
 from memory.models import BeliefId
 from world.actions import Wait
@@ -187,11 +188,18 @@ class DirectSelfStateProjector:
         beliefs = memory.semantic_beliefs
         if not beliefs and loop_input.snapshot is not None:
             beliefs = loop_input.snapshot.semantic_beliefs
+        goal_ids: tuple[GoalId, ...] = ()
+        if loop_input.snapshot is not None:
+            goal_ids = tuple(
+                goal.goal_id
+                for goal in loop_input.snapshot.goals
+                if goal.status is GoalStatus.ACTIVE
+            )
         model = project_self_model(
             owner_id=loop_input.agent_id,
             life_status=life_status,
             beliefs=beliefs,
-            goal_ids=(),
+            goal_ids=goal_ids,
         )
         _LOG.debug(
             "self_model_projected",

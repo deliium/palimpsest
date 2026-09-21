@@ -181,3 +181,79 @@ def test_inbox_is_out_of_band_not_derived_from_communications() -> None:
     )
     assert perspective.inbox == ()
     assert perspective.observation.communications[0].text == "claim-only"
+
+
+def test_build_perspective_carries_goals_drives_and_counterpart_bindings(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    from agents.models import (
+        REQUIRED_DRIVE_KINDS,
+        Goal,
+        GoalId,
+        GoalStatus,
+        default_drive_profile,
+    )
+
+    engine = WorldEngine(config=SimulationRunConfig(seed=1), bootstrap=_bootstrap())
+    engine.observe()
+    translator = registration_translator(engine._bootstrap)
+    observation = engine.observation_for(AgentId("agent-1"))
+    owner = AgentId("agent-1")
+    goals = (
+        Goal(
+            goal_id=GoalId("goal-1"),
+            owner_id=owner,
+            description="secret-survive",
+            priority=0.8,
+            status=GoalStatus.ACTIVE,
+        ),
+    )
+    caplog.set_level(logging.DEBUG, logger="simulation.perception")
+    perspective = build_perspective(
+        agent_id=owner,
+        observation=observation,
+        translator=translator,
+        goals=goals,
+        drives=default_drive_profile(owner),
+    )
+    assert perspective.goals == goals
+    assert perspective.drives is not None
+    assert len(perspective.drives.dispositions) == len(REQUIRED_DRIVE_KINDS)
+    assert perspective.social_identity is not None
+    assert perspective.social_identity.owner_entity_id == EntityId("body-1")
+    counterpart_ids = {
+        item.agent_id.value for item in perspective.social_identity.counterparts
+    }
+    assert "agent-2" in counterpart_ids
+    snapshot = perspective.to_snapshot()
+    assert snapshot.goals == goals
+    assert snapshot.inbox == ()
+    messages = " ".join(record.getMessage() for record in caplog.records)
+    assert "goals=" in messages
+    assert "secret-survive" not in messages
+
+
+def test_build_perspective_rejects_foreign_goals() -> None:
+    from agents.models import Goal, GoalId, GoalStatus
+    from simulation.perception import PerspectiveOwnershipCode
+
+    engine = WorldEngine(config=SimulationRunConfig(seed=1), bootstrap=_bootstrap())
+    engine.observe()
+    translator = registration_translator(engine._bootstrap)
+    observation = engine.observation_for(AgentId("agent-1"))
+    with pytest.raises(PerspectiveOwnershipError) as exc_info:
+        build_perspective(
+            agent_id=AgentId("agent-1"),
+            observation=observation,
+            translator=translator,
+            goals=(
+                Goal(
+                    goal_id=GoalId("goal-foreign"),
+                    owner_id=AgentId("agent-2"),
+                    description="other",
+                    priority=0.1,
+                    status=GoalStatus.ACTIVE,
+                ),
+            ),
+        )
+    assert exc_info.value.code is PerspectiveOwnershipCode.FOREIGN_GOAL

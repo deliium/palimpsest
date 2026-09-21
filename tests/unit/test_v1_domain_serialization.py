@@ -571,3 +571,91 @@ def test_episodic_memory_rejects_unknown_fields_and_content() -> None:
         )
     assert content.value.code == "unsupported_legacy_memory_payload"
     assert "nope" not in str(content.value)
+
+
+def test_agent_and_goal_round_trip_with_model_version() -> None:
+    from agents.models import (
+        Agent,
+        AgentId,
+        DriveKind,
+        Goal,
+        GoalId,
+        GoalOutcome,
+        GoalOutcomeKind,
+        GoalProgress,
+        GoalStatus,
+        default_drive_profile,
+    )
+
+    owner = AgentId("agent-1")
+    goal = Goal(
+        goal_id=GoalId("goal-1"),
+        owner_id=owner,
+        description="find-water-secret",
+        priority=0.6,
+        status=GoalStatus.ACTIVE,
+        outcome=GoalOutcome(
+            kind=GoalOutcomeKind.SATISFY_DRIVE, drive_kind=DriveKind.THIRST
+        ),
+        progress=GoalProgress(
+            estimate=0.2, confidence=0.5, stall_count=0, horizon_ticks=2
+        ),
+    )
+    agent = Agent(
+        agent_id=owner,
+        name="Ada",
+        goals=(goal,),
+        drives=default_drive_profile(owner),
+    )
+    encoded_goal = encode_domain(goal)
+    encoded_agent = encode_domain(agent)
+    assert decode_domain(encoded_goal) == goal
+    assert decode_domain(encoded_agent) == agent
+    assert b'"model_version":2' in encoded_goal
+    assert b'"model_version":2' in encoded_agent
+    assert b"find-water-secret" in encoded_goal  # payload bytes may contain it
+    # Errors and decode failures must not echo semantic payloads in exception text.
+    with pytest.raises(DomainSerializationError) as unsupported:
+        decode_domain(
+            b'{"data":{"agent_id":"agent-1","drives":{},"goals":[],'
+            b'"model_version":99,"name":"Ada"},"schema_version":1,"type":"agent"}'
+        )
+    assert unsupported.value.code == "unsupported_schema_version"
+    assert "Ada" not in str(unsupported.value)
+
+
+def test_legacy_agent_and_goal_decode_intentionally() -> None:
+    from agents.models import (
+        REQUIRED_DRIVE_KINDS,
+        GoalOutcomeKind,
+        GoalStatus,
+    )
+
+    legacy_goal = (
+        b'{"data":{"description":"legacy-secret-goal","goal_id":"goal-1",'
+        b'"owner_id":"agent-1","priority":0.5,"status":"active"},'
+        b'"schema_version":1,"type":"goal"}'
+    )
+    decoded_goal = decode_domain(legacy_goal)
+    assert decoded_goal.status is GoalStatus.ACTIVE
+    assert decoded_goal.outcome.kind is GoalOutcomeKind.PRESERVE_LIFE
+    assert decoded_goal.progress.estimate == 0.0
+
+    legacy_agent = (
+        b'{"data":{"agent_id":"agent-1","goals":[],"name":"Ada"},'
+        b'"schema_version":1,"type":"agent"}'
+    )
+    decoded_agent = decode_domain(legacy_agent)
+    assert decoded_agent.agent_id.value == "agent-1"
+    assert decoded_agent.drives is not None
+    assert len(decoded_agent.drives.dispositions) == len(REQUIRED_DRIVE_KINDS)
+
+
+def test_ambiguous_agent_payload_without_version_is_rejected() -> None:
+    with pytest.raises(DomainSerializationError) as rejected:
+        decode_domain(
+            b'{"data":{"agent_id":"agent-1","goals":[],"name":"Ada",'
+            b'"drives":{"owner_id":"agent-1","dispositions":[]}},'
+            b'"schema_version":1,"type":"agent"}'
+        )
+    assert rejected.value.code == "unsupported_schema_version"

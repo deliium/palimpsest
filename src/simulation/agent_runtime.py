@@ -416,6 +416,8 @@ class AgentRuntime:
                 semantic_beliefs=semantic_beliefs,
                 relationships=relationships,
                 snapshot_revision=self._internal_state.invocation_count,
+                goals=self._agent.goals,
+                drives=self._agent.drives,
             )
         except TypeError:
             raise
@@ -448,6 +450,18 @@ class AgentRuntime:
                     "legacy_belief_count": len(snapshot.legacy_beliefs),
                     "semantic_belief_count": len(snapshot.semantic_beliefs),
                     "relationship_count": len(snapshot.relationships),
+                    "goal_count": len(snapshot.goals),
+                    "drive_count": (
+                        0
+                        if snapshot.drives is None
+                        else len(snapshot.drives.dispositions)
+                    ),
+                    "inbox_count": len(snapshot.inbox),
+                    "counterpart_count": (
+                        0
+                        if snapshot.social_identity is None
+                        else len(snapshot.social_identity.counterparts)
+                    ),
                 }
             },
         )

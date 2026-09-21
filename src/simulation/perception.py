@@ -16,10 +16,12 @@ from collections.abc import Sequence
 from enum import StrEnum
 
 from agents.cognition.contracts import Perspective
-from agents.models import AgentId
+from agents.cognition.models import CounterpartBinding, OwnerSafeSocialIdentity
+from agents.models import AgentId, DriveProfile, Goal, default_drive_profile
 from memory.models import Belief, MemoryTrace
 from simulation.bootstrap import RegistrationTranslator
 from social.models import CommunicationEnvelope
+from world.identifiers import EntityId
 from world.observations import Observation
 
 _LOGGER = logging.getLogger("simulation.perception")
@@ -37,6 +39,9 @@ class PerspectiveOwnershipCode(StrEnum):
     CROSS_AGENT_OBSERVATION = "cross_agent_observation"
     UNKNOWN_AGENT = "unknown_agent"
     MISADDRESSED_INBOX = "misaddressed_inbox"
+    FOREIGN_GOAL = "foreign_goal"
+    FOREIGN_DRIVE = "foreign_drive"
+    IDENTITY_MISMATCH = "identity_mismatch"
     INVALID_INPUT = "invalid_input"
 
 
@@ -46,6 +51,62 @@ class PerspectiveOwnershipError(ValueError):
     def __init__(self, code: PerspectiveOwnershipCode, message: str) -> None:
         self.code = code
         super().__init__(message)
+
+
+def _owner_safe_social_identity(
+    *,
+    agent_id: AgentId,
+    owner_entity_id: EntityId,
+    observation: Observation,
+    translator: RegistrationTranslator,
+) -> OwnerSafeSocialIdentity:
+    """Project only visible/communicative counterpart bindings for cognition."""
+    candidate_entities: set[str] = set()
+    for body in observation.visible_bodies:
+        if body.entity_id != owner_entity_id:
+            candidate_entities.add(body.entity_id.value)
+    for communication in observation.communications:
+        if communication.speaker_id != owner_entity_id:
+            candidate_entities.add(communication.speaker_id.value)
+    bindings: list[CounterpartBinding] = []
+    for entity_value in sorted(candidate_entities):
+        entity_id = EntityId(entity_value)
+        try:
+            counterpart_agent = translator.to_agent_id(entity_id)
+        except KeyError:
+            # Unregistered bodies remain world entities without agent binding.
+            continue
+        if counterpart_agent == agent_id:
+            _LOGGER.warning(
+                "%s agent=%s entity=%s",
+                PerspectiveOwnershipCode.IDENTITY_MISMATCH.value,
+                agent_id.value,
+                entity_id.value,
+            )
+            raise PerspectiveOwnershipError(
+                PerspectiveOwnershipCode.IDENTITY_MISMATCH,
+                "counterpart entity maps to perspective owner",
+            )
+        expected_entity = translator.to_entity_id(counterpart_agent)
+        if expected_entity != entity_id:
+            _LOGGER.warning(
+                "%s agent=%s entity=%s",
+                PerspectiveOwnershipCode.IDENTITY_MISMATCH.value,
+                agent_id.value,
+                entity_id.value,
+            )
+            raise PerspectiveOwnershipError(
+                PerspectiveOwnershipCode.IDENTITY_MISMATCH,
+                "counterpart agent/entity projection mismatch",
+            )
+        bindings.append(
+            CounterpartBinding(agent_id=counterpart_agent, entity_id=entity_id)
+        )
+    return OwnerSafeSocialIdentity(
+        owner_id=agent_id,
+        owner_entity_id=owner_entity_id,
+        counterparts=tuple(bindings),
+    )
 
 
 def build_perspective(
@@ -59,6 +120,8 @@ def build_perspective(
     semantic_beliefs: Sequence[object] = (),
     relationships: Sequence[object] = (),
     snapshot_revision: int = 0,
+    goals: Sequence[Goal] = (),
+    drives: DriveProfile | None = None,
 ) -> Perspective:
     """Pair one ``AgentId`` with exactly its registered entity observation.
 
@@ -132,6 +195,55 @@ def build_perspective(
                 "inbox envelope recipient_id must match perspective agent",
             )
 
+    goals_tuple = tuple(goals)
+    for goal in goals_tuple:
+        if type(goal) is not Goal:
+            _LOGGER.error(
+                "%s reason=goal_entry_type agent=%s",
+                PerspectiveOwnershipCode.INVALID_INPUT.value,
+                agent_id.value,
+            )
+            raise TypeError("goals entries must be Goal")
+        if goal.owner_id != agent_id:
+            _LOGGER.warning(
+                "%s agent=%s goal_id=%s",
+                PerspectiveOwnershipCode.FOREIGN_GOAL.value,
+                agent_id.value,
+                goal.goal_id.value,
+            )
+            raise PerspectiveOwnershipError(
+                PerspectiveOwnershipCode.FOREIGN_GOAL,
+                "goal owner_id must match perspective agent",
+            )
+
+    drive_profile = (
+        default_drive_profile(agent_id) if drives is None else drives
+    )
+    if type(drive_profile) is not DriveProfile:
+        _LOGGER.error(
+            "%s reason=drive_type agent=%s",
+            PerspectiveOwnershipCode.INVALID_INPUT.value,
+            agent_id.value,
+        )
+        raise TypeError("drives must be DriveProfile")
+    if drive_profile.owner_id != agent_id:
+        _LOGGER.warning(
+            "%s agent=%s",
+            PerspectiveOwnershipCode.FOREIGN_DRIVE.value,
+            agent_id.value,
+        )
+        raise PerspectiveOwnershipError(
+            PerspectiveOwnershipCode.FOREIGN_DRIVE,
+            "drive profile owner_id must match perspective agent",
+        )
+
+    social_identity = _owner_safe_social_identity(
+        agent_id=agent_id,
+        owner_entity_id=expected_entity_id,
+        observation=observation,
+        translator=translator,
+    )
+
     from memory.beliefs import SemanticBelief
     from social.relationships import DirectedRelationshipProfile
 
@@ -144,12 +256,16 @@ def build_perspective(
         semantic_beliefs=tuple(semantic_beliefs),  # type: ignore[arg-type]
         relationships=tuple(relationships),  # type: ignore[arg-type]
         snapshot_revision=snapshot_revision,
+        goals=goals_tuple,
+        drives=drive_profile,
+        social_identity=social_identity,
     )
     _ = SemanticBelief, DirectedRelationshipProfile
     _LOGGER.debug(
         "perspective_built agent=%s entity=%s tick=%s revision=%s "
         "memories=%s beliefs=%s semantic_beliefs=%s relationships=%s "
-        "inbox=%s communications=%s occurrences=%s snapshot_revision=%s",
+        "goals=%s drives=%s inbox=%s counterparts=%s "
+        "communications=%s occurrences=%s snapshot_revision=%s",
         agent_id.value,
         expected_entity_id.value,
         observation.tick,
@@ -158,7 +274,10 @@ def build_perspective(
         len(perspective.beliefs),
         len(perspective.semantic_beliefs),
         len(perspective.relationships),
+        len(perspective.goals),
+        0 if perspective.drives is None else len(perspective.drives.dispositions),
         len(perspective.inbox),
+        len(social_identity.counterparts),
         len(observation.communications),
         len(observation.occurrences),
         perspective.snapshot_revision,
