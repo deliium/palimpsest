@@ -79,6 +79,8 @@ class RelationshipSignalKind(StrEnum):
     RESOURCE_GIVEN = "resource_given"
     PROTECTION_RECEIVED = "protection_received"
     PROTECTION_GIVEN = "protection_given"
+    CORROBORATION_RECEIVED = "corroboration_received"
+    CONTRADICTION_RECEIVED = "contradiction_received"
 
 
 class RelationshipActivationState(StrEnum):
@@ -628,6 +630,14 @@ _SIGNAL_EFFECTS: Final[
     ),
     RelationshipSignalKind.PROXIMITY: ((RelationshipDimension.FAMILIARITY, 0.2),),
     RelationshipSignalKind.COMMUNICATION: ((RelationshipDimension.FAMILIARITY, 0.15),),
+    RelationshipSignalKind.CORROBORATION_RECEIVED: (
+        (RelationshipDimension.TRUST, 0.25),
+        (RelationshipDimension.FAMILIARITY, 0.05),
+    ),
+    RelationshipSignalKind.CONTRADICTION_RECEIVED: (
+        (RelationshipDimension.TRUST, -0.25),
+        (RelationshipDimension.FAMILIARITY, 0.05),
+    ),
     RelationshipSignalKind.RESOURCE_RECEIVED: (
         (RelationshipDimension.DEBT, 0.35),
         (RelationshipDimension.TRUST, 0.15),

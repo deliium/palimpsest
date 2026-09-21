@@ -41,6 +41,7 @@ __all__ = [
     "legacy_text_utterance",
     "observation_allows_communication_target",
     "origin_utterance",
+    "retell_utterance",
 ]
 
 COMMUNICATION_SCHEMA_VERSION: Final[str] = "communication.v1"
@@ -352,6 +353,49 @@ def origin_utterance(
             source_agent_chain=(speaker_id,),
             hop_count=0,
             sender_confidence=sender_confidence,
+            source_basis=source_basis,
+        ),
+    )
+
+
+def retell_utterance(
+    *,
+    prior: StructuredUtterance,
+    speaker_id: EntityId,
+    communication_id: str,
+    sender_confidence: float | None = None,
+    text: str | None = None,
+    concepts: Sequence[str] | None = None,
+    relations: Sequence[CommunicationRelation] | None = None,
+    source_basis: CommunicationSourceBasis = CommunicationSourceBasis.RECONSTRUCTED_MEMORY,
+) -> StructuredUtterance:
+    """Append the current speaker as a new hop without copying prior identity."""
+    if type(prior) is not StructuredUtterance:
+        raise TypeError("retell_utterance requires StructuredUtterance")
+    if type(speaker_id) is not EntityId:
+        raise TypeError("speaker_id must be EntityId")
+    if speaker_id in prior.declared.source_agent_chain:
+        raise ValueError("retell_utterance: speaker_already_in_chain")
+    chain = tuple(prior.declared.source_agent_chain) + (speaker_id,)
+    confidence = (
+        prior.declared.sender_confidence
+        if sender_confidence is None
+        else sender_confidence
+    )
+    content = CommunicationContent(
+        text=prior.content.text if text is None else text,
+        concepts=prior.content.concepts if concepts is None else concepts,
+        relations=prior.content.relations if relations is None else relations,
+    )
+    return StructuredUtterance(
+        content=content,
+        declared=DeclaredTransmission(
+            communication_id=CommunicationId(communication_id),
+            immediate_source_id=speaker_id,
+            parent_communication_id=prior.declared.communication_id,
+            source_agent_chain=chain,
+            hop_count=len(chain) - 1,
+            sender_confidence=confidence,
             source_basis=source_basis,
         ),
     )

@@ -50,6 +50,7 @@ __all__ = [
     "Planner",
     "SelfStateProjector",
     "SituationModeler",
+    "SocialMessagePolicy",
 ]
 
 
@@ -374,7 +375,23 @@ class Planner(Protocol):
         loop_input: CognitiveLoopInput,
         intention: SelectedIntention,
         futures: PossibleFutures,
+        memory: RetrievedMemoryContext | None = None,
     ) -> ActionPlan: ...
+
+
+class SocialMessagePolicy(Protocol):
+    """Deterministic or provider-backed talk/ask/tell selection (non-authoritative)."""
+
+    def select(
+        self,
+        *,
+        owner_id: object,
+        speaker_id: object,
+        observation: object,
+        memory: RetrievedMemoryContext,
+        preferred_recipient_id: object | None = None,
+        snapshot_memories: object = (),
+    ) -> object | None: ...
 
 
 class MemoryUpdateHook(Protocol):

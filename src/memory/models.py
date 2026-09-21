@@ -329,6 +329,7 @@ class CommunicatedTransmissionMeta:
     content_fingerprint: str
     parent_communication_id: str | None = None
     source_agent_chain: tuple[EntityId, ...] = ()
+    transmission_root_id: str = ""
     policy_version: str = "communicated-memory.v1"
 
     def __post_init__(self) -> None:
@@ -387,10 +388,24 @@ class CommunicatedTransmissionMeta:
         if not chain:
             raise ValueError("CommunicatedTransmissionMeta.source_agent_chain: empty")
         if hop != len(chain) - 1:
-            raise ValueError(
-                "CommunicatedTransmissionMeta.hop_count: chain_mismatch"
-            )
+            raise ValueError("CommunicatedTransmissionMeta.hop_count: chain_mismatch")
         object.__setattr__(self, "source_agent_chain", chain)
+        root = self.transmission_root_id
+        if not root:
+            if hop == 0:
+                root = self.communication_id
+            elif self.parent_communication_id is not None:
+                root = self.parent_communication_id
+            else:
+                root = self.communication_id
+        object.__setattr__(
+            self,
+            "transmission_root_id",
+            require_stable_id(
+                "CommunicatedTransmissionMeta.transmission_root_id",
+                root,
+            ),
+        )
         object.__setattr__(
             self,
             "policy_version",

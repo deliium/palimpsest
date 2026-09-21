@@ -123,7 +123,7 @@ async def test_loop_runs_exact_stage_order_once(
             return await super().select(loop_input, motivation, futures)
 
     class TrackingPlanner(ScriptedPlanner):
-        async def plan(self, loop_input, intention, futures):  # type: ignore[no-untyped-def]
+        async def plan(self, loop_input, intention, futures, memory=None):  # type: ignore[no-untyped-def]
             calls.append("planning")
             return await super().plan(loop_input, intention, futures)
 
@@ -186,7 +186,7 @@ async def test_loop_runs_exact_stage_order_once(
 @pytest.mark.asyncio
 async def test_component_replacement_changes_command() -> None:
     class MovePlanner(ScriptedPlanner):
-        async def plan(self, loop_input, intention, futures):  # type: ignore[no-untyped-def]
+        async def plan(self, loop_input, intention, futures, memory=None):  # type: ignore[no-untyped-def]
             return ActionPlan(
                 owner_id=loop_input.agent_id,
                 command=Move(destination_id=EntityId("loc-2")),

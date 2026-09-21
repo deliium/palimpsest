@@ -8,6 +8,7 @@ from agents.cognition.communication import (
     DeterministicSocialMessagePolicy,
     SocialMessageDecision,
     build_communicated_memory_trace,
+    project_trust_inputs,
     receiver_confidence_for_transmission,
 )
 from agents.cognition.contracts import (
@@ -226,6 +227,7 @@ __all__ = [
     "intention_for_action_direction",
     "project_legacy_self_belief_state",
     "project_self_model",
+    "project_trust_inputs",
     "receiver_confidence_for_transmission",
     "require_confidence",
 ]

@@ -184,8 +184,9 @@ class ScriptedPlanner:
         loop_input: CognitiveLoopInput,
         intention: SelectedIntention,
         futures: PossibleFutures,
+        memory: RetrievedMemoryContext | None = None,
     ) -> ActionPlan:
-        _ = intention, futures
+        _ = intention, futures, memory
         return ActionPlan(owner_id=loop_input.agent_id, command=Wait(), confidence=1.0)
 
 

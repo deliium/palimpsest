@@ -25,6 +25,7 @@ from agents.cognition.models import (
     MemoryUpdateIntent,
     MemoryUpdateKind,
     PossibleFutures,
+    RetrievedMemoryContext,
     SelectedIntention,
 )
 from agents.models import Agent, AgentId
@@ -282,8 +283,9 @@ async def test_failed_cognition_does_not_mutate_memory_service() -> None:
             loop_input: CognitiveLoopInput,
             intention: SelectedIntention,
             futures: PossibleFutures,
+            memory: RetrievedMemoryContext | None = None,
         ) -> ActionPlan:
-            _ = loop_input, intention, futures
+            _ = loop_input, intention, futures, memory
             raise RuntimeError("planner boom")
 
     bootstrap = _bootstrap()

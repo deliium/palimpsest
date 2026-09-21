@@ -1400,6 +1400,9 @@ def _encode_memory_trace(value: MemoryTrace) -> dict[str, Any]:
                             item.value
                             for item in value.provenance.transmission.source_agent_chain
                         ],
+                        "transmission_root_id": (
+                            value.provenance.transmission.transmission_root_id
+                        ),
                     }
                 }
             ),
@@ -2789,6 +2792,7 @@ def _decode_communicated_transmission(
             "policy_version",
         },
         path=path,
+        optional={"transmission_root_id"},
     )
     chain_raw = data["source_agent_chain"]
     if not isinstance(chain_raw, list):
@@ -2796,6 +2800,8 @@ def _decode_communicated_transmission(
     try:
         parent_raw = data["parent_communication_id"]
         parent_id = None if parent_raw is None else str(parent_raw)
+        root_raw = data.get("transmission_root_id", "")
+        root_id = "" if root_raw is None else str(root_raw)
         return CommunicatedTransmissionMeta(
             communication_id=_str_field(data, "communication_id", path=path),
             action_kind=_str_field(data, "action_kind", path=path),
@@ -2805,6 +2811,7 @@ def _decode_communicated_transmission(
             content_fingerprint=_str_field(data, "content_fingerprint", path=path),
             parent_communication_id=parent_id,
             source_agent_chain=tuple(EntityId(str(item)) for item in chain_raw),
+            transmission_root_id=root_id,
             policy_version=_str_field(data, "policy_version", path=path),
         )
     except DomainSerializationError:

@@ -395,8 +395,9 @@ class WaitFallbackPlanner:
         loop_input: CognitiveLoopInput,
         intention: SelectedIntention,
         futures: PossibleFutures,
+        memory: RetrievedMemoryContext | None = None,
     ) -> ActionPlan:
-        _ = intention, futures
+        _ = intention, futures, memory
         return ActionPlan(
             owner_id=loop_input.agent_id,
             command=Wait(),
@@ -533,6 +534,109 @@ class SubjectiveRevisionHook:
             policy=self._belief_policy,
             trace_index=index,
         )
+        from agents.cognition.communication import project_trust_inputs
+        from memory.belief_formation import (
+            BeliefEvidenceCandidate as EvidenceCandidate,
+        )
+        from memory.belief_formation import (
+            evaluate_communicated_testimony,
+        )
+        from memory.beliefs import CommunicatedEvidenceDecision, EvidenceStance
+
+        resolver = self._resolve_counterpart
+        trust_by_speaker: dict[str, tuple[float, float]] = {}
+        if loop_input.snapshot is not None:
+            for profile in loop_input.snapshot.relationships:
+                trust_by_speaker[profile.target_id.value] = project_trust_inputs(
+                    profile
+                )
+
+        adjusted: list[BeliefEvidenceCandidate] = []
+        testimony_signals: list[
+            tuple[AgentId, RelationshipSignalKind, MemoryTrace]
+        ] = []
+        for candidate in candidates:
+            trace = index.get(candidate.memory_id)
+            if (
+                trace is None
+                or candidate.provenance_kind is not MemorySourceKind.COMMUNICATED
+                or trace.provenance.transmission is None
+            ):
+                adjusted.append(candidate)
+                continue
+            meta = trace.provenance.transmission
+            speaker_agent: AgentId | None = None
+            if resolver is not None and trace.provenance.speaker_id is not None:
+                resolved = resolver(trace.provenance.speaker_id)
+                if type(resolved) is AgentId:
+                    speaker_agent = resolved
+            trust, trust_conf = (0.5, 0.2)
+            if speaker_agent is not None:
+                trust, trust_conf = trust_by_speaker.get(
+                    speaker_agent.value, (0.5, 0.2)
+                )
+            factors = evaluate_communicated_testimony(
+                sender_confidence=meta.sender_confidence,
+                receiver_confidence=meta.receiver_confidence,
+                trust=trust,
+                trust_confidence=trust_conf,
+                hop_count=meta.hop_count,
+                context_relevance=max(0.2, trace.confidence),
+                base_contribution=candidate.contribution,
+                policy=self._belief_policy,
+            )
+            _LOG.debug(
+                "communicated_testimony_evaluated",
+                extra={
+                    "cognition": {
+                        "owner_id": owner.value,
+                        "source_id": (
+                            None if speaker_agent is None else speaker_agent.value
+                        ),
+                        "policy_version": self._belief_policy.version,
+                        "hop_count": meta.hop_count,
+                        "decision": factors.decision.value,
+                        "confidence_delta": factors.confidence_delta,
+                        "deduplication_root": candidate.lineage_root_id.value,
+                    }
+                },
+            )
+            if factors.decision is CommunicatedEvidenceDecision.DEFER:
+                continue
+            stance = candidate.stance
+            if factors.decision is CommunicatedEvidenceDecision.CONTRADICT:
+                stance = EvidenceStance.CONTRADICTING
+            adjusted.append(
+                EvidenceCandidate(
+                    memory_id=candidate.memory_id,
+                    claim=candidate.claim,
+                    stance=stance,
+                    contribution=factors.adjusted_contribution,
+                    lineage_root_id=candidate.lineage_root_id,
+                    source_tick=candidate.source_tick,
+                    provenance_kind=candidate.provenance_kind,
+                    applied_factors=factors,
+                )
+            )
+            if speaker_agent is not None:
+                if factors.decision is CommunicatedEvidenceDecision.ACCEPT:
+                    testimony_signals.append(
+                        (
+                            speaker_agent,
+                            RelationshipSignalKind.CORROBORATION_RECEIVED,
+                            trace,
+                        )
+                    )
+                elif factors.decision is CommunicatedEvidenceDecision.CONTRADICT:
+                    testimony_signals.append(
+                        (
+                            speaker_agent,
+                            RelationshipSignalKind.CONTRADICTION_RECEIVED,
+                            trace,
+                        )
+                    )
+        candidates = tuple(adjusted)
+
         groups: dict[str, list[BeliefEvidenceCandidate]] = {}
         claim_for_key: dict[str, SemanticClaim] = {}
         for candidate in candidates:
@@ -571,7 +675,6 @@ class SubjectiveRevisionHook:
             )
 
         signals_by_target: dict[str, list[RelationshipInteractionSignal]] = {}
-        resolver = self._resolve_counterpart
         for trace in unique_traces:
             if resolver is None:
                 break
@@ -600,6 +703,24 @@ class SubjectiveRevisionHook:
                     source_tick=trace.source_tick,
                 )
                 signals_by_target.setdefault(counterpart.value, []).append(signal)
+
+        for speaker_agent, signal_kind, trace in testimony_signals:
+            if resolver is None:
+                break
+            root = lineage_root_for_trace(trace, index)
+            if trace.provenance.transmission is not None:
+                from memory.belief_formation import transmission_root_for_trace
+
+                root = transmission_root_for_trace(trace)
+            signal = RelationshipInteractionSignal(
+                counterpart_id=speaker_agent,
+                kind=signal_kind,
+                strength=min(1.0, max(0.05, trace.confidence * 0.5)),
+                memory_ref=trace.memory_id.value,
+                lineage_root_ref=root.value,
+                source_tick=trace.source_tick,
+            )
+            signals_by_target.setdefault(speaker_agent.value, []).append(signal)
 
         for target_key, signals in sorted(signals_by_target.items()):
             target = AgentId(target_key)

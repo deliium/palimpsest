@@ -74,7 +74,7 @@ Rationale: This feature completes the cognition-to-social-action path and connec
 
   Dependencies: Tasks 1 and 3.
 
-- [ ] Task 5: Generate `talk`, `ask`, and `tell` from the speaker's subjective state.
+- [x] Task 5: Generate `talk`, `ask`, and `tell` from the speaker's subjective state.
 
   Deliverable: Extend imagination/deliberation planning with a deterministic, replaceable social-message policy. `talk` may express a goal- or relationship-relevant conversational act; `ask` must arise from an information need, uncertainty, goal, or unresolved belief; `tell` must be grounded in the speaker's selected semantic belief or reconstructed memory evidence. Carry selected source references through cognition artifacts so the planner can construct declared lineage and confidence without accessing objective events. Permit retelling only from the speaker's own communicated trace/reconstruction and append the new sender/hop instead of copying the source trace. Select recipients only from currently allowed perceived counterparts, produce exactly one fresh closed `AgentCommand`, and fall back safely when no eligible target or grounded content exists. Provide policy ports/fakes so future LLM-backed wording remains structured, validated, and non-authoritative.
 
@@ -84,7 +84,7 @@ Rationale: This feature completes the cognition-to-social-action path and connec
 
   Dependencies: Tasks 1, 2, and 4.
 
-- [ ] Task 6: Apply trust-, confidence-, context-, and hop-aware belief updates without treating testimony as fact.
+- [x] Task 6: Apply trust-, confidence-, context-, and hop-aware belief updates without treating testimony as fact.
 
   Deliverable: Extend communicated evidence evaluation so a receiving agent always retains the observation/memory trace but may accept, discount, contradict, or defer semantic-belief revision according to a versioned policy using sender-declared confidence, receiver confidence, directed trust and trust-confidence, context relevance, corroboration/contradiction, and hop attenuation. Snapshot the applied factors and resulting confidence delta in belief evidence metadata for auditability. Keep memory independent of `social`: cognition must project the required relationship inputs into neutral policy values. Generic communication may increase familiarity, but trust must change only from explicit corroboration/contradiction or other existing evidence-backed interaction signals; do not equate repetition with independent support, and deduplicate reports sharing the same transmission root.
 

@@ -115,8 +115,9 @@ class _FixedCommandPlanner:
         loop_input: CognitiveLoopInput,
         intention: object,
         futures: object,
+        memory: object | None = None,
     ) -> ActionPlan:
-        _ = intention, futures
+        _ = intention, futures, memory
         return ActionPlan(
             owner_id=loop_input.agent_id,
             command=self._command,  # type: ignore[arg-type]
@@ -220,7 +221,7 @@ async def test_cross_agent_observation_rejected() -> None:
 @pytest.mark.asyncio
 async def test_cognition_failure_yields_no_submission() -> None:
     class BoomPlanner:
-        async def plan(self, loop_input, intention, futures):  # type: ignore[no-untyped-def]
+        async def plan(self, loop_input, intention, futures, memory=None):  # type: ignore[no-untyped-def]
             raise RuntimeError("secret planner boom")
 
     bootstrap = _bootstrap(("agent-1", "body-1"))

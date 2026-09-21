@@ -14,6 +14,7 @@ from typing import Final
 
 from agents.models import AgentId
 from memory.beliefs import (
+    AppliedTestimonyFactors,
     BeliefActivationState,
     BeliefConfidenceState,
     BeliefEvidenceBundle,
@@ -25,6 +26,7 @@ from memory.beliefs import (
     ClaimSubject,
     ClaimSubjectKind,
     ClaimValue,
+    CommunicatedEvidenceDecision,
     EvidenceStance,
     SemanticBelief,
     SemanticBeliefHistory,
@@ -63,6 +65,11 @@ class BeliefFormationPolicy:
     activate_confidence_threshold: float = 0.4
     retire_confidence_threshold: float = 0.05
     base_contribution: float = 0.35
+    hop_attenuation: float = 0.85
+    trust_accept_threshold: float = 0.45
+    trust_contradict_ceiling: float = 0.25
+    defer_max_hop: int = 8
+    min_context_relevance: float = 0.15
 
     def __post_init__(self) -> None:
         object.__setattr__(
@@ -103,12 +110,23 @@ class BeliefFormationPolicy:
                 self.decay_half_life_ticks,
             ),
         )
+        object.__setattr__(
+            self,
+            "defer_max_hop",
+            require_exact_nonneg_int(
+                "BeliefFormationPolicy.defer_max_hop", self.defer_max_hop
+            ),
+        )
         for name in (
             "direct_weight",
             "communicated_weight",
             "activate_confidence_threshold",
             "retire_confidence_threshold",
             "base_contribution",
+            "hop_attenuation",
+            "trust_accept_threshold",
+            "trust_contradict_ceiling",
+            "min_context_relevance",
         ):
             value = getattr(self, name)
             if isinstance(value, bool) or not isinstance(value, (int, float)):
@@ -119,6 +137,8 @@ class BeliefFormationPolicy:
             object.__setattr__(self, name, 0.0 if number == 0.0 else number)
         if self.retire_confidence_threshold > self.activate_confidence_threshold:
             raise ValueError("BeliefFormationPolicy: retire_above_activate")
+        if self.trust_contradict_ceiling > self.trust_accept_threshold:
+            raise ValueError("BeliefFormationPolicy: contradict_above_accept")
 
     def as_ref(self) -> BeliefPolicyRef:
         return BeliefPolicyRef(policy_id=self.policy_id, version=self.version)
@@ -148,6 +168,7 @@ class BeliefEvidenceCandidate:
     lineage_root_id: MemoryId
     source_tick: int
     provenance_kind: MemorySourceKind
+    applied_factors: AppliedTestimonyFactors | None = None
 
     def __post_init__(self) -> None:
         if type(self.memory_id) is not MemoryId:
@@ -160,6 +181,11 @@ class BeliefEvidenceCandidate:
             raise TypeError("BeliefEvidenceCandidate.lineage_root_id: invalid_type")
         if type(self.provenance_kind) is not MemorySourceKind:
             raise TypeError("BeliefEvidenceCandidate.provenance_kind: invalid_type")
+        if (
+            self.applied_factors is not None
+            and type(self.applied_factors) is not AppliedTestimonyFactors
+        ):
+            raise TypeError("BeliefEvidenceCandidate.applied_factors: invalid_type")
         object.__setattr__(
             self,
             "contribution",
@@ -206,6 +232,99 @@ def provenance_weight(
     if kind is MemorySourceKind.COMMUNICATED:
         return policy.communicated_weight
     raise ValueError("provenance_weight: unsupported_kind")
+
+
+def transmission_root_for_trace(trace: MemoryTrace) -> MemoryId:
+    """Opaque transmission-root id for independent-evidence deduplication.
+
+    Uses speaker-declared communication correlation when present; falls back to
+    the episodic memory id. Never exposes content fingerprints in the returned id.
+    """
+    if type(trace) is not MemoryTrace:
+        raise TypeError("transmission_root_for_trace: invalid_trace")
+    meta = trace.provenance.transmission
+    if meta is None:
+        return trace.memory_id
+    root = meta.transmission_root_id or (
+        meta.communication_id
+        if meta.hop_count == 0
+        else (meta.parent_communication_id or meta.communication_id)
+    )
+    material = f"tr|{root}"
+    digest = hashlib.sha256(material.encode("utf-8")).hexdigest()
+    return MemoryId(f"tr-{digest[:48]}")
+
+
+def evaluate_communicated_testimony(
+    *,
+    sender_confidence: float,
+    receiver_confidence: float,
+    trust: float,
+    trust_confidence: float,
+    hop_count: int,
+    context_relevance: float,
+    base_contribution: float,
+    policy: BeliefFormationPolicy,
+) -> AppliedTestimonyFactors:
+    """Evaluate communicated evidence without treating testimony as fact.
+
+    Neutral policy inputs only — cognition projects relationship trust into
+    ``trust`` / ``trust_confidence`` floats before calling this function.
+    """
+    if type(policy) is not BeliefFormationPolicy:
+        raise TypeError("evaluate_communicated_testimony: invalid_policy")
+    hop = require_exact_nonneg_int(
+        "evaluate_communicated_testimony.hop_count", hop_count
+    )
+    sender = _unit("sender_confidence", sender_confidence)
+    receiver = _unit("receiver_confidence", receiver_confidence)
+    trust_v = _unit("trust", trust)
+    trust_conf = _unit("trust_confidence", trust_confidence)
+    relevance = _unit("context_relevance", context_relevance)
+    base = _unit("base_contribution", base_contribution)
+    attenuation = quantize_score(policy.hop_attenuation**hop)
+    weighted = quantize_score(
+        min(
+            1.0,
+            base
+            * sender
+            * receiver
+            * max(trust_v, 0.05)
+            * max(trust_conf, 0.05)
+            * relevance
+            * attenuation,
+        )
+    )
+    if hop > policy.defer_max_hop or relevance < policy.min_context_relevance:
+        decision = CommunicatedEvidenceDecision.DEFER
+        adjusted = 0.0
+        delta = 0.0
+    elif trust_v < policy.trust_contradict_ceiling and trust_conf >= 0.4:
+        decision = CommunicatedEvidenceDecision.CONTRADICT
+        adjusted = weighted
+        delta = quantize_score(-adjusted)
+    elif trust_v >= policy.trust_accept_threshold and trust_conf >= 0.3:
+        decision = CommunicatedEvidenceDecision.ACCEPT
+        adjusted = weighted
+        delta = adjusted
+    else:
+        decision = CommunicatedEvidenceDecision.DISCOUNT
+        adjusted = quantize_score(weighted * 0.5)
+        delta = adjusted
+    return AppliedTestimonyFactors(
+        decision=decision,
+        hop_count=hop,
+        trust=trust_v,
+        trust_confidence=trust_conf,
+        sender_confidence=sender,
+        receiver_confidence=receiver,
+        context_relevance=relevance,
+        hop_attenuation=attenuation,
+        base_contribution=base,
+        adjusted_contribution=adjusted,
+        confidence_delta=delta,
+        policy_version=policy.version,
+    )
 
 
 def lineage_root_for_trace(
@@ -324,7 +443,9 @@ def bundle_from_candidates(
     for candidate in candidates:
         if canonical_subject_predicate_key(candidate.claim) != target_key:
             continue
-        if canonical_claim_identity(candidate.claim) == target_identity:
+        if candidate.stance is EvidenceStance.CONTRADICTING:
+            stance = EvidenceStance.CONTRADICTING
+        elif canonical_claim_identity(candidate.claim) == target_identity:
             stance = EvidenceStance.SUPPORTING
         else:
             stance = EvidenceStance.CONTRADICTING
@@ -334,6 +455,7 @@ def bundle_from_candidates(
             contribution=candidate.contribution,
             ordinal=ordinal,
             lineage_root_id=candidate.lineage_root_id,
+            applied_factors=candidate.applied_factors,
         )
         ordinal += 1
         if stance is EvidenceStance.SUPPORTING:
@@ -372,12 +494,22 @@ def extract_evidence_candidates(
         if trace.forgotten_at_tick is not None:
             continue
         weight = provenance_weight(trace.provenance.kind, policy=policy)
+        hop = 0
+        if (
+            trace.provenance.kind is MemorySourceKind.COMMUNICATED
+            and trace.provenance.transmission is not None
+        ):
+            hop = trace.provenance.transmission.hop_count
+            weight = quantize_score(weight * (policy.hop_attenuation**hop))
         contribution = quantize_score(
             min(1.0, policy.base_contribution * weight * trace.confidence)
         )
         if contribution <= 0.0:
             continue
-        root = lineage_root_for_trace(trace, index)
+        if trace.provenance.kind is MemorySourceKind.COMMUNICATED:
+            root = transmission_root_for_trace(trace)
+        else:
+            root = lineage_root_for_trace(trace, index)
 
         for concept in trace.concepts:
             claim = SemanticClaim(
@@ -755,10 +887,12 @@ __all__ = [
     "apply_confidence_decay",
     "belief_id_for_claim",
     "bundle_from_candidates",
+    "evaluate_communicated_testimony",
     "extract_evidence_candidates",
     "lineage_root_for_trace",
     "merge_revision",
     "provenance_weight",
     "revise_confidence",
     "revision_id_for",
+    "transmission_root_for_trace",
 ]

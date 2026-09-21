@@ -165,7 +165,7 @@ async def test_default_loop_critical_thirst_drinks_when_water_visible() -> None:
 @pytest.mark.asyncio
 async def test_defaults_replaceable_planner() -> None:
     class AlwaysWait(WaitFallbackPlanner):
-        async def plan(self, loop_input, intention, futures):  # type: ignore[no-untyped-def]
+        async def plan(self, loop_input, intention, futures, memory=None):  # type: ignore[no-untyped-def]
             plan = await super().plan(loop_input, intention, futures)
             assert type(plan.command) is Wait
             return plan

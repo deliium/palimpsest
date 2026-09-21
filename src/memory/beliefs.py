@@ -33,6 +33,7 @@ from world.identifiers import (
 )
 
 __all__ = [
+    "AppliedTestimonyFactors",
     "BeliefActivationState",
     "BeliefConfidenceState",
     "BeliefEvidenceBundle",
@@ -46,6 +47,7 @@ __all__ = [
     "ClaimSubject",
     "ClaimSubjectKind",
     "ClaimValue",
+    "CommunicatedEvidenceDecision",
     "EvidenceStance",
     "OwnershipError",
     "SemanticBelief",
@@ -90,6 +92,102 @@ class EvidenceStance(StrEnum):
 
     SUPPORTING = "supporting"
     CONTRADICTING = "contradicting"
+
+
+class CommunicatedEvidenceDecision(StrEnum):
+    """Closed outcomes for trust-aware communicated evidence evaluation."""
+
+    ACCEPT = "accept"
+    DISCOUNT = "discount"
+    CONTRADICT = "contradict"
+    DEFER = "defer"
+
+
+@dataclass(frozen=True, slots=True)
+class AppliedTestimonyFactors:
+    """Audit snapshot of factors applied to one communicated evidence item.
+
+    Domain-neutral floats only. Never carries propositions, trust labels, or
+    content fingerprints.
+    """
+
+    decision: CommunicatedEvidenceDecision
+    hop_count: int
+    trust: float
+    trust_confidence: float
+    sender_confidence: float
+    receiver_confidence: float
+    context_relevance: float
+    hop_attenuation: float
+    base_contribution: float
+    adjusted_contribution: float
+    confidence_delta: float
+    policy_version: str
+
+    def __post_init__(self) -> None:
+        if type(self.decision) is not CommunicatedEvidenceDecision:
+            raise TypeError("AppliedTestimonyFactors.decision: invalid_type")
+        object.__setattr__(
+            self,
+            "hop_count",
+            require_exact_nonneg_int(
+                "AppliedTestimonyFactors.hop_count", self.hop_count
+            ),
+        )
+        for name in (
+            "trust",
+            "trust_confidence",
+            "sender_confidence",
+            "receiver_confidence",
+            "context_relevance",
+            "hop_attenuation",
+            "base_contribution",
+            "adjusted_contribution",
+        ):
+            object.__setattr__(
+                self,
+                name,
+                quantize_score(
+                    _unit_interval(
+                        f"AppliedTestimonyFactors.{name}", getattr(self, name)
+                    )
+                ),
+            )
+        object.__setattr__(
+            self,
+            "confidence_delta",
+            quantize_score(
+                _signed_unit(
+                    "AppliedTestimonyFactors.confidence_delta", self.confidence_delta
+                )
+            ),
+        )
+        object.__setattr__(
+            self,
+            "policy_version",
+            require_bounded_text(
+                "AppliedTestimonyFactors.policy_version",
+                self.policy_version,
+                max_length=64,
+            ),
+        )
+
+    def __repr__(self) -> str:
+        return (
+            f"AppliedTestimonyFactors(decision={self.decision.value!r}, "
+            f"hop_count={self.hop_count}, "
+            f"confidence_delta={self.confidence_delta}, "
+            f"policy_version={self.policy_version!r})"
+        )
+
+
+def _signed_unit(name: str, value: object) -> float:
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        raise ValueError(f"{name}: not_finite_number")
+    number = float(value)
+    if not math.isfinite(number) or number < -1.0 or number > 1.0:
+        raise ValueError(f"{name}: not_signed_unit")
+    return 0.0 if number == 0.0 else number
 
 
 class BeliefActivationState(StrEnum):
@@ -447,6 +545,7 @@ class BeliefEvidenceContribution:
     contribution: float
     ordinal: int
     lineage_root_id: MemoryId
+    applied_factors: AppliedTestimonyFactors | None = None
 
     def __post_init__(self) -> None:
         if type(self.memory_id) is not MemoryId:
@@ -455,6 +554,11 @@ class BeliefEvidenceContribution:
             raise TypeError("BeliefEvidenceContribution.stance: invalid_type")
         if type(self.lineage_root_id) is not MemoryId:
             raise TypeError("BeliefEvidenceContribution.lineage_root_id: invalid_type")
+        if (
+            self.applied_factors is not None
+            and type(self.applied_factors) is not AppliedTestimonyFactors
+        ):
+            raise TypeError("BeliefEvidenceContribution.applied_factors: invalid_type")
         object.__setattr__(
             self,
             "contribution",
@@ -476,7 +580,8 @@ class BeliefEvidenceContribution:
         return (
             f"BeliefEvidenceContribution(memory_id={self.memory_id.value!r}, "
             f"stance={self.stance.value!r}, ordinal={self.ordinal}, "
-            f"lineage_root_id={self.lineage_root_id.value!r})"
+            f"lineage_root_id={self.lineage_root_id.value!r}, "
+            f"has_factors={self.applied_factors is not None})"
         )
 
 

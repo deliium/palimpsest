@@ -6,10 +6,12 @@ from agents.models import AgentId
 from memory.belief_formation import (
     BeliefFormationPolicy,
     belief_id_for_claim,
+    evaluate_communicated_testimony,
     extract_evidence_candidates,
     lineage_root_for_trace,
     merge_revision,
     provenance_weight,
+    transmission_root_for_trace,
 )
 from memory.beliefs import (
     BeliefActivationState,
@@ -19,6 +21,7 @@ from memory.beliefs import (
     ClaimSubject,
     ClaimSubjectKind,
     ClaimValue,
+    CommunicatedEvidenceDecision,
     EvidenceStance,
     SemanticClaim,
     canonical_claim_identity,
@@ -328,3 +331,131 @@ def test_competing_value_counts_as_contradiction() -> None:
     )
     assert second.belief.confidence.confidence < first.belief.confidence.confidence
     assert second.belief.evidence_contradiction_count >= 1
+
+
+def test_evaluate_communicated_testimony_decisions() -> None:
+    policy = _policy()
+    accept = evaluate_communicated_testimony(
+        sender_confidence=0.9,
+        receiver_confidence=0.8,
+        trust=0.8,
+        trust_confidence=0.7,
+        hop_count=0,
+        context_relevance=0.6,
+        base_contribution=0.4,
+        policy=policy,
+    )
+    assert accept.decision is CommunicatedEvidenceDecision.ACCEPT
+    assert accept.adjusted_contribution > 0.0
+    assert accept.confidence_delta > 0.0
+
+    contradict = evaluate_communicated_testimony(
+        sender_confidence=0.9,
+        receiver_confidence=0.8,
+        trust=0.1,
+        trust_confidence=0.7,
+        hop_count=0,
+        context_relevance=0.6,
+        base_contribution=0.4,
+        policy=policy,
+    )
+    assert contradict.decision is CommunicatedEvidenceDecision.CONTRADICT
+    assert contradict.confidence_delta < 0.0
+
+    defer = evaluate_communicated_testimony(
+        sender_confidence=0.9,
+        receiver_confidence=0.8,
+        trust=0.5,
+        trust_confidence=0.5,
+        hop_count=policy.defer_max_hop + 1,
+        context_relevance=0.6,
+        base_contribution=0.4,
+        policy=policy,
+    )
+    assert defer.decision is CommunicatedEvidenceDecision.DEFER
+    assert defer.adjusted_contribution == 0.0
+
+
+def test_transmission_root_dedups_same_root_reports() -> None:
+    from memory.models import CommunicatedTransmissionMeta
+
+    owner = AgentId("agent-1")
+    meta = CommunicatedTransmissionMeta(
+        communication_id="comm-hop-1",
+        action_kind="tell",
+        hop_count=1,
+        sender_confidence=0.7,
+        receiver_confidence=0.6,
+        content_fingerprint="a" * 64,
+        parent_communication_id="comm-root",
+        source_agent_chain=(EntityId("body-a"), EntityId("body-b")),
+        transmission_root_id="comm-root",
+    )
+    first = _trace(
+        "m-1",
+        tick=1,
+        concept="water",
+        kind=MemorySourceKind.COMMUNICATED,
+        speaker_id=EntityId("body-a"),
+    )
+    # Rebuild with transmission metadata.
+    first = MemoryTrace(
+        memory_id=first.memory_id,
+        owner_id=owner,
+        world_revision=first.world_revision,
+        concepts=first.concepts,
+        entities=first.entities,
+        relations=first.relations,
+        context=first.context,
+        emotional_salience=first.emotional_salience,
+        confidence=first.confidence,
+        provenance=MemoryProvenance(
+            kind=MemorySourceKind.COMMUNICATED,
+            source_tick=1,
+            speaker_id=EntityId("body-a"),
+            transmission=meta,
+        ),
+        created_tick=1,
+        source_tick=1,
+        last_access_tick=1,
+        access_count=0,
+    )
+    second_meta = CommunicatedTransmissionMeta(
+        communication_id="comm-hop-2",
+        action_kind="tell",
+        hop_count=1,
+        sender_confidence=0.7,
+        receiver_confidence=0.6,
+        content_fingerprint="b" * 64,
+        parent_communication_id="comm-root",
+        source_agent_chain=(EntityId("body-a"), EntityId("body-c")),
+        transmission_root_id="comm-root",
+    )
+    second = MemoryTrace(
+        memory_id=MemoryId("m-2"),
+        owner_id=owner,
+        world_revision=first.world_revision,
+        concepts=first.concepts,
+        entities=(),
+        relations=(),
+        context=first.context,
+        emotional_salience=0.0,
+        confidence=0.9,
+        provenance=MemoryProvenance(
+            kind=MemorySourceKind.COMMUNICATED,
+            source_tick=2,
+            speaker_id=EntityId("body-c"),
+            transmission=second_meta,
+        ),
+        created_tick=2,
+        source_tick=2,
+        last_access_tick=2,
+        access_count=0,
+    )
+    assert transmission_root_for_trace(first) == transmission_root_for_trace(second)
+    policy = _policy()
+    candidates = extract_evidence_candidates(
+        (first, second), owner_id=owner, policy=policy
+    )
+    roots = {item.lineage_root_id for item in candidates}
+    assert len(roots) == 1

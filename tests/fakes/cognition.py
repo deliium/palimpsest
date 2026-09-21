@@ -470,8 +470,9 @@ class FakePlanner:
         loop_input: CognitiveLoopInput,
         intention: SelectedIntention,
         futures: PossibleFutures,
+        memory: RetrievedMemoryContext | None = None,
     ) -> ActionPlan:
-        _ = loop_input, intention, futures
+        _ = loop_input, intention, futures, memory
         output = self._queue.consume(invocation_id=_active_invocation(), ordinal=7)
         assert type(output) is ActionPlan
         return output

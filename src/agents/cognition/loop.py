@@ -412,7 +412,7 @@ class CognitiveLoop:
             kind=ComponentKind.PLANNING,
             ordinal=7,
             input_artifact=intention,
-            awaitable=self._planner.plan(loop_input, intention, futures),
+            awaitable=self._planner.plan(loop_input, intention, futures, memory),
             expected_type=ActionPlan,
         )
         try:

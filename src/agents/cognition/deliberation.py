@@ -22,8 +22,10 @@ from agents.cognition.models import (
     MotivationCode,
     MotivationEvaluation,
     PossibleFutures,
+    RetrievedMemoryContext,
     SelectedIntention,
     SubjectiveRiskKind,
+    SubjectiveSnapshot,
     intention_for_action_direction,
     require_confidence,
 )
@@ -207,13 +209,21 @@ class MultiCriteriaIntentionSelector:
 class CommandPlanner:
     """Compile selected direction+target into one fresh closed AgentCommand."""
 
-    __slots__ = ()
+    __slots__ = ("_social_messages",)
+
+    def __init__(self, social_messages: object | None = None) -> None:
+        from agents.cognition.communication import DeterministicSocialMessagePolicy
+
+        if social_messages is None:
+            social_messages = DeterministicSocialMessagePolicy()
+        self._social_messages = social_messages
 
     async def plan(
         self,
         loop_input: CognitiveLoopInput,
         intention: SelectedIntention,
         futures: PossibleFutures,
+        memory: RetrievedMemoryContext | None = None,
     ) -> ActionPlan:
         owner = loop_input.agent_id
         tick = loop_input.observation.tick
@@ -240,6 +250,9 @@ class CommandPlanner:
                 future,
                 loop_input.observation,
                 owner_id=owner,
+                memory=memory,
+                social_messages=self._social_messages,
+                snapshot=loop_input.snapshot,
             )
             if compiled is None:
                 used_fallback = True
@@ -785,7 +798,9 @@ def _compile_command(
     observation: Observation,
     *,
     owner_id: AgentId,
-    memory: object | None = None,
+    memory: RetrievedMemoryContext | None = None,
+    social_messages: object | None = None,
+    snapshot: SubjectiveSnapshot | None = None,
 ) -> AgentCommand | None:
     direction = future.direction
     target = future.target_entity_id
@@ -832,7 +847,6 @@ def _compile_command(
         return Flee(threat_id=threat)
     if direction is ActionDirection.COMMUNICATE:
         from agents.cognition.communication import DeterministicSocialMessagePolicy
-        from agents.cognition.models import DecisionMetadata, RetrievedMemoryContext
 
         preferred = None if target is None else EntityId(target)
         speaker = (
@@ -840,19 +854,47 @@ def _compile_command(
             if observation.self_body is not None
             else observation.observer_id
         )
+        policy = social_messages
+        if policy is None:
+            policy = DeterministicSocialMessagePolicy()
         empty_memory = RetrievedMemoryContext(
             owner_id=owner_id,
             memory_ids=(),
             belief_ids=(),
             confidence=1.0,
             decision_metadata=DecisionMetadata(candidate_count=0),
+            semantic_beliefs=(() if snapshot is None else snapshot.semantic_beliefs),
         )
-        decision = DeterministicSocialMessagePolicy().select(
+        memory_ctx = empty_memory if memory is None else memory
+        if (
+            memory is not None
+            and snapshot is not None
+            and not memory.semantic_beliefs
+            and snapshot.semantic_beliefs
+        ):
+            memory_ctx = RetrievedMemoryContext(
+                owner_id=memory.owner_id,
+                memory_ids=memory.memory_ids,
+                belief_ids=memory.belief_ids,
+                confidence=memory.confidence,
+                decision_metadata=memory.decision_metadata,
+                semantic_beliefs=snapshot.semantic_beliefs,
+                reconstructions=memory.reconstructions,
+                ranked_hits=memory.ranked_hits,
+                pending_accesses=memory.pending_accesses,
+                reconsolidation=memory.reconsolidation,
+                reconstruction_policy_version=memory.reconstruction_policy_version,
+            )
+        select = getattr(policy, "select", None)
+        if select is None:
+            return None
+        decision = select(
             owner_id=owner_id,
             speaker_id=speaker,
             observation=observation,
-            memory=empty_memory if memory is None else memory,
+            memory=memory_ctx,
             preferred_recipient_id=preferred,
+            snapshot_memories=(() if snapshot is None else snapshot.memories),
         )
         if decision is None:
             return None

@@ -251,3 +251,137 @@ def test_communicated_trace_round_trips_serialization() -> None:
     assert decode_domain(encode_domain(trace)) == trace
     assert type(trace.provenance) is MemoryProvenance
     assert trace.provenance.transmission is not None
+
+
+def test_social_message_policy_talk_fallback_without_evidence(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    from agents.cognition.communication import DeterministicSocialMessagePolicy
+    from world.observations import CoarseHealth, VisibleBody
+
+    owner = AgentId("agent-1")
+    observation = Observation(
+        observer_id=EntityId("body-1"),
+        world_id=WorldId("world-1"),
+        revision=WorldRevision(1),
+        tick=2,
+        self_body=ObservedSelf(
+            entity_id=EntityId("body-1"),
+            location_id=EntityId("loc-1"),
+            health=Health(100),
+            hunger=Hunger(0.0),
+            thirst=Thirst(0.0),
+            fatigue=Fatigue(0.0),
+            temperature=TemperatureCelsius(36.5),
+            inventory=(),
+            life_status=LifeStatus.ALIVE,
+            carry_capacity=CarryCapacity(10),
+        ),
+        visible_bodies=(
+            VisibleBody(
+                entity_id=EntityId("body-2"),
+                life_status=LifeStatus.ALIVE,
+                coarse_health=CoarseHealth.STABLE,
+            ),
+        ),
+        visibility=1.0,
+    )
+    memory = RetrievedMemoryContext(
+        owner_id=owner,
+        memory_ids=(),
+        belief_ids=(),
+        confidence=1.0,
+        decision_metadata=DecisionMetadata(candidate_count=0),
+    )
+    with caplog.at_level(logging.DEBUG, logger="agents.cognition.communication"):
+        decision = DeterministicSocialMessagePolicy().select(
+            owner_id=owner,
+            speaker_id=EntityId("body-1"),
+            observation=observation,
+            memory=memory,
+            preferred_recipient_id=EntityId("body-2"),
+        )
+    assert decision is not None
+    assert decision.action_kind == "talk"
+    assert decision.fallback is True
+    assert decision.hop_count == 0
+    messages = " ".join(record.getMessage() for record in caplog.records)
+    assert "social_message_selected" in messages
+    assert "hello" not in messages
+
+
+def test_social_message_policy_retells_communicated_trace_with_hop() -> None:
+    from agents.cognition.communication import DeterministicSocialMessagePolicy
+    from world.actions import Tell
+    from world.observations import CoarseHealth, VisibleBody
+
+    owner = AgentId("agent-bob")
+    observation = _observation_with_comm(
+        tick=5,
+        listener="body-bob",
+        speaker="body-alice",
+        communication_id="comm-alice-1",
+        concepts=("water",),
+    )
+    # Retell uses snapshot memories for the speaker (Bob), not the observation inbox.
+    prior = build_communicated_memory_trace(
+        owner_id=owner,
+        observation_tick=4,
+        observation_revision=WorldRevision(1),
+        message=observation.communications[0],
+        location_id=EntityId("loc-1"),
+    )
+    speak_obs = Observation(
+        observer_id=EntityId("body-bob"),
+        world_id=WorldId("world-1"),
+        revision=WorldRevision(2),
+        tick=5,
+        self_body=ObservedSelf(
+            entity_id=EntityId("body-bob"),
+            location_id=EntityId("loc-1"),
+            health=Health(100),
+            hunger=Hunger(0.0),
+            thirst=Thirst(0.0),
+            fatigue=Fatigue(0.0),
+            temperature=TemperatureCelsius(36.5),
+            inventory=(),
+            life_status=LifeStatus.ALIVE,
+            carry_capacity=CarryCapacity(10),
+        ),
+        visible_bodies=(
+            VisibleBody(
+                entity_id=EntityId("body-carol"),
+                life_status=LifeStatus.ALIVE,
+                coarse_health=CoarseHealth.STABLE,
+            ),
+        ),
+        visibility=1.0,
+    )
+    memory = RetrievedMemoryContext(
+        owner_id=owner,
+        memory_ids=(prior.memory_id,),
+        belief_ids=(),
+        confidence=1.0,
+        decision_metadata=DecisionMetadata(candidate_count=1),
+    )
+    decision = DeterministicSocialMessagePolicy().select(
+        owner_id=owner,
+        speaker_id=EntityId("body-bob"),
+        observation=speak_obs,
+        memory=memory,
+        preferred_recipient_id=EntityId("body-carol"),
+        snapshot_memories=(prior,),
+    )
+    assert decision is not None
+    assert decision.action_kind == "tell"
+    assert type(decision.command) is Tell
+    assert decision.hop_count == 1
+    assert decision.command.utterance.declared.hop_count == 1
+    assert decision.command.utterance.declared.parent_communication_id is not None
+    assert decision.command.utterance.declared.parent_communication_id.value == (
+        "comm-alice-1"
+    )
+    assert decision.command.utterance.declared.source_agent_chain == (
+        EntityId("body-alice"),
+        EntityId("body-bob"),
+    )
