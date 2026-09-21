@@ -15,8 +15,9 @@ All application settings use the **`PALIMPSEST_`** prefix only. Environment vari
 | `PALIMPSEST_TEST_DATABASE_URL` | Disposable integration-test URL; database **name** must contain `palimpsest_test` and must not be `postgres` / `template0` / `template1` |
 | `PALIMPSEST_POOL_SIZE` / `PALIMPSEST_MAX_OVERFLOW` / `PALIMPSEST_POOL_TIMEOUT_SECONDS` | Async pool bounds (`pool_pre_ping` is always on) |
 | `PALIMPSEST_DEFAULT_RUN_SEED` | Optional composition default. Always copied into `SimulationRunConfig`; never an implicit global RNG |
+| `PALIMPSEST_LLM_*` | Disabled-by-default provider settings. See [LLM providers](llm-providers.md) |
 
-Booleans are rejected as integer settings. Invalid environments, pool bounds, seeds, and non-asyncpg URLs fail validation. Credentials are `SecretStr` and are stripped from `repr`, validation errors, and logs.
+Booleans are rejected as integer settings. Invalid environments, pool bounds, seeds, and non-asyncpg URLs fail validation. Credentials are `SecretStr` and are stripped from `repr`, validation errors, and logs. LLM base URLs and API keys never appear in `SettingsError`, `repr`, or `bootstrap_fields()` (only `has_llm_base_url` / `has_llm_api_key` and enum/count diagnostics).
 
 Alembic loads its URL from validated settings (never from `alembic.ini`). If both `PALIMPSEST_DATABASE_URL` and `PALIMPSEST_TEST_DATABASE_URL` are set and disagree, migration settings fail closed. Integration fixtures bind Alembic to the validated disposable test DSN so a conflicting runtime URL cannot divert the upgrade.
 
@@ -65,5 +66,6 @@ Copy `.env.example` to `.env` for local overrides. Do not commit `.env`.
 ## See also
 
 - [Architecture](architecture.md)
+- [LLM providers](llm-providers.md)
 - [Physical simulation](physical-simulation.md)
 - [Development](development.md)

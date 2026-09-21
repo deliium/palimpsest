@@ -156,7 +156,7 @@ Raw provider bytes, text, mappings, headers, and exceptions may exist only insid
 
 ### Phase 5: Mandatory Documentation Checkpoint
 
-- [ ] Task 10: Run the mandatory `$aif-docs` checkpoint for provider usage and trust boundaries.
+- [x] Task 10: Run the mandatory `$aif-docs` checkpoint for provider usage and trust boundaries.
   - Invoke `$aif-docs` after implementation approval to create/update `docs/llm-providers.md`, `docs/architecture.md`, `docs/configuration.md`, `docs/development.md`, and the README documentation index as appropriate.
   - Document the public request/result API, strict schema contract, structured-output mode matrix, retry/error matrix, correlation privacy rules, prompt immutability/versioning, local OpenAI-compatible/Ollama/vLLM configuration, lifecycle ownership, deterministic fake usage, and recorded-response requirement for exact replay.
   - Update previous/next navigation and See Also links for every affected documentation page according to the existing docs ordering. Keep complex cognition and runtime composition explicitly deferred and M3 incomplete.

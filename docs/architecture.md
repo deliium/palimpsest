@@ -1,6 +1,6 @@
 # Architecture
 
-[Back to README](../README.md) · [Next Page →](physical-simulation.md)
+[Back to README](../README.md) · [Next Page →](llm-providers.md)
 
 Palimpsest is a modular monolith under `src/`. Cross-module imports must target a package `__init__.py` facade or names listed in `__all__`. Private modules (leading `_`) are not cross-boundary APIs.
 
@@ -13,7 +13,7 @@ Palimpsest is a modular monolith under `src/`. Cross-module imports must target 
 | `agents.cognition` | Strategy protocol; returns non-authoritative `AgentCommand` | `world`, `agents`, `memory`, `social`, `llm` |
 | `memory` | Owner-bound `MemoryTrace` / `Belief` stores | `world`, `agents` |
 | `social` | Opaque communication envelopes and relationships | `world`, `agents` |
-| `llm` | Provider-neutral untrusted responses | *(none)* |
+| `llm` | Provider-neutral structured `LLMProvider` / `LLMResult` | *(none)* |
 | `simulation` | `WorldEngine`, bootstrap, lifecycle, seed/clock/RNG/IDs, codecs, persistence ports, durable tick service, replay | `world`, `agents`, `agents.cognition`, `memory`, `social`, `llm` |
 | `persistence` | SQLAlchemy adapters for simulation repository ports | `simulation`, `infrastructure` |
 | `api` | HTTP composition root | `simulation`, `infrastructure`, `persistence` |
@@ -35,7 +35,7 @@ Import packages, not private modules:
 - `agents.cognition`: `CognitionStrategy` (`propose` → `AgentCommand`), `Perspective`
 - `memory`: `MemoryTrace`, `Belief`, owner-bound stores, `OwnershipError`
 - `social`: `CommunicationEnvelope`, `Relationship`, `EnvelopeSender`
-- `llm`: `LLMClient`, `LLMResponse`
+- `llm`: `LLMProvider`, `LLMRequest`, `LLMResult`, `StructuredOutput`, prompts, factory
 - `simulation`: `WorldEngine`, `WorldBootstrap`, lifecycle types, `build_perspective`, persistence DTOs/ports, `PersistentSimulationService`, `ReplayService`, codecs, deterministic IDs/RNG/clock, export ports
 - `persistence`: repository factories (`create_run_repository`, …)
 - `analysis`: `EventSource`, `ExportSource`
@@ -99,7 +99,7 @@ These are encoded as types and import rules, and enforced by `WorldEngine` for o
 2. **Agents receive immutable observations, never `WorldState`.** `WorldState` is absent from public `world` exports. Each agent receives only its own observation via trusted routing.
 3. **Objective and subjective state stay separate.** `Agent` / goals / memories / beliefs are not world aggregates.
 4. **Actions are structured and typed.** Fifteen closed `AgentCommand` variants; cognition returns commands; the engine admits and resolves them.
-5. **LLM output is untrusted.** `LLMResponse` cannot mutate world state.
+5. **LLM output is untrusted.** Structurally validated `LLMResult` / `StructuredOutput` cannot mutate world state or become commands without an explicit cognition translation step.
 6. **`WorldEvent` is immutable.** Closed occurrence details; no open payloads. Rejected/conflicted/duplicate outcomes emit no world events.
 7. **Memories and beliefs may be wrong.** They are mutable owner-bound aggregates (`MemoryTrace` / `Belief`).
 8. **Memory is agent-scoped.** Stores reject cross-owner writes; nothing shares memory automatically.
@@ -116,12 +116,13 @@ These are encoded as types and import rules, and enforced by `WorldEngine` for o
 
 ## Deferred scope
 
-No agent cognition loop inside the engine, fear-of-death psychology, prompts, memory retrieval algorithms, analysis metrics, production LLM providers, pathfinding beyond one adjacent edge, crafting, diseases, revival, or multi-tick sleeping state. No Kafka, Kubernetes, Celery, or extra vector databases.
+No agent cognition loop inside the engine, fear-of-death psychology, memory retrieval algorithms, analysis metrics, Anthropic-native adapters, pathfinding beyond one adjacent edge, crafting, diseases, revival, or multi-tick sleeping state. Provider lifecycle is not wired into the API/`compose` composition root yet. No Kafka, Kubernetes, Celery, or extra vector databases.
 
 Production PostgreSQL privilege design for `CREATE EXTENSION` is deferred; development credentials may create `vector`.
 
 ## See also
 
+- [LLM providers](llm-providers.md)
 - [Physical simulation](physical-simulation.md)
 - [Configuration](configuration.md)
 - [Development](development.md)

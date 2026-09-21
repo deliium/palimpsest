@@ -50,8 +50,9 @@ Development credentials in `compose.yaml` are **not production**. `docker compos
 | Page | Contents |
 | --- | --- |
 | [Architecture](docs/architecture.md) | Bounded packages, `WorldEngine` lifecycle, perception boundary, eleven invariants |
+| [LLM providers](docs/llm-providers.md) | Structured `LLMProvider`, modes, retries, prompts, local OpenAI-compatible config, fakes |
 | [Physical simulation](docs/physical-simulation.md) | Topology, capacities, actions, physiology, death, schema-v4, tests |
-| [Configuration](docs/configuration.md) | `PALIMPSEST_` settings, logging, redaction, seeds, identifiers, clocks |
+| [Configuration](docs/configuration.md) | `PALIMPSEST_` settings (including `PALIMPSEST_LLM_*`), logging, redaction, seeds, identifiers, clocks |
 | [Development](docs/development.md) | Tests, migrations, local and Docker workflows, exact commands |
 | [Persistence](docs/persistence.md) | Event store, append-only guarantees, durable ticks, replay |
 
@@ -61,7 +62,7 @@ Development credentials in `compose.yaml` are **not production**. `docker compos
 2. Agents receive immutable, agent-specific observations, never `WorldState`.
 3. Objective world state and subjective agent state remain separate.
 4. Every agent action is a closed typed command resolved by `WorldEngine` through private world rules.
-5. LLM output is untrusted and cannot mutate world state directly.
+5. LLM output is untrusted and cannot mutate world state directly (structurally validated `LLMResult` still requires explicit cognition translation).
 6. Objective `WorldEvent` values are immutable closed occurrence facts.
 7. Agent memories and beliefs are mutable and may be incorrect.
 8. Memory is agent-scoped and is never shared automatically.

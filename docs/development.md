@@ -34,6 +34,8 @@ uv run --frozen --python 3.12.14 pytest
 | --- | --- |
 | `uv run --frozen --python 3.12.14 pytest` | Unit + architecture (no Docker, no PostgreSQL) |
 | `uv run --frozen --python 3.12.14 pytest tests/unit/physical -q` | Physical conservation, physiology, scale, seed proofs |
+| `uv run --frozen --python 3.12.14 pytest tests/unit/test_openai_compatible*.py tests/unit/test_llm_*.py tests/unit/test_fake_llm_provider.py -q` | Provider codec/transport, prompts, factory, fake |
+| `uv run --frozen --python 3.12.14 pytest tests/architecture/test_llm_provider_isolation.py -q` | LLM import/signature/logging isolation |
 | `uv run --frozen --python 3.12.14 pytest tests/unit/test_world_perception*.py tests/unit/test_perception_event_isolation.py -q` | Visibility, noninterference, event audience, routing isolation |
 | `uv run --frozen --python 3.12.14 pytest -m integration` | Disposable Postgres via `PALIMPSEST_TEST_DATABASE_URL` |
 | `uv run --frozen --python 3.12.14 pytest -m compose` | Compose file checks and optional stack smoke |
@@ -111,4 +113,5 @@ uv run --frozen --python 3.12.14 pytest -m compose
 ## See also
 
 - [Architecture](architecture.md)
+- [LLM providers](llm-providers.md)
 - [Configuration](configuration.md)

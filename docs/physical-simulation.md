@@ -1,6 +1,6 @@
 # V1 Physical Simulation
 
-[← Architecture](architecture.md) · [Back to README](../README.md) · [Next Page →](configuration.md)
+[← LLM providers](llm-providers.md) · [Back to README](../README.md) · [Next Page →](configuration.md)
 
 Objective physical rules for a small discrete world (about 5–10 agents, 10–20 locations, several resource kinds). Psychological fear of death, beliefs, goals, and emotional responses are **not** implemented.
 
@@ -75,5 +75,6 @@ uv run --frozen --python 3.12.14 pytest tests/unit/physical -q
 ## See also
 
 - [Architecture](architecture.md)
+- [LLM providers](llm-providers.md)
 - [Persistence](persistence.md)
 - [Development](development.md)
