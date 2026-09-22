@@ -2460,6 +2460,7 @@ def _decode_structured_utterance(data: object, *, path: str) -> StructuredUttera
             "sender_confidence",
             "source_basis",
         },
+        optional={"root_communication_id"},
         path=f"{path}.declared",
     )
     concepts_raw = content_raw["concepts"]

@@ -44,7 +44,9 @@ __all__ = [
     "create_experiment_record_repository",
     "create_experiment_repository",
     "create_memory_service",
+    "create_pending_finalization_repository",
     "create_run_repository",
+    "create_runner_attempt_state_repository",
     "create_snapshot_repository",
     "create_subjective_state_service",
     "create_tick_journal_repository",
@@ -114,6 +116,38 @@ def create_experiment_record_repository(
         )
     from persistence.experiment_sqlalchemy import (
         create_experiment_record_repository as impl,
+    )
+
+    return impl(session_factory)
+
+
+def create_pending_finalization_repository(
+    session_factory: async_sessionmaker[AsyncSession] | None = None,
+):
+    """Build the append-only pending finalization outbox repository."""
+    if session_factory is None:
+        raise PersistenceAdapterError(
+            "missing_session_factory",
+            operation="create_pending_finalization_repository",
+        )
+    from persistence.runner_sqlalchemy import (
+        create_pending_finalization_repository as impl,
+    )
+
+    return impl(session_factory)
+
+
+def create_runner_attempt_state_repository(
+    session_factory: async_sessionmaker[AsyncSession] | None = None,
+):
+    """Build the append-only runner attempt recovery repository."""
+    if session_factory is None:
+        raise PersistenceAdapterError(
+            "missing_session_factory",
+            operation="create_runner_attempt_state_repository",
+        )
+    from persistence.runner_sqlalchemy import (
+        create_runner_attempt_state_repository as impl,
     )
 
     return impl(session_factory)

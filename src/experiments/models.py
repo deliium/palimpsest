@@ -152,4 +152,6 @@ def definition_fingerprint(definition: ExperimentDefinition) -> str:
 def require_stochastic(identity: StochasticIdentity | str) -> StochasticIdentity:
     if type(identity) is StochasticIdentity:
         return identity
+    if type(identity) is not str:
+        raise TypeError("stochastic_identity must be StochasticIdentity or str")
     return StochasticIdentity(identity)

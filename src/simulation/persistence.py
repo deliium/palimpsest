@@ -63,6 +63,7 @@ __all__ = [
     "ACCEPTED_PERSISTENCE_CODEC_VERSIONS",
     "ACCEPTED_PROJECTOR_VERSIONS",
     "EVENT_SCHEMA_VERSION",
+    "PENDING_FINALIZATION_CODEC_VERSION",
     "PERSISTENCE_CODEC_VERSION",
     "PROJECTOR_VERSION",
     "CommitHash",
@@ -71,6 +72,9 @@ __all__ = [
     "ExperimentRepository",
     "ExperimentRunAssignment",
     "PayloadHash",
+    "PendingFinalizationRecord",
+    "PendingFinalizationRepository",
+    "PendingFinalizationStatus",
     "ReplayFallbackPolicy",
     "ReplayMode",
     "ReplayRequest",
@@ -78,6 +82,8 @@ __all__ = [
     "ReplayStatus",
     "RunCreateRequest",
     "RunManifest",
+    "RunnerAttemptStateRecord",
+    "RunnerAttemptStateRepository",
     "SimulationRunRepository",
     "SnapshotId",
     "SnapshotRepository",
@@ -815,6 +821,105 @@ class ExperimentRepository(Protocol):
     async def get_experiment(
         self, experiment_id: ExperimentId
     ) -> ExperimentMetadata | None: ...
+
+
+class PendingFinalizationStatus(StrEnum):
+    """Outbox status for one pending subjective finalization."""
+
+    PENDING = "pending"
+    FINALIZED = "finalized"
+    ABORTED = "aborted"
+
+
+PENDING_FINALIZATION_CODEC_VERSION: Final[str] = "pending-finalization-v1"
+
+
+@dataclass(frozen=True, slots=True)
+class PendingFinalizationRecord:
+    """Append-only pending finalization outbox row (not objective authority)."""
+
+    run_id: RunId
+    agent_id: str
+    tick: int
+    invocation_id: str
+    integrity_hash: str
+    codec_version: str
+    payload: Mapping[str, object]
+    status: PendingFinalizationStatus
+
+    def __post_init__(self) -> None:
+        if type(self.run_id) is not RunId:
+            raise TypeError("run_id must be RunId")
+        require_stable_id("agent_id", self.agent_id)
+        object.__setattr__(self, "tick", require_exact_nonneg_int("tick", self.tick))
+        require_stable_id("invocation_id", self.invocation_id)
+        require_stable_id("integrity_hash", self.integrity_hash)
+        require_stable_id("codec_version", self.codec_version)
+        if type(self.status) is not PendingFinalizationStatus:
+            raise TypeError("status must be PendingFinalizationStatus")
+        if isinstance(self.payload, (str, bytes)) or not isinstance(
+            self.payload, Mapping
+        ):
+            raise TypeError("payload must be a mapping")
+        object.__setattr__(self, "payload", dict(self.payload))
+
+
+@dataclass(frozen=True, slots=True)
+class RunnerAttemptStateRecord:
+    """Append-only runner attempt recovery state."""
+
+    run_id: RunId
+    attempt_id: str
+    tick: int
+    phase: str
+    recovery_required: bool
+    integrity_hash: str
+    codec_version: str
+    payload: Mapping[str, object]
+
+    def __post_init__(self) -> None:
+        if type(self.run_id) is not RunId:
+            raise TypeError("run_id must be RunId")
+        require_stable_id("attempt_id", self.attempt_id)
+        object.__setattr__(self, "tick", require_exact_nonneg_int("tick", self.tick))
+        require_stable_id("phase", self.phase)
+        if type(self.recovery_required) is not bool:
+            raise TypeError("recovery_required must be bool")
+        require_stable_id("integrity_hash", self.integrity_hash)
+        require_stable_id("codec_version", self.codec_version)
+        if isinstance(self.payload, (str, bytes)) or not isinstance(
+            self.payload, Mapping
+        ):
+            raise TypeError("payload must be a mapping")
+        object.__setattr__(self, "payload", dict(self.payload))
+
+
+class PendingFinalizationRepository(Protocol):
+    """Append-only pending subjective finalization outbox."""
+
+    async def append_pending(self, record: PendingFinalizationRecord) -> None: ...
+
+    async def mark_finalized(
+        self, *, run_id: RunId, agent_id: str, invocation_id: str
+    ) -> None: ...
+
+    async def mark_aborted(
+        self, *, run_id: RunId, agent_id: str, invocation_id: str
+    ) -> None: ...
+
+    async def list_pending_for_tick(
+        self, *, run_id: RunId, tick: int
+    ) -> tuple[PendingFinalizationRecord, ...]: ...
+
+
+class RunnerAttemptStateRepository(Protocol):
+    """Append-only runner attempt recovery records."""
+
+    async def append_attempt(self, record: RunnerAttemptStateRecord) -> None: ...
+
+    async def list_recovery_required(
+        self, *, run_id: RunId
+    ) -> tuple[RunnerAttemptStateRecord, ...]: ...
 
 
 def persistence_diagnostic_fields(

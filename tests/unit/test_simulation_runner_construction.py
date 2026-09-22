@@ -108,7 +108,9 @@ def test_resolve_physical_rules_mortality_modes() -> None:
     enabled = _config(mortality_mode=MortalityMode.ENABLED)
     assert enabled.resolve_physical_rules().version == "physical-v1"
     disabled = _config(mortality_mode=MortalityMode.DISABLED)
-    assert disabled.resolve_physical_rules().version == NON_LETHAL_PHYSICAL_RULES_VERSION
+    assert (
+        disabled.resolve_physical_rules().version == NON_LETHAL_PHYSICAL_RULES_VERSION
+    )
 
 
 def test_mortality_enabled_rejects_nonlethal_scenario_rules() -> None:
@@ -178,7 +180,8 @@ async def test_from_config_selects_reference_memory_and_disabled_imagination() -
         assert loop._motivation._mortality_appraisal_enabled is False
         assert runner.run_config.physical_rules is not None
         assert (
-            runner.run_config.physical_rules.version == NON_LETHAL_PHYSICAL_RULES_VERSION
+            runner.run_config.physical_rules.version
+            == NON_LETHAL_PHYSICAL_RULES_VERSION
         )
 
 

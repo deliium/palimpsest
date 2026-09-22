@@ -12,7 +12,17 @@ from experiments.catalog import (
     experiment_d_drives,
     experiment_e_false_story,
 )
-from experiments.collectors import CollectorMetricDocument, collect_arm_summary
+from experiments.collectors import (
+    CollectorMetricDocument,
+    collect_arm_summary,
+    collect_drive_outcomes,
+    collect_for_experiment,
+    collect_imagination_outcomes,
+    collect_memory_drift,
+    collect_mortality_outcomes,
+    collect_propagation,
+    collect_trajectory_stats,
+)
 from experiments.coordinator import (
     ExperimentArmResult,
     ExperimentAssignment,
@@ -42,8 +52,8 @@ from experiments.persistence import (
 )
 
 __all__ = [
-    "CollectorMetricDocument",
     "EXPERIMENT_RECORD_SCHEMA_VERSION",
+    "CollectorMetricDocument",
     "ExperimentArmResult",
     "ExperimentAssignment",
     "ExperimentAssignmentRecord",
@@ -59,6 +69,13 @@ __all__ = [
     "StoryInterventionArbiter",
     "StoryTruthSpec",
     "collect_arm_summary",
+    "collect_drive_outcomes",
+    "collect_for_experiment",
+    "collect_imagination_outcomes",
+    "collect_memory_drift",
+    "collect_mortality_outcomes",
+    "collect_propagation",
+    "collect_trajectory_stats",
     "condition_fingerprint",
     "definition_fingerprint",
     "experiment_a_memory",

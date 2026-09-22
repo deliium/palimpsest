@@ -1,9 +1,8 @@
-"""Async experiment coordinator for sequential A–E arm execution."""
+"""Async experiment coordinator for sequential A-E arm execution."""
 
 from __future__ import annotations
 
 import logging
-from collections.abc import Sequence
 from dataclasses import dataclass
 from typing import Final
 
@@ -41,6 +40,7 @@ class ExperimentArmResult:
     assignment: ExperimentAssignment
     runner_result: SimulationRunnerResult
     config_fingerprint: str
+    metrics: tuple[object, ...] = ()
 
 
 def materialize_assignments(
@@ -121,20 +121,27 @@ class ExperimentCoordinator:
                 assignment.runner_config,
                 run_id=assignment.run_id,
             ) as runner:
-                if (
-                    self._intervention is not None
-                    and assignment.condition_id.endswith("intervention")
+                if self._intervention is not None and assignment.condition_id.endswith(
+                    "intervention"
                 ):
                     runner.set_intervention_arbiter(self._intervention)
                 runner_result = await runner.run()
             fingerprint = runner_config_fingerprint(assignment.runner_config)
-            results.append(
-                ExperimentArmResult(
-                    assignment=assignment,
-                    runner_result=runner_result,
-                    config_fingerprint=fingerprint,
-                )
+            arm = ExperimentArmResult(
+                assignment=assignment,
+                runner_result=runner_result,
+                config_fingerprint=fingerprint,
             )
+            from experiments.collectors import collect_for_experiment
+
+            metrics = collect_for_experiment(arm)
+            arm = ExperimentArmResult(
+                assignment=assignment,
+                runner_result=runner_result,
+                config_fingerprint=fingerprint,
+                metrics=metrics,
+            )
+            results.append(arm)
             _LOG.info(
                 "experiment_arm_complete",
                 extra={
@@ -143,6 +150,9 @@ class ExperimentCoordinator:
                         "stop_reason": runner_result.stop_reason.value,
                         "ticks_committed": runner_result.ticks_committed,
                         "config_fingerprint_prefix": fingerprint[:12],
+                        "metric_families": tuple(
+                            getattr(item, "family", "unknown") for item in metrics
+                        ),
                     }
                 },
             )

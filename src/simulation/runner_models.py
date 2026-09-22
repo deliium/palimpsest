@@ -12,7 +12,7 @@ import math
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from enum import StrEnum
-from typing import Final
+from typing import Any, Final
 
 from agents.models import (
     REQUIRED_DRIVE_KINDS,
@@ -132,7 +132,9 @@ class RunnerAttemptReceipt:
 
     def __post_init__(self) -> None:
         object.__setattr__(
-            self, "tick", require_exact_nonneg_int("RunnerAttemptReceipt.tick", self.tick)
+            self,
+            "tick",
+            require_exact_nonneg_int("RunnerAttemptReceipt.tick", self.tick),
         )
         if type(self.status) is not RunnerAttemptStatus:
             raise TypeError("status must be RunnerAttemptStatus")
@@ -150,7 +152,10 @@ class RunnerAttemptReceipt:
                 "RunnerAttemptReceipt.finalized_count", self.finalized_count
             ),
         )
-        if self.stop_reason is not None and type(self.stop_reason) is not RunnerStopReasonCode:
+        if (
+            self.stop_reason is not None
+            and type(self.stop_reason) is not RunnerStopReasonCode
+        ):
             raise TypeError("stop_reason must be RunnerStopReasonCode or None")
 
 
@@ -214,7 +219,9 @@ def _require_positive_int(name: str, value: object) -> int:
     return value
 
 
-def _require_finite_float(name: str, value: object, *, minimum: float, maximum: float) -> float:
+def _require_finite_float(
+    name: str, value: object, *, minimum: float, maximum: float
+) -> float:
     if isinstance(value, bool) or not isinstance(value, (int, float)):
         raise TypeError(f"{name} must be a finite number")
     number = float(value)
@@ -229,7 +236,9 @@ def _require_positive_float(name: str, value: object) -> float:
     return _require_finite_float(name, value, minimum=math.ulp(0.0), maximum=1e12)
 
 
-def _copy_ordered(name: str, values: Sequence[object], *, model_type: type) -> tuple:
+def _copy_ordered(
+    name: str, values: Sequence[object], *, model_type: type
+) -> tuple[Any, ...]:
     if isinstance(values, (set, frozenset)):
         raise TypeError(f"{name} must be an ordered sequence")
     if isinstance(values, (str, bytes)) or not isinstance(values, Sequence):
@@ -258,7 +267,9 @@ class DriveOverrideSpec:
             raise ValueError("DriveOverrideSpec requires baseline or sensitivity")
         if self.baseline is not None:
             object.__setattr__(
-                self, "baseline", _unit_interval("DriveOverrideSpec.baseline", self.baseline)
+                self,
+                "baseline",
+                _unit_interval("DriveOverrideSpec.baseline", self.baseline),
             )
         if self.sensitivity is not None:
             object.__setattr__(
@@ -284,7 +295,9 @@ class AgentCognitionSpec:
         if type(self.memory_mode) is not MemoryMode:
             raise TypeError("AgentCognitionSpec.memory_mode must be MemoryMode")
         if type(self.imagination_mode) is not ImaginationMode:
-            raise TypeError("AgentCognitionSpec.imagination_mode must be ImaginationMode")
+            raise TypeError(
+                "AgentCognitionSpec.imagination_mode must be ImaginationMode"
+            )
         if self.policy_version != COGNITION_POLICY_VERSION:
             raise ValueError("unsupported cognition policy_version")
         overrides = _copy_ordered(
@@ -363,12 +376,16 @@ class WorldScenarioSpec:
         object.__setattr__(
             self,
             "locations",
-            _copy_ordered("WorldScenarioSpec.locations", self.locations, model_type=Location),
+            _copy_ordered(
+                "WorldScenarioSpec.locations", self.locations, model_type=Location
+            ),
         )
         object.__setattr__(
             self,
             "bodies",
-            _copy_ordered("WorldScenarioSpec.bodies", self.bodies, model_type=AgentBody),
+            _copy_ordered(
+                "WorldScenarioSpec.bodies", self.bodies, model_type=AgentBody
+            ),
         )
         object.__setattr__(
             self,
@@ -385,7 +402,9 @@ class WorldScenarioSpec:
         object.__setattr__(
             self,
             "weather",
-            _copy_ordered("WorldScenarioSpec.weather", self.weather, model_type=Weather),
+            _copy_ordered(
+                "WorldScenarioSpec.weather", self.weather, model_type=Weather
+            ),
         )
         if not self.locations:
             raise ValueError("WorldScenarioSpec.locations must be non-empty")
@@ -407,7 +426,9 @@ class RunnerStopPolicy:
 
     def __post_init__(self) -> None:
         object.__setattr__(
-            self, "max_ticks", _require_positive_int("RunnerStopPolicy.max_ticks", self.max_ticks)
+            self,
+            "max_ticks",
+            _require_positive_int("RunnerStopPolicy.max_ticks", self.max_ticks),
         )
         if type(self.stop_on_all_agents_terminal) is not bool:
             raise TypeError("stop_on_all_agents_terminal must be bool")
@@ -509,7 +530,9 @@ class RunnerProviderSettings:
             object.__setattr__(
                 self,
                 "top_p",
-                _require_finite_float("top_p", self.top_p, minimum=math.ulp(0.0), maximum=1.0),
+                _require_finite_float(
+                    "top_p", self.top_p, minimum=math.ulp(0.0), maximum=1.0
+                ),
             )
         if self.provider_seed is not None:
             object.__setattr__(
@@ -523,9 +546,11 @@ class RunnerProviderSettings:
                 "max_output_tokens",
                 _require_positive_int("max_output_tokens", self.max_output_tokens),
             )
-        stops = _copy_ordered(
-            "stop_sequences", self.stop_sequences, model_type=str
-        ) if self.stop_sequences else ()
+        stops = (
+            _copy_ordered("stop_sequences", self.stop_sequences, model_type=str)
+            if self.stop_sequences
+            else ()
+        )
         if len(stops) > 8:
             raise ValueError("stop_sequences exceeds maximum entries")
         for item in stops:
@@ -575,10 +600,8 @@ class RunnerProviderSettings:
                     "exact reproducibility requires deterministic_fake or recorded "
                     "recording_policy"
                 )
-            if self.adapter_kind not in {
-                ProviderAdapterKind.DISABLED,
-            } and self.recording_policy is RecordingPolicy.LIVE:
-                raise ValueError("live adapter incompatible with exact reproducibility")
+            if self.adapter_kind is ProviderAdapterKind.OPENAI_COMPATIBLE:
+                raise ValueError("exact reproducibility forbids live external adapters")
         forbidden = {"api_key", "base_url", "endpoint", "authorization"}
         # Structural guard: dataclass has no credential fields by construction.
         for name in forbidden:
@@ -670,7 +693,10 @@ class SimulationRunnerConfig:
             raise TypeError("provider must be RunnerProviderSettings")
         if type(self.persistence) is not RunnerPersistenceSpec:
             raise TypeError("persistence must be RunnerPersistenceSpec")
-        if self.experiment is not None and type(self.experiment) is not ExperimentAssignmentRef:
+        if (
+            self.experiment is not None
+            and type(self.experiment) is not ExperimentAssignmentRef
+        ):
             raise TypeError("experiment must be ExperimentAssignmentRef or None")
         if self.schema_version != RUNNER_SCHEMA_VERSION:
             raise ValueError("unsupported runner schema_version")
@@ -764,7 +790,9 @@ def runner_config_diagnostics(
         location_count=len(config.scenario.locations),
         resource_count=len(config.scenario.resources),
         max_ticks=config.stop_policy.max_ticks,
-        memory_modes=tuple(agent.cognition.memory_mode.value for agent in config.agents),
+        memory_modes=tuple(
+            agent.cognition.memory_mode.value for agent in config.agents
+        ),
         imagination_modes=tuple(
             agent.cognition.imagination_mode.value for agent in config.agents
         ),
@@ -785,7 +813,9 @@ def runner_config_diagnostics(
     )
 
 
-def describe_runner_config(diagnostics: RunnerConfigDiagnostics) -> Mapping[str, object]:
+def describe_runner_config(
+    diagnostics: RunnerConfigDiagnostics,
+) -> Mapping[str, object]:
     """Dict form of diagnostics for structured logs (no secrets/payloads)."""
     if type(diagnostics) is not RunnerConfigDiagnostics:
         raise TypeError("describe_runner_config requires RunnerConfigDiagnostics")
@@ -844,7 +874,9 @@ class ObservationDelivery:
         require_stable_id("ObservationDelivery.delivery_id", self.delivery_id)
         require_stable_id("ObservationDelivery.content_hash", self.content_hash)
         object.__setattr__(
-            self, "tick", require_exact_nonneg_int("ObservationDelivery.tick", self.tick)
+            self,
+            "tick",
+            require_exact_nonneg_int("ObservationDelivery.tick", self.tick),
         )
         require_stable_id("ObservationDelivery.kind", self.kind)
         if self.schema_version != OBSERVATION_DELIVERY_SCHEMA_VERSION:

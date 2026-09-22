@@ -197,11 +197,7 @@ def experiment_d_drives(
         (
             "d-safety",
             "drive_safety",
-            (
-                DriveOverrideSpec(
-                    kind=DriveKind.SAFETY, baseline=0.9, sensitivity=0.8
-                ),
-            ),
+            (DriveOverrideSpec(kind=DriveKind.SAFETY, baseline=0.9, sensitivity=0.8),),
         ),
         (
             "d-belonging",
@@ -215,11 +211,7 @@ def experiment_d_drives(
         (
             "d-status",
             "drive_status",
-            (
-                DriveOverrideSpec(
-                    kind=DriveKind.STATUS, baseline=0.9, sensitivity=0.8
-                ),
-            ),
+            (DriveOverrideSpec(kind=DriveKind.STATUS, baseline=0.9, sensitivity=0.8),),
         ),
     )
     arms = tuple(

@@ -47,10 +47,27 @@ from simulation.agent_runtime import (
     PreparedObservation,
 )
 from simulation.bootstrap import WorldBootstrap, registration_translator
-from simulation.identifiers import derive_run_id
+from simulation.clock import Tick
 from simulation.engine import WorldEngine
+from simulation.identifiers import derive_run_id
+from simulation.journal import hash_snapshot
 from simulation.lifecycle import ActionSubmission
-from simulation.models import RunId, SimulationRunConfig
+from simulation.models import DERIVATION_VERSION_V3, RunId, SimulationRunConfig
+from simulation.persistence import (
+    EVENT_SCHEMA_VERSION,
+    PENDING_FINALIZATION_CODEC_VERSION,
+    PERSISTENCE_CODEC_VERSION,
+    PROJECTOR_VERSION,
+    PayloadHash,
+    PendingFinalizationRecord,
+    PendingFinalizationRepository,
+    PendingFinalizationStatus,
+    RunCreateRequest,
+    SimulationRunRepository,
+    SnapshotId,
+    TickJournalRepository,
+    WorldSnapshot,
+)
 from simulation.runner_models import (
     AgentCognitionSpec,
     CognitionFailurePolicy,
@@ -66,6 +83,7 @@ from simulation.runner_models import (
     describe_runner_config,
 )
 from simulation.runner_serialization import build_runner_diagnostics
+from simulation.service import PersistentSimulationService
 from simulation.subjective_state import InMemorySubjectiveStateService
 from social.service import InMemoryRelationshipService
 
@@ -151,8 +169,11 @@ class RunnerDependencyFactories:
 
     __slots__ = (
         "_credential_resolver",
+        "_journal",
         "_monotonic",
+        "_pending_finalizations",
         "_provider_factory",
+        "_run_repository",
         "_sleep",
     )
 
@@ -169,11 +190,29 @@ class RunnerDependencyFactories:
         ) = None,
         sleep: AsyncSleep | None = None,
         monotonic: MonotonicClock | None = None,
+        run_repository: SimulationRunRepository | None = None,
+        journal: TickJournalRepository | None = None,
+        pending_finalizations: PendingFinalizationRepository | None = None,
     ) -> None:
         self._credential_resolver = credential_resolver
         self._provider_factory = provider_factory
         self._sleep = sleep
         self._monotonic = monotonic
+        self._run_repository = run_repository
+        self._journal = journal
+        self._pending_finalizations = pending_finalizations
+
+    @property
+    def run_repository(self) -> SimulationRunRepository | None:
+        return self._run_repository
+
+    @property
+    def journal(self) -> TickJournalRepository | None:
+        return self._journal
+
+    @property
+    def pending_finalizations(self) -> PendingFinalizationRepository | None:
+        return self._pending_finalizations
 
     def resolve_credentials(
         self, settings: RunnerProviderSettings
@@ -288,9 +327,11 @@ class SimulationRunner:
         "_closed",
         "_config",
         "_diagnostics",
+        "_durable",
         "_engine",
         "_injected_stop",
         "_intervention_arbiter",
+        "_pending_finalizations",
         "_provider",
         "_run_config",
         "_run_id",
@@ -311,6 +352,8 @@ class SimulationRunner:
         agents: Sequence[_AgentBundle],
         provider: AsyncCloseable,
         diagnostics: object,
+        durable: PersistentSimulationService | None = None,
+        pending_finalizations: PendingFinalizationRepository | None = None,
     ) -> None:
         self._config = config
         self._run_id = run_id
@@ -321,6 +364,8 @@ class SimulationRunner:
         self._agents = tuple(agents)
         self._provider = provider
         self._diagnostics = diagnostics
+        self._durable = durable
+        self._pending_finalizations = pending_finalizations
         self._closed = False
         self._started = False
         self._ticks_committed = 0
@@ -366,13 +411,16 @@ class SimulationRunner:
         """
         if type(config) is not SimulationRunnerConfig:
             raise TypeError("from_config requires SimulationRunnerConfig")
-        if config.persistence.durable:
+
+        deps = factories if factories is not None else RunnerDependencyFactories()
+        if config.persistence.durable and (
+            deps.run_repository is None or deps.journal is None
+        ):
             raise RunnerConstructionError(
                 RunnerConstructionErrorCode.DURABLE_UNSUPPORTED,
                 stage="persistence",
             )
 
-        deps = factories if factories is not None else RunnerDependencyFactories()
         created_closables: list[AsyncCloseable] = []
         created_agents: list[_AgentBundle] = []
         stage = "validate"
@@ -397,7 +445,9 @@ class SimulationRunner:
                 derivation_version=config.derivation_version,
                 stochastic_identity=config.stochastic_identity,
             )
-            resolved_run_id = run_id if run_id is not None else derive_run_id(run_config)
+            resolved_run_id = (
+                run_id if run_id is not None else derive_run_id(run_config)
+            )
             if type(resolved_run_id) is not RunId:
                 raise TypeError("run_id must be RunId")
 
@@ -508,11 +558,37 @@ class SimulationRunner:
 
             diagnostics = build_runner_diagnostics(config)
             fields = describe_runner_config(diagnostics)
+            durable_service: PersistentSimulationService | None = None
+            if config.persistence.durable:
+                stage = "durable_create_run"
+                assert deps.run_repository is not None
+                assert deps.journal is not None
+                bootstrap_snapshot = _bootstrap_snapshot(engine)
+                await deps.run_repository.create_run(
+                    RunCreateRequest(
+                        run_id=resolved_run_id,
+                        world_id=bootstrap.world_id,
+                        seed=run_config.seed,
+                        config=run_config,
+                        derivation_version=(
+                            run_config.derivation_version or DERIVATION_VERSION_V3
+                        ),
+                        event_schema_version=EVENT_SCHEMA_VERSION,
+                        projector_version=PROJECTOR_VERSION,
+                        persistence_codec_version=PERSISTENCE_CODEC_VERSION,
+                        bootstrap=bootstrap_snapshot,
+                    )
+                )
+                durable_service = PersistentSimulationService(engine, deps.journal)
+                _LOG.info(
+                    "runner_durable_service_ready run_id=%s",
+                    resolved_run_id.value,
+                )
             _LOG.info(
                 "runner_constructed run_id=%s world_id=%s agent_count=%s "
                 "config_fingerprint_prefix=%s scenario_fingerprint_prefix=%s "
                 "cognition_fingerprint_prefix=%s rules_fingerprint_prefix=%s "
-                "mortality_mode=%s",
+                "mortality_mode=%s durable=%s",
                 resolved_run_id.value,
                 bootstrap.world_id.value,
                 len(runtimes),
@@ -521,6 +597,7 @@ class SimulationRunner:
                 fields["cognition_fingerprint_prefix"],
                 fields["rules_fingerprint_prefix"],
                 config.mortality_mode.value,
+                config.persistence.durable,
             )
             return cls(
                 config=config,
@@ -532,6 +609,8 @@ class SimulationRunner:
                 agents=created_agents,
                 provider=provider,
                 diagnostics=diagnostics,
+                durable=durable_service,
+                pending_finalizations=deps.pending_finalizations,
             )
         except RunnerConstructionError:
             await _cleanup_created(created_closables, stage=stage)
@@ -547,7 +626,6 @@ class SimulationRunner:
                 RunnerConstructionErrorCode.FACTORY_FAILED,
                 stage=stage,
             ) from None
-
 
     def request_stop(self) -> None:
         """Request stop at the next fully finalized committed boundary."""
@@ -625,9 +703,7 @@ class SimulationRunner:
                 if arbiter is not None:
                     maybe = getattr(arbiter, "maybe_replace", None)
                     if callable(maybe):
-                        effective = maybe(
-                            tick=tick_value, agent_id=runtime.agent_id
-                        )
+                        effective = maybe(tick=tick_value, agent_id=runtime.agent_id)
                 pending = await runtime.bind_effective_command(
                     prepared, effective_command=effective
                 )
@@ -638,7 +714,7 @@ class SimulationRunner:
                 runtime.status is AgentRuntimeStatus.TERMINAL
                 for runtime in self._runtimes
             ):
-                self._engine.resolve_tick(())
+                await self._commit_tick(())
                 self._ticks_committed += 1
                 return RunnerAttemptReceipt(
                     tick=tick_value,
@@ -648,11 +724,23 @@ class SimulationRunner:
                     stop_reason=RunnerStopReasonCode.ALL_AGENTS_TERMINAL,
                 )
 
-            tick_result = self._engine.resolve_tick(tuple(submissions))
+            if self._pending_finalizations is not None:
+                for pending in pendings:
+                    await self._pending_finalizations.append_pending(
+                        _pending_record(self._run_id, pending)
+                    )
+                    _LOG.debug(
+                        "runner_pending_recorded run_id=%s tick=%s invocation_id=%s",
+                        self._run_id.value,
+                        tick_value,
+                        pending.invocation_id,
+                    )
+
+            await self._commit_tick(tuple(submissions))
             _LOG.debug(
                 "runner_tick_committed run_id=%s tick=%s submission_count=%s",
                 self._run_id.value,
-                tick_result.tick.value,
+                tick_value,
                 len(submissions),
             )
 
@@ -661,6 +749,12 @@ class SimulationRunner:
                 await self._runtimes_by_agent(
                     pending.submission.agent_id
                 ).finalize_pending(pending)
+                if self._pending_finalizations is not None:
+                    await self._pending_finalizations.mark_finalized(
+                        run_id=self._run_id,
+                        agent_id=pending.submission.agent_id.value,
+                        invocation_id=pending.invocation_id,
+                    )
                 finalized += 1
 
             self._ticks_committed += 1
@@ -684,9 +778,9 @@ class SimulationRunner:
         except AgentRuntimeError:
             for pending in reversed(pendings):
                 try:
-                    self._runtimes_by_agent(
-                        pending.submission.agent_id
-                    ).abort_pending(pending)
+                    self._runtimes_by_agent(pending.submission.agent_id).abort_pending(
+                        pending
+                    )
                 except AgentRuntimeError:
                     pass
             policy = self._config.cognition_failure_policy
@@ -708,9 +802,9 @@ class SimulationRunner:
         except Exception:
             for pending in reversed(pendings):
                 try:
-                    self._runtimes_by_agent(
-                        pending.submission.agent_id
-                    ).abort_pending(pending)
+                    self._runtimes_by_agent(pending.submission.agent_id).abort_pending(
+                        pending
+                    )
                 except AgentRuntimeError:
                     pass
             _LOG.error(
@@ -770,8 +864,7 @@ class SimulationRunner:
         if self._ticks_committed >= self._config.stop_policy.max_ticks:
             return RunnerStopReasonCode.MAX_TICKS
         if self._config.stop_policy.stop_on_all_agents_terminal and all(
-            runtime.status is AgentRuntimeStatus.TERMINAL
-            for runtime in self._runtimes
+            runtime.status is AgentRuntimeStatus.TERMINAL for runtime in self._runtimes
         ):
             return RunnerStopReasonCode.ALL_AGENTS_TERMINAL
         return None
@@ -784,6 +877,18 @@ class SimulationRunner:
             RunnerConstructionErrorCode.OWNERSHIP,
             stage="runtime_lookup",
         )
+
+    async def _commit_tick(self, submissions: tuple[ActionSubmission, ...]) -> None:
+        """Commit through exactly one authority path; never fall back."""
+        if self._durable is not None:
+            if self._durable.fenced:
+                raise RunnerConstructionError(
+                    RunnerConstructionErrorCode.DURABLE_UNSUPPORTED,
+                    stage="fenced",
+                )
+            await self._durable.resolve_tick(submissions)
+            return
+        self._engine.resolve_tick(submissions)
 
     async def aclose(self) -> None:
         """Close owned providers. Idempotent."""
@@ -880,3 +985,71 @@ async def _cleanup_created(
                 RunnerConstructionErrorCode.CLEANUP_FAILED.value,
                 stage,
             )
+
+
+def _bootstrap_snapshot(engine: WorldEngine) -> WorldSnapshot:
+    """Build the tick-0 durable bootstrap checkpoint from a live engine."""
+    draft = WorldSnapshot(
+        snapshot_id=SnapshotId(f"bootstrap-{engine.run_id.value}"),
+        run_id=engine.run_id,
+        world_id=engine.world_id,
+        seed=engine._config.seed,
+        config=engine._config,
+        registrations=engine._registrations,
+        locations=tuple(engine._snapshot.world.state.locations.values()),
+        bodies=tuple(engine._snapshot.world.state.bodies.values()),
+        items=tuple(engine._snapshot.world.state.items.values()),
+        resources=tuple(engine._snapshot.world.state.resources.values()),
+        weather=tuple(engine._snapshot.world.state.weather.values()),
+        next_tick=Tick(0),
+        revision=engine.revision,
+        event_schema_version=EVENT_SCHEMA_VERSION,
+        projector_version=PROJECTOR_VERSION,
+        persistence_codec_version=PERSISTENCE_CODEC_VERSION,
+        derivation_version=engine._config.derivation_version or DERIVATION_VERSION_V3,
+        integrity_hash=PayloadHash("a" * 64),
+        predecessor_commit_hash=None,
+    )
+    return WorldSnapshot(
+        snapshot_id=draft.snapshot_id,
+        run_id=draft.run_id,
+        world_id=draft.world_id,
+        seed=draft.seed,
+        config=draft.config,
+        registrations=draft.registrations,
+        locations=draft.locations,
+        bodies=draft.bodies,
+        items=draft.items,
+        resources=draft.resources,
+        weather=draft.weather,
+        next_tick=draft.next_tick,
+        revision=draft.revision,
+        event_schema_version=draft.event_schema_version,
+        projector_version=draft.projector_version,
+        persistence_codec_version=draft.persistence_codec_version,
+        derivation_version=draft.derivation_version,
+        integrity_hash=hash_snapshot(draft),
+        predecessor_commit_hash=None,
+    )
+
+
+def _pending_record(
+    run_id: RunId, pending: PendingRuntimeFinalization
+) -> PendingFinalizationRecord:
+    """Metadata-only outbox envelope (no memory/prompt payloads)."""
+    return PendingFinalizationRecord(
+        run_id=run_id,
+        agent_id=pending.submission.agent_id.value,
+        tick=pending.tick,
+        invocation_id=pending.invocation_id,
+        integrity_hash=pending.integrity_hash,
+        codec_version=PENDING_FINALIZATION_CODEC_VERSION,
+        payload={
+            "observation_key": list(pending.observation_key),
+            "effective_command_kind": pending.effective_command_kind,
+            "prior_status": pending.prior_status.value,
+            "next_status": pending.next_status.value,
+            "has_subjective_batch": pending.subjective_batch is not None,
+        },
+        status=PendingFinalizationStatus.PENDING,
+    )

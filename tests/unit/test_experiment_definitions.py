@@ -68,7 +68,9 @@ def test_experiment_b_c_d_and_stable_fingerprint() -> None:
     b = experiment_b_imagination(base)
     c = experiment_c_mortality(base)
     d = experiment_d_drives(base)
-    assert {item.runner_config.agents[0].cognition.imagination_mode for item in b.conditions} == {
+    assert {
+        item.runner_config.agents[0].cognition.imagination_mode for item in b.conditions
+    } == {
         ImaginationMode.DISABLED,
         ImaginationMode.ENABLED,
     }
