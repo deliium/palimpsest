@@ -437,3 +437,45 @@ def test_encode_domain_rejects_persistence_types() -> None:
     with pytest.raises(DomainSerializationError) as manifest:
         encode_domain(_manifest())
     assert manifest.value.code == "unsupported_type"
+
+
+def test_derivation_v3_config_round_trips_stochastic_identity() -> None:
+    from world.models import default_physical_rules
+
+    from simulation.models import StochasticIdentity
+
+    seed = 99
+    config = SimulationRunConfig(
+        seed=seed,
+        physical_rules=default_physical_rules(),
+        stochastic_identity=StochasticIdentity("cmp-round-trip"),
+    )
+    assert config.derivation_version == "v3"
+    snapshot = WorldSnapshot(
+        snapshot_id=SnapshotId("snap-v3"),
+        run_id=RunId("run-v3-a"),
+        world_id=WorldId("world-v3"),
+        seed=seed,
+        config=config,
+        registrations=(AgentRegistration(AgentId("agent-1"), EntityId("body-1")),),
+        locations=(make_location("loc-1", name="Camp"),),
+        bodies=(_alive_body(),),
+        items=(),
+        resources=(),
+        weather=(make_weather(),),
+        next_tick=Tick(0),
+        revision=WorldRevision(0),
+        event_schema_version=EVENT_SCHEMA_VERSION,
+        projector_version=PROJECTOR_VERSION,
+        persistence_codec_version=PERSISTENCE_CODEC_VERSION,
+        derivation_version="v3",
+        integrity_hash=PayloadHash(_HASH_A),
+        predecessor_commit_hash=None,
+    )
+    decoded = decode_persistence(encode_persistence(snapshot), WorldSnapshot)
+    assert isinstance(decoded, WorldSnapshot)
+    assert decoded.config == config
+    assert decoded.config.stochastic_identity == StochasticIdentity("cmp-round-trip")
+    document = json.loads(encode_persistence(snapshot).decode("utf-8"))
+    assert document["data"]["config"]["stochastic_identity"] == "cmp-round-trip"
+    assert document["data"]["config"]["derivation_version"] == "v3"

@@ -497,7 +497,7 @@ def _versions_compatible(
         return False
     if persistence_codec_version not in ACCEPTED_PERSISTENCE_CODEC_VERSIONS:
         return False
-    if derivation_version not in {DERIVATION_VERSION, "v1", "v2"}:
+    if derivation_version not in {DERIVATION_VERSION, "v1", "v2", "v3"}:
         return False
     return schema_projector_compatible(
         event_schema_version=event_schema_version,

@@ -1,0 +1,161 @@
+"""Unit tests for cognition loop configuration and treatments."""
+
+from __future__ import annotations
+
+import pytest
+
+from agents.cognition.configuration import (
+    CognitionDriveOverride,
+    CognitionImaginationMode,
+    CognitionLoopConfig,
+    CognitionMemoryMode,
+    CognitionMortalityAppraisalMode,
+    build_cognitive_loop,
+    production_cognition_config,
+)
+from agents.cognition.defaults import PresentStateImagination, default_cognitive_loop
+from agents.cognition.imagination import ImaginationEngine
+from agents.cognition.models import ReferenceEpisode, RetrievedMemoryContext, episode_facts
+from agents.cognition.motivation import MotivationAppraisal
+from agents.models import AgentId, DriveKind
+from memory.models import (
+    ConceptMention,
+    EntityMention,
+    MemoryId,
+    MemoryProvenance,
+    MemorySituationContext,
+    MemorySourceKind,
+    MemoryTrace,
+    MentionId,
+    WorldRevision,
+)
+
+
+def test_production_defaults_match_legacy_default_loop() -> None:
+    config = production_cognition_config()
+    assert config.memory_mode is CognitionMemoryMode.RECONSTRUCTIVE
+    assert config.imagination_mode is CognitionImaginationMode.ENABLED
+    assert (
+        config.mortality_appraisal_mode is CognitionMortalityAppraisalMode.ENABLED
+    )
+    loop = default_cognitive_loop()
+    assert type(loop._futures) is ImaginationEngine
+    assert type(loop._motivation) is MotivationAppraisal
+
+
+def test_build_loop_selects_present_state_and_disabled_mortality() -> None:
+    config = CognitionLoopConfig(
+        imagination_mode=CognitionImaginationMode.DISABLED,
+        mortality_appraisal_mode=CognitionMortalityAppraisalMode.DISABLED,
+    )
+    loop = build_cognitive_loop(config)
+    assert type(loop._futures) is PresentStateImagination
+    assert loop._motivation._mortality_appraisal_enabled is False
+
+
+def test_drive_overrides_resolve_complete_profile() -> None:
+    config = CognitionLoopConfig(
+        drive_overrides=(
+            CognitionDriveOverride(
+                kind=DriveKind.CURIOSITY, baseline=0.9, sensitivity=0.2
+            ),
+        )
+    )
+    profile = config.resolve_drive_profile(AgentId("agent-1"))
+    curiosity = next(d for d in profile.dispositions if d.kind is DriveKind.CURIOSITY)
+    assert curiosity.baseline == 0.9
+    assert curiosity.sensitivity == 0.2
+    hunger = next(d for d in profile.dispositions if d.kind is DriveKind.HUNGER)
+    assert hunger.baseline == 0.5
+
+
+def test_reference_episode_from_trace_is_lossless() -> None:
+    owner = AgentId("agent-1")
+    trace = MemoryTrace(
+        memory_id=MemoryId("mem-1"),
+        owner_id=owner,
+        world_revision=WorldRevision(0),
+        concepts=(ConceptMention(mention_id=MentionId("c1"), concept="danger"),),
+        entities=(EntityMention(mention_id=MentionId("e1"), label="wolf"),),
+        relations=(),
+        context=MemorySituationContext(),
+        emotional_salience=0.7,
+        confidence=0.8,
+        provenance=MemoryProvenance(
+            kind=MemorySourceKind.DIRECT_OBSERVATION, source_tick=1
+        ),
+        created_tick=1,
+        source_tick=1,
+        last_access_tick=1,
+        access_count=0,
+    )
+    episode = ReferenceEpisode.from_trace(
+        trace, policy_id="cognition-reference", policy_version="memory-policy-v1"
+    )
+    assert episode.source_memory_id == trace.memory_id
+    assert episode.concepts == trace.concepts
+    assert episode.confidence == trace.confidence
+    assert not hasattr(episode, "used_provider")
+    context = RetrievedMemoryContext(
+        owner_id=owner,
+        memory_ids=(trace.memory_id,),
+        belief_ids=(),
+        confidence=0.8,
+        reference_episodes=(episode,),
+    )
+    facts = episode_facts(context)
+    assert len(facts) == 1
+    assert facts[0].episode_kind == "reference"
+    assert facts[0].source_memory_ids == (trace.memory_id,)
+
+
+def test_retrieved_context_rejects_mixed_episode_channels() -> None:
+    from memory.models import (
+        ReconstructionId,
+        ReconstructedMemory,
+    )
+
+    owner = AgentId("agent-1")
+    reference = ReferenceEpisode(
+        episode_id="ref-1",
+        owner_id=owner,
+        source_memory_id=MemoryId("mem-1"),
+        narrative="n",
+        concepts=(),
+        entities=(),
+        relations=(),
+        context=MemorySituationContext(),
+        confidence=1.0,
+        emotional_salience=0.0,
+        created_tick=0,
+        source_tick=0,
+        policy_id="cognition-reference",
+        policy_version="memory-policy-v1",
+    )
+    reconstructed = ReconstructedMemory(
+        reconstruction_id=ReconstructionId("recon-1"),
+        owner_id=owner,
+        narrative="story",
+        concepts=(),
+        entities=(),
+        relations=(),
+        context=MemorySituationContext(),
+        confidence=1.0,
+        emotional_salience=0.0,
+        source_memory_ids=(MemoryId("mem-1"),),
+        generation=1,
+        reconstructed_at_tick=0,
+        policy_id="p",
+        policy_version="1",
+        used_provider=False,
+        fallback_used=False,
+    )
+    with pytest.raises(ValueError, match="cannot mix"):
+        RetrievedMemoryContext(
+            owner_id=owner,
+            memory_ids=(MemoryId("mem-1"),),
+            belief_ids=(),
+            confidence=1.0,
+            reconstructions=(reconstructed,),
+            reference_episodes=(reference,),
+        )

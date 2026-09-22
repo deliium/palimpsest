@@ -17,7 +17,7 @@ from typing import Any, Final
 from agents.models import AgentId
 from simulation.bootstrap import AgentRegistration
 from simulation.clock import Tick
-from simulation.models import RunId, SimulationRunConfig
+from simulation.models import RunId, SimulationRunConfig, StochasticIdentity
 from simulation.persistence import (
     ACCEPTED_PERSISTENCE_CODEC_VERSIONS,
     PERSISTENCE_CODEC_VERSION,
@@ -567,6 +567,9 @@ def _encode_config(config: SimulationRunConfig) -> dict[str, Any]:
             raise _map_domain_error(exc) from exc
         payload["derivation_version"] = config.derivation_version
         payload["rules_fingerprint"] = physical_rules_fingerprint(config.physical_rules)
+    if config.stochastic_identity is not None:
+        payload["derivation_version"] = config.derivation_version
+        payload["stochastic_identity"] = config.stochastic_identity.value
     return payload
 
 
@@ -579,7 +582,13 @@ def _decode_config(data: dict[str, Any], *, path: str) -> SimulationRunConfig:
             raise
         except (TypeError, ValueError) as exc:
             raise PersistenceSerializationError("invalid_model", path) from exc
-    allowed = {"seed", "physical_rules", "derivation_version", "rules_fingerprint"}
+    allowed = {
+        "seed",
+        "physical_rules",
+        "derivation_version",
+        "rules_fingerprint",
+        "stochastic_identity",
+    }
     if keys - allowed or "seed" not in keys:
         raise PersistenceSerializationError("invalid_fields", path)
     rules: PhysicalRules | None = None
@@ -605,16 +614,33 @@ def _decode_config(data: dict[str, Any], *, path: str) -> SimulationRunConfig:
         if "derivation_version" in data
         else None
     )
+    stochastic = None
+    if "stochastic_identity" in data:
+        try:
+            stochastic = StochasticIdentity(
+                _str_field(data, "stochastic_identity", path=path)
+            )
+        except (TypeError, ValueError) as exc:
+            raise PersistenceSerializationError(
+                "invalid_model", f"{path}.stochastic_identity"
+            ) from exc
     try:
         return SimulationRunConfig(
             seed=_nonneg_int_field(data, "seed", path=path),
             physical_rules=rules,
             derivation_version=derivation,
+            stochastic_identity=stochastic,
         )
     except PersistenceSerializationError:
         raise
     except (TypeError, ValueError) as exc:
-        raise PersistenceSerializationError("invalid_model", path) from exc
+        code = "invalid_model"
+        message = str(exc)
+        if "stochastic_identity_absent" in message:
+            code = "stochastic_identity_absent"
+        elif "stochastic_identity_mismatch" in message:
+            code = "stochastic_identity_mismatch"
+        raise PersistenceSerializationError(code, path) from exc
 
 
 def _encode_registration(value: AgentRegistration) -> dict[str, Any]:

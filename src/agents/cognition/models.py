@@ -33,9 +33,13 @@ from memory.beliefs import (
 from memory.models import (
     Belief,
     BeliefId,
+    ConceptMention,
+    EntityMention,
     MemoryAccessReceipt,
     MemoryId,
     MemoryRankedHit,
+    MemoryRelation,
+    MemorySituationContext,
     MemoryTrace,
     ReconsolidationIntent,
     ReconstructedMemory,
@@ -85,6 +89,8 @@ __all__ = [
     "PerceivedNeedPressures",
     "PerceptionClaimCode",
     "PossibleFutures",
+    "EpisodeFacts",
+    "ReferenceEpisode",
     "RetrievedMemoryContext",
     "SelectedIntention",
     "SelfBeliefState",
@@ -101,6 +107,7 @@ __all__ = [
     "UncertaintyBand",
     "action_direction_for_intention",
     "diagnostic_projection",
+    "episode_facts",
     "intention_for_action_direction",
     "project_legacy_self_belief_state",
     "project_self_model",
@@ -859,13 +866,190 @@ class InterpretedPerception:
 
 
 @dataclass(frozen=True, slots=True)
-class RetrievedMemoryContext:
-    """Owner-scoped reconstructive recall with scientific source metadata.
+class EpisodeFacts:
+    """Shared read-only episode facts for communication and imagination.
 
-    ``reconstructions`` are the remembered episodes for downstream cognition.
-    Ranked hits and pending access receipts remain scientific evidence only and
-    must never be treated as the remembered episode itself. Operational logs
-    must never serialize reconstruction or hit payloads.
+    Reconstruction-only generation/provider/lineage fields are intentionally
+    absent so reference and reconstructed episodes can share one consumer path.
+    """
+
+    owner_id: AgentId
+    concepts: tuple[ConceptMention, ...]
+    entities: tuple[EntityMention, ...]
+    relations: tuple[MemoryRelation, ...]
+    confidence: float
+    emotional_salience: float
+    source_memory_ids: tuple[MemoryId, ...]
+    narrative: str
+    episode_kind: str
+    episode_id: str
+
+
+@dataclass(frozen=True, slots=True)
+class ReferenceEpisode:
+    """Lossless owner-scoped projection of a stored trace for exact memory.
+
+    Distinct from ``ReconstructedMemory``: no reconstruction lineage, provider
+    flags, generation, or fabricated reconstruction identity.
+    """
+
+    episode_id: str
+    owner_id: AgentId
+    source_memory_id: MemoryId
+    narrative: str
+    concepts: tuple[ConceptMention, ...]
+    entities: tuple[EntityMention, ...]
+    relations: tuple[MemoryRelation, ...]
+    context: MemorySituationContext
+    confidence: float
+    emotional_salience: float
+    created_tick: int
+    source_tick: int
+    policy_id: str
+    policy_version: str
+
+    def __post_init__(self) -> None:
+        if type(self.owner_id) is not AgentId:
+            raise TypeError("ReferenceEpisode.owner_id must be AgentId")
+        if type(self.source_memory_id) is not MemoryId:
+            raise TypeError("ReferenceEpisode.source_memory_id must be MemoryId")
+        if type(self.context) is not MemorySituationContext:
+            raise TypeError("ReferenceEpisode.context must be MemorySituationContext")
+        object.__setattr__(
+            self,
+            "episode_id",
+            require_bounded_text(
+                "ReferenceEpisode.episode_id", self.episode_id, max_length=128
+            ),
+        )
+        object.__setattr__(
+            self,
+            "narrative",
+            require_bounded_text(
+                "ReferenceEpisode.narrative", self.narrative, max_length=4096
+            ),
+        )
+        object.__setattr__(
+            self,
+            "confidence",
+            require_confidence("ReferenceEpisode.confidence", self.confidence),
+        )
+        object.__setattr__(
+            self,
+            "emotional_salience",
+            require_confidence(
+                "ReferenceEpisode.emotional_salience", self.emotional_salience
+            ),
+        )
+        object.__setattr__(
+            self,
+            "created_tick",
+            require_exact_nonneg_int("ReferenceEpisode.created_tick", self.created_tick),
+        )
+        object.__setattr__(
+            self,
+            "source_tick",
+            require_exact_nonneg_int("ReferenceEpisode.source_tick", self.source_tick),
+        )
+        object.__setattr__(
+            self,
+            "policy_id",
+            require_bounded_text(
+                "ReferenceEpisode.policy_id", self.policy_id, max_length=64
+            ),
+        )
+        object.__setattr__(
+            self,
+            "policy_version",
+            require_bounded_text(
+                "ReferenceEpisode.policy_version",
+                self.policy_version,
+                max_length=_MAX_COMPONENT_VERSION_CHARS,
+            ),
+        )
+        object.__setattr__(self, "concepts", tuple(self.concepts))
+        object.__setattr__(self, "entities", tuple(self.entities))
+        object.__setattr__(self, "relations", tuple(self.relations))
+
+    @classmethod
+    def from_trace(
+        cls,
+        trace: MemoryTrace,
+        *,
+        policy_id: str,
+        policy_version: str,
+    ) -> ReferenceEpisode:
+        """Project a stored trace into a reference episode without reconstruction."""
+        if type(trace) is not MemoryTrace:
+            raise TypeError("from_trace requires MemoryTrace")
+        narrative = (
+            f"reference:{trace.memory_id.value}:t{trace.source_tick}:"
+            f"c{len(trace.concepts)}:e{len(trace.entities)}:r{len(trace.relations)}"
+        )
+        return cls(
+            episode_id=f"ref-{trace.memory_id.value}",
+            owner_id=trace.owner_id,
+            source_memory_id=trace.memory_id,
+            narrative=narrative,
+            concepts=trace.concepts,
+            entities=trace.entities,
+            relations=trace.relations,
+            context=trace.context,
+            confidence=trace.confidence,
+            emotional_salience=trace.emotional_salience,
+            created_tick=trace.created_tick,
+            source_tick=trace.source_tick,
+            policy_id=policy_id,
+            policy_version=policy_version,
+        )
+
+
+def episode_facts(context: RetrievedMemoryContext) -> tuple[EpisodeFacts, ...]:
+    """Return shared episode facts from reference or reconstructed channels."""
+    if type(context) is not RetrievedMemoryContext:
+        raise TypeError("episode_facts requires RetrievedMemoryContext")
+    facts: list[EpisodeFacts] = []
+    for item in context.reference_episodes:
+        facts.append(
+            EpisodeFacts(
+                owner_id=item.owner_id,
+                concepts=item.concepts,
+                entities=item.entities,
+                relations=item.relations,
+                confidence=item.confidence,
+                emotional_salience=item.emotional_salience,
+                source_memory_ids=(item.source_memory_id,),
+                narrative=item.narrative,
+                episode_kind="reference",
+                episode_id=item.episode_id,
+            )
+        )
+    for item in context.reconstructions:
+        facts.append(
+            EpisodeFacts(
+                owner_id=item.owner_id,
+                concepts=item.concepts,
+                entities=item.entities,
+                relations=item.relations,
+                confidence=item.confidence,
+                emotional_salience=item.emotional_salience,
+                source_memory_ids=item.source_memory_ids,
+                narrative=item.narrative,
+                episode_kind="reconstructed",
+                episode_id=item.reconstruction_id.value,
+            )
+        )
+    return tuple(facts)
+
+
+@dataclass(frozen=True, slots=True)
+class RetrievedMemoryContext:
+    """Owner-scoped recall with reconstructive and/or exact-reference episodes.
+
+    ``reconstructions`` and ``reference_episodes`` are the remembered episode
+    channels for downstream cognition. Ranked hits and pending access receipts
+    remain scientific evidence only. Reconstruction-only fields are unavailable
+    on reference episodes; consumers must use ``episode_facts``.
     """
 
     owner_id: AgentId
@@ -879,6 +1063,7 @@ class RetrievedMemoryContext:
     retrieval_tick: int | None = None
     scoring_policy_version: str | None = None
     reconstructions: tuple[ReconstructedMemory, ...] = ()
+    reference_episodes: tuple[ReferenceEpisode, ...] = ()
     reconsolidation: ReconsolidationIntent | None = None
     reconstruction_policy_version: str | None = None
     semantic_beliefs: tuple[SemanticBelief, ...] = ()
@@ -998,6 +1183,33 @@ class RetrievedMemoryContext:
             if item.owner_id != self.owner_id:
                 raise ValueError("RetrievedMemoryContext reconstruction owner mismatch")
         object.__setattr__(self, "reconstructions", reconstructions)
+        if isinstance(self.reference_episodes, (set, frozenset, Mapping)):
+            raise TypeError("RetrievedMemoryContext.reference_episodes must be ordered")
+        if isinstance(self.reference_episodes, (str, bytes)) or not isinstance(
+            self.reference_episodes, Sequence
+        ):
+            raise TypeError("RetrievedMemoryContext.reference_episodes must be ordered")
+        references = tuple(self.reference_episodes)
+        if len(references) > _MAX_MEMORY_REFS:
+            raise ValueError(
+                "RetrievedMemoryContext.reference_episodes exceeds maximum length"
+            )
+        for item in references:
+            if type(item) is not ReferenceEpisode:
+                raise TypeError(
+                    "RetrievedMemoryContext.reference_episodes entries must be "
+                    "ReferenceEpisode"
+                )
+            if item.owner_id != self.owner_id:
+                raise ValueError(
+                    "RetrievedMemoryContext reference episode owner mismatch"
+                )
+        if reconstructions and references:
+            raise ValueError(
+                "RetrievedMemoryContext cannot mix reconstructions and "
+                "reference_episodes"
+            )
+        object.__setattr__(self, "reference_episodes", references)
         if self.reconsolidation is not None:
             if type(self.reconsolidation) is not ReconsolidationIntent:
                 raise TypeError(
@@ -1055,6 +1267,7 @@ class RetrievedMemoryContext:
             f"semantic_belief_count={len(self.semantic_beliefs)}, "
             f"hit_count={len(self.ranked_hits)}, "
             f"reconstruction_count={len(self.reconstructions)}, "
+            f"reference_episode_count={len(self.reference_episodes)}, "
             f"pending_access_count={len(self.pending_accesses)}, "
             f"has_reconsolidation={self.reconsolidation is not None}, "
             f"candidate_count={self.candidate_count}, "

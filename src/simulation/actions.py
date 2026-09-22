@@ -18,7 +18,7 @@ from simulation.identifiers import (
     derive_request_id,
 )
 from simulation.models import RunId, SimulationRunConfig
-from simulation.randomness import StreamScope
+from simulation.randomness import StreamScope, objective_stream_identity
 from world.actions import (
     ActionProposal,
     ActionRequest,
@@ -157,6 +157,7 @@ def derive_engine_event_id(
 
 def future_effect_scope(
     *,
+    config: SimulationRunConfig,
     run_id: RunId,
     world_id: WorldId,
     tick: Tick,
@@ -166,6 +167,7 @@ def future_effect_scope(
 ) -> StreamScope:
     """Canonical action-scoped random-effect stream identity."""
     return physical_action_effect_scope(
+        config=config,
         run_id=run_id,
         world_id=world_id,
         tick=tick,
@@ -177,6 +179,7 @@ def future_effect_scope(
 
 def physical_action_effect_scope(
     *,
+    config: SimulationRunConfig,
     run_id: RunId,
     world_id: WorldId,
     tick: Tick,
@@ -185,6 +188,8 @@ def physical_action_effect_scope(
     purpose: str,
 ) -> StreamScope:
     """Named stream for one agent action purpose within a tick."""
+    if type(config) is not SimulationRunConfig:
+        raise TypeError("physical_action_effect_scope requires SimulationRunConfig")
     if type(run_id) is not RunId:
         raise TypeError("physical_action_effect_scope requires RunId")
     if type(world_id) is not WorldId:
@@ -196,10 +201,11 @@ def physical_action_effect_scope(
     if type(purpose) is not str or not purpose:
         raise ValueError("purpose must be a non-empty str")
     ordinal_value = require_exact_nonneg_int("ordinal", ordinal)
+    stream_identity = objective_stream_identity(config, run_id=run_id)
     return StreamScope(
         namespace="effect",
         names=(
-            run_id.value,
+            stream_identity,
             world_id.value,
             f"tick:{tick.value}",
             f"ordinal:{ordinal_value}",
@@ -211,6 +217,7 @@ def physical_action_effect_scope(
 
 def physical_system_effect_scope(
     *,
+    config: SimulationRunConfig,
     run_id: RunId,
     world_id: WorldId,
     tick: Tick,
@@ -218,6 +225,8 @@ def physical_system_effect_scope(
     purpose: str,
 ) -> StreamScope:
     """Named stream for one autonomous system purpose within a tick."""
+    if type(config) is not SimulationRunConfig:
+        raise TypeError("physical_system_effect_scope requires SimulationRunConfig")
     if type(run_id) is not RunId:
         raise TypeError("physical_system_effect_scope requires RunId")
     if type(world_id) is not WorldId:
@@ -228,10 +237,11 @@ def physical_system_effect_scope(
         raise TypeError("physical_system_effect_scope requires EntityId")
     if type(purpose) is not str or not purpose:
         raise ValueError("purpose must be a non-empty str")
+    stream_identity = objective_stream_identity(config, run_id=run_id)
     return StreamScope(
         namespace="system-effect",
         names=(
-            run_id.value,
+            stream_identity,
             world_id.value,
             f"tick:{tick.value}",
             f"entity:{entity_id.value}",

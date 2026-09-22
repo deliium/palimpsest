@@ -1,0 +1,286 @@
+"""Cognition-owned loop configuration and factory.
+
+This module never imports ``simulation`` or ``experiments``. Runner modes are
+translated at the composition boundary into these cognition-local policies.
+"""
+
+from __future__ import annotations
+
+import logging
+import math
+from collections.abc import Sequence
+from dataclasses import dataclass
+from enum import StrEnum
+from typing import Final
+
+from agents.cognition.contracts import FutureImagination, MemoryRetriever, MotivationEvaluator
+from agents.cognition.loop import CognitiveLoop
+from agents.models import (
+    REQUIRED_DRIVE_KINDS,
+    AgentId,
+    DriveDisposition,
+    DriveKind,
+    DriveProfile,
+)
+
+_LOG = logging.getLogger("agents.cognition.configuration")
+
+COGNITION_FACTORY_VERSION: Final[str] = "cognition-factory-v1"
+MEMORY_POLICY_VERSION: Final[str] = "memory-policy-v1"
+IMAGINATION_POLICY_VERSION: Final[str] = "imagination-policy-v1"
+MORTALITY_APPRAISAL_POLICY_VERSION: Final[str] = "mortality-appraisal-policy-v1"
+
+_OVERRIDEABLE: Final[frozenset[DriveKind]] = frozenset(
+    {
+        DriveKind.CURIOSITY,
+        DriveKind.SAFETY,
+        DriveKind.BELONGING,
+        DriveKind.STATUS,
+    }
+)
+
+
+class CognitionMemoryMode(StrEnum):
+    """Closed memory retrieval treatments owned by cognition."""
+
+    REFERENCE = "reference"
+    RECONSTRUCTIVE = "reconstructive"
+
+
+class CognitionImaginationMode(StrEnum):
+    """Closed imagination treatments. Disabled is non-counterfactual."""
+
+    DISABLED = "disabled"
+    ENABLED = "enabled"
+
+
+class CognitionMortalityAppraisalMode(StrEnum):
+    """Whether motivation appraises mortality/opportunity foreclosure."""
+
+    DISABLED = "disabled"
+    ENABLED = "enabled"
+
+
+def _unit_interval(name: str, value: object) -> float:
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        raise ValueError(f"{name}: not_unit_interval")
+    number = float(value)
+    if not math.isfinite(number) or number < 0.0 or number > 1.0:
+        raise ValueError(f"{name}: not_unit_interval")
+    return 0.0 if number == 0.0 else number
+
+
+@dataclass(frozen=True, slots=True)
+class CognitionDriveOverride:
+    """Sparse override for one experiment-controlled drive disposition."""
+
+    kind: DriveKind
+    baseline: float | None = None
+    sensitivity: float | None = None
+
+    def __post_init__(self) -> None:
+        if type(self.kind) is not DriveKind:
+            raise TypeError("CognitionDriveOverride.kind must be DriveKind")
+        if self.kind not in _OVERRIDEABLE:
+            raise ValueError("CognitionDriveOverride.kind is not overrideable")
+        if self.baseline is None and self.sensitivity is None:
+            raise ValueError("CognitionDriveOverride requires baseline or sensitivity")
+        if self.baseline is not None:
+            object.__setattr__(
+                self, "baseline", _unit_interval("baseline", self.baseline)
+            )
+        if self.sensitivity is not None:
+            object.__setattr__(
+                self, "sensitivity", _unit_interval("sensitivity", self.sensitivity)
+            )
+
+
+@dataclass(frozen=True, slots=True)
+class CognitionLoopConfig:
+    """Explicit policies used to assemble a fixed ``CognitiveLoop``."""
+
+    memory_mode: CognitionMemoryMode = CognitionMemoryMode.RECONSTRUCTIVE
+    imagination_mode: CognitionImaginationMode = CognitionImaginationMode.ENABLED
+    mortality_appraisal_mode: CognitionMortalityAppraisalMode = (
+        CognitionMortalityAppraisalMode.ENABLED
+    )
+    drive_overrides: tuple[CognitionDriveOverride, ...] = ()
+    memory_policy_version: str = MEMORY_POLICY_VERSION
+    imagination_policy_version: str = IMAGINATION_POLICY_VERSION
+    mortality_appraisal_policy_version: str = MORTALITY_APPRAISAL_POLICY_VERSION
+    factory_version: str = COGNITION_FACTORY_VERSION
+
+    def __post_init__(self) -> None:
+        if type(self.memory_mode) is not CognitionMemoryMode:
+            raise TypeError("memory_mode must be CognitionMemoryMode")
+        if type(self.imagination_mode) is not CognitionImaginationMode:
+            raise TypeError("imagination_mode must be CognitionImaginationMode")
+        if type(self.mortality_appraisal_mode) is not CognitionMortalityAppraisalMode:
+            raise TypeError(
+                "mortality_appraisal_mode must be CognitionMortalityAppraisalMode"
+            )
+        if self.memory_policy_version != MEMORY_POLICY_VERSION:
+            raise ValueError("unsupported memory_policy_version")
+        if self.imagination_policy_version != IMAGINATION_POLICY_VERSION:
+            raise ValueError("unsupported imagination_policy_version")
+        if self.mortality_appraisal_policy_version != MORTALITY_APPRAISAL_POLICY_VERSION:
+            raise ValueError("unsupported mortality_appraisal_policy_version")
+        if self.factory_version != COGNITION_FACTORY_VERSION:
+            raise ValueError("unsupported factory_version")
+        if isinstance(self.drive_overrides, (set, frozenset)):
+            raise TypeError("drive_overrides must be ordered")
+        if isinstance(self.drive_overrides, (str, bytes)) or not isinstance(
+            self.drive_overrides, Sequence
+        ):
+            raise TypeError("drive_overrides must be ordered")
+        overrides = tuple(self.drive_overrides)
+        seen: set[DriveKind] = set()
+        for item in overrides:
+            if type(item) is not CognitionDriveOverride:
+                raise TypeError("drive_overrides entries must be CognitionDriveOverride")
+            if item.kind in seen:
+                raise ValueError("drive_overrides kinds must be unique")
+            seen.add(item.kind)
+        object.__setattr__(self, "drive_overrides", overrides)
+        _LOG.debug(
+            "cognition_config_validated",
+            extra={
+                "cognition": {
+                    "factory_version": self.factory_version,
+                    "memory_mode": self.memory_mode.value,
+                    "imagination_mode": self.imagination_mode.value,
+                    "mortality_appraisal_mode": self.mortality_appraisal_mode.value,
+                    "drive_override_count": len(self.drive_overrides),
+                    "status": "validated",
+                }
+            },
+        )
+
+    def resolve_drive_profile(self, owner_id: AgentId) -> DriveProfile:
+        """Build a complete owner-scoped profile with sparse overrides applied."""
+        if type(owner_id) is not AgentId:
+            raise TypeError("owner_id must be AgentId")
+        override_map = {item.kind: item for item in self.drive_overrides}
+        dispositions: list[DriveDisposition] = []
+        for kind in REQUIRED_DRIVE_KINDS:
+            baseline = 0.5
+            sensitivity = 0.5
+            override = override_map.get(kind)
+            if override is not None:
+                if override.baseline is not None:
+                    baseline = override.baseline
+                if override.sensitivity is not None:
+                    sensitivity = override.sensitivity
+            dispositions.append(
+                DriveDisposition(kind=kind, baseline=baseline, sensitivity=sensitivity)
+            )
+        return DriveProfile(owner_id=owner_id, dispositions=tuple(dispositions))
+
+    def condition_fingerprint_material(self) -> dict[str, object]:
+        """Stable, payload-free material for condition fingerprints."""
+        return {
+            "drive_overrides": [
+                {
+                    "baseline": item.baseline,
+                    "kind": item.kind.value,
+                    "sensitivity": item.sensitivity,
+                }
+                for item in self.drive_overrides
+            ],
+            "factory_version": self.factory_version,
+            "imagination_mode": self.imagination_mode.value,
+            "imagination_policy_version": self.imagination_policy_version,
+            "memory_mode": self.memory_mode.value,
+            "memory_policy_version": self.memory_policy_version,
+            "mortality_appraisal_mode": self.mortality_appraisal_mode.value,
+            "mortality_appraisal_policy_version": (
+                self.mortality_appraisal_policy_version
+            ),
+        }
+
+
+def production_cognition_config() -> CognitionLoopConfig:
+    """Current production defaults (reconstructive + imagination + mortality)."""
+    return CognitionLoopConfig()
+
+
+def build_cognitive_loop(
+    config: CognitionLoopConfig | None = None,
+    *,
+    memory: MemoryRetriever | None = None,
+    futures: FutureImagination | None = None,
+    motivation: MotivationEvaluator | None = None,
+) -> CognitiveLoop:
+    """Assemble a ``CognitiveLoop`` from explicit policies.
+
+    Optional component overrides are for tests. Production wiring selects
+    memory/imagination/motivation implementations from ``config`` modes when
+    overrides are omitted.
+    """
+    resolved = config if config is not None else production_cognition_config()
+    if type(resolved) is not CognitionLoopConfig:
+        raise TypeError("config must be CognitionLoopConfig")
+
+    from agents.cognition.communication import (
+        CommunicatedMemoryUpdateHook,
+        CompositeMemoryUpdateHook,
+    )
+    from agents.cognition.defaults import (
+        DirectSelfStateProjector,
+        DirectSituationModeler,
+        EmptyMemoryRetriever,
+        LiteralPerceptionInterpreter,
+        PresentStateImagination,
+        SubjectiveRevisionHook,
+    )
+    from agents.cognition.deliberation import (
+        CommandPlanner,
+        MultiCriteriaIntentionSelector,
+    )
+    from agents.cognition.imagination import ImaginationEngine
+    from agents.cognition.motivation import MotivationAppraisal
+
+    if memory is None:
+        memory = EmptyMemoryRetriever()
+        # Caller/runner injects ScopedMemoryRetriever or ReferenceMemoryRetriever.
+    if futures is None:
+        if resolved.imagination_mode is CognitionImaginationMode.DISABLED:
+            futures = PresentStateImagination()
+        else:
+            futures = ImaginationEngine()
+    if motivation is None:
+        motivation = MotivationAppraisal(
+            mortality_appraisal_enabled=(
+                resolved.mortality_appraisal_mode
+                is CognitionMortalityAppraisalMode.ENABLED
+            )
+        )
+
+    _LOG.debug(
+        "cognitive_loop_built",
+        extra={
+            "cognition": {
+                "factory_version": resolved.factory_version,
+                "memory_mode": resolved.memory_mode.value,
+                "imagination_mode": resolved.imagination_mode.value,
+                "mortality_appraisal_mode": resolved.mortality_appraisal_mode.value,
+                "status": "built",
+            }
+        },
+    )
+    return CognitiveLoop(
+        perception=LiteralPerceptionInterpreter(),
+        memory=memory,
+        situation=DirectSituationModeler(),
+        self_state=DirectSelfStateProjector(),
+        futures=futures,
+        motivation=motivation,
+        intention=MultiCriteriaIntentionSelector(),
+        planner=CommandPlanner(),
+        memory_updates=CompositeMemoryUpdateHook(
+            (
+                CommunicatedMemoryUpdateHook(),
+                SubjectiveRevisionHook(),
+            )
+        ),
+    )

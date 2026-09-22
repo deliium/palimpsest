@@ -168,7 +168,12 @@ def activate_drives(
 class MotivationAppraisal:
     """Deterministic V1 appraisal over independent drives, goals, and mortality."""
 
-    __slots__ = ()
+    __slots__ = ("_mortality_appraisal_enabled",)
+
+    def __init__(self, *, mortality_appraisal_enabled: bool = True) -> None:
+        if type(mortality_appraisal_enabled) is not bool:
+            raise TypeError("mortality_appraisal_enabled must be bool")
+        self._mortality_appraisal_enabled = mortality_appraisal_enabled
 
     async def evaluate(
         self,
@@ -217,6 +222,7 @@ class MotivationAppraisal:
                     pressures=pressures,
                     self_state=self_state,
                     option_count=len(futures.futures),
+                    mortality_appraisal_enabled=self._mortality_appraisal_enabled,
                 )
             )
 
@@ -328,19 +334,22 @@ def _appraise_future(
     pressures: PerceivedNeedPressures,
     self_state: SelfModel,
     option_count: int,
+    mortality_appraisal_enabled: bool = True,
 ) -> FutureAppraisal:
     _ = pressures, self_state
     drive_effects = _refine_drive_effects(future.drive_effects, activation_map)
     goal_effects = _refine_goal_effects(future.goal_effects, active_goals)
     risks = future.risks
     uncertainty = future.uncertainty
-    mortality = _mortality_foreclosure(
-        future=future,
-        activation_map=activation_map,
-        active_goals=active_goals,
-        relationships=relationships,
-        option_count=option_count,
-    )
+    mortality = None
+    if mortality_appraisal_enabled:
+        mortality = _mortality_foreclosure(
+            future=future,
+            activation_map=activation_map,
+            active_goals=active_goals,
+            relationships=relationships,
+            option_count=option_count,
+        )
     support_drive = sum(
         1
         for effect in drive_effects

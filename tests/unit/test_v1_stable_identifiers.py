@@ -185,6 +185,35 @@ def test_derivation_v2_aliases_on_rules_fingerprint() -> None:
         )
 
 
+def test_derivation_v3_mixes_stochastic_identity_into_ids() -> None:
+    from world.models import default_physical_rules
+
+    from simulation.models import StochasticIdentity
+
+    rules = default_physical_rules()
+    left = SimulationRunConfig(
+        seed=42,
+        physical_rules=rules,
+        stochastic_identity=StochasticIdentity("arm-shared"),
+    )
+    right = SimulationRunConfig(
+        seed=42,
+        physical_rules=rules,
+        stochastic_identity=StochasticIdentity("arm-other"),
+    )
+    assert left.derivation_version == "v3"
+    assert derive_run_id(left) != derive_run_id(right)
+    assert derive_entity_id(left, "camp") != derive_entity_id(right, "camp")
+    assert derive_entity_id(left, "camp") == derive_entity_id(
+        SimulationRunConfig(
+            seed=42,
+            physical_rules=rules,
+            stochastic_identity=StochasticIdentity("arm-shared"),
+        ),
+        "camp",
+    )
+
+
 def test_factories_reject_empty_key_sets() -> None:
     config = SimulationRunConfig(seed=1)
     with pytest.raises(ValueError, match="at least one key"):

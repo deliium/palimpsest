@@ -8,17 +8,23 @@ are never used.
 from __future__ import annotations
 
 import hashlib
+import logging
 import random
 from collections.abc import Mapping
 from dataclasses import dataclass
 
 from simulation.models import (
     DERIVATION_VERSION_V2,
+    DERIVATION_VERSION_V3,
+    RunId,
     SimulationRunConfig,
     require_seed,
+    stochastic_identity_fingerprint,
 )
 from world.models import physical_rules_fingerprint
 from world.values import WeatherCondition
+
+_LOGGER = logging.getLogger("simulation.randomness")
 
 
 @dataclass(frozen=True, slots=True)
@@ -50,14 +56,57 @@ def _length_prefixed(value: bytes) -> bytes:
     return len(value).to_bytes(4, "big") + value
 
 
-def derive_stream_seed(config: SimulationRunConfig, scope: StreamScope) -> int:
-    hasher = hashlib.sha256()
+def _mix_config_material(hasher: object, config: SimulationRunConfig) -> None:
+    """Mix versioned replay-significant config into a derivation hasher."""
     assert config.derivation_version is not None
-    hasher.update(config.derivation_version.encode("utf-8"))
-    if config.derivation_version == DERIVATION_VERSION_V2:
+    update = hasher.update  # type: ignore[attr-defined]
+    update(config.derivation_version.encode("utf-8"))
+    if config.derivation_version in {DERIVATION_VERSION_V2, DERIVATION_VERSION_V3}:
         assert config.physical_rules is not None
         fingerprint = physical_rules_fingerprint(config.physical_rules).encode("ascii")
-        hasher.update(_length_prefixed(fingerprint))
+        update(_length_prefixed(fingerprint))
+    if config.derivation_version == DERIVATION_VERSION_V3:
+        assert config.stochastic_identity is not None
+        identity_bytes = config.stochastic_identity.value.encode("utf-8")
+        update(_length_prefixed(b"stochastic"))
+        update(_length_prefixed(identity_bytes))
+
+
+def objective_stream_identity(config: SimulationRunConfig, *, run_id: RunId) -> str:
+    """Return the scope identity used for objective world RNG streams.
+
+    Derivation-v3 substitutes ``stochastic_identity`` for durable ``RunId`` so
+    paired experiment arms share objective streams. Legacy v1/v2 retain
+    ``run_id`` for bit-compatible replay of persisted history.
+    """
+    if type(run_id) is not RunId:
+        raise TypeError("objective_stream_identity requires RunId")
+    assert config.derivation_version is not None
+    if config.derivation_version == DERIVATION_VERSION_V3:
+        if config.stochastic_identity is None:
+            raise ValueError(
+                "derivation-v3 requires stochastic_identity "
+                "(code=stochastic_identity_absent)"
+            )
+        identity = config.stochastic_identity.value
+        _LOGGER.debug(
+            "objective_stream_identity derivation_version=%s "
+            "stochastic_fingerprint_prefix=%s",
+            config.derivation_version,
+            stochastic_identity_fingerprint(config.stochastic_identity)[:12],
+        )
+        return identity
+    _LOGGER.debug(
+        "objective_stream_identity derivation_version=%s run_id=%s",
+        config.derivation_version,
+        run_id.value,
+    )
+    return run_id.value
+
+
+def derive_stream_seed(config: SimulationRunConfig, scope: StreamScope) -> int:
+    hasher = hashlib.sha256()
+    _mix_config_material(hasher, config)
     hasher.update(_length_prefixed(b"stream"))
     hasher.update(_length_prefixed(str(config.seed).encode("utf-8")))
     hasher.update(canonical_scope_bytes(scope))

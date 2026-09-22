@@ -3744,14 +3744,17 @@ def _optional_actor(raw: object, path: str) -> str:
 
 
 def _encode_export(value: SimulationExport) -> dict[str, Any]:
+    metadata: dict[str, Any] = {
+        "derivation_version": value.metadata.derivation_version,
+        "llm_replay": value.metadata.llm_replay,
+        "run_id": value.metadata.run_id.value,
+        "seed": value.metadata.seed,
+    }
+    if value.metadata.stochastic_identity is not None:
+        metadata["stochastic_identity"] = value.metadata.stochastic_identity.value
     return {
         "events": [_encode_world_event(event) for event in value.events],
-        "metadata": {
-            "derivation_version": value.metadata.derivation_version,
-            "llm_replay": value.metadata.llm_replay,
-            "run_id": value.metadata.run_id.value,
-            "seed": value.metadata.seed,
-        },
+        "metadata": metadata,
     }
 
 
@@ -3763,15 +3766,22 @@ def _decode_export(data: dict[str, Any], *, path: str) -> SimulationExport:
         raise DomainSerializationError("invalid_object", f"{path}.metadata")
     if not isinstance(events_raw, list):
         raise DomainSerializationError("invalid_array", f"{path}.events")
-    _require_keys(
-        metadata,
-        {"run_id", "seed", "derivation_version", "llm_replay"},
-        path=f"{path}.metadata",
-    )
+    required = {"run_id", "seed", "derivation_version", "llm_replay"}
+    _require_keys(metadata, required, path=f"{path}.metadata")
+    allowed = required | {"stochastic_identity"}
+    if set(metadata) - allowed:
+        raise DomainSerializationError("invalid_fields", f"{path}.metadata")
     llm_replay = metadata["llm_replay"]
     if llm_replay != LLM_REPLAY_REQUIREMENT:
         raise DomainSerializationError("invalid_model", f"{path}.metadata.llm_replay")
     try:
+        from simulation.models import StochasticIdentity
+
+        stochastic = None
+        if "stochastic_identity" in metadata:
+            stochastic = StochasticIdentity(
+                _str_field(metadata, "stochastic_identity", path=f"{path}.metadata")
+            )
         events = tuple(
             _decode_world_event(item, path=f"{path}.events[{index}]")
             for index, item in enumerate(events_raw)
@@ -3785,6 +3795,7 @@ def _decode_export(data: dict[str, Any], *, path: str) -> SimulationExport:
                     metadata, "derivation_version", path=f"{path}.metadata"
                 ),
                 llm_replay=LLM_REPLAY_REQUIREMENT,
+                stochastic_identity=stochastic,
             ),
             events=events,
         )

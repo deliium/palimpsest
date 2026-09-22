@@ -21,6 +21,7 @@ from agents.cognition.models import (
     MemoryUpdateKind,
     RetrievedMemoryContext,
     SelectedIntention,
+    episode_facts,
 )
 from agents.models import AgentId
 from memory.models import (
@@ -566,8 +567,8 @@ class DeterministicSocialMessagePolicy:
             ),
         )
         reconstructions = sorted(
-            (r for r in memory.reconstructions if r.owner_id == owner_id),
-            key=lambda item: (-item.confidence, item.reconstruction_id.value),
+            (r for r in episode_facts(memory) if r.owner_id == owner_id),
+            key=lambda item: (-item.confidence, item.episode_id),
         )
         communicated = _owned_communicated_traces(
             owner_id=owner_id,
@@ -627,7 +628,7 @@ class DeterministicSocialMessagePolicy:
                 utterance = origin_utterance(
                     text=_SAFE_ASK_TEXT,
                     speaker_id=speaker_id,
-                    communication_id=f"plan-ask-{recon.reconstruction_id.value}",
+                    communication_id=f"plan-ask-{recon.episode_id}",
                     sender_confidence=max(0.2, 1.0 - recon.confidence),
                     source_basis=CommunicationSourceBasis.RECONSTRUCTED_MEMORY,
                     concepts=tuple(item.concept for item in recon.concepts[:4]),
@@ -658,7 +659,7 @@ class DeterministicSocialMessagePolicy:
                         text=_SAFE_TELL_TEXT if not concepts else concepts[0],
                         speaker_id=speaker_id,
                         communication_id=(
-                            f"plan-retell-{recon.reconstruction_id.value}"
+                            f"plan-retell-{recon.episode_id}"
                         ),
                         sender_confidence=recon.confidence,
                         source_basis=CommunicationSourceBasis.RECONSTRUCTED_MEMORY,

@@ -1,7 +1,7 @@
 """Simulation application ports and composition-boundary diagnostics.
 
 Pure deterministic primitives do not log. These helpers emit run identity
-only: never random draws, exported events, prompts, or credentials.
+only: never random draws, exported events, prompts, credentials, or seeds.
 """
 
 from __future__ import annotations
@@ -16,8 +16,13 @@ from simulation.models import (
     SimulationExport,
     SimulationRunConfig,
     fingerprint_physical_rules,
+    stochastic_identity_fingerprint,
 )
 from simulation.randomness import StreamScope
+from simulation.runner_models import (
+    RunnerConfigDiagnostics,
+    describe_runner_config,
+)
 from world.events import WorldEvent
 
 _LOGGER = logging.getLogger("simulation.run")
@@ -36,11 +41,14 @@ def describe_run(
     run_id: RunId,
     scope: StreamScope | None = None,
 ) -> dict[str, str | int]:
-    """Secret-safe fields for DEBUG composition logs."""
+    """Secret-safe fields for DEBUG composition logs.
+
+    Never includes seed, stochastic identity source material, drive values,
+    or full configuration payloads.
+    """
     assert config.derivation_version is not None
     fields: dict[str, str | int] = {
         "run_id": run_id.value,
-        "seed": config.seed,
         "derivation_version": config.derivation_version,
     }
     if scope is not None:
@@ -50,6 +58,10 @@ def describe_run(
         fields["rules_fingerprint_prefix"] = fingerprint_physical_rules(
             config.physical_rules
         )[:12]
+    if config.stochastic_identity is not None:
+        fields["stochastic_fingerprint_prefix"] = stochastic_identity_fingerprint(
+            config.stochastic_identity
+        )[:12]
     return fields
 
 
@@ -58,12 +70,11 @@ def log_run_configured(
     run_id: RunId,
     scope: StreamScope | None = None,
 ) -> None:
-    """DEBUG: run id, effective seed, derivation version, optional stream scope."""
+    """DEBUG: run id, derivation version, optional stream scope (no seeds)."""
     fields = describe_run(config, run_id, scope)
     _LOGGER.debug(
-        "run_configured run_id=%s seed=%s derivation_version=%s scope=%s",
+        "run_configured run_id=%s derivation_version=%s scope=%s",
         fields["run_id"],
-        fields["seed"],
         fields["derivation_version"],
         fields.get("stream_scope", "-"),
     )
@@ -80,12 +91,18 @@ def log_physical_config_validated(config: SimulationRunConfig) -> None:
         )
         return
     fingerprint = fingerprint_physical_rules(config.physical_rules)
+    stochastic_prefix = "-"
+    if config.stochastic_identity is not None:
+        stochastic_prefix = stochastic_identity_fingerprint(
+            config.stochastic_identity
+        )[:12]
     _LOGGER.debug(
         "physical_config_validated derivation_version=%s rules_version=%s "
-        "fingerprint_prefix=%s",
+        "fingerprint_prefix=%s stochastic_fingerprint_prefix=%s",
         config.derivation_version,
         config.physical_rules.version,
         fingerprint[:12],
+        stochastic_prefix,
     )
 
 
@@ -105,6 +122,15 @@ def log_replay_mismatch(
     )
 
 
+def log_stochastic_identity_mismatch(*, code: str, run_id: RunId) -> None:
+    """WARN/ERROR for stochastic identity replay failures (no raw identity)."""
+    _LOGGER.error(
+        "stochastic_identity_mismatch code=%s run_id=%s",
+        code,
+        run_id.value,
+    )
+
+
 def log_invalid_setup(reason: str) -> None:
     _LOGGER.error("invalid_setup reason=%s", reason)
 
@@ -115,6 +141,7 @@ def export_metadata(config: SimulationRunConfig, run_id: RunId) -> ExportMetadat
         run_id=run_id,
         seed=config.seed,
         derivation_version=config.derivation_version,
+        stochastic_identity=config.stochastic_identity,
     )
 
 
@@ -126,4 +153,20 @@ def make_export(
     return SimulationExport(
         metadata=export_metadata(config, run_id),
         events=tuple(events),
+    )
+
+
+def log_runner_config_diagnostics(diagnostics: RunnerConfigDiagnostics) -> None:
+    """DEBUG metadata-only runner configuration summary (no seeds/payloads)."""
+    fields = describe_runner_config(diagnostics)
+    _LOGGER.debug(
+        "runner_config_diagnostics schema_version=%s derivation_version=%s "
+        "agent_count=%s max_ticks=%s mortality_mode=%s "
+        "config_fingerprint_prefix=%s",
+        fields["schema_version"],
+        fields["derivation_version"],
+        fields["agent_count"],
+        fields["max_ticks"],
+        fields["mortality_mode"],
+        fields["config_fingerprint_prefix"],
     )

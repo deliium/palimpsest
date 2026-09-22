@@ -170,6 +170,7 @@ def test_canonical_admission_keys_are_ordinal_stable_and_rng_isolated() -> None:
     assert second[1].request_id == again[1].request_id
     assert first[1].request_id != second[1].request_id
     scope = future_effect_scope(
+        config=config,
         run_id=run_id,
         world_id=world_id,
         tick=Tick(3),

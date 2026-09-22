@@ -988,6 +988,7 @@ class WorldEngine:
             assert transitions is not None
             location_transitions = transitions[current]
             scope = physical_system_effect_scope(
+                config=self._config,
                 run_id=self._run_id,
                 world_id=self.world_id,
                 tick=snap.tick,
@@ -1093,6 +1094,7 @@ class WorldEngine:
             rules.search_base_probability + rules.search_visibility_weight * visibility
         )
         scope = physical_action_effect_scope(
+            config=self._config,
             run_id=self._run_id,
             world_id=self.world_id,
             tick=snap.tick,
@@ -1155,6 +1157,7 @@ class WorldEngine:
             return None
         ordinal, agent_id = request_ordinals[request.request_id]
         hit_scope = physical_action_effect_scope(
+            config=self._config,
             run_id=self._run_id,
             world_id=self.world_id,
             tick=snap.tick,
@@ -1169,6 +1172,7 @@ class WorldEngine:
         damage = None
         if hit:
             damage_scope = physical_action_effect_scope(
+                config=self._config,
                 run_id=self._run_id,
                 world_id=self.world_id,
                 tick=snap.tick,
@@ -1227,6 +1231,7 @@ class WorldEngine:
             return None
         ordinal, agent_id = request_ordinals[request.request_id]
         success_scope = physical_action_effect_scope(
+            config=self._config,
             run_id=self._run_id,
             world_id=self.world_id,
             tick=snap.tick,
@@ -1241,6 +1246,7 @@ class WorldEngine:
         destination_index = None
         if success:
             dest_scope = physical_action_effect_scope(
+                config=self._config,
                 run_id=self._run_id,
                 world_id=self.world_id,
                 tick=snap.tick,

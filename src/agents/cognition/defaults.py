@@ -49,6 +49,7 @@ __all__ = [
     "EmptyMemoryUpdateHook",
     "LiteralPerceptionInterpreter",
     "PlaceholderFutureImagination",
+    "PresentStateImagination",
     "StableIntentionSelector",
     "StableMotivationEvaluator",
     "SubjectiveRevisionHook",
@@ -270,6 +271,43 @@ class PlaceholderFutureImagination:
             decision_metadata=DecisionMetadata(
                 selection_codes=tuple(f.future_id for f in futures),
                 candidate_count=len(futures),
+            ),
+        )
+
+
+class PresentStateImagination:
+    """Non-counterfactual imagination-disabled policy.
+
+    Emits a single present-state continuation derived only from current
+    situation claims. Does not invent alternate action futures.
+    """
+
+    async def imagine(
+        self,
+        loop_input: CognitiveLoopInput,
+        situation: SituationModel,
+        self_state: SelfModel,
+        memory: RetrievedMemoryContext | None = None,
+    ) -> PossibleFutures:
+        _ = self_state, memory
+        if SituationClaimCode.TERMINAL_SELF in situation.claim_codes:
+            claim_codes = (SituationClaimCode.TERMINAL_SELF,)
+            future_id = "present-terminal"
+        else:
+            claim_codes = tuple(situation.claim_codes) or (SituationClaimCode.IDLE,)
+            future_id = "present"
+        future = ImaginedFuture(
+            future_id=future_id,
+            claim_codes=claim_codes,
+            confidence=1.0,
+        )
+        return PossibleFutures(
+            owner_id=loop_input.agent_id,
+            futures=(future,),
+            confidence=1.0,
+            decision_metadata=DecisionMetadata(
+                selection_codes=(future_id,),
+                candidate_count=1,
             ),
         )
 
@@ -774,31 +812,9 @@ class SubjectiveRevisionHook:
 
 def default_cognitive_loop() -> CognitiveLoop:
     """Build a CognitiveLoop wired with deterministic V1 cognition policies."""
-    from agents.cognition.communication import (
-        CommunicatedMemoryUpdateHook,
-        CompositeMemoryUpdateHook,
+    from agents.cognition.configuration import (
+        build_cognitive_loop,
+        production_cognition_config,
     )
-    from agents.cognition.deliberation import (
-        CommandPlanner,
-        MultiCriteriaIntentionSelector,
-    )
-    from agents.cognition.imagination import ImaginationEngine
-    from agents.cognition.motivation import MotivationAppraisal
 
-    _ = _COMPONENT_VERSION
-    return CognitiveLoop(
-        perception=LiteralPerceptionInterpreter(),
-        memory=EmptyMemoryRetriever(),
-        situation=DirectSituationModeler(),
-        self_state=DirectSelfStateProjector(),
-        futures=ImaginationEngine(),
-        motivation=MotivationAppraisal(),
-        intention=MultiCriteriaIntentionSelector(),
-        planner=CommandPlanner(),
-        memory_updates=CompositeMemoryUpdateHook(
-            (
-                CommunicatedMemoryUpdateHook(),
-                SubjectiveRevisionHook(),
-            )
-        ),
-    )
+    return build_cognitive_loop(production_cognition_config())

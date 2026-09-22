@@ -30,6 +30,7 @@ from agents.cognition.models import (
     SubjectiveRiskKind,
     SubjectiveUncertainty,
     UncertaintyBand,
+    episode_facts,
     require_confidence,
 )
 from agents.models import (
@@ -44,7 +45,6 @@ from memory.beliefs import (
     BeliefValueKind,
     SemanticBelief,
 )
-from memory.models import ReconstructedMemory
 from social.relationships import (
     DirectedRelationshipProfile,
     RelationshipActivationState,
@@ -365,31 +365,29 @@ def _collect_evidence(
             belief_ids.append(belief.belief_id.value)
 
     memory_ids: list[str] = []
-    reconstructions = memory.reconstructions
-    for reconstruction in reconstructions:
-        if type(reconstruction) is not ReconstructedMemory:
+    facts = episode_facts(memory)
+    for episode in facts:
+        if episode.owner_id != owner:
             continue
-        if reconstruction.owner_id != owner:
-            continue
-        conf = reconstruction.confidence
+        conf = episode.confidence
         if conf < MIN_BELIEF_CONFIDENCE:
             continue
-        concepts = {item.concept for item in reconstruction.concepts}
-        salience = reconstruction.emotional_salience
+        concepts = {item.concept for item in episode.concepts}
+        salience = episode.emotional_salience
         weight = _quantize_unit(conf * max(0.25, salience))
         if concepts & _DANGER_CONCEPTS:
             danger = _quantize_unit(max(danger, weight))
-            memory_ids.extend(mid.value for mid in reconstruction.source_memory_ids)
+            memory_ids.extend(mid.value for mid in episode.source_memory_ids)
         if concepts & _SAFETY_CONCEPTS:
             safety = _quantize_unit(max(safety, weight))
-            memory_ids.extend(mid.value for mid in reconstruction.source_memory_ids)
-        for relation in reconstruction.relations:
+            memory_ids.extend(mid.value for mid in episode.source_memory_ids)
+        for relation in episode.relations:
             if relation.predicate in _DANGER_PREDICATES:
                 danger = _quantize_unit(max(danger, weight))
-                memory_ids.extend(mid.value for mid in reconstruction.source_memory_ids)
+                memory_ids.extend(mid.value for mid in episode.source_memory_ids)
             elif relation.predicate in _SAFETY_PREDICATES:
                 safety = _quantize_unit(max(safety, weight))
-                memory_ids.extend(mid.value for mid in reconstruction.source_memory_ids)
+                memory_ids.extend(mid.value for mid in episode.source_memory_ids)
 
     relationship_ids: list[str] = []
     for profile in _owned_relationships(loop_input, owner):
@@ -414,7 +412,7 @@ def _collect_evidence(
         memory_ids=tuple(sorted(set(memory_ids))),
         relationship_ids=tuple(sorted(set(relationship_ids))),
         usable_belief_count=usable,
-        reconstruction_count=len(reconstructions),
+        reconstruction_count=len(facts),
         ignored_belief_count=ignored,
     )
 

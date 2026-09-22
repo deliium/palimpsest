@@ -23,6 +23,7 @@ from simulation.contracts import (
 from simulation.identifiers import (
     derive_run_id,
     derive_scoped_id,
+    derive_world_id,
     reject_operational_identifier,
 )
 from simulation.models import (
@@ -162,17 +163,18 @@ def test_describe_run_omits_random_draws(caplog: pytest.LogCaptureFixture) -> No
     scope = StreamScope(namespace="agent", names=("alpha",))
     fields = describe_run(config, run_id, scope)
     assert "random" not in fields
-    assert fields["seed"] == 42
+    assert "seed" not in fields
     assert fields["derivation_version"] == DERIVATION_VERSION
     caplog.set_level(logging.DEBUG, logger="simulation.run")
     log_run_configured(config, run_id, scope)
     log_replay_mismatch(run_id, DERIVATION_VERSION, "v0")
-    log_invalid_setup("missing seed")
+    log_invalid_setup("missing_config")
     messages = " ".join(record.getMessage() for record in caplog.records)
     assert "run_configured" in messages
     assert "physical_config_legacy" in messages
     assert "replay_mismatch" in messages
     assert "invalid_setup" in messages
+    assert "seed=" not in messages
     assert str(sample_stream(config, scope, 1)[0]) not in messages
 
 
@@ -236,3 +238,134 @@ def test_mapping_order_independence_for_stream_scopes() -> None:
     assert first[0] == second[1]
     assert first[1] == second[0]
     assert first[0] != first[1]
+
+
+def test_derivation_v3_requires_stochastic_identity() -> None:
+    from world.models import default_physical_rules
+
+    from simulation.models import StochasticIdentity
+
+    with pytest.raises(ValueError, match="stochastic_identity_absent"):
+        SimulationRunConfig(
+            seed=1,
+            physical_rules=default_physical_rules(),
+            derivation_version="v3",
+        )
+    with pytest.raises(ValueError, match="stochastic_identity_mismatch"):
+        SimulationRunConfig(
+            seed=1,
+            stochastic_identity=StochasticIdentity("cmp-1"),
+            derivation_version="v1",
+        )
+    with pytest.raises(ValueError, match="stochastic_identity_mismatch"):
+        SimulationRunConfig(
+            seed=1,
+            physical_rules=default_physical_rules(),
+            stochastic_identity=StochasticIdentity("cmp-1"),
+            derivation_version="v2",
+        )
+
+
+def test_stochastic_identity_equalizes_streams_across_run_ids() -> None:
+    from world.models import default_physical_rules
+
+    from simulation.actions import physical_system_effect_scope
+    from simulation.clock import Tick
+    from simulation.models import RunId, StochasticIdentity
+    from simulation.randomness import objective_stream_identity
+    from world.identifiers import EntityId, WorldId
+
+    identity = StochasticIdentity("paired-world-1")
+    rules = default_physical_rules()
+    shared = SimulationRunConfig(
+        seed=11,
+        physical_rules=rules,
+        stochastic_identity=identity,
+    )
+    other = SimulationRunConfig(
+        seed=11,
+        physical_rules=rules,
+        stochastic_identity=StochasticIdentity("paired-world-2"),
+    )
+    cognition_fingerprint = "condition-memory-reconstructive-v1"
+    assert cognition_fingerprint not in (
+        shared.stochastic_identity.value,
+        other.stochastic_identity.value,
+    )
+    run_a = RunId("durable-run-a")
+    run_b = RunId("durable-run-b")
+    assert objective_stream_identity(shared, run_id=run_a) == identity.value
+    assert objective_stream_identity(shared, run_id=run_b) == identity.value
+    assert objective_stream_identity(shared, run_id=run_a) != run_a.value
+    scope_a = physical_system_effect_scope(
+        config=shared,
+        run_id=run_a,
+        world_id=WorldId("world-1"),
+        tick=Tick(2),
+        entity_id=EntityId("loc-1"),
+        purpose="weather",
+    )
+    scope_b = physical_system_effect_scope(
+        config=shared,
+        run_id=run_b,
+        world_id=WorldId("world-1"),
+        tick=Tick(2),
+        entity_id=EntityId("loc-1"),
+        purpose="weather",
+    )
+    assert sample_stream(shared, scope_a, 4) == sample_stream(shared, scope_b, 4)
+    scope_other = physical_system_effect_scope(
+        config=other,
+        run_id=run_a,
+        world_id=WorldId("world-1"),
+        tick=Tick(2),
+        entity_id=EntityId("loc-1"),
+        purpose="weather",
+    )
+    assert sample_stream(shared, scope_a, 4) != sample_stream(other, scope_other, 4)
+    assert derive_world_id(shared, "camp") == derive_world_id(
+        SimulationRunConfig(
+            seed=11,
+            physical_rules=rules,
+            stochastic_identity=identity,
+        ),
+        "camp",
+    )
+    assert derive_world_id(shared, "camp") != derive_world_id(other, "camp")
+    assert derive_run_id(shared) == derive_run_id(
+        SimulationRunConfig(
+            seed=11,
+            physical_rules=rules,
+            stochastic_identity=identity,
+        )
+    )
+    # Durable run IDs remain independently injectable for paired arms.
+    assert run_a != run_b
+
+
+def test_legacy_scopes_still_include_run_id() -> None:
+    from world.models import default_physical_rules
+
+    from simulation.actions import physical_system_effect_scope
+    from simulation.clock import Tick
+    from simulation.models import RunId
+    from world.identifiers import EntityId, WorldId
+
+    config = SimulationRunConfig(seed=5, physical_rules=default_physical_rules())
+    scope_a = physical_system_effect_scope(
+        config=config,
+        run_id=RunId("run-a"),
+        world_id=WorldId("world-1"),
+        tick=Tick(0),
+        entity_id=EntityId("loc-1"),
+        purpose="weather",
+    )
+    scope_b = physical_system_effect_scope(
+        config=config,
+        run_id=RunId("run-b"),
+        world_id=WorldId("world-1"),
+        tick=Tick(0),
+        entity_id=EntityId("loc-1"),
+        purpose="weather",
+    )
+    assert sample_stream(config, scope_a, 4) != sample_stream(config, scope_b, 4)

@@ -8,11 +8,13 @@ populate these values.
 from __future__ import annotations
 
 import hashlib
+import logging
 
 from agents.models import GoalId
 from memory.models import BeliefId, MemoryId
 from simulation.models import (
     DERIVATION_VERSION_V2,
+    DERIVATION_VERSION_V3,
     RunId,
     SimulationRunConfig,
 )
@@ -27,19 +29,28 @@ from world.identifiers import (
 )
 from world.models import physical_rules_fingerprint
 
+_LOGGER = logging.getLogger("simulation.identifiers")
+
+
+def _length_prefixed(value: bytes) -> bytes:
+    return len(value).to_bytes(4, "big") + value
+
 
 def _digest(config: SimulationRunConfig, *parts: bytes) -> bytes:
     hasher = hashlib.sha256()
     assert config.derivation_version is not None
     hasher.update(config.derivation_version.encode("utf-8"))
-    if config.derivation_version == DERIVATION_VERSION_V2:
+    if config.derivation_version in {DERIVATION_VERSION_V2, DERIVATION_VERSION_V3}:
         assert config.physical_rules is not None
         fingerprint = physical_rules_fingerprint(config.physical_rules).encode("ascii")
-        hasher.update(len(fingerprint).to_bytes(4, "big"))
-        hasher.update(fingerprint)
+        hasher.update(_length_prefixed(fingerprint))
+    if config.derivation_version == DERIVATION_VERSION_V3:
+        assert config.stochastic_identity is not None
+        identity_bytes = config.stochastic_identity.value.encode("utf-8")
+        hasher.update(_length_prefixed(b"stochastic"))
+        hasher.update(_length_prefixed(identity_bytes))
     for part in parts:
-        hasher.update(len(part).to_bytes(4, "big"))
-        hasher.update(part)
+        hasher.update(_length_prefixed(part))
     return hasher.digest()
 
 
