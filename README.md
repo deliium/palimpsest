@@ -53,14 +53,15 @@ Development credentials in `compose.yaml` are **not production**. `docker compos
 | [Simulation runner](docs/simulation-runner.md) | Config-driven `SimulationRunner`, stochastic vs durable identity, tick lifecycle, results |
 | [Experiments](docs/experiments.md) | Trusted A–E catalog, false-story boundary, coordinator, experiment persistence (`0010`) |
 | [Analysis metrics](docs/analysis-metrics.md) | V1 metric catalog, populations/denominators, numerical policy, known-answer fixtures |
+| [Research API](docs/research-api.md) | FastAPI control/inspection/debug, WebSocket cursors/backpressure, capability credentials |
 | [Cognition and agent runtime](docs/cognition-runtime.md) | `CognitiveLoop`, drives/goals, subjective imagination/motivation/intention, `AgentRuntime`, metadata-only logs |
 | [Memory reconstruction](docs/memory-reconstruction.md) | Subjective recall, reconsolidation, lineage, drift analysis, Alembic `0006`/`0007`/`0008`, safe logging |
 | [Social communication](docs/social-communication.md) | Talk/Ask/Tell delivery vs testimony, owner-scoped traces, trust-weighted beliefs, transmission analysis |
 | [LLM providers](docs/llm-providers.md) | Structured `LLMProvider`, modes, retries, prompts, local OpenAI-compatible config, fakes |
 | [Physical simulation](docs/physical-simulation.md) | Topology, capacities, actions, physiology, death, schema-v4, tests |
 | [Configuration](docs/configuration.md) | `PALIMPSEST_` settings (including `PALIMPSEST_LLM_*`), logging, redaction, seeds, identifiers, clocks |
-| [Development](docs/development.md) | Tests, migrations (head `0010`), local and Docker workflows, exact commands |
-| [Persistence](docs/persistence.md) | Event store, Alembic through `0010`, episodic + subjective + experiment records, replay |
+| [Development](docs/development.md) | Tests, migrations (head `0012`), local and Docker workflows, exact commands |
+| [Persistence](docs/persistence.md) | Event store, Alembic through `0012`, subjective + scientific evidence, run control, stream outbox, replay |
 
 ## Invariants (summary)
 

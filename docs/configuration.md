@@ -16,6 +16,7 @@ All application settings use the **`PALIMPSEST_`** prefix only. Environment vari
 | `PALIMPSEST_POOL_SIZE` / `PALIMPSEST_MAX_OVERFLOW` / `PALIMPSEST_POOL_TIMEOUT_SECONDS` | Async pool bounds (`pool_pre_ping` is always on) |
 | `PALIMPSEST_DEFAULT_RUN_SEED` | Optional composition default. Always copied into `SimulationRunConfig`; never an implicit global RNG |
 | `PALIMPSEST_LLM_*` | Disabled-by-default provider settings. See [LLM providers](llm-providers.md) |
+| `PALIMPSEST_API_*` | Research API bind, capability credentials, stream queue/heartbeat/poll, debug gate. See [Research API](research-api.md) |
 
 Booleans are rejected as integer settings. Invalid environments, pool bounds, seeds, and non-asyncpg URLs fail validation. Credentials are `SecretStr` and are stripped from `repr`, validation errors, and logs. LLM base URLs and API keys never appear in `SettingsError`, `repr`, or `bootstrap_fields()` (only `has_llm_base_url` / `has_llm_api_key` and enum/count diagnostics).
 

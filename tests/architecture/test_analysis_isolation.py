@@ -150,11 +150,25 @@ def test_social_transmission_service_holds_both_ports() -> None:
         assert "ObjectiveEventSource" not in body
 
 
-def test_analysis_must_not_import_persistence() -> None:
-    hits: list[str] = []
-    for path in (SRC / "analysis").rglob("*.py"):
-        hits.extend(_module_imports_forbidden(path, ("persistence",)))
-    assert hits == []
+def test_cognition_never_imports_truth_or_metric_symbols() -> None:
+    forbidden = (
+        "ClaimTruthSpec",
+        "StoryTruthSpec",
+        "MetricDocument",
+        "assemble_metric_documents",
+        "EvidenceCompositionService",
+    )
+    for path in (SRC / "agents" / "cognition").rglob("*.py"):
+        text = path.read_text(encoding="utf-8")
+        for symbol in forbidden:
+            assert symbol not in text, f"{path}: {symbol}"
+
+
+def test_api_schemas_forbid_live_world_engine_and_private_state() -> None:
+    schemas = SRC / "api" / "schemas.py"
+    text = schemas.read_text(encoding="utf-8")
+    for symbol in ("WorldEngine", "WorldState", "WorldTransition", "_snapshot"):
+        assert symbol not in text, f"api.schemas must not expose {symbol}"
 
 
 def test_persistence_must_not_import_analysis() -> None:

@@ -39,6 +39,10 @@ Scheduling is sequential in bootstrap registration order. Concurrent cognition i
 
 Stop policies cover max ticks and closed failure modes. Results are versioned machine-readable documents with stop reason, tick counts, config fingerprint prefixes, and exact vs replica-normalized trajectory hashes. Seeds, credentials, prompts, and raw provider output stay out of logs and result documents.
 
+## Recovery and inspection
+
+Committed objective ticks with interrupted subjective finalization rehydrate without rerunning cognition. Inspection and replay use detached projections — never live `WorldEngine` mutation. See [Research API](research-api.md) and [Persistence](persistence.md).
+
 ## LLM reproducibility
 
 External LLM runs are reproducible only with deterministic fakes or recorded validated outputs. Exact reproducibility requests require fake/recorded provider mode. Credentials remain composition concerns and never enter canonical specs or hashes.

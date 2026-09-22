@@ -36,19 +36,27 @@ Establish the modular-monolith foundation: packaging, bounded packages, typed co
 
 ## Next
 
-### M3 — Cognition and Providers (in progress)
+### M3 — Cognition and Providers (complete, 2026-09-22)
 
-**Delivered (2026-09-21):**
-- Explicit async `CognitiveLoop` + per-agent `AgentRuntime` (plan `v1-agent-runtime-cognitive-loop`)
-- Owner-scoped episodic `MemoryService`, structured `MemoryTrace`, deferred access apply, Alembic `0005` / SQLAlchemy adapter (plan `v1-episodic-memory-traces`)
-- Semantic beliefs, emergent `SelfModel`, directed relationship profiles, atomic subjective commit, Alembic `0007` (plan `semantic-beliefs-self-model-relationships`)
-- Deterministic subjective imagination, independent drives, structured goals, opportunity-based fear of death, multi-criteria intention selection, and command planning (plan `v1-imagination-motivation-goal-intention`)
+**Delivered:**
+- Explicit async `CognitiveLoop` + per-agent `AgentRuntime`
+- Owner-scoped episodic memory, semantic beliefs, relationships, reconstructive recall
+- Deterministic subjective imagination / motivation / intention
+- Research FastAPI surface (`/v1` control, inspection, gated debug, WebSocket stream)
+- Canonical five-agent reference scenario + V1 metric catalog assembly
 
-**Still open:**
-- LLM provider lifecycle composition in API / `compose.yaml` (factory ports exist)
+**Deferred (post-V1):** LLM provider lifecycle composition in API / `compose.yaml` (factory ports exist)
 
-### M4 — Persistence and Analysis (persistence complete; analysis deferred)
+**Plan:** `.ai-factory/plans/complete-v1-experimental-metrics-inspection-api.md`
 
-**Persistence (complete, 2026-09-19):** plan `feature-event-sourcing-persistence-replay` — durable run manifests, append-only PostgreSQL event store, checkpoints, `PersistentSimulationService`, and `ReplayService` with deterministic reconstruction. Extended by M2.5 physical schema-v3 / migration `0003`. Experiment metadata is queryable; analysis metrics over exports are not claimed complete.
+### M4 — Persistence and Analysis (complete, 2026-09-22)
 
-**Still open:** read-only analysis metrics over immutable exports.
+**Persistence:** durable run manifests, event store, checkpoints, scientific evidence (`0012`), run control (`0011`), stream outbox, recovery/rehydration.
+
+**Analysis:** fifteen V1 metric families with executable specifications, evidence-manifest revision, and experiment collection. Truth specs remain analysis-only.
+
+**Plan:** `.ai-factory/plans/complete-v1-experimental-metrics-inspection-api.md` (closes deferred M4 analysis scope)
+
+## V1 status
+
+V1 completion is the successful verification of plan Tasks 1–22 (Commit 6: `feat(v1): enforce end-to-end completion gates`).

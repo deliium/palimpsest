@@ -438,12 +438,26 @@ def bundle_from_candidates(
     *,
     target_claim: SemanticClaim,
 ) -> BeliefEvidenceBundle:
-    """Group candidates into supporting/contradicting evidence for ``target_claim``."""
-    supporting: list[BeliefEvidenceContribution] = []
-    contradicting: list[BeliefEvidenceContribution] = []
-    ordinal = 0
+    """Group candidates into supporting/contradicting evidence for ``target_claim``.
+
+    One memory may emit multiple claim values under the same subject/predicate
+    (for example several ``experienced_concept`` values). Collapse to one
+    contribution per ``memory_id``: prefer SUPPORTING when any identity matches
+    the target claim, otherwise CONTRADICTING with the strongest contribution.
+    """
     target_key = canonical_subject_predicate_key(target_claim)
     target_identity = canonical_claim_identity(target_claim)
+    # memory_id -> (stance, contribution, lineage_root, factors, sort_key)
+    collapsed: dict[
+        str,
+        tuple[
+            EvidenceStance,
+            float,
+            MemoryId,
+            AppliedTestimonyFactors | None,
+            tuple[int, float, str, str],
+        ],
+    ] = {}
     for candidate in candidates:
         if canonical_subject_predicate_key(candidate.claim) != target_key:
             continue
@@ -453,13 +467,44 @@ def bundle_from_candidates(
             stance = EvidenceStance.SUPPORTING
         else:
             stance = EvidenceStance.CONTRADICTING
+        mid = candidate.memory_id.value
+        sort_key = (
+            0 if stance is EvidenceStance.SUPPORTING else 1,
+            -candidate.contribution,
+            candidate.lineage_root_id.value,
+            mid,
+        )
+        incoming = (
+            stance,
+            candidate.contribution,
+            candidate.lineage_root_id,
+            candidate.applied_factors,
+            sort_key,
+        )
+        existing = collapsed.get(mid)
+        if existing is None:
+            collapsed[mid] = incoming
+            continue
+        existing_stance = existing[0]
+        if existing_stance is EvidenceStance.SUPPORTING:
+            if stance is EvidenceStance.SUPPORTING and sort_key < existing[4]:
+                collapsed[mid] = incoming
+            continue
+        if stance is EvidenceStance.SUPPORTING or sort_key < existing[4]:
+            collapsed[mid] = incoming
+
+    ordered = sorted(collapsed.items(), key=lambda item: item[1][4])
+    supporting: list[BeliefEvidenceContribution] = []
+    contradicting: list[BeliefEvidenceContribution] = []
+    ordinal = 0
+    for mid, (stance, contribution, lineage_root, factors, _) in ordered:
         item = BeliefEvidenceContribution(
-            memory_id=candidate.memory_id,
+            memory_id=MemoryId(mid),
             stance=stance,
-            contribution=candidate.contribution,
+            contribution=contribution,
             ordinal=ordinal,
-            lineage_root_id=candidate.lineage_root_id,
-            applied_factors=candidate.applied_factors,
+            lineage_root_id=lineage_root,
+            applied_factors=factors,
         )
         ordinal += 1
         if stance is EvidenceStance.SUPPORTING:

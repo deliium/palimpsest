@@ -20,13 +20,25 @@ Objective instrumentation is post-commit observation only. Collectors never flow
 
 Builders share scenario, seed, and stochastic identity across paired arms; only declared treatment dimensions differ. Condition/config fingerprints change when treatments change.
 
+## Reference scenario (V1 gate)
+
+`experiments.reference_scenario.build_reference_scenario()` builds the canonical five-agent / 48-tick fixture used by end-to-end proofs:
+
+- Connected camp/spring/grove/ridge map with regenerating food and water
+- Reconstructive memory + imagination enabled; deterministic-fake provider
+- Sparse milestone arbiter (extract/drink/eat/tell/colocate/lethal attack) with a bounded override budget
+- Early scheduled death proving N+1 terminal status and no later applied actions
+- Public receipts/projections only in Task 20 tests (no `runner.engine` / `WorldState`)
+
+Wire the arbiter with `SimulationRunner.set_intervention_arbiter(...)` before `run()`.
+
 ## Experiment E
 
 The story enters as a normal structured `Tell` at a configured tick/source/recipient. The utterance has no `is_false` marker. A separate analysis-only `StoryTruthSpec` and intervention fingerprint identify the controlled treatment. Multi-hop lineage uses parent/root communication IDs on declared transmission metadata.
 
 ## Persistence
 
-Append-only experiment records (Alembic `0010`):
+Append-only experiment records (Alembic `0010`, reconciled with run-control membership in `0011`):
 
 - `experiment_definitions` — schema version, payload hash, definition fingerprint
 - `experiment_assignments` — condition × seed ordinal × replicate → run ID

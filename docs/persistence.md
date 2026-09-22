@@ -88,6 +88,13 @@ Adapter failure before commit leaves the engine unchanged. Crash after commit is
 
 Append-only `experiment_definitions`, `experiment_assignments`, and `experiment_results` store versioned fingerprints and one immutable final result per assigned run. Adapter: `persistence.create_experiment_record_repository(...)`. These tables use the same `reject_history_mutation` update/delete/truncate triggers as authoritative history but are experiment-framework records (not folded into objective world replay). See [Experiments](experiments.md).
 
+## Run control and scientific evidence (`0011` / `0012`)
+
+- **`0011_v1_run_control`:** canonical runner configuration V2, lifecycle transitions, execution leases/heartbeats, experiment assignment reconciliation.
+- **`0012_v1_scientific_evidence`:** append-only goal revisions, action resolutions, claim-level truth specs, evidence manifests, metric-set lifecycle + immutable metric documents, unified stream/outbox with one monotonic per-run cursor.
+
+Migration head is `0012`. Tests may target only databases whose name contains `palimpsest_test`; Alembic receives the validated URL directly and fails closed on conflicting ambient URLs.
+
 ## Logging
 
 Safe fields: run ID, tick/revision, record counts, version strings, hash prefixes, stable error codes, perception reason codes, reconstruction IDs, policy versions, reconsolidation counts, belief/relationship operation IDs and dimension-change counts. Never log seeds, full configs, event payloads, observation bodies, communication text, snapshot bodies, DSNs, SQL parameters, memories, belief claims/values, relationship assessments, reconstructions/narratives, embeddings, or random draws. Control verbosity with `PALIMPSEST_LOG_LEVEL`.

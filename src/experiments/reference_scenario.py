@@ -47,7 +47,7 @@ from simulation.runner_serialization import (
     runner_config_fingerprint,
     scenario_fingerprint,
 )
-from world.actions import AgentCommand, Attack, Drink, Eat, Search, Tell
+from world.actions import AgentCommand, Attack, Drink, Eat, Move, Search, Tell
 from world.communications import origin_utterance
 from world.identifiers import EntityId, WorldId, WorldRevision
 from world.models import (
@@ -112,6 +112,8 @@ MILESTONE_DRINK_WATER: Final[str] = "ms-drink-water"
 MILESTONE_EXTRACT_FOOD: Final[str] = "ms-extract-food"
 MILESTONE_EAT_FOOD: Final[str] = "ms-eat-food"
 MILESTONE_TELL_OBSERVE: Final[str] = "ms-tell-observe"
+MILESTONE_COLOCATE_ATTACKER: Final[str] = "ms-colocate-attacker"
+MILESTONE_COLOCATE_VICTIM: Final[str] = "ms-colocate-victim"
 MILESTONE_LETHAL_ATTACK: Final[str] = "ms-lethal-attack"
 
 _AGENT_SPECS: Final[tuple[tuple[str, str, str], ...]] = (
@@ -215,12 +217,24 @@ def _goal(
 
 
 def _reference_physical_rules() -> PhysicalRules:
-    """Deterministic search/attack outcomes for sparse milestone guarantees."""
+    """Deterministic search/attack outcomes for sparse milestone guarantees.
+
+    Attack damage is one-shot lethal. Exposure and metabolism are moderated so
+    the surviving cohort can complete the full 48-tick window outdoors at night
+    without collapsing before the scheduled lethal milestone.
+    """
     return PhysicalRules(
         attack_hit_probability=1.0,
         search_base_probability=1.0,
         search_visibility_weight=0.0,
         resource_extraction_amount=1.0,
+        attack_damage_min=200,
+        attack_damage_max_exclusive=201,
+        exposure_damage=0.5,
+        metabolism_hunger=0.4,
+        metabolism_thirst=0.4,
+        hunger_damage=0.5,
+        thirst_damage=0.5,
     )
 
 
@@ -283,13 +297,14 @@ def _build_bodies() -> tuple[AgentBody, ...]:
         _alive_body(BODY_KAI, location_id=LOC_SPRING, thirst=45.0),
         _alive_body(BODY_ROWAN, location_id=LOC_RIDGE),
         _alive_body(BODY_SOREN, location_id=LOC_CAMP),
-        # Low health so one guaranteed hit proves early death + N+1 terminal idle.
+        # Healthy enough to survive moderated night exposure until the scheduled
+        # one-shot lethal attack; health is not the kill mechanism.
         _alive_body(
             BODY_NYX,
             location_id=LOC_CAMP,
-            health=5.0,
-            hunger=30.0,
-            thirst=30.0,
+            health=80.0,
+            hunger=10.0,
+            thirst=10.0,
         ),
     )
 
@@ -468,6 +483,19 @@ def _build_milestones(*, death_tick: int) -> tuple[MilestoneOverride, ...]:
             tick=8,
             agent_id=soren,
             build_command=_fresh_tell(milestone_id=MILESTONE_TELL_OBSERVE, tick=8),
+        ),
+        # Co-locate before the lethal strike so Attack admits (same location).
+        MilestoneOverride(
+            milestone_id=MILESTONE_COLOCATE_ATTACKER,
+            tick=max(0, death_tick - 1),
+            agent_id=soren,
+            build_command=lambda: Move(destination_id=EntityId(LOC_CAMP)),
+        ),
+        MilestoneOverride(
+            milestone_id=MILESTONE_COLOCATE_VICTIM,
+            tick=max(0, death_tick - 1),
+            agent_id=AgentId(AGENT_NYX),
+            build_command=lambda: Move(destination_id=EntityId(LOC_CAMP)),
         ),
         MilestoneOverride(
             milestone_id=MILESTONE_LETHAL_ATTACK,

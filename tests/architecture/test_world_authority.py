@@ -153,3 +153,31 @@ def test_llm_package_cannot_reach_world_authority_or_engine() -> None:
     assert "admit_agent_command" not in simulation.__all__
     assert "WorldEngine" in simulation.__all__
     assert "ActionSubmission" in simulation.__all__
+
+
+def test_reference_scenario_tests_forbid_private_engine_access() -> None:
+    """Task 20 e2e/property tests must not read private world authority."""
+    tests_root = ROOT / "tests"
+    targets = (
+        tests_root / "unit" / "test_reference_scenario_e2e.py",
+        tests_root / "unit" / "test_reference_scenario_properties.py",
+        tests_root / "reference_scenario_helpers.py",
+    )
+    forbidden_attrs = frozenset({"engine", "_snapshot"})
+    forbidden_names = frozenset({"WorldState"})
+    forbidden_modules = frozenset(
+        {"world._state", "world._transitions", "world._operations"}
+    )
+    for path in targets:
+        tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
+        for node in ast.walk(tree):
+            if isinstance(node, ast.Attribute) and node.attr in forbidden_attrs:
+                if isinstance(node.value, ast.Name) and node.value.id in {
+                    "runner",
+                    "self",
+                }:
+                    raise AssertionError(f"{path.name}: forbidden .{node.attr}")
+            if isinstance(node, ast.Name) and node.id in forbidden_names:
+                raise AssertionError(f"{path.name}: forbidden {node.id}")
+            if isinstance(node, ast.ImportFrom) and node.module in forbidden_modules:
+                raise AssertionError(f"{path.name}: forbidden import {node.module}")

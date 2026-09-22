@@ -71,10 +71,15 @@ Validation errors expose only `metric_family`, `algorithm_version`, and a stable
 
 ## Logging
 
-Specification and model code is log-free. Metric **implementations** (later tasks) may emit DEBUG metadata (family, version, counts, duration) without evidence payloads.
+Specification and model code is log-free. Metric implementations emit DEBUG metadata (family, version, counts, duration) without evidence payloads.
 
 ## Tests
 
 ```bash
-uv run pytest tests/unit/test_metric_specifications.py -q --tb=short
+uv run --frozen --python 3.12.14 pytest \
+  tests/unit/test_metric_specifications.py \
+  tests/unit/test_metric_properties.py \
+  tests/unit/test_metric_determinism.py \
+  tests/unit/test_metric_service.py \
+  tests/unit/test_reference_scenario_e2e.py -q
 ```
