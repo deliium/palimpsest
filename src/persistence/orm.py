@@ -20,6 +20,7 @@ from sqlalchemy import (
     ForeignKeyConstraint,
     Index,
     Integer,
+    LargeBinary,
     Numeric,
     PrimaryKeyConstraint,
     String,
@@ -36,12 +37,26 @@ _STABLE_ID_LEN: Final[int] = 128
 
 __all__ = [
     "AUTHORITATIVE_TABLES",
+    "SCIENTIFIC_EVIDENCE_APPEND_ONLY_TABLES",
+    "SCIENTIFIC_EVIDENCE_TABLES",
     "SHA256_HEX_LEN",
-    "ExperimentOrm",
-    "ExperimentResultOrm",
+    "ActionResolutionOrm",
+    "ClaimTruthSpecOrm",
+    "EvidenceManifestOrm",
     "ExperimentAssignmentOrm",
     "ExperimentDefinitionOrm",
+    "ExperimentOrm",
+    "ExperimentResultOrm",
     "ExperimentRunOrm",
+    "GoalRevisionOrm",
+    "MetricDocumentOrm",
+    "MetricSetOrm",
+    "RunControlStateOrm",
+    "RunLifecycleTransitionOrm",
+    "RunStreamHeadOrm",
+    "RunStreamRecordOrm",
+    "RunnerAttemptStateOrm",
+    "RunnerPendingFinalizationOrm",
     "SimulationRunOrm",
     "SnapshotBodyOrm",
     "SnapshotInventoryOrm",
@@ -53,8 +68,6 @@ __all__ = [
     "TickCommitOrm",
     "WorldEventOrm",
     "WorldSnapshotOrm",
-    "RunnerPendingFinalizationOrm",
-    "RunnerAttemptStateOrm",
 ]
 
 AUTHORITATIVE_TABLES: Final[tuple[str, ...]] = (
@@ -71,6 +84,26 @@ AUTHORITATIVE_TABLES: Final[tuple[str, ...]] = (
     "snapshot_items",
     "snapshot_resources",
     "snapshot_weather",
+)
+
+SCIENTIFIC_EVIDENCE_TABLES: Final[tuple[str, ...]] = (
+    "evidence_manifests",
+    "goal_revisions",
+    "action_resolutions",
+    "claim_truth_specs",
+    "metric_sets",
+    "metric_documents",
+    "run_stream_heads",
+    "run_stream_records",
+)
+
+SCIENTIFIC_EVIDENCE_APPEND_ONLY_TABLES: Final[tuple[str, ...]] = (
+    "goal_revisions",
+    "action_resolutions",
+    "claim_truth_specs",
+    "evidence_manifests",
+    "metric_documents",
+    "run_stream_records",
 )
 
 
@@ -639,6 +672,12 @@ class ExperimentAssignmentOrm(Base):
             name="fk_experiment_assignments_definition",
             ondelete="RESTRICT",
         ),
+        ForeignKeyConstraint(
+            ["run_id"],
+            ["simulation_runs.run_id"],
+            name="fk_experiment_assignments_run",
+            ondelete="RESTRICT",
+        ),
         UniqueConstraint("run_id", name="uq_experiment_assignments_run"),
         UniqueConstraint("created_ordinal", name="uq_experiment_assignments_ordinal"),
         CheckConstraint("seed >= 0", name="ck_experiment_assignments_seed"),
@@ -685,6 +724,430 @@ class ExperimentResultOrm(Base):
     payload_hash: Mapped[str] = mapped_column(String(SHA256_HEX_LEN), nullable=False)
     stop_reason: Mapped[str] = mapped_column(String(64), nullable=False)
     ticks_committed: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    created_ordinal: Mapped[int] = mapped_column(
+        BigInteger, nullable=False, autoincrement=True
+    )
+
+
+class RunControlStateOrm(Base):
+    """Mutable durable run-control head (config, lifecycle, lease, progress)."""
+
+    __tablename__ = "run_control_states"
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["run_id"],
+            ["simulation_runs.run_id"],
+            name="fk_run_control_states_run",
+            ondelete="RESTRICT",
+        ),
+        CheckConstraint(
+            "lifecycle_state IN ("
+            "'configured','ready','paused','starting','running','stopping',"
+            "'completed','failed','fenced','recovery-required','interrupted'"
+            ")",
+            name="ck_run_control_lifecycle_state",
+        ),
+        CheckConstraint(
+            "config_availability IN ('available','unavailable')",
+            name="ck_run_control_config_availability",
+        ),
+        CheckConstraint(
+            "lifecycle_version >= 0",
+            name="ck_run_control_lifecycle_version",
+        ),
+        CheckConstraint(
+            "ticks_committed >= 0 AND progress_cursor >= 0",
+            name="ck_run_control_progress_nonneg",
+        ),
+        CheckConstraint(
+            "("
+            "config_availability = 'unavailable' "
+            "AND config_schema_version IS NULL "
+            "AND config_fingerprint IS NULL "
+            "AND config_payload IS NULL"
+            ") OR ("
+            "config_availability = 'available' "
+            "AND config_schema_version IS NOT NULL "
+            "AND config_fingerprint IS NOT NULL "
+            "AND config_payload IS NOT NULL"
+            ")",
+            name="ck_run_control_config_envelope",
+        ),
+        CheckConstraint(
+            f"("
+            f"config_fingerprint IS NULL OR "
+            f"char_length(config_fingerprint) = {SHA256_HEX_LEN}"
+            f")",
+            name="ck_run_control_config_fingerprint",
+        ),
+        Index("ix_run_control_states_lifecycle", "lifecycle_state"),
+        Index("ix_run_control_states_lease", "lease_id"),
+    )
+
+    run_id: Mapped[str] = mapped_column(String(_STABLE_ID_LEN), primary_key=True)
+    lifecycle_state: Mapped[str] = mapped_column(String(32), nullable=False)
+    lifecycle_version: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    config_availability: Mapped[str] = mapped_column(String(32), nullable=False)
+    config_schema_version: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    config_fingerprint: Mapped[str | None] = mapped_column(
+        String(SHA256_HEX_LEN), nullable=True
+    )
+    config_payload: Mapped[bytes | None] = mapped_column(LargeBinary, nullable=True)
+    ticks_committed: Mapped[int] = mapped_column(BigInteger, nullable=False, default=0)
+    progress_cursor: Mapped[int] = mapped_column(BigInteger, nullable=False, default=0)
+    lease_id: Mapped[str | None] = mapped_column(String(_STABLE_ID_LEN), nullable=True)
+    lease_owner_id: Mapped[str | None] = mapped_column(
+        String(_STABLE_ID_LEN), nullable=True
+    )
+    lease_claimed_at_unix_ms: Mapped[int | None] = mapped_column(
+        BigInteger, nullable=True
+    )
+    lease_heartbeat_at_unix_ms: Mapped[int | None] = mapped_column(
+        BigInteger, nullable=True
+    )
+    lease_expires_at_unix_ms: Mapped[int | None] = mapped_column(
+        BigInteger, nullable=True
+    )
+    terminal_reason_code: Mapped[str | None] = mapped_column(String(64), nullable=True)
+
+
+class RunLifecycleTransitionOrm(Base):
+    """Append-only optimistic lifecycle transition audit."""
+
+    __tablename__ = "run_lifecycle_transitions"
+    __table_args__ = (
+        PrimaryKeyConstraint("run_id", "resulting_version"),
+        ForeignKeyConstraint(
+            ["run_id"],
+            ["run_control_states.run_id"],
+            name="fk_run_lifecycle_transitions_run",
+            ondelete="RESTRICT",
+        ),
+        CheckConstraint(
+            "expected_version >= 0 AND resulting_version = expected_version + 1",
+            name="ck_run_lifecycle_transition_versions",
+        ),
+        UniqueConstraint(
+            "created_ordinal", name="uq_run_lifecycle_transitions_ordinal"
+        ),
+        Index("ix_run_lifecycle_transitions_operation", "operation_id"),
+    )
+
+    run_id: Mapped[str] = mapped_column(String(_STABLE_ID_LEN), nullable=False)
+    from_state: Mapped[str] = mapped_column(String(32), nullable=False)
+    to_state: Mapped[str] = mapped_column(String(32), nullable=False)
+    expected_version: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    resulting_version: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    reason_code: Mapped[str] = mapped_column(String(64), nullable=False)
+    operation_id: Mapped[str] = mapped_column(String(_STABLE_ID_LEN), nullable=False)
+    created_ordinal: Mapped[int] = mapped_column(
+        BigInteger, nullable=False, autoincrement=True
+    )
+
+
+class EvidenceManifestOrm(Base):
+    """Append-only evidence manifest / high-water revision."""
+
+    __tablename__ = "evidence_manifests"
+    __table_args__ = (
+        PrimaryKeyConstraint("run_id", "manifest_hash"),
+        ForeignKeyConstraint(
+            ["run_id"],
+            ["simulation_runs.run_id"],
+            name="fk_evidence_manifests_run",
+            ondelete="RESTRICT",
+        ),
+        CheckConstraint(
+            f"char_length(manifest_hash) = {SHA256_HEX_LEN}",
+            name="ck_evidence_manifests_hash",
+        ),
+        UniqueConstraint("created_ordinal", name="uq_evidence_manifests_ordinal"),
+        Index("ix_evidence_manifests_run", "run_id", "created_ordinal"),
+    )
+
+    run_id: Mapped[str] = mapped_column(String(_STABLE_ID_LEN), nullable=False)
+    manifest_hash: Mapped[str] = mapped_column(String(SHA256_HEX_LEN), nullable=False)
+    schema_version: Mapped[str] = mapped_column(String(64), nullable=False)
+    objective_commit_hash: Mapped[str] = mapped_column(
+        String(_STABLE_ID_LEN), nullable=False
+    )
+    high_water_json: Mapped[dict[str, object]] = mapped_column(JSONB, nullable=False)
+    created_ordinal: Mapped[int] = mapped_column(
+        BigInteger, nullable=False, autoincrement=True
+    )
+
+
+class GoalRevisionOrm(Base):
+    """Append-only versioned goal transition."""
+
+    __tablename__ = "goal_revisions"
+    __table_args__ = (
+        PrimaryKeyConstraint("run_id", "goal_id", "revision"),
+        ForeignKeyConstraint(
+            ["run_id"],
+            ["simulation_runs.run_id"],
+            name="fk_goal_revisions_run",
+            ondelete="RESTRICT",
+        ),
+        CheckConstraint("revision >= 0 AND tick >= 0", name="ck_goal_revisions_nonneg"),
+        CheckConstraint(
+            f"char_length(content_hash) = {SHA256_HEX_LEN}",
+            name="ck_goal_revisions_hash",
+        ),
+        UniqueConstraint("created_ordinal", name="uq_goal_revisions_ordinal"),
+        Index("ix_goal_revisions_run_tick", "run_id", "tick", "created_ordinal"),
+    )
+
+    run_id: Mapped[str] = mapped_column(String(_STABLE_ID_LEN), nullable=False)
+    goal_id: Mapped[str] = mapped_column(String(_STABLE_ID_LEN), nullable=False)
+    revision: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    owner_id: Mapped[str] = mapped_column(String(_STABLE_ID_LEN), nullable=False)
+    tick: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    schema_version: Mapped[str] = mapped_column(String(64), nullable=False)
+    content_hash: Mapped[str] = mapped_column(String(SHA256_HEX_LEN), nullable=False)
+    payload: Mapped[bytes] = mapped_column(LargeBinary, nullable=False)
+    created_ordinal: Mapped[int] = mapped_column(
+        BigInteger, nullable=False, autoincrement=True
+    )
+
+
+class ActionResolutionOrm(Base):
+    """Append-only action resolution keyed by (run, tick, ordinal)."""
+
+    __tablename__ = "action_resolutions"
+    __table_args__ = (
+        PrimaryKeyConstraint("run_id", "tick", "ordinal"),
+        ForeignKeyConstraint(
+            ["run_id"],
+            ["simulation_runs.run_id"],
+            name="fk_action_resolutions_run",
+            ondelete="RESTRICT",
+        ),
+        CheckConstraint(
+            "tick >= 0 AND ordinal >= 0", name="ck_action_resolutions_nonneg"
+        ),
+        CheckConstraint(
+            f"char_length(content_hash) = {SHA256_HEX_LEN}",
+            name="ck_action_resolutions_hash",
+        ),
+        UniqueConstraint("created_ordinal", name="uq_action_resolutions_ordinal"),
+        Index("ix_action_resolutions_run", "run_id", "tick"),
+    )
+
+    run_id: Mapped[str] = mapped_column(String(_STABLE_ID_LEN), nullable=False)
+    tick: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    ordinal: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    schema_version: Mapped[str] = mapped_column(String(64), nullable=False)
+    content_hash: Mapped[str] = mapped_column(String(SHA256_HEX_LEN), nullable=False)
+    payload: Mapped[bytes] = mapped_column(LargeBinary, nullable=False)
+    created_ordinal: Mapped[int] = mapped_column(
+        BigInteger, nullable=False, autoincrement=True
+    )
+
+
+class ClaimTruthSpecOrm(Base):
+    """Append-only claim-level truth specification (opaque payload)."""
+
+    __tablename__ = "claim_truth_specs"
+    __table_args__ = (
+        PrimaryKeyConstraint("run_id", "claim_id"),
+        ForeignKeyConstraint(
+            ["run_id"],
+            ["simulation_runs.run_id"],
+            name="fk_claim_truth_specs_run",
+            ondelete="RESTRICT",
+        ),
+        CheckConstraint(
+            "availability IN ('available', 'unavailable')",
+            name="ck_claim_truth_availability",
+        ),
+        CheckConstraint(
+            "("
+            "availability = 'unavailable' "
+            "AND schema_version IS NULL "
+            "AND content_hash IS NULL "
+            "AND payload IS NULL"
+            ") OR ("
+            "availability = 'available' "
+            "AND schema_version IS NOT NULL "
+            "AND content_hash IS NOT NULL "
+            "AND payload IS NOT NULL "
+            f"AND char_length(content_hash) = {SHA256_HEX_LEN}"
+            ")",
+            name="ck_claim_truth_envelope",
+        ),
+        UniqueConstraint("created_ordinal", name="uq_claim_truth_specs_ordinal"),
+        Index("ix_claim_truth_specs_run", "run_id", "created_ordinal"),
+    )
+
+    run_id: Mapped[str] = mapped_column(String(_STABLE_ID_LEN), nullable=False)
+    claim_id: Mapped[str] = mapped_column(String(_STABLE_ID_LEN), nullable=False)
+    availability: Mapped[str] = mapped_column(String(32), nullable=False)
+    schema_version: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    content_hash: Mapped[str | None] = mapped_column(
+        String(SHA256_HEX_LEN), nullable=True
+    )
+    payload: Mapped[bytes | None] = mapped_column(LargeBinary, nullable=True)
+    created_ordinal: Mapped[int] = mapped_column(
+        BigInteger, nullable=False, autoincrement=True
+    )
+
+
+class MetricSetOrm(Base):
+    """Mutable metric-set lifecycle head linked to an evidence revision."""
+
+    __tablename__ = "metric_sets"
+    __table_args__ = (
+        PrimaryKeyConstraint("run_id", "metric_set_id"),
+        ForeignKeyConstraint(
+            ["run_id"],
+            ["simulation_runs.run_id"],
+            name="fk_metric_sets_run",
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["run_id", "evidence_manifest_hash"],
+            ["evidence_manifests.run_id", "evidence_manifests.manifest_hash"],
+            name="fk_metric_sets_manifest",
+            ondelete="RESTRICT",
+        ),
+        CheckConstraint(
+            "lifecycle_state IN ("
+            "'pending','running','complete','partial','failed'"
+            ")",
+            name="ck_metric_sets_lifecycle",
+        ),
+        CheckConstraint("lifecycle_version >= 0", name="ck_metric_sets_version"),
+        CheckConstraint(
+            f"char_length(evidence_manifest_hash) = {SHA256_HEX_LEN}",
+            name="ck_metric_sets_hash",
+        ),
+        Index("ix_metric_sets_lifecycle", "lifecycle_state"),
+    )
+
+    run_id: Mapped[str] = mapped_column(String(_STABLE_ID_LEN), nullable=False)
+    metric_set_id: Mapped[str] = mapped_column(String(_STABLE_ID_LEN), nullable=False)
+    lifecycle_state: Mapped[str] = mapped_column(String(32), nullable=False)
+    evidence_manifest_hash: Mapped[str] = mapped_column(
+        String(SHA256_HEX_LEN), nullable=False
+    )
+    lifecycle_version: Mapped[int] = mapped_column(
+        BigInteger, nullable=False, default=0
+    )
+
+
+class MetricDocumentOrm(Base):
+    """Immutable metric document/result linked to metric set + evidence revision."""
+
+    __tablename__ = "metric_documents"
+    __table_args__ = (
+        PrimaryKeyConstraint("run_id", "metric_set_id", "metric_family"),
+        ForeignKeyConstraint(
+            ["run_id", "metric_set_id"],
+            ["metric_sets.run_id", "metric_sets.metric_set_id"],
+            name="fk_metric_documents_set",
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["run_id", "evidence_manifest_hash"],
+            ["evidence_manifests.run_id", "evidence_manifests.manifest_hash"],
+            name="fk_metric_documents_manifest",
+            ondelete="RESTRICT",
+        ),
+        CheckConstraint(
+            f"char_length(content_hash) = {SHA256_HEX_LEN}",
+            name="ck_metric_documents_hash",
+        ),
+        CheckConstraint(
+            f"char_length(evidence_manifest_hash) = {SHA256_HEX_LEN}",
+            name="ck_metric_documents_manifest_hash",
+        ),
+        UniqueConstraint("created_ordinal", name="uq_metric_documents_ordinal"),
+        Index(
+            "ix_metric_documents_run_set",
+            "run_id",
+            "metric_set_id",
+            "created_ordinal",
+        ),
+        Index("ix_metric_documents_content", "content_hash"),
+    )
+
+    run_id: Mapped[str] = mapped_column(String(_STABLE_ID_LEN), nullable=False)
+    metric_set_id: Mapped[str] = mapped_column(String(_STABLE_ID_LEN), nullable=False)
+    metric_family: Mapped[str] = mapped_column(String(_STABLE_ID_LEN), nullable=False)
+    evidence_manifest_hash: Mapped[str] = mapped_column(
+        String(SHA256_HEX_LEN), nullable=False
+    )
+    schema_version: Mapped[str] = mapped_column(String(64), nullable=False)
+    content_hash: Mapped[str] = mapped_column(String(SHA256_HEX_LEN), nullable=False)
+    payload: Mapped[bytes] = mapped_column(LargeBinary, nullable=False)
+    created_ordinal: Mapped[int] = mapped_column(
+        BigInteger, nullable=False, autoincrement=True
+    )
+
+
+class RunStreamHeadOrm(Base):
+    """Mutable per-run stream high-water cursor."""
+
+    __tablename__ = "run_stream_heads"
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["run_id"],
+            ["simulation_runs.run_id"],
+            name="fk_run_stream_heads_run",
+            ondelete="RESTRICT",
+        ),
+        CheckConstraint("high_water >= 0", name="ck_run_stream_heads_nonneg"),
+    )
+
+    run_id: Mapped[str] = mapped_column(String(_STABLE_ID_LEN), primary_key=True)
+    high_water: Mapped[int] = mapped_column(BigInteger, nullable=False, default=0)
+
+
+class RunStreamRecordOrm(Base):
+    """Append-only unified stream/outbox record with monotonic per-run cursor."""
+
+    __tablename__ = "run_stream_records"
+    __table_args__ = (
+        PrimaryKeyConstraint("run_id", "cursor_value"),
+        ForeignKeyConstraint(
+            ["run_id"],
+            ["simulation_runs.run_id"],
+            name="fk_run_stream_records_run",
+            ondelete="RESTRICT",
+        ),
+        CheckConstraint("cursor_value >= 1", name="ck_run_stream_records_cursor"),
+        CheckConstraint(
+            "record_kind IN ("
+            "'status','eventless_tick','event','metric',"
+            "'result','recoverable_error','completion'"
+            ")",
+            name="ck_run_stream_records_kind",
+        ),
+        CheckConstraint(
+            f"char_length(content_hash) = {SHA256_HEX_LEN}",
+            name="ck_run_stream_records_hash",
+        ),
+        CheckConstraint(
+            "related_tick IS NULL OR related_tick >= 0",
+            name="ck_run_stream_records_tick",
+        ),
+        UniqueConstraint("created_ordinal", name="uq_run_stream_records_ordinal"),
+        Index(
+            "ix_run_stream_records_kind",
+            "run_id",
+            "record_kind",
+            "cursor_value",
+        ),
+    )
+
+    run_id: Mapped[str] = mapped_column(String(_STABLE_ID_LEN), nullable=False)
+    cursor_value: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    record_kind: Mapped[str] = mapped_column(String(32), nullable=False)
+    schema_version: Mapped[str] = mapped_column(String(64), nullable=False)
+    content_hash: Mapped[str] = mapped_column(String(SHA256_HEX_LEN), nullable=False)
+    payload: Mapped[bytes] = mapped_column(LargeBinary, nullable=False)
+    related_tick: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
     created_ordinal: Mapped[int] = mapped_column(
         BigInteger, nullable=False, autoincrement=True
     )

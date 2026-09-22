@@ -1,11 +1,14 @@
-"""Minimal resume/recovery contracts for simulation run control.
+"""Run-control lifecycle, leases, and resume/recovery contracts.
 
 Task 5 owns finalization-command recovery and mode discrimination. Task 6
-expands this module into the full lifecycle/lease graph.
+owns the durable lifecycle graph, optimistic transitions, execution leases,
+and process-restart classification. Configuration payloads must never appear
+in logs.
 """
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from dataclasses import dataclass
 from enum import StrEnum
 from typing import Final
@@ -15,6 +18,7 @@ from agents.models import AgentId, Goal
 from memory.models import Belief
 from simulation.agent_runtime import AgentRuntimeStatus
 from simulation.clock import require_exact_nonneg_int
+from simulation.evidence import OpaqueCanonicalEnvelope, opaque_envelope_from_payload
 from simulation.lifecycle import ActionSubmission, require_action_submission
 from simulation.models import RunId
 from simulation.runner_models import (
@@ -26,18 +30,43 @@ from simulation.subjective_state import SubjectiveMutationBatch
 from world.identifiers import require_stable_id
 
 __all__ = [
+    "ALLOWED_LIFECYCLE_TRANSITIONS",
     "FINALIZATION_COMMAND_CODEC_VERSION",
+    "STREAM_RECORD_SCHEMA_VERSION",
     "AgentRuntimeCheckpoint",
+    "ConfigAvailability",
+    "ExecutionLease",
     "FinalizationCommand",
+    "LifecycleTransitionError",
+    "ProcessRestartClass",
     "ResumeMode",
+    "RunControlRecord",
+    "RunLifecycleState",
+    "RunLifecycleTransition",
     "RunnerCrashInjected",
     "RunnerCrashPoint",
     "RunnerResumePlan",
     "RunnerRuntimeCheckpoint",
+    "StreamRecord",
+    "StreamRecordDraft",
+    "StreamRecordKind",
+    "assert_lifecycle_transition",
+    "classify_process_restart",
     "classify_resume_mode",
+    "is_lifecycle_transition_allowed",
+    "is_terminal_lifecycle_state",
+    "make_stream_envelope",
 ]
 
 FINALIZATION_COMMAND_CODEC_VERSION: Final[str] = "finalization-command-v1"
+STREAM_RECORD_SCHEMA_VERSION: Final[str] = "stream-record-v1"
+
+
+def make_stream_envelope(payload: bytes) -> OpaqueCanonicalEnvelope:
+    """Wrap opaque stream body bytes in a stream-record-v1 envelope."""
+    return opaque_envelope_from_payload(
+        schema_version=STREAM_RECORD_SCHEMA_VERSION, payload=payload
+    )
 
 
 class ResumeMode(StrEnum):
@@ -70,6 +99,356 @@ class RunnerCrashInjected(RuntimeError):
         if ordinal is not None:
             parts.append(f"ordinal={ordinal}")
         super().__init__(",".join(parts))
+
+
+class RunLifecycleState(StrEnum):
+    """Closed durable run-control lifecycle graph."""
+
+    CONFIGURED = "configured"
+    READY = "ready"
+    PAUSED = "paused"
+    STARTING = "starting"
+    RUNNING = "running"
+    STOPPING = "stopping"
+    COMPLETED = "completed"
+    FAILED = "failed"
+    FENCED = "fenced"
+    RECOVERY_REQUIRED = "recovery-required"
+    INTERRUPTED = "interrupted"
+
+
+class ConfigAvailability(StrEnum):
+    """Whether canonical runner-config-v2 bytes are durable for a run."""
+
+    AVAILABLE = "available"
+    UNAVAILABLE = "unavailable"
+
+
+class ProcessRestartClass(StrEnum):
+    """Classification after process restart without inspecting payloads."""
+
+    CLEAN_CONTINUE = "clean_continue"
+    LEASE_EXPIRED = "lease_expired"
+    RECOVERY_REQUIRED = "recovery_required"
+    INTERRUPTED_IN_FLIGHT = "interrupted_in_flight"
+    TERMINAL = "terminal"
+    FENCED = "fenced"
+    CONFIGURATION_UNAVAILABLE = "configuration_unavailable"
+
+
+# Legal edges for optimistic lifecycle transitions (one-tick uses ready/paused).
+ALLOWED_LIFECYCLE_TRANSITIONS: Final[
+    Mapping[RunLifecycleState, frozenset[RunLifecycleState]]
+] = {
+    RunLifecycleState.CONFIGURED: frozenset(
+        {
+            RunLifecycleState.READY,
+            RunLifecycleState.STARTING,
+            RunLifecycleState.FAILED,
+        }
+    ),
+    RunLifecycleState.READY: frozenset(
+        {
+            RunLifecycleState.STARTING,
+            RunLifecycleState.PAUSED,
+            RunLifecycleState.STOPPING,
+            RunLifecycleState.FAILED,
+            RunLifecycleState.RECOVERY_REQUIRED,
+        }
+    ),
+    RunLifecycleState.PAUSED: frozenset(
+        {
+            RunLifecycleState.READY,
+            RunLifecycleState.STARTING,
+            RunLifecycleState.STOPPING,
+            RunLifecycleState.FAILED,
+            RunLifecycleState.RECOVERY_REQUIRED,
+            RunLifecycleState.INTERRUPTED,
+        }
+    ),
+    RunLifecycleState.STARTING: frozenset(
+        {
+            RunLifecycleState.RUNNING,
+            RunLifecycleState.FAILED,
+            RunLifecycleState.INTERRUPTED,
+            RunLifecycleState.RECOVERY_REQUIRED,
+            RunLifecycleState.FENCED,
+        }
+    ),
+    RunLifecycleState.RUNNING: frozenset(
+        {
+            RunLifecycleState.READY,
+            RunLifecycleState.PAUSED,
+            RunLifecycleState.STOPPING,
+            RunLifecycleState.COMPLETED,
+            RunLifecycleState.FAILED,
+            RunLifecycleState.FENCED,
+            RunLifecycleState.RECOVERY_REQUIRED,
+            RunLifecycleState.INTERRUPTED,
+        }
+    ),
+    RunLifecycleState.STOPPING: frozenset(
+        {
+            RunLifecycleState.COMPLETED,
+            RunLifecycleState.FAILED,
+            RunLifecycleState.PAUSED,
+            RunLifecycleState.READY,
+            RunLifecycleState.FENCED,
+            RunLifecycleState.RECOVERY_REQUIRED,
+            RunLifecycleState.INTERRUPTED,
+        }
+    ),
+    RunLifecycleState.RECOVERY_REQUIRED: frozenset(
+        {
+            RunLifecycleState.READY,
+            RunLifecycleState.PAUSED,
+            RunLifecycleState.STARTING,
+            RunLifecycleState.FAILED,
+            RunLifecycleState.FENCED,
+        }
+    ),
+    RunLifecycleState.INTERRUPTED: frozenset(
+        {
+            RunLifecycleState.RECOVERY_REQUIRED,
+            RunLifecycleState.FAILED,
+            RunLifecycleState.FENCED,
+        }
+    ),
+    RunLifecycleState.FENCED: frozenset(),
+    RunLifecycleState.COMPLETED: frozenset(),
+    RunLifecycleState.FAILED: frozenset(),
+}
+
+_TERMINAL_STATES: Final[frozenset[RunLifecycleState]] = frozenset(
+    {
+        RunLifecycleState.COMPLETED,
+        RunLifecycleState.FAILED,
+        RunLifecycleState.FENCED,
+    }
+)
+
+_IN_FLIGHT_STATES: Final[frozenset[RunLifecycleState]] = frozenset(
+    {
+        RunLifecycleState.STARTING,
+        RunLifecycleState.RUNNING,
+        RunLifecycleState.STOPPING,
+    }
+)
+
+
+class LifecycleTransitionError(ValueError):
+    """Illegal or contended lifecycle transition."""
+
+    def __init__(self, code: str) -> None:
+        self.code = code
+        super().__init__(code)
+
+
+def is_terminal_lifecycle_state(state: RunLifecycleState) -> bool:
+    if type(state) is not RunLifecycleState:
+        raise TypeError("state must be RunLifecycleState")
+    return state in _TERMINAL_STATES
+
+
+def is_lifecycle_transition_allowed(
+    current: RunLifecycleState, target: RunLifecycleState
+) -> bool:
+    if type(current) is not RunLifecycleState:
+        raise TypeError("current must be RunLifecycleState")
+    if type(target) is not RunLifecycleState:
+        raise TypeError("target must be RunLifecycleState")
+    if current == target:
+        return True
+    return target in ALLOWED_LIFECYCLE_TRANSITIONS[current]
+
+
+def assert_lifecycle_transition(
+    current: RunLifecycleState, target: RunLifecycleState
+) -> None:
+    if not is_lifecycle_transition_allowed(current, target):
+        raise LifecycleTransitionError("illegal_lifecycle_transition")
+
+
+@dataclass(frozen=True, slots=True)
+class ExecutionLease:
+    """Cross-process execution claim with heartbeat/expiry metadata."""
+
+    lease_id: str
+    owner_id: str
+    claimed_at_unix_ms: int
+    heartbeat_at_unix_ms: int
+    expires_at_unix_ms: int
+
+    def __post_init__(self) -> None:
+        require_stable_id("lease_id", self.lease_id)
+        require_stable_id("owner_id", self.owner_id)
+        object.__setattr__(
+            self,
+            "claimed_at_unix_ms",
+            require_exact_nonneg_int("claimed_at_unix_ms", self.claimed_at_unix_ms),
+        )
+        object.__setattr__(
+            self,
+            "heartbeat_at_unix_ms",
+            require_exact_nonneg_int(
+                "heartbeat_at_unix_ms", self.heartbeat_at_unix_ms
+            ),
+        )
+        object.__setattr__(
+            self,
+            "expires_at_unix_ms",
+            require_exact_nonneg_int("expires_at_unix_ms", self.expires_at_unix_ms),
+        )
+        if self.expires_at_unix_ms < self.claimed_at_unix_ms:
+            raise ValueError("lease_expiry_before_claim")
+        if self.heartbeat_at_unix_ms < self.claimed_at_unix_ms:
+            raise ValueError("lease_heartbeat_before_claim")
+
+    def is_expired(self, *, now_unix_ms: int) -> bool:
+        now = require_exact_nonneg_int("now_unix_ms", now_unix_ms)
+        return now >= self.expires_at_unix_ms
+
+
+@dataclass(frozen=True, slots=True)
+class RunLifecycleTransition:
+    """One optimistic lifecycle edge attempt (append-only audit shape)."""
+
+    run_id: RunId
+    from_state: RunLifecycleState
+    to_state: RunLifecycleState
+    expected_version: int
+    resulting_version: int
+    reason_code: str
+    operation_id: str
+
+    def __post_init__(self) -> None:
+        if type(self.run_id) is not RunId:
+            raise TypeError("run_id must be RunId")
+        if type(self.from_state) is not RunLifecycleState:
+            raise TypeError("from_state must be RunLifecycleState")
+        if type(self.to_state) is not RunLifecycleState:
+            raise TypeError("to_state must be RunLifecycleState")
+        object.__setattr__(
+            self,
+            "expected_version",
+            require_exact_nonneg_int("expected_version", self.expected_version),
+        )
+        object.__setattr__(
+            self,
+            "resulting_version",
+            require_exact_nonneg_int("resulting_version", self.resulting_version),
+        )
+        if self.resulting_version != self.expected_version + 1:
+            raise ValueError("resulting_version_must_increment")
+        require_stable_id("reason_code", self.reason_code)
+        require_stable_id("operation_id", self.operation_id)
+        assert_lifecycle_transition(self.from_state, self.to_state)
+
+
+@dataclass(frozen=True, slots=True)
+class RunControlRecord:
+    """Durable run-control head: config envelope, lifecycle, lease, progress."""
+
+    run_id: RunId
+    lifecycle_state: RunLifecycleState
+    lifecycle_version: int
+    config_availability: ConfigAvailability
+    ticks_committed: int
+    progress_cursor: int
+    config_schema_version: str | None = None
+    config_fingerprint: str | None = None
+    config_payload: bytes | None = None
+    lease: ExecutionLease | None = None
+    terminal_reason_code: str | None = None
+
+    def __post_init__(self) -> None:
+        if type(self.run_id) is not RunId:
+            raise TypeError("run_id must be RunId")
+        if type(self.lifecycle_state) is not RunLifecycleState:
+            raise TypeError("lifecycle_state must be RunLifecycleState")
+        object.__setattr__(
+            self,
+            "lifecycle_version",
+            require_exact_nonneg_int("lifecycle_version", self.lifecycle_version),
+        )
+        if type(self.config_availability) is not ConfigAvailability:
+            raise TypeError("config_availability must be ConfigAvailability")
+        object.__setattr__(
+            self,
+            "ticks_committed",
+            require_exact_nonneg_int("ticks_committed", self.ticks_committed),
+        )
+        object.__setattr__(
+            self,
+            "progress_cursor",
+            require_exact_nonneg_int("progress_cursor", self.progress_cursor),
+        )
+        if self.config_availability is ConfigAvailability.UNAVAILABLE:
+            if (
+                self.config_schema_version is not None
+                or self.config_fingerprint is not None
+                or self.config_payload is not None
+            ):
+                raise ValueError("legacy_config_must_remain_unavailable")
+        else:
+            if self.config_schema_version is None or self.config_fingerprint is None:
+                raise ValueError("available_config_requires_version_and_fingerprint")
+            require_stable_id("config_schema_version", self.config_schema_version)
+            require_stable_id("config_fingerprint", self.config_fingerprint)
+            if self.config_payload is None:
+                raise ValueError("available_config_requires_payload")
+            if not isinstance(self.config_payload, (bytes, bytearray)):
+                raise TypeError("config_payload must be bytes")
+            object.__setattr__(self, "config_payload", bytes(self.config_payload))
+        if self.lease is not None and type(self.lease) is not ExecutionLease:
+            raise TypeError("lease must be ExecutionLease or None")
+        if self.terminal_reason_code is not None:
+            require_stable_id("terminal_reason_code", self.terminal_reason_code)
+
+    def __repr__(self) -> str:
+        return (
+            f"RunControlRecord(run_id={self.run_id.value!r}, "
+            f"lifecycle_state={self.lifecycle_state.value!r}, "
+            f"lifecycle_version={self.lifecycle_version}, "
+            f"config_availability={self.config_availability.value!r}, "
+            f"ticks_committed={self.ticks_committed}, "
+            f"progress_cursor={self.progress_cursor}, "
+            f"has_lease={self.lease is not None})"
+        )
+
+
+def classify_process_restart(
+    record: RunControlRecord,
+    *,
+    now_unix_ms: int,
+    pending_count: int = 0,
+) -> ProcessRestartClass:
+    """Classify process-restart work from durable head + pending count."""
+    if type(record) is not RunControlRecord:
+        raise TypeError("record must be RunControlRecord")
+    now = require_exact_nonneg_int("now_unix_ms", now_unix_ms)
+    pending = require_exact_nonneg_int("pending_count", pending_count)
+    if record.config_availability is ConfigAvailability.UNAVAILABLE:
+        return ProcessRestartClass.CONFIGURATION_UNAVAILABLE
+    if record.lifecycle_state is RunLifecycleState.FENCED:
+        return ProcessRestartClass.FENCED
+    if is_terminal_lifecycle_state(record.lifecycle_state):
+        return ProcessRestartClass.TERMINAL
+    if (
+        record.lifecycle_state is RunLifecycleState.RECOVERY_REQUIRED
+        or pending > 0
+    ):
+        return ProcessRestartClass.RECOVERY_REQUIRED
+    if record.lifecycle_state is RunLifecycleState.INTERRUPTED:
+        return ProcessRestartClass.INTERRUPTED_IN_FLIGHT
+    lease = record.lease
+    if lease is not None and lease.is_expired(now_unix_ms=now):
+        return ProcessRestartClass.LEASE_EXPIRED
+    if record.lifecycle_state in _IN_FLIGHT_STATES:
+        if lease is None or lease.is_expired(now_unix_ms=now):
+            return ProcessRestartClass.INTERRUPTED_IN_FLIGHT
+        return ProcessRestartClass.CLEAN_CONTINUE
+    return ProcessRestartClass.CLEAN_CONTINUE
 
 
 @dataclass(frozen=True, slots=True)
@@ -325,3 +704,79 @@ def classify_resume_mode(
         pending_tick=pending_tick,
         pending_count=pending_count,
     )
+
+
+class StreamRecordKind(StrEnum):
+    """Closed set of durable unified stream/outbox record kinds."""
+
+    STATUS = "status"
+    EVENTLESS_TICK = "eventless_tick"
+    EVENT = "event"
+    METRIC = "metric"
+    RESULT = "result"
+    RECOVERABLE_ERROR = "recoverable_error"
+    COMPLETION = "completion"
+
+
+@dataclass(frozen=True, slots=True)
+class StreamRecordDraft:
+    """Stream publication input before per-run cursor assignment."""
+
+    kind: StreamRecordKind
+    envelope: OpaqueCanonicalEnvelope
+    related_tick: int | None = None
+
+    def __post_init__(self) -> None:
+        if type(self.kind) is not StreamRecordKind:
+            raise TypeError("kind must be StreamRecordKind")
+        if type(self.envelope) is not OpaqueCanonicalEnvelope:
+            raise TypeError("envelope must be OpaqueCanonicalEnvelope")
+        if self.envelope.schema_version != STREAM_RECORD_SCHEMA_VERSION:
+            raise ValueError("unsupported_stream_record_version")
+        if self.related_tick is not None:
+            object.__setattr__(
+                self,
+                "related_tick",
+                require_exact_nonneg_int("related_tick", self.related_tick),
+            )
+
+
+@dataclass(frozen=True, slots=True)
+class StreamRecord:
+    """Durable monotonic stream/outbox record for one run."""
+
+    run_id: RunId
+    cursor: int
+    kind: StreamRecordKind
+    envelope: OpaqueCanonicalEnvelope
+    related_tick: int | None = None
+
+    def __post_init__(self) -> None:
+        if type(self.run_id) is not RunId:
+            raise TypeError("run_id must be RunId")
+        object.__setattr__(
+            self,
+            "cursor",
+            require_exact_nonneg_int("cursor", self.cursor),
+        )
+        if self.cursor < 1:
+            raise ValueError("cursor must be >= 1")
+        if type(self.kind) is not StreamRecordKind:
+            raise TypeError("kind must be StreamRecordKind")
+        if type(self.envelope) is not OpaqueCanonicalEnvelope:
+            raise TypeError("envelope must be OpaqueCanonicalEnvelope")
+        if self.envelope.schema_version != STREAM_RECORD_SCHEMA_VERSION:
+            raise ValueError("unsupported_stream_record_version")
+        if self.related_tick is not None:
+            object.__setattr__(
+                self,
+                "related_tick",
+                require_exact_nonneg_int("related_tick", self.related_tick),
+            )
+
+    def __repr__(self) -> str:
+        return (
+            f"StreamRecord(run_id={self.run_id.value!r}, cursor={self.cursor}, "
+            f"kind={self.kind.value!r}, "
+            f"hash_prefix={self.envelope.content_hash[:12]!r})"
+        )

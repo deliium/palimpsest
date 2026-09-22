@@ -72,3 +72,31 @@ class InMemoryExperimentRecordRepository:
             )
         )
         return tuple(items)
+
+    async def get_membership(
+        self, *, experiment_id: str, run_id: str
+    ):
+        from experiments.persistence import ExperimentMembership
+
+        for record in self._assignments.values():
+            if record.experiment_id == experiment_id and record.run_id == run_id:
+                return ExperimentMembership(
+                    experiment_id=record.experiment_id,
+                    run_id=record.run_id,
+                    source="assignment",
+                    condition_id=record.condition_id,
+                )
+        return None
+
+    async def get_membership_for_run(self, *, run_id: str):
+        from experiments.persistence import ExperimentMembership
+
+        for record in self._assignments.values():
+            if record.run_id == run_id:
+                return ExperimentMembership(
+                    experiment_id=record.experiment_id,
+                    run_id=record.run_id,
+                    source="assignment",
+                    condition_id=record.condition_id,
+                )
+        return None

@@ -13,13 +13,13 @@ from sqlalchemy import text
 from infrastructure.database import DatabaseResources, session_scope
 from infrastructure.settings import Settings
 from persistence.memory_orm import SUBJECTIVE_MEMORY_TABLES
-from persistence.orm import AUTHORITATIVE_TABLES
+from persistence.orm import AUTHORITATIVE_TABLES, SCIENTIFIC_EVIDENCE_TABLES
 from persistence.subjective_orm import SUBJECTIVE_AGENT_TABLES
 
 pytestmark = pytest.mark.integration
 
 ROOT = Path(__file__).resolve().parents[2]
-_EXPECTED_HEAD = "0010"
+_EXPECTED_HEAD = "0012"
 
 # Mutable lifecycle tables keep access/forgetting updates; reconstruction and
 # fragment tables are append-only. Trace content uses a selective trigger.
@@ -72,6 +72,7 @@ async def test_vector_extension_and_event_store_tables_exist(
         )
         found = set(tables.scalars().all())
         assert set(AUTHORITATIVE_TABLES).issubset(found)
+        assert set(SCIENTIFIC_EVIDENCE_TABLES).issubset(found)
         assert set(SUBJECTIVE_MEMORY_TABLES).issubset(found)
         assert set(SUBJECTIVE_AGENT_TABLES).issubset(found)
 
@@ -86,6 +87,7 @@ async def test_orm_metadata_matches_migrated_tables(
 
     expected = (
         set(AUTHORITATIVE_TABLES)
+        | set(SCIENTIFIC_EVIDENCE_TABLES)
         | set(SUBJECTIVE_MEMORY_TABLES)
         | set(SUBJECTIVE_AGENT_TABLES)
     )
@@ -105,6 +107,37 @@ async def test_subjective_memory_tables_are_not_authoritative() -> None:
 async def test_subjective_agent_tables_are_not_authoritative() -> None:
     overlap = set(SUBJECTIVE_AGENT_TABLES) & set(AUTHORITATIVE_TABLES)
     assert not overlap
+
+
+async def test_scientific_evidence_tables_are_not_authoritative() -> None:
+    from persistence.orm import SCIENTIFIC_EVIDENCE_TABLES
+
+    overlap = set(SCIENTIFIC_EVIDENCE_TABLES) & set(AUTHORITATIVE_TABLES)
+    assert not overlap
+
+
+async def test_scientific_evidence_append_only_tables_have_reject_triggers(
+    database_resources: DatabaseResources,
+) -> None:
+    from persistence.orm import SCIENTIFIC_EVIDENCE_APPEND_ONLY_TABLES
+
+    async with session_scope(database_resources.session_factory) as session:
+        for table in sorted(SCIENTIFIC_EVIDENCE_APPEND_ONLY_TABLES):
+            for suffix in ("update", "delete", "truncate"):
+                tgname = f"trg_{table}_reject_{suffix}"
+                result = await session.execute(
+                    text(
+                        """
+                        SELECT tgname FROM pg_trigger t
+                        JOIN pg_class c ON c.oid = t.tgrelid
+                        WHERE c.relname = :table
+                          AND NOT t.tgisinternal
+                          AND tgname = :tgname
+                        """
+                    ),
+                    {"table": table, "tgname": tgname},
+                )
+                assert result.scalars().all() == [tgname]
 
 
 async def test_mutable_subjective_tables_lack_full_reject_triggers(

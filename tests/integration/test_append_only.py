@@ -1,4 +1,4 @@
-"""Append-only trigger enforcement on authoritative history tables."""
+"""Append-only trigger enforcement on authoritative and scientific tables."""
 
 from __future__ import annotations
 
@@ -9,11 +9,15 @@ from sqlalchemy import text
 from sqlalchemy.exc import DBAPIError, IntegrityError
 
 from infrastructure.database import DatabaseResources, session_scope
+from persistence.orm import SCIENTIFIC_EVIDENCE_APPEND_ONLY_TABLES
 
 pytestmark = pytest.mark.integration
 
 _HASH_A = "a" * 64
 _HASH_B = "b" * 64
+
+# Registry of append-only scientific evidence tables (Task 7).
+_SCIENTIFIC_APPEND_ONLY = SCIENTIFIC_EVIDENCE_APPEND_ONLY_TABLES
 
 
 def _unique(prefix: str) -> str:
@@ -142,3 +146,27 @@ async def test_update_delete_truncate_rejected_insert_allowed(
             {"run_id": run_id},
         )
         assert count.scalar_one() == 2
+
+
+async def test_scientific_evidence_append_only_registry(
+    database_resources: DatabaseResources,
+) -> None:
+    """Every Task-7 append-only table has update/delete/truncate reject triggers."""
+    async with session_scope(database_resources.session_factory) as session:
+        assert _SCIENTIFIC_APPEND_ONLY
+        for table in _SCIENTIFIC_APPEND_ONLY:
+            for suffix in ("update", "delete", "truncate"):
+                tgname = f"trg_{table}_reject_{suffix}"
+                result = await session.execute(
+                    text(
+                        """
+                        SELECT tgname FROM pg_trigger t
+                        JOIN pg_class c ON c.oid = t.tgrelid
+                        WHERE c.relname = :table
+                          AND NOT t.tgisinternal
+                          AND tgname = :tgname
+                        """
+                    ),
+                    {"table": table, "tgname": tgname},
+                )
+                assert result.scalars().all() == [tgname], table

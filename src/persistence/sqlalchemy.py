@@ -392,6 +392,57 @@ class SqlAlchemyTickJournalRepository:
                 events.append(decoded)
             return tuple(events)
 
+    async def list_events_keyset(
+        self,
+        run_id: RunId,
+        *,
+        after_tick: int,
+        after_sequence: int,
+        to_tick: Tick | None,
+        limit: int,
+    ) -> tuple[WorldEvent, ...]:
+        if type(run_id) is not RunId:
+            raise TypeError("run_id must be RunId")
+        if to_tick is not None and type(to_tick) is not Tick:
+            raise TypeError("to_tick must be Tick or None")
+        if isinstance(limit, bool) or not isinstance(limit, int) or limit < 0:
+            raise ValueError("limit must be a non-negative int")
+        if isinstance(after_tick, bool) or not isinstance(after_tick, int) or after_tick < 0:
+            raise ValueError("after_tick must be a non-negative int")
+        if isinstance(after_sequence, bool) or not isinstance(after_sequence, int):
+            raise ValueError("after_sequence must be an int")
+        from sqlalchemy import and_, or_
+
+        stmt = (
+            select(WorldEventOrm)
+            .where(WorldEventOrm.run_id == run_id.value)
+            .where(
+                or_(
+                    WorldEventOrm.tick > after_tick,
+                    and_(
+                        WorldEventOrm.tick == after_tick,
+                        WorldEventOrm.sequence > after_sequence,
+                    ),
+                )
+            )
+            .order_by(WorldEventOrm.tick, WorldEventOrm.sequence)
+            .limit(limit)
+        )
+        if to_tick is not None:
+            stmt = stmt.where(WorldEventOrm.tick <= to_tick.value)
+        async with session_scope(self._session_factory) as session:
+            result = await session.execute(stmt)
+            rows = result.scalars().all()
+            events: list[WorldEvent] = []
+            for row in rows:
+                decoded = event_from_orm(row)
+                if type(decoded) is not WorldEvent:
+                    raise PersistenceCorruptionError(
+                        "invalid_event", operation="list_events_keyset"
+                    )
+                events.append(decoded)
+            return tuple(events)
+
     async def list_tick_commits(
         self,
         run_id: RunId,

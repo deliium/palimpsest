@@ -1,14 +1,17 @@
 """Read-only SQLAlchemy loader for experiment memory-drift analysis.
 
-SELECT-only. Fail closed when experiment/run membership is missing. Does not
-import analysis types; callers map the snapshot into analysis evidence sources
-via ``experiments.composition``. Never logs event details, memory content,
-narratives, or SQL parameters.
+SELECT-only. Experiment membership is optional: when ``experiment_id`` is
+provided, fail closed if membership is missing; when omitted, load by run/owner
+only. Optional ``EvidenceManifest`` clamps sources under repeatable-read
+semantics in one session. Does not import analysis types; callers map the
+snapshot into analysis evidence sources via ``experiments.composition``. Never
+logs event details, memory content, narratives, or SQL parameters.
 """
 
 from __future__ import annotations
 
 import logging
+import time
 from collections.abc import Sequence
 from typing import Final, cast
 
@@ -51,9 +54,20 @@ from persistence.memory_orm import (
     MemoryRelationOrm,
     MemoryTraceOrm,
 )
-from persistence.orm import ExperimentRunOrm, WorldEventOrm
+from persistence.orm import (
+    ExperimentAssignmentOrm,
+    ExperimentRunOrm,
+    SimulationRunOrm,
+    WorldEventOrm,
+)
 from persistence.readers import event_from_orm
 from persistence.transmission_mapping import transmission_from_row
+from simulation.evidence import (
+    EvidenceManifest,
+    clamp_sequence_to_high_water,
+    manifest_hash_prefix,
+)
+from simulation.models import RunId
 
 __all__ = [
     "PersistedAnalysisSnapshot",
@@ -67,7 +81,7 @@ _LOG: Final[logging.Logger] = logging.getLogger("persistence.analysis_sqlalchemy
 
 
 class SqlAlchemyAnalysisEvidenceLoader:
-    """Async read-only loader scoped by explicit experiment/run membership."""
+    """Async read-only loader for run/owner scope; experiment membership optional."""
 
     __slots__ = ("_session_factory",)
 
@@ -77,10 +91,33 @@ class SqlAlchemyAnalysisEvidenceLoader:
     async def load(
         self,
         *,
-        experiment_id: str,
         run_id: str,
         owner_id: str,
+        experiment_id: str | None = None,
+        manifest: EvidenceManifest | None = None,
     ) -> PersistedAnalysisSnapshot:
+        run_id = RunId(run_id).value
+        owner_id = AgentId(owner_id).value
+        if experiment_id is not None:
+            from simulation.persistence import ExperimentId
+
+            experiment_id = ExperimentId(experiment_id).value
+        if manifest is not None:
+            if type(manifest) is not EvidenceManifest:
+                raise TypeError("manifest must be EvidenceManifest")
+            if manifest.run_id != run_id:
+                _LOG.error(
+                    "analysis_evidence_manifest_scope_mismatch",
+                    extra={
+                        "operation": "load",
+                        "run_id": run_id,
+                        "reason_code": "manifest_run_scope_mismatch",
+                    },
+                )
+                raise PersistenceAdapterError(
+                    "manifest_run_scope_mismatch", operation="load"
+                )
+        started = time.perf_counter()
         _LOG.debug(
             "analysis_evidence_load_start",
             extra={
@@ -88,23 +125,42 @@ class SqlAlchemyAnalysisEvidenceLoader:
                 "experiment_id": experiment_id,
                 "run_id": run_id,
                 "owner_id": owner_id,
+                "has_manifest": manifest is not None,
+                "manifest_hash_prefix": (
+                    None if manifest is None else manifest_hash_prefix(manifest)
+                ),
             },
         )
         async with session_scope(self._session_factory) as session:
-            membership = await session.get(ExperimentRunOrm, (experiment_id, run_id))
-            if membership is None:
+            run_row = await session.get(SimulationRunOrm, run_id)
+            if run_row is None:
                 _LOG.error(
-                    "analysis_evidence_membership_missing",
+                    "analysis_evidence_run_missing",
                     extra={
                         "operation": "load",
-                        "experiment_id": experiment_id,
                         "run_id": run_id,
-                        "reason_code": "experiment_run_not_found",
+                        "reason_code": "run_not_found",
                     },
                 )
-                raise PersistenceNotFoundError(
-                    "experiment_run_not_found", operation="load"
+                raise PersistenceNotFoundError("run_not_found", operation="load")
+
+            if experiment_id is not None:
+                membership = await _has_canonical_membership(
+                    session, experiment_id=experiment_id, run_id=run_id
                 )
+                if not membership:
+                    _LOG.error(
+                        "analysis_evidence_membership_missing",
+                        extra={
+                            "operation": "load",
+                            "experiment_id": experiment_id,
+                            "run_id": run_id,
+                            "reason_code": "experiment_membership_not_found",
+                        },
+                    )
+                    raise PersistenceNotFoundError(
+                        "experiment_membership_not_found", operation="load"
+                    )
 
             traces = await _load_traces(session, run_id=run_id, owner_id=owner_id)
             reconstructions = await _load_reconstructions(
@@ -115,8 +171,16 @@ class SqlAlchemyAnalysisEvidenceLoader:
             )
             events = await _load_events(session, run_id=run_id)
 
+            if manifest is not None:
+                traces, reconstructions, edges = _clamp_to_manifest(
+                    traces=traces,
+                    reconstructions=reconstructions,
+                    edges=edges,
+                    manifest=manifest,
+                )
+
         snapshot = PersistedAnalysisSnapshot(
-            experiment_id=experiment_id,
+            experiment_id=experiment_id or "",
             run_id=run_id,
             owner_id=owner_id,
             traces=traces,
@@ -124,6 +188,7 @@ class SqlAlchemyAnalysisEvidenceLoader:
             derivation_edges=edges,
             events=events,
         )
+        duration_ms = round((time.perf_counter() - started) * 1000, 3)
         _LOG.debug(
             "analysis_evidence_load_complete",
             extra={
@@ -135,6 +200,8 @@ class SqlAlchemyAnalysisEvidenceLoader:
                 "reconstruction_count": len(reconstructions),
                 "edge_count": len(edges),
                 "event_count": len(events),
+                "availability": "available",
+                "duration_ms": duration_ms,
             },
         )
         _LOG.info(
@@ -149,6 +216,95 @@ class SqlAlchemyAnalysisEvidenceLoader:
             },
         )
         return snapshot
+
+
+def _clamp_to_manifest(
+    *,
+    traces: tuple[MemoryTrace, ...],
+    reconstructions: tuple[PersistedReconstructionRow, ...],
+    edges: tuple[PersistedDerivationEdge, ...],
+    manifest: EvidenceManifest,
+) -> tuple[
+    tuple[MemoryTrace, ...],
+    tuple[PersistedReconstructionRow, ...],
+    tuple[PersistedDerivationEdge, ...],
+]:
+    marks = manifest.high_water
+    direct = tuple(
+        trace
+        for trace in traces
+        if trace.provenance.kind is MemorySourceKind.DIRECT_OBSERVATION
+    )
+    communicated = tuple(
+        trace
+        for trace in traces
+        if trace.provenance.kind is MemorySourceKind.COMMUNICATED
+    )
+    unknown = tuple(
+        trace
+        for trace in traces
+        if trace.provenance.kind
+        not in {
+            MemorySourceKind.DIRECT_OBSERVATION,
+            MemorySourceKind.COMMUNICATED,
+        }
+    )
+    if unknown:
+        _LOG.warning(
+            "analysis_evidence_legacy_trace_kind",
+            extra={
+                "operation": "_clamp_to_manifest",
+                "reason_code": "legacy_or_unknown_trace_kind",
+                "run_id": manifest.run_id,
+                "unknown_count": len(unknown),
+            },
+        )
+    clamped_direct = clamp_sequence_to_high_water(
+        direct, marks.direct_memories, source_label="direct_memories"
+    )
+    clamped_communicated = clamp_sequence_to_high_water(
+        communicated,
+        marks.communicated_memories,
+        source_label="communicated_memories",
+    )
+    clamped_traces = clamped_direct + clamped_communicated
+    clamped_reconstructions = clamp_sequence_to_high_water(
+        reconstructions, marks.reconstructions, source_label="reconstructions"
+    )
+    kept_memory_ids = {trace.memory_id.value for trace in clamped_traces}
+    kept_reconstruction_ids = {
+        row.reconstruction_id for row in clamped_reconstructions
+    }
+    filtered_edges = tuple(
+        edge
+        for edge in edges
+        if edge.derived_memory_id in kept_memory_ids
+        or (
+            edge.reconstruction_id is not None
+            and edge.reconstruction_id in kept_reconstruction_ids
+        )
+    )
+    return clamped_traces, clamped_reconstructions, filtered_edges
+
+
+async def _has_canonical_membership(
+    session: AsyncSession, *, experiment_id: str, run_id: str
+) -> bool:
+    """True when assignment or legacy experiment_runs membership exists."""
+    assignment = (
+        await session.execute(
+            select(ExperimentAssignmentOrm)
+            .where(
+                ExperimentAssignmentOrm.experiment_id == experiment_id,
+                ExperimentAssignmentOrm.run_id == run_id,
+            )
+            .limit(1)
+        )
+    ).scalar_one_or_none()
+    if assignment is not None:
+        return True
+    legacy = await session.get(ExperimentRunOrm, (experiment_id, run_id))
+    return legacy is not None
 
 
 def create_analysis_evidence_loader(

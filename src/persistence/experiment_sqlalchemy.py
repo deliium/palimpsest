@@ -13,6 +13,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 from experiments.persistence import (
     ExperimentAssignmentRecord,
     ExperimentDefinitionRecord,
+    ExperimentMembership,
     ExperimentResultRecord,
 )
 from infrastructure.database import session_scope
@@ -24,7 +25,10 @@ from persistence.errors import (
 from persistence.orm import (
     ExperimentAssignmentOrm,
     ExperimentDefinitionOrm,
+    ExperimentOrm,
     ExperimentResultOrm,
+    ExperimentRunOrm,
+    SimulationRunOrm,
 )
 
 _LOGGER = get_logger("persistence.experiment_sqlalchemy")
@@ -125,6 +129,11 @@ class SqlAlchemyExperimentRecordRepository:
                     raise PersistenceConflictError(
                         "definition_missing", operation="append_assignment"
                     )
+                run = await session.get(SimulationRunOrm, record.run_id)
+                if run is None:
+                    raise PersistenceConflictError(
+                        "run_missing", operation="append_assignment"
+                    )
                 session.add(
                     ExperimentAssignmentOrm(
                         experiment_id=record.experiment_id,
@@ -136,6 +145,7 @@ class SqlAlchemyExperimentRecordRepository:
                         config_fingerprint=record.config_fingerprint,
                     )
                 )
+                await _ensure_canonical_membership(session, record)
                 await session.commit()
         except PersistenceAdapterError:
             raise
@@ -236,6 +246,114 @@ class SqlAlchemyExperimentRecordRepository:
                 )
                 for row in rows
             )
+
+    async def get_membership(
+        self, *, experiment_id: str, run_id: str
+    ) -> ExperimentMembership | None:
+        async with session_scope(self._session_factory) as session:
+            return await _load_membership(
+                session, experiment_id=experiment_id, run_id=run_id
+            )
+
+    async def get_membership_for_run(
+        self, *, run_id: str
+    ) -> ExperimentMembership | None:
+        async with session_scope(self._session_factory) as session:
+            assignment = (
+                await session.execute(
+                    select(ExperimentAssignmentOrm).where(
+                        ExperimentAssignmentOrm.run_id == run_id
+                    )
+                )
+            ).scalar_one_or_none()
+            if assignment is not None:
+                return ExperimentMembership(
+                    experiment_id=assignment.experiment_id,
+                    run_id=assignment.run_id,
+                    source="assignment",
+                    condition_id=assignment.condition_id,
+                )
+            legacy = (
+                await session.execute(
+                    select(ExperimentRunOrm)
+                    .where(ExperimentRunOrm.run_id == run_id)
+                    .order_by(ExperimentRunOrm.ordinal)
+                    .limit(1)
+                )
+            ).scalar_one_or_none()
+            if legacy is None:
+                return None
+            return ExperimentMembership(
+                experiment_id=legacy.experiment_id,
+                run_id=legacy.run_id,
+                source="legacy_run",
+                ordinal=legacy.ordinal,
+            )
+
+
+async def _ensure_canonical_membership(
+    session: AsyncSession, record: ExperimentAssignmentRecord
+) -> None:
+    """Mirror assignment into experiments/experiment_runs membership tables."""
+    experiment = await session.get(ExperimentOrm, record.experiment_id)
+    if experiment is None:
+        session.add(
+            ExperimentOrm(
+                experiment_id=record.experiment_id,
+                label=record.experiment_id,
+            )
+        )
+        await session.flush()
+    membership = await session.get(
+        ExperimentRunOrm, (record.experiment_id, record.run_id)
+    )
+    if membership is not None:
+        return
+    max_ordinal = (
+        await session.execute(
+            select(ExperimentRunOrm.ordinal)
+            .where(ExperimentRunOrm.experiment_id == record.experiment_id)
+            .order_by(ExperimentRunOrm.ordinal.desc())
+            .limit(1)
+        )
+    ).scalar_one_or_none()
+    next_ordinal = 0 if max_ordinal is None else int(max_ordinal) + 1
+    session.add(
+        ExperimentRunOrm(
+            experiment_id=record.experiment_id,
+            run_id=record.run_id,
+            ordinal=next_ordinal,
+        )
+    )
+
+
+async def _load_membership(
+    session: AsyncSession, *, experiment_id: str, run_id: str
+) -> ExperimentMembership | None:
+    assignment = (
+        await session.execute(
+            select(ExperimentAssignmentOrm).where(
+                ExperimentAssignmentOrm.experiment_id == experiment_id,
+                ExperimentAssignmentOrm.run_id == run_id,
+            )
+        )
+    ).scalar_one_or_none()
+    if assignment is not None:
+        return ExperimentMembership(
+            experiment_id=assignment.experiment_id,
+            run_id=assignment.run_id,
+            source="assignment",
+            condition_id=assignment.condition_id,
+        )
+    legacy = await session.get(ExperimentRunOrm, (experiment_id, run_id))
+    if legacy is None:
+        return None
+    return ExperimentMembership(
+        experiment_id=legacy.experiment_id,
+        run_id=legacy.run_id,
+        source="legacy_run",
+        ordinal=legacy.ordinal,
+    )
 
 
 def _definition_matches(

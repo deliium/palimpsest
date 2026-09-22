@@ -29,16 +29,18 @@ src/
   llm/providers/         # OpenAI-compatible HTTP adapter + pure codec
   simulation/            # WorldEngine, AgentRuntime, SimulationRunner, codecs, replay
                          # run_control.py (resume modes + finalization-command contracts)
+                         # inspection.py (detached objective/agent-visible projection; no live observe)
   experiments/           # trusted experiment catalog/coordinator (A–E); never imported by domain
                          # composition.py maps neutral persistence snapshots → analysis sources
   persistence/           # SQLAlchemy adapters (simulation, memory, subjective, analysis loaders)
+                         # inspection_sqlalchemy.py (keyset pagination + manifest-constrained reads)
                          # may implement experiments.persistence ports; transmission_mapping.py
   analysis/              # read-only analysis: drift/transmission, metric DTOs,
                          # evidence stages, claim truth, numerical policy, canonical codecs
                          # MemoryDriftAnalysisService + SocialTransmissionAnalysisService
   api/                   # FastAPI composition root (no LLM provider wiring yet)
   infrastructure/        # settings (PALIMPSEST_*), logging, database adapters
-alembic/versions/        # migrations through 0010 (experiment framework records)
+alembic/versions/        # migrations through 0012 (run control + scientific evidence)
 docs/                    # contributor docs (architecture, memory, social-communication, …)
 tests/
   unit/ architecture/ integration/ compose/ typecheck/ fakes/

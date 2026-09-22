@@ -2,8 +2,10 @@
 
 Structured filters and ownership predicates run in SQL before ranking. Scoring
 uses the pure ``memory.scoring`` helpers so PostgreSQL and in-memory results
-share the same total order. This module must not import event ORM classes,
-``world.events``, private world authority, or replay readers.
+share the same total order. Paginated inspection reads for research/debug live
+in ``persistence.inspection_sqlalchemy`` (not this write-path service). This
+module must not import event ORM classes, ``world.events``, private world
+authority, or replay readers.
 """
 
 from __future__ import annotations

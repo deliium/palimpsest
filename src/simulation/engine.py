@@ -11,7 +11,7 @@ import logging
 from collections.abc import Sequence
 from dataclasses import dataclass
 from enum import StrEnum
-from typing import Final
+from typing import TYPE_CHECKING, Final
 
 from agents.models import AgentId
 from simulation.actions import (
@@ -102,6 +102,9 @@ from world.identifiers import EntityId, EventId, RequestId, WorldId, WorldRevisi
 from world.models import AgentBody, LifeStatus, default_physical_rules
 from world.observations import Observation, ObservationContext
 from world.values import WeatherCondition, clamp_unit_interval
+
+if TYPE_CHECKING:
+    from simulation.runner_models import DetachedObjectiveProjection
 
 _LOGGER = logging.getLogger("simulation.engine")
 
@@ -381,6 +384,129 @@ class WorldEngine:
             bodies[entity_id]
             for entity_id in sorted(bodies.keys(), key=lambda item: item.value)
         )
+
+    def detached_objective_projection(self) -> DetachedObjectiveProjection:
+        """Public objective projection without mutating engine phase."""
+        from simulation.runner_models import build_detached_objective_projection
+
+        return build_detached_objective_projection(
+            tick=self.tick.value,
+            revision=self.revision.value,
+            bodies=self.detached_bodies(),
+        )
+
+    def project_detached_observations(self) -> ObservationBatch:
+        """Project agent-visible observations without mutating engine phase.
+
+        Mirrors the PerceptionService path used by ``observe()`` but never
+        advances phase, never stores a tick token, and never writes the batch
+        onto the live snapshot. Intended for inspection/replay only.
+        """
+        snap = self._snapshot
+        if (
+            snap.phase is EnginePhase.AWAITING_SUBMISSIONS
+            and snap.observation_batch is not None
+        ):
+            _LOGGER.debug(
+                "%s tick=%s observers=%s revision=%s prior_events=%s "
+                "detached_replay=1",
+                EngineDiagnosticCode.OBSERVATIONS_ISSUED.value,
+                snap.tick.value,
+                len(snap.observation_batch.observations),
+                snap.world.state.revision.value,
+                len(snap.prior_event_window),
+            )
+            return snap.observation_batch
+        if snap.phase not in {
+            EnginePhase.AWAITING_OBSERVATION,
+            EnginePhase.AWAITING_SUBMISSIONS,
+        }:
+            _LOGGER.error(
+                "%s reason=detached_observe_wrong_phase phase=%s tick=%s",
+                EngineDiagnosticCode.LIFECYCLE_MISUSE.value,
+                snap.phase.value,
+                snap.tick.value,
+            )
+            raise RuntimeError("detached observations unavailable in current phase")
+        observer_ids = tuple(
+            registration.entity_id for registration in self._registrations
+        )
+        rules = self._config.physical_rules
+        if rules is None:
+            rules = default_physical_rules()
+        context = ObservationContext(tick=snap.tick.value, physical_rules=rules)
+        prior_events = snap.prior_event_window
+        try:
+            observations = self._perception.project(
+                world_id=self.world_id,
+                state=snap.world.state,
+                observer_ids=observer_ids,
+                context=context,
+                prior_events=prior_events,
+            )
+        except (TypeError, ValueError) as exc:
+            _LOGGER.error(
+                "%s tick=%s code=detached_observation_invariant reason=%s",
+                EngineDiagnosticCode.CANDIDATE_ABORTED.value,
+                snap.tick.value,
+                type(exc).__name__,
+            )
+            raise
+        token = TickToken(
+            value=derive_scoped_id(
+                self._config,
+                StreamScope(
+                    namespace="tick-token",
+                    names=(
+                        self._engine_id,
+                        self._run_id.value,
+                        self.world_id.value,
+                        f"tick:{snap.tick.value}",
+                        "detached-inspection",
+                    ),
+                ),
+            ),
+            tick=snap.tick,
+        )
+        batch = ObservationBatch(
+            tick=snap.tick,
+            revision=snap.world.state.revision,
+            token=token,
+            observations=observations,
+        )
+        _LOGGER.debug(
+            "%s tick=%s observers=%s revision=%s prior_events=%s "
+            "detached_replay=0 phase_unchanged=%s",
+            EngineDiagnosticCode.OBSERVATIONS_ISSUED.value,
+            snap.tick.value,
+            len(observations),
+            snap.world.state.revision.value,
+            len(prior_events),
+            snap.phase.value,
+        )
+        return batch
+
+    def project_agent_visible_detached(
+        self, agent_id: AgentId
+    ) -> tuple[EntityId, Observation]:
+        """Return ``(entity_id, observation)`` for one agent without phase mutation."""
+        if type(agent_id) is not AgentId:
+            raise TypeError("project_agent_visible_detached requires AgentId")
+        entity_id = self._translator.to_entity_id(agent_id)
+        batch = self.project_detached_observations()
+        observation = batch.for_observer(entity_id)
+        _LOGGER.debug(
+            "%s tick=%s agent=%s entity=%s revision=%s "
+            "occurrences=%s communications=%s detached=1",
+            EngineDiagnosticCode.OBSERVATION_ROUTED.value,
+            self.tick.value,
+            agent_id.value,
+            entity_id.value,
+            batch.revision.value,
+            len(observation.occurrences),
+            len(observation.communications),
+        )
+        return entity_id, observation
 
     def observe(self) -> ObservationBatch:
         """Issue or replay the immutable observation batch for the open tick.

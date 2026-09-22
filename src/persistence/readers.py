@@ -29,7 +29,9 @@ __all__ = [
     "event_details_payload",
     "event_from_orm",
     "event_occurrence_payload",
+    "keyset_after_tuple",
     "manifest_from_run_orm",
+    "next_event_keyset_cursor",
     "nonneg_int_from_numeric",
     "snapshot_from_canonical_payload",
     "tick_commit_from_orm",
@@ -274,3 +276,34 @@ def snapshot_from_canonical_payload(
             "integrity_mismatch", operation="snapshot_from_canonical_payload"
         )
     return decoded
+
+
+def keyset_after_tuple(after: object | None) -> tuple[int, int]:
+    """Normalize an optional event keyset cursor to ``(tick, sequence)``.
+
+    ``None`` starts before the first event ``(0, -1)``.
+    """
+    if after is None:
+        return (0, -1)
+    tick = getattr(after, "tick", None)
+    sequence = getattr(after, "sequence", None)
+    if type(tick) is not int or type(sequence) is not int:
+        raise TypeError("after must expose int tick and sequence")
+    if tick < 0 or sequence < 0:
+        raise ValueError("after cursor must be non-negative")
+    return (tick, sequence)
+
+
+def next_event_keyset_cursor(events: object) -> object | None:
+    """Build the next event keyset cursor from the last page event, if any."""
+    from simulation.inspection import EventKeysetCursor
+
+    if not events:
+        return None
+    sequence = tuple(events)  # type: ignore[arg-type]
+    last = sequence[-1]
+    tick = getattr(last, "tick", None)
+    seq = getattr(last, "sequence", None)
+    if type(tick) is not int or type(seq) is not int:
+        raise TypeError("events must expose tick and sequence")
+    return EventKeysetCursor(tick=tick, sequence=seq)

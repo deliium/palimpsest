@@ -49,6 +49,27 @@ __all__ = [
     "ReplayService",
 ]
 
+_DEFAULT_PAGE_SIZE = 100
+_MAX_PAGE_SIZE = 1000
+
+
+def _clamp_page_limit(limit: int) -> int:
+    if isinstance(limit, bool) or type(limit) is not int or limit < 1:
+        _LOGGER.error(
+            "%s code=invalid_page_limit",
+            EngineDiagnosticCode.CHECKPOINT_CORRUPT.value,
+        )
+        raise ValueError("invalid_page_limit")
+    if limit > _MAX_PAGE_SIZE:
+        _LOGGER.error(
+            "%s code=page_limit_exceeded limit=%s maximum=%s",
+            EngineDiagnosticCode.CHECKPOINT_CORRUPT.value,
+            limit,
+            _MAX_PAGE_SIZE,
+        )
+        raise ValueError("page_limit_exceeded")
+    return limit
+
 
 @dataclass(frozen=True, slots=True)
 class ReplayOutcome:
@@ -454,7 +475,7 @@ class ReplayService:
         *,
         from_tick: Tick,
         to_tick: Tick | None = None,
-        limit: int = 100,
+        limit: int = _DEFAULT_PAGE_SIZE,
         offset: int = 0,
     ) -> ReplayEventPage:
         """Return a detached page of objective events (no live engine)."""
@@ -464,8 +485,7 @@ class ReplayService:
             raise TypeError("from_tick must be Tick")
         if to_tick is not None and type(to_tick) is not Tick:
             raise TypeError("to_tick must be Tick or None")
-        if isinstance(limit, bool) or type(limit) is not int or limit < 1:
-            raise ValueError("limit must be a positive int")
+        limit = _clamp_page_limit(limit)
         if isinstance(offset, bool) or type(offset) is not int or offset < 0:
             raise ValueError("offset must be a non-negative int")
         events = await self._journal.list_events(
@@ -497,13 +517,108 @@ class ReplayService:
             next_offset=next_offset,
         )
 
+    async def read_event_keyset_page(
+        self,
+        run_id: RunId,
+        *,
+        after_tick: int = 0,
+        after_sequence: int = -1,
+        to_tick: Tick | None = None,
+        limit: int = _DEFAULT_PAGE_SIZE,
+    ) -> ReplayEventPage:
+        """Detached keyset page of events ordered by ``(tick, sequence)``.
+
+        Pass ``after_sequence=-1`` with ``after_tick=0`` to start from the head.
+        Chunked reads request ``limit + 1`` rows to compute the next cursor.
+        """
+        if type(run_id) is not RunId:
+            raise TypeError("run_id must be RunId")
+        if to_tick is not None and type(to_tick) is not Tick:
+            raise TypeError("to_tick must be Tick or None")
+        limit = _clamp_page_limit(limit)
+        if (
+            isinstance(after_tick, bool)
+            or type(after_tick) is not int
+            or after_tick < 0
+        ):
+            raise ValueError("after_tick must be a non-negative int")
+        if isinstance(after_sequence, bool) or type(after_sequence) is not int:
+            raise ValueError("after_sequence must be an int")
+        if after_sequence < -1:
+            raise ValueError("after_sequence must be >= -1")
+        list_events_keyset = getattr(self._journal, "list_events_keyset", None)
+        if list_events_keyset is None:
+            # Fallback: offset scan from from_tick (tests/fakes without keyset).
+            raw = await self._journal.list_events(
+                run_id,
+                from_tick=Tick(after_tick),
+                to_tick=to_tick,
+                limit=limit + 1 + max(0, after_sequence + 1),
+                offset=0,
+            )
+            filtered = tuple(
+                event
+                for event in raw
+                if (event.tick, event.sequence) > (after_tick, after_sequence)
+            )[: limit + 1]
+        else:
+            filtered = await list_events_keyset(
+                run_id,
+                after_tick=after_tick,
+                after_sequence=after_sequence,
+                to_tick=to_tick,
+                limit=limit + 1,
+            )
+        page = filtered[:limit]
+        next_offset = None
+        if len(filtered) > limit:
+            next_offset = 0  # signal more pages; callers should use keyset cursor
+        _LOGGER.debug(
+            "replay_event_keyset_page run_id=%s after_tick=%s after_sequence=%s "
+            "to_tick=%s limit=%s event_count=%s has_more=%s",
+            run_id.value,
+            after_tick,
+            after_sequence,
+            None if to_tick is None else to_tick.value,
+            limit,
+            len(page),
+            len(filtered) > limit,
+        )
+        return ReplayEventPage(
+            run_id=run_id,
+            from_tick=Tick(after_tick),
+            to_tick=to_tick,
+            limit=limit,
+            offset=0,
+            events=page,
+            next_offset=next_offset,
+        )
+
+    async def inspect_at_tick(
+        self,
+        request: ReplayRequest,
+        *,
+        agent_id: object | None = None,
+    ) -> object:
+        """Replay then project public inspection DTOs (never returns an engine)."""
+        from agents.models import AgentId as AgentIdType
+        from simulation.inspection import project_replay_for_inspection
+
+        outcome = await self.replay(request)
+        resolved_agent: AgentIdType | None = None
+        if agent_id is not None:
+            if type(agent_id) is not AgentIdType:
+                raise TypeError("agent_id must be AgentId or None")
+            resolved_agent = agent_id
+        return project_replay_for_inspection(outcome, agent_id=resolved_agent)
+
     async def read_commit_page(
         self,
         run_id: RunId,
         *,
         from_tick: Tick,
         to_tick: Tick | None = None,
-        limit: int = 100,
+        limit: int = _DEFAULT_PAGE_SIZE,
     ) -> ReplayCommitPage:
         """Return a detached keyset page of tick commits (no live engine)."""
         if type(run_id) is not RunId:
@@ -512,8 +627,7 @@ class ReplayService:
             raise TypeError("from_tick must be Tick")
         if to_tick is not None and type(to_tick) is not Tick:
             raise TypeError("to_tick must be Tick or None")
-        if isinstance(limit, bool) or type(limit) is not int or limit < 1:
-            raise ValueError("limit must be a positive int")
+        limit = _clamp_page_limit(limit)
         commits = await self._journal.list_tick_commits(
             run_id, from_tick=from_tick, to_tick=to_tick
         )

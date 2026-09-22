@@ -16,11 +16,24 @@ from typing import Final, Protocol
 
 from simulation.bootstrap import AgentRegistration, WorldBootstrap
 from simulation.clock import Tick, require_exact_nonneg_int
+from simulation.evidence import (
+    ActionResolutionRecord,
+    EvidenceManifest,
+    GoalRevisionRecord,
+)
 from simulation.models import (
     DERIVATION_VERSION,
     RunId,
     SimulationRunConfig,
     require_seed,
+)
+from simulation.run_control import (
+    ExecutionLease,
+    RunControlRecord,
+    RunLifecycleState,
+    RunLifecycleTransition,
+    StreamRecord,
+    StreamRecordDraft,
 )
 from world.events import (
     EVENT_SCHEMA_REPLAY_V2,
@@ -72,6 +85,7 @@ __all__ = [
     "ExperimentMetadata",
     "ExperimentRepository",
     "ExperimentRunAssignment",
+    "FinalizedBoundaryBatch",
     "PayloadHash",
     "PendingFinalizationRecord",
     "PendingFinalizationRepository",
@@ -83,13 +97,16 @@ __all__ = [
     "ReplayRequest",
     "ReplayResult",
     "ReplayStatus",
+    "RunControlRepository",
     "RunCreateRequest",
     "RunManifest",
     "RunnerAttemptStateRecord",
     "RunnerAttemptStateRepository",
+    "ScientificEvidenceRepository",
     "SimulationRunRepository",
     "SnapshotId",
     "SnapshotRepository",
+    "StreamRepository",
     "TickAppendRequest",
     "TickCommit",
     "TickJournalRepository",
@@ -1002,6 +1019,145 @@ class RunnerAttemptStateRepository(Protocol):
     async def list_recovery_required(
         self, *, run_id: RunId
     ) -> tuple[RunnerAttemptStateRecord, ...]: ...
+
+
+class RunControlRepository(Protocol):
+    """Durable run-control head: config V2, lifecycle, leases, progress."""
+
+    async def upsert_configured(
+        self,
+        record: RunControlRecord,
+    ) -> RunControlRecord: ...
+
+    async def get(self, run_id: RunId) -> RunControlRecord | None: ...
+
+    async def transition(
+        self,
+        *,
+        run_id: RunId,
+        expected_version: int,
+        to_state: RunLifecycleState,
+        reason_code: str,
+        operation_id: str,
+        ticks_committed: int | None = None,
+        progress_cursor: int | None = None,
+        terminal_reason_code: str | None = None,
+    ) -> RunControlRecord: ...
+
+    async def claim_lease(
+        self,
+        *,
+        run_id: RunId,
+        expected_version: int,
+        lease: ExecutionLease,
+        operation_id: str,
+    ) -> RunControlRecord: ...
+
+    async def heartbeat_lease(
+        self,
+        *,
+        run_id: RunId,
+        lease_id: str,
+        heartbeat_at_unix_ms: int,
+        expires_at_unix_ms: int,
+        operation_id: str,
+    ) -> RunControlRecord: ...
+
+    async def release_lease(
+        self,
+        *,
+        run_id: RunId,
+        lease_id: str,
+        operation_id: str,
+    ) -> RunControlRecord: ...
+
+    async def list_transitions(
+        self, *, run_id: RunId
+    ) -> tuple[RunLifecycleTransition, ...]: ...
+
+
+@dataclass(frozen=True, slots=True)
+class FinalizedBoundaryBatch:
+    """Atomic evidence + stream publication at a finalized tick boundary."""
+
+    run_id: RunId
+    tick: int
+    resolutions: tuple[ActionResolutionRecord, ...] = ()
+    goal_revisions: tuple[GoalRevisionRecord, ...] = ()
+    stream_drafts: tuple[StreamRecordDraft, ...] = ()
+    manifest: EvidenceManifest | None = None
+
+    def __post_init__(self) -> None:
+        if type(self.run_id) is not RunId:
+            raise TypeError("run_id must be RunId")
+        object.__setattr__(
+            self,
+            "tick",
+            require_exact_nonneg_int("tick", self.tick),
+        )
+        object.__setattr__(self, "resolutions", tuple(self.resolutions))
+        object.__setattr__(self, "goal_revisions", tuple(self.goal_revisions))
+        object.__setattr__(self, "stream_drafts", tuple(self.stream_drafts))
+        for resolution in self.resolutions:
+            if type(resolution) is not ActionResolutionRecord:
+                raise TypeError("resolutions must be ActionResolutionRecord")
+            if resolution.run_id != self.run_id.value:
+                raise ValueError("resolution_run_mismatch")
+        for goal in self.goal_revisions:
+            if type(goal) is not GoalRevisionRecord:
+                raise TypeError("goal_revisions must be GoalRevisionRecord")
+            if goal.run_id != self.run_id.value:
+                raise ValueError("goal_run_mismatch")
+        for draft in self.stream_drafts:
+            if type(draft) is not StreamRecordDraft:
+                raise TypeError("stream_drafts must be StreamRecordDraft")
+        if self.manifest is not None:
+            if type(self.manifest) is not EvidenceManifest:
+                raise TypeError("manifest must be EvidenceManifest")
+            if self.manifest.run_id != self.run_id.value:
+                raise ValueError("manifest_run_mismatch")
+
+
+class ScientificEvidenceRepository(Protocol):
+    """Append-only goal revisions, action resolutions, and evidence manifests."""
+
+    async def append_goal_revision(self, record: GoalRevisionRecord) -> None: ...
+
+    async def append_action_resolution(
+        self, record: ActionResolutionRecord
+    ) -> None: ...
+
+    async def append_manifest(self, manifest: EvidenceManifest) -> None: ...
+
+    async def get_manifest(
+        self, *, run_id: str, manifest_hash: str | None = None
+    ) -> EvidenceManifest | None: ...
+
+    async def list_goal_revisions(
+        self, *, run_id: str
+    ) -> tuple[GoalRevisionRecord, ...]: ...
+
+    async def list_action_resolutions(
+        self, *, run_id: str, tick: int | None = None
+    ) -> tuple[ActionResolutionRecord, ...]: ...
+
+    async def publish_finalized_boundary(
+        self, batch: FinalizedBoundaryBatch
+    ) -> tuple[StreamRecord, ...]: ...
+
+
+class StreamRepository(Protocol):
+    """Unified durable stream/outbox with one monotonic cursor per run."""
+
+    async def publish(
+        self, *, run_id: RunId, drafts: Sequence[StreamRecordDraft]
+    ) -> tuple[StreamRecord, ...]: ...
+
+    async def read_after(
+        self, *, run_id: RunId, after_cursor: int, limit: int
+    ) -> tuple[StreamRecord, ...]: ...
+
+    async def high_water(self, *, run_id: RunId) -> int: ...
 
 
 def persistence_diagnostic_fields(

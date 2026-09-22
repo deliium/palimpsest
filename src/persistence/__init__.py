@@ -43,13 +43,22 @@ __all__ = [
     "create_analysis_evidence_loader",
     "create_experiment_record_repository",
     "create_experiment_repository",
+    "create_inspection_evidence_loader",
     "create_memory_service",
+    "create_metric_document_repository",
+    "create_metric_set_repository",
+    "create_objective_evidence_loader",
     "create_pending_finalization_repository",
+    "create_run_control_repository",
     "create_run_repository",
     "create_runner_attempt_state_repository",
+    "create_scientific_evidence_repository",
     "create_snapshot_repository",
+    "create_stream_repository",
+    "create_subjective_evidence_loader",
     "create_subjective_state_service",
     "create_tick_journal_repository",
+    "create_truth_spec_repository",
 ]
 
 
@@ -153,6 +162,98 @@ def create_runner_attempt_state_repository(
     return impl(session_factory)
 
 
+def create_run_control_repository(
+    session_factory: async_sessionmaker[AsyncSession] | None = None,
+):
+    """Build the durable run-control lifecycle/lease repository."""
+    if session_factory is None:
+        raise PersistenceAdapterError(
+            "missing_session_factory",
+            operation="create_run_control_repository",
+        )
+    from persistence.run_control_sqlalchemy import (
+        create_run_control_repository as impl,
+    )
+
+    return impl(session_factory)
+
+
+def create_scientific_evidence_repository(
+    session_factory: async_sessionmaker[AsyncSession] | None = None,
+):
+    """Build the append-only scientific evidence repository."""
+    if session_factory is None:
+        raise PersistenceAdapterError(
+            "missing_session_factory",
+            operation="create_scientific_evidence_repository",
+        )
+    from persistence.scientific_evidence_sqlalchemy import (
+        create_scientific_evidence_repository as impl,
+    )
+
+    return impl(session_factory)
+
+
+def create_stream_repository(
+    session_factory: async_sessionmaker[AsyncSession] | None = None,
+):
+    """Build the unified durable stream/outbox repository."""
+    if session_factory is None:
+        raise PersistenceAdapterError(
+            "missing_session_factory",
+            operation="create_stream_repository",
+        )
+    from persistence.scientific_evidence_sqlalchemy import (
+        create_stream_repository as impl,
+    )
+
+    return impl(session_factory)
+
+
+def create_truth_spec_repository(
+    session_factory: async_sessionmaker[AsyncSession] | None = None,
+):
+    """Build the append-only claim truth-spec repository."""
+    if session_factory is None:
+        raise PersistenceAdapterError(
+            "missing_session_factory",
+            operation="create_truth_spec_repository",
+        )
+    from persistence.metric_sqlalchemy import create_truth_spec_repository as impl
+
+    return impl(session_factory)
+
+
+def create_metric_set_repository(
+    session_factory: async_sessionmaker[AsyncSession] | None = None,
+):
+    """Build the metric-set lifecycle repository."""
+    if session_factory is None:
+        raise PersistenceAdapterError(
+            "missing_session_factory",
+            operation="create_metric_set_repository",
+        )
+    from persistence.metric_sqlalchemy import create_metric_set_repository as impl
+
+    return impl(session_factory)
+
+
+def create_metric_document_repository(
+    session_factory: async_sessionmaker[AsyncSession] | None = None,
+):
+    """Build the append-only metric document repository."""
+    if session_factory is None:
+        raise PersistenceAdapterError(
+            "missing_session_factory",
+            operation="create_metric_document_repository",
+        )
+    from persistence.metric_sqlalchemy import (
+        create_metric_document_repository as impl,
+    )
+
+    return impl(session_factory)
+
+
 def create_analysis_evidence_loader(
     session_factory: async_sessionmaker[AsyncSession] | None = None,
 ) -> SqlAlchemyAnalysisEvidenceLoader:
@@ -163,6 +264,51 @@ def create_analysis_evidence_loader(
         )
     from persistence.analysis_sqlalchemy import (
         create_analysis_evidence_loader as impl,
+    )
+
+    return impl(session_factory)
+
+
+def create_objective_evidence_loader(
+    session_factory: async_sessionmaker[AsyncSession] | None = None,
+):
+    """Build a run-scoped objective inspection event loader."""
+    if session_factory is None:
+        raise PersistenceAdapterError(
+            "missing_session_factory", operation="create_objective_evidence_loader"
+        )
+    from persistence.inspection_sqlalchemy import (
+        create_objective_evidence_loader as impl,
+    )
+
+    return impl(session_factory)
+
+
+def create_subjective_evidence_loader(
+    session_factory: async_sessionmaker[AsyncSession] | None = None,
+):
+    """Build a run/owner-scoped subjective inspection loader (debug surface)."""
+    if session_factory is None:
+        raise PersistenceAdapterError(
+            "missing_session_factory", operation="create_subjective_evidence_loader"
+        )
+    from persistence.inspection_sqlalchemy import (
+        create_subjective_evidence_loader as impl,
+    )
+
+    return impl(session_factory)
+
+
+def create_inspection_evidence_loader(
+    session_factory: async_sessionmaker[AsyncSession] | None = None,
+):
+    """Build the combined objective/subjective inspection loader facade."""
+    if session_factory is None:
+        raise PersistenceAdapterError(
+            "missing_session_factory", operation="create_inspection_evidence_loader"
+        )
+    from persistence.inspection_sqlalchemy import (
+        create_inspection_evidence_loader as impl,
     )
 
     return impl(session_factory)

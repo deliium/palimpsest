@@ -16,16 +16,19 @@ from analysis.models import ReconstructionEvidence, SubjectiveDerivationEdge
 from memory.models import (
     AgentId,
     MemoryId,
+    MemorySourceKind,
     MemoryTrace,
     ReconstructedMemory,
     ReconstructionId,
 )
+from simulation.evidence import EvidenceManifest, clamp_sequence_to_high_water
 from world.events import WorldEvent
 from world.identifiers import EventId, require_stable_id
 
 __all__ = [
     "InMemoryMemoryEvidenceSource",
     "InMemoryObjectiveEventSource",
+    "ManifestConstrainedMemoryEvidenceSource",
     "reconstruction_evidence_from_durable",
 ]
 
@@ -224,3 +227,81 @@ def reconstruction_evidence_from_durable(
         narrative_fingerprint=payload_sha256,
         content_available=True,
     )
+
+
+class ManifestConstrainedMemoryEvidenceSource:
+    """Wrap a memory evidence source and clamp traces to one EvidenceManifest."""
+
+    __slots__ = ("_inner", "_manifest")
+
+    def __init__(
+        self,
+        inner: InMemoryMemoryEvidenceSource,
+        manifest: EvidenceManifest,
+    ) -> None:
+        if type(inner) is not InMemoryMemoryEvidenceSource:
+            raise TypeError("inner must be InMemoryMemoryEvidenceSource")
+        if type(manifest) is not EvidenceManifest:
+            raise TypeError("manifest must be EvidenceManifest")
+        self._inner = inner
+        self._manifest = manifest
+
+    def traces(self, *, run_id: str, owner_id: str) -> tuple[MemoryTrace, ...]:
+        run_id = require_stable_id("run_id", run_id)
+        if run_id != self._manifest.run_id:
+            _LOG.error(
+                "manifest_constrained_scope_mismatch",
+                extra={
+                    "operation": "traces",
+                    "reason_code": "manifest_run_scope_mismatch",
+                    "run_id": run_id,
+                },
+            )
+            raise ValueError("manifest_run_scope_mismatch")
+        traces = self._inner.traces(run_id=run_id, owner_id=owner_id)
+        marks = self._manifest.high_water
+        direct = tuple(
+            t
+            for t in traces
+            if t.provenance.kind is MemorySourceKind.DIRECT_OBSERVATION
+        )
+        communicated = tuple(
+            t for t in traces if t.provenance.kind is MemorySourceKind.COMMUNICATED
+        )
+        return clamp_sequence_to_high_water(
+            direct, marks.direct_memories, source_label="direct_memories"
+        ) + clamp_sequence_to_high_water(
+            communicated,
+            marks.communicated_memories,
+            source_label="communicated_memories",
+        )
+
+    def reconstructions(
+        self, *, run_id: str, owner_id: str
+    ) -> tuple[ReconstructionEvidence, ...]:
+        run_id = require_stable_id("run_id", run_id)
+        if run_id != self._manifest.run_id:
+            raise ValueError("manifest_run_scope_mismatch")
+        items = self._inner.reconstructions(run_id=run_id, owner_id=owner_id)
+        return clamp_sequence_to_high_water(
+            items,
+            self._manifest.high_water.reconstructions,
+            source_label="reconstructions",
+        )
+
+    def derivation_edges(
+        self, *, run_id: str, owner_id: str
+    ) -> tuple[SubjectiveDerivationEdge, ...]:
+        traces = self.traces(run_id=run_id, owner_id=owner_id)
+        reconstructions = self.reconstructions(run_id=run_id, owner_id=owner_id)
+        kept_memory = {t.memory_id.value for t in traces}
+        kept_recon = {r.reconstruction_id for r in reconstructions}
+        return tuple(
+            edge
+            for edge in self._inner.derivation_edges(run_id=run_id, owner_id=owner_id)
+            if edge.derived_memory_id in kept_memory
+            or (
+                edge.reconstruction_id is not None
+                and edge.reconstruction_id in kept_recon
+            )
+        )

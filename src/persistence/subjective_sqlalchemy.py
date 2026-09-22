@@ -2,8 +2,9 @@
 
 Persists episodic memory mutations (via ``SqlAlchemyMemoryService``), semantic
 belief revisions, and directed relationship revisions in one transaction with
-idempotent operation receipts. Never logs claims, values, dimensions, or
-``exc_info``.
+idempotent operation receipts. Keyset pagination for inspection/debug is owned
+by ``persistence.inspection_sqlalchemy``. Never logs claims, values, dimensions,
+or ``exc_info``.
 """
 
 from __future__ import annotations

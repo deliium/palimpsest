@@ -77,6 +77,7 @@ class EvidenceCompositionService:
             experiment_id=experiment_id,
             run_id=run_id,
             owner_id=owner_id,
+            manifest=manifest,
         )
         if manifest is not None:
             if manifest.run_id != run_id:
@@ -89,6 +90,7 @@ class EvidenceCompositionService:
                     },
                 )
                 raise EvidenceCompositionError("manifest_run_scope_mismatch")
+            # Idempotent clamp if the adapter did not already constrain.
             snapshot = constrain_snapshot_to_manifest(snapshot, manifest)
         sources = map_snapshot_to_analysis_sources(snapshot)
         _LOG.debug(

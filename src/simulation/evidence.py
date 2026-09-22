@@ -3,6 +3,9 @@
 Manifests constrain repeatable-read loading for metric computation. They carry
 counts and hashes only — never truth payloads, claims, or source rows.
 
+Also owns opaque codecs for goal revisions and action-resolution evidence so
+persistence can store canonical bytes/hashes without importing analysis types.
+
 Must not import ``analysis`` or ``experiments``.
 """
 
@@ -11,23 +14,36 @@ from __future__ import annotations
 import hashlib
 import json
 import logging
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
-from typing import Final, Protocol
+from typing import Any, Final, Protocol
 
 from world.identifiers import require_exact_nonneg_int, require_stable_id
 
 __all__ = [
+    "ACTION_RESOLUTION_SCHEMA_VERSION",
     "EVIDENCE_MANIFEST_SCHEMA_VERSION",
+    "GOAL_REVISION_SCHEMA_VERSION",
+    "ActionResolutionRecord",
     "EvidenceHighWaterMarks",
     "EvidenceManifest",
     "EvidenceManifestError",
     "EvidenceManifestReader",
+    "GoalRevisionRecord",
+    "OpaqueCanonicalEnvelope",
     "build_evidence_manifest",
     "clamp_sequence_to_high_water",
+    "encode_action_resolution_evidence",
+    "encode_evidence_manifest_payload",
+    "encode_goal_transition_receipt",
+    "hash_canonical_payload",
     "manifest_hash_prefix",
     "manifest_idempotency_material",
+    "opaque_envelope_from_payload",
 ]
+
+GOAL_REVISION_SCHEMA_VERSION: Final[str] = "goal-revision-v1"
+ACTION_RESOLUTION_SCHEMA_VERSION: Final[str] = "action-resolution-v1"
 
 _LOG: Final[logging.Logger] = logging.getLogger("simulation.evidence")
 
@@ -309,3 +325,250 @@ def _hash_prefix(value: str, *, length: int = 12) -> str:
     if not isinstance(value, str) or not value:
         return ""
     return value[:length]
+
+
+def _canonical_dumps(value: object) -> bytes:
+    return json.dumps(
+        value,
+        ensure_ascii=False,
+        allow_nan=False,
+        separators=(",", ":"),
+        sort_keys=True,
+    ).encode("utf-8")
+
+
+def hash_canonical_payload(payload: bytes) -> str:
+    """SHA-256 hex digest of opaque canonical bytes."""
+    if type(payload) is not bytes:
+        raise TypeError("payload must be bytes")
+    return hashlib.sha256(payload).hexdigest()
+
+
+@dataclass(frozen=True, slots=True)
+class OpaqueCanonicalEnvelope:
+    """Schema-versioned opaque bytes with matching content hash.
+
+    Persistence stores these without decoding. Analysis/simulation codecs
+    produce the payload at the composition boundary.
+    """
+
+    schema_version: str
+    content_hash: str
+    payload: bytes
+
+    def __post_init__(self) -> None:
+        object.__setattr__(
+            self,
+            "schema_version",
+            require_stable_id(
+                "OpaqueCanonicalEnvelope.schema_version", self.schema_version
+            ),
+        )
+        if type(self.payload) is not bytes:
+            raise TypeError("OpaqueCanonicalEnvelope.payload: invalid_type")
+        object.__setattr__(
+            self,
+            "content_hash",
+            require_stable_id(
+                "OpaqueCanonicalEnvelope.content_hash", self.content_hash
+            ),
+        )
+        expected = hash_canonical_payload(self.payload)
+        if self.content_hash != expected:
+            _LOG.error(
+                "opaque_envelope_hash_mismatch",
+                extra={
+                    "operation": "OpaqueCanonicalEnvelope.__post_init__",
+                    "reason_code": "content_hash_mismatch",
+                    "schema_version": self.schema_version,
+                    "expected_prefix": expected[:12],
+                    "actual_prefix": self.content_hash[:12],
+                },
+            )
+            raise EvidenceManifestError("content_hash_mismatch")
+
+    def __repr__(self) -> str:
+        return (
+            f"OpaqueCanonicalEnvelope(schema_version={self.schema_version!r}, "
+            f"content_hash_prefix={self.content_hash[:12]!r}, "
+            f"payload_bytes={len(self.payload)})"
+        )
+
+
+def opaque_envelope_from_payload(
+    *, schema_version: str, payload: bytes
+) -> OpaqueCanonicalEnvelope:
+    """Build a validated envelope from already-canonical payload bytes."""
+    digest = hash_canonical_payload(payload)
+    return OpaqueCanonicalEnvelope(
+        schema_version=schema_version,
+        content_hash=digest,
+        payload=payload,
+    )
+
+
+@dataclass(frozen=True, slots=True)
+class GoalRevisionRecord:
+    """Append-only versioned goal transition (opaque payload + indexed keys)."""
+
+    run_id: str
+    goal_id: str
+    revision: int
+    owner_id: str
+    tick: int
+    envelope: OpaqueCanonicalEnvelope
+
+    def __post_init__(self) -> None:
+        object.__setattr__(
+            self, "run_id", require_stable_id("GoalRevisionRecord.run_id", self.run_id)
+        )
+        object.__setattr__(
+            self,
+            "goal_id",
+            require_stable_id("GoalRevisionRecord.goal_id", self.goal_id),
+        )
+        object.__setattr__(
+            self,
+            "owner_id",
+            require_stable_id("GoalRevisionRecord.owner_id", self.owner_id),
+        )
+        object.__setattr__(
+            self,
+            "revision",
+            require_exact_nonneg_int("GoalRevisionRecord.revision", self.revision),
+        )
+        object.__setattr__(
+            self,
+            "tick",
+            require_exact_nonneg_int("GoalRevisionRecord.tick", self.tick),
+        )
+        if type(self.envelope) is not OpaqueCanonicalEnvelope:
+            raise TypeError("GoalRevisionRecord.envelope: invalid_type")
+        if self.envelope.schema_version != GOAL_REVISION_SCHEMA_VERSION:
+            raise EvidenceManifestError("unsupported_goal_revision_version")
+
+    def __repr__(self) -> str:
+        return (
+            f"GoalRevisionRecord(run_id={self.run_id!r}, goal_id={self.goal_id!r}, "
+            f"revision={self.revision}, tick={self.tick}, "
+            f"hash_prefix={self.envelope.content_hash[:12]!r})"
+        )
+
+
+@dataclass(frozen=True, slots=True)
+class ActionResolutionRecord:
+    """Append-only action resolution keyed by ``(run, tick, ordinal)``."""
+
+    run_id: str
+    tick: int
+    ordinal: int
+    envelope: OpaqueCanonicalEnvelope
+
+    def __post_init__(self) -> None:
+        object.__setattr__(
+            self,
+            "run_id",
+            require_stable_id("ActionResolutionRecord.run_id", self.run_id),
+        )
+        object.__setattr__(
+            self,
+            "tick",
+            require_exact_nonneg_int("ActionResolutionRecord.tick", self.tick),
+        )
+        object.__setattr__(
+            self,
+            "ordinal",
+            require_exact_nonneg_int("ActionResolutionRecord.ordinal", self.ordinal),
+        )
+        if type(self.envelope) is not OpaqueCanonicalEnvelope:
+            raise TypeError("ActionResolutionRecord.envelope: invalid_type")
+        if self.envelope.schema_version != ACTION_RESOLUTION_SCHEMA_VERSION:
+            raise EvidenceManifestError("unsupported_action_resolution_version")
+
+    def __repr__(self) -> str:
+        return (
+            f"ActionResolutionRecord(run_id={self.run_id!r}, tick={self.tick}, "
+            f"ordinal={self.ordinal}, "
+            f"hash_prefix={self.envelope.content_hash[:12]!r})"
+        )
+
+
+def encode_goal_transition_receipt(receipt: object) -> OpaqueCanonicalEnvelope:
+    """Encode a ``GoalTransitionReceipt`` as an opaque canonical envelope."""
+    from simulation.runner_models import GoalTransitionReceipt
+
+    if type(receipt) is not GoalTransitionReceipt:
+        raise TypeError("encode_goal_transition_receipt requires GoalTransitionReceipt")
+    document: dict[str, Any] = {
+        "from_status": receipt.from_status.value,
+        "goal_id": receipt.goal_id.value,
+        "outcome_kind": receipt.outcome_kind.value,
+        "owner_id": receipt.owner_id.value,
+        "reason_code": receipt.reason_code.value,
+        "schema_version": GOAL_REVISION_SCHEMA_VERSION,
+        "tick": receipt.tick,
+        "to_status": receipt.to_status.value,
+    }
+    payload = _canonical_dumps(document)
+    envelope = opaque_envelope_from_payload(
+        schema_version=GOAL_REVISION_SCHEMA_VERSION, payload=payload
+    )
+    _LOG.debug(
+        "goal_revision_encoded",
+        extra={
+            "operation": "encode_goal_transition_receipt",
+            "schema_version": GOAL_REVISION_SCHEMA_VERSION,
+            "hash_prefix": envelope.content_hash[:12],
+        },
+    )
+    return envelope
+
+
+def encode_action_resolution_evidence(evidence: object) -> OpaqueCanonicalEnvelope:
+    """Encode ``ActionResolutionEvidence`` as an opaque canonical envelope."""
+    from simulation.runner_models import ActionResolutionEvidence
+
+    if type(evidence) is not ActionResolutionEvidence:
+        raise TypeError(
+            "encode_action_resolution_evidence requires ActionResolutionEvidence"
+        )
+    document: dict[str, Any] = {
+        "agent_id": evidence.agent_id.value,
+        "base_revision": evidence.base_revision,
+        "command_kind": evidence.command_kind,
+        "ordinal": evidence.ordinal,
+        "reason": evidence.reason.value,
+        "request_id": evidence.request_id,
+        "resulting_revision": evidence.resulting_revision,
+        "schema_version": ACTION_RESOLUTION_SCHEMA_VERSION,
+        "status": evidence.status.value,
+        "tick": evidence.tick,
+    }
+    payload = _canonical_dumps(document)
+    envelope = opaque_envelope_from_payload(
+        schema_version=ACTION_RESOLUTION_SCHEMA_VERSION, payload=payload
+    )
+    _LOG.debug(
+        "action_resolution_encoded",
+        extra={
+            "operation": "encode_action_resolution_evidence",
+            "schema_version": ACTION_RESOLUTION_SCHEMA_VERSION,
+            "tick": evidence.tick,
+            "ordinal": evidence.ordinal,
+            "hash_prefix": envelope.content_hash[:12],
+        },
+    )
+    return envelope
+
+
+def encode_evidence_manifest_payload(manifest: EvidenceManifest) -> bytes:
+    """Canonical JSON bytes matching the manifest content-hash document."""
+    if type(manifest) is not EvidenceManifest:
+        raise TypeError("encode_evidence_manifest_payload requires EvidenceManifest")
+    document: Mapping[str, object] = {
+        "high_water": manifest.high_water.as_canonical_dict(),
+        "objective_commit_hash": manifest.objective_commit_hash,
+        "run_id": manifest.run_id,
+        "schema_version": manifest.schema_version,
+    }
+    return _canonical_dumps(document)
