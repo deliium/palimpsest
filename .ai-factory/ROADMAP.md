@@ -12,11 +12,11 @@ Graph topology and capacities, portable items and resources, physiology and term
 
 ### M2 — Simulation Loop
 
-**Status:** complete (plan `feature-v1-world-engine`)
+**Status:** complete (plan `v1-feature-v1-world-engine`)
 
 Authoritative deterministic `WorldEngine` tick loop: observe → ordered submissions → resolve, private rules, schema-versioned event export, and replay proofs.
 
-**Plan:** `.ai-factory/plans/feature-v1-world-engine.md`
+**Plan:** `.ai-factory/plans/v1-feature-v1-world-engine.md`
 
 ### M1.5 — V1 Core Domain Model and Contracts
 
@@ -24,7 +24,7 @@ Authoritative deterministic `WorldEngine` tick loop: observe → ordered submiss
 
 Typed objective/subjective models, closed fifteen-command trust pipeline, private world operations, immutable events, and schema-v1 serialization — still without a tick loop or behavioral resolution policy.
 
-**Plan:** `.ai-factory/plans/feature-v1-core-domain-model-contracts.md`
+**Plan:** `.ai-factory/plans/v1-feature-v1-core-domain-model-contracts.md`
 
 ### M1 — V1 Project Foundation
 
@@ -32,7 +32,7 @@ Typed objective/subjective models, closed fifteen-command trust pipeline, privat
 
 Establish the modular-monolith foundation: packaging, bounded packages, typed contracts, settings/logging, async DB + Alembic/pgvector bootstrap, FastAPI health API, containers, and documentation — without a simulation loop.
 
-**Plan:** `.ai-factory/plans/feature-v1-project-foundation.md`
+**Plan:** `.ai-factory/plans/v1-feature-v1-project-foundation.md`
 
 ## Next
 
@@ -47,7 +47,7 @@ Establish the modular-monolith foundation: packaging, bounded packages, typed co
 
 **Deferred (post-V1):** LLM provider lifecycle composition in API / `compose.yaml` (factory ports exist)
 
-**Plan:** `.ai-factory/plans/complete-v1-experimental-metrics-inspection-api.md`
+**Plan:** `.ai-factory/plans/v1-complete-v1-experimental-metrics-inspection-api.md`
 
 ### M4 — Persistence and Analysis (complete, 2026-09-22)
 
@@ -55,7 +55,7 @@ Establish the modular-monolith foundation: packaging, bounded packages, typed co
 
 **Analysis:** fifteen V1 metric families with executable specifications, evidence-manifest revision, and experiment collection. Truth specs remain analysis-only.
 
-**Plan:** `.ai-factory/plans/complete-v1-experimental-metrics-inspection-api.md` (closes deferred M4 analysis scope)
+**Plan:** `.ai-factory/plans/v1-complete-v1-experimental-metrics-inspection-api.md` (closes deferred M4 analysis scope)
 
 ## V1 status
 

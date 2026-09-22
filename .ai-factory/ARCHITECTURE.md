@@ -193,8 +193,8 @@ llm_result.to_agent_command()               # does not exist
 - `docs/architecture.md` — contributor-facing matrix, WorldEngine lifecycle, perception boundary, and invariants
 - `docs/memory-reconstruction.md` — reconstructive recall, reconsolidation, drift analysis, logging allowlists
 - `docs/social-communication.md` — objective delivery vs declared testimony vs owner-scoped derivation vs analysis
-- `.ai-factory/plans/agent-social-communication-transmission.md` — social communication and transmission plan
-- `.ai-factory/plans/reconstructive-memory-reconsolidation.md` — reconstructive memory plan
+- `.ai-factory/plans/v1-agent-social-communication-transmission.md` — social communication and transmission plan
+- `.ai-factory/plans/v1-reconstructive-memory-reconsolidation.md` — reconstructive memory plan
 - `.ai-factory/plans/v1-agent-runtime-cognitive-loop.md` — cognitive loop and AgentRuntime plan
-- `.ai-factory/plans/llm-provider-abstraction.md` — provider-neutral LLM boundary plan
-- `.ai-factory/plans/perception-observation-system.md` — perception plan
+- `.ai-factory/plans/v1-llm-provider-abstraction.md` — provider-neutral LLM boundary plan
+- `.ai-factory/plans/v1-perception-observation-system.md` — perception plan
