@@ -278,6 +278,26 @@ async def test_paired_arms_share_stochastic_identity_distinct_run_ids() -> None:
 
 
 @pytest.mark.asyncio
+async def test_from_config_fails_closed_when_capability_flag_enabled() -> None:
+    from simulation.runner_models import V2CapabilityFlags
+
+    base = _config()
+    config = SimulationRunnerConfig(
+        seed=base.seed,
+        stochastic_identity=base.stochastic_identity,
+        scenario=base.scenario,
+        agents=base.agents,
+        stop_policy=base.stop_policy,
+        capability_flags=V2CapabilityFlags(predictive_world_model=True),
+    )
+    with pytest.raises(RunnerConstructionError) as exc_info:
+        await SimulationRunner.from_config(config, run_id=RunId("run-cap-on"))
+    assert (
+        exc_info.value.code is RunnerConstructionErrorCode.CAPABILITY_UNIMPLEMENTED
+    )
+
+
+@pytest.mark.asyncio
 async def test_runtimes_not_started_after_construction() -> None:
     async with await SimulationRunner.from_config(
         _config(), run_id=RunId("run-created")

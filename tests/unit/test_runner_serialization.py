@@ -184,10 +184,71 @@ def test_v1_decode_explicitly_upgrades_missing_name_and_goals() -> None:
 
 
 def test_v2_rejects_missing_name_field() -> None:
-    document = json.loads(encode_runner_config(_config()).decode("utf-8"))
+    from simulation.runner_models import RUNNER_SCHEMA_VERSION_V2
+
+    base = _config()
+    v2 = SimulationRunnerConfig(
+        seed=base.seed,
+        stochastic_identity=base.stochastic_identity,
+        scenario=base.scenario,
+        agents=base.agents,
+        stop_policy=base.stop_policy,
+        schema_version=RUNNER_SCHEMA_VERSION_V2,
+    )
+    document = json.loads(encode_runner_config(v2).decode("utf-8"))
     del document["agents"][0]["name"]
     with pytest.raises(RunnerSerializationError) as rejected:
         decode_runner_config(
             json.dumps(document, separators=(",", ":"), sort_keys=True).encode("utf-8")
         )
     assert rejected.value.code == "missing_field"
+
+
+def test_v3_round_trip_includes_default_off_capability_flags() -> None:
+    from simulation.runner_models import RUNNER_SCHEMA_VERSION_V3, V2CapabilityFlags
+
+    config = _config()
+    assert config.schema_version == RUNNER_SCHEMA_VERSION_V3
+    encoded = encode_runner_config(config)
+    document = json.loads(encoded.decode("utf-8"))
+    assert document["schema_version"] == RUNNER_SCHEMA_VERSION_V3
+    assert document["capability_flags"] == {
+        "advanced_social_inference": False,
+        "extended_self_model": False,
+        "multi_hop_testimony_tracking": False,
+        "predictive_world_model": False,
+    }
+    decoded = decode_runner_config(encoded)
+    assert decoded.capability_flags == V2CapabilityFlags()
+    assert runner_config_fingerprint(decoded) == runner_config_fingerprint(config)
+
+
+def test_v2_decode_upgrades_to_default_off_flags() -> None:
+    from simulation.runner_models import RUNNER_SCHEMA_VERSION_V2, V2CapabilityFlags
+
+    base = _config()
+    v2 = SimulationRunnerConfig(
+        seed=base.seed,
+        stochastic_identity=base.stochastic_identity,
+        scenario=base.scenario,
+        agents=base.agents,
+        stop_policy=base.stop_policy,
+        schema_version=RUNNER_SCHEMA_VERSION_V2,
+    )
+    encoded = encode_runner_config(v2)
+    document = json.loads(encoded.decode("utf-8"))
+    assert "capability_flags" not in document
+    decoded = decode_runner_config(encoded)
+    assert decoded.schema_version == RUNNER_SCHEMA_VERSION_V2
+    assert decoded.capability_flags == V2CapabilityFlags()
+    assert not decoded.capability_flags.any_enabled()
+
+
+def test_v3_rejects_extra_capability_flag_field() -> None:
+    document = json.loads(encode_runner_config(_config()).decode("utf-8"))
+    document["capability_flags"]["extra_flag"] = False
+    with pytest.raises(RunnerSerializationError) as rejected:
+        decode_runner_config(
+            json.dumps(document, separators=(",", ":"), sort_keys=True).encode("utf-8")
+        )
+    assert rejected.value.code == "invalid_fields"

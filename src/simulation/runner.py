@@ -165,6 +165,7 @@ class RunnerConstructionErrorCode(StrEnum):
     CLEANUP_FAILED = "cleanup_failed"
     DURABLE_UNSUPPORTED = "durable_unsupported"
     PARTIAL_CONSTRUCTION = "partial_construction"
+    CAPABILITY_UNIMPLEMENTED = "capability_unimplemented"
 
 
 class RunnerConstructionError(ValueError):
@@ -640,14 +641,30 @@ class SimulationRunner:
         stage = "validate"
 
         try:
+            enabled_flags = config.capability_flags.enabled_names()
             _LOG.debug(
                 "runner_construction_start schema_version=%s agent_count=%s "
-                "mortality_mode=%s durable=%s",
+                "mortality_mode=%s durable=%s capability_flag_count=%s "
+                "enabled_flag_count=%s",
                 config.schema_version,
                 len(config.agents),
                 config.mortality_mode.value,
                 config.persistence.durable,
+                4,
+                len(enabled_flags),
             )
+            if enabled_flags:
+                _LOG.error(
+                    "runner_construction_capability_unimplemented "
+                    "schema_version=%s flag_count=%s reason_code=%s",
+                    config.schema_version,
+                    len(enabled_flags),
+                    RunnerConstructionErrorCode.CAPABILITY_UNIMPLEMENTED.value,
+                )
+                raise RunnerConstructionError(
+                    RunnerConstructionErrorCode.CAPABILITY_UNIMPLEMENTED,
+                    stage="capability_flags",
+                )
 
             stage = "physical_rules"
             physical_rules = config.resolve_physical_rules()

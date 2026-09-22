@@ -1,6 +1,9 @@
-"""Named builders for Experiments A–D."""
+"""Named builders for Experiments A-E."""
 
 from __future__ import annotations
+
+import logging
+from typing import Final
 
 from agents.models import DriveKind
 from experiments.models import (
@@ -20,7 +23,10 @@ from simulation.runner_models import (
     RunnerStopPolicy,
     SimulationRunnerConfig,
     WorldScenarioSpec,
+    capability_flags_digest,
 )
+
+_LOG: Final[logging.Logger] = logging.getLogger("experiments.catalog")
 
 
 def _with_agent_modes(
@@ -71,6 +77,7 @@ def _with_agent_modes(
         provider=base.provider,
         persistence=base.persistence,
         experiment=base.experiment,
+        capability_flags=base.capability_flags,
         schema_version=base.schema_version,
         derivation_version=base.derivation_version,
         mortality_policy_version=base.mortality_policy_version,
@@ -263,7 +270,11 @@ def base_runner_config_from_scenario(
     agents: tuple[AgentRunnerSpec, ...],
     max_ticks: int,
 ) -> SimulationRunnerConfig:
-    """Helper for tests/builders: assemble a shared base configuration."""
+    """Helper for tests/builders: assemble a shared base configuration.
+
+    Emits current write schema (``runner-config-v3``) with all V2 capability
+    flags default-off for V1-equivalent execution.
+    """
     return SimulationRunnerConfig(
         seed=seed,
         stochastic_identity=require_stochastic(stochastic_identity),
@@ -271,3 +282,28 @@ def base_runner_config_from_scenario(
         agents=agents,
         stop_policy=RunnerStopPolicy(max_ticks=max_ticks),
     )
+
+
+def v1_regression_profile(config: SimulationRunnerConfig) -> SimulationRunnerConfig:
+    """Require all V2 capability flags off (V1-equivalent run profile).
+
+    Returns the same config when valid; raises ``ValueError`` with stable code
+    ``v1_regression_flags_enabled`` otherwise. Does not mutate the config.
+    """
+    if type(config) is not SimulationRunnerConfig:
+        raise TypeError("v1_regression_profile requires SimulationRunnerConfig")
+    enabled = config.capability_flags.enabled_names()
+    digest_prefix = capability_flags_digest(config.capability_flags)[:12]
+    _LOG.debug(
+        "v1_regression_profile_check schema_version=%s enabled_flag_count=%s "
+        "capability_flags_digest_prefix=%s",
+        config.schema_version,
+        len(enabled),
+        digest_prefix,
+    )
+    if enabled:
+        raise ValueError(
+            "v1 regression requires all capability flags off "
+            f"(code=v1_regression_flags_enabled flag_count={len(enabled)})"
+        )
+    return config

@@ -234,7 +234,25 @@ def test_goal_evaluator_completion_death_and_run_end() -> None:
     assert death[0].to_status is GoalStatus.ABANDONED
 
 
-def test_new_configs_default_to_schema_v2() -> None:
-    from simulation.runner_models import RUNNER_SCHEMA_VERSION_V2
+def test_new_configs_default_to_schema_v3() -> None:
+    from simulation.runner_models import RUNNER_SCHEMA_VERSION_V3, V2CapabilityFlags
 
-    assert _config().schema_version == RUNNER_SCHEMA_VERSION_V2
+    config = _config()
+    assert config.schema_version == RUNNER_SCHEMA_VERSION_V3
+    assert config.capability_flags == V2CapabilityFlags()
+    assert not config.capability_flags.any_enabled()
+
+
+def test_capability_flags_require_schema_v3() -> None:
+    from simulation.runner_models import RUNNER_SCHEMA_VERSION_V2, V2CapabilityFlags
+
+    with pytest.raises(ValueError, match="capability_requires_v3"):
+        SimulationRunnerConfig(
+            seed=_config().seed,
+            stochastic_identity=_config().stochastic_identity,
+            scenario=_config().scenario,
+            agents=_config().agents,
+            stop_policy=_config().stop_policy,
+            schema_version=RUNNER_SCHEMA_VERSION_V2,
+            capability_flags=V2CapabilityFlags(advanced_social_inference=True),
+        )

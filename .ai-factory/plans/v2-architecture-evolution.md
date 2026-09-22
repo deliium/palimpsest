@@ -154,25 +154,25 @@ LLM provider lifespan remains an API/`llm.factory` composition concern (ARCHITEC
 
 ### Phase 2: Capability Flags, Golden Fixtures, and Persistence Decision
 
-- [ ] Task 4: Introduce `runner-config-v3` with run-level V2 capability flags.
+- [x] Task 4: Introduce `runner-config-v3` with run-level V2 capability flags.
   - Deliverable: Add frozen `V2CapabilityFlags` / `CapabilityProfile` on `SimulationRunnerConfig` (run-level). Introduce `RUNNER_SCHEMA_VERSION_V3 = "runner-config-v3"` as the new write default; keep `SUPPORTED_RUNNER_SCHEMA_VERSIONS` including v1/v2. Update `_encode_runner_document` / `decode_runner_config` with versioned exact `_require_keys` sets (patch rule: new fields update required sets in the same change). Decode v1/v2 → default-off flags. Encode v3 with all flags present (default false). Include flags in fingerprints/diagnostics. Construction: flags-off wires existing V1 policies only; flags-on without an owning later plan fail closed with a stable reason code (or identical no-op — prefer fail closed). Do **not** change `COGNITION_POLICY_VERSION` unless the policy contract itself changes. Do **not** add `llm_lifecycle_composed` here.
   - Files: `src/simulation/runner_models.py`, `src/simulation/runner_serialization.py`, `src/simulation/runner.py`, `src/simulation/__init__.py`, `tests/unit/test_runner_models.py`, `tests/unit/test_runner_serialization.py`, `tests/unit/test_simulation_runner_construction.py`, `tests/typecheck/simulation_runner.py` (if present).
   - Logging: DEBUG construction with run_id/schema_version/flag names/values; INFO when any flag is true (IDs/counts only); WARN on legacy schema decode/upgrade; ERROR stable `unsupported_version` / `capability_unimplemented` codes. Never log seeds, goals, observations, or command bodies.
   - Dependencies: Task 2.
 
-- [ ] Task 5: Capture golden V1 runner-config payloads and fingerprint/trajectory identity rules.
+- [x] Task 5: Capture golden V1 runner-config payloads and fingerprint/trajectory identity rules.
   - Deliverable: Golden byte fixtures for representative `runner-config-v2` payloads (at least one catalog condition and the reference scenario config). Assert V2-ready decoders still accept them and upgrade to default-off flags. Document and test: after v3 write bump, `config_fingerprint` may differ from golden v2 bytes, but for flags-off equivalent scenarios `exact_trajectory_hash` / objective commit identity remain stable vs a pre-recorded baseline (short horizon). Prefer extending existing determinism tests over new engines.
   - Files: `tests/unit/fixtures/` (or `tests/fixtures/runner_configs/`), `tests/unit/test_v2_golden_runner_configs.py`, `tests/unit/test_runner_serialization.py`, `docs/simulation-runner.md` (identity rules).
   - Logging: Tests assert hashes/version codes; DEBUG fixture names and schema_version only.
   - Dependencies: Task 4.
 
-- [ ] Task 6: Experiment compatibility and V1 regression profile helper.
+- [x] Task 6: Experiment compatibility and V1 regression profile helper.
   - Deliverable: Keep `experiment-definition-v1`. Catalog A–E and reference scenario stay on default-off flags (builders may still emit `runner-config-v3` bytes with all flags false, or continue emitting v2 if decode upgrade is the path — pick one and test both decode and catalog construction). Add `v1_regression_profile()` (name flexible) asserting all capability flags off. Fix catalog module docstring if it still says A–D. Extend existing tests; do not create a non-existent `test_reference_scenario.py`.
   - Files: `src/experiments/models.py`, `src/experiments/catalog.py`, `src/experiments/reference_scenario.py`, `src/experiments/__init__.py`, `tests/unit/test_experiment_definitions.py`, `tests/unit/test_experiment_coordinator.py`, `tests/unit/test_reference_scenario_spec.py`, `tests/unit/test_v2_flag_defaults.py`.
   - Logging: DEBUG experiment_id/condition_id/schema_version/flag digest prefixes; never log full runner JSON or seeds in INFO+.
   - Dependencies: Task 4.
 
-- [ ] Task 7: Record the no-Alembic-migration decision and head pin.
+- [x] Task 7: Record the no-Alembic-migration decision and head pin.
   - Deliverable: Document that capability flags are carried only in runner JSON (`run_control.config_payload`); Alembic head remains `0012`. Add a small test or docs assertion that no `0013_*.py` is introduced by this plan and that authoritative table semantics are unchanged. Explicitly forbid inventing indexed flag columns without a later justified plan.
   - Files: `docs/persistence.md`, `tests/unit/test_compatibility_matrix.py` or `tests/unit/test_alembic_head_pin.py`, `.ai-factory/ARCHITECTURE.md` (migration head note).
   - Logging: N/A beyond existing Alembic conventions if touched (should not be).

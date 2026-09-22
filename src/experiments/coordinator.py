@@ -65,6 +65,12 @@ def materialize_assignments(
                     ),
                     provider=condition.runner_config.provider,
                     persistence=condition.runner_config.persistence,
+                    capability_flags=condition.runner_config.capability_flags,
+                    schema_version=condition.runner_config.schema_version,
+                    derivation_version=condition.runner_config.derivation_version,
+                    mortality_policy_version=(
+                        condition.runner_config.mortality_policy_version
+                    ),
                 )
                 run_id = RunId(
                     f"{definition.experiment_id}-{condition.condition_id}"

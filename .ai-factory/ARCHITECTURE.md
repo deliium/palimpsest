@@ -45,6 +45,7 @@ src/
                          # streaming.py (durable outbox catch-up + live handoff)
   infrastructure/        # settings (PALIMPSEST_*), logging, database adapters
 alembic/versions/        # migrations through 0012 (run control + scientific evidence)
+                         # V2 scaffolding: no 0013 — capability flags live in runner JSON only
 docs/                    # contributor docs (architecture, memory, social-communication, …)
 tests/
   unit/ architecture/ integration/ compose/ typecheck/ fakes/

@@ -7,6 +7,8 @@ payloads are out of scope for this module's public diagnostics.
 
 from __future__ import annotations
 
+import hashlib
+import json
 import logging
 import math
 from collections.abc import Mapping, Sequence
@@ -65,9 +67,14 @@ _LOGGER = logging.getLogger("simulation.runner_models")
 
 RUNNER_SCHEMA_VERSION_V1: Final[str] = "runner-config-v1"
 RUNNER_SCHEMA_VERSION_V2: Final[str] = "runner-config-v2"
-RUNNER_SCHEMA_VERSION: Final[str] = RUNNER_SCHEMA_VERSION_V2
+RUNNER_SCHEMA_VERSION_V3: Final[str] = "runner-config-v3"
+RUNNER_SCHEMA_VERSION: Final[str] = RUNNER_SCHEMA_VERSION_V3
 SUPPORTED_RUNNER_SCHEMA_VERSIONS: Final[frozenset[str]] = frozenset(
-    {RUNNER_SCHEMA_VERSION_V1, RUNNER_SCHEMA_VERSION_V2}
+    {
+        RUNNER_SCHEMA_VERSION_V1,
+        RUNNER_SCHEMA_VERSION_V2,
+        RUNNER_SCHEMA_VERSION_V3,
+    }
 )
 RESULT_SCHEMA_VERSION_V1: Final[str] = "runner-result-v1"
 RESULT_SCHEMA_VERSION_V2: Final[str] = "runner-result-v2"
@@ -79,6 +86,13 @@ COGNITION_POLICY_VERSION: Final[str] = "cognition-policy-v1"
 PROVIDER_SETTINGS_VERSION: Final[str] = "provider-settings-v1"
 MORTALITY_POLICY_VERSION: Final[str] = "mortality-policy-v1"
 OBJECTIVE_PROJECTION_VERSION: Final[str] = "objective-projection-v1"
+
+_V2_CAPABILITY_FLAG_NAMES: Final[tuple[str, ...]] = (
+    "advanced_social_inference",
+    "multi_hop_testimony_tracking",
+    "predictive_world_model",
+    "extended_self_model",
+)
 
 _OVERRIDEABLE_DRIVE_KINDS: Final[frozenset[DriveKind]] = frozenset(
     {
@@ -124,6 +138,39 @@ class MortalityMode(StrEnum):
 
     DISABLED = "disabled"
     ENABLED = "enabled"
+
+
+@dataclass(frozen=True, slots=True)
+class V2CapabilityFlags:
+    """Run-level reserved V2 capability identifiers (configuration only).
+
+    Defaults are all off (V1-equivalent wiring). Enabling any flag before a
+    later plan owns it must fail closed at runner construction
+    (``capability_unimplemented``). These are not cognition plugins.
+    """
+
+    advanced_social_inference: bool = False
+    multi_hop_testimony_tracking: bool = False
+    predictive_world_model: bool = False
+    extended_self_model: bool = False
+
+    def __post_init__(self) -> None:
+        for name in _V2_CAPABILITY_FLAG_NAMES:
+            value = getattr(self, name)
+            if type(value) is not bool:
+                raise TypeError(f"V2CapabilityFlags.{name} must be bool")
+
+    def any_enabled(self) -> bool:
+        return any(getattr(self, name) for name in _V2_CAPABILITY_FLAG_NAMES)
+
+    def enabled_names(self) -> tuple[str, ...]:
+        return tuple(
+            name for name in _V2_CAPABILITY_FLAG_NAMES if getattr(self, name)
+        )
+
+
+# Alias kept for plan wording; prefer V2CapabilityFlags in new code.
+CapabilityProfile = V2CapabilityFlags
 
 
 class RunnerStopReasonCode(StrEnum):
@@ -1034,6 +1081,7 @@ class SimulationRunnerConfig:
     provider: RunnerProviderSettings = RunnerProviderSettings()
     persistence: RunnerPersistenceSpec = RunnerPersistenceSpec()
     experiment: ExperimentAssignmentRef | None = None
+    capability_flags: V2CapabilityFlags = V2CapabilityFlags()
     schema_version: str = RUNNER_SCHEMA_VERSION
     derivation_version: str = DERIVATION_VERSION_V3
     mortality_policy_version: str = MORTALITY_POLICY_VERSION
@@ -1080,26 +1128,52 @@ class SimulationRunnerConfig:
             and type(self.experiment) is not ExperimentAssignmentRef
         ):
             raise TypeError("experiment must be ExperimentAssignmentRef or None")
+        if type(self.capability_flags) is not V2CapabilityFlags:
+            raise TypeError("capability_flags must be V2CapabilityFlags")
         if self.schema_version not in SUPPORTED_RUNNER_SCHEMA_VERSIONS:
             raise ValueError("unsupported runner schema_version")
         if require_derivation_version(self.derivation_version) != DERIVATION_VERSION_V3:
             raise ValueError("runner config requires derivation-v3")
         if self.mortality_policy_version != MORTALITY_POLICY_VERSION:
             raise ValueError("unsupported mortality_policy_version")
-        if self.schema_version == RUNNER_SCHEMA_VERSION_V1:
+        if (
+            self.schema_version
+            in {RUNNER_SCHEMA_VERSION_V1, RUNNER_SCHEMA_VERSION_V2}
+            and self.capability_flags.any_enabled()
+        ):
+            raise ValueError(
+                "capability flags require runner-config-v3 "
+                "(code=capability_requires_v3)"
+            )
+        if self.schema_version in {
+            RUNNER_SCHEMA_VERSION_V1,
+            RUNNER_SCHEMA_VERSION_V2,
+        }:
             _LOGGER.warning(
                 "runner_config_legacy_schema schema_version=%s agent_count=%s",
                 self.schema_version,
                 len(self.agents),
             )
+        enabled = self.capability_flags.enabled_names()
+        if enabled:
+            _LOGGER.info(
+                "runner_config_capability_flags_enabled schema_version=%s "
+                "flag_count=%s flag_names=%s",
+                self.schema_version,
+                len(enabled),
+                ",".join(enabled),
+            )
         _LOGGER.debug(
             "runner_config_validated schema_version=%s agent_count=%s "
-            "location_count=%s max_ticks=%s mortality_mode=%s",
+            "location_count=%s max_ticks=%s mortality_mode=%s "
+            "capability_flag_count=%s enabled_flag_count=%s",
             self.schema_version,
             len(self.agents),
             len(self.scenario.locations),
             self.stop_policy.max_ticks,
             self.mortality_mode.value,
+            len(_V2_CAPABILITY_FLAG_NAMES),
+            len(enabled),
         )
 
     def ordered_registrations(self) -> tuple[AgentRegistration, ...]:
@@ -1158,6 +1232,9 @@ class RunnerConfigDiagnostics:
     provider_fingerprint_prefix: str
     stochastic_fingerprint_prefix: str
     rules_fingerprint_prefix: str
+    capability_flag_names: tuple[str, ...]
+    enabled_capability_flags: tuple[str, ...]
+    capability_flags_digest_prefix: str
 
 
 def runner_config_diagnostics(
@@ -1171,6 +1248,8 @@ def runner_config_diagnostics(
     """Build a payload-free diagnostic projection for logging."""
     if type(config) is not SimulationRunnerConfig:
         raise TypeError("runner_config_diagnostics requires SimulationRunnerConfig")
+    enabled = config.capability_flags.enabled_names()
+    flags_digest = capability_flags_digest(config.capability_flags)
     return RunnerConfigDiagnostics(
         schema_version=config.schema_version,
         derivation_version=config.derivation_version,
@@ -1198,7 +1277,21 @@ def runner_config_diagnostics(
         rules_fingerprint_prefix=physical_rules_fingerprint(
             config.scenario.physical_rules
         )[:12],
+        capability_flag_names=_V2_CAPABILITY_FLAG_NAMES,
+        enabled_capability_flags=enabled,
+        capability_flags_digest_prefix=flags_digest[:12],
     )
+
+
+def capability_flags_digest(flags: V2CapabilityFlags) -> str:
+    """Stable hex digest over closed flag names/values (no payloads)."""
+    if type(flags) is not V2CapabilityFlags:
+        raise TypeError("capability_flags_digest requires V2CapabilityFlags")
+    document = {name: getattr(flags, name) for name in _V2_CAPABILITY_FLAG_NAMES}
+    payload = json.dumps(document, separators=(",", ":"), sort_keys=True).encode(
+        "utf-8"
+    )
+    return hashlib.sha256(payload).hexdigest()
 
 
 def describe_runner_config(
@@ -1226,6 +1319,9 @@ def describe_runner_config(
         "provider_fingerprint_prefix": diagnostics.provider_fingerprint_prefix,
         "stochastic_fingerprint_prefix": diagnostics.stochastic_fingerprint_prefix,
         "rules_fingerprint_prefix": diagnostics.rules_fingerprint_prefix,
+        "capability_flag_names": diagnostics.capability_flag_names,
+        "enabled_capability_flags": diagnostics.enabled_capability_flags,
+        "capability_flags_digest_prefix": diagnostics.capability_flags_digest_prefix,
     }
 
 

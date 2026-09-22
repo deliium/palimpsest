@@ -1,4 +1,4 @@
-"""Unit tests for experiment A–D definitions."""
+"""Unit tests for experiment A-E definitions."""
 
 from __future__ import annotations
 

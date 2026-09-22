@@ -45,6 +45,7 @@ from simulation.runner_models import (
     RESULT_SCHEMA_VERSION_V1,
     RESULT_SCHEMA_VERSION_V2,
     RUNNER_SCHEMA_VERSION,
+    RUNNER_SCHEMA_VERSION_V3,
     SUPPORTED_RESULT_SCHEMA_VERSIONS,
     SUPPORTED_RUNNER_SCHEMA_VERSIONS,
 )
@@ -57,9 +58,6 @@ from world.events import (
 )
 
 _LOG: Final[logging.Logger] = logging.getLogger("simulation.compatibility")
-
-# Planned write default (Task 4). Not yet the active RUNNER_SCHEMA_VERSION.
-RUNNER_SCHEMA_VERSION_V3: Final[str] = "runner-config-v3"
 
 # Mirrored literals — owning packages must keep these equal (tested).
 ALEMBIC_HEAD_REVISION: Final[str] = "0012"
@@ -158,7 +156,7 @@ _MATRIX: dict[str, CompatibilityEntry] = {
         accepted_restore=_versions(*sorted(SUPPORTED_RUNNER_SCHEMA_VERSIONS)),
         bump_trigger=(
             "New runner fields require a versioned exact key set "
-            f"(planned write {RUNNER_SCHEMA_VERSION_V3} for V2 capability flags; "
+            f"(write {RUNNER_SCHEMA_VERSION_V3} for V2 capability flags; "
             "v1/v2 decode + default-off upgrade retained)."
         ),
         owner_package="simulation.runner_models / simulation.runner_serialization",

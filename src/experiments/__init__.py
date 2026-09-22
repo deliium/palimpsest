@@ -11,6 +11,7 @@ from experiments.catalog import (
     experiment_c_mortality,
     experiment_d_drives,
     experiment_e_false_story,
+    v1_regression_profile,
 )
 from experiments.collectors import (
     CollectorMetricDocument,
@@ -23,12 +24,6 @@ from experiments.collectors import (
     collect_mortality_outcomes,
     collect_propagation,
     collect_trajectory_stats,
-)
-from experiments.metric_collection import (
-    MetricCollectionResult,
-    MetricCollectionService,
-    compare_compatible_bundles,
-    persist_metric_bundle,
 )
 from experiments.composition import (
     EvidenceCompositionError,
@@ -57,6 +52,12 @@ from experiments.interventions import (
     unwrap_arbiter_command,
 )
 from experiments.memory_repository import InMemoryExperimentRecordRepository
+from experiments.metric_collection import (
+    MetricCollectionResult,
+    MetricCollectionService,
+    compare_compatible_bundles,
+    persist_metric_bundle,
+)
 from experiments.models import (
     ExperimentCondition,
     ExperimentDefinition,
@@ -167,4 +168,5 @@ __all__ = [
     "materialize_assignments",
     "persist_metric_bundle",
     "unwrap_arbiter_command",
+    "v1_regression_profile",
 ]

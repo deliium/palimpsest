@@ -14,7 +14,6 @@ from simulation.compatibility import (
     EXPERIMENT_DEFINITION_SCHEMA_VERSION,
     METRIC_CATALOG_VERSION,
     METRIC_DOCUMENT_SCHEMA_VERSION,
-    RUNNER_SCHEMA_VERSION_V3,
     STREAM_ENVELOPE_VERSION,
     WS_PROTOCOL_VERSION,
     CompatibilityEntry,
@@ -32,6 +31,7 @@ from simulation.runner_models import (
     RUNNER_SCHEMA_VERSION,
     RUNNER_SCHEMA_VERSION_V1,
     RUNNER_SCHEMA_VERSION_V2,
+    RUNNER_SCHEMA_VERSION_V3,
     SUPPORTED_RUNNER_SCHEMA_VERSIONS,
 )
 
@@ -82,16 +82,16 @@ def test_event_schema_stays_at_v5_write() -> None:
     assert "no v6" in bump or "stay at replay-v5" in bump
 
 
-def test_runner_config_documents_planned_v3() -> None:
+def test_runner_config_write_is_v3_with_legacy_accepted() -> None:
     entry = compatibility_entry("runner_config")
     assert entry.write_version == RUNNER_SCHEMA_VERSION
-    assert RUNNER_SCHEMA_VERSION == RUNNER_SCHEMA_VERSION_V2
+    assert RUNNER_SCHEMA_VERSION == RUNNER_SCHEMA_VERSION_V3
     assert RUNNER_SCHEMA_VERSION_V3 == "runner-config-v3"
     assert RUNNER_SCHEMA_VERSION_V3 in entry.bump_trigger
     assert RUNNER_SCHEMA_VERSION_V1 in SUPPORTED_RUNNER_SCHEMA_VERSIONS
     assert RUNNER_SCHEMA_VERSION_V2 in SUPPORTED_RUNNER_SCHEMA_VERSIONS
-    # Active write is still v2 until the capability-flags task flips the default.
-    assert RUNNER_SCHEMA_VERSION_V3 not in SUPPORTED_RUNNER_SCHEMA_VERSIONS
+    assert RUNNER_SCHEMA_VERSION_V3 in SUPPORTED_RUNNER_SCHEMA_VERSIONS
+    assert RUNNER_SCHEMA_VERSION_V3 in entry.accepted_restore
 
 
 def test_alembic_head_pin_and_no_0013() -> None:

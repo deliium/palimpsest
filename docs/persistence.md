@@ -70,8 +70,8 @@ Contributor summary:
 | `PERSISTENCE_CODEC_VERSION` | Canonical JSON codec for manifests/snapshots/commits (`v2` write; accept `v1`/`v2`) |
 | Derivation v1 / v2 / v3 | Deterministic ID/stream derivation (v2 includes rules fingerprint) |
 | Subjective codec v1 | Semantic beliefs, relationship profiles, mutation receipts (non-authoritative) |
-| Runner config | Write `runner-config-v2` today; planned `runner-config-v3` for V2 capability flags (v1/v2 decode retained) |
-| Alembic head | Pin **`0012`** — capability flags live in runner JSON only; no `0013` in V2 scaffolding |
+| Runner config | Write `runner-config-v3` (V2 capability flags); accept `v1`/`v2` decode with default-off flags |
+| Alembic head | Pin **`0012`** — capability flags live only in `run_control.config_payload` runner JSON; **no `0013`** and no indexed flag columns in V2 scaffolding |
 
 Runs never mix replay schema versions. Legacy schema-v1 audit events remain decodable for export but must not enter the authoritative log. Alembic revision `0004` persists SQL cause/occurrence columns so restored engines reproduce the same next observation as live engines (eventful and eventless prior windows). Revision `0005` adds owner-scoped episodic memory tables. Revision `0006` adds reconstruction/derivation provenance with selective immutability. Revision `0007` adds semantic belief and directed relationship tables. Revision `0008` adds communicated transmission metadata and testimony-factor columns. Observation codecs round-trip every field and provenance type with exact keys.
 
@@ -100,7 +100,7 @@ Append-only `experiment_definitions`, `experiment_assignments`, and `experiment_
 - **`0011_v1_run_control`:** canonical runner configuration V2, lifecycle transitions, execution leases/heartbeats, experiment assignment reconciliation.
 - **`0012_v1_scientific_evidence`:** append-only goal revisions, action resolutions, claim-level truth specs, evidence manifests, metric-set lifecycle + immutable metric documents, unified stream/outbox with one monotonic per-run cursor.
 
-Migration head is `0012`. Tests may target only databases whose name contains `palimpsest_test`; Alembic receives the validated URL directly and fails closed on conflicting ambient URLs.
+Migration head is `0012`. V2 capability flags are **not** Alembic columns — they are carried only inside canonical runner-config JSON stored in existing `run_control.config_payload` (`0011`). Do not invent indexed SQL flag columns or add `0013_*` without a later justified plan. Tests may target only databases whose name contains `palimpsest_test`; Alembic receives the validated URL directly and fails closed on conflicting ambient URLs.
 
 ## Logging
 

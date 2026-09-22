@@ -16,12 +16,29 @@ Derivation version **v3** requires an explicit stochastic identity and fails clo
 
 ## Configuration
 
-`SimulationRunnerConfig` is frozen and versioned. Strict canonical JSON codecs reject unknown fields, duplicate keys, non-finite numbers, credentials, and unsupported versions. Separate fingerprints cover:
+`SimulationRunnerConfig` is frozen and versioned (`runner-config-v3` write default;
+`runner-config-v1` / `v2` remain decodable). Strict canonical JSON codecs reject
+unknown fields, duplicate keys, non-finite numbers, credentials, and unsupported
+versions. Separate fingerprints cover:
 
-- full runner specification
+- full runner specification (`runner_config_fingerprint`)
 - scenario/world
 - cognitive condition
 - provider settings (adapter kind/model/request knobs only; no secrets)
+
+Run-level `V2CapabilityFlags` ride in `runner-config-v3` only (all default off).
+Legacy v1/v2 payloads decode to default-off flags. Enabling any reserved flag
+fails closed at construction (`capability_unimplemented`) until a later plan owns it.
+
+### Fingerprint vs trajectory identity
+
+| Identity | Stable across `runner-config-v2` → `v3` flags-off rewrite? |
+| --- | --- |
+| `config_fingerprint` | **No** — may change when schema/key set grows (capability flags) |
+| `exact_trajectory_hash` / objective commit identity | **Yes** — same seed, scenario, stochastic identity, flags off |
+| `replica_normalized_trajectory_hash` | **Yes** under the same conditions (run-derived IDs stripped) |
+
+Golden `runner-config-v2` fixtures live under `tests/fixtures/runner_configs/`.
 
 Use `SimulationRunner.from_config(...)` with injected factories/ports. The runner must not import environment settings, SQLAlchemy, or API code.
 

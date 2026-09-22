@@ -10,7 +10,7 @@ from __future__ import annotations
 import hashlib
 import json
 from collections.abc import Mapping
-from typing import Any
+from typing import Any, Final
 
 from agents.models import AgentId, DriveKind, Goal
 from llm.factory import ProviderAdapterKind
@@ -24,6 +24,7 @@ from simulation.runner_models import (
     RESULT_SCHEMA_VERSION_V2,
     RUNNER_SCHEMA_VERSION_V1,
     RUNNER_SCHEMA_VERSION_V2,
+    RUNNER_SCHEMA_VERSION_V3,
     SUPPORTED_RUNNER_SCHEMA_VERSIONS,
     AgentCognitionSpec,
     AgentRunnerSpec,
@@ -45,6 +46,7 @@ from simulation.runner_models import (
     SimulationRunnerConfig,
     SimulationRunnerResult,
     SimulationRunnerResultDocument,
+    V2CapabilityFlags,
     WorldScenarioSpec,
     runner_config_diagnostics,
 )
@@ -259,7 +261,7 @@ def _encode_agent(value: AgentRunnerSpec, *, schema_version: str) -> dict[str, A
         "cognition": _encode_cognition(value.cognition),
         "entity_id": value.entity_id.value,
     }
-    if schema_version == RUNNER_SCHEMA_VERSION_V2:
+    if schema_version in {RUNNER_SCHEMA_VERSION_V2, RUNNER_SCHEMA_VERSION_V3}:
         assert value.name is not None
         payload["name"] = value.name
         payload["initial_goals"] = [_encode_goal(goal) for goal in value.initial_goals]
@@ -524,6 +526,67 @@ def _decode_provider(data: dict[str, Any], *, path: str) -> RunnerProviderSettin
         raise RunnerSerializationError("invalid_model", path) from exc
 
 
+_RUNNER_ROOT_KEYS_LEGACY: Final[set[str]] = {
+    "schema_version",
+    "derivation_version",
+    "seed",
+    "stochastic_identity",
+    "scenario",
+    "agents",
+    "stop_policy",
+    "mortality_mode",
+    "mortality_policy_version",
+    "cognition_failure_policy",
+    "provider",
+    "persistence",
+    "experiment",
+}
+_RUNNER_ROOT_KEYS_V3: Final[set[str]] = {
+    *_RUNNER_ROOT_KEYS_LEGACY,
+    "capability_flags",
+}
+_CAPABILITY_FLAG_KEYS: Final[set[str]] = {
+    "advanced_social_inference",
+    "multi_hop_testimony_tracking",
+    "predictive_world_model",
+    "extended_self_model",
+}
+
+
+def _encode_capability_flags(flags: V2CapabilityFlags) -> dict[str, Any]:
+    return {
+        "advanced_social_inference": flags.advanced_social_inference,
+        "multi_hop_testimony_tracking": flags.multi_hop_testimony_tracking,
+        "predictive_world_model": flags.predictive_world_model,
+        "extended_self_model": flags.extended_self_model,
+    }
+
+
+def _decode_capability_flags(
+    data: Mapping[str, Any], *, path: str
+) -> V2CapabilityFlags:
+    if not isinstance(data, dict):
+        raise RunnerSerializationError("invalid_object", path)
+    _require_keys(data, _CAPABILITY_FLAG_KEYS, path=path)
+    try:
+        return V2CapabilityFlags(
+            advanced_social_inference=_bool_field(
+                data, "advanced_social_inference", path=path
+            ),
+            multi_hop_testimony_tracking=_bool_field(
+                data, "multi_hop_testimony_tracking", path=path
+            ),
+            predictive_world_model=_bool_field(
+                data, "predictive_world_model", path=path
+            ),
+            extended_self_model=_bool_field(data, "extended_self_model", path=path),
+        )
+    except RunnerSerializationError:
+        raise
+    except (TypeError, ValueError) as exc:
+        raise RunnerSerializationError("invalid_model", path) from exc
+
+
 def _encode_runner_document(config: SimulationRunnerConfig) -> dict[str, Any]:
     document: dict[str, Any] = {
         "agents": [
@@ -555,6 +618,10 @@ def _encode_runner_document(config: SimulationRunnerConfig) -> dict[str, Any]:
             ),
         },
     }
+    if config.schema_version == RUNNER_SCHEMA_VERSION_V3:
+        document["capability_flags"] = _encode_capability_flags(
+            config.capability_flags
+        )
     if config.experiment is not None:
         document["experiment"] = {
             "condition_id": config.experiment.condition_id,
@@ -587,28 +654,17 @@ def decode_runner_config(payload: bytes) -> SimulationRunnerConfig:
         raise RunnerSerializationError("invalid_json", "$") from exc
     if not isinstance(data, dict):
         raise RunnerSerializationError("invalid_object", "$")
-    _require_keys(
-        data,
-        {
-            "schema_version",
-            "derivation_version",
-            "seed",
-            "stochastic_identity",
-            "scenario",
-            "agents",
-            "stop_policy",
-            "mortality_mode",
-            "mortality_policy_version",
-            "cognition_failure_policy",
-            "provider",
-            "persistence",
-            "experiment",
-        },
-        path="$",
-    )
-    schema_version = _str_field(data, "schema_version", path="$")
+    schema_version = data.get("schema_version")
+    if not isinstance(schema_version, str):
+        raise RunnerSerializationError("invalid_string", "$.schema_version")
     if schema_version not in SUPPORTED_RUNNER_SCHEMA_VERSIONS:
         raise RunnerSerializationError("unsupported_version", "$.schema_version")
+    root_keys = (
+        _RUNNER_ROOT_KEYS_V3
+        if schema_version == RUNNER_SCHEMA_VERSION_V3
+        else _RUNNER_ROOT_KEYS_LEGACY
+    )
+    _require_keys(data, root_keys, path="$")
     mortality_policy = _str_field(data, "mortality_policy_version", path="$")
     if mortality_policy != MORTALITY_POLICY_VERSION:
         raise RunnerSerializationError(
@@ -673,6 +729,13 @@ def decode_runner_config(payload: bytes) -> SimulationRunnerConfig:
             )
         except (TypeError, ValueError) as exc:
             raise RunnerSerializationError("invalid_model", "$.experiment") from exc
+    if schema_version == RUNNER_SCHEMA_VERSION_V3:
+        capability_flags = _decode_capability_flags(
+            data["capability_flags"], path="$.capability_flags"
+        )
+    else:
+        # Legacy v1/v2 decode upgrades to default-off flags.
+        capability_flags = V2CapabilityFlags()
     agents_list: list[AgentRunnerSpec] = []
     for index, item in enumerate(agents_raw):
         if not isinstance(item, dict):
@@ -726,6 +789,7 @@ def decode_runner_config(payload: bytes) -> SimulationRunnerConfig:
                 ),
             ),
             experiment=experiment,
+            capability_flags=capability_flags,
             schema_version=_str_field(data, "schema_version", path="$"),
             derivation_version=_str_field(data, "derivation_version", path="$"),
             mortality_policy_version=_str_field(
