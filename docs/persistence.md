@@ -55,16 +55,23 @@ Relationship dimensions are only: trust, fear, affection, debt, respect, resentm
 
 ## Versions
 
+Canonical taxonomy (write version, accepted restore set, bump trigger, owner,
+V1 fixture impact) lives in `simulation.compatibility.COMPATIBILITY_MATRIX`.
+Contributor summary:
+
 | Constant | Role |
 | --- | --- |
 | Event schema audit v1 | Decode/export only; not authoritative replay |
 | Event schema replay v2 | Legacy projector (inventory transfers) |
 | Event schema replay v3 | Physical runs; effect-complete + causes (readable; no fabricated occurrence context) |
-| Event schema replay v4 | Physical runs (new writes); causes + occurrence context for perception audiences |
-| `PROJECTOR_VERSION` | Private world projector compatibility |
-| `PERSISTENCE_CODEC_VERSION` | Canonical JSON codec for manifests/snapshots/commits |
-| Derivation v1 / v2 | Deterministic ID/stream derivation (v2 includes rules fingerprint) |
+| Event schema replay v4 | Causes + occurrence context for perception audiences |
+| Event schema replay v5 | Current write (structured communication); V2 scaffolding does **not** bump to v6 |
+| `PROJECTOR_VERSION` | Private world projector compatibility (`v2` write; accept `v1`/`v2`) |
+| `PERSISTENCE_CODEC_VERSION` | Canonical JSON codec for manifests/snapshots/commits (`v2` write; accept `v1`/`v2`) |
+| Derivation v1 / v2 / v3 | Deterministic ID/stream derivation (v2 includes rules fingerprint) |
 | Subjective codec v1 | Semantic beliefs, relationship profiles, mutation receipts (non-authoritative) |
+| Runner config | Write `runner-config-v2` today; planned `runner-config-v3` for V2 capability flags (v1/v2 decode retained) |
+| Alembic head | Pin **`0012`** — capability flags live in runner JSON only; no `0013` in V2 scaffolding |
 
 Runs never mix replay schema versions. Legacy schema-v1 audit events remain decodable for export but must not enter the authoritative log. Alembic revision `0004` persists SQL cause/occurrence columns so restored engines reproduce the same next observation as live engines (eventful and eventless prior windows). Revision `0005` adds owner-scoped episodic memory tables. Revision `0006` adds reconstruction/derivation provenance with selective immutability. Revision `0007` adds semantic belief and directed relationship tables. Revision `0008` adds communicated transmission metadata and testimony-factor columns. Observation codecs round-trip every field and provenance type with exact keys.
 

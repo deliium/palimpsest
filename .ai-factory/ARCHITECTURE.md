@@ -115,6 +115,7 @@ tests/
 - **New Features:** Follow the bounded-package rules and facades in this document and `docs/architecture.md` where practical
 - **Existing Code:** Document the current structure as-is (including reconstructive memory and social transmission). When modifying existing code, prefer these conventions without forcing unrelated rewrites
 - **Interoperability:** Wire infrastructure only at the API/composition boundary; do not allocate LLM providers in API lifespan until cognition consumers own them
+- **Domain-contract evolution:** Observation, closed `AgentCommand`, and `world.communications` follow accepted-set discipline (see `docs/architecture.md`). V2 scaffolding does not add fields/commands; live/restored observation parity remains the hard gate for any later domain bump. Version taxonomy: `simulation.compatibility`
 
 ## Code Examples
 

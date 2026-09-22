@@ -29,6 +29,8 @@ Objective physical rules for a small discrete world (about 5–10 agents, 10–2
 
 An observation for open tick `N` is projected from the tick-start snapshot plus committed occurrences from tick `N−1`. Current-tick submissions and outcomes never appear early. Eventless prior windows are empty but still carried for live/restored parity. Live and restored engines at the same tick emit equal observations (including canonical serialization).
 
+**Domain-contract evolution gate:** any future Observation / command / communications wire bump must keep live/restored observation parity green (`test_live_and_restored_observations_match_with_prior_events` and related checkpoint tests). Policy details: [Architecture — Domain-contract evolution](architecture.md#domain-contract-evolution-observation--commands--communications).
+
 ## Actions (all applied / rejected / conflicted — none deferred)
 
 | Action | Summary |

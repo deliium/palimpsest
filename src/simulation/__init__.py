@@ -29,6 +29,18 @@ from simulation.bootstrap import (
     registration_translator,
 )
 from simulation.clock import LogicalClock, Tick, require_exact_nonneg_int, require_tick
+from simulation.compatibility import (
+    ALEMBIC_HEAD_REVISION,
+    API_HTTP_PREFIX,
+    COMPATIBILITY_MATRIX,
+    EXPERIMENT_DEFINITION_SCHEMA_VERSION,
+    RUNNER_SCHEMA_VERSION_V3,
+    STREAM_ENVELOPE_VERSION,
+    WS_PROTOCOL_VERSION,
+    CompatibilityEntry,
+    compatibility_entry,
+    list_compatibility_ids,
+)
 from simulation.contracts import (
     RunConfigurationPort,
     describe_run,
@@ -292,7 +304,10 @@ from simulation.subjective_state import (
 
 __all__ = [
     "ACTION_RESOLUTION_SCHEMA_VERSION",
+    "ALEMBIC_HEAD_REVISION",
     "ALLOWED_LIFECYCLE_TRANSITIONS",
+    "API_HTTP_PREFIX",
+    "COMPATIBILITY_MATRIX",
     "DEFAULT_INSPECTION_PAGE_SIZE",
     "DERIVATION_VERSION",
     "DERIVATION_VERSION_V1",
@@ -300,6 +315,7 @@ __all__ = [
     "DERIVATION_VERSION_V3",
     "EVENT_SCHEMA_VERSION",
     "EVIDENCE_MANIFEST_SCHEMA_VERSION",
+    "EXPERIMENT_DEFINITION_SCHEMA_VERSION",
     "FINALIZATION_COMMAND_CODEC_VERSION",
     "GOAL_REVISION_SCHEMA_VERSION",
     "LLM_REPLAY_REQUIREMENT",
@@ -310,8 +326,11 @@ __all__ = [
     "RUNNER_SCHEMA_VERSION",
     "RUNNER_SCHEMA_VERSION_V1",
     "RUNNER_SCHEMA_VERSION_V2",
+    "RUNNER_SCHEMA_VERSION_V3",
+    "STREAM_ENVELOPE_VERSION",
     "STREAM_RECORD_SCHEMA_VERSION",
     "SUBJECTIVE_SCHEMA_VERSION",
+    "WS_PROTOCOL_VERSION",
     "ActionResolution",
     "ActionResolutionReason",
     "ActionResolutionRecord",
@@ -330,6 +349,7 @@ __all__ = [
     "CognitionCounters",
     "CognitionFailurePolicy",
     "CommitHash",
+    "CompatibilityEntry",
     "ConfigAvailability",
     "DetachedInspectionProjector",
     "DetachedObjectiveProjection",
@@ -463,6 +483,7 @@ __all__ = [
     "classify_process_restart",
     "classify_resume_mode",
     "cognition_fingerprint",
+    "compatibility_entry",
     "compute_commit_hash",
     "create_named_stream",
     "create_rng",
@@ -510,6 +531,7 @@ __all__ = [
     "hash_world_event",
     "is_lifecycle_transition_allowed",
     "is_terminal_lifecycle_state",
+    "list_compatibility_ids",
     "log_invalid_physical_config",
     "log_invalid_setup",
     "log_physical_config_validated",

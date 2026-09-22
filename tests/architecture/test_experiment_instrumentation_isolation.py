@@ -16,6 +16,10 @@ _FORBIDDEN_SYMBOLS = (
     "collect_arm_summary",
     "ClaimTruthSpec",
     "EvidenceCompositionService",
+    "MemoryDriftAnalysisService",
+    "MemoryDriftReport",
+    "SocialTransmissionAnalysisService",
+    "SocialTransmissionReport",
 )
 _DOMAIN_ROOTS = (
     "world",

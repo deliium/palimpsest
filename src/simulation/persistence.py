@@ -52,6 +52,7 @@ from world.identifiers import (
 from world.models import AgentBody, Item, Location, Resource, Weather
 
 # New-write versions for physical replay-v5 runs (structured communication).
+# Taxonomy / accepted-set policy: see simulation.compatibility.COMPATIBILITY_MATRIX.
 EVENT_SCHEMA_VERSION: Final[int] = EVENT_SCHEMA_REPLAY_V5
 PROJECTOR_VERSION: Final[str] = "v2"
 PERSISTENCE_CODEC_VERSION: Final[str] = "v2"

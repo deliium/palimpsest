@@ -61,7 +61,7 @@ observe() → ObservationBatch + TickToken
 - Ordered input position is resolution priority. Conflicts arise only when an initially valid action is invalidated by an earlier effect.
 - At most one action per registered agent per tick; omitted agents produce nothing; empty submissions still run autonomous physiology.
 - All fifteen commands have explicit applied / rejected / conflicted behavior (no deferred physical policy). Details: [Physical simulation](physical-simulation.md).
-- New physical runs emit schema-v4 replay events (effect-complete + causes + occurrence context). Schema-v3 remains readable; schema-1 export remains an audit artifact where applicable.
+- New physical runs emit schema-v5 replay events (structured communication + occurrence context). Schemas v2–v4 remain readable; schema-1 export remains an audit artifact where applicable. Version taxonomy: `simulation.compatibility` / [Persistence](persistence.md).
 
 ## Perception boundary
 
@@ -73,6 +73,17 @@ Objective `WorldState` stays private. Agent-facing cognition sees only immutable
 | Output | Exactly one detached `Observation` per registered observer; repeated `observe()` in one open tick is equal |
 | Routing | `WorldEngine.observation_for(AgentId)` or `ObservationBatch.for_observer`; cognition uses `build_perspective` |
 | Forbidden to cognition | `WorldState`, `World`, engine snapshots, private projectors, raw `WorldEvent`, another agent's observation, all-agent batches |
+
+### Domain-contract evolution (Observation / commands / communications)
+
+Later V2 feature plans may evolve agent-facing contracts only under this accepted-set discipline (this scaffolding plan adds **no** new fields, commands, or communication variants):
+
+1. **Observation and related codecs** — new write versions only when the wire shape changes; legacy decode remains in an `ACCEPTED_*` set. Cognition inputs must not silently widen to authority types (`WorldState`, private `world._*`, `WorldEvent` stores).
+2. **Closed `AgentCommand` set** — remains closed at fifteen variants unless a versioned bump lands together with admission rules, world-operation evaluation, event details, and replay codecs in the same change.
+3. **Communications** — stay event-only (`Talk`/`Ask`/`Tell` → `Talked`/`Asked`/`Told`). Delivery proves delivery, not truth; declared lineage on `StructuredUtterance` is distrustable testimony. Content never becomes world-owned fact.
+4. **Hard gate for any domain bump** — live and restored engines at the same tick must emit equal observations (including canonical serialization). Required regression: `tests/unit/test_checkpoint_restoration.py::test_live_and_restored_observations_match_with_prior_events` (and siblings). Do not ship a domain wire change that breaks live/restored parity.
+
+See also `simulation.compatibility` (version taxonomy) and [.ai-factory/ARCHITECTURE.md](../.ai-factory/ARCHITECTURE.md).
 
 ### Field access matrix
 
@@ -106,7 +117,7 @@ These are encoded as types and import rules, and enforced by `WorldEngine` for o
 6. **`WorldEvent` is immutable.** Closed occurrence details; no open payloads. Rejected/conflicted/duplicate outcomes emit no world events.
 7. **Memories and beliefs may be wrong.** They are mutable owner-bound aggregates (`MemoryTrace` / `Belief`).
 8. **Memory is agent- and run-scoped.** Normal `MemoryService` instances bind one `MemoryScope(run_id, owner_id)`. Stores reject cross-owner writes; retrieval/recall never joins objective events. Remembered episodes are reconstructed (`ReconstructedMemory`), not raw traces.
-9. **Information crosses agents only via perception and explicit communication.** Envelopes cannot carry memory traces or `Agent` values.
+9. **Information crosses agents only via perception, explicit communication, or physical external artifacts.** Perception and Talk/Ask/Tell delivery events never copy sender memory, beliefs, reconstructions, or relationship state. Portable items transferred by Take/Drop/Give (and observed via perception) are the only physical channel for shared external state. Social envelopes cannot carry memory traces or `Agent` values; silent cross-agent memory/belief copy is forbidden.
 10. **Randomness is injected from an explicit seed.** `SimulationRunConfig.seed` is required; only `simulation.randomness` may use `random.Random` instances. Seeds are never logged.
 11. **Cognition is a strategy protocol.** `CognitionStrategy.propose(perspective)` returns `AgentCommand` and has no LLM, repository, `WorldState`, or mutation capability in its signature.
 

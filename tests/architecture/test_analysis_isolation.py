@@ -157,11 +157,38 @@ def test_cognition_never_imports_truth_or_metric_symbols() -> None:
         "MetricDocument",
         "assemble_metric_documents",
         "EvidenceCompositionService",
+        "MemoryDriftAnalysisService",
+        "MemoryDriftReport",
+        "SocialTransmissionAnalysisService",
+        "SocialTransmissionReport",
     )
     for path in (SRC / "agents" / "cognition").rglob("*.py"):
         text = path.read_text(encoding="utf-8")
         for symbol in forbidden:
             assert symbol not in text, f"{path}: {symbol}"
+
+
+def test_live_subjective_packages_forbid_analysis_feedback_symbols() -> None:
+    """Analysis join reports must never feed live memory formation or agents."""
+    forbidden = (
+        "MemoryDriftAnalysisService",
+        "MemoryDriftReport",
+        "SocialTransmissionAnalysisService",
+        "SocialTransmissionReport",
+        "ClaimTruthSpec",
+        "StoryTruthSpec",
+        "EvidenceCompositionService",
+        "ObjectiveEventSource",
+    )
+    for package in ("memory", "social", "agents"):
+        root = SRC / package
+        for path in root.rglob("*.py"):
+            # Cognition subtree already covered above; still scan base agents.
+            if package == "agents" and "cognition" in path.parts:
+                continue
+            text = path.read_text(encoding="utf-8")
+            for symbol in forbidden:
+                assert symbol not in text, f"{path.relative_to(SRC)}: {symbol}"
 
 
 def test_api_schemas_forbid_live_world_engine_and_private_state() -> None:

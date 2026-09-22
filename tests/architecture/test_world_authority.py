@@ -122,6 +122,32 @@ def test_public_facades_hide_authority_and_expose_codec() -> None:
     assert "PerceptionService" not in simulation.__all__
 
 
+def test_physical_external_artifact_channel_remains_public() -> None:
+    """Invariant 9: items move via Take/Drop/Give; envelopes never carry MemoryTrace."""
+    import world
+    from world.actions import Drop, Give, Take
+    from world.events import Dropped, Given, Taken
+
+    for name in ("Take", "Drop", "Give", "Taken", "Dropped", "Given"):
+        assert name in world.__all__, f"world facade must export {name}"
+    assert Take is world.Take
+    assert Drop is world.Drop
+    assert Give is world.Give
+    assert Taken is world.Taken
+    assert Dropped is world.Dropped
+    assert Given is world.Given
+
+    social_root = SRC_ROOT / "social"
+    for path in social_root.rglob("*.py"):
+        text = path.read_text(encoding="utf-8")
+        assert "MemoryTrace" not in text, (
+            f"{path.relative_to(SRC_ROOT)} must not reference MemoryTrace "
+            "(silent memory copy via envelopes is forbidden)"
+        )
+        assert "ReconstructedMemory" not in text
+        assert "BeliefRevision" not in text
+
+
 def test_cognition_package_omits_world_authority_symbols() -> None:
     import agents.cognition as cognition
 
