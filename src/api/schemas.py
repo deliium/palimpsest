@@ -40,6 +40,8 @@ class ConfigAvailabilityOut(StrEnum):
 
 class CreateSimulationRequest(StrictModel):
     run_id: str = Field(min_length=1, max_length=128, pattern=r"^[A-Za-z0-9._-]+$")
+    # Default stays v2 for existing clients; v1/v2/v3 payloads are all accepted.
+    # Decode happens at runner construction (not at create).
     config_schema_version: str = Field(
         default="runner-config-v2", min_length=1, max_length=64
     )

@@ -42,6 +42,7 @@ from simulation.run_control import (
     RunLifecycleState,
     is_terminal_lifecycle_state,
 )
+from simulation.runner_models import SUPPORTED_RUNNER_SCHEMA_VERSIONS
 
 _LOGGER = get_logger("api.simulation_manager")
 
@@ -115,6 +116,17 @@ class SimulationManager:
         if self._draining:
             raise service_unavailable(code="draining")
 
+    def _warn_unsupported_config_schema(
+        self, *, schema_version: str, run_id: str
+    ) -> None:
+        if schema_version not in SUPPORTED_RUNNER_SCHEMA_VERSIONS:
+            _LOGGER.warning(
+                "unsupported_config_schema_version",
+                run_id=run_id,
+                config_schema_version=schema_version,
+                reason_code="unsupported_version",
+            )
+
     async def _handle_for(self, run_id: str) -> _RunHandle:
         async with self._handles_lock:
             handle = self._handles.get(run_id)
@@ -158,6 +170,9 @@ class SimulationManager:
         digest = hashlib.sha256(config_payload).hexdigest()
         if digest != config_fingerprint:
             raise bad_request(code="config_fingerprint_mismatch", run_id=run_id)
+        self._warn_unsupported_config_schema(
+            schema_version=config_schema_version, run_id=run_id
+        )
         handle = await self._handle_for(run_id)
         async with handle.lock:
             existing = await self._run_control.get(RunId(run_id))
@@ -207,6 +222,9 @@ class SimulationManager:
             raise bad_request(code="invalid_config_payload", run_id=run_id)
         if hashlib.sha256(config_payload).hexdigest() != config_fingerprint:
             raise bad_request(code="config_fingerprint_mismatch", run_id=run_id)
+        self._warn_unsupported_config_schema(
+            schema_version=config_schema_version, run_id=run_id
+        )
         handle = await self._handle_for(run_id)
         async with handle.lock:
             current = await self._require_record(run_id)

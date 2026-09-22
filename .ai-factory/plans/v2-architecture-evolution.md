@@ -181,25 +181,25 @@ LLM provider lifespan remains an API/`llm.factory` composition concern (ARCHITEC
 
 ### Phase 3: Seams, Replay, API, and V1 Executability
 
-- [ ] Task 8: Document V2 extension seams without implementing behavior.
+- [x] Task 8: Document V2 extension seams without implementing behavior.
   - Deliverable: Map plug-in points for later V2 plans: `CognitiveLoop` stage protocols, `AgentCognitionSpec` modes, run-level `V2CapabilityFlags`, `AgentRuntime` subjective finalization, PerceptionService (observe-only), communication eligibility (world-private), `experiments.catalog` arms, analysis-only evidence stages, and **API/`llm.factory` LLM lifecycle composition** (not a runner flag). State off-limits seams (WorldEngine admission, event immutability, Observation trust). Capture “default-off flags → V1-equivalent wiring; flags-on fail closed until a later plan owns them.”
   - Files: `.ai-factory/ARCHITECTURE.md`, `docs/architecture.md`, `docs/cognition-runtime.md`, `.ai-factory/DESCRIPTION.md` (V2 scaffolding note only).
   - Logging: Docs-only; N/A.
   - Dependencies: Tasks 2, 4.
 
-- [ ] Task 9: Snapshot/replay compatibility acceptance suite.
+- [x] Task 9: Snapshot/replay compatibility acceptance suite.
   - Deliverable: Focused replay/restore proofs: (a) V1 event fixtures at schemas 2–5 still restore; (b) flags-off equivalent runs preserve objective trajectory/commit identity (not config fingerprint equality); (c) subjective table divergence does not change objective fold. Extend `test_replay_service`, `test_simulation_replay_determinism`, integration replay suites; add `tests/unit/test_v2_v1_replay_compat.py` if needed. Do **not** duplicate full catalog/reference execution (Task 11).
   - Files: `tests/unit/test_replay_service.py`, `tests/unit/test_simulation_replay_determinism.py`, `tests/integration/test_simulation_persistence_replay.py`, `tests/integration/test_physical_simulation_replay.py`, `tests/unit/test_v2_v1_replay_compat.py`.
   - Logging: Tests assert on hashes/version codes; runner DEBUG may emit run_id/tick/version; never event payloads.
   - Dependencies: Tasks 4, 5.
 
-- [ ] Task 10: API versioning policy and `/v1` regression coverage.
+- [x] Task 10: API versioning policy and `/v1` regression coverage.
   - Deliverable: Document `/v1` stability and “no `/v2` routes in this plan.” Keep `WS_PROTOCOL_VERSION = palimpsest.v1`. Prove create/configure accept legacy `runner-config-v2` payloads (opaque store + fingerprint) and that runner start/decode accepts v2 upgrade and v3 flags-off. Extend `test_api_simulation_manager`, lifecycle, replay routes, and `test_v1_api_e2e` as needed.
   - Files: `docs/research-api.md`, `src/api/schemas.py`, `src/api/simulation_manager.py`, `src/api/security.py` (comments only unless needed), `tests/unit/test_api_simulation_manager.py`, `tests/unit/test_api_replay_routes.py`, `tests/integration/test_v1_api_e2e.py`.
   - Logging: Existing route INFO templates; WARN on unsupported `config_schema_version`; never log `config_payload`.
   - Dependencies: Task 4.
 
-- [ ] Task 11: End-to-end V1 experiment executability gate.
+- [x] Task 11: End-to-end V1 experiment executability gate.
   - Deliverable: Acceptance tests that construct and run (short tick counts, deterministic fakes) catalog experiments A–E and the five-agent reference scenario under V2-ready code with all flags off. Assert schema/decode path, stop reasons where applicable, and `v1_regression_profile()`. Mark heavy paths with existing pytest markers; default unit path stays network-free and DB-free. Own execution breadth here (not Task 9).
   - Files: `tests/unit/test_v1_regression_gate.py` (new), `tests/integration/test_experiment_framework.py`, `tests/unit/test_reference_scenario_e2e.py` (extend if appropriate), `src/experiments/catalog.py`, `src/experiments/reference_scenario.py`.
   - Logging: INFO gate start/end with experiment_id, tick counts, flag digest; DEBUG per-condition fingerprints; ERROR stable failure codes; never observations/memories.

@@ -28,6 +28,14 @@ Secrets use strong `SecretStr` values. Query-string secrets are rejected. Prefer
 
 Stable problem-detail errors carry closed reason codes. Lifecycle conflicts return conflict responses without leaking configuration or evidence payloads.
 
+### API versioning (V2 scaffolding)
+
+- Keep **`/v1`** stable. Do **not** introduce `/v2` HTTP routes in this scaffolding plan.
+- Introduce `/v2` only when a request/response shape cannot be expressed as optional additive fields on `/v1`.
+- WebSocket subprotocol remains `palimpsest.v1` (credentials via header / subprotocol only — never query strings).
+- `SimulationManager` stores opaque `config_payload` + fingerprint; decode happens at runner construction.
+- Accepted runner config wire versions: `runner-config-v1`, `runner-config-v2` (legacy), and `runner-config-v3` (current write with default-off `V2CapabilityFlags`). Legacy v2 payloads must remain creatable/configurable and constructible.
+
 ## Debug security
 
 Subjective debug routes are **disabled by default**. Enabling requires:

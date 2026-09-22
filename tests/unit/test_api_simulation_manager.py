@@ -189,3 +189,61 @@ async def test_list_and_status_keyset() -> None:
     assert page.next_cursor == "run-b"
     rest = await manager.list_runs(after_run_id=page.next_cursor, limit=2)
     assert [item.run_id for item in rest.items] == ["run-c"]
+
+
+@pytest.mark.asyncio
+async def test_create_accepts_golden_runner_config_v2_payload() -> None:
+    from pathlib import Path
+
+    from simulation.models import RunId as SimRunId
+    from simulation.runner import SimulationRunner
+    from simulation.runner_models import V2CapabilityFlags
+    from simulation.runner_serialization import decode_runner_config
+
+    payload = (
+        Path(__file__).resolve().parents[1]
+        / "fixtures"
+        / "runner_configs"
+        / "catalog_a_condition_v2.json"
+    ).read_bytes()
+    fingerprint = hashlib.sha256(payload).hexdigest()
+    manager, repo, _ = _manager()
+    created = await manager.create(
+        run_id="run-golden-v2",
+        config_schema_version="runner-config-v2",
+        config_fingerprint=fingerprint,
+        config_payload=payload,
+    )
+    assert created.config_schema_version == "runner-config-v2"
+    record = await repo.get(RunId("run-golden-v2"))
+    assert record is not None
+    assert record.config_payload == payload
+    decoded = decode_runner_config(record.config_payload)
+    assert decoded.capability_flags == V2CapabilityFlags()
+    async with await SimulationRunner.from_config(
+        decoded, run_id=SimRunId("run-golden-v2-runner")
+    ) as runner:
+        assert runner.run_id.value == "run-golden-v2-runner"
+
+
+def test_api_keeps_v1_routes_and_ws_protocol() -> None:
+    from pathlib import Path
+
+    from api.security import WS_PROTOCOL_VERSION
+
+    assert WS_PROTOCOL_VERSION == "palimpsest.v1"
+    api_root = Path(__file__).resolve().parents[2] / "src" / "api"
+    hits: list[str] = []
+    markers = (
+        'prefix="/v2"',
+        "prefix='/v2'",
+        'APIRouter(prefix="/v2"',
+        '@router.get("/v2/',
+        '@router.post("/v2/',
+        '@router.websocket("/v2/',
+    )
+    for path in api_root.rglob("*.py"):
+        text = path.read_text(encoding="utf-8")
+        if any(marker in text for marker in markers):
+            hits.append(str(path.relative_to(api_root)))
+    assert hits == []

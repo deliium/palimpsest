@@ -134,6 +134,26 @@ No Anthropic-native adapters, pathfinding beyond one adjacent edge, crafting, di
 
 Production PostgreSQL privilege design for `CREATE EXTENSION` is deferred; development credentials may create `vector`.
 
+## V2 extension seams (scaffolding)
+
+Later V2 feature plans plug into these seams only. They must not re-open WorldEngine authority, Observation trust, or replay identity.
+
+| Seam | Where | Notes |
+| --- | --- | --- |
+| CognitiveLoop stage protocols | `agents.cognition` constructor injection | Plain Python; no LangGraph/discovery plugins |
+| `AgentCognitionSpec` modes | `MemoryMode` / `ImaginationMode` (+ mortality on run config) | Closed enums; new modes need versioned bumps |
+| Run-level `V2CapabilityFlags` | `SimulationRunnerConfig` / `runner-config-v3` | Default off = V1-equivalent; flags-on fail closed until owned |
+| `AgentRuntime` subjective finalization | `simulation.agent_runtime` | Episodic + beliefs + relationships; never objective fold |
+| PerceptionService | private `world._perception` | Observe-only; never forms memory/belief |
+| Communication eligibility | private world policy + `world.communications` | Event-only delivery; testimony distrust |
+| Experiment catalog arms | `experiments.catalog` A–E + reference scenario | Flags ride in runner JSON; stay on `experiment-definition-v1` |
+| Analysis evidence stages | `analysis` only | Never feed reports into live cognition |
+| LLM lifecycle composition | `api` + `llm.factory` | **Not** a runner flag; still deferred until a cognition consumer owns it |
+
+**Off-limits:** WorldEngine admission, event immutability / `AUTHORITATIVE_TABLES`, Observation → authority type widening, silent cross-agent memory copy, scripted “emergence” roles.
+
+See `simulation.compatibility`, [Simulation runner](simulation-runner.md), and [.ai-factory/ARCHITECTURE.md](../.ai-factory/ARCHITECTURE.md).
+
 ## See also
 
 - [Cognition and agent runtime](cognition-runtime.md)

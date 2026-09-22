@@ -158,13 +158,27 @@ uv run --frozen --python 3.12.14 pytest \
 
 Integration coverage is in-memory (no PostgreSQL/Docker/network/LLM). Divergence tests hold the objective observation constant and vary only subjective evidence.
 
+## V2 extension seams (cognition / runtime)
+
+| Seam | Contract |
+| --- | --- |
+| Stage protocols | Constructor-injected into `CognitiveLoop`; replace one stage at a time |
+| Modes | `AgentCognitionSpec.memory_mode` / `imagination_mode`; run-level mortality |
+| Capability flags | Run-level `V2CapabilityFlags` on `SimulationRunnerConfig` — not stage plugins; default off wires V1 policies; any flag on fails closed until a later plan owns it |
+| Subjective finalization | `AgentRuntime` commits episodic/belief/relationship batches only |
+| LLM lifecycle | Remains `api` / `llm.factory` composition — **not** encoded on runner fingerprints |
+
+Off-limits from cognition: `WorldState`, `WorldEvent` stores, analysis reports, experiment collectors/truth specs.
+
+Full seam map: [Architecture — V2 extension seams](architecture.md#v2-extension-seams-scaffolding).
+
 ## Deferred
 
 - Production LLM-backed cognition stages (beyond optional reconstructive recall)
 - Durable cognition-artifact persistence
 - Concurrent agent execution
 - General M4 analysis metrics over cognition receipts
-- LLM provider lifecycle composition in API / `compose.yaml` (factory ports exist; M3 providers slice remains open)
+- LLM provider lifecycle composition in API / `compose.yaml` (factory ports exist; deferred until a cognition consumer owns it)
 
 ## See Also
 

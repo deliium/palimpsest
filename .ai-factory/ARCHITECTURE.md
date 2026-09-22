@@ -117,6 +117,7 @@ tests/
 - **Existing Code:** Document the current structure as-is (including reconstructive memory and social transmission). When modifying existing code, prefer these conventions without forcing unrelated rewrites
 - **Interoperability:** Wire infrastructure only at the API/composition boundary; do not allocate LLM providers in API lifespan until cognition consumers own them
 - **Domain-contract evolution:** Observation, closed `AgentCommand`, and `world.communications` follow accepted-set discipline (see `docs/architecture.md`). V2 scaffolding does not add fields/commands; live/restored observation parity remains the hard gate for any later domain bump. Version taxonomy: `simulation.compatibility`
+- **V2 extension seams:** Later plans plug into CognitiveLoop stage protocols, `AgentCognitionSpec` modes, run-level `V2CapabilityFlags` (default-off = V1 wiring; flags-on fail closed until owned), `AgentRuntime` subjective finalization, observe-only perception, event-only communication eligibility, `experiments.catalog` arms, analysis-only evidence stages, and API/`llm.factory` LLM lifecycle composition (not a runner flag). Off-limits: WorldEngine admission, event immutability, Observation trust boundaries. See `docs/architecture.md` and `docs/cognition-runtime.md`.
 
 ## Code Examples
 
