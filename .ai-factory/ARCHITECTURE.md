@@ -32,6 +32,7 @@ src/
                          # inspection.py (detached objective/agent-visible projection; no live observe)
   experiments/           # trusted experiment catalog/coordinator (A–E); never imported by domain
                          # composition.py maps neutral persistence snapshots → analysis sources
+                         # reference_scenario.py: canonical five-agent / 48-tick fixture + milestone arbiter
   persistence/           # SQLAlchemy adapters (simulation, memory, subjective, analysis loaders)
                          # inspection_sqlalchemy.py (keyset pagination + manifest-constrained reads)
                          # may implement experiments.persistence ports; transmission_mapping.py

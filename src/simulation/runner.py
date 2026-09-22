@@ -61,7 +61,12 @@ from simulation.clock import Tick
 from simulation.engine import WorldEngine
 from simulation.identifiers import derive_run_id
 from simulation.journal import hash_snapshot
-from simulation.lifecycle import ActionSubmission, TickResult
+from simulation.lifecycle import (
+    ActionResolution,
+    ActionResolutionStatus,
+    ActionSubmission,
+    TickResult,
+)
 from simulation.models import DERIVATION_VERSION_V3, RunId, SimulationRunConfig
 from simulation.persistence import (
     EVENT_SCHEMA_VERSION,
@@ -126,6 +131,7 @@ from simulation.subjective_state import (
 )
 from social.contracts import RelationshipService
 from social.service import InMemoryRelationshipService
+from world.actions import AgentCommand, require_agent_command
 from world.identifiers import EntityId, WorldRevision
 
 _LOG: Final[logging.Logger] = logging.getLogger("simulation.runner")
@@ -486,6 +492,16 @@ def _counterpart_resolver(
             return None
 
     return resolve
+
+
+def _unwrap_arbiter_decision(decision: object | None) -> AgentCommand | None:
+    """Normalize typed arbiter decisions and legacy raw commands."""
+    if decision is None:
+        return None
+    command = getattr(decision, "command", None)
+    if command is not None and getattr(decision, "milestone_id", None) is not None:
+        return require_agent_command(command)
+    return require_agent_command(decision)
 
 
 @dataclass(frozen=True, slots=True)
@@ -861,6 +877,26 @@ class SimulationRunner:
         """Attach a trusted pre-admission intervention arbiter (experiments only)."""
         self._intervention_arbiter = arbiter
 
+    def _acknowledge_arbiter(self, resolutions: Sequence[ActionResolution]) -> None:
+        """Acknowledge one-shot arbiter status from committed resolutions."""
+        arbiter = self._intervention_arbiter
+        if arbiter is None:
+            return
+        acknowledge = getattr(arbiter, "acknowledge_resolutions", None)
+        if callable(acknowledge):
+            acknowledge(resolutions)
+            return
+        mark = getattr(arbiter, "mark_committed", None)
+        if not callable(mark):
+            return
+        # Legacy arbiter path when acknowledge_resolutions is unavailable.
+        for resolution in resolutions:
+            if type(resolution) is not ActionResolution:
+                continue
+            accepted = resolution.status is ActionResolutionStatus.APPLIED
+            mark(accepted=accepted)
+            break
+
     def set_crash_hook(
         self,
         hook: Callable[[RunnerCrashPoint, int | None], None] | None,
@@ -946,7 +982,13 @@ class SimulationRunner:
                 if arbiter is not None:
                     maybe = getattr(arbiter, "maybe_replace", None)
                     if callable(maybe):
-                        effective = maybe(tick=tick_value, agent_id=runtime.agent_id)
+                        proposed = prepared.proposal.proposed_command
+                        decision = maybe(
+                            tick=tick_value,
+                            agent_id=runtime.agent_id,
+                            proposed_command=proposed,
+                        )
+                        effective = _unwrap_arbiter_decision(decision)
                 pending = await runtime.bind_effective_command(
                     prepared, effective_command=effective
                 )
@@ -993,6 +1035,7 @@ class SimulationRunner:
                 tick_value,
                 len(submissions),
             )
+            self._acknowledge_arbiter(tick_result.resolutions)
             self._maybe_crash(RunnerCrashPoint.AFTER_OBJECTIVE_COMMIT)
 
             finalized = await self._finalize_and_acknowledge(

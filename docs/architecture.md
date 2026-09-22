@@ -23,7 +23,7 @@ Palimpsest is a modular monolith under `src/`. Cross-module imports must target 
 
 Private world authority (`world/_state.py`, `world/_transitions.py`, `world/_operations.py`, `world/_rules.py`, `world/_physical.py`, `world/_perception.py`, `world/_replay.py`) may be imported only by `simulation.engine`, `simulation.bootstrap`, and other private `world._*` modules. They are not re-exported from `world`.
 
-`memory` and `social` are independent (no cross-imports). Base `agents` must not import `agents.cognition`. `llm` imports no domain module. `simulation` must not import `api`, `analysis`, `experiments`, `infrastructure`, or `persistence`. Domain packages do not import `infrastructure` or `experiments`. `persistence` may import public `memory` and `social` facades and `experiments.persistence` ports for durable adapters (intentional). `analysis` may import `memory` read-only contracts for drift and social-transmission analysis. Subjective beliefs, self-model projections, and relationship profiles never become `WorldEvent` variants or enter `AUTHORITATIVE_TABLES`. See [Persistence](persistence.md), [Simulation runner](simulation-runner.md), [Experiments](experiments.md), [Memory reconstruction](memory-reconstruction.md), and [Social communication](social-communication.md).
+`memory` and `social` are independent (no cross-imports). Base `agents` must not import `agents.cognition`. `llm` imports no domain module. `simulation` must not import `api`, `analysis`, `experiments`, `infrastructure`, or `persistence`. Domain packages do not import `infrastructure` or `experiments`. `persistence` may import public `memory` and `social` facades and `experiments.persistence` ports for durable adapters (intentional). `analysis` may import `memory` read-only contracts for drift and social-transmission analysis. Subjective beliefs, self-model projections, and relationship profiles never become `WorldEvent` variants or enter `AUTHORITATIVE_TABLES`. See [Persistence](persistence.md), [Simulation runner](simulation-runner.md), [Experiments](experiments.md), [Analysis metrics](analysis-metrics.md), [Memory reconstruction](memory-reconstruction.md), and [Social communication](social-communication.md).
 
 Import-linter (`pyproject.toml`) and `tests/architecture/boundary_checker.py` enforce the allowlist, private-world authority, public facades, framework leakage, provider SDKs, and prohibited `random` / wall-clock / UUID defaults in domain code.
 
@@ -39,7 +39,7 @@ Import packages, not private modules:
 - `llm`: `LLMProvider`, `LLMRequest`, `LLMResult`, `StructuredOutput`, prompts (incl. `reconstructive_memory/v1`), factory
 - `simulation`: `WorldEngine`, `AgentRuntime`, `WorldBootstrap`, lifecycle types, `build_perspective`, `SubjectiveStateService`, persistence DTOs/ports, `PersistentSimulationService`, `ReplayService`, codecs (incl. subjective-v1), deterministic IDs/RNG/clock, export ports
 - `persistence`: repository factories, `create_memory_service`, and `create_subjective_state_service` (always require owner scope)
-- `analysis`: `EventSource`, `ExportSource`, `MemoryDriftAnalysisService`, drift/chain DTOs
+- `analysis`: `EventSource`, `ExportSource`, `MemoryDriftAnalysisService`, drift/chain DTOs, `MetricFamilyId` / `metric_specification` catalog
 - `api`: `create_app`
 - `infrastructure`: `load_settings`, `configure_logging`, `create_database_resources`
 

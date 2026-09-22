@@ -17,16 +17,20 @@ from analysis.numerical import library_versions, quantize_float, require_finite
 from world.identifiers import require_exact_nonneg_int, require_stable_id
 
 __all__ = [
+    "ACTION_RESOLUTION_RATES_FAMILY",
     "DRIFT_METRIC_VERSION",
     "EVENT_FACT_PROJECTOR_VERSION",
     "METRIC_DOCUMENT_SCHEMA_VERSION",
     "SOCIAL_TRANSMISSION_METRIC_VERSION",
+    "ActionResolutionRow",
+    "AppliedActionRow",
     "ChainNodeKind",
     "ComparisonStatus",
     "DriftDelta",
     "DriftStep",
     "EvidenceStage",
     "FactAvailability",
+    "GoalTransitionRow",
     "MemoryDriftReport",
     "MetricAvailability",
     "MetricCoverage",
@@ -36,9 +40,11 @@ __all__ = [
     "ReconstructionChain",
     "ReconstructionChainNode",
     "ReconstructionEvidence",
+    "ResourceHoldingRow",
     "SocialTransmissionReport",
     "StructuredFactSet",
     "SubjectiveDerivationEdge",
+    "SurvivalAgentRow",
     "TransmissionDistortion",
     "TransmissionHopRecord",
 ]
@@ -47,6 +53,9 @@ METRIC_DOCUMENT_SCHEMA_VERSION: Final[str] = "1"
 
 DRIFT_METRIC_VERSION: Final[str] = "1"
 EVENT_FACT_PROJECTOR_VERSION: Final[str] = "1"
+
+# Supporting Task-11 rates document family (not one of the fifteen catalog IDs).
+ACTION_RESOLUTION_RATES_FAMILY: Final[str] = "action_resolution_rates"
 
 
 class ChainNodeKind(StrEnum):
@@ -540,7 +549,12 @@ class MetricProvenance:
 
 @dataclass(frozen=True, slots=True)
 class MetricDocument:
-    """Immutable, schema-versioned metric result with run scope and coverage."""
+    """Immutable, schema-versioned metric result with run scope and coverage.
+
+    Family formulas, populations, and edge-case policy are defined in
+    ``analysis.specifications`` (catalog ``metric-catalog-v1``). This document
+    is the computed artifact, not the specification.
+    """
 
     schema_version: str
     metric_family: str
@@ -863,4 +877,200 @@ class SocialTransmissionReport:
             f"unique_agents={self.unique_agent_count}, "
             f"unresolved={self.unresolved_link_count}, "
             f"metric_version={self.metric_version!r})"
+        )
+
+
+@dataclass(frozen=True, slots=True)
+class ResourceHoldingRow:
+    """One agent's observed named resource measure (never labeled wealth)."""
+
+    agent_id: str
+    value: float | None
+
+    def __post_init__(self) -> None:
+        object.__setattr__(
+            self,
+            "agent_id",
+            require_stable_id("ResourceHoldingRow.agent_id", self.agent_id),
+        )
+        if self.value is not None:
+            object.__setattr__(
+                self,
+                "value",
+                quantize_float(require_finite(float(self.value))),
+            )
+
+    def __repr__(self) -> str:
+        return (
+            f"ResourceHoldingRow(agent_id={self.agent_id!r}, "
+            f"observed={self.value is not None})"
+        )
+
+
+@dataclass(frozen=True, slots=True)
+class AppliedActionRow:
+    """Detached applied action token for objective/behavior metrics."""
+
+    tick: int
+    ordinal: int
+    agent_id: str
+    action_kind: str
+    location_id: str | None = None
+    target_id: str | None = None
+
+    def __post_init__(self) -> None:
+        object.__setattr__(
+            self,
+            "tick",
+            require_exact_nonneg_int("AppliedActionRow.tick", self.tick),
+        )
+        object.__setattr__(
+            self,
+            "ordinal",
+            require_exact_nonneg_int("AppliedActionRow.ordinal", self.ordinal),
+        )
+        object.__setattr__(
+            self,
+            "agent_id",
+            require_stable_id("AppliedActionRow.agent_id", self.agent_id),
+        )
+        object.__setattr__(
+            self,
+            "action_kind",
+            require_stable_id("AppliedActionRow.action_kind", self.action_kind),
+        )
+        if self.location_id is not None:
+            object.__setattr__(
+                self,
+                "location_id",
+                require_stable_id("AppliedActionRow.location_id", self.location_id),
+            )
+        if self.target_id is not None:
+            object.__setattr__(
+                self,
+                "target_id",
+                require_stable_id("AppliedActionRow.target_id", self.target_id),
+            )
+
+    def __repr__(self) -> str:
+        return (
+            f"AppliedActionRow(tick={self.tick}, ordinal={self.ordinal}, "
+            f"agent_id={self.agent_id!r}, action_kind={self.action_kind!r})"
+        )
+
+
+@dataclass(frozen=True, slots=True)
+class ActionResolutionRow:
+    """Detached ActionResolution evidence row (status codes only)."""
+
+    tick: int
+    ordinal: int
+    agent_id: str
+    command_kind: str
+    status: str
+
+    def __post_init__(self) -> None:
+        object.__setattr__(
+            self,
+            "tick",
+            require_exact_nonneg_int("ActionResolutionRow.tick", self.tick),
+        )
+        object.__setattr__(
+            self,
+            "ordinal",
+            require_exact_nonneg_int("ActionResolutionRow.ordinal", self.ordinal),
+        )
+        object.__setattr__(
+            self,
+            "agent_id",
+            require_stable_id("ActionResolutionRow.agent_id", self.agent_id),
+        )
+        object.__setattr__(
+            self,
+            "command_kind",
+            require_stable_id("ActionResolutionRow.command_kind", self.command_kind),
+        )
+        object.__setattr__(
+            self,
+            "status",
+            require_stable_id("ActionResolutionRow.status", self.status),
+        )
+
+    def __repr__(self) -> str:
+        return (
+            f"ActionResolutionRow(tick={self.tick}, ordinal={self.ordinal}, "
+            f"agent_id={self.agent_id!r}, status={self.status!r})"
+        )
+
+
+@dataclass(frozen=True, slots=True)
+class SurvivalAgentRow:
+    """Registration plus optional objective death tick for survival metrics."""
+
+    agent_id: str
+    death_tick: int | None = None
+
+    def __post_init__(self) -> None:
+        object.__setattr__(
+            self,
+            "agent_id",
+            require_stable_id("SurvivalAgentRow.agent_id", self.agent_id),
+        )
+        if self.death_tick is not None:
+            object.__setattr__(
+                self,
+                "death_tick",
+                require_exact_nonneg_int(
+                    "SurvivalAgentRow.death_tick", self.death_tick
+                ),
+            )
+
+    def __repr__(self) -> str:
+        return (
+            f"SurvivalAgentRow(agent_id={self.agent_id!r}, "
+            f"has_death={self.death_tick is not None})"
+        )
+
+
+@dataclass(frozen=True, slots=True)
+class GoalTransitionRow:
+    """Detached goal-transition receipt codes for goal-completion metrics."""
+
+    goal_id: str
+    owner_id: str
+    tick: int
+    reason_code: str
+    to_status: str
+
+    def __post_init__(self) -> None:
+        object.__setattr__(
+            self,
+            "goal_id",
+            require_stable_id("GoalTransitionRow.goal_id", self.goal_id),
+        )
+        object.__setattr__(
+            self,
+            "owner_id",
+            require_stable_id("GoalTransitionRow.owner_id", self.owner_id),
+        )
+        object.__setattr__(
+            self,
+            "tick",
+            require_exact_nonneg_int("GoalTransitionRow.tick", self.tick),
+        )
+        object.__setattr__(
+            self,
+            "reason_code",
+            require_stable_id("GoalTransitionRow.reason_code", self.reason_code),
+        )
+        object.__setattr__(
+            self,
+            "to_status",
+            require_stable_id("GoalTransitionRow.to_status", self.to_status),
+        )
+
+    def __repr__(self) -> str:
+        return (
+            f"GoalTransitionRow(goal_id={self.goal_id!r}, "
+            f"reason_code={self.reason_code!r}, tick={self.tick})"
         )

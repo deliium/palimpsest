@@ -12,6 +12,7 @@ from typing import Any, Final
 
 from analysis.evidence import EvidenceStage, require_evidence_stage
 from analysis.models import (
+    ACTION_RESOLUTION_RATES_FAMILY,
     METRIC_DOCUMENT_SCHEMA_VERSION,
     MetricAvailability,
     MetricCoverage,
@@ -26,11 +27,26 @@ from analysis.numerical import (
 from world.identifiers import require_stable_id
 
 __all__ = [
+    "ACTION_RESOLUTION_RATES_FAMILY",
     "MetricSerializationError",
     "decode_metric_document",
     "encode_metric_document",
+    "is_supported_metric_family",
     "metric_document_fingerprint",
 ]
+
+
+def is_supported_metric_family(metric_family: str) -> bool:
+    """True for catalog families or the shared action-resolution rates family."""
+    if metric_family == ACTION_RESOLUTION_RATES_FAMILY:
+        return True
+    try:
+        from analysis.specifications import MetricFamilyId
+
+        MetricFamilyId(metric_family)
+    except ValueError:
+        return False
+    return True
 
 _REQUIRED_FIELDS: Final[frozenset[str]] = frozenset(
     {

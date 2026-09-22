@@ -128,28 +128,28 @@ The API is for research and inspection, not a production public service. No prod
 
 ### Phase 3: Reference Scenario and Objective Metrics
 
-- [ ] Task 9: Add the canonical five-agent reference scenario and typed milestone arbitration.
+- [x] Task 9: Add the canonical five-agent reference scenario and typed milestone arbitration.
   - Deliverable: Create a reusable 48-tick/two-day scenario with five named agents, structured goals, connected locations, food/water extraction and consumption, actual resource depletion/regeneration, survival needs, normal communication, direct/reconstructive memory, relationships, imagination, and one death early enough to prove N+1 terminal observation and a later no-action tick.
   - Define a typed arbiter protocol returning a fresh command plus milestone ID; acknowledge one-shot status from the committed `ActionResolution`. Use fresh deterministic communication IDs and record proposed-versus-effective metadata. Set a numeric override budget so most of the 240 cognition invocations remain production-policy decisions.
   - Files: `src/experiments/reference_scenario.py`, `src/experiments/interventions.py`, `src/experiments/__init__.py`, `src/simulation/runner.py`, `src/simulation/runner_models.py`, `src/simulation/runner_serialization.py`, `tests/reference_scenario_helpers.py`, `tests/unit/test_reference_scenario_spec.py`, `tests/unit/test_experiment_interventions.py`.
   - Logging: INFO scenario IDs, counts, versions, max ticks, and fingerprint prefixes; DEBUG milestone IDs/ticks/status only; WARN unmet milestone preconditions; ERROR stable scenario/arbiter codes. Never log names, goals, locations/resources, seeds, commands, utterances, memories, beliefs, truth labels, or config payloads.
   - Dependencies: Tasks 1 and 4-5. The scenario is an input fixture for metric implementation, not a consumer of metrics.
 
-- [ ] Task 10: Specify formulas, populations, denominators, and edge-case policy for all V1 metrics.
+- [x] Task 10: Specify formulas, populations, denominators, and edge-case policy for all V1 metrics.
   - Deliverable: Publish executable metric specifications for all fifteen required families before implementation. Define cohort/time windows, deceased/zero-holding treatment, opportunity versus occurrence denominators, self-edge/exclusion rules, censoring, action vocabulary, motif tokenization/gaps/support, adoption stages, evidence-stage deduplication, signed trust handling, graph projection/community algorithm, and empty/one/all-zero/unknown cases.
   - Define known-answer fixtures from Task 9 plus small degenerate fixtures. Every formula names evidence inputs, availability behavior, exact NumPy/pandas/SciPy/NetworkX policy, canonical quantization, and version identifier.
   - Files: `src/analysis/specifications.py`, `src/analysis/models.py`, `docs/analysis-metrics.md`, `tests/unit/metric_fixtures.py`, `tests/unit/test_metric_specifications.py`.
   - Logging: Specification/model code is log-free. Validation errors expose only metric/version and stable reason codes, never fixture values or evidence content.
   - Dependencies: Tasks 2-3, 8, and 9.
 
-- [ ] Task 11: Implement objective outcome metrics.
+- [x] Task 11: Implement objective outcome metrics.
   - Deliverable: Implement resource inequality, cooperation/conflict occurrence and attempted/rejected/conflicted rates, survival, and goal completion from immutable events, replayed state, action resolutions, registrations, and goal revisions. Use explicitly named inventory count/load, extraction, transfer, and consumption-access measures; distinguish attacks, fleeing, helping, giving, and communication rather than silently combining them.
   - Add known-answer, unknown/legacy, censoring, permutation-determinism, finite-output, and Hypothesis invariant tests.
   - Files: `src/analysis/objective_metrics.py`, `src/analysis/models.py`, `src/analysis/serialization.py`, `src/analysis/__init__.py`, `tests/unit/test_objective_metrics.py`, `tests/unit/test_metric_properties.py`.
   - Logging: DEBUG metric/version, run scope, input/output counts, population/denominator, availability, and duration; WARN insufficient/degenerate/legacy evidence; ERROR stable non-finite/calculation codes. Never log events, inventories, goals, rows, or results.
   - Dependencies: Tasks 7-10.
 
-- [ ] Task 12: Implement repeated-convention and behavioral-specialization indicators.
+- [x] Task 12: Implement repeated-convention and behavioral-specialization indicators.
   - Deliverable: Implement neutral repeated action/interaction n-grams and actor/location/target motifs with support, recurrence, opportunity coverage, and gap policy. Implement per-agent action/resource distributions, entropy/concentration, normalized divergence from the population, and idle/dead-period handling without assigning culture or role labels.
   - Use deterministic pandas tables and NumPy/SciPy calculations per Task 10; include input permutation, zero-action, one-agent, terminal-agent, and known-answer tests.
   - Files: `src/analysis/behavior_metrics.py`, `src/analysis/models.py`, `src/analysis/serialization.py`, `src/analysis/__init__.py`, `tests/unit/test_behavior_metrics.py`, `tests/unit/test_metric_determinism.py`.
