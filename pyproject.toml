@@ -19,6 +19,10 @@ dependencies = [
     "pgvector",
     "structlog",
     "httpx>=0.28.1",
+    "numpy>=2",
+    "pandas>=2",
+    "scipy>=1.11",
+    "networkx>=3",
 ]
 
 [dependency-groups]
@@ -170,6 +174,10 @@ ignore_missing_imports = true
 module = ["importlinter", "importlinter.*"]
 ignore_missing_imports = true
 
+[[tool.mypy.overrides]]
+module = ["networkx", "networkx.*", "pandas", "pandas.*", "scipy", "scipy.*"]
+ignore_missing_imports = true
+
 [tool.importlinter]
 root_packages = [
     "world",
@@ -307,6 +315,12 @@ forbidden_modules = [
 ]
 # memory -> agents is transitive; gate direct agents imports only.
 allow_indirect_imports = true
+
+[[tool.importlinter.contracts]]
+id = "analysis_persistence_independence"
+name = "Analysis and persistence must not import each other (composition in experiments)"
+type = "independence"
+modules = ["analysis", "persistence"]
 
 [[tool.importlinter.contracts]]
 id = "private_world_authority"
@@ -471,6 +485,8 @@ forbidden_modules = [
     "infrastructure",
     "persistence",
 ]
+# Evidence composition lives here: may import analysis + simulation + memory,
+# never concrete SQLAlchemy/persistence. Composition roots inject readers.
 allow_indirect_imports = true
 
 [[tool.importlinter.contracts]]

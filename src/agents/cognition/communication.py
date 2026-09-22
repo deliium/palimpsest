@@ -66,6 +66,7 @@ __all__ = [
     "CommunicatedMemoryUpdateHook",
     "CompositeMemoryUpdateHook",
     "DeterministicSocialMessagePolicy",
+    "PendingEvidenceAccumulator",
     "SocialMessageDecision",
     "SocialMessagePolicy",
     "build_communicated_memory_trace",
@@ -443,17 +444,70 @@ class CommunicatedMemoryUpdateHook:
         return tuple(intents)
 
 
+class PendingEvidenceAccumulator:
+    """Typed pending-trace accumulator for one cognition update pass.
+
+    Traces proposed by earlier hooks (direct/communicated) are recorded here so
+    later hooks can form belief/relationship revisions in the same atomic batch
+    without mutating stores between hooks.
+    """
+
+    __slots__ = ("_traces",)
+
+    def __init__(self) -> None:
+        self._traces: list[MemoryTrace] = []
+
+    def clear(self) -> None:
+        self._traces.clear()
+
+    def record(self, trace: MemoryTrace) -> None:
+        if type(trace) is not MemoryTrace:
+            raise TypeError("PendingEvidenceAccumulator.record: invalid_type")
+        self._traces.append(trace)
+
+    def record_from_intents(self, intents: Sequence[MemoryUpdateIntent]) -> int:
+        recorded = 0
+        for intent in intents:
+            if type(intent) is not MemoryUpdateIntent:
+                raise TypeError("PendingEvidenceAccumulator: invalid_intent")
+            if intent.kind is MemoryUpdateKind.WRITE_MEMORY and intent.memory is not None:
+                self.record(intent.memory)
+                recorded += 1
+        return recorded
+
+    def traces(self) -> tuple[MemoryTrace, ...]:
+        return tuple(self._traces)
+
+    def __repr__(self) -> str:
+        return f"PendingEvidenceAccumulator(trace_count={len(self._traces)})"
+
+
 class CompositeMemoryUpdateHook:
-    """Run memory-update hooks in order and concatenate proposed intents."""
+    """Run memory-update hooks in order and concatenate proposed intents.
 
-    __slots__ = ("_hooks",)
+    When a shared ``PendingEvidenceAccumulator`` is supplied, each WRITE_MEMORY
+    intent is recorded before the next hook runs so belief/relationship hooks
+    can consume same-tick pending evidence.
+    """
 
-    def __init__(self, hooks: Sequence[object]) -> None:
+    __slots__ = ("_hooks", "_pending")
+
+    def __init__(
+        self,
+        hooks: Sequence[object],
+        *,
+        pending: PendingEvidenceAccumulator | None = None,
+    ) -> None:
         if isinstance(hooks, (str, bytes)) or not isinstance(hooks, Sequence):
             raise TypeError("hooks must be an ordered sequence")
         if isinstance(hooks, (set, frozenset)):
             raise TypeError("hooks must be an ordered sequence")
         self._hooks = tuple(hooks)
+        self._pending = pending if pending is not None else PendingEvidenceAccumulator()
+
+    @property
+    def pending(self) -> PendingEvidenceAccumulator:
+        return self._pending
 
     async def propose_updates(
         self,
@@ -463,6 +517,7 @@ class CompositeMemoryUpdateHook:
         memory: RetrievedMemoryContext,
         intention: SelectedIntention,
     ) -> tuple[MemoryUpdateIntent, ...]:
+        self._pending.clear()
         intents: list[MemoryUpdateIntent] = []
         for hook in self._hooks:
             propose = getattr(hook, "propose_updates", None)
@@ -477,6 +532,20 @@ class CompositeMemoryUpdateHook:
                         "propose_updates entries must be MemoryUpdateIntent"
                     )
                 intents.append(item)
+            recorded = self._pending.record_from_intents(batch)
+            if recorded:
+                _LOG.debug(
+                    "pending_evidence_recorded",
+                    extra={
+                        "cognition": {
+                            "owner_id": loop_input.agent_id.value,
+                            "tick": perception.tick,
+                            "recorded_count": recorded,
+                            "pending_count": len(self._pending.traces()),
+                            "status": "accumulated",
+                        }
+                    },
+                )
         return tuple(intents)
 
 

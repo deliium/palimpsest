@@ -1,9 +1,16 @@
-"""In-memory read-only evidence sources for experiment analysis tests and fakes."""
+"""In-memory read-only evidence sources for experiment analysis tests and fakes.
+
+Run/owner scope is stored on each evidence item (edges, reconstructions, scoped
+traces). Readers filter by those fields — never by post-hoc unscoped scans.
+"""
 
 from __future__ import annotations
 
+import logging
 from collections.abc import Mapping, Sequence
+from typing import Final
 
+from analysis.evidence import ScopedMemoryTrace
 from analysis.memory_drift import evidence_from_reconstructed_memory
 from analysis.models import ReconstructionEvidence, SubjectiveDerivationEdge
 from memory.models import (
@@ -21,6 +28,8 @@ __all__ = [
     "InMemoryObjectiveEventSource",
     "reconstruction_evidence_from_durable",
 ]
+
+_LOG: Final[logging.Logger] = logging.getLogger("analysis.sources")
 
 
 class InMemoryObjectiveEventSource:
@@ -61,24 +70,53 @@ class InMemoryObjectiveEventSource:
 
 
 class InMemoryMemoryEvidenceSource:
-    """Detached subjective evidence snapshot for one or more scopes."""
+    """Detached subjective evidence snapshot keyed by run/owner scope."""
 
-    __slots__ = ("_edges", "_reconstructions", "_traces")
+    __slots__ = ("_edges", "_reconstructions", "_scoped_traces", "_traces")
 
     def __init__(
         self,
         *,
         traces: Sequence[MemoryTrace] = (),
+        scoped_traces: Sequence[ScopedMemoryTrace] = (),
         reconstructions: Sequence[ReconstructionEvidence] = (),
         derivation_edges: Sequence[SubjectiveDerivationEdge] = (),
     ) -> None:
+        for edge in derivation_edges:
+            if type(edge) is not SubjectiveDerivationEdge:
+                raise TypeError("InMemoryMemoryEvidenceSource: invalid_edge")
+        for reconstruction in reconstructions:
+            if type(reconstruction) is not ReconstructionEvidence:
+                raise TypeError("InMemoryMemoryEvidenceSource: invalid_reconstruction")
+        for scoped in scoped_traces:
+            if type(scoped) is not ScopedMemoryTrace:
+                raise TypeError("InMemoryMemoryEvidenceSource: invalid_scoped_trace")
         self._traces = tuple(traces)
+        self._scoped_traces = tuple(scoped_traces)
         self._reconstructions = tuple(reconstructions)
         self._edges = tuple(derivation_edges)
+        _LOG.debug(
+            "memory_evidence_source_built",
+            extra={
+                "operation": "InMemoryMemoryEvidenceSource.__init__",
+                "trace_count": len(self._traces),
+                "scoped_trace_count": len(self._scoped_traces),
+                "reconstruction_count": len(self._reconstructions),
+                "edge_count": len(self._edges),
+            },
+        )
 
     def traces(self, *, run_id: str, owner_id: str) -> tuple[MemoryTrace, ...]:
-        require_stable_id("run_id", run_id)
+        run_id = require_stable_id("run_id", run_id)
         owner_id = require_stable_id("owner_id", owner_id)
+        scoped = tuple(
+            item.trace
+            for item in self._scoped_traces
+            if item.run_id == run_id and item.owner_id == owner_id
+        )
+        if scoped:
+            return scoped
+        # Legacy path: unscoped MemoryTrace values match owner only (no run_id).
         return tuple(
             trace for trace in self._traces if trace.owner_id.value == owner_id
         )
@@ -97,9 +135,13 @@ class InMemoryMemoryEvidenceSource:
     def derivation_edges(
         self, *, run_id: str, owner_id: str
     ) -> tuple[SubjectiveDerivationEdge, ...]:
-        require_stable_id("run_id", run_id)
-        require_stable_id("owner_id", owner_id)
-        return self._edges
+        run_id = require_stable_id("run_id", run_id)
+        owner_id = require_stable_id("owner_id", owner_id)
+        return tuple(
+            edge
+            for edge in self._edges
+            if edge.run_id == run_id and edge.owner_id == owner_id
+        )
 
 
 def reconstruction_evidence_from_durable(

@@ -19,18 +19,31 @@ from memory.beliefs import (
     AppliedTestimonyFactors,
     BeliefActivationState,
     BeliefConfidenceState,
+    BeliefEvidenceBundle,
+    BeliefEvidenceContribution,
     BeliefPolicyRef,
     BeliefRevisionId,
+    BeliefRevisionRequest,
     BeliefValueKind,
     ClaimSubject,
     ClaimSubjectKind,
     ClaimValue,
     CommunicatedEvidenceDecision,
+    EvidenceStance,
     SemanticBelief,
     SemanticClaim,
 )
-from memory.models import BeliefId, CommunicatedTransmissionMeta, EntityId
-from simulation.subjective_state import SubjectiveApplyReceipt
+from memory.models import (
+    BeliefId,
+    CommunicatedTransmissionMeta,
+    EntityId,
+    MemoryAccessReceipt,
+    MemoryId,
+    MemoryTrace,
+    ReconstructionRecord,
+)
+from simulation.serialization import decode_domain, encode_domain
+from simulation.subjective_state import SubjectiveApplyReceipt, SubjectiveMutationBatch
 from social.models import RelationshipId
 from social.relationships import (
     DirectedRelationshipProfile,
@@ -39,8 +52,11 @@ from social.relationships import (
     RelationshipDimension,
     RelationshipDimensionState,
     RelationshipEvidenceItem,
+    RelationshipInteractionSignal,
     RelationshipPolicyRef,
     RelationshipRevisionId,
+    RelationshipRevisionRequest,
+    RelationshipSignalKind,
 )
 from world.models import LifeStatus
 
@@ -48,7 +64,9 @@ __all__ = [
     "SUBJECTIVE_SCHEMA_VERSION",
     "SubjectiveSerializationError",
     "decode_subjective",
+    "decode_subjective_mutation_batch",
     "encode_subjective",
+    "encode_subjective_mutation_batch",
 ]
 
 SUBJECTIVE_SCHEMA_VERSION: Final[str] = "subjective-v1"
@@ -187,6 +205,14 @@ def _encode_top(value: object, *, path: str) -> tuple[str, dict[str, Any]]:
         return "applied_testimony_factors", _encode_applied_factors(value)
     if type(value) is CommunicatedTransmissionMeta:
         return "communicated_transmission_meta", _encode_transmission_meta(value)
+    if type(value) is SubjectiveMutationBatch:
+        return "subjective_mutation_batch", _encode_mutation_batch(value)
+    if type(value) is BeliefRevisionRequest:
+        return "belief_revision_request", _encode_belief_revision_request(value)
+    if type(value) is RelationshipRevisionRequest:
+        return "relationship_revision_request", _encode_relationship_revision_request(
+            value
+        )
     raise SubjectiveSerializationError("unsupported_type", path)
 
 
@@ -203,7 +229,31 @@ def _decode_top(tag: str, data: dict[str, Any], *, path: str) -> object:
         return _decode_applied_factors(data, path=path)
     if tag == "communicated_transmission_meta":
         return _decode_transmission_meta(data, path=path)
+    if tag == "subjective_mutation_batch":
+        return _decode_mutation_batch(data, path=path)
+    if tag == "belief_revision_request":
+        return _decode_belief_revision_request(data, path=path)
+    if tag == "relationship_revision_request":
+        return _decode_relationship_revision_request(data, path=path)
     raise SubjectiveSerializationError("unsupported_type", path)
+
+
+def encode_subjective_mutation_batch(batch: SubjectiveMutationBatch) -> dict[str, Any]:
+    """Encode a mutation batch as a nested JSON-compatible mapping (no logs)."""
+    if type(batch) is not SubjectiveMutationBatch:
+        raise TypeError(
+            "encode_subjective_mutation_batch requires SubjectiveMutationBatch"
+        )
+    return _encode_mutation_batch(batch)
+
+
+def decode_subjective_mutation_batch(
+    data: Mapping[str, Any], *, path: str = "$"
+) -> SubjectiveMutationBatch:
+    """Decode a nested mutation-batch mapping (no logs)."""
+    if not isinstance(data, Mapping) or isinstance(data, (str, bytes)):
+        raise SubjectiveSerializationError("invalid_object", path)
+    return _decode_mutation_batch(dict(data), path=path)
 
 
 def _encode_applied_factors(value: AppliedTestimonyFactors) -> dict[str, Any]:
@@ -887,3 +937,418 @@ def _require_list_str(value: object, *, path: str) -> str:
     if not isinstance(value, str):
         raise SubjectiveSerializationError("invalid_string", path)
     return value
+
+
+def _domain_envelope(value: object) -> dict[str, Any]:
+    raw = json.loads(encode_domain(value).decode("utf-8"))
+    if not isinstance(raw, dict):
+        raise SubjectiveSerializationError("invalid_domain_envelope", "$")
+    return raw
+
+
+def _decode_domain_envelope(raw: object, *, path: str) -> object:
+    if not isinstance(raw, dict):
+        raise SubjectiveSerializationError("invalid_object", path)
+    try:
+        payload = json.dumps(
+            raw,
+            ensure_ascii=False,
+            sort_keys=True,
+            separators=(",", ":"),
+            allow_nan=False,
+        ).encode("utf-8")
+        return decode_domain(payload)
+    except SubjectiveSerializationError:
+        raise
+    except Exception as exc:
+        raise SubjectiveSerializationError("invalid_domain", path) from exc
+
+
+def _encode_mutation_batch(batch: SubjectiveMutationBatch) -> dict[str, Any]:
+    return {
+        "belief_revisions": [
+            _encode_belief_revision_request(item) for item in batch.belief_revisions
+        ],
+        "expected_revision": batch.expected_revision,
+        "logical_tick": batch.logical_tick,
+        "memory_accesses": [
+            {
+                "access_tick": item.access_tick,
+                "memory_id": item.memory_id.value,
+                "operation_id": item.operation_id,
+            }
+            for item in batch.memory_accesses
+        ],
+        "memory_writes": [_domain_envelope(item) for item in batch.memory_writes],
+        "operation_id": batch.operation_id,
+        "reconstructions": [_domain_envelope(item) for item in batch.reconstructions],
+        "relationship_revisions": [
+            _encode_relationship_revision_request(item)
+            for item in batch.relationship_revisions
+        ],
+    }
+
+
+def _decode_mutation_batch(
+    data: dict[str, Any], *, path: str
+) -> SubjectiveMutationBatch:
+    _require_keys(
+        data,
+        {
+            "belief_revisions",
+            "expected_revision",
+            "logical_tick",
+            "memory_accesses",
+            "memory_writes",
+            "operation_id",
+            "reconstructions",
+            "relationship_revisions",
+        },
+        path=path,
+    )
+    writes_raw = data["memory_writes"]
+    accesses_raw = data["memory_accesses"]
+    reconstructions_raw = data["reconstructions"]
+    belief_raw = data["belief_revisions"]
+    relationship_raw = data["relationship_revisions"]
+    if not isinstance(writes_raw, list):
+        raise SubjectiveSerializationError("invalid_array", f"{path}.memory_writes")
+    if not isinstance(accesses_raw, list):
+        raise SubjectiveSerializationError("invalid_array", f"{path}.memory_accesses")
+    if not isinstance(reconstructions_raw, list):
+        raise SubjectiveSerializationError("invalid_array", f"{path}.reconstructions")
+    if not isinstance(belief_raw, list):
+        raise SubjectiveSerializationError("invalid_array", f"{path}.belief_revisions")
+    if not isinstance(relationship_raw, list):
+        raise SubjectiveSerializationError(
+            "invalid_array", f"{path}.relationship_revisions"
+        )
+    try:
+        writes: list[MemoryTrace] = []
+        for index, item in enumerate(writes_raw):
+            decoded = _decode_domain_envelope(
+                item, path=f"{path}.memory_writes[{index}]"
+            )
+            if type(decoded) is not MemoryTrace:
+                raise SubjectiveSerializationError(
+                    "invalid_type", f"{path}.memory_writes[{index}]"
+                )
+            writes.append(decoded)
+        accesses: list[MemoryAccessReceipt] = []
+        for index, item in enumerate(accesses_raw):
+            if not isinstance(item, dict):
+                raise SubjectiveSerializationError(
+                    "invalid_object", f"{path}.memory_accesses[{index}]"
+                )
+            _require_keys(
+                item,
+                {"memory_id", "access_tick", "operation_id"},
+                path=f"{path}.memory_accesses[{index}]",
+            )
+            accesses.append(
+                MemoryAccessReceipt(
+                    memory_id=MemoryId(
+                        _str_field(
+                            item, "memory_id", path=f"{path}.memory_accesses[{index}]"
+                        )
+                    ),
+                    access_tick=_int_field(
+                        item, "access_tick", path=f"{path}.memory_accesses[{index}]"
+                    ),
+                    operation_id=_str_field(
+                        item, "operation_id", path=f"{path}.memory_accesses[{index}]"
+                    ),
+                )
+            )
+        reconstructions: list[ReconstructionRecord] = []
+        for index, item in enumerate(reconstructions_raw):
+            decoded = _decode_domain_envelope(
+                item, path=f"{path}.reconstructions[{index}]"
+            )
+            if type(decoded) is not ReconstructionRecord:
+                raise SubjectiveSerializationError(
+                    "invalid_type", f"{path}.reconstructions[{index}]"
+                )
+            reconstructions.append(decoded)
+        expected = data["expected_revision"]
+        if expected is not None and (
+            isinstance(expected, bool) or not isinstance(expected, int)
+        ):
+            raise SubjectiveSerializationError(
+                "invalid_int", f"{path}.expected_revision"
+            )
+        return SubjectiveMutationBatch(
+            operation_id=_str_field(data, "operation_id", path=path),
+            logical_tick=_int_field(data, "logical_tick", path=path),
+            memory_writes=tuple(writes),
+            memory_accesses=tuple(accesses),
+            reconstructions=tuple(reconstructions),
+            belief_revisions=tuple(
+                _decode_belief_revision_request(
+                    item, path=f"{path}.belief_revisions[{index}]"
+                )
+                for index, item in enumerate(belief_raw)
+            ),
+            relationship_revisions=tuple(
+                _decode_relationship_revision_request(
+                    item, path=f"{path}.relationship_revisions[{index}]"
+                )
+                for index, item in enumerate(relationship_raw)
+            ),
+            expected_revision=expected,
+        )
+    except SubjectiveSerializationError:
+        raise
+    except (TypeError, ValueError) as exc:
+        raise SubjectiveSerializationError("invalid_model", path) from exc
+
+
+def _encode_evidence_contribution(
+    item: BeliefEvidenceContribution,
+) -> dict[str, Any]:
+    payload: dict[str, Any] = {
+        "contribution": item.contribution,
+        "lineage_root_id": item.lineage_root_id.value,
+        "memory_id": item.memory_id.value,
+        "ordinal": item.ordinal,
+        "stance": item.stance.value,
+    }
+    if item.applied_factors is not None:
+        payload["applied_factors"] = _encode_applied_factors(item.applied_factors)
+    return payload
+
+
+def _decode_evidence_contribution(
+    raw: object, *, path: str
+) -> BeliefEvidenceContribution:
+    if not isinstance(raw, dict):
+        raise SubjectiveSerializationError("invalid_object", path)
+    _require_keys(
+        raw,
+        {"memory_id", "stance", "contribution", "ordinal", "lineage_root_id"},
+        path=path,
+        optional={"applied_factors"},
+    )
+    factors_raw = raw.get("applied_factors")
+    factors = (
+        None
+        if factors_raw is None
+        else _decode_applied_factors(factors_raw, path=f"{path}.applied_factors")
+    )
+    try:
+        return BeliefEvidenceContribution(
+            memory_id=MemoryId(_str_field(raw, "memory_id", path=path)),
+            stance=EvidenceStance(_str_field(raw, "stance", path=path)),
+            contribution=_float_field(raw, "contribution", path=path),
+            ordinal=_int_field(raw, "ordinal", path=path),
+            lineage_root_id=MemoryId(_str_field(raw, "lineage_root_id", path=path)),
+            applied_factors=factors,
+        )
+    except SubjectiveSerializationError:
+        raise
+    except (TypeError, ValueError) as exc:
+        raise SubjectiveSerializationError("invalid_model", path) from exc
+
+
+def _encode_belief_revision_request(
+    request: BeliefRevisionRequest,
+) -> dict[str, Any]:
+    payload: dict[str, Any] = {
+        "claim": _encode_claim(request.claim),
+        "evidence": {
+            "contradicting": [
+                _encode_evidence_contribution(item)
+                for item in request.evidence.contradicting
+            ],
+            "supporting": [
+                _encode_evidence_contribution(item)
+                for item in request.evidence.supporting
+            ],
+        },
+        "expected_revision_ordinal": request.expected_revision_ordinal,
+        "logical_tick": request.logical_tick,
+        "operation_id": request.operation_id,
+        "owner_id": request.owner_id.value,
+        "policy": _encode_policy(request.policy),
+    }
+    if request.belief_id is not None:
+        payload["belief_id"] = request.belief_id.value
+    if request.activation_state is not None:
+        payload["activation_state"] = request.activation_state.value
+    if request.confidence is not None:
+        payload["confidence"] = _encode_confidence(request.confidence)
+    return payload
+
+
+def _decode_belief_revision_request(raw: object, *, path: str) -> BeliefRevisionRequest:
+    if not isinstance(raw, dict):
+        raise SubjectiveSerializationError("invalid_object", path)
+    _require_keys(
+        raw,
+        {
+            "owner_id",
+            "operation_id",
+            "logical_tick",
+            "claim",
+            "evidence",
+            "policy",
+            "expected_revision_ordinal",
+        },
+        path=path,
+        optional={"belief_id", "activation_state", "confidence"},
+    )
+    evidence_raw = raw["evidence"]
+    if not isinstance(evidence_raw, dict):
+        raise SubjectiveSerializationError("invalid_object", f"{path}.evidence")
+    _require_keys(
+        evidence_raw, {"supporting", "contradicting"}, path=f"{path}.evidence"
+    )
+    supporting_raw = evidence_raw["supporting"]
+    contradicting_raw = evidence_raw["contradicting"]
+    if not isinstance(supporting_raw, list) or not isinstance(contradicting_raw, list):
+        raise SubjectiveSerializationError("invalid_array", f"{path}.evidence")
+    activation_raw = raw.get("activation_state")
+    confidence_raw = raw.get("confidence")
+    belief_id_raw = raw.get("belief_id")
+    expected = raw["expected_revision_ordinal"]
+    try:
+        return BeliefRevisionRequest(
+            owner_id=AgentId(_str_field(raw, "owner_id", path=path)),
+            operation_id=_str_field(raw, "operation_id", path=path),
+            logical_tick=_int_field(raw, "logical_tick", path=path),
+            claim=_decode_claim(raw["claim"], path=f"{path}.claim"),
+            evidence=BeliefEvidenceBundle(
+                supporting=tuple(
+                    _decode_evidence_contribution(
+                        item, path=f"{path}.evidence.supporting[{index}]"
+                    )
+                    for index, item in enumerate(supporting_raw)
+                ),
+                contradicting=tuple(
+                    _decode_evidence_contribution(
+                        item, path=f"{path}.evidence.contradicting[{index}]"
+                    )
+                    for index, item in enumerate(contradicting_raw)
+                ),
+            ),
+            policy=_decode_belief_policy(raw["policy"], path=f"{path}.policy"),
+            belief_id=None if belief_id_raw is None else BeliefId(str(belief_id_raw)),
+            expected_revision_ordinal=expected,
+            activation_state=(
+                None
+                if activation_raw is None
+                else BeliefActivationState(str(activation_raw))
+            ),
+            confidence=(
+                None
+                if confidence_raw is None
+                else _decode_confidence(confidence_raw, path=f"{path}.confidence")
+            ),
+        )
+    except SubjectiveSerializationError:
+        raise
+    except (TypeError, ValueError) as exc:
+        raise SubjectiveSerializationError("invalid_model", path) from exc
+
+
+def _encode_relationship_revision_request(
+    request: RelationshipRevisionRequest,
+) -> dict[str, Any]:
+    return {
+        "expected_revision_ordinal": request.expected_revision_ordinal,
+        "logical_tick": request.logical_tick,
+        "operation_id": request.operation_id,
+        "policy": _encode_rel_policy(request.policy),
+        "signals": [
+            {
+                "counterpart_id": item.counterpart_id.value,
+                "kind": item.kind.value,
+                "lineage_root_ref": item.lineage_root_ref,
+                "memory_ref": item.memory_ref,
+                "source_tick": item.source_tick,
+                "strength": item.strength,
+            }
+            for item in request.signals
+        ],
+        "source_id": request.source_id.value,
+        "target_id": request.target_id.value,
+    }
+
+
+def _decode_relationship_revision_request(
+    raw: object, *, path: str
+) -> RelationshipRevisionRequest:
+    if not isinstance(raw, dict):
+        raise SubjectiveSerializationError("invalid_object", path)
+    _require_keys(
+        raw,
+        {
+            "source_id",
+            "target_id",
+            "operation_id",
+            "logical_tick",
+            "signals",
+            "policy",
+            "expected_revision_ordinal",
+        },
+        path=path,
+    )
+    signals_raw = raw["signals"]
+    if not isinstance(signals_raw, list):
+        raise SubjectiveSerializationError("invalid_array", f"{path}.signals")
+    try:
+        signals: list[RelationshipInteractionSignal] = []
+        for index, item in enumerate(signals_raw):
+            if not isinstance(item, dict):
+                raise SubjectiveSerializationError(
+                    "invalid_object", f"{path}.signals[{index}]"
+                )
+            _require_keys(
+                item,
+                {
+                    "counterpart_id",
+                    "kind",
+                    "strength",
+                    "memory_ref",
+                    "lineage_root_ref",
+                    "source_tick",
+                },
+                path=f"{path}.signals[{index}]",
+            )
+            signals.append(
+                RelationshipInteractionSignal(
+                    counterpart_id=AgentId(
+                        _str_field(
+                            item, "counterpart_id", path=f"{path}.signals[{index}]"
+                        )
+                    ),
+                    kind=RelationshipSignalKind(
+                        _str_field(item, "kind", path=f"{path}.signals[{index}]")
+                    ),
+                    strength=_float_field(
+                        item, "strength", path=f"{path}.signals[{index}]"
+                    ),
+                    memory_ref=_str_field(
+                        item, "memory_ref", path=f"{path}.signals[{index}]"
+                    ),
+                    lineage_root_ref=_str_field(
+                        item, "lineage_root_ref", path=f"{path}.signals[{index}]"
+                    ),
+                    source_tick=_int_field(
+                        item, "source_tick", path=f"{path}.signals[{index}]"
+                    ),
+                )
+            )
+        return RelationshipRevisionRequest(
+            source_id=AgentId(_str_field(raw, "source_id", path=path)),
+            target_id=AgentId(_str_field(raw, "target_id", path=path)),
+            operation_id=_str_field(raw, "operation_id", path=path),
+            logical_tick=_int_field(raw, "logical_tick", path=path),
+            signals=tuple(signals),
+            policy=_decode_rel_policy(raw["policy"], path=f"{path}.policy"),
+            expected_revision_ordinal=raw["expected_revision_ordinal"],
+        )
+    except SubjectiveSerializationError:
+        raise
+    except (TypeError, ValueError) as exc:
+        raise SubjectiveSerializationError("invalid_model", path) from exc

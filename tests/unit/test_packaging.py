@@ -70,6 +70,26 @@ def _offline_env() -> dict[str, str]:
     return env
 
 
+def test_scientific_analysis_dependencies_are_declared() -> None:
+    pyproject = _pyproject()
+    project = pyproject["project"]
+    assert isinstance(project, dict)
+    dependencies = project["dependencies"]
+    assert isinstance(dependencies, list)
+    joined = "\n".join(str(item) for item in dependencies)
+    for name in ("numpy>=2", "pandas>=2", "scipy>=1.11", "networkx>=3"):
+        assert name in joined, f"missing runtime dependency pin: {name}"
+    import networkx
+    import numpy
+    import pandas
+    import scipy
+
+    assert numpy.__version__.split(".", maxsplit=1)[0] >= "2"
+    assert pandas.__version__.split(".", maxsplit=1)[0] >= "2"
+    assert scipy.__version__.split(".", maxsplit=1)[0] >= "1"
+    assert networkx.__version__.split(".", maxsplit=1)[0] >= "3"
+
+
 def test_reference_python_version_is_pinned() -> None:
     pyproject = _pyproject()
     pinned = _tool_palimpsest()["python_version"]

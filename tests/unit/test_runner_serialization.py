@@ -121,3 +121,73 @@ def test_scenario_fingerprint_stable_across_cognition() -> None:
     assert scenario_fingerprint(left) == scenario_fingerprint(right)
     assert runner_config_fingerprint(left) != runner_config_fingerprint(right)
     assert provider_fingerprint(left) == provider_fingerprint(right)
+
+
+def test_v2_round_trip_includes_name_and_goals() -> None:
+    from agents.models import Goal, GoalId, GoalOutcome, GoalOutcomeKind, GoalStatus
+    from simulation.runner_models import RUNNER_SCHEMA_VERSION_V2
+
+    base = _config()
+    agent = base.agents[0]
+    goal = Goal(
+        goal_id=GoalId("goal-reach"),
+        owner_id=agent.agent_id,
+        description="reach place",
+        priority=0.7,
+        status=GoalStatus.ACTIVE,
+        outcome=GoalOutcome(kind=GoalOutcomeKind.REACH_PLACE, place_id="loc-1"),
+    )
+    config = SimulationRunnerConfig(
+        seed=base.seed,
+        stochastic_identity=base.stochastic_identity,
+        scenario=base.scenario,
+        agents=(
+            AgentRunnerSpec(
+                agent_id=agent.agent_id,
+                entity_id=agent.entity_id,
+                cognition=agent.cognition,
+                name="scout",
+                initial_goals=(goal,),
+            ),
+        ),
+        stop_policy=base.stop_policy,
+        schema_version=RUNNER_SCHEMA_VERSION_V2,
+    )
+    decoded = decode_runner_config(encode_runner_config(config))
+    assert decoded.schema_version == RUNNER_SCHEMA_VERSION_V2
+    assert decoded.agents[0].name == "scout"
+    assert len(decoded.agents[0].initial_goals) == 1
+    assert decoded.agents[0].initial_goals[0].goal_id.value == "goal-reach"
+
+
+def test_v1_decode_explicitly_upgrades_missing_name_and_goals() -> None:
+    from simulation.runner_models import RUNNER_SCHEMA_VERSION_V1
+
+    config = _config()
+    v1 = SimulationRunnerConfig(
+        seed=config.seed,
+        stochastic_identity=config.stochastic_identity,
+        scenario=config.scenario,
+        agents=config.agents,
+        stop_policy=config.stop_policy,
+        schema_version=RUNNER_SCHEMA_VERSION_V1,
+    )
+    encoded = encode_runner_config(v1)
+    document = json.loads(encoded.decode("utf-8"))
+    assert document["schema_version"] == RUNNER_SCHEMA_VERSION_V1
+    assert "name" not in document["agents"][0]
+    assert "initial_goals" not in document["agents"][0]
+    decoded = decode_runner_config(encoded)
+    assert decoded.schema_version == RUNNER_SCHEMA_VERSION_V1
+    assert decoded.agents[0].name == decoded.agents[0].agent_id.value
+    assert decoded.agents[0].initial_goals == ()
+
+
+def test_v2_rejects_missing_name_field() -> None:
+    document = json.loads(encode_runner_config(_config()).decode("utf-8"))
+    del document["agents"][0]["name"]
+    with pytest.raises(RunnerSerializationError) as rejected:
+        decode_runner_config(
+            json.dumps(document, separators=(",", ":"), sort_keys=True).encode("utf-8")
+        )
+    assert rejected.value.code == "missing_field"

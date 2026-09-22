@@ -41,6 +41,18 @@ def _imported_modules_and_names(path: Path) -> tuple[set[str], set[str]]:
     return modules, names
 
 
+def _module_imports_forbidden(
+    path: Path, forbidden_roots: tuple[str, ...]
+) -> list[str]:
+    modules, _ = _imported_modules_and_names(path)
+    hits: list[str] = []
+    for module in modules:
+        for forbidden in forbidden_roots:
+            if module == forbidden or module.startswith(f"{forbidden}."):
+                hits.append(f"{path.relative_to(SRC)}:{module}")
+    return hits
+
+
 def test_analysis_service_holds_both_objective_and_subjective_ports() -> None:
     hints = MemoryDriftAnalysisService.__init__.__annotations__
     text = " ".join(str(value) for value in hints.values())
@@ -136,3 +148,50 @@ def test_social_transmission_service_holds_both_ports() -> None:
         body = path.read_text(encoding="utf-8")
         assert "SocialTransmissionAnalysisService" not in body
         assert "ObjectiveEventSource" not in body
+
+
+def test_analysis_must_not_import_persistence() -> None:
+    hits: list[str] = []
+    for path in (SRC / "analysis").rglob("*.py"):
+        hits.extend(_module_imports_forbidden(path, ("persistence",)))
+    assert hits == []
+
+
+def test_persistence_must_not_import_analysis() -> None:
+    hits: list[str] = []
+    for path in (SRC / "persistence").rglob("*.py"):
+        hits.extend(_module_imports_forbidden(path, ("analysis",)))
+    assert hits == []
+
+
+def test_api_must_not_import_analysis() -> None:
+    hits: list[str] = []
+    for path in (SRC / "api").rglob("*.py"):
+        hits.extend(_module_imports_forbidden(path, ("analysis",)))
+    assert hits == []
+
+
+def test_simulation_must_not_import_analysis_or_experiments() -> None:
+    hits: list[str] = []
+    for path in (SRC / "simulation").rglob("*.py"):
+        hits.extend(_module_imports_forbidden(path, ("analysis", "experiments")))
+    assert hits == []
+
+
+def test_evidence_composition_lives_in_experiments_without_persistence() -> None:
+    composition = SRC / "experiments" / "composition.py"
+    assert composition.is_file()
+    modules, names = _imported_modules_and_names(composition)
+    assert any(
+        module == "analysis" or module.startswith("analysis.") for module in modules
+    )
+    assert "InMemoryObjectiveEventSource" in names or any(
+        "sources" in module for module in modules
+    )
+    hits = _module_imports_forbidden(composition, ("persistence", "sqlalchemy"))
+    assert hits == []
+    for package in ("agents", "memory", "social", "simulation", "world"):
+        for path in (SRC / package).rglob("*.py"):
+            text = path.read_text(encoding="utf-8")
+            assert "EvidenceCompositionService" not in text
+            assert "map_snapshot_to_analysis_sources" not in text

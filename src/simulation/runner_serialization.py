@@ -12,7 +12,7 @@ import json
 from collections.abc import Mapping
 from typing import Any
 
-from agents.models import AgentId, DriveKind
+from agents.models import AgentId, DriveKind, Goal
 from llm.factory import ProviderAdapterKind
 from llm.models import StructuredOutputMode
 from simulation.models import StochasticIdentity
@@ -20,13 +20,19 @@ from simulation.runner_models import (
     COGNITION_POLICY_VERSION,
     MORTALITY_POLICY_VERSION,
     PROVIDER_SETTINGS_VERSION,
-    RUNNER_SCHEMA_VERSION,
+    RESULT_SCHEMA_VERSION,
+    RESULT_SCHEMA_VERSION_V2,
+    RUNNER_SCHEMA_VERSION_V1,
+    RUNNER_SCHEMA_VERSION_V2,
+    SUPPORTED_RUNNER_SCHEMA_VERSIONS,
     AgentCognitionSpec,
     AgentRunnerSpec,
+    CognitionCounters,
     CognitionFailurePolicy,
     DriveOverrideSpec,
     ExactReproducibilityMode,
     ExperimentAssignmentRef,
+    FinalizedTickReceipt,
     ImaginationMode,
     MemoryMode,
     MortalityMode,
@@ -37,18 +43,22 @@ from simulation.runner_models import (
     RunnerProviderSettings,
     RunnerStopPolicy,
     SimulationRunnerConfig,
+    SimulationRunnerResult,
+    SimulationRunnerResultDocument,
     WorldScenarioSpec,
     runner_config_diagnostics,
 )
 from simulation.serialization import (
     DomainSerializationError,
     _decode_agent_body,
+    _decode_goal,
     _decode_item,
     _decode_location,
     _decode_physical_rules,
     _decode_resource,
     _decode_weather,
     _encode_agent_body,
+    _encode_goal,
     _encode_item,
     _encode_location,
     _encode_physical_rules,
@@ -61,11 +71,20 @@ from world.models import physical_rules_fingerprint
 __all__ = [
     "RunnerSerializationError",
     "build_runner_diagnostics",
+    "build_runner_result_document",
     "cognition_fingerprint",
+    "decode_finalization_command",
     "decode_runner_config",
+    "encode_finalization_command",
     "encode_runner_config",
+    "encode_runner_result_document",
+    "exact_trajectory_hash",
+    "finalization_command_to_mapping",
+    "objective_projection_hash",
     "provider_fingerprint",
+    "replica_normalized_trajectory_hash",
     "runner_config_fingerprint",
+    "runner_result_fingerprint",
     "scenario_fingerprint",
 ]
 
@@ -234,24 +253,70 @@ def _decode_cognition(data: dict[str, Any], *, path: str) -> AgentCognitionSpec:
         raise RunnerSerializationError("invalid_model", path) from exc
 
 
-def _encode_agent(value: AgentRunnerSpec) -> dict[str, Any]:
-    return {
+def _encode_agent(value: AgentRunnerSpec, *, schema_version: str) -> dict[str, Any]:
+    payload: dict[str, Any] = {
         "agent_id": value.agent_id.value,
         "cognition": _encode_cognition(value.cognition),
         "entity_id": value.entity_id.value,
     }
+    if schema_version == RUNNER_SCHEMA_VERSION_V2:
+        assert value.name is not None
+        payload["name"] = value.name
+        payload["initial_goals"] = [_encode_goal(goal) for goal in value.initial_goals]
+    return payload
 
 
-def _decode_agent(data: dict[str, Any], *, path: str) -> AgentRunnerSpec:
-    _require_keys(data, {"agent_id", "entity_id", "cognition"}, path=path)
+def _decode_agent(
+    data: dict[str, Any], *, path: str, schema_version: str
+) -> AgentRunnerSpec:
+    if schema_version == RUNNER_SCHEMA_VERSION_V1:
+        _require_keys(data, {"agent_id", "entity_id", "cognition"}, path=path)
+        cognition_raw = data["cognition"]
+        if not isinstance(cognition_raw, dict):
+            raise RunnerSerializationError("invalid_object", f"{path}.cognition")
+        try:
+            agent_id = AgentId(_str_field(data, "agent_id", path=path))
+            # Explicit V1 upgrade: name defaults to agent_id; goals empty.
+            return AgentRunnerSpec(
+                agent_id=agent_id,
+                entity_id=EntityId(_str_field(data, "entity_id", path=path)),
+                cognition=_decode_cognition(cognition_raw, path=f"{path}.cognition"),
+                name=agent_id.value,
+                initial_goals=(),
+            )
+        except RunnerSerializationError:
+            raise
+        except (TypeError, ValueError) as exc:
+            raise RunnerSerializationError("invalid_model", path) from exc
+
+    _require_keys(
+        data,
+        {"agent_id", "entity_id", "cognition", "name", "initial_goals"},
+        path=path,
+    )
     cognition_raw = data["cognition"]
     if not isinstance(cognition_raw, dict):
         raise RunnerSerializationError("invalid_object", f"{path}.cognition")
+    goals_raw = data["initial_goals"]
+    if not isinstance(goals_raw, list):
+        raise RunnerSerializationError("invalid_array", f"{path}.initial_goals")
+    goals: list[Goal] = []
+    for index, item in enumerate(goals_raw):
+        if not isinstance(item, dict):
+            raise RunnerSerializationError(
+                "invalid_object", f"{path}.initial_goals[{index}]"
+            )
+        try:
+            goals.append(_decode_goal(item, path=f"{path}.initial_goals[{index}]"))
+        except DomainSerializationError as exc:
+            raise _map_domain(exc) from exc
     try:
         return AgentRunnerSpec(
             agent_id=AgentId(_str_field(data, "agent_id", path=path)),
             entity_id=EntityId(_str_field(data, "entity_id", path=path)),
             cognition=_decode_cognition(cognition_raw, path=f"{path}.cognition"),
+            name=_str_field(data, "name", path=path),
+            initial_goals=tuple(goals),
         )
     except RunnerSerializationError:
         raise
@@ -461,7 +526,10 @@ def _decode_provider(data: dict[str, Any], *, path: str) -> RunnerProviderSettin
 
 def _encode_runner_document(config: SimulationRunnerConfig) -> dict[str, Any]:
     document: dict[str, Any] = {
-        "agents": [_encode_agent(agent) for agent in config.agents],
+        "agents": [
+            _encode_agent(agent, schema_version=config.schema_version)
+            for agent in config.agents
+        ],
         "cognition_failure_policy": config.cognition_failure_policy.value,
         "derivation_version": config.derivation_version,
         "mortality_mode": config.mortality_mode.value,
@@ -538,9 +606,11 @@ def decode_runner_config(payload: bytes) -> SimulationRunnerConfig:
         },
         path="$",
     )
-    if _str_field(data, "schema_version", path="$") != RUNNER_SCHEMA_VERSION:
+    schema_version = _str_field(data, "schema_version", path="$")
+    if schema_version not in SUPPORTED_RUNNER_SCHEMA_VERSIONS:
         raise RunnerSerializationError("unsupported_version", "$.schema_version")
-    if _str_field(data, "mortality_policy_version", path="$") != MORTALITY_POLICY_VERSION:
+    mortality_policy = _str_field(data, "mortality_policy_version", path="$")
+    if mortality_policy != MORTALITY_POLICY_VERSION:
         raise RunnerSerializationError(
             "unsupported_version", "$.mortality_policy_version"
         )
@@ -607,7 +677,11 @@ def decode_runner_config(payload: bytes) -> SimulationRunnerConfig:
     for index, item in enumerate(agents_raw):
         if not isinstance(item, dict):
             raise RunnerSerializationError("invalid_object", f"$.agents[{index}]")
-        agents_list.append(_decode_agent(item, path=f"$.agents[{index}]"))
+        agents_list.append(
+            _decode_agent(
+                item, path=f"$.agents[{index}]", schema_version=schema_version
+            )
+        )
     cadence = checkpoint_raw["cadence_ticks"]
     if cadence is not None and (
         isinstance(cadence, bool) or not isinstance(cadence, int) or cadence < 0
@@ -624,7 +698,9 @@ def decode_runner_config(payload: bytes) -> SimulationRunnerConfig:
             scenario=_decode_scenario(scenario_raw, path="$.scenario"),
             agents=tuple(agents_list),
             stop_policy=RunnerStopPolicy(
-                max_ticks=_nonneg_int_field(stop_raw, "max_ticks", path="$.stop_policy"),
+                max_ticks=_nonneg_int_field(
+                    stop_raw, "max_ticks", path="$.stop_policy"
+                ),
                 stop_on_all_agents_terminal=_bool_field(
                     stop_raw, "stop_on_all_agents_terminal", path="$.stop_policy"
                 ),
@@ -715,43 +791,164 @@ def build_runner_diagnostics(
 
 def encode_runner_result_document(document: object) -> bytes:
     """Encode a result document as strict canonical JSON bytes."""
-    from simulation.runner_models import RESULT_SCHEMA_VERSION, SimulationRunnerResultDocument
-
     if type(document) is not SimulationRunnerResultDocument:
-        raise TypeError("encode_runner_result_document requires SimulationRunnerResultDocument")
-    payload = {
-        "schema_version": document.schema_version,
+        raise TypeError(
+            "encode_runner_result_document requires SimulationRunnerResultDocument"
+        )
+    payload: dict[str, Any] = {
+        "attempt_count": document.attempt_count,
+        "cognition_fingerprint": document.cognition_fingerprint,
+        "config_fingerprint": document.config_fingerprint,
+        "exact_trajectory_hash": document.exact_trajectory_hash,
+        "replica_normalized_trajectory_hash": (
+            document.replica_normalized_trajectory_hash
+        ),
         "run_id": document.run_id,
+        "scenario_fingerprint": document.scenario_fingerprint,
+        "schema_version": document.schema_version,
         "stop_reason": document.stop_reason,
         "ticks_committed": document.ticks_committed,
-        "config_fingerprint": document.config_fingerprint,
-        "scenario_fingerprint": document.scenario_fingerprint,
-        "cognition_fingerprint": document.cognition_fingerprint,
-        "exact_trajectory_hash": document.exact_trajectory_hash,
-        "replica_normalized_trajectory_hash": document.replica_normalized_trajectory_hash,
-        "attempt_count": document.attempt_count,
     }
-    return json.dumps(payload, sort_keys=True, separators=(",", ":")).encode("utf-8")
+    if document.schema_version == RESULT_SCHEMA_VERSION_V2:
+        payload["cognition_invocations"] = document.cognition_invocations
+        payload["finalized_tick_count"] = document.finalized_tick_count
+        payload["goal_transition_count"] = document.goal_transition_count
+        payload["imagination_evaluations"] = document.imagination_evaluations
+        payload["imagined_future_count"] = document.imagined_future_count
+        payload["objective_state_hash"] = document.objective_state_hash
+    return _canonical_dumps(payload)
 
 
 def runner_result_fingerprint(document: object) -> str:
-    return hashlib.sha256(encode_runner_result_document(document)).hexdigest()
+    return _sha256_hex(encode_runner_result_document(document))
+
+
+def _encode_resolution_evidence(
+    evidence: object, *, include_request_id: bool
+) -> dict[str, Any]:
+    from simulation.runner_models import ActionResolutionEvidence
+
+    if type(evidence) is not ActionResolutionEvidence:
+        raise TypeError("evidence must be ActionResolutionEvidence")
+    payload: dict[str, Any] = {
+        "agent_id": evidence.agent_id.value,
+        "base_revision": evidence.base_revision,
+        "command_kind": evidence.command_kind,
+        "ordinal": evidence.ordinal,
+        "reason": evidence.reason.value,
+        "resulting_revision": evidence.resulting_revision,
+        "status": evidence.status.value,
+        "tick": evidence.tick,
+    }
+    if include_request_id:
+        payload["request_id"] = evidence.request_id
+    return payload
+
+
+def _encode_tick_receipt_for_hash(
+    receipt: FinalizedTickReceipt, *, include_run_scoped_ids: bool
+) -> dict[str, Any]:
+    return {
+        "base_revision": receipt.base_revision,
+        "event_count": receipt.event_count,
+        "objective_state_hash": receipt.objective_state_hash,
+        "resolutions": [
+            _encode_resolution_evidence(item, include_request_id=include_run_scoped_ids)
+            for item in receipt.resolutions
+        ],
+        "resulting_revision": receipt.resulting_revision,
+        "resulting_tick": receipt.resulting_tick,
+        "tick": receipt.tick,
+    }
+
+
+def exact_trajectory_hash(
+    *,
+    run_id: str,
+    tick_receipts: tuple[FinalizedTickReceipt, ...],
+) -> str:
+    """Hash trajectory identity including run-scoped identifiers."""
+    document = {
+        "mode": "exact",
+        "run_id": run_id,
+        "ticks": [
+            _encode_tick_receipt_for_hash(item, include_run_scoped_ids=True)
+            for item in tick_receipts
+        ],
+    }
+    return _sha256_hex(_canonical_dumps(document))
+
+
+def replica_normalized_trajectory_hash(
+    *,
+    tick_receipts: tuple[FinalizedTickReceipt, ...],
+) -> str:
+    """Hash trajectory identity with documented run-derived IDs removed.
+
+    Strips ``request_id`` (run-derived) and omits ``run_id``. Tick ordinals,
+    agent identities, command kinds, statuses, and revisions remain so distinct
+    trajectories cannot collapse.
+    """
+    document = {
+        "mode": "replica",
+        "ticks": [
+            _encode_tick_receipt_for_hash(item, include_run_scoped_ids=False)
+            for item in tick_receipts
+        ],
+    }
+    return _sha256_hex(_canonical_dumps(document))
+
+
+def objective_projection_hash(projection: object) -> str:
+    """Canonical hash of a detached objective projection."""
+    from simulation.runner_models import DetachedObjectiveProjection
+
+    if type(projection) is not DetachedObjectiveProjection:
+        raise TypeError("projection must be DetachedObjectiveProjection")
+    document = {
+        "bodies": [
+            {
+                "entity_id": body.entity_id.value,
+                "inventory": [item.value for item in body.inventory],
+                "life_status": body.life_status.value,
+                "location_id": body.location_id.value,
+            }
+            for body in projection.bodies
+        ],
+        "projection_version": projection.projection_version,
+        "revision": projection.revision,
+        "tick": projection.tick,
+    }
+    return _sha256_hex(_canonical_dumps(document))
 
 
 def build_runner_result_document(
     *,
     result: object,
     config: SimulationRunnerConfig,
-) -> object:
+) -> SimulationRunnerResultDocument:
     """Build a versioned result document from a finalized runner result."""
-    from simulation.runner_models import (
-        RESULT_SCHEMA_VERSION,
-        SimulationRunnerResult,
-        SimulationRunnerResultDocument,
-    )
-
     if type(result) is not SimulationRunnerResult:
         raise TypeError("result must be SimulationRunnerResult")
+    tick_receipts = result.finalized_tick_receipts
+    if tick_receipts:
+        exact = exact_trajectory_hash(
+            run_id=result.run_id.value, tick_receipts=tick_receipts
+        )
+        replica = replica_normalized_trajectory_hash(tick_receipts=tick_receipts)
+    else:
+        # Legacy/empty evidence path: preserve run-scoped vs replica distinction.
+        exact = _sha256_hex(
+            f"exact|{result.run_id.value}|{result.ticks_committed}".encode()
+        )
+        replica = _sha256_hex(
+            (
+                f"replica|{config.stochastic_identity.value}|{result.ticks_committed}"
+            ).encode()
+        )
+    counters = result.cognition_counters
+    if type(counters) is not CognitionCounters:
+        counters = CognitionCounters()
     return SimulationRunnerResultDocument(
         schema_version=RESULT_SCHEMA_VERSION,
         run_id=result.run_id.value,
@@ -760,11 +957,245 @@ def build_runner_result_document(
         config_fingerprint=runner_config_fingerprint(config),
         scenario_fingerprint=scenario_fingerprint(config),
         cognition_fingerprint=cognition_fingerprint(config),
-        exact_trajectory_hash=hashlib.sha256(
-            f"exact|{result.run_id.value}|{result.ticks_committed}".encode()
-        ).hexdigest(),
-        replica_normalized_trajectory_hash=hashlib.sha256(
-            f"replica|{config.stochastic_identity.value}|{result.ticks_committed}".encode()
-        ).hexdigest(),
+        exact_trajectory_hash=exact,
+        replica_normalized_trajectory_hash=replica,
         attempt_count=len(result.attempt_receipts),
+        objective_state_hash=result.objective_state_hash,
+        cognition_invocations=counters.cognition_invocations,
+        imagination_evaluations=counters.imagination_evaluations,
+        imagined_future_count=counters.imagined_future_count,
+        goal_transition_count=len(result.goal_transition_receipts),
+        finalized_tick_count=len(tick_receipts),
     )
+
+
+def finalization_command_to_mapping(command: object) -> dict[str, Any]:
+    """Encode a FinalizationCommand to a JSONB-safe mapping (log-free)."""
+    from agents.cognition.models import IntentionCode, InternalAgentState
+    from memory.models import Belief
+    from simulation.agent_runtime import AgentRuntimeStatus
+    from simulation.clock import Tick
+    from simulation.lifecycle import ActionSubmission, TickToken
+    from simulation.models import RunId
+    from simulation.run_control import (
+        FINALIZATION_COMMAND_CODEC_VERSION,
+        FinalizationCommand,
+    )
+    from simulation.serialization import encode_domain
+    from simulation.subjective_serialization import encode_subjective_mutation_batch
+
+    if type(command) is not FinalizationCommand:
+        raise TypeError("finalization_command_to_mapping requires FinalizationCommand")
+    if command.codec_version != FINALIZATION_COMMAND_CODEC_VERSION:
+        raise RunnerSerializationError("unsupported_codec_version", "$.codec_version")
+    state = command.next_internal_state
+    if type(state) is not InternalAgentState:
+        raise RunnerSerializationError(
+            "invalid_internal_state", "$.next_internal_state"
+        )
+    submission = command.submission
+    if type(submission) is not ActionSubmission:
+        raise RunnerSerializationError("invalid_submission", "$.submission")
+    command_envelope = json.loads(encode_domain(submission.command).decode("utf-8"))
+    beliefs = []
+    for item in command.legacy_belief_writes:
+        if type(item) is not Belief:
+            raise RunnerSerializationError("invalid_belief", "$.legacy_belief_writes")
+        beliefs.append(json.loads(encode_domain(item).decode("utf-8")))
+    payload: dict[str, Any] = {
+        "agent_id": command.agent_id.value,
+        "codec_version": command.codec_version,
+        "delivery_acknowledged": command.delivery_acknowledged,
+        "delivery_content_hash": command.delivery_content_hash,
+        "delivery_id": command.delivery_id,
+        "effective_command_kind": command.effective_command_kind,
+        "final_confidence": command.final_confidence,
+        "has_futures_boundary": command.has_futures_boundary,
+        "integrity_hash": command.integrity_hash,
+        "invocation_id": command.invocation_id,
+        "legacy_belief_writes": beliefs,
+        "next_internal_state": {
+            "invocation_count": state.invocation_count,
+            "last_command_kind": state.last_command_kind,
+            "last_intention": (
+                None if state.last_intention is None else state.last_intention.value
+            ),
+            "owner_id": state.owner_id.value,
+        },
+        "next_status": command.next_status.value,
+        "observation_key": list(command.observation_key),
+        "prior_status": command.prior_status.value,
+        "run_id": command.run_id.value,
+        "subjective_batch": (
+            None
+            if command.subjective_batch is None
+            else encode_subjective_mutation_batch(command.subjective_batch)
+        ),
+        "submission": {
+            "agent_id": submission.agent_id.value,
+            "command": command_envelope,
+            "token": {
+                "tick": submission.token.tick.value,
+                "value": submission.token.value,
+            },
+        },
+        "tick": command.tick,
+    }
+    _ = (AgentRuntimeStatus, IntentionCode, RunId, Tick, TickToken)
+    return payload
+
+
+def encode_finalization_command(command: object) -> bytes:
+    """Canonical UTF-8 bytes for a FinalizationCommand."""
+    return _canonical_dumps(finalization_command_to_mapping(command))
+
+
+def decode_finalization_command(payload: object) -> object:
+    """Decode mapping or bytes into a FinalizationCommand."""
+    from agents.cognition.models import IntentionCode, InternalAgentState
+    from agents.models import AgentId
+    from memory.models import Belief
+    from simulation.agent_runtime import AgentRuntimeStatus
+    from simulation.clock import Tick
+    from simulation.lifecycle import ActionSubmission, TickToken
+    from simulation.models import RunId
+    from simulation.run_control import (
+        FINALIZATION_COMMAND_CODEC_VERSION,
+        FinalizationCommand,
+    )
+    from simulation.serialization import decode_domain
+    from simulation.subjective_serialization import (
+        SubjectiveSerializationError,
+        decode_subjective_mutation_batch,
+    )
+    from world.actions import require_agent_command
+
+    if isinstance(payload, (bytes, bytearray)):
+        try:
+            text = bytes(payload).decode("utf-8")
+            data = json.loads(text)
+        except (UnicodeDecodeError, json.JSONDecodeError) as exc:
+            raise RunnerSerializationError("invalid_json", "$") from exc
+    elif isinstance(payload, Mapping):
+        data = dict(payload)
+    else:
+        raise TypeError("decode_finalization_command requires mapping or bytes")
+    if not isinstance(data, dict):
+        raise RunnerSerializationError("invalid_envelope", "$")
+    required = {
+        "codec_version",
+        "run_id",
+        "agent_id",
+        "tick",
+        "invocation_id",
+        "observation_key",
+        "prior_status",
+        "next_status",
+        "effective_command_kind",
+        "integrity_hash",
+        "next_internal_state",
+        "submission",
+        "subjective_batch",
+        "has_futures_boundary",
+        "final_confidence",
+        "legacy_belief_writes",
+        "delivery_id",
+        "delivery_content_hash",
+        "delivery_acknowledged",
+    }
+    if set(data) != required:
+        raise RunnerSerializationError("invalid_fields", "$")
+    if data["codec_version"] != FINALIZATION_COMMAND_CODEC_VERSION:
+        raise RunnerSerializationError("unsupported_codec_version", "$.codec_version")
+    state_raw = data["next_internal_state"]
+    if not isinstance(state_raw, dict):
+        raise RunnerSerializationError("invalid_object", "$.next_internal_state")
+    submission_raw = data["submission"]
+    if not isinstance(submission_raw, dict):
+        raise RunnerSerializationError("invalid_object", "$.submission")
+    token_raw = submission_raw.get("token")
+    if not isinstance(token_raw, dict):
+        raise RunnerSerializationError("invalid_object", "$.submission.token")
+    obs_raw = data["observation_key"]
+    if not isinstance(obs_raw, list) or len(obs_raw) != 2:
+        raise RunnerSerializationError("invalid_observation_key", "$.observation_key")
+    beliefs_raw = data["legacy_belief_writes"]
+    if not isinstance(beliefs_raw, list):
+        raise RunnerSerializationError("invalid_array", "$.legacy_belief_writes")
+    try:
+        last_intention_raw = state_raw.get("last_intention")
+        last_intention = (
+            None
+            if last_intention_raw is None
+            else IntentionCode(str(last_intention_raw))
+        )
+        command_obj = decode_domain(
+            json.dumps(
+                submission_raw["command"],
+                ensure_ascii=False,
+                sort_keys=True,
+                separators=(",", ":"),
+                allow_nan=False,
+            ).encode("utf-8")
+        )
+        beliefs: list[Belief] = []
+        for index, item in enumerate(beliefs_raw):
+            decoded = decode_domain(
+                json.dumps(
+                    item,
+                    ensure_ascii=False,
+                    sort_keys=True,
+                    separators=(",", ":"),
+                    allow_nan=False,
+                ).encode("utf-8")
+            )
+            if type(decoded) is not Belief:
+                raise RunnerSerializationError(
+                    "invalid_belief", f"$.legacy_belief_writes[{index}]"
+                )
+            beliefs.append(decoded)
+        batch_raw = data["subjective_batch"]
+        batch = (
+            None
+            if batch_raw is None
+            else decode_subjective_mutation_batch(batch_raw, path="$.subjective_batch")
+        )
+        return FinalizationCommand(
+            codec_version=str(data["codec_version"]),
+            run_id=RunId(str(data["run_id"])),
+            agent_id=AgentId(str(data["agent_id"])),
+            tick=int(data["tick"]),
+            invocation_id=str(data["invocation_id"]),
+            observation_key=(int(obs_raw[0]), int(obs_raw[1])),
+            prior_status=AgentRuntimeStatus(str(data["prior_status"])),
+            next_status=AgentRuntimeStatus(str(data["next_status"])),
+            effective_command_kind=str(data["effective_command_kind"]),
+            integrity_hash=str(data["integrity_hash"]),
+            next_internal_state=InternalAgentState(
+                owner_id=AgentId(str(state_raw["owner_id"])),
+                invocation_count=int(state_raw["invocation_count"]),
+                last_intention=last_intention,
+                last_command_kind=state_raw.get("last_command_kind"),
+            ),
+            submission=ActionSubmission(
+                token=TickToken(
+                    value=str(token_raw["value"]),
+                    tick=Tick(int(token_raw["tick"])),
+                ),
+                agent_id=AgentId(str(submission_raw["agent_id"])),
+                command=require_agent_command(command_obj),
+            ),
+            subjective_batch=batch,
+            has_futures_boundary=bool(data["has_futures_boundary"]),
+            final_confidence=float(data["final_confidence"]),
+            legacy_belief_writes=tuple(beliefs),
+            delivery_id=data["delivery_id"],
+            delivery_content_hash=data["delivery_content_hash"],
+            delivery_acknowledged=bool(data["delivery_acknowledged"]),
+        )
+    except RunnerSerializationError:
+        raise
+    except SubjectiveSerializationError as exc:
+        raise RunnerSerializationError(exc.code, exc.path) from None
+    except (TypeError, ValueError, KeyError) as exc:
+        raise RunnerSerializationError("invalid_model", "$") from exc

@@ -57,7 +57,9 @@ ALLOWED_IMPORTS: Final[dict[str, frozenset[str]]] = {
     "simulation": frozenset(
         {"world", "agents", "agents.cognition", "memory", "social", "llm"}
     ),
-    "experiments": frozenset({"simulation", "analysis", "agents", "world"}),
+    "experiments": frozenset(
+        {"simulation", "analysis", "agents", "world", "memory"}
+    ),
 
     "api": frozenset({"simulation", "infrastructure", "persistence"}),
     "analysis": frozenset({"world", "simulation", "memory"}),

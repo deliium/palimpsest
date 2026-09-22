@@ -10,6 +10,7 @@ from agents.cognition.defaults import PresentStateImagination
 from agents.cognition.imagination import ImaginationEngine
 from agents.cognition.memory import ReferenceMemoryRetriever, ScopedMemoryRetriever
 from agents.models import AgentId, DriveKind
+from llm.factory import DeterministicFakeLLMProvider
 from memory.service import InMemoryMemoryService
 from simulation.agent_runtime import AgentRuntimeStatus
 from simulation.models import RunId, StochasticIdentity
@@ -195,6 +196,25 @@ async def test_from_config_default_reconstructive_and_imagination() -> None:
         assert isinstance(loop._memory, ScopedMemoryRetriever)
         assert isinstance(loop._futures, ImaginationEngine)
         assert loop._motivation._mortality_appraisal_enabled is True
+        # Bundle readers must be wired (not disconnected MemoryStore).
+        agent_bundle = runner._agents[0]
+        assert agent_bundle.bundle.scope.owner_id.value == "agent-1"
+        snap = await agent_bundle.bundle.snapshot()
+        assert snap.memories == ()
+        assert isinstance(runner._provider, DeterministicFakeLLMProvider)
+
+
+@pytest.mark.asyncio
+async def test_from_config_uses_deterministic_fake_provider() -> None:
+    from simulation.runner_models import RecordingPolicy
+
+    config = _config()
+    assert config.provider.recording_policy is RecordingPolicy.DETERMINISTIC_FAKE
+    async with await SimulationRunner.from_config(
+        config, run_id=RunId("run-det-fake")
+    ) as runner:
+        assert type(runner._provider) is DeterministicFakeLLMProvider
+        await runner._provider.close()
 
 
 @pytest.mark.asyncio

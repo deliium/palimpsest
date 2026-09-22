@@ -465,12 +465,17 @@ class EmptyMemoryUpdateHook:
 class SubjectiveRevisionHook:
     """Propose deferred semantic-belief and relationship revisions from episodes.
 
-    Uses only the frozen snapshot and current-tick owned traces. Never mutates
-    stores; revisions become visible on the next cognition invocation after a
-    successful commit boundary.
+    Uses only the frozen snapshot, pending same-tick traces from earlier hooks,
+    and current-tick owned traces. Never mutates stores; revisions become
+    visible on the next cognition invocation after a successful commit boundary.
     """
 
-    __slots__ = ("_belief_policy", "_relationship_policy", "_resolve_counterpart")
+    __slots__ = (
+        "_belief_policy",
+        "_pending",
+        "_relationship_policy",
+        "_resolve_counterpart",
+    )
 
     def __init__(
         self,
@@ -478,6 +483,7 @@ class SubjectiveRevisionHook:
         belief_policy: object | None = None,
         relationship_policy: object | None = None,
         resolve_counterpart: Callable[..., object] | None = None,
+        pending: object | None = None,
     ) -> None:
         from memory.belief_formation import (
             DEFAULT_BELIEF_FORMATION_POLICY,
@@ -499,6 +505,7 @@ class SubjectiveRevisionHook:
         self._belief_policy = belief_policy
         self._relationship_policy = relationship_policy
         self._resolve_counterpart: Callable[..., object] | None = resolve_counterpart
+        self._pending = pending
 
     async def propose_updates(
         self,
@@ -537,6 +544,13 @@ class SubjectiveRevisionHook:
             for trace in loop_input.snapshot.memories:
                 if trace.created_tick == tick or trace.source_tick == tick:
                     traces.append(trace)
+        pending = self._pending
+        if pending is not None:
+            pending_traces = getattr(pending, "traces", None)
+            if callable(pending_traces):
+                for trace in pending_traces():
+                    if type(trace) is MemoryTrace:
+                        traces.append(trace)
         if memory.reconsolidation is not None:
             derived = memory.reconsolidation.derived_trace
             if type(derived) is MemoryTrace and derived.owner_id == owner:

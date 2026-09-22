@@ -20,11 +20,20 @@ from agents.models import (
     DriveDisposition,
     DriveKind,
     DriveProfile,
+    Goal,
+    GoalId,
+    GoalOutcomeKind,
+    GoalStatus,
 )
 from llm.factory import ProviderAdapterKind
 from llm.models import StructuredOutputMode
 from simulation.bootstrap import AgentRegistration
 from simulation.clock import require_exact_nonneg_int
+from simulation.lifecycle import (
+    ActionResolution,
+    ActionResolutionReason,
+    ActionResolutionStatus,
+)
 from simulation.models import (
     DERIVATION_VERSION_V3,
     StochasticIdentity,
@@ -33,10 +42,17 @@ from simulation.models import (
     require_stochastic_identity,
     stochastic_identity_fingerprint,
 )
-from world.identifiers import EntityId, WorldId, WorldRevision, require_stable_id
+from world.identifiers import (
+    EntityId,
+    WorldId,
+    WorldRevision,
+    require_bounded_text,
+    require_stable_id,
+)
 from world.models import (
     AgentBody,
     Item,
+    LifeStatus,
     Location,
     PhysicalRules,
     Resource,
@@ -47,10 +63,22 @@ from world.models import (
 
 _LOGGER = logging.getLogger("simulation.runner_models")
 
-RUNNER_SCHEMA_VERSION: Final[str] = "runner-config-v1"
+RUNNER_SCHEMA_VERSION_V1: Final[str] = "runner-config-v1"
+RUNNER_SCHEMA_VERSION_V2: Final[str] = "runner-config-v2"
+RUNNER_SCHEMA_VERSION: Final[str] = RUNNER_SCHEMA_VERSION_V2
+SUPPORTED_RUNNER_SCHEMA_VERSIONS: Final[frozenset[str]] = frozenset(
+    {RUNNER_SCHEMA_VERSION_V1, RUNNER_SCHEMA_VERSION_V2}
+)
+RESULT_SCHEMA_VERSION_V1: Final[str] = "runner-result-v1"
+RESULT_SCHEMA_VERSION_V2: Final[str] = "runner-result-v2"
+RESULT_SCHEMA_VERSION: Final[str] = RESULT_SCHEMA_VERSION_V2
+SUPPORTED_RESULT_SCHEMA_VERSIONS: Final[frozenset[str]] = frozenset(
+    {RESULT_SCHEMA_VERSION_V1, RESULT_SCHEMA_VERSION_V2}
+)
 COGNITION_POLICY_VERSION: Final[str] = "cognition-policy-v1"
 PROVIDER_SETTINGS_VERSION: Final[str] = "provider-settings-v1"
 MORTALITY_POLICY_VERSION: Final[str] = "mortality-policy-v1"
+OBJECTIVE_PROJECTION_VERSION: Final[str] = "objective-projection-v1"
 
 _OVERRIDEABLE_DRIVE_KINDS: Final[frozenset[DriveKind]] = frozenset(
     {
@@ -160,6 +188,309 @@ class RunnerAttemptReceipt:
 
 
 @dataclass(frozen=True, slots=True)
+class CognitionCounters:
+    """Aggregate cognition/imagination invocation counts for one run."""
+
+    cognition_invocations: int = 0
+    imagination_evaluations: int = 0
+    imagined_future_count: int = 0
+
+    def __post_init__(self) -> None:
+        object.__setattr__(
+            self,
+            "cognition_invocations",
+            require_exact_nonneg_int(
+                "CognitionCounters.cognition_invocations", self.cognition_invocations
+            ),
+        )
+        object.__setattr__(
+            self,
+            "imagination_evaluations",
+            require_exact_nonneg_int(
+                "CognitionCounters.imagination_evaluations",
+                self.imagination_evaluations,
+            ),
+        )
+        object.__setattr__(
+            self,
+            "imagined_future_count",
+            require_exact_nonneg_int(
+                "CognitionCounters.imagined_future_count", self.imagined_future_count
+            ),
+        )
+
+
+@dataclass(frozen=True, slots=True)
+class ActionResolutionEvidence:
+    """Detached public ActionResolution evidence (scientific, not for logs)."""
+
+    ordinal: int
+    agent_id: AgentId
+    command_kind: str
+    status: ActionResolutionStatus
+    reason: ActionResolutionReason
+    tick: int
+    base_revision: int
+    resulting_revision: int
+    request_id: str
+
+    def __post_init__(self) -> None:
+        object.__setattr__(
+            self,
+            "ordinal",
+            require_exact_nonneg_int("ActionResolutionEvidence.ordinal", self.ordinal),
+        )
+        if type(self.agent_id) is not AgentId:
+            raise TypeError("ActionResolutionEvidence.agent_id must be AgentId")
+        require_stable_id("ActionResolutionEvidence.command_kind", self.command_kind)
+        if type(self.status) is not ActionResolutionStatus:
+            raise TypeError("status must be ActionResolutionStatus")
+        if type(self.reason) is not ActionResolutionReason:
+            raise TypeError("reason must be ActionResolutionReason")
+        object.__setattr__(
+            self,
+            "tick",
+            require_exact_nonneg_int("ActionResolutionEvidence.tick", self.tick),
+        )
+        object.__setattr__(
+            self,
+            "base_revision",
+            require_exact_nonneg_int(
+                "ActionResolutionEvidence.base_revision", self.base_revision
+            ),
+        )
+        object.__setattr__(
+            self,
+            "resulting_revision",
+            require_exact_nonneg_int(
+                "ActionResolutionEvidence.resulting_revision", self.resulting_revision
+            ),
+        )
+        require_stable_id("ActionResolutionEvidence.request_id", self.request_id)
+        if self.resulting_revision < self.base_revision:
+            raise ValueError("resulting_revision must be >= base_revision")
+
+
+def detach_action_resolution_evidence(
+    resolution: ActionResolution,
+) -> ActionResolutionEvidence:
+    """Project an ActionResolution into detached public evidence."""
+    if type(resolution) is not ActionResolution:
+        raise TypeError("detach_action_resolution_evidence requires ActionResolution")
+    return ActionResolutionEvidence(
+        ordinal=resolution.ordinal,
+        agent_id=resolution.agent_id,
+        command_kind=resolution.command.kind,
+        status=resolution.status,
+        reason=resolution.reason,
+        tick=resolution.tick.value,
+        base_revision=resolution.base_revision.value,
+        resulting_revision=resolution.resulting_revision.value,
+        request_id=resolution.request_id.value,
+    )
+
+
+@dataclass(frozen=True, slots=True)
+class BodyObjectiveFact:
+    """Observable body facts for post-finalization goal evaluation."""
+
+    entity_id: EntityId
+    location_id: EntityId
+    life_status: LifeStatus
+    inventory: tuple[EntityId, ...]
+
+    def __post_init__(self) -> None:
+        if type(self.entity_id) is not EntityId:
+            raise TypeError("BodyObjectiveFact.entity_id must be EntityId")
+        if type(self.location_id) is not EntityId:
+            raise TypeError("BodyObjectiveFact.location_id must be EntityId")
+        if type(self.life_status) is not LifeStatus:
+            raise TypeError("BodyObjectiveFact.life_status must be LifeStatus")
+        if isinstance(self.inventory, (set, frozenset)):
+            raise TypeError("inventory must be ordered")
+        inventory = tuple(self.inventory)
+        for item in inventory:
+            if type(item) is not EntityId:
+                raise TypeError("inventory entries must be EntityId")
+        object.__setattr__(self, "inventory", inventory)
+
+
+@dataclass(frozen=True, slots=True)
+class DetachedObjectiveProjection:
+    """Public hashable objective projection without WorldEngine access."""
+
+    tick: int
+    revision: int
+    bodies: tuple[BodyObjectiveFact, ...]
+    projection_version: str = OBJECTIVE_PROJECTION_VERSION
+
+    def __post_init__(self) -> None:
+        object.__setattr__(
+            self,
+            "tick",
+            require_exact_nonneg_int("DetachedObjectiveProjection.tick", self.tick),
+        )
+        object.__setattr__(
+            self,
+            "revision",
+            require_exact_nonneg_int(
+                "DetachedObjectiveProjection.revision", self.revision
+            ),
+        )
+        if self.projection_version != OBJECTIVE_PROJECTION_VERSION:
+            raise ValueError("unsupported objective projection_version")
+        bodies = _copy_ordered(
+            "DetachedObjectiveProjection.bodies",
+            self.bodies,
+            model_type=BodyObjectiveFact,
+        )
+        entity_ids = [body.entity_id for body in bodies]
+        if len(set(entity_ids)) != len(entity_ids):
+            raise ValueError("body entity_ids must be unique")
+        object.__setattr__(self, "bodies", bodies)
+
+
+@dataclass(frozen=True, slots=True)
+class FinalizedTickReceipt:
+    """Detached receipt for one successfully finalized committed tick."""
+
+    tick: int
+    resulting_tick: int
+    base_revision: int
+    resulting_revision: int
+    resolutions: tuple[ActionResolutionEvidence, ...]
+    objective_state_hash: str
+    event_count: int = 0
+
+    def __post_init__(self) -> None:
+        object.__setattr__(
+            self,
+            "tick",
+            require_exact_nonneg_int("FinalizedTickReceipt.tick", self.tick),
+        )
+        object.__setattr__(
+            self,
+            "resulting_tick",
+            require_exact_nonneg_int(
+                "FinalizedTickReceipt.resulting_tick", self.resulting_tick
+            ),
+        )
+        if self.resulting_tick != self.tick + 1:
+            raise ValueError("resulting_tick must be exactly tick + 1")
+        object.__setattr__(
+            self,
+            "base_revision",
+            require_exact_nonneg_int(
+                "FinalizedTickReceipt.base_revision", self.base_revision
+            ),
+        )
+        object.__setattr__(
+            self,
+            "resulting_revision",
+            require_exact_nonneg_int(
+                "FinalizedTickReceipt.resulting_revision", self.resulting_revision
+            ),
+        )
+        if self.resulting_revision < self.base_revision:
+            raise ValueError("resulting_revision must be >= base_revision")
+        resolutions = _copy_ordered(
+            "FinalizedTickReceipt.resolutions",
+            self.resolutions,
+            model_type=ActionResolutionEvidence,
+        )
+        object.__setattr__(self, "resolutions", resolutions)
+        require_stable_id(
+            "FinalizedTickReceipt.objective_state_hash", self.objective_state_hash
+        )
+        object.__setattr__(
+            self,
+            "event_count",
+            require_exact_nonneg_int(
+                "FinalizedTickReceipt.event_count", self.event_count
+            ),
+        )
+
+
+class GoalTransitionReasonCode(StrEnum):
+    """Closed reason codes for simulation-owned goal status transitions."""
+
+    COMPLETED = "completed"
+    ABANDONED = "abandoned"
+    DEATH = "death"
+    RUN_END = "run_end"
+
+
+@dataclass(frozen=True, slots=True)
+class GoalTransitionReceipt:
+    """Immutable receipt for one post-finalization goal status transition."""
+
+    goal_id: GoalId
+    owner_id: AgentId
+    outcome_kind: GoalOutcomeKind
+    from_status: GoalStatus
+    to_status: GoalStatus
+    tick: int
+    reason_code: GoalTransitionReasonCode
+
+    def __post_init__(self) -> None:
+        if type(self.goal_id) is not GoalId:
+            raise TypeError("goal_id must be GoalId")
+        if type(self.owner_id) is not AgentId:
+            raise TypeError("owner_id must be AgentId")
+        if type(self.outcome_kind) is not GoalOutcomeKind:
+            raise TypeError("outcome_kind must be GoalOutcomeKind")
+        if type(self.from_status) is not GoalStatus:
+            raise TypeError("from_status must be GoalStatus")
+        if type(self.to_status) is not GoalStatus:
+            raise TypeError("to_status must be GoalStatus")
+        object.__setattr__(
+            self,
+            "tick",
+            require_exact_nonneg_int("GoalTransitionReceipt.tick", self.tick),
+        )
+        if type(self.reason_code) is not GoalTransitionReasonCode:
+            raise TypeError("reason_code must be GoalTransitionReasonCode")
+
+
+@dataclass(frozen=True, slots=True)
+class GoalEvaluationEvidence:
+    """Observable evidence for deterministic post-finalization goal evaluation.
+
+    Imagined ``GoalEffect`` values are never accepted as committed outcomes.
+    """
+
+    tick: int
+    run_ending: bool
+    owner_entity_ids: Mapping[str, str]
+    bodies: tuple[BodyObjectiveFact, ...]
+
+    def __post_init__(self) -> None:
+        object.__setattr__(
+            self,
+            "tick",
+            require_exact_nonneg_int("GoalEvaluationEvidence.tick", self.tick),
+        )
+        if type(self.run_ending) is not bool:
+            raise TypeError("run_ending must be bool")
+        if not isinstance(self.owner_entity_ids, Mapping):
+            raise TypeError("owner_entity_ids must be a mapping")
+        mapping = {str(key): str(value) for key, value in self.owner_entity_ids.items()}
+        for key, value in mapping.items():
+            require_stable_id("GoalEvaluationEvidence.owner_id", key)
+            require_stable_id("GoalEvaluationEvidence.entity_id", value)
+        object.__setattr__(self, "owner_entity_ids", mapping)
+        object.__setattr__(
+            self,
+            "bodies",
+            _copy_ordered(
+                "GoalEvaluationEvidence.bodies",
+                self.bodies,
+                model_type=BodyObjectiveFact,
+            ),
+        )
+
+
+@dataclass(frozen=True, slots=True)
 class SimulationRunnerResult:
     """Final result after objective commit and all finalizations succeed."""
 
@@ -167,6 +498,11 @@ class SimulationRunnerResult:
     ticks_committed: int
     stop_reason: RunnerStopReasonCode
     attempt_receipts: tuple[RunnerAttemptReceipt, ...]
+    finalized_tick_receipts: tuple[FinalizedTickReceipt, ...] = ()
+    goal_transition_receipts: tuple[GoalTransitionReceipt, ...] = ()
+    cognition_counters: CognitionCounters = CognitionCounters()
+    final_objective_projection: DetachedObjectiveProjection | None = None
+    objective_state_hash: str | None = None
 
     def __post_init__(self) -> None:
         from simulation.models import RunId
@@ -189,6 +525,35 @@ class SimulationRunnerResult:
             if type(item) is not RunnerAttemptReceipt:
                 raise TypeError("attempt_receipts entries must be RunnerAttemptReceipt")
         object.__setattr__(self, "attempt_receipts", receipts)
+        object.__setattr__(
+            self,
+            "finalized_tick_receipts",
+            _copy_ordered(
+                "finalized_tick_receipts",
+                self.finalized_tick_receipts,
+                model_type=FinalizedTickReceipt,
+            ),
+        )
+        object.__setattr__(
+            self,
+            "goal_transition_receipts",
+            _copy_ordered(
+                "goal_transition_receipts",
+                self.goal_transition_receipts,
+                model_type=GoalTransitionReceipt,
+            ),
+        )
+        if type(self.cognition_counters) is not CognitionCounters:
+            raise TypeError("cognition_counters must be CognitionCounters")
+        if (
+            self.final_objective_projection is not None
+            and type(self.final_objective_projection) is not DetachedObjectiveProjection
+        ):
+            raise TypeError(
+                "final_objective_projection must be DetachedObjectiveProjection or None"
+            )
+        if self.objective_state_hash is not None:
+            require_stable_id("objective_state_hash", self.objective_state_hash)
 
 
 class CognitionFailurePolicy(StrEnum):
@@ -338,6 +703,8 @@ class AgentRunnerSpec:
     agent_id: AgentId
     entity_id: EntityId
     cognition: AgentCognitionSpec
+    name: str | None = None
+    initial_goals: tuple[Goal, ...] = ()
 
     def __post_init__(self) -> None:
         if type(self.agent_id) is not AgentId:
@@ -348,6 +715,21 @@ class AgentRunnerSpec:
             raise TypeError("AgentRunnerSpec.cognition must be AgentCognitionSpec")
         if self.cognition.agent_id != self.agent_id:
             raise ValueError("AgentRunnerSpec cognition.agent_id must match agent_id")
+        resolved_name = self.agent_id.value if self.name is None else self.name
+        object.__setattr__(
+            self, "name", require_bounded_text("AgentRunnerSpec.name", resolved_name)
+        )
+        goals = _copy_ordered(
+            "AgentRunnerSpec.initial_goals", self.initial_goals, model_type=Goal
+        )
+        seen: set[GoalId] = set()
+        for goal in goals:
+            if goal.owner_id != self.agent_id:
+                raise ValueError("initial_goals owner_id must match agent_id")
+            if goal.goal_id in seen:
+                raise ValueError("initial_goals goal_id values must be unique")
+            seen.add(goal.goal_id)
+        object.__setattr__(self, "initial_goals", goals)
 
     def registration(self) -> AgentRegistration:
         return AgentRegistration(agent_id=self.agent_id, entity_id=self.entity_id)
@@ -698,12 +1080,18 @@ class SimulationRunnerConfig:
             and type(self.experiment) is not ExperimentAssignmentRef
         ):
             raise TypeError("experiment must be ExperimentAssignmentRef or None")
-        if self.schema_version != RUNNER_SCHEMA_VERSION:
+        if self.schema_version not in SUPPORTED_RUNNER_SCHEMA_VERSIONS:
             raise ValueError("unsupported runner schema_version")
         if require_derivation_version(self.derivation_version) != DERIVATION_VERSION_V3:
             raise ValueError("runner config requires derivation-v3")
         if self.mortality_policy_version != MORTALITY_POLICY_VERSION:
             raise ValueError("unsupported mortality_policy_version")
+        if self.schema_version == RUNNER_SCHEMA_VERSION_V1:
+            _LOGGER.warning(
+                "runner_config_legacy_schema schema_version=%s agent_count=%s",
+                self.schema_version,
+                len(self.agents),
+            )
         _LOGGER.debug(
             "runner_config_validated schema_version=%s agent_count=%s "
             "location_count=%s max_ticks=%s mortality_mode=%s",
@@ -841,7 +1229,6 @@ def describe_runner_config(
     }
 
 
-RESULT_SCHEMA_VERSION: Final[str] = "runner-result-v1"
 OBSERVATION_DELIVERY_SCHEMA_VERSION: Final[str] = "observation-delivery-v1"
 
 
@@ -924,9 +1311,15 @@ class SimulationRunnerResultDocument:
     exact_trajectory_hash: str
     replica_normalized_trajectory_hash: str
     attempt_count: int
+    objective_state_hash: str | None = None
+    cognition_invocations: int = 0
+    imagination_evaluations: int = 0
+    imagined_future_count: int = 0
+    goal_transition_count: int = 0
+    finalized_tick_count: int = 0
 
     def __post_init__(self) -> None:
-        if self.schema_version != RESULT_SCHEMA_VERSION:
+        if self.schema_version not in SUPPORTED_RESULT_SCHEMA_VERSIONS:
             raise ValueError("unsupported result schema_version")
         require_stable_id("run_id", self.run_id)
         require_stable_id("stop_reason", self.stop_reason)
@@ -948,3 +1341,255 @@ class SimulationRunnerResultDocument:
             "attempt_count",
             require_exact_nonneg_int("attempt_count", self.attempt_count),
         )
+        if self.objective_state_hash is not None:
+            require_stable_id("objective_state_hash", self.objective_state_hash)
+        for name in (
+            "cognition_invocations",
+            "imagination_evaluations",
+            "imagined_future_count",
+            "goal_transition_count",
+            "finalized_tick_count",
+        ):
+            object.__setattr__(
+                self,
+                name,
+                require_exact_nonneg_int(name, getattr(self, name)),
+            )
+        if self.schema_version == RESULT_SCHEMA_VERSION_V1:
+            if (
+                self.objective_state_hash is not None
+                or self.cognition_invocations
+                or self.imagination_evaluations
+                or self.imagined_future_count
+                or self.goal_transition_count
+                or self.finalized_tick_count
+            ):
+                raise ValueError("runner-result-v1 forbids v2 result fields")
+
+
+def project_bodies_to_facts(
+    bodies: Sequence[AgentBody],
+) -> tuple[BodyObjectiveFact, ...]:
+    """Build ordered body facts from immutable AgentBody values."""
+    if isinstance(bodies, (set, frozenset)):
+        raise TypeError("bodies must be ordered")
+    facts: list[BodyObjectiveFact] = []
+    for body in bodies:
+        if type(body) is not AgentBody:
+            raise TypeError("bodies entries must be AgentBody")
+        facts.append(
+            BodyObjectiveFact(
+                entity_id=body.entity_id,
+                location_id=body.location_id,
+                life_status=body.life_status,
+                inventory=tuple(body.inventory),
+            )
+        )
+    facts.sort(key=lambda item: item.entity_id.value)
+    return tuple(facts)
+
+
+def build_detached_objective_projection(
+    *,
+    tick: int,
+    revision: int,
+    bodies: Sequence[AgentBody],
+) -> DetachedObjectiveProjection:
+    """Construct a detached objective projection from public body values."""
+    return DetachedObjectiveProjection(
+        tick=tick,
+        revision=revision,
+        bodies=project_bodies_to_facts(bodies),
+    )
+
+
+def _body_index(
+    evidence: GoalEvaluationEvidence,
+) -> dict[str, BodyObjectiveFact]:
+    return {body.entity_id.value: body for body in evidence.bodies}
+
+
+def _owner_body(
+    evidence: GoalEvaluationEvidence, owner_id: AgentId
+) -> BodyObjectiveFact | None:
+    entity_id = evidence.owner_entity_ids.get(owner_id.value)
+    if entity_id is None:
+        return None
+    return _body_index(evidence).get(entity_id)
+
+
+def _entity_location(
+    evidence: GoalEvaluationEvidence, entity_id: str
+) -> EntityId | None:
+    bodies = _body_index(evidence)
+    body = bodies.get(entity_id)
+    if body is not None:
+        return body.location_id
+    return None
+
+
+def _outcome_satisfied(
+    goal: Goal, evidence: GoalEvaluationEvidence, body: BodyObjectiveFact
+) -> bool:
+    """Return True only when observable objective facts confirm completion.
+
+    Imagined GoalEffect values are ignored. Kinds without objective evaluators
+    never return True here (they close only via death or run_end).
+    """
+    outcome = goal.outcome
+    if outcome is None:
+        return False
+    kind = outcome.kind
+    if kind is GoalOutcomeKind.REACH_PLACE:
+        return (
+            outcome.place_id is not None
+            and body.location_id.value == outcome.place_id
+        )
+    if kind is GoalOutcomeKind.OBTAIN_ENTITY:
+        return (
+            outcome.entity_id is not None
+            and any(item.value == outcome.entity_id for item in body.inventory)
+        )
+    if kind is GoalOutcomeKind.AVOID_ENTITY:
+        if outcome.entity_id is None:
+            return False
+        other_location = _entity_location(evidence, outcome.entity_id)
+        if other_location is None:
+            # Target not present in objective projection: avoidance holds.
+            return True
+        return other_location != body.location_id
+    if kind is GoalOutcomeKind.PRESERVE_LIFE:
+        return body.life_status is LifeStatus.ALIVE and evidence.run_ending
+    # SATISFY_DRIVE, RELATE_TO_AGENT, GATHER_INFORMATION, ACHIEVE_CODE:
+    # not objectively decidable from body/location/inventory alone.
+    return False
+
+
+def evaluate_goals_after_finalization(
+    goals: Sequence[Goal],
+    evidence: GoalEvaluationEvidence,
+) -> tuple[GoalTransitionReceipt, ...]:
+    """Deterministically evaluate active goals against observable evidence.
+
+    Semantics per ``GoalOutcomeKind`` (imagined effects never commit outcomes):
+
+    - ``REACH_PLACE`` / ``OBTAIN_ENTITY`` / ``AVOID_ENTITY``: ``COMPLETED`` when
+      observable facts match; ``DEATH`` abandons on owner death; ``RUN_END``
+      abandons remaining active goals at run end.
+    - ``PRESERVE_LIFE``: ``COMPLETED`` at run end while alive; ``DEATH`` abandons
+      on owner death.
+    - ``SATISFY_DRIVE`` / ``RELATE_TO_AGENT`` / ``GATHER_INFORMATION`` /
+      ``ACHIEVE_CODE``: never completed from objective facts alone; ``DEATH`` or
+      ``RUN_END`` abandon active goals.
+    """
+    if type(evidence) is not GoalEvaluationEvidence:
+        raise TypeError("evidence must be GoalEvaluationEvidence")
+    if isinstance(goals, (set, frozenset)):
+        raise TypeError("goals must be ordered")
+    receipts: list[GoalTransitionReceipt] = []
+    for goal in goals:
+        if type(goal) is not Goal:
+            raise TypeError("goals entries must be Goal")
+        if goal.status is not GoalStatus.ACTIVE:
+            continue
+        outcome_kind = (
+            goal.outcome.kind
+            if goal.outcome is not None
+            else GoalOutcomeKind.PRESERVE_LIFE
+        )
+        body = _owner_body(evidence, goal.owner_id)
+        if body is None:
+            _LOGGER.debug(
+                "goal_eval_missing_body goal_id=%s owner_id=%s tick=%s",
+                goal.goal_id.value,
+                goal.owner_id.value,
+                evidence.tick,
+            )
+            if evidence.run_ending:
+                receipts.append(
+                    GoalTransitionReceipt(
+                        goal_id=goal.goal_id,
+                        owner_id=goal.owner_id,
+                        outcome_kind=outcome_kind,
+                        from_status=GoalStatus.ACTIVE,
+                        to_status=GoalStatus.ABANDONED,
+                        tick=evidence.tick,
+                        reason_code=GoalTransitionReasonCode.RUN_END,
+                    )
+                )
+            continue
+        if body.life_status is LifeStatus.DEAD:
+            receipts.append(
+                GoalTransitionReceipt(
+                    goal_id=goal.goal_id,
+                    owner_id=goal.owner_id,
+                    outcome_kind=outcome_kind,
+                    from_status=GoalStatus.ACTIVE,
+                    to_status=GoalStatus.ABANDONED,
+                    tick=evidence.tick,
+                    reason_code=GoalTransitionReasonCode.DEATH,
+                )
+            )
+            _LOGGER.debug(
+                "goal_transition goal_id=%s owner_id=%s tick=%s "
+                "reason=%s to_status=%s",
+                goal.goal_id.value,
+                goal.owner_id.value,
+                evidence.tick,
+                GoalTransitionReasonCode.DEATH.value,
+                GoalStatus.ABANDONED.value,
+            )
+            continue
+        if _outcome_satisfied(goal, evidence, body):
+            receipts.append(
+                GoalTransitionReceipt(
+                    goal_id=goal.goal_id,
+                    owner_id=goal.owner_id,
+                    outcome_kind=outcome_kind,
+                    from_status=GoalStatus.ACTIVE,
+                    to_status=GoalStatus.COMPLETED,
+                    tick=evidence.tick,
+                    reason_code=GoalTransitionReasonCode.COMPLETED,
+                )
+            )
+            _LOGGER.debug(
+                "goal_transition goal_id=%s owner_id=%s tick=%s "
+                "reason=%s to_status=%s",
+                goal.goal_id.value,
+                goal.owner_id.value,
+                evidence.tick,
+                GoalTransitionReasonCode.COMPLETED.value,
+                GoalStatus.COMPLETED.value,
+            )
+            continue
+        if evidence.run_ending:
+            receipts.append(
+                GoalTransitionReceipt(
+                    goal_id=goal.goal_id,
+                    owner_id=goal.owner_id,
+                    outcome_kind=outcome_kind,
+                    from_status=GoalStatus.ACTIVE,
+                    to_status=GoalStatus.ABANDONED,
+                    tick=evidence.tick,
+                    reason_code=GoalTransitionReasonCode.RUN_END,
+                )
+            )
+            _LOGGER.debug(
+                "goal_transition goal_id=%s owner_id=%s tick=%s "
+                "reason=%s to_status=%s",
+                goal.goal_id.value,
+                goal.owner_id.value,
+                evidence.tick,
+                GoalTransitionReasonCode.RUN_END.value,
+                GoalStatus.ABANDONED.value,
+            )
+    receipts.sort(
+        key=lambda item: (item.tick, item.owner_id.value, item.goal_id.value)
+    )
+    _LOGGER.debug(
+        "goal_eval_complete tick=%s run_ending=%s transition_count=%s",
+        evidence.tick,
+        evidence.run_ending,
+        len(receipts),
+    )
+    return tuple(receipts)

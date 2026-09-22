@@ -10,6 +10,7 @@ from agents.cognition.communication import (
     COMMUNICATED_MEMORY_POLICY_VERSION,
     CommunicatedMemoryUpdateHook,
     CompositeMemoryUpdateHook,
+    PendingEvidenceAccumulator,
     build_communicated_memory_trace,
     receiver_confidence_for_transmission,
 )
@@ -221,13 +222,44 @@ async def test_communicated_hook_dedupes_by_communication_id(
 async def test_composite_runs_communicated_then_empty() -> None:
     observation = _observation_with_comm()
     loop_input, perception, plan, intention, memory = _loop_pieces(observation)
+    pending = PendingEvidenceAccumulator()
     hook = CompositeMemoryUpdateHook(
-        (CommunicatedMemoryUpdateHook(), EmptyMemoryUpdateHook())
+        (CommunicatedMemoryUpdateHook(), EmptyMemoryUpdateHook()),
+        pending=pending,
     )
     intents = await hook.propose_updates(
         loop_input, plan, perception, memory, intention
     )
     assert len(intents) == 1
+    assert len(pending.traces()) == 1
+    assert pending.traces()[0].provenance.kind is MemorySourceKind.COMMUNICATED
+
+
+@pytest.mark.asyncio
+async def test_pending_evidence_drives_same_batch_revisions() -> None:
+    """Communicated traces proposed first must feed SubjectiveRevisionHook."""
+    from agents.cognition.defaults import SubjectiveRevisionHook
+
+    observation = _observation_with_comm()
+    loop_input, perception, plan, intention, memory = _loop_pieces(observation)
+    pending = PendingEvidenceAccumulator()
+    hook = CompositeMemoryUpdateHook(
+        (
+            CommunicatedMemoryUpdateHook(),
+            SubjectiveRevisionHook(
+                resolve_counterpart=lambda entity_id: (
+                    AgentId("agent-2") if entity_id == EntityId("body-2") else None
+                ),
+                pending=pending,
+            ),
+        ),
+        pending=pending,
+    )
+    intents = await hook.propose_updates(
+        loop_input, plan, perception, memory, intention
+    )
+    assert any(item.kind is MemoryUpdateKind.WRITE_MEMORY for item in intents)
+    assert len(pending.traces()) == 1
 
 
 def test_receiver_confidence_attenuates_with_hops() -> None:

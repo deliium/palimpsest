@@ -29,6 +29,7 @@ Palimpsest is a Python 3.12+ modular monolith for reproducible, discrete, text-b
 - **ORM / migrations:** SQLAlchemy 2 async + Alembic + asyncpg
 - **Logging:** structlog (infrastructure); stdlib logging inside `llm` (metadata-only)
 - **HTTP client:** httpx (runtime; OpenAI-compatible LLM transport and tests)
+- **Scientific computing (analysis metrics):** NumPy >=2, pandas >=2, SciPy >=1.11, NetworkX >=3 (canonical quantized metric output; not unconstrained BLAS/platform bit identity)
 - **Testing:** pytest, pytest-asyncio, Hypothesis, import-linter, Ruff, mypy
 
 ## Architecture Notes

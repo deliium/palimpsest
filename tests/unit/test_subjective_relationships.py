@@ -148,10 +148,16 @@ async def test_service_idempotent_and_asymmetric() -> None:
     )
     first = await alice.revise(request)
     second = await alice.revise(request)
+    assert first.idempotent is False
     assert second.idempotent is True
     assert first.relationship_id == second.relationship_id
+    assert len(await alice.snapshot()) == 1
     assert await bob.snapshot() == ()
     assert await alice.get_directed(target_id=AgentId("bob")) is not None
+    reader = alice.as_reader()
+    assert len(reader.snapshot()) == 1
+    assert reader.snapshot()[0].source_id == AgentId("alice")
+    assert reader.snapshot()[0].target_id == AgentId("bob")
 
 
 @pytest.mark.asyncio

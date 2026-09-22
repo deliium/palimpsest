@@ -22,22 +22,28 @@ from agents.cognition.configuration import (
     build_cognitive_loop,
 )
 from agents.cognition.memory import ReferenceMemoryRetriever, ScopedMemoryRetriever
-from agents.models import Agent, AgentId
+from agents.cognition.models import ComponentKind
+from agents.cognition.reconstruction import LLMMemoryReconstructor
+from agents.models import Agent, AgentId, Goal, GoalStatus
 from llm.factory import (
+    DeterministicFakeLLMProvider,
     DisabledLLMProvider,
     ProviderAdapterKind,
     ProviderFactoryConfig,
     create_llm_provider,
 )
 from memory.belief_service import InMemorySemanticBeliefService
+from memory.contracts import MemoryReconstructor, MemoryService, SemanticBeliefService
 from memory.models import (
     BeliefStore,
+    MemoryReconstructionPolicy,
     MemoryRunId,
     MemoryScope,
     MemoryScoreWeights,
     MemoryScoringPolicy,
     MemoryStore,
 )
+from memory.reconstruction import DeterministicMemoryReconstructor
 from memory.service import InMemoryMemoryService
 from simulation.agent_runtime import (
     AgentRuntime,
@@ -46,15 +52,20 @@ from simulation.agent_runtime import (
     PendingRuntimeFinalization,
     PreparedObservation,
 )
-from simulation.bootstrap import WorldBootstrap, registration_translator
+from simulation.bootstrap import (
+    RegistrationTranslator,
+    WorldBootstrap,
+    registration_translator,
+)
 from simulation.clock import Tick
 from simulation.engine import WorldEngine
 from simulation.identifiers import derive_run_id
 from simulation.journal import hash_snapshot
-from simulation.lifecycle import ActionSubmission
+from simulation.lifecycle import ActionSubmission, TickResult
 from simulation.models import DERIVATION_VERSION_V3, RunId, SimulationRunConfig
 from simulation.persistence import (
     EVENT_SCHEMA_VERSION,
+    LEGACY_PENDING_FINALIZATION_CODEC_VERSION,
     PENDING_FINALIZATION_CODEC_VERSION,
     PERSISTENCE_CODEC_VERSION,
     PROJECTOR_VERSION,
@@ -68,11 +79,27 @@ from simulation.persistence import (
     TickJournalRepository,
     WorldSnapshot,
 )
+from simulation.run_control import (
+    FinalizationCommand,
+    ResumeMode,
+    RunnerCrashInjected,
+    RunnerCrashPoint,
+    RunnerResumePlan,
+    RunnerRuntimeCheckpoint,
+    classify_resume_mode,
+)
 from simulation.runner_models import (
     AgentCognitionSpec,
+    CognitionCounters,
     CognitionFailurePolicy,
+    DetachedObjectiveProjection,
+    ExperimentalObservationSink,
+    FinalizedTickReceipt,
+    GoalEvaluationEvidence,
+    GoalTransitionReceipt,
     MemoryMode,
     MortalityMode,
+    ObservationDelivery,
     RecordingPolicy,
     RunnerAttemptReceipt,
     RunnerAttemptStatus,
@@ -80,25 +107,45 @@ from simulation.runner_models import (
     RunnerStopReasonCode,
     SimulationRunnerConfig,
     SimulationRunnerResult,
+    build_detached_objective_projection,
     describe_runner_config,
+    detach_action_resolution_evidence,
+    evaluate_goals_after_finalization,
 )
-from simulation.runner_serialization import build_runner_diagnostics
+from simulation.runner_serialization import (
+    build_runner_diagnostics,
+    decode_finalization_command,
+    finalization_command_to_mapping,
+    objective_projection_hash,
+)
 from simulation.service import PersistentSimulationService
-from simulation.subjective_state import InMemorySubjectiveStateService
+from simulation.subjective_state import (
+    InMemorySubjectiveOwnerBundle,
+    SubjectiveOwnerBundle,
+    SubjectiveStateService,
+)
+from social.contracts import RelationshipService
 from social.service import InMemoryRelationshipService
+from world.identifiers import EntityId, WorldRevision
 
 _LOG: Final[logging.Logger] = logging.getLogger("simulation.runner")
 _DEFAULT_SCORING_POLICY_ID: Final[str] = "runner-default"
 _DEFAULT_SCORING_POLICY_VERSION: Final[str] = "1"
+_DEFAULT_RECONSTRUCTION_POLICY_ID: Final[str] = "runner-reconstruction"
+_DEFAULT_RECONSTRUCTION_POLICY_VERSION: Final[str] = "1"
 
 __all__ = [
     "AsyncCloseable",
+    "BeliefServiceFactory",
+    "MemoryServiceFactory",
     "ProviderCredentialResolver",
     "ProviderCredentials",
+    "RelationshipServiceFactory",
     "RunnerConstructionError",
     "RunnerConstructionErrorCode",
     "RunnerDependencyFactories",
     "SimulationRunner",
+    "SubjectiveBundleFactory",
 ]
 
 
@@ -160,19 +207,60 @@ AsyncSleep = Callable[[float], Awaitable[None]]
 MonotonicClock = Callable[[], float]
 
 
+class MemoryServiceFactory(Protocol):
+    """Injectable factory for owner-scoped episodic memory services."""
+
+    def __call__(
+        self,
+        scope: MemoryScope,
+        *,
+        reconstructor: MemoryReconstructor | None = None,
+    ) -> MemoryService: ...
+
+
+class BeliefServiceFactory(Protocol):
+    """Injectable factory for owner-scoped semantic belief services."""
+
+    def __call__(self, scope: MemoryScope) -> SemanticBeliefService: ...
+
+
+class RelationshipServiceFactory(Protocol):
+    """Injectable factory for owner-scoped relationship services."""
+
+    def __call__(self, owner_id: AgentId) -> RelationshipService: ...
+
+
+class SubjectiveBundleFactory(Protocol):
+    """Injectable factory for owner-scoped subjective bundles."""
+
+    def __call__(
+        self,
+        scope: MemoryScope,
+        *,
+        memory_service: MemoryService,
+        belief_service: SemanticBeliefService,
+        relationship_service: RelationshipService,
+    ) -> SubjectiveOwnerBundle: ...
+
+
 class RunnerDependencyFactories:
     """Narrow injected factories for runner-owned resource construction.
 
-    Defaults construct in-memory owner-scoped services and a disabled LLM
-    provider. Durable persistence adapters are injected by composition roots.
+    Defaults construct in-memory owner-scoped services and a deterministic-fake
+    or disabled LLM provider. Durable persistence adapters are injected by
+    composition roots via the protocol factories below.
     """
 
     __slots__ = (
+        "_belief_factory",
+        "_bundle_factory",
         "_credential_resolver",
         "_journal",
+        "_memory_factory",
         "_monotonic",
         "_pending_finalizations",
         "_provider_factory",
+        "_relationship_factory",
         "_run_repository",
         "_sleep",
     )
@@ -188,6 +276,10 @@ class RunnerDependencyFactories:
             ]
             | None
         ) = None,
+        memory_factory: MemoryServiceFactory | None = None,
+        belief_factory: BeliefServiceFactory | None = None,
+        relationship_factory: RelationshipServiceFactory | None = None,
+        bundle_factory: SubjectiveBundleFactory | None = None,
         sleep: AsyncSleep | None = None,
         monotonic: MonotonicClock | None = None,
         run_repository: SimulationRunRepository | None = None,
@@ -196,6 +288,10 @@ class RunnerDependencyFactories:
     ) -> None:
         self._credential_resolver = credential_resolver
         self._provider_factory = provider_factory
+        self._memory_factory = memory_factory
+        self._belief_factory = belief_factory
+        self._relationship_factory = relationship_factory
+        self._bundle_factory = bundle_factory
         self._sleep = sleep
         self._monotonic = monotonic
         self._run_repository = run_repository
@@ -235,12 +331,65 @@ class RunnerDependencyFactories:
             monotonic=self._monotonic,
         )
 
+    def create_memory_service(
+        self,
+        scope: MemoryScope,
+        *,
+        reconstructor: MemoryReconstructor | None = None,
+    ) -> MemoryService:
+        if self._memory_factory is not None:
+            return self._memory_factory(scope, reconstructor=reconstructor)
+        return InMemoryMemoryService(scope, reconstructor=reconstructor)
+
+    def create_belief_service(self, scope: MemoryScope) -> SemanticBeliefService:
+        if self._belief_factory is not None:
+            return self._belief_factory(scope)
+        return InMemorySemanticBeliefService(scope)
+
+    def create_relationship_service(self, owner_id: AgentId) -> RelationshipService:
+        if self._relationship_factory is not None:
+            return self._relationship_factory(owner_id)
+        return InMemoryRelationshipService(owner_id)
+
+    def create_subjective_bundle(
+        self,
+        scope: MemoryScope,
+        *,
+        memory_service: MemoryService,
+        belief_service: SemanticBeliefService,
+        relationship_service: RelationshipService,
+    ) -> SubjectiveOwnerBundle:
+        if self._bundle_factory is not None:
+            return self._bundle_factory(
+                scope,
+                memory_service=memory_service,
+                belief_service=belief_service,
+                relationship_service=relationship_service,
+            )
+        return InMemorySubjectiveOwnerBundle(
+            scope,
+            memory_service=memory_service,
+            belief_service=belief_service,
+            relationship_service=relationship_service,
+        )
+
 
 def _default_scoring_policy() -> MemoryScoringPolicy:
     return MemoryScoringPolicy(
         policy_id=_DEFAULT_SCORING_POLICY_ID,
         version=_DEFAULT_SCORING_POLICY_VERSION,
         weights=MemoryScoreWeights(recency=1.0, current_context_overlap=1.0),
+    )
+
+
+def _default_reconstruction_policy(
+    *, allow_provider: bool
+) -> MemoryReconstructionPolicy:
+    return MemoryReconstructionPolicy(
+        policy_id=_DEFAULT_RECONSTRUCTION_POLICY_ID,
+        version=_DEFAULT_RECONSTRUCTION_POLICY_VERSION,
+        allow_provider=allow_provider,
+        reconsolidate=True,
     )
 
 
@@ -275,14 +424,21 @@ def _default_provider(
     sleep: AsyncSleep | None,
     monotonic: MonotonicClock | None,
 ) -> AsyncCloseable:
-    if settings.adapter_kind is ProviderAdapterKind.DISABLED:
-        return DisabledLLMProvider()
     if settings.recording_policy is RecordingPolicy.DETERMINISTIC_FAKE:
-        _LOG.warning(
-            "provider_deterministic_fallback adapter_kind=%s recording_policy=%s",
+        _LOG.info(
+            "provider_deterministic_fake adapter_kind=%s recording_policy=%s",
             settings.adapter_kind.value,
             settings.recording_policy.value,
         )
+        return DeterministicFakeLLMProvider()
+    if settings.recording_policy is RecordingPolicy.RECORDED:
+        _LOG.warning(
+            "provider_recorded_fallback adapter_kind=%s recording_policy=%s",
+            settings.adapter_kind.value,
+            settings.recording_policy.value,
+        )
+        return DeterministicFakeLLMProvider(provider_name="recorded_fallback")
+    if settings.adapter_kind is ProviderAdapterKind.DISABLED:
         return DisabledLLMProvider()
     if sleep is None or monotonic is None:
         raise RunnerConstructionError(
@@ -307,15 +463,41 @@ def _default_provider(
     return create_llm_provider(factory_config, sleep=sleep, monotonic=monotonic)
 
 
+def _reconstructor_for(
+    settings: RunnerProviderSettings,
+    provider: AsyncCloseable,
+) -> MemoryReconstructor:
+    if settings.recording_policy is RecordingPolicy.DETERMINISTIC_FAKE:
+        return DeterministicMemoryReconstructor()
+    if settings.adapter_kind is ProviderAdapterKind.DISABLED:
+        return DeterministicMemoryReconstructor()
+    if settings.recording_policy is RecordingPolicy.LIVE:
+        return LLMMemoryReconstructor(provider)  # type: ignore[arg-type]
+    return DeterministicMemoryReconstructor()
+
+
+def _counterpart_resolver(
+    translator: RegistrationTranslator,
+) -> Callable[[EntityId], AgentId | None]:
+    def resolve(entity_id: EntityId) -> AgentId | None:
+        try:
+            return translator.to_agent_id(entity_id)
+        except KeyError:
+            return None
+
+    return resolve
+
+
 @dataclass(frozen=True, slots=True)
 class _AgentBundle:
     """Owner-scoped services for one registered agent."""
 
     runtime: AgentRuntime
-    memory_service: InMemoryMemoryService
-    belief_service: InMemorySemanticBeliefService
-    relationship_service: InMemoryRelationshipService
-    subjective_state: InMemorySubjectiveStateService
+    bundle: SubjectiveOwnerBundle
+    memory_service: MemoryService
+    belief_service: SemanticBeliefService
+    relationship_service: RelationshipService
+    subjective_state: SubjectiveStateService
 
 
 class SimulationRunner:
@@ -325,12 +507,17 @@ class SimulationRunner:
         "_agents",
         "_bootstrap",
         "_closed",
+        "_cognition_counters",
         "_config",
+        "_crash_hook",
         "_diagnostics",
         "_durable",
         "_engine",
+        "_finalized_tick_receipts",
+        "_goal_transition_receipts",
         "_injected_stop",
         "_intervention_arbiter",
+        "_observation_sink",
         "_pending_finalizations",
         "_provider",
         "_run_config",
@@ -354,6 +541,8 @@ class SimulationRunner:
         diagnostics: object,
         durable: PersistentSimulationService | None = None,
         pending_finalizations: PendingFinalizationRepository | None = None,
+        observation_sink: ExperimentalObservationSink | None = None,
+        crash_hook: Callable[[RunnerCrashPoint, int | None], None] | None = None,
     ) -> None:
         self._config = config
         self._run_id = run_id
@@ -366,11 +555,20 @@ class SimulationRunner:
         self._diagnostics = diagnostics
         self._durable = durable
         self._pending_finalizations = pending_finalizations
+        self._observation_sink = (
+            observation_sink
+            if observation_sink is not None
+            else ExperimentalObservationSink()
+        )
+        self._crash_hook = crash_hook
         self._closed = False
         self._started = False
         self._ticks_committed = 0
         self._injected_stop = False
         self._intervention_arbiter: object | None = None
+        self._finalized_tick_receipts: list[FinalizedTickReceipt] = []
+        self._goal_transition_receipts: list[GoalTransitionReceipt] = []
+        self._cognition_counters = CognitionCounters()
 
     @property
     def config(self) -> SimulationRunnerConfig:
@@ -486,6 +684,16 @@ class SimulationRunner:
             stage = "agents"
             memory_run_id = MemoryRunId(resolved_run_id.value)
             scoring_policy = _default_scoring_policy()
+            allow_provider = (
+                config.provider.recording_policy is RecordingPolicy.LIVE
+                and config.provider.adapter_kind
+                is ProviderAdapterKind.OPENAI_COMPATIBLE
+            )
+            reconstruction_policy = _default_reconstruction_policy(
+                allow_provider=allow_provider
+            )
+            reconstructor = _reconstructor_for(config.provider, provider)
+            counterpart = _counterpart_resolver(translator)
             runtimes: list[AgentRuntime] = []
 
             for ordinal, agent_spec in enumerate(config.agents):
@@ -497,17 +705,19 @@ class SimulationRunner:
                         stage=stage,
                     )
                 scope = MemoryScope(run_id=memory_run_id, owner_id=owner)
-                memory_service = InMemoryMemoryService(scope)
-                belief_service = InMemorySemanticBeliefService(scope)
-                relationship_service = InMemoryRelationshipService(owner)
-                subjective = InMemorySubjectiveStateService(
+                memory_service = deps.create_memory_service(
+                    scope, reconstructor=reconstructor
+                )
+                belief_service = deps.create_belief_service(scope)
+                relationship_service = deps.create_relationship_service(owner)
+                owner_bundle = deps.create_subjective_bundle(
                     scope,
                     memory_service=memory_service,
                     belief_service=belief_service,
                     relationship_service=relationship_service,
                 )
-                memory_store = MemoryStore(owner)
-                belief_store = BeliefStore(owner)
+                # Legacy Belief store remains available for WRITE_BELIEF intents only.
+                legacy_beliefs = BeliefStore(owner)
                 loop_config = _cognition_config_for(
                     agent_spec.cognition,
                     mortality_mode=config.mortality_mode,
@@ -516,44 +726,54 @@ class SimulationRunner:
                     agent_spec.cognition.memory_mode,
                     memory_service=memory_service,
                     scoring_policy=scoring_policy,
+                    reconstruction_policy=reconstruction_policy,
+                    belief_reader=None,
                 )
                 cognitive_loop = build_cognitive_loop(
                     loop_config,
                     memory=memory_retriever,
+                    resolve_counterpart=counterpart,
                 )
                 agent = Agent(
                     agent_id=owner,
-                    name=owner.value,
-                    goals=(),
+                    name=(
+                        agent_spec.name if agent_spec.name is not None else owner.value
+                    ),
+                    goals=agent_spec.initial_goals,
                     drives=agent_spec.cognition.resolve_drive_profile(),
                 )
                 runtime = AgentRuntime(
                     agent=agent,
                     translator=translator,
                     cognitive_loop=cognitive_loop,
-                    memory_reader=memory_store,
-                    memory_writer=memory_store,
-                    belief_reader=belief_store,
-                    belief_writer=belief_store,
+                    memory_reader=owner_bundle.memory_reader,
+                    memory_writer=MemoryStore(owner),
+                    belief_reader=legacy_beliefs,
+                    belief_writer=legacy_beliefs,
                     memory_service=memory_service,
-                    subjective_state=subjective,
+                    semantic_belief_reader=owner_bundle.semantic_belief_reader,
+                    relationship_reader=owner_bundle.relationship_reader,
+                    subjective_state=owner_bundle.commit_service,
                 )
                 bundle = _AgentBundle(
                     runtime=runtime,
+                    bundle=owner_bundle,
                     memory_service=memory_service,
                     belief_service=belief_service,
                     relationship_service=relationship_service,
-                    subjective_state=subjective,
+                    subjective_state=owner_bundle.commit_service,
                 )
                 created_agents.append(bundle)
                 runtimes.append(runtime)
                 _LOG.debug(
                     "runner_agent_constructed ordinal=%s memory_mode=%s "
-                    "imagination_mode=%s mortality_mode=%s",
+                    "imagination_mode=%s mortality_mode=%s "
+                    "allow_provider=%s",
                     ordinal,
                     agent_spec.cognition.memory_mode.value,
                     agent_spec.cognition.imagination_mode.value,
                     config.mortality_mode.value,
+                    allow_provider,
                 )
 
             diagnostics = build_runner_diagnostics(config)
@@ -641,6 +861,28 @@ class SimulationRunner:
         """Attach a trusted pre-admission intervention arbiter (experiments only)."""
         self._intervention_arbiter = arbiter
 
+    def set_crash_hook(
+        self,
+        hook: Callable[[RunnerCrashPoint, int | None], None] | None,
+    ) -> None:
+        """Install a fault-injection hook for recovery tests (never production)."""
+        self._crash_hook = hook
+
+    def set_observation_sink(self, sink: ExperimentalObservationSink) -> None:
+        """Replace the post-finalization observation sink."""
+        if type(sink) is not ExperimentalObservationSink and not hasattr(
+            sink, "deliver"
+        ):
+            raise TypeError("sink must implement deliver()")
+        self._observation_sink = sink
+
+    def _maybe_crash(
+        self, point: RunnerCrashPoint, *, ordinal: int | None = None
+    ) -> None:
+        if self._crash_hook is None:
+            return
+        self._crash_hook(point, ordinal)
+
     def _ensure_started(self) -> None:
         if self._started:
             return
@@ -682,6 +924,7 @@ class SimulationRunner:
         )
 
         pendings: list[PendingRuntimeFinalization] = []
+        commands: list[FinalizationCommand] = []
         submissions: list[ActionSubmission] = []
 
         try:
@@ -707,14 +950,18 @@ class SimulationRunner:
                 pending = await runtime.bind_effective_command(
                     prepared, effective_command=effective
                 )
+                command = pending.to_finalization_command(run_id=self._run_id)
+                assert type(command) is FinalizationCommand
                 pendings.append(pending)
+                commands.append(command)
                 submissions.append(pending.submission)
 
             if not submissions and all(
                 runtime.status is AgentRuntimeStatus.TERMINAL
                 for runtime in self._runtimes
             ):
-                await self._commit_tick(())
+                tick_result = await self._commit_tick(())
+                self._record_finalized_tick(tick_result, pendings=())
                 self._ticks_committed += 1
                 return RunnerAttemptReceipt(
                     tick=tick_value,
@@ -725,39 +972,34 @@ class SimulationRunner:
                 )
 
             if self._pending_finalizations is not None:
-                for pending in pendings:
+                for command in commands:
                     await self._pending_finalizations.append_pending(
-                        _pending_record(self._run_id, pending)
+                        _pending_record_from_command(command)
                     )
                     _LOG.debug(
-                        "runner_pending_recorded run_id=%s tick=%s invocation_id=%s",
+                        "runner_pending_recorded run_id=%s tick=%s "
+                        "invocation_id=%s codec_version=%s",
                         self._run_id.value,
                         tick_value,
-                        pending.invocation_id,
+                        command.invocation_id,
+                        command.codec_version,
                     )
 
-            await self._commit_tick(tuple(submissions))
+            self._maybe_crash(RunnerCrashPoint.BEFORE_OBJECTIVE_COMMIT)
+            tick_result = await self._commit_tick(tuple(submissions))
             _LOG.debug(
                 "runner_tick_committed run_id=%s tick=%s submission_count=%s",
                 self._run_id.value,
                 tick_value,
                 len(submissions),
             )
+            self._maybe_crash(RunnerCrashPoint.AFTER_OBJECTIVE_COMMIT)
 
-            finalized = 0
-            for pending in pendings:
-                await self._runtimes_by_agent(
-                    pending.submission.agent_id
-                ).finalize_pending(pending)
-                if self._pending_finalizations is not None:
-                    await self._pending_finalizations.mark_finalized(
-                        run_id=self._run_id,
-                        agent_id=pending.submission.agent_id.value,
-                        invocation_id=pending.invocation_id,
-                    )
-                finalized += 1
-
-            self._ticks_committed += 1
+            finalized = await self._finalize_and_acknowledge(
+                pendings=tuple(pendings),
+                commands=tuple(commands),
+                tick_result=tick_result,
+            )
             stop_reason = self._evaluate_stop()
             _LOG.info(
                 "runner_tick_finalized run_id=%s tick=%s submission_count=%s "
@@ -775,6 +1017,37 @@ class SimulationRunner:
                 finalized_count=finalized,
                 stop_reason=stop_reason,
             )
+        except RunnerCrashInjected as crash:
+            _LOG.warning(
+                "runner_crash_injected run_id=%s tick=%s point=%s",
+                self._run_id.value,
+                tick_value,
+                crash.point.value,
+            )
+            if crash.point is RunnerCrashPoint.BEFORE_OBJECTIVE_COMMIT:
+                for pending in reversed(pendings):
+                    try:
+                        self._runtimes_by_agent(
+                            pending.submission.agent_id
+                        ).abort_pending(pending)
+                    except AgentRuntimeError:
+                        pass
+                if self._pending_finalizations is not None:
+                    for command in commands:
+                        try:
+                            await self._pending_finalizations.mark_aborted(
+                                run_id=self._run_id,
+                                agent_id=command.agent_id.value,
+                                invocation_id=command.invocation_id,
+                            )
+                        except Exception:
+                            _LOG.error(
+                                "runner_pending_abort_failed run_id=%s "
+                                "invocation_id=%s",
+                                self._run_id.value,
+                                command.invocation_id,
+                            )
+            raise
         except AgentRuntimeError:
             for pending in reversed(pendings):
                 try:
@@ -783,6 +1056,20 @@ class SimulationRunner:
                     )
                 except AgentRuntimeError:
                     pass
+            if self._pending_finalizations is not None:
+                for command in commands:
+                    try:
+                        await self._pending_finalizations.mark_aborted(
+                            run_id=self._run_id,
+                            agent_id=command.agent_id.value,
+                            invocation_id=command.invocation_id,
+                        )
+                    except Exception:
+                        _LOG.error(
+                            "runner_pending_abort_failed run_id=%s invocation_id=%s",
+                            self._run_id.value,
+                            command.invocation_id,
+                        )
             policy = self._config.cognition_failure_policy
             _LOG.error(
                 "runner_cognition_failed run_id=%s tick=%s policy=%s",
@@ -820,6 +1107,284 @@ class SimulationRunner:
                 stop_reason=RunnerStopReasonCode.AUTHORITY_FAILURE,
             )
 
+    async def _finalize_and_acknowledge(
+        self,
+        *,
+        pendings: tuple[PendingRuntimeFinalization, ...],
+        commands: tuple[FinalizationCommand, ...],
+        tick_result: TickResult | None,
+        record_receipt: bool = True,
+    ) -> int:
+        finalized = 0
+        for ordinal, (pending, command) in enumerate(
+            zip(pendings, commands, strict=True)
+        ):
+            self._maybe_crash(
+                RunnerCrashPoint.DURING_OWNER_FINALIZATION, ordinal=ordinal
+            )
+            runtime = self._runtimes_by_agent(pending.submission.agent_id)
+            await runtime.finalize_pending(pending)
+            self._maybe_crash(
+                RunnerCrashPoint.BEFORE_COLLECTOR_PUBLICATION, ordinal=ordinal
+            )
+            assert command.delivery_id is not None
+            assert command.delivery_content_hash is not None
+            delivery = ObservationDelivery(
+                delivery_id=command.delivery_id,
+                content_hash=command.delivery_content_hash,
+                tick=command.tick,
+                kind="finalized_tick_owner",
+            )
+            ack = self._observation_sink.deliver(delivery)
+            _LOG.debug(
+                "runner_delivery_ack run_id=%s tick=%s delivery_id=%s",
+                self._run_id.value,
+                command.tick,
+                ack.delivery_id,
+            )
+            self._maybe_crash(RunnerCrashPoint.AFTER_ACKNOWLEDGEMENT, ordinal=ordinal)
+            if self._pending_finalizations is not None:
+                await self._pending_finalizations.mark_finalized(
+                    run_id=self._run_id,
+                    agent_id=command.agent_id.value,
+                    invocation_id=command.invocation_id,
+                )
+            finalized += 1
+            _LOG.info(
+                "runner_owner_finalized run_id=%s tick=%s invocation_id=%s ordinal=%s",
+                self._run_id.value,
+                command.tick,
+                command.invocation_id,
+                ordinal,
+            )
+        if record_receipt and tick_result is not None:
+            already = any(
+                receipt.tick == tick_result.tick.value
+                for receipt in self._finalized_tick_receipts
+            )
+            if not already:
+                self._record_finalized_tick(tick_result, pendings=pendings)
+            if self._ticks_committed <= tick_result.tick.value:
+                self._ticks_committed = tick_result.tick.value + 1
+        return finalized
+
+    async def recover_pending_finalizations(self) -> RunnerAttemptReceipt:
+        """Complete pending subjective finalizations without rerunning cognition.
+
+        Distinguishes pending-subjective recovery from continued execution.
+        Committed objective history is never rolled back or duplicated.
+        """
+        self._ensure_started()
+        if self._pending_finalizations is None:
+            plan = classify_resume_mode(
+                run_id=self._run_id,
+                ticks_committed=self._ticks_committed,
+                engine_tick=self._engine.tick.value,
+                pending_count=0,
+                pending_tick=None,
+            )
+            _LOG.debug(
+                "runner_recovery_noop run_id=%s mode=%s ticks_committed=%s",
+                self._run_id.value,
+                plan.mode.value,
+                self._ticks_committed,
+            )
+            return RunnerAttemptReceipt(
+                tick=self._ticks_committed,
+                status=RunnerAttemptStatus.FINALIZED,
+                submission_count=0,
+                finalized_count=0,
+            )
+
+        records = await self._pending_finalizations.list_pending_for_run(
+            run_id=self._run_id
+        )
+        plan = classify_resume_mode(
+            run_id=self._run_id,
+            ticks_committed=self._ticks_committed,
+            engine_tick=self._engine.tick.value,
+            pending_count=len(records),
+            pending_tick=None if not records else records[0].tick,
+        )
+        _LOG.debug(
+            "runner_recovery_boundary run_id=%s mode=%s pending_count=%s "
+            "ticks_committed=%s engine_tick=%s",
+            self._run_id.value,
+            plan.mode.value,
+            plan.pending_count,
+            plan.ticks_committed,
+            self._engine.tick.value,
+        )
+        if plan.mode is ResumeMode.CONTINUED_EXECUTION:
+            return RunnerAttemptReceipt(
+                tick=self._ticks_committed,
+                status=RunnerAttemptStatus.FINALIZED,
+                submission_count=0,
+                finalized_count=0,
+            )
+        if plan.mode is ResumeMode.OBJECTIVE_REPLAY:
+            _LOG.info(
+                "runner_objective_replay_required run_id=%s ticks_committed=%s "
+                "engine_tick=%s",
+                self._run_id.value,
+                self._ticks_committed,
+                self._engine.tick.value,
+            )
+            # Objective authority already advanced; align runner cursor only.
+            self._ticks_committed = self._engine.tick.value
+            return RunnerAttemptReceipt(
+                tick=self._ticks_committed,
+                status=RunnerAttemptStatus.FINALIZED,
+                submission_count=0,
+                finalized_count=0,
+            )
+
+        # PENDING_SUBJECTIVE_RECOVERY
+        by_tick: dict[int, list[FinalizationCommand]] = {}
+        for record in records:
+            command = _command_from_pending_record(record)
+            by_tick.setdefault(command.tick, []).append(command)
+
+        total_finalized = 0
+        last_tick = self._ticks_committed
+        for tick in sorted(by_tick):
+            commands = tuple(by_tick[tick])
+            pendings: list[PendingRuntimeFinalization] = []
+            for command in commands:
+                runtime = self._runtimes_by_agent(command.agent_id)
+                pending = runtime.restore_pending_from_command(command)
+                pendings.append(pending)
+            # Objective already committed for this tick; synthesize receipt cursor.
+            resulting_tick = Tick(tick + 1)
+            if self._engine.tick.value < resulting_tick.value:
+                _LOG.error(
+                    "runner_recovery_corrupt run_id=%s code=objective_not_committed "
+                    "tick=%s engine_tick=%s",
+                    self._run_id.value,
+                    tick,
+                    self._engine.tick.value,
+                )
+                for command in commands:
+                    await self._pending_finalizations.mark_aborted(
+                        run_id=self._run_id,
+                        agent_id=command.agent_id.value,
+                        invocation_id=command.invocation_id,
+                    )
+                return RunnerAttemptReceipt(
+                    tick=tick,
+                    status=RunnerAttemptStatus.ABORTED,
+                    submission_count=len(commands),
+                    finalized_count=0,
+                    stop_reason=RunnerStopReasonCode.AUTHORITY_FAILURE,
+                )
+            revision = self._engine.revision
+            tick_result = TickResult(
+                tick=Tick(tick),
+                resulting_tick=resulting_tick,
+                base_revision=WorldRevision(max(0, revision.value - 1)),
+                resulting_revision=revision if revision.value > 0 else WorldRevision(0),
+                resolutions=(),
+                events=(),
+            )
+            # Fix revision pairing when engine revision did not advance.
+            if tick_result.resulting_revision.value < tick_result.base_revision.value:
+                tick_result = TickResult(
+                    tick=Tick(tick),
+                    resulting_tick=resulting_tick,
+                    base_revision=WorldRevision(0),
+                    resulting_revision=WorldRevision(0),
+                    resolutions=(),
+                    events=(),
+                )
+            elif (
+                tick_result.resulting_revision.value
+                > tick_result.base_revision.value + 1
+            ):
+                tick_result = TickResult(
+                    tick=Tick(tick),
+                    resulting_tick=resulting_tick,
+                    base_revision=WorldRevision(revision.value),
+                    resulting_revision=WorldRevision(revision.value),
+                    resolutions=(),
+                    events=(),
+                )
+            finalized = await self._finalize_and_acknowledge(
+                pendings=tuple(pendings),
+                commands=commands,
+                tick_result=tick_result,
+            )
+            total_finalized += finalized
+            last_tick = tick
+            _LOG.info(
+                "runner_pending_recovered run_id=%s tick=%s finalized_count=%s",
+                self._run_id.value,
+                tick,
+                finalized,
+            )
+        return RunnerAttemptReceipt(
+            tick=last_tick,
+            status=RunnerAttemptStatus.FINALIZED,
+            submission_count=total_finalized,
+            finalized_count=total_finalized,
+            stop_reason=self._evaluate_stop(),
+        )
+
+    def export_runtime_checkpoint(self) -> RunnerRuntimeCheckpoint:
+        """Export rehydratable runner state (no subjective payloads)."""
+        pending_tick = None
+        pending_count = 0
+        states = tuple(
+            runtime.export_runtime_checkpoint() for runtime in self._runtimes
+        )
+        return RunnerRuntimeCheckpoint(
+            run_id=self._run_id,
+            ticks_committed=self._ticks_committed,
+            engine_tick=self._engine.tick.value,
+            engine_revision=self._engine.revision.value,
+            runtime_states=states,  # type: ignore[arg-type]
+            finalized_tick_receipts=tuple(self._finalized_tick_receipts),
+            goal_transition_receipts=tuple(self._goal_transition_receipts),
+            cognition_counters=self._cognition_counters,
+            pending_tick=pending_tick,
+            pending_count=pending_count,
+        )
+
+    def apply_runtime_checkpoint(self, checkpoint: RunnerRuntimeCheckpoint) -> None:
+        """Restore runner cursors and per-owner runtime state after construction."""
+        if type(checkpoint) is not RunnerRuntimeCheckpoint:
+            raise TypeError("checkpoint must be RunnerRuntimeCheckpoint")
+        if checkpoint.run_id != self._run_id:
+            raise ValueError("run_id mismatch")
+        by_agent = {state.agent_id: state for state in checkpoint.runtime_states}
+        for runtime in self._runtimes:
+            state = by_agent.get(runtime.agent_id)
+            if state is None:
+                continue
+            runtime.restore_runtime_checkpoint(state)
+        self._ticks_committed = checkpoint.ticks_committed
+        self._finalized_tick_receipts = list(checkpoint.finalized_tick_receipts)
+        self._goal_transition_receipts = list(checkpoint.goal_transition_receipts)
+        self._cognition_counters = checkpoint.cognition_counters
+        self._started = True
+        _LOG.info(
+            "runner_rehydrated run_id=%s ticks_committed=%s runtime_count=%s",
+            self._run_id.value,
+            self._ticks_committed,
+            len(checkpoint.runtime_states),
+        )
+
+    def classify_resume(
+        self, *, pending_count: int, pending_tick: int | None
+    ) -> RunnerResumePlan:
+        """Classify resume mode from durable pending and engine cursors."""
+        return classify_resume_mode(
+            run_id=self._run_id,
+            ticks_committed=self._ticks_committed,
+            engine_tick=self._engine.tick.value,
+            pending_count=pending_count,
+            pending_tick=pending_tick,
+        )
+
     async def run(self) -> SimulationRunnerResult:
         """Run until a closed stop reason is reached at a finalized boundary."""
         self._ensure_started()
@@ -842,21 +1407,133 @@ class SimulationRunner:
             ):
                 stop_reason = RunnerStopReasonCode.MAX_TICKS
         assert stop_reason is not None
+        projection = self.final_objective_projection()
+        objective_hash = objective_projection_hash(projection)
+        goal_receipts = self._evaluate_goals_at_boundary(
+            tick=max(0, self._ticks_committed - 1) if self._ticks_committed else 0,
+            run_ending=True,
+            projection=projection,
+        )
+        self._goal_transition_receipts.extend(goal_receipts)
         result = SimulationRunnerResult(
             run_id=self._run_id,
             ticks_committed=self._ticks_committed,
             stop_reason=stop_reason,
             attempt_receipts=tuple(receipts),
+            finalized_tick_receipts=tuple(self._finalized_tick_receipts),
+            goal_transition_receipts=tuple(self._goal_transition_receipts),
+            cognition_counters=self._cognition_counters,
+            final_objective_projection=projection,
+            objective_state_hash=objective_hash,
         )
         _LOG.info(
             "runner_finished run_id=%s ticks_committed=%s stop_reason=%s "
-            "attempt_count=%s",
+            "attempt_count=%s finalized_tick_count=%s goal_transition_count=%s "
+            "objective_hash_prefix=%s",
             self._run_id.value,
             self._ticks_committed,
             stop_reason.value,
             len(receipts),
+            len(self._finalized_tick_receipts),
+            len(self._goal_transition_receipts),
+            objective_hash[:12],
         )
         return result
+
+    def final_objective_projection(self) -> DetachedObjectiveProjection:
+        """Detached final objective projection without private engine access."""
+        return build_detached_objective_projection(
+            tick=self._engine.tick.value,
+            revision=self._engine.revision.value,
+            bodies=self._engine.detached_bodies(),
+        )
+
+    def _record_finalized_tick(
+        self,
+        tick_result: TickResult,
+        *,
+        pendings: tuple[PendingRuntimeFinalization, ...],
+    ) -> None:
+        projection = build_detached_objective_projection(
+            tick=tick_result.resulting_tick.value,
+            revision=tick_result.resulting_revision.value,
+            bodies=self._engine.detached_bodies(),
+        )
+        state_hash = objective_projection_hash(projection)
+        receipt = FinalizedTickReceipt(
+            tick=tick_result.tick.value,
+            resulting_tick=tick_result.resulting_tick.value,
+            base_revision=tick_result.base_revision.value,
+            resulting_revision=tick_result.resulting_revision.value,
+            resolutions=tuple(
+                detach_action_resolution_evidence(item)
+                for item in tick_result.resolutions
+            ),
+            objective_state_hash=state_hash,
+            event_count=len(tick_result.events),
+        )
+        self._finalized_tick_receipts.append(receipt)
+        cognition_invocations = self._cognition_counters.cognition_invocations
+        imagination_evaluations = self._cognition_counters.imagination_evaluations
+        imagined_future_count = self._cognition_counters.imagined_future_count
+        for pending in pendings:
+            cognition_invocations += 1
+            if pending.has_futures_boundary:
+                imagination_evaluations += 1
+            else:
+                for record in pending.loop_result.boundary_records:
+                    if record.component_kind is ComponentKind.FUTURES:
+                        imagination_evaluations += 1
+                        break
+            # Imagined futures are not exposed on CognitiveLoopResult; count
+            # FUTURES stage completions only (never GoalEffect as outcomes).
+        self._cognition_counters = CognitionCounters(
+            cognition_invocations=cognition_invocations,
+            imagination_evaluations=imagination_evaluations,
+            imagined_future_count=imagined_future_count,
+        )
+        mid_receipts = self._evaluate_goals_at_boundary(
+            tick=tick_result.tick.value,
+            run_ending=False,
+            projection=projection,
+        )
+        self._goal_transition_receipts.extend(mid_receipts)
+        _LOG.debug(
+            "finalized_tick_receipt run_id=%s tick=%s resolution_count=%s "
+            "event_count=%s objective_hash_prefix=%s cognition_invocations=%s",
+            self._run_id.value,
+            receipt.tick,
+            len(receipt.resolutions),
+            receipt.event_count,
+            state_hash[:12],
+            cognition_invocations,
+        )
+
+    def _evaluate_goals_at_boundary(
+        self,
+        *,
+        tick: int,
+        run_ending: bool,
+        projection: DetachedObjectiveProjection,
+    ) -> tuple[GoalTransitionReceipt, ...]:
+        goals: list[Goal] = []
+        completed_ids = {item.goal_id for item in self._goal_transition_receipts}
+        for runtime in self._runtimes:
+            for goal in runtime.agent.goals:
+                if goal.goal_id in completed_ids:
+                    continue
+                if goal.status is GoalStatus.ACTIVE:
+                    goals.append(goal)
+        owner_entity_ids = {
+            agent.agent_id.value: agent.entity_id.value for agent in self._config.agents
+        }
+        evidence = GoalEvaluationEvidence(
+            tick=tick,
+            run_ending=run_ending,
+            owner_entity_ids=owner_entity_ids,
+            bodies=projection.bodies,
+        )
+        return evaluate_goals_after_finalization(tuple(goals), evidence)
 
     def _evaluate_stop(self) -> RunnerStopReasonCode | None:
         if self._injected_stop and self._config.stop_policy.allow_injected_stop:
@@ -878,7 +1555,9 @@ class SimulationRunner:
             stage="runtime_lookup",
         )
 
-    async def _commit_tick(self, submissions: tuple[ActionSubmission, ...]) -> None:
+    async def _commit_tick(
+        self, submissions: tuple[ActionSubmission, ...]
+    ) -> TickResult:
         """Commit through exactly one authority path; never fall back."""
         if self._durable is not None:
             if self._durable.fenced:
@@ -886,9 +1565,42 @@ class SimulationRunner:
                     RunnerConstructionErrorCode.DURABLE_UNSUPPORTED,
                     stage="fenced",
                 )
-            await self._durable.resolve_tick(submissions)
-            return
-        self._engine.resolve_tick(submissions)
+            checkpoint_id: SnapshotId | None = None
+            policy = self._config.persistence.checkpoint
+            next_committed = self._ticks_committed + 1
+            if (
+                policy.enabled
+                and policy.cadence_ticks is not None
+                and next_committed % policy.cadence_ticks == 0
+            ):
+                checkpoint_id = SnapshotId(
+                    f"ckpt-{self._run_id.value}-t{next_committed}"
+                )
+                _LOG.debug(
+                    "checkpoint_cadence_hit run_id=%s committed_ticks=%s "
+                    "cadence_ticks=%s snapshot_id=%s",
+                    self._run_id.value,
+                    next_committed,
+                    policy.cadence_ticks,
+                    checkpoint_id.value,
+                )
+            await self._durable.resolve_tick(submissions, checkpoint_id=checkpoint_id)
+            if checkpoint_id is not None:
+                _LOG.info(
+                    "runner_checkpoint_committed run_id=%s committed_ticks=%s "
+                    "snapshot_id=%s",
+                    self._run_id.value,
+                    next_committed,
+                    checkpoint_id.value,
+                )
+            result = self._engine.last_tick_result
+            if result is None:
+                raise RunnerConstructionError(
+                    RunnerConstructionErrorCode.INVALID_CONFIG,
+                    stage="missing_tick_result",
+                )
+            return result
+        return self._engine.resolve_tick(submissions)
 
     async def aclose(self) -> None:
         """Close owned providers. Idempotent."""
@@ -921,18 +1633,23 @@ class SimulationRunner:
 def _memory_retriever_for(
     mode: MemoryMode,
     *,
-    memory_service: InMemoryMemoryService,
+    memory_service: MemoryService,
     scoring_policy: MemoryScoringPolicy,
+    reconstruction_policy: MemoryReconstructionPolicy | None = None,
+    belief_reader: object | None = None,
 ) -> ReferenceMemoryRetriever | ScopedMemoryRetriever:
     if mode is MemoryMode.REFERENCE:
         return ReferenceMemoryRetriever(
             memory_service,
             scoring_policy=scoring_policy,
+            belief_reader=belief_reader,  # type: ignore[arg-type]
         )
     if mode is MemoryMode.RECONSTRUCTIVE:
         return ScopedMemoryRetriever(
             memory_service,
             scoring_policy=scoring_policy,
+            reconstruction_policy=reconstruction_policy,
+            belief_reader=belief_reader,  # type: ignore[arg-type]
         )
     raise RunnerConstructionError(
         RunnerConstructionErrorCode.INVALID_CONFIG,
@@ -1033,23 +1750,58 @@ def _bootstrap_snapshot(engine: WorldEngine) -> WorldSnapshot:
     )
 
 
+def _pending_record_from_command(
+    command: FinalizationCommand,
+) -> PendingFinalizationRecord:
+    """Persist the versioned finalization command (privacy-reviewed payload)."""
+    return PendingFinalizationRecord(
+        run_id=command.run_id,
+        agent_id=command.agent_id.value,
+        tick=command.tick,
+        invocation_id=command.invocation_id,
+        integrity_hash=command.integrity_hash,
+        codec_version=PENDING_FINALIZATION_CODEC_VERSION,
+        payload=finalization_command_to_mapping(command),
+        status=PendingFinalizationStatus.PENDING,
+    )
+
+
+def _command_from_pending_record(
+    record: PendingFinalizationRecord,
+) -> FinalizationCommand:
+    """Decode a durable pending row into a finalization command."""
+    if record.codec_version == LEGACY_PENDING_FINALIZATION_CODEC_VERSION:
+        _LOG.error(
+            "runner_recovery_legacy run_id=%s invocation_id=%s codec_version=%s",
+            record.run_id.value,
+            record.invocation_id,
+            record.codec_version,
+        )
+        raise RunnerConstructionError(
+            RunnerConstructionErrorCode.INVALID_CONFIG,
+            stage="legacy_pending_finalization",
+        )
+    if record.codec_version != PENDING_FINALIZATION_CODEC_VERSION:
+        _LOG.error(
+            "runner_recovery_corrupt run_id=%s code=unsupported_codec "
+            "invocation_id=%s codec_version=%s",
+            record.run_id.value,
+            record.invocation_id,
+            record.codec_version,
+        )
+        raise RunnerConstructionError(
+            RunnerConstructionErrorCode.INVALID_CONFIG,
+            stage="pending_codec",
+        )
+    command = decode_finalization_command(record.payload)
+    assert type(command) is FinalizationCommand
+    return command
+
+
 def _pending_record(
     run_id: RunId, pending: PendingRuntimeFinalization
 ) -> PendingFinalizationRecord:
-    """Metadata-only outbox envelope (no memory/prompt payloads)."""
-    return PendingFinalizationRecord(
-        run_id=run_id,
-        agent_id=pending.submission.agent_id.value,
-        tick=pending.tick,
-        invocation_id=pending.invocation_id,
-        integrity_hash=pending.integrity_hash,
-        codec_version=PENDING_FINALIZATION_CODEC_VERSION,
-        payload={
-            "observation_key": list(pending.observation_key),
-            "effective_command_kind": pending.effective_command_kind,
-            "prior_status": pending.prior_status.value,
-            "next_status": pending.next_status.value,
-            "has_subjective_batch": pending.subjective_batch is not None,
-        },
-        status=PendingFinalizationStatus.PENDING,
-    )
+    """Compatibility wrapper: encode the full finalization command."""
+    command = pending.to_finalization_command(run_id=run_id)
+    assert type(command) is FinalizationCommand
+    return _pending_record_from_command(command)

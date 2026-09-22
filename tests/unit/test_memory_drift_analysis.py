@@ -239,6 +239,8 @@ def test_build_reconstruction_chains_traverses_ordered_edges() -> None:
         reconstructions=(evidence,),
         edges=(
             SubjectiveDerivationEdge(
+                run_id="run-1",
+                owner_id="agent-1",
                 derived_memory_id="m-derived",
                 source_memory_id="m-root",
                 ordinal=0,

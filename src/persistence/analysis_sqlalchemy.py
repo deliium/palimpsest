@@ -1,20 +1,25 @@
 """Read-only SQLAlchemy loader for experiment memory-drift analysis.
 
 SELECT-only. Fail closed when experiment/run membership is missing. Does not
-import analysis types; callers map the snapshot into analysis evidence sources.
-Never logs event details, memory content, narratives, or SQL parameters.
+import analysis types; callers map the snapshot into analysis evidence sources
+via ``experiments.composition``. Never logs event details, memory content,
+narratives, or SQL parameters.
 """
 
 from __future__ import annotations
 
 import logging
 from collections.abc import Sequence
-from dataclasses import dataclass
 from typing import Final, cast
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
+from experiments.persistence import (
+    PersistedAnalysisSnapshot,
+    PersistedDerivationEdge,
+    PersistedReconstructionRow,
+)
 from infrastructure.database import session_scope
 from memory.models import (
     AgentId,
@@ -59,52 +64,6 @@ __all__ = [
 ]
 
 _LOG: Final[logging.Logger] = logging.getLogger("persistence.analysis_sqlalchemy")
-
-
-@dataclass(frozen=True, slots=True)
-class PersistedDerivationEdge:
-    derived_memory_id: str
-    source_memory_id: str
-    ordinal: int
-    reconstruction_id: str | None
-
-
-@dataclass(frozen=True, slots=True)
-class PersistedReconstructionRow:
-    reconstruction_id: str
-    source_memory_ids: tuple[str, ...]
-    created_tick: int
-    generation: int
-    policy_id: str
-    policy_version: str
-    used_provider: bool
-    fallback_used: bool
-    prompt_version: str | None
-    schema_version: str | None
-    payload_sha256: str
-
-
-@dataclass(frozen=True, slots=True)
-class PersistedAnalysisSnapshot:
-    """Detached subjective + objective evidence for one experiment membership."""
-
-    experiment_id: str
-    run_id: str
-    owner_id: str
-    traces: tuple[MemoryTrace, ...]
-    reconstructions: tuple[PersistedReconstructionRow, ...]
-    derivation_edges: tuple[PersistedDerivationEdge, ...]
-    events: tuple[object, ...]
-
-    def __repr__(self) -> str:
-        return (
-            f"PersistedAnalysisSnapshot(experiment_id={self.experiment_id!r}, "
-            f"run_id={self.run_id!r}, owner_id={self.owner_id!r}, "
-            f"trace_count={len(self.traces)}, "
-            f"reconstruction_count={len(self.reconstructions)}, "
-            f"edge_count={len(self.derivation_edges)}, "
-            f"event_count={len(self.events)})"
-        )
 
 
 class SqlAlchemyAnalysisEvidenceLoader:

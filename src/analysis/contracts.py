@@ -1,4 +1,9 @@
-"""Read-only analysis ports. No live aggregates or mutable repositories."""
+"""Read-only analysis ports. No live aggregates or mutable repositories.
+
+Evidence composition (persistence readers → these ports) lives in
+``experiments.composition``. Analysis must never import persistence; persistence
+must never import analysis; API must never import analysis.
+"""
 
 from __future__ import annotations
 

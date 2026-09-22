@@ -63,6 +63,7 @@ __all__ = [
     "ACCEPTED_PERSISTENCE_CODEC_VERSIONS",
     "ACCEPTED_PROJECTOR_VERSIONS",
     "EVENT_SCHEMA_VERSION",
+    "LEGACY_PENDING_FINALIZATION_CODEC_VERSION",
     "PENDING_FINALIZATION_CODEC_VERSION",
     "PERSISTENCE_CODEC_VERSION",
     "PROJECTOR_VERSION",
@@ -75,6 +76,8 @@ __all__ = [
     "PendingFinalizationRecord",
     "PendingFinalizationRepository",
     "PendingFinalizationStatus",
+    "ReplayCommitPage",
+    "ReplayEventPage",
     "ReplayFallbackPolicy",
     "ReplayMode",
     "ReplayRequest",
@@ -797,6 +800,80 @@ class TickJournalRepository(Protocol):
     ) -> tuple[TickCommit, ...]: ...
 
 
+@dataclass(frozen=True, slots=True)
+class ReplayEventPage:
+    """Detached page of objective events for inspection without a live engine."""
+
+    run_id: RunId
+    from_tick: Tick
+    to_tick: Tick | None
+    limit: int
+    offset: int
+    events: tuple[WorldEvent, ...]
+    next_offset: int | None
+
+    def __post_init__(self) -> None:
+        if type(self.run_id) is not RunId:
+            raise TypeError("ReplayEventPage.run_id must be RunId")
+        if type(self.from_tick) is not Tick:
+            raise TypeError("ReplayEventPage.from_tick must be Tick")
+        if self.to_tick is not None and type(self.to_tick) is not Tick:
+            raise TypeError("ReplayEventPage.to_tick must be Tick or None")
+        object.__setattr__(
+            self,
+            "limit",
+            require_exact_nonneg_int("ReplayEventPage.limit", self.limit),
+        )
+        object.__setattr__(
+            self,
+            "offset",
+            require_exact_nonneg_int("ReplayEventPage.offset", self.offset),
+        )
+        if isinstance(self.events, (set, frozenset)):
+            raise TypeError("events must be ordered")
+        events = tuple(self.events)
+        for item in events:
+            if type(item) is not WorldEvent:
+                raise TypeError("events entries must be WorldEvent")
+        object.__setattr__(self, "events", events)
+        if self.next_offset is not None:
+            object.__setattr__(
+                self,
+                "next_offset",
+                require_exact_nonneg_int(
+                    "ReplayEventPage.next_offset", self.next_offset
+                ),
+            )
+
+
+@dataclass(frozen=True, slots=True)
+class ReplayCommitPage:
+    """Detached page of tick commits for inspection without a live engine."""
+
+    run_id: RunId
+    from_tick: Tick
+    to_tick: Tick | None
+    commits: tuple[TickCommit, ...]
+    next_from_tick: Tick | None
+
+    def __post_init__(self) -> None:
+        if type(self.run_id) is not RunId:
+            raise TypeError("ReplayCommitPage.run_id must be RunId")
+        if type(self.from_tick) is not Tick:
+            raise TypeError("ReplayCommitPage.from_tick must be Tick")
+        if self.to_tick is not None and type(self.to_tick) is not Tick:
+            raise TypeError("ReplayCommitPage.to_tick must be Tick or None")
+        if isinstance(self.commits, (set, frozenset)):
+            raise TypeError("commits must be ordered")
+        commits = tuple(self.commits)
+        for item in commits:
+            if type(item) is not TickCommit:
+                raise TypeError("commits entries must be TickCommit")
+        object.__setattr__(self, "commits", commits)
+        if self.next_from_tick is not None and type(self.next_from_tick) is not Tick:
+            raise TypeError("next_from_tick must be Tick or None")
+
+
 class SnapshotRepository(Protocol):
     """Immutable checkpoint lookup."""
 
@@ -831,7 +908,8 @@ class PendingFinalizationStatus(StrEnum):
     ABORTED = "aborted"
 
 
-PENDING_FINALIZATION_CODEC_VERSION: Final[str] = "pending-finalization-v1"
+PENDING_FINALIZATION_CODEC_VERSION: Final[str] = "finalization-command-v1"
+LEGACY_PENDING_FINALIZATION_CODEC_VERSION: Final[str] = "pending-finalization-v1"
 
 
 @dataclass(frozen=True, slots=True)
@@ -909,6 +987,10 @@ class PendingFinalizationRepository(Protocol):
 
     async def list_pending_for_tick(
         self, *, run_id: RunId, tick: int
+    ) -> tuple[PendingFinalizationRecord, ...]: ...
+
+    async def list_pending_for_run(
+        self, *, run_id: RunId
     ) -> tuple[PendingFinalizationRecord, ...]: ...
 
 

@@ -69,6 +69,17 @@ class InMemoryPendingFinalizationRepository:
         items.sort(key=lambda item: (item.agent_id, item.invocation_id))
         return tuple(items)
 
+    async def list_pending_for_run(
+        self, *, run_id: RunId
+    ) -> tuple[PendingFinalizationRecord, ...]:
+        items = [
+            row
+            for row in self._rows.values()
+            if row.run_id == run_id and row.status is PendingFinalizationStatus.PENDING
+        ]
+        items.sort(key=lambda item: (item.tick, item.agent_id, item.invocation_id))
+        return tuple(items)
+
     async def _mark(
         self,
         *,

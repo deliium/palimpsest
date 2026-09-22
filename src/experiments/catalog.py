@@ -54,6 +54,8 @@ def _with_agent_modes(
                 agent_id=agent.agent_id,
                 entity_id=agent.entity_id,
                 cognition=cognition,
+                name=agent.name,
+                initial_goals=agent.initial_goals,
             )
         )
     return SimulationRunnerConfig(

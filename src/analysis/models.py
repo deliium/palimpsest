@@ -1,4 +1,4 @@
-"""Immutable reconstruction-chain and memory-drift analysis DTOs.
+"""Immutable reconstruction-chain, metric-document, and memory-drift DTOs.
 
 Domain values are log-free. Safe ``repr`` exposes IDs, counts, versions, and
 status codes only — never narratives, event details, or memory payloads.
@@ -6,22 +6,32 @@ status codes only — never narratives, event details, or memory payloads.
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from dataclasses import dataclass
 from enum import StrEnum
+from types import MappingProxyType
 from typing import Final
 
+from analysis.evidence import EvidenceStage, require_evidence_stage
+from analysis.numerical import library_versions, quantize_float, require_finite
 from world.identifiers import require_exact_nonneg_int, require_stable_id
 
 __all__ = [
     "DRIFT_METRIC_VERSION",
     "EVENT_FACT_PROJECTOR_VERSION",
+    "METRIC_DOCUMENT_SCHEMA_VERSION",
     "SOCIAL_TRANSMISSION_METRIC_VERSION",
     "ChainNodeKind",
     "ComparisonStatus",
     "DriftDelta",
     "DriftStep",
+    "EvidenceStage",
     "FactAvailability",
     "MemoryDriftReport",
+    "MetricAvailability",
+    "MetricCoverage",
+    "MetricDocument",
+    "MetricProvenance",
     "ObjectiveLinkStatus",
     "ReconstructionChain",
     "ReconstructionChainNode",
@@ -32,6 +42,8 @@ __all__ = [
     "TransmissionDistortion",
     "TransmissionHopRecord",
 ]
+
+METRIC_DOCUMENT_SCHEMA_VERSION: Final[str] = "1"
 
 DRIFT_METRIC_VERSION: Final[str] = "1"
 EVENT_FACT_PROJECTOR_VERSION: Final[str] = "1"
@@ -385,14 +397,30 @@ class MemoryDriftReport:
 
 @dataclass(frozen=True, slots=True)
 class SubjectiveDerivationEdge:
-    """Ordered direct derivation edge for provenance traversal."""
+    """Ordered direct derivation edge for provenance traversal.
 
+    Edges always carry run/owner scope so in-memory and durable stores can key
+    and filter without post-hoc unscoped scans.
+    """
+
+    run_id: str
+    owner_id: str
     derived_memory_id: str
     source_memory_id: str
     ordinal: int
     reconstruction_id: str | None = None
 
     def __post_init__(self) -> None:
+        object.__setattr__(
+            self,
+            "run_id",
+            require_stable_id("SubjectiveDerivationEdge.run_id", self.run_id),
+        )
+        object.__setattr__(
+            self,
+            "owner_id",
+            require_stable_id("SubjectiveDerivationEdge.owner_id", self.owner_id),
+        )
         object.__setattr__(
             self,
             "derived_memory_id",
@@ -426,9 +454,211 @@ class SubjectiveDerivationEdge:
 
     def __repr__(self) -> str:
         return (
-            f"SubjectiveDerivationEdge(derived_memory_id={self.derived_memory_id!r}, "
+            f"SubjectiveDerivationEdge(run_id={self.run_id!r}, "
+            f"owner_id={self.owner_id!r}, "
+            f"derived_memory_id={self.derived_memory_id!r}, "
             f"source_memory_id={self.source_memory_id!r}, ordinal={self.ordinal}, "
             f"has_reconstruction={self.reconstruction_id is not None})"
+        )
+
+
+class MetricAvailability(StrEnum):
+    """Whether a metric result is fully known, missing, unknown, or partial."""
+
+    PRESENT = "present"
+    ABSENT = "absent"
+    UNKNOWN = "unknown"
+    PARTIAL = "partial"
+
+
+@dataclass(frozen=True, slots=True)
+class MetricCoverage:
+    """Observed-versus-expected coverage for one metric denominator."""
+
+    observed: int
+    expected: int
+    ratio: float | None = None
+
+    def __post_init__(self) -> None:
+        object.__setattr__(
+            self,
+            "observed",
+            require_exact_nonneg_int("MetricCoverage.observed", self.observed),
+        )
+        object.__setattr__(
+            self,
+            "expected",
+            require_exact_nonneg_int("MetricCoverage.expected", self.expected),
+        )
+        if self.ratio is not None:
+            object.__setattr__(
+                self,
+                "ratio",
+                quantize_float(require_finite(float(self.ratio))),
+            )
+
+    def __repr__(self) -> str:
+        return (
+            f"MetricCoverage(observed={self.observed}, expected={self.expected}, "
+            f"has_ratio={self.ratio is not None})"
+        )
+
+
+@dataclass(frozen=True, slots=True)
+class MetricProvenance:
+    """Stable provenance metadata without embedding evidence payloads."""
+
+    source_kind: str
+    source_ids: tuple[str, ...]
+    notes_code: str | None = None
+
+    def __post_init__(self) -> None:
+        object.__setattr__(
+            self,
+            "source_kind",
+            require_stable_id("MetricProvenance.source_kind", self.source_kind),
+        )
+        ids = tuple(
+            require_stable_id(f"MetricProvenance.source_ids[{index}]", item)
+            for index, item in enumerate(self.source_ids)
+        )
+        object.__setattr__(self, "source_ids", ids)
+        if self.notes_code is not None:
+            object.__setattr__(
+                self,
+                "notes_code",
+                require_stable_id("MetricProvenance.notes_code", self.notes_code),
+            )
+
+    def __repr__(self) -> str:
+        return (
+            f"MetricProvenance(source_kind={self.source_kind!r}, "
+            f"source_id_count={len(self.source_ids)}, "
+            f"notes_code={self.notes_code!r})"
+        )
+
+
+@dataclass(frozen=True, slots=True)
+class MetricDocument:
+    """Immutable, schema-versioned metric result with run scope and coverage."""
+
+    schema_version: str
+    metric_family: str
+    algorithm_version: str
+    library_versions: Mapping[str, str]
+    run_id: str
+    input_revision: str
+    evidence_stages: frozenset[EvidenceStage]
+    population: str
+    denominator: str
+    coverage: MetricCoverage | None
+    availability: MetricAvailability
+    values: Mapping[str, object]
+    provenance: MetricProvenance
+
+    def __post_init__(self) -> None:
+        object.__setattr__(
+            self,
+            "schema_version",
+            require_stable_id("MetricDocument.schema_version", self.schema_version),
+        )
+        if self.schema_version != METRIC_DOCUMENT_SCHEMA_VERSION:
+            raise ValueError("MetricDocument.schema_version: unsupported")
+        object.__setattr__(
+            self,
+            "metric_family",
+            require_stable_id("MetricDocument.metric_family", self.metric_family),
+        )
+        object.__setattr__(
+            self,
+            "algorithm_version",
+            require_stable_id(
+                "MetricDocument.algorithm_version", self.algorithm_version
+            ),
+        )
+        object.__setattr__(
+            self,
+            "run_id",
+            require_stable_id("MetricDocument.run_id", self.run_id),
+        )
+        object.__setattr__(
+            self,
+            "input_revision",
+            require_stable_id("MetricDocument.input_revision", self.input_revision),
+        )
+        object.__setattr__(
+            self,
+            "population",
+            require_stable_id("MetricDocument.population", self.population),
+        )
+        object.__setattr__(
+            self,
+            "denominator",
+            require_stable_id("MetricDocument.denominator", self.denominator),
+        )
+        if type(self.availability) is not MetricAvailability:
+            raise TypeError("MetricDocument.availability: invalid_type")
+        if type(self.provenance) is not MetricProvenance:
+            raise TypeError("MetricDocument.provenance: invalid_type")
+        if self.coverage is not None and type(self.coverage) is not MetricCoverage:
+            raise TypeError("MetricDocument.coverage: invalid_type")
+        if not isinstance(self.evidence_stages, frozenset) or not self.evidence_stages:
+            raise ValueError("MetricDocument.evidence_stages: empty_or_invalid")
+        stages = frozenset(
+            require_evidence_stage("MetricDocument.evidence_stages", stage)
+            for stage in self.evidence_stages
+        )
+        object.__setattr__(self, "evidence_stages", stages)
+
+        if not isinstance(self.library_versions, Mapping) or not self.library_versions:
+            raise ValueError("MetricDocument.library_versions: empty_or_invalid")
+        required_libs = ("numpy", "pandas", "scipy", "networkx")
+        versions: dict[str, str] = {}
+        for lib_key in sorted(self.library_versions):
+            if not isinstance(lib_key, str):
+                raise TypeError("MetricDocument.library_versions: invalid_key")
+            lib_value = self.library_versions[lib_key]
+            if not isinstance(lib_value, str) or not lib_value:
+                raise ValueError("MetricDocument.library_versions: invalid_value")
+            versions[lib_key] = lib_value
+        for name in required_libs:
+            if name not in versions:
+                raise ValueError(f"MetricDocument.library_versions: missing_{name}")
+        object.__setattr__(self, "library_versions", MappingProxyType(versions))
+
+        if not isinstance(self.values, Mapping):
+            raise TypeError("MetricDocument.values: invalid_type")
+        cleaned: dict[str, object] = {}
+        for value_key in sorted(self.values):
+            if not isinstance(value_key, str):
+                raise TypeError("MetricDocument.values: invalid_key")
+            raw_value: object = self.values[value_key]
+            if raw_value is None:
+                cleaned[value_key] = None
+            elif isinstance(raw_value, bool):
+                cleaned[value_key] = raw_value
+            elif isinstance(raw_value, str):
+                cleaned[value_key] = raw_value
+            elif isinstance(raw_value, int) and not isinstance(raw_value, bool):
+                cleaned[value_key] = raw_value
+            elif isinstance(raw_value, float):
+                cleaned[value_key] = quantize_float(require_finite(raw_value))
+            else:
+                raise TypeError("MetricDocument.values: invalid_value")
+        object.__setattr__(self, "values", MappingProxyType(cleaned))
+
+    @staticmethod
+    def default_library_versions() -> Mapping[str, str]:
+        """Installed scientific library versions for new documents."""
+        return library_versions()
+
+    def __repr__(self) -> str:
+        return (
+            f"MetricDocument(schema_version={self.schema_version!r}, "
+            f"metric_family={self.metric_family!r}, run_id={self.run_id!r}, "
+            f"availability={self.availability.value!r}, "
+            f"stage_count={len(self.evidence_stages)}, "
+            f"value_count={len(self.values)})"
         )
 
 

@@ -12,9 +12,16 @@ from enum import StrEnum
 from typing import Final
 
 from agents.models import AgentId
+from analysis.truth import (
+    CLAIM_TRUTH_SCHEMA_VERSION,
+    ClaimExpectedValue,
+    ClaimTruthSpec,
+    ClaimValueKind,
+    TruthEvaluatorPolicy,
+)
 from world.actions import Tell
 from world.communications import StructuredUtterance, origin_utterance
-from world.identifiers import EntityId, require_stable_id
+from world.identifiers import EntityId, require_exact_nonneg_int, require_stable_id
 
 _LOG: Final[logging.Logger] = logging.getLogger("experiments.interventions")
 
@@ -32,11 +39,22 @@ class InterventionStatus(StrEnum):
 
 @dataclass(frozen=True, slots=True)
 class StoryTruthSpec:
-    """Analysis-only truth label. Never exposed to agents or cognition."""
+    """Analysis-only truth label with claim-level identity for metrics.
+
+    Never exposed to agents or cognition. Use ``to_claim_truth`` to export the
+    metric-facing ``ClaimTruthSpec`` owned by ``analysis``.
+    """
 
     intervention_id: str
     is_false: bool
     concept_codes: tuple[str, ...]
+    claim_id: str | None = None
+    valid_from_tick: int = 0
+    valid_to_tick: int | None = None
+    unit: str | None = None
+    tolerance: float | None = None
+    evaluator_policy: TruthEvaluatorPolicy = TruthEvaluatorPolicy.EXACT_MATCH
+    objective_provenance: str | None = None
     policy_version: str = INTERVENTION_POLICY_VERSION
 
     def __post_init__(self) -> None:
@@ -48,6 +66,81 @@ class StoryTruthSpec:
         object.__setattr__(self, "concept_codes", tuple(self.concept_codes))
         for code in self.concept_codes:
             require_stable_id("concept_code", code)
+        claim_id = self.claim_id
+        if claim_id is None:
+            claim_id = f"{self.intervention_id}-claim"
+        object.__setattr__(
+            self,
+            "claim_id",
+            require_stable_id("claim_id", claim_id),
+        )
+        object.__setattr__(
+            self,
+            "valid_from_tick",
+            require_exact_nonneg_int("valid_from_tick", self.valid_from_tick),
+        )
+        if self.valid_to_tick is not None:
+            object.__setattr__(
+                self,
+                "valid_to_tick",
+                require_exact_nonneg_int("valid_to_tick", self.valid_to_tick),
+            )
+            if self.valid_to_tick < self.valid_from_tick:
+                raise ValueError("invalid_validity_interval")
+        if self.unit is not None:
+            object.__setattr__(self, "unit", require_stable_id("unit", self.unit))
+        if self.tolerance is not None:
+            if type(self.tolerance) is not float:
+                raise TypeError("tolerance must be float")
+            if (
+                self.tolerance != self.tolerance
+                or self.tolerance in (float("inf"), float("-inf"))
+                or self.tolerance < 0.0
+            ):
+                raise ValueError("invalid_tolerance")
+        if type(self.evaluator_policy) is not TruthEvaluatorPolicy:
+            raise TypeError("evaluator_policy must be TruthEvaluatorPolicy")
+        if self.objective_provenance is not None:
+            object.__setattr__(
+                self,
+                "objective_provenance",
+                require_stable_id("objective_provenance", self.objective_provenance),
+            )
+
+    def to_claim_truth(self) -> ClaimTruthSpec:
+        """Export analysis-owned claim truth for metric evaluation."""
+        assert self.claim_id is not None
+        expected = ClaimExpectedValue(
+            kind=ClaimValueKind.BOOLEAN,
+            boolean_value=not self.is_false,
+        )
+        spec = ClaimTruthSpec(
+            claim_id=self.claim_id,
+            schema_version=CLAIM_TRUTH_SCHEMA_VERSION,
+            expected=expected,
+            valid_from_tick=self.valid_from_tick,
+            valid_to_tick=self.valid_to_tick,
+            unit=self.unit,
+            tolerance=self.tolerance,
+            evaluator_policy=self.evaluator_policy,
+            intervention_id=self.intervention_id,
+            objective_provenance=self.objective_provenance,
+            concept_codes=self.concept_codes,
+        )
+        _LOG.debug(
+            "story_truth_exported_to_claim",
+            extra={
+                "operation": "StoryTruthSpec.to_claim_truth",
+                "intervention_id": self.intervention_id,
+                "claim_id": self.claim_id,
+                "schema_version": CLAIM_TRUTH_SCHEMA_VERSION,
+                "evaluator_policy": self.evaluator_policy.value,
+                "valid_from_tick": self.valid_from_tick,
+                "has_valid_to_tick": self.valid_to_tick is not None,
+                "concept_count": len(self.concept_codes),
+            },
+        )
+        return spec
 
 
 @dataclass(frozen=True, slots=True)
@@ -183,6 +276,7 @@ def make_false_story_intervention(
         intervention_id=intervention_id,
         is_false=True,
         concept_codes=concepts,
+        valid_from_tick=tick,
     )
     return StoryIntervention(
         intervention_id=intervention_id,

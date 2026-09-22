@@ -133,3 +133,108 @@ def test_cognition_fingerprint_ignores_provider_and_run_identity() -> None:
     assert scenario_fingerprint(left) == scenario_fingerprint(
         _config(memory_mode=MemoryMode.RECONSTRUCTIVE)
     )
+
+
+def test_agent_runner_spec_defaults_name_and_accepts_goals() -> None:
+    from agents.models import Goal, GoalId, GoalOutcome, GoalOutcomeKind, GoalStatus
+
+    agent_id = AgentId("agent-1")
+    goal = Goal(
+        goal_id=GoalId("goal-1"),
+        owner_id=agent_id,
+        description="reach camp",
+        priority=0.5,
+        status=GoalStatus.ACTIVE,
+        outcome=GoalOutcome(kind=GoalOutcomeKind.REACH_PLACE, place_id="loc-1"),
+    )
+    spec = AgentRunnerSpec(
+        agent_id=agent_id,
+        entity_id=EntityId("body-1"),
+        cognition=AgentCognitionSpec(agent_id=agent_id),
+        initial_goals=(goal,),
+    )
+    assert spec.name == "agent-1"
+    assert len(spec.initial_goals) == 1
+
+
+def test_goal_evaluator_completion_death_and_run_end() -> None:
+    from agents.models import Goal, GoalId, GoalOutcome, GoalOutcomeKind, GoalStatus
+    from simulation.runner_models import (
+        BodyObjectiveFact,
+        GoalEvaluationEvidence,
+        GoalTransitionReasonCode,
+        evaluate_goals_after_finalization,
+    )
+    from world.models import LifeStatus
+
+    agent_id = AgentId("agent-1")
+    reach = Goal(
+        goal_id=GoalId("g-reach"),
+        owner_id=agent_id,
+        description="reach",
+        priority=0.5,
+        status=GoalStatus.ACTIVE,
+        outcome=GoalOutcome(kind=GoalOutcomeKind.REACH_PLACE, place_id="loc-1"),
+    )
+    preserve = Goal(
+        goal_id=GoalId("g-life"),
+        owner_id=agent_id,
+        description="live",
+        priority=0.5,
+        status=GoalStatus.ACTIVE,
+        outcome=GoalOutcome(kind=GoalOutcomeKind.PRESERVE_LIFE),
+    )
+    drive = Goal(
+        goal_id=GoalId("g-drive"),
+        owner_id=agent_id,
+        description="hunger",
+        priority=0.5,
+        status=GoalStatus.ACTIVE,
+        outcome=GoalOutcome(
+            kind=GoalOutcomeKind.SATISFY_DRIVE, drive_kind=DriveKind.HUNGER
+        ),
+    )
+    alive = BodyObjectiveFact(
+        entity_id=EntityId("body-1"),
+        location_id=EntityId("loc-1"),
+        life_status=LifeStatus.ALIVE,
+        inventory=(),
+    )
+    completed = evaluate_goals_after_finalization(
+        (reach, preserve, drive),
+        GoalEvaluationEvidence(
+            tick=3,
+            run_ending=True,
+            owner_entity_ids={"agent-1": "body-1"},
+            bodies=(alive,),
+        ),
+    )
+    by_goal = {item.goal_id.value: item for item in completed}
+    assert by_goal["g-reach"].reason_code is GoalTransitionReasonCode.COMPLETED
+    assert by_goal["g-life"].reason_code is GoalTransitionReasonCode.COMPLETED
+    assert by_goal["g-drive"].reason_code is GoalTransitionReasonCode.RUN_END
+
+    dead = BodyObjectiveFact(
+        entity_id=EntityId("body-1"),
+        location_id=EntityId("loc-1"),
+        life_status=LifeStatus.DEAD,
+        inventory=(),
+    )
+    death = evaluate_goals_after_finalization(
+        (reach,),
+        GoalEvaluationEvidence(
+            tick=4,
+            run_ending=False,
+            owner_entity_ids={"agent-1": "body-1"},
+            bodies=(dead,),
+        ),
+    )
+    assert len(death) == 1
+    assert death[0].reason_code is GoalTransitionReasonCode.DEATH
+    assert death[0].to_status is GoalStatus.ABANDONED
+
+
+def test_new_configs_default_to_schema_v2() -> None:
+    from simulation.runner_models import RUNNER_SCHEMA_VERSION_V2
+
+    assert _config().schema_version == RUNNER_SCHEMA_VERSION_V2

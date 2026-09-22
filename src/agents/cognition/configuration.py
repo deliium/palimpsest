@@ -210,12 +210,16 @@ def build_cognitive_loop(
     memory: MemoryRetriever | None = None,
     futures: FutureImagination | None = None,
     motivation: MotivationEvaluator | None = None,
+    resolve_counterpart: object | None = None,
+    pending_evidence: object | None = None,
 ) -> CognitiveLoop:
     """Assemble a ``CognitiveLoop`` from explicit policies.
 
     Optional component overrides are for tests. Production wiring selects
     memory/imagination/motivation implementations from ``config`` modes when
-    overrides are omitted.
+    overrides are omitted. ``resolve_counterpart`` maps entity IDs to agent IDs
+    without importing simulation types. ``pending_evidence`` is a shared
+    accumulator so direct/communicated traces drive same-batch revisions.
     """
     resolved = config if config is not None else production_cognition_config()
     if type(resolved) is not CognitionLoopConfig:
@@ -224,6 +228,7 @@ def build_cognitive_loop(
     from agents.cognition.communication import (
         CommunicatedMemoryUpdateHook,
         CompositeMemoryUpdateHook,
+        PendingEvidenceAccumulator,
     )
     from agents.cognition.defaults import (
         DirectSelfStateProjector,
@@ -238,6 +243,7 @@ def build_cognitive_loop(
         MultiCriteriaIntentionSelector,
     )
     from agents.cognition.imagination import ImaginationEngine
+    from agents.cognition.memory import DirectObservationMemoryUpdateHook
     from agents.cognition.motivation import MotivationAppraisal
 
     if memory is None:
@@ -256,6 +262,20 @@ def build_cognitive_loop(
             )
         )
 
+    pending: PendingEvidenceAccumulator
+    if pending_evidence is None:
+        pending = PendingEvidenceAccumulator()
+    elif type(pending_evidence) is PendingEvidenceAccumulator:
+        pending = pending_evidence
+    else:
+        raise TypeError("pending_evidence must be PendingEvidenceAccumulator")
+
+    counterpart = None
+    if resolve_counterpart is not None:
+        if not callable(resolve_counterpart):
+            raise TypeError("resolve_counterpart must be callable")
+        counterpart = resolve_counterpart
+
     _LOG.debug(
         "cognitive_loop_built",
         extra={
@@ -264,6 +284,7 @@ def build_cognitive_loop(
                 "memory_mode": resolved.memory_mode.value,
                 "imagination_mode": resolved.imagination_mode.value,
                 "mortality_appraisal_mode": resolved.mortality_appraisal_mode.value,
+                "has_counterpart_resolver": counterpart is not None,
                 "status": "built",
             }
         },
@@ -279,8 +300,13 @@ def build_cognitive_loop(
         planner=CommandPlanner(),
         memory_updates=CompositeMemoryUpdateHook(
             (
+                DirectObservationMemoryUpdateHook(),
                 CommunicatedMemoryUpdateHook(),
-                SubjectiveRevisionHook(),
-            )
+                SubjectiveRevisionHook(
+                    resolve_counterpart=counterpart,
+                    pending=pending,
+                ),
+            ),
+            pending=pending,
         ),
     )

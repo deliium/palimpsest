@@ -122,6 +122,8 @@ def test_analyze_memory_drift_reports_per_step_and_cumulative() -> None:
             reconstructions=(evidence,),
             derivation_edges=(
                 SubjectiveDerivationEdge(
+                    run_id="run-1",
+                    owner_id="agent-1",
                     derived_memory_id="m-derived",
                     source_memory_id="m-root",
                     ordinal=0,

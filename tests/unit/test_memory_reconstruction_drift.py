@@ -247,6 +247,8 @@ async def test_repeated_recall_measurably_drifts_with_scripted_schedule(
             derived_traces.append(intent.derived_trace)
             edges.append(
                 SubjectiveDerivationEdge(
+                    run_id="run-1",
+                    owner_id="agent-1",
                     derived_memory_id=derived_id.value,
                     source_memory_id=parent_id.value
                     if step == 0
@@ -372,6 +374,8 @@ async def test_identical_inputs_yield_identical_drift_reports() -> None:
             parent = "m-root" if step == 0 else derived[step - 1].memory_id.value
             edges.append(
                 SubjectiveDerivationEdge(
+                    run_id="run-1",
+                    owner_id="agent-1",
                     derived_memory_id=derived_id.value,
                     source_memory_id=parent,
                     ordinal=0,

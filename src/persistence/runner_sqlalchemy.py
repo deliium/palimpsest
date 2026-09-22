@@ -134,6 +134,26 @@ class SqlAlchemyPendingFinalizationRepository:
             rows = (await session.execute(stmt)).scalars().all()
             return tuple(_pending_from_orm(row) for row in rows)
 
+    async def list_pending_for_run(
+        self, *, run_id: RunId
+    ) -> tuple[PendingFinalizationRecord, ...]:
+        async with session_scope(self._session_factory) as session:
+            stmt = (
+                select(RunnerPendingFinalizationOrm)
+                .where(RunnerPendingFinalizationOrm.run_id == run_id.value)
+                .where(
+                    RunnerPendingFinalizationOrm.status
+                    == PendingFinalizationStatus.PENDING.value
+                )
+                .order_by(
+                    RunnerPendingFinalizationOrm.tick,
+                    RunnerPendingFinalizationOrm.created_ordinal,
+                    RunnerPendingFinalizationOrm.agent_id,
+                )
+            )
+            rows = (await session.execute(stmt)).scalars().all()
+            return tuple(_pending_from_orm(row) for row in rows)
+
     async def _mark(
         self,
         *,

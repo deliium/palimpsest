@@ -6,6 +6,7 @@ from agents.cognition.communication import (
     CommunicatedMemoryUpdateHook,
     CompositeMemoryUpdateHook,
     DeterministicSocialMessagePolicy,
+    PendingEvidenceAccumulator,
     SocialMessageDecision,
     build_communicated_memory_trace,
     project_trust_inputs,
@@ -75,7 +76,13 @@ from agents.cognition.loop import (
     CognitiveLoopError,
     CognitiveLoopFailure,
 )
-from agents.cognition.memory import ReferenceMemoryRetriever, ScopedMemoryRetriever
+from agents.cognition.memory import (
+    DIRECT_OBSERVATION_MEMORY_POLICY_VERSION,
+    DirectObservationMemoryUpdateHook,
+    ReferenceMemoryRetriever,
+    ScopedMemoryRetriever,
+    build_direct_observation_memory_trace,
+)
 from agents.cognition.models import (
     BOUNDARY_SCHEMA_VERSION,
     DEFAULT_SELF_MODEL_POLICY,
@@ -151,6 +158,7 @@ __all__ = [
     "COGNITION_FACTORY_VERSION",
     "COGNITION_IMAGINATION_POLICY_VERSION",
     "COMMUNICATED_MEMORY_POLICY_VERSION",
+    "DIRECT_OBSERVATION_MEMORY_POLICY_VERSION",
     "COMPONENT_VERSION",
     "DEFAULT_SELF_MODEL_POLICY",
     "DELIBERATION_POLICY_VERSION",
@@ -188,6 +196,7 @@ __all__ = [
     "CounterpartBinding",
     "DecisionMetadata",
     "DeterministicSocialMessagePolicy",
+    "DirectObservationMemoryUpdateHook",
     "DirectSelfStateProjector",
     "DirectSituationModeler",
     "DriveEffect",
@@ -219,6 +228,7 @@ __all__ = [
     "MultiCriteriaIntentionSelector",
     "OptionSpaceChange",
     "OwnerSafeSocialIdentity",
+    "PendingEvidenceAccumulator",
     "PerceivedNeedPressures",
     "PerceptionClaimCode",
     "PerceptionInterpreter",
@@ -256,6 +266,7 @@ __all__ = [
     "activate_drives",
     "build_cognitive_loop",
     "build_communicated_memory_trace",
+    "build_direct_observation_memory_trace",
     "default_cognitive_loop",
     "derive_need_pressures",
     "diagnostic_projection",

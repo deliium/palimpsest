@@ -23,6 +23,8 @@ from simulation.persistence import (
     PERSISTENCE_CODEC_VERSION,
     PROJECTOR_VERSION,
     CommitHash,
+    ReplayCommitPage,
+    ReplayEventPage,
     ReplayFallbackPolicy,
     ReplayMode,
     ReplayRequest,
@@ -444,6 +446,97 @@ class ReplayService:
             outcome.engine,
             journal,
             predecessor_commit_hash=outcome.predecessor_commit_hash,
+        )
+
+    async def read_event_page(
+        self,
+        run_id: RunId,
+        *,
+        from_tick: Tick,
+        to_tick: Tick | None = None,
+        limit: int = 100,
+        offset: int = 0,
+    ) -> ReplayEventPage:
+        """Return a detached page of objective events (no live engine)."""
+        if type(run_id) is not RunId:
+            raise TypeError("run_id must be RunId")
+        if type(from_tick) is not Tick:
+            raise TypeError("from_tick must be Tick")
+        if to_tick is not None and type(to_tick) is not Tick:
+            raise TypeError("to_tick must be Tick or None")
+        if isinstance(limit, bool) or type(limit) is not int or limit < 1:
+            raise ValueError("limit must be a positive int")
+        if isinstance(offset, bool) or type(offset) is not int or offset < 0:
+            raise ValueError("offset must be a non-negative int")
+        events = await self._journal.list_events(
+            run_id,
+            from_tick=from_tick,
+            to_tick=to_tick,
+            limit=limit,
+            offset=offset,
+        )
+        next_offset = offset + len(events) if len(events) == limit else None
+        _LOGGER.debug(
+            "replay_event_page run_id=%s from_tick=%s to_tick=%s "
+            "limit=%s offset=%s event_count=%s next_offset=%s",
+            run_id.value,
+            from_tick.value,
+            None if to_tick is None else to_tick.value,
+            limit,
+            offset,
+            len(events),
+            next_offset if next_offset is not None else "-",
+        )
+        return ReplayEventPage(
+            run_id=run_id,
+            from_tick=from_tick,
+            to_tick=to_tick,
+            limit=limit,
+            offset=offset,
+            events=events,
+            next_offset=next_offset,
+        )
+
+    async def read_commit_page(
+        self,
+        run_id: RunId,
+        *,
+        from_tick: Tick,
+        to_tick: Tick | None = None,
+        limit: int = 100,
+    ) -> ReplayCommitPage:
+        """Return a detached keyset page of tick commits (no live engine)."""
+        if type(run_id) is not RunId:
+            raise TypeError("run_id must be RunId")
+        if type(from_tick) is not Tick:
+            raise TypeError("from_tick must be Tick")
+        if to_tick is not None and type(to_tick) is not Tick:
+            raise TypeError("to_tick must be Tick or None")
+        if isinstance(limit, bool) or type(limit) is not int or limit < 1:
+            raise ValueError("limit must be a positive int")
+        commits = await self._journal.list_tick_commits(
+            run_id, from_tick=from_tick, to_tick=to_tick
+        )
+        page = commits[:limit]
+        next_from_tick: Tick | None = None
+        if len(commits) > limit:
+            next_from_tick = Tick(page[-1].tick.value + 1)
+        _LOGGER.debug(
+            "replay_commit_page run_id=%s from_tick=%s to_tick=%s "
+            "limit=%s commit_count=%s next_from_tick=%s",
+            run_id.value,
+            from_tick.value,
+            None if to_tick is None else to_tick.value,
+            limit,
+            len(page),
+            None if next_from_tick is None else next_from_tick.value,
+        )
+        return ReplayCommitPage(
+            run_id=run_id,
+            from_tick=from_tick,
+            to_tick=to_tick,
+            commits=page,
+            next_from_tick=next_from_tick,
         )
 
     async def _durable_head_next_tick(self, run_id: RunId) -> Tick:

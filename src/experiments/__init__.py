@@ -23,6 +23,11 @@ from experiments.collectors import (
     collect_propagation,
     collect_trajectory_stats,
 )
+from experiments.composition import (
+    EvidenceCompositionError,
+    EvidenceCompositionService,
+    map_snapshot_to_analysis_sources,
+)
 from experiments.coordinator import (
     ExperimentArmResult,
     ExperimentAssignment,
@@ -45,15 +50,24 @@ from experiments.models import (
 )
 from experiments.persistence import (
     EXPERIMENT_RECORD_SCHEMA_VERSION,
+    AnalysisEvidenceSnapshotReader,
+    EvidenceManifestRepository,
     ExperimentAssignmentRecord,
     ExperimentDefinitionRecord,
     ExperimentRecordRepository,
     ExperimentResultRecord,
+    PersistedAnalysisSnapshot,
+    PersistedDerivationEdge,
+    PersistedReconstructionRow,
 )
 
 __all__ = [
     "EXPERIMENT_RECORD_SCHEMA_VERSION",
+    "AnalysisEvidenceSnapshotReader",
     "CollectorMetricDocument",
+    "EvidenceCompositionError",
+    "EvidenceCompositionService",
+    "EvidenceManifestRepository",
     "ExperimentArmResult",
     "ExperimentAssignment",
     "ExperimentAssignmentRecord",
@@ -65,6 +79,9 @@ __all__ = [
     "ExperimentResultRecord",
     "ExperimentSeedMatrix",
     "InMemoryExperimentRecordRepository",
+    "PersistedAnalysisSnapshot",
+    "PersistedDerivationEdge",
+    "PersistedReconstructionRow",
     "StoryIntervention",
     "StoryInterventionArbiter",
     "StoryTruthSpec",
@@ -84,5 +101,6 @@ __all__ = [
     "experiment_d_drives",
     "experiment_e_false_story",
     "make_false_story_intervention",
+    "map_snapshot_to_analysis_sources",
     "materialize_assignments",
 ]

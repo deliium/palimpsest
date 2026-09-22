@@ -170,3 +170,59 @@ def log_runner_config_diagnostics(diagnostics: RunnerConfigDiagnostics) -> None:
         fields["mortality_mode"],
         fields["config_fingerprint_prefix"],
     )
+
+
+def log_finalized_tick_receipt(
+    *,
+    run_id: str,
+    tick: int,
+    resolution_count: int,
+    event_count: int,
+    objective_hash_prefix: str,
+) -> None:
+    """DEBUG boundary for a detached finalized tick receipt."""
+    _LOGGER.debug(
+        "finalized_tick_receipt run_id=%s tick=%s resolution_count=%s "
+        "event_count=%s objective_hash_prefix=%s",
+        run_id,
+        tick,
+        resolution_count,
+        event_count,
+        objective_hash_prefix,
+    )
+
+
+def log_goal_transition_boundary(
+    *,
+    run_id: str,
+    tick: int,
+    transition_count: int,
+    reason_code: str,
+) -> None:
+    """DEBUG goal evaluation boundary (IDs/counts/codes only)."""
+    _LOGGER.debug(
+        "goal_transition_boundary run_id=%s tick=%s transition_count=%s "
+        "reason_code=%s",
+        run_id,
+        tick,
+        transition_count,
+        reason_code,
+    )
+
+
+def log_checkpoint_boundary(
+    *,
+    run_id: str,
+    committed_ticks: int,
+    cadence_ticks: int,
+    snapshot_id: str,
+) -> None:
+    """INFO durable checkpoint cadence hit."""
+    _LOGGER.info(
+        "checkpoint_boundary run_id=%s committed_ticks=%s cadence_ticks=%s "
+        "snapshot_id=%s",
+        run_id,
+        committed_ticks,
+        cadence_ticks,
+        snapshot_id,
+    )

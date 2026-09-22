@@ -4,16 +4,35 @@ from __future__ import annotations
 
 import inspect
 
+import pytest
+
 from analysis.contracts import (
     EventSource,
     ExportSource,
     MemoryEvidenceSource,
     ObjectiveEventSource,
 )
+from analysis.evidence import (
+    EvidenceStage,
+    closed_evidence_stages,
+    require_evidence_stage,
+)
 from analysis.models import (
+    METRIC_DOCUMENT_SCHEMA_VERSION,
+    MetricAvailability,
+    MetricCoverage,
+    MetricDocument,
+    MetricProvenance,
     ReconstructionEvidence,
     StructuredFactSet,
     SubjectiveDerivationEdge,
+)
+from analysis.numerical import (
+    CANONICAL_OUTPUT_CLAIM,
+    NumericalPolicyError,
+    normalize_signed_zero,
+    quantize_float,
+    require_finite,
 )
 from analysis.sources import InMemoryMemoryEvidenceSource, InMemoryObjectiveEventSource
 from memory.contracts import MemoryReconstructor
@@ -127,12 +146,15 @@ def test_analysis_dto_repr_omits_payload_content() -> None:
     )
     assert "gate" not in repr(evidence)
     edge = SubjectiveDerivationEdge(
+        run_id="run-1",
+        owner_id="agent-1",
         derived_memory_id="m-2",
         source_memory_id="m-1",
         ordinal=0,
         reconstruction_id="recon-1",
     )
     assert "has_reconstruction=True" in repr(edge)
+    assert "run_id='run-1'" in repr(edge)
 
 
 def test_memory_reconstructor_accepts_only_recall_evidence() -> None:
@@ -144,3 +166,85 @@ def test_memory_reconstructor_accepts_only_recall_evidence() -> None:
     source = inspect.getsource(MemoryReconstructor)
     assert "WorldEvent" in source  # documented prohibition
     assert "RecallEvidence" in source
+
+
+def test_evidence_stage_enum_is_closed() -> None:
+    stages = closed_evidence_stages()
+    assert len(stages) == 10
+    assert EvidenceStage.OBJECTIVE_EVENT_STATE in stages
+    assert EvidenceStage.ACTION_RESOLUTION in stages
+    assert require_evidence_stage("stage", "direct_trace") is EvidenceStage.DIRECT_TRACE
+    with pytest.raises(ValueError, match="unknown_evidence_stage"):
+        require_evidence_stage("stage", "invented_stage")
+
+
+def test_metric_document_requires_scope_versions_and_rejects_non_finite() -> None:
+    doc = MetricDocument(
+        schema_version=METRIC_DOCUMENT_SCHEMA_VERSION,
+        metric_family="resource_inequality",
+        algorithm_version="1",
+        library_versions=MetricDocument.default_library_versions(),
+        run_id="run-1",
+        input_revision="rev-placeholder-1",
+        evidence_stages=frozenset({EvidenceStage.OBJECTIVE_EVENT_STATE}),
+        population="living_agents",
+        denominator="inventory_count",
+        coverage=MetricCoverage(observed=2, expected=3, ratio=2 / 3),
+        availability=MetricAvailability.PARTIAL,
+        values={"gini": 0.125, "note": None},
+        provenance=MetricProvenance(
+            source_kind="objective_events",
+            source_ids=("evt-1", "evt-2"),
+            notes_code="partial_coverage",
+        ),
+    )
+    assert doc.availability is MetricAvailability.PARTIAL
+    assert "gini" not in repr(doc)
+    assert set(doc.library_versions) >= {"numpy", "pandas", "scipy", "networkx"}
+
+    with pytest.raises(NumericalPolicyError, match=r"non_finite"):
+        MetricDocument(
+            schema_version=METRIC_DOCUMENT_SCHEMA_VERSION,
+            metric_family="resource_inequality",
+            algorithm_version="1",
+            library_versions=MetricDocument.default_library_versions(),
+            run_id="run-1",
+            input_revision="rev-1",
+            evidence_stages=frozenset({EvidenceStage.OBJECTIVE_EVENT_STATE}),
+            population="living_agents",
+            denominator="inventory_count",
+            coverage=None,
+            availability=MetricAvailability.PRESENT,
+            values={"gini": float("nan")},
+            provenance=MetricProvenance(
+                source_kind="objective_events", source_ids=("evt-1",)
+            ),
+        )
+
+    with pytest.raises(ValueError, match="empty_or_invalid"):
+        MetricDocument(
+            schema_version=METRIC_DOCUMENT_SCHEMA_VERSION,
+            metric_family="resource_inequality",
+            algorithm_version="1",
+            library_versions=MetricDocument.default_library_versions(),
+            run_id="run-1",
+            input_revision="rev-1",
+            evidence_stages=frozenset(),
+            population="living_agents",
+            denominator="inventory_count",
+            coverage=None,
+            availability=MetricAvailability.UNKNOWN,
+            values={},
+            provenance=MetricProvenance(
+                source_kind="objective_events", source_ids=()
+            ),
+        )
+
+
+def test_numerical_policy_signed_zero_and_claim() -> None:
+    assert normalize_signed_zero(-0.0) == 0.0
+    assert quantize_float(1 / 3) == quantize_float(quantize_float(1 / 3))
+    assert CANONICAL_OUTPUT_CLAIM.startswith("canonical_quantized")
+    with pytest.raises(NumericalPolicyError) as exc:
+        require_finite(float("inf"))
+    assert exc.value.code == "non_finite"

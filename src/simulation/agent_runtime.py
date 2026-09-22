@@ -20,6 +20,7 @@ from agents.cognition.models import (
     CognitiveLoopInput,
     CognitiveLoopProposal,
     CognitiveLoopResult,
+    ComponentKind,
     InternalAgentState,
     MemoryUpdateIntent,
     MemoryUpdateKind,
@@ -66,6 +67,7 @@ __all__ = [
     "InvocationIdSource",
     "PendingRuntimeFinalization",
     "PreparedObservation",
+    "pending_from_finalization_command",
 ]
 
 _LOG: Final[logging.Logger] = logging.getLogger("simulation.agent_runtime")
@@ -96,6 +98,8 @@ class AgentRuntimeErrorCode(StrEnum):
     PENDING_MISSING = "pending_missing"
     PENDING_MISMATCH = "pending_mismatch"
     FINALIZE_IDEMPOTENT = "finalize_idempotent"
+    RECOVERY_CORRUPT = "recovery_corrupt"
+    RECOVERY_LEGACY = "recovery_legacy"
 
 
 class AgentRuntimeError(Exception):
@@ -191,6 +195,7 @@ class PendingRuntimeFinalization:
     subjective_batch: SubjectiveMutationBatch | None
     effective_command_kind: str
     integrity_hash: str
+    has_futures_boundary: bool = False
     finalized: bool = False
 
     def __post_init__(self) -> None:
@@ -211,6 +216,8 @@ class PendingRuntimeFinalization:
         require_stable_id(
             "PendingRuntimeFinalization.integrity_hash", self.integrity_hash
         )
+        if type(self.has_futures_boundary) is not bool:
+            raise TypeError("has_futures_boundary must be bool")
         if type(self.finalized) is not bool:
             raise TypeError("finalized must be bool")
 
@@ -220,6 +227,95 @@ class PendingRuntimeFinalization:
             f"tick={self.tick}, command_kind={self.effective_command_kind!r}, "
             f"finalized={self.finalized})"
         )
+
+    def to_finalization_command(self, *, run_id: object) -> object:
+        """Build the durable finalization command for this pending transition."""
+        from simulation.models import RunId
+        from simulation.run_control import (
+            FINALIZATION_COMMAND_CODEC_VERSION,
+            FinalizationCommand,
+        )
+
+        if type(run_id) is not RunId:
+            raise TypeError("run_id must be RunId")
+        legacy_beliefs: list[Belief] = []
+        for intent in self.loop_result.memory_update_intents:
+            if (
+                intent.kind is MemoryUpdateKind.WRITE_BELIEF
+                and intent.belief is not None
+            ):
+                legacy_beliefs.append(intent.belief)
+        delivery_id = f"{run_id.value}:{self.invocation_id}:delivery"
+        content_material = (
+            f"{run_id.value}|{self.invocation_id}|{self.integrity_hash}|tick"
+        ).encode()
+        delivery_hash = hashlib.sha256(content_material).hexdigest()
+        return FinalizationCommand(
+            codec_version=FINALIZATION_COMMAND_CODEC_VERSION,
+            run_id=run_id,
+            agent_id=self.submission.agent_id,
+            tick=self.tick,
+            invocation_id=self.invocation_id,
+            observation_key=self.observation_key,
+            prior_status=self.prior_status,
+            next_status=self.next_status,
+            effective_command_kind=self.effective_command_kind,
+            integrity_hash=self.integrity_hash,
+            next_internal_state=self.next_internal_state,
+            submission=self.submission,
+            subjective_batch=self.subjective_batch,
+            has_futures_boundary=self.has_futures_boundary,
+            final_confidence=self.loop_result.final_confidence,
+            legacy_belief_writes=tuple(legacy_beliefs),
+            delivery_id=delivery_id,
+            delivery_content_hash=delivery_hash,
+            delivery_acknowledged=False,
+        )
+
+
+def pending_from_finalization_command(command: object) -> PendingRuntimeFinalization:
+    """Rehydrate a pending transition from a durable finalization command."""
+    from memory.models import Belief
+    from simulation.run_control import FinalizationCommand
+
+    if type(command) is not FinalizationCommand:
+        raise TypeError("command must be FinalizationCommand")
+    intents: list[MemoryUpdateIntent] = []
+    for belief in command.legacy_belief_writes:
+        if type(belief) is not Belief:
+            raise TypeError("legacy_belief_writes entries must be Belief")
+        intents.append(
+            MemoryUpdateIntent(
+                owner_id=command.agent_id,
+                kind=MemoryUpdateKind.WRITE_BELIEF,
+                belief=belief,
+            )
+        )
+    loop_result = CognitiveLoopResult(
+        invocation_id=command.invocation_id,
+        agent_id=command.agent_id,
+        command=command.submission.command,
+        boundary_records=(),
+        memory_update_intents=tuple(intents),
+        final_confidence=command.final_confidence,
+        internal_state=command.next_internal_state,
+        pending_accesses=(),
+        pending_reconsolidation=None,
+    )
+    return PendingRuntimeFinalization(
+        observation_key=command.observation_key,
+        tick=command.tick,
+        invocation_id=command.invocation_id,
+        submission=command.submission,
+        loop_result=loop_result,
+        prior_status=command.prior_status,
+        next_status=command.next_status,
+        next_internal_state=command.next_internal_state,
+        subjective_batch=command.subjective_batch,
+        effective_command_kind=command.effective_command_kind,
+        integrity_hash=command.integrity_hash,
+        has_futures_boundary=command.has_futures_boundary,
+    )
 
 
 @dataclass(frozen=True, slots=True)
@@ -289,6 +385,7 @@ class AgentRuntime:
         "_agent",
         "_belief_reader",
         "_belief_writer",
+        "_finalized_hashes",
         "_inbox",
         "_internal_state",
         "_invocation_ids",
@@ -298,7 +395,6 @@ class AgentRuntime:
         "_memory_service",
         "_memory_writer",
         "_pending",
-        "_finalized_hashes",
         "_processed_invocations",
         "_relationship_reader",
         "_semantic_belief_reader",
@@ -357,6 +453,11 @@ class AgentRuntime:
     @property
     def agent_id(self) -> AgentId:
         return self._agent.agent_id
+
+    @property
+    def agent(self) -> Agent:
+        """Immutable agent identity used for this runtime."""
+        return self._agent
 
     @property
     def status(self) -> AgentRuntimeStatus:
@@ -609,9 +710,7 @@ class AgentRuntime:
             snapshot=snapshot,
         )
         try:
-            proposal = await self._loop.prepare(
-                loop_input, invocation_id=invocation_id
-            )
+            proposal = await self._loop.prepare(loop_input, invocation_id=invocation_id)
         except CognitiveLoopError as exc:
             _LOG.error(
                 "runtime_cognition_failed",
@@ -752,6 +851,10 @@ class AgentRuntime:
                 0 if subjective_batch is None else subjective_batch.expected_revision
             ),
         )
+        has_futures = any(
+            record.component_kind is ComponentKind.FUTURES
+            for record in loop_result.boundary_records
+        )
         pending = PendingRuntimeFinalization(
             observation_key=prepared.observation_key,
             tick=prepared.tick,
@@ -764,6 +867,7 @@ class AgentRuntime:
             subjective_batch=subjective_batch,
             effective_command_kind=command_kind,
             integrity_hash=integrity,
+            has_futures_boundary=has_futures,
         )
         self._pending = pending
         _LOG.debug(
@@ -808,7 +912,10 @@ class AgentRuntime:
                 loop_result=pending.loop_result,
                 terminal=False,
             )
-        if self._pending is None or self._pending.integrity_hash != pending.integrity_hash:
+        if (
+            self._pending is None
+            or self._pending.integrity_hash != pending.integrity_hash
+        ):
             raise AgentRuntimeError(
                 AgentRuntimeErrorCode.PENDING_MISMATCH
                 if self._pending is not None
@@ -876,6 +983,110 @@ class AgentRuntime:
                     "status": "aborted",
                 }
             },
+        )
+
+    def restore_pending_from_command(
+        self, command: object
+    ) -> PendingRuntimeFinalization:
+        """Install a recovered pending transition without cognition/provider calls."""
+        from simulation.run_control import FinalizationCommand
+
+        if type(command) is not FinalizationCommand:
+            raise TypeError("command must be FinalizationCommand")
+        if command.agent_id != self._agent.agent_id:
+            raise AgentRuntimeError(
+                AgentRuntimeErrorCode.OWNERSHIP,
+                agent_id=self._agent.agent_id.value,
+                invocation_id=command.invocation_id,
+                tick=command.tick,
+            )
+        if command.integrity_hash in self._finalized_hashes:
+            _LOG.warning(
+                "runtime_restore_pending_idempotent",
+                extra={
+                    "runtime": {
+                        "code": AgentRuntimeErrorCode.FINALIZE_IDEMPOTENT.value,
+                        "agent_id": self._agent.agent_id.value,
+                        "tick": command.tick,
+                        "invocation_id": command.invocation_id,
+                    }
+                },
+            )
+            return pending_from_finalization_command(command)
+        if self._pending is not None:
+            if self._pending.integrity_hash == command.integrity_hash:
+                return self._pending
+            raise AgentRuntimeError(
+                AgentRuntimeErrorCode.PENDING_EXISTS,
+                agent_id=self._agent.agent_id.value,
+                invocation_id=command.invocation_id,
+                tick=command.tick,
+            )
+        pending = pending_from_finalization_command(command)
+        self._pending = pending
+        _LOG.debug(
+            "runtime_pending_restored",
+            extra={
+                "runtime": {
+                    "agent_id": self._agent.agent_id.value,
+                    "tick": command.tick,
+                    "invocation_id": command.invocation_id,
+                    "status": "restored",
+                }
+            },
+        )
+        return pending
+
+    def restore_runtime_checkpoint(self, checkpoint: object) -> None:
+        """Restore status/internal state/goals from a detached checkpoint."""
+        from agents.models import Agent, Goal
+        from simulation.run_control import AgentRuntimeCheckpoint
+
+        if type(checkpoint) is not AgentRuntimeCheckpoint:
+            raise TypeError("checkpoint must be AgentRuntimeCheckpoint")
+        if checkpoint.agent_id != self._agent.agent_id:
+            raise AgentRuntimeError(
+                AgentRuntimeErrorCode.OWNERSHIP,
+                agent_id=self._agent.agent_id.value,
+            )
+        goals = tuple(checkpoint.goals)
+        for goal in goals:
+            if type(goal) is not Goal:
+                raise TypeError("goals entries must be Goal")
+        self._agent = Agent(
+            agent_id=self._agent.agent_id,
+            name=self._agent.name,
+            goals=goals,
+            drives=self._agent.drives,
+        )
+        self._status = checkpoint.status
+        self._internal_state = checkpoint.internal_state
+        self._last_observation_key = checkpoint.last_observation_key
+        self._pending = None
+        _LOG.debug(
+            "runtime_checkpoint_restored",
+            extra={
+                "runtime": {
+                    "agent_id": self._agent.agent_id.value,
+                    "status": self._status.value,
+                    "processed_invocation_count": checkpoint.processed_invocation_count,
+                    "finalized_hash_count": checkpoint.finalized_hash_count,
+                }
+            },
+        )
+
+    def export_runtime_checkpoint(self) -> object:
+        """Export detached runtime state for rehydration."""
+        from simulation.run_control import AgentRuntimeCheckpoint
+
+        return AgentRuntimeCheckpoint(
+            agent_id=self._agent.agent_id,
+            status=self._status,
+            internal_state=self._internal_state,
+            last_observation_key=self._last_observation_key,
+            processed_invocation_count=len(self._processed_invocations),
+            finalized_hash_count=len(self._finalized_hashes),
+            goals=self._agent.goals,
         )
 
     async def process_observation(
@@ -1253,7 +1464,7 @@ def _pending_integrity_hash(
 ) -> str:
     material = (
         f"{invocation_id}|{tick}|{command_kind}|{next_status}|{revision_hint}"
-    ).encode("utf-8")
+    ).encode()
     return hashlib.sha256(material).hexdigest()
 
 

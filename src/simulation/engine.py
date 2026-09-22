@@ -99,7 +99,7 @@ from world.effects import (
 )
 from world.events import Died, WorldEvent, normalize_events
 from world.identifiers import EntityId, EventId, RequestId, WorldId, WorldRevision
-from world.models import LifeStatus, default_physical_rules
+from world.models import AgentBody, LifeStatus, default_physical_rules
 from world.observations import Observation, ObservationContext
 from world.values import WeatherCondition, clamp_unit_interval
 
@@ -144,6 +144,7 @@ class WorldEngine:
         "_bootstrap",
         "_config",
         "_engine_id",
+        "_last_tick_result",
         "_perception",
         "_registrations",
         "_run_id",
@@ -174,6 +175,7 @@ class WorldEngine:
         self._translator = registration_translator(bootstrap)
         self._registrations = bootstrap.registrations
         self._perception = PerceptionService()
+        self._last_tick_result: TickResult | None = None
         world = _materialize_world(bootstrap)
         self._engine_id = derive_scoped_id(
             config,
@@ -366,6 +368,19 @@ class WorldEngine:
     @property
     def run_id(self) -> RunId:
         return self._run_id
+
+    @property
+    def last_tick_result(self) -> TickResult | None:
+        """Most recent committed TickResult, if any."""
+        return self._last_tick_result
+
+    def detached_bodies(self) -> tuple[AgentBody, ...]:
+        """Ordered immutable body copies for public objective projection."""
+        bodies = self._snapshot.world.state.bodies
+        return tuple(
+            bodies[entity_id]
+            for entity_id in sorted(bodies.keys(), key=lambda item: item.value)
+        )
 
     def observe(self) -> ObservationBatch:
         """Issue or replay the immutable observation batch for the open tick.
@@ -615,6 +630,7 @@ class WorldEngine:
         )
         self._snapshot = candidate.next_snapshot
         result = candidate.result
+        self._last_tick_result = result
         death_count = sum(
             1 for record in result.events if type(record.event.details) is Died
         )

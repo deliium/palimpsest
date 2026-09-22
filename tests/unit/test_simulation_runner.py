@@ -72,3 +72,16 @@ async def test_runner_injected_stop() -> None:
         result = await runner.run()
         assert result.stop_reason is RunnerStopReasonCode.INJECTED_STOP
         assert result.ticks_committed >= 2
+
+
+@pytest.mark.asyncio
+async def test_runner_exposes_tick_receipts_and_objective_projection() -> None:
+    async with await SimulationRunner.from_config(
+        _config(max_ticks=2), run_id=RunId("run-tick-3")
+    ) as runner:
+        result = await runner.run()
+        projection = runner.final_objective_projection()
+    assert len(result.finalized_tick_receipts) == 2
+    assert result.objective_state_hash is not None
+    assert projection.revision >= 0
+    assert result.cognition_counters.cognition_invocations >= 1

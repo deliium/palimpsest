@@ -542,3 +542,43 @@ async def test_subjective_memory_activity_does_not_alter_replay_event_hashes() -
     )
     assert first.result.status is second.result.status
     assert first.result.status is ReplayStatus.OK
+
+
+@pytest.mark.asyncio
+async def test_replay_event_and_commit_pages_are_detached() -> None:
+    event = make_replayable_event(
+        event_id=EventId("evt-page-1"),
+        run_id="run-1",
+        world_id=WorldId("world-1"),
+        tick=0,
+        sequence=0,
+        request_id=RequestId("req-page-1"),
+        resulting_revision=WorldRevision(0),
+        details=Waited(),
+        actor_id=EntityId("body-1"),
+    )
+    request = TickAppendRequest(
+        run_id=RunId("run-1"),
+        tick=Tick(0),
+        expected_base_revision=WorldRevision(0),
+        expected_predecessor_commit_hash=None,
+        idempotency_key="idem-page-0",
+        events=(event,),
+    )
+    commit = _commit_for(request, resulting_revision=WorldRevision(0))
+    service = ReplayService(
+        _FakeRuns(_manifest()),
+        _FakeJournal(commits=[commit], events=[event]),
+        _FakeSnapshots([_snapshot()]),
+    )
+    events = await service.read_event_page(
+        RunId("run-1"), from_tick=Tick(0), limit=10, offset=0
+    )
+    commits = await service.read_commit_page(
+        RunId("run-1"), from_tick=Tick(0), limit=10
+    )
+    assert len(events.events) == 1
+    assert events.next_offset is None
+    assert len(commits.commits) == 1
+    assert commits.next_from_tick is None
+    assert events.events[0].event_id.value == "evt-page-1"

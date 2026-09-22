@@ -38,6 +38,18 @@ __all__ = [
     "MemoryServiceErrorCode",
 ]
 
+
+class _MemoryServiceReader:
+    """Sync ``MemoryReader`` facade over an in-memory memory service."""
+
+    __slots__ = ("_service",)
+
+    def __init__(self, service: InMemoryMemoryService) -> None:
+        self._service = service
+
+    def snapshot(self) -> tuple[MemoryTrace, ...]:
+        return self._service.sync_snapshot()
+
 _LOG: Final[logging.Logger] = logging.getLogger("memory.service")
 
 
@@ -334,11 +346,19 @@ class InMemoryMemoryService:
         return self._with_lineage_edges(trace)
 
     async def snapshot(self) -> tuple[MemoryTrace, ...]:
+        return self.sync_snapshot()
+
+    def sync_snapshot(self) -> tuple[MemoryTrace, ...]:
+        """Synchronous active-trace snapshot for perspective assembly."""
         return tuple(
             self._with_lineage_edges(trace)
             for trace in self._records.values()
             if trace.forgotten_at_tick is None
         )
+
+    def as_reader(self) -> _MemoryServiceReader:
+        """Return a sync ``MemoryReader`` bound to this service's store."""
+        return _MemoryServiceReader(self)
 
     def _with_lineage_edges(self, trace: MemoryTrace) -> MemoryTrace:
         edges = self._derivation_edges.get(trace.memory_id)

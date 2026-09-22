@@ -41,6 +41,21 @@ __all__ = [
     "InMemorySemanticBeliefService",
 ]
 
+
+class _SemanticBeliefServiceReader:
+    """Sync ``SemanticBeliefReader`` facade over an in-memory belief service."""
+
+    __slots__ = ("_service",)
+
+    def __init__(self, service: InMemorySemanticBeliefService) -> None:
+        self._service = service
+
+    def snapshot(self) -> tuple[SemanticBelief, ...]:
+        return self._service.sync_snapshot()
+
+    def history(self, belief_id: BeliefId) -> SemanticBeliefHistory | None:
+        return self._service.history_sync(belief_id)
+
 _LOG: Final[logging.Logger] = logging.getLogger("memory.belief_service")
 
 
@@ -467,4 +482,18 @@ class InMemorySemanticBeliefService:
         return self._store.history(belief_id)
 
     async def snapshot(self) -> tuple[SemanticBelief, ...]:
+        return self.sync_snapshot()
+
+    def sync_snapshot(self) -> tuple[SemanticBelief, ...]:
+        """Synchronous belief snapshot for perspective assembly."""
         return self._store.snapshot()
+
+    def history_sync(self, belief_id: BeliefId) -> SemanticBeliefHistory | None:
+        """Synchronous history lookup for ``SemanticBeliefReader`` adapters."""
+        if type(belief_id) is not BeliefId:
+            raise BeliefServiceError(BeliefServiceErrorCode.INVALID_REQUEST)
+        return self._store.history(belief_id)
+
+    def as_reader(self) -> _SemanticBeliefServiceReader:
+        """Return a sync ``SemanticBeliefReader`` bound to this service."""
+        return _SemanticBeliefServiceReader(self)

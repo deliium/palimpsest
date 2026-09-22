@@ -31,6 +31,21 @@ __all__ = [
     "RelationshipServiceErrorCode",
 ]
 
+
+class _RelationshipServiceReader:
+    """Sync ``RelationshipReader`` facade over an in-memory relationship service."""
+
+    __slots__ = ("_service",)
+
+    def __init__(self, service: InMemoryRelationshipService) -> None:
+        self._service = service
+
+    def snapshot(self) -> tuple[DirectedRelationshipProfile, ...]:
+        return self._service.sync_snapshot()
+
+    def history(self, relationship_id: RelationshipId) -> RelationshipHistory | None:
+        return self._service.history_sync(relationship_id)
+
 _LOG: Final[logging.Logger] = logging.getLogger("social.service")
 
 
@@ -273,4 +288,18 @@ class InMemoryRelationshipService:
         return self._store.history(relationship_id)
 
     async def snapshot(self) -> tuple[DirectedRelationshipProfile, ...]:
+        return self.sync_snapshot()
+
+    def sync_snapshot(self) -> tuple[DirectedRelationshipProfile, ...]:
+        """Synchronous relationship snapshot for perspective assembly."""
         return self._store.snapshot()
+
+    def history_sync(
+        self, relationship_id: RelationshipId
+    ) -> RelationshipHistory | None:
+        """Synchronous history lookup for ``RelationshipReader`` adapters."""
+        return self._store.history(relationship_id)
+
+    def as_reader(self) -> _RelationshipServiceReader:
+        """Return a sync ``RelationshipReader`` bound to this service."""
+        return _RelationshipServiceReader(self)

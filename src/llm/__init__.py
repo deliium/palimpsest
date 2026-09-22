@@ -10,6 +10,7 @@ from llm.errors import (
     retry_exhausted,
 )
 from llm.factory import (
+    DeterministicFakeLLMProvider,
     DisabledLLMProvider,
     ProviderAdapterKind,
     ProviderFactoryConfig,
@@ -49,6 +50,7 @@ from llm.providers import CORRELATION_HEADER_NAME, OpenAICompatibleProvider
 
 __all__ = [
     "CORRELATION_HEADER_NAME",
+    "DeterministicFakeLLMProvider",
     "DisabledLLMProvider",
     "EffectiveOptions",
     "FinishReason",

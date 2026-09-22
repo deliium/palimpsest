@@ -2,6 +2,10 @@
 
 Concrete SQLAlchemy adapters live in ``persistence`` and may import these
 contracts. The ``experiments`` package never imports SQLAlchemy.
+
+Neutral analysis evidence rows live here so persistence adapters stay
+analysis-free and the outer composition service can map them into analysis
+sources without importing persistence.
 """
 
 from __future__ import annotations
@@ -9,6 +13,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Protocol
 
+from memory.models import MemoryTrace
+from simulation.evidence import EvidenceManifest
 from world.identifiers import require_stable_id
 
 EXPERIMENT_RECORD_SCHEMA_VERSION = "experiment-record-v1"
@@ -92,3 +98,77 @@ class ExperimentRecordRepository(Protocol):
     async def list_assignments(
         self, experiment_id: str
     ) -> tuple[ExperimentAssignmentRecord, ...]: ...
+
+
+@dataclass(frozen=True, slots=True)
+class PersistedDerivationEdge:
+    """Neutral derivation edge row (no analysis types)."""
+
+    derived_memory_id: str
+    source_memory_id: str
+    ordinal: int
+    reconstruction_id: str | None
+
+
+@dataclass(frozen=True, slots=True)
+class PersistedReconstructionRow:
+    """Neutral reconstruction metadata row (no narrative payloads)."""
+
+    reconstruction_id: str
+    source_memory_ids: tuple[str, ...]
+    created_tick: int
+    generation: int
+    policy_id: str
+    policy_version: str
+    used_provider: bool
+    fallback_used: bool
+    prompt_version: str | None
+    schema_version: str | None
+    payload_sha256: str
+
+
+@dataclass(frozen=True, slots=True)
+class PersistedAnalysisSnapshot:
+    """Detached subjective + objective evidence for one experiment membership.
+
+    Framework-free. Persistence adapters produce these; composition maps them
+    into analysis evidence sources. Events are opaque detached domain objects.
+    """
+
+    experiment_id: str
+    run_id: str
+    owner_id: str
+    traces: tuple[MemoryTrace, ...]
+    reconstructions: tuple[PersistedReconstructionRow, ...]
+    derivation_edges: tuple[PersistedDerivationEdge, ...]
+    events: tuple[object, ...]
+
+    def __repr__(self) -> str:
+        return (
+            f"PersistedAnalysisSnapshot(experiment_id={self.experiment_id!r}, "
+            f"run_id={self.run_id!r}, owner_id={self.owner_id!r}, "
+            f"trace_count={len(self.traces)}, "
+            f"reconstruction_count={len(self.reconstructions)}, "
+            f"edge_count={len(self.derivation_edges)}, "
+            f"event_count={len(self.events)})"
+        )
+
+
+class AnalysisEvidenceSnapshotReader(Protocol):
+    """Async reader returning neutral analysis snapshots (no analysis imports)."""
+
+    async def load(
+        self,
+        *,
+        experiment_id: str,
+        run_id: str,
+        owner_id: str,
+    ) -> PersistedAnalysisSnapshot: ...
+
+
+class EvidenceManifestRepository(Protocol):
+    """Port for durable evidence manifests (implemented by persistence later)."""
+
+    async def get_manifest(self, run_id: str) -> EvidenceManifest | None: ...
+
+    async def append_manifest(self, manifest: EvidenceManifest) -> None: ...

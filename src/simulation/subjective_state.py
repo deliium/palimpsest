@@ -17,7 +17,13 @@ from enum import StrEnum
 from typing import Final, Protocol
 
 from agents.models import AgentId
-from memory.beliefs import BeliefRevisionRequest
+from memory.beliefs import BeliefRevisionRequest, SemanticBelief
+from memory.contracts import (
+    MemoryReader,
+    MemoryService,
+    SemanticBeliefReader,
+    SemanticBeliefService,
+)
 from memory.models import (
     MemoryAccessReceipt,
     MemoryMutationBatch,
@@ -26,7 +32,11 @@ from memory.models import (
     MemoryTrace,
     ReconstructionRecord,
 )
-from social.relationships import RelationshipRevisionRequest
+from social.contracts import RelationshipReader, RelationshipService
+from social.relationships import (
+    DirectedRelationshipProfile,
+    RelationshipRevisionRequest,
+)
 from world.identifiers import (
     require_bounded_text,
     require_exact_nonneg_int,
@@ -34,9 +44,12 @@ from world.identifiers import (
 )
 
 __all__ = [
+    "InMemorySubjectiveOwnerBundle",
     "InMemorySubjectiveStateService",
     "SubjectiveApplyReceipt",
     "SubjectiveMutationBatch",
+    "SubjectiveOwnerBundle",
+    "SubjectiveOwnerSnapshot",
     "SubjectiveStateError",
     "SubjectiveStateErrorCode",
     "SubjectiveStateService",
@@ -657,3 +670,214 @@ def subjective_operation_id(*, owner_id: AgentId, invocation_id: str) -> str:
 
 def require_memory_run_id(value: str) -> MemoryRunId:
     return MemoryRunId(value)
+
+
+@dataclass(frozen=True, slots=True)
+class SubjectiveOwnerSnapshot:
+    """Detached owner-scoped subjective snapshot (counts/IDs only in logs)."""
+
+    memories: tuple[MemoryTrace, ...]
+    semantic_beliefs: tuple[SemanticBelief, ...]
+    relationships: tuple[DirectedRelationshipProfile, ...]
+    reconstruction_count: int = 0
+
+    def __post_init__(self) -> None:
+        object.__setattr__(
+            self,
+            "reconstruction_count",
+            require_exact_nonneg_int(
+                "SubjectiveOwnerSnapshot.reconstruction_count",
+                self.reconstruction_count,
+            ),
+        )
+
+    def __repr__(self) -> str:
+        return (
+            f"SubjectiveOwnerSnapshot(memory_count={len(self.memories)}, "
+            f"belief_count={len(self.semantic_beliefs)}, "
+            f"relationship_count={len(self.relationships)}, "
+            f"reconstruction_count={self.reconstruction_count})"
+        )
+
+
+class SubjectiveOwnerBundle(Protocol):
+    """Async owner-scoped subjective services for one ``(run, owner)`` scope.
+
+    Provides memory, belief, relationship, reconstruction (via memory recall),
+    snapshot, and atomic commit ports so persistence adapters can be injected
+    at the API composition boundary without disconnected store reads.
+    """
+
+    @property
+    def scope(self) -> MemoryScope: ...
+
+    @property
+    def memory(self) -> MemoryService: ...
+
+    @property
+    def belief(self) -> SemanticBeliefService: ...
+
+    @property
+    def relationship(self) -> RelationshipService: ...
+
+    @property
+    def commit_service(self) -> SubjectiveStateService: ...
+
+    @property
+    def memory_reader(self) -> MemoryReader: ...
+
+    @property
+    def semantic_belief_reader(self) -> SemanticBeliefReader: ...
+
+    @property
+    def relationship_reader(self) -> RelationshipReader: ...
+
+    async def snapshot(self) -> SubjectiveOwnerSnapshot: ...
+
+    async def commit(
+        self, batch: SubjectiveMutationBatch
+    ) -> SubjectiveApplyReceipt: ...
+
+
+class InMemorySubjectiveOwnerBundle:
+    """In-process owner-scoped subjective bundle with shared commit boundary."""
+
+    __slots__ = (
+        "_belief",
+        "_memory",
+        "_relationship",
+        "_scope",
+        "_subjective",
+    )
+
+    def __init__(
+        self,
+        scope: MemoryScope,
+        *,
+        memory_service: MemoryService,
+        belief_service: SemanticBeliefService,
+        relationship_service: RelationshipService,
+        subjective_state: SubjectiveStateService | None = None,
+    ) -> None:
+        if type(scope) is not MemoryScope:
+            raise TypeError("InMemorySubjectiveOwnerBundle requires MemoryScope")
+        if memory_service.scope != scope:
+            raise ValueError("memory_service scope mismatch")
+        belief_scope = getattr(belief_service, "scope", None)
+        if belief_scope is not None and belief_scope != scope:
+            raise ValueError("belief_service scope mismatch")
+        if relationship_service.source_id != scope.owner_id:
+            raise ValueError("relationship_service owner mismatch")
+        self._scope = scope
+        self._memory = memory_service
+        self._belief = belief_service
+        self._relationship = relationship_service
+        if subjective_state is None:
+            subjective_state = InMemorySubjectiveStateService(
+                scope,
+                memory_service=memory_service,  # type: ignore[arg-type]
+                belief_service=belief_service,  # type: ignore[arg-type]
+                relationship_service=relationship_service,  # type: ignore[arg-type]
+            )
+        elif subjective_state.scope != scope:
+            raise ValueError("subjective_state scope mismatch")
+        self._subjective = subjective_state
+        _LOG.info(
+            "subjective_bundle_created",
+            extra={
+                "operation": "create",
+                "run_id": scope.run_id.value,
+                "owner_id": scope.owner_id.value,
+            },
+        )
+
+    @property
+    def scope(self) -> MemoryScope:
+        return self._scope
+
+    @property
+    def memory(self) -> MemoryService:
+        return self._memory
+
+    @property
+    def belief(self) -> SemanticBeliefService:
+        return self._belief
+
+    @property
+    def relationship(self) -> RelationshipService:
+        return self._relationship
+
+    @property
+    def commit_service(self) -> SubjectiveStateService:
+        return self._subjective
+
+    @property
+    def memory_reader(self) -> MemoryReader:
+        as_reader = getattr(self._memory, "as_reader", None)
+        if as_reader is None:
+            raise TypeError("memory service missing as_reader")
+        return as_reader()
+
+    @property
+    def semantic_belief_reader(self) -> SemanticBeliefReader:
+        as_reader = getattr(self._belief, "as_reader", None)
+        if as_reader is None:
+            raise TypeError("belief service missing as_reader")
+        return as_reader()
+
+    @property
+    def relationship_reader(self) -> RelationshipReader:
+        as_reader = getattr(self._relationship, "as_reader", None)
+        if as_reader is None:
+            raise TypeError("relationship service missing as_reader")
+        return as_reader()
+
+    async def snapshot(self) -> SubjectiveOwnerSnapshot:
+        memories = await self._memory.snapshot()
+        beliefs = await self._belief.snapshot()
+        relationships = await self._relationship.snapshot()
+        reconstruction_count = 0
+        for trace in memories:
+            if trace.lineage.reconstruction_id is not None:
+                reconstruction_count += 1
+        snap = SubjectiveOwnerSnapshot(
+            memories=memories,
+            semantic_beliefs=beliefs,
+            relationships=relationships,
+            reconstruction_count=reconstruction_count,
+        )
+        _LOG.debug(
+            "subjective_bundle_snapshot",
+            extra={
+                "operation": "snapshot",
+                "run_id": self._scope.run_id.value,
+                "owner_id": self._scope.owner_id.value,
+                "memory_count": len(memories),
+                "belief_count": len(beliefs),
+                "relationship_count": len(relationships),
+                "reconstruction_count": reconstruction_count,
+            },
+        )
+        return snap
+
+    async def commit(
+        self, batch: SubjectiveMutationBatch
+    ) -> SubjectiveApplyReceipt:
+        receipt = await self._subjective.commit(batch)
+        _LOG.info(
+            "subjective_bundle_commit",
+            extra={
+                "operation": "commit",
+                "run_id": self._scope.run_id.value,
+                "owner_id": self._scope.owner_id.value,
+                "operation_id": receipt.operation_id,
+                "revision": receipt.revision,
+                "idempotent": receipt.idempotent,
+                "memory_write_count": receipt.memory_written_count,
+                "belief_revision_count": receipt.belief_revision_count,
+                "relationship_revision_count": receipt.relationship_revision_count,
+                "reconstruction_written_count": receipt.reconstruction_written_count,
+            },
+        )
+        return receipt
+

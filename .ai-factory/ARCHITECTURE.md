@@ -28,10 +28,14 @@ src/
   llm/prompts/           # immutable versioned prompt package resources
   llm/providers/         # OpenAI-compatible HTTP adapter + pure codec
   simulation/            # WorldEngine, AgentRuntime, SimulationRunner, codecs, replay
+                         # run_control.py (resume modes + finalization-command contracts)
   experiments/           # trusted experiment catalog/coordinator (A–E); never imported by domain
+                         # composition.py maps neutral persistence snapshots → analysis sources
   persistence/           # SQLAlchemy adapters (simulation, memory, subjective, analysis loaders)
                          # may implement experiments.persistence ports; transmission_mapping.py
-  analysis/              # read-only MemoryDriftAnalysisService + SocialTransmissionAnalysisService
+  analysis/              # read-only analysis: drift/transmission, metric DTOs,
+                         # evidence stages, claim truth, numerical policy, canonical codecs
+                         # MemoryDriftAnalysisService + SocialTransmissionAnalysisService
   api/                   # FastAPI composition root (no LLM provider wiring yet)
   infrastructure/        # settings (PALIMPSEST_*), logging, database adapters
 alembic/versions/        # migrations through 0010 (experiment framework records)
@@ -49,12 +53,16 @@ tests/
 - ✅ `llm` uses stdlib `logging` only (metadata allowlist; no `exc_info` / structlog / payload fields)
 - ✅ `agents.cognition` may import public contracts from agents/world/memory/social/llm
 - ✅ `simulation` may import domain public contracts; must not import `api`, `analysis`, `experiments`, `infrastructure`, or `persistence`
-- ✅ `experiments` may import public `simulation` and read-only `analysis` contracts; must not import `api`, `infrastructure`, or concrete SQLAlchemy
+- ✅ Simulation owns immutable `EvidenceManifest` high-water marks (counts/hashes only — never truth payloads)
+- ✅ `experiments` may import public `simulation`, read-only `analysis`, and `memory` contracts; must not import `api`, `infrastructure`, or concrete SQLAlchemy/`persistence`
+- ✅ `experiments.composition` is the legal outer composition boundary that maps neutral detached persistence rows into analysis sources; persistence adapters implement `experiments.persistence` ports only
 - ✅ `persistence` may import public `simulation` contracts, public `memory` and `social` facades, `infrastructure`, and `experiments.persistence` ports only
 - ✅ `persistence` identity types for subjective/transmission mapping come from `memory.models` (re-exported `EntityId`) — never import `world` from persistence
 - ✅ `api` may import `simulation`, `infrastructure`, and `persistence`
-- ✅ `analysis` is read-only; may import `world`, `simulation`, and `memory` contracts (not live infra/agents)
+- ✅ `analysis` is read-only; may import `world`, `simulation`, and `memory` contracts (not live infra/agents/persistence)
 - ✅ `infrastructure` imports no domain policy
+- ❌ `analysis` and `persistence` must not import each other
+- ❌ `api` must not import `analysis`
 - ❌ Domain packages must not import `infrastructure`, FastAPI, or ORM stacks
 - ❌ `world`, `agents`, `agents.cognition`, `memory`, and `social` must not import `experiments`
 - ❌ Non-simulation packages must not import private `world._*` authority modules
