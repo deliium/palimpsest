@@ -248,7 +248,11 @@ def transmission_root_for_trace(trace: MemoryTrace) -> MemoryId:
     root = meta.transmission_root_id or (
         meta.communication_id
         if meta.hop_count == 0
-        else (meta.parent_communication_id or meta.communication_id)
+        else (
+            meta.parent_communication_id
+            if meta.hop_count == 1 and meta.parent_communication_id is not None
+            else meta.communication_id
+        )
     )
     material = f"tr|{root}"
     digest = hashlib.sha256(material.encode("utf-8")).hexdigest()

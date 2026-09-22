@@ -158,28 +158,28 @@ The API is for research and inspection, not a production public service. No prod
 
 ### Phase 4: Subjective, Network, and Experiment Metrics
 
-- [ ] Task 13: Implement visibility-aware memory drift, belief accuracy, and false-belief persistence.
+- [x] Task 13: Implement visibility-aware memory drift, belief accuracy, and false-belief persistence.
   - Deliverable: Compare direct memory first against the exact agent-visible projection, then optionally report a separately labeled authoritative-world gap. Preserve direct/communicated/reconstructed/reconsolidated/belief/testimony stages on every row and deduplicate corroboration by lineage root.
   - Evaluate only claims covered by Task 3's typed truth specs. Implement categorical/numeric policies, validity intervals, confidence-weighted accuracy, onset/correction/retirement, right-censored persistence, and unknown/unobservable exclusion; objective truth never enters live cognition.
   - Files: `src/analysis/memory_drift.py`, `src/analysis/belief_metrics.py`, `src/analysis/service.py`, `src/analysis/models.py`, `src/analysis/__init__.py`, `tests/unit/test_memory_drift_analysis.py`, `tests/unit/test_reconstruction_analysis_service.py`, `tests/unit/test_belief_metrics.py`, `tests/architecture/test_analysis_isolation.py`.
   - Logging: DEBUG scope, metric/projector/evaluator versions, chain/revision/evaluable/unknown/censored counts; WARN incomplete lineage/truth; ERROR stable evaluator/scope codes. Never log observations, narratives, claims, truth values, memories, beliefs, or results.
   - Dependencies: Tasks 3-4, 8, and 10.
 
-- [ ] Task 14: Implement relationship stability, signed trust networks, and community indicators.
+- [x] Task 14: Implement relationship stability, signed trust networks, and community indicators.
   - Deliverable: Compute tick- or revision-weighted directed relationship stability with explicit missing-dimension, activation/retirement, sign-change, variance, delta, and duration policy. Build sorted signed trust/interaction graphs with confidence/threshold/self-loop/isolate rules and report density, reciprocity, weighted degrees, components, centralization, and one named deterministic community algorithm over an explicit nonnegative projection.
   - Canonicalize community labels and validate library version, node/edge ordering, negative/zero weights, disconnected graphs, and input permutations.
   - Files: `src/analysis/relationship_metrics.py`, `src/analysis/network_metrics.py`, `src/analysis/models.py`, `src/analysis/__init__.py`, `tests/unit/test_relationship_metrics.py`, `tests/unit/test_network_metrics.py`, `tests/unit/test_metric_determinism.py`.
   - Logging: DEBUG graph/metric versions, run scope, node/edge/component/community counts, availability, and duration; WARN disconnected/insufficient graphs; ERROR stable graph/non-finite codes. Never log relationship values by named pair, membership lists, graph payloads, or results.
   - Dependencies: Tasks 8 and 10.
 
-- [ ] Task 15: Repair transmission lineage and implement stage-specific diffusion and rumor distortion.
+- [x] Task 15: Repair transmission lineage and implement stage-specific diffusion and rumor distortion.
   - Deliverable: Correct root/parent propagation in `StructuredUtterance`, world events, communicated-memory provenance, subjective codecs, and persistence mappings. Prefer explicit root identity with an event/schema migration when necessary; reject cycles, preserve unresolved testimony, and never infer parents from sorted hop order.
   - Implement separate world-delivery, receiver-trace, belief-candidate, belief-activation, reconstruction, and retell adoption metrics. Report first adoption, reach, hops/time, branching, structured concept/relation edits, unsupported additions/losses, confidence attenuation, and unresolved coverage without merging declared lineage with verified truth.
   - Files: `src/world/communications.py`, `src/world/events.py`, `src/agents/cognition/communication.py`, `src/memory/models.py`, `src/simulation/subjective_serialization.py`, `src/persistence/transmission_mapping.py`, `src/analysis/social_transmission.py`, `src/analysis/transmission_metrics.py`, `src/analysis/models.py`, `tests/unit/test_multi_hop_communication_memory.py`, `tests/unit/test_social_transmission_analysis.py`, `tests/unit/test_transmission_metrics.py`, `tests/integration/test_social_transmission_analysis_persistence.py`.
   - Logging: DEBUG lineage/metric versions, run scope, stage/hop/branch/unresolved counts, and duration; WARN cycle/unresolved/partial evidence; ERROR stable schema/lineage codes. Never log utterances, claims, memories, concept/relation payloads, truth values, or metric documents.
   - Dependencies: Tasks 3-4, 7-10, and 13.
 
-- [ ] Task 16: Add run-level metric orchestration, durable experiment collection, and compatible comparison.
+- [x] Task 16: Add run-level metric orchestration, durable experiment collection, and compatible comparison.
   - Deliverable: Assemble all metric families from one evidence manifest, maintain a separate metric-set lifecycle from objective run completion, emit canonical quantized documents, and persist each family idempotently through neutral repository protocols at the composition boundary defined in Task 3.
   - Replace placeholder collectors, attach canonical experiment assignments, support run-level metrics without experiment membership, and compare only compatible schema/algorithm/library/population/denominator/evidence revisions. Repeated computation over the same manifest must produce the same canonical hashes.
   - Files: `src/analysis/metric_service.py`, `src/analysis/serialization.py`, `src/experiments/metric_collection.py`, `src/experiments/collectors.py`, `src/experiments/coordinator.py`, `src/experiments/models.py`, `src/persistence/experiment_sqlalchemy.py`, `tests/unit/test_metric_service.py`, `tests/unit/test_experiment_collectors.py`, `tests/unit/test_experiment_coordinator.py`, `tests/integration/test_metric_persistence.py`.

@@ -8,24 +8,34 @@ Never injects WorldEvent into agents, cognition, memory, or reconstruction.
 from __future__ import annotations
 
 import logging
+from collections.abc import Mapping, Sequence
 from typing import Final
 
 from analysis.contracts import MemoryEvidenceSource, ObjectiveEventSource
+from analysis.evidence import EvidenceStage
 from analysis.memory_drift import (
+    AGENT_VISIBLE_PROJECTOR_VERSION,
     DRIFT_METRIC_VERSION,
     EVENT_FACT_PROJECTOR_VERSION,
     build_reconstruction_chains,
     compare_fact_sets,
+    compute_memory_drift,
     cumulative_drift,
+    evidence_stage_for_trace,
+    project_agent_visible_observation,
+    project_world_event,
 )
 from analysis.models import (
     ChainNodeKind,
     DriftDelta,
     DriftStep,
     MemoryDriftReport,
+    MetricDocument,
     ObjectiveLinkStatus,
+    StructuredFactSet,
 )
 from world.identifiers import require_stable_id
+from world.observations import Observation
 
 __all__ = ["MemoryDriftAnalysisService"]
 
@@ -52,8 +62,15 @@ class MemoryDriftAnalysisService:
         experiment_id: str,
         run_id: str,
         owner_id: str,
+        agent_visible: Sequence[Observation] | None = None,
+        include_authoritative_world_gap: bool = True,
     ) -> MemoryDriftReport:
-        """Join opaque source correlation with objective events and measure drift."""
+        """Join opaque source correlation with objective events and measure drift.
+
+        Primary comparison uses agent-visible projection when provided. Optional
+        authoritative-world gaps are separately labeled and never mixed into the
+        primary chain baseline.
+        """
         experiment_id = require_stable_id("experiment_id", experiment_id)
         run_id = require_stable_id("run_id", run_id)
         owner_id = require_stable_id("owner_id", owner_id)
@@ -66,7 +83,9 @@ class MemoryDriftAnalysisService:
                 "run_id": run_id,
                 "owner_id": owner_id,
                 "projector_version": EVENT_FACT_PROJECTOR_VERSION,
+                "agent_visible_projector_version": AGENT_VISIBLE_PROJECTOR_VERSION,
                 "metric_version": DRIFT_METRIC_VERSION,
+                "agent_visible_count": 0 if agent_visible is None else len(agent_visible),
             },
         )
 
@@ -100,20 +119,46 @@ class MemoryDriftAnalysisService:
             for edge in edges
             if edge.reconstruction_id is not None
         }
+        traces_by_id = {trace.memory_id.value: trace for trace in traces}
+
+        visible_by_source: dict[str, StructuredFactSet] = {}
+        if agent_visible:
+            for observation in agent_visible:
+                facts = project_agent_visible_observation(observation)
+                for occurrence in observation.occurrences:
+                    event_id = (
+                        None
+                        if occurrence.provenance.source_event_id is None
+                        else occurrence.provenance.source_event_id.value
+                    )
+                    if event_id is not None:
+                        visible_by_source[event_id] = facts
+                for message in observation.communications:
+                    event_id = (
+                        None
+                        if message.provenance.source_event_id is None
+                        else message.provenance.source_event_id.value
+                    )
+                    if event_id is not None:
+                        visible_by_source[event_id] = facts
 
         chains = build_reconstruction_chains(
             traces=traces,
             reconstructions=reconstructions,
             edges=edges,
             events_by_id=events_by_id,
+            agent_visible_by_source_id=visible_by_source or None,
+            include_authoritative_world=not bool(visible_by_source),
         )
 
         steps: list[DriftStep] = []
+        authoritative_gaps: list[DriftStep] = []
         cumulative: list[DriftDelta] = []
         linked = 0
         unlinked = 0
         absent = 0
         broken_provenance = 0
+        stage_counts: dict[str, int] = {}
 
         for chain in chains:
             if chain.objective_link is ObjectiveLinkStatus.LINKED:
@@ -158,6 +203,11 @@ class MemoryDriftAnalysisService:
                             "reason_code": "provenance_break",
                         },
                     )
+                stage = _stage_for_node(
+                    after.kind, after.node_id, traces_by_id=traces_by_id
+                )
+                if stage is not None:
+                    stage_counts[stage.value] = stage_counts.get(stage.value, 0) + 1
                 delta = compare_fact_sets(
                     before.facts,
                     after.facts,
@@ -171,8 +221,44 @@ class MemoryDriftAnalysisService:
                         from_id=before.node_id,
                         to_id=after.node_id,
                         delta=delta,
+                        evidence_stage=stage,
+                        comparison_label="primary",
                     )
                 )
+
+            if (
+                include_authoritative_world_gap
+                and chain.observed_source_id is not None
+                and chain.objective_link is ObjectiveLinkStatus.LINKED
+            ):
+                event = events_by_id.get(chain.observed_source_id)
+                root_node = next(
+                    (
+                        node
+                        for node in chain.nodes
+                        if node.kind is ChainNodeKind.ROOT_TRACE
+                    ),
+                    None,
+                )
+                if event is not None and root_node is not None:
+                    world_facts = project_world_event(event)
+                    gap = compare_fact_sets(
+                        world_facts,
+                        root_node.facts,
+                        provenance_continuous=True,
+                    )
+                    authoritative_gaps.append(
+                        DriftStep(
+                            chain_root_memory_id=chain.root_memory_id,
+                            from_kind=ChainNodeKind.AUTHORITATIVE_WORLD_GAP,
+                            to_kind=ChainNodeKind.ROOT_TRACE,
+                            from_id=chain.observed_source_id,
+                            to_id=root_node.node_id,
+                            delta=gap,
+                            evidence_stage=EvidenceStage.OBJECTIVE_EVENT_STATE,
+                            comparison_label="authoritative_world_gap",
+                        )
+                    )
 
             first_facts = chain.nodes[0].facts
             last_facts = chain.nodes[-1].facts
@@ -188,7 +274,11 @@ class MemoryDriftAnalysisService:
             experiment_id=experiment_id,
             run_id=run_id,
             owner_id=owner_id,
-            projector_version=EVENT_FACT_PROJECTOR_VERSION,
+            projector_version=(
+                AGENT_VISIBLE_PROJECTOR_VERSION
+                if visible_by_source
+                else EVENT_FACT_PROJECTOR_VERSION
+            ),
             metric_version=DRIFT_METRIC_VERSION,
             chains=chains,
             steps=tuple(steps),
@@ -196,6 +286,8 @@ class MemoryDriftAnalysisService:
             linked_count=linked,
             unlinked_count=unlinked,
             absent_source_count=absent,
+            authoritative_gap_steps=tuple(authoritative_gaps),
+            evidence_stage_counts=stage_counts or None,
         )
         _LOG.debug(
             "memory_drift_analysis_metrics",
@@ -210,6 +302,7 @@ class MemoryDriftAnalysisService:
                 "unlinked_count": unlinked,
                 "absent_source_count": absent,
                 "broken_provenance_count": broken_provenance,
+                "authoritative_gap_count": len(authoritative_gaps),
                 "metric_names": (
                     "retained_concepts",
                     "lost_concepts",
@@ -233,6 +326,46 @@ class MemoryDriftAnalysisService:
         )
         return report
 
+    def analyze_memory_drift_document(
+        self,
+        *,
+        experiment_id: str,
+        run_id: str,
+        owner_id: str,
+        input_revision: str,
+        agent_visible: Sequence[Observation] | None = None,
+        include_authoritative_world_gap: bool = True,
+    ) -> MetricDocument:
+        """Analyze drift and emit a catalog MetricDocument."""
+        report = self.analyze_memory_drift(
+            experiment_id=experiment_id,
+            run_id=run_id,
+            owner_id=owner_id,
+            agent_visible=agent_visible,
+            include_authoritative_world_gap=include_authoritative_world_gap,
+        )
+        return compute_memory_drift(report, input_revision=input_revision)
+
+
+def _stage_for_node(
+    kind: ChainNodeKind,
+    node_id: str,
+    *,
+    traces_by_id: Mapping[str, object],
+) -> EvidenceStage | None:
+    if kind is ChainNodeKind.AGENT_VISIBLE_PROJECTION:
+        return EvidenceStage.AGENT_VISIBLE_PROJECTION
+    if kind is ChainNodeKind.OBJECTIVE_EVENT:
+        return EvidenceStage.OBJECTIVE_EVENT_STATE
+    if kind is ChainNodeKind.RECONSTRUCTION:
+        return EvidenceStage.RECONSTRUCTION
+    if kind in (ChainNodeKind.ROOT_TRACE, ChainNodeKind.DERIVED_TRACE):
+        trace = traces_by_id.get(node_id)
+        if trace is not None:
+            return evidence_stage_for_trace(trace)  # type: ignore[arg-type]
+        return EvidenceStage.DIRECT_TRACE
+    return None
+
 
 def _edge_continuous(
     *,
@@ -243,6 +376,8 @@ def _edge_continuous(
     reconstruction_sources: dict[str, frozenset[str]],
     derived_reconstructions: dict[str, str],
 ) -> bool:
+    if before_kind is ChainNodeKind.AGENT_VISIBLE_PROJECTION:
+        return after_kind is ChainNodeKind.ROOT_TRACE
     if before_kind is ChainNodeKind.OBJECTIVE_EVENT:
         return after_kind is ChainNodeKind.ROOT_TRACE
     if (

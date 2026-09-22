@@ -1,22 +1,34 @@
 """Pure memory-drift comparison and provenance-chain traversal.
 
-Log-free. Distinguishes unknown/absent objective truth from contradicted or
-unsupported subjective additions. Never invents missing objective sources.
+Log-free projectors/comparators. Distinguishes unknown/absent objective truth
+from contradicted or unsupported subjective additions. Never invents missing
+objective sources. Visibility-aware primary baseline prefers agent-visible
+projection; authoritative-world gaps are separately labeled.
 """
 
 from __future__ import annotations
 
 import hashlib
+import logging
+import time
 from collections.abc import Mapping, Sequence
 from typing import Final
 
+from analysis.evidence import EvidenceStage
 from analysis.models import (
+    AGENT_VISIBLE_PROJECTOR_VERSION,
     DRIFT_METRIC_VERSION,
     EVENT_FACT_PROJECTOR_VERSION,
+    METRIC_DOCUMENT_SCHEMA_VERSION,
     ChainNodeKind,
     ComparisonStatus,
     DriftDelta,
     FactAvailability,
+    MemoryDriftReport,
+    MetricAvailability,
+    MetricCoverage,
+    MetricDocument,
+    MetricProvenance,
     ObjectiveLinkStatus,
     ReconstructionChain,
     ReconstructionChainNode,
@@ -24,30 +36,43 @@ from analysis.models import (
     StructuredFactSet,
     SubjectiveDerivationEdge,
 )
+from analysis.numerical import library_versions, quantize_float, require_finite
+from analysis.specifications import MetricFamilyId, metric_specification
 from memory.models import (
     ConceptMention,
     EntityMention,
     MemoryRelation,
     MemorySituationContext,
+    MemorySourceKind,
     MemoryTrace,
     ReconstructedMemory,
     RelationEndpointKind,
 )
 from world.events import WorldEvent
+from world.identifiers import require_stable_id
+from world.observations import Observation
 
 __all__ = [
+    "AGENT_VISIBLE_PROJECTOR_VERSION",
     "DRIFT_METRIC_VERSION",
     "EVENT_FACT_PROJECTOR_VERSION",
     "build_reconstruction_chains",
     "compare_fact_sets",
+    "compute_memory_drift",
+    "concept_jaccard_loss",
     "cumulative_drift",
+    "dedupe_traces_by_lineage_root",
     "evidence_from_reconstructed_memory",
+    "evidence_stage_for_trace",
+    "project_agent_visible_observation",
     "project_memory_trace",
     "project_reconstructed_memory",
     "project_reconstruction_evidence",
     "project_world_event",
     "resolve_objective_link",
 ]
+
+_LOG: Final[logging.Logger] = logging.getLogger("analysis.memory_drift")
 
 _EMPTY_FACTS: Final[StructuredFactSet] = StructuredFactSet(
     concepts=frozenset(),
@@ -117,6 +142,132 @@ def project_world_event(event: WorldEvent) -> StructuredFactSet:
         availability=FactAvailability.PRESENT,
         projector_version=EVENT_FACT_PROJECTOR_VERSION,
     )
+
+
+def project_agent_visible_observation(observation: Observation) -> StructuredFactSet:
+    """Project exact agent-visible observation into structured facts.
+
+    Primary baseline for direct-memory drift. Never invents hidden state.
+    """
+    if type(observation) is not Observation:
+        raise TypeError("project_agent_visible_observation: invalid_type")
+    concepts: set[str] = set()
+    entity_ids: set[str] = set()
+    entity_labels: set[str] = set()
+    relations: set[tuple[str, str, str]] = set()
+    context_tags: set[str] = set()
+
+    entity_ids.add(observation.observer_id.value)
+    location_id: str | None = None
+    if observation.self_body is not None:
+        entity_ids.add(observation.self_body.entity_id.value)
+        location_id = observation.self_body.location_id.value
+    for body in observation.visible_bodies:
+        entity_ids.add(body.entity_id.value)
+    for item in observation.items:
+        entity_ids.add(item.entity_id.value)
+    for resource in observation.resources:
+        entity_ids.add(resource.entity_id.value)
+    for exit_item in observation.exits:
+        entity_ids.add(exit_item.destination_id.value)
+    for occurrence in observation.occurrences:
+        concepts.add(occurrence.kind)
+        if occurrence.actor_id is not None:
+            entity_ids.add(occurrence.actor_id.value)
+        if occurrence.other_entity_id is not None:
+            entity_ids.add(occurrence.other_entity_id.value)
+        if occurrence.destination_id is not None:
+            entity_ids.add(occurrence.destination_id.value)
+        if occurrence.success is not None:
+            context_tags.add(f"success:{occurrence.success}")
+        if occurrence.actor_id is not None and occurrence.other_entity_id is not None:
+            relations.add(
+                (
+                    occurrence.kind,
+                    occurrence.actor_id.value,
+                    occurrence.other_entity_id.value,
+                )
+            )
+    for message in observation.communications:
+        concepts.add(message.action_kind)
+        entity_ids.add(message.speaker_id.value)
+        entity_ids.add(message.listener_id.value)
+        concepts.update(message.utterance.content.concepts)
+    if observation.day_phase is not None:
+        context_tags.add(f"day_phase:{observation.day_phase.value}")
+    if observation.weather_condition is not None:
+        context_tags.add(f"weather:{observation.weather_condition.value}")
+
+    return StructuredFactSet(
+        concepts=frozenset(concepts),
+        entity_ids=frozenset(entity_ids),
+        entity_labels=frozenset(entity_labels),
+        relations=frozenset(relations),
+        context_tags=frozenset(context_tags),
+        location_id=location_id,
+        confidence=None,
+        salience=None,
+        narrative_fingerprint=None,
+        availability=FactAvailability.PRESENT,
+        projector_version=AGENT_VISIBLE_PROJECTOR_VERSION,
+    )
+
+
+def evidence_stage_for_trace(trace: MemoryTrace) -> EvidenceStage:
+    """Map a memory trace provenance/lineage to a closed EvidenceStage."""
+    if type(trace) is not MemoryTrace:
+        raise TypeError("evidence_stage_for_trace: invalid_type")
+    if trace.lineage.generation > 0 and trace.lineage.source_memory_ids:
+        return EvidenceStage.RECONSOLIDATED_TRACE
+    if trace.provenance.kind is MemorySourceKind.COMMUNICATED:
+        return EvidenceStage.COMMUNICATED_TRACE
+    return EvidenceStage.DIRECT_TRACE
+
+
+def dedupe_traces_by_lineage_root(
+    traces: Sequence[MemoryTrace],
+) -> tuple[MemoryTrace, ...]:
+    """Keep one corroborating trace per (stage, lineage root); never collapse stages."""
+    selected: dict[tuple[str, str], MemoryTrace] = {}
+    for trace in traces:
+        stage = evidence_stage_for_trace(trace)
+        root = (
+            trace.lineage.source_memory_ids[0].value
+            if trace.lineage.source_memory_ids
+            else trace.memory_id.value
+        )
+        key = (stage.value, root)
+        existing = selected.get(key)
+        if existing is None:
+            selected[key] = trace
+            continue
+        # Prefer earlier creation, then stable memory id.
+        if (trace.created_tick, trace.memory_id.value) < (
+            existing.created_tick,
+            existing.memory_id.value,
+        ):
+            selected[key] = trace
+    return tuple(
+        sorted(
+            selected.values(),
+            key=lambda item: (item.created_tick, item.memory_id.value),
+        )
+    )
+
+
+def concept_jaccard_loss(before: StructuredFactSet, after: StructuredFactSet) -> float | None:
+    """1 - Jaccard(concepts) when both sides PRESENT; else None (unknown)."""
+    if (
+        before.availability is not FactAvailability.PRESENT
+        or after.availability is not FactAvailability.PRESENT
+    ):
+        return None
+    union = before.concepts | after.concepts
+    if not union:
+        return 0.0
+    intersection = before.concepts & after.concepts
+    jaccard = float(len(intersection)) / float(len(union))
+    return quantize_float(require_finite(1.0 - jaccard))
 
 
 def project_memory_trace(trace: MemoryTrace) -> StructuredFactSet:
@@ -399,8 +550,17 @@ def build_reconstruction_chains(
     reconstructions: Sequence[ReconstructionEvidence],
     edges: Sequence[SubjectiveDerivationEdge],
     events_by_id: Mapping[str, WorldEvent],
+    agent_visible_by_source_id: Mapping[str, StructuredFactSet] | None = None,
+    include_authoritative_world: bool = True,
 ) -> tuple[ReconstructionChain, ...]:
-    """Traverse ordered derivation edges into immutable reconstruction chains."""
+    """Traverse ordered derivation edges into immutable reconstruction chains.
+
+    Primary baseline prefers agent-visible projection when provided. Authoritative
+    world events remain available for separately labeled gap comparisons when
+    ``include_authoritative_world`` is true.
+    """
+    visible_map = dict(agent_visible_by_source_id or {})
+    traces = dedupe_traces_by_lineage_root(traces)
     traces_by_id = {trace.memory_id.value: trace for trace in traces}
     reconstructions_by_id = {item.reconstruction_id: item for item in reconstructions}
 
@@ -429,28 +589,41 @@ def build_reconstruction_chains(
             events_by_id=events_by_id,
         )
         nodes: list[ReconstructionChainNode] = []
-        if link is ObjectiveLinkStatus.LINKED and objective_facts is not None:
+        visible = None if observed is None else visible_map.get(observed)
+        if visible is not None:
             nodes.append(
                 ReconstructionChainNode(
-                    kind=ChainNodeKind.OBJECTIVE_EVENT,
-                    node_id=observed or root.memory_id.value,
+                    kind=ChainNodeKind.AGENT_VISIBLE_PROJECTION,
+                    node_id=f"visible:{observed}",
                     generation=0,
-                    facts=objective_facts,
+                    facts=visible,
                     observed_source_id=observed,
-                    objective_link=link,
+                    objective_link=ObjectiveLinkStatus.NOT_APPLICABLE,
                 )
             )
-        elif link is ObjectiveLinkStatus.UNLINKED:
-            nodes.append(
-                ReconstructionChainNode(
-                    kind=ChainNodeKind.OBJECTIVE_EVENT,
-                    node_id=observed or root.memory_id.value,
-                    generation=0,
-                    facts=_EMPTY_FACTS,
-                    observed_source_id=observed,
-                    objective_link=link,
+        elif include_authoritative_world:
+            if link is ObjectiveLinkStatus.LINKED and objective_facts is not None:
+                nodes.append(
+                    ReconstructionChainNode(
+                        kind=ChainNodeKind.OBJECTIVE_EVENT,
+                        node_id=observed or root.memory_id.value,
+                        generation=0,
+                        facts=objective_facts,
+                        observed_source_id=observed,
+                        objective_link=link,
+                    )
                 )
-            )
+            elif link is ObjectiveLinkStatus.UNLINKED:
+                nodes.append(
+                    ReconstructionChainNode(
+                        kind=ChainNodeKind.OBJECTIVE_EVENT,
+                        node_id=observed or root.memory_id.value,
+                        generation=0,
+                        facts=_EMPTY_FACTS,
+                        observed_source_id=observed,
+                        objective_link=link,
+                    )
+                )
 
         nodes.append(
             ReconstructionChainNode(
@@ -623,3 +796,167 @@ def _endpoint_key(
                 return f"entity:{entity.entity_id.value}"
             return f"label:{entity.label}"
     return f"entity:{mention_id}"
+
+
+def compute_memory_drift(
+    report: MemoryDriftReport,
+    *,
+    input_revision: str,
+) -> MetricDocument:
+    """Summarize a MemoryDriftReport into a catalog MetricDocument."""
+    started = time.perf_counter()
+    if type(report) is not MemoryDriftReport:
+        raise TypeError("compute_memory_drift: invalid_report")
+    input_revision = require_stable_id("input_revision", input_revision)
+    spec = metric_specification(MetricFamilyId.MEMORY_DRIFT)
+    chain_count = len(report.chains)
+    if chain_count == 0:
+        return MetricDocument(
+            schema_version=METRIC_DOCUMENT_SCHEMA_VERSION,
+            metric_family=spec.family_id.value,
+            algorithm_version=spec.algorithm_version,
+            library_versions=library_versions(),
+            run_id=report.run_id,
+            input_revision=input_revision,
+            evidence_stages=frozenset(spec.evidence_inputs),
+            population=spec.population,
+            denominator=spec.denominator,
+            coverage=None,
+            availability=MetricAvailability.ABSENT,
+            values={},
+            provenance=MetricProvenance(
+                source_kind="memory_drift",
+                source_ids=(),
+                notes_code="no_chains",
+            ),
+        )
+
+    losses: list[float] = []
+    unknown_pairs = 0
+    for step in report.steps:
+        if step.comparison_label != "primary":
+            continue
+        loss = concept_jaccard_loss(
+            StructuredFactSet(
+                concepts=step.delta.retained_concepts | step.delta.lost_concepts,
+                entity_ids=frozenset(),
+                entity_labels=frozenset(),
+                relations=frozenset(),
+                context_tags=frozenset(),
+                location_id=None,
+                confidence=None,
+                salience=None,
+                narrative_fingerprint=None,
+                availability=(
+                    FactAvailability.PRESENT
+                    if step.delta.comparison_status is ComparisonStatus.COMPLETE
+                    else FactAvailability.UNKNOWN
+                ),
+                projector_version=EVENT_FACT_PROJECTOR_VERSION,
+            ),
+            StructuredFactSet(
+                concepts=step.delta.retained_concepts | step.delta.added_concepts,
+                entity_ids=frozenset(),
+                entity_labels=frozenset(),
+                relations=frozenset(),
+                context_tags=frozenset(),
+                location_id=None,
+                confidence=None,
+                salience=None,
+                narrative_fingerprint=None,
+                availability=(
+                    FactAvailability.PRESENT
+                    if step.delta.comparison_status is ComparisonStatus.COMPLETE
+                    else FactAvailability.UNKNOWN
+                ),
+                projector_version=EVENT_FACT_PROJECTOR_VERSION,
+            ),
+        )
+        if loss is None:
+            unknown_pairs += 1
+        else:
+            losses.append(loss)
+
+    # Prefer cumulative endpoint losses when step reconstruction is messy.
+    if not losses:
+        for index, chain in enumerate(report.chains):
+            if len(chain.nodes) < 2:
+                unknown_pairs += 1
+                continue
+            loss = concept_jaccard_loss(chain.nodes[0].facts, chain.nodes[-1].facts)
+            if loss is None:
+                unknown_pairs += 1
+            else:
+                losses.append(loss)
+
+    if not losses and unknown_pairs > 0:
+        availability = MetricAvailability.UNKNOWN
+        values: dict[str, object] = {
+            "mean_concept_jaccard_loss": None,
+            "linked_chain_rate": None,
+            "chain_count": chain_count,
+            "unlinked_count": report.unlinked_count,
+        }
+        notes = "unknown_comparisons"
+    elif not losses:
+        availability = MetricAvailability.ABSENT
+        values = {}
+        notes = "no_comparable_pairs"
+    else:
+        mean_loss = quantize_float(
+            require_finite(float(sum(losses)) / float(len(losses)))
+        )
+        linked_rate = quantize_float(
+            require_finite(float(report.linked_count) / float(chain_count))
+        )
+        availability = (
+            MetricAvailability.PARTIAL
+            if unknown_pairs > 0
+            else MetricAvailability.PRESENT
+        )
+        values = {
+            "mean_concept_jaccard_loss": mean_loss,
+            "linked_chain_rate": linked_rate,
+            "chain_count": chain_count,
+            "unlinked_count": report.unlinked_count,
+        }
+        notes = "ok"
+
+    duration_ms = int((time.perf_counter() - started) * 1000)
+    _LOG.debug(
+        "memory_drift_metric_complete",
+        extra={
+            "operation": "compute_memory_drift",
+            "run_id": report.run_id,
+            "chain_count": chain_count,
+            "availability": availability.value,
+            "duration_ms": duration_ms,
+        },
+    )
+    return MetricDocument(
+        schema_version=METRIC_DOCUMENT_SCHEMA_VERSION,
+        metric_family=spec.family_id.value,
+        algorithm_version=spec.algorithm_version,
+        library_versions=library_versions(),
+        run_id=report.run_id,
+        input_revision=input_revision,
+        evidence_stages=frozenset(spec.evidence_inputs),
+        population=spec.population,
+        denominator=spec.denominator,
+        coverage=MetricCoverage(
+            observed=len(losses),
+            expected=len(losses) + unknown_pairs,
+            ratio=(
+                None
+                if len(losses) + unknown_pairs == 0
+                else float(len(losses)) / float(len(losses) + unknown_pairs)
+            ),
+        ),
+        availability=availability,
+        values=values,
+        provenance=MetricProvenance(
+            source_kind="memory_drift",
+            source_ids=(),
+            notes_code=notes,
+        ),
+    )

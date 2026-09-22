@@ -2,6 +2,8 @@
 
 Joins communication events with communicated memory traces after the fact.
 Never feeds results back into live cognition. Domain payloads stay out of logs.
+Prefer explicit transmission_root_id; reject cycles; never infer parents from
+sorted hop order.
 """
 
 from __future__ import annotations
@@ -17,6 +19,7 @@ from analysis.models import (
     SocialTransmissionReport,
     TransmissionDistortion,
     TransmissionHopRecord,
+    TransmissionLineageEdge,
 )
 from memory.models import MemorySourceKind, MemoryTrace
 from world.events import Asked, Talked, Told, WorldEvent
@@ -25,7 +28,9 @@ from world.identifiers import require_stable_id
 __all__ = [
     "SOCIAL_TRANSMISSION_METRIC_VERSION",
     "SocialTransmissionAnalysisService",
+    "build_lineage_edges",
     "build_social_transmission_report",
+    "detect_lineage_cycle",
 ]
 
 _LOG: Final[logging.Logger] = logging.getLogger("analysis.social_transmission")
@@ -46,19 +51,41 @@ def _communication_events(events: Sequence[WorldEvent]) -> tuple[WorldEvent, ...
     return tuple(event for event in events if type(event.details) in _COMM_DETAILS)
 
 
+def detect_lineage_cycle(
+    *,
+    child_id: str,
+    parent_id: str | None,
+    parent_of: dict[str, str | None],
+) -> bool:
+    """Return True if linking child→parent would create a cycle."""
+    if parent_id is None:
+        return False
+    if parent_id == child_id:
+        return True
+    seen: set[str] = {child_id}
+    cursor: str | None = parent_id
+    while cursor is not None:
+        if cursor in seen:
+            return True
+        seen.add(cursor)
+        cursor = parent_of.get(cursor)
+    return False
+
+
 def _hop_from_event(event: WorldEvent) -> TransmissionHopRecord:
     details = event.details
     assert type(details) in _COMM_DETAILS
     declared = details.utterance.declared
     content = details.utterance.content
-    root = (
-        declared.communication_id.value
-        if declared.hop_count == 0
-        else (
-            declared.parent_communication_id.value
-            if declared.parent_communication_id is not None and declared.hop_count == 1
-            else declared.communication_id.value
-        )
+    root = declared.root_communication_id.value
+    parent = (
+        None
+        if declared.parent_communication_id is None
+        else declared.parent_communication_id.value
+    )
+    concepts = frozenset(content.concepts)
+    relations = frozenset(
+        (rel.subject, rel.predicate, rel.object) for rel in content.relations
     )
     return TransmissionHopRecord(
         communication_id=declared.communication_id.value,
@@ -71,8 +98,12 @@ def _hop_from_event(event: WorldEvent) -> TransmissionHopRecord:
         sender_confidence=declared.sender_confidence,
         receiver_confidence=None,
         transmission_root_id=root,
-        concept_count=len(content.concepts),
-        relation_count=len(content.relations),
+        concept_count=len(concepts),
+        relation_count=len(relations),
+        parent_communication_id=parent,
+        concepts=concepts,
+        relations=relations,
+        adoption_stage="world_delivery",
     )
 
 
@@ -80,6 +111,20 @@ def _hop_from_trace(trace: MemoryTrace) -> TransmissionHopRecord | None:
     meta = trace.provenance.transmission
     if meta is None or trace.provenance.kind is not MemorySourceKind.COMMUNICATED:
         return None
+    concepts = frozenset(
+        c.concept
+        for c in trace.concepts
+        if c.mention_id.value.startswith("c-")
+        and not c.mention_id.value.startswith("c-rel-")
+    )
+    relations = frozenset(
+        (
+            rel.predicate,
+            rel.subject.mention_id.value,
+            rel.object.mention_id.value,
+        )
+        for rel in trace.relations
+    )
     return TransmissionHopRecord(
         communication_id=meta.communication_id,
         event_id=(
@@ -99,58 +144,112 @@ def _hop_from_trace(trace: MemoryTrace) -> TransmissionHopRecord | None:
         sender_confidence=meta.sender_confidence,
         receiver_confidence=meta.receiver_confidence,
         transmission_root_id=meta.transmission_root_id or meta.communication_id,
-        concept_count=len(
-            [
-                c
-                for c in trace.concepts
-                if c.mention_id.value.startswith("c-")
-                and not c.mention_id.value.startswith("c-rel-")
-            ]
-        ),
+        concept_count=len(concepts),
         relation_count=len(trace.relations),
+        parent_communication_id=meta.parent_communication_id,
+        concepts=concepts,
+        relations=relations,
+        adoption_stage="receiver_trace",
     )
+
+
+def build_lineage_edges(
+    hops: Sequence[TransmissionHopRecord],
+) -> tuple[TransmissionLineageEdge, ...]:
+    """Build declared parent links; reject cycles; mark unresolved parents."""
+    by_id = {hop.communication_id: hop for hop in hops}
+    parent_of: dict[str, str | None] = {
+        hop.communication_id: hop.parent_communication_id for hop in hops
+    }
+    edges: list[TransmissionLineageEdge] = []
+    for hop in sorted(hops, key=lambda item: (item.tick, item.communication_id)):
+        parent = hop.parent_communication_id
+        cycle = detect_lineage_cycle(
+            child_id=hop.communication_id,
+            parent_id=parent,
+            parent_of=parent_of,
+        )
+        unresolved = False
+        if hop.hop_count > 0 and parent is None:
+            unresolved = True
+        elif parent is not None and parent not in by_id:
+            unresolved = True
+        if cycle:
+            _LOG.warning(
+                "transmission_lineage_cycle_rejected",
+                extra={
+                    "operation": "build_lineage_edges",
+                    "reason_code": "cycle_rejected",
+                    "hop_count": hop.hop_count,
+                },
+            )
+            parent_of[hop.communication_id] = None
+        edges.append(
+            TransmissionLineageEdge(
+                parent_communication_id=None if cycle else parent,
+                child_communication_id=hop.communication_id,
+                transmission_root_id=hop.transmission_root_id,
+                hop_count=hop.hop_count,
+                tick=hop.tick,
+                speaker_id=hop.speaker_id,
+                listener_id=hop.listener_id,
+                cycle_rejected=cycle,
+                unresolved=unresolved or cycle,
+            )
+        )
+    return tuple(edges)
 
 
 def _distortions(
     hops: Sequence[TransmissionHopRecord],
+    lineage: Sequence[TransmissionLineageEdge],
 ) -> tuple[TransmissionDistortion, ...]:
+    """Compare consecutive hops on declared parent links only."""
     by_id = {hop.communication_id: hop for hop in hops}
-    # Parent is prior hop when hop_count increases along shared root.
-    by_root: dict[str, list[TransmissionHopRecord]] = defaultdict(list)
-    for hop in hops:
-        by_root[hop.transmission_root_id].append(hop)
     results: list[TransmissionDistortion] = []
-    for root_hops in by_root.values():
-        ordered = sorted(root_hops, key=lambda item: (item.hop_count, item.tick))
-        for index in range(1, len(ordered)):
-            prior = ordered[index - 1]
-            current = ordered[index]
-            if current.hop_count <= prior.hop_count:
+    for edge in lineage:
+        if edge.unresolved or edge.cycle_rejected:
+            continue
+        if edge.parent_communication_id is None:
+            continue
+        prior = by_id.get(edge.parent_communication_id)
+        current = by_id.get(edge.child_communication_id)
+        if prior is None or current is None:
+            continue
+        if prior.speaker_id == current.speaker_id and prior.listener_id == current.listener_id:
+            # Ignore self-retell distortion edges.
+            if prior.communication_id == current.communication_id:
                 continue
+        concepts_added = len(current.concepts - prior.concepts)
+        concepts_removed = len(prior.concepts - current.concepts)
+        relations_added = len(current.relations - prior.relations)
+        relations_removed = len(prior.relations - current.relations)
+        # Fallback to counts when structured sets empty but counts differ.
+        if not current.concepts and not prior.concepts:
             concepts_added = max(0, current.concept_count - prior.concept_count)
             concepts_removed = max(0, prior.concept_count - current.concept_count)
+        if not current.relations and not prior.relations:
             relations_added = max(0, current.relation_count - prior.relation_count)
             relations_removed = max(0, prior.relation_count - current.relation_count)
-            results.append(
-                TransmissionDistortion(
-                    from_communication_id=prior.communication_id,
-                    to_communication_id=current.communication_id,
-                    concepts_added=concepts_added,
-                    concepts_removed=concepts_removed,
-                    relations_added=relations_added,
-                    relations_removed=relations_removed,
-                    cumulative_change=(
-                        concepts_added
-                        + concepts_removed
-                        + relations_added
-                        + relations_removed
-                    ),
-                )
+        results.append(
+            TransmissionDistortion(
+                from_communication_id=prior.communication_id,
+                to_communication_id=current.communication_id,
+                concepts_added=concepts_added,
+                concepts_removed=concepts_removed,
+                relations_added=relations_added,
+                relations_removed=relations_removed,
+                cumulative_change=(
+                    concepts_added
+                    + concepts_removed
+                    + relations_added
+                    + relations_removed
+                ),
             )
+        )
     results.sort(
         key=lambda item: (item.from_communication_id, item.to_communication_id)
     )
-    _ = by_id
     return tuple(results)
 
 
@@ -180,7 +279,28 @@ def build_social_transmission_report(
             merged[hop.communication_id] = hop
             continue
         if existing.receiver_confidence is None and hop.receiver_confidence is not None:
-            merged[hop.communication_id] = hop
+            # Prefer trace fields but keep event parent/root when present.
+            merged[hop.communication_id] = TransmissionHopRecord(
+                communication_id=hop.communication_id,
+                event_id=hop.event_id or existing.event_id,
+                speaker_id=hop.speaker_id,
+                listener_id=hop.listener_id,
+                action_kind=hop.action_kind,
+                hop_count=hop.hop_count,
+                tick=hop.tick,
+                sender_confidence=hop.sender_confidence,
+                receiver_confidence=hop.receiver_confidence,
+                transmission_root_id=hop.transmission_root_id
+                or existing.transmission_root_id,
+                concept_count=hop.concept_count,
+                relation_count=hop.relation_count,
+                parent_communication_id=(
+                    hop.parent_communication_id or existing.parent_communication_id
+                ),
+                concepts=hop.concepts or existing.concepts,
+                relations=hop.relations or existing.relations,
+                adoption_stage=hop.adoption_stage or existing.adoption_stage,
+            )
     hop_list = tuple(
         sorted(
             merged.values(),
@@ -197,18 +317,19 @@ def build_social_transmission_report(
         hop_list = tuple(
             hop for hop in hop_list if hop.transmission_root_id == transmission_root_id
         )
+    lineage = build_lineage_edges(hop_list)
     agents: set[str] = set()
     for hop in hop_list:
         agents.add(hop.speaker_id)
         if hop.listener_id is not None:
             agents.add(hop.listener_id)
     children: dict[str, int] = defaultdict(int)
-    for hop in hop_list:
-        if hop.hop_count > 0:
-            children[hop.transmission_root_id] += 1
+    for edge in lineage:
+        if edge.parent_communication_id is not None and not edge.unresolved:
+            children[edge.parent_communication_id] += 1
     fan_out = max(children.values()) if children else 0
     branch_count = sum(1 for count in children.values() if count > 1)
-    unresolved = sum(1 for hop in hop_list if hop.event_id is None)
+    unresolved = sum(1 for edge in lineage if edge.unresolved)
     max_hop = max((hop.hop_count for hop in hop_list), default=0)
     return SocialTransmissionReport(
         experiment_id=experiment_id,
@@ -216,7 +337,7 @@ def build_social_transmission_report(
         metric_version=SOCIAL_TRANSMISSION_METRIC_VERSION,
         transmission_root_id=transmission_root_id,
         hops=hop_list,
-        distortions=_distortions(hop_list),
+        distortions=_distortions(hop_list, lineage),
         unique_agent_count=len(agents),
         branch_count=branch_count,
         fan_out_count=fan_out,

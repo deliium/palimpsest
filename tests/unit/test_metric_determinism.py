@@ -94,3 +94,35 @@ def test_behavior_metrics_terminal_and_zero_action_stable() -> None:
     )
     assert metric_document_fingerprint(with_death) == metric_document_fingerprint(again)
     assert with_death.values["agents_scored"] == 1
+
+
+def test_network_and_relationship_permutation_invariant() -> None:
+    from analysis.models import RelationshipEdgeRow
+    from analysis.network_metrics import compute_trust_network_structure
+    from analysis.relationship_metrics import compute_relationship_stability
+
+    rows = [
+        RelationshipEdgeRow(
+            source_id="a", target_id="b", logical_tick=1, activation_state="active", trust=0.5
+        ),
+        RelationshipEdgeRow(
+            source_id="b", target_id="a", logical_tick=2, activation_state="active", trust=-0.2
+        ),
+        RelationshipEdgeRow(
+            source_id="a", target_id="b", logical_tick=4, activation_state="active", trust=0.9
+        ),
+    ]
+    rel_a = compute_relationship_stability(
+        rows, run_id="run-d", input_revision="rev-d", window_end=10
+    )
+    rel_b = compute_relationship_stability(
+        list(reversed(rows)), run_id="run-d", input_revision="rev-d", window_end=10
+    )
+    net_a = compute_trust_network_structure(
+        rows, run_id="run-d", input_revision="rev-d", agent_ids=("a", "b")
+    )
+    net_b = compute_trust_network_structure(
+        list(reversed(rows)), run_id="run-d", input_revision="rev-d", agent_ids=("b", "a")
+    )
+    assert metric_document_fingerprint(rel_a) == metric_document_fingerprint(rel_b)
+    assert metric_document_fingerprint(net_a) == metric_document_fingerprint(net_b)

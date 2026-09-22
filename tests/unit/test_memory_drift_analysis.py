@@ -320,3 +320,51 @@ def test_identical_fact_sets_are_canonically_equal() -> None:
     assert delta.canonical_equal is True
     assert delta.added_concepts == frozenset()
     assert delta.lost_concepts == frozenset()
+
+
+def test_visibility_aware_chain_prefers_agent_visible_baseline() -> None:
+    from analysis.memory_drift import (
+        build_reconstruction_chains,
+        compute_memory_drift,
+        project_agent_visible_observation,
+    )
+    from analysis.models import ChainNodeKind, StructuredFactSet
+    from world.identifiers import WorldId, WorldRevision
+    from world.observations import Observation
+
+    root = _root_trace()
+    visible = StructuredFactSet(
+        concepts=frozenset({"gate", "yard"}),
+        entity_ids=frozenset({"ent-door"}),
+        entity_labels=frozenset(),
+        relations=frozenset(),
+        context_tags=frozenset({"yard"}),
+        location_id=None,
+        confidence=None,
+        salience=None,
+        narrative_fingerprint=None,
+        availability=FactAvailability.PRESENT,
+        projector_version="1",
+    )
+    chains = build_reconstruction_chains(
+        traces=(root,),
+        reconstructions=(),
+        edges=(),
+        events_by_id={},
+        agent_visible_by_source_id={"evt-1": visible},
+        include_authoritative_world=False,
+    )
+    assert len(chains) == 1
+    assert chains[0].nodes[0].kind is ChainNodeKind.AGENT_VISIBLE_PROJECTION
+    assert chains[0].nodes[1].kind is ChainNodeKind.ROOT_TRACE
+
+    # Observation projector is importable and returns PRESENT facts.
+    observation = Observation(
+        world_id=WorldId("world-1"),
+        observer_id=EntityId("body-1"),
+        revision=WorldRevision(1),
+        tick=1,
+    )
+    facts = project_agent_visible_observation(observation)
+    assert facts.availability is FactAvailability.PRESENT
+    assert "body-1" in facts.entity_ids

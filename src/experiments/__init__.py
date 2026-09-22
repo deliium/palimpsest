@@ -15,6 +15,7 @@ from experiments.catalog import (
 from experiments.collectors import (
     CollectorMetricDocument,
     collect_arm_summary,
+    collect_catalog_metrics,
     collect_drive_outcomes,
     collect_for_experiment,
     collect_imagination_outcomes,
@@ -22,6 +23,12 @@ from experiments.collectors import (
     collect_mortality_outcomes,
     collect_propagation,
     collect_trajectory_stats,
+)
+from experiments.metric_collection import (
+    MetricCollectionResult,
+    MetricCollectionService,
+    compare_compatible_bundles,
+    persist_metric_bundle,
 )
 from experiments.composition import (
     EvidenceCompositionError,
@@ -117,6 +124,8 @@ __all__ = [
     "ExperimentResultRecord",
     "ExperimentSeedMatrix",
     "InMemoryExperimentRecordRepository",
+    "MetricCollectionResult",
+    "MetricCollectionService",
     "MetricDocumentRecord",
     "MetricDocumentRepository",
     "MetricSetLifecycle",
@@ -137,6 +146,7 @@ __all__ = [
     "TruthSpecRepository",
     "build_reference_scenario",
     "collect_arm_summary",
+    "collect_catalog_metrics",
     "collect_drive_outcomes",
     "collect_for_experiment",
     "collect_imagination_outcomes",
@@ -144,6 +154,7 @@ __all__ = [
     "collect_mortality_outcomes",
     "collect_propagation",
     "collect_trajectory_stats",
+    "compare_compatible_bundles",
     "condition_fingerprint",
     "definition_fingerprint",
     "experiment_a_memory",
@@ -154,5 +165,6 @@ __all__ = [
     "make_false_story_intervention",
     "map_snapshot_to_analysis_sources",
     "materialize_assignments",
+    "persist_metric_bundle",
     "unwrap_arbiter_command",
 ]

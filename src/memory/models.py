@@ -394,10 +394,13 @@ class CommunicatedTransmissionMeta:
         if not root:
             if hop == 0:
                 root = self.communication_id
-            elif self.parent_communication_id is not None:
+            elif hop == 1 and self.parent_communication_id is not None:
+                # Legacy migration: hop-1 root historically equaled parent.
                 root = self.parent_communication_id
             else:
-                root = self.communication_id
+                raise ValueError(
+                    "CommunicatedTransmissionMeta.transmission_root_id: required"
+                )
         object.__setattr__(
             self,
             "transmission_root_id",

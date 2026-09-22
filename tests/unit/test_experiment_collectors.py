@@ -65,7 +65,7 @@ async def test_collectors_dispatch_by_experiment_family() -> None:
         assert drift.family == "memory_drift"
         assert "memory_mode" in dict(drift.fields)
         for doc in docs:
-            assert doc.schema_version == "experiment-collector-v1"
+            assert doc.schema_version == "experiment-collector-v2"
             assert "is_false" not in dict(doc.fields)
             assert not any("truth" in key for key, _ in doc.fields)
 

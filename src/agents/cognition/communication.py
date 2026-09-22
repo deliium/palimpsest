@@ -175,20 +175,7 @@ def build_communicated_memory_trace(
             else declared.parent_communication_id.value
         ),
         source_agent_chain=tuple(declared.source_agent_chain),
-        transmission_root_id=(
-            declared.communication_id.value
-            if declared.hop_count == 0
-            else (
-                declared.parent_communication_id.value
-                if declared.parent_communication_id is not None
-                and declared.hop_count == 1
-                else (
-                    declared.parent_communication_id.value
-                    if declared.parent_communication_id is not None
-                    else declared.communication_id.value
-                )
-            )
-        ),
+        transmission_root_id=declared.root_communication_id.value,
         policy_version=COMMUNICATED_MEMORY_POLICY_VERSION,
     )
     concepts: list[ConceptMention] = []

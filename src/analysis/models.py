@@ -18,12 +18,14 @@ from world.identifiers import require_exact_nonneg_int, require_stable_id
 
 __all__ = [
     "ACTION_RESOLUTION_RATES_FAMILY",
+    "AGENT_VISIBLE_PROJECTOR_VERSION",
     "DRIFT_METRIC_VERSION",
     "EVENT_FACT_PROJECTOR_VERSION",
     "METRIC_DOCUMENT_SCHEMA_VERSION",
     "SOCIAL_TRANSMISSION_METRIC_VERSION",
     "ActionResolutionRow",
     "AppliedActionRow",
+    "BeliefClaimRow",
     "ChainNodeKind",
     "ComparisonStatus",
     "DriftDelta",
@@ -40,6 +42,7 @@ __all__ = [
     "ReconstructionChain",
     "ReconstructionChainNode",
     "ReconstructionEvidence",
+    "RelationshipEdgeRow",
     "ResourceHoldingRow",
     "SocialTransmissionReport",
     "StructuredFactSet",
@@ -47,12 +50,14 @@ __all__ = [
     "SurvivalAgentRow",
     "TransmissionDistortion",
     "TransmissionHopRecord",
+    "TransmissionLineageEdge",
 ]
 
 METRIC_DOCUMENT_SCHEMA_VERSION: Final[str] = "1"
 
 DRIFT_METRIC_VERSION: Final[str] = "1"
 EVENT_FACT_PROJECTOR_VERSION: Final[str] = "1"
+AGENT_VISIBLE_PROJECTOR_VERSION: Final[str] = "1"
 
 # Supporting Task-11 rates document family (not one of the fifteen catalog IDs).
 ACTION_RESOLUTION_RATES_FAMILY: Final[str] = "action_resolution_rates"
@@ -61,10 +66,12 @@ ACTION_RESOLUTION_RATES_FAMILY: Final[str] = "action_resolution_rates"
 class ChainNodeKind(StrEnum):
     """Ordered provenance roles along one reconstruction chain."""
 
+    AGENT_VISIBLE_PROJECTION = "agent_visible_projection"
     OBJECTIVE_EVENT = "objective_event"
     ROOT_TRACE = "root_trace"
     RECONSTRUCTION = "reconstruction"
     DERIVED_TRACE = "derived_trace"
+    AUTHORITATIVE_WORLD_GAP = "authoritative_world_gap"
 
 
 class ObjectiveLinkStatus(StrEnum):
@@ -296,6 +303,8 @@ class DriftStep:
     from_id: str
     to_id: str
     delta: DriftDelta
+    evidence_stage: EvidenceStage | None = None
+    comparison_label: str = "primary"
 
     def __post_init__(self) -> None:
         object.__setattr__(
@@ -317,11 +326,23 @@ class DriftStep:
         )
         if type(self.delta) is not DriftDelta:
             raise TypeError("DriftStep.delta: invalid_type")
+        if self.evidence_stage is not None:
+            object.__setattr__(
+                self,
+                "evidence_stage",
+                require_evidence_stage("DriftStep.evidence_stage", self.evidence_stage),
+            )
+        object.__setattr__(
+            self,
+            "comparison_label",
+            require_stable_id("DriftStep.comparison_label", self.comparison_label),
+        )
 
     def __repr__(self) -> str:
         return (
             f"DriftStep(root={self.chain_root_memory_id!r}, "
             f"from={self.from_kind.value!r}, to={self.to_kind.value!r}, "
+            f"label={self.comparison_label!r}, "
             f"canonical_equal={self.delta.canonical_equal})"
         )
 
@@ -341,6 +362,8 @@ class MemoryDriftReport:
     linked_count: int
     unlinked_count: int
     absent_source_count: int
+    authoritative_gap_steps: tuple[DriftStep, ...] = ()
+    evidence_stage_counts: Mapping[str, int] | None = None
 
     def __post_init__(self) -> None:
         object.__setattr__(
@@ -393,6 +416,16 @@ class MemoryDriftReport:
         )
         if len(self.cumulative) != len(self.chains):
             raise ValueError("MemoryDriftReport.cumulative: length_mismatch")
+        if self.evidence_stage_counts is not None:
+            cleaned: dict[str, int] = {}
+            for key in sorted(self.evidence_stage_counts):
+                value = self.evidence_stage_counts[key]
+                if type(value) is not int or value < 0:
+                    raise ValueError("MemoryDriftReport.evidence_stage_counts: invalid")
+                cleaned[require_stable_id("evidence_stage_counts.key", key)] = value
+            object.__setattr__(
+                self, "evidence_stage_counts", MappingProxyType(cleaned)
+            )
 
     def __repr__(self) -> str:
         return (
@@ -767,6 +800,10 @@ class TransmissionHopRecord:
     transmission_root_id: str
     concept_count: int
     relation_count: int
+    parent_communication_id: str | None = None
+    concepts: frozenset[str] = frozenset()
+    relations: frozenset[tuple[str, str, str]] = frozenset()
+    adoption_stage: str | None = None
 
     def __post_init__(self) -> None:
         object.__setattr__(
@@ -786,6 +823,23 @@ class TransmissionHopRecord:
             "tick",
             require_exact_nonneg_int("TransmissionHopRecord.tick", self.tick),
         )
+        if self.parent_communication_id is not None:
+            object.__setattr__(
+                self,
+                "parent_communication_id",
+                require_stable_id(
+                    "TransmissionHopRecord.parent_communication_id",
+                    self.parent_communication_id,
+                ),
+            )
+        if self.adoption_stage is not None:
+            object.__setattr__(
+                self,
+                "adoption_stage",
+                require_stable_id(
+                    "TransmissionHopRecord.adoption_stage", self.adoption_stage
+                ),
+            )
 
     def __repr__(self) -> str:
         return (
@@ -1073,4 +1127,237 @@ class GoalTransitionRow:
         return (
             f"GoalTransitionRow(goal_id={self.goal_id!r}, "
             f"reason_code={self.reason_code!r}, tick={self.tick})"
+        )
+
+
+@dataclass(frozen=True, slots=True)
+class BeliefClaimRow:
+    """Detached belief-revision claim for accuracy / persistence metrics.
+
+    ``claim_id`` must match a ``ClaimTruthSpec.claim_id`` to be evaluable.
+    Objective truth never enters this row from cognition.
+    """
+
+    owner_id: str
+    belief_id: str
+    claim_id: str
+    logical_tick: int
+    activation_state: str
+    confidence: float | None
+    value_kind: str
+    bool_value: bool | None = None
+    categorical_value: str | None = None
+    numeric_value: float | None = None
+    evidence_stage: EvidenceStage = EvidenceStage.BELIEF_REVISION_TESTIMONY
+
+    def __post_init__(self) -> None:
+        object.__setattr__(
+            self, "owner_id", require_stable_id("BeliefClaimRow.owner_id", self.owner_id)
+        )
+        object.__setattr__(
+            self,
+            "belief_id",
+            require_stable_id("BeliefClaimRow.belief_id", self.belief_id),
+        )
+        object.__setattr__(
+            self, "claim_id", require_stable_id("BeliefClaimRow.claim_id", self.claim_id)
+        )
+        object.__setattr__(
+            self,
+            "logical_tick",
+            require_exact_nonneg_int("BeliefClaimRow.logical_tick", self.logical_tick),
+        )
+        object.__setattr__(
+            self,
+            "activation_state",
+            require_stable_id("BeliefClaimRow.activation_state", self.activation_state),
+        )
+        object.__setattr__(
+            self,
+            "value_kind",
+            require_stable_id("BeliefClaimRow.value_kind", self.value_kind),
+        )
+        object.__setattr__(
+            self,
+            "evidence_stage",
+            require_evidence_stage("BeliefClaimRow.evidence_stage", self.evidence_stage),
+        )
+        if self.confidence is not None:
+            if type(self.confidence) is not float or (
+                self.confidence != self.confidence
+                or self.confidence in (float("inf"), float("-inf"))
+            ):
+                raise ValueError("BeliefClaimRow.confidence: non_finite")
+        if self.categorical_value is not None:
+            object.__setattr__(
+                self,
+                "categorical_value",
+                require_stable_id(
+                    "BeliefClaimRow.categorical_value", self.categorical_value
+                ),
+            )
+        if self.numeric_value is not None:
+            if type(self.numeric_value) is not float or (
+                self.numeric_value != self.numeric_value
+                or self.numeric_value in (float("inf"), float("-inf"))
+            ):
+                raise ValueError("BeliefClaimRow.numeric_value: non_finite")
+
+    def __repr__(self) -> str:
+        return (
+            f"BeliefClaimRow(owner_id={self.owner_id!r}, belief_id={self.belief_id!r}, "
+            f"claim_id={self.claim_id!r}, tick={self.logical_tick}, "
+            f"activation={self.activation_state!r})"
+        )
+
+
+@dataclass(frozen=True, slots=True)
+class RelationshipEdgeRow:
+    """One directed relationship revision snapshot for stability / network metrics."""
+
+    source_id: str
+    target_id: str
+    logical_tick: int
+    activation_state: str
+    trust: float | None = None
+    trust_confidence: float | None = None
+    fear: float | None = None
+    affection: float | None = None
+    debt: float | None = None
+    respect: float | None = None
+    resentment: float | None = None
+    familiarity: float | None = None
+    dependency: float | None = None
+    ordinal: int = 0
+
+    def __post_init__(self) -> None:
+        object.__setattr__(
+            self,
+            "source_id",
+            require_stable_id("RelationshipEdgeRow.source_id", self.source_id),
+        )
+        object.__setattr__(
+            self,
+            "target_id",
+            require_stable_id("RelationshipEdgeRow.target_id", self.target_id),
+        )
+        if self.source_id == self.target_id:
+            raise ValueError("RelationshipEdgeRow: self_target")
+        object.__setattr__(
+            self,
+            "logical_tick",
+            require_exact_nonneg_int(
+                "RelationshipEdgeRow.logical_tick", self.logical_tick
+            ),
+        )
+        object.__setattr__(
+            self,
+            "activation_state",
+            require_stable_id(
+                "RelationshipEdgeRow.activation_state", self.activation_state
+            ),
+        )
+        object.__setattr__(
+            self,
+            "ordinal",
+            require_exact_nonneg_int("RelationshipEdgeRow.ordinal", self.ordinal),
+        )
+        for name in (
+            "trust",
+            "fear",
+            "affection",
+            "debt",
+            "respect",
+            "resentment",
+            "familiarity",
+            "dependency",
+            "trust_confidence",
+        ):
+            value = getattr(self, name)
+            if value is None:
+                continue
+            if type(value) is not float or (
+                value != value or value in (float("inf"), float("-inf"))
+            ):
+                raise ValueError(f"RelationshipEdgeRow.{name}: non_finite")
+
+    def __repr__(self) -> str:
+        return (
+            f"RelationshipEdgeRow(source_id={self.source_id!r}, "
+            f"target_id={self.target_id!r}, tick={self.logical_tick}, "
+            f"activation={self.activation_state!r})"
+        )
+
+
+@dataclass(frozen=True, slots=True)
+class TransmissionLineageEdge:
+    """Declared parent→child transmission link (never inferred from hop order)."""
+
+    parent_communication_id: str | None
+    child_communication_id: str
+    transmission_root_id: str
+    hop_count: int
+    tick: int
+    speaker_id: str
+    listener_id: str | None
+    cycle_rejected: bool = False
+    unresolved: bool = False
+
+    def __post_init__(self) -> None:
+        if self.parent_communication_id is not None:
+            object.__setattr__(
+                self,
+                "parent_communication_id",
+                require_stable_id(
+                    "TransmissionLineageEdge.parent_communication_id",
+                    self.parent_communication_id,
+                ),
+            )
+        object.__setattr__(
+            self,
+            "child_communication_id",
+            require_stable_id(
+                "TransmissionLineageEdge.child_communication_id",
+                self.child_communication_id,
+            ),
+        )
+        object.__setattr__(
+            self,
+            "transmission_root_id",
+            require_stable_id(
+                "TransmissionLineageEdge.transmission_root_id",
+                self.transmission_root_id,
+            ),
+        )
+        object.__setattr__(
+            self,
+            "hop_count",
+            require_exact_nonneg_int(
+                "TransmissionLineageEdge.hop_count", self.hop_count
+            ),
+        )
+        object.__setattr__(
+            self,
+            "tick",
+            require_exact_nonneg_int("TransmissionLineageEdge.tick", self.tick),
+        )
+        object.__setattr__(
+            self,
+            "speaker_id",
+            require_stable_id("TransmissionLineageEdge.speaker_id", self.speaker_id),
+        )
+        if self.listener_id is not None:
+            object.__setattr__(
+                self,
+                "listener_id",
+                require_stable_id(
+                    "TransmissionLineageEdge.listener_id", self.listener_id
+                ),
+            )
+
+    def __repr__(self) -> str:
+        return (
+            f"TransmissionLineageEdge(child={self.child_communication_id!r}, "
+            f"root={self.transmission_root_id!r}, hop={self.hop_count}, "
+            f"unresolved={self.unresolved}, cycle_rejected={self.cycle_rejected})"
         )
