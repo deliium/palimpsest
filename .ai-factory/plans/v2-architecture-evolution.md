@@ -208,7 +208,7 @@ LLM provider lifespan remains an API/`llm.factory` composition concern (ARCHITEC
 
 ### Phase 4: Docs Checkpoint and Downstream Plan Contract
 
-- [ ] Task 12: Contributor documentation, migration matrix, and downstream plan contract.
+- [x] Task 12: Contributor documentation, migration matrix, and downstream plan contract.
   - Deliverable: `/aif-docs` checkpoint updating architecture/persistence/simulation-runner/experiments/research-api with the compatibility matrix, `runner-config-v3` + default-off flags, no-`0013` decision, API versioning policy, domain-contract evolution rules, fingerprint vs trajectory identity, and LLM lifecycle composition seam. Include a concise checklist every future V2 feature plan must satisfy: invariants intact; flags opt-in and fail closed until owned; V1 regression gate green; schema bumps follow accepted-set + exact key-set discipline; no scripted emergence; no LLM→world shortcuts; experiments remain reproducible. Add a short “V2 scaffolding” section to DESCRIPTION. Do not invent ROADMAP milestones; link to `/aif-roadmap` for M5.
   - Files: `docs/architecture.md`, `docs/persistence.md`, `docs/simulation-runner.md`, `docs/experiments.md`, `docs/research-api.md`, `.ai-factory/DESCRIPTION.md`, `.ai-factory/ARCHITECTURE.md`, `README.md` (landing pointers only if needed).
   - Logging: N/A (docs).

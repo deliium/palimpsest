@@ -32,6 +32,10 @@ Palimpsest is a Python 3.12+ modular monolith for reproducible, discrete, text-b
 - **Scientific computing (analysis metrics):** NumPy >=2, pandas >=2, SciPy >=1.11, NetworkX >=3 (canonical quantized metric output; not unconstrained BLAS/platform bit identity)
 - **Testing:** pytest, pytest-asyncio, Hypothesis, import-linter, Ruff, mypy
 
+## V2 scaffolding
+
+Additive substrate only (no new social/cognitive behavior): `simulation.compatibility` version matrix; `runner-config-v3` with default-off `V2CapabilityFlags` (flags-on fail closed until owned); Alembic head stays `0012` (flags in runner JSON only); `/v1` + `palimpsest.v1` stable (no `/v2` routes yet); domain-contract evolution rules without wire changes; V1 regression gate for catalog A–E + reference scenario. Later V2 plans must follow the downstream checklist in `docs/architecture.md`. Register M5/V2 milestones via `/aif-roadmap`.
+
 ## Architecture Notes
 
 Modular monolith with explicit bounded packages under `src/`. Domain modules do not import infrastructure; the API composition root wires adapters. `simulation.WorldEngine` is the sole public mutation authority; private world modules prepare candidates and project observations only. Cognition never receives `WorldState` or another agent's observation. Agents, memory, cognition, and reconstruction APIs may carry opaque `EventId` correlation only — never `WorldEvent` or event stores. Structured `Talk`/`Ask`/`Tell` proves delivery only; declared lineage is testimony; each receiver forms a fresh communicated `MemoryTrace`. Read-only `analysis` may join objective events with subjective reconstruction and social-transmission evidence after the fact. The `llm` package is import-closed against world/simulation/API/infrastructure, forbids vendor SDKs, and never converts results into commands—future cognition must translate validated decision schemas into fresh `AgentCommand` values and use normal admission. Cross-module imports use package facades / `__all__`. Import-linter and AST boundary checks enforce dependency rules.

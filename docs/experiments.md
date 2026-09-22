@@ -20,6 +20,10 @@ Objective instrumentation is post-commit observation only. Collectors never flow
 
 Builders share scenario, seed, and stochastic identity across paired arms; only declared treatment dimensions differ. Condition/config fingerprints change when treatments change.
 
+Catalog builders emit current write schema (`runner-config-v3`) with all `V2CapabilityFlags` default-off. Use `experiments.catalog.v1_regression_profile(config)` to assert the V1-equivalent flag profile (raises `v1_regression_flags_enabled` if any flag is on). Capability flags are configuration identifiers only; they do not change experiment-definition schema (`experiment-definition-v1`).
+
+Network-free regression gate: `tests/unit/test_v1_regression_gate.py` (short ticks, catalog A–E + reference scenario).
+
 ## Reference scenario (V1 gate)
 
 `experiments.reference_scenario.build_reference_scenario()` builds the canonical five-agent / 48-tick fixture used by end-to-end proofs:
@@ -62,5 +66,7 @@ uv run --frozen --python 3.12.14 pytest \
   tests/unit/test_experiment_interventions.py \
   tests/unit/test_experiment_coordinator.py \
   tests/unit/test_experiment_persistence_contracts.py \
+  tests/unit/test_v1_regression_gate.py \
+  tests/unit/test_v2_flag_defaults.py \
   tests/architecture/test_experiment_instrumentation_isolation.py -q
 ```

@@ -118,6 +118,7 @@ tests/
 - **Interoperability:** Wire infrastructure only at the API/composition boundary; do not allocate LLM providers in API lifespan until cognition consumers own them
 - **Domain-contract evolution:** Observation, closed `AgentCommand`, and `world.communications` follow accepted-set discipline (see `docs/architecture.md`). V2 scaffolding does not add fields/commands; live/restored observation parity remains the hard gate for any later domain bump. Version taxonomy: `simulation.compatibility`
 - **V2 extension seams:** Later plans plug into CognitiveLoop stage protocols, `AgentCognitionSpec` modes, run-level `V2CapabilityFlags` (default-off = V1 wiring; flags-on fail closed until owned), `AgentRuntime` subjective finalization, observe-only perception, event-only communication eligibility, `experiments.catalog` arms, analysis-only evidence stages, and API/`llm.factory` LLM lifecycle composition (not a runner flag). Off-limits: WorldEngine admission, event immutability, Observation trust boundaries. See `docs/architecture.md` and `docs/cognition-runtime.md`.
+- **Downstream V2 plan contract:** Every later V2 feature plan must keep V1 invariants, opt-in fail-closed flags, V1 regression gate green, accepted-set + exact key-set schema bumps, no scripted emergence, no LLM→world shortcuts, and reproducible experiments. Checklist: `docs/architecture.md` (Downstream V2 plan contract). Roadmap milestones via `/aif-roadmap` only.
 
 ## Code Examples
 

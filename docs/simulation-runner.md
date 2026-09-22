@@ -71,5 +71,7 @@ uv run --frozen --python 3.12.14 pytest \
   tests/unit/test_simulation_runner_construction.py \
   tests/unit/test_simulation_runner.py \
   tests/unit/test_runner_results.py \
-  tests/unit/test_simulation_runner_e2e.py -q
+  tests/unit/test_simulation_runner_e2e.py \
+  tests/unit/test_v2_golden_runner_configs.py \
+  tests/unit/test_v1_regression_gate.py -q
 ```

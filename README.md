@@ -49,9 +49,9 @@ Development credentials in `compose.yaml` are **not production**. `docker compos
 
 | Page | Contents |
 | --- | --- |
-| [Architecture](docs/architecture.md) | Bounded packages, `WorldEngine` lifecycle, perception boundary, eleven invariants |
-| [Simulation runner](docs/simulation-runner.md) | Config-driven `SimulationRunner`, stochastic vs durable identity, tick lifecycle, results |
-| [Experiments](docs/experiments.md) | Trusted A–E catalog, false-story boundary, coordinator, experiment persistence (`0010`) |
+| [Architecture](docs/architecture.md) | Bounded packages, `WorldEngine` lifecycle, perception boundary, eleven invariants, V2 seams + downstream plan contract |
+| [Simulation runner](docs/simulation-runner.md) | Config-driven `SimulationRunner`, `runner-config-v3` flags, fingerprint vs trajectory identity |
+| [Experiments](docs/experiments.md) | Trusted A–E catalog, `v1_regression_profile`, false-story boundary, coordinator, persistence (`0010`) |
 | [Analysis metrics](docs/analysis-metrics.md) | V1 metric catalog, populations/denominators, numerical policy, known-answer fixtures |
 | [Research API](docs/research-api.md) | FastAPI control/inspection/debug, WebSocket cursors/backpressure, capability credentials |
 | [Cognition and agent runtime](docs/cognition-runtime.md) | `CognitiveLoop`, drives/goals, subjective imagination/motivation/intention, `AgentRuntime`, metadata-only logs |
