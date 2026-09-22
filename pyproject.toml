@@ -153,6 +153,9 @@ select = [
 [tool.ruff.lint.per-file-ignores]
 "tests/**" = ["RUF012"]
 
+[tool.ruff.lint.flake8-bugbear]
+extend-immutable-calls = ["fastapi.Depends", "fastapi.Query", "Depends", "Query"]
+
 [tool.mypy]
 python_version = "3.12"
 mypy_path = "src"

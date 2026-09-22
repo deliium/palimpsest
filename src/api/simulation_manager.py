@@ -500,7 +500,9 @@ class SimulationManager:
             return claimed
         raise conflict(code="lifecycle_conflict", run_id=current.run_id.value)
 
-    async def _release_lease(self, handle: _RunHandle, record: RunControlRecord) -> None:
+    async def _release_lease(
+        self, handle: _RunHandle, record: RunControlRecord
+    ) -> None:
         if handle.lease_id is None:
             return
         try:
@@ -634,9 +636,11 @@ class SimulationManager:
                 reason_code="run_task_failed",
             )
             async with handle.lock:
-                record = await self._run_control.get(RunId(run_id))
-                if record is not None:
-                    await self._fail_run(handle, record, reason_code="run_task_failed")
+                failed_record = await self._run_control.get(RunId(run_id))
+                if failed_record is not None:
+                    await self._fail_run(
+                        handle, failed_record, reason_code="run_task_failed"
+                    )
 
     async def _fail_run(
         self, handle: _RunHandle, record: RunControlRecord, *, reason_code: str

@@ -31,7 +31,8 @@ async def stream_simulation(websocket: WebSocket, run_id: str) -> None:
         await websocket.close(code=4401)
         return
 
-    await websocket.accept(subprotocol=accepted_protocols[0] if accepted_protocols else None)
+    subprotocol = accepted_protocols[0] if accepted_protocols else None
+    await websocket.accept(subprotocol=subprotocol)
 
     after_cursor = 0
     raw_after = websocket.query_params.get("after_cursor")
@@ -66,7 +67,9 @@ async def stream_simulation(websocket: WebSocket, run_id: str) -> None:
     )
     try:
         async for envelope in fanout.subscribe(config):
-            await websocket.send_json(envelope.model_dump(mode="json", exclude_none=True))
+            await websocket.send_json(
+                envelope.model_dump(mode="json", exclude_none=True)
+            )
             if envelope.kind.value == "completion":
                 break
     except WebSocketDisconnect:

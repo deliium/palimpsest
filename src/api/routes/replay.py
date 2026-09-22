@@ -7,7 +7,7 @@ import time
 from fastapi import APIRouter, Depends, Request
 
 from api.dependencies import get_replay_api_service, get_settings
-from api.errors import gone, not_found, unprocessable
+from api.errors import gone, unprocessable
 from api.schemas import AvailabilityOut, ReplayRequest, ReplayResultOut
 from api.security import ApiCapability, require_http_capability
 from api.services import ReplayApiService

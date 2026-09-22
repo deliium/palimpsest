@@ -260,7 +260,9 @@ async def metric_document(
     result = await service.document(run_id, metric_set_id, metric_family)
     _LOGGER.info(
         "route_metric_document",
-        route_template="GET /v1/simulations/{run_id}/metrics/{metric_set_id}/{metric_family}",
+        route_template=(
+            "GET /v1/simulations/{run_id}/metrics/{metric_set_id}/{metric_family}"
+        ),
         status=200,
         run_id=run_id,
     )
@@ -300,7 +302,9 @@ def empty_event_page(*, run_id: str, limit: int) -> EventPageOut:
     )
 
 
-def event_summaries_from_world_events(events: tuple[object, ...]) -> tuple[EventSummaryOut, ...]:
+def event_summaries_from_world_events(
+    events: tuple[object, ...],
+) -> tuple[EventSummaryOut, ...]:
     """Extract tick/sequence/kind only from WorldEvent-like objects."""
     summaries: list[EventSummaryOut] = []
     for event in events:

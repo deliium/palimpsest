@@ -62,7 +62,10 @@ def get_run_control_repository(request: Request) -> RunControlRepository:
     if existing is not None:
         return cast(RunControlRepository, existing)
     resources = get_database_resources(request)
-    return create_run_control_repository(resources.session_factory)
+    return cast(
+        RunControlRepository,
+        create_run_control_repository(resources.session_factory),
+    )
 
 
 def get_stream_repository(request: Request) -> StreamRepository:
@@ -70,7 +73,10 @@ def get_stream_repository(request: Request) -> StreamRepository:
     if existing is not None:
         return cast(StreamRepository, existing)
     resources = get_database_resources(request)
-    return create_stream_repository(resources.session_factory)
+    return cast(
+        StreamRepository,
+        create_stream_repository(resources.session_factory),
+    )
 
 
 def get_replay_service(request: Request) -> ReplayService:

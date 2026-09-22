@@ -600,16 +600,23 @@ class ReplayService:
         *,
         agent_id: object | None = None,
     ) -> object:
-        """Replay then project public inspection DTOs (never returns an engine)."""
+        """Replay then project public inspection DTOs (never returns an engine).
+
+        ``agent_id`` may be an ``AgentId`` or a stable string id so API
+        composition roots need not import ``agents`` directly.
+        """
         from agents.models import AgentId as AgentIdType
         from simulation.inspection import project_replay_for_inspection
 
         outcome = await self.replay(request)
         resolved_agent: AgentIdType | None = None
         if agent_id is not None:
-            if type(agent_id) is not AgentIdType:
-                raise TypeError("agent_id must be AgentId or None")
-            resolved_agent = agent_id
+            if type(agent_id) is AgentIdType:
+                resolved_agent = agent_id
+            elif type(agent_id) is str:
+                resolved_agent = AgentIdType(agent_id)
+            else:
+                raise TypeError("agent_id must be AgentId, str, or None")
         return project_replay_for_inspection(outcome, agent_id=resolved_agent)
 
     async def read_commit_page(

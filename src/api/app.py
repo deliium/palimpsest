@@ -6,10 +6,16 @@ from collections.abc import AsyncIterator, Callable
 from contextlib import asynccontextmanager
 from typing import Protocol
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
+from fastapi.responses import JSONResponse
 
 from api.errors import ApiError, api_error_handler
 from api.middleware import RequestIdMiddleware
+from api.persistence_services import (
+    PersistenceInspectionService,
+    PersistenceMetricReadService,
+    PersistenceReplayApiService,
+)
 from api.routes import (
     health_router,
     inspection_router,
@@ -21,12 +27,25 @@ from api.simulation_manager import SimulationManager
 from infrastructure.database import create_database_resources, dispose_engine
 from infrastructure.logging import (
     configure_logging,
+    get_logger,
     log_bootstrap,
     log_lifecycle,
     log_setup_failure,
 )
 from infrastructure.settings import Settings, load_runtime_settings
-from persistence import create_run_control_repository, create_stream_repository
+from persistence import (
+    create_inspection_evidence_loader,
+    create_metric_document_repository,
+    create_metric_set_repository,
+    create_run_control_repository,
+    create_run_repository,
+    create_snapshot_repository,
+    create_stream_repository,
+    create_tick_journal_repository,
+)
+from simulation.replay import ReplayService
+
+_LOGGER = get_logger("api.app")
 
 
 class DisposableEngine(Protocol):
@@ -41,6 +60,51 @@ class DatabaseResourcesLike(Protocol):
 DatabaseFactory = Callable[[Settings], DatabaseResourcesLike]
 
 
+def _attach_persistence_services(app: FastAPI, session_factory: object) -> None:
+    """Wire default persistence-backed facades unless tests already overrode them."""
+    runs = create_run_repository(session_factory)  # type: ignore[arg-type]
+    journal = create_tick_journal_repository(session_factory)  # type: ignore[arg-type]
+    snapshots = create_snapshot_repository(session_factory)  # type: ignore[arg-type]
+    replay = ReplayService(runs, journal, snapshots)
+
+    if getattr(app.state, "inspection_service", None) is None:
+        evidence = create_inspection_evidence_loader(session_factory)  # type: ignore[arg-type]
+        app.state.inspection_service = PersistenceInspectionService(
+            evidence=evidence,
+            runs=runs,
+            replay=replay,
+        )
+        _LOGGER.info(
+            "[FIX] inspection_service_attached",
+            service="PersistenceInspectionService",
+        )
+    if getattr(app.state, "metric_read_service", None) is None:
+        app.state.metric_read_service = PersistenceMetricReadService(
+            documents=create_metric_document_repository(session_factory),  # type: ignore[arg-type]
+            metric_sets=create_metric_set_repository(session_factory),  # type: ignore[arg-type]
+            runs=runs,
+        )
+        _LOGGER.info(
+            "[FIX] metric_read_service_attached",
+            service="PersistenceMetricReadService",
+        )
+    if getattr(app.state, "replay_api_service", None) is None:
+        app.state.replay_api_service = PersistenceReplayApiService(replay=replay)
+        _LOGGER.info(
+            "[FIX] replay_api_service_attached",
+            service="PersistenceReplayApiService",
+        )
+
+
+async def _api_error_exception_handler(
+    request: Request, exc: Exception
+) -> JSONResponse:
+    """Starlette-compatible wrapper (handler signature uses Exception)."""
+    if not isinstance(exc, ApiError):
+        raise exc
+    return await api_error_handler(request, exc)
+
+
 @asynccontextmanager
 async def _lifespan(app: FastAPI) -> AsyncIterator[None]:
     settings: Settings = app.state.settings
@@ -52,20 +116,23 @@ async def _lifespan(app: FastAPI) -> AsyncIterator[None]:
         log_setup_failure("database_factory_failed")
         raise
     app.state.database = resources
-    if (
-        manager is None
-        and getattr(app.state, "attach_default_manager", True)
-        and hasattr(resources, "session_factory")
-    ):
-        run_control = create_run_control_repository(resources.session_factory)  # type: ignore[arg-type]
-        app.state.run_control_repository = run_control
-        app.state.stream_repository = create_stream_repository(
-            resources.session_factory  # type: ignore[arg-type]
-        )
-        app.state.simulation_manager = SimulationManager(
-            settings=settings,
-            run_control=run_control,
-        )
+    if hasattr(resources, "session_factory"):
+        if (
+            manager is None
+            and getattr(app.state, "attach_default_manager", True)
+        ):
+            run_control = create_run_control_repository(
+                resources.session_factory  # type: ignore[arg-type]
+            )
+            app.state.run_control_repository = run_control
+            app.state.stream_repository = create_stream_repository(
+                resources.session_factory  # type: ignore[arg-type]
+            )
+            app.state.simulation_manager = SimulationManager(
+                settings=settings,
+                run_control=run_control,
+            )
+        _attach_persistence_services(app, resources.session_factory)
     log_lifecycle("app_started")
     try:
         yield
@@ -104,7 +171,7 @@ def create_app(
     app.state.attach_default_manager = attach_default_manager
     if simulation_manager is not None:
         app.state.simulation_manager = simulation_manager
-    app.add_exception_handler(ApiError, api_error_handler)
+    app.add_exception_handler(ApiError, _api_error_exception_handler)
     app.add_middleware(RequestIdMiddleware)
     app.include_router(health_router)
     app.include_router(simulations_router)

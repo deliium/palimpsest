@@ -43,13 +43,17 @@ class CreateSimulationRequest(StrictModel):
     config_schema_version: str = Field(
         default="runner-config-v2", min_length=1, max_length=64
     )
-    config_fingerprint: str = Field(min_length=64, max_length=64, pattern=r"^[a-f0-9]+$")
+    config_fingerprint: str = Field(
+        min_length=64, max_length=64, pattern=r"^[a-f0-9]+$"
+    )
     config_payload_b64: str = Field(min_length=1, max_length=2_000_000)
 
 
 class ConfigureSimulationRequest(StrictModel):
     config_schema_version: str = Field(min_length=1, max_length=64)
-    config_fingerprint: str = Field(min_length=64, max_length=64, pattern=r"^[a-f0-9]+$")
+    config_fingerprint: str = Field(
+        min_length=64, max_length=64, pattern=r"^[a-f0-9]+$"
+    )
     config_payload_b64: str = Field(min_length=1, max_length=2_000_000)
     expected_version: int = Field(ge=0)
 

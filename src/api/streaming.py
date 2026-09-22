@@ -68,7 +68,9 @@ def stream_record_to_envelope(
     )
 
 
-def heartbeat_envelope(*, run_id: str, cursor: int, high_water: int) -> StreamEnvelopeOut:
+def heartbeat_envelope(
+    *, run_id: str, cursor: int, high_water: int
+) -> StreamEnvelopeOut:
     return StreamEnvelopeOut(
         envelope_version=STREAM_ENVELOPE_VERSION,
         run_id=run_id,
@@ -100,7 +102,9 @@ class StreamFanout:
         self._closed = True
         self._wake.set()
 
-    async def subscribe(self, config: StreamSessionConfig) -> AsyncIterator[StreamEnvelopeOut]:
+    async def subscribe(
+        self, config: StreamSessionConfig
+    ) -> AsyncIterator[StreamEnvelopeOut]:
         if config.after_cursor < 0:
             raise bad_request(code="invalid_cursor", run_id=config.run_id)
         run_id = RunId(config.run_id)
