@@ -64,6 +64,7 @@ __all__ = [
     "ActionPlan",
     "CognitionFailureReason",
     "CognitiveLoopInput",
+    "CognitiveLoopProposal",
     "CognitiveLoopResult",
     "ComponentBoundaryRecord",
     "ComponentKind",
@@ -2727,6 +2728,98 @@ def _validate_boundary_artifacts(record: ComponentBoundaryRecord) -> None:
             and record.failure_reason is not CognitionFailureReason.CANCELLED
         ):
             raise ValueError("cancelled boundary failure_reason must be CANCELLED")
+
+
+@dataclass(frozen=True, slots=True)
+class CognitiveLoopProposal:
+    """Deliberation result through planning without memory updates or next state.
+
+    Trusted binding must call ``CognitiveLoop.complete`` with the effective
+    command before command-dependent memory intents or ``last_command_kind``
+    are derived. The proposed command must not be used for those stages when
+    an intervention substitutes a different effective command.
+    """
+
+    invocation_id: str
+    agent_id: AgentId
+    loop_input: CognitiveLoopInput
+    perception: InterpretedPerception
+    memory: RetrievedMemoryContext
+    situation: SituationModel
+    self_state: SelfModel
+    futures: PossibleFutures
+    motivation: MotivationEvaluation
+    intention: SelectedIntention
+    plan: ActionPlan
+    proposed_command: AgentCommand
+    boundary_records: tuple[ComponentBoundaryRecord, ...]
+    final_confidence: float
+
+    def __post_init__(self) -> None:
+        object.__setattr__(
+            self,
+            "invocation_id",
+            require_stable_id(
+                "CognitiveLoopProposal.invocation_id", self.invocation_id
+            ),
+        )
+        if type(self.agent_id) is not AgentId:
+            raise TypeError("CognitiveLoopProposal.agent_id must be AgentId")
+        if type(self.loop_input) is not CognitiveLoopInput:
+            raise TypeError("CognitiveLoopProposal.loop_input must be CognitiveLoopInput")
+        if self.loop_input.agent_id != self.agent_id:
+            raise ValueError("CognitiveLoopProposal agent_id mismatch")
+        if type(self.perception) is not InterpretedPerception:
+            raise TypeError("perception must be InterpretedPerception")
+        if type(self.memory) is not RetrievedMemoryContext:
+            raise TypeError("memory must be RetrievedMemoryContext")
+        if type(self.situation) is not SituationModel:
+            raise TypeError("situation must be SituationModel")
+        if type(self.self_state) is not SelfModel:
+            raise TypeError("self_state must be SelfModel")
+        if type(self.futures) is not PossibleFutures:
+            raise TypeError("futures must be PossibleFutures")
+        if type(self.motivation) is not MotivationEvaluation:
+            raise TypeError("motivation must be MotivationEvaluation")
+        if type(self.intention) is not SelectedIntention:
+            raise TypeError("intention must be SelectedIntention")
+        if type(self.plan) is not ActionPlan:
+            raise TypeError("plan must be ActionPlan")
+        object.__setattr__(
+            self, "proposed_command", require_agent_command(self.proposed_command)
+        )
+        if self.plan.command != self.proposed_command:
+            raise ValueError("proposed_command must match plan.command")
+        if isinstance(self.boundary_records, (set, frozenset, Mapping)):
+            raise TypeError("boundary_records must be ordered")
+        if isinstance(self.boundary_records, (str, bytes)) or not isinstance(
+            self.boundary_records, Sequence
+        ):
+            raise TypeError("boundary_records must be ordered")
+        records = tuple(self.boundary_records)
+        for record in records:
+            if type(record) is not ComponentBoundaryRecord:
+                raise TypeError("boundary_records entries must be ComponentBoundaryRecord")
+            if record.invocation_id != self.invocation_id:
+                raise ValueError("boundary record invocation_id mismatch")
+            if record.component_kind is ComponentKind.MEMORY_UPDATE:
+                raise ValueError("proposal must not include MEMORY_UPDATE boundaries")
+        object.__setattr__(self, "boundary_records", records)
+        object.__setattr__(
+            self,
+            "final_confidence",
+            require_confidence(
+                "CognitiveLoopProposal.final_confidence", self.final_confidence
+            ),
+        )
+
+    def __repr__(self) -> str:
+        return (
+            f"CognitiveLoopProposal(invocation_id={self.invocation_id!r}, "
+            f"agent_id={self.agent_id.value!r}, "
+            f"proposed_command_type={type(self.proposed_command).__name__}, "
+            f"boundary_count={len(self.boundary_records)})"
+        )
 
 
 @dataclass(frozen=True, slots=True)

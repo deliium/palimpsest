@@ -97,6 +97,8 @@ from world.identifiers import (
     WorldRevision,
 )
 from world.models import (
+    NON_LETHAL_PHYSICAL_RULES_VERSION,
+    PHYSICAL_RULES_VERSION,
     AgentBody,
     Item,
     LifeStatus,
@@ -106,6 +108,7 @@ from world.models import (
     Weather,
     canonical_physical_rules_bytes,
     default_physical_rules,
+    non_lethal_physical_rules,
     physical_rules_fingerprint,
 )
 from world.observations import (
@@ -275,9 +278,12 @@ __all__ = [
     "legacy_text_utterance",
     "make_physical_replayable_event",
     "make_replayable_event",
+    "NON_LETHAL_PHYSICAL_RULES_VERSION",
+    "non_lethal_physical_rules",
     "observation_allows_communication_target",
     "observed_self_from_body",
     "origin_utterance",
+    "PHYSICAL_RULES_VERSION",
     "physical_rules_fingerprint",
     "require_agent_command",
     "require_replayable_event",

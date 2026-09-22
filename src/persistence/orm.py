@@ -15,6 +15,7 @@ from typing import Final
 
 from sqlalchemy import (
     BigInteger,
+    Boolean,
     CheckConstraint,
     ForeignKeyConstraint,
     Index,
@@ -49,6 +50,8 @@ __all__ = [
     "TickCommitOrm",
     "WorldEventOrm",
     "WorldSnapshotOrm",
+    "RunnerPendingFinalizationOrm",
+    "RunnerAttemptStateOrm",
 ]
 
 AUTHORITATIVE_TABLES: Final[tuple[str, ...]] = (
@@ -524,3 +527,73 @@ class SnapshotWeatherOrm(Base):
     snapshot_id: Mapped[str] = mapped_column(String(_STABLE_ID_LEN), nullable=False)
     location_id: Mapped[str] = mapped_column(String(_STABLE_ID_LEN), nullable=False)
     condition: Mapped[str] = mapped_column(Text, nullable=False)
+
+
+class RunnerPendingFinalizationOrm(Base):
+    """Append-only pending subjective finalization outbox (not authoritative)."""
+
+    __tablename__ = "runner_pending_finalizations"
+    __table_args__ = (
+        PrimaryKeyConstraint("run_id", "agent_id", "invocation_id"),
+        ForeignKeyConstraint(
+            ["run_id"],
+            ["simulation_runs.run_id"],
+            name="fk_runner_pending_run",
+            ondelete="RESTRICT",
+        ),
+        CheckConstraint(
+            "status IN ('pending', 'finalized', 'aborted')",
+            name="ck_runner_pending_status",
+        ),
+        CheckConstraint(
+            f"char_length(integrity_hash) = {SHA256_HEX_LEN}",
+            name="ck_runner_pending_hash",
+        ),
+        UniqueConstraint("created_ordinal", name="uq_runner_pending_ordinal"),
+    )
+
+    run_id: Mapped[str] = mapped_column(String(_STABLE_ID_LEN), nullable=False)
+    agent_id: Mapped[str] = mapped_column(String(_STABLE_ID_LEN), nullable=False)
+    tick: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    invocation_id: Mapped[str] = mapped_column(String(_STABLE_ID_LEN), nullable=False)
+    integrity_hash: Mapped[str] = mapped_column(String(SHA256_HEX_LEN), nullable=False)
+    codec_version: Mapped[str] = mapped_column(String(32), nullable=False)
+    payload_json: Mapped[dict] = mapped_column(JSONB, nullable=False)
+    status: Mapped[str] = mapped_column(String(32), nullable=False)
+    created_ordinal: Mapped[int] = mapped_column(
+        BigInteger, nullable=False, autoincrement=True
+    )
+
+
+class RunnerAttemptStateOrm(Base):
+    """Append-only runner attempt recovery state (not authoritative)."""
+
+    __tablename__ = "runner_attempt_states"
+    __table_args__ = (
+        PrimaryKeyConstraint("run_id", "attempt_id"),
+        ForeignKeyConstraint(
+            ["run_id"],
+            ["simulation_runs.run_id"],
+            name="fk_runner_attempt_run",
+            ondelete="RESTRICT",
+        ),
+        CheckConstraint(
+            f"char_length(integrity_hash) = {SHA256_HEX_LEN}",
+            name="ck_runner_attempt_hash",
+        ),
+        UniqueConstraint("created_ordinal", name="uq_runner_attempt_ordinal"),
+    )
+
+    run_id: Mapped[str] = mapped_column(String(_STABLE_ID_LEN), nullable=False)
+    attempt_id: Mapped[str] = mapped_column(String(_STABLE_ID_LEN), nullable=False)
+    tick: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    phase: Mapped[str] = mapped_column(String(64), nullable=False)
+    recovery_required: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False
+    )
+    integrity_hash: Mapped[str] = mapped_column(String(SHA256_HEX_LEN), nullable=False)
+    codec_version: Mapped[str] = mapped_column(String(32), nullable=False)
+    payload_json: Mapped[dict] = mapped_column(JSONB, nullable=False)
+    created_ordinal: Mapped[int] = mapped_column(
+        BigInteger, nullable=False, autoincrement=True
+    )

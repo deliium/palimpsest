@@ -8,6 +8,7 @@ private world admission/operations and never exposes ``TickToken`` to cognition.
 
 from __future__ import annotations
 
+import hashlib
 import logging
 from collections.abc import Sequence
 from dataclasses import dataclass
@@ -17,6 +18,7 @@ from typing import Final, Protocol
 from agents.cognition.loop import CognitiveLoop, CognitiveLoopError
 from agents.cognition.models import (
     CognitiveLoopInput,
+    CognitiveLoopProposal,
     CognitiveLoopResult,
     InternalAgentState,
     MemoryUpdateIntent,
@@ -49,7 +51,7 @@ from simulation.subjective_state import (
 )
 from social.contracts import RelationshipReader
 from social.models import CommunicationEnvelope
-from world.actions import require_agent_command
+from world.actions import AgentCommand, require_agent_command
 from world.identifiers import require_stable_id
 from world.models import LifeStatus
 from world.observations import Observation
@@ -62,6 +64,8 @@ __all__ = [
     "AgentStepResult",
     "InboxSource",
     "InvocationIdSource",
+    "PendingRuntimeFinalization",
+    "PreparedObservation",
 ]
 
 _LOG: Final[logging.Logger] = logging.getLogger("simulation.agent_runtime")
@@ -88,6 +92,10 @@ class AgentRuntimeErrorCode(StrEnum):
     INVALID_INPUT = "invalid_input"
     MEMORY_APPLY_FAILED = "memory_apply_failed"
     SUBJECTIVE_APPLY_FAILED = "subjective_apply_failed"
+    PENDING_EXISTS = "pending_exists"
+    PENDING_MISSING = "pending_missing"
+    PENDING_MISMATCH = "pending_mismatch"
+    FINALIZE_IDEMPOTENT = "finalize_idempotent"
 
 
 class AgentRuntimeError(Exception):
@@ -139,6 +147,79 @@ class InvocationIdSource(Protocol):
     """Deterministic opaque invocation id allocator."""
 
     def next_id(self, *, agent_id: AgentId, tick: int) -> str: ...
+
+
+@dataclass(frozen=True, slots=True)
+class PreparedObservation:
+    """Deliberation-only result. No subjective mutation has occurred."""
+
+    observation_key: tuple[int, int]
+    tick: int
+    invocation_id: str
+    token: TickToken
+    proposal: CognitiveLoopProposal
+    prior_status: AgentRuntimeStatus
+
+    def __post_init__(self) -> None:
+        require_stable_id("PreparedObservation.invocation_id", self.invocation_id)
+        if type(self.proposal) is not CognitiveLoopProposal:
+            raise TypeError("proposal must be CognitiveLoopProposal")
+        if type(self.token) is not TickToken:
+            raise TypeError("token must be TickToken")
+        if type(self.prior_status) is not AgentRuntimeStatus:
+            raise TypeError("prior_status must be AgentRuntimeStatus")
+
+    def __repr__(self) -> str:
+        return (
+            f"PreparedObservation(invocation_id={self.invocation_id!r}, "
+            f"tick={self.tick}, status={self.prior_status.value!r})"
+        )
+
+
+@dataclass(frozen=True, slots=True)
+class PendingRuntimeFinalization:
+    """Detached runtime transition awaiting post-objective finalize."""
+
+    observation_key: tuple[int, int]
+    tick: int
+    invocation_id: str
+    submission: ActionSubmission
+    loop_result: CognitiveLoopResult
+    prior_status: AgentRuntimeStatus
+    next_status: AgentRuntimeStatus
+    next_internal_state: InternalAgentState
+    subjective_batch: SubjectiveMutationBatch | None
+    effective_command_kind: str
+    integrity_hash: str
+    finalized: bool = False
+
+    def __post_init__(self) -> None:
+        require_stable_id(
+            "PendingRuntimeFinalization.invocation_id", self.invocation_id
+        )
+        object.__setattr__(
+            self, "submission", require_action_submission(self.submission)
+        )
+        if type(self.loop_result) is not CognitiveLoopResult:
+            raise TypeError("loop_result must be CognitiveLoopResult")
+        if type(self.next_internal_state) is not InternalAgentState:
+            raise TypeError("next_internal_state must be InternalAgentState")
+        require_stable_id(
+            "PendingRuntimeFinalization.effective_command_kind",
+            self.effective_command_kind,
+        )
+        require_stable_id(
+            "PendingRuntimeFinalization.integrity_hash", self.integrity_hash
+        )
+        if type(self.finalized) is not bool:
+            raise TypeError("finalized must be bool")
+
+    def __repr__(self) -> str:
+        return (
+            f"PendingRuntimeFinalization(invocation_id={self.invocation_id!r}, "
+            f"tick={self.tick}, command_kind={self.effective_command_kind!r}, "
+            f"finalized={self.finalized})"
+        )
 
 
 @dataclass(frozen=True, slots=True)
@@ -216,6 +297,8 @@ class AgentRuntime:
         "_memory_reader",
         "_memory_service",
         "_memory_writer",
+        "_pending",
+        "_finalized_hashes",
         "_processed_invocations",
         "_relationship_reader",
         "_semantic_belief_reader",
@@ -268,6 +351,8 @@ class AgentRuntime:
         self._internal_state = InternalAgentState(owner_id=agent.agent_id)
         self._last_observation_key: tuple[int, int] | None = None
         self._processed_invocations: set[str] = set()
+        self._pending: PendingRuntimeFinalization | None = None
+        self._finalized_hashes: set[str] = set()
 
     @property
     def agent_id(self) -> AgentId:
@@ -324,13 +409,13 @@ class AgentRuntime:
             },
         )
 
-    async def process_observation(
+    async def prepare_observation(
         self,
         observation: Observation,
         *,
         token: TickToken,
-    ) -> AgentStepResult:
-        """Process one owned observation into at most one ``ActionSubmission``."""
+    ) -> PreparedObservation | AgentStepResult:
+        """Deliberate only. Does not mutate subjective or internal state."""
         if type(observation) is not Observation:
             raise TypeError("observation must be Observation")
         if type(token) is not TickToken:
@@ -376,6 +461,13 @@ class AgentRuntime:
                 terminal=True,
             )
 
+        if self._pending is not None:
+            raise AgentRuntimeError(
+                AgentRuntimeErrorCode.PENDING_EXISTS,
+                agent_id=agent_id.value,
+                tick=tick,
+            )
+
         obs_key = (observation.tick, observation.revision.value)
         if self._last_observation_key == obs_key:
             _LOG.warning(
@@ -394,7 +486,6 @@ class AgentRuntime:
                 tick=tick,
             )
 
-        # Ownership check via existing perspective builder; freeze snapshot.
         try:
             semantic_beliefs = (
                 ()
@@ -500,7 +591,7 @@ class AgentRuntime:
             )
 
         _LOG.debug(
-            "runtime_cognition_start",
+            "runtime_prepare_start",
             extra={
                 "runtime": {
                     "agent_id": agent_id.value,
@@ -518,7 +609,9 @@ class AgentRuntime:
             snapshot=snapshot,
         )
         try:
-            loop_result = await self._loop.run(loop_input, invocation_id=invocation_id)
+            proposal = await self._loop.prepare(
+                loop_input, invocation_id=invocation_id
+            )
         except CognitiveLoopError as exc:
             _LOG.error(
                 "runtime_cognition_failed",
@@ -541,7 +634,76 @@ class AgentRuntime:
                 tick=tick,
             ) from None
 
-        command = require_agent_command(loop_result.command)
+        prepared = PreparedObservation(
+            observation_key=obs_key,
+            tick=tick,
+            invocation_id=invocation_id,
+            token=token,
+            proposal=proposal,
+            prior_status=self._status,
+        )
+        _LOG.debug(
+            "runtime_prepare_complete",
+            extra={
+                "runtime": {
+                    "agent_id": agent_id.value,
+                    "tick": tick,
+                    "invocation_id": invocation_id,
+                    "boundary_count": len(proposal.boundary_records),
+                    "status": "prepared",
+                }
+            },
+        )
+        return prepared
+
+    async def bind_effective_command(
+        self,
+        prepared: PreparedObservation,
+        *,
+        effective_command: AgentCommand | None = None,
+    ) -> PendingRuntimeFinalization:
+        """Bind the effective command into a detached pending finalization."""
+        if type(prepared) is not PreparedObservation:
+            raise TypeError("prepared must be PreparedObservation")
+        if self._pending is not None:
+            raise AgentRuntimeError(
+                AgentRuntimeErrorCode.PENDING_EXISTS,
+                agent_id=self._agent.agent_id.value,
+                invocation_id=prepared.invocation_id,
+                tick=prepared.tick,
+            )
+        command = require_agent_command(
+            prepared.proposal.proposed_command
+            if effective_command is None
+            else effective_command
+        )
+        try:
+            loop_result = await self._loop.complete(
+                prepared.proposal, effective_command=command
+            )
+        except CognitiveLoopError as exc:
+            _LOG.error(
+                "runtime_cognition_failed",
+                extra={
+                    "runtime": {
+                        "code": AgentRuntimeErrorCode.COGNITION_FAILED.value,
+                        "agent_id": self._agent.agent_id.value,
+                        "tick": prepared.tick,
+                        "invocation_id": prepared.invocation_id,
+                        "reason": exc.failure.reason.value,
+                        "component_kind": exc.failure.component_kind.value,
+                        "ordinal": exc.failure.ordinal,
+                    }
+                },
+            )
+            raise AgentRuntimeError(
+                AgentRuntimeErrorCode.COGNITION_FAILED,
+                agent_id=self._agent.agent_id.value,
+                invocation_id=prepared.invocation_id,
+                tick=prepared.tick,
+            ) from None
+
+        observation = prepared.proposal.loop_input.observation
         intents = loop_result.memory_update_intents
         kind_counts = {
             "write_memory": 0,
@@ -555,58 +717,297 @@ class AgentRuntime:
             "runtime_intent_counts",
             extra={
                 "runtime": {
-                    "agent_id": agent_id.value,
-                    "tick": tick,
-                    "invocation_id": invocation_id,
+                    "agent_id": self._agent.agent_id.value,
+                    "tick": prepared.tick,
+                    "invocation_id": prepared.invocation_id,
                     "intent_counts": kind_counts,
                 }
             },
         )
         _prevalidate_updates(
-            agent_id,
+            self._agent.agent_id,
             intents,
             observation=observation,
         )
-        await self._apply_memory_side_effects(
-            agent_id=agent_id,
-            tick=tick,
-            invocation_id=invocation_id,
+        subjective_batch = self._build_subjective_batch(
+            agent_id=self._agent.agent_id,
+            tick=prepared.tick,
+            invocation_id=prepared.invocation_id,
             intents=intents,
             pending_accesses=loop_result.pending_accesses,
             pending_reconsolidation=loop_result.pending_reconsolidation,
         )
-
         submission = ActionSubmission(
-            token=token,
-            agent_id=agent_id,
+            token=prepared.token,
+            agent_id=self._agent.agent_id,
             command=command,
         )
-        self._internal_state = loop_result.internal_state
-        self._last_observation_key = obs_key
-        self._processed_invocations.add(invocation_id)
-
+        command_kind = type(command).__name__.lower()
+        integrity = _pending_integrity_hash(
+            invocation_id=prepared.invocation_id,
+            tick=prepared.tick,
+            command_kind=command_kind,
+            next_status=prepared.prior_status.value,
+            revision_hint=(
+                0 if subjective_batch is None else subjective_batch.expected_revision
+            ),
+        )
+        pending = PendingRuntimeFinalization(
+            observation_key=prepared.observation_key,
+            tick=prepared.tick,
+            invocation_id=prepared.invocation_id,
+            submission=submission,
+            loop_result=loop_result,
+            prior_status=prepared.prior_status,
+            next_status=prepared.prior_status,
+            next_internal_state=loop_result.internal_state,
+            subjective_batch=subjective_batch,
+            effective_command_kind=command_kind,
+            integrity_hash=integrity,
+        )
+        self._pending = pending
         _LOG.debug(
-            "runtime_cognition_complete",
+            "runtime_bind_complete",
+            extra={
+                "runtime": {
+                    "agent_id": self._agent.agent_id.value,
+                    "tick": prepared.tick,
+                    "invocation_id": prepared.invocation_id,
+                    "command_type": type(command).__name__,
+                    "has_subjective_batch": subjective_batch is not None,
+                    "status": "pending",
+                }
+            },
+        )
+        return pending
+
+    async def finalize_pending(
+        self, pending: PendingRuntimeFinalization
+    ) -> AgentStepResult:
+        """Apply a previously bound transition after objective commit."""
+        if type(pending) is not PendingRuntimeFinalization:
+            raise TypeError("pending must be PendingRuntimeFinalization")
+        agent_id = self._agent.agent_id
+        if pending.integrity_hash in self._finalized_hashes:
+            _LOG.warning(
+                "runtime_finalize_idempotent",
+                extra={
+                    "runtime": {
+                        "code": AgentRuntimeErrorCode.FINALIZE_IDEMPOTENT.value,
+                        "agent_id": agent_id.value,
+                        "tick": pending.tick,
+                        "invocation_id": pending.invocation_id,
+                    }
+                },
+            )
+            return AgentStepResult(
+                status=self._status,
+                invocation_id=pending.invocation_id,
+                tick=pending.tick,
+                submission=pending.submission,
+                loop_result=pending.loop_result,
+                terminal=False,
+            )
+        if self._pending is None or self._pending.integrity_hash != pending.integrity_hash:
+            raise AgentRuntimeError(
+                AgentRuntimeErrorCode.PENDING_MISMATCH
+                if self._pending is not None
+                else AgentRuntimeErrorCode.PENDING_MISSING,
+                agent_id=agent_id.value,
+                invocation_id=pending.invocation_id,
+                tick=pending.tick,
+            )
+
+        await self._apply_pending_side_effects(pending)
+        self._internal_state = pending.next_internal_state
+        self._last_observation_key = pending.observation_key
+        self._processed_invocations.add(pending.invocation_id)
+        self._finalized_hashes.add(pending.integrity_hash)
+        self._pending = None
+        _LOG.info(
+            "runtime_finalize_complete",
             extra={
                 "runtime": {
                     "agent_id": agent_id.value,
-                    "tick": tick,
-                    "invocation_id": invocation_id,
+                    "tick": pending.tick,
+                    "invocation_id": pending.invocation_id,
                     "status": self._status.value,
-                    "memory_update_count": len(intents),
-                    "pending_access_count": len(loop_result.pending_accesses),
-                    "command_type": type(command).__name__,
-                    "boundary_count": len(loop_result.boundary_records),
+                    "memory_update_count": len(
+                        pending.loop_result.memory_update_intents
+                    ),
                 }
             },
         )
         return AgentStepResult(
             status=self._status,
-            invocation_id=invocation_id,
-            tick=tick,
-            submission=submission,
-            loop_result=loop_result,
+            invocation_id=pending.invocation_id,
+            tick=pending.tick,
+            submission=pending.submission,
+            loop_result=pending.loop_result,
             terminal=False,
+        )
+
+    def abort_pending(self, pending: PendingRuntimeFinalization) -> None:
+        """Discard an uncommitted pending transition without applying it."""
+        if type(pending) is not PendingRuntimeFinalization:
+            raise TypeError("pending must be PendingRuntimeFinalization")
+        if self._pending is None:
+            raise AgentRuntimeError(
+                AgentRuntimeErrorCode.PENDING_MISSING,
+                agent_id=self._agent.agent_id.value,
+                invocation_id=pending.invocation_id,
+                tick=pending.tick,
+            )
+        if self._pending.integrity_hash != pending.integrity_hash:
+            raise AgentRuntimeError(
+                AgentRuntimeErrorCode.PENDING_MISMATCH,
+                agent_id=self._agent.agent_id.value,
+                invocation_id=pending.invocation_id,
+                tick=pending.tick,
+            )
+        self._pending = None
+        _LOG.warning(
+            "runtime_pending_aborted",
+            extra={
+                "runtime": {
+                    "agent_id": self._agent.agent_id.value,
+                    "tick": pending.tick,
+                    "invocation_id": pending.invocation_id,
+                    "status": "aborted",
+                }
+            },
+        )
+
+    async def process_observation(
+        self,
+        observation: Observation,
+        *,
+        token: TickToken,
+    ) -> AgentStepResult:
+        """One-call path: prepare, bind proposed command, finalize immediately.
+
+        Prefer prepare/bind/finalize around objective commit for runner ticks.
+        """
+        prepared = await self.prepare_observation(observation, token=token)
+        if type(prepared) is AgentStepResult:
+            return prepared
+        pending = await self.bind_effective_command(prepared)
+        return await self.finalize_pending(pending)
+
+    async def _apply_pending_side_effects(
+        self, pending: PendingRuntimeFinalization
+    ) -> None:
+        # Legacy WRITE_BELIEF intents still use the sync belief writer.
+        for intent in pending.loop_result.memory_update_intents:
+            if intent.kind is MemoryUpdateKind.WRITE_BELIEF:
+                assert intent.belief is not None
+                self._belief_writer.write(intent.belief)
+        if pending.subjective_batch is not None:
+            if self._subjective_state is None:
+                raise AgentRuntimeError(
+                    AgentRuntimeErrorCode.SUBJECTIVE_APPLY_FAILED,
+                    agent_id=self._agent.agent_id.value,
+                    invocation_id=pending.invocation_id,
+                    tick=pending.tick,
+                )
+            try:
+                receipt = await self._subjective_state.commit(pending.subjective_batch)
+            except SubjectiveStateError as exc:
+                _LOG.error(
+                    "runtime_subjective_apply_failed",
+                    extra={
+                        "runtime": {
+                            "code": AgentRuntimeErrorCode.SUBJECTIVE_APPLY_FAILED.value,
+                            "agent_id": self._agent.agent_id.value,
+                            "tick": pending.tick,
+                            "invocation_id": pending.invocation_id,
+                            "reason_code": exc.code.value,
+                            "adapter": exc.adapter,
+                        }
+                    },
+                )
+                raise AgentRuntimeError(
+                    AgentRuntimeErrorCode.SUBJECTIVE_APPLY_FAILED,
+                    agent_id=self._agent.agent_id.value,
+                    invocation_id=pending.invocation_id,
+                    tick=pending.tick,
+                ) from None
+            _LOG.debug(
+                "runtime_subjective_apply_complete",
+                extra={
+                    "runtime": {
+                        "agent_id": self._agent.agent_id.value,
+                        "tick": pending.tick,
+                        "invocation_id": pending.invocation_id,
+                        "revision": receipt.revision,
+                        "idempotent": receipt.idempotent,
+                        "status": "ok",
+                    }
+                },
+            )
+            return
+        await self._apply_memory_side_effects(
+            agent_id=self._agent.agent_id,
+            tick=pending.tick,
+            invocation_id=pending.invocation_id,
+            intents=pending.loop_result.memory_update_intents,
+            pending_accesses=pending.loop_result.pending_accesses,
+            pending_reconsolidation=pending.loop_result.pending_reconsolidation,
+        )
+
+    def _build_subjective_batch(
+        self,
+        *,
+        agent_id: AgentId,
+        tick: int,
+        invocation_id: str,
+        intents: Sequence[MemoryUpdateIntent],
+        pending_accesses: Sequence[MemoryAccessReceipt],
+        pending_reconsolidation: object | None,
+    ) -> SubjectiveMutationBatch | None:
+        if self._subjective_state is None:
+            return None
+        from memory.beliefs import BeliefRevisionRequest
+        from memory.models import ReconsolidationIntent, ReconstructionRecord
+        from social.relationships import RelationshipRevisionRequest
+
+        writes: list[MemoryTrace] = []
+        belief_revisions: list[BeliefRevisionRequest] = []
+        relationship_revisions: list[RelationshipRevisionRequest] = []
+        for intent in intents:
+            if intent.kind is MemoryUpdateKind.WRITE_MEMORY:
+                assert intent.memory is not None
+                writes.append(intent.memory)
+            elif intent.kind is MemoryUpdateKind.WRITE_BELIEF:
+                continue
+            elif intent.kind is MemoryUpdateKind.REVISE_SEMANTIC_BELIEF:
+                assert type(intent.belief_revision) is BeliefRevisionRequest
+                belief_revisions.append(intent.belief_revision)
+            elif intent.kind is MemoryUpdateKind.REVISE_RELATIONSHIP:
+                assert type(intent.relationship_revision) is RelationshipRevisionRequest
+                relationship_revisions.append(intent.relationship_revision)
+        reconstructions: tuple[ReconstructionRecord, ...] = ()
+        if pending_reconsolidation is not None:
+            if type(pending_reconsolidation) is not ReconsolidationIntent:
+                raise AgentRuntimeError(
+                    AgentRuntimeErrorCode.INVALID_UPDATE,
+                    agent_id=agent_id.value,
+                    invocation_id=invocation_id,
+                    tick=tick,
+                )
+            writes.append(pending_reconsolidation.derived_trace)
+            reconstructions = (pending_reconsolidation.record,)
+        return SubjectiveMutationBatch(
+            operation_id=subjective_operation_id(
+                owner_id=agent_id, invocation_id=invocation_id
+            ),
+            logical_tick=tick,
+            memory_writes=tuple(writes),
+            memory_accesses=tuple(pending_accesses),
+            reconstructions=reconstructions,
+            belief_revisions=tuple(belief_revisions),
+            relationship_revisions=tuple(relationship_revisions),
+            expected_revision=self._subjective_state.revision,
         )
 
     async def _apply_memory_side_effects(
@@ -840,6 +1241,20 @@ class AgentRuntime:
 def _is_dead_self(observation: Observation) -> bool:
     self_body = observation.self_body
     return self_body is not None and self_body.life_status is LifeStatus.DEAD
+
+
+def _pending_integrity_hash(
+    *,
+    invocation_id: str,
+    tick: int,
+    command_kind: str,
+    next_status: str,
+    revision_hint: int,
+) -> str:
+    material = (
+        f"{invocation_id}|{tick}|{command_kind}|{next_status}|{revision_hint}"
+    ).encode("utf-8")
+    return hashlib.sha256(material).hexdigest()
 
 
 def _prevalidate_updates(

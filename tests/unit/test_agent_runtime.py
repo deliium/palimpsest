@@ -391,3 +391,38 @@ def test_agent_runtime_omits_world_event_and_replay_imports() -> None:
     assert "WorldEvent" not in names
     assert "ReplayService" not in names
     assert "ObjectiveEventSource" not in names
+
+
+@pytest.mark.asyncio
+async def test_prepare_bind_finalize_and_abort() -> None:
+    from world.actions import Move
+    from world.identifiers import EntityId
+
+    runtime, memories, _beliefs = _runtime()
+    runtime.start()
+    prepared = await runtime.prepare_observation(_self(tick=0), token=_token(0))
+    assert type(prepared).__name__ == "PreparedObservation"
+    assert runtime.internal_state.invocation_count == 0
+    assert len(memories.snapshot()) == 0
+
+    pending = await runtime.bind_effective_command(
+        prepared,
+        effective_command=Move(destination_id=EntityId("loc-2")),
+    )
+    assert pending.effective_command_kind == "move"
+    assert runtime.internal_state.invocation_count == 0
+    assert len(memories.snapshot()) == 0
+
+    runtime.abort_pending(pending)
+    assert runtime._pending is None
+
+    prepared2 = await runtime.prepare_observation(_self(tick=0), token=_token(0))
+    pending2 = await runtime.bind_effective_command(prepared2)
+    result = await runtime.finalize_pending(pending2)
+    assert result.submission is not None
+    assert runtime.internal_state.invocation_count == 1
+
+    # Idempotent finalize of same hash after clear returns prior completion path
+    # via finalized_hashes.
+    again = await runtime.finalize_pending(pending2)
+    assert again.invocation_id == pending2.invocation_id

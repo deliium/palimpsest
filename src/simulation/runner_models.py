@@ -41,6 +41,7 @@ from world.models import (
     PhysicalRules,
     Resource,
     Weather,
+    non_lethal_physical_rules,
     physical_rules_fingerprint,
 )
 
@@ -107,6 +108,82 @@ class RunnerStopReasonCode(StrEnum):
     COGNITION_FAILURE = "cognition_failure"
     AUTHORITY_FAILURE = "authority_failure"
     FINALIZATION_RECOVERY_REQUIRED = "finalization_recovery_required"
+
+
+class RunnerAttemptStatus(StrEnum):
+    """Closed attempt receipt statuses for one tick orchestration attempt."""
+
+    STARTED = "started"
+    ABORTED = "aborted"
+    COMMITTED_AWAITING_FINALIZATION = "committed_awaiting_finalization"
+    RECOVERY_REQUIRED = "recovery_required"
+    FINALIZED = "finalized"
+
+
+@dataclass(frozen=True, slots=True)
+class RunnerAttemptReceipt:
+    """Immutable receipt for one tick attempt (not a final run result)."""
+
+    tick: int
+    status: RunnerAttemptStatus
+    submission_count: int
+    finalized_count: int
+    stop_reason: RunnerStopReasonCode | None = None
+
+    def __post_init__(self) -> None:
+        object.__setattr__(
+            self, "tick", require_exact_nonneg_int("RunnerAttemptReceipt.tick", self.tick)
+        )
+        if type(self.status) is not RunnerAttemptStatus:
+            raise TypeError("status must be RunnerAttemptStatus")
+        object.__setattr__(
+            self,
+            "submission_count",
+            require_exact_nonneg_int(
+                "RunnerAttemptReceipt.submission_count", self.submission_count
+            ),
+        )
+        object.__setattr__(
+            self,
+            "finalized_count",
+            require_exact_nonneg_int(
+                "RunnerAttemptReceipt.finalized_count", self.finalized_count
+            ),
+        )
+        if self.stop_reason is not None and type(self.stop_reason) is not RunnerStopReasonCode:
+            raise TypeError("stop_reason must be RunnerStopReasonCode or None")
+
+
+@dataclass(frozen=True, slots=True)
+class SimulationRunnerResult:
+    """Final result after objective commit and all finalizations succeed."""
+
+    run_id: object
+    ticks_committed: int
+    stop_reason: RunnerStopReasonCode
+    attempt_receipts: tuple[RunnerAttemptReceipt, ...]
+
+    def __post_init__(self) -> None:
+        from simulation.models import RunId
+
+        if type(self.run_id) is not RunId:
+            raise TypeError("run_id must be RunId")
+        object.__setattr__(
+            self,
+            "ticks_committed",
+            require_exact_nonneg_int(
+                "SimulationRunnerResult.ticks_committed", self.ticks_committed
+            ),
+        )
+        if type(self.stop_reason) is not RunnerStopReasonCode:
+            raise TypeError("stop_reason must be RunnerStopReasonCode")
+        if isinstance(self.attempt_receipts, (set, frozenset)):
+            raise TypeError("attempt_receipts must be ordered")
+        receipts = tuple(self.attempt_receipts)
+        for item in receipts:
+            if type(item) is not RunnerAttemptReceipt:
+                raise TypeError("attempt_receipts entries must be RunnerAttemptReceipt")
+        object.__setattr__(self, "attempt_receipts", receipts)
 
 
 class CognitionFailurePolicy(StrEnum):
@@ -614,6 +691,36 @@ class SimulationRunnerConfig:
     def ordered_registrations(self) -> tuple[AgentRegistration, ...]:
         return tuple(agent.registration() for agent in self.agents)
 
+    def resolve_physical_rules(self) -> PhysicalRules:
+        """Map mortality mode onto the effective world physical ruleset.
+
+        Mortality disabled selects the named non-lethal variant derived from the
+        scenario rules template. Mortality enabled rejects a non-lethal version
+        so lethal and non-lethal treatments cannot silently alias.
+        """
+        from world.models import NON_LETHAL_PHYSICAL_RULES_VERSION
+
+        if self.mortality_mode is MortalityMode.DISABLED:
+            rules = non_lethal_physical_rules(base=self.scenario.physical_rules)
+            _LOGGER.debug(
+                "physical_rules_resolved mortality_mode=%s rules_version=%s",
+                self.mortality_mode.value,
+                rules.version,
+            )
+            return rules
+        rules = self.scenario.physical_rules
+        if rules.version == NON_LETHAL_PHYSICAL_RULES_VERSION:
+            raise ValueError(
+                "mortality enabled forbids non-lethal physical rules "
+                "(code=mortality_rules_mismatch)"
+            )
+        _LOGGER.debug(
+            "physical_rules_resolved mortality_mode=%s rules_version=%s",
+            self.mortality_mode.value,
+            rules.version,
+        )
+        return rules
+
 
 @dataclass(frozen=True, slots=True)
 class RunnerConfigDiagnostics:
@@ -702,3 +809,110 @@ def describe_runner_config(diagnostics: RunnerConfigDiagnostics) -> Mapping[str,
         "stochastic_fingerprint_prefix": diagnostics.stochastic_fingerprint_prefix,
         "rules_fingerprint_prefix": diagnostics.rules_fingerprint_prefix,
     }
+
+
+RESULT_SCHEMA_VERSION: Final[str] = "runner-result-v1"
+OBSERVATION_DELIVERY_SCHEMA_VERSION: Final[str] = "observation-delivery-v1"
+
+
+@dataclass(frozen=True, slots=True)
+class ObservationDeliveryAck:
+    """Idempotent acknowledgement bound to a delivery ID and content hash."""
+
+    delivery_id: str
+    content_hash: str
+    schema_version: str = OBSERVATION_DELIVERY_SCHEMA_VERSION
+
+    def __post_init__(self) -> None:
+        require_stable_id("ObservationDeliveryAck.delivery_id", self.delivery_id)
+        require_stable_id("ObservationDeliveryAck.content_hash", self.content_hash)
+        if self.schema_version != OBSERVATION_DELIVERY_SCHEMA_VERSION:
+            raise ValueError("unsupported observation delivery schema_version")
+
+
+@dataclass(frozen=True, slots=True)
+class ObservationDelivery:
+    """Detached post-finalization delivery for trusted collectors only."""
+
+    delivery_id: str
+    content_hash: str
+    tick: int
+    kind: str
+    schema_version: str = OBSERVATION_DELIVERY_SCHEMA_VERSION
+
+    def __post_init__(self) -> None:
+        require_stable_id("ObservationDelivery.delivery_id", self.delivery_id)
+        require_stable_id("ObservationDelivery.content_hash", self.content_hash)
+        object.__setattr__(
+            self, "tick", require_exact_nonneg_int("ObservationDelivery.tick", self.tick)
+        )
+        require_stable_id("ObservationDelivery.kind", self.kind)
+        if self.schema_version != OBSERVATION_DELIVERY_SCHEMA_VERSION:
+            raise ValueError("unsupported observation delivery schema_version")
+
+
+class ExperimentalObservationSink:
+    """Idempotent sink protocol implemented by trusted experiment collectors.
+
+    Concrete collectors may subclass or duck-type this interface. Re-delivery of
+    identical content must return the same acknowledgement; divergent reuse of
+    a delivery ID must fail closed.
+    """
+
+    def __init__(self) -> None:
+        self._acks: dict[str, ObservationDeliveryAck] = {}
+
+    def deliver(self, delivery: ObservationDelivery) -> ObservationDeliveryAck:
+        if type(delivery) is not ObservationDelivery:
+            raise TypeError("delivery must be ObservationDelivery")
+        existing = self._acks.get(delivery.delivery_id)
+        if existing is not None:
+            if existing.content_hash != delivery.content_hash:
+                raise ValueError("delivery_id content mismatch")
+            return existing
+        ack = ObservationDeliveryAck(
+            delivery_id=delivery.delivery_id,
+            content_hash=delivery.content_hash,
+        )
+        self._acks[delivery.delivery_id] = ack
+        return ack
+
+
+@dataclass(frozen=True, slots=True)
+class SimulationRunnerResultDocument:
+    """Versioned machine-readable final run result (no narrative payloads)."""
+
+    schema_version: str
+    run_id: str
+    stop_reason: str
+    ticks_committed: int
+    config_fingerprint: str
+    scenario_fingerprint: str
+    cognition_fingerprint: str
+    exact_trajectory_hash: str
+    replica_normalized_trajectory_hash: str
+    attempt_count: int
+
+    def __post_init__(self) -> None:
+        if self.schema_version != RESULT_SCHEMA_VERSION:
+            raise ValueError("unsupported result schema_version")
+        require_stable_id("run_id", self.run_id)
+        require_stable_id("stop_reason", self.stop_reason)
+        object.__setattr__(
+            self,
+            "ticks_committed",
+            require_exact_nonneg_int("ticks_committed", self.ticks_committed),
+        )
+        for name in (
+            "config_fingerprint",
+            "scenario_fingerprint",
+            "cognition_fingerprint",
+            "exact_trajectory_hash",
+            "replica_normalized_trajectory_hash",
+        ):
+            require_stable_id(name, getattr(self, name))
+        object.__setattr__(
+            self,
+            "attempt_count",
+            require_exact_nonneg_int("attempt_count", self.attempt_count),
+        )

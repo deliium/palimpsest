@@ -330,3 +330,31 @@ async def test_input_propagation_uses_prior_outputs() -> None:
     assert type(seen["memory"]) is RetrievedMemoryContext
     assert type(seen["situation"]) is SituationModel
     assert type(seen["futures"]) is PossibleFutures
+
+
+@pytest.mark.asyncio
+async def test_prepare_excludes_memory_update_and_complete_binds_effective() -> None:
+    class TrackingHook:
+        def __init__(self) -> None:
+            self.commands: list[str] = []
+
+        async def propose_updates(self, loop_input, plan, perception, memory, intention):
+            self.commands.append(type(plan.command).__name__)
+            return ()
+
+    hook = TrackingHook()
+    loop = _loop(memory_updates=hook)
+    proposal = await loop.prepare(_loop_input(), invocation_id="inv-prep")
+    assert type(proposal.proposed_command) is Wait
+    assert all(
+        record.component_kind is not ComponentKind.MEMORY_UPDATE
+        for record in proposal.boundary_records
+    )
+    assert hook.commands == []
+
+    result = await loop.complete(
+        proposal, effective_command=Move(destination_id=EntityId("loc-2"))
+    )
+    assert type(result.command) is Move
+    assert result.internal_state.last_command_kind == "move"
+    assert hook.commands == ["Move"]

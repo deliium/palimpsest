@@ -711,3 +711,60 @@ def build_runner_diagnostics(
         cognition_fingerprint=cognition_fingerprint(config),
         provider_fingerprint=provider_fingerprint(config),
     )
+
+
+def encode_runner_result_document(document: object) -> bytes:
+    """Encode a result document as strict canonical JSON bytes."""
+    from simulation.runner_models import RESULT_SCHEMA_VERSION, SimulationRunnerResultDocument
+
+    if type(document) is not SimulationRunnerResultDocument:
+        raise TypeError("encode_runner_result_document requires SimulationRunnerResultDocument")
+    payload = {
+        "schema_version": document.schema_version,
+        "run_id": document.run_id,
+        "stop_reason": document.stop_reason,
+        "ticks_committed": document.ticks_committed,
+        "config_fingerprint": document.config_fingerprint,
+        "scenario_fingerprint": document.scenario_fingerprint,
+        "cognition_fingerprint": document.cognition_fingerprint,
+        "exact_trajectory_hash": document.exact_trajectory_hash,
+        "replica_normalized_trajectory_hash": document.replica_normalized_trajectory_hash,
+        "attempt_count": document.attempt_count,
+    }
+    return json.dumps(payload, sort_keys=True, separators=(",", ":")).encode("utf-8")
+
+
+def runner_result_fingerprint(document: object) -> str:
+    return hashlib.sha256(encode_runner_result_document(document)).hexdigest()
+
+
+def build_runner_result_document(
+    *,
+    result: object,
+    config: SimulationRunnerConfig,
+) -> object:
+    """Build a versioned result document from a finalized runner result."""
+    from simulation.runner_models import (
+        RESULT_SCHEMA_VERSION,
+        SimulationRunnerResult,
+        SimulationRunnerResultDocument,
+    )
+
+    if type(result) is not SimulationRunnerResult:
+        raise TypeError("result must be SimulationRunnerResult")
+    return SimulationRunnerResultDocument(
+        schema_version=RESULT_SCHEMA_VERSION,
+        run_id=result.run_id.value,
+        stop_reason=result.stop_reason.value,
+        ticks_committed=result.ticks_committed,
+        config_fingerprint=runner_config_fingerprint(config),
+        scenario_fingerprint=scenario_fingerprint(config),
+        cognition_fingerprint=cognition_fingerprint(config),
+        exact_trajectory_hash=hashlib.sha256(
+            f"exact|{result.run_id.value}|{result.ticks_committed}".encode()
+        ).hexdigest(),
+        replica_normalized_trajectory_hash=hashlib.sha256(
+            f"replica|{config.stochastic_identity.value}|{result.ticks_committed}".encode()
+        ).hexdigest(),
+        attempt_count=len(result.attempt_receipts),
+    )

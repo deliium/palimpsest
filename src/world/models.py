@@ -32,6 +32,11 @@ from world.values import (
 )
 
 PHYSICAL_RULES_VERSION: Final[str] = "physical-v1"
+NON_LETHAL_PHYSICAL_RULES_VERSION: Final[str] = "physical-nonlethal-v1"
+# Closed DeathCause values covered by non-lethal mapping (world.effects.DeathCause).
+_NON_LETHAL_COVERED_DEATH_CAUSES: Final[frozenset[str]] = frozenset(
+    {"attack", "combined_needs", "exposure"}
+)
 
 
 def _canonical_finite_float(name: str, value: object) -> float:
@@ -586,6 +591,65 @@ class PhysicalRules:
 def default_physical_rules() -> PhysicalRules:
     """Return the canonical V1 physical ruleset used by new physical runs."""
     return PhysicalRules()
+
+
+def non_lethal_physical_rules(*, base: PhysicalRules | None = None) -> PhysicalRules:
+    """Return named non-lethal rules covering every classified death path.
+
+    Preserves metabolism and action costs from ``base`` (or defaults) while
+    zeroing starvation, dehydration, fatigue, exposure, and combat lethality.
+    Rejects construction when ``DeathCause`` gains unclassified members so the
+    mortality mapping cannot silently miss a new death path.
+    """
+    from world.effects import DeathCause
+
+    classified = {cause.value for cause in DeathCause}
+    if classified != set(_NON_LETHAL_COVERED_DEATH_CAUSES):
+        uncovered = sorted(classified - set(_NON_LETHAL_COVERED_DEATH_CAUSES))
+        raise ValueError(
+            "non_lethal_physical_rules uncovered death causes "
+            f"{uncovered!r} (code=mortality_mapping_incomplete)"
+        )
+    template = base if base is not None else PhysicalRules()
+    if type(template) is not PhysicalRules:
+        raise TypeError("non_lethal_physical_rules base must be PhysicalRules")
+    return PhysicalRules(
+        version=NON_LETHAL_PHYSICAL_RULES_VERSION,
+        hours_per_day=template.hours_per_day,
+        day_start_hour=template.day_start_hour,
+        day_end_hour=template.day_end_hour,
+        metabolism_hunger=template.metabolism_hunger,
+        metabolism_thirst=template.metabolism_thirst,
+        metabolism_fatigue=template.metabolism_fatigue,
+        hunger_damage=0.0,
+        thirst_damage=0.0,
+        fatigue_damage=0.0,
+        exposure_damage=0.0,
+        exposure_low_celsius=template.exposure_low_celsius,
+        exposure_high_celsius=template.exposure_high_celsius,
+        temperature_lerp_factor=template.temperature_lerp_factor,
+        move_fatigue=template.move_fatigue,
+        flee_fatigue=template.flee_fatigue,
+        help_fatigue=template.help_fatigue,
+        sleep_fatigue_recovery=template.sleep_fatigue_recovery,
+        eat_hunger_relief=template.eat_hunger_relief,
+        drink_thirst_relief=template.drink_thirst_relief,
+        help_health_gain=template.help_health_gain,
+        attack_hit_probability=template.attack_hit_probability,
+        attack_damage_min=0,
+        attack_damage_max_exclusive=1,
+        flee_success_probability=template.flee_success_probability,
+        search_base_probability=template.search_base_probability,
+        search_visibility_weight=template.search_visibility_weight,
+        resource_extraction_amount=template.resource_extraction_amount,
+        weather_period_ticks=template.weather_period_ticks,
+        day_visibility_factor=template.day_visibility_factor,
+        night_visibility_factor=template.night_visibility_factor,
+        weather_visibility=template.weather_visibility,
+        weather_temperature_offset=template.weather_temperature_offset,
+        phase_temperature_offset=template.phase_temperature_offset,
+        weather_transitions=template.weather_transitions,
+    )
 
 
 def canonical_physical_rules_bytes(rules: PhysicalRules) -> bytes:
