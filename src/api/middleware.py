@@ -48,13 +48,15 @@ class RequestIdMiddleware:
         if malformed:
             _LOGGER.warning("malformed_request_id", reason="rejected_inbound_value")
         bind_log_context(request_id=request_id)
+        # Expose for exception handlers without logging the path.
+        scope.setdefault("state", {})
+        if isinstance(scope["state"], dict):
+            scope["state"]["request_id"] = request_id
         method = str(scope.get("method", ""))
-        path = str(scope.get("path", ""))
         started = time.perf_counter()
         _LOGGER.debug(
             "request_started",
             method=method,
-            path=path,
             request_id=request_id,
         )
         status_code = 500
@@ -74,7 +76,6 @@ class RequestIdMiddleware:
             _LOGGER.error(
                 "unhandled_failure",
                 method=method,
-                path=path,
                 request_id=request_id,
             )
             raise
@@ -83,7 +84,6 @@ class RequestIdMiddleware:
             _LOGGER.debug(
                 "request_completed",
                 method=method,
-                path=path,
                 status=status_code,
                 duration_ms=duration_ms,
                 request_id=request_id,

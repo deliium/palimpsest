@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from collections.abc import Sequence
 
-from sqlalchemy import select
+from sqlalchemy import select, text
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
@@ -321,6 +321,12 @@ class SqlAlchemyStreamRepository:
                 published = await _publish_stream_in_session(
                     session, run_id=run_id, drafts=draft_tuple
                 )
+                # Wake-up only — never authoritative for cursor/order.
+                if published:
+                    await session.execute(
+                        text("SELECT pg_notify('palimpsest_stream', :run_id)"),
+                        {"run_id": run_id.value},
+                    )
                 await session.commit()
         except PersistenceAdapterError:
             raise

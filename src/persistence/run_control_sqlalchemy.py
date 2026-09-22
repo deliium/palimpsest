@@ -112,6 +112,51 @@ class SqlAlchemyRunControlRepository:
                 return None
             return _to_record(row)
 
+    async def replace_configuration(
+        self,
+        record: RunControlRecord,
+        *,
+        expected_version: int,
+    ) -> RunControlRecord:
+        if type(record) is not RunControlRecord:
+            raise TypeError("replace_configuration requires RunControlRecord")
+        fields = {
+            "operation": "replace_configuration",
+            "run_id": record.run_id.value,
+            "expected_version": expected_version,
+        }
+        _LOGGER.debug("run_control_replace_started", **fields)
+        async with session_scope(self._session_factory) as session:
+            row = await session.get(RunControlStateOrm, record.run_id.value)
+            if row is None:
+                raise PersistenceNotFoundError(
+                    "run_control_missing", operation="replace_configuration"
+                )
+            if row.lifecycle_version != expected_version:
+                raise PersistenceConflictError(
+                    "version_conflict", operation="replace_configuration"
+                )
+            current = RunLifecycleState(row.lifecycle_state)
+            if current not in {
+                RunLifecycleState.CONFIGURED,
+                RunLifecycleState.READY,
+                RunLifecycleState.PAUSED,
+            }:
+                raise PersistenceConflictError(
+                    "illegal_lifecycle_transition",
+                    operation="replace_configuration",
+                )
+            row.lifecycle_state = RunLifecycleState.CONFIGURED.value
+            row.lifecycle_version = expected_version + 1
+            row.config_availability = record.config_availability.value
+            row.config_schema_version = record.config_schema_version
+            row.config_fingerprint = record.config_fingerprint
+            row.config_payload = record.config_payload
+            result = _to_record(row)
+            await session.commit()
+        _LOGGER.info("run_control_replaced", **fields, lifecycle_version=result.lifecycle_version)
+        return result
+
     async def transition(
         self,
         *,
@@ -404,6 +449,32 @@ class SqlAlchemyRunControlRepository:
                 )
                 for row in rows
             )
+
+    async def list_runs(
+        self,
+        *,
+        after_run_id: str | None = None,
+        limit: int = 100,
+    ) -> tuple[RunControlRecord, ...]:
+        if limit < 1:
+            raise ValueError("limit must be >= 1")
+        if limit > 1000:
+            raise ValueError("limit exceeds maximum")
+        async with session_scope(self._session_factory) as session:
+            stmt = select(RunControlStateOrm).order_by(RunControlStateOrm.run_id)
+            if after_run_id is not None:
+                stmt = stmt.where(RunControlStateOrm.run_id > after_run_id)
+            stmt = stmt.limit(limit)
+            rows = (await session.execute(stmt)).scalars().all()
+            records = tuple(_to_record(row) for row in rows)
+        _LOGGER.debug(
+            "run_control_list_runs",
+            operation="list_runs",
+            count=len(records),
+            limit=limit,
+            has_cursor=after_run_id is not None,
+        )
+        return records
 
 
 def _from_record(record: RunControlRecord) -> RunControlStateOrm:

@@ -334,3 +334,35 @@ def test_settings_error_excludes_validation_input_values() -> None:
     assert "not-an-int-sekrit" not in message
     assert "input_value" not in message
     assert "pydantic.dev" not in message
+
+
+def test_api_credentials_require_strength_and_debug_pairing() -> None:
+    with pytest.raises(SettingsError, match="at least 32"):
+        load_settings(env_file=False, api_control_credential="short")
+    with pytest.raises(SettingsError, match="DEBUG_CREDENTIAL"):
+        load_settings(env_file=False, api_debug_enabled=True)
+    strong = "x" * 32
+    settings = load_settings(
+        env_file=False,
+        api_debug_enabled=True,
+        api_debug_credential=strong,
+    )
+    assert settings.api_debug_enabled is True
+    assert "x" * 32 not in repr(settings)
+    assert settings.bootstrap_fields()["has_api_debug_credential"] is True
+    assert settings.bootstrap_fields()["api_debug_enabled"] is True
+
+
+def test_api_auth_required_needs_capability_credentials() -> None:
+    with pytest.raises(SettingsError, match="CONTROL_CREDENTIAL"):
+        load_settings(env_file=False, api_auth_required=True)
+    strong = "y" * 32
+    settings = load_settings(
+        env_file=False,
+        api_auth_required=True,
+        api_control_credential=strong,
+        api_inspection_credential=strong,
+        api_agent_visible_credential=strong,
+    )
+    assert settings.api_auth_required is True
+    assert settings.api_max_page_size == 100

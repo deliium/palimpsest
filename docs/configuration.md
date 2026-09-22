@@ -32,7 +32,7 @@ Copy `.env.example` to `.env` for local overrides. Do not commit `.env`.
 | `logging_configured` | DEBUG | `infrastructure.logging` |
 | `settings_loaded` | DEBUG | `infrastructure.settings` |
 | `engine_created`, `session_opened`, `session_closed`, `readiness_check_started`, `engine_disposing`, `engine_disposed` | DEBUG | `infrastructure.database` |
-| `request_started`, `request_completed` | DEBUG | `api.request` — `method`, `path`, `status`, `duration_ms`, `request_id` only |
+| `request_started`, `request_completed` | DEBUG | `api.request` — `method`, `status`, `duration_ms`, `request_id` only (route templates logged by handlers; never raw paths/query strings) |
 | `run_configured` | DEBUG | `simulation.run` — `run_id`, `derivation_version`, `scope` (never seed) |
 | `logging_ready` | INFO | `infrastructure.logging` |
 | `app_started`, `app_stopping`, `app_stopped` | INFO | `infrastructure.lifecycle` |

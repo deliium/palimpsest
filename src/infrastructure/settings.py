@@ -36,6 +36,14 @@ _LOCAL_HTTP_HOSTS: Final[frozenset[str]] = frozenset({"localhost", "127.0.0.1", 
 _DEFAULT_LLM_MAX_REQUEST_BYTES: Final[int] = 1_048_576
 _DEFAULT_LLM_MAX_RESPONSE_BYTES: Final[int] = 1_048_576
 _DEFAULT_LLM_MAX_HEADER_BYTES: Final[int] = 8_192
+_DEFAULT_API_MAX_PAGE_SIZE: Final[int] = 100
+_DEFAULT_API_STREAM_QUEUE_SIZE: Final[int] = 64
+_DEFAULT_API_STREAM_HEARTBEAT_SECONDS: Final[float] = 15.0
+_DEFAULT_API_STREAM_POLL_SECONDS: Final[float] = 0.25
+_DEFAULT_API_LEASE_TTL_SECONDS: Final[float] = 30.0
+_DEFAULT_API_LEASE_HEARTBEAT_SECONDS: Final[float] = 10.0
+_DEFAULT_API_DRAIN_TIMEOUT_SECONDS: Final[float] = 30.0
+_MIN_API_CREDENTIAL_LENGTH: Final[int] = 32
 
 
 class SettingsError(Exception):
@@ -152,6 +160,35 @@ class Settings(BaseSettings):
     llm_max_header_bytes: Annotated[int, Field(ge=1)] = _DEFAULT_LLM_MAX_HEADER_BYTES
     llm_send_correlation_header: bool = False
 
+    # Research API (PALIMPSEST_API_*). Debug is disabled by default.
+    api_auth_required: bool = False
+    api_control_credential: SecretStr | None = Field(default=None, repr=False)
+    api_inspection_credential: SecretStr | None = Field(default=None, repr=False)
+    api_agent_visible_credential: SecretStr | None = Field(default=None, repr=False)
+    api_debug_enabled: bool = False
+    api_debug_credential: SecretStr | None = Field(default=None, repr=False)
+    api_max_page_size: Annotated[
+        int, Field(ge=1, le=1000)
+    ] = _DEFAULT_API_MAX_PAGE_SIZE
+    api_stream_queue_size: Annotated[int, Field(ge=1, le=10_000)] = (
+        _DEFAULT_API_STREAM_QUEUE_SIZE
+    )
+    api_stream_heartbeat_seconds: Annotated[float, Field(gt=0)] = (
+        _DEFAULT_API_STREAM_HEARTBEAT_SECONDS
+    )
+    api_stream_poll_seconds: Annotated[float, Field(gt=0)] = (
+        _DEFAULT_API_STREAM_POLL_SECONDS
+    )
+    api_lease_ttl_seconds: Annotated[float, Field(gt=0)] = (
+        _DEFAULT_API_LEASE_TTL_SECONDS
+    )
+    api_lease_heartbeat_seconds: Annotated[float, Field(gt=0)] = (
+        _DEFAULT_API_LEASE_HEARTBEAT_SECONDS
+    )
+    api_drain_timeout_seconds: Annotated[float, Field(gt=0)] = (
+        _DEFAULT_API_DRAIN_TIMEOUT_SECONDS
+    )
+
     @field_validator(
         "api_port",
         "pool_size",
@@ -161,6 +198,8 @@ class Settings(BaseSettings):
         "llm_max_request_bytes",
         "llm_max_response_bytes",
         "llm_max_header_bytes",
+        "api_max_page_size",
+        "api_stream_queue_size",
         mode="before",
     )
     @classmethod
@@ -172,6 +211,11 @@ class Settings(BaseSettings):
         "llm_temperature",
         "llm_per_attempt_timeout_seconds",
         "llm_total_deadline_seconds",
+        "api_stream_heartbeat_seconds",
+        "api_stream_poll_seconds",
+        "api_lease_ttl_seconds",
+        "api_lease_heartbeat_seconds",
+        "api_drain_timeout_seconds",
         mode="before",
     )
     @classmethod
@@ -241,6 +285,41 @@ class Settings(BaseSettings):
             raise ValueError("llm_api_key must be a non-blank string")
         return value
 
+    @field_validator(
+        "api_control_credential",
+        "api_inspection_credential",
+        "api_agent_visible_credential",
+        "api_debug_credential",
+    )
+    @classmethod
+    def validate_api_credentials(cls, value: SecretStr | None) -> SecretStr | None:
+        if value is None:
+            return None
+        raw = value.get_secret_value()
+        if not raw or raw.strip() != raw or not raw.strip():
+            raise ValueError("API credential must be a non-blank string")
+        if len(raw) < _MIN_API_CREDENTIAL_LENGTH:
+            raise ValueError(
+                f"API credential must be at least {_MIN_API_CREDENTIAL_LENGTH} characters"
+            )
+        if any(ch.isspace() for ch in raw):
+            raise ValueError("API credential must not contain whitespace")
+        return value
+
+    @field_validator(
+        "api_stream_heartbeat_seconds",
+        "api_stream_poll_seconds",
+        "api_lease_ttl_seconds",
+        "api_lease_heartbeat_seconds",
+        "api_drain_timeout_seconds",
+    )
+    @classmethod
+    def validate_api_positive_finite(cls, value: float) -> float:
+        number = float(value)
+        if not math.isfinite(number):
+            raise ValueError("API duration settings must be finite")
+        return number
+
     @field_validator("llm_base_url")
     @classmethod
     def validate_llm_base_url_shape(cls, value: SecretStr | None) -> SecretStr | None:
@@ -257,6 +336,36 @@ class Settings(BaseSettings):
             raw = self.test_database_url.get_secret_value()
             _validate_asyncpg_url(raw)
             _validate_disposable_test_database(raw)
+        return self
+
+    @model_validator(mode="after")
+    def validate_api_auth_consistency(self) -> Settings:
+        if self.api_auth_required:
+            if self.api_control_credential is None:
+                raise ValueError(
+                    "PALIMPSEST_API_CONTROL_CREDENTIAL is required when "
+                    "PALIMPSEST_API_AUTH_REQUIRED is true"
+                )
+            if self.api_inspection_credential is None:
+                raise ValueError(
+                    "PALIMPSEST_API_INSPECTION_CREDENTIAL is required when "
+                    "PALIMPSEST_API_AUTH_REQUIRED is true"
+                )
+            if self.api_agent_visible_credential is None:
+                raise ValueError(
+                    "PALIMPSEST_API_AGENT_VISIBLE_CREDENTIAL is required when "
+                    "PALIMPSEST_API_AUTH_REQUIRED is true"
+                )
+        if self.api_debug_enabled and self.api_debug_credential is None:
+            raise ValueError(
+                "PALIMPSEST_API_DEBUG_CREDENTIAL is required when "
+                "PALIMPSEST_API_DEBUG_ENABLED is true"
+            )
+        if self.api_lease_heartbeat_seconds >= self.api_lease_ttl_seconds:
+            raise ValueError(
+                "PALIMPSEST_API_LEASE_HEARTBEAT_SECONDS must be less than "
+                "PALIMPSEST_API_LEASE_TTL_SECONDS"
+            )
         return self
 
     @model_validator(mode="after")
@@ -328,6 +437,16 @@ class Settings(BaseSettings):
             "llm_max_header_bytes": self.llm_max_header_bytes,
             "llm_send_correlation_header": self.llm_send_correlation_header,
             "has_llm_temperature": self.llm_temperature is not None,
+            "api_auth_required": self.api_auth_required,
+            "api_debug_enabled": self.api_debug_enabled,
+            "has_api_control_credential": self.api_control_credential is not None,
+            "has_api_inspection_credential": self.api_inspection_credential is not None,
+            "has_api_agent_visible_credential": (
+                self.api_agent_visible_credential is not None
+            ),
+            "has_api_debug_credential": self.api_debug_credential is not None,
+            "api_max_page_size": self.api_max_page_size,
+            "api_stream_queue_size": self.api_stream_queue_size,
         }
 
     def __repr__(self) -> str:
@@ -341,7 +460,9 @@ class Settings(BaseSettings):
             f"pool_size={self.pool_size}, "
             f"llm_adapter_kind={self.llm_adapter_kind.value!r}, "
             f"llm_enabled={self.llm_enabled()}, "
-            f"has_llm_api_key={self.llm_api_key is not None})"
+            f"has_llm_api_key={self.llm_api_key is not None}, "
+            f"api_auth_required={self.api_auth_required}, "
+            f"api_debug_enabled={self.api_debug_enabled})"
         )
 
     def __str__(self) -> str:

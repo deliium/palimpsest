@@ -17,7 +17,7 @@ Palimpsest is a Python 3.12+ modular monolith for reproducible, discrete, text-b
 - Deterministic seed-derived RNG streams (including explicit stochastic/comparison identity), logical clock, namespaced IDs, and live/restored observation parity
 - Configuration-driven `SimulationRunner` with staged prepare/bind/finalize cognition and versioned experiment result documents
 - `PALIMPSEST_` settings (including disabled-by-default `PALIMPSEST_LLM_*`), structured logging (no observation/communication/memory/belief/relationship/LLM payloads), async SQLAlchemy lifecycle, Alembic + pgvector bootstrap (migration head `0012`)
-- FastAPI `/health` liveness and Docker Compose development stack (API does not yet own LLM provider lifecycle)
+- FastAPI research API: `/health`, versioned `/v1` simulation control/inspection/replay, resumable WebSocket stream from durable outbox; capability credentials (`PALIMPSEST_API_*`); debug disabled by default; LLM provider lifecycle composition remains deferred
 
 ## Tech Stack
 

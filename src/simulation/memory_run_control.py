@@ -44,6 +44,41 @@ class InMemoryRunControlRepository:
             raise TypeError("run_id must be RunId")
         return self._records.get(run_id.value)
 
+    async def replace_configuration(
+        self,
+        record: RunControlRecord,
+        *,
+        expected_version: int,
+    ) -> RunControlRecord:
+        if type(record) is not RunControlRecord:
+            raise TypeError("replace_configuration requires RunControlRecord")
+        existing = self._records.get(record.run_id.value)
+        if existing is None:
+            raise KeyError("run_control_missing")
+        if existing.lifecycle_version != expected_version:
+            raise ValueError("version_conflict")
+        if existing.lifecycle_state not in {
+            RunLifecycleState.CONFIGURED,
+            RunLifecycleState.READY,
+            RunLifecycleState.PAUSED,
+        }:
+            raise ValueError("illegal_lifecycle_transition")
+        updated = RunControlRecord(
+            run_id=existing.run_id,
+            lifecycle_state=RunLifecycleState.CONFIGURED,
+            lifecycle_version=expected_version + 1,
+            config_availability=record.config_availability,
+            ticks_committed=existing.ticks_committed,
+            progress_cursor=existing.progress_cursor,
+            config_schema_version=record.config_schema_version,
+            config_fingerprint=record.config_fingerprint,
+            config_payload=record.config_payload,
+            lease=existing.lease,
+            terminal_reason_code=existing.terminal_reason_code,
+        )
+        self._records[record.run_id.value] = updated
+        return updated
+
     async def transition(
         self,
         *,
@@ -217,3 +252,17 @@ class InMemoryRunControlRepository:
         self, *, run_id: RunId
     ) -> tuple[RunLifecycleTransition, ...]:
         return tuple(self._transitions.get(run_id.value, ()))
+
+    async def list_runs(
+        self,
+        *,
+        after_run_id: str | None = None,
+        limit: int = 100,
+    ) -> tuple[RunControlRecord, ...]:
+        if limit < 1:
+            raise ValueError("limit must be >= 1")
+        keys = sorted(self._records)
+        if after_run_id is not None:
+            keys = [key for key in keys if key > after_run_id]
+        selected = keys[:limit]
+        return tuple(self._records[key] for key in selected)

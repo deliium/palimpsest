@@ -1031,6 +1031,13 @@ class RunControlRepository(Protocol):
 
     async def get(self, run_id: RunId) -> RunControlRecord | None: ...
 
+    async def replace_configuration(
+        self,
+        record: RunControlRecord,
+        *,
+        expected_version: int,
+    ) -> RunControlRecord: ...
+
     async def transition(
         self,
         *,
@@ -1074,6 +1081,13 @@ class RunControlRepository(Protocol):
     async def list_transitions(
         self, *, run_id: RunId
     ) -> tuple[RunLifecycleTransition, ...]: ...
+
+    async def list_runs(
+        self,
+        *,
+        after_run_id: str | None = None,
+        limit: int = 100,
+    ) -> tuple[RunControlRecord, ...]: ...
 
 
 @dataclass(frozen=True, slots=True)

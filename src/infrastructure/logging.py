@@ -57,6 +57,10 @@ _SENSITIVE_KEYS: Final[frozenset[str]] = frozenset(
         "test_database_url",
         "token",
         "url",
+        "api_control_credential",
+        "api_inspection_credential",
+        "api_agent_visible_credential",
+        "api_debug_credential",
         "validated_output",
         "variables",
     }

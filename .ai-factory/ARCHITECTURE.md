@@ -39,7 +39,10 @@ src/
   analysis/              # read-only analysis: drift/transmission, metric DTOs,
                          # evidence stages, claim truth, numerical policy, canonical codecs
                          # MemoryDriftAnalysisService + SocialTransmissionAnalysisService
-  api/                   # FastAPI composition root (no LLM provider wiring yet)
+  api/                   # FastAPI composition root: /health + /v1 simulation
+                         # control/inspection/replay + WebSocket stream
+                         # security.py (capability credentials), simulation_manager.py
+                         # streaming.py (durable outbox catch-up + live handoff)
   infrastructure/        # settings (PALIMPSEST_*), logging, database adapters
 alembic/versions/        # migrations through 0012 (run control + scientific evidence)
 docs/                    # contributor docs (architecture, memory, social-communication, …)
@@ -79,7 +82,8 @@ tests/
 
 ## Layer/Module Communication
 
-- Composition root (`api`) loads settings, configures logging, and owns database lifespan
+- Composition root (`api`) loads settings, configures logging, owns database lifespan, recoverable `SimulationManager`, and resumable stream fan-out
+- Research API capabilities: `simulation_control`, `objective_inspection` (incl. WebSocket stream), `agent_visible`, `subjective_debug` (disabled by default); credentials via header / WS subprotocol only — never query strings
 - LLM settings exist under `PALIMPSEST_LLM_*`; factory construction stays standalone in `llm.factory` until a cognition consumer owns lifecycle composition
 - `WorldEngine` owns observation tokens, ordered admission, private batch preparation, and atomic commit
 - Communication (`Talk` / `Ask` / `Tell`) is event-only: world verifies delivery eligibility and records `Talked` / `Asked` / `Told`; content truth is never world-owned. Declared lineage on `StructuredUtterance` is speaker testimony. Writes use event schema **replay-v5**; legacy replay-v2/v3/v4 text-only records decode into an explicit unreferenced structured form

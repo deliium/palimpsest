@@ -188,21 +188,21 @@ The API is for research and inspection, not a production public service. No prod
 
 ### Phase 5: Research API and Realtime Observation
 
-- [ ] Task 17: Implement API security, schemas, errors, and the recoverable simulation manager.
+- [x] Task 17: Implement API security, schemas, errors, and the recoverable simulation manager.
   - Deliverable: Define separate capabilities for simulation control, objective inspection/streaming, agent-visible projection, and subjective debug. Add bounded `PALIMPSEST_API_*` settings, disabled-by-default debug access, strong `SecretStr` credentials, safe header/WebSocket-subprotocol transport, and explicit prohibition on query-string secrets.
   - Add strict Pydantic schemas, stable problem details, and an API manager for per-run locks, leases/heartbeats, one-tick ready-state transitions, run-to-stop tasks, stop-at-finalized-boundary, rehydration, metric lifecycle, and graceful draining.
   - Files: `src/infrastructure/settings.py`, `src/infrastructure/logging.py`, `src/api/schemas.py`, `src/api/errors.py`, `src/api/security.py`, `src/api/simulation_manager.py`, `src/api/dependencies.py`, `src/api/app.py`, `.env.example`, `tests/unit/test_settings.py`, `tests/unit/test_logging.py`, `tests/unit/test_api_security.py`, `tests/unit/test_api_simulation_manager.py`, `tests/unit/test_api_composition.py`.
   - Logging: DEBUG manager/lease/task boundaries with request/run/connection IDs, lifecycle codes, counts, and duration; INFO create/start/stop/completion; WARN conflict/expiry/shutdown/recovery; ERROR stable API codes. Allow bounded route templates, never raw paths/query strings, bodies, tokens, configuration, seeds, evidence, metrics, prompts, credentials, or exceptions.
   - Dependencies: Tasks 5-8 and 16.
 
-- [ ] Task 18: Add versioned REST control, inspection, debug, metric, and replay endpoints.
+- [x] Task 18: Add versioned REST control, inspection, debug, metric, and replay endpoints.
   - Deliverable: Add `/v1` create/configure/start/tick/run/stop/list/status endpoints; objective world, commits/events, agent-visible observation, metadata-only experimental state, gated owner-scoped memories/beliefs/relationships, metric catalog/documents, and replay-to-tick endpoints.
   - Enforce capability checks, lifecycle conflicts, idempotency, bounded keyset pagination, run/owner scope, disabled debug routes, legacy/unavailable evidence semantics, and stable replay/corruption responses. API imports only allowed public `simulation`, `infrastructure`, and `persistence` surfaces.
   - Files: `src/api/routes/simulations.py`, `src/api/routes/inspection.py`, `src/api/routes/replay.py`, `src/api/routes/__init__.py`, `src/api/app.py`, `src/api/dependencies.py`, `src/api/schemas.py`, `tests/unit/test_api_simulation_routes.py`, `tests/unit/test_api_inspection_routes.py`, `tests/unit/test_api_replay_routes.py`, `tests/integration/test_api_simulation_lifecycle.py`, `tests/integration/test_api_event_pagination.py`, `tests/integration/test_api_debug_scope.py`.
   - Logging: INFO route template/method/status/request/run ID and bounded counts; DEBUG manager/projection timing; WARN auth/lifecycle/conflict codes; ERROR stable internal codes. Never log raw paths/query strings, bodies, state/evidence/metrics, credentials, or exception text.
   - Dependencies: Tasks 8, 16, and 17.
 
-- [ ] Task 19: Implement resumable WebSocket progress and event streaming from the durable outbox.
+- [x] Task 19: Implement resumable WebSocket progress and event streaming from the durable outbox.
   - Deliverable: Add `/v1/simulations/{run_id}/stream` with authenticated pre-accept, versioned envelopes, one durable cursor, catch-up/high-water/live handoff, eventless ticks, status/metric/result/error/completion frames, bounded queues, non-blocking fan-out, heartbeats, slow-consumer reconnect, disconnect cleanup, and graceful shutdown.
   - Consume Task 7's stream/outbox as the sole replayable source; PostgreSQL polling or `LISTEN/NOTIFY` is only a wake-up optimization. Specify an in-process Starlette/AnyIO WebSocket test harness because `httpx.ASGITransport` does not support WebSockets.
   - Files: `src/api/streaming.py`, `src/api/routes/streams.py`, `src/api/routes/__init__.py`, `src/api/app.py`, `src/api/dependencies.py`, `src/api/schemas.py`, `src/persistence/run_control_sqlalchemy.py`, `tests/unit/test_api_streaming.py`, `tests/integration/test_api_stream_resume.py`, `tests/integration/test_api_stream_backpressure.py`.
