@@ -2424,6 +2424,7 @@ def _encode_structured_utterance(value: StructuredUtterance) -> dict[str, Any]:
                 if value.declared.parent_communication_id is None
                 else value.declared.parent_communication_id.value
             ),
+            "root_communication_id": value.declared.root_communication_id.value,
             "sender_confidence": value.declared.sender_confidence,
             "source_agent_chain": [
                 item.value for item in value.declared.source_agent_chain
@@ -2522,6 +2523,34 @@ def _decode_structured_utterance(data: object, *, path: str) -> StructuredUttera
                     )
                 ),
                 parent_communication_id=parent_id,
+                root_communication_id=CommunicationId(
+                    _str_field(
+                        declared_raw,
+                        "root_communication_id",
+                        path=f"{path}.declared",
+                    )
+                    if "root_communication_id" in declared_raw
+                    else (
+                        _str_field(
+                            declared_raw,
+                            "communication_id",
+                            path=f"{path}.declared",
+                        )
+                        if _int_field(
+                            declared_raw, "hop_count", path=f"{path}.declared"
+                        )
+                        == 0
+                        else (
+                            parent_id.value
+                            if parent_id is not None
+                            else _str_field(
+                                declared_raw,
+                                "communication_id",
+                                path=f"{path}.declared",
+                            )
+                        )
+                    )
+                ),
                 source_agent_chain=tuple(EntityId(str(item)) for item in chain_raw),
                 hop_count=_int_field(
                     declared_raw, "hop_count", path=f"{path}.declared"

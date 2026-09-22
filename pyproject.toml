@@ -51,6 +51,7 @@ packages = [
     "social",
     "llm",
     "simulation",
+    "experiments",
     "api",
     "analysis",
     "infrastructure",
@@ -65,6 +66,7 @@ packages = [
     "src/social",
     "src/llm",
     "src/simulation",
+    "src/experiments",
     "src/api",
     "src/analysis",
     "src/infrastructure",
@@ -114,6 +116,7 @@ source_pkgs = [
     "social",
     "llm",
     "simulation",
+    "experiments",
     "api",
     "analysis",
     "infrastructure",
@@ -175,6 +178,7 @@ root_packages = [
     "social",
     "llm",
     "simulation",
+    "experiments",
     "api",
     "analysis",
     "infrastructure",
@@ -379,6 +383,11 @@ forbidden_modules = ["pydantic", "pydantic_core"]
 # directly.
 ignore_imports = [
     "agents.cognition.reconstruction -> llm",
+    "simulation.runner_models -> llm.models",
+    "simulation.runner_models -> llm.factory",
+    "simulation.runner_serialization -> llm.factory",
+    "simulation.runner_serialization -> llm.models",
+    "simulation.runner -> llm.factory",
 ]
 
 [[tool.importlinter.contracts]]
@@ -414,28 +423,28 @@ id = "agents_must_not_import_orchestration"
 name = "Agents package may not import orchestration or infrastructure"
 type = "forbidden"
 source_modules = ["agents"]
-forbidden_modules = ["simulation", "api", "analysis", "infrastructure", "persistence"]
+forbidden_modules = ["simulation", "api", "analysis", "infrastructure", "persistence", "experiments"]
 
 [[tool.importlinter.contracts]]
 id = "memory_must_not_import_non_agent_layers"
 name = "Memory may not import non-agent domain layers"
 type = "forbidden"
 source_modules = ["memory"]
-forbidden_modules = ["llm", "simulation", "api", "analysis", "infrastructure", "persistence"]
+forbidden_modules = ["llm", "simulation", "api", "analysis", "infrastructure", "persistence", "experiments"]
 
 [[tool.importlinter.contracts]]
 id = "social_must_not_import_non_agent_layers"
 name = "Social may not import non-agent domain layers"
 type = "forbidden"
 source_modules = ["social"]
-forbidden_modules = ["llm", "simulation", "api", "analysis", "infrastructure", "persistence"]
+forbidden_modules = ["llm", "simulation", "api", "analysis", "infrastructure", "persistence", "experiments"]
 
 [[tool.importlinter.contracts]]
 id = "cognition_must_not_import_orchestration"
 name = "Cognition may not import orchestration or infrastructure"
 type = "forbidden"
 source_modules = ["agents.cognition"]
-forbidden_modules = ["simulation", "api", "analysis", "infrastructure", "persistence"]
+forbidden_modules = ["simulation", "api", "analysis", "infrastructure", "persistence", "experiments"]
 
 [[tool.importlinter.contracts]]
 id = "subjective_layers_forbid_objective_event_modules"
@@ -451,3 +460,37 @@ forbidden_modules = [
     "persistence.sqlalchemy",
     "analysis",
 ]
+
+[[tool.importlinter.contracts]]
+id = "experiments_may_import_simulation_and_analysis"
+name = "Experiments must not import api, infrastructure, or persistence"
+type = "forbidden"
+source_modules = ["experiments"]
+forbidden_modules = [
+    "api",
+    "infrastructure",
+    "persistence",
+]
+allow_indirect_imports = true
+
+[[tool.importlinter.contracts]]
+id = "domain_must_not_import_experiments"
+name = "Domain packages must not import experiments"
+type = "forbidden"
+source_modules = [
+    "world",
+    "agents",
+    "memory",
+    "social",
+    "llm",
+    "simulation",
+]
+forbidden_modules = ["experiments"]
+
+[[tool.importlinter.contracts]]
+id = "simulation_does_not_import_experiments"
+name = "Simulation does not import experiments"
+type = "forbidden"
+source_modules = ["simulation"]
+forbidden_modules = ["experiments"]
+

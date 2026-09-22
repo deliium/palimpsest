@@ -26,6 +26,7 @@ PACKAGES = (
     "social",
     "llm",
     "simulation",
+    "experiments",
     "api",
     "analysis",
     "infrastructure",

@@ -226,6 +226,7 @@ class DeclaredTransmission:
     communication_id: CommunicationId
     immediate_source_id: EntityId
     parent_communication_id: CommunicationId | None
+    root_communication_id: CommunicationId
     source_agent_chain: Sequence[EntityId]
     hop_count: int
     sender_confidence: float
@@ -244,6 +245,10 @@ class DeclaredTransmission:
         ):
             raise TypeError(
                 "DeclaredTransmission.parent_communication_id: not_communication_id"
+            )
+        if type(self.root_communication_id) is not CommunicationId:
+            raise TypeError(
+                "DeclaredTransmission.root_communication_id: not_communication_id"
             )
         if type(self.source_basis) is not CommunicationSourceBasis:
             raise TypeError("DeclaredTransmission.source_basis: not_source_basis")
@@ -273,6 +278,13 @@ class DeclaredTransmission:
             and self.parent_communication_id == self.communication_id
         ):
             raise ValueError("DeclaredTransmission.parent_communication_id: self_ref")
+        if hop == 0 and self.root_communication_id != self.communication_id:
+            raise ValueError("DeclaredTransmission.root_communication_id: origin_mismatch")
+        if (
+            hop > 0
+            and self.root_communication_id == self.communication_id
+        ):
+            raise ValueError("DeclaredTransmission.root_communication_id: not_inherited")
         object.__setattr__(self, "hop_count", hop)
         object.__setattr__(
             self,
@@ -292,6 +304,7 @@ class DeclaredTransmission:
             f"DeclaredTransmission(communication_id={self.communication_id.value!r}, "
             f"immediate_source_id={self.immediate_source_id.value!r}, "
             f"parent_communication_id={parent!r}, "
+            f"root_communication_id={self.root_communication_id.value!r}, "
             f"hop_count={self.hop_count}, "
             f"chain_count={len(self.source_agent_chain)}, "
             f"confidence_band={confidence_band(self.sender_confidence)!r}, "
@@ -340,6 +353,7 @@ def origin_utterance(
     relations: Sequence[CommunicationRelation] = (),
 ) -> StructuredUtterance:
     """Build a hop-0 origin utterance for tests and safe planner fallbacks."""
+    comm_id = CommunicationId(communication_id)
     return StructuredUtterance(
         content=CommunicationContent(
             text=text,
@@ -347,9 +361,10 @@ def origin_utterance(
             relations=relations,
         ),
         declared=DeclaredTransmission(
-            communication_id=CommunicationId(communication_id),
+            communication_id=comm_id,
             immediate_source_id=speaker_id,
             parent_communication_id=None,
+            root_communication_id=comm_id,
             source_agent_chain=(speaker_id,),
             hop_count=0,
             sender_confidence=sender_confidence,
@@ -395,6 +410,7 @@ def retell_utterance(
             communication_id=CommunicationId(communication_id),
             immediate_source_id=speaker_id,
             parent_communication_id=prior.declared.communication_id,
+            root_communication_id=prior.declared.root_communication_id,
             source_agent_chain=chain,
             hop_count=len(chain) - 1,
             sender_confidence=confidence,

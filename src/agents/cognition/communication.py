@@ -784,6 +784,7 @@ def _utterance_from_communicated_trace(
                 else transmission.source_agent_chain[-1]
             ),
             parent_communication_id=parent_id,
+            root_communication_id=CommunicationId(transmission.transmission_root_id),
             source_agent_chain=tuple(transmission.source_agent_chain),
             hop_count=transmission.hop_count,
             sender_confidence=transmission.sender_confidence,

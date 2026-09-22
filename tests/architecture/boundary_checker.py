@@ -24,6 +24,7 @@ BOUNDED_PACKAGES: Final[frozenset[str]] = frozenset(
         "social",
         "llm",
         "simulation",
+        "experiments",
         "api",
         "analysis",
         "infrastructure",
@@ -39,6 +40,7 @@ BOUNDED_LAYERS: Final[tuple[str, ...]] = (
     "social",
     "llm",
     "simulation",
+    "experiments",
     "api",
     "analysis",
     "infrastructure",
@@ -55,10 +57,12 @@ ALLOWED_IMPORTS: Final[dict[str, frozenset[str]]] = {
     "simulation": frozenset(
         {"world", "agents", "agents.cognition", "memory", "social", "llm"}
     ),
+    "experiments": frozenset({"simulation", "analysis", "agents", "world"}),
+
     "api": frozenset({"simulation", "infrastructure", "persistence"}),
     "analysis": frozenset({"world", "simulation", "memory"}),
     "infrastructure": frozenset(),
-    "persistence": frozenset({"simulation", "infrastructure", "memory", "social"}),
+    "persistence": frozenset({"simulation", "infrastructure", "memory", "social", "experiments"}),
 }
 
 PRIVATE_WORLD_MODULES: Final[frozenset[str]] = frozenset(
@@ -164,6 +168,7 @@ LLM_FORBIDDEN_BOUNDED: Final[frozenset[str]] = frozenset(
         "memory",
         "social",
         "simulation",
+        "experiments",
         "api",
         "analysis",
         "infrastructure",

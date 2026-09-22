@@ -27,13 +27,14 @@ src/
   llm/                   # provider-neutral StructuredOutput / LLMResult (no vendor SDKs)
   llm/prompts/           # immutable versioned prompt package resources
   llm/providers/         # OpenAI-compatible HTTP adapter + pure codec
-  simulation/            # WorldEngine, AgentRuntime, SubjectiveStateService, codecs, replay
+  simulation/            # WorldEngine, AgentRuntime, SimulationRunner, codecs, replay
+  experiments/           # trusted experiment catalog/coordinator (A–E); never imported by domain
   persistence/           # SQLAlchemy adapters (simulation, memory, subjective, analysis loaders)
-                         # transmission_mapping.py (EntityId via memory.models — never world)
+                         # may implement experiments.persistence ports; transmission_mapping.py
   analysis/              # read-only MemoryDriftAnalysisService + SocialTransmissionAnalysisService
   api/                   # FastAPI composition root (no LLM provider wiring yet)
   infrastructure/        # settings (PALIMPSEST_*), logging, database adapters
-alembic/versions/        # migrations through 0008 (social transmission provenance)
+alembic/versions/        # migrations through 0009 (runner finalization outbox)
 docs/                    # contributor docs (architecture, memory, social-communication, …)
 tests/
   unit/ architecture/ integration/ compose/ typecheck/ fakes/
@@ -47,13 +48,15 @@ tests/
 - ✅ `llm` imports no domain, simulation, API, persistence, or infrastructure module
 - ✅ `llm` uses stdlib `logging` only (metadata allowlist; no `exc_info` / structlog / payload fields)
 - ✅ `agents.cognition` may import public contracts from agents/world/memory/social/llm
-- ✅ `simulation` may import domain public contracts; must not import `api`, `analysis`, `infrastructure`, or `persistence`
-- ✅ `persistence` may import public `simulation` contracts, public `memory` and `social` facades, and `infrastructure`
+- ✅ `simulation` may import domain public contracts; must not import `api`, `analysis`, `experiments`, `infrastructure`, or `persistence`
+- ✅ `experiments` may import public `simulation` and read-only `analysis` contracts; must not import `api`, `infrastructure`, or concrete SQLAlchemy
+- ✅ `persistence` may import public `simulation` contracts, public `memory` and `social` facades, `infrastructure`, and `experiments.persistence` ports only
 - ✅ `persistence` identity types for subjective/transmission mapping come from `memory.models` (re-exported `EntityId`) — never import `world` from persistence
 - ✅ `api` may import `simulation`, `infrastructure`, and `persistence`
 - ✅ `analysis` is read-only; may import `world`, `simulation`, and `memory` contracts (not live infra/agents)
 - ✅ `infrastructure` imports no domain policy
 - ❌ Domain packages must not import `infrastructure`, FastAPI, or ORM stacks
+- ❌ `world`, `agents`, `agents.cognition`, `memory`, and `social` must not import `experiments`
 - ❌ Non-simulation packages must not import private `world._*` authority modules
 - ❌ Only `simulation.engine` / `simulation.bootstrap` and private `world._*` may import world authority internals
 - ❌ Only `infrastructure` and `persistence` may import SQLAlchemy/Alembic/asyncpg
@@ -61,6 +64,7 @@ tests/
 - ❌ Cross-module imports of private modules or transitive re-exports
 - ❌ Agents, cognition, memory, reconstruction protocols, and runtime composition must not import, receive, or dereference `WorldEvent`, event repositories, replay services, snapshots, or private world state (opaque `EventId` only)
 - ❌ Cognition must not feed analysis results back into live planning or memory formation
+- ❌ Experiment collectors, truth specifications, and objective snapshots must never flow into cognition, memory formation, prompts, or action selection
 
 ## Layer/Module Communication
 

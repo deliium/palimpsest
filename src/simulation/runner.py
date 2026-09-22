@@ -290,6 +290,7 @@ class SimulationRunner:
         "_diagnostics",
         "_engine",
         "_injected_stop",
+        "_intervention_arbiter",
         "_provider",
         "_run_config",
         "_run_id",
@@ -324,6 +325,7 @@ class SimulationRunner:
         self._started = False
         self._ticks_committed = 0
         self._injected_stop = False
+        self._intervention_arbiter: object | None = None
 
     @property
     def config(self) -> SimulationRunnerConfig:
@@ -557,6 +559,10 @@ class SimulationRunner:
         self._injected_stop = True
         _LOG.info("runner_stop_requested run_id=%s", self._run_id.value)
 
+    def set_intervention_arbiter(self, arbiter: object | None) -> None:
+        """Attach a trusted pre-admission intervention arbiter (experiments only)."""
+        self._intervention_arbiter = arbiter
+
     def _ensure_started(self) -> None:
         if self._started:
             return
@@ -614,7 +620,17 @@ class SimulationRunner:
                         ordinal,
                     )
                     continue
-                pending = await runtime.bind_effective_command(prepared)
+                effective = None
+                arbiter = self._intervention_arbiter
+                if arbiter is not None:
+                    maybe = getattr(arbiter, "maybe_replace", None)
+                    if callable(maybe):
+                        effective = maybe(
+                            tick=tick_value, agent_id=runtime.agent_id
+                        )
+                pending = await runtime.bind_effective_command(
+                    prepared, effective_command=effective
+                )
                 pendings.append(pending)
                 submissions.append(pending.submission)
 
