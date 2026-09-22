@@ -6,7 +6,7 @@ Palimpsest is a Python 3.12+ modular monolith for reproducible, discrete, text-b
 
 ## Core Features
 
-- Bounded packages for world authority, agents, cognition strategies/`CognitiveLoop`, memory (including reconstructive recall and semantic beliefs), social envelopes and directed relationship profiles, LLM trust boundaries, simulation/`WorldEngine`/`AgentRuntime`/`SubjectiveStateService`, persistence adapters, analysis ports (events + drift), API, and infrastructure
+- Bounded packages for world authority, agents, cognition strategies/`CognitiveLoop`, memory (including reconstructive recall and semantic beliefs), social envelopes and directed relationship profiles, LLM trust boundaries, simulation/`WorldEngine`/`AgentRuntime`/`SimulationRunner`/`SubjectiveStateService`, trusted `experiments` catalog (A–E), persistence adapters, analysis ports (events + drift), API, and infrastructure
 - Typed immutable agent-facing `Observation` contracts, private world authority (`World` / `WorldState` / rules / perception / operations), and versioned event/export codecs (replay-v4 occurrence context)
 - Deterministic `PerceptionService` projecting one observation per agent from tick-start state plus prior committed events; cognition routed via `AgentRuntime` / `build_perspective`
 - Explicit async cognitive pipeline with replaceable stage protocols, scientific boundary records, reconstructive memory stage, emergent `SelfModel`, production subjective imagination/motivation/deliberation policies, deterministic fakes, and fail-closed runtime lifecycle
@@ -14,8 +14,9 @@ Palimpsest is a Python 3.12+ modular monolith for reproducible, discrete, text-b
 - Subjective reconstructive recall (`MemoryRecallRequest` → `ReconstructedMemory`) with deterministic and optional LLM-backed policies; non-destructive reconsolidation and lineage outside authoritative replay
 - Semantic beliefs with append-only revisions/evidence, asymmetric relationship dimensions (no friend/enemy/leader labels), and atomic owner-scoped subjective commits
 - Async `LLMProvider` with immutable `LLMRequest`/`LLMResult`, strict `StructuredOutput`, versioned prompt resources (including `reconstructive_memory/v1`), and a configurable OpenAI-compatible HTTP adapter (no vendor SDKs)
-- Deterministic seed-derived RNG streams, logical clock, namespaced IDs, and live/restored observation parity
-- `PALIMPSEST_` settings (including disabled-by-default `PALIMPSEST_LLM_*`), structured logging (no observation/communication/memory/belief/relationship/LLM payloads), async SQLAlchemy lifecycle, Alembic + pgvector bootstrap (migration head `0008`)
+- Deterministic seed-derived RNG streams (including explicit stochastic/comparison identity), logical clock, namespaced IDs, and live/restored observation parity
+- Configuration-driven `SimulationRunner` with staged prepare/bind/finalize cognition and versioned experiment result documents
+- `PALIMPSEST_` settings (including disabled-by-default `PALIMPSEST_LLM_*`), structured logging (no observation/communication/memory/belief/relationship/LLM payloads), async SQLAlchemy lifecycle, Alembic + pgvector bootstrap (migration head `0010`)
 - FastAPI `/health` liveness and Docker Compose development stack (API does not yet own LLM provider lifecycle)
 
 ## Tech Stack

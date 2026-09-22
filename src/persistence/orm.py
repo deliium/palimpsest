@@ -38,6 +38,9 @@ __all__ = [
     "AUTHORITATIVE_TABLES",
     "SHA256_HEX_LEN",
     "ExperimentOrm",
+    "ExperimentResultOrm",
+    "ExperimentAssignmentOrm",
+    "ExperimentDefinitionOrm",
     "ExperimentRunOrm",
     "SimulationRunOrm",
     "SnapshotBodyOrm",
@@ -594,6 +597,94 @@ class RunnerAttemptStateOrm(Base):
     integrity_hash: Mapped[str] = mapped_column(String(SHA256_HEX_LEN), nullable=False)
     codec_version: Mapped[str] = mapped_column(String(32), nullable=False)
     payload_json: Mapped[dict] = mapped_column(JSONB, nullable=False)
+    created_ordinal: Mapped[int] = mapped_column(
+        BigInteger, nullable=False, autoincrement=True
+    )
+
+
+class ExperimentDefinitionOrm(Base):
+    __tablename__ = "experiment_definitions"
+    __table_args__ = (
+        CheckConstraint(
+            f"char_length(payload_hash) = {SHA256_HEX_LEN}",
+            name="ck_experiment_definitions_hash",
+        ),
+        CheckConstraint(
+            f"char_length(definition_fingerprint) = {SHA256_HEX_LEN}",
+            name="ck_experiment_definitions_fp",
+        ),
+        UniqueConstraint("created_ordinal", name="uq_experiment_definitions_ordinal"),
+    )
+
+    experiment_id: Mapped[str] = mapped_column(String(_STABLE_ID_LEN), primary_key=True)
+    schema_version: Mapped[str] = mapped_column(String(64), nullable=False)
+    payload_hash: Mapped[str] = mapped_column(String(SHA256_HEX_LEN), nullable=False)
+    definition_fingerprint: Mapped[str] = mapped_column(
+        String(SHA256_HEX_LEN), nullable=False
+    )
+    created_ordinal: Mapped[int] = mapped_column(
+        BigInteger, nullable=False, autoincrement=True
+    )
+
+
+class ExperimentAssignmentOrm(Base):
+    __tablename__ = "experiment_assignments"
+    __table_args__ = (
+        PrimaryKeyConstraint(
+            "experiment_id", "condition_id", "seed_ordinal", "replicate_index"
+        ),
+        ForeignKeyConstraint(
+            ["experiment_id"],
+            ["experiment_definitions.experiment_id"],
+            name="fk_experiment_assignments_definition",
+            ondelete="RESTRICT",
+        ),
+        UniqueConstraint("run_id", name="uq_experiment_assignments_run"),
+        UniqueConstraint("created_ordinal", name="uq_experiment_assignments_ordinal"),
+        CheckConstraint("seed >= 0", name="ck_experiment_assignments_seed"),
+        CheckConstraint(
+            "seed_ordinal >= 0 AND replicate_index >= 0",
+            name="ck_experiment_assignments_ords",
+        ),
+    )
+
+    experiment_id: Mapped[str] = mapped_column(String(_STABLE_ID_LEN), nullable=False)
+    condition_id: Mapped[str] = mapped_column(String(_STABLE_ID_LEN), nullable=False)
+    seed_ordinal: Mapped[int] = mapped_column(Integer, nullable=False)
+    replicate_index: Mapped[int] = mapped_column(Integer, nullable=False)
+    run_id: Mapped[str] = mapped_column(String(_STABLE_ID_LEN), nullable=False)
+    seed: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    config_fingerprint: Mapped[str] = mapped_column(
+        String(SHA256_HEX_LEN), nullable=False
+    )
+    created_ordinal: Mapped[int] = mapped_column(
+        BigInteger, nullable=False, autoincrement=True
+    )
+
+
+class ExperimentResultOrm(Base):
+    __tablename__ = "experiment_results"
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["run_id"],
+            ["experiment_assignments.run_id"],
+            name="fk_experiment_results_run",
+            ondelete="RESTRICT",
+        ),
+        UniqueConstraint("created_ordinal", name="uq_experiment_results_ordinal"),
+        CheckConstraint("ticks_committed >= 0", name="ck_experiment_results_ticks"),
+        CheckConstraint(
+            f"char_length(payload_hash) = {SHA256_HEX_LEN}",
+            name="ck_experiment_results_hash",
+        ),
+    )
+
+    run_id: Mapped[str] = mapped_column(String(_STABLE_ID_LEN), primary_key=True)
+    experiment_id: Mapped[str] = mapped_column(String(_STABLE_ID_LEN), nullable=False)
+    condition_id: Mapped[str] = mapped_column(String(_STABLE_ID_LEN), nullable=False)
+    payload_hash: Mapped[str] = mapped_column(String(SHA256_HEX_LEN), nullable=False)
+    stop_reason: Mapped[str] = mapped_column(String(64), nullable=False)
+    ticks_committed: Mapped[int] = mapped_column(BigInteger, nullable=False)
     created_ordinal: Mapped[int] = mapped_column(
         BigInteger, nullable=False, autoincrement=True
     )

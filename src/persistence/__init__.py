@@ -41,6 +41,7 @@ __all__ = [
     "PersistenceCorruptionError",
     "PersistenceNotFoundError",
     "create_analysis_evidence_loader",
+    "create_experiment_record_repository",
     "create_experiment_repository",
     "create_memory_service",
     "create_run_repository",
@@ -98,6 +99,22 @@ def create_experiment_repository(
             "missing_session_factory", operation="create_experiment_repository"
         )
     from persistence.sqlalchemy import create_experiment_repository as impl
+
+    return impl(session_factory)
+
+
+def create_experiment_record_repository(
+    session_factory: async_sessionmaker[AsyncSession] | None = None,
+):
+    """Build the append-only experiment definition/assignment/result repository."""
+    if session_factory is None:
+        raise PersistenceAdapterError(
+            "missing_session_factory",
+            operation="create_experiment_record_repository",
+        )
+    from persistence.experiment_sqlalchemy import (
+        create_experiment_record_repository as impl,
+    )
 
     return impl(session_factory)
 

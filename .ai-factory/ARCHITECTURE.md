@@ -34,7 +34,7 @@ src/
   analysis/              # read-only MemoryDriftAnalysisService + SocialTransmissionAnalysisService
   api/                   # FastAPI composition root (no LLM provider wiring yet)
   infrastructure/        # settings (PALIMPSEST_*), logging, database adapters
-alembic/versions/        # migrations through 0009 (runner finalization outbox)
+alembic/versions/        # migrations through 0010 (experiment framework records)
 docs/                    # contributor docs (architecture, memory, social-communication, …)
 tests/
   unit/ architecture/ integration/ compose/ typecheck/ fakes/

@@ -25,6 +25,7 @@ from experiments.interventions import (
     StoryTruthSpec,
     make_false_story_intervention,
 )
+from experiments.memory_repository import InMemoryExperimentRecordRepository
 from experiments.models import (
     ExperimentCondition,
     ExperimentDefinition,
@@ -32,15 +33,28 @@ from experiments.models import (
     condition_fingerprint,
     definition_fingerprint,
 )
+from experiments.persistence import (
+    EXPERIMENT_RECORD_SCHEMA_VERSION,
+    ExperimentAssignmentRecord,
+    ExperimentDefinitionRecord,
+    ExperimentRecordRepository,
+    ExperimentResultRecord,
+)
 
 __all__ = [
     "CollectorMetricDocument",
+    "EXPERIMENT_RECORD_SCHEMA_VERSION",
     "ExperimentArmResult",
     "ExperimentAssignment",
+    "ExperimentAssignmentRecord",
     "ExperimentCondition",
     "ExperimentCoordinator",
     "ExperimentDefinition",
+    "ExperimentDefinitionRecord",
+    "ExperimentRecordRepository",
+    "ExperimentResultRecord",
     "ExperimentSeedMatrix",
+    "InMemoryExperimentRecordRepository",
     "StoryIntervention",
     "StoryInterventionArbiter",
     "StoryTruthSpec",

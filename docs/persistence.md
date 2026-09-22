@@ -84,6 +84,10 @@ Adapter failure before commit leaves the engine unchanged. Crash after commit is
 
 `ReplayService` loads a run, selects a verified checkpoint at or before the target tick, validates versions and commit continuity, folds subsequent events, and accounts for eventless ticks via `committed_through_tick`. Recovery at the durable head is `CONTINUATION` (may `open_durable`); earlier targets are `READONLY`. Subjective reconstructions do not participate in objective replay folding. Exact LLM reconstructive recall still requires recorded responses or deterministic stubs.
 
+## Experiment records (`0010`)
+
+Append-only `experiment_definitions`, `experiment_assignments`, and `experiment_results` store versioned fingerprints and one immutable final result per assigned run. Adapter: `persistence.create_experiment_record_repository(...)`. These tables use the same `reject_history_mutation` update/delete/truncate triggers as authoritative history but are experiment-framework records (not folded into objective world replay). See [Experiments](experiments.md).
+
 ## Logging
 
 Safe fields: run ID, tick/revision, record counts, version strings, hash prefixes, stable error codes, perception reason codes, reconstruction IDs, policy versions, reconsolidation counts, belief/relationship operation IDs and dimension-change counts. Never log seeds, full configs, event payloads, observation bodies, communication text, snapshot bodies, DSNs, SQL parameters, memories, belief claims/values, relationship assessments, reconstructions/narratives, embeddings, or random draws. Control verbosity with `PALIMPSEST_LOG_LEVEL`.
@@ -100,5 +104,7 @@ uv run --frozen --python 3.12.14 pytest -m integration tests/integration
 
 - [Memory reconstruction](memory-reconstruction.md)
 - [Physical simulation](physical-simulation.md)
+- [Simulation runner](simulation-runner.md)
+- [Experiments](experiments.md)
 - [Architecture](architecture.md)
 - [Development](development.md)

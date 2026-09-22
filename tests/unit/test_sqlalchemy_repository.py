@@ -241,6 +241,8 @@ def test_snapshot_integrity_mismatch_is_corruption() -> None:
 
 
 def test_repository_factories_require_session_factory() -> None:
+    from persistence import create_experiment_record_repository
+
     with pytest.raises(PersistenceAdapterError) as err:
         create_run_repository()
     assert err.value.code == "missing_session_factory"
@@ -250,6 +252,9 @@ def test_repository_factories_require_session_factory() -> None:
         create_snapshot_repository()
     with pytest.raises(PersistenceAdapterError):
         create_experiment_repository()
+    with pytest.raises(PersistenceAdapterError) as record_err:
+        create_experiment_record_repository()
+    assert record_err.value.code == "missing_session_factory"
     with pytest.raises(PersistenceAdapterError) as analysis_err:
         create_analysis_evidence_loader()
     assert analysis_err.value.code == "missing_session_factory"
