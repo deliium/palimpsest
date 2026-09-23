@@ -120,7 +120,7 @@ Map onto existing `ComponentKind` stages where possible; introduce **trace-view 
 
 ### Phase 2: Simulation ports, codec, and runtime wiring
 
-- [ ] Task 4: Define run-scoped simulation DTOs + `CognitionTraceRepository` Protocol
+- [x] Task 4: Define run-scoped simulation DTOs + `CognitionTraceRepository` Protocol
   - Deliverable: In `simulation` (new `cognition_trace.py` or section of persistence ports):
     - `CognitionTraceStageRecord` / `CognitionTraceInvocation` with `run_id`, agent_id, tick, invocation_id, ordered stages, command kind / final confidence metadata, schema id `cognition-trace-v1`, content_hash
     - Builder that attaches `run_id` to cognition stage summaries from Task 2
@@ -131,19 +131,19 @@ Map onto existing `ComponentKind` stages where possible; introduce **trace-view 
   - Files: `src/simulation/cognition_trace.py` (preferred), `src/simulation/__init__.py`, unit tests
   - Depends on: Task 1
 
-- [ ] Task 5: Add `cognition-trace-v1` encode/decode codec
+- [x] Task 5: Add `cognition-trace-v1` encode/decode codec
   - Deliverable: Versioned codec in `simulation` producing canonical bytes + content_hash for durable storage (same pattern as scientific evidence / subjective envelopes). Persistence adapters must store codec output only — no ad-hoc JSON in SQLAlchemy. Accepted-set ready for a single write version in this plan.
   - LOGGING REQUIREMENTS: DEBUG encode/decode with schema_version and hash prefix; ERROR `unsupported_version` / `invalid_fields`; never log stage summaries at INFO+.
   - Files: `src/simulation/cognition_trace_serialization.py` (or beside Task 4 module), tests for round-trip + hash stability
   - Depends on: Task 4
 
-- [ ] Task 6: Provide `NullCognitionTraceRepository` and construction injection rules
+- [x] Task 6: Provide `NullCognitionTraceRepository` and construction injection rules
   - Deliverable: No-op Null implementation that records zero state and succeeds all appends/queries as empty. Document: runner / `AgentRuntime` always receives a repository instance; when `CognitionTraceSpec.enabled` is false, inject Null (zero durable calls). When enabled, inject in-memory or SQLAlchemy adapter from composition root. Keep `runner.py` `AgentRuntime(...)` construction minimal.
   - LOGGING REQUIREMENTS: DEBUG optional `cognition_trace_null_append` only under verbose tests if needed; default Null is silent at INFO+.
   - Files: same module as Task 4, `src/simulation/runner.py` construction helpers as needed, unit tests
   - Depends on: Task 4
 
-- [ ] Task 7: Wire optional sink in `AgentRuntime` / runner bind path
+- [x] Task 7: Wire optional sink in `AgentRuntime` / runner bind path
   - Deliverable: When tracing enabled, after successful cognition **bind** produces `CognitiveLoopResult` (or structured failure with partial boundary records):
     - Project stages (Task 2) → attach `run_id` (Task 4) → encode hash (Task 5) → `append_invocation`
     - Soft-fail: catch sink errors → WARN `cognition_trace_sink_failed` + continue; never change command/submission/subjective decision inputs

@@ -42,8 +42,15 @@ from memory.models import (
 )
 from memory.service import MemoryServiceError
 from simulation.bootstrap import RegistrationTranslator
+from simulation.cognition_trace import (
+    CognitionTraceRepository,
+    NullCognitionTraceRepository,
+    maybe_append_cognition_trace,
+)
 from simulation.lifecycle import ActionSubmission, TickToken, require_action_submission
+from simulation.models import RunId
 from simulation.perception import build_perspective
+from simulation.runner_models import CognitionTraceSpec
 from simulation.subjective_state import (
     SubjectiveMutationBatch,
     SubjectiveStateError,
@@ -385,6 +392,8 @@ class AgentRuntime:
         "_agent",
         "_belief_reader",
         "_belief_writer",
+        "_cognition_trace_repository",
+        "_cognition_trace_spec",
         "_finalized_hashes",
         "_inbox",
         "_internal_state",
@@ -397,6 +406,7 @@ class AgentRuntime:
         "_pending",
         "_processed_invocations",
         "_relationship_reader",
+        "_run_id",
         "_semantic_belief_reader",
         "_status",
         "_subjective_state",
@@ -419,6 +429,9 @@ class AgentRuntime:
         subjective_state: SubjectiveStateService | None = None,
         inbox_source: InboxSource | None = None,
         invocation_id_source: InvocationIdSource | None = None,
+        run_id: RunId | None = None,
+        cognition_trace_repository: CognitionTraceRepository | None = None,
+        cognition_trace_spec: CognitionTraceSpec | None = None,
     ) -> None:
         if type(agent) is not Agent:
             raise TypeError("agent must be Agent")
@@ -426,6 +439,18 @@ class AgentRuntime:
             raise TypeError("translator must be RegistrationTranslator")
         if type(cognitive_loop) is not CognitiveLoop:
             raise TypeError("cognitive_loop must be CognitiveLoop")
+        if run_id is not None and type(run_id) is not RunId:
+            raise TypeError("run_id must be RunId or None")
+        if cognition_trace_repository is not None and not hasattr(
+            cognition_trace_repository, "append_invocation"
+        ):
+            raise TypeError(
+                "cognition_trace_repository must implement CognitionTraceRepository"
+            )
+        if cognition_trace_spec is not None and type(cognition_trace_spec) is not (
+            CognitionTraceSpec
+        ):
+            raise TypeError("cognition_trace_spec must be CognitionTraceSpec or None")
         self._agent = agent
         self._translator = translator
         self._loop = cognitive_loop
@@ -442,6 +467,17 @@ class AgentRuntime:
             invocation_id_source
             if invocation_id_source is not None
             else SequentialInvocationIds()
+        )
+        self._run_id = run_id
+        self._cognition_trace_repository = (
+            cognition_trace_repository
+            if cognition_trace_repository is not None
+            else NullCognitionTraceRepository()
+        )
+        self._cognition_trace_spec = (
+            cognition_trace_spec
+            if cognition_trace_spec is not None
+            else CognitionTraceSpec()
         )
         self._status = AgentRuntimeStatus.CREATED
         self._internal_state = InternalAgentState(owner_id=agent.agent_id)
@@ -781,6 +817,13 @@ class AgentRuntime:
                 prepared.proposal, effective_command=command
             )
         except CognitiveLoopError as exc:
+            await self._soft_append_cognition_trace(
+                tick=prepared.tick,
+                invocation_id=prepared.invocation_id,
+                loop_failure=exc.failure,
+                loop_input=prepared.proposal.loop_input,
+                command_kind=type(command).__name__.lower(),
+            )
             _LOG.error(
                 "runtime_cognition_failed",
                 extra={
@@ -842,6 +885,14 @@ class AgentRuntime:
             command=command,
         )
         command_kind = type(command).__name__.lower()
+        await self._soft_append_cognition_trace(
+            tick=prepared.tick,
+            invocation_id=prepared.invocation_id,
+            loop_result=loop_result,
+            loop_input=prepared.proposal.loop_input,
+            command_kind=command_kind,
+            final_confidence=loop_result.final_confidence,
+        )
         integrity = _pending_integrity_hash(
             invocation_id=prepared.invocation_id,
             tick=prepared.tick,
@@ -884,6 +935,44 @@ class AgentRuntime:
             },
         )
         return pending
+
+    async def _soft_append_cognition_trace(
+        self,
+        *,
+        tick: int,
+        invocation_id: str,
+        loop_result: CognitiveLoopResult | None = None,
+        loop_failure: object | None = None,
+        loop_input: CognitiveLoopInput | None = None,
+        command_kind: str | None = None,
+        final_confidence: float | None = None,
+    ) -> None:
+        """Best-effort cognition trace append; never affects bind outcomes."""
+        if self._run_id is None:
+            if self._cognition_trace_spec.enabled:
+                _LOG.debug(
+                    "cognition_trace_skipped",
+                    extra={
+                        "reason_code": "missing_run_id",
+                        "agent_id": self._agent.agent_id.value,
+                        "tick": tick,
+                        "invocation_id": invocation_id,
+                    },
+                )
+            return
+        await maybe_append_cognition_trace(
+            repository=self._cognition_trace_repository,
+            spec=self._cognition_trace_spec,
+            run_id=self._run_id,
+            agent_id=self._agent.agent_id,
+            tick=tick,
+            invocation_id=invocation_id,
+            loop_result=loop_result,
+            loop_failure=loop_failure,
+            loop_input=loop_input,
+            command_kind=command_kind,
+            final_confidence=final_confidence,
+        )
 
     async def finalize_pending(
         self, pending: PendingRuntimeFinalization

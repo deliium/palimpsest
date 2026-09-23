@@ -57,6 +57,10 @@ from simulation.bootstrap import (
     WorldBootstrap,
     registration_translator,
 )
+from simulation.cognition_trace import (
+    CognitionTraceRepository,
+    select_cognition_trace_repository,
+)
 from simulation.clock import Tick
 from simulation.engine import WorldEngine
 from simulation.identifiers import derive_run_id
@@ -728,6 +732,19 @@ class SimulationRunner:
             reconstructor = _reconstructor_for(config.provider, provider)
             counterpart = _counterpart_resolver(translator)
             runtimes: list[AgentRuntime] = []
+            cognition_trace_repository: CognitionTraceRepository = (
+                select_cognition_trace_repository(
+                    enabled=config.cognition_trace.enabled,
+                )
+            )
+            if config.cognition_trace.enabled:
+                _LOG.info(
+                    "runner_cognition_trace_enabled detail=%s "
+                    "sample_every_n_ticks=%s max_bytes_per_invocation=%s",
+                    config.cognition_trace.detail.value,
+                    config.cognition_trace.sample_every_n_ticks,
+                    config.cognition_trace.max_bytes_per_invocation,
+                )
 
             for ordinal, agent_spec in enumerate(config.agents):
                 stage = f"agent:{ordinal}"
@@ -787,6 +804,9 @@ class SimulationRunner:
                     semantic_belief_reader=owner_bundle.semantic_belief_reader,
                     relationship_reader=owner_bundle.relationship_reader,
                     subjective_state=owner_bundle.commit_service,
+                    run_id=resolved_run_id,
+                    cognition_trace_repository=cognition_trace_repository,
+                    cognition_trace_spec=config.cognition_trace,
                 )
                 bundle = _AgentBundle(
                     runtime=runtime,

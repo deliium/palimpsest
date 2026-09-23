@@ -47,6 +47,7 @@ def test_matrix_covers_required_taxonomy_ids() -> None:
         "derivation",
         "runner_config",
         "runner_result",
+        "cognition_trace",
         "cognition_policy",
         "subjective_codec",
         "stream_record",

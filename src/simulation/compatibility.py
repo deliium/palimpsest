@@ -39,6 +39,7 @@ from simulation.run_control import (
     FINALIZATION_COMMAND_CODEC_VERSION,
     STREAM_RECORD_SCHEMA_VERSION,
 )
+from simulation.cognition_trace import COGNITION_TRACE_SCHEMA_VERSION
 from simulation.runner_models import (
     COGNITION_POLICY_VERSION,
     RESULT_SCHEMA_VERSION,
@@ -179,6 +180,18 @@ _MATRIX: dict[str, CompatibilityEntry] = {
         owner_package="simulation.runner_models / simulation.runner_serialization",
         v1_fixture_impact=(
             f"{RESULT_SCHEMA_VERSION_V1}/{RESULT_SCHEMA_VERSION_V2} remain accepted"
+        ),
+    ),
+    "cognition_trace": CompatibilityEntry(
+        entry_id="cognition_trace",
+        write_version=COGNITION_TRACE_SCHEMA_VERSION,
+        accepted_restore=_versions(COGNITION_TRACE_SCHEMA_VERSION),
+        bump_trigger=(
+            "Wire shape change for durable cognition-trace stage envelopes"
+        ),
+        owner_package="simulation.cognition_trace / cognition_trace_serialization",
+        v1_fixture_impact=(
+            "Non-authoritative; outside EvidenceManifest / objective replay"
         ),
     ),
     "cognition_policy": CompatibilityEntry(
