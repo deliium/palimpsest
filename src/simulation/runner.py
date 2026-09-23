@@ -57,11 +57,11 @@ from simulation.bootstrap import (
     WorldBootstrap,
     registration_translator,
 )
+from simulation.clock import Tick
 from simulation.cognition_trace import (
     CognitionTraceRepository,
     select_cognition_trace_repository,
 )
-from simulation.clock import Tick
 from simulation.engine import WorldEngine
 from simulation.identifiers import derive_run_id
 from simulation.journal import hash_snapshot

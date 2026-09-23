@@ -20,6 +20,7 @@ from dataclasses import dataclass
 from types import MappingProxyType
 from typing import Final
 
+from simulation.cognition_trace import COGNITION_TRACE_SCHEMA_VERSION
 from simulation.evidence import EVIDENCE_MANIFEST_SCHEMA_VERSION
 from simulation.models import (
     DERIVATION_VERSION,
@@ -39,7 +40,6 @@ from simulation.run_control import (
     FINALIZATION_COMMAND_CODEC_VERSION,
     STREAM_RECORD_SCHEMA_VERSION,
 )
-from simulation.cognition_trace import COGNITION_TRACE_SCHEMA_VERSION
 from simulation.runner_models import (
     COGNITION_POLICY_VERSION,
     RESULT_SCHEMA_VERSION,

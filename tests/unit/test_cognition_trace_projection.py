@@ -163,7 +163,9 @@ def test_project_full_scientific_sequence_and_tom_unavailable() -> None:
         invocation_id="inv-1",
     )
     assert len(stages) == len(SCIENTIFIC_TRACE_STAGE_SEQUENCE)
-    assert tuple(stage.stage_kind for stage in stages) == SCIENTIFIC_TRACE_STAGE_SEQUENCE
+    assert (
+        tuple(stage.stage_kind for stage in stages) == SCIENTIFIC_TRACE_STAGE_SEQUENCE
+    )
     tom = stages[8]
     assert tom.stage_kind is CognitionTraceStageKind.THEORY_OF_MIND
     assert tom.status is CognitionTraceStageStatus.UNAVAILABLE

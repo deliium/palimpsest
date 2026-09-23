@@ -37,9 +37,9 @@ __all__ = [
     "ACCEPTED_COGNITION_TRACE_SCHEMA_VERSIONS",
     "COGNITION_TRACE_SCHEMA_VERSION",
     "CognitionTraceSerializationError",
+    "cognition_trace_content_hash",
     "decode_cognition_trace_invocation",
     "encode_cognition_trace_invocation",
-    "cognition_trace_content_hash",
 ]
 
 ACCEPTED_COGNITION_TRACE_SCHEMA_VERSIONS: Final[frozenset[str]] = frozenset(
@@ -78,7 +78,9 @@ def encode_cognition_trace_invocation(invocation: CognitionTraceInvocation) -> b
         )
     document = _encode_document(invocation)
     # Content hash is over the payload excluding the hash field itself.
-    payload_for_hash = {key: value for key, value in document.items() if key != "content_hash"}
+    payload_for_hash = {
+        key: value for key, value in document.items() if key != "content_hash"
+    }
     digest = _sha256_hex(_canonical_dumps(payload_for_hash))
     document["content_hash"] = digest
     encoded = _canonical_dumps(document)
@@ -266,7 +268,9 @@ def _decode_stage_summary(
     }
     _require_keys(data, required, path=path)
     try:
-        stage_kind = CognitionTraceStageKind(_require_str(data, "stage_kind", path=path))
+        stage_kind = CognitionTraceStageKind(
+            _require_str(data, "stage_kind", path=path)
+        )
         status = CognitionTraceStageStatus(_require_str(data, "status", path=path))
     except ValueError as exc:
         raise CognitionTraceSerializationError("invalid_enum", path) from exc
@@ -309,7 +313,9 @@ def _decode_stage_summary(
     band = None
     if band_raw is not None:
         try:
-            band = UncertaintyBand(_require_str_value(band_raw, f"{path}.uncertainty_band"))
+            band = UncertaintyBand(
+                _require_str_value(band_raw, f"{path}.uncertainty_band")
+            )
         except ValueError as exc:
             raise CognitionTraceSerializationError(
                 "invalid_enum", f"{path}.uncertainty_band"
@@ -365,8 +371,12 @@ def _decode_stage_summary(
             path=f"{path}.llm_meta",
         )
         llm = CognitionTraceLlmMeta(
-            provider_name=_optional_str(llm_raw, "provider_name", path=f"{path}.llm_meta"),
-            model_name=_optional_str(llm_raw, "model_name", path=f"{path}.llm_meta"),
+            provider_name=_optional_str(
+                llm_raw, "provider_name", path=f"{path}.llm_meta"
+            ),
+            model_name=_optional_str(
+                llm_raw, "model_name", path=f"{path}.llm_meta"
+            ),
             finish_reason=_optional_str(
                 llm_raw, "finish_reason", path=f"{path}.llm_meta"
             ),

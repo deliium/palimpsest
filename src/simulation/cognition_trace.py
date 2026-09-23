@@ -595,7 +595,7 @@ def _truncate_stages_to_budget(
 
     kept: list[CognitionTraceStageSummary] = []
     for stage in stages:
-        candidate = tuple(kept) + (stage,)
+        candidate = (*kept, stage)
         # Approximate size via content hash input length.
         size = len(stage_summaries_content_hash(candidate).encode("utf-8")) * 32
         # Use a rough estimate: number of refs/codes as proxy if needed.

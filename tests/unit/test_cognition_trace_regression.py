@@ -243,7 +243,11 @@ def test_projector_stage_order_and_forbidden_fields() -> None:
     stages = project_cognition_trace_stages(loop_result=None)
     kinds = [s.stage_kind for s in stages]
     assert CognitionTraceStageKind.THEORY_OF_MIND in kinds
-    tom = next(s for s in stages if s.stage_kind is CognitionTraceStageKind.THEORY_OF_MIND)
+    tom = next(
+        s
+        for s in stages
+        if s.stage_kind is CognitionTraceStageKind.THEORY_OF_MIND
+    )
     assert tom.status is CognitionTraceStageStatus.UNAVAILABLE
     for stage in stages:
         assert not hasattr(stage, "rationale")

@@ -327,7 +327,9 @@ class CognitionTraceStageSummary:
         object.__setattr__(
             self,
             "ordinal",
-            require_exact_nonneg_int("CognitionTraceStageSummary.ordinal", self.ordinal),
+            require_exact_nonneg_int(
+                "CognitionTraceStageSummary.ordinal", self.ordinal
+            ),
         )
         if self.confidence is not None:
             object.__setattr__(
@@ -384,7 +386,10 @@ class CognitionTraceStageSummary:
                     "CognitionTraceStageSummary.intention_code", self.intention_code
                 ),
             )
-        if self.llm_meta is not None and type(self.llm_meta) is not CognitionTraceLlmMeta:
+        if (
+            self.llm_meta is not None
+            and type(self.llm_meta) is not CognitionTraceLlmMeta
+        ):
             raise TypeError(
                 "CognitionTraceStageSummary.llm_meta must be CognitionTraceLlmMeta "
                 "or None"
@@ -954,7 +959,9 @@ def _project_beliefs(
             counts[CognitionTraceCountKey.SEMANTIC_BELIEF_COUNT.value] = len(
                 output.beliefs
             )
-            counts[CognitionTraceCountKey.CANDIDATE_COUNT.value] = output.candidate_count
+            counts[CognitionTraceCountKey.CANDIDATE_COUNT.value] = (
+                output.candidate_count
+            )
         elif type(output) is SelfBeliefState:
             for belief_id in output.belief_ids:
                 refs.append(
@@ -1128,9 +1135,13 @@ def _project_goals(
         decision = motivation_record.decision_metadata
         for goal_id in motivation.active_goal_ids:
             refs.append(
-                CognitionTraceIdRef(kind=CognitionTraceRefKind.GOAL, value=goal_id.value)
+                CognitionTraceIdRef(
+                    kind=CognitionTraceRefKind.GOAL, value=goal_id.value
+                )
             )
-        counts[CognitionTraceCountKey.GOAL_COUNT.value] = len(motivation.active_goal_ids)
+        counts[CognitionTraceCountKey.GOAL_COUNT.value] = len(
+            motivation.active_goal_ids
+        )
 
     if self_record is not None and not refs:
         output = self_record.output_artifact
