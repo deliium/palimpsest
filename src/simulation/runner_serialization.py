@@ -25,11 +25,14 @@ from simulation.runner_models import (
     RUNNER_SCHEMA_VERSION_V1,
     RUNNER_SCHEMA_VERSION_V2,
     RUNNER_SCHEMA_VERSION_V3,
+    RUNNER_SCHEMA_VERSION_V4,
     SUPPORTED_RUNNER_SCHEMA_VERSIONS,
     AgentCognitionSpec,
     AgentRunnerSpec,
     CognitionCounters,
     CognitionFailurePolicy,
+    CognitionTraceDetail,
+    CognitionTraceSpec,
     DriveOverrideSpec,
     ExactReproducibilityMode,
     ExperimentAssignmentRef,
@@ -261,7 +264,11 @@ def _encode_agent(value: AgentRunnerSpec, *, schema_version: str) -> dict[str, A
         "cognition": _encode_cognition(value.cognition),
         "entity_id": value.entity_id.value,
     }
-    if schema_version in {RUNNER_SCHEMA_VERSION_V2, RUNNER_SCHEMA_VERSION_V3}:
+    if schema_version in {
+        RUNNER_SCHEMA_VERSION_V2,
+        RUNNER_SCHEMA_VERSION_V3,
+        RUNNER_SCHEMA_VERSION_V4,
+    }:
         assert value.name is not None
         payload["name"] = value.name
         payload["initial_goals"] = [_encode_goal(goal) for goal in value.initial_goals]
@@ -545,11 +552,21 @@ _RUNNER_ROOT_KEYS_V3: Final[set[str]] = {
     *_RUNNER_ROOT_KEYS_LEGACY,
     "capability_flags",
 }
+_RUNNER_ROOT_KEYS_V4: Final[set[str]] = {
+    *_RUNNER_ROOT_KEYS_V3,
+    "cognition_trace",
+}
 _CAPABILITY_FLAG_KEYS: Final[set[str]] = {
     "advanced_social_inference",
     "multi_hop_testimony_tracking",
     "predictive_world_model",
     "extended_self_model",
+}
+_COGNITION_TRACE_KEYS: Final[set[str]] = {
+    "enabled",
+    "detail",
+    "sample_every_n_ticks",
+    "max_bytes_per_invocation",
 }
 
 
@@ -580,6 +597,51 @@ def _decode_capability_flags(
                 data, "predictive_world_model", path=path
             ),
             extended_self_model=_bool_field(data, "extended_self_model", path=path),
+        )
+    except RunnerSerializationError:
+        raise
+    except (TypeError, ValueError) as exc:
+        raise RunnerSerializationError("invalid_model", path) from exc
+
+
+def _encode_cognition_trace(spec: CognitionTraceSpec) -> dict[str, Any]:
+    return {
+        "enabled": spec.enabled,
+        "detail": spec.detail.value,
+        "sample_every_n_ticks": spec.sample_every_n_ticks,
+        "max_bytes_per_invocation": spec.max_bytes_per_invocation,
+    }
+
+
+def _decode_cognition_trace(
+    data: Mapping[str, Any], *, path: str
+) -> CognitionTraceSpec:
+    if not isinstance(data, dict):
+        raise RunnerSerializationError("invalid_object", path)
+    _require_keys(data, _COGNITION_TRACE_KEYS, path=path)
+    detail_raw = _str_field(data, "detail", path=path)
+    try:
+        detail = CognitionTraceDetail(detail_raw)
+    except ValueError as exc:
+        raise RunnerSerializationError("invalid_enum", f"{path}.detail") from exc
+    sample = data["sample_every_n_ticks"]
+    if sample is not None and (
+        isinstance(sample, bool) or not isinstance(sample, int) or sample < 1
+    ):
+        raise RunnerSerializationError("invalid_int", f"{path}.sample_every_n_ticks")
+    max_bytes = data["max_bytes_per_invocation"]
+    if max_bytes is not None and (
+        isinstance(max_bytes, bool) or not isinstance(max_bytes, int) or max_bytes < 1
+    ):
+        raise RunnerSerializationError(
+            "invalid_int", f"{path}.max_bytes_per_invocation"
+        )
+    try:
+        return CognitionTraceSpec(
+            enabled=_bool_field(data, "enabled", path=path),
+            detail=detail,
+            sample_every_n_ticks=sample,
+            max_bytes_per_invocation=max_bytes,
         )
     except RunnerSerializationError:
         raise
@@ -618,10 +680,15 @@ def _encode_runner_document(config: SimulationRunnerConfig) -> dict[str, Any]:
             ),
         },
     }
-    if config.schema_version == RUNNER_SCHEMA_VERSION_V3:
+    if config.schema_version in {
+        RUNNER_SCHEMA_VERSION_V3,
+        RUNNER_SCHEMA_VERSION_V4,
+    }:
         document["capability_flags"] = _encode_capability_flags(
             config.capability_flags
         )
+    if config.schema_version == RUNNER_SCHEMA_VERSION_V4:
+        document["cognition_trace"] = _encode_cognition_trace(config.cognition_trace)
     if config.experiment is not None:
         document["experiment"] = {
             "condition_id": config.experiment.condition_id,
@@ -659,11 +726,12 @@ def decode_runner_config(payload: bytes) -> SimulationRunnerConfig:
         raise RunnerSerializationError("invalid_string", "$.schema_version")
     if schema_version not in SUPPORTED_RUNNER_SCHEMA_VERSIONS:
         raise RunnerSerializationError("unsupported_version", "$.schema_version")
-    root_keys = (
-        _RUNNER_ROOT_KEYS_V3
-        if schema_version == RUNNER_SCHEMA_VERSION_V3
-        else _RUNNER_ROOT_KEYS_LEGACY
-    )
+    if schema_version == RUNNER_SCHEMA_VERSION_V4:
+        root_keys = _RUNNER_ROOT_KEYS_V4
+    elif schema_version == RUNNER_SCHEMA_VERSION_V3:
+        root_keys = _RUNNER_ROOT_KEYS_V3
+    else:
+        root_keys = _RUNNER_ROOT_KEYS_LEGACY
     _require_keys(data, root_keys, path="$")
     mortality_policy = _str_field(data, "mortality_policy_version", path="$")
     if mortality_policy != MORTALITY_POLICY_VERSION:
@@ -729,13 +797,20 @@ def decode_runner_config(payload: bytes) -> SimulationRunnerConfig:
             )
         except (TypeError, ValueError) as exc:
             raise RunnerSerializationError("invalid_model", "$.experiment") from exc
-    if schema_version == RUNNER_SCHEMA_VERSION_V3:
+    if schema_version in {RUNNER_SCHEMA_VERSION_V3, RUNNER_SCHEMA_VERSION_V4}:
         capability_flags = _decode_capability_flags(
             data["capability_flags"], path="$.capability_flags"
         )
     else:
         # Legacy v1/v2 decode upgrades to default-off flags.
         capability_flags = V2CapabilityFlags()
+    if schema_version == RUNNER_SCHEMA_VERSION_V4:
+        cognition_trace = _decode_cognition_trace(
+            data["cognition_trace"], path="$.cognition_trace"
+        )
+    else:
+        # Legacy v1/v2/v3 decode upgrades to disabled tracing.
+        cognition_trace = CognitionTraceSpec()
     agents_list: list[AgentRunnerSpec] = []
     for index, item in enumerate(agents_raw):
         if not isinstance(item, dict):
@@ -790,6 +865,7 @@ def decode_runner_config(payload: bytes) -> SimulationRunnerConfig:
             ),
             experiment=experiment,
             capability_flags=capability_flags,
+            cognition_trace=cognition_trace,
             schema_version=_str_field(data, "schema_version", path="$"),
             derivation_version=_str_field(data, "derivation_version", path="$"),
             mortality_policy_version=_str_field(

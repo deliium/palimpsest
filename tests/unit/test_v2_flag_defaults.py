@@ -18,9 +18,10 @@ from experiments.catalog import (
 )
 from experiments.reference_scenario import build_reference_scenario
 from simulation.runner_models import (
-    RUNNER_SCHEMA_VERSION_V3,
+    RUNNER_SCHEMA_VERSION_V4,
     AgentCognitionSpec,
     AgentRunnerSpec,
+    CognitionTraceSpec,
     SimulationRunnerConfig,
     V2CapabilityFlags,
     WorldScenarioSpec,
@@ -76,11 +77,13 @@ def test_catalog_conditions_default_off_flags(builder: object) -> None:
     assert definition.schema_version == "experiment-definition-v1"
     for condition in definition.conditions:
         config = condition.runner_config
-        assert config.schema_version == RUNNER_SCHEMA_VERSION_V3
+        assert config.schema_version == RUNNER_SCHEMA_VERSION_V4
         assert config.capability_flags == V2CapabilityFlags()
+        assert config.cognition_trace == CognitionTraceSpec()
         assert v1_regression_profile(config) is config
         decoded = decode_runner_config(encode_runner_config(config))
         assert decoded.capability_flags == V2CapabilityFlags()
+        assert decoded.cognition_trace == CognitionTraceSpec()
 
 
 def test_reference_scenario_default_off_flags(caplog: pytest.LogCaptureFixture) -> None:
@@ -88,8 +91,9 @@ def test_reference_scenario_default_off_flags(caplog: pytest.LogCaptureFixture) 
         bundle = build_reference_scenario(
             seed=7, stochastic_identity="cmp-ref-flags", max_ticks=48
         )
-    assert bundle.config.schema_version == RUNNER_SCHEMA_VERSION_V3
+    assert bundle.config.schema_version == RUNNER_SCHEMA_VERSION_V4
     assert bundle.config.capability_flags == V2CapabilityFlags()
+    assert bundle.config.cognition_trace == CognitionTraceSpec()
     assert v1_regression_profile(bundle.config) is bundle.config
 
 
@@ -104,4 +108,18 @@ def test_v1_regression_profile_rejects_enabled_flag() -> None:
         capability_flags=V2CapabilityFlags(extended_self_model=True),
     )
     with pytest.raises(ValueError, match="v1_regression_flags_enabled"):
+        v1_regression_profile(enabled)
+
+
+def test_v1_regression_profile_rejects_enabled_tracing() -> None:
+    base = _base()
+    enabled = SimulationRunnerConfig(
+        seed=base.seed,
+        stochastic_identity=base.stochastic_identity,
+        scenario=base.scenario,
+        agents=base.agents,
+        stop_policy=base.stop_policy,
+        cognition_trace=CognitionTraceSpec(enabled=True),
+    )
+    with pytest.raises(ValueError, match="v1_regression_trace_enabled"):
         v1_regression_profile(enabled)

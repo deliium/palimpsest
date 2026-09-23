@@ -32,6 +32,7 @@ from simulation.runner_models import (
     RUNNER_SCHEMA_VERSION_V1,
     RUNNER_SCHEMA_VERSION_V2,
     RUNNER_SCHEMA_VERSION_V3,
+    RUNNER_SCHEMA_VERSION_V4,
     SUPPORTED_RUNNER_SCHEMA_VERSIONS,
 )
 
@@ -82,16 +83,19 @@ def test_event_schema_stays_at_v5_write() -> None:
     assert "no v6" in bump or "stay at replay-v5" in bump
 
 
-def test_runner_config_write_is_v3_with_legacy_accepted() -> None:
+def test_runner_config_write_is_v4_with_legacy_accepted() -> None:
     entry = compatibility_entry("runner_config")
     assert entry.write_version == RUNNER_SCHEMA_VERSION
-    assert RUNNER_SCHEMA_VERSION == RUNNER_SCHEMA_VERSION_V3
-    assert RUNNER_SCHEMA_VERSION_V3 == "runner-config-v3"
+    assert RUNNER_SCHEMA_VERSION == RUNNER_SCHEMA_VERSION_V4
+    assert RUNNER_SCHEMA_VERSION_V4 == "runner-config-v4"
+    assert RUNNER_SCHEMA_VERSION_V4 in entry.bump_trigger
     assert RUNNER_SCHEMA_VERSION_V3 in entry.bump_trigger
     assert RUNNER_SCHEMA_VERSION_V1 in SUPPORTED_RUNNER_SCHEMA_VERSIONS
     assert RUNNER_SCHEMA_VERSION_V2 in SUPPORTED_RUNNER_SCHEMA_VERSIONS
     assert RUNNER_SCHEMA_VERSION_V3 in SUPPORTED_RUNNER_SCHEMA_VERSIONS
+    assert RUNNER_SCHEMA_VERSION_V4 in SUPPORTED_RUNNER_SCHEMA_VERSIONS
     assert RUNNER_SCHEMA_VERSION_V3 in entry.accepted_restore
+    assert RUNNER_SCHEMA_VERSION_V4 in entry.accepted_restore
 
 
 def test_alembic_head_pin_and_no_0013() -> None:
@@ -135,6 +139,9 @@ def test_facade_reexports_compatibility_surface() -> None:
 
     assert "COMPATIBILITY_MATRIX" in simulation.__all__
     assert "RUNNER_SCHEMA_VERSION_V3" in simulation.__all__
+    assert "RUNNER_SCHEMA_VERSION_V4" in simulation.__all__
+    assert "CognitionTraceSpec" in simulation.__all__
     assert "ALEMBIC_HEAD_REVISION" in simulation.__all__
     assert simulation.compatibility_entry is compatibility_entry
     assert simulation.RUNNER_SCHEMA_VERSION_V3 == RUNNER_SCHEMA_VERSION_V3
+    assert simulation.RUNNER_SCHEMA_VERSION_V4 == RUNNER_SCHEMA_VERSION_V4

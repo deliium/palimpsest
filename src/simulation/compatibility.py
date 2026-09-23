@@ -46,6 +46,7 @@ from simulation.runner_models import (
     RESULT_SCHEMA_VERSION_V2,
     RUNNER_SCHEMA_VERSION,
     RUNNER_SCHEMA_VERSION_V3,
+    RUNNER_SCHEMA_VERSION_V4,
     SUPPORTED_RESULT_SCHEMA_VERSIONS,
     SUPPORTED_RUNNER_SCHEMA_VERSIONS,
 )
@@ -80,6 +81,7 @@ __all__ = [
     "METRIC_CATALOG_VERSION",
     "METRIC_DOCUMENT_SCHEMA_VERSION",
     "RUNNER_SCHEMA_VERSION_V3",
+    "RUNNER_SCHEMA_VERSION_V4",
     "STREAM_ENVELOPE_VERSION",
     "WS_PROTOCOL_VERSION",
     "CompatibilityEntry",
@@ -156,13 +158,14 @@ _MATRIX: dict[str, CompatibilityEntry] = {
         accepted_restore=_versions(*sorted(SUPPORTED_RUNNER_SCHEMA_VERSIONS)),
         bump_trigger=(
             "New runner fields require a versioned exact key set "
-            f"(write {RUNNER_SCHEMA_VERSION_V3} for V2 capability flags; "
-            "v1/v2 decode + default-off upgrade retained)."
+            f"(write {RUNNER_SCHEMA_VERSION_V4} for cognition_trace; "
+            f"{RUNNER_SCHEMA_VERSION_V3} retained for capability flags; "
+            "v1/v2/v3 decode + default-off upgrade retained)."
         ),
         owner_package="simulation.runner_models / simulation.runner_serialization",
         v1_fixture_impact=(
-            "Golden runner-config-v1/v2 fixtures must decode; "
-            "config_fingerprint may change under v3 write"
+            "Golden runner-config-v1/v2/v3 fixtures must decode; "
+            "config_fingerprint may change under v4 write"
         ),
     ),
     "runner_result": CompatibilityEntry(
@@ -308,7 +311,8 @@ _LOG.debug(
         "entry_count": len(COMPATIBILITY_MATRIX),
         "event_write": str(EVENT_SCHEMA_VERSION),
         "runner_write": RUNNER_SCHEMA_VERSION,
-        "runner_planned_v3": RUNNER_SCHEMA_VERSION_V3,
+        "runner_v3": RUNNER_SCHEMA_VERSION_V3,
+        "runner_v4": RUNNER_SCHEMA_VERSION_V4,
         "alembic_head": ALEMBIC_HEAD_REVISION,
         "accepted_event_count": len(ACCEPTED_EVENT_SCHEMA_VERSIONS),
     },

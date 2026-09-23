@@ -272,8 +272,8 @@ def base_runner_config_from_scenario(
 ) -> SimulationRunnerConfig:
     """Helper for tests/builders: assemble a shared base configuration.
 
-    Emits current write schema (``runner-config-v3``) with all V2 capability
-    flags default-off for V1-equivalent execution.
+    Emits current write schema (``runner-config-v4``) with all V2 capability
+    flags off and cognition tracing disabled (V1-equivalent defaults).
     """
     return SimulationRunnerConfig(
         seed=seed,
@@ -285,10 +285,11 @@ def base_runner_config_from_scenario(
 
 
 def v1_regression_profile(config: SimulationRunnerConfig) -> SimulationRunnerConfig:
-    """Require all V2 capability flags off (V1-equivalent run profile).
+    """Require all V2 capability flags off and cognition tracing off.
 
-    Returns the same config when valid; raises ``ValueError`` with stable code
-    ``v1_regression_flags_enabled`` otherwise. Does not mutate the config.
+    Returns the same config when valid; raises ``ValueError`` with stable codes
+    ``v1_regression_flags_enabled`` or ``v1_regression_trace_enabled`` otherwise.
+    Does not mutate the config.
     """
     if type(config) is not SimulationRunnerConfig:
         raise TypeError("v1_regression_profile requires SimulationRunnerConfig")
@@ -296,14 +297,22 @@ def v1_regression_profile(config: SimulationRunnerConfig) -> SimulationRunnerCon
     digest_prefix = capability_flags_digest(config.capability_flags)[:12]
     _LOG.debug(
         "v1_regression_profile_check schema_version=%s enabled_flag_count=%s "
-        "capability_flags_digest_prefix=%s",
+        "capability_flags_digest_prefix=%s cognition_trace_enabled=%s "
+        "cognition_trace_detail=%s",
         config.schema_version,
         len(enabled),
         digest_prefix,
+        config.cognition_trace.enabled,
+        config.cognition_trace.detail.value,
     )
     if enabled:
         raise ValueError(
             "v1 regression requires all capability flags off "
             f"(code=v1_regression_flags_enabled flag_count={len(enabled)})"
+        )
+    if config.cognition_trace.enabled:
+        raise ValueError(
+            "v1 regression requires cognition tracing off "
+            "(code=v1_regression_trace_enabled)"
         )
     return config

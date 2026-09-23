@@ -68,12 +68,14 @@ _LOGGER = logging.getLogger("simulation.runner_models")
 RUNNER_SCHEMA_VERSION_V1: Final[str] = "runner-config-v1"
 RUNNER_SCHEMA_VERSION_V2: Final[str] = "runner-config-v2"
 RUNNER_SCHEMA_VERSION_V3: Final[str] = "runner-config-v3"
-RUNNER_SCHEMA_VERSION: Final[str] = RUNNER_SCHEMA_VERSION_V3
+RUNNER_SCHEMA_VERSION_V4: Final[str] = "runner-config-v4"
+RUNNER_SCHEMA_VERSION: Final[str] = RUNNER_SCHEMA_VERSION_V4
 SUPPORTED_RUNNER_SCHEMA_VERSIONS: Final[frozenset[str]] = frozenset(
     {
         RUNNER_SCHEMA_VERSION_V1,
         RUNNER_SCHEMA_VERSION_V2,
         RUNNER_SCHEMA_VERSION_V3,
+        RUNNER_SCHEMA_VERSION_V4,
     }
 )
 RESULT_SCHEMA_VERSION_V1: Final[str] = "runner-result-v1"
@@ -171,6 +173,62 @@ class V2CapabilityFlags:
 
 # Alias kept for plan wording; prefer V2CapabilityFlags in new code.
 CapabilityProfile = V2CapabilityFlags
+
+
+class CognitionTraceDetail(StrEnum):
+    """Closed detail levels for optional cognitive execution tracing."""
+
+    SUMMARY = "summary"
+    STRUCTURED = "structured"
+
+
+@dataclass(frozen=True, slots=True)
+class CognitionTraceSpec:
+    """Optional run-level cognition trace recording (not a V2 capability flag).
+
+    Default disabled. When disabled, ``detail`` / sampling / byte limits are
+    ignored for behavior. Soft volume limits truncate with reason codes rather
+    than failing the run (enforced by the sink in a later task).
+    """
+
+    enabled: bool = False
+    detail: CognitionTraceDetail = CognitionTraceDetail.SUMMARY
+    sample_every_n_ticks: int | None = None
+    max_bytes_per_invocation: int | None = None
+
+    def __post_init__(self) -> None:
+        if type(self.enabled) is not bool:
+            raise TypeError("CognitionTraceSpec.enabled must be bool")
+        if type(self.detail) is not CognitionTraceDetail:
+            raise TypeError("CognitionTraceSpec.detail must be CognitionTraceDetail")
+        if self.sample_every_n_ticks is not None:
+            object.__setattr__(
+                self,
+                "sample_every_n_ticks",
+                require_exact_nonneg_int(
+                    "CognitionTraceSpec.sample_every_n_ticks",
+                    self.sample_every_n_ticks,
+                ),
+            )
+            if self.sample_every_n_ticks < 1:
+                raise ValueError(
+                    "CognitionTraceSpec.sample_every_n_ticks must be >= 1 "
+                    "(code=invalid_sample_every)"
+                )
+        if self.max_bytes_per_invocation is not None:
+            object.__setattr__(
+                self,
+                "max_bytes_per_invocation",
+                require_exact_nonneg_int(
+                    "CognitionTraceSpec.max_bytes_per_invocation",
+                    self.max_bytes_per_invocation,
+                ),
+            )
+            if self.max_bytes_per_invocation < 1:
+                raise ValueError(
+                    "CognitionTraceSpec.max_bytes_per_invocation must be >= 1 "
+                    "(code=invalid_max_bytes)"
+                )
 
 
 class RunnerStopReasonCode(StrEnum):
@@ -1082,6 +1140,7 @@ class SimulationRunnerConfig:
     persistence: RunnerPersistenceSpec = RunnerPersistenceSpec()
     experiment: ExperimentAssignmentRef | None = None
     capability_flags: V2CapabilityFlags = V2CapabilityFlags()
+    cognition_trace: CognitionTraceSpec = CognitionTraceSpec()
     schema_version: str = RUNNER_SCHEMA_VERSION
     derivation_version: str = DERIVATION_VERSION_V3
     mortality_policy_version: str = MORTALITY_POLICY_VERSION
@@ -1130,6 +1189,8 @@ class SimulationRunnerConfig:
             raise TypeError("experiment must be ExperimentAssignmentRef or None")
         if type(self.capability_flags) is not V2CapabilityFlags:
             raise TypeError("capability_flags must be V2CapabilityFlags")
+        if type(self.cognition_trace) is not CognitionTraceSpec:
+            raise TypeError("cognition_trace must be CognitionTraceSpec")
         if self.schema_version not in SUPPORTED_RUNNER_SCHEMA_VERSIONS:
             raise ValueError("unsupported runner schema_version")
         if require_derivation_version(self.derivation_version) != DERIVATION_VERSION_V3:
@@ -1142,12 +1203,26 @@ class SimulationRunnerConfig:
             and self.capability_flags.any_enabled()
         ):
             raise ValueError(
-                "capability flags require runner-config-v3 "
+                "capability flags require runner-config-v3+ "
                 "(code=capability_requires_v3)"
+            )
+        if (
+            self.schema_version
+            in {
+                RUNNER_SCHEMA_VERSION_V1,
+                RUNNER_SCHEMA_VERSION_V2,
+                RUNNER_SCHEMA_VERSION_V3,
+            }
+            and self.cognition_trace.enabled
+        ):
+            raise ValueError(
+                "cognition_trace.enabled requires runner-config-v4 "
+                "(code=cognition_trace_requires_v4)"
             )
         if self.schema_version in {
             RUNNER_SCHEMA_VERSION_V1,
             RUNNER_SCHEMA_VERSION_V2,
+            RUNNER_SCHEMA_VERSION_V3,
         }:
             _LOGGER.warning(
                 "runner_config_legacy_schema schema_version=%s agent_count=%s",
@@ -1163,10 +1238,20 @@ class SimulationRunnerConfig:
                 len(enabled),
                 ",".join(enabled),
             )
+        if self.cognition_trace.enabled:
+            _LOGGER.info(
+                "runner_config_cognition_trace_enabled schema_version=%s "
+                "detail=%s sample_every_n_ticks=%s max_bytes_per_invocation=%s",
+                self.schema_version,
+                self.cognition_trace.detail.value,
+                self.cognition_trace.sample_every_n_ticks,
+                self.cognition_trace.max_bytes_per_invocation,
+            )
         _LOGGER.debug(
             "runner_config_validated schema_version=%s agent_count=%s "
             "location_count=%s max_ticks=%s mortality_mode=%s "
-            "capability_flag_count=%s enabled_flag_count=%s",
+            "capability_flag_count=%s enabled_flag_count=%s "
+            "cognition_trace_enabled=%s cognition_trace_detail=%s",
             self.schema_version,
             len(self.agents),
             len(self.scenario.locations),
@@ -1174,6 +1259,8 @@ class SimulationRunnerConfig:
             self.mortality_mode.value,
             len(_V2_CAPABILITY_FLAG_NAMES),
             len(enabled),
+            self.cognition_trace.enabled,
+            self.cognition_trace.detail.value,
         )
 
     def ordered_registrations(self) -> tuple[AgentRegistration, ...]:
@@ -1235,6 +1322,8 @@ class RunnerConfigDiagnostics:
     capability_flag_names: tuple[str, ...]
     enabled_capability_flags: tuple[str, ...]
     capability_flags_digest_prefix: str
+    cognition_trace_enabled: bool
+    cognition_trace_detail: str
 
 
 def runner_config_diagnostics(
@@ -1280,6 +1369,8 @@ def runner_config_diagnostics(
         capability_flag_names=_V2_CAPABILITY_FLAG_NAMES,
         enabled_capability_flags=enabled,
         capability_flags_digest_prefix=flags_digest[:12],
+        cognition_trace_enabled=config.cognition_trace.enabled,
+        cognition_trace_detail=config.cognition_trace.detail.value,
     )
 
 
@@ -1322,6 +1413,8 @@ def describe_runner_config(
         "capability_flag_names": diagnostics.capability_flag_names,
         "enabled_capability_flags": diagnostics.enabled_capability_flags,
         "capability_flags_digest_prefix": diagnostics.capability_flags_digest_prefix,
+        "cognition_trace_enabled": diagnostics.cognition_trace_enabled,
+        "cognition_trace_detail": diagnostics.cognition_trace_detail,
     }
 
 

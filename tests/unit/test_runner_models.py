@@ -234,25 +234,51 @@ def test_goal_evaluator_completion_death_and_run_end() -> None:
     assert death[0].to_status is GoalStatus.ABANDONED
 
 
-def test_new_configs_default_to_schema_v3() -> None:
-    from simulation.runner_models import RUNNER_SCHEMA_VERSION_V3, V2CapabilityFlags
+def test_new_configs_default_to_schema_v4() -> None:
+    from simulation.runner_models import (
+        RUNNER_SCHEMA_VERSION_V4,
+        CognitionTraceSpec,
+        V2CapabilityFlags,
+    )
 
     config = _config()
-    assert config.schema_version == RUNNER_SCHEMA_VERSION_V3
+    assert config.schema_version == RUNNER_SCHEMA_VERSION_V4
     assert config.capability_flags == V2CapabilityFlags()
     assert not config.capability_flags.any_enabled()
+    assert config.cognition_trace == CognitionTraceSpec()
+    assert not config.cognition_trace.enabled
 
 
 def test_capability_flags_require_schema_v3() -> None:
     from simulation.runner_models import RUNNER_SCHEMA_VERSION_V2, V2CapabilityFlags
 
+    base = _config()
     with pytest.raises(ValueError, match="capability_requires_v3"):
         SimulationRunnerConfig(
-            seed=_config().seed,
-            stochastic_identity=_config().stochastic_identity,
-            scenario=_config().scenario,
-            agents=_config().agents,
-            stop_policy=_config().stop_policy,
+            seed=base.seed,
+            stochastic_identity=base.stochastic_identity,
+            scenario=base.scenario,
+            agents=base.agents,
+            stop_policy=base.stop_policy,
             schema_version=RUNNER_SCHEMA_VERSION_V2,
             capability_flags=V2CapabilityFlags(advanced_social_inference=True),
+        )
+
+
+def test_cognition_trace_enabled_requires_schema_v4() -> None:
+    from simulation.runner_models import (
+        RUNNER_SCHEMA_VERSION_V3,
+        CognitionTraceSpec,
+    )
+
+    base = _config()
+    with pytest.raises(ValueError, match="cognition_trace_requires_v4"):
+        SimulationRunnerConfig(
+            seed=base.seed,
+            stochastic_identity=base.stochastic_identity,
+            scenario=base.scenario,
+            agents=base.agents,
+            stop_policy=base.stop_policy,
+            schema_version=RUNNER_SCHEMA_VERSION_V3,
+            cognition_trace=CognitionTraceSpec(enabled=True),
         )

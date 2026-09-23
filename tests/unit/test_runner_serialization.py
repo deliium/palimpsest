@@ -204,23 +204,65 @@ def test_v2_rejects_missing_name_field() -> None:
     assert rejected.value.code == "missing_field"
 
 
-def test_v3_round_trip_includes_default_off_capability_flags() -> None:
-    from simulation.runner_models import RUNNER_SCHEMA_VERSION_V3, V2CapabilityFlags
+def test_v4_round_trip_includes_default_off_trace_and_flags() -> None:
+    from simulation.runner_models import (
+        RUNNER_SCHEMA_VERSION_V4,
+        CognitionTraceSpec,
+        V2CapabilityFlags,
+    )
 
     config = _config()
-    assert config.schema_version == RUNNER_SCHEMA_VERSION_V3
+    assert config.schema_version == RUNNER_SCHEMA_VERSION_V4
     encoded = encode_runner_config(config)
     document = json.loads(encoded.decode("utf-8"))
-    assert document["schema_version"] == RUNNER_SCHEMA_VERSION_V3
+    assert document["schema_version"] == RUNNER_SCHEMA_VERSION_V4
     assert document["capability_flags"] == {
         "advanced_social_inference": False,
         "extended_self_model": False,
         "multi_hop_testimony_tracking": False,
         "predictive_world_model": False,
     }
+    assert document["cognition_trace"] == {
+        "detail": "summary",
+        "enabled": False,
+        "max_bytes_per_invocation": None,
+        "sample_every_n_ticks": None,
+    }
     decoded = decode_runner_config(encoded)
     assert decoded.capability_flags == V2CapabilityFlags()
+    assert decoded.cognition_trace == CognitionTraceSpec()
     assert runner_config_fingerprint(decoded) == runner_config_fingerprint(config)
+
+
+def test_v3_decode_upgrades_to_disabled_cognition_trace() -> None:
+    from simulation.runner_models import (
+        RUNNER_SCHEMA_VERSION_V3,
+        CognitionTraceSpec,
+        V2CapabilityFlags,
+    )
+
+    base = _config()
+    v3 = SimulationRunnerConfig(
+        seed=base.seed,
+        stochastic_identity=base.stochastic_identity,
+        scenario=base.scenario,
+        agents=base.agents,
+        stop_policy=base.stop_policy,
+        mortality_mode=base.mortality_mode,
+        cognition_failure_policy=base.cognition_failure_policy,
+        provider=base.provider,
+        persistence=base.persistence,
+        experiment=base.experiment,
+        capability_flags=V2CapabilityFlags(),
+        schema_version=RUNNER_SCHEMA_VERSION_V3,
+    )
+    encoded = encode_runner_config(v3)
+    document = json.loads(encoded.decode("utf-8"))
+    assert document["schema_version"] == RUNNER_SCHEMA_VERSION_V3
+    assert "cognition_trace" not in document
+    decoded = decode_runner_config(encoded)
+    assert decoded.cognition_trace == CognitionTraceSpec()
+    assert not decoded.cognition_trace.enabled
 
 
 def test_v2_decode_upgrades_to_default_off_flags() -> None:

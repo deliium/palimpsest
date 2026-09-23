@@ -28,7 +28,7 @@ from experiments.reference_scenario import (
 from simulation.models import RunId
 from simulation.runner import SimulationRunner
 from simulation.runner_models import (
-    RUNNER_SCHEMA_VERSION_V3,
+    RUNNER_SCHEMA_VERSION_V4,
     AgentCognitionSpec,
     AgentRunnerSpec,
     WorldScenarioSpec,
@@ -94,7 +94,7 @@ async def test_catalog_experiment_executes_flags_off(
         base.stop_policy.max_ticks,
     )
     for condition in definition.conditions:
-        assert condition.runner_config.schema_version == RUNNER_SCHEMA_VERSION_V3
+        assert condition.runner_config.schema_version == RUNNER_SCHEMA_VERSION_V4
         v1_regression_profile(condition.runner_config)
         _LOG.debug(
             "v1_regression_gate_condition experiment_id=%s condition_id=%s "
@@ -125,7 +125,7 @@ async def test_reference_scenario_short_horizon_flags_off() -> None:
     )
     assert bundle.scenario_id == REFERENCE_SCENARIO_ID
     v1_regression_profile(bundle.config)
-    assert bundle.config.schema_version == RUNNER_SCHEMA_VERSION_V3
+    assert bundle.config.schema_version == RUNNER_SCHEMA_VERSION_V4
     _LOG.info(
         "v1_regression_gate_reference_start max_ticks=%s "
         "config_fingerprint_prefix=%s",
