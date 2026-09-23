@@ -62,7 +62,7 @@ from world.events import (
 _LOG: Final[logging.Logger] = logging.getLogger("simulation.compatibility")
 
 # Mirrored literals — owning packages must keep these equal (tested).
-ALEMBIC_HEAD_REVISION: Final[str] = "0012"
+ALEMBIC_HEAD_REVISION: Final[str] = "0013"
 EXPERIMENT_DEFINITION_SCHEMA_VERSION: Final[str] = "experiment-definition-v1"
 METRIC_DOCUMENT_SCHEMA_VERSION: Final[str] = "1"
 METRIC_CATALOG_VERSION: Final[str] = "metric-catalog-v1"
@@ -296,10 +296,13 @@ _MATRIX: dict[str, CompatibilityEntry] = {
         accepted_restore=_versions(ALEMBIC_HEAD_REVISION),
         bump_trigger=(
             "New indexed SQL columns required for inspection; "
-            "V2 scaffolding: no 0013 — flags live in runner JSON only"
+            "0013 adds cognition_trace_invocations (non-authoritative)"
         ),
         owner_package="alembic/versions",
-        v1_fixture_impact="Head pin 0012; authoritative table semantics unchanged",
+        v1_fixture_impact=(
+            "Head pin 0013; cognition traces outside AUTHORITATIVE_TABLES / "
+            "EvidenceManifest"
+        ),
     ),
     "communication": CompatibilityEntry(
         entry_id="communication",

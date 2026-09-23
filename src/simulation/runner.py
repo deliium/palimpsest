@@ -265,6 +265,7 @@ class RunnerDependencyFactories:
     __slots__ = (
         "_belief_factory",
         "_bundle_factory",
+        "_cognition_trace_repository",
         "_credential_resolver",
         "_journal",
         "_memory_factory",
@@ -296,6 +297,7 @@ class RunnerDependencyFactories:
         run_repository: SimulationRunRepository | None = None,
         journal: TickJournalRepository | None = None,
         pending_finalizations: PendingFinalizationRepository | None = None,
+        cognition_trace_repository: CognitionTraceRepository | None = None,
     ) -> None:
         self._credential_resolver = credential_resolver
         self._provider_factory = provider_factory
@@ -308,6 +310,7 @@ class RunnerDependencyFactories:
         self._run_repository = run_repository
         self._journal = journal
         self._pending_finalizations = pending_finalizations
+        self._cognition_trace_repository = cognition_trace_repository
 
     @property
     def run_repository(self) -> SimulationRunRepository | None:
@@ -320,6 +323,10 @@ class RunnerDependencyFactories:
     @property
     def pending_finalizations(self) -> PendingFinalizationRepository | None:
         return self._pending_finalizations
+
+    @property
+    def cognition_trace_repository(self) -> CognitionTraceRepository | None:
+        return self._cognition_trace_repository
 
     def resolve_credentials(
         self, settings: RunnerProviderSettings
@@ -735,6 +742,7 @@ class SimulationRunner:
             cognition_trace_repository: CognitionTraceRepository = (
                 select_cognition_trace_repository(
                     enabled=config.cognition_trace.enabled,
+                    durable=deps.cognition_trace_repository,
                 )
             )
             if config.cognition_trace.enabled:

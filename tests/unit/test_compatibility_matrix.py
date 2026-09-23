@@ -99,13 +99,13 @@ def test_runner_config_write_is_v4_with_legacy_accepted() -> None:
     assert RUNNER_SCHEMA_VERSION_V4 in entry.accepted_restore
 
 
-def test_alembic_head_pin_and_no_0013() -> None:
+def test_alembic_head_pin_and_0013_exists() -> None:
     entry = compatibility_entry("alembic_head")
-    assert entry.write_version == ALEMBIC_HEAD_REVISION == "0012"
+    assert entry.write_version == ALEMBIC_HEAD_REVISION == "0013"
     versions = ROOT / "alembic" / "versions"
     assert (versions / "0012_v1_scientific_evidence.py").is_file()
-    stray = sorted(versions.glob("0013_*.py"))
-    assert stray == [], f"unexpected Alembic 0013 migration: {stray}"
+    assert (versions / "0013_v2_cognition_trace.py").is_file()
+    assert sorted(versions.glob("0014_*.py")) == []
 
 
 def test_cross_package_mirrors_stay_in_sync() -> None:

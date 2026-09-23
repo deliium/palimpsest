@@ -158,7 +158,7 @@ Map onto existing `ComponentKind` stages where possible; introduce **trace-view 
 
 ### Phase 3: Durable persistence and isolation
 
-- [ ] Task 8: Alembic `0013` cognition-trace tables + head-pin update
+- [x] Task 8: Alembic `0013` cognition-trace tables + head-pin update
   - Deliverable:
     - Migration `0013_*`: append-only run-scoped cognition trace table(s) **outside** `AUTHORITATIVE_TABLES`
     - Indexed columns for inspection: `(run_id, tick)`, `(run_id, agent_id, tick)`; PK supporting idempotent retries (e.g. run_id + agent_id + tick + invocation_id)
@@ -170,13 +170,13 @@ Map onto existing `ComponentKind` stages where possible; introduce **trace-view 
   - Files: `alembic/versions/0013_*.py`, `src/persistence/orm.py`, `src/simulation/compatibility.py`, `tests/unit/test_alembic_head_pin.py`, `tests/unit/test_compatibility_matrix.py`
   - Depends on: Task 4
 
-- [ ] Task 9: SQLAlchemy adapter + factory
+- [x] Task 9: SQLAlchemy adapter + factory
   - Deliverable: `SqlAlchemyCognitionTraceRepository` implementing the Protocol using Task 5 codec bytes; `persistence.create_cognition_trace_repository(...)`; composition injects it only when tracing enabled + durable (otherwise Null / in-memory). Idempotent identical retry; conflict on divergent hash.
   - LOGGING REQUIREMENTS: Mirror scientific evidence (`*_append_started`, `*_committed`, `*_identical_retry`, `*_divergent_conflict`).
   - Files: `src/persistence/cognition_trace_sqlalchemy.py` (new), `src/persistence/__init__.py`, unit tests with fakes; integration marked opt-in
   - Depends on: Tasks 5, 8
 
-- [ ] Task 10: Architecture isolation gates (trace cannot influence WorldEngine)
+- [x] Task 10: Architecture isolation gates (trace cannot influence WorldEngine)
   - Deliverable: Add/extend architecture tests:
     - Trace ORM table names disjoint from `AUTHORITATIVE_TABLES`
     - `world` / private `_perception` / engine admission do not import cognition-trace types

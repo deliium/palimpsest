@@ -41,6 +41,7 @@ __all__ = [
     "PersistenceCorruptionError",
     "PersistenceNotFoundError",
     "create_analysis_evidence_loader",
+    "create_cognition_trace_repository",
     "create_experiment_record_repository",
     "create_experiment_repository",
     "create_inspection_evidence_loader",
@@ -205,6 +206,22 @@ def create_stream_repository(
         )
     from persistence.scientific_evidence_sqlalchemy import (
         create_stream_repository as impl,
+    )
+
+    return impl(session_factory)
+
+
+def create_cognition_trace_repository(
+    session_factory: async_sessionmaker[AsyncSession] | None = None,
+):
+    """Build the append-only cognition execution trace repository."""
+    if session_factory is None:
+        raise PersistenceAdapterError(
+            "missing_session_factory",
+            operation="create_cognition_trace_repository",
+        )
+    from persistence.cognition_trace_sqlalchemy import (
+        create_cognition_trace_repository as impl,
     )
 
     return impl(session_factory)

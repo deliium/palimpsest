@@ -17,6 +17,7 @@ from sqlalchemy import (
     BigInteger,
     Boolean,
     CheckConstraint,
+    Float,
     ForeignKeyConstraint,
     Index,
     Integer,
@@ -37,11 +38,14 @@ _STABLE_ID_LEN: Final[int] = 128
 
 __all__ = [
     "AUTHORITATIVE_TABLES",
+    "COGNITION_TRACE_APPEND_ONLY_TABLES",
+    "COGNITION_TRACE_TABLES",
     "SCIENTIFIC_EVIDENCE_APPEND_ONLY_TABLES",
     "SCIENTIFIC_EVIDENCE_TABLES",
     "SHA256_HEX_LEN",
     "ActionResolutionOrm",
     "ClaimTruthSpecOrm",
+    "CognitionTraceInvocationOrm",
     "EvidenceManifestOrm",
     "ExperimentAssignmentOrm",
     "ExperimentDefinitionOrm",
@@ -104,6 +108,12 @@ SCIENTIFIC_EVIDENCE_APPEND_ONLY_TABLES: Final[tuple[str, ...]] = (
     "evidence_manifests",
     "metric_documents",
     "run_stream_records",
+)
+
+COGNITION_TRACE_TABLES: Final[tuple[str, ...]] = ("cognition_trace_invocations",)
+
+COGNITION_TRACE_APPEND_ONLY_TABLES: Final[tuple[str, ...]] = (
+    "cognition_trace_invocations",
 )
 
 
@@ -1148,6 +1158,59 @@ class RunStreamRecordOrm(Base):
     content_hash: Mapped[str] = mapped_column(String(SHA256_HEX_LEN), nullable=False)
     payload: Mapped[bytes] = mapped_column(LargeBinary, nullable=False)
     related_tick: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
+    created_ordinal: Mapped[int] = mapped_column(
+        BigInteger, nullable=False, autoincrement=True
+    )
+
+
+class CognitionTraceInvocationOrm(Base):
+    """Append-only cognition execution trace (non-authoritative).
+
+    Outside ``AUTHORITATIVE_TABLES`` and ``EvidenceManifest`` / objective fold.
+    """
+
+    __tablename__ = "cognition_trace_invocations"
+    __table_args__ = (
+        PrimaryKeyConstraint("run_id", "agent_id", "tick", "invocation_id"),
+        ForeignKeyConstraint(
+            ["run_id"],
+            ["simulation_runs.run_id"],
+            name="fk_cognition_trace_invocations_run",
+            ondelete="RESTRICT",
+        ),
+        CheckConstraint("tick >= 0", name="ck_cognition_trace_invocations_nonneg"),
+        CheckConstraint(
+            f"char_length(content_hash) = {SHA256_HEX_LEN}",
+            name="ck_cognition_trace_invocations_hash",
+        ),
+        CheckConstraint(
+            "final_confidence IS NULL OR "
+            "(final_confidence >= 0.0 AND final_confidence <= 1.0)",
+            name="ck_cognition_trace_invocations_confidence",
+        ),
+        UniqueConstraint(
+            "created_ordinal", name="uq_cognition_trace_invocations_ordinal"
+        ),
+        Index("ix_cognition_trace_invocations_run_tick", "run_id", "tick"),
+        Index(
+            "ix_cognition_trace_invocations_run_agent_tick",
+            "run_id",
+            "agent_id",
+            "tick",
+        ),
+    )
+
+    run_id: Mapped[str] = mapped_column(String(_STABLE_ID_LEN), nullable=False)
+    agent_id: Mapped[str] = mapped_column(String(_STABLE_ID_LEN), nullable=False)
+    tick: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    invocation_id: Mapped[str] = mapped_column(String(_STABLE_ID_LEN), nullable=False)
+    schema_version: Mapped[str] = mapped_column(String(64), nullable=False)
+    content_hash: Mapped[str] = mapped_column(String(SHA256_HEX_LEN), nullable=False)
+    payload: Mapped[bytes] = mapped_column(LargeBinary, nullable=False)
+    command_kind: Mapped[str | None] = mapped_column(
+        String(_STABLE_ID_LEN), nullable=True
+    )
+    final_confidence: Mapped[float | None] = mapped_column(Float, nullable=True)
     created_ordinal: Mapped[int] = mapped_column(
         BigInteger, nullable=False, autoincrement=True
     )
