@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import hashlib
 import os
+from pathlib import Path
 
 import pytest
 
@@ -19,6 +20,13 @@ pytestmark = pytest.mark.unit
 
 _PAYLOAD = b'{"schema_version":"runner-config-v2","agents":[]}'
 _FINGERPRINT = hashlib.sha256(_PAYLOAD).hexdigest()
+_GOLDEN_V2_PAYLOAD = (
+    Path(__file__).resolve().parents[1]
+    / "fixtures"
+    / "runner_configs"
+    / "catalog_a_condition_v2.json"
+).read_bytes()
+_API_SRC_ROOT = Path(__file__).resolve().parents[2] / "src" / "api"
 
 
 @pytest.fixture(autouse=True)
@@ -193,19 +201,12 @@ async def test_list_and_status_keyset() -> None:
 
 @pytest.mark.asyncio
 async def test_create_accepts_golden_runner_config_v2_payload() -> None:
-    from pathlib import Path
-
     from simulation.models import RunId as SimRunId
     from simulation.runner import SimulationRunner
     from simulation.runner_models import V2CapabilityFlags
     from simulation.runner_serialization import decode_runner_config
 
-    payload = (
-        Path(__file__).resolve().parents[1]
-        / "fixtures"
-        / "runner_configs"
-        / "catalog_a_condition_v2.json"
-    ).read_bytes()
+    payload = _GOLDEN_V2_PAYLOAD
     fingerprint = hashlib.sha256(payload).hexdigest()
     manager, repo, _ = _manager()
     created = await manager.create(
@@ -227,12 +228,9 @@ async def test_create_accepts_golden_runner_config_v2_payload() -> None:
 
 
 def test_api_keeps_v1_routes_and_ws_protocol() -> None:
-    from pathlib import Path
-
     from api.security import WS_PROTOCOL_VERSION
 
     assert WS_PROTOCOL_VERSION == "palimpsest.v1"
-    api_root = Path(__file__).resolve().parents[2] / "src" / "api"
     hits: list[str] = []
     markers = (
         'prefix="/v2"',
@@ -242,8 +240,8 @@ def test_api_keeps_v1_routes_and_ws_protocol() -> None:
         '@router.post("/v2/',
         '@router.websocket("/v2/',
     )
-    for path in api_root.rglob("*.py"):
+    for path in _API_SRC_ROOT.rglob("*.py"):
         text = path.read_text(encoding="utf-8")
         if any(marker in text for marker in markers):
-            hits.append(str(path.relative_to(api_root)))
+            hits.append(str(path.relative_to(_API_SRC_ROOT)))
     assert hits == []

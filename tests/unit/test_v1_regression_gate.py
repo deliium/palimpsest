@@ -21,7 +21,10 @@ from experiments.catalog import (
 )
 from experiments.coordinator import ExperimentCoordinator
 from experiments.models import ExperimentSeedMatrix
-from experiments.reference_scenario import REFERENCE_SCENARIO_ID, build_reference_scenario
+from experiments.reference_scenario import (
+    REFERENCE_SCENARIO_ID,
+    build_reference_scenario,
+)
 from simulation.models import RunId
 from simulation.runner import SimulationRunner
 from simulation.runner_models import (
