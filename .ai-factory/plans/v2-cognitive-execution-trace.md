@@ -192,7 +192,7 @@ Map onto existing `ComponentKind` stages where possible; introduce **trace-view 
 
 ### Phase 4: Regression and docs
 
-- [ ] Task 11: Tests for volume control, determinism, and V1 regression
+- [x] Task 11: Tests for volume control, determinism, and V1 regression
   - Deliverable:
     - Unit: projector stage order, unavailable ToM, no CoT fields, summary hash stability
     - Unit: codec round-trip; repository idempotency + page queries (in-memory)
@@ -204,7 +204,7 @@ Map onto existing `ComponentKind` stages where possible; introduce **trace-view 
   - Files: `tests/unit/test_cognition_trace*.py`, extend V1/V2 regression suites
   - Depends on: Tasks 7, 9
 
-- [ ] Task 12: Documentation checkpoint (`/aif-docs` scope)
+- [x] Task 12: Documentation checkpoint (`/aif-docs` scope)
   - Deliverable: Update:
     - `docs/cognition-runtime.md` — trace sequence, relation to `ComponentBoundaryRecord`, package split, optional config, no-CoT, ToM unavailable, logging allowlist
     - `docs/architecture.md` — seam table entry; isolation; Alembic `0013`; Downstream V2 checklist still satisfied

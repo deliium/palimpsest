@@ -20,7 +20,7 @@ Objective instrumentation is post-commit observation only. Collectors never flow
 
 Builders share scenario, seed, and stochastic identity across paired arms; only declared treatment dimensions differ. Condition/config fingerprints change when treatments change.
 
-Catalog builders emit current write schema (`runner-config-v3`) with all `V2CapabilityFlags` default-off. Use `experiments.catalog.v1_regression_profile(config)` to assert the V1-equivalent flag profile (raises `v1_regression_flags_enabled` if any flag is on). Capability flags are configuration identifiers only; they do not change experiment-definition schema (`experiment-definition-v1`).
+Catalog builders emit current write schema (`runner-config-v4`) with all `V2CapabilityFlags` default-off and `CognitionTraceSpec` disabled. Use `experiments.catalog.v1_regression_profile(config)` to assert the V1-equivalent profile (raises `v1_regression_flags_enabled` if any flag is on, or `v1_regression_trace_enabled` if tracing is enabled). Capability flags and tracing are configuration identifiers only; they do not change experiment-definition schema (`experiment-definition-v1`).
 
 Network-free regression gate: `tests/unit/test_v1_regression_gate.py` (short ticks, catalog A–E + reference scenario).
 

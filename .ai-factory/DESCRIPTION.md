@@ -15,7 +15,7 @@ Palimpsest is a Python 3.12+ modular monolith for reproducible, discrete, text-b
 - Semantic beliefs with append-only revisions/evidence, asymmetric relationship dimensions (no friend/enemy/leader labels), and atomic owner-scoped subjective commits
 - Async `LLMProvider` with immutable `LLMRequest`/`LLMResult`, strict `StructuredOutput`, versioned prompt resources (including `reconstructive_memory/v1`), and a configurable OpenAI-compatible HTTP adapter (no vendor SDKs)
 - Deterministic seed-derived RNG streams (including explicit stochastic/comparison identity), logical clock, namespaced IDs, and live/restored observation parity
-- Configuration-driven `SimulationRunner` with staged prepare/bind/finalize cognition, versioned experiment result documents, and `runner-config-v3` run-level `V2CapabilityFlags` (all default off; flags-on fail closed until a later plan owns them)
+- Configuration-driven `SimulationRunner` with staged prepare/bind/finalize cognition, versioned experiment result documents, `runner-config-v4` with default-off `CognitionTraceSpec`, and `V2CapabilityFlags` (all default off; flags-on fail closed until a later plan owns them)
 - `PALIMPSEST_` settings (including disabled-by-default `PALIMPSEST_LLM_*`), structured logging (no observation/communication/memory/belief/relationship/LLM payloads), async SQLAlchemy lifecycle, Alembic + pgvector bootstrap (migration head `0013` for optional cognition-trace tables; V2 capability flags remain runner JSON only)
 - FastAPI research API: `/health`, versioned `/v1` simulation control/inspection/replay, resumable WebSocket stream from durable outbox; capability credentials (`PALIMPSEST_API_*`); debug disabled by default; LLM provider lifecycle composition remains deferred
 
@@ -34,7 +34,7 @@ Palimpsest is a Python 3.12+ modular monolith for reproducible, discrete, text-b
 
 ## V2 scaffolding
 
-Additive substrate only (no new social/cognitive behavior): `simulation.compatibility` version matrix; `runner-config-v3` with default-off `V2CapabilityFlags` (flags-on fail closed until owned); Alembic head stays `0012` (flags in runner JSON only); `/v1` + `palimpsest.v1` stable (no `/v2` routes yet); domain-contract evolution rules without wire changes; V1 regression gate for catalog A–E + reference scenario. Later V2 plans must follow the downstream checklist in `docs/architecture.md`. Register M5/V2 milestones via `/aif-roadmap`.
+Additive substrate plus optional cognition execution trace: `simulation.compatibility` version matrix; `runner-config-v4` with default-off `V2CapabilityFlags` and `CognitionTraceSpec`; Alembic head `0013` for non-authoritative cognition-trace tables (flags remain runner JSON only); `/v1` + `palimpsest.v1` stable (no `/v2` routes yet); domain-contract evolution rules without wire changes; V1 regression gate for catalog A–E + reference scenario (flags-off and tracing-off). Later V2 plans must follow the downstream checklist in `docs/architecture.md`. Register M5/V2 milestones via `/aif-roadmap`.
 
 ## Architecture Notes
 

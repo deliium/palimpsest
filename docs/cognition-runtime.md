@@ -23,6 +23,48 @@ Each stage is a narrow async protocol under `agents.cognition`. Components are c
 
 `final_confidence` on a successful result is the **planner-supplied** confidence only. It is not an aggregate statistical estimate.
 
+## Optional cognition execution trace
+
+In-memory `ComponentBoundaryRecord` receipts are not durable. An optional, default-off **cognition execution trace** projects those receipts (plus snapshot context) into a stable scientific stage sequence for debugger / experiment consumers — without influencing `WorldEngine`, admission, or objective replay.
+
+### Trace-view stage sequence
+
+```text
+Observation
+→ retrieved memories
+→ reconstructed memories
+→ situation model
+→ beliefs
+→ emotional state (structured projection; no free-form affect narrative)
+→ goals
+→ imagined futures
+→ theory-of-mind models when available (else explicit unavailable)
+→ selected intention
+→ planned action
+```
+
+Beliefs, goals, emotional state, and ToM-unavailable placeholders are **trace-view projections** (not new `CognitiveLoop` stages). ToM records `unavailable` / `tom_not_implemented` until a later plan owns `advanced_social_inference`.
+
+### Package split
+
+| Package | Owns |
+| --- | --- |
+| `agents.cognition.trace` | Pure stage summaries / refs / projector — no `run_id`, no persistence |
+| `simulation.cognition_trace` | Run-scoped envelopes, `CognitionTraceRepository` Protocol, Null / in-memory, soft-append after bind |
+| `persistence` | Codec bytes only (`SqlAlchemyCognitionTraceRepository`); **must not** import `agents.cognition` |
+
+Configure via top-level frozen `CognitionTraceSpec` on `SimulationRunnerConfig` (`runner-config-v4`). This is **not** a V2 capability flag. When disabled, the runner injects `NullCognitionTraceRepository` (V1 behavioral parity). When enabled, append happens once after successful cognition **bind** (soft-fail: WARN + drop; never alters `ActionSubmission`). HTTP / debugger UI routes are deferred — repository ports are the consumer API.
+
+### Logging allowlist (trace)
+
+| Logger | Safe extras |
+| --- | --- |
+| `agents.cognition.trace` | stage kinds, counts, ordinals, reason codes, invocation/agent/tick ids |
+| `simulation.cognition_trace` | run/agent/tick/invocation ids, hash prefixes, stage_count, sample/truncate reason codes |
+| `persistence.cognition_trace` | append/commit/identical-retry/divergent-conflict metadata (same pattern as scientific evidence) |
+
+Never log observation/memory/belief text, prompts, CoT, raw provider bodies, credentials, or endpoints.
+
 ## Production V1 deliberation policy
 
 `default_cognitive_loop()` wires versioned production policies for imagination, motivation, intention, and planning. Perception/situation/self-state defaults remain literal stand-ins; empty memory retrieval is replaced when a `MemoryService` / `ScopedMemoryRetriever` is injected. Constructor injection still accepts mocks and legacy placeholders for tests.
@@ -165,6 +207,7 @@ Integration coverage is in-memory (no PostgreSQL/Docker/network/LLM). Divergence
 | Stage protocols | Constructor-injected into `CognitiveLoop`; replace one stage at a time |
 | Modes | `AgentCognitionSpec.memory_mode` / `imagination_mode`; run-level mortality |
 | Capability flags | Run-level `V2CapabilityFlags` on `SimulationRunnerConfig` — not stage plugins; default off wires V1 policies; any flag on fails closed until a later plan owns it |
+| Cognition execution trace | Top-level `CognitionTraceSpec` (`runner-config-v4`, default off) — not a capability flag; ports only; no HTTP yet |
 | Subjective finalization | `AgentRuntime` commits episodic/belief/relationship batches only |
 | LLM lifecycle | Remains `api` / `llm.factory` composition — **not** encoded on runner fingerprints |
 
@@ -175,10 +218,11 @@ Full seam map: [Architecture — V2 extension seams](architecture.md#v2-extensio
 ## Deferred
 
 - Production LLM-backed cognition stages (beyond optional reconstructive recall)
-- Durable cognition-artifact persistence
 - Concurrent agent execution
 - General M4 analysis metrics over cognition receipts
 - LLM provider lifecycle composition in API / `compose.yaml` (factory ports exist; deferred until a cognition consumer owns it)
+- HTTP / debugger UI over cognition-trace repository ports
+- Theory-of-mind cognition (trace records `unavailable` until owned)
 
 ## See Also
 
