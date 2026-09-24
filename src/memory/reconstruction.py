@@ -13,6 +13,7 @@ from collections.abc import Mapping, Sequence
 from typing import Final
 
 from memory.contracts import MemoryReconstructor, MemoryService
+from memory.dynamics import reconstruct_v2
 from memory.models import (
     ConceptMention,
     EntityMention,
@@ -28,6 +29,7 @@ from memory.models import (
     MemoryRunId,
     MemorySituationContext,
     MemoryTrace,
+    PendingSemanticizationIntent,
     RecallEvidence,
     RecallSourceEvidence,
     ReconsolidationIntent,
@@ -196,8 +198,7 @@ def plan_reconsolidation(
             raise ValueError("plan_reconsolidation: not_fresh")
 
     expected_generation = 1 + max(
-        source_traces[source_id].lineage.generation
-        for source_id in reconstructed.source_memory_ids
+        item.generation for item in evidence.sources
     )
     if reconstructed.generation != expected_generation:
         raise ValueError("plan_reconsolidation: generation_not_dense")
@@ -276,6 +277,11 @@ class MemoryRecallOrchestrator:
             raise TypeError("MemoryRecallOrchestrator.recall: invalid_request")
 
         scope = service.scope
+        dynamics_version = (
+            None
+            if request.dynamics_policy is None
+            else request.dynamics_policy.version
+        )
         _LOG.debug(
             "memory_recall_start",
             extra={
@@ -284,6 +290,7 @@ class MemoryRecallOrchestrator:
                 "owner_id": scope.owner_id.value,
                 "tick": request.retrieve.current_tick,
                 "policy_version": request.reconstruction_policy.version,
+                "dynamics_policy_version": dynamics_version,
                 "reconstruction_id": request.reconstruction_id.value,
             },
         )
@@ -324,10 +331,84 @@ class MemoryRecallOrchestrator:
                 pending_accesses=retrieve_result.pending_accesses,
                 evidence=evidence,
                 reconsolidation=None,
+                audits=(),
+                pending_semanticization=None,
             )
 
-        reconstructed = await self._reconstructor.reconstruct(evidence)
-        reconstructed = validate_reconstructed_memory(reconstructed, evidence=evidence)
+        audits: tuple = ()
+        if request.dynamics_policy is not None:
+            access_counts = {
+                hit.trace.memory_id.value: hit.trace.access_count
+                for hit in retrieve_result.hits
+            }
+            _LOG.debug(
+                "memory_recall_v2_start",
+                extra={
+                    "operation": "recall",
+                    "run_id": scope.run_id.value,
+                    "owner_id": scope.owner_id.value,
+                    "tick": request.retrieve.current_tick,
+                    "dynamics_policy_version": request.dynamics_policy.version,
+                    "source_count": len(evidence.sources),
+                    "reconstruction_id": request.reconstruction_id.value,
+                },
+            )
+            try:
+                dynamics_result = reconstruct_v2(
+                    evidence,
+                    policy=request.dynamics_policy,
+                    access_counts=access_counts,
+                )
+            except (TypeError, ValueError) as exc:
+                reason = str(exc).rsplit(":", maxsplit=1)[-1].strip()
+                _LOG.error(
+                    "memory_recall_v2_failed",
+                    extra={
+                        "operation": "recall",
+                        "run_id": scope.run_id.value,
+                        "owner_id": scope.owner_id.value,
+                        "reason_code": reason,
+                        "dynamics_policy_version": request.dynamics_policy.version,
+                    },
+                )
+                raise
+            reconstructed = dynamics_result.reconstructed
+            audits = (dynamics_result.audit,)
+            pending_semanticization: PendingSemanticizationIntent | None = None
+            hint = dynamics_result.semanticization
+            if hint is not None and hint.should_revise:
+                pending_semanticization = PendingSemanticizationIntent(
+                    owner_id=evidence.owner_id,
+                    tick=evidence.current_tick,
+                    source_memory_ids=hint.source_memory_ids,
+                    gist_concepts=hint.gist_concepts,
+                )
+            code_counts: dict[str, int] = {}
+            for code in dynamics_result.audit.distortion_codes:
+                code_counts[code.value] = code_counts.get(code.value, 0) + 1
+            _LOG.debug(
+                "memory_recall_v2_complete",
+                extra={
+                    "operation": "recall",
+                    "run_id": scope.run_id.value,
+                    "owner_id": scope.owner_id.value,
+                    "dynamics_policy_version": request.dynamics_policy.version,
+                    "source_count": len(evidence.sources),
+                    "selected_count": len(dynamics_result.audit.selected_ids),
+                    "competitor_count": len(dynamics_result.audit.competitor_ids),
+                    "distortion_code_counts": code_counts,
+                    "pending_reconsolidation": bool(
+                        request.reconstruction_policy.reconsolidate
+                    ),
+                    "semanticization_pending": pending_semanticization is not None,
+                },
+            )
+        else:
+            reconstructed = await self._reconstructor.reconstruct(evidence)
+            reconstructed = validate_reconstructed_memory(
+                reconstructed, evidence=evidence
+            )
+            pending_semanticization = None
 
         reconsolidation: ReconsolidationIntent | None = None
         if request.reconstruction_policy.reconsolidate:
@@ -367,10 +448,12 @@ class MemoryRecallOrchestrator:
                 "owner_id": scope.owner_id.value,
                 "tick": request.retrieve.current_tick,
                 "policy_version": request.reconstruction_policy.version,
+                "dynamics_policy_version": dynamics_version,
                 "reconstruction_id": request.reconstruction_id.value,
                 "source_count": len(evidence.sources),
                 "belief_count": len(evidence.beliefs),
                 "result_count": 1,
+                "audit_count": len(audits),
                 "fallback_used": reconstructed.fallback_used,
                 "used_provider": reconstructed.used_provider,
                 "generation": reconstructed.generation,
@@ -381,6 +464,8 @@ class MemoryRecallOrchestrator:
             pending_accesses=retrieve_result.pending_accesses,
             evidence=evidence,
             reconsolidation=reconsolidation,
+            audits=audits,
+            pending_semanticization=pending_semanticization,
         )
 
 

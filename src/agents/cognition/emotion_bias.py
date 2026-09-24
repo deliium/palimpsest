@@ -3,6 +3,11 @@
 Applies closed numeric adjustments from ``AgentEmotionalState`` only when
 ``enabled`` is true and prior state is non-neutral. Never mutates stored
 ``MemoryTrace`` values; never emits free-form affect narrative.
+
+Ordering vs V2 dynamics: ``MemoryService.recall`` (including dynamics +
+``RecallAuditRecord``) completes first. These helpers only re-rank
+agent-visible hits/reconstructions afterward. Audit ``selected_ids`` remain
+pre-emotion and are never rewritten here.
 """
 
 from __future__ import annotations

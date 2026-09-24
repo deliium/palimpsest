@@ -113,7 +113,7 @@ def experiment_a_memory(
     *,
     seed_matrix: ExperimentSeedMatrix | None = None,
 ) -> ExperimentDefinition:
-    """Exact/reference memory versus reconstructive memory."""
+    """Reference, V1 reconstructive, and opt-in V2 reconstructive memory arms."""
     matrix = seed_matrix or ExperimentSeedMatrix(seeds=(base.seed,))
     return _definition(
         experiment_id="experiment-a-memory",
@@ -130,7 +130,46 @@ def experiment_a_memory(
                 "memory_reconstructive",
                 _with_agent_modes(base, memory_mode=MemoryMode.RECONSTRUCTIVE),
             ),
+            (
+                "a-reconstructive-v2",
+                "memory_reconstructive_v2",
+                _with_agent_modes(base, memory_mode=MemoryMode.RECONSTRUCTIVE_V2),
+            ),
         ),
+    )
+
+
+EXPERIMENT_A_V1_CONDITION_IDS: Final[frozenset[str]] = frozenset(
+    {"a-reference", "a-reconstructive"}
+)
+
+
+def experiment_a_memory_v1_arms(
+    base: SimulationRunnerConfig,
+    *,
+    seed_matrix: ExperimentSeedMatrix | None = None,
+) -> ExperimentDefinition:
+    """Experiment A restricted to V1 regression arms (excludes V2)."""
+    full = experiment_a_memory(base, seed_matrix=seed_matrix)
+    conditions = tuple(
+        item
+        for item in full.conditions
+        if item.condition_id in EXPERIMENT_A_V1_CONDITION_IDS
+    )
+    _LOG.debug(
+        "experiment_a_v1_arms",
+        extra={
+            "experiment_id": full.experiment_id,
+            "condition_count": len(conditions),
+            "condition_ids": [item.condition_id for item in conditions],
+        },
+    )
+    return ExperimentDefinition(
+        experiment_id=full.experiment_id,
+        schema_version=full.schema_version,
+        seed_matrix=full.seed_matrix,
+        conditions=conditions,
+        paired_world_group=full.paired_world_group,
     )
 
 

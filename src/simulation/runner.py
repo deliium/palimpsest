@@ -1794,7 +1794,19 @@ def _memory_retriever_for(
     belief_reader: object | None = None,
     emotion_bias: bool = False,
 ) -> ReferenceMemoryRetriever | ScopedMemoryRetriever:
+    from memory.models import default_memory_dynamics_policy
+
     if mode is MemoryMode.REFERENCE:
+        _LOG.debug(
+            "memory_retriever_constructed",
+            extra={
+                "runner": {
+                    "memory_mode": mode.value,
+                    "dynamics_policy_version": "none",
+                    "emotion_bias": emotion_bias,
+                }
+            },
+        )
         return ReferenceMemoryRetriever(
             memory_service,
             scoring_policy=scoring_policy,
@@ -1802,6 +1814,16 @@ def _memory_retriever_for(
             emotion_bias=emotion_bias,
         )
     if mode is MemoryMode.RECONSTRUCTIVE:
+        _LOG.debug(
+            "memory_retriever_constructed",
+            extra={
+                "runner": {
+                    "memory_mode": mode.value,
+                    "dynamics_policy_version": "none",
+                    "emotion_bias": emotion_bias,
+                }
+            },
+        )
         return ScopedMemoryRetriever(
             memory_service,
             scoring_policy=scoring_policy,
@@ -1809,6 +1831,35 @@ def _memory_retriever_for(
             belief_reader=belief_reader,  # type: ignore[arg-type]
             emotion_bias=emotion_bias,
         )
+    if mode is MemoryMode.RECONSTRUCTIVE_V2:
+        dynamics = default_memory_dynamics_policy()
+        _LOG.debug(
+            "memory_retriever_constructed",
+            extra={
+                "runner": {
+                    "memory_mode": mode.value,
+                    "dynamics_policy_version": dynamics.version,
+                    "emotion_bias": emotion_bias,
+                }
+            },
+        )
+        return ScopedMemoryRetriever(
+            memory_service,
+            scoring_policy=scoring_policy,
+            reconstruction_policy=reconstruction_policy,
+            belief_reader=belief_reader,  # type: ignore[arg-type]
+            emotion_bias=emotion_bias,
+            dynamics_policy=dynamics,
+        )
+    _LOG.error(
+        "memory_retriever_unsupported_mode",
+        extra={
+            "runner": {
+                "memory_mode": getattr(mode, "value", str(mode)),
+                "stage": "memory_mode",
+            }
+        },
+    )
     raise RunnerConstructionError(
         RunnerConstructionErrorCode.INVALID_CONFIG,
         stage="memory_mode",

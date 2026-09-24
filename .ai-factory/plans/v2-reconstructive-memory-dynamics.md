@@ -122,21 +122,21 @@ Provide metrics hooks for recall accuracy, source confusion, memory survival, in
 
 ### Phase 2: Orchestration, Pending Surfaces, Emotion Contract
 
-- [ ] Task 4: Wire V2 path in shared recall orchestrator / `MemoryService`; freeze V1; lock Emotion×V2 ordering.
+- [x] Task 4: Wire V2 path in shared recall orchestrator / `MemoryService`; freeze V1; lock Emotion×V2 ordering.
   - Deliverable: When `request.dynamics_policy is not None`, run retrieve → dynamics competition → V2 reconstruct → attach `audits` on `MemoryRecallResult` → optional reconsolidation intent. When `dynamics_policy is None`, existing deterministic reconstructor only (golden/parity vs current fixtures). Branch inside shared `MemoryRecallOrchestrator` so in-memory and SQL recall share behavior; do **not** require SQL reconstructor factory injection. Cognition adapter (`agents.cognition.memory`) continues to map only agent-safe fields into `RetrievedMemoryContext` (strip `audits` / evidence). **Ordering contract:** service recall (dynamics+audit) completes before any `apply_*_emotion_bias` re-ranking; document that audit `selected_ids` are pre-emotion; flags-off bias remains off. `apply` still commits access receipts + reconsolidation atomically.
   - Expected behavior: V1 fixture recalls unchanged; V2 emits audits; agents never see audit objects; emotion bias cannot rewrite stored audits.
   - Files: `src/memory/reconstruction.py`, `src/memory/service.py`, `src/agents/cognition/memory.py`, `src/agents/cognition/emotion_bias.py` (docs/order assertions only if needed), `tests/unit/test_memory_reconstruction.py`, `tests/unit/test_memory_v2_orchestration.py`, `tests/unit/test_emotional_memory_bias.py` (ordering assertion when both enabled).
   - Logging requirements: DEBUG `memory_recall_v2_start/complete` with policy version, source_count, selected_count, competitor_count, distortion_code_counts, pending_reconsolidation bool, emotion_bias_applied bool (from adapter). WARN on truncation. ERROR on ownership/contract failure. Never log narratives/concepts.
   - Dependencies: Tasks 1–3.
 
-- [ ] Task 5: Add pending semanticization / belief-revision surface through loop → runtime.
+- [x] Task 5: Add pending semanticization / belief-revision surface through loop → runtime.
   - Deliverable: Extend `RetrievedMemoryContext` with optional pending semanticization intent (ownership-checked `BeliefRevisionRequest` or thin wrapper). Thread via `CognitiveLoopResult` (parallel to `pending_reconsolidation`). `AgentRuntime` applies it with existing belief-revision apply path after successful cognition finalize. V2 dynamics trigger only (Task 3 predicate); V1 leaves None. Fail closed on owner mismatch. No second belief store — reuse `SemanticBeliefService` / `belief_formation`.
   - Expected behavior: Repeated similar V2 recalls can enqueue one belief revision; REFERENCE/V1 never do; failed cognition leaves beliefs unchanged.
   - Files: `src/agents/cognition/models.py`, `src/agents/cognition/memory.py`, `src/agents/cognition/loop.py`, `src/simulation/agent_runtime.py`, unit tests for pending apply + ownership.
   - Logging requirements: DEBUG semanticization_pending bool, belief_id present bool, owner/tick — never proposition text.
   - Dependencies: Tasks 2–4.
 
-- [ ] Task 6: Runner presets for three profiles; inject `dynamics_policy` only for V2.
+- [x] Task 6: Runner presets for three profiles; inject `dynamics_policy` only for V2.
   - Deliverable: `_memory_retriever_for`: `REFERENCE` → `ReferenceMemoryRetriever`; `RECONSTRUCTIVE` → V1 `ScopedMemoryRetriever` (no dynamics policy); `RECONSTRUCTIVE_V2` → scoped retriever that sets `MemoryRecallRequest.dynamics_policy` to `memory-dynamics-v1` defaults. Soft-forget remains the only deactivation path — V2 must not hard-delete/purge by age. Keep `emotion_bias` construction orthogonal. Construction diagnostics include `memory_mode` + dynamics_policy_version when V2.
   - Expected behavior: Three modes construct; invalid mode fails closed; V1 requests have `dynamics_policy is None`.
   - Files: `src/simulation/runner.py`, `src/agents/cognition/defaults.py` / presets as needed, construction tests.
@@ -145,7 +145,7 @@ Provide metrics hooks for recall accuracy, source confusion, memory survival, in
 
 ### Phase 3: Experiments and Audit Export
 
-- [ ] Task 7: Extend Experiment A with `a-reconstructive-v2` and isolate V1 regression arms.
+- [x] Task 7: Extend Experiment A with `a-reconstructive-v2` and isolate V1 regression arms.
   - Deliverable: Add catalog arm `a-reconstructive-v2` / `memory_reconstructive_v2` with `MemoryMode.RECONSTRUCTIVE_V2` to `experiment_a_memory` (three arms sharing seed/world/stochastic identity). Introduce an explicit V1-arm helper or gate filter (e.g. `experiment_a_memory_v1_arms` or condition-id allowlist `a-reference` + `a-reconstructive`) used by `test_v1_regression_gate.py` so the gate **does not** execute the V2 arm. Update `test_experiment_definitions.py` for the three-mode set on the full definition; regression tests assert only two arms run.
   - Expected behavior: Full Experiment A has three arms; V1 regression trajectories unchanged and independent of V2 health.
   - Files: `src/experiments/catalog.py`, `src/experiments/__init__.py` if exporting helper, `tests/unit/test_experiment_definitions.py`, `tests/unit/test_v1_regression_gate.py`, related flag-default tests that enumerate A arms.

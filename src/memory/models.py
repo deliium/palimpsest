@@ -74,6 +74,7 @@ __all__ = [
     "MemoryTrace",
     "MentionId",
     "OwnershipError",
+    "PendingSemanticizationIntent",
     "RecallAuditRecord",
     "RecallEvidence",
     "RecallSourceEvidence",
@@ -2104,6 +2105,61 @@ class StrengthDeltaSummary:
 
 
 @dataclass(frozen=True, slots=True)
+class PendingSemanticizationIntent:
+    """V2-only pending belief gist; concepts are for belief formation, not agents.
+
+    Built from dynamics semanticization triggers. Cognition maps this into a
+    ``BeliefRevisionRequest``; agents never read the gist as free-form narrative.
+    """
+
+    owner_id: AgentId
+    tick: int
+    source_memory_ids: tuple[MemoryId, ...]
+    gist_concepts: tuple[str, ...]
+
+    def __post_init__(self) -> None:
+        if type(self.owner_id) is not AgentId:
+            raise TypeError("PendingSemanticizationIntent.owner_id: invalid_type")
+        object.__setattr__(
+            self,
+            "tick",
+            require_exact_nonneg_int("PendingSemanticizationIntent.tick", self.tick),
+        )
+        object.__setattr__(
+            self,
+            "source_memory_ids",
+            _require_ordered_models(
+                "PendingSemanticizationIntent.source_memory_ids",
+                self.source_memory_ids,
+                model_type=MemoryId,
+                max_items=_MAX_AUDIT_IDS,
+            ),
+        )
+        object.__setattr__(
+            self,
+            "gist_concepts",
+            _require_ordered_unique_text(
+                "PendingSemanticizationIntent.gist_concepts",
+                self.gist_concepts,
+                max_length=_MAX_CONCEPT_CHARS,
+                max_items=_MAX_MENTIONS,
+            ),
+        )
+        if not self.gist_concepts:
+            raise ValueError("PendingSemanticizationIntent.gist_concepts: empty")
+        if not self.source_memory_ids:
+            raise ValueError("PendingSemanticizationIntent.source_memory_ids: empty")
+
+    def __repr__(self) -> str:
+        return (
+            f"PendingSemanticizationIntent(owner_id={self.owner_id.value!r}, "
+            f"tick={self.tick}, "
+            f"source_count={len(self.source_memory_ids)}, "
+            f"gist_concept_count={len(self.gist_concepts)})"
+        )
+
+
+@dataclass(frozen=True, slots=True)
 class RecallAuditRecord:
     """Experiment-only recall audit; never agent-visible.
 
@@ -2922,6 +2978,7 @@ class MemoryRecallResult:
     evidence: RecallEvidence
     reconsolidation: ReconsolidationIntent | None = None
     audits: tuple[RecallAuditRecord, ...] = ()
+    pending_semanticization: PendingSemanticizationIntent | None = None
 
     def __post_init__(self) -> None:
         reconstructions = _require_ordered_models(
@@ -2969,11 +3026,21 @@ class MemoryRecallResult:
                 raise ValueError("MemoryRecallResult.audits: owner_mismatch")
             if audit.reconstruction_id != self.evidence.reconstruction_id:
                 raise ValueError("MemoryRecallResult.audits: reconstruction_mismatch")
+        if self.pending_semanticization is not None:
+            if type(self.pending_semanticization) is not PendingSemanticizationIntent:
+                raise TypeError(
+                    "MemoryRecallResult.pending_semanticization: invalid_type"
+                )
+            if self.pending_semanticization.owner_id != self.evidence.owner_id:
+                raise ValueError(
+                    "MemoryRecallResult.pending_semanticization: owner_mismatch"
+                )
 
     def __repr__(self) -> str:
         return (
             f"MemoryRecallResult(reconstruction_count={len(self.reconstructions)}, "
             f"pending_access_count={len(self.pending_accesses)}, "
             f"has_reconsolidation={self.reconsolidation is not None}, "
-            f"audit_count={len(self.audits)})"
+            f"audit_count={len(self.audits)}, "
+            f"has_semanticization={self.pending_semanticization is not None})"
         )

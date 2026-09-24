@@ -435,6 +435,7 @@ class CognitiveLoop:
             internal_state=next_state,
             pending_accesses=proposal.memory.pending_accesses,
             pending_reconsolidation=proposal.memory.reconsolidation,
+            pending_semanticization=proposal.memory.pending_semanticization,
         )
         _LOG.debug(
             "cognitive_loop_complete",
@@ -447,6 +448,9 @@ class CognitiveLoop:
                     "pending_access_count": len(proposal.memory.pending_accesses),
                     "reconstruction_count": len(proposal.memory.reconstructions),
                     "pending_write_count": 1 if proposal.memory.reconsolidation else 0,
+                    "semanticization_pending": (
+                        proposal.memory.pending_semanticization is not None
+                    ),
                     "final_confidence": proposal.final_confidence,
                     "command_type": type(command).__name__,
                     "effective_matches_proposal": command == proposal.proposed_command,

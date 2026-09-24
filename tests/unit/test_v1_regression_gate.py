@@ -12,7 +12,7 @@ import pytest
 from agents.models import AgentId
 from experiments.catalog import (
     base_runner_config_from_scenario,
-    experiment_a_memory,
+    experiment_a_memory_v1_arms,
     experiment_b_imagination,
     experiment_c_mortality,
     experiment_d_drives,
@@ -44,7 +44,7 @@ pytestmark = pytest.mark.unit
 _LOG = logging.getLogger("tests.v1_regression_gate")
 
 _CATALOG_BUILDERS = (
-    ("experiment-a-memory", experiment_a_memory),
+    ("experiment-a-memory", experiment_a_memory_v1_arms),
     ("experiment-b-imagination", experiment_b_imagination),
     ("experiment-c-mortality", experiment_c_mortality),
     ("experiment-d-drives", experiment_d_drives),

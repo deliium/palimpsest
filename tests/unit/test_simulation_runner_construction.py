@@ -202,6 +202,19 @@ async def test_from_config_default_reconstructive_and_imagination() -> None:
         snap = await agent_bundle.bundle.snapshot()
         assert snap.memories == ()
         assert isinstance(runner._provider, DeterministicFakeLLMProvider)
+        assert loop._memory._dynamics_policy is None
+
+
+@pytest.mark.asyncio
+async def test_from_config_selects_reconstructive_v2_dynamics_policy() -> None:
+    config = _config(memory_mode=MemoryMode.RECONSTRUCTIVE_V2)
+    async with await SimulationRunner.from_config(
+        config, run_id=RunId("run-construct-v2")
+    ) as runner:
+        loop = runner.runtimes[0]._loop
+        assert isinstance(loop._memory, ScopedMemoryRetriever)
+        assert loop._memory._dynamics_policy is not None
+        assert loop._memory._dynamics_policy.version == "memory-dynamics-v1"
 
 
 @pytest.mark.asyncio

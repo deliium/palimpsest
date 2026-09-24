@@ -1219,6 +1219,7 @@ class AgentRuntime:
             intents=intents,
             pending_accesses=loop_result.pending_accesses,
             pending_reconsolidation=loop_result.pending_reconsolidation,
+            pending_semanticization=loop_result.pending_semanticization,
         )
         submission = ActionSubmission(
             token=prepared.token,
@@ -1614,6 +1615,7 @@ class AgentRuntime:
             intents=pending.loop_result.memory_update_intents,
             pending_accesses=pending.loop_result.pending_accesses,
             pending_reconsolidation=pending.loop_result.pending_reconsolidation,
+            pending_semanticization=pending.loop_result.pending_semanticization,
         )
 
     def _build_subjective_batch(
@@ -1625,6 +1627,7 @@ class AgentRuntime:
         intents: Sequence[MemoryUpdateIntent],
         pending_accesses: Sequence[MemoryAccessReceipt],
         pending_reconsolidation: object | None,
+        pending_semanticization: object | None = None,
     ) -> SubjectiveMutationBatch | None:
         if self._subjective_state is None:
             return None
@@ -1658,6 +1661,35 @@ class AgentRuntime:
                 )
             writes.append(pending_reconsolidation.derived_trace)
             reconstructions = (pending_reconsolidation.record,)
+        if pending_semanticization is not None:
+            if type(pending_semanticization) is not BeliefRevisionRequest:
+                raise AgentRuntimeError(
+                    AgentRuntimeErrorCode.INVALID_UPDATE,
+                    agent_id=agent_id.value,
+                    invocation_id=invocation_id,
+                    tick=tick,
+                )
+            if pending_semanticization.owner_id != agent_id:
+                raise AgentRuntimeError(
+                    AgentRuntimeErrorCode.OWNERSHIP,
+                    agent_id=agent_id.value,
+                    invocation_id=invocation_id,
+                    tick=tick,
+                )
+            belief_revisions.append(pending_semanticization)
+            _LOG.debug(
+                "runtime_semanticization_queued",
+                extra={
+                    "runtime": {
+                        "agent_id": agent_id.value,
+                        "tick": tick,
+                        "invocation_id": invocation_id,
+                        "semanticization_pending": True,
+                        "belief_id_present": pending_semanticization.belief_id
+                        is not None,
+                    }
+                },
+            )
         return SubjectiveMutationBatch(
             operation_id=subjective_operation_id(
                 owner_id=agent_id, invocation_id=invocation_id
@@ -1680,6 +1712,7 @@ class AgentRuntime:
         intents: Sequence[MemoryUpdateIntent],
         pending_accesses: Sequence[MemoryAccessReceipt],
         pending_reconsolidation: object | None = None,
+        pending_semanticization: object | None = None,
     ) -> None:
         from memory.beliefs import BeliefRevisionRequest
         from memory.models import ReconsolidationIntent, ReconstructionRecord
@@ -1737,6 +1770,36 @@ class AgentRuntime:
             writes.append(derived)
             reconsolidation_count = 1
             reconstructions = (pending_reconsolidation.record,)
+
+        if pending_semanticization is not None:
+            if type(pending_semanticization) is not BeliefRevisionRequest:
+                raise AgentRuntimeError(
+                    AgentRuntimeErrorCode.INVALID_UPDATE,
+                    agent_id=agent_id.value,
+                    invocation_id=invocation_id,
+                    tick=tick,
+                )
+            if pending_semanticization.owner_id != agent_id:
+                raise AgentRuntimeError(
+                    AgentRuntimeErrorCode.OWNERSHIP,
+                    agent_id=agent_id.value,
+                    invocation_id=invocation_id,
+                    tick=tick,
+                )
+            belief_revisions.append(pending_semanticization)
+            _LOG.debug(
+                "runtime_semanticization_apply",
+                extra={
+                    "runtime": {
+                        "agent_id": agent_id.value,
+                        "tick": tick,
+                        "invocation_id": invocation_id,
+                        "semanticization_pending": True,
+                        "belief_id_present": pending_semanticization.belief_id
+                        is not None,
+                    }
+                },
+            )
 
         if self._subjective_state is not None:
             if self._subjective_state.scope.owner_id != agent_id:

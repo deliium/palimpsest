@@ -50,17 +50,38 @@ def _base():
 
 
 def test_experiment_a_pairs_reference_and_reconstructive() -> None:
+    from experiments.catalog import (
+        EXPERIMENT_A_V1_CONDITION_IDS,
+        experiment_a_memory_v1_arms,
+    )
+
     definition = experiment_a_memory(_base())
-    assert len(definition.conditions) == 2
+    assert len(definition.conditions) == 3
     modes = {
         item.runner_config.agents[0].cognition.memory_mode
         for item in definition.conditions
     }
-    assert modes == {MemoryMode.REFERENCE, MemoryMode.RECONSTRUCTIVE}
+    assert modes == {
+        MemoryMode.REFERENCE,
+        MemoryMode.RECONSTRUCTIVE,
+        MemoryMode.RECONSTRUCTIVE_V2,
+    }
+    assert {item.condition_id for item in definition.conditions} == {
+        "a-reference",
+        "a-reconstructive",
+        "a-reconstructive-v2",
+    }
     assert (
         definition.conditions[0].runner_config.stochastic_identity
         == definition.conditions[1].runner_config.stochastic_identity
+        == definition.conditions[2].runner_config.stochastic_identity
     )
+    v1 = experiment_a_memory_v1_arms(_base())
+    assert len(v1.conditions) == 2
+    assert {item.condition_id for item in v1.conditions} == EXPERIMENT_A_V1_CONDITION_IDS
+    assert MemoryMode.RECONSTRUCTIVE_V2 not in {
+        item.runner_config.agents[0].cognition.memory_mode for item in v1.conditions
+    }
 
 
 def test_experiment_b_c_d_and_stable_fingerprint() -> None:

@@ -363,6 +363,7 @@ async def test_deterministic_recall_projects_ranked_sources_without_invention() 
     assert "gate" in reconstructed.narrative
     assert reconstructed.used_provider is False
     assert result.reconsolidation is None
+    assert result.audits == ()
 
 
 @pytest.mark.asyncio

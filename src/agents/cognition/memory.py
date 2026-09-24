@@ -31,6 +31,7 @@ from memory.models import (
     BeliefId,
     ConceptMention,
     EntityMention,
+    MemoryDynamicsPolicy,
     MemoryId,
     MemoryLineage,
     MemoryProvenance,
@@ -71,6 +72,7 @@ class ScopedMemoryRetriever:
 
     __slots__ = (
         "_belief_reader",
+        "_dynamics_policy",
         "_emotion_bias",
         "_limit",
         "_reconstruction_policy",
@@ -87,6 +89,7 @@ class ScopedMemoryRetriever:
         belief_reader: BeliefReader | None = None,
         limit: int = _DEFAULT_LIMIT,
         emotion_bias: bool = False,
+        dynamics_policy: MemoryDynamicsPolicy | None = None,
     ) -> None:
         if type(scoring_policy) is not MemoryScoringPolicy:
             raise TypeError("scoring_policy must be MemoryScoringPolicy")
@@ -106,12 +109,17 @@ class ScopedMemoryRetriever:
             raise ValueError("limit must be positive")
         if type(emotion_bias) is not bool:
             raise TypeError("emotion_bias must be bool")
+        if dynamics_policy is not None and type(dynamics_policy) is not (
+            MemoryDynamicsPolicy
+        ):
+            raise TypeError("dynamics_policy must be MemoryDynamicsPolicy | None")
         self._service = memory_service
         self._scoring_policy = scoring_policy
         self._reconstruction_policy = reconstruction_policy
         self._belief_reader = belief_reader
         self._limit = limit
         self._emotion_bias = emotion_bias
+        self._dynamics_policy = dynamics_policy
 
     async def retrieve(
         self,
@@ -184,7 +192,10 @@ class ScopedMemoryRetriever:
                 tags=tags,
             ),
             derived_memory_id=derived_id,
+            dynamics_policy=self._dynamics_policy,
         )
+        # Service recall (incl. V2 dynamics + audits) completes before any
+        # emotion re-ranking below. Audit selected_ids are pre-emotion.
         result = await self._service.recall(recall_request)
 
         # Scientific ranked evidence: rebuild hits from evidence sources only as
@@ -253,6 +264,13 @@ class ScopedMemoryRetriever:
             prior,
             enabled=self._emotion_bias,
         )
+        # Audits stay on MemoryRecallResult only — never on agent context.
+        emotion_bias_applied = retrieval_bias or reconstruction_bias
+        dynamics_version = (
+            None
+            if self._dynamics_policy is None
+            else self._dynamics_policy.version
+        )
         memory_ids = tuple(hit.trace.memory_id for hit in ranked_hits_tuple)
         generation = reconstructions[0].generation if reconstructions else 0
         _LOG.debug(
@@ -263,8 +281,10 @@ class ScopedMemoryRetriever:
                     "tick": perception.tick,
                     "policy_version": self._scoring_policy.version,
                     "reconstruction_policy_version": policy.version,
+                    "dynamics_policy_version": dynamics_version,
                     "emotion_bias_policy_version": EMOTION_BIAS_POLICY_VERSION,
-                    "emotion_bias_applied": retrieval_bias or reconstruction_bias,
+                    "emotion_bias_applied": emotion_bias_applied,
+                    "audit_count": len(result.audits),
                     "enabled_components": list(
                         self._scoring_policy.weights.enabled_components()
                     ),
@@ -273,6 +293,9 @@ class ScopedMemoryRetriever:
                     "result_count": len(ranked_hits_tuple),
                     "reconstruction_count": len(reconstructions),
                     "pending_write_count": 1 if result.reconsolidation else 0,
+                    "semanticization_pending": (
+                        result.pending_semanticization is not None
+                    ),
                     "generation": generation,
                     "used_provider": (
                         reconstructions[0].used_provider if reconstructions else False
@@ -307,6 +330,10 @@ class ScopedMemoryRetriever:
             reconsolidation=result.reconsolidation,
             reconstruction_policy_version=policy.version,
             semantic_beliefs=semantic_beliefs,
+            pending_semanticization=_belief_revision_from_semanticization(
+                result.pending_semanticization,
+                owner_id=loop_input.agent_id,
+            ),
         )
 
 
@@ -842,4 +869,97 @@ class DirectObservationMemoryUpdateHook:
             },
         )
         return tuple(intents)
+
+
+def _belief_revision_from_semanticization(
+    pending: object | None,
+    *,
+    owner_id: AgentId,
+) -> object | None:
+    """Map V2 pending semanticization into one ownership-checked belief revision."""
+    from memory.belief_formation import (
+        DEFAULT_BELIEF_FORMATION_POLICY,
+        BeliefEvidenceCandidate,
+        belief_id_for_claim,
+        bundle_from_candidates,
+    )
+    from memory.beliefs import (
+        BeliefRevisionRequest,
+        BeliefValueKind,
+        ClaimSubject,
+        ClaimSubjectKind,
+        ClaimValue,
+        EvidenceStance,
+        SemanticClaim,
+    )
+    from memory.models import (
+        MemorySourceKind,
+        PendingSemanticizationIntent,
+    )
+
+    if pending is None:
+        return None
+    if type(pending) is not PendingSemanticizationIntent:
+        raise TypeError("pending_semanticization must be PendingSemanticizationIntent")
+    if pending.owner_id != owner_id:
+        _LOG.error(
+            "semanticization_owner_mismatch",
+            extra={
+                "cognition": {
+                    "owner_id": owner_id.value,
+                    "tick": pending.tick,
+                    "reason_code": "ownership",
+                    "semanticization_pending": True,
+                    "belief_id_present": False,
+                }
+            },
+        )
+        raise ValueError("pending semanticization owner mismatch")
+
+    gist = pending.gist_concepts[0]
+    claim = SemanticClaim(
+        subject=ClaimSubject(kind=ClaimSubjectKind.AGENT, agent_id=owner_id),
+        predicate="experienced_concept",
+        value=ClaimValue(kind=BeliefValueKind.TEXT, text_value=gist),
+    )
+    candidates: list[BeliefEvidenceCandidate] = []
+    for memory_id in pending.source_memory_ids:
+        candidates.append(
+            BeliefEvidenceCandidate(
+                memory_id=memory_id,
+                claim=claim,
+                stance=EvidenceStance.SUPPORTING,
+                contribution=DEFAULT_BELIEF_FORMATION_POLICY.base_contribution,
+                lineage_root_id=memory_id,
+                source_tick=pending.tick,
+                provenance_kind=MemorySourceKind.DIRECT_OBSERVATION,
+            )
+        )
+    evidence = bundle_from_candidates(candidates, target_claim=claim)
+    belief_id = belief_id_for_claim(owner_id=owner_id, claim=claim)
+    revision = BeliefRevisionRequest(
+        owner_id=owner_id,
+        operation_id=(
+            f"sem:{owner_id.value}:t{pending.tick}:{belief_id.value}"
+        ),
+        logical_tick=pending.tick,
+        claim=claim,
+        evidence=evidence,
+        policy=DEFAULT_BELIEF_FORMATION_POLICY.as_ref(),
+        belief_id=belief_id,
+    )
+    _LOG.debug(
+        "semanticization_mapped",
+        extra={
+            "cognition": {
+                "owner_id": owner_id.value,
+                "tick": pending.tick,
+                "semanticization_pending": True,
+                "belief_id_present": True,
+                "source_count": len(pending.source_memory_ids),
+                "gist_concept_count": len(pending.gist_concepts),
+            }
+        },
+    )
+    return revision
 

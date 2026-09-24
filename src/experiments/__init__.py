@@ -6,7 +6,9 @@ this package or receive its collectors, truth specs, or results.
 """
 
 from experiments.catalog import (
+    EXPERIMENT_A_V1_CONDITION_IDS,
     experiment_a_memory,
+    experiment_a_memory_v1_arms,
     experiment_b_imagination,
     experiment_c_mortality,
     experiment_d_drives,
@@ -158,7 +160,9 @@ __all__ = [
     "compare_compatible_bundles",
     "condition_fingerprint",
     "definition_fingerprint",
+    "EXPERIMENT_A_V1_CONDITION_IDS",
     "experiment_a_memory",
+    "experiment_a_memory_v1_arms",
     "experiment_b_imagination",
     "experiment_c_mortality",
     "experiment_d_drives",

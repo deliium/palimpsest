@@ -27,6 +27,7 @@ from agents.models import (
 )
 from memory.beliefs import (
     BeliefActivationState,
+    BeliefRevisionRequest,
     BeliefValueKind,
     ClaimSubjectKind,
     SemanticBelief,
@@ -1150,6 +1151,7 @@ class RetrievedMemoryContext:
     reconsolidation: ReconsolidationIntent | None = None
     reconstruction_policy_version: str | None = None
     semantic_beliefs: tuple[SemanticBelief, ...] = ()
+    pending_semanticization: BeliefRevisionRequest | None = None
 
     def __post_init__(self) -> None:
         if type(self.owner_id) is not AgentId:
@@ -1341,6 +1343,16 @@ class RetrievedMemoryContext:
                 )
             seen_belief_ids.add(belief_item.belief_id.value)
         object.__setattr__(self, "semantic_beliefs", semantic)
+        if self.pending_semanticization is not None:
+            if type(self.pending_semanticization) is not BeliefRevisionRequest:
+                raise TypeError(
+                    "RetrievedMemoryContext.pending_semanticization must be "
+                    "BeliefRevisionRequest"
+                )
+            if self.pending_semanticization.owner_id != self.owner_id:
+                raise ValueError(
+                    "RetrievedMemoryContext pending_semanticization owner mismatch"
+                )
 
     def __repr__(self) -> str:
         return (
@@ -1353,6 +1365,7 @@ class RetrievedMemoryContext:
             f"reference_episode_count={len(self.reference_episodes)}, "
             f"pending_access_count={len(self.pending_accesses)}, "
             f"has_reconsolidation={self.reconsolidation is not None}, "
+            f"has_semanticization={self.pending_semanticization is not None}, "
             f"candidate_count={self.candidate_count}, "
             f"confidence={self.confidence})"
         )
@@ -3472,6 +3485,7 @@ class CognitiveLoopResult:
     internal_state: InternalAgentState
     pending_accesses: tuple[MemoryAccessReceipt, ...] = ()
     pending_reconsolidation: ReconsolidationIntent | None = None
+    pending_semanticization: BeliefRevisionRequest | None = None
 
     def __post_init__(self) -> None:
         object.__setattr__(
@@ -3536,6 +3550,14 @@ class CognitiveLoopResult:
                 )
             if self.pending_reconsolidation.record.owner_id != self.agent_id:
                 raise ValueError("pending_reconsolidation owner must match agent_id")
+        if self.pending_semanticization is not None:
+            if type(self.pending_semanticization) is not BeliefRevisionRequest:
+                raise TypeError(
+                    "CognitiveLoopResult.pending_semanticization must be "
+                    "BeliefRevisionRequest"
+                )
+            if self.pending_semanticization.owner_id != self.agent_id:
+                raise ValueError("pending_semanticization owner must match agent_id")
         object.__setattr__(
             self,
             "final_confidence",
@@ -3558,6 +3580,7 @@ class CognitiveLoopResult:
             f"boundary_count={len(self.boundary_records)}, "
             f"memory_update_count={len(self.memory_update_intents)}, "
             f"pending_access_count={len(self.pending_accesses)}, "
+            f"has_semanticization={self.pending_semanticization is not None}, "
             f"final_confidence={self.final_confidence})"
         )
 

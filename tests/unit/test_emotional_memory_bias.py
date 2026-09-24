@@ -259,3 +259,111 @@ async def test_situation_modeler_applies_bias_only_when_enabled() -> None:
         code.startswith("emotion_bias:")
         for code in model_on.decision_metadata.selection_codes
     )
+
+
+@pytest.mark.asyncio
+async def test_emotion_bias_does_not_rewrite_v2_audit_selected_ids() -> None:
+    """Dynamics audits are pre-emotion; bias only reorders agent-visible views."""
+    from agents.cognition.emotion_bias import apply_reconstruction_emotion_bias
+    from memory.models import (
+        ConceptMention,
+        MemoryMutationBatch,
+        MemoryProvenance,
+        MemoryRecallRequest,
+        MemoryReconstructionPolicy,
+        MemoryRetrieveRequest,
+        MemoryRunId,
+        MemoryScope,
+        MemoryScoreWeights,
+        MemoryScoringPolicy,
+        MemorySourceKind,
+        MemoryTrace,
+        MentionId,
+        ReconstructionId,
+        default_memory_dynamics_policy,
+    )
+    from memory.service import InMemoryMemoryService
+
+    scope = MemoryScope(run_id=MemoryRunId("run-emo"), owner_id=AgentId("agent-1"))
+    service = InMemoryMemoryService(scope)
+    await service.apply(
+        MemoryMutationBatch(
+            writes=(
+                MemoryTrace(
+                    memory_id=MemoryId("m-threat"),
+                    owner_id=AgentId("agent-1"),
+                    world_revision=WorldRevision(0),
+                    concepts=(
+                        ConceptMention(
+                            mention_id=MentionId("c-t"), concept="alarm"
+                        ),
+                    ),
+                    entities=(),
+                    relations=(),
+                    context=MemorySituationContext(tags=("threat_signal",)),
+                    emotional_salience=0.9,
+                    confidence=0.9,
+                    provenance=MemoryProvenance(
+                        kind=MemorySourceKind.DIRECT_OBSERVATION,
+                        source_tick=4,
+                    ),
+                    created_tick=4,
+                    source_tick=4,
+                    last_access_tick=4,
+                    access_count=0,
+                ),
+                MemoryTrace(
+                    memory_id=MemoryId("m-social"),
+                    owner_id=AgentId("agent-1"),
+                    world_revision=WorldRevision(0),
+                    concepts=(
+                        ConceptMention(
+                            mention_id=MentionId("c-s"), concept="chat"
+                        ),
+                    ),
+                    entities=(),
+                    relations=(),
+                    context=MemorySituationContext(tags=("social_signal",)),
+                    emotional_salience=0.2,
+                    confidence=0.9,
+                    provenance=MemoryProvenance(
+                        kind=MemorySourceKind.DIRECT_OBSERVATION,
+                        source_tick=3,
+                    ),
+                    created_tick=3,
+                    source_tick=3,
+                    last_access_tick=3,
+                    access_count=0,
+                ),
+            )
+        )
+    )
+    result = await service.recall(
+        MemoryRecallRequest(
+            retrieve=MemoryRetrieveRequest(
+                current_tick=10,
+                limit=8,
+                scoring_policy=MemoryScoringPolicy(
+                    policy_id="score",
+                    version="1",
+                    weights=MemoryScoreWeights(recency=1.0),
+                ),
+            ),
+            reconstruction_id=ReconstructionId("recon-emo"),
+            reconstruction_policy=MemoryReconstructionPolicy(
+                policy_id="recall", version="1"
+            ),
+            dynamics_policy=default_memory_dynamics_policy(),
+        )
+    )
+    assert len(result.audits) == 1
+    selected_before = result.audits[0].selected_ids
+    _biased, applied = apply_reconstruction_emotion_bias(
+        result.reconstructions,
+        _fear_prior(),
+        enabled=True,
+    )
+    assert result.audits[0].selected_ids == selected_before
+    # Bias may or may not reorder a single reconstruction; audits stay frozen.
+    assert applied in {True, False}
+
