@@ -10,8 +10,8 @@ Improved: 2026-09-24 (`/aif-improve`)
 - Docs: yes
 
 ## Roadmap Linkage
-Milestone: "none"
-Rationale: Skipped — ROADMAP.md has no incomplete milestone (`WARN [aif-plan] no incomplete roadmap milestone; skipping linkage`).
+Milestone: "M5.3 — Short-Term Emotional State"
+Rationale: Linked after `/aif-roadmap` registered V2 M5.x delivered milestones (2026-09-24).
 
 ## Compatibility contract
 

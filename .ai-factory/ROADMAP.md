@@ -36,6 +36,18 @@ Establish the modular-monolith foundation: packaging, bounded packages, typed co
 
 ## Next
 
+### M6 — Remaining V2 Capability Flags (not started)
+
+**Goal:** Own additional default-off `V2CapabilityFlags` beyond short-term emotion (for example `advanced_social_inference` and other reserved flags), each with fail-closed allowlist ownership, V1 regression gates green when flags-off, and no LLM→world shortcuts.
+
+**Out of scope until planned:** free-form affect narration, personality trait systems, HTTP debug UI for emotion, collapsing emotion+drives+goals into one reward scalar.
+
+**Plans:** none yet — create via `/aif-plan` when ready.
+
+## V1 status
+
+V1 completion is the successful verification of plan Tasks 1–22 (Commit 6: `feat(v1): enforce end-to-end completion gates`).
+
 ### M3 — Cognition and Providers (complete, 2026-09-22)
 
 **Delivered:**
@@ -57,6 +69,28 @@ Establish the modular-monolith foundation: packaging, bounded packages, typed co
 
 **Plan:** `.ai-factory/plans/v1-complete-v1-experimental-metrics-inspection-api.md` (closes deferred M4 analysis scope)
 
-## V1 status
+## V2 delivered
 
-V1 completion is the successful verification of plan Tasks 1–22 (Commit 6: `feat(v1): enforce end-to-end completion gates`).
+### M5 — V2 Architectural Scaffolding (complete, 2026-09-22)
+
+Version compatibility matrix, `runner-config-v3+` with default-off reserved capability flags (fail closed until owned), V1 regression gates, and downstream V2 plan contract — without new social/cognitive behavior in the scaffolding plan.
+
+**Plan:** `.ai-factory/plans/v2-architecture-evolution.md`
+
+### M5.1 — Cognitive Execution Trace (complete, 2026-09-23)
+
+Optional, default-off `CognitionTraceSpec` / `runner-config-v4`, non-authoritative durable stage traces (Alembic `0013`), ports and null sink — outside the objective fold; tracing-off trajectories unchanged.
+
+**Plan:** `.ai-factory/plans/v2-cognitive-execution-trace.md`
+
+### M5.2 — Hierarchical Long-Term Goal Management (complete, 2026-09-24)
+
+Owner-scoped hierarchical `GoalBoard` / `goals.v1` GoalManager stage, lifecycle transitions, live goal application, conflict scenarios, and cognition-trace goal projection — not a capability flag.
+
+**Plan:** `.ai-factory/plans/v2-hierarchical-long-term-goal-management.md`
+
+### M5.3 — Short-Term Emotional State (complete, 2026-09-24)
+
+Owned flag `V2CapabilityFlags.short_term_emotional_state` (default off), closed-catalog `AgentEmotionalState` / `emotion.v1` stage, runtime carry, deterministic influence hooks, checkpoint codecs, live trace projection, and V1 regression under flags-off.
+
+**Plan:** `.ai-factory/plans/v2-short-term-emotional-state.md`
