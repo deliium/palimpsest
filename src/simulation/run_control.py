@@ -13,9 +13,15 @@ from dataclasses import dataclass
 from enum import StrEnum
 from typing import Final
 
-from agents.cognition.models import InternalAgentState
+from agents.cognition.models import (
+    AgentEmotionalState,
+    EmotionIntensity,
+    EmotionKind,
+    InternalAgentState,
+    empty_emotional_state,
+)
 from agents.models import AgentId, Goal
-from memory.models import Belief
+from memory.models import Belief, quantize_score
 from simulation.agent_runtime import AgentRuntimeStatus
 from simulation.clock import require_exact_nonneg_int
 from simulation.evidence import OpaqueCanonicalEnvelope, opaque_envelope_from_payload
@@ -31,6 +37,7 @@ from world.identifiers import require_stable_id
 
 __all__ = [
     "ALLOWED_LIFECYCLE_TRANSITIONS",
+    "EMOTIONAL_STATE_CODEC_VERSION",
     "FINALIZATION_COMMAND_CODEC_VERSION",
     "STREAM_RECORD_SCHEMA_VERSION",
     "AgentRuntimeCheckpoint",
@@ -53,6 +60,8 @@ __all__ = [
     "assert_lifecycle_transition",
     "classify_process_restart",
     "classify_resume_mode",
+    "decode_emotional_state",
+    "encode_emotional_state",
     "is_lifecycle_transition_allowed",
     "is_terminal_lifecycle_state",
     "make_stream_envelope",
@@ -60,6 +69,18 @@ __all__ = [
 
 FINALIZATION_COMMAND_CODEC_VERSION: Final[str] = "finalization-command-v1"
 STREAM_RECORD_SCHEMA_VERSION: Final[str] = "stream-record-v1"
+EMOTIONAL_STATE_CODEC_VERSION: Final[str] = "emotional-state-v1"
+_EMOTIONAL_STATE_KEYS: Final[frozenset[str]] = frozenset(
+    {
+        "codec_version",
+        "owner_id",
+        "tick",
+        "last_update_tick",
+        "policy_version",
+        "intensities",
+    }
+)
+_INTENSITY_KEYS: Final[frozenset[str]] = frozenset({"kind", "intensity"})
 
 
 def make_stream_envelope(payload: bytes) -> OpaqueCanonicalEnvelope:
@@ -572,6 +593,7 @@ class AgentRuntimeCheckpoint:
     processed_invocation_count: int
     finalized_hash_count: int
     goals: tuple[Goal, ...]
+    emotional_state: AgentEmotionalState | None = None
 
     def __post_init__(self) -> None:
         if type(self.agent_id) is not AgentId:
@@ -597,6 +619,107 @@ class AgentRuntimeCheckpoint:
             if type(goal) is not Goal:
                 raise TypeError("goals entries must be Goal")
         object.__setattr__(self, "goals", goals)
+        if self.emotional_state is not None:
+            if type(self.emotional_state) is not AgentEmotionalState:
+                raise TypeError("emotional_state must be AgentEmotionalState")
+            if self.emotional_state.owner_id != self.agent_id:
+                raise ValueError("emotional_state owner_id mismatch")
+
+
+def encode_emotional_state(
+    state: AgentEmotionalState | None,
+) -> dict[str, object] | None:
+    """Encode owner-scoped emotional carry; ``None`` when unset/neutral-absent."""
+    if state is None:
+        return None
+    if type(state) is not AgentEmotionalState:
+        raise TypeError("state must be AgentEmotionalState")
+    payload: dict[str, object] = {
+        "codec_version": EMOTIONAL_STATE_CODEC_VERSION,
+        "owner_id": state.owner_id.value,
+        "tick": state.tick,
+        "last_update_tick": state.last_update_tick,
+        "policy_version": state.policy_version,
+        "intensities": [
+            {"kind": entry.kind.value, "intensity": entry.intensity}
+            for entry in state.intensities
+        ],
+    }
+    if set(payload) != _EMOTIONAL_STATE_KEYS:
+        raise ValueError("emotional_state encode key-set mismatch")
+    return payload
+
+
+def decode_emotional_state(
+    data: object | None,
+    *,
+    owner_id: AgentId,
+    path: str = "$.emotional_state",
+) -> AgentEmotionalState | None:
+    """Decode emotional carry; missing/null → ``None`` (legacy empty)."""
+    if data is None:
+        return None
+    if not isinstance(data, Mapping):
+        raise TypeError(f"{path}: invalid_object")
+    raw = dict(data)
+    # Legacy documents without the field are handled by callers passing None.
+    # Partial/unknown versions fail closed.
+    if "codec_version" not in raw:
+        return None
+    if raw.get("codec_version") != EMOTIONAL_STATE_CODEC_VERSION:
+        raise ValueError(f"{path}: unsupported_codec_version")
+    if set(raw) != _EMOTIONAL_STATE_KEYS:
+        raise ValueError(f"{path}: unexpected_keys")
+    owner_raw = raw["owner_id"]
+    if type(owner_raw) is not str:
+        raise TypeError(f"{path}.owner_id: invalid_type")
+    decoded_owner = AgentId(owner_raw)
+    if decoded_owner != owner_id:
+        raise ValueError(f"{path}: ownership")
+    intensities_raw = raw["intensities"]
+    if not isinstance(intensities_raw, list):
+        raise TypeError(f"{path}.intensities: invalid_type")
+    intensities: list[EmotionIntensity] = []
+    for index, item in enumerate(intensities_raw):
+        item_path = f"{path}.intensities[{index}]"
+        if not isinstance(item, Mapping):
+            raise TypeError(f"{item_path}: invalid_object")
+        entry = dict(item)
+        if set(entry) != _INTENSITY_KEYS:
+            raise ValueError(f"{item_path}: unexpected_keys")
+        kind_raw = entry["kind"]
+        if type(kind_raw) is not str:
+            raise TypeError(f"{item_path}.kind: invalid_type")
+        try:
+            kind = EmotionKind(kind_raw)
+        except ValueError as exc:
+            raise ValueError(f"{item_path}.kind: unknown_kind") from exc
+        intensity_raw = entry["intensity"]
+        if isinstance(intensity_raw, bool) or not isinstance(
+            intensity_raw, (int, float)
+        ):
+            raise TypeError(f"{item_path}.intensity: invalid_type")
+        intensities.append(
+            EmotionIntensity(kind=kind, intensity=quantize_score(float(intensity_raw)))
+        )
+    tick = raw["tick"]
+    last_update = raw["last_update_tick"]
+    policy = raw["policy_version"]
+    if type(tick) is not int or isinstance(tick, bool):
+        raise TypeError(f"{path}.tick: invalid_type")
+    if type(last_update) is not int or isinstance(last_update, bool):
+        raise TypeError(f"{path}.last_update_tick: invalid_type")
+    if type(policy) is not str:
+        raise TypeError(f"{path}.policy_version: invalid_type")
+    if not intensities:
+        return empty_emotional_state(decoded_owner, tick=tick)
+    return AgentEmotionalState(
+        owner_id=decoded_owner,
+        tick=tick,
+        intensities=tuple(intensities),
+        last_update_tick=last_update,
+        policy_version=policy,
+    )
 
 
 @dataclass(frozen=True, slots=True)

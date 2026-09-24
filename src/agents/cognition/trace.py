@@ -28,6 +28,7 @@ from agents.cognition.models import (
     ComponentKind,
     ComponentStatus,
     DecisionMetadata,
+    EmotionalStateEvaluation,
     GoalBoard,
     InterpretedPerception,
     MotivationEvaluation,
@@ -39,6 +40,7 @@ from agents.cognition.models import (
     SituationModel,
     SubjectiveSnapshot,
     UncertaintyBand,
+    intensity_band,
     require_confidence,
 )
 from agents.models import GoalHorizon, GoalStatus
@@ -151,6 +153,7 @@ class CognitionTraceRefKind(StrEnum):
     GOAL = "goal"
     FUTURE = "future"
     DRIVE = "drive"
+    EMOTION = "emotion"
     COMMAND = "command"
     INTENTION = "intention"
     MOTIVE = "motive"
@@ -180,6 +183,7 @@ class CognitionTraceCountKey(StrEnum):
     GOAL_HORIZON_CURRENT_INTENTION = "goal_horizon_current_intention"
     GOAL_FOCI_COUNT = "goal_foci_count"
     DRIVE_COUNT = "drive_count"
+    EMOTION_KIND_COUNT = "emotion_kind_count"
     FUTURE_COUNT = "future_count"
     CLAIM_COUNT = "claim_count"
     CANDIDATE_COUNT = "candidate_count"
@@ -201,6 +205,7 @@ _COMPONENT_TO_TRACE: Final[
     ),
     ComponentKind.SITUATION: (CognitionTraceStageKind.SITUATION_MODEL,),
     ComponentKind.GOAL_MANAGEMENT: (CognitionTraceStageKind.GOALS,),
+    ComponentKind.EMOTIONAL_STATE: (CognitionTraceStageKind.EMOTIONAL_STATE,),
     ComponentKind.FUTURES: (CognitionTraceStageKind.IMAGINED_FUTURES,),
     ComponentKind.INTENTION: (CognitionTraceStageKind.SELECTED_INTENTION,),
     ComponentKind.PLANNING: (CognitionTraceStageKind.PLANNED_ACTION,),
@@ -574,6 +579,7 @@ def project_cognition_trace_stages(
         elif stage_kind is CognitionTraceStageKind.EMOTIONAL_STATE:
             stages.append(
                 _project_emotional_state(
+                    emotion_record=by_kind.get(ComponentKind.EMOTIONAL_STATE),
                     motivation_record=by_kind.get(ComponentKind.MOTIVATION),
                     memory_record=by_kind.get(ComponentKind.MEMORY_RETRIEVAL),
                     snap=snap,
@@ -1057,6 +1063,7 @@ def _band_from_unit(value: float) -> UncertaintyBand:
 
 def _project_emotional_state(
     *,
+    emotion_record: ComponentBoundaryRecord | None = None,
     motivation_record: ComponentBoundaryRecord | None,
     memory_record: ComponentBoundaryRecord | None,
     snap: SubjectiveSnapshot | None,
@@ -1069,6 +1076,46 @@ def _project_emotional_state(
     codes: list[str] = []
     band: UncertaintyBand | None = None
     decision = None
+
+    # Prefer live EMOTIONAL_STATE stage intensities + driver codes.
+    if (
+        emotion_record is not None
+        and type(emotion_record.output_artifact) is EmotionalStateEvaluation
+    ):
+        evaluation = emotion_record.output_artifact
+        confidence = evaluation.confidence
+        decision = emotion_record.decision_metadata
+        state = evaluation.state
+        if not state.is_neutral():
+            band = intensity_band(state.max_intensity())
+            for entry in state.intensities:
+                if entry.intensity <= 0.0:
+                    continue
+                refs.append(
+                    CognitionTraceIdRef(
+                        kind=CognitionTraceRefKind.EMOTION,
+                        value=entry.kind.value,
+                    )
+                )
+            counts[CognitionTraceCountKey.EMOTION_KIND_COUNT.value] = len(refs)
+        for driver in evaluation.driver_codes:
+            codes.append(driver.value)
+        if emotion_record.decision_metadata.selection_codes:
+            for code in emotion_record.decision_metadata.selection_codes:
+                if code not in codes:
+                    codes.append(code)
+        return CognitionTraceStageSummary(
+            stage_kind=CognitionTraceStageKind.EMOTIONAL_STATE,
+            status=CognitionTraceStageStatus.COMPLETED,
+            ordinal=ordinal,
+            confidence=confidence,
+            uncertainty_band=band,
+            selection_codes=tuple(codes),
+            id_refs=tuple(refs),
+            counts=counts or None,
+            decision_metadata=decision,
+            llm_meta=llm_meta,
+        )
 
     motivation = None
     if motivation_record is not None and type(motivation_record.output_artifact) is (

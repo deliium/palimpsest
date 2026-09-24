@@ -58,7 +58,7 @@ def test_component_kind_mapping() -> None:
     ) == frozenset()
     assert component_kinds_for_stage(
         CognitionTraceStageKind.EMOTIONAL_STATE
-    ) == frozenset()
+    ) == frozenset({ComponentKind.EMOTIONAL_STATE})
 
 
 def test_stage_summary_rejects_forbidden_attributes() -> None:
