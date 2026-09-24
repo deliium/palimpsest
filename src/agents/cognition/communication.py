@@ -457,7 +457,10 @@ class PendingEvidenceAccumulator:
         for intent in intents:
             if type(intent) is not MemoryUpdateIntent:
                 raise TypeError("PendingEvidenceAccumulator: invalid_intent")
-            if intent.kind is MemoryUpdateKind.WRITE_MEMORY and intent.memory is not None:
+            if (
+                intent.kind is MemoryUpdateKind.WRITE_MEMORY
+                and intent.memory is not None
+            ):
                 self.record(intent.memory)
                 recorded += 1
         return recorded
@@ -770,9 +773,7 @@ class DeterministicSocialMessagePolicy:
                     utterance = origin_utterance(
                         text=_SAFE_TELL_TEXT if not concepts else concepts[0],
                         speaker_id=speaker_id,
-                        communication_id=(
-                            f"plan-retell-{recon.episode_id}"
-                        ),
+                        communication_id=(f"plan-retell-{recon.episode_id}"),
                         sender_confidence=recon.confidence,
                         source_basis=CommunicationSourceBasis.RECONSTRUCTED_MEMORY,
                         concepts=concepts,

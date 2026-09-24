@@ -384,7 +384,9 @@ class FakeSelfStateProjector:
 class FakeGoalManager:
     def __init__(
         self,
-        scripts: Mapping[str, Sequence[ScriptedStageSuccess | ScriptedStageFailure]] | None = None,
+        scripts: (
+            Mapping[str, Sequence[ScriptedStageSuccess | ScriptedStageFailure]] | None
+        ) = None,
     ) -> None:
         from agents.cognition.goal_manager import PassthroughGoalManager
 

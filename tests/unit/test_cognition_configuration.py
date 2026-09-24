@@ -17,7 +17,11 @@ from agents.cognition.configuration import (
 )
 from agents.cognition.defaults import PresentStateImagination, default_cognitive_loop
 from agents.cognition.imagination import ImaginationEngine
-from agents.cognition.models import ReferenceEpisode, RetrievedMemoryContext, episode_facts
+from agents.cognition.models import (
+    ReferenceEpisode,
+    RetrievedMemoryContext,
+    episode_facts,
+)
 from agents.cognition.motivation import MotivationAppraisal
 from agents.models import AgentId, DriveKind
 from memory.models import (
@@ -156,8 +160,8 @@ def test_reference_episode_from_trace_is_lossless() -> None:
 
 def test_retrieved_context_rejects_mixed_episode_channels() -> None:
     from memory.models import (
-        ReconstructionId,
         ReconstructedMemory,
+        ReconstructionId,
     )
 
     owner = AgentId("agent-1")

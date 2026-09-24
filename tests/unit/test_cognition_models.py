@@ -278,10 +278,10 @@ def test_memory_update_intent_owner_and_kind() -> None:
 def test_emotional_state_evaluation_and_component_kind() -> None:
     from agents.cognition.models import (
         AgentEmotionalState,
+        EmotionalStateEvaluation,
         EmotionDriverCode,
         EmotionIntensity,
         EmotionKind,
-        EmotionalStateEvaluation,
         empty_emotional_state,
     )
 

@@ -12,10 +12,10 @@ from agents.cognition.models import (
     ActionDirection,
     AgentEmotionalState,
     DecisionMetadata,
+    EmotionalStateEvaluation,
     EmotionDriverCode,
     EmotionIntensity,
     EmotionKind,
-    EmotionalStateEvaluation,
     SubjectiveRisk,
     SubjectiveRiskKind,
     empty_emotional_state,
@@ -41,7 +41,9 @@ def _evaluation(*, kind: EmotionKind, intensity: float) -> EmotionalStateEvaluat
         driver_codes=(EmotionDriverCode.THREAT,),
         confidence=1.0,
         policy_version="emotion.v1",
-        decision_metadata=DecisionMetadata(selection_codes=("test",), candidate_count=1),
+        decision_metadata=DecisionMetadata(
+            selection_codes=("test",), candidate_count=1
+        ),
     )
 
 
@@ -108,12 +110,10 @@ def test_prefer_emotion_directions_and_social_acts() -> None:
     assert preferred_c == frozenset({ActionDirection.COMMUNICATE})
     assert code_c == "emotion_prefer_communicate"
     assert social_act_preference(attachment) == "talk"
-    assert social_act_preference(_evaluation(kind=EmotionKind.ANXIETY, intensity=0.8)) == (
-        "ask"
-    )
-    assert social_act_preference(_evaluation(kind=EmotionKind.ANGER, intensity=0.8)) == (
-        "tell"
-    )
+    anxiety = _evaluation(kind=EmotionKind.ANXIETY, intensity=0.8)
+    anger = _evaluation(kind=EmotionKind.ANGER, intensity=0.8)
+    assert social_act_preference(anxiety) == "ask"
+    assert social_act_preference(anger) == "tell"
 
 
 def test_passthrough_none_leaves_risks_unchanged() -> None:

@@ -139,24 +139,61 @@ async def test_loop_runs_exact_stage_order_once(
             )
 
     class TrackingFutures(ScriptedFutureImagination):
-        async def imagine(self, loop_input, situation, self_state, memory, goal_board=None, emotional_state=None):  # type: ignore[no-untyped-def]
+        async def imagine(
+            self,
+            loop_input,
+            situation,
+            self_state,
+            memory,
+            goal_board=None,
+            emotional_state=None,
+        ):  # type: ignore[no-untyped-def]
             calls.append("futures")
-            return await super().imagine(loop_input, situation, self_state, memory, goal_board)
+            return await super().imagine(
+                loop_input, situation, self_state, memory, goal_board
+            )
 
     class TrackingMotivation(ScriptedMotivationEvaluator):
-        async def evaluate(self, loop_input, situation, self_state, futures, goal_board=None, emotional_state=None):  # type: ignore[no-untyped-def]
+        async def evaluate(
+            self,
+            loop_input,
+            situation,
+            self_state,
+            futures,
+            goal_board=None,
+            emotional_state=None,
+        ):  # type: ignore[no-untyped-def]
             calls.append("motivation")
-            return await super().evaluate(loop_input, situation, self_state, futures, goal_board)
+            return await super().evaluate(
+                loop_input, situation, self_state, futures, goal_board
+            )
 
     class TrackingIntention(ScriptedIntentionSelector):
-        async def select(self, loop_input, motivation, futures, goal_board=None, emotional_state=None):  # type: ignore[no-untyped-def]
+        async def select(
+            self,
+            loop_input,
+            motivation,
+            futures,
+            goal_board=None,
+            emotional_state=None,
+        ):  # type: ignore[no-untyped-def]
             calls.append("intention")
             return await super().select(loop_input, motivation, futures, goal_board)
 
     class TrackingPlanner(ScriptedPlanner):
-        async def plan(self, loop_input, intention, futures, memory=None, goal_board=None, emotional_state=None):  # type: ignore[no-untyped-def]
+        async def plan(
+            self,
+            loop_input,
+            intention,
+            futures,
+            memory=None,
+            goal_board=None,
+            emotional_state=None,
+        ):  # type: ignore[no-untyped-def]
             calls.append("planning")
-            return await super().plan(loop_input, intention, futures, memory, goal_board)
+            return await super().plan(
+                loop_input, intention, futures, memory, goal_board
+            )
 
     class TrackingUpdates(ScriptedMemoryUpdateHook):
         async def propose_updates(  # type: ignore[no-untyped-def]
@@ -223,7 +260,15 @@ async def test_loop_runs_exact_stage_order_once(
 @pytest.mark.asyncio
 async def test_component_replacement_changes_command() -> None:
     class MovePlanner(ScriptedPlanner):
-        async def plan(self, loop_input, intention, futures, memory=None, goal_board=None, emotional_state=None):  # type: ignore[no-untyped-def]
+        async def plan(
+            self,
+            loop_input,
+            intention,
+            futures,
+            memory=None,
+            goal_board=None,
+            emotional_state=None,
+        ):  # type: ignore[no-untyped-def]
             return ActionPlan(
                 owner_id=loop_input.agent_id,
                 command=Move(destination_id=EntityId("loc-2")),
@@ -264,7 +309,15 @@ async def test_wrong_output_type_short_circuits() -> None:
 @pytest.mark.asyncio
 async def test_component_exception_short_circuits() -> None:
     class BoomMotivation(ScriptedMotivationEvaluator):
-        async def evaluate(self, loop_input, situation, self_state, futures, goal_board=None, emotional_state=None):  # type: ignore[no-untyped-def]
+        async def evaluate(
+            self,
+            loop_input,
+            situation,
+            self_state,
+            futures,
+            goal_board=None,
+            emotional_state=None,
+        ):  # type: ignore[no-untyped-def]
             raise RuntimeError("secret motive payload")
 
     with pytest.raises(CognitiveLoopError) as exc_info:
@@ -280,7 +333,14 @@ async def test_component_exception_short_circuits() -> None:
 @pytest.mark.asyncio
 async def test_cancellation_records_cancelled_boundary() -> None:
     class CancelIntention(ScriptedIntentionSelector):
-        async def select(self, loop_input, motivation, futures, goal_board=None, emotional_state=None):  # type: ignore[no-untyped-def]
+        async def select(
+            self,
+            loop_input,
+            motivation,
+            futures,
+            goal_board=None,
+            emotional_state=None,
+        ):  # type: ignore[no-untyped-def]
             raise asyncio.CancelledError
 
     with pytest.raises(CognitiveLoopError) as exc_info:
@@ -350,7 +410,15 @@ async def test_input_propagation_uses_prior_outputs() -> None:
             return await super().model(loop_input, perception, memory)
 
     class CaptureMotivation(ScriptedMotivationEvaluator):
-        async def evaluate(self, loop_input, situation, self_state, futures, goal_board=None, emotional_state=None):  # type: ignore[no-untyped-def]
+        async def evaluate(
+            self,
+            loop_input,
+            situation,
+            self_state,
+            futures,
+            goal_board=None,
+            emotional_state=None,
+        ):  # type: ignore[no-untyped-def]
             seen["situation"] = situation
             seen["futures"] = futures
             return MotivationEvaluation(
@@ -375,7 +443,9 @@ async def test_prepare_excludes_memory_update_and_complete_binds_effective() -> 
         def __init__(self) -> None:
             self.commands: list[str] = []
 
-        async def propose_updates(self, loop_input, plan, perception, memory, intention):
+        async def propose_updates(
+            self, loop_input, plan, perception, memory, intention
+        ):
             self.commands.append(type(plan.command).__name__)
             return ()
 

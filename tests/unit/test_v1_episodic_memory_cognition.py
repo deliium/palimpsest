@@ -2,22 +2,21 @@
 
 from __future__ import annotations
 
-from agents.cognition.emotion import PassthroughEmotionalStateAppraiser
-
 import pytest
 
 from agents.cognition.defaults import (
-        PassthroughGoalManager,
     DirectSelfStateProjector,
     DirectSituationModeler,
     EmptyMemoryRetriever,
     EmptyMemoryUpdateHook,
     LiteralPerceptionInterpreter,
+    PassthroughGoalManager,
     PlaceholderFutureImagination,
     StableIntentionSelector,
     StableMotivationEvaluator,
     WaitFallbackPlanner,
 )
+from agents.cognition.emotion import PassthroughEmotionalStateAppraiser
 from agents.cognition.loop import CognitiveLoop
 from agents.cognition.memory import ScopedMemoryRetriever
 from agents.cognition.models import (

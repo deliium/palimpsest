@@ -7,25 +7,24 @@ constructor-inject placeholder stages and fixed planners.
 
 from __future__ import annotations
 
-from agents.cognition.emotion import PassthroughEmotionalStateAppraiser
-
 import logging
 
 import pytest
 from tests.simulation_helpers import make_location, weather_for_locations
 
 from agents.cognition.defaults import (
-        PassthroughGoalManager,
     DirectSelfStateProjector,
     DirectSituationModeler,
     EmptyMemoryRetriever,
     EmptyMemoryUpdateHook,
     LiteralPerceptionInterpreter,
+    PassthroughGoalManager,
     PlaceholderFutureImagination,
     StableIntentionSelector,
     StableMotivationEvaluator,
     default_cognitive_loop,
 )
+from agents.cognition.emotion import PassthroughEmotionalStateAppraiser
 from agents.cognition.loop import CognitiveLoop
 from agents.cognition.models import ActionPlan, CognitiveLoopInput
 from agents.models import Agent, AgentId
@@ -226,7 +225,15 @@ async def test_cross_agent_observation_rejected() -> None:
 @pytest.mark.asyncio
 async def test_cognition_failure_yields_no_submission() -> None:
     class BoomPlanner:
-        async def plan(self, loop_input, intention, futures, memory=None, goal_board=None, emotional_state=None):  # type: ignore[no-untyped-def]
+        async def plan(
+            self,
+            loop_input,
+            intention,
+            futures,
+            memory=None,
+            goal_board=None,
+            emotional_state=None,
+        ):  # type: ignore[no-untyped-def]
             raise RuntimeError("secret planner boom")
 
     bootstrap = _bootstrap(("agent-1", "body-1"))

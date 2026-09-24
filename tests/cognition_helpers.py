@@ -6,22 +6,21 @@ domain objects remains metadata-safe by production model contracts.
 
 from __future__ import annotations
 
-from agents.cognition.emotion import PassthroughEmotionalStateAppraiser
-
 from collections.abc import Sequence
 
 from agents.cognition.contracts import MemoryRetriever
 from agents.cognition.defaults import (
-    PassthroughGoalManager,
     DirectSelfStateProjector,
     DirectSituationModeler,
     EmptyMemoryUpdateHook,
     LiteralPerceptionInterpreter,
+    PassthroughGoalManager,
 )
 from agents.cognition.deliberation import (
     CommandPlanner,
     MultiCriteriaIntentionSelector,
 )
+from agents.cognition.emotion import PassthroughEmotionalStateAppraiser
 from agents.cognition.imagination import ImaginationEngine
 from agents.cognition.loop import CognitiveLoop
 from agents.cognition.models import (
@@ -146,18 +145,14 @@ class FixedMemoryRetriever:
         _ = perception
         owner = loop_input.agent_id
         beliefs = tuple(b for b in self._beliefs if b.owner_id == owner)
-        reconstructions = tuple(
-            r for r in self._reconstructions if r.owner_id == owner
-        )
+        reconstructions = tuple(r for r in self._reconstructions if r.owner_id == owner)
         # Fall back to snapshot beliefs when none were injected.
         if not beliefs and loop_input.snapshot is not None:
             beliefs = loop_input.snapshot.semantic_beliefs
         return RetrievedMemoryContext(
             owner_id=owner,
             memory_ids=tuple(
-                mid
-                for recon in reconstructions
-                for mid in recon.source_memory_ids
+                mid for recon in reconstructions for mid in recon.source_memory_ids
             ),
             belief_ids=tuple(item.belief_id for item in beliefs),
             confidence=1.0,
@@ -554,9 +549,7 @@ async def run_deliberation(
     memory: RetrievedMemoryContext | None = None,
     situation: SituationModel | None = None,
     self_model: SelfModel | None = None,
-) -> tuple[
-    PossibleFutures, MotivationEvaluation, SelectedIntention, ActionPlan
-]:
+) -> tuple[PossibleFutures, MotivationEvaluation, SelectedIntention, ActionPlan]:
     """Run imagination → motivation → intention → planning with production policies."""
     mem = memory
     if mem is None:
@@ -573,9 +566,7 @@ async def run_deliberation(
             claims.append(SituationClaimCode.THREAT_SIGNAL)
         if obs.communications:
             claims.append(SituationClaimCode.SOCIAL_SIGNAL)
-        sit = build_situation(
-            *claims, owner=loop_input.agent_id.value, tick=obs.tick
-        )
+        sit = build_situation(*claims, owner=loop_input.agent_id.value, tick=obs.tick)
     else:
         sit = situation
     self_state = self_model or build_self_model(owner=loop_input.agent_id.value)

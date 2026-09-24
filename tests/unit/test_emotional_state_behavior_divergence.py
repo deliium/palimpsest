@@ -6,8 +6,11 @@ import logging
 
 import pytest
 
-from agents.cognition.configuration import CognitionLoopConfig, build_cognitive_loop
-from agents.cognition.configuration import CognitionEmotionalStateMode
+from agents.cognition.configuration import (
+    CognitionEmotionalStateMode,
+    CognitionLoopConfig,
+    build_cognitive_loop,
+)
 from agents.cognition.emotion_bias import apply_retrieval_emotion_bias
 from agents.cognition.models import (
     AgentEmotionalState,
@@ -64,7 +67,13 @@ def _observation(*, tick: int = 0) -> Observation:
     )
 
 
-def _hit(memory_id: str, *, salience: float, tags: tuple[str, ...], score: float) -> MemoryRankedHit:
+def _hit(
+    memory_id: str,
+    *,
+    salience: float,
+    tags: tuple[str, ...],
+    score: float,
+) -> MemoryRankedHit:
     trace = MemoryTrace(
         memory_id=MemoryId(memory_id),
         owner_id=_OWNER,
@@ -136,16 +145,12 @@ def test_identical_hits_diverge_under_fear_prior() -> None:
     fear = _prior(EmotionKind.FEAR, 0.8)
     attachment = _prior(EmotionKind.ATTACHMENT, 0.8)
 
-    fear_ranked, fear_applied = apply_retrieval_emotion_bias(
-        hits, fear, enabled=True
-    )
+    fear_ranked, fear_applied = apply_retrieval_emotion_bias(hits, fear, enabled=True)
     attach_ranked, attach_applied = apply_retrieval_emotion_bias(
         hits, attachment, enabled=True
     )
     off_a, off_applied_a = apply_retrieval_emotion_bias(hits, fear, enabled=False)
-    off_b, off_applied_b = apply_retrieval_emotion_bias(
-        hits, attachment, enabled=False
-    )
+    off_b, off_applied_b = apply_retrieval_emotion_bias(hits, attachment, enabled=False)
 
     assert fear_applied and attach_applied
     assert fear_ranked[0].trace.memory_id.value == "m-threat"

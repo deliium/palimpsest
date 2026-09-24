@@ -2,23 +2,22 @@
 
 from __future__ import annotations
 
-from agents.cognition.emotion import PassthroughEmotionalStateAppraiser
-
 import pytest
 
 from agents.cognition.defaults import (
-    PassthroughGoalManager,
     DirectSelfStateProjector,
     DirectSituationModeler,
     EmptyMemoryRetriever,
     EmptyMemoryUpdateHook,
     LiteralPerceptionInterpreter,
+    PassthroughGoalManager,
     PlaceholderFutureImagination,
     StableIntentionSelector,
     StableMotivationEvaluator,
     WaitFallbackPlanner,
     default_cognitive_loop,
 )
+from agents.cognition.emotion import PassthroughEmotionalStateAppraiser
 from agents.cognition.loop import CognitiveLoop, CognitiveLoopError
 from agents.cognition.models import (
     ActionPlan,
@@ -174,7 +173,15 @@ async def test_default_loop_critical_thirst_drinks_when_water_visible() -> None:
 @pytest.mark.asyncio
 async def test_defaults_replaceable_planner() -> None:
     class AlwaysWait(WaitFallbackPlanner):
-        async def plan(self, loop_input, intention, futures, memory=None, goal_board=None, emotional_state=None):  # type: ignore[no-untyped-def]
+        async def plan(
+            self,
+            loop_input,
+            intention,
+            futures,
+            memory=None,
+            goal_board=None,
+            emotional_state=None,
+        ):  # type: ignore[no-untyped-def]
             plan = await super().plan(loop_input, intention, futures)
             assert type(plan.command) is Wait
             return plan
