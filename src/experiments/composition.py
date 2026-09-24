@@ -9,7 +9,12 @@ from __future__ import annotations
 import logging
 from typing import Final
 
-from analysis.models import SubjectiveDerivationEdge
+from analysis.models import (
+    MEMORY_DYNAMICS_METRIC_VERSION,
+    MemoryDynamicsAuditRow,
+    MemoryDynamicsReport,
+    SubjectiveDerivationEdge,
+)
 from analysis.sources import (
     InMemoryMemoryEvidenceSource,
     InMemoryObjectiveEventSource,
@@ -30,6 +35,7 @@ __all__ = [
     "EvidenceCompositionError",
     "EvidenceCompositionService",
     "constrain_snapshot_to_manifest",
+    "map_recall_audits_to_dynamics_report",
     "map_snapshot_to_analysis_sources",
 ]
 
@@ -275,3 +281,61 @@ def map_snapshot_to_analysis_sources(
         },
     )
     return objective, memory
+
+
+def map_recall_audits_to_dynamics_report(
+    *,
+    experiment_id: str,
+    run_id: str,
+    condition_id: str,
+    memory_mode: str,
+    audits: tuple[object, ...],
+) -> MemoryDynamicsReport:
+    """Map in-run ``RecallAuditRecord`` values into a neutral analysis report.
+
+    Agents never see these audits. Empty audits yield an empty report (V1 /
+    REFERENCE arms). Distortion codes and IDs only — never narratives.
+    """
+    from memory.models import RecallAuditRecord
+
+    rows: list[MemoryDynamicsAuditRow] = []
+    for item in audits:
+        if type(item) is not RecallAuditRecord:
+            raise TypeError("map_recall_audits_to_dynamics_report: invalid_audit")
+        rows.append(
+            MemoryDynamicsAuditRow(
+                reconstruction_id=item.reconstruction_id.value,
+                owner_id=item.owner_id.value,
+                tick=item.tick,
+                source_count=len(item.source_memory_ids),
+                competitor_count=len(item.competitor_ids),
+                selected_count=len(item.selected_ids),
+                distortion_codes=tuple(code.value for code in item.distortion_codes),
+                confidence_before=item.confidence_before,
+                confidence_after=item.confidence_after,
+                strength_delta_count=len(item.strength_deltas),
+                source_memory_ids=tuple(mid.value for mid in item.source_memory_ids),
+                competitor_ids=tuple(mid.value for mid in item.competitor_ids),
+                selected_ids=tuple(mid.value for mid in item.selected_ids),
+            )
+        )
+    report = MemoryDynamicsReport(
+        experiment_id=experiment_id,
+        run_id=run_id,
+        condition_id=condition_id,
+        metric_version=MEMORY_DYNAMICS_METRIC_VERSION,
+        audits=tuple(rows),
+        memory_mode=memory_mode,
+    )
+    _LOG.debug(
+        "memory_dynamics_audit_composed",
+        extra={
+            "operation": "map_recall_audits_to_dynamics_report",
+            "experiment_id": experiment_id,
+            "run_id": run_id,
+            "condition_id": condition_id,
+            "audit_export_count": len(rows),
+            "memory_mode": memory_mode,
+        },
+    )
+    return report

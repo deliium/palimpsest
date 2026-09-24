@@ -50,7 +50,7 @@ __all__ = [
 ]
 
 METRIC_CATALOG_VERSION: Final[str] = "metric-catalog-v1"
-METRIC_FAMILY_COUNT: Final[int] = 15
+METRIC_FAMILY_COUNT: Final[int] = 16
 
 # Align with existing memory-drift / transmission document versions.
 _ALGO_V1: Final[str] = "1"
@@ -75,7 +75,7 @@ class MetricSpecificationError(ValueError):
 
 
 class MetricFamilyId(StrEnum):
-    """Closed catalog of fifteen V1 metric families (Acceptance Criteria)."""
+    """Closed catalog of sixteen metric families (V1 + memory_dynamics)."""
 
     RESOURCE_INEQUALITY = "resource_inequality"
     COOPERATION = "cooperation"
@@ -92,6 +92,7 @@ class MetricFamilyId(StrEnum):
     GROUP_COMMUNITY_STRUCTURE = "group_community_structure"
     KNOWLEDGE_DIFFUSION = "knowledge_diffusion"
     RUMOR_DISTORTION = "rumor_distortion"
+    MEMORY_DYNAMICS = "memory_dynamics"
 
 
 class DenominatorKind(StrEnum):
@@ -857,6 +858,54 @@ def _spec_memory_drift() -> MetricSpecification:
     )
 
 
+def _spec_memory_dynamics() -> MetricSpecification:
+    return _base(
+        family_id=MetricFamilyId.MEMORY_DYNAMICS,
+        evidence_inputs=frozenset({EvidenceStage.RECONSTRUCTION}),
+        population="v2_recall_audits_per_run",
+        denominator="recall audits with reconstruction_id",
+        denominator_kind=DenominatorKind.OCCURRENCE,
+        cohort_window="run window covering harvested V2 recalls",
+        deceased_policy="owner death stops new audits; existing audits remain",
+        zero_holding_policy="empty audit set -> availability=absent",
+        opportunity_vs_occurrence=(
+            "rates over harvested RecallAuditRecord exports only; "
+            "REFERENCE/V1 arms produce no audits"
+        ),
+        self_edge_policy="not_applicable",
+        censoring_policy="missing audits -> absent; never invent competitor sets",
+        formulas={
+            "recall_accuracy": (
+                "mean Jaccard(|source_memory_ids ∩ selected_ids| / "
+                "|source_memory_ids ∪ selected_ids|) over audits"
+            ),
+            "source_confusion": (
+                "fraction of audits with distortion_code source_confusion"
+            ),
+            "memory_survival": (
+                "mean selected_count / (source_count + competitor_count)"
+            ),
+            "interference": "fraction of audits with distortion_code interference",
+            "confidence_calibration": (
+                "mean clamp(confidence_after / confidence_before, 0, 1); "
+                "before<=0 -> 1 if after<=0 else 0"
+            ),
+        },
+        value_keys=(
+            "recall_accuracy",
+            "source_confusion",
+            "memory_survival",
+            "interference",
+            "confidence_calibration",
+        ),
+        empty_case="no audits -> availability=absent",
+        unknown_case=(
+            "incomplete audit export -> availability=unknown; "
+            "MetricAvailability.unknown"
+        ),
+    )
+
+
 def _spec_belief_accuracy() -> MetricSpecification:
     return _base(
         family_id=MetricFamilyId.BELIEF_ACCURACY,
@@ -1249,6 +1298,7 @@ _BUILDERS: Final[tuple[Callable[[], MetricSpecification], ...]] = (
     _spec_repeated_conventions,
     _spec_behavioral_specialization,
     _spec_memory_drift,
+    _spec_memory_dynamics,
     _spec_belief_accuracy,
     _spec_false_belief_persistence,
     _spec_relationship_stability,
@@ -1260,7 +1310,7 @@ _BUILDERS: Final[tuple[Callable[[], MetricSpecification], ...]] = (
 
 
 def all_metric_specifications() -> tuple[MetricSpecification, ...]:
-    """Return the closed ordered catalog of fifteen family specifications."""
+    """Return the closed ordered catalog of sixteen family specifications."""
     return tuple(builder() for builder in _BUILDERS)
 
 

@@ -68,25 +68,34 @@ def collect_trajectory_stats(arm: Any) -> CollectorMetricDocument:
     )
 
 
-def _run_level_bundle(arm: Any):
+def _run_level_bundle(arm: Any, *, memory_dynamics_report: object | None = None):
     """Assemble run-level catalog metrics without requiring experiment membership."""
+    from analysis.models import MemoryDynamicsReport
+
     ticks = int(arm.runner_result.ticks_committed)
     agent_ids = tuple(
         agent.agent_id.value for agent in arm.assignment.runner_config.agents
     )
+    report = None
+    if memory_dynamics_report is not None:
+        if type(memory_dynamics_report) is not MemoryDynamicsReport:
+            raise TypeError("memory_dynamics_report must be MemoryDynamicsReport")
+        report = memory_dynamics_report
     inputs = MetricComputationInputs(
         run_id=arm.assignment.run_id.value,
         input_revision=arm.config_fingerprint[:32] or "rev-run",
         window_end=max(ticks - 1, 0),
         agent_ids=agent_ids,
         eligible_agent_ids=agent_ids,
+        memory_dynamics_report=report,
     )
     return assemble_metric_documents(inputs)
 
 
 def collect_catalog_metrics(arm: Any) -> CollectorMetricDocument:
     """Attach catalog metric fingerprints for the completed arm."""
-    bundle = _run_level_bundle(arm)
+    report = _memory_dynamics_report_for(arm)
+    bundle = _run_level_bundle(arm, memory_dynamics_report=report)
     present = sum(
         1
         for doc in bundle.documents
@@ -106,10 +115,28 @@ def collect_catalog_metrics(arm: Any) -> CollectorMetricDocument:
     )
 
 
+def _memory_dynamics_report_for(arm: Any):
+    """Compose MemoryDynamicsReport from runner-harvested audits when present."""
+    from experiments.composition import map_recall_audits_to_dynamics_report
+
+    audits = getattr(arm.runner_result, "memory_dynamics_audits", ())
+    if not audits:
+        return None
+    mode = arm.assignment.runner_config.agents[0].cognition.memory_mode.value
+    return map_recall_audits_to_dynamics_report(
+        experiment_id=arm.assignment.experiment_id,
+        run_id=arm.assignment.run_id.value,
+        condition_id=arm.assignment.condition_id,
+        memory_mode=mode,
+        audits=tuple(audits),
+    )
+
+
 def collect_memory_drift(arm: Any) -> CollectorMetricDocument:
     """Experiment A: memory-mode treatment plus catalog memory_drift availability."""
     mode = arm.assignment.runner_config.agents[0].cognition.memory_mode.value
-    bundle = _run_level_bundle(arm)
+    report = _memory_dynamics_report_for(arm)
+    bundle = _run_level_bundle(arm, memory_dynamics_report=report)
     drift_docs = [
         doc for doc in bundle.documents if doc.metric_family == "memory_drift"
     ]
@@ -128,6 +155,34 @@ def collect_memory_drift(arm: Any) -> CollectorMetricDocument:
             ("ticks_committed", arm.runner_result.ticks_committed),
             ("config_fingerprint_prefix", arm.config_fingerprint[:12]),
             ("memory_drift_availability", availability),
+        ),
+    )
+
+
+def collect_memory_dynamics(arm: Any) -> CollectorMetricDocument:
+    """Experiment A: V2 memory-dynamics audit export + catalog availability."""
+    mode = arm.assignment.runner_config.agents[0].cognition.memory_mode.value
+    report = _memory_dynamics_report_for(arm)
+    audit_count = 0 if report is None else len(report.audits)
+    bundle = _run_level_bundle(arm, memory_dynamics_report=report)
+    dynamics_docs = [
+        doc for doc in bundle.documents if doc.metric_family == "memory_dynamics"
+    ]
+    availability = (
+        dynamics_docs[0].availability.value
+        if dynamics_docs
+        else MetricAvailability.ABSENT.value
+    )
+    return CollectorMetricDocument(
+        schema_version=COLLECTOR_SCHEMA_VERSION,
+        family="memory_dynamics",
+        run_id=arm.assignment.run_id.value,
+        condition_id=arm.assignment.condition_id,
+        fields=(
+            ("memory_mode", mode),
+            ("audit_export_count", audit_count),
+            ("memory_dynamics_availability", availability),
+            ("config_fingerprint_prefix", arm.config_fingerprint[:12]),
         ),
     )
 
@@ -205,7 +260,13 @@ def collect_for_experiment(arm: Any) -> tuple[CollectorMetricDocument, ...]:
     trajectory = collect_trajectory_stats(arm)
     catalog = collect_catalog_metrics(arm)
     if experiment_id.startswith("experiment-a"):
-        return (summary, trajectory, catalog, collect_memory_drift(arm))
+        return (
+            summary,
+            trajectory,
+            catalog,
+            collect_memory_drift(arm),
+            collect_memory_dynamics(arm),
+        )
     if experiment_id.startswith("experiment-b"):
         return (summary, trajectory, catalog, collect_imagination_outcomes(arm))
     if experiment_id.startswith("experiment-c"):

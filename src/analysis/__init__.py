@@ -46,6 +46,7 @@ from analysis.memory_drift import (
     project_world_event,
     resolve_objective_link,
 )
+from analysis.memory_dynamics_metrics import compute_memory_dynamics
 from analysis.metric_service import (
     MetricBundle,
     MetricComputationInputs,
@@ -55,6 +56,7 @@ from analysis.metric_service import (
 )
 from analysis.models import (
     ACTION_RESOLUTION_RATES_FAMILY,
+    MEMORY_DYNAMICS_METRIC_VERSION,
     METRIC_DOCUMENT_SCHEMA_VERSION,
     SOCIAL_TRANSMISSION_METRIC_VERSION,
     ActionResolutionRow,
@@ -67,6 +69,8 @@ from analysis.models import (
     FactAvailability,
     GoalTransitionRow,
     MemoryDriftReport,
+    MemoryDynamicsAuditRow,
+    MemoryDynamicsReport,
     MetricAvailability,
     MetricCoverage,
     MetricDocument,
@@ -215,6 +219,9 @@ __all__ = [
     "InMemoryObjectiveEventSource",
     "MemoryDriftAnalysisService",
     "MemoryDriftReport",
+    "MemoryDynamicsAuditRow",
+    "MemoryDynamicsReport",
+    "MEMORY_DYNAMICS_METRIC_VERSION",
     "MemoryEvidenceSource",
     "MetricAvailability",
     "MetricBundle",
@@ -272,6 +279,7 @@ __all__ = [
     "compute_group_community_structure",
     "compute_knowledge_diffusion",
     "compute_memory_drift",
+    "compute_memory_dynamics",
     "compute_relationship_stability",
     "compute_repeated_conventions",
     "compute_resource_inequality",

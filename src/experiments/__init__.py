@@ -23,6 +23,7 @@ from experiments.collectors import (
     collect_for_experiment,
     collect_imagination_outcomes,
     collect_memory_drift,
+    collect_memory_dynamics,
     collect_mortality_outcomes,
     collect_propagation,
     collect_trajectory_stats,
@@ -30,6 +31,7 @@ from experiments.collectors import (
 from experiments.composition import (
     EvidenceCompositionError,
     EvidenceCompositionService,
+    map_recall_audits_to_dynamics_report,
     map_snapshot_to_analysis_sources,
 )
 from experiments.coordinator import (
@@ -154,6 +156,7 @@ __all__ = [
     "collect_for_experiment",
     "collect_imagination_outcomes",
     "collect_memory_drift",
+    "collect_memory_dynamics",
     "collect_mortality_outcomes",
     "collect_propagation",
     "collect_trajectory_stats",
@@ -168,6 +171,7 @@ __all__ = [
     "experiment_d_drives",
     "experiment_e_false_story",
     "make_false_story_intervention",
+    "map_recall_audits_to_dynamics_report",
     "map_snapshot_to_analysis_sources",
     "materialize_assignments",
     "persist_metric_bundle",

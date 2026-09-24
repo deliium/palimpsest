@@ -47,6 +47,7 @@ from memory.models import (
     MemorySourceKind,
     MemoryTrace,
     MentionId,
+    RecallAuditRecord,
     ReconstructionId,
     RelationEndpoint,
     RelationEndpointKind,
@@ -71,6 +72,7 @@ class ScopedMemoryRetriever:
     """Production ``MemoryRetriever`` bound to one owner-scoped ``MemoryService``."""
 
     __slots__ = (
+        "_audits",
         "_belief_reader",
         "_dynamics_policy",
         "_emotion_bias",
@@ -120,6 +122,11 @@ class ScopedMemoryRetriever:
         self._limit = limit
         self._emotion_bias = emotion_bias
         self._dynamics_policy = dynamics_policy
+        self._audits: list[RecallAuditRecord] = []
+
+    def export_audits(self) -> tuple[RecallAuditRecord, ...]:
+        """Return accumulated V2 recall audits (scientific sink; never agent-facing)."""
+        return tuple(self._audits)
 
     async def retrieve(
         self,
@@ -197,6 +204,8 @@ class ScopedMemoryRetriever:
         # Service recall (incl. V2 dynamics + audits) completes before any
         # emotion re-ranking below. Audit selected_ids are pre-emotion.
         result = await self._service.recall(recall_request)
+        if result.audits:
+            self._audits.extend(result.audits)
 
         # Scientific ranked evidence: rebuild hits from evidence sources only as
         # ID metadata. Full ranked_hits require a retrieve; recall already ran

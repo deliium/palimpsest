@@ -21,12 +21,14 @@ from analysis.behavior_metrics import (
     compute_repeated_conventions,
 )
 from analysis.memory_drift import compute_memory_drift
+from analysis.memory_dynamics_metrics import compute_memory_dynamics
 from analysis.models import (
     ActionResolutionRow,
     AppliedActionRow,
     BeliefClaimRow,
     GoalTransitionRow,
     MemoryDriftReport,
+    MemoryDynamicsReport,
     MetricDocument,
     RelationshipEdgeRow,
     ResourceHoldingRow,
@@ -88,6 +90,7 @@ class MetricComputationInputs:
     agent_ids: Sequence[str] = ()
     death_ticks: Mapping[str, int] | None = None
     memory_drift_report: MemoryDriftReport | None = None
+    memory_dynamics_report: MemoryDynamicsReport | None = None
     transmission_hops: Sequence[TransmissionHopRecord] = ()
     transmission_report: SocialTransmissionReport | None = None
     eligible_agent_ids: Sequence[str] = ()
@@ -269,6 +272,13 @@ def assemble_metric_documents(inputs: MetricComputationInputs) -> MetricBundle:
             "memory_drift",
             lambda: compute_memory_drift(
                 inputs.memory_drift_report, input_revision=revision
+            ),
+        )
+    if inputs.memory_dynamics_report is not None:
+        _safe(
+            "memory_dynamics",
+            lambda: compute_memory_dynamics(
+                inputs.memory_dynamics_report, input_revision=revision
             ),
         )
     _safe(

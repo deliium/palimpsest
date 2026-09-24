@@ -550,6 +550,7 @@ class _AgentBundle:
     belief_service: SemanticBeliefService
     relationship_service: RelationshipService
     subjective_state: SubjectiveStateService
+    memory_retriever: ReferenceMemoryRetriever | ScopedMemoryRetriever | None = None
 
 
 class SimulationRunner:
@@ -865,6 +866,7 @@ class SimulationRunner:
                     belief_service=belief_service,
                     relationship_service=relationship_service,
                     subjective_state=owner_bundle.commit_service,
+                    memory_retriever=memory_retriever,
                 )
                 created_agents.append(bundle)
                 runtimes.append(runtime)
@@ -1549,6 +1551,7 @@ class SimulationRunner:
         )
         self._goal_transition_receipts.extend(goal_receipts)
         await self._apply_objective_goal_receipts(goal_receipts)
+        audits = self.export_memory_dynamics_audits()
         result = SimulationRunnerResult(
             run_id=self._run_id,
             ticks_committed=self._ticks_committed,
@@ -1559,11 +1562,12 @@ class SimulationRunner:
             cognition_counters=self._cognition_counters,
             final_objective_projection=projection,
             objective_state_hash=objective_hash,
+            memory_dynamics_audits=audits,
         )
         _LOG.info(
             "runner_finished run_id=%s ticks_committed=%s stop_reason=%s "
             "attempt_count=%s finalized_tick_count=%s goal_transition_count=%s "
-            "objective_hash_prefix=%s",
+            "objective_hash_prefix=%s memory_dynamics_audit_count=%s",
             self._run_id.value,
             self._ticks_committed,
             stop_reason.value,
@@ -1571,8 +1575,34 @@ class SimulationRunner:
             len(self._finalized_tick_receipts),
             len(self._goal_transition_receipts),
             objective_hash[:12],
+            len(audits),
         )
         return result
+
+    def export_memory_dynamics_audits(self) -> tuple[object, ...]:
+        """Harvest in-run V2 recall audits from scoped retrievers (IDs only)."""
+        from agents.cognition.memory import ScopedMemoryRetriever
+        from memory.models import RecallAuditRecord
+
+        collected: list[RecallAuditRecord] = []
+        for bundle in self._agents:
+            retriever = bundle.memory_retriever
+            if type(retriever) is not ScopedMemoryRetriever:
+                continue
+            for audit in retriever.export_audits():
+                if type(audit) is not RecallAuditRecord:
+                    raise TypeError("memory_dynamics_audits: invalid_item")
+                collected.append(audit)
+        _LOG.debug(
+            "memory_dynamics_audit_export",
+            extra={
+                "runner": {
+                    "run_id": self._run_id.value,
+                    "audit_export_count": len(collected),
+                }
+            },
+        )
+        return tuple(collected)
 
     def final_objective_projection(self) -> DetachedObjectiveProjection:
         """Detached final objective projection without private engine access."""

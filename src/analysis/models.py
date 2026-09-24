@@ -21,6 +21,7 @@ __all__ = [
     "AGENT_VISIBLE_PROJECTOR_VERSION",
     "DRIFT_METRIC_VERSION",
     "EVENT_FACT_PROJECTOR_VERSION",
+    "MEMORY_DYNAMICS_METRIC_VERSION",
     "METRIC_DOCUMENT_SCHEMA_VERSION",
     "SOCIAL_TRANSMISSION_METRIC_VERSION",
     "ActionResolutionRow",
@@ -34,6 +35,8 @@ __all__ = [
     "FactAvailability",
     "GoalTransitionRow",
     "MemoryDriftReport",
+    "MemoryDynamicsAuditRow",
+    "MemoryDynamicsReport",
     "MetricAvailability",
     "MetricCoverage",
     "MetricDocument",
@@ -1361,3 +1364,138 @@ class TransmissionLineageEdge:
             f"root={self.transmission_root_id!r}, hop={self.hop_count}, "
             f"unresolved={self.unresolved}, cycle_rejected={self.cycle_rejected})"
         )
+
+
+MEMORY_DYNAMICS_METRIC_VERSION: Final[str] = "memory_dynamics@1"
+
+
+@dataclass(frozen=True, slots=True)
+class MemoryDynamicsAuditRow:
+    """Neutral in-run audit export (IDs/codes/counts only)."""
+
+    reconstruction_id: str
+    owner_id: str
+    tick: int
+    source_count: int
+    competitor_count: int
+    selected_count: int
+    distortion_codes: tuple[str, ...]
+    confidence_before: float
+    confidence_after: float
+    strength_delta_count: int
+    source_memory_ids: tuple[str, ...] = ()
+    competitor_ids: tuple[str, ...] = ()
+    selected_ids: tuple[str, ...] = ()
+
+    def __post_init__(self) -> None:
+        object.__setattr__(
+            self,
+            "reconstruction_id",
+            require_stable_id(
+                "MemoryDynamicsAuditRow.reconstruction_id", self.reconstruction_id
+            ),
+        )
+        object.__setattr__(
+            self,
+            "owner_id",
+            require_stable_id("MemoryDynamicsAuditRow.owner_id", self.owner_id),
+        )
+        object.__setattr__(
+            self,
+            "tick",
+            require_exact_nonneg_int("MemoryDynamicsAuditRow.tick", self.tick),
+        )
+        for name in (
+            "source_count",
+            "competitor_count",
+            "selected_count",
+            "strength_delta_count",
+        ):
+            object.__setattr__(
+                self,
+                name,
+                require_exact_nonneg_int(
+                    f"MemoryDynamicsAuditRow.{name}", getattr(self, name)
+                ),
+            )
+        object.__setattr__(
+            self,
+            "confidence_before",
+            quantize_float(require_finite(float(self.confidence_before))),
+        )
+        object.__setattr__(
+            self,
+            "confidence_after",
+            quantize_float(require_finite(float(self.confidence_after))),
+        )
+        codes = tuple(self.distortion_codes)
+        for code in codes:
+            require_stable_id("MemoryDynamicsAuditRow.distortion_codes", code)
+        object.__setattr__(self, "distortion_codes", codes)
+        for field in ("source_memory_ids", "competitor_ids", "selected_ids"):
+            ids = tuple(getattr(self, field))
+            for item in ids:
+                require_stable_id(f"MemoryDynamicsAuditRow.{field}", item)
+            object.__setattr__(self, field, ids)
+
+    def __repr__(self) -> str:
+        return (
+            f"MemoryDynamicsAuditRow(reconstruction_id={self.reconstruction_id!r}, "
+            f"owner_id={self.owner_id!r}, tick={self.tick}, "
+            f"source_count={self.source_count}, "
+            f"competitor_count={self.competitor_count}, "
+            f"selected_count={self.selected_count}, "
+            f"distortion_code_count={len(self.distortion_codes)})"
+        )
+
+
+@dataclass(frozen=True, slots=True)
+class MemoryDynamicsReport:
+    """Experiment-scoped V2 memory-dynamics audit aggregate."""
+
+    experiment_id: str
+    run_id: str
+    condition_id: str
+    metric_version: str
+    audits: tuple[MemoryDynamicsAuditRow, ...]
+    memory_mode: str
+
+    def __post_init__(self) -> None:
+        object.__setattr__(
+            self,
+            "experiment_id",
+            require_stable_id("MemoryDynamicsReport.experiment_id", self.experiment_id),
+        )
+        object.__setattr__(
+            self,
+            "run_id",
+            require_stable_id("MemoryDynamicsReport.run_id", self.run_id),
+        )
+        object.__setattr__(
+            self,
+            "condition_id",
+            require_stable_id("MemoryDynamicsReport.condition_id", self.condition_id),
+        )
+        object.__setattr__(
+            self,
+            "metric_version",
+            require_stable_id(
+                "MemoryDynamicsReport.metric_version", self.metric_version
+            ),
+        )
+        object.__setattr__(
+            self,
+            "memory_mode",
+            require_stable_id("MemoryDynamicsReport.memory_mode", self.memory_mode),
+        )
+        for row in self.audits:
+            if type(row) is not MemoryDynamicsAuditRow:
+                raise TypeError("MemoryDynamicsReport.audits: invalid_item")
+
+    def __repr__(self) -> str:
+        return (
+            f"MemoryDynamicsReport(experiment_id={self.experiment_id!r}, "
+            f"run_id={self.run_id!r}, condition_id={self.condition_id!r}, "
+            f"audit_count={len(self.audits)}, memory_mode={self.memory_mode!r})"
+        )
+

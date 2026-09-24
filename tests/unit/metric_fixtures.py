@@ -408,6 +408,18 @@ def degenerate_fixtures() -> tuple[KnownAnswerFixture, ...]:
             notes_code="no_relationship_revisions",
             input_summary_code="empty_relationship_store",
         ),
+        KnownAnswerFixture(
+            fixture_id="deg-memory-dynamics-empty",
+            family_id=MetricFamilyId.MEMORY_DYNAMICS,
+            algorithm_version=metric_specification(
+                MetricFamilyId.MEMORY_DYNAMICS
+            ).algorithm_version,
+            kind=FixtureKind.DEGENERATE,
+            availability=MetricAvailability.ABSENT,
+            expected_values={},
+            notes_code="no_audits",
+            input_summary_code="empty_v2_audit_export",
+        ),
     )
 
 

@@ -645,6 +645,7 @@ class SimulationRunnerResult:
     cognition_counters: CognitionCounters = CognitionCounters()
     final_objective_projection: DetachedObjectiveProjection | None = None
     objective_state_hash: str | None = None
+    memory_dynamics_audits: tuple[object, ...] = ()
 
     def __post_init__(self) -> None:
         from simulation.models import RunId
@@ -696,6 +697,11 @@ class SimulationRunnerResult:
             )
         if self.objective_state_hash is not None:
             require_stable_id("objective_state_hash", self.objective_state_hash)
+        if isinstance(self.memory_dynamics_audits, (set, frozenset)):
+            raise TypeError("memory_dynamics_audits must be ordered")
+        object.__setattr__(
+            self, "memory_dynamics_audits", tuple(self.memory_dynamics_audits)
+        )
 
 
 class CognitionFailurePolicy(StrEnum):
