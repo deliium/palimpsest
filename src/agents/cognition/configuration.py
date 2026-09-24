@@ -333,11 +333,13 @@ def build_cognitive_loop(
         ):
             emotional_state = PassthroughEmotionalStateAppraiser()
         else:
-            # Full emotion.v1 engine is selected when Task 5 lands; until then
-            # ENABLED requires an explicit override or the later engine import.
             from agents.cognition.emotion import EmotionalStateEngine
 
             emotional_state = EmotionalStateEngine()
+
+    emotion_bias = (
+        resolved.emotional_state_mode is CognitionEmotionalStateMode.ENABLED
+    )
 
     pending: PendingEvidenceAccumulator
     if pending_evidence is None:
@@ -363,6 +365,7 @@ def build_cognitive_loop(
                 "mortality_appraisal_mode": resolved.mortality_appraisal_mode.value,
                 "goal_management_mode": resolved.goal_management_mode.value,
                 "emotional_state_mode": resolved.emotional_state_mode.value,
+                "emotion_bias": emotion_bias,
                 "has_counterpart_resolver": counterpart is not None,
                 "status": "built",
             }
@@ -371,7 +374,7 @@ def build_cognitive_loop(
     return CognitiveLoop(
         perception=LiteralPerceptionInterpreter(),
         memory=memory,
-        situation=DirectSituationModeler(),
+        situation=DirectSituationModeler(emotion_bias=emotion_bias),
         self_state=DirectSelfStateProjector(),
         goal_manager=goal_manager,
         emotional_state=emotional_state,

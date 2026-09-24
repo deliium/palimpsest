@@ -143,6 +143,7 @@ class Perspective:
     goals: tuple[Goal, ...] = ()
     drives: DriveProfile | None = None
     social_identity: OwnerSafeSocialIdentity | None = None
+    emotional_state: object | None = None
 
     def __post_init__(self) -> None:
         if type(self.agent_id) is not AgentId:
@@ -250,9 +251,21 @@ class Perspective:
                 raise ValueError("Perspective.social_identity: ownership")
             if self.social_identity.owner_entity_id != self.observation.observer_id:
                 raise ValueError("Perspective.social_identity: entity_mismatch")
+        if self.emotional_state is not None:
+            from agents.cognition.models import AgentEmotionalState
+
+            if type(self.emotional_state) is not AgentEmotionalState:
+                raise TypeError("Perspective.emotional_state: invalid_type")
+            if self.emotional_state.owner_id != self.agent_id:
+                raise ValueError("Perspective.emotional_state: ownership")
 
     def to_snapshot(self) -> SubjectiveSnapshot:
         """Freeze this perspective into a ``SubjectiveSnapshot``."""
+        from agents.cognition.models import AgentEmotionalState
+
+        emotion = self.emotional_state
+        if emotion is not None and type(emotion) is not AgentEmotionalState:
+            raise TypeError("Perspective.emotional_state: invalid_type")
         return SubjectiveSnapshot(
             owner_id=self.agent_id,
             revision=self.snapshot_revision,
@@ -264,6 +277,7 @@ class Perspective:
             drives=self.drives,
             inbox=self.inbox,
             social_identity=self.social_identity,
+            emotional_state=emotion,  # type: ignore[arg-type]
         )
 
     def __repr__(self) -> str:
@@ -374,6 +388,7 @@ class FutureImagination(Protocol):
         self_state: SelfModel,
         memory: RetrievedMemoryContext,
         goal_board: GoalBoard | None = None,
+        emotional_state: EmotionalStateEvaluation | None = None,
     ) -> PossibleFutures: ...
 
 
@@ -387,6 +402,7 @@ class MotivationEvaluator(Protocol):
         self_state: SelfModel,
         futures: PossibleFutures,
         goal_board: GoalBoard | None = None,
+        emotional_state: EmotionalStateEvaluation | None = None,
     ) -> MotivationEvaluation: ...
 
 
@@ -399,6 +415,7 @@ class IntentionSelector(Protocol):
         motivation: MotivationEvaluation,
         futures: PossibleFutures,
         goal_board: GoalBoard | None = None,
+        emotional_state: EmotionalStateEvaluation | None = None,
     ) -> SelectedIntention: ...
 
 
@@ -412,6 +429,7 @@ class Planner(Protocol):
         futures: PossibleFutures,
         memory: RetrievedMemoryContext | None = None,
         goal_board: GoalBoard | None = None,
+        emotional_state: EmotionalStateEvaluation | None = None,
     ) -> ActionPlan: ...
 
 
@@ -427,6 +445,7 @@ class SocialMessagePolicy(Protocol):
         memory: RetrievedMemoryContext,
         preferred_recipient_id: object | None = None,
         snapshot_memories: object = (),
+        emotional_state: EmotionalStateEvaluation | None = None,
     ) -> object | None: ...
 
 

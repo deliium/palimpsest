@@ -685,6 +685,7 @@ class SubjectiveSnapshot:
     drives: DriveProfile | None = None
     inbox: tuple[CommunicationEnvelope, ...] = ()
     social_identity: OwnerSafeSocialIdentity | None = None
+    emotional_state: AgentEmotionalState | None = None
 
     def __post_init__(self) -> None:
         if type(self.owner_id) is not AgentId:
@@ -803,6 +804,11 @@ class SubjectiveSnapshot:
                 raise TypeError("SubjectiveSnapshot.social_identity: invalid_type")
             if self.social_identity.owner_id != self.owner_id:
                 raise ValueError("SubjectiveSnapshot.social_identity: ownership")
+        if self.emotional_state is not None:
+            if type(self.emotional_state) is not AgentEmotionalState:
+                raise TypeError("SubjectiveSnapshot.emotional_state: invalid_type")
+            if self.emotional_state.owner_id != self.owner_id:
+                raise ValueError("SubjectiveSnapshot.emotional_state: ownership")
 
     def __repr__(self) -> str:
         drive_count = 0 if self.drives is None else len(self.drives.dispositions)
@@ -810,6 +816,11 @@ class SubjectiveSnapshot:
             0
             if self.social_identity is None
             else len(self.social_identity.counterparts)
+        )
+        emotion_kinds = (
+            0
+            if self.emotional_state is None
+            else len(self.emotional_state.intensities)
         )
         return (
             f"SubjectiveSnapshot(owner_id={self.owner_id.value!r}, "
@@ -821,7 +832,8 @@ class SubjectiveSnapshot:
             f"goal_count={len(self.goals)}, "
             f"drive_count={drive_count}, "
             f"inbox_count={len(self.inbox)}, "
-            f"counterpart_count={counterpart_count})"
+            f"counterpart_count={counterpart_count}, "
+            f"emotion_kind_count={emotion_kinds})"
         )
 
 
@@ -3355,6 +3367,7 @@ class CognitiveLoopProposal:
     situation: SituationModel
     self_state: SelfModel
     goal_board: GoalBoard
+    emotional_state: EmotionalStateEvaluation
     futures: PossibleFutures
     motivation: MotivationEvaluation
     intention: SelectedIntention
@@ -3391,6 +3404,10 @@ class CognitiveLoopProposal:
             raise TypeError("goal_board must be GoalBoard")
         if self.goal_board.owner_id != self.agent_id:
             raise ValueError("goal_board owner_id mismatch")
+        if type(self.emotional_state) is not EmotionalStateEvaluation:
+            raise TypeError("emotional_state must be EmotionalStateEvaluation")
+        if self.emotional_state.owner_id != self.agent_id:
+            raise ValueError("emotional_state owner_id mismatch")
         if type(self.futures) is not PossibleFutures:
             raise TypeError("futures must be PossibleFutures")
         if type(self.motivation) is not MotivationEvaluation:

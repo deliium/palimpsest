@@ -8,6 +8,7 @@ from __future__ import annotations
 
 from agents.cognition.contracts import (
     CognitionStrategy,
+    EmotionalStateAppraiser,
     FutureImagination,
     GoalManager,
     IntentionSelector,
@@ -141,6 +142,34 @@ class ScriptedGoalManager:
         )
 
 
+class ScriptedEmotionalStateAppraiser:
+    async def appraise(
+        self,
+        loop_input: CognitiveLoopInput,
+        perception: InterpretedPerception,
+        situation: SituationModel,
+        memory: RetrievedMemoryContext,
+        self_state: SelfModel,
+        goal_board: GoalBoard,
+        prior_state: object | None = None,
+    ):
+        from agents.cognition.emotion import PassthroughEmotionalStateAppraiser
+        from agents.cognition.models import AgentEmotionalState
+
+        prior: AgentEmotionalState | None = None
+        if type(prior_state) is AgentEmotionalState:
+            prior = prior_state
+        return await PassthroughEmotionalStateAppraiser().appraise(
+            loop_input,
+            perception,
+            situation,
+            memory,
+            self_state,
+            goal_board,
+            prior,
+        )
+
+
 class ScriptedFutureImagination:
     async def imagine(
         self,
@@ -149,8 +178,9 @@ class ScriptedFutureImagination:
         self_state: SelfModel,
         memory: RetrievedMemoryContext,
         goal_board: GoalBoard | None = None,
+        emotional_state: object | None = None,
     ) -> PossibleFutures:
-        _ = situation, self_state, memory
+        _ = situation, self_state, memory, goal_board, emotional_state
         return PossibleFutures(
             owner_id=loop_input.agent_id,
             futures=(
@@ -172,8 +202,9 @@ class ScriptedMotivationEvaluator:
         self_state: SelfModel,
         futures: PossibleFutures,
         goal_board: GoalBoard | None = None,
+        emotional_state: object | None = None,
     ) -> MotivationEvaluation:
-        _ = situation, self_state, futures
+        _ = situation, self_state, futures, goal_board, emotional_state
         return MotivationEvaluation(
             owner_id=loop_input.agent_id,
             scores=(MotivationScore(motive=MotivationCode.WAIT, score=1.0),),
@@ -188,8 +219,9 @@ class ScriptedIntentionSelector:
         motivation: MotivationEvaluation,
         futures: PossibleFutures,
         goal_board: GoalBoard | None = None,
+        emotional_state: object | None = None,
     ) -> SelectedIntention:
-        _ = motivation, futures
+        _ = motivation, futures, goal_board, emotional_state
         return SelectedIntention(
             owner_id=loop_input.agent_id,
             intention=IntentionCode.WAIT,
@@ -206,8 +238,9 @@ class ScriptedPlanner:
         futures: PossibleFutures,
         memory: RetrievedMemoryContext | None = None,
         goal_board: GoalBoard | None = None,
+        emotional_state: object | None = None,
     ) -> ActionPlan:
-        _ = intention, futures, memory
+        _ = intention, futures, memory, goal_board, emotional_state
         return ActionPlan(owner_id=loop_input.agent_id, command=Wait(), confidence=1.0)
 
 
@@ -230,6 +263,7 @@ def _assert_protocols_assignable() -> None:
     situation: SituationModeler = ScriptedSituationModeler()
     self_state: SelfStateProjector = ScriptedSelfStateProjector()
     goal_manager: GoalManager = ScriptedGoalManager()
+    emotional_state: EmotionalStateAppraiser = ScriptedEmotionalStateAppraiser()
     futures: FutureImagination = ScriptedFutureImagination()
     motivation: MotivationEvaluator = ScriptedMotivationEvaluator()
     intention: IntentionSelector = ScriptedIntentionSelector()
@@ -241,6 +275,7 @@ def _assert_protocols_assignable() -> None:
         situation,
         self_state,
         goal_manager,
+        emotional_state,
         futures,
         motivation,
         intention,

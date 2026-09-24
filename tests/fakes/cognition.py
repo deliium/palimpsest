@@ -15,11 +15,12 @@ from enum import StrEnum
 from typing import Final
 
 from agents.cognition.models import (
-    GoalBoard,
     ActionPlan,
     CognitiveLoopInput,
     ComponentKind,
     ComponentStatus,
+    EmotionalStateEvaluation,
+    GoalBoard,
     InterpretedPerception,
     MemoryUpdateIntent,
     MotivationEvaluation,
@@ -34,7 +35,9 @@ __all__ = [
     "FakeCognitionCallRecord",
     "FakeCognitionFailureCode",
     "FakeCognitionHarnessError",
+    "FakeEmotionalStateAppraiser",
     "FakeFutureImagination",
+    "FakeGoalManager",
     "FakeIntentionSelector",
     "FakeMemoryRetriever",
     "FakeMemoryUpdateHook",
@@ -42,7 +45,6 @@ __all__ = [
     "FakePerceptionInterpreter",
     "FakePlanner",
     "FakeSelfStateProjector",
-    "FakeGoalManager",
     "FakeSituationModeler",
     "ScriptedStageFailure",
     "ScriptedStageSuccess",
@@ -128,6 +130,7 @@ _STAGE_OUTPUT_TYPES: Final[Mapping[ComponentKind, type | tuple[type, ...]]] = {
     ComponentKind.SITUATION: SituationModel,
     ComponentKind.SELF_STATE: SelfModel,
     ComponentKind.GOAL_MANAGEMENT: GoalBoard,
+    ComponentKind.EMOTIONAL_STATE: EmotionalStateEvaluation,
     ComponentKind.FUTURES: PossibleFutures,
     ComponentKind.MOTIVATION: MotivationEvaluation,
     ComponentKind.INTENTION: SelectedIntention,
@@ -414,6 +417,61 @@ class FakeGoalManager:
         return output
 
 
+class FakeEmotionalStateAppraiser:
+    def __init__(
+        self,
+        scripts: Mapping[str, Sequence[ScriptedStageSuccess | ScriptedStageFailure]]
+        | None = None,
+    ) -> None:
+        from agents.cognition.emotion import PassthroughEmotionalStateAppraiser
+
+        self._passthrough = PassthroughEmotionalStateAppraiser()
+        self._queue = None
+        if scripts is not None:
+            self._queue = _ScriptQueue(
+                component_kind=ComponentKind.EMOTIONAL_STATE, scripts=scripts
+            )
+
+    @property
+    def calls(self) -> tuple[FakeCognitionCallRecord, ...]:
+        if self._queue is None:
+            return ()
+        return tuple(self._queue.calls)
+
+    async def appraise(
+        self,
+        loop_input: CognitiveLoopInput,
+        perception: InterpretedPerception,
+        situation: SituationModel,
+        memory: RetrievedMemoryContext,
+        self_state: SelfModel,
+        goal_board: GoalBoard,
+        prior_state: object | None = None,
+    ) -> EmotionalStateEvaluation:
+        if self._queue is None:
+            return await self._passthrough.appraise(
+                loop_input,
+                perception,
+                situation,
+                memory,
+                self_state,
+                goal_board,
+                prior_state,  # type: ignore[arg-type]
+            )
+        _ = (
+            loop_input,
+            perception,
+            situation,
+            memory,
+            self_state,
+            goal_board,
+            prior_state,
+        )
+        output = self._queue.consume(invocation_id=_active_invocation(), ordinal=5)
+        assert type(output) is EmotionalStateEvaluation
+        return output
+
+
 class FakeFutureImagination:
     def __init__(
         self,
@@ -434,9 +492,10 @@ class FakeFutureImagination:
         self_state: SelfModel,
         memory: RetrievedMemoryContext,
         goal_board=None,
+        emotional_state=None,
     ) -> PossibleFutures:
-        _ = loop_input, situation, self_state, memory, goal_board
-        output = self._queue.consume(invocation_id=_active_invocation(), ordinal=5)
+        _ = loop_input, situation, self_state, memory, goal_board, emotional_state
+        output = self._queue.consume(invocation_id=_active_invocation(), ordinal=6)
         assert type(output) is PossibleFutures
         return output
 
@@ -461,9 +520,10 @@ class FakeMotivationEvaluator:
         self_state: SelfModel,
         futures: PossibleFutures,
         goal_board=None,
+        emotional_state=None,
     ) -> MotivationEvaluation:
-        _ = loop_input, situation, self_state, futures, goal_board
-        output = self._queue.consume(invocation_id=_active_invocation(), ordinal=6)
+        _ = loop_input, situation, self_state, futures, goal_board, emotional_state
+        output = self._queue.consume(invocation_id=_active_invocation(), ordinal=7)
         assert type(output) is MotivationEvaluation
         return output
 
@@ -487,9 +547,10 @@ class FakeIntentionSelector:
         motivation: MotivationEvaluation,
         futures: PossibleFutures,
         goal_board=None,
+        emotional_state=None,
     ) -> SelectedIntention:
-        _ = loop_input, motivation, futures, goal_board
-        output = self._queue.consume(invocation_id=_active_invocation(), ordinal=7)
+        _ = loop_input, motivation, futures, goal_board, emotional_state
+        output = self._queue.consume(invocation_id=_active_invocation(), ordinal=8)
         assert type(output) is SelectedIntention
         return output
 
@@ -514,9 +575,10 @@ class FakePlanner:
         futures: PossibleFutures,
         memory: RetrievedMemoryContext | None = None,
         goal_board: object | None = None,
+        emotional_state: object | None = None,
     ) -> ActionPlan:
-        _ = loop_input, intention, futures, memory, goal_board
-        output = self._queue.consume(invocation_id=_active_invocation(), ordinal=8)
+        _ = loop_input, intention, futures, memory, goal_board, emotional_state
+        output = self._queue.consume(invocation_id=_active_invocation(), ordinal=9)
         assert type(output) is ActionPlan
         return output
 
@@ -543,6 +605,6 @@ class FakeMemoryUpdateHook:
         intention: SelectedIntention,
     ) -> tuple[MemoryUpdateIntent, ...]:
         _ = loop_input, plan, perception, memory, intention
-        output = self._queue.consume(invocation_id=_active_invocation(), ordinal=9)
+        output = self._queue.consume(invocation_id=_active_invocation(), ordinal=10)
         assert type(output) is tuple
         return output

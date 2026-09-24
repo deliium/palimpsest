@@ -17,10 +17,12 @@ from typing import TYPE_CHECKING, Final, Protocol
 
 from agents.cognition.loop import CognitiveLoop, CognitiveLoopError
 from agents.cognition.models import (
+    AgentEmotionalState,
     CognitiveLoopInput,
     CognitiveLoopProposal,
     CognitiveLoopResult,
     ComponentKind,
+    EmotionalStateEvaluation,
     GoalBoard,
     GoalTransitionIntent,
     GoalTransitionIntentReason,
@@ -405,6 +407,7 @@ class AgentRuntime:
         "_belief_writer",
         "_cognition_trace_repository",
         "_cognition_trace_spec",
+        "_emotional_state",
         "_finalized_hashes",
         "_goal_revision_counters",
         "_inbox",
@@ -503,6 +506,7 @@ class AgentRuntime:
         self._goal_revision_counters: dict[str, int] = {}
         self._status = AgentRuntimeStatus.CREATED
         self._internal_state = InternalAgentState(owner_id=agent.agent_id)
+        self._emotional_state: AgentEmotionalState | None = None
         self._last_observation_key: tuple[int, int] | None = None
         self._processed_invocations: set[str] = set()
         self._pending: PendingRuntimeFinalization | None = None
@@ -524,6 +528,48 @@ class AgentRuntime:
     @property
     def internal_state(self) -> InternalAgentState:
         return self._internal_state
+
+    @property
+    def emotional_state(self) -> AgentEmotionalState | None:
+        """Prior-tick owner-scoped emotional carry (None when unset)."""
+        return self._emotional_state
+
+    def _commit_emotional_state(
+        self, state: AgentEmotionalState | None
+    ) -> None:
+        """Store post-stage emotional state for the next snapshot (N+1)."""
+        if state is None:
+            _LOG.debug(
+                "emotional_state_commit_skipped",
+                extra={
+                    "runtime": {
+                        "agent_id": self._agent.agent_id.value,
+                        "emotional_state_present": False,
+                        "kind_count": 0,
+                    }
+                },
+            )
+            return
+        if type(state) is not AgentEmotionalState:
+            raise TypeError("emotional_state must be AgentEmotionalState")
+        if state.owner_id != self._agent.agent_id:
+            raise AgentRuntimeError(
+                AgentRuntimeErrorCode.OWNERSHIP,
+                agent_id=self._agent.agent_id.value,
+            )
+        self._emotional_state = state
+        _LOG.debug(
+            "emotional_state_committed",
+            extra={
+                "runtime": {
+                    "agent_id": self._agent.agent_id.value,
+                    "emotional_state_present": True,
+                    "kind_count": len(state.intensities),
+                    "tick": state.tick,
+                    "max_intensity": state.max_intensity(),
+                }
+            },
+        )
 
     def apply_goal_status_transitions(
         self,
@@ -940,6 +986,7 @@ class AgentRuntime:
                 snapshot_revision=self._internal_state.invocation_count,
                 goals=self._agent.goals,
                 drives=self._agent.drives,
+                emotional_state=self._emotional_state,
             )
         except TypeError:
             raise
@@ -1313,11 +1360,15 @@ class AgentRuntime:
             _goal_board_intents(pending.loop_result)
         )
         await self.publish_goal_revisions(intent_receipts)
+        self._commit_emotional_state(
+            _emotional_state_from_result(pending.loop_result)
+        )
         self._internal_state = pending.next_internal_state
         self._last_observation_key = pending.observation_key
         self._processed_invocations.add(pending.invocation_id)
         self._finalized_hashes.add(pending.integrity_hash)
         self._pending = None
+        emotion = self._emotional_state
         _LOG.info(
             "runtime_finalize_complete",
             extra={
@@ -1330,6 +1381,10 @@ class AgentRuntime:
                         pending.loop_result.memory_update_intents
                     ),
                     "goal_transition_count": len(intent_receipts),
+                    "emotional_state_present": emotion is not None,
+                    "emotional_kind_count": (
+                        0 if emotion is None else len(emotion.intensities)
+                    ),
                 }
             },
         )
@@ -1450,7 +1505,9 @@ class AgentRuntime:
         self._status = checkpoint.status
         self._internal_state = checkpoint.internal_state
         self._last_observation_key = checkpoint.last_observation_key
+        self._emotional_state = checkpoint.emotional_state
         self._pending = None
+        emotion = self._emotional_state
         _LOG.debug(
             "runtime_checkpoint_restored",
             extra={
@@ -1459,6 +1516,10 @@ class AgentRuntime:
                     "status": self._status.value,
                     "processed_invocation_count": checkpoint.processed_invocation_count,
                     "finalized_hash_count": checkpoint.finalized_hash_count,
+                    "emotional_state_present": emotion is not None,
+                    "emotional_kind_count": (
+                        0 if emotion is None else len(emotion.intensities)
+                    ),
                 }
             },
         )
@@ -1475,6 +1536,7 @@ class AgentRuntime:
             processed_invocation_count=len(self._processed_invocations),
             finalized_hash_count=len(self._finalized_hashes),
             goals=self._agent.goals,
+            emotional_state=self._emotional_state,
         )
 
     async def process_observation(
@@ -1850,6 +1912,20 @@ def _goal_board_intents(
             continue
         intents.extend(board.transition_intents)
     return tuple(intents)
+
+
+def _emotional_state_from_result(
+    loop_result: CognitiveLoopResult,
+) -> AgentEmotionalState | None:
+    """Extract post-update emotional state from EMOTIONAL_STATE boundaries."""
+    for record in loop_result.boundary_records:
+        if record.component_kind is not ComponentKind.EMOTIONAL_STATE:
+            continue
+        evaluation = record.output_artifact
+        if type(evaluation) is not EmotionalStateEvaluation:
+            continue
+        return evaluation.state
+    return None
 
 
 def _intent_reason_to_receipt_code(

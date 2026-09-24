@@ -2,16 +2,19 @@
 
 from __future__ import annotations
 
-from agents.cognition.emotion import PassthroughEmotionalStateAppraiser
-
 import logging
 
 import pytest
 
 from agents.cognition.defaults import default_cognitive_loop
+from agents.cognition.emotion import PassthroughEmotionalStateAppraiser
 from agents.cognition.models import (
+    AgentEmotionalState,
+    EmotionIntensity,
+    EmotionKind,
     MemoryUpdateIntent,
     MemoryUpdateKind,
+    empty_emotional_state,
 )
 from agents.models import Agent, AgentId
 from memory.models import (
@@ -26,6 +29,7 @@ from memory.models import (
     MemoryStore,
     MemoryTrace,
     MentionId,
+    quantize_score,
 )
 from simulation.agent_runtime import (
     AgentRuntime,
@@ -40,6 +44,11 @@ from simulation.bootstrap import (
 )
 from simulation.clock import Tick
 from simulation.lifecycle import ActionSubmission, TickToken
+from simulation.perception import (
+    PerspectiveOwnershipCode,
+    PerspectiveOwnershipError,
+    build_perspective,
+)
 from tests.simulation_helpers import make_location, weather_for_locations
 from world.actions import Wait
 from world.identifiers import EntityId, WorldId, WorldRevision
@@ -223,7 +232,13 @@ async def test_cognition_failure_does_not_mutate_memory() -> None:
 
     class BoomMotivation(StableMotivationEvaluator):
         async def evaluate(  # type: ignore[no-untyped-def]
-            self, loop_input, situation, self_state, futures, goal_board=None
+            self,
+            loop_input,
+            situation,
+            self_state,
+            futures,
+            goal_board=None,
+            emotional_state=None,
         ):
             raise RuntimeError("secret motivation")
 
@@ -436,6 +451,81 @@ async def test_prepare_bind_finalize_and_abort() -> None:
     # via finalized_hashes.
     again = await runtime.finalize_pending(pending2)
     assert again.invocation_id == pending2.invocation_id
+
+
+@pytest.mark.asyncio
+async def test_emotional_state_commits_on_finalize_visible_next_tick() -> None:
+    """Post-stage emotion lands on runtime after finalize; next prepare sees it."""
+    runtime, _memories, _beliefs = _runtime()
+    runtime.start()
+    assert runtime.emotional_state is None
+
+    prepared = await runtime.prepare_observation(_self(tick=0), token=_token(0))
+    assert prepared.proposal.loop_input.snapshot.emotional_state is None
+    pending = await runtime.bind_effective_command(prepared)
+    assert runtime.emotional_state is None  # not yet committed
+    await runtime.finalize_pending(pending)
+
+    carried = runtime.emotional_state
+    assert type(carried) is AgentEmotionalState
+    assert carried.owner_id == AgentId("agent-1")
+    assert carried.tick == 0
+    assert carried.is_neutral()
+
+    prepared2 = await runtime.prepare_observation(_self(tick=1), token=_token(1))
+    prior = prepared2.proposal.loop_input.snapshot.emotional_state
+    assert prior is not None
+    assert prior.owner_id == AgentId("agent-1")
+    assert prior.tick == 0
+    assert prior.is_neutral()
+
+
+@pytest.mark.asyncio
+async def test_abort_pending_does_not_commit_emotional_state() -> None:
+    runtime, _memories, _beliefs = _runtime()
+    runtime.start()
+    prepared = await runtime.prepare_observation(_self(tick=0), token=_token(0))
+    pending = await runtime.bind_effective_command(prepared)
+    runtime.abort_pending(pending)
+    assert runtime.emotional_state is None
+
+
+def test_build_perspective_threads_emotional_state() -> None:
+    bootstrap = _bootstrap()
+    translator = registration_translator(bootstrap)
+    emotion = AgentEmotionalState(
+        owner_id=AgentId("agent-1"),
+        tick=3,
+        intensities=(
+            EmotionIntensity(kind=EmotionKind.FEAR, intensity=0.4),
+        ),
+        last_update_tick=3,
+        policy_version="emotion.v1",
+    )
+    perspective = build_perspective(
+        agent_id=AgentId("agent-1"),
+        observation=_self(tick=4),
+        translator=translator,
+        emotional_state=emotion,
+    )
+    assert perspective.emotional_state is emotion
+    snapshot = perspective.to_snapshot()
+    assert snapshot.emotional_state is emotion
+    assert snapshot.emotional_state.get(EmotionKind.FEAR) == quantize_score(0.4)
+
+
+def test_build_perspective_rejects_foreign_emotional_state() -> None:
+    bootstrap = _bootstrap()
+    translator = registration_translator(bootstrap)
+    foreign = empty_emotional_state(AgentId("agent-2"), tick=0)
+    with pytest.raises(PerspectiveOwnershipError) as exc_info:
+        build_perspective(
+            agent_id=AgentId("agent-1"),
+            observation=_self(tick=0),
+            translator=translator,
+            emotional_state=foreign,
+        )
+    assert exc_info.value.code is PerspectiveOwnershipCode.FOREIGN_EMOTIONAL_STATE
 
 
 def _goal_for_runtime(

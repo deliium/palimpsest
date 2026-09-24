@@ -145,6 +145,13 @@ class EmptyMemoryRetriever:
 class DirectSituationModeler:
     """Map perception claims into a closed situation model."""
 
+    __slots__ = ("_emotion_bias",)
+
+    def __init__(self, *, emotion_bias: bool = False) -> None:
+        if type(emotion_bias) is not bool:
+            raise TypeError("emotion_bias must be bool")
+        self._emotion_bias = emotion_bias
+
     async def model(
         self,
         loop_input: CognitiveLoopInput,
@@ -165,14 +172,35 @@ class DirectSituationModeler:
             claims.append(SituationClaimCode.LOCAL_SCENE)
         if not claims:
             claims.append(SituationClaimCode.IDLE)
+        prior = (
+            None
+            if loop_input.snapshot is None
+            else loop_input.snapshot.emotional_state
+        )
+        from agents.cognition.emotion_bias import (
+            EMOTION_BIAS_POLICY_VERSION,
+            apply_situation_focus_bias,
+        )
+
+        ordered, focus_counts, bias_applied = apply_situation_focus_bias(
+            claims,
+            prior,
+            enabled=self._emotion_bias,
+        )
+        selection = list(c.value for c in ordered)
+        if bias_applied:
+            selection.append(f"emotion_bias:{EMOTION_BIAS_POLICY_VERSION}")
+            selection.extend(
+                f"emotion_focus:{code}" for code in sorted(focus_counts)
+            )
         return SituationModel(
             owner_id=loop_input.agent_id,
             tick=perception.tick,
-            claim_codes=tuple(claims),
+            claim_codes=ordered,
             confidence=1.0,
             decision_metadata=DecisionMetadata(
-                selection_codes=tuple(c.value for c in claims),
-                candidate_count=len(claims),
+                selection_codes=tuple(selection),
+                candidate_count=len(ordered),
             ),
         )
 
@@ -233,8 +261,9 @@ class PlaceholderFutureImagination:
         self_state: SelfModel,
         memory: RetrievedMemoryContext | None = None,
         goal_board: GoalBoard | None = None,
+        emotional_state: object | None = None,
     ) -> PossibleFutures:
-        _ = self_state, memory, goal_board
+        _ = self_state, memory, goal_board, emotional_state
         futures: list[ImaginedFuture] = []
         if SituationClaimCode.TERMINAL_SELF in situation.claim_codes:
             futures.append(
@@ -293,8 +322,9 @@ class PresentStateImagination:
         self_state: SelfModel,
         memory: RetrievedMemoryContext | None = None,
         goal_board: GoalBoard | None = None,
+        emotional_state: object | None = None,
     ) -> PossibleFutures:
-        _ = self_state, memory, goal_board
+        _ = self_state, memory, goal_board, emotional_state
         if SituationClaimCode.TERMINAL_SELF in situation.claim_codes:
             claim_codes = (SituationClaimCode.TERMINAL_SELF,)
             future_id = "present-terminal"
@@ -327,8 +357,9 @@ class StableMotivationEvaluator:
         self_state: SelfModel,
         futures: PossibleFutures,
         goal_board: GoalBoard | None = None,
+        emotional_state: object | None = None,
     ) -> MotivationEvaluation:
-        _ = self_state, futures, goal_board
+        _ = self_state, futures, goal_board, emotional_state
         scores: dict[MotivationCode, float] = {
             MotivationCode.WAIT: 0.5,
             MotivationCode.SURVIVE: 0.0,
@@ -403,8 +434,9 @@ class StableIntentionSelector:
         motivation: MotivationEvaluation,
         futures: PossibleFutures | None = None,
         goal_board: GoalBoard | None = None,
+        emotional_state: object | None = None,
     ) -> SelectedIntention:
-        _ = futures, goal_board
+        _ = futures, goal_board, emotional_state
         if not motivation.scores:
             intention = IntentionCode.WAIT
             source = MotivationCode.WAIT
@@ -442,8 +474,9 @@ class WaitFallbackPlanner:
         futures: PossibleFutures,
         memory: RetrievedMemoryContext | None = None,
         goal_board: GoalBoard | None = None,
+        emotional_state: object | None = None,
     ) -> ActionPlan:
-        _ = intention, futures, memory, goal_board
+        _ = intention, futures, memory, goal_board, emotional_state
         return ActionPlan(
             owner_id=loop_input.agent_id,
             command=Wait(),

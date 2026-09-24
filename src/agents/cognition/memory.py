@@ -11,6 +11,7 @@ from __future__ import annotations
 import logging
 from typing import Final
 
+from agents.cognition.configuration import MEMORY_POLICY_VERSION
 from agents.cognition.models import (
     ActionPlan,
     CognitiveLoopInput,
@@ -22,7 +23,6 @@ from agents.cognition.models import (
     RetrievedMemoryContext,
     SelectedIntention,
 )
-from agents.cognition.configuration import MEMORY_POLICY_VERSION
 from agents.models import AgentId
 from memory.beliefs import SemanticBelief
 from memory.contracts import BeliefReader, MemoryService
@@ -56,8 +56,8 @@ from world.observations import Observation, ObservedOccurrence
 __all__ = [
     "DIRECT_OBSERVATION_MEMORY_POLICY_VERSION",
     "DirectObservationMemoryUpdateHook",
-    "ScopedMemoryRetriever",
     "ReferenceMemoryRetriever",
+    "ScopedMemoryRetriever",
     "build_direct_observation_memory_trace",
 ]
 
@@ -71,6 +71,7 @@ class ScopedMemoryRetriever:
 
     __slots__ = (
         "_belief_reader",
+        "_emotion_bias",
         "_limit",
         "_reconstruction_policy",
         "_scoring_policy",
@@ -85,6 +86,7 @@ class ScopedMemoryRetriever:
         reconstruction_policy: MemoryReconstructionPolicy | None = None,
         belief_reader: BeliefReader | None = None,
         limit: int = _DEFAULT_LIMIT,
+        emotion_bias: bool = False,
     ) -> None:
         if type(scoring_policy) is not MemoryScoringPolicy:
             raise TypeError("scoring_policy must be MemoryScoringPolicy")
@@ -102,11 +104,14 @@ class ScopedMemoryRetriever:
             raise TypeError("reconstruction_policy must be MemoryReconstructionPolicy")
         if limit < 1:
             raise ValueError("limit must be positive")
+        if type(emotion_bias) is not bool:
+            raise TypeError("emotion_bias must be bool")
         self._service = memory_service
         self._scoring_policy = scoring_policy
         self._reconstruction_policy = reconstruction_policy
         self._belief_reader = belief_reader
         self._limit = limit
+        self._emotion_bias = emotion_bias
 
     async def retrieve(
         self,
@@ -227,10 +232,29 @@ class ScopedMemoryRetriever:
             if reconstructed.owner_id != loop_input.agent_id:
                 raise ValueError("foreign-owner reconstruction rejected")
 
-        memory_ids = tuple(hit.trace.memory_id for hit in ranked_hits)
-        generation = (
-            result.reconstructions[0].generation if result.reconstructions else 0
+        prior = (
+            None
+            if loop_input.snapshot is None
+            else loop_input.snapshot.emotional_state
         )
+        from agents.cognition.emotion_bias import (
+            EMOTION_BIAS_POLICY_VERSION,
+            apply_reconstruction_emotion_bias,
+            apply_retrieval_emotion_bias,
+        )
+
+        ranked_hits_tuple, retrieval_bias = apply_retrieval_emotion_bias(
+            ranked_hits,
+            prior,
+            enabled=self._emotion_bias,
+        )
+        reconstructions, reconstruction_bias = apply_reconstruction_emotion_bias(
+            result.reconstructions,
+            prior,
+            enabled=self._emotion_bias,
+        )
+        memory_ids = tuple(hit.trace.memory_id for hit in ranked_hits_tuple)
+        generation = reconstructions[0].generation if reconstructions else 0
         _LOG.debug(
             "memory_recall_mapped",
             extra={
@@ -239,24 +263,22 @@ class ScopedMemoryRetriever:
                     "tick": perception.tick,
                     "policy_version": self._scoring_policy.version,
                     "reconstruction_policy_version": policy.version,
+                    "emotion_bias_policy_version": EMOTION_BIAS_POLICY_VERSION,
+                    "emotion_bias_applied": retrieval_bias or reconstruction_bias,
                     "enabled_components": list(
                         self._scoring_policy.weights.enabled_components()
                     ),
                     "candidate_count": result.evidence.policy.max_source_traces,
                     "source_count": len(result.evidence.sources),
-                    "result_count": len(ranked_hits),
-                    "reconstruction_count": len(result.reconstructions),
+                    "result_count": len(ranked_hits_tuple),
+                    "reconstruction_count": len(reconstructions),
                     "pending_write_count": 1 if result.reconsolidation else 0,
                     "generation": generation,
                     "used_provider": (
-                        result.reconstructions[0].used_provider
-                        if result.reconstructions
-                        else False
+                        reconstructions[0].used_provider if reconstructions else False
                     ),
                     "fallback_used": (
-                        result.reconstructions[0].fallback_used
-                        if result.reconstructions
-                        else False
+                        reconstructions[0].fallback_used if reconstructions else False
                     ),
                 }
             },
@@ -266,22 +288,22 @@ class ScopedMemoryRetriever:
             memory_ids=memory_ids,
             belief_ids=belief_ids,
             confidence=(
-                result.reconstructions[0].confidence if result.reconstructions else 1.0
+                reconstructions[0].confidence if reconstructions else 1.0
             ),
             decision_metadata=DecisionMetadata(
                 candidate_count=len(result.evidence.sources),
                 selection_codes=tuple(
                     f"recon:{item.reconstruction_id.value}"
-                    for item in result.reconstructions
+                    for item in reconstructions
                 )
-                or tuple(f"rank:{hit.rank}" for hit in ranked_hits),
+                or tuple(f"rank:{hit.rank}" for hit in ranked_hits_tuple),
             ),
-            ranked_hits=tuple(ranked_hits),
+            ranked_hits=ranked_hits_tuple,
             pending_accesses=result.pending_accesses,
             candidate_count=len(result.evidence.sources),
             retrieval_tick=perception.tick,
             scoring_policy_version=self._scoring_policy.version,
-            reconstructions=result.reconstructions,
+            reconstructions=reconstructions,
             reconsolidation=result.reconsolidation,
             reconstruction_policy_version=policy.version,
             semantic_beliefs=semantic_beliefs,
@@ -296,7 +318,13 @@ class ReferenceMemoryRetriever:
     consumers read via ``episode_facts``.
     """
 
-    __slots__ = ("_belief_reader", "_limit", "_scoring_policy", "_service")
+    __slots__ = (
+        "_belief_reader",
+        "_emotion_bias",
+        "_limit",
+        "_scoring_policy",
+        "_service",
+    )
 
     def __init__(
         self,
@@ -305,6 +333,7 @@ class ReferenceMemoryRetriever:
         scoring_policy: MemoryScoringPolicy,
         belief_reader: BeliefReader | None = None,
         limit: int = _DEFAULT_LIMIT,
+        emotion_bias: bool = False,
     ) -> None:
         if type(scoring_policy) is not MemoryScoringPolicy:
             raise TypeError("scoring_policy must be MemoryScoringPolicy")
@@ -314,10 +343,13 @@ class ReferenceMemoryRetriever:
             )
         if limit < 1:
             raise ValueError("limit must be positive")
+        if type(emotion_bias) is not bool:
+            raise TypeError("emotion_bias must be bool")
         self._service = memory_service
         self._scoring_policy = scoring_policy
         self._belief_reader = belief_reader
         self._limit = limit
+        self._emotion_bias = emotion_bias
 
     async def retrieve(
         self,
@@ -367,8 +399,23 @@ class ReferenceMemoryRetriever:
             ),
         )
         result = await self._service.retrieve(retrieve)
+        prior = (
+            None
+            if loop_input.snapshot is None
+            else loop_input.snapshot.emotional_state
+        )
+        from agents.cognition.emotion_bias import (
+            EMOTION_BIAS_POLICY_VERSION,
+            apply_retrieval_emotion_bias,
+        )
+
+        biased_hits, retrieval_bias = apply_retrieval_emotion_bias(
+            result.hits,
+            prior,
+            enabled=self._emotion_bias,
+        )
         reference_episodes: list[ReferenceEpisode] = []
-        for hit in result.hits:
+        for hit in biased_hits:
             if hit.trace.owner_id != loop_input.agent_id:
                 _LOG.error(
                     "memory_reference_foreign_owner",
@@ -388,7 +435,7 @@ class ReferenceMemoryRetriever:
                     policy_version=MEMORY_POLICY_VERSION,
                 )
             )
-        memory_ids = tuple(hit.trace.memory_id for hit in result.hits)
+        memory_ids = tuple(hit.trace.memory_id for hit in biased_hits)
         confidence = (
             reference_episodes[0].confidence if reference_episodes else 1.0
         )
@@ -399,6 +446,8 @@ class ReferenceMemoryRetriever:
                     "owner_id": loop_input.agent_id.value,
                     "tick": perception.tick,
                     "policy_version": MEMORY_POLICY_VERSION,
+                    "emotion_bias_policy_version": EMOTION_BIAS_POLICY_VERSION,
+                    "emotion_bias_applied": retrieval_bias,
                     "mode": "reference",
                     "candidate_count": result.candidate_count,
                     "result_count": len(reference_episodes),
@@ -416,9 +465,9 @@ class ReferenceMemoryRetriever:
                 selection_codes=tuple(
                     f"ref:{item.episode_id}" for item in reference_episodes
                 )
-                or tuple(f"rank:{hit.rank}" for hit in result.hits),
+                or tuple(f"rank:{hit.rank}" for hit in biased_hits),
             ),
-            ranked_hits=tuple(result.hits),
+            ranked_hits=biased_hits,
             pending_accesses=result.pending_accesses,
             candidate_count=result.candidate_count,
             retrieval_tick=perception.tick,

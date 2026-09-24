@@ -14,6 +14,7 @@ from agents.cognition.models import (
     CognitiveLoopInput,
     DecisionMetadata,
     DriveEffect,
+    EmotionalStateEvaluation,
     FutureAppraisal,
     GoalBoard,
     GoalEffect,
@@ -183,9 +184,11 @@ class MotivationAppraisal:
         self_state: SelfModel,
         futures: PossibleFutures,
         goal_board: GoalBoard | None = None,
+        emotional_state: EmotionalStateEvaluation | None = None,
     ) -> MotivationEvaluation:
         owner = loop_input.agent_id
         tick = loop_input.observation.tick
+        _ = emotional_state  # risk already scaled in imagination; reserved for votes
         _LOG.debug(
             "motivation_start",
             extra={
@@ -193,6 +196,7 @@ class MotivationAppraisal:
                     "owner_id": owner.value,
                     "tick": tick,
                     "policy_version": POLICY_VERSION,
+                    "emotion_present": emotional_state is not None,
                     "status": "start",
                 }
             },

@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import logging
 from collections.abc import Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import Final
 
 from agents.cognition.models import (
@@ -17,6 +17,7 @@ from agents.cognition.models import (
     CognitiveLoopInput,
     DecisionMetadata,
     DriveEffect,
+    EmotionalStateEvaluation,
     FutureSourceRef,
     GoalBoard,
     GoalEffect,
@@ -146,6 +147,7 @@ class ImaginationEngine:
         self_state: SelfModel,
         memory: RetrievedMemoryContext,
         goal_board: GoalBoard | None = None,
+        emotional_state: EmotionalStateEvaluation | None = None,
     ) -> PossibleFutures:
         owner = loop_input.agent_id
         tick = loop_input.observation.tick
@@ -246,6 +248,21 @@ class ImaginationEngine:
             )
             raise
 
+        from agents.cognition.emotion_bias import scale_subjective_risks
+
+        biased: list[ImaginedFuture] = []
+        risk_bias_applied = False
+        for future in futures:
+            scaled, changed = scale_subjective_risks(
+                future.risks, emotional_state
+            )
+            if changed:
+                risk_bias_applied = True
+                biased.append(replace(future, risks=scaled))
+            else:
+                biased.append(future)
+        futures = tuple(biased)
+
         if evidence.ignored_belief_count > 0:
             _LOG.warning(
                 "imagination_evidence_truncated",
@@ -263,6 +280,8 @@ class ImaginationEngine:
         direction_codes = tuple(
             f"{future.future_id}:{future.direction.value}" for future in futures
         )
+        if risk_bias_applied:
+            direction_codes = (*direction_codes, "emotion_risk_scale")
         confidence = min((future.confidence for future in futures), default=1.0)
         result = PossibleFutures(
             owner_id=owner,

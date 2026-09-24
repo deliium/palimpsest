@@ -823,6 +823,10 @@ class SimulationRunner:
                     scoring_policy=scoring_policy,
                     reconstruction_policy=reconstruction_policy,
                     belief_reader=None,
+                    emotion_bias=(
+                        loop_config.emotional_state_mode
+                        is CognitionEmotionalStateMode.ENABLED
+                    ),
                 )
                 cognitive_loop = build_cognitive_loop(
                     loop_config,
@@ -1788,12 +1792,14 @@ def _memory_retriever_for(
     scoring_policy: MemoryScoringPolicy,
     reconstruction_policy: MemoryReconstructionPolicy | None = None,
     belief_reader: object | None = None,
+    emotion_bias: bool = False,
 ) -> ReferenceMemoryRetriever | ScopedMemoryRetriever:
     if mode is MemoryMode.REFERENCE:
         return ReferenceMemoryRetriever(
             memory_service,
             scoring_policy=scoring_policy,
             belief_reader=belief_reader,  # type: ignore[arg-type]
+            emotion_bias=emotion_bias,
         )
     if mode is MemoryMode.RECONSTRUCTIVE:
         return ScopedMemoryRetriever(
@@ -1801,6 +1807,7 @@ def _memory_retriever_for(
             scoring_policy=scoring_policy,
             reconstruction_policy=reconstruction_policy,
             belief_reader=belief_reader,  # type: ignore[arg-type]
+            emotion_bias=emotion_bias,
         )
     raise RunnerConstructionError(
         RunnerConstructionErrorCode.INVALID_CONFIG,

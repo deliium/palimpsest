@@ -572,6 +572,8 @@ class SocialMessagePolicy(Protocol):
         memory: RetrievedMemoryContext,
         preferred_recipient_id: EntityId | None = None,
         snapshot_memories: Sequence[MemoryTrace] = (),
+        selected_belief_ids: Sequence[BeliefId] = (),
+        emotional_state: object | None = None,
     ) -> SocialMessageDecision | None: ...
 
 
@@ -590,6 +592,7 @@ class DeterministicSocialMessagePolicy:
         preferred_recipient_id: EntityId | None = None,
         snapshot_memories: Sequence[MemoryTrace] = (),
         selected_belief_ids: Sequence[BeliefId] = (),
+        emotional_state: object | None = None,
     ) -> SocialMessageDecision | None:
         recipients = _eligible_recipients(observation)
         candidate_count = len(recipients)
@@ -632,8 +635,20 @@ class DeterministicSocialMessagePolicy:
         )
         # Tell from beliefs only when the caller selected specific belief IDs
         # (share-intent). Bare COMMUNICATE stays talk/ask/retell/recon grounded.
+        # Anger-biased emotion may prefer tell without explicit belief selection.
+        from agents.cognition.emotion_bias import social_act_preference
+        from agents.cognition.models import EmotionalStateEvaluation
+
+        emotion_eval: EmotionalStateEvaluation | None = None
+        if emotional_state is not None:
+            if type(emotional_state) is not EmotionalStateEvaluation:
+                raise TypeError("emotional_state must be EmotionalStateEvaluation")
+            emotion_eval = emotional_state
+        act_pref = social_act_preference(emotion_eval)
+
         decision: SocialMessageDecision | None = None
-        if selected_ids and beliefs and beliefs[0].confidence.confidence >= 0.5:
+        allow_belief_tell = bool(selected_ids) or act_pref == "tell"
+        if allow_belief_tell and beliefs and beliefs[0].confidence.confidence >= 0.5:
             claim = beliefs[0]
             conf = claim.confidence.confidence
             utterance = origin_utterance(
@@ -659,7 +674,11 @@ class DeterministicSocialMessagePolicy:
                     "cognition": {
                         "owner_id": owner_id.value,
                         "policy_version": SOCIAL_MESSAGE_POLICY_VERSION,
-                        "reason_code": "selected_belief_testify",
+                        "reason_code": (
+                            "emotion_prefer_tell"
+                            if act_pref == "tell" and not selected_ids
+                            else "selected_belief_testify"
+                        ),
                         "selected_belief_count": len(selected_ids),
                         "confidence_band": confidence_band(conf),
                     }
@@ -676,6 +695,43 @@ class DeterministicSocialMessagePolicy:
                         "belief_count": len(beliefs),
                     }
                 },
+            )
+
+        if decision is None and act_pref == "ask":
+            utterance = origin_utterance(
+                text=_SAFE_ASK_TEXT,
+                speaker_id=speaker_id,
+                communication_id="plan-ask-emotion",
+                sender_confidence=0.5,
+                source_basis=CommunicationSourceBasis.DIRECT_OBSERVATION,
+                concepts=(),
+            )
+            decision = SocialMessageDecision(
+                command=Ask(recipient_id=recipient, utterance=utterance),
+                action_kind="ask",
+                source_basis=CommunicationSourceBasis.DIRECT_OBSERVATION,
+                hop_count=0,
+                sender_confidence=utterance.declared.sender_confidence,
+                fallback=False,
+                candidate_count=candidate_count,
+            )
+        elif decision is None and act_pref == "talk":
+            utterance = origin_utterance(
+                text=_SAFE_TALK_TEXT,
+                speaker_id=speaker_id,
+                communication_id="plan-talk-emotion",
+                sender_confidence=0.5,
+                source_basis=CommunicationSourceBasis.DIRECT_OBSERVATION,
+                concepts=(),
+            )
+            decision = SocialMessageDecision(
+                command=Talk(recipient_id=recipient, utterance=utterance),
+                action_kind="talk",
+                source_basis=CommunicationSourceBasis.DIRECT_OBSERVATION,
+                hop_count=0,
+                sender_confidence=utterance.declared.sender_confidence,
+                fallback=False,
+                candidate_count=candidate_count,
             )
 
         if decision is None:

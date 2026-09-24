@@ -226,7 +226,7 @@ async def test_cross_agent_observation_rejected() -> None:
 @pytest.mark.asyncio
 async def test_cognition_failure_yields_no_submission() -> None:
     class BoomPlanner:
-        async def plan(self, loop_input, intention, futures, memory=None, goal_board=None):  # type: ignore[no-untyped-def]
+        async def plan(self, loop_input, intention, futures, memory=None, goal_board=None, emotional_state=None):  # type: ignore[no-untyped-def]
             raise RuntimeError("secret planner boom")
 
     bootstrap = _bootstrap(("agent-1", "body-1"))

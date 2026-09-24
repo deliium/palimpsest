@@ -16,6 +16,7 @@ from agents.cognition.models import (
     ActionPlan,
     CognitiveLoopInput,
     DecisionMetadata,
+    EmotionalStateEvaluation,
     FutureAppraisal,
     GoalBoard,
     ImaginedFuture,
@@ -113,6 +114,7 @@ class MultiCriteriaIntentionSelector:
         motivation: MotivationEvaluation,
         futures: PossibleFutures,
         goal_board: GoalBoard | None = None,
+        emotional_state: EmotionalStateEvaluation | None = None,
     ) -> SelectedIntention:
         owner = loop_input.agent_id
         tick = loop_input.observation.tick
@@ -165,6 +167,27 @@ class MultiCriteriaIntentionSelector:
         if focus_supported:
             surviving = focus_supported
 
+        from agents.cognition.emotion_bias import prefer_emotion_directions
+
+        emotion_code: str | None = None
+        preferred, emotion_code = prefer_emotion_directions(
+            tuple(
+                futures_by_id[item.future_id].direction
+                for item in surviving
+                if item.future_id in futures_by_id
+            ),
+            emotional_state,
+        )
+        if preferred is not None:
+            emotion_filtered = [
+                item
+                for item in surviving
+                if item.future_id in futures_by_id
+                and futures_by_id[item.future_id].direction in preferred
+            ]
+            if emotion_filtered:
+                surviving = emotion_filtered
+
         undominated = _pareto_filter(surviving, futures_by_id, motivation)
         after_pareto = len(undominated)
         if not undominated:
@@ -180,6 +203,8 @@ class MultiCriteriaIntentionSelector:
             f"future:{winner.future_id}",
             f"tie:{tie_break}",
         ]
+        if emotion_code is not None:
+            selection_codes.append(emotion_code)
         if goal_board is not None and goal_board.foci_ids and future is not None:
             focus_ids = set(goal_board.foci_ids)
             if any(effect.goal_id in focus_ids for effect in future.goal_effects):
@@ -239,6 +264,7 @@ class CommandPlanner:
         futures: PossibleFutures,
         memory: RetrievedMemoryContext | None = None,
         goal_board: GoalBoard | None = None,
+        emotional_state: EmotionalStateEvaluation | None = None,
     ) -> ActionPlan:
         _ = goal_board
         owner = loop_input.agent_id
@@ -269,6 +295,7 @@ class CommandPlanner:
                 memory=memory,
                 social_messages=self._social_messages,
                 snapshot=loop_input.snapshot,
+                emotional_state=emotional_state,
             )
             if compiled is None:
                 used_fallback = True
@@ -843,6 +870,7 @@ def _compile_command(
     memory: RetrievedMemoryContext | None = None,
     social_messages: object | None = None,
     snapshot: SubjectiveSnapshot | None = None,
+    emotional_state: EmotionalStateEvaluation | None = None,
 ) -> AgentCommand | None:
     direction = future.direction
     target = future.target_entity_id
@@ -937,6 +965,7 @@ def _compile_command(
             memory=memory_ctx,
             preferred_recipient_id=preferred,
             snapshot_memories=(() if snapshot is None else snapshot.memories),
+            emotional_state=emotional_state,
         )
         if decision is None:
             return None

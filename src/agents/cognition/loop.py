@@ -35,6 +35,7 @@ from agents.cognition.models import (
     ComponentKind,
     ComponentStatus,
     DecisionMetadata,
+    EmotionalStateEvaluation,
     GoalBoard,
     IntentionCode,
     InternalAgentState,
@@ -65,6 +66,7 @@ _STAGE_ORDER: Final[tuple[ComponentKind, ...]] = (
     ComponentKind.SITUATION,
     ComponentKind.SELF_STATE,
     ComponentKind.GOAL_MANAGEMENT,
+    ComponentKind.EMOTIONAL_STATE,
     ComponentKind.FUTURES,
     ComponentKind.MOTIVATION,
     ComponentKind.INTENTION,
@@ -244,39 +246,76 @@ class CognitiveLoop:
             ),
             expected_type=GoalBoard,
         )
-        futures = await run_stage(
-            kind=ComponentKind.FUTURES,
+        prior_emotion = None
+        if loop_input.snapshot is not None:
+            prior_emotion = loop_input.snapshot.emotional_state
+        emotional_evaluation = await run_stage(
+            kind=ComponentKind.EMOTIONAL_STATE,
             ordinal=5,
             input_artifact=goal_board,
+            awaitable=self._emotional_state.appraise(
+                loop_input,
+                perception,
+                situation,
+                memory,
+                self_state,
+                goal_board,
+                prior_emotion,
+            ),
+            expected_type=EmotionalStateEvaluation,
+        )
+        futures = await run_stage(
+            kind=ComponentKind.FUTURES,
+            ordinal=6,
+            input_artifact=emotional_evaluation,
             awaitable=self._futures.imagine(
-                loop_input, situation, self_state, memory, goal_board
+                loop_input,
+                situation,
+                self_state,
+                memory,
+                goal_board,
+                emotional_evaluation,
             ),
             expected_type=PossibleFutures,
         )
         motivation = await run_stage(
             kind=ComponentKind.MOTIVATION,
-            ordinal=6,
+            ordinal=7,
             input_artifact=futures,
             awaitable=self._motivation.evaluate(
-                loop_input, situation, self_state, futures, goal_board
+                loop_input,
+                situation,
+                self_state,
+                futures,
+                goal_board,
+                emotional_evaluation,
             ),
             expected_type=MotivationEvaluation,
         )
         intention = await run_stage(
             kind=ComponentKind.INTENTION,
-            ordinal=7,
+            ordinal=8,
             input_artifact=motivation,
             awaitable=self._intention.select(
-                loop_input, motivation, futures, goal_board
+                loop_input,
+                motivation,
+                futures,
+                goal_board,
+                emotional_evaluation,
             ),
             expected_type=SelectedIntention,
         )
         plan = await run_stage(
             kind=ComponentKind.PLANNING,
-            ordinal=8,
+            ordinal=9,
             input_artifact=intention,
             awaitable=self._planner.plan(
-                loop_input, intention, futures, memory, goal_board
+                loop_input,
+                intention,
+                futures,
+                memory,
+                goal_board,
+                emotional_evaluation,
             ),
             expected_type=ActionPlan,
         )
@@ -286,7 +325,7 @@ class CognitiveLoop:
             fail(
                 reason=CognitionFailureReason.COMMAND_REJECTED,
                 kind=ComponentKind.PLANNING,
-                ordinal=8,
+                ordinal=9,
                 input_artifact=intention,
             )
             raise  # pragma: no cover
@@ -300,6 +339,7 @@ class CognitiveLoop:
             situation=situation,
             self_state=self_state,
             goal_board=goal_board,
+            emotional_state=emotional_evaluation,
             futures=futures,
             motivation=motivation,
             intention=intention,
@@ -362,7 +402,7 @@ class CognitiveLoop:
         )
         updates = await run_stage(
             kind=ComponentKind.MEMORY_UPDATE,
-            ordinal=9,
+            ordinal=10,
             input_artifact=effective_plan,
             awaitable=self._memory_updates.propose_updates(
                 loop_input,

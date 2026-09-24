@@ -41,6 +41,7 @@ class PerspectiveOwnershipCode(StrEnum):
     MISADDRESSED_INBOX = "misaddressed_inbox"
     FOREIGN_GOAL = "foreign_goal"
     FOREIGN_DRIVE = "foreign_drive"
+    FOREIGN_EMOTIONAL_STATE = "foreign_emotional_state"
     IDENTITY_MISMATCH = "identity_mismatch"
     INVALID_INPUT = "invalid_input"
 
@@ -122,6 +123,7 @@ def build_perspective(
     snapshot_revision: int = 0,
     goals: Sequence[Goal] = (),
     drives: DriveProfile | None = None,
+    emotional_state: object | None = None,
 ) -> Perspective:
     """Pair one ``AgentId`` with exactly its registered entity observation.
 
@@ -247,6 +249,27 @@ def build_perspective(
     from memory.beliefs import SemanticBelief
     from social.relationships import DirectedRelationshipProfile
 
+    if emotional_state is not None:
+        from agents.cognition.models import AgentEmotionalState
+
+        if type(emotional_state) is not AgentEmotionalState:
+            _LOGGER.error(
+                "%s reason=emotional_state_type agent=%s",
+                PerspectiveOwnershipCode.INVALID_INPUT.value,
+                agent_id.value,
+            )
+            raise TypeError("emotional_state must be AgentEmotionalState")
+        if emotional_state.owner_id != agent_id:
+            _LOGGER.warning(
+                "%s agent=%s",
+                PerspectiveOwnershipCode.FOREIGN_EMOTIONAL_STATE.value,
+                agent_id.value,
+            )
+            raise PerspectiveOwnershipError(
+                PerspectiveOwnershipCode.FOREIGN_EMOTIONAL_STATE,
+                "emotional_state owner_id must match perspective agent",
+            )
+
     perspective = Perspective(
         agent_id=agent_id,
         observation=observation,
@@ -259,13 +282,20 @@ def build_perspective(
         goals=goals_tuple,
         drives=drive_profile,
         social_identity=social_identity,
+        emotional_state=emotional_state,
     )
     _ = SemanticBelief, DirectedRelationshipProfile
+    emotion_kind_count = (
+        0
+        if perspective.emotional_state is None
+        else len(perspective.emotional_state.intensities)  # type: ignore[union-attr]
+    )
     _LOGGER.debug(
         "perspective_built agent=%s entity=%s tick=%s revision=%s "
         "memories=%s beliefs=%s semantic_beliefs=%s relationships=%s "
         "goals=%s drives=%s inbox=%s counterparts=%s "
-        "communications=%s occurrences=%s snapshot_revision=%s",
+        "communications=%s occurrences=%s snapshot_revision=%s "
+        "emotional_kinds=%s",
         agent_id.value,
         expected_entity_id.value,
         observation.tick,
@@ -281,5 +311,6 @@ def build_perspective(
         len(observation.communications),
         len(observation.occurrences),
         perspective.snapshot_revision,
+        emotion_kind_count,
     )
     return perspective
