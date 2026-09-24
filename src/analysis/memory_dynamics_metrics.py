@@ -90,7 +90,9 @@ def compute_memory_dynamics(
         if true_ids or selected:
             union = true_ids | selected
             accuracy = (
-                0.0 if not union else float(len(true_ids & selected)) / float(len(union))
+                0.0
+                if not union
+                else float(len(true_ids & selected)) / float(len(union))
             )
         else:
             source_n = max(row.source_count, 1)

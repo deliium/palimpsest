@@ -102,6 +102,7 @@ from experiments.reference_scenario import (
 
 __all__ = [
     "DEFAULT_OVERRIDE_BUDGET",
+    "EXPERIMENT_A_V1_CONDITION_IDS",
     "EXPERIMENT_RECORD_SCHEMA_VERSION",
     "MILESTONE_ARBITER_POLICY_VERSION",
     "REFERENCE_DEATH_TICK",
@@ -163,7 +164,6 @@ __all__ = [
     "compare_compatible_bundles",
     "condition_fingerprint",
     "definition_fingerprint",
-    "EXPERIMENT_A_V1_CONDITION_IDS",
     "experiment_a_memory",
     "experiment_a_memory_v1_arms",
     "experiment_b_imagination",

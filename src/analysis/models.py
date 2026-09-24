@@ -1155,7 +1155,9 @@ class BeliefClaimRow:
 
     def __post_init__(self) -> None:
         object.__setattr__(
-            self, "owner_id", require_stable_id("BeliefClaimRow.owner_id", self.owner_id)
+            self,
+            "owner_id",
+            require_stable_id("BeliefClaimRow.owner_id", self.owner_id),
         )
         object.__setattr__(
             self,
@@ -1163,7 +1165,9 @@ class BeliefClaimRow:
             require_stable_id("BeliefClaimRow.belief_id", self.belief_id),
         )
         object.__setattr__(
-            self, "claim_id", require_stable_id("BeliefClaimRow.claim_id", self.claim_id)
+            self,
+            "claim_id",
+            require_stable_id("BeliefClaimRow.claim_id", self.claim_id),
         )
         object.__setattr__(
             self,
@@ -1183,7 +1187,9 @@ class BeliefClaimRow:
         object.__setattr__(
             self,
             "evidence_stage",
-            require_evidence_stage("BeliefClaimRow.evidence_stage", self.evidence_stage),
+            require_evidence_stage(
+                "BeliefClaimRow.evidence_stage", self.evidence_stage
+            ),
         )
         if self.confidence is not None:
             if type(self.confidence) is not float or (

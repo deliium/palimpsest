@@ -876,8 +876,8 @@ def _spec_memory_dynamics() -> MetricSpecification:
         censoring_policy="missing audits -> absent; never invent competitor sets",
         formulas={
             "recall_accuracy": (
-                "mean Jaccard(|source_memory_ids ∩ selected_ids| / "
-                "|source_memory_ids ∪ selected_ids|) over audits"
+                "mean Jaccard(|source_memory_ids n selected_ids| / "
+                "|source_memory_ids u selected_ids|) over audits"
             ),
             "source_confusion": (
                 "fraction of audits with distortion_code source_confusion"
