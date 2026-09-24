@@ -152,7 +152,7 @@ Provide metrics hooks for recall accuracy, source confusion, memory survival, in
   - Logging requirements: Experiment construction logs condition ids/counts only.
   - Dependencies: Task 6.
 
-- [ ] Task 8: Wire analysis-only audit export into experiment composition and collectors.
+- [x] Task 8: Wire analysis-only audit export into experiment composition and collectors.
   - Deliverable: Define a neutral in-run audit evidence DTO (IDs/codes/counts only) collected during V2 recalls (runner/scientific sink or arm artifact — **not** agent-visible). Map via `experiments.composition` into analysis sources. Extend Experiment A collectors to populate `MetricComputationInputs.memory_dynamics_report` when audits exist. Do **not** require Alembic; do **not** extend `PersistedReconstructionRow` unless export without durability proves impossible (escalate then — out of default scope).
   - Expected behavior: V2 arm runs produce exportable audits; REFERENCE/V1 produce none; agents still cannot read audits.
   - Files: `src/experiments/persistence.py` (ports only if needed), `src/experiments/composition.py`, `src/experiments/collectors.py`, `src/analysis/sources.py` as needed, collector unit tests.
@@ -161,21 +161,21 @@ Provide metrics hooks for recall accuracy, source confusion, memory survival, in
 
 ### Phase 4: Metrics, Fixtures, Docs
 
-- [ ] Task 9: Add `memory_dynamics@1` metric family with five hooks and collector input.
+- [x] Task 9: Add `memory_dynamics@1` metric family with five hooks and collector input.
   - Deliverable: Add `MetricFamilyId.MEMORY_DYNAMICS`; bump `METRIC_FAMILY_COUNT` 15→16; update `_BUILDERS`, `validate_metric_catalog`, and any “fifteen families” docs/tests. Implement `src/analysis/memory_dynamics_metrics.py` with document values `recall_accuracy`, `source_confusion`, `memory_survival`, `interference`, `confidence_calibration` (canonical quantized floats + defined empty behavior). Add optional `memory_dynamics_report` on `MetricComputationInputs`; assemble when present (mirror drift). Architecture isolation: metrics never flow into cognition.
   - Expected behavior: Known-answer fixtures stable; missing report → empty/ABSENT per spec; V1-only runs assemble without failure.
   - Files: `src/analysis/specifications.py`, `src/analysis/memory_dynamics_metrics.py`, `src/analysis/metric_service.py`, `src/analysis/__init__.py`, `tests/unit/test_metric_specifications.py`, `tests/unit/metric_fixtures.py`, assembly tests, isolation tests if needed.
   - Logging requirements: DEBUG family id + value keys present; never fact text.
   - Dependencies: Tasks 2, 8.
 
-- [ ] Task 10: Deterministic interference and source-confusion fixtures.
+- [x] Task 10: Deterministic interference and source-confusion fixtures.
   - Deliverable: Fixtures with two+ similar experiences (overlapping concepts/entities, distinct provenance); different cues select/combine different traces; repeated recall changes relative strength/survival; agent-visible attribution can disagree with audit true sources; confidence calibration moves under degradation. Assert V1 (`dynamics_policy=None`) on the same store does not apply interference blend/confusion. Prefer `InMemoryMemoryService` + fixed ticks/IDs.
   - Expected behavior: Deterministic across runs; expected winner IDs / distortion codes asserted in tests only.
   - Files: `tests/unit/test_memory_dynamics_fixtures.py`, optional analysis known-answer using the same fixture.
   - Logging requirements: Tests may assert metadata log fields; never require payload logging.
   - Dependencies: Tasks 3–4, Task 9 for metric assertions.
 
-- [ ] Task 11: Documentation and V1 regression gate green.
+- [x] Task 11: Documentation and V1 regression gate green.
   - Deliverable: Update `docs/memory-reconstruction.md` (V2 dynamics, request `dynamics_policy`, agent vs `MemoryRecallResult.audits`, Emotion×V2 ordering, no age-delete, mode table), `docs/experiments.md` (Experiment A third arm + regression arm isolation), `docs/analysis-metrics.md` (`memory_dynamics@1`, sixteen families). Confirm `test_v1_regression_gate.py` passes under flags-off, tracing-off, V1 arms only.
   - Expected behavior: Docs match shipped behavior; regression gate green; V2 described as opt-in mode.
   - Files: `docs/memory-reconstruction.md`, `docs/experiments.md`, `docs/analysis-metrics.md`, regression tests.
@@ -194,16 +194,16 @@ Provide metrics hooks for recall accuracy, source confusion, memory survival, in
 
 ## Verification checklist
 
-- [ ] `MemoryMode` and `CognitionMemoryMode` each have three values; default `RECONSTRUCTIVE`
-- [ ] `MEMORY_POLICY_VERSION` unchanged; V2 selected via `MemoryRecallRequest.dynamics_policy`
-- [ ] V1 reconstructive recalls bit-identical on frozen fixtures
-- [ ] V2 produces `MemoryRecallResult.audits`; agents cannot read audits
-- [ ] Semanticization pending applies via runtime parallel to reconsolidation
-- [ ] Emotion bias runs after dynamics; audit reflects pre-emotion selection
-- [ ] No age-based hard deletes in V2 path
-- [ ] Experiment A includes `a-reconstructive-v2`; V1 regression pins two arms only
-- [ ] Audit export feeds `memory_dynamics_report`
-- [ ] `memory_dynamics@1` exposes five named hooks; catalog size 16
-- [ ] Interference fixtures deterministic
-- [ ] V1 regression gate green (flags-off, tracing-off)
-- [ ] Logs metadata-only
+- [x] `MemoryMode` and `CognitionMemoryMode` each have three values; default `RECONSTRUCTIVE`
+- [x] `MEMORY_POLICY_VERSION` unchanged; V2 selected via `MemoryRecallRequest.dynamics_policy`
+- [x] V1 reconstructive recalls bit-identical on frozen fixtures
+- [x] V2 produces `MemoryRecallResult.audits`; agents cannot read audits
+- [x] Semanticization pending applies via runtime parallel to reconsolidation
+- [x] Emotion bias runs after dynamics; audit reflects pre-emotion selection
+- [x] No age-based hard deletes in V2 path
+- [x] Experiment A includes `a-reconstructive-v2`; V1 regression pins two arms only
+- [x] Audit export feeds `memory_dynamics_report`
+- [x] `memory_dynamics@1` exposes five named hooks; catalog size 16
+- [x] Interference fixtures deterministic
+- [x] V1 regression gate green (flags-off, tracing-off)
+- [x] Logs metadata-only

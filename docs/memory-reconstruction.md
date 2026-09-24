@@ -4,25 +4,40 @@
 
 Downstream cognition consumes `ReconstructedMemory` episodes as subjective experience evidence for imagination and risk appraisal; ranked source traces remain scientific evidence only. Reconstructions may be inaccurate — different remembered concepts can change subjective risk without changing world truth.
 
+## Memory modes (experiment treatments)
+
+| `MemoryMode` | Behavior |
+| --- | --- |
+| `REFERENCE` | Exact/reference retrieval (`ReferenceMemoryRetriever`) |
+| `RECONSTRUCTIVE` (default) | Frozen V1 merge-recall + optional reconsolidation |
+| `RECONSTRUCTIVE_V2` | Opt-in dynamics: cue competition, interference, decay, source confusion, testing effects, semanticization |
+
+V2 is selected by injecting `MemoryRecallRequest.dynamics_policy` (`memory-dynamics-v1` defaults). When `dynamics_policy is None`, the V1 path stays bit-identical. Soft-forget remains the only deactivation path — V2 never hard-deletes by age.
+
+**Agent vs audit split:** agent-facing `ReconstructedMemory` / `RetrievedMemoryContext` never carry `RecallAuditRecord`. True provenance, competitors, and distortion codes live on `MemoryRecallResult.audits` only and export into `MemoryDynamicsReport` for metrics.
+
+**Emotion × V2 ordering:** dynamics + audit complete inside `MemoryService.recall` first; optional `apply_*_emotion_bias` may re-rank agent-visible hits afterward. Audit `selected_ids` are pre-emotion.
+
 ## Pipeline
 
 ```text
-MemoryRecallRequest
+MemoryRecallRequest (+ optional dynamics_policy)
 → owner-scoped retrieve
 → RecallEvidence
-→ MemoryReconstructor (deterministic or LLM-backed)
-→ ReconstructedMemory (+ optional ReconsolidationIntent)
+→ V1 DeterministicMemoryReconstructor  OR  V2 dynamics reconstruct
+→ ReconstructedMemory (+ optional ReconsolidationIntent / pending semanticization)
 → AgentRuntime.apply (deferred, atomic with access receipts)
 ```
 
 | Type | Role |
 | --- | --- |
-| `MemoryRecallRequest` | Composes `MemoryRetrieveRequest` + policy, beliefs, recall context, optional derived ID |
+| `MemoryRecallRequest` | Composes `MemoryRetrieveRequest` + policy, beliefs, recall context, optional derived ID, optional `dynamics_policy` |
 | `RecallEvidence` | Bounded canonical DTO: ranked sources, beliefs, context — **no** `WorldEvent` |
 | `MemoryReconstructor` | Protocol: `reconstruct(evidence) -> ReconstructedMemory` |
 | `ReconstructedMemory` | Subjective episode (narrative + structured fragments + provenance metadata) |
 | `ReconsolidationIntent` | Deferred plan: append-only record, source edges, optional derived `MemoryTrace` |
-| `MemoryRecallResult` | Reconstructions, evidence, pending accesses, optional reconsolidation |
+| `RecallAuditRecord` | Experiment-only V2 audit (IDs/codes/counts); never on agent context |
+| `MemoryRecallResult` | Reconstructions, evidence, pending accesses, optional reconsolidation, optional audits |
 
 Opaque `EventId` may appear as `observed_source_id` correlation only. Memory, agents, cognition, and reconstruction APIs never accept or dereference `WorldEvent`.
 

@@ -12,13 +12,15 @@ Objective instrumentation is post-commit observation only. Collectors never flow
 
 | ID | Treatment |
 | --- | --- |
-| A | Exact/reference memory vs reconstructive memory |
+| A | Exact/reference memory vs V1 reconstructive vs opt-in `RECONSTRUCTIVE_V2` |
 | B | Imagination (future simulation) disabled vs enabled |
 | C | Mortality disabled vs enabled (non-lethal physical rules overlay) |
 | D | Controlled curiosity / safety / belonging / status drive profiles |
 | E | Inject one controlled false `Tell` through ordinary communication; measure propagation without exposing the objective truth label to agents |
 
 Builders share scenario, seed, and stochastic identity across paired arms; only declared treatment dimensions differ. Condition/config fingerprints change when treatments change.
+
+**Experiment A** has three arms (`a-reference`, `a-reconstructive`, `a-reconstructive-v2`). The V1 regression gate uses `experiment_a_memory_v1_arms()` / `EXPERIMENT_A_V1_CONDITION_IDS` so only the two V1 arms run — a broken V2 path cannot fail V1 `exact_trajectory_hash` baselines. V2 audits are harvested in-run, composed via `map_recall_audits_to_dynamics_report`, and never agent-visible.
 
 Catalog builders emit current write schema (`runner-config-v4`) with all `V2CapabilityFlags` default-off and `CognitionTraceSpec` disabled. Use `experiments.catalog.v1_regression_profile(config)` to assert the V1-equivalent profile (raises `v1_regression_flags_enabled` if any flag is on, or `v1_regression_trace_enabled` if tracing is enabled). Capability flags and tracing are configuration identifiers only; they do not change experiment-definition schema (`experiment-definition-v1`).
 

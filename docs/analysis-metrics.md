@@ -2,7 +2,7 @@
 
 [← Experiments](experiments.md) · [Memory reconstruction](memory-reconstruction.md) · [Back to README](../README.md)
 
-Executable formula, population, and edge-case policy for all fifteen V1 metric families lives in `analysis.specifications`. Implementations (Tasks 11–15) must consume these specs; they do not redefine denominators ad hoc.
+Executable formula, population, and edge-case policy for all sixteen metric families lives in `analysis.specifications`. Implementations must consume these specs; they do not redefine denominators ad hoc.
 
 ## Catalog
 
@@ -16,6 +16,7 @@ Executable formula, population, and edge-case policy for all fifteen V1 metric f
 | `repeated_conventions` | `repeated_conventions@1` | objective events + action resolution |
 | `behavioral_specialization` | `behavioral_specialization@1` | objective events + action resolution |
 | `memory_drift` | `memory_drift@1` | agent-visible + memory stages |
+| `memory_dynamics` | `memory_dynamics@1` | V2 recall audits (reconstruction stage) |
 | `belief_accuracy` | `belief_accuracy@1` | belief revision (ClaimTruthSpec only) |
 | `false_belief_persistence` | `false_belief_persistence@1` | belief revision + truth specs |
 | `relationship_stability` | `relationship_stability@1` | relationship revisions |
@@ -25,6 +26,8 @@ Executable formula, population, and edge-case policy for all fifteen V1 metric f
 | `rumor_distortion` | `rumor_distortion@1` | multi-hop structured content |
 
 Catalog version: `metric-catalog-v1`. Document schema: `MetricDocument` schema `1`.
+
+`memory_dynamics@1` values: `recall_accuracy`, `source_confusion`, `memory_survival`, `interference`, `confidence_calibration`. Assembled only when `MetricComputationInputs.memory_dynamics_report` is present (in-run V2 audit export). REFERENCE / V1 reconstructive arms leave the family absent.
 
 ### Supporting formulas (not a separate family)
 
