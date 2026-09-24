@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from agents.cognition.emotion import PassthroughEmotionalStateAppraiser
+
 import pytest
 
 from agents.cognition.defaults import (
@@ -178,6 +180,7 @@ async def test_defaults_replaceable_planner() -> None:
         situation=DirectSituationModeler(),
         self_state=DirectSelfStateProjector(),
         goal_manager=PassthroughGoalManager(),
+        emotional_state=PassthroughEmotionalStateAppraiser(),
         futures=PlaceholderFutureImagination(),
         motivation=StableMotivationEvaluator(),
         intention=StableIntentionSelector(),
@@ -257,6 +260,7 @@ async def test_fake_planner_in_loop_and_exhausted_script() -> None:
         situation=ScriptedSituationModeler(),
         self_state=ScriptedSelfStateProjector(),
         goal_manager=PassthroughGoalManager(),
+        emotional_state=PassthroughEmotionalStateAppraiser(),
         futures=ScriptedFutureImagination(),
         motivation=ScriptedMotivationEvaluator(),
         intention=ScriptedIntentionSelector(),

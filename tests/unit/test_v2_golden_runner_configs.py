@@ -67,6 +67,7 @@ def test_v3_rewrite_changes_config_fingerprint_not_flags() -> None:
     rewritten = json.loads(encode_runner_config(v3).decode("utf-8"))
     assert rewritten["schema_version"] == RUNNER_SCHEMA_VERSION_V3
     assert rewritten["capability_flags"]["advanced_social_inference"] is False
+    assert rewritten["capability_flags"]["short_term_emotional_state"] is False
 
 
 @pytest.mark.asyncio

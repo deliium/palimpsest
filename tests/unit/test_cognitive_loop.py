@@ -7,6 +7,7 @@ import logging
 
 import pytest
 
+from agents.cognition.emotion import PassthroughEmotionalStateAppraiser
 from agents.cognition.goal_manager import PassthroughGoalManager
 from agents.cognition.loop import (
     COMPONENT_VERSION,
@@ -71,6 +72,7 @@ def _loop(**overrides: object) -> CognitiveLoop:
         "situation": ScriptedSituationModeler(),
         "self_state": ScriptedSelfStateProjector(),
         "goal_manager": PassthroughGoalManager(),
+        "emotional_state": PassthroughEmotionalStateAppraiser(),
         "futures": ScriptedFutureImagination(),
         "motivation": ScriptedMotivationEvaluator(),
         "intention": ScriptedIntentionSelector(),
@@ -150,6 +152,7 @@ async def test_loop_runs_exact_stage_order_once(
         situation=TrackingSituation(),
         self_state=TrackingSelf(),
         goal_manager=TrackingGoals(),
+        emotional_state=PassthroughEmotionalStateAppraiser(),
         futures=TrackingFutures(),
         motivation=TrackingMotivation(),
         intention=TrackingIntention(),

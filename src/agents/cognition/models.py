@@ -46,6 +46,7 @@ from memory.models import (
     MemoryTrace,
     ReconsolidationIntent,
     ReconstructedMemory,
+    quantize_score,
 )
 from social.models import CommunicationEnvelope
 from world.actions import AgentCommand, require_agent_command
@@ -62,9 +63,12 @@ from world.observations import Observation
 
 __all__ = [
     "BOUNDARY_SCHEMA_VERSION",
+    "DEFAULT_EMOTION_KINDS",
+    "DEFAULT_EMOTION_POLICY_VERSION",
     "DEFAULT_SELF_MODEL_POLICY",
     "ActionDirection",
     "ActionPlan",
+    "AgentEmotionalState",
     "CognitionFailureReason",
     "CognitiveLoopInput",
     "CognitiveLoopProposal",
@@ -75,6 +79,11 @@ __all__ = [
     "CounterpartBinding",
     "DecisionMetadata",
     "DriveEffect",
+    "EmotionDriverCode",
+    "EmotionIntensity",
+    "EmotionKind",
+    "EmotionRegulationPolicy",
+    "EmotionalStateEvaluation",
     "EpisodeFacts",
     "FutureAppraisal",
     "FutureSourceRef",
@@ -113,8 +122,11 @@ __all__ = [
     "SubjectiveUncertainty",
     "UncertaintyBand",
     "action_direction_for_intention",
+    "default_emotion_regulation_policy",
     "diagnostic_projection",
+    "empty_emotional_state",
     "episode_facts",
+    "intensity_band",
     "intention_for_action_direction",
     "project_legacy_self_belief_state",
     "project_self_model",
@@ -153,6 +165,7 @@ class ComponentKind(StrEnum):
     SITUATION = "situation"
     SELF_STATE = "self_state"
     GOAL_MANAGEMENT = "goal_management"
+    EMOTIONAL_STATE = "emotional_state"
     FUTURES = "futures"
     MOTIVATION = "motivation"
     INTENTION = "intention"
@@ -204,6 +217,51 @@ class SituationClaimCode(StrEnum):
     RESOURCE_PRESENT = "resource_present"
     THREAT_SIGNAL = "threat_signal"
     TERMINAL_SELF = "terminal_self"
+
+
+class EmotionKind(StrEnum):
+    """Closed short-term emotion catalog (not free-form affect labels).
+
+    Distinct from ``RelationshipDimension.FEAR`` — emotion fear is transient
+    owner affect; relationship fear is an asymmetric directed assessment.
+    """
+
+    FEAR = "fear"
+    ANGER = "anger"
+    SADNESS = "sadness"
+    RELIEF = "relief"
+    ATTACHMENT = "attachment"
+    ANXIETY = "anxiety"
+    CONFIDENCE = "confidence"
+
+
+DEFAULT_EMOTION_KINDS: Final[tuple[EmotionKind, ...]] = (
+    EmotionKind.FEAR,
+    EmotionKind.ANGER,
+    EmotionKind.SADNESS,
+    EmotionKind.RELIEF,
+    EmotionKind.ATTACHMENT,
+    EmotionKind.ANXIETY,
+    EmotionKind.CONFIDENCE,
+)
+
+DEFAULT_EMOTION_POLICY_VERSION: Final[str] = "emotion.v1"
+
+
+class EmotionDriverCode(StrEnum):
+    """Closed driver reason codes for emotional-state transitions."""
+
+    OBSERVATION = "observation"
+    MEMORY_SALIENCE = "memory_salience"
+    THREAT = "threat"
+    GOAL_PROGRESS = "goal_progress"
+    GOAL_FAILURE = "goal_failure"
+    SOCIAL_INTERACTION = "social_interaction"
+    RELATIONSHIP = "relationship"
+    PHYSICAL_CONDITION = "physical_condition"
+    DECAY = "decay"
+    REGULATION = "regulation"
+    PASSTHROUGH = "passthrough"
 
 
 class MotivationCode(StrEnum):
@@ -1728,6 +1786,369 @@ class GoalBoard:
         )
 
 
+def intensity_band(value: float) -> UncertaintyBand:
+    """Map a unit-interval intensity to a closed band (no narrative)."""
+    intensity = require_confidence("intensity_band", value)
+    if intensity < 0.34:
+        return UncertaintyBand.LOW
+    if intensity < 0.67:
+        return UncertaintyBand.MEDIUM
+    return UncertaintyBand.HIGH
+
+
+@dataclass(frozen=True, slots=True)
+class EmotionIntensity:
+    """One quantized unit-interval intensity for a closed emotion kind."""
+
+    kind: EmotionKind
+    intensity: float
+
+    def __post_init__(self) -> None:
+        if type(self.kind) is not EmotionKind:
+            raise TypeError("EmotionIntensity.kind: invalid_type")
+        object.__setattr__(
+            self,
+            "intensity",
+            quantize_score(
+                require_confidence("EmotionIntensity.intensity", self.intensity)
+            ),
+        )
+
+    def __repr__(self) -> str:
+        return (
+            f"EmotionIntensity(kind={self.kind.value!r}, "
+            f"band={intensity_band(self.intensity).value!r})"
+        )
+
+
+@dataclass(frozen=True, slots=True)
+class EmotionRegulationPolicy:
+    """Versioned per-kind decay, gain, and clamp policy for emotional state."""
+
+    policy_version: str
+    enabled_kinds: tuple[EmotionKind, ...]
+    decay_rates: Mapping[EmotionKind, float]
+    gain_caps: Mapping[EmotionKind, float]
+    floors: Mapping[EmotionKind, float]
+    ceilings: Mapping[EmotionKind, float]
+    baselines: Mapping[EmotionKind, float]
+
+    def __post_init__(self) -> None:
+        object.__setattr__(
+            self,
+            "policy_version",
+            require_bounded_text(
+                "EmotionRegulationPolicy.policy_version",
+                self.policy_version,
+                max_length=_MAX_COMPONENT_VERSION_CHARS,
+            ),
+        )
+        if isinstance(self.enabled_kinds, (set, frozenset, Mapping)):
+            raise TypeError("EmotionRegulationPolicy.enabled_kinds: not_ordered")
+        if isinstance(self.enabled_kinds, (str, bytes)) or not isinstance(
+            self.enabled_kinds, Sequence
+        ):
+            raise TypeError("EmotionRegulationPolicy.enabled_kinds: not_ordered")
+        enabled = tuple(self.enabled_kinds)
+        if not enabled:
+            raise ValueError("EmotionRegulationPolicy.enabled_kinds: empty")
+        seen: set[EmotionKind] = set()
+        for kind in enabled:
+            if type(kind) is not EmotionKind:
+                raise TypeError(
+                    "EmotionRegulationPolicy.enabled_kinds: invalid_entry_type"
+                )
+            if kind not in DEFAULT_EMOTION_KINDS:
+                raise ValueError(
+                    "EmotionRegulationPolicy.enabled_kinds: unknown_kind"
+                )
+            if kind in seen:
+                raise ValueError(
+                    "EmotionRegulationPolicy.enabled_kinds: duplicate_kind"
+                )
+            seen.add(kind)
+        # Keep catalog order for determinism.
+        ordered = tuple(kind for kind in DEFAULT_EMOTION_KINDS if kind in seen)
+        object.__setattr__(self, "enabled_kinds", ordered)
+
+        def _map(
+            name: str,
+            raw: Mapping[EmotionKind, float],
+            *,
+            allow_zero: bool = True,
+        ) -> dict[EmotionKind, float]:
+            if type(raw) is not dict and not isinstance(raw, Mapping):
+                raise TypeError(f"{name}: invalid_type")
+            if isinstance(raw, (set, frozenset)):
+                raise TypeError(f"{name}: invalid_type")
+            out: dict[EmotionKind, float] = {}
+            for kind in ordered:
+                if kind not in raw:
+                    raise ValueError(f"{name}: incomplete_set")
+                value = require_confidence(f"{name}[{kind.value}]", raw[kind])
+                if not allow_zero and value <= 0.0:
+                    raise ValueError(f"{name}: non_positive")
+                out[kind] = quantize_score(value)
+            for key in raw:
+                if type(key) is not EmotionKind:
+                    raise TypeError(f"{name}: invalid_key_type")
+                if key not in seen:
+                    raise ValueError(f"{name}: disabled_kind")
+            return out
+
+        decay = _map("EmotionRegulationPolicy.decay_rates", self.decay_rates)
+        gains = _map("EmotionRegulationPolicy.gain_caps", self.gain_caps)
+        floors = _map("EmotionRegulationPolicy.floors", self.floors)
+        ceilings = _map("EmotionRegulationPolicy.ceilings", self.ceilings)
+        baselines = _map("EmotionRegulationPolicy.baselines", self.baselines)
+        for kind in ordered:
+            if floors[kind] > ceilings[kind]:
+                raise ValueError("EmotionRegulationPolicy: floor_above_ceiling")
+            if baselines[kind] < floors[kind] or baselines[kind] > ceilings[kind]:
+                raise ValueError("EmotionRegulationPolicy: baseline_out_of_bounds")
+            if gains[kind] > ceilings[kind]:
+                raise ValueError("EmotionRegulationPolicy: gain_above_ceiling")
+        object.__setattr__(self, "decay_rates", dict(decay))
+        object.__setattr__(self, "gain_caps", dict(gains))
+        object.__setattr__(self, "floors", dict(floors))
+        object.__setattr__(self, "ceilings", dict(ceilings))
+        object.__setattr__(self, "baselines", dict(baselines))
+
+    def __repr__(self) -> str:
+        return (
+            f"EmotionRegulationPolicy(policy_version={self.policy_version!r}, "
+            f"enabled_kind_count={len(self.enabled_kinds)})"
+        )
+
+
+def default_emotion_regulation_policy(
+    *,
+    enabled_kinds: Sequence[EmotionKind] | None = None,
+) -> EmotionRegulationPolicy:
+    """Return the default ``emotion.v1`` regulation policy."""
+    kinds = (
+        tuple(DEFAULT_EMOTION_KINDS)
+        if enabled_kinds is None
+        else tuple(enabled_kinds)
+    )
+    decay = {kind: 0.15 for kind in kinds}
+    gains = {kind: 0.85 for kind in kinds}
+    floors = {kind: 0.0 for kind in kinds}
+    ceilings = {kind: 1.0 for kind in kinds}
+    baselines = {kind: 0.0 for kind in kinds}
+    return EmotionRegulationPolicy(
+        policy_version=DEFAULT_EMOTION_POLICY_VERSION,
+        enabled_kinds=kinds,
+        decay_rates=decay,
+        gain_caps=gains,
+        floors=floors,
+        ceilings=ceilings,
+        baselines=baselines,
+    )
+
+
+@dataclass(frozen=True, slots=True)
+class AgentEmotionalState:
+    """Owner-scoped transient emotion vector (subjective; not world state)."""
+
+    owner_id: AgentId
+    tick: int
+    intensities: tuple[EmotionIntensity, ...]
+    last_update_tick: int
+    policy_version: str
+
+    def __post_init__(self) -> None:
+        if type(self.owner_id) is not AgentId:
+            raise TypeError("AgentEmotionalState.owner_id: invalid_type")
+        object.__setattr__(
+            self,
+            "tick",
+            require_exact_nonneg_int("AgentEmotionalState.tick", self.tick),
+        )
+        object.__setattr__(
+            self,
+            "last_update_tick",
+            require_exact_nonneg_int(
+                "AgentEmotionalState.last_update_tick", self.last_update_tick
+            ),
+        )
+        if self.last_update_tick > self.tick:
+            raise ValueError("AgentEmotionalState.last_update_tick: ahead_of_tick")
+        object.__setattr__(
+            self,
+            "policy_version",
+            require_bounded_text(
+                "AgentEmotionalState.policy_version",
+                self.policy_version,
+                max_length=_MAX_COMPONENT_VERSION_CHARS,
+            ),
+        )
+        if isinstance(self.intensities, (set, frozenset, Mapping)):
+            raise TypeError("AgentEmotionalState.intensities: not_ordered")
+        if isinstance(self.intensities, (str, bytes)) or not isinstance(
+            self.intensities, Sequence
+        ):
+            raise TypeError("AgentEmotionalState.intensities: not_ordered")
+        items = tuple(self.intensities)
+        if len(items) > len(DEFAULT_EMOTION_KINDS):
+            raise ValueError("AgentEmotionalState.intensities: too_many")
+        seen: set[EmotionKind] = set()
+        for entry in items:
+            if type(entry) is not EmotionIntensity:
+                raise TypeError("AgentEmotionalState.intensities: invalid_entry_type")
+            if entry.kind not in DEFAULT_EMOTION_KINDS:
+                raise ValueError("AgentEmotionalState.intensities: unknown_kind")
+            if entry.kind in seen:
+                raise ValueError("AgentEmotionalState.intensities: duplicate_kind")
+            seen.add(entry.kind)
+        # Stable catalog order among present kinds.
+        by_kind = {entry.kind: entry for entry in items}
+        ordered = tuple(
+            by_kind[kind] for kind in DEFAULT_EMOTION_KINDS if kind in by_kind
+        )
+        object.__setattr__(self, "intensities", ordered)
+
+    def intensity_map(self) -> dict[EmotionKind, float]:
+        """Return a kind→quantized intensity mapping (copy)."""
+        return {entry.kind: entry.intensity for entry in self.intensities}
+
+    def get(self, kind: EmotionKind) -> float:
+        """Return intensity for ``kind``, or ``0.0`` when absent/disabled."""
+        if type(kind) is not EmotionKind:
+            raise TypeError("AgentEmotionalState.get: invalid_kind")
+        for entry in self.intensities:
+            if entry.kind is kind:
+                return entry.intensity
+        return 0.0
+
+    def max_intensity(self) -> float:
+        """Return the maximum quantized intensity, or ``0.0`` when empty."""
+        if not self.intensities:
+            return 0.0
+        return max(entry.intensity for entry in self.intensities)
+
+    def is_neutral(self) -> bool:
+        """True when every present intensity is zero (or vector empty)."""
+        return all(entry.intensity == 0.0 for entry in self.intensities)
+
+    def __repr__(self) -> str:
+        max_band = intensity_band(self.max_intensity()).value
+        return (
+            f"AgentEmotionalState(owner_id={self.owner_id.value!r}, "
+            f"tick={self.tick}, kind_count={len(self.intensities)}, "
+            f"max_intensity_band={max_band!r}, "
+            f"last_update_tick={self.last_update_tick}, "
+            f"policy_version={self.policy_version!r})"
+        )
+
+
+def empty_emotional_state(
+    owner_id: AgentId,
+    *,
+    tick: int = 0,
+    policy_version: str = DEFAULT_EMOTION_POLICY_VERSION,
+    enabled_kinds: Sequence[EmotionKind] | None = None,
+) -> AgentEmotionalState:
+    """Build a zero-intensity emotional state for ``owner_id``."""
+    if type(owner_id) is not AgentId:
+        raise TypeError("empty_emotional_state: invalid_owner_type")
+    kinds = (
+        tuple(DEFAULT_EMOTION_KINDS)
+        if enabled_kinds is None
+        else tuple(enabled_kinds)
+    )
+    ordered = tuple(kind for kind in DEFAULT_EMOTION_KINDS if kind in set(kinds))
+    intensities = tuple(
+        EmotionIntensity(kind=kind, intensity=0.0) for kind in ordered
+    )
+    return AgentEmotionalState(
+        owner_id=owner_id,
+        tick=tick,
+        intensities=intensities,
+        last_update_tick=tick,
+        policy_version=policy_version,
+    )
+
+
+@dataclass(frozen=True, slots=True)
+class EmotionalStateEvaluation:
+    """Frozen stage output from ``EMOTIONAL_STATE`` appraisal."""
+
+    owner_id: AgentId
+    tick: int
+    state: AgentEmotionalState
+    driver_codes: tuple[EmotionDriverCode, ...]
+    confidence: float
+    policy_version: str
+    decision_metadata: DecisionMetadata = DecisionMetadata()
+
+    def __post_init__(self) -> None:
+        if type(self.owner_id) is not AgentId:
+            raise TypeError("EmotionalStateEvaluation.owner_id: invalid_type")
+        object.__setattr__(
+            self,
+            "tick",
+            require_exact_nonneg_int("EmotionalStateEvaluation.tick", self.tick),
+        )
+        if type(self.state) is not AgentEmotionalState:
+            raise TypeError("EmotionalStateEvaluation.state: invalid_type")
+        if self.state.owner_id != self.owner_id:
+            raise ValueError("EmotionalStateEvaluation.state: owner_mismatch")
+        if self.state.tick != self.tick:
+            raise ValueError("EmotionalStateEvaluation.state: tick_mismatch")
+        if isinstance(self.driver_codes, (set, frozenset, Mapping)):
+            raise TypeError("EmotionalStateEvaluation.driver_codes: not_ordered")
+        if isinstance(self.driver_codes, (str, bytes)) or not isinstance(
+            self.driver_codes, Sequence
+        ):
+            raise TypeError("EmotionalStateEvaluation.driver_codes: not_ordered")
+        codes = tuple(self.driver_codes)
+        if len(codes) > _MAX_SELECTION_CODES:
+            raise ValueError("EmotionalStateEvaluation.driver_codes: too_many")
+        seen: set[EmotionDriverCode] = set()
+        for code in codes:
+            if type(code) is not EmotionDriverCode:
+                raise TypeError(
+                    "EmotionalStateEvaluation.driver_codes: invalid_entry_type"
+                )
+            if code in seen:
+                raise ValueError(
+                    "EmotionalStateEvaluation.driver_codes: duplicate_code"
+                )
+            seen.add(code)
+        object.__setattr__(self, "driver_codes", codes)
+        object.__setattr__(
+            self,
+            "confidence",
+            require_confidence(
+                "EmotionalStateEvaluation.confidence", self.confidence
+            ),
+        )
+        object.__setattr__(
+            self,
+            "policy_version",
+            require_bounded_text(
+                "EmotionalStateEvaluation.policy_version",
+                self.policy_version,
+                max_length=_MAX_COMPONENT_VERSION_CHARS,
+            ),
+        )
+        if type(self.decision_metadata) is not DecisionMetadata:
+            raise TypeError(
+                "EmotionalStateEvaluation.decision_metadata: invalid_type"
+            )
+
+    def __repr__(self) -> str:
+        return (
+            f"EmotionalStateEvaluation(owner_id={self.owner_id.value!r}, "
+            f"tick={self.tick}, kind_count={len(self.state.intensities)}, "
+            f"driver_count={len(self.driver_codes)}, "
+            f"max_intensity_band="
+            f"{intensity_band(self.state.max_intensity()).value!r}, "
+            f"policy_version={self.policy_version!r})"
+        )
+
+
 def _claim_references_owner(claim: SemanticClaim, owner_id: AgentId) -> bool:
     subject = claim.subject
     if (
@@ -2759,6 +3180,7 @@ _STAGE_OUTPUT_TYPES: Final[frozenset[type]] = frozenset(
         SelfBeliefState,
         SelfModel,
         GoalBoard,
+        EmotionalStateEvaluation,
         PossibleFutures,
         MotivationEvaluation,
         SelectedIntention,

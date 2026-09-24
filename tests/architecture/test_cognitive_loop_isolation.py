@@ -221,6 +221,8 @@ def test_goal_manager_module_does_not_import_simulation() -> None:
 def test_component_kind_includes_goal_management() -> None:
     assert ComponentKind.GOAL_MANAGEMENT in ComponentKind
     assert ComponentKind.GOAL_MANAGEMENT.value == "goal_management"
+    assert ComponentKind.EMOTIONAL_STATE in ComponentKind
+    assert ComponentKind.EMOTIONAL_STATE.value == "emotional_state"
 
 
 def test_boundary_record_forbids_sensitive_field_names() -> None:

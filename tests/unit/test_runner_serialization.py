@@ -221,6 +221,7 @@ def test_v4_round_trip_includes_default_off_trace_and_flags() -> None:
         "extended_self_model": False,
         "multi_hop_testimony_tracking": False,
         "predictive_world_model": False,
+        "short_term_emotional_state": False,
     }
     assert document["cognition_trace"] == {
         "detail": "summary",

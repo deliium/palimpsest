@@ -275,6 +275,48 @@ def test_memory_update_intent_owner_and_kind() -> None:
         )
 
 
+def test_emotional_state_evaluation_and_component_kind() -> None:
+    from agents.cognition.models import (
+        AgentEmotionalState,
+        EmotionDriverCode,
+        EmotionIntensity,
+        EmotionKind,
+        EmotionalStateEvaluation,
+        empty_emotional_state,
+    )
+
+    assert ComponentKind.EMOTIONAL_STATE.value == "emotional_state"
+    owner = AgentId("agent-1")
+    state = empty_emotional_state(owner, tick=2)
+    evaluation = EmotionalStateEvaluation(
+        owner_id=owner,
+        tick=2,
+        state=state,
+        driver_codes=(EmotionDriverCode.PASSTHROUGH, EmotionDriverCode.DECAY),
+        confidence=1.0,
+        policy_version="emotion.v1",
+    )
+    assert "driver_count=2" in repr(evaluation)
+    assert "afraid" not in repr(evaluation).lower()
+    with pytest.raises(ValueError, match="owner_mismatch"):
+        EmotionalStateEvaluation(
+            owner_id=owner,
+            tick=0,
+            state=AgentEmotionalState(
+                owner_id=AgentId("other"),
+                tick=0,
+                intensities=(
+                    EmotionIntensity(kind=EmotionKind.FEAR, intensity=0.1),
+                ),
+                last_update_tick=0,
+                policy_version="emotion.v1",
+            ),
+            driver_codes=(EmotionDriverCode.THREAT,),
+            confidence=1.0,
+            policy_version="emotion.v1",
+        )
+
+
 def test_boundary_record_completed_and_failed() -> None:
     perception = _perception()
     completed = ComponentBoundaryRecord(

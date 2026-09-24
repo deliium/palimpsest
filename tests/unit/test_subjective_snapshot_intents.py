@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from agents.cognition.emotion import PassthroughEmotionalStateAppraiser
+
 import logging
 
 import pytest
@@ -331,6 +333,7 @@ async def test_runtime_defers_revise_intents_without_mutation(
         situation=DirectSituationModeler(),
         self_state=DirectSelfStateProjector(),
         goal_manager=PassthroughGoalManager(),
+        emotional_state=PassthroughEmotionalStateAppraiser(),
         futures=PlaceholderFutureImagination(),
         motivation=StableMotivationEvaluator(),
         intention=StableIntentionSelector(),

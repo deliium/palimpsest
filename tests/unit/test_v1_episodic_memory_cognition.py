@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from agents.cognition.emotion import PassthroughEmotionalStateAppraiser
+
 import pytest
 
 from agents.cognition.defaults import (
@@ -249,6 +251,7 @@ async def test_runtime_applies_service_batch_after_successful_cognition() -> Non
         situation=DirectSituationModeler(),
         self_state=DirectSelfStateProjector(),
         goal_manager=PassthroughGoalManager(),
+        emotional_state=PassthroughEmotionalStateAppraiser(),
         futures=PlaceholderFutureImagination(),
         motivation=StableMotivationEvaluator(),
         intention=StableIntentionSelector(),
@@ -300,6 +303,7 @@ async def test_failed_cognition_does_not_mutate_memory_service() -> None:
         situation=DirectSituationModeler(),
         self_state=DirectSelfStateProjector(),
         goal_manager=PassthroughGoalManager(),
+        emotional_state=PassthroughEmotionalStateAppraiser(),
         futures=PlaceholderFutureImagination(),
         motivation=StableMotivationEvaluator(),
         intention=StableIntentionSelector(),

@@ -322,3 +322,18 @@ def test_cognition_trace_enabled_requires_schema_v4() -> None:
             schema_version=RUNNER_SCHEMA_VERSION_V3,
             cognition_trace=CognitionTraceSpec(enabled=True),
         )
+
+
+def test_owned_capability_flag_helpers() -> None:
+    from simulation.runner_models import V2CapabilityFlags
+
+    flags = V2CapabilityFlags(short_term_emotional_state=True)
+    assert flags.enabled_names() == ("short_term_emotional_state",)
+    assert flags.owned_enabled_names() == ("short_term_emotional_state",)
+    assert flags.unimplemented_enabled_names() == ()
+    mixed = V2CapabilityFlags(
+        short_term_emotional_state=True,
+        predictive_world_model=True,
+    )
+    assert mixed.unimplemented_enabled_names() == ("predictive_world_model",)
+    assert mixed.owned_enabled_names() == ("short_term_emotional_state",)

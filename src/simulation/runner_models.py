@@ -94,6 +94,12 @@ _V2_CAPABILITY_FLAG_NAMES: Final[tuple[str, ...]] = (
     "multi_hop_testimony_tracking",
     "predictive_world_model",
     "extended_self_model",
+    "short_term_emotional_state",
+)
+
+# Flags owned by an implemented plan may be enabled without fail-closed.
+_V2_OWNED_CAPABILITY_FLAGS: Final[frozenset[str]] = frozenset(
+    {"short_term_emotional_state"}
 )
 
 _OVERRIDEABLE_DRIVE_KINDS: Final[frozenset[DriveKind]] = frozenset(
@@ -146,15 +152,18 @@ class MortalityMode(StrEnum):
 class V2CapabilityFlags:
     """Run-level reserved V2 capability identifiers (configuration only).
 
-    Defaults are all off (V1-equivalent wiring). Enabling any flag before a
-    later plan owns it must fail closed at runner construction
-    (``capability_unimplemented``). These are not cognition plugins.
+    Defaults are all off (V1-equivalent wiring). Enabling a flag that is not
+    yet owned by an implemented plan must fail closed at runner construction
+    (``capability_unimplemented``). Owned flags (currently
+    ``short_term_emotional_state``) may be enabled. These are not cognition
+    plugins.
     """
 
     advanced_social_inference: bool = False
     multi_hop_testimony_tracking: bool = False
     predictive_world_model: bool = False
     extended_self_model: bool = False
+    short_term_emotional_state: bool = False
 
     def __post_init__(self) -> None:
         for name in _V2_CAPABILITY_FLAG_NAMES:
@@ -168,6 +177,22 @@ class V2CapabilityFlags:
     def enabled_names(self) -> tuple[str, ...]:
         return tuple(
             name for name in _V2_CAPABILITY_FLAG_NAMES if getattr(self, name)
+        )
+
+    def unimplemented_enabled_names(self) -> tuple[str, ...]:
+        """Enabled flags that are not yet owned by an implementation plan."""
+        return tuple(
+            name
+            for name in self.enabled_names()
+            if name not in _V2_OWNED_CAPABILITY_FLAGS
+        )
+
+    def owned_enabled_names(self) -> tuple[str, ...]:
+        """Enabled flags owned by an implemented plan."""
+        return tuple(
+            name
+            for name in self.enabled_names()
+            if name in _V2_OWNED_CAPABILITY_FLAGS
         )
 
 

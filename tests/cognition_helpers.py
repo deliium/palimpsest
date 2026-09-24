@@ -6,6 +6,8 @@ domain objects remains metadata-safe by production model contracts.
 
 from __future__ import annotations
 
+from agents.cognition.emotion import PassthroughEmotionalStateAppraiser
+
 from collections.abc import Sequence
 
 from agents.cognition.contracts import MemoryRetriever
@@ -175,6 +177,7 @@ def production_cognitive_loop(
         situation=DirectSituationModeler(),
         self_state=DirectSelfStateProjector(),
         goal_manager=PassthroughGoalManager(),
+        emotional_state=PassthroughEmotionalStateAppraiser(),
         futures=ImaginationEngine(),
         motivation=MotivationAppraisal(),
         intention=MultiCriteriaIntentionSelector(),

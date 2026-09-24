@@ -561,6 +561,7 @@ _CAPABILITY_FLAG_KEYS: Final[set[str]] = {
     "multi_hop_testimony_tracking",
     "predictive_world_model",
     "extended_self_model",
+    "short_term_emotional_state",
 }
 _COGNITION_TRACE_KEYS: Final[set[str]] = {
     "enabled",
@@ -576,6 +577,7 @@ def _encode_capability_flags(flags: V2CapabilityFlags) -> dict[str, Any]:
         "multi_hop_testimony_tracking": flags.multi_hop_testimony_tracking,
         "predictive_world_model": flags.predictive_world_model,
         "extended_self_model": flags.extended_self_model,
+        "short_term_emotional_state": flags.short_term_emotional_state,
     }
 
 
@@ -597,6 +599,9 @@ def _decode_capability_flags(
                 data, "predictive_world_model", path=path
             ),
             extended_self_model=_bool_field(data, "extended_self_model", path=path),
+            short_term_emotional_state=_bool_field(
+                data, "short_term_emotional_state", path=path
+            ),
         )
     except RunnerSerializationError:
         raise

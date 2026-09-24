@@ -13,6 +13,7 @@ from dataclasses import dataclass
 from typing import Any, Final, TypeVar, cast
 
 from agents.cognition.contracts import (
+    EmotionalStateAppraiser,
     FutureImagination,
     GoalManager,
     IntentionSelector,
@@ -141,6 +142,7 @@ class CognitiveLoop:
     """Sequential cognitive pipeline returning one closed ``AgentCommand``."""
 
     __slots__ = (
+        "_emotional_state",
         "_futures",
         "_goal_manager",
         "_intention",
@@ -161,6 +163,7 @@ class CognitiveLoop:
         situation: SituationModeler,
         self_state: SelfStateProjector,
         goal_manager: GoalManager,
+        emotional_state: EmotionalStateAppraiser,
         futures: FutureImagination,
         motivation: MotivationEvaluator,
         intention: IntentionSelector,
@@ -172,6 +175,7 @@ class CognitiveLoop:
         self._situation = situation
         self._self_state = self_state
         self._goal_manager = goal_manager
+        self._emotional_state = emotional_state
         self._futures = futures
         self._motivation = motivation
         self._intention = intention

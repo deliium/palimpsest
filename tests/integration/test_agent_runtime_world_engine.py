@@ -7,6 +7,8 @@ constructor-inject placeholder stages and fixed planners.
 
 from __future__ import annotations
 
+from agents.cognition.emotion import PassthroughEmotionalStateAppraiser
+
 import logging
 
 import pytest
@@ -133,6 +135,7 @@ def _loop_with_command(command: object) -> CognitiveLoop:
         situation=DirectSituationModeler(),
         self_state=DirectSelfStateProjector(),
         goal_manager=PassthroughGoalManager(),
+        emotional_state=PassthroughEmotionalStateAppraiser(),
         futures=PlaceholderFutureImagination(),
         motivation=StableMotivationEvaluator(),
         intention=StableIntentionSelector(),
@@ -234,6 +237,7 @@ async def test_cognition_failure_yields_no_submission() -> None:
         situation=DirectSituationModeler(),
         self_state=DirectSelfStateProjector(),
         goal_manager=PassthroughGoalManager(),
+        emotional_state=PassthroughEmotionalStateAppraiser(),
         futures=PlaceholderFutureImagination(),
         motivation=StableMotivationEvaluator(),
         intention=StableIntentionSelector(),

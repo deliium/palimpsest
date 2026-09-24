@@ -6,6 +6,7 @@ import pytest
 
 from agents.cognition.configuration import (
     CognitionDriveOverride,
+    CognitionEmotionalStateMode,
     CognitionGoalManagementMode,
     CognitionImaginationMode,
     CognitionLoopConfig,
@@ -40,10 +41,14 @@ def test_production_defaults_match_legacy_default_loop() -> None:
         config.mortality_appraisal_mode is CognitionMortalityAppraisalMode.ENABLED
     )
     assert config.goal_management_mode is CognitionGoalManagementMode.ENABLED
+    assert (
+        config.emotional_state_mode is CognitionEmotionalStateMode.PASSTHROUGH
+    )
     loop = default_cognitive_loop()
     assert type(loop._futures) is ImaginationEngine
     assert type(loop._motivation) is MotivationAppraisal
     assert type(loop._goal_manager).__name__ == "HierarchicalGoalManager"
+    assert type(loop._emotional_state).__name__ == "PassthroughEmotionalStateAppraiser"
 
 
 def test_build_loop_selects_passthrough_goal_manager() -> None:
@@ -56,6 +61,31 @@ def test_build_loop_selects_passthrough_goal_manager() -> None:
     assert type(loop._goal_manager) is PassthroughGoalManager
     material = config.condition_fingerprint_material()
     assert material["goal_management_mode"] == "passthrough"
+
+
+def test_build_loop_selects_emotional_state_modes() -> None:
+    from agents.cognition.emotion import (
+        EmotionalStateEngine,
+        PassthroughEmotionalStateAppraiser,
+    )
+
+    passthrough = build_cognitive_loop(
+        CognitionLoopConfig(
+            emotional_state_mode=CognitionEmotionalStateMode.PASSTHROUGH,
+        )
+    )
+    assert type(passthrough._emotional_state) is PassthroughEmotionalStateAppraiser
+    enabled = build_cognitive_loop(
+        CognitionLoopConfig(
+            emotional_state_mode=CognitionEmotionalStateMode.ENABLED,
+        )
+    )
+    assert type(enabled._emotional_state) is EmotionalStateEngine
+    material = CognitionLoopConfig(
+        emotional_state_mode=CognitionEmotionalStateMode.ENABLED,
+    ).condition_fingerprint_material()
+    assert material["emotional_state_mode"] == "enabled"
+    assert material["emotional_state_policy_version"] == "emotion.v1"
 
 
 def test_build_loop_selects_present_state_and_disabled_mortality() -> None:

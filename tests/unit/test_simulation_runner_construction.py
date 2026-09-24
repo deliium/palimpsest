@@ -298,6 +298,47 @@ async def test_from_config_fails_closed_when_capability_flag_enabled() -> None:
 
 
 @pytest.mark.asyncio
+async def test_from_config_allows_owned_emotional_state_flag() -> None:
+    from agents.cognition.emotion import EmotionalStateEngine
+    from simulation.runner_models import V2CapabilityFlags
+
+    base = _config()
+    config = SimulationRunnerConfig(
+        seed=base.seed,
+        stochastic_identity=base.stochastic_identity,
+        scenario=base.scenario,
+        agents=base.agents,
+        stop_policy=base.stop_policy,
+        capability_flags=V2CapabilityFlags(short_term_emotional_state=True),
+    )
+    async with await SimulationRunner.from_config(
+        config, run_id=RunId("run-emotion-cap")
+    ) as runner:
+        assert all(rt.status is AgentRuntimeStatus.CREATED for rt in runner.runtimes)
+        loop = runner.runtimes[0]._loop
+        assert type(loop._emotional_state) is EmotionalStateEngine
+
+
+@pytest.mark.asyncio
+async def test_from_config_flags_off_uses_emotional_passthrough(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    from agents.cognition.emotion import PassthroughEmotionalStateAppraiser
+
+    with caplog.at_level(logging.DEBUG, logger="simulation.runner"):
+        async with await SimulationRunner.from_config(
+            _config(), run_id=RunId("run-emotion-off")
+        ) as runner:
+            loop = runner.runtimes[0]._loop
+            assert type(loop._emotional_state) is PassthroughEmotionalStateAppraiser
+    assert any(
+        "emotional_state_mode=passthrough" in record.getMessage()
+        and "short_term_emotional_state=False" in record.getMessage()
+        for record in caplog.records
+    )
+
+
+@pytest.mark.asyncio
 async def test_runtimes_not_started_after_construction() -> None:
     async with await SimulationRunner.from_config(
         _config(), run_id=RunId("run-created")

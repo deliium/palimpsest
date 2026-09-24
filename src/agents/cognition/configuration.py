@@ -14,6 +14,7 @@ from enum import StrEnum
 from typing import Final
 
 from agents.cognition.contracts import (
+    EmotionalStateAppraiser,
     FutureImagination,
     GoalManager,
     MemoryRetriever,
@@ -35,6 +36,7 @@ MEMORY_POLICY_VERSION: Final[str] = "memory-policy-v1"
 IMAGINATION_POLICY_VERSION: Final[str] = "imagination-policy-v1"
 MORTALITY_APPRAISAL_POLICY_VERSION: Final[str] = "mortality-appraisal-policy-v1"
 GOAL_MANAGEMENT_POLICY_VERSION: Final[str] = "goals.v1"
+EMOTIONAL_STATE_POLICY_VERSION: Final[str] = "emotion.v1"
 
 _OVERRIDEABLE: Final[frozenset[DriveKind]] = frozenset(
     {
@@ -69,6 +71,13 @@ class CognitionMortalityAppraisalMode(StrEnum):
 
 class CognitionGoalManagementMode(StrEnum):
     """Hierarchical goal-management treatment for ``CognitiveLoop``."""
+
+    ENABLED = "enabled"
+    PASSTHROUGH = "passthrough"
+
+
+class CognitionEmotionalStateMode(StrEnum):
+    """Short-term emotional-state treatment for ``CognitiveLoop``."""
 
     ENABLED = "enabled"
     PASSTHROUGH = "passthrough"
@@ -120,11 +129,15 @@ class CognitionLoopConfig:
     goal_management_mode: CognitionGoalManagementMode = (
         CognitionGoalManagementMode.ENABLED
     )
+    emotional_state_mode: CognitionEmotionalStateMode = (
+        CognitionEmotionalStateMode.PASSTHROUGH
+    )
     drive_overrides: tuple[CognitionDriveOverride, ...] = ()
     memory_policy_version: str = MEMORY_POLICY_VERSION
     imagination_policy_version: str = IMAGINATION_POLICY_VERSION
     mortality_appraisal_policy_version: str = MORTALITY_APPRAISAL_POLICY_VERSION
     goal_management_policy_version: str = GOAL_MANAGEMENT_POLICY_VERSION
+    emotional_state_policy_version: str = EMOTIONAL_STATE_POLICY_VERSION
     factory_version: str = COGNITION_FACTORY_VERSION
 
     def __post_init__(self) -> None:
@@ -140,14 +153,22 @@ class CognitionLoopConfig:
             raise TypeError(
                 "goal_management_mode must be CognitionGoalManagementMode"
             )
+        if type(self.emotional_state_mode) is not CognitionEmotionalStateMode:
+            raise TypeError(
+                "emotional_state_mode must be CognitionEmotionalStateMode"
+            )
         if self.memory_policy_version != MEMORY_POLICY_VERSION:
             raise ValueError("unsupported memory_policy_version")
         if self.imagination_policy_version != IMAGINATION_POLICY_VERSION:
             raise ValueError("unsupported imagination_policy_version")
-        if self.mortality_appraisal_policy_version != MORTALITY_APPRAISAL_POLICY_VERSION:
+        if self.mortality_appraisal_policy_version != (
+            MORTALITY_APPRAISAL_POLICY_VERSION
+        ):
             raise ValueError("unsupported mortality_appraisal_policy_version")
         if self.goal_management_policy_version != GOAL_MANAGEMENT_POLICY_VERSION:
             raise ValueError("unsupported goal_management_policy_version")
+        if self.emotional_state_policy_version != EMOTIONAL_STATE_POLICY_VERSION:
+            raise ValueError("unsupported emotional_state_policy_version")
         if self.factory_version != COGNITION_FACTORY_VERSION:
             raise ValueError("unsupported factory_version")
         if isinstance(self.drive_overrides, (set, frozenset)):
@@ -160,7 +181,9 @@ class CognitionLoopConfig:
         seen: set[DriveKind] = set()
         for item in overrides:
             if type(item) is not CognitionDriveOverride:
-                raise TypeError("drive_overrides entries must be CognitionDriveOverride")
+                raise TypeError(
+                    "drive_overrides entries must be CognitionDriveOverride"
+                )
             if item.kind in seen:
                 raise ValueError("drive_overrides kinds must be unique")
             seen.add(item.kind)
@@ -174,6 +197,7 @@ class CognitionLoopConfig:
                     "imagination_mode": self.imagination_mode.value,
                     "mortality_appraisal_mode": self.mortality_appraisal_mode.value,
                     "goal_management_mode": self.goal_management_mode.value,
+                    "emotional_state_mode": self.emotional_state_mode.value,
                     "drive_override_count": len(self.drive_overrides),
                     "status": "validated",
                 }
@@ -214,6 +238,8 @@ class CognitionLoopConfig:
             "factory_version": self.factory_version,
             "goal_management_mode": self.goal_management_mode.value,
             "goal_management_policy_version": self.goal_management_policy_version,
+            "emotional_state_mode": self.emotional_state_mode.value,
+            "emotional_state_policy_version": self.emotional_state_policy_version,
             "imagination_mode": self.imagination_mode.value,
             "imagination_policy_version": self.imagination_policy_version,
             "memory_mode": self.memory_mode.value,
@@ -237,17 +263,18 @@ def build_cognitive_loop(
     futures: FutureImagination | None = None,
     motivation: MotivationEvaluator | None = None,
     goal_manager: GoalManager | None = None,
+    emotional_state: EmotionalStateAppraiser | None = None,
     resolve_counterpart: object | None = None,
     pending_evidence: object | None = None,
 ) -> CognitiveLoop:
     """Assemble a ``CognitiveLoop`` from explicit policies.
 
     Optional component overrides are for tests. Production wiring selects
-    memory/imagination/motivation/goal-management implementations from
-    ``config`` modes when overrides are omitted. ``resolve_counterpart`` maps
-    entity IDs to agent IDs without importing simulation types.
-    ``pending_evidence`` is a shared accumulator so direct/communicated traces
-    drive same-batch revisions.
+    memory/imagination/motivation/goal-management/emotional-state
+    implementations from ``config`` modes when overrides are omitted.
+    ``resolve_counterpart`` maps entity IDs to agent IDs without importing
+    simulation types. ``pending_evidence`` is a shared accumulator so
+    direct/communicated traces drive same-batch revisions.
     """
     resolved = config if config is not None else production_cognition_config()
     if type(resolved) is not CognitionLoopConfig:
@@ -270,6 +297,7 @@ def build_cognitive_loop(
         CommandPlanner,
         MultiCriteriaIntentionSelector,
     )
+    from agents.cognition.emotion import PassthroughEmotionalStateAppraiser
     from agents.cognition.goal_manager import (
         HierarchicalGoalManager,
         PassthroughGoalManager,
@@ -298,6 +326,18 @@ def build_cognitive_loop(
             goal_manager = PassthroughGoalManager()
         else:
             goal_manager = HierarchicalGoalManager()
+    if emotional_state is None:
+        if (
+            resolved.emotional_state_mode
+            is CognitionEmotionalStateMode.PASSTHROUGH
+        ):
+            emotional_state = PassthroughEmotionalStateAppraiser()
+        else:
+            # Full emotion.v1 engine is selected when Task 5 lands; until then
+            # ENABLED requires an explicit override or the later engine import.
+            from agents.cognition.emotion import EmotionalStateEngine
+
+            emotional_state = EmotionalStateEngine()
 
     pending: PendingEvidenceAccumulator
     if pending_evidence is None:
@@ -322,6 +362,7 @@ def build_cognitive_loop(
                 "imagination_mode": resolved.imagination_mode.value,
                 "mortality_appraisal_mode": resolved.mortality_appraisal_mode.value,
                 "goal_management_mode": resolved.goal_management_mode.value,
+                "emotional_state_mode": resolved.emotional_state_mode.value,
                 "has_counterpart_resolver": counterpart is not None,
                 "status": "built",
             }
@@ -333,6 +374,7 @@ def build_cognitive_loop(
         situation=DirectSituationModeler(),
         self_state=DirectSelfStateProjector(),
         goal_manager=goal_manager,
+        emotional_state=emotional_state,
         futures=futures,
         motivation=motivation,
         intention=MultiCriteriaIntentionSelector(),

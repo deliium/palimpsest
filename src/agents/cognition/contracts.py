@@ -16,7 +16,9 @@ from typing import Protocol
 
 from agents.cognition.models import (
     ActionPlan,
+    AgentEmotionalState,
     CognitiveLoopInput,
+    EmotionalStateEvaluation,
     GoalBoard,
     InterpretedPerception,
     MemoryUpdateIntent,
@@ -41,6 +43,7 @@ __all__ = [
     "CognitionContractError",
     "CognitionContractErrorCode",
     "CognitionStrategy",
+    "EmotionalStateAppraiser",
     "FutureImagination",
     "GoalManager",
     "IntentionSelector",
@@ -344,6 +347,21 @@ class GoalManager(Protocol):
         self_state: SelfModel,
         memory: RetrievedMemoryContext,
     ) -> GoalBoard: ...
+
+
+class EmotionalStateAppraiser(Protocol):
+    """Appraise owner-scoped short-term emotional state after goal management."""
+
+    async def appraise(
+        self,
+        loop_input: CognitiveLoopInput,
+        perception: InterpretedPerception,
+        situation: SituationModel,
+        memory: RetrievedMemoryContext,
+        self_state: SelfModel,
+        goal_board: GoalBoard,
+        prior_state: AgentEmotionalState | None = None,
+    ) -> EmotionalStateEvaluation: ...
 
 
 class FutureImagination(Protocol):

@@ -15,6 +15,7 @@ from typing import Final, Protocol
 
 from agents.cognition.configuration import (
     CognitionDriveOverride,
+    CognitionEmotionalStateMode,
     CognitionImaginationMode,
     CognitionLoopConfig,
     CognitionMemoryMode,
@@ -99,6 +100,7 @@ from simulation.run_control import (
     classify_resume_mode,
 )
 from simulation.runner_models import (
+    _V2_CAPABILITY_FLAG_NAMES,
     AgentCognitionSpec,
     CognitionCounters,
     CognitionFailurePolicy,
@@ -117,6 +119,7 @@ from simulation.runner_models import (
     RunnerStopReasonCode,
     SimulationRunnerConfig,
     SimulationRunnerResult,
+    V2CapabilityFlags,
     build_detached_objective_projection,
     describe_runner_config,
     detach_action_resolution_evidence,
@@ -423,7 +426,19 @@ def _cognition_config_for(
     spec: AgentCognitionSpec,
     *,
     mortality_mode: MortalityMode,
+    capability_flags: V2CapabilityFlags,
 ) -> CognitionLoopConfig:
+    emotional_flag = capability_flags.short_term_emotional_state
+    emotional_mode = (
+        CognitionEmotionalStateMode.ENABLED
+        if emotional_flag
+        else CognitionEmotionalStateMode.PASSTHROUGH
+    )
+    _LOG.debug(
+        "cognition_config_emotional_state_mode flag=%s mode=%s",
+        emotional_flag,
+        emotional_mode.value,
+    )
     return CognitionLoopConfig(
         memory_mode=CognitionMemoryMode(spec.memory_mode.value),
         imagination_mode=CognitionImaginationMode(spec.imagination_mode.value),
@@ -432,6 +447,7 @@ def _cognition_config_for(
             if mortality_mode is MortalityMode.DISABLED
             else CognitionMortalityAppraisalMode.ENABLED
         ),
+        emotional_state_mode=emotional_mode,
         drive_overrides=tuple(
             CognitionDriveOverride(
                 kind=item.kind,
@@ -661,23 +677,35 @@ class SimulationRunner:
 
         try:
             enabled_flags = config.capability_flags.enabled_names()
+            owned_enabled = config.capability_flags.owned_enabled_names()
+            unimplemented_flags = (
+                config.capability_flags.unimplemented_enabled_names()
+            )
             _LOG.debug(
                 "runner_construction_start schema_version=%s agent_count=%s "
                 "mortality_mode=%s durable=%s capability_flag_count=%s "
-                "enabled_flag_count=%s",
+                "enabled_flag_count=%s owned_enabled_flag_count=%s "
+                "unimplemented_flag_count=%s owned_enabled_flags=%s "
+                "unimplemented_flags=%s",
                 config.schema_version,
                 len(config.agents),
                 config.mortality_mode.value,
                 config.persistence.durable,
-                4,
+                len(_V2_CAPABILITY_FLAG_NAMES),
                 len(enabled_flags),
+                len(owned_enabled),
+                len(unimplemented_flags),
+                ",".join(owned_enabled) if owned_enabled else "",
+                ",".join(unimplemented_flags) if unimplemented_flags else "",
             )
-            if enabled_flags:
+            if unimplemented_flags:
                 _LOG.error(
                     "runner_construction_capability_unimplemented "
-                    "schema_version=%s flag_count=%s reason_code=%s",
+                    "schema_version=%s flag_count=%s unimplemented_flags=%s "
+                    "reason_code=%s",
                     config.schema_version,
-                    len(enabled_flags),
+                    len(unimplemented_flags),
+                    ",".join(unimplemented_flags),
                     RunnerConstructionErrorCode.CAPABILITY_UNIMPLEMENTED.value,
                 )
                 raise RunnerConstructionError(
@@ -787,6 +815,7 @@ class SimulationRunner:
                 loop_config = _cognition_config_for(
                     agent_spec.cognition,
                     mortality_mode=config.mortality_mode,
+                    capability_flags=config.capability_flags,
                 )
                 memory_retriever = _memory_retriever_for(
                     agent_spec.cognition.memory_mode,
@@ -838,11 +867,14 @@ class SimulationRunner:
                 _LOG.debug(
                     "runner_agent_constructed ordinal=%s memory_mode=%s "
                     "imagination_mode=%s mortality_mode=%s "
+                    "emotional_state_mode=%s short_term_emotional_state=%s "
                     "allow_provider=%s",
                     ordinal,
                     agent_spec.cognition.memory_mode.value,
                     agent_spec.cognition.imagination_mode.value,
                     config.mortality_mode.value,
+                    loop_config.emotional_state_mode.value,
+                    config.capability_flags.short_term_emotional_state,
                     allow_provider,
                 )
 

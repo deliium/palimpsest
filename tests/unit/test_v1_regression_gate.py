@@ -172,3 +172,31 @@ def test_goal_management_always_on_not_capability_flag() -> None:
     assert cognition.goal_management_mode is CognitionGoalManagementMode.ENABLED
     assert not hasattr(config, "goal_management_enabled")
     assert "goal_management" not in config.capability_flags.__dataclass_fields__
+
+
+def test_short_term_emotional_state_is_owned_capability_flag_default_off() -> None:
+    """V2 short-term emotion is gated by the owned capability flag (default off)."""
+    from agents.cognition import (
+        CognitionEmotionalStateMode,
+        production_cognition_config,
+    )
+
+    config = v1_regression_profile(_short_base())
+    assert config.capability_flags.short_term_emotional_state is False
+    assert "short_term_emotional_state" in config.capability_flags.__dataclass_fields__
+    cognition = production_cognition_config()
+    assert cognition.emotional_state_mode is CognitionEmotionalStateMode.PASSTHROUGH
+
+
+@pytest.mark.asyncio
+async def test_flags_off_runner_uses_emotional_passthrough() -> None:
+    from agents.cognition.emotion import PassthroughEmotionalStateAppraiser
+
+    config = v1_regression_profile(_short_base(max_ticks=2))
+    async with await SimulationRunner.from_config(
+        config, run_id=RunId("run-v1-emotion-off")
+    ) as runner:
+        loop = runner.runtimes[0]._loop
+        assert type(loop._emotional_state) is PassthroughEmotionalStateAppraiser
+        result = await runner.run()
+    assert result.ticks_committed == 2
