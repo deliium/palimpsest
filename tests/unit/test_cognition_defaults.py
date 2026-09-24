@@ -5,6 +5,7 @@ from __future__ import annotations
 import pytest
 
 from agents.cognition.defaults import (
+    PassthroughGoalManager,
     DirectSelfStateProjector,
     DirectSituationModeler,
     EmptyMemoryRetriever,
@@ -112,9 +113,10 @@ async def test_defaults_are_deterministic_and_owner_scoped() -> None:
     assert type(perception) is InterpretedPerception
     assert perception.owner_id == AgentId("agent-1")
     assert PerceptionClaimCode.SELF_ALIVE in perception.claim_codes
-    futures = first.boundary_records[4].output_artifact
-    from agents.cognition.models import PossibleFutures
+    futures = first.boundary_records[5].output_artifact
+    from agents.cognition.models import GoalBoard, PossibleFutures
 
+    assert type(first.boundary_records[4].output_artifact) is GoalBoard
     assert type(futures) is PossibleFutures
     assert len(futures.futures) >= 1
 
@@ -165,7 +167,7 @@ async def test_default_loop_critical_thirst_drinks_when_water_visible() -> None:
 @pytest.mark.asyncio
 async def test_defaults_replaceable_planner() -> None:
     class AlwaysWait(WaitFallbackPlanner):
-        async def plan(self, loop_input, intention, futures, memory=None):  # type: ignore[no-untyped-def]
+        async def plan(self, loop_input, intention, futures, memory=None, goal_board=None):  # type: ignore[no-untyped-def]
             plan = await super().plan(loop_input, intention, futures)
             assert type(plan.command) is Wait
             return plan
@@ -175,6 +177,7 @@ async def test_defaults_replaceable_planner() -> None:
         memory=EmptyMemoryRetriever(),
         situation=DirectSituationModeler(),
         self_state=DirectSelfStateProjector(),
+        goal_manager=PassthroughGoalManager(),
         futures=PlaceholderFutureImagination(),
         motivation=StableMotivationEvaluator(),
         intention=StableIntentionSelector(),
@@ -244,15 +247,16 @@ async def test_fake_scripts_and_metadata_only_history() -> None:
 @pytest.mark.asyncio
 async def test_fake_planner_in_loop_and_exhausted_script() -> None:
     plan = ActionPlan(owner_id=AgentId("agent-1"), command=Wait(), confidence=1.0)
-    planner = FakePlanner({"inv-plan": [ScriptedStageSuccess(ordinal=7, output=plan)]})
+    planner = FakePlanner({"inv-plan": [ScriptedStageSuccess(ordinal=8, output=plan)]})
     updates = FakeMemoryUpdateHook(
-        {"inv-plan": [ScriptedStageSuccess(ordinal=8, output=())]}
+        {"inv-plan": [ScriptedStageSuccess(ordinal=9, output=())]}
     )
     loop = CognitiveLoop(
         perception=LiteralPerceptionInterpreter(),
         memory=ScriptedMemoryRetriever(),
         situation=ScriptedSituationModeler(),
         self_state=ScriptedSelfStateProjector(),
+        goal_manager=PassthroughGoalManager(),
         futures=ScriptedFutureImagination(),
         motivation=ScriptedMotivationEvaluator(),
         intention=ScriptedIntentionSelector(),
@@ -262,7 +266,7 @@ async def test_fake_planner_in_loop_and_exhausted_script() -> None:
     with invocation_context("inv-plan"):
         result = await loop.run(_loop_input(), invocation_id="inv-plan")
     assert type(result.command) is Wait
-    assert planner.calls[0].ordinal == 7
+    assert planner.calls[0].ordinal == 8
     assert "Wait(" not in repr(planner.calls[0])
 
     with invocation_context("inv-plan"):

@@ -17,6 +17,7 @@ from agents.cognition.models import (
     CognitiveLoopInput,
     DecisionMetadata,
     FutureAppraisal,
+    GoalBoard,
     ImaginedFuture,
     IntentionCode,
     MotivationCode,
@@ -111,6 +112,7 @@ class MultiCriteriaIntentionSelector:
         loop_input: CognitiveLoopInput,
         motivation: MotivationEvaluation,
         futures: PossibleFutures,
+        goal_board: GoalBoard | None = None,
     ) -> SelectedIntention:
         owner = loop_input.agent_id
         tick = loop_input.observation.tick
@@ -123,6 +125,7 @@ class MultiCriteriaIntentionSelector:
                     "tick": tick,
                     "policy_version": DELIBERATION_POLICY_VERSION,
                     "candidate_count": len(appraisals),
+                    "foci_count": 0 if goal_board is None else len(goal_board.foci_ids),
                     "status": "start",
                 }
             },
@@ -156,6 +159,12 @@ class MultiCriteriaIntentionSelector:
         if not surviving:
             surviving = feasible
 
+        focus_supported = _prefer_goal_focus_support(
+            surviving, futures_by_id, goal_board
+        )
+        if focus_supported:
+            surviving = focus_supported
+
         undominated = _pareto_filter(surviving, futures_by_id, motivation)
         after_pareto = len(undominated)
         if not undominated:
@@ -166,6 +175,15 @@ class MultiCriteriaIntentionSelector:
         direction = ActionDirection.WAIT if future is None else future.direction
         intention = intention_for_action_direction(direction)
         confidence = _selection_confidence(winner, future)
+        selection_codes = [
+            f"direction:{direction.value}",
+            f"future:{winner.future_id}",
+            f"tie:{tie_break}",
+        ]
+        if goal_board is not None and goal_board.foci_ids and future is not None:
+            focus_ids = set(goal_board.foci_ids)
+            if any(effect.goal_id in focus_ids for effect in future.goal_effects):
+                selection_codes.append("goal_focus_support")
 
         result = SelectedIntention(
             owner_id=owner,
@@ -173,11 +191,7 @@ class MultiCriteriaIntentionSelector:
             source_motive=_motive_for_direction(direction),
             confidence=confidence,
             decision_metadata=DecisionMetadata(
-                selection_codes=(
-                    f"direction:{direction.value}",
-                    f"future:{winner.future_id}",
-                    f"tie:{tie_break}",
-                ),
+                selection_codes=tuple(selection_codes),
                 candidate_count=before,
                 tie_break_applied=tie_break != _TIE_BREAK_NONE,
             ),
@@ -224,7 +238,9 @@ class CommandPlanner:
         intention: SelectedIntention,
         futures: PossibleFutures,
         memory: RetrievedMemoryContext | None = None,
+        goal_board: GoalBoard | None = None,
     ) -> ActionPlan:
+        _ = goal_board
         owner = loop_input.agent_id
         tick = loop_input.observation.tick
         future = _resolve_future(intention, futures)
@@ -448,6 +464,32 @@ def _has_social_target(observation: Observation, target_entity_id: str | None) -
             for message in observation.communications
         )
     return bool(observation.visible_bodies) or bool(observation.communications)
+
+
+def _prefer_goal_focus_support(
+    appraisals: list[FutureAppraisal],
+    futures_by_id: dict[str, ImaginedFuture],
+    goal_board: GoalBoard | None,
+) -> list[FutureAppraisal]:
+    """Narrow to futures that advance CURRENT_INTENTION foci when any exist."""
+
+    if goal_board is None or not goal_board.foci_ids:
+        return []
+    focus_ids = set(goal_board.foci_ids)
+    supported: list[FutureAppraisal] = []
+    for appraisal in appraisals:
+        future = futures_by_id.get(appraisal.future_id)
+        if future is None:
+            continue
+        if any(
+            effect.goal_id in focus_ids and effect.progress_delta > 0.0
+            for effect in future.goal_effects
+        ):
+            supported.append(appraisal)
+        elif any(effect.goal_id in focus_ids for effect in appraisal.goal_effects):
+            if any(e.progress_delta > 0.0 for e in appraisal.goal_effects):
+                supported.append(appraisal)
+    return supported
 
 
 def _critical_vetoes(

@@ -14,6 +14,7 @@ from typing import Any, Final, TypeVar, cast
 
 from agents.cognition.contracts import (
     FutureImagination,
+    GoalManager,
     IntentionSelector,
     MemoryRetriever,
     MemoryUpdateHook,
@@ -33,6 +34,7 @@ from agents.cognition.models import (
     ComponentKind,
     ComponentStatus,
     DecisionMetadata,
+    GoalBoard,
     IntentionCode,
     InternalAgentState,
     InterpretedPerception,
@@ -61,6 +63,7 @@ _STAGE_ORDER: Final[tuple[ComponentKind, ...]] = (
     ComponentKind.MEMORY_RETRIEVAL,
     ComponentKind.SITUATION,
     ComponentKind.SELF_STATE,
+    ComponentKind.GOAL_MANAGEMENT,
     ComponentKind.FUTURES,
     ComponentKind.MOTIVATION,
     ComponentKind.INTENTION,
@@ -139,6 +142,7 @@ class CognitiveLoop:
 
     __slots__ = (
         "_futures",
+        "_goal_manager",
         "_intention",
         "_memory",
         "_memory_updates",
@@ -156,6 +160,7 @@ class CognitiveLoop:
         memory: MemoryRetriever,
         situation: SituationModeler,
         self_state: SelfStateProjector,
+        goal_manager: GoalManager,
         futures: FutureImagination,
         motivation: MotivationEvaluator,
         intention: IntentionSelector,
@@ -166,6 +171,7 @@ class CognitiveLoop:
         self._memory = memory
         self._situation = situation
         self._self_state = self_state
+        self._goal_manager = goal_manager
         self._futures = futures
         self._motivation = motivation
         self._intention = intention
@@ -225,34 +231,49 @@ class CognitiveLoop:
             awaitable=self._self_state.project(loop_input, situation, memory),
             expected_type=SelfModel,
         )
-        futures = await run_stage(
-            kind=ComponentKind.FUTURES,
+        goal_board = await run_stage(
+            kind=ComponentKind.GOAL_MANAGEMENT,
             ordinal=4,
             input_artifact=self_state,
-            awaitable=self._futures.imagine(loop_input, situation, self_state, memory),
+            awaitable=self._goal_manager.manage(
+                loop_input, situation, self_state, memory
+            ),
+            expected_type=GoalBoard,
+        )
+        futures = await run_stage(
+            kind=ComponentKind.FUTURES,
+            ordinal=5,
+            input_artifact=goal_board,
+            awaitable=self._futures.imagine(
+                loop_input, situation, self_state, memory, goal_board
+            ),
             expected_type=PossibleFutures,
         )
         motivation = await run_stage(
             kind=ComponentKind.MOTIVATION,
-            ordinal=5,
+            ordinal=6,
             input_artifact=futures,
             awaitable=self._motivation.evaluate(
-                loop_input, situation, self_state, futures
+                loop_input, situation, self_state, futures, goal_board
             ),
             expected_type=MotivationEvaluation,
         )
         intention = await run_stage(
             kind=ComponentKind.INTENTION,
-            ordinal=6,
+            ordinal=7,
             input_artifact=motivation,
-            awaitable=self._intention.select(loop_input, motivation, futures),
+            awaitable=self._intention.select(
+                loop_input, motivation, futures, goal_board
+            ),
             expected_type=SelectedIntention,
         )
         plan = await run_stage(
             kind=ComponentKind.PLANNING,
-            ordinal=7,
+            ordinal=8,
             input_artifact=intention,
-            awaitable=self._planner.plan(loop_input, intention, futures, memory),
+            awaitable=self._planner.plan(
+                loop_input, intention, futures, memory, goal_board
+            ),
             expected_type=ActionPlan,
         )
         try:
@@ -261,7 +282,7 @@ class CognitiveLoop:
             fail(
                 reason=CognitionFailureReason.COMMAND_REJECTED,
                 kind=ComponentKind.PLANNING,
-                ordinal=7,
+                ordinal=8,
                 input_artifact=intention,
             )
             raise  # pragma: no cover
@@ -274,6 +295,7 @@ class CognitiveLoop:
             memory=memory,
             situation=situation,
             self_state=self_state,
+            goal_board=goal_board,
             futures=futures,
             motivation=motivation,
             intention=intention,
@@ -291,6 +313,7 @@ class CognitiveLoop:
                     "boundary_count": len(records),
                     "final_confidence": plan.confidence,
                     "command_type": type(command).__name__,
+                    "goal_count": len(goal_board.goals),
                     "status": "prepared",
                 }
             },
@@ -335,7 +358,7 @@ class CognitiveLoop:
         )
         updates = await run_stage(
             kind=ComponentKind.MEMORY_UPDATE,
-            ordinal=8,
+            ordinal=9,
             input_artifact=effective_plan,
             awaitable=self._memory_updates.propose_updates(
                 loop_input,

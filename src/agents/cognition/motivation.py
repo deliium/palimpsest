@@ -15,6 +15,7 @@ from agents.cognition.models import (
     DecisionMetadata,
     DriveEffect,
     FutureAppraisal,
+    GoalBoard,
     GoalEffect,
     ImaginedFuture,
     MortalityOpportunityForeclosure,
@@ -181,6 +182,7 @@ class MotivationAppraisal:
         situation: SituationModel,
         self_state: SelfModel,
         futures: PossibleFutures,
+        goal_board: GoalBoard | None = None,
     ) -> MotivationEvaluation:
         owner = loop_input.agent_id
         tick = loop_input.observation.tick
@@ -207,7 +209,8 @@ class MotivationAppraisal:
             danger_signal=danger_signal,
             social_signal=social_signal,
         )
-        active_goals = _active_goals(loop_input, owner)
+        active_goals = _eligible_planning_goals(loop_input, owner, goal_board)
+        mortality_goals = _mortality_outstanding_goals(loop_input, owner, goal_board)
         relationships = _relationships(loop_input, owner)
         activation_map = {item.kind: item for item in drive_state.activations}
 
@@ -218,6 +221,7 @@ class MotivationAppraisal:
                     future=future,
                     activation_map=activation_map,
                     active_goals=active_goals,
+                    mortality_goals=mortality_goals,
                     relationships=relationships,
                     pressures=pressures,
                     self_state=self_state,
@@ -276,7 +280,19 @@ def _drive_profile(loop_input: CognitiveLoopInput, owner: AgentId) -> DriveProfi
     return default_drive_profile(owner)
 
 
-def _active_goals(loop_input: CognitiveLoopInput, owner: AgentId) -> tuple[Goal, ...]:
+def _eligible_planning_goals(
+    loop_input: CognitiveLoopInput,
+    owner: AgentId,
+    goal_board: GoalBoard | None,
+) -> tuple[Goal, ...]:
+    if goal_board is not None:
+        if goal_board.owner_id != owner:
+            raise ValueError("GoalBoard: ownership")
+        return tuple(
+            goal
+            for goal in goal_board.goals
+            if goal.status is GoalStatus.ACTIVE and goal.owner_id == owner
+        )
     if loop_input.snapshot is None:
         return ()
     return tuple(
@@ -284,6 +300,37 @@ def _active_goals(loop_input: CognitiveLoopInput, owner: AgentId) -> tuple[Goal,
         for goal in loop_input.snapshot.goals
         if goal.status is GoalStatus.ACTIVE and goal.owner_id == owner
     )
+
+
+def _mortality_outstanding_goals(
+    loop_input: CognitiveLoopInput,
+    owner: AgentId,
+    goal_board: GoalBoard | None,
+) -> tuple[Goal, ...]:
+    """Goals that still contribute outstanding value if life ends.
+
+    Includes ACTIVE and SUSPENDED; excludes FAILED / ABANDONED / COMPLETED.
+    """
+
+    source: tuple[Goal, ...]
+    if goal_board is not None:
+        if goal_board.owner_id != owner:
+            raise ValueError("GoalBoard: ownership")
+        source = goal_board.goals
+    elif loop_input.snapshot is not None:
+        source = loop_input.snapshot.goals
+    else:
+        return ()
+    return tuple(
+        goal
+        for goal in source
+        if goal.owner_id == owner
+        and goal.status in {GoalStatus.ACTIVE, GoalStatus.SUSPENDED}
+    )
+
+
+def _active_goals(loop_input: CognitiveLoopInput, owner: AgentId) -> tuple[Goal, ...]:
+    return _eligible_planning_goals(loop_input, owner, None)
 
 
 def _relationships(
@@ -330,6 +377,7 @@ def _appraise_future(
     future: ImaginedFuture,
     activation_map: dict[DriveKind, DriveActivation],
     active_goals: tuple[Goal, ...],
+    mortality_goals: tuple[Goal, ...],
     relationships: tuple[DirectedRelationshipProfile, ...],
     pressures: PerceivedNeedPressures,
     self_state: SelfModel,
@@ -346,7 +394,7 @@ def _appraise_future(
         mortality = _mortality_foreclosure(
             future=future,
             activation_map=activation_map,
-            active_goals=active_goals,
+            active_goals=mortality_goals,
             relationships=relationships,
             option_count=option_count,
         )

@@ -10,6 +10,7 @@ from collections.abc import Sequence
 
 from agents.cognition.contracts import MemoryRetriever
 from agents.cognition.defaults import (
+    PassthroughGoalManager,
     DirectSelfStateProjector,
     DirectSituationModeler,
     EmptyMemoryUpdateHook,
@@ -173,6 +174,7 @@ def production_cognitive_loop(
         memory=memory if memory is not None else FixedMemoryRetriever(),
         situation=DirectSituationModeler(),
         self_state=DirectSelfStateProjector(),
+        goal_manager=PassthroughGoalManager(),
         futures=ImaginationEngine(),
         motivation=MotivationAppraisal(),
         intention=MultiCriteriaIntentionSelector(),

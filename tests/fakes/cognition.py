@@ -15,6 +15,7 @@ from enum import StrEnum
 from typing import Final
 
 from agents.cognition.models import (
+    GoalBoard,
     ActionPlan,
     CognitiveLoopInput,
     ComponentKind,
@@ -41,6 +42,7 @@ __all__ = [
     "FakePerceptionInterpreter",
     "FakePlanner",
     "FakeSelfStateProjector",
+    "FakeGoalManager",
     "FakeSituationModeler",
     "ScriptedStageFailure",
     "ScriptedStageSuccess",
@@ -125,6 +127,7 @@ _STAGE_OUTPUT_TYPES: Final[Mapping[ComponentKind, type | tuple[type, ...]]] = {
     ComponentKind.MEMORY_RETRIEVAL: RetrievedMemoryContext,
     ComponentKind.SITUATION: SituationModel,
     ComponentKind.SELF_STATE: SelfModel,
+    ComponentKind.GOAL_MANAGEMENT: GoalBoard,
     ComponentKind.FUTURES: PossibleFutures,
     ComponentKind.MOTIVATION: MotivationEvaluation,
     ComponentKind.INTENTION: SelectedIntention,
@@ -375,6 +378,42 @@ class FakeSelfStateProjector:
         return output
 
 
+class FakeGoalManager:
+    def __init__(
+        self,
+        scripts: Mapping[str, Sequence[ScriptedStageSuccess | ScriptedStageFailure]] | None = None,
+    ) -> None:
+        from agents.cognition.goal_manager import PassthroughGoalManager
+
+        self._passthrough = PassthroughGoalManager()
+        self._queue = None
+        if scripts is not None:
+            self._queue = _ScriptQueue(
+                component_kind=ComponentKind.GOAL_MANAGEMENT, scripts=scripts
+            )
+
+    @property
+    def calls(self) -> tuple[FakeCognitionCallRecord, ...]:
+        if self._queue is None:
+            return ()
+        return tuple(self._queue.calls)
+
+    async def manage(
+        self,
+        loop_input: CognitiveLoopInput,
+        situation: SituationModel,
+        self_state: SelfModel,
+        memory: RetrievedMemoryContext,
+    ):
+        if self._queue is None:
+            return await self._passthrough.manage(
+                loop_input, situation, self_state, memory
+            )
+        _ = loop_input, situation, self_state, memory
+        output = self._queue.consume(invocation_id=_active_invocation(), ordinal=4)
+        return output
+
+
 class FakeFutureImagination:
     def __init__(
         self,
@@ -394,9 +433,10 @@ class FakeFutureImagination:
         situation: SituationModel,
         self_state: SelfModel,
         memory: RetrievedMemoryContext,
+        goal_board=None,
     ) -> PossibleFutures:
-        _ = loop_input, situation, self_state, memory
-        output = self._queue.consume(invocation_id=_active_invocation(), ordinal=4)
+        _ = loop_input, situation, self_state, memory, goal_board
+        output = self._queue.consume(invocation_id=_active_invocation(), ordinal=5)
         assert type(output) is PossibleFutures
         return output
 
@@ -420,9 +460,10 @@ class FakeMotivationEvaluator:
         situation: SituationModel,
         self_state: SelfModel,
         futures: PossibleFutures,
+        goal_board=None,
     ) -> MotivationEvaluation:
-        _ = loop_input, situation, self_state, futures
-        output = self._queue.consume(invocation_id=_active_invocation(), ordinal=5)
+        _ = loop_input, situation, self_state, futures, goal_board
+        output = self._queue.consume(invocation_id=_active_invocation(), ordinal=6)
         assert type(output) is MotivationEvaluation
         return output
 
@@ -445,9 +486,10 @@ class FakeIntentionSelector:
         loop_input: CognitiveLoopInput,
         motivation: MotivationEvaluation,
         futures: PossibleFutures,
+        goal_board=None,
     ) -> SelectedIntention:
-        _ = loop_input, motivation, futures
-        output = self._queue.consume(invocation_id=_active_invocation(), ordinal=6)
+        _ = loop_input, motivation, futures, goal_board
+        output = self._queue.consume(invocation_id=_active_invocation(), ordinal=7)
         assert type(output) is SelectedIntention
         return output
 
@@ -471,9 +513,10 @@ class FakePlanner:
         intention: SelectedIntention,
         futures: PossibleFutures,
         memory: RetrievedMemoryContext | None = None,
+        goal_board: object | None = None,
     ) -> ActionPlan:
-        _ = loop_input, intention, futures, memory
-        output = self._queue.consume(invocation_id=_active_invocation(), ordinal=7)
+        _ = loop_input, intention, futures, memory, goal_board
+        output = self._queue.consume(invocation_id=_active_invocation(), ordinal=8)
         assert type(output) is ActionPlan
         return output
 
@@ -500,6 +543,6 @@ class FakeMemoryUpdateHook:
         intention: SelectedIntention,
     ) -> tuple[MemoryUpdateIntent, ...]:
         _ = loop_input, plan, perception, memory, intention
-        output = self._queue.consume(invocation_id=_active_invocation(), ordinal=8)
+        output = self._queue.consume(invocation_id=_active_invocation(), ordinal=9)
         assert type(output) is tuple
         return output

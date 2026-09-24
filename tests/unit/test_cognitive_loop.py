@@ -7,6 +7,7 @@ import logging
 
 import pytest
 
+from agents.cognition.goal_manager import PassthroughGoalManager
 from agents.cognition.loop import (
     COMPONENT_VERSION,
     CognitiveLoop,
@@ -69,6 +70,7 @@ def _loop(**overrides: object) -> CognitiveLoop:
         "memory": ScriptedMemoryRetriever(),
         "situation": ScriptedSituationModeler(),
         "self_state": ScriptedSelfStateProjector(),
+        "goal_manager": PassthroughGoalManager(),
         "futures": ScriptedFutureImagination(),
         "motivation": ScriptedMotivationEvaluator(),
         "intention": ScriptedIntentionSelector(),
@@ -107,25 +109,30 @@ async def test_loop_runs_exact_stage_order_once(
             calls.append("self_state")
             return await super().project(loop_input, situation, memory)
 
+    class TrackingGoals(PassthroughGoalManager):
+        async def manage(self, loop_input, situation, self_state, memory):  # type: ignore[no-untyped-def]
+            calls.append("goal_management")
+            return await super().manage(loop_input, situation, self_state, memory)
+
     class TrackingFutures(ScriptedFutureImagination):
-        async def imagine(self, loop_input, situation, self_state, memory):  # type: ignore[no-untyped-def]
+        async def imagine(self, loop_input, situation, self_state, memory, goal_board=None):  # type: ignore[no-untyped-def]
             calls.append("futures")
-            return await super().imagine(loop_input, situation, self_state, memory)
+            return await super().imagine(loop_input, situation, self_state, memory, goal_board)
 
     class TrackingMotivation(ScriptedMotivationEvaluator):
-        async def evaluate(self, loop_input, situation, self_state, futures):  # type: ignore[no-untyped-def]
+        async def evaluate(self, loop_input, situation, self_state, futures, goal_board=None):  # type: ignore[no-untyped-def]
             calls.append("motivation")
-            return await super().evaluate(loop_input, situation, self_state, futures)
+            return await super().evaluate(loop_input, situation, self_state, futures, goal_board)
 
     class TrackingIntention(ScriptedIntentionSelector):
-        async def select(self, loop_input, motivation, futures):  # type: ignore[no-untyped-def]
+        async def select(self, loop_input, motivation, futures, goal_board=None):  # type: ignore[no-untyped-def]
             calls.append("intention")
-            return await super().select(loop_input, motivation, futures)
+            return await super().select(loop_input, motivation, futures, goal_board)
 
     class TrackingPlanner(ScriptedPlanner):
-        async def plan(self, loop_input, intention, futures, memory=None):  # type: ignore[no-untyped-def]
+        async def plan(self, loop_input, intention, futures, memory=None, goal_board=None):  # type: ignore[no-untyped-def]
             calls.append("planning")
-            return await super().plan(loop_input, intention, futures)
+            return await super().plan(loop_input, intention, futures, memory, goal_board)
 
     class TrackingUpdates(ScriptedMemoryUpdateHook):
         async def propose_updates(  # type: ignore[no-untyped-def]
@@ -142,6 +149,7 @@ async def test_loop_runs_exact_stage_order_once(
         memory=TrackingMemory(),
         situation=TrackingSituation(),
         self_state=TrackingSelf(),
+        goal_manager=TrackingGoals(),
         futures=TrackingFutures(),
         motivation=TrackingMotivation(),
         intention=TrackingIntention(),
@@ -154,6 +162,7 @@ async def test_loop_runs_exact_stage_order_once(
         "memory_retrieval",
         "situation",
         "self_state",
+        "goal_management",
         "futures",
         "motivation",
         "intention",
@@ -161,19 +170,20 @@ async def test_loop_runs_exact_stage_order_once(
         "memory_update",
     ]
     assert type(result.command) is Wait
-    assert len(result.boundary_records) == 9
+    assert len(result.boundary_records) == 10
     assert [r.component_kind for r in result.boundary_records] == [
         ComponentKind.PERCEPTION,
         ComponentKind.MEMORY_RETRIEVAL,
         ComponentKind.SITUATION,
         ComponentKind.SELF_STATE,
+        ComponentKind.GOAL_MANAGEMENT,
         ComponentKind.FUTURES,
         ComponentKind.MOTIVATION,
         ComponentKind.INTENTION,
         ComponentKind.PLANNING,
         ComponentKind.MEMORY_UPDATE,
     ]
-    assert [r.ordinal for r in result.boundary_records] == list(range(9))
+    assert [r.ordinal for r in result.boundary_records] == list(range(10))
     assert all(
         r.component_version == COMPONENT_VERSION for r in result.boundary_records
     )
@@ -186,7 +196,7 @@ async def test_loop_runs_exact_stage_order_once(
 @pytest.mark.asyncio
 async def test_component_replacement_changes_command() -> None:
     class MovePlanner(ScriptedPlanner):
-        async def plan(self, loop_input, intention, futures, memory=None):  # type: ignore[no-untyped-def]
+        async def plan(self, loop_input, intention, futures, memory=None, goal_board=None):  # type: ignore[no-untyped-def]
             return ActionPlan(
                 owner_id=loop_input.agent_id,
                 command=Move(destination_id=EntityId("loc-2")),
@@ -227,7 +237,7 @@ async def test_wrong_output_type_short_circuits() -> None:
 @pytest.mark.asyncio
 async def test_component_exception_short_circuits() -> None:
     class BoomMotivation(ScriptedMotivationEvaluator):
-        async def evaluate(self, loop_input, situation, self_state, futures):  # type: ignore[no-untyped-def]
+        async def evaluate(self, loop_input, situation, self_state, futures, goal_board=None):  # type: ignore[no-untyped-def]
             raise RuntimeError("secret motive payload")
 
     with pytest.raises(CognitiveLoopError) as exc_info:
@@ -243,7 +253,7 @@ async def test_component_exception_short_circuits() -> None:
 @pytest.mark.asyncio
 async def test_cancellation_records_cancelled_boundary() -> None:
     class CancelIntention(ScriptedIntentionSelector):
-        async def select(self, loop_input, motivation, futures):  # type: ignore[no-untyped-def]
+        async def select(self, loop_input, motivation, futures, goal_board=None):  # type: ignore[no-untyped-def]
             raise asyncio.CancelledError
 
     with pytest.raises(CognitiveLoopError) as exc_info:
@@ -313,7 +323,7 @@ async def test_input_propagation_uses_prior_outputs() -> None:
             return await super().model(loop_input, perception, memory)
 
     class CaptureMotivation(ScriptedMotivationEvaluator):
-        async def evaluate(self, loop_input, situation, self_state, futures):  # type: ignore[no-untyped-def]
+        async def evaluate(self, loop_input, situation, self_state, futures, goal_board=None):  # type: ignore[no-untyped-def]
             seen["situation"] = situation
             seen["futures"] = futures
             return MotivationEvaluation(

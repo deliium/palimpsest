@@ -12,11 +12,13 @@ import logging
 from collections.abc import Callable
 from typing import Final
 
+from agents.cognition.goal_manager import PassthroughGoalManager
 from agents.cognition.loop import CognitiveLoop
 from agents.cognition.models import (
     ActionPlan,
     CognitiveLoopInput,
     DecisionMetadata,
+    GoalBoard,
     ImaginedFuture,
     IntentionCode,
     InterpretedPerception,
@@ -48,6 +50,7 @@ __all__ = [
     "EmptyMemoryRetriever",
     "EmptyMemoryUpdateHook",
     "LiteralPerceptionInterpreter",
+    "PassthroughGoalManager",
     "PlaceholderFutureImagination",
     "PresentStateImagination",
     "StableIntentionSelector",
@@ -229,8 +232,9 @@ class PlaceholderFutureImagination:
         situation: SituationModel,
         self_state: SelfModel,
         memory: RetrievedMemoryContext | None = None,
+        goal_board: GoalBoard | None = None,
     ) -> PossibleFutures:
-        _ = self_state, memory
+        _ = self_state, memory, goal_board
         futures: list[ImaginedFuture] = []
         if SituationClaimCode.TERMINAL_SELF in situation.claim_codes:
             futures.append(
@@ -288,8 +292,9 @@ class PresentStateImagination:
         situation: SituationModel,
         self_state: SelfModel,
         memory: RetrievedMemoryContext | None = None,
+        goal_board: GoalBoard | None = None,
     ) -> PossibleFutures:
-        _ = self_state, memory
+        _ = self_state, memory, goal_board
         if SituationClaimCode.TERMINAL_SELF in situation.claim_codes:
             claim_codes = (SituationClaimCode.TERMINAL_SELF,)
             future_id = "present-terminal"
@@ -321,8 +326,9 @@ class StableMotivationEvaluator:
         situation: SituationModel,
         self_state: SelfModel,
         futures: PossibleFutures,
+        goal_board: GoalBoard | None = None,
     ) -> MotivationEvaluation:
-        _ = self_state, futures
+        _ = self_state, futures, goal_board
         scores: dict[MotivationCode, float] = {
             MotivationCode.WAIT: 0.5,
             MotivationCode.SURVIVE: 0.0,
@@ -396,8 +402,9 @@ class StableIntentionSelector:
         loop_input: CognitiveLoopInput,
         motivation: MotivationEvaluation,
         futures: PossibleFutures | None = None,
+        goal_board: GoalBoard | None = None,
     ) -> SelectedIntention:
-        _ = futures
+        _ = futures, goal_board
         if not motivation.scores:
             intention = IntentionCode.WAIT
             source = MotivationCode.WAIT
@@ -434,8 +441,9 @@ class WaitFallbackPlanner:
         intention: SelectedIntention,
         futures: PossibleFutures,
         memory: RetrievedMemoryContext | None = None,
+        goal_board: GoalBoard | None = None,
     ) -> ActionPlan:
-        _ = intention, futures, memory
+        _ = intention, futures, memory, goal_board
         return ActionPlan(
             owner_id=loop_input.agent_id,
             command=Wait(),

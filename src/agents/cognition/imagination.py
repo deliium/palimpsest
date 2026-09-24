@@ -18,6 +18,7 @@ from agents.cognition.models import (
     DecisionMetadata,
     DriveEffect,
     FutureSourceRef,
+    GoalBoard,
     GoalEffect,
     ImaginedFuture,
     PossibleFutures,
@@ -144,6 +145,7 @@ class ImaginationEngine:
         situation: SituationModel,
         self_state: SelfModel,
         memory: RetrievedMemoryContext,
+        goal_board: GoalBoard | None = None,
     ) -> PossibleFutures:
         owner = loop_input.agent_id
         tick = loop_input.observation.tick
@@ -217,7 +219,7 @@ class ImaginationEngine:
                             claim_codes=(SituationClaimCode.IDLE,),
                         ),
                     )
-                active_goals = _active_goals(loop_input)
+                active_goals = _eligible_planning_goals(loop_input, goal_board)
                 built: list[ImaginedFuture] = []
                 for seed in seeds[:_MAX_CANDIDATES]:
                     built.append(
@@ -291,14 +293,35 @@ class ImaginationEngine:
         return result
 
 
-def _active_goals(loop_input: CognitiveLoopInput) -> tuple[Goal, ...]:
+def _eligible_planning_goals(
+    loop_input: CognitiveLoopInput,
+    goal_board: GoalBoard | None,
+) -> tuple[Goal, ...]:
+    """ACTIVE goals from GoalBoard when present; else snapshot ACTIVE goals.
+
+    SUSPENDED / FAILED / ABANDONED / COMPLETED are excluded from forward planning.
+    """
+
+    owner = loop_input.agent_id
+    if goal_board is not None:
+        if goal_board.owner_id != owner:
+            raise ValueError("GoalBoard: ownership")
+        return tuple(
+            goal
+            for goal in goal_board.goals
+            if goal.status is GoalStatus.ACTIVE and goal.owner_id == owner
+        )
     if loop_input.snapshot is None:
         return ()
     return tuple(
         goal
         for goal in loop_input.snapshot.goals
-        if goal.status is GoalStatus.ACTIVE and goal.owner_id == loop_input.agent_id
+        if goal.status is GoalStatus.ACTIVE and goal.owner_id == owner
     )
+
+
+def _active_goals(loop_input: CognitiveLoopInput) -> tuple[Goal, ...]:
+    return _eligible_planning_goals(loop_input, None)
 
 
 def _owned_relationships(

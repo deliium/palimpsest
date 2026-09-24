@@ -191,9 +191,36 @@ def test_facade_exports_production_deliberation_policies() -> None:
         "MOTIVATION_POLICY_VERSION",
         "DELIBERATION_POLICY_VERSION",
         "PLANNER_POLICY_VERSION",
+        "HierarchicalGoalManager",
+        "PassthroughGoalManager",
+        "CognitionGoalManagementMode",
+        "GOAL_POLICY_VERSION",
+        "GoalBoard",
+        "derive_cognition_goal_id",
     ):
         assert name in cognition.__all__
         assert getattr(cognition, name) is not None
+
+
+def test_goal_manager_module_does_not_import_simulation() -> None:
+    path = COGNITION_ROOT / "goal_manager.py"
+    tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
+    imported: set[str] = set()
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Import):
+            for alias in node.names:
+                imported.add(alias.name)
+        elif isinstance(node, ast.ImportFrom) and node.module is not None:
+            imported.add(node.module)
+    assert not any(
+        item == "simulation" or item.startswith("simulation.") for item in imported
+    )
+    assert "analysis" not in imported
+
+
+def test_component_kind_includes_goal_management() -> None:
+    assert ComponentKind.GOAL_MANAGEMENT in ComponentKind
+    assert ComponentKind.GOAL_MANAGEMENT.value == "goal_management"
 
 
 def test_boundary_record_forbids_sensitive_field_names() -> None:
