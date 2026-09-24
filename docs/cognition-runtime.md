@@ -13,6 +13,7 @@ Observation
 → situation model
 → beliefs/self state
 → goal management (GoalManager / GoalBoard)
+→ emotional state (EmotionalStateEngine / PASSTHROUGH)
 → possible futures (ImaginationEngine)
 → motivation evaluation (MotivationAppraisal)
 → intention selection (MultiCriteriaIntentionSelector)
@@ -23,6 +24,27 @@ Observation
 Each stage is a narrow async protocol under `agents.cognition`. Components are constructor-injected into `CognitiveLoop` with plain Python control flow (no LangGraph/LangChain/DAG engine). Every completed stage appends a versioned `ComponentBoundaryRecord` (typed I/O artifacts, confidence, status, decision metadata). Records are scientific receipts — not chain-of-thought, prompts, or raw provider responses.
 
 `final_confidence` on a successful result is the **planner-supplied** confidence only. It is not an aggregate statistical estimate.
+
+## Short-term emotional state (V2 owned flag)
+
+`V2CapabilityFlags.short_term_emotional_state` (default **off**) owns a transient, owner-scoped `AgentEmotionalState` vector over a closed catalog (`fear`, `anger`, `sadness`, `relief`, `attachment`, `anxiety`, `confidence`). Runner maps the flag to `CognitionEmotionalStateMode`:
+
+| Flag | Mode | Behavior |
+| --- | --- | --- |
+| off | `PASSTHROUGH` | Re-emit prior/empty state; no retrieval/focus/risk/intention/social bias |
+| on | `ENABLED` | `emotion.v1` numeric drivers + deterministic bias hooks |
+
+**V1 `MemoryTrace.emotional_salience`** remains a per-trace memory property. Live short-term emotion may *read* salience and *bias* retrieval/reconstruction ranking; it must not rewrite stored traces or fold into `WorldState` / objective events.
+
+**Pipeline timing:** prior-tick state (from `AgentRuntime` → perspective → `SubjectiveSnapshot`) biases memory retrieval and situation-focus claim order in the same invocation. The updated stage output biases same-tick futures → planning and is committed onto the runtime for N+1. Carry lives on `AgentRuntime`, not on `agents.models.Agent`.
+
+**Attention:** there is no separate attention subsystem. Flag-on “attention” means closed situation-focus / claim reweighting plus retrieval bias only.
+
+**Enums:** `EmotionKind.FEAR` (transient owner affect) is distinct from `RelationshipDimension.FEAR` (asymmetric directed assessment). Drivers may read relationship fear as input; the types must never be conflated.
+
+**Logging allowlist:** policy version, owner/tick, kind counts, intensity bands, driver/reason codes, bias_applied — never free-form affect narrative, observation payloads, or memory text.
+
+**Non-goals:** free-form emotional prose, personality traits, writing emotion into objective world state, collapsing emotion+drives+goals into one reward scalar, enabling other reserved V2 flags.
 
 ## Optional cognition execution trace
 
@@ -44,7 +66,7 @@ Observation
 → planned action
 ```
 
-Beliefs, emotional state, and ToM-unavailable placeholders are **trace-view projections** (not new `CognitiveLoop` stages). The scientific **goals** trace view prefers the live `GOAL_MANAGEMENT` / `GoalBoard` stage (horizon + status histograms, foci refs) and falls back to snapshot/motivation only when that stage is absent. ToM records `unavailable` / `tom_not_implemented` until a later plan owns `advanced_social_inference`.
+Beliefs and ToM-unavailable placeholders are **trace-view projections** (not new `CognitiveLoop` stages). The scientific **emotional state** and **goals** trace views prefer live `EMOTIONAL_STATE` / `GOAL_MANAGEMENT` stage outputs (intensities + driver codes; horizon + status histograms) and fall back to drive/salience or snapshot/motivation only when those stages are absent/PASSTHROUGH-neutral. ToM records `unavailable` / `tom_not_implemented` until a later plan owns `advanced_social_inference`.
 
 ### Package split
 
@@ -228,7 +250,7 @@ Integration coverage is in-memory (no PostgreSQL/Docker/network/LLM). Divergence
 | --- | --- |
 | Stage protocols | Constructor-injected into `CognitiveLoop`; replace one stage at a time |
 | Modes | `AgentCognitionSpec.memory_mode` / `imagination_mode`; run-level mortality |
-| Capability flags | Run-level `V2CapabilityFlags` on `SimulationRunnerConfig` — not stage plugins; default off wires V1 policies; any flag on fails closed until a later plan owns it |
+| Capability flags | Run-level `V2CapabilityFlags` on `SimulationRunnerConfig` — not stage plugins; default off wires V1 policies; **owned** flags (currently `short_term_emotional_state`) may enable; other flags still fail closed (`capability_unimplemented`) |
 | Cognition execution trace | Top-level `CognitionTraceSpec` (`runner-config-v4`, default off) — not a capability flag; ports only; no HTTP yet |
 | Subjective finalization | `AgentRuntime` commits episodic/belief/relationship batches only |
 | LLM lifecycle | Remains `api` / `llm.factory` composition — **not** encoded on runner fingerprints |

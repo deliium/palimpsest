@@ -64,7 +64,7 @@ All inputs are typed, bounded, owner-safe, and policy-visible (no hidden globals
 | Retrieved traces | `RecallSourceEvidence` | Rank, score, fragments, ages, generation, provenance kind, opaque `observed_source_id` |
 | Current beliefs | `MemoryRecallRequest.beliefs` | Owner-scoped snapshot; capped by `max_beliefs` |
 | Current context | `MemoryRecallContext` | Location, tags, related entities |
-| Emotional significance | `MemoryRecallContext.emotional_significance` + per-source `emotional_salience` | Unit interval |
+| Emotional significance | `MemoryRecallContext.emotional_significance` + per-source `emotional_salience` | Unit interval; **V1 per-trace property**. Live V2 short-term `AgentEmotionalState` (capability-flagged) may bias retrieval/reconstruction ranking without mutating stored salience — see [Cognition runtime](cognition-runtime.md#short-term-emotional-state-v2-owned-flag). |
 | Social significance | `MemoryRecallContext.social_significance` | Unit interval |
 | Episode / storage age | `episode_age_ticks` / `storage_age_ticks` | Explicit logical ticks via `MemoryAgeSemantics` |
 | Source confidence | `RecallSourceEvidence.source_confidence` | Unit interval |

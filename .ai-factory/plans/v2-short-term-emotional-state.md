@@ -108,14 +108,14 @@ Add a transient, owner-scoped **`AgentEmotionalState`** that is separate from ob
 
 ### Phase 2: Transition Policy and Loop Integration
 
-- [ ] Task 5: Implement deterministic `EmotionalStateEngine` (`emotion.v1`).
+- [x] Task 5: Implement deterministic `EmotionalStateEngine` (`emotion.v1`).
   - Deliverable: New `src/agents/cognition/emotion.py` (or policy module) implementing: (1) per-kind decay/regulation toward baseline using `EmotionRegulationPolicy` and tick delta; (2) closed driver deltas from interpreted perception, retrieved memory salience, situation threat claims, **this-tick `GoalBoard` statuses / transition intents** (not live `Agent.goals`), inbox/social envelopes, relationship dimensions (including reading `RelationshipDimension.FEAR` as input only), and observation physiology/terminal cues; (3) clamp/quantize; (4) emit `EmotionalStateEvaluation` + stable reason codes. Provide PASSTHROUGH appraiser that returns prior/zero state with `passthrough` reason. Version constant `EMOTION_POLICY_VERSION = "emotion.v1"`.
   - Expected behavior: Identical subjective inputs → identical outputs; high threat raises fear/anxiety; goal-failure intents raise sadness/anger (policy weights); relief on threat removal / goal-progress intents; attachment from positive social/relationship evidence; confidence from competence/progress cues — all numeric, no narrative.
   - Files: `src/agents/cognition/emotion.py`, `src/agents/cognition/defaults.py`, `src/agents/cognition/configuration.py`, `tests/unit/test_emotional_state_engine.py`.
   - Logging requirements: DEBUG `emotional_state_start` / `emotional_state_complete` with policy version, owner/tick, active_kind_count, max_intensity_band, driver_code_counts, decay_applied. WARN on truncation/disabled-kind rejection; ERROR on ownership/contract failure. Never log free-text affect, observation payloads, or memory content.
   - Dependencies: Tasks 1, 2.
 
-- [ ] Task 6: Insert emotional stage into `CognitiveLoop` with constructor injection and proposal wiring.
+- [x] Task 6: Insert emotional stage into `CognitiveLoop` with constructor injection and proposal wiring.
   - Deliverable: Update `_STAGE_ORDER` and `CognitiveLoop.prepare` to run emotional appraisal after `GOAL_MANAGEMENT` and before `FUTURES`. Inject `EmotionalStateAppraiser` on the loop (mirror `GoalManager`). Extend `CognitiveLoopProposal` with the evaluation field; include it in boundary validation. Pass prior state from `SubjectiveSnapshot.emotional_state` into the stage; pass updated evaluation into downstream stage calls. Shift ordinals; update architecture isolation / loop / typecheck tests.
   - Expected behavior: Stage boundary records include `EMOTIONAL_STATE`; PASSTHROUGH keeps downstream unbiased; ENABLED feeds updated state forward.
   - Files: `src/agents/cognition/loop.py`, `src/agents/cognition/contracts.py`, `src/agents/cognition/models.py`, `src/agents/cognition/defaults.py`, `src/agents/cognition/configuration.py`, `tests/unit/test_cognitive_loop.py`, `tests/architecture/test_cognitive_loop_isolation.py`, `tests/typecheck/cognitive_loop.py` (if present).
@@ -124,35 +124,35 @@ Add a transient, owner-scoped **`AgentEmotionalState`** that is separate from ob
 
 ### Phase 3: Runtime Carry and Influence Hooks
 
-- [ ] Task 7: Carry emotional state on `AgentRuntime` through perspective → snapshot (N→N+1).
+- [x] Task 7: Carry emotional state on `AgentRuntime` through perspective → snapshot (N→N+1).
   - Deliverable: Add owner-scoped `_emotional_state` on `AgentRuntime` (default empty/None). Extend `Perspective` and `build_perspective(..., emotional_state=...)` in `agents/cognition/contracts.py` + `simulation/perception.py` to thread into `SubjectiveSnapshot.emotional_state`. After successful cognition finalize/bind, commit post-stage `AgentEmotionalState` onto the runtime (ownership-checked) so the next snapshot includes it. Snapshot for invocation N stays fixed; mutations appear on N+1. Do not mutate `Agent` domain identity.
   - Expected behavior: Fear induced on tick t is visible as prior state on tick t+1 retrieval bias; objective world unchanged; flags-off / PASSTHROUGH leave empty/neutral carry.
   - Files: `src/agents/cognition/contracts.py`, `src/agents/cognition/models.py`, `src/simulation/perception.py`, `src/simulation/agent_runtime.py`, related unit tests (`tests/unit/test_agent_runtime.py`, perspective tests).
   - Logging requirements: DEBUG commit emotional_state_present, kind_count, tick — never intensities as INFO payloads; DEBUG may include quantized max intensity only.
   - Dependencies: Tasks 2, 6.
 
-- [ ] Task 8: Wire prior-state bias into memory retrieval / reconstruction and situation-focus weights.
+- [x] Task 8: Wire prior-state bias into memory retrieval / reconstruction and situation-focus weights.
   - Deliverable: When prior `AgentEmotionalState` is non-neutral and mode ENABLED, apply deterministic retrieval score bias (congruent salience / threat-tagged traces under fear/anxiety; attachment-congruent social traces under attachment) without changing `MemoryTrace` storage. Extend reconstruction ranking/salience blend similarly. Apply closed situation-focus / claim reweighting from prior emotion (this is the plan’s “attention” surface — not a new attention engine). Keep V1 scoring path bit-identical when prior state is absent/zero or mode PASSTHROUGH. Prefer cognition-side bias wrappers over mutating `memory.scoring` globals; if scoring policy gains optional emotion weights, version the policy id and keep defaults emotion-neutral.
   - Expected behavior: Same store + same query + different prior emotion → different ranked hits / focus weights when ENABLED; identical when PASSTHROUGH/off.
   - Files: `src/agents/cognition/memory.py`, `src/agents/cognition/reconstruction.py`, situation modeler/defaults as needed, optionally `src/memory/scoring.py`, `tests/unit/test_emotional_memory_bias.py`.
   - Logging requirements: DEBUG bias_applied bool, policy version, hit_count delta, focus_code_counts — never trace text/embeddings.
   - Dependencies: Tasks 1, 7.
 
-- [ ] Task 9: Wire updated-state bias into risk, intention, and social/communication behavior.
+- [x] Task 9: Wire updated-state bias into risk, intention, and social/communication behavior.
   - Deliverable: Extend protocol signatures for `FutureImagination`, `MotivationEvaluator`, `IntentionSelector`, `Planner`, and `SocialMessagePolicy` to accept optional `EmotionalStateEvaluation` (default None). When ENABLED, scale subjective risk likelihood/severity (e.g. emotion fear/anxiety ↑ physical-harm weight; confidence ↓ foreclosure weight within clamps). Add multi-criteria intention votes / veto nudges without a total-reward field. Bias `DeterministicSocialMessagePolicy` toward attachment/anger/anxiety-consistent talk/ask/tell preferences via closed codes only. PASSTHROUGH and None leave existing V1 math unchanged. Keep `EmotionKind.FEAR` distinct from `RelationshipDimension.FEAR` in code and tests.
   - Expected behavior: Identical observation + goals + drives + memories, differing only in emotional state → different selected intention/command and/or communication choice under ENABLED.
   - Files: `src/agents/cognition/contracts.py`, `src/agents/cognition/imagination.py`, `src/agents/cognition/motivation.py`, `src/agents/cognition/deliberation.py`, `src/agents/cognition/defaults.py` (planner), `src/agents/cognition/communication.py`, `src/agents/cognition/loop.py`, `tests/unit/test_emotional_influence_hooks.py`.
   - Logging requirements: DEBUG reason codes like `emotion_risk_scale`, `emotion_intention_vote`, `emotion_social_bias` with kind bands only — never utterance text.
   - Dependencies: Tasks 2, 5, 6.
 
-- [ ] Task 10: Version agent/checkpoint codecs for emotional state (accepted-set discipline).
+- [x] Task 10: Version agent/checkpoint codecs for emotional state (accepted-set discipline).
   - Deliverable: Encode/decode `AgentRuntime` emotional carry via agent/checkpoint serialization paths (exact key-set write version; intentional legacy decode defaults: missing emotion → empty state). Fail closed on unknown versions. Do **not** bump `subjective_serialization` unless that envelope already owns the field. Do not add Alembic tables. Flags-off runs omit or empty-encode harmlessly.
   - Expected behavior: Live/restored parity for emotional vector when durable resume is used; in-memory multi-tick works without durable path.
   - Files: `src/simulation/serialization.py` (and/or agent checkpoint helpers used by persistence), `tests/unit/test_v1_domain_serialization.py` / checkpoint restore tests as applicable.
   - Logging requirements: DEBUG encode/decode version + kind_count only.
   - Dependencies: Task 7.
 
-- [ ] Task 11: Update cognition-trace emotional projection to prefer live stage.
+- [x] Task 11: Update cognition-trace emotional projection to prefer live stage.
   - Deliverable: When `ComponentKind.EMOTIONAL_STATE` completed with intensities, project kind refs, intensity bands, driver reason codes, and counts into `CognitionTraceStageKind.EMOTIONAL_STATE`. Map the component in `_COMPONENT_TO_TRACE` as appropriate without breaking the fixed scientific sequence. Fall back to existing drive/salience projection only when stage missing/PASSTHROUGH-neutral. Keep tracing non-authoritative and outside the objective fold.
   - Expected behavior: Flag-on + tracing-on shows structured emotion summary; tracing on/off does not change `exact_trajectory_hash`.
   - Files: `src/agents/cognition/trace.py`, `tests/unit/test_cognition_trace_projection.py` (or existing trace tests).
@@ -161,28 +161,28 @@ Add a transient, owner-scoped **`AgentEmotionalState`** that is separate from ob
 
 ### Phase 4: Controlled Tests and Docs
 
-- [ ] Task 12: Unit tests for decay/regulation and driver transitions.
+- [x] Task 12: Unit tests for decay/regulation and driver transitions.
   - Deliverable: Table-driven tests beyond Task 5 smoke coverage: per-kind decay over N ticks toward baseline; clamp at ceilings; disabled kinds ignored; each driver code (including GoalBoard failure/progress intents) produces expected directional deltas; determinism; ownership fail-closed; no prose fields on artifacts; relationship-fear driver does not type-confuse with `EmotionKind.FEAR`.
   - Expected behavior: Stable quantized outputs; reason-code sets match drivers applied.
   - Files: `tests/unit/test_emotional_state_engine.py`, `tests/unit/test_emotional_state_models.py`.
   - Logging requirements: Capture logs and assert allowlisted keys only.
   - Dependencies: Task 5.
 
-- [ ] Task 13: Controlled divergence tests — identical objective situation, different prior emotion.
+- [x] Task 13: Controlled divergence tests — identical objective situation, different prior emotion.
   - Deliverable: Construct two cognition invocations with **byte-identical** `Observation` (and same goals/drives/memory store contents) but different seeded prior `AgentEmotionalState` under ENABLED (seed via runtime/perspective). Assert divergent retrieval ranking and/or selected `AgentCommand` / communication choice. Add a third PASSTHROUGH/flag-off control where both priors collapse to identical commands. Prefer pure unit tests with fakes (no Docker).
   - Expected behavior: Proves emotion is causal for behavior independently of objective world state.
   - Files: `tests/unit/test_emotional_state_behavior_divergence.py`.
   - Logging requirements: Assert DEBUG includes emotion bias reason codes when ENABLED; absent when PASSTHROUGH.
   - Dependencies: Tasks 7, 8, 9.
 
-- [ ] Task 14: Capability gating and V1 regression proofs.
+- [x] Task 14: Capability gating and V1 regression proofs.
   - Deliverable: Tests that (a) enabling unowned flags still fails closed; (b) enabling only `short_term_emotional_state` constructs and changes behavior vs flag-off for a minimal threat scenario; (c) runner JSON round-trips the fifth capability key; (d) `tests/unit/test_v1_regression_gate.py` remains green flags-off/tracing-off; (e) import-linter / architecture isolation still pass. Inverse of goal-management’s “not a capability flag” test: assert emotional state **is** gated by the owned flag.
   - Expected behavior: Flag-off bit-identical to V1 reference for regression profile; flag-on is opt-in only.
   - Files: `tests/unit/test_runner_models.py`, `tests/unit/test_simulation_runner_construction.py`, `tests/unit/test_runner_serialization.py`, `tests/unit/test_v1_regression_gate.py`, architecture tests as needed.
   - Logging requirements: Assert construction ERROR reason_code for unimplemented flags.
   - Dependencies: Tasks 3, 4, 9, 13.
 
-- [ ] Task 15: Documentation checkpoint (`/aif-docs`).
+- [x] Task 15: Documentation checkpoint (`/aif-docs`).
   - Deliverable: Update `docs/cognition-runtime.md` pipeline diagram and policy table for emotional stage + flag mapping; clarify V1 salience vs V2 short-term state; document situation-focus (not a separate attention engine); note `EmotionKind` vs `RelationshipDimension.FEAR`; logging allowlist and non-goals. Cross-link Downstream V2 contract / owned capability flag. Keep README lean.
   - Expected behavior: Contributors can enable the flag and understand decay/drivers/influence surfaces without reading the plan.
   - Files: `docs/cognition-runtime.md`, optionally `docs/architecture.md` (V2 extension seams / owned flags), `docs/memory-reconstruction.md` (salience vs live emotion note).

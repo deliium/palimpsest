@@ -160,7 +160,7 @@ See `simulation.compatibility`, [Simulation runner](simulation-runner.md), and [
 Every later V2 feature plan must satisfy this checklist before merge:
 
 1. **V1 invariants intact** — WorldEngine authority, Observation trust, append-only history, subjective ≠ objective fold, LLM non-authority, no silent cross-agent copy, reproducible seeds/stubs where claimed.
-2. **Capability flags opt-in** — reserved `V2CapabilityFlags` stay default-off; enabling a flag without an owning plan fails closed (`capability_unimplemented`); no silent behavior when off.
+2. **Capability flags opt-in** — reserved `V2CapabilityFlags` stay default-off; enabling a flag without an owning plan fails closed (`capability_unimplemented`); owned flags (currently `short_term_emotional_state`) may enable without that error; no silent behavior when off.
 3. **V1 regression gate green** — `tests/unit/test_v1_regression_gate.py` (catalog A–E + short reference) and replay/API compat suites remain passing under flags-off **and** tracing-off (`v1_regression_profile` rejects enabled tracing).
 4. **Schema bumps use accepted-set + exact key-set discipline** — never drop accepted V1 versions in the same change that adds a write version; runner JSON uses versioned `_require_keys` (no silent extra fields on an existing schema id).
 5. **No scripted emergence** — no hard-coded friend/enemy/leader/culture roles or milestone scripts that fake social outcomes beyond existing trusted override patterns.
