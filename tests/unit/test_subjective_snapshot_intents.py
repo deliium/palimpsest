@@ -7,6 +7,7 @@ import logging
 import pytest
 
 from agents.cognition.defaults import (
+        PassthroughGoalManager,
     DirectSelfStateProjector,
     DirectSituationModeler,
     EmptyMemoryRetriever,
@@ -329,6 +330,7 @@ async def test_runtime_defers_revise_intents_without_mutation(
         memory=EmptyMemoryRetriever(),
         situation=DirectSituationModeler(),
         self_state=DirectSelfStateProjector(),
+        goal_manager=PassthroughGoalManager(),
         futures=PlaceholderFutureImagination(),
         motivation=StableMotivationEvaluator(),
         intention=StableIntentionSelector(),

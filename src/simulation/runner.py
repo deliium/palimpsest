@@ -83,6 +83,7 @@ from simulation.persistence import (
     PendingFinalizationRepository,
     PendingFinalizationStatus,
     RunCreateRequest,
+    ScientificEvidenceRepository,
     SimulationRunRepository,
     SnapshotId,
     TickJournalRepository,
@@ -274,6 +275,7 @@ class RunnerDependencyFactories:
         "_provider_factory",
         "_relationship_factory",
         "_run_repository",
+        "_scientific_evidence",
         "_sleep",
     )
 
@@ -298,6 +300,7 @@ class RunnerDependencyFactories:
         journal: TickJournalRepository | None = None,
         pending_finalizations: PendingFinalizationRepository | None = None,
         cognition_trace_repository: CognitionTraceRepository | None = None,
+        scientific_evidence: ScientificEvidenceRepository | None = None,
     ) -> None:
         self._credential_resolver = credential_resolver
         self._provider_factory = provider_factory
@@ -311,6 +314,7 @@ class RunnerDependencyFactories:
         self._journal = journal
         self._pending_finalizations = pending_finalizations
         self._cognition_trace_repository = cognition_trace_repository
+        self._scientific_evidence = scientific_evidence
 
     @property
     def run_repository(self) -> SimulationRunRepository | None:
@@ -327,6 +331,10 @@ class RunnerDependencyFactories:
     @property
     def cognition_trace_repository(self) -> CognitionTraceRepository | None:
         return self._cognition_trace_repository
+
+    @property
+    def scientific_evidence(self) -> ScientificEvidenceRepository | None:
+        return self._scientific_evidence
 
     def resolve_credentials(
         self, settings: RunnerProviderSettings
@@ -815,6 +823,7 @@ class SimulationRunner:
                     run_id=resolved_run_id,
                     cognition_trace_repository=cognition_trace_repository,
                     cognition_trace_spec=config.cognition_trace,
+                    scientific_evidence=deps.scientific_evidence,
                 )
                 bundle = _AgentBundle(
                     runtime=runtime,
@@ -1048,7 +1057,7 @@ class SimulationRunner:
                 for runtime in self._runtimes
             ):
                 tick_result = await self._commit_tick(())
-                self._record_finalized_tick(tick_result, pendings=())
+                await self._record_finalized_tick(tick_result, pendings=())
                 self._ticks_committed += 1
                 return RunnerAttemptReceipt(
                     tick=tick_value,
@@ -1251,7 +1260,7 @@ class SimulationRunner:
                 for receipt in self._finalized_tick_receipts
             )
             if not already:
-                self._record_finalized_tick(tick_result, pendings=pendings)
+                await self._record_finalized_tick(tick_result, pendings=pendings)
             if self._ticks_committed <= tick_result.tick.value:
                 self._ticks_committed = tick_result.tick.value + 1
         return finalized
@@ -1503,6 +1512,7 @@ class SimulationRunner:
             projection=projection,
         )
         self._goal_transition_receipts.extend(goal_receipts)
+        await self._apply_objective_goal_receipts(goal_receipts)
         result = SimulationRunnerResult(
             run_id=self._run_id,
             ticks_committed=self._ticks_committed,
@@ -1536,7 +1546,7 @@ class SimulationRunner:
             bodies=self._engine.detached_bodies(),
         )
 
-    def _record_finalized_tick(
+    async def _record_finalized_tick(
         self,
         tick_result: TickResult,
         *,
@@ -1586,6 +1596,7 @@ class SimulationRunner:
             projection=projection,
         )
         self._goal_transition_receipts.extend(mid_receipts)
+        await self._apply_objective_goal_receipts(mid_receipts)
         _LOG.debug(
             "finalized_tick_receipt run_id=%s tick=%s resolution_count=%s "
             "event_count=%s objective_hash_prefix=%s cognition_invocations=%s",
@@ -1596,6 +1607,21 @@ class SimulationRunner:
             state_hash[:12],
             cognition_invocations,
         )
+
+    async def _apply_objective_goal_receipts(
+        self,
+        receipts: tuple[GoalTransitionReceipt, ...],
+    ) -> None:
+        """Mutate live Agent.goals from objective receipts and publish revisions."""
+        if not receipts:
+            return
+        by_owner: dict[AgentId, list[GoalTransitionReceipt]] = {}
+        for item in receipts:
+            by_owner.setdefault(item.owner_id, []).append(item)
+        for owner_id, owned in by_owner.items():
+            runtime = self._runtimes_by_agent(owner_id)
+            applied = runtime.apply_goal_status_transitions(owned)
+            await runtime.publish_goal_revisions(applied)
 
     def _evaluate_goals_at_boundary(
         self,
@@ -1610,7 +1636,12 @@ class SimulationRunner:
             for goal in runtime.agent.goals:
                 if goal.goal_id in completed_ids:
                     continue
-                if goal.status is GoalStatus.ACTIVE:
+                # ACTIVE for normal evaluation; FAILED/SUSPENDED remain eligible
+                # so same-tick objective COMPLETED can overwrite subjective status.
+                if goal.status is GoalStatus.ACTIVE or goal.status in (
+                    GoalStatus.FAILED,
+                    GoalStatus.SUSPENDED,
+                ):
                     goals.append(goal)
         owner_entity_ids = {
             agent.agent_id.value: agent.entity_id.value for agent in self._config.agents

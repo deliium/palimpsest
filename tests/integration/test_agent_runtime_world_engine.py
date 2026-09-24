@@ -13,6 +13,7 @@ import pytest
 from tests.simulation_helpers import make_location, weather_for_locations
 
 from agents.cognition.defaults import (
+        PassthroughGoalManager,
     DirectSelfStateProjector,
     DirectSituationModeler,
     EmptyMemoryRetriever,
@@ -131,6 +132,7 @@ def _loop_with_command(command: object) -> CognitiveLoop:
         memory=EmptyMemoryRetriever(),
         situation=DirectSituationModeler(),
         self_state=DirectSelfStateProjector(),
+        goal_manager=PassthroughGoalManager(),
         futures=PlaceholderFutureImagination(),
         motivation=StableMotivationEvaluator(),
         intention=StableIntentionSelector(),
@@ -221,7 +223,7 @@ async def test_cross_agent_observation_rejected() -> None:
 @pytest.mark.asyncio
 async def test_cognition_failure_yields_no_submission() -> None:
     class BoomPlanner:
-        async def plan(self, loop_input, intention, futures, memory=None):  # type: ignore[no-untyped-def]
+        async def plan(self, loop_input, intention, futures, memory=None, goal_board=None):  # type: ignore[no-untyped-def]
             raise RuntimeError("secret planner boom")
 
     bootstrap = _bootstrap(("agent-1", "body-1"))
@@ -231,6 +233,7 @@ async def test_cognition_failure_yields_no_submission() -> None:
         memory=EmptyMemoryRetriever(),
         situation=DirectSituationModeler(),
         self_state=DirectSelfStateProjector(),
+        goal_manager=PassthroughGoalManager(),
         futures=PlaceholderFutureImagination(),
         motivation=StableMotivationEvaluator(),
         intention=StableIntentionSelector(),

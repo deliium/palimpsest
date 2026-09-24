@@ -234,6 +234,46 @@ def test_goal_evaluator_completion_death_and_run_end() -> None:
     assert death[0].to_status is GoalStatus.ABANDONED
 
 
+def test_goal_evaluator_completed_overwrites_subjective_failed() -> None:
+    from agents.models import Goal, GoalId, GoalOutcome, GoalOutcomeKind, GoalStatus
+    from simulation.runner_models import (
+        BodyObjectiveFact,
+        GoalEvaluationEvidence,
+        GoalTransitionReasonCode,
+        evaluate_goals_after_finalization,
+    )
+    from world.models import LifeStatus
+
+    agent_id = AgentId("agent-1")
+    failed = Goal(
+        goal_id=GoalId("g-reach"),
+        owner_id=agent_id,
+        description="reach",
+        priority=0.5,
+        status=GoalStatus.FAILED,
+        outcome=GoalOutcome(kind=GoalOutcomeKind.REACH_PLACE, place_id="loc-1"),
+    )
+    alive = BodyObjectiveFact(
+        entity_id=EntityId("body-1"),
+        location_id=EntityId("loc-1"),
+        life_status=LifeStatus.ALIVE,
+        inventory=(),
+    )
+    receipts = evaluate_goals_after_finalization(
+        (failed,),
+        GoalEvaluationEvidence(
+            tick=5,
+            run_ending=False,
+            owner_entity_ids={"agent-1": "body-1"},
+            bodies=(alive,),
+        ),
+    )
+    assert len(receipts) == 1
+    assert receipts[0].reason_code is GoalTransitionReasonCode.COMPLETED
+    assert receipts[0].from_status is GoalStatus.FAILED
+    assert receipts[0].to_status is GoalStatus.COMPLETED
+
+
 def test_new_configs_default_to_schema_v4() -> None:
     from simulation.runner_models import (
         RUNNER_SCHEMA_VERSION_V4,

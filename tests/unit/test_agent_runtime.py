@@ -211,6 +211,7 @@ async def test_cognition_failure_does_not_mutate_memory() -> None:
         EmptyMemoryRetriever,
         EmptyMemoryUpdateHook,
         LiteralPerceptionInterpreter,
+        PassthroughGoalManager,
         PlaceholderFutureImagination,
         StableIntentionSelector,
         StableMotivationEvaluator,
@@ -219,7 +220,9 @@ async def test_cognition_failure_does_not_mutate_memory() -> None:
     from agents.cognition.loop import CognitiveLoop
 
     class BoomMotivation(StableMotivationEvaluator):
-        async def evaluate(self, loop_input, situation, self_state, futures):  # type: ignore[no-untyped-def]
+        async def evaluate(  # type: ignore[no-untyped-def]
+            self, loop_input, situation, self_state, futures, goal_board=None
+        ):
             raise RuntimeError("secret motivation")
 
     bootstrap = _bootstrap()
@@ -233,6 +236,7 @@ async def test_cognition_failure_does_not_mutate_memory() -> None:
             memory=EmptyMemoryRetriever(),
             situation=DirectSituationModeler(),
             self_state=DirectSelfStateProjector(),
+            goal_manager=PassthroughGoalManager(),
             futures=PlaceholderFutureImagination(),
             motivation=BoomMotivation(),
             intention=StableIntentionSelector(),
@@ -260,6 +264,7 @@ async def test_memory_updates_apply_after_success() -> None:
         DirectSituationModeler,
         EmptyMemoryRetriever,
         LiteralPerceptionInterpreter,
+        PassthroughGoalManager,
         PlaceholderFutureImagination,
         StableIntentionSelector,
         StableMotivationEvaluator,
@@ -335,6 +340,7 @@ async def test_memory_updates_apply_after_success() -> None:
             memory=EmptyMemoryRetriever(),
             situation=DirectSituationModeler(),
             self_state=DirectSelfStateProjector(),
+            goal_manager=PassthroughGoalManager(),
             futures=PlaceholderFutureImagination(),
             motivation=StableMotivationEvaluator(),
             intention=StableIntentionSelector(),
@@ -426,3 +432,234 @@ async def test_prepare_bind_finalize_and_abort() -> None:
     # via finalized_hashes.
     again = await runtime.finalize_pending(pending2)
     assert again.invocation_id == pending2.invocation_id
+
+
+def _goal_for_runtime(
+    *,
+    goal_id: str = "g-1",
+    owner_id: str = "agent-1",
+    status: object | None = None,
+    description: str = "goal",
+) -> object:
+    from agents.models import Goal, GoalId, GoalOutcome, GoalOutcomeKind, GoalStatus
+
+    return Goal(
+        goal_id=GoalId(goal_id),
+        owner_id=AgentId(owner_id),
+        description=description,
+        priority=0.5,
+        status=GoalStatus.ACTIVE if status is None else status,
+        outcome=GoalOutcome(kind=GoalOutcomeKind.REACH_PLACE, place_id="loc-1"),
+    )
+
+
+def _runtime_with_goals(*goals: object) -> AgentRuntime:
+    from agents.models import Goal
+
+    bootstrap = _bootstrap()
+    memories = MemoryStore(AgentId("agent-1"))
+    beliefs = BeliefStore(AgentId("agent-1"))
+    typed = tuple(item for item in goals if type(item) is Goal)
+    agent = Agent(agent_id=AgentId("agent-1"), name="agent-1", goals=typed)
+    return AgentRuntime(
+        agent=agent,
+        translator=registration_translator(bootstrap),
+        cognitive_loop=default_cognitive_loop(),
+        memory_reader=memories,
+        memory_writer=memories,
+        belief_reader=beliefs,
+        belief_writer=beliefs,
+    )
+
+
+def test_apply_goal_status_transitions_updates_agent_goals(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    from agents.models import GoalId, GoalOutcomeKind, GoalStatus
+    from simulation.runner_models import GoalTransitionReasonCode, GoalTransitionReceipt
+
+    active = _goal_for_runtime(goal_id="g-reach", description="secret-outcome")
+    other = _goal_for_runtime(goal_id="g-other", description="keep-active")
+    runtime = _runtime_with_goals(active, other)
+    receipt = GoalTransitionReceipt(
+        goal_id=GoalId("g-reach"),
+        owner_id=AgentId("agent-1"),
+        outcome_kind=GoalOutcomeKind.REACH_PLACE,
+        from_status=GoalStatus.ACTIVE,
+        to_status=GoalStatus.COMPLETED,
+        tick=2,
+        reason_code=GoalTransitionReasonCode.COMPLETED,
+    )
+    foreign = GoalTransitionReceipt(
+        goal_id=GoalId("g-foreign"),
+        owner_id=AgentId("agent-2"),
+        outcome_kind=GoalOutcomeKind.REACH_PLACE,
+        from_status=GoalStatus.ACTIVE,
+        to_status=GoalStatus.COMPLETED,
+        tick=1,
+        reason_code=GoalTransitionReasonCode.COMPLETED,
+    )
+    caplog.set_level(logging.DEBUG, logger="simulation.agent_runtime")
+    applied = runtime.apply_goal_status_transitions((foreign, receipt))
+    assert len(applied) == 1
+    by_id = {goal.goal_id.value: goal for goal in runtime.agent.goals}
+    assert by_id["g-reach"].status is GoalStatus.COMPLETED
+    assert by_id["g-other"].status is GoalStatus.ACTIVE
+    messages = " ".join(record.getMessage() for record in caplog.records)
+    joined_extra = " ".join(
+        str(getattr(record, "runtime", "")) for record in caplog.records
+    )
+    assert "secret-outcome" not in messages
+    assert "secret-outcome" not in joined_extra
+    assert "goal_status_transition_applied" in messages
+
+
+def test_apply_goal_transition_intents_upsert_and_precedence() -> None:
+    from agents.cognition.models import GoalTransitionIntent, GoalTransitionIntentReason
+    from agents.models import Goal, GoalId, GoalOutcome, GoalOutcomeKind, GoalStatus
+
+    parent = _goal_for_runtime(goal_id="g-parent", description="parent")
+    completed = _goal_for_runtime(
+        goal_id="g-done",
+        status=GoalStatus.COMPLETED,
+        description="already-done",
+    )
+    runtime = _runtime_with_goals(parent, completed)
+    child = Goal(
+        goal_id=GoalId("g-child"),
+        owner_id=AgentId("agent-1"),
+        description="child",
+        priority=0.4,
+        status=GoalStatus.ACTIVE,
+        outcome=GoalOutcome(kind=GoalOutcomeKind.OBTAIN_ENTITY, entity_id="food-1"),
+        parent_goal_id=GoalId("g-parent"),
+    )
+    intents = (
+        GoalTransitionIntent(
+            goal_id=GoalId("g-child"),
+            owner_id=AgentId("agent-1"),
+            from_status=GoalStatus.ACTIVE,
+            to_status=GoalStatus.ACTIVE,
+            reason_code=GoalTransitionIntentReason.DECOMPOSED,
+            tick=4,
+            resulting_goal=child,
+        ),
+        GoalTransitionIntent(
+            goal_id=GoalId("g-parent"),
+            owner_id=AgentId("agent-1"),
+            from_status=GoalStatus.ACTIVE,
+            to_status=GoalStatus.SUSPENDED,
+            reason_code=GoalTransitionIntentReason.SUSPENDED,
+            tick=4,
+            resulting_goal=Goal(
+                goal_id=GoalId("g-parent"),
+                owner_id=AgentId("agent-1"),
+                description="parent",
+                priority=0.5,
+                status=GoalStatus.SUSPENDED,
+                outcome=GoalOutcome(kind=GoalOutcomeKind.REACH_PLACE, place_id="loc-1"),
+            ),
+        ),
+        GoalTransitionIntent(
+            goal_id=GoalId("g-done"),
+            owner_id=AgentId("agent-1"),
+            from_status=GoalStatus.COMPLETED,
+            to_status=GoalStatus.FAILED,
+            reason_code=GoalTransitionIntentReason.FAILED,
+            tick=4,
+        ),
+    )
+    receipts = runtime.apply_goal_transition_intents(intents)
+    by_id = {goal.goal_id.value: goal for goal in runtime.agent.goals}
+    assert "g-child" in by_id
+    assert by_id["g-parent"].status is GoalStatus.SUSPENDED
+    assert by_id["g-done"].status is GoalStatus.COMPLETED
+    assert {item.goal_id.value for item in receipts} == {"g-child", "g-parent"}
+
+    # Objective COMPLETED overwrites same-tick subjective SUSPENDED.
+    from simulation.runner_models import GoalTransitionReasonCode, GoalTransitionReceipt
+
+    objective = GoalTransitionReceipt(
+        goal_id=GoalId("g-parent"),
+        owner_id=AgentId("agent-1"),
+        outcome_kind=GoalOutcomeKind.REACH_PLACE,
+        from_status=GoalStatus.SUSPENDED,
+        to_status=GoalStatus.COMPLETED,
+        tick=4,
+        reason_code=GoalTransitionReasonCode.COMPLETED,
+    )
+    runtime.apply_goal_status_transitions((objective,))
+    assert (
+        {goal.goal_id.value: goal.status for goal in runtime.agent.goals}["g-parent"]
+        is GoalStatus.COMPLETED
+    )
+
+
+@pytest.mark.asyncio
+async def test_publish_goal_revisions_soft_skips_without_repo(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    from agents.models import GoalId, GoalOutcomeKind, GoalStatus
+    from simulation.runner_models import GoalTransitionReasonCode, GoalTransitionReceipt
+
+    runtime = _runtime_with_goals(_goal_for_runtime())
+    receipt = GoalTransitionReceipt(
+        goal_id=GoalId("g-1"),
+        owner_id=AgentId("agent-1"),
+        outcome_kind=GoalOutcomeKind.REACH_PLACE,
+        from_status=GoalStatus.ACTIVE,
+        to_status=GoalStatus.COMPLETED,
+        tick=1,
+        reason_code=GoalTransitionReasonCode.COMPLETED,
+    )
+    caplog.set_level(logging.DEBUG, logger="simulation.agent_runtime")
+    await runtime.publish_goal_revisions((receipt,))
+    assert any(
+        "goal_revision_publish_skipped" in record.getMessage()
+        for record in caplog.records
+    )
+
+
+@pytest.mark.asyncio
+async def test_publish_goal_revisions_appends_when_wired() -> None:
+    from agents.models import GoalId, GoalOutcomeKind, GoalStatus
+    from simulation.memory_scientific_evidence import (
+        InMemoryScientificEvidenceRepository,
+    )
+    from simulation.models import RunId
+    from simulation.runner_models import GoalTransitionReasonCode, GoalTransitionReceipt
+
+    evidence = InMemoryScientificEvidenceRepository()
+    bootstrap = _bootstrap()
+    memories = MemoryStore(AgentId("agent-1"))
+    beliefs = BeliefStore(AgentId("agent-1"))
+    runtime = AgentRuntime(
+        agent=Agent(
+            agent_id=AgentId("agent-1"),
+            name="agent-1",
+            goals=(_goal_for_runtime(),),  # type: ignore[arg-type]
+        ),
+        translator=registration_translator(bootstrap),
+        cognitive_loop=default_cognitive_loop(),
+        memory_reader=memories,
+        memory_writer=memories,
+        belief_reader=beliefs,
+        belief_writer=beliefs,
+        run_id=RunId("run-1"),
+        scientific_evidence=evidence,
+    )
+    receipt = GoalTransitionReceipt(
+        goal_id=GoalId("g-1"),
+        owner_id=AgentId("agent-1"),
+        outcome_kind=GoalOutcomeKind.REACH_PLACE,
+        from_status=GoalStatus.ACTIVE,
+        to_status=GoalStatus.FAILED,
+        tick=7,
+        reason_code=GoalTransitionReasonCode.FAILED,
+    )
+    await runtime.publish_goal_revisions((receipt,))
+    revisions = await evidence.list_goal_revisions(run_id="run-1")
+    assert len(revisions) == 1
+    assert revisions[0].revision == 1
+    assert revisions[0].goal_id == "g-1"
+    assert revisions[0].tick == 7

@@ -16,6 +16,7 @@ from agents.cognition import (
     ComponentKind,
     ComponentStatus,
     DecisionMetadata,
+    GoalBoard,
     IntentionCode,
     InternalAgentState,
     InterpretedPerception,
@@ -32,7 +33,7 @@ from agents.cognition import (
     project_cognition_trace_stages,
     stage_summaries_content_hash,
 )
-from agents.models import AgentId, Goal, GoalId, GoalStatus
+from agents.models import AgentId, Goal, GoalHorizon, GoalId, GoalStatus
 from memory.models import BeliefId, MemoryId
 from world.actions import Wait
 from world.identifiers import EntityId, WorldId, WorldRevision
@@ -228,3 +229,101 @@ def test_projected_summaries_forbid_payload_fields() -> None:
     assert "stay alive" not in joined
     assert not any(hasattr(stage, "run_id") for stage in stages)
     assert not any(hasattr(stage, "latency_ms") for stage in stages)
+
+
+def test_goals_projection_prefers_goal_board_histograms() -> None:
+    agent = AgentId("agent-1")
+    long_term = Goal(
+        goal_id=GoalId("lt-1"),
+        owner_id=agent,
+        description="survive-winter-secret",
+        priority=0.9,
+        status=GoalStatus.ACTIVE,
+        horizon=GoalHorizon.LONG_TERM,
+    )
+    focus = Goal(
+        goal_id=GoalId("ci-1"),
+        owner_id=agent,
+        description="drink-now-secret",
+        priority=0.95,
+        status=GoalStatus.ACTIVE,
+        horizon=GoalHorizon.CURRENT_INTENTION,
+    )
+    suspended = Goal(
+        goal_id=GoalId("mt-1"),
+        owner_id=agent,
+        description="explore-secret",
+        priority=0.5,
+        status=GoalStatus.SUSPENDED,
+        horizon=GoalHorizon.MEDIUM_TERM,
+    )
+    board = GoalBoard(
+        owner_id=agent,
+        tick=0,
+        policy_version="goals.v1",
+        goals=(long_term, focus, suspended),
+        foci_ids=(focus.goal_id,),
+        transition_intents=(),
+        confidence=0.88,
+        decision_metadata=DecisionMetadata(selection_codes=("goal_management",)),
+    )
+    stages = project_cognition_trace_stages(
+        boundary_records=(
+            _record(
+                kind=ComponentKind.GOAL_MANAGEMENT,
+                ordinal=4,
+                output=board,
+            ),
+        ),
+        agent_id=agent.value,
+        tick=0,
+        invocation_id="inv-1",
+    )
+    goals_stage = next(
+        stage for stage in stages if stage.stage_kind is CognitionTraceStageKind.GOALS
+    )
+    assert goals_stage.status is CognitionTraceStageStatus.COMPLETED
+    assert goals_stage.confidence == 0.88
+    assert goals_stage.counts is not None
+    assert goals_stage.counts[CognitionTraceCountKey.GOAL_COUNT.value] == 3
+    assert goals_stage.counts[CognitionTraceCountKey.GOAL_FOCI_COUNT.value] == 1
+    assert goals_stage.counts[CognitionTraceCountKey.GOAL_STATUS_ACTIVE.value] == 2
+    assert goals_stage.counts[CognitionTraceCountKey.GOAL_STATUS_SUSPENDED.value] == 1
+    assert goals_stage.counts[CognitionTraceCountKey.GOAL_HORIZON_LONG_TERM.value] == 1
+    assert (
+        goals_stage.counts[
+            CognitionTraceCountKey.GOAL_HORIZON_CURRENT_INTENTION.value
+        ]
+        == 1
+    )
+    assert any(ref.value == "ci-1" for ref in goals_stage.id_refs)
+    joined = repr(goals_stage)
+    assert "survive-winter-secret" not in joined
+    assert "drink-now-secret" not in joined
+    assert "explore-secret" not in joined
+
+
+def test_goals_projection_falls_back_without_goal_board() -> None:
+    agent = AgentId("agent-1")
+    motivation = MotivationEvaluation(
+        owner_id=agent,
+        scores=(MotivationScore(motive=MotivationCode.WAIT, score=0.4),),
+        confidence=0.55,
+        active_goal_ids=(GoalId("goal-fallback"),),
+    )
+    stages = project_cognition_trace_stages(
+        boundary_records=(
+            _record(
+                kind=ComponentKind.MOTIVATION,
+                ordinal=4,
+                output=motivation,
+            ),
+        ),
+        agent_id=agent.value,
+    )
+    goals_stage = next(
+        stage for stage in stages if stage.stage_kind is CognitionTraceStageKind.GOALS
+    )
+    assert goals_stage.counts is not None
+    assert goals_stage.counts[CognitionTraceCountKey.GOAL_COUNT.value] == 1
+    assert any(ref.value == "goal-fallback" for ref in goals_stage.id_refs)

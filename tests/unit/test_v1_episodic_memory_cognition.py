@@ -5,6 +5,7 @@ from __future__ import annotations
 import pytest
 
 from agents.cognition.defaults import (
+        PassthroughGoalManager,
     DirectSelfStateProjector,
     DirectSituationModeler,
     EmptyMemoryRetriever,
@@ -247,6 +248,7 @@ async def test_runtime_applies_service_batch_after_successful_cognition() -> Non
         memory=retriever,
         situation=DirectSituationModeler(),
         self_state=DirectSelfStateProjector(),
+        goal_manager=PassthroughGoalManager(),
         futures=PlaceholderFutureImagination(),
         motivation=StableMotivationEvaluator(),
         intention=StableIntentionSelector(),
@@ -284,8 +286,9 @@ async def test_failed_cognition_does_not_mutate_memory_service() -> None:
             intention: SelectedIntention,
             futures: PossibleFutures,
             memory: RetrievedMemoryContext | None = None,
+            goal_board=None,
         ) -> ActionPlan:
-            _ = loop_input, intention, futures, memory
+            _ = loop_input, intention, futures, memory, goal_board
             raise RuntimeError("planner boom")
 
     bootstrap = _bootstrap()
@@ -296,6 +299,7 @@ async def test_failed_cognition_does_not_mutate_memory_service() -> None:
         memory=EmptyMemoryRetriever(),
         situation=DirectSituationModeler(),
         self_state=DirectSelfStateProjector(),
+        goal_manager=PassthroughGoalManager(),
         futures=PlaceholderFutureImagination(),
         motivation=StableMotivationEvaluator(),
         intention=StableIntentionSelector(),

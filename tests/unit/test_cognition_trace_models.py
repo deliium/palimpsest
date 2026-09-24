@@ -49,6 +49,9 @@ def test_component_kind_mapping() -> None:
     assert component_kinds_for_stage(
         CognitionTraceStageKind.RECONSTRUCTED_MEMORIES
     ) == frozenset({ComponentKind.MEMORY_RETRIEVAL})
+    assert component_kinds_for_stage(CognitionTraceStageKind.GOALS) == frozenset(
+        {ComponentKind.GOAL_MANAGEMENT}
+    )
     assert component_kinds_for_stage(CognitionTraceStageKind.BELIEFS) == frozenset()
     assert component_kinds_for_stage(
         CognitionTraceStageKind.THEORY_OF_MIND

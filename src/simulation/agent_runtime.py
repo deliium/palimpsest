@@ -11,9 +11,9 @@ from __future__ import annotations
 import hashlib
 import logging
 from collections.abc import Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from enum import StrEnum
-from typing import Final, Protocol
+from typing import TYPE_CHECKING, Final, Protocol
 
 from agents.cognition.loop import CognitiveLoop, CognitiveLoopError
 from agents.cognition.models import (
@@ -21,11 +21,14 @@ from agents.cognition.models import (
     CognitiveLoopProposal,
     CognitiveLoopResult,
     ComponentKind,
+    GoalBoard,
+    GoalTransitionIntent,
+    GoalTransitionIntentReason,
     InternalAgentState,
     MemoryUpdateIntent,
     MemoryUpdateKind,
 )
-from agents.models import Agent, AgentId
+from agents.models import Agent, AgentId, GoalOutcomeKind, GoalStatus
 from memory.contracts import (
     BeliefReader,
     BeliefWriter,
@@ -47,10 +50,15 @@ from simulation.cognition_trace import (
     NullCognitionTraceRepository,
     maybe_append_cognition_trace,
 )
+from simulation.evidence import GoalRevisionRecord, encode_goal_transition_receipt
 from simulation.lifecycle import ActionSubmission, TickToken, require_action_submission
 from simulation.models import RunId
 from simulation.perception import build_perspective
-from simulation.runner_models import CognitionTraceSpec
+from simulation.runner_models import (
+    CognitionTraceSpec,
+    GoalTransitionReasonCode,
+    GoalTransitionReceipt,
+)
 from simulation.subjective_state import (
     SubjectiveMutationBatch,
     SubjectiveStateError,
@@ -63,6 +71,9 @@ from world.actions import AgentCommand, require_agent_command
 from world.identifiers import require_stable_id
 from world.models import LifeStatus
 from world.observations import Observation
+
+if TYPE_CHECKING:
+    from simulation.persistence import ScientificEvidenceRepository
 
 __all__ = [
     "AgentRuntime",
@@ -395,6 +406,7 @@ class AgentRuntime:
         "_cognition_trace_repository",
         "_cognition_trace_spec",
         "_finalized_hashes",
+        "_goal_revision_counters",
         "_inbox",
         "_internal_state",
         "_invocation_ids",
@@ -407,6 +419,7 @@ class AgentRuntime:
         "_processed_invocations",
         "_relationship_reader",
         "_run_id",
+        "_scientific_evidence",
         "_semantic_belief_reader",
         "_status",
         "_subjective_state",
@@ -432,6 +445,7 @@ class AgentRuntime:
         run_id: RunId | None = None,
         cognition_trace_repository: CognitionTraceRepository | None = None,
         cognition_trace_spec: CognitionTraceSpec | None = None,
+        scientific_evidence: ScientificEvidenceRepository | None = None,
     ) -> None:
         if type(agent) is not Agent:
             raise TypeError("agent must be Agent")
@@ -451,6 +465,12 @@ class AgentRuntime:
             CognitionTraceSpec
         ):
             raise TypeError("cognition_trace_spec must be CognitionTraceSpec or None")
+        if scientific_evidence is not None and not hasattr(
+            scientific_evidence, "append_goal_revision"
+        ):
+            raise TypeError(
+                "scientific_evidence must implement ScientificEvidenceRepository"
+            )
         self._agent = agent
         self._translator = translator
         self._loop = cognitive_loop
@@ -479,6 +499,8 @@ class AgentRuntime:
             if cognition_trace_spec is not None
             else CognitionTraceSpec()
         )
+        self._scientific_evidence = scientific_evidence
+        self._goal_revision_counters: dict[str, int] = {}
         self._status = AgentRuntimeStatus.CREATED
         self._internal_state = InternalAgentState(owner_id=agent.agent_id)
         self._last_observation_key: tuple[int, int] | None = None
@@ -502,6 +524,278 @@ class AgentRuntime:
     @property
     def internal_state(self) -> InternalAgentState:
         return self._internal_state
+
+    def apply_goal_status_transitions(
+        self,
+        receipts: Sequence[GoalTransitionReceipt],
+    ) -> tuple[GoalTransitionReceipt, ...]:
+        """Apply owner-scoped objective receipts to live ``Agent.goals``.
+
+        Deterministic order is ``(tick, goal_id.value)``. Foreign owners are
+        skipped. Returns receipts that mutated local goals.
+        """
+        if isinstance(receipts, (set, frozenset)):
+            raise TypeError("receipts must be ordered")
+        owner = self._agent.agent_id
+        owned = [
+            item
+            for item in receipts
+            if type(item) is GoalTransitionReceipt and item.owner_id == owner
+        ]
+        owned.sort(key=lambda item: (item.tick, item.goal_id.value))
+        if not owned:
+            return ()
+        by_id = {goal.goal_id: goal for goal in self._agent.goals}
+        order = [goal.goal_id for goal in self._agent.goals]
+        applied: list[GoalTransitionReceipt] = []
+        for receipt in owned:
+            existing = by_id.get(receipt.goal_id)
+            if existing is None:
+                _LOG.debug(
+                    "goal_status_transition_skipped",
+                    extra={
+                        "runtime": {
+                            "agent_id": owner.value,
+                            "tick": receipt.tick,
+                            "goal_id": receipt.goal_id.value,
+                            "reason_code": receipt.reason_code.value,
+                            "skip": "missing_goal",
+                        }
+                    },
+                )
+                continue
+            updated = replace(existing, status=receipt.to_status)
+            by_id[receipt.goal_id] = updated
+            applied.append(receipt)
+            _LOG.debug(
+                "goal_status_transition_applied",
+                extra={
+                    "runtime": {
+                        "agent_id": owner.value,
+                        "tick": receipt.tick,
+                        "goal_id": receipt.goal_id.value,
+                        "from_status": receipt.from_status.value,
+                        "to_status": receipt.to_status.value,
+                        "reason_code": receipt.reason_code.value,
+                    }
+                },
+            )
+        if not applied:
+            return ()
+        self._agent = Agent(
+            agent_id=self._agent.agent_id,
+            name=self._agent.name,
+            goals=tuple(by_id[goal_id] for goal_id in order),
+            drives=self._agent.drives,
+        )
+        return tuple(applied)
+
+    def apply_goal_transition_intents(
+        self,
+        intents: Sequence[GoalTransitionIntent],
+    ) -> tuple[GoalTransitionReceipt, ...]:
+        """Apply owner-scoped GoalBoard intents to live ``Agent.goals``.
+
+        Upserts ``resulting_goal`` when present. Refuses subjective
+        ``FAILED`` / ``SUSPENDED`` over already ``COMPLETED`` / ``ABANDONED``.
+        Returns revision receipts mapped for scientific publish.
+        """
+        if isinstance(intents, (set, frozenset)):
+            raise TypeError("intents must be ordered")
+        owner = self._agent.agent_id
+        owned = [
+            item
+            for item in intents
+            if type(item) is GoalTransitionIntent and item.owner_id == owner
+        ]
+        owned.sort(key=lambda item: (item.tick, item.goal_id.value))
+        if not owned:
+            return ()
+        by_id = {goal.goal_id: goal for goal in self._agent.goals}
+        order = [goal.goal_id for goal in self._agent.goals]
+        applied_receipts: list[GoalTransitionReceipt] = []
+        for intent in owned:
+            existing = by_id.get(intent.goal_id)
+            if existing is not None and existing.status in (
+                GoalStatus.COMPLETED,
+                GoalStatus.ABANDONED,
+            ):
+                if intent.reason_code in (
+                    GoalTransitionIntentReason.FAILED,
+                    GoalTransitionIntentReason.SUSPENDED,
+                ) or intent.to_status in (
+                    GoalStatus.FAILED,
+                    GoalStatus.SUSPENDED,
+                ):
+                    _LOG.debug(
+                        "goal_transition_intent_skipped",
+                        extra={
+                            "runtime": {
+                                "agent_id": owner.value,
+                                "tick": intent.tick,
+                                "goal_id": intent.goal_id.value,
+                                "from_status": existing.status.value,
+                                "to_status": intent.to_status.value,
+                                "reason_code": intent.reason_code.value,
+                                "skip": "terminal_precedence",
+                            }
+                        },
+                    )
+                    continue
+            if intent.resulting_goal is not None:
+                updated = intent.resulting_goal
+            elif existing is not None:
+                updated = replace(existing, status=intent.to_status)
+            else:
+                _LOG.debug(
+                    "goal_transition_intent_skipped",
+                    extra={
+                        "runtime": {
+                            "agent_id": owner.value,
+                            "tick": intent.tick,
+                            "goal_id": intent.goal_id.value,
+                            "reason_code": intent.reason_code.value,
+                            "skip": "missing_goal",
+                        }
+                    },
+                )
+                continue
+            if intent.goal_id not in by_id:
+                order.append(intent.goal_id)
+            from_status = (
+                existing.status if existing is not None else intent.from_status
+            )
+            by_id[intent.goal_id] = updated
+            receipt = GoalTransitionReceipt(
+                goal_id=intent.goal_id,
+                owner_id=owner,
+                outcome_kind=(
+                    updated.outcome.kind
+                    if updated.outcome is not None
+                    else GoalOutcomeKind.ACHIEVE_CODE
+                ),
+                from_status=from_status,
+                to_status=updated.status,
+                tick=intent.tick,
+                reason_code=_intent_reason_to_receipt_code(intent.reason_code),
+            )
+            applied_receipts.append(receipt)
+            _LOG.debug(
+                "goal_transition_intent_applied",
+                extra={
+                    "runtime": {
+                        "agent_id": owner.value,
+                        "tick": intent.tick,
+                        "goal_id": intent.goal_id.value,
+                        "from_status": from_status.value,
+                        "to_status": updated.status.value,
+                        "reason_code": intent.reason_code.value,
+                    }
+                },
+            )
+        if not applied_receipts:
+            return ()
+        self._agent = Agent(
+            agent_id=self._agent.agent_id,
+            name=self._agent.name,
+            goals=tuple(by_id[goal_id] for goal_id in order),
+            drives=self._agent.drives,
+        )
+        _LOG.info(
+            "goal_transition_intents_committed",
+            extra={
+                "runtime": {
+                    "agent_id": owner.value,
+                    "tick": owned[0].tick,
+                    "transition_count": len(applied_receipts),
+                    "reason_codes": tuple(
+                        item.reason_code.value for item in applied_receipts
+                    ),
+                    "goal_ids": tuple(item.goal_id.value for item in applied_receipts),
+                }
+            },
+        )
+        return tuple(applied_receipts)
+
+    async def publish_goal_revisions(
+        self,
+        receipts: Sequence[GoalTransitionReceipt],
+    ) -> None:
+        """Append scientific goal revisions. Soft-skips when no repo is wired."""
+        if not receipts:
+            return
+        if self._scientific_evidence is None:
+            _LOG.debug(
+                "goal_revision_publish_skipped",
+                extra={
+                    "runtime": {
+                        "agent_id": self._agent.agent_id.value,
+                        "receipt_count": len(receipts),
+                        "reason_code": "no_scientific_evidence",
+                    }
+                },
+            )
+            return
+        if self._run_id is None:
+            _LOG.debug(
+                "goal_revision_publish_skipped",
+                extra={
+                    "runtime": {
+                        "agent_id": self._agent.agent_id.value,
+                        "receipt_count": len(receipts),
+                        "reason_code": "missing_run_id",
+                    }
+                },
+            )
+            return
+        ordered = sorted(
+            (item for item in receipts if type(item) is GoalTransitionReceipt),
+            key=lambda item: (item.tick, item.goal_id.value),
+        )
+        for receipt in ordered:
+            if receipt.owner_id != self._agent.agent_id:
+                continue
+            key = receipt.goal_id.value
+            revision = self._goal_revision_counters.get(key, 0) + 1
+            self._goal_revision_counters[key] = revision
+            envelope = encode_goal_transition_receipt(receipt)
+            record = GoalRevisionRecord(
+                run_id=self._run_id.value,
+                goal_id=receipt.goal_id.value,
+                revision=revision,
+                owner_id=receipt.owner_id.value,
+                tick=receipt.tick,
+                envelope=envelope,
+            )
+            try:
+                await self._scientific_evidence.append_goal_revision(record)
+            except Exception:
+                _LOG.error(
+                    "goal_revision_append_failed",
+                    extra={
+                        "runtime": {
+                            "agent_id": self._agent.agent_id.value,
+                            "goal_id": receipt.goal_id.value,
+                            "tick": receipt.tick,
+                            "revision": revision,
+                            "reason_code": receipt.reason_code.value,
+                        }
+                    },
+                )
+                raise
+            _LOG.debug(
+                "goal_revision_appended",
+                extra={
+                    "runtime": {
+                        "agent_id": self._agent.agent_id.value,
+                        "goal_id": receipt.goal_id.value,
+                        "tick": receipt.tick,
+                        "revision": revision,
+                        "reason_code": receipt.reason_code.value,
+                        "hash_prefix": envelope.content_hash[:12],
+                    }
+                },
+            )
 
     def start(self) -> None:
         """Transition CREATED → ACTIVE. Rejects repeats."""
@@ -1015,6 +1309,10 @@ class AgentRuntime:
             )
 
         await self._apply_pending_side_effects(pending)
+        intent_receipts = self.apply_goal_transition_intents(
+            _goal_board_intents(pending.loop_result)
+        )
+        await self.publish_goal_revisions(intent_receipts)
         self._internal_state = pending.next_internal_state
         self._last_observation_key = pending.observation_key
         self._processed_invocations.add(pending.invocation_id)
@@ -1031,6 +1329,7 @@ class AgentRuntime:
                     "memory_update_count": len(
                         pending.loop_result.memory_update_intents
                     ),
+                    "goal_transition_count": len(intent_receipts),
                 }
             },
         )
@@ -1536,6 +1835,42 @@ class AgentRuntime:
             )
         for write in writes:
             self._memory_writer.write(write)
+
+
+def _goal_board_intents(
+    loop_result: CognitiveLoopResult,
+) -> tuple[GoalTransitionIntent, ...]:
+    """Extract GoalBoard transition intents from GOAL_MANAGEMENT boundaries."""
+    intents: list[GoalTransitionIntent] = []
+    for record in loop_result.boundary_records:
+        if record.component_kind is not ComponentKind.GOAL_MANAGEMENT:
+            continue
+        board = record.output_artifact
+        if type(board) is not GoalBoard:
+            continue
+        intents.extend(board.transition_intents)
+    return tuple(intents)
+
+
+def _intent_reason_to_receipt_code(
+    reason: GoalTransitionIntentReason,
+) -> GoalTransitionReasonCode:
+    """Map subjective intent reasons onto revision receipt reason codes."""
+    if reason is GoalTransitionIntentReason.FAILED:
+        return GoalTransitionReasonCode.FAILED
+    if reason is GoalTransitionIntentReason.SUSPENDED:
+        return GoalTransitionReasonCode.SUSPENDED
+    if reason is GoalTransitionIntentReason.RESUMED:
+        return GoalTransitionReasonCode.RESUMED
+    if reason is GoalTransitionIntentReason.ABANDONED:
+        return GoalTransitionReasonCode.ABANDONED
+    if reason is GoalTransitionIntentReason.DECOMPOSED:
+        return GoalTransitionReasonCode.DECOMPOSED
+    if reason is GoalTransitionIntentReason.REVISED:
+        return GoalTransitionReasonCode.REVISED
+    # PROGRESS_UPDATED / FOCUS_SELECTED are subjective revisions without a
+    # dedicated objective receipt code.
+    return GoalTransitionReasonCode.REVISED
 
 
 def _is_dead_self(observation: Observation) -> bool:

@@ -28,6 +28,7 @@ from agents.cognition.models import (
     ComponentKind,
     ComponentStatus,
     DecisionMetadata,
+    GoalBoard,
     InterpretedPerception,
     MotivationEvaluation,
     PossibleFutures,
@@ -40,7 +41,7 @@ from agents.cognition.models import (
     UncertaintyBand,
     require_confidence,
 )
-from agents.models import GoalStatus
+from agents.models import GoalHorizon, GoalStatus
 from world.identifiers import require_exact_nonneg_int, require_stable_id
 from world.observations import Observation
 
@@ -167,6 +168,17 @@ class CognitionTraceCountKey(StrEnum):
     BELIEF_COUNT = "belief_count"
     SEMANTIC_BELIEF_COUNT = "semantic_belief_count"
     GOAL_COUNT = "goal_count"
+    GOAL_STATUS_ACTIVE = "goal_status_active"
+    GOAL_STATUS_COMPLETED = "goal_status_completed"
+    GOAL_STATUS_FAILED = "goal_status_failed"
+    GOAL_STATUS_ABANDONED = "goal_status_abandoned"
+    GOAL_STATUS_SUSPENDED = "goal_status_suspended"
+    GOAL_HORIZON_DESIRE = "goal_horizon_desire"
+    GOAL_HORIZON_LONG_TERM = "goal_horizon_long_term"
+    GOAL_HORIZON_MEDIUM_TERM = "goal_horizon_medium_term"
+    GOAL_HORIZON_SUBGOAL = "goal_horizon_subgoal"
+    GOAL_HORIZON_CURRENT_INTENTION = "goal_horizon_current_intention"
+    GOAL_FOCI_COUNT = "goal_foci_count"
     DRIVE_COUNT = "drive_count"
     FUTURE_COUNT = "future_count"
     CLAIM_COUNT = "claim_count"
@@ -188,6 +200,7 @@ _COMPONENT_TO_TRACE: Final[
         CognitionTraceStageKind.RECONSTRUCTED_MEMORIES,
     ),
     ComponentKind.SITUATION: (CognitionTraceStageKind.SITUATION_MODEL,),
+    ComponentKind.GOAL_MANAGEMENT: (CognitionTraceStageKind.GOALS,),
     ComponentKind.FUTURES: (CognitionTraceStageKind.IMAGINED_FUTURES,),
     ComponentKind.INTENTION: (CognitionTraceStageKind.SELECTED_INTENTION,),
     ComponentKind.PLANNING: (CognitionTraceStageKind.PLANNED_ACTION,),
@@ -572,6 +585,7 @@ def project_cognition_trace_stages(
             stages.append(
                 _project_goals(
                     snap=snap,
+                    goal_record=by_kind.get(ComponentKind.GOAL_MANAGEMENT),
                     motivation_record=by_kind.get(ComponentKind.MOTIVATION),
                     self_record=by_kind.get(ComponentKind.SELF_STATE),
                     ordinal=ordinal,
@@ -1117,6 +1131,7 @@ def _project_emotional_state(
 def _project_goals(
     *,
     snap: SubjectiveSnapshot | None,
+    goal_record: ComponentBoundaryRecord | None,
     motivation_record: ComponentBoundaryRecord | None,
     self_record: ComponentBoundaryRecord | None,
     ordinal: int,
@@ -1126,6 +1141,62 @@ def _project_goals(
     counts: dict[str, int] = {}
     confidence: float | None = None
     decision = None
+
+    if goal_record is not None and type(goal_record.output_artifact) is GoalBoard:
+        board = goal_record.output_artifact
+        confidence = board.confidence
+        decision = goal_record.decision_metadata
+        status_hist: dict[GoalStatus, int] = {}
+        horizon_hist: dict[GoalHorizon, int] = {}
+        for goal in board.goals:
+            status_hist[goal.status] = status_hist.get(goal.status, 0) + 1
+            horizon_hist[goal.horizon] = horizon_hist.get(goal.horizon, 0) + 1
+        for focus_id in board.foci_ids:
+            refs.append(
+                CognitionTraceIdRef(
+                    kind=CognitionTraceRefKind.GOAL, value=focus_id.value
+                )
+            )
+        if not refs:
+            for goal in board.goals:
+                if goal.status is GoalStatus.ACTIVE:
+                    refs.append(
+                        CognitionTraceIdRef(
+                            kind=CognitionTraceRefKind.GOAL, value=goal.goal_id.value
+                        )
+                    )
+        counts[CognitionTraceCountKey.GOAL_COUNT.value] = len(board.goals)
+        counts[CognitionTraceCountKey.GOAL_FOCI_COUNT.value] = len(board.foci_ids)
+        _STATUS_COUNT_KEYS = {
+            GoalStatus.ACTIVE: CognitionTraceCountKey.GOAL_STATUS_ACTIVE,
+            GoalStatus.COMPLETED: CognitionTraceCountKey.GOAL_STATUS_COMPLETED,
+            GoalStatus.FAILED: CognitionTraceCountKey.GOAL_STATUS_FAILED,
+            GoalStatus.ABANDONED: CognitionTraceCountKey.GOAL_STATUS_ABANDONED,
+            GoalStatus.SUSPENDED: CognitionTraceCountKey.GOAL_STATUS_SUSPENDED,
+        }
+        _HORIZON_COUNT_KEYS = {
+            GoalHorizon.DESIRE: CognitionTraceCountKey.GOAL_HORIZON_DESIRE,
+            GoalHorizon.LONG_TERM: CognitionTraceCountKey.GOAL_HORIZON_LONG_TERM,
+            GoalHorizon.MEDIUM_TERM: CognitionTraceCountKey.GOAL_HORIZON_MEDIUM_TERM,
+            GoalHorizon.SUBGOAL: CognitionTraceCountKey.GOAL_HORIZON_SUBGOAL,
+            GoalHorizon.CURRENT_INTENTION: (
+                CognitionTraceCountKey.GOAL_HORIZON_CURRENT_INTENTION
+            ),
+        }
+        for status, key in _STATUS_COUNT_KEYS.items():
+            counts[key.value] = status_hist.get(status, 0)
+        for horizon, key in _HORIZON_COUNT_KEYS.items():
+            counts[key.value] = horizon_hist.get(horizon, 0)
+        return CognitionTraceStageSummary(
+            stage_kind=CognitionTraceStageKind.GOALS,
+            status=CognitionTraceStageStatus.COMPLETED,
+            ordinal=ordinal,
+            confidence=confidence,
+            id_refs=tuple(refs),
+            counts=counts or None,
+            decision_metadata=decision,
+            llm_meta=llm_meta,
+        )
 
     if motivation_record is not None and type(motivation_record.output_artifact) is (
         MotivationEvaluation
@@ -1174,7 +1245,13 @@ def _project_goals(
             )
         counts[CognitionTraceCountKey.GOAL_COUNT.value] = len(active)
 
-    if not refs and snap is None and motivation_record is None and self_record is None:
+    if (
+        not refs
+        and snap is None
+        and motivation_record is None
+        and self_record is None
+        and goal_record is None
+    ):
         return CognitionTraceStageSummary(
             stage_kind=CognitionTraceStageKind.GOALS,
             status=CognitionTraceStageStatus.SKIPPED,

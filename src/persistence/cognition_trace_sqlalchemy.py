@@ -10,12 +10,12 @@ from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
-from agents.models import AgentId
 from infrastructure.database import session_scope
 from infrastructure.logging import get_logger
 from persistence.errors import PersistenceAdapterError, PersistenceConflictError
 from persistence.orm import CognitionTraceInvocationOrm
 from simulation.cognition_trace import (
+    AgentId,
     CognitionTraceConflictError,
     CognitionTraceInvocation,
     CognitionTracePage,

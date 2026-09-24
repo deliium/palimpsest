@@ -517,12 +517,23 @@ class FinalizedTickReceipt:
 
 
 class GoalTransitionReasonCode(StrEnum):
-    """Closed reason codes for simulation-owned goal status transitions."""
+    """Closed reason codes for simulation-owned goal status transitions.
+
+    Objective boundary evaluation emits ``COMPLETED`` / ``ABANDONED`` /
+    ``DEATH`` / ``RUN_END``. Subjective GoalBoard commits may emit
+    ``FAILED`` / ``SUSPENDED`` / ``RESUMED`` / ``DECOMPOSED`` / ``REVISED``
+    (and ``ABANDONED``) when mapped into revision receipts.
+    """
 
     COMPLETED = "completed"
     ABANDONED = "abandoned"
     DEATH = "death"
     RUN_END = "run_end"
+    FAILED = "failed"
+    SUSPENDED = "suspended"
+    RESUMED = "resumed"
+    DECOMPOSED = "decomposed"
+    REVISED = "revised"
 
 
 @dataclass(frozen=True, slots=True)
@@ -1679,13 +1690,19 @@ def evaluate_goals_after_finalization(
     for goal in goals:
         if type(goal) is not Goal:
             raise TypeError("goals entries must be Goal")
-        if goal.status is not GoalStatus.ACTIVE:
+        # Subjective FAILED/SUSPENDED on the same tick remain eligible for
+        # objective COMPLETED overwrite; skip other non-ACTIVE statuses.
+        if goal.status is not GoalStatus.ACTIVE and goal.status not in (
+            GoalStatus.FAILED,
+            GoalStatus.SUSPENDED,
+        ):
             continue
         outcome_kind = (
             goal.outcome.kind
             if goal.outcome is not None
             else GoalOutcomeKind.PRESERVE_LIFE
         )
+        from_status = goal.status
         body = _owner_body(evidence, goal.owner_id)
         if body is None:
             _LOGGER.debug(
@@ -1694,13 +1711,13 @@ def evaluate_goals_after_finalization(
                 goal.owner_id.value,
                 evidence.tick,
             )
-            if evidence.run_ending:
+            if evidence.run_ending and from_status is GoalStatus.ACTIVE:
                 receipts.append(
                     GoalTransitionReceipt(
                         goal_id=goal.goal_id,
                         owner_id=goal.owner_id,
                         outcome_kind=outcome_kind,
-                        from_status=GoalStatus.ACTIVE,
+                        from_status=from_status,
                         to_status=GoalStatus.ABANDONED,
                         tick=evidence.tick,
                         reason_code=GoalTransitionReasonCode.RUN_END,
@@ -1708,12 +1725,14 @@ def evaluate_goals_after_finalization(
                 )
             continue
         if body.life_status is LifeStatus.DEAD:
+            if from_status is not GoalStatus.ACTIVE:
+                continue
             receipts.append(
                 GoalTransitionReceipt(
                     goal_id=goal.goal_id,
                     owner_id=goal.owner_id,
                     outcome_kind=outcome_kind,
-                    from_status=GoalStatus.ACTIVE,
+                    from_status=from_status,
                     to_status=GoalStatus.ABANDONED,
                     tick=evidence.tick,
                     reason_code=GoalTransitionReasonCode.DEATH,
@@ -1735,7 +1754,7 @@ def evaluate_goals_after_finalization(
                     goal_id=goal.goal_id,
                     owner_id=goal.owner_id,
                     outcome_kind=outcome_kind,
-                    from_status=GoalStatus.ACTIVE,
+                    from_status=from_status,
                     to_status=GoalStatus.COMPLETED,
                     tick=evidence.tick,
                     reason_code=GoalTransitionReasonCode.COMPLETED,
@@ -1751,13 +1770,13 @@ def evaluate_goals_after_finalization(
                 GoalStatus.COMPLETED.value,
             )
             continue
-        if evidence.run_ending:
+        if evidence.run_ending and from_status is GoalStatus.ACTIVE:
             receipts.append(
                 GoalTransitionReceipt(
                     goal_id=goal.goal_id,
                     owner_id=goal.owner_id,
                     outcome_kind=outcome_kind,
-                    from_status=GoalStatus.ACTIVE,
+                    from_status=from_status,
                     to_status=GoalStatus.ABANDONED,
                     tick=evidence.tick,
                     reason_code=GoalTransitionReasonCode.RUN_END,

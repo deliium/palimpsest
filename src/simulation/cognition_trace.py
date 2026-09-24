@@ -26,6 +26,7 @@ _LOG: Final[logging.Logger] = logging.getLogger("simulation.cognition_trace")
 
 __all__ = [
     "COGNITION_TRACE_SCHEMA_VERSION",
+    "AgentId",
     "CognitionTraceConflictError",
     "CognitionTraceInvocation",
     "CognitionTracePage",
