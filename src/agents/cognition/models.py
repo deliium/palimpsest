@@ -19,8 +19,11 @@ from agents.models import (
     DriveKind,
     DriveProfile,
     Goal,
+    GoalHorizon,
     GoalId,
+    GoalStatus,
     default_drive_profile,
+    validate_goal_hierarchy,
 )
 from memory.beliefs import (
     BeliefActivationState,
@@ -72,9 +75,13 @@ __all__ = [
     "CounterpartBinding",
     "DecisionMetadata",
     "DriveEffect",
+    "EpisodeFacts",
     "FutureAppraisal",
     "FutureSourceRef",
+    "GoalBoard",
     "GoalEffect",
+    "GoalTransitionIntent",
+    "GoalTransitionIntentReason",
     "ImaginedFuture",
     "IntentionCode",
     "InternalAgentState",
@@ -90,7 +97,6 @@ __all__ = [
     "PerceivedNeedPressures",
     "PerceptionClaimCode",
     "PossibleFutures",
-    "EpisodeFacts",
     "ReferenceEpisode",
     "RetrievedMemoryContext",
     "SelectedIntention",
@@ -128,6 +134,9 @@ _MAX_EFFECTS: Final[int] = 32
 _MAX_RISKS: Final[int] = 16
 _MAX_SOURCE_REFS: Final[int] = 64
 _MAX_APPRAISALS: Final[int] = 32
+_MAX_GOAL_BOARD_GOALS: Final[int] = 64
+_MAX_GOAL_FOCI: Final[int] = 8
+_MAX_GOAL_TRANSITION_INTENTS: Final[int] = 64
 _EFFECT_QUANTUM: Final[float] = 1e-6
 _MORTALITY_WEIGHT_GOAL: Final[float] = 0.30
 _MORTALITY_WEIGHT_ATTACHMENT: Final[float] = 0.20
@@ -143,6 +152,7 @@ class ComponentKind(StrEnum):
     MEMORY_RETRIEVAL = "memory_retrieval"
     SITUATION = "situation"
     SELF_STATE = "self_state"
+    GOAL_MANAGEMENT = "goal_management"
     FUTURES = "futures"
     MOTIVATION = "motivation"
     INTENTION = "intention"
@@ -945,7 +955,9 @@ class ReferenceEpisode:
         object.__setattr__(
             self,
             "created_tick",
-            require_exact_nonneg_int("ReferenceEpisode.created_tick", self.created_tick),
+            require_exact_nonneg_int(
+                "ReferenceEpisode.created_tick", self.created_tick
+            ),
         )
         object.__setattr__(
             self,
@@ -1541,6 +1553,178 @@ class SelfModel:
             f"belief_count={len(self.beliefs)}, "
             f"candidate_count={self.candidate_count}, "
             f"goal_count={len(self.goal_ids)}, confidence={self.confidence})"
+        )
+
+
+class GoalTransitionIntentReason(StrEnum):
+    """Closed subjective goal-transition reasons (not WorldEngine receipts)."""
+
+    FAILED = "failed"
+    SUSPENDED = "suspended"
+    RESUMED = "resumed"
+    ABANDONED = "abandoned"
+    DECOMPOSED = "decomposed"
+    REVISED = "revised"
+    PROGRESS_UPDATED = "progress_updated"
+    FOCUS_SELECTED = "focus_selected"
+
+
+@dataclass(frozen=True, slots=True)
+class GoalTransitionIntent:
+    """Owner-scoped intent to mutate live goals after cognition finalize."""
+
+    goal_id: GoalId
+    owner_id: AgentId
+    from_status: GoalStatus
+    to_status: GoalStatus
+    reason_code: GoalTransitionIntentReason
+    tick: int
+    resulting_goal: Goal | None = None
+
+    def __post_init__(self) -> None:
+        if type(self.goal_id) is not GoalId:
+            raise TypeError("GoalTransitionIntent.goal_id: invalid_type")
+        if type(self.owner_id) is not AgentId:
+            raise TypeError("GoalTransitionIntent.owner_id: invalid_type")
+        if type(self.from_status) is not GoalStatus:
+            raise TypeError("GoalTransitionIntent.from_status: invalid_type")
+        if type(self.to_status) is not GoalStatus:
+            raise TypeError("GoalTransitionIntent.to_status: invalid_type")
+        if type(self.reason_code) is not GoalTransitionIntentReason:
+            raise TypeError("GoalTransitionIntent.reason_code: invalid_type")
+        object.__setattr__(
+            self,
+            "tick",
+            require_exact_nonneg_int("GoalTransitionIntent.tick", self.tick),
+        )
+        if self.resulting_goal is not None:
+            if type(self.resulting_goal) is not Goal:
+                raise TypeError("GoalTransitionIntent.resulting_goal: invalid_type")
+            if self.resulting_goal.owner_id != self.owner_id:
+                raise ValueError("GoalTransitionIntent.resulting_goal: owner_mismatch")
+            if self.resulting_goal.goal_id != self.goal_id:
+                raise ValueError(
+                    "GoalTransitionIntent.resulting_goal: goal_id_mismatch"
+                )
+            if self.resulting_goal.status is not self.to_status:
+                raise ValueError(
+                    "GoalTransitionIntent.resulting_goal: status_mismatch"
+                )
+
+    def __repr__(self) -> str:
+        return (
+            f"GoalTransitionIntent(goal_id={self.goal_id.value!r}, "
+            f"owner_id={self.owner_id.value!r}, "
+            f"from_status={self.from_status.value!r}, "
+            f"to_status={self.to_status.value!r}, "
+            f"reason_code={self.reason_code.value!r}, tick={self.tick})"
+        )
+
+
+@dataclass(frozen=True, slots=True)
+class GoalBoard:
+    """Frozen hierarchical goal board emitted by ``GOAL_MANAGEMENT``."""
+
+    owner_id: AgentId
+    tick: int
+    goals: tuple[Goal, ...]
+    foci_ids: tuple[GoalId, ...]
+    transition_intents: tuple[GoalTransitionIntent, ...]
+    confidence: float
+    policy_version: str
+    decision_metadata: DecisionMetadata = DecisionMetadata()
+
+    def __post_init__(self) -> None:
+        if type(self.owner_id) is not AgentId:
+            raise TypeError("GoalBoard.owner_id: invalid_type")
+        object.__setattr__(
+            self,
+            "tick",
+            require_exact_nonneg_int("GoalBoard.tick", self.tick),
+        )
+        if isinstance(self.goals, (set, frozenset, Mapping)):
+            raise TypeError("GoalBoard.goals: not_ordered")
+        if isinstance(self.goals, (str, bytes)) or not isinstance(self.goals, Sequence):
+            raise TypeError("GoalBoard.goals: not_ordered")
+        goals = tuple(self.goals)
+        if len(goals) > _MAX_GOAL_BOARD_GOALS:
+            raise ValueError("GoalBoard.goals: too_many")
+        seen: set[GoalId] = set()
+        for goal in goals:
+            if type(goal) is not Goal:
+                raise TypeError("GoalBoard.goals: invalid_entry_type")
+            if goal.owner_id != self.owner_id:
+                raise ValueError("GoalBoard.goals: owner_mismatch")
+            if goal.goal_id in seen:
+                raise ValueError("GoalBoard.goals: duplicate_goal_id")
+            seen.add(goal.goal_id)
+        validate_goal_hierarchy(goals)
+        object.__setattr__(self, "goals", goals)
+        if isinstance(self.foci_ids, (set, frozenset, Mapping)):
+            raise TypeError("GoalBoard.foci_ids: not_ordered")
+        if isinstance(self.foci_ids, (str, bytes)) or not isinstance(
+            self.foci_ids, Sequence
+        ):
+            raise TypeError("GoalBoard.foci_ids: not_ordered")
+        foci = tuple(self.foci_ids)
+        if len(foci) > _MAX_GOAL_FOCI:
+            raise ValueError("GoalBoard.foci_ids: too_many")
+        foci_seen: set[GoalId] = set()
+        by_id = {goal.goal_id: goal for goal in goals}
+        for focus_id in foci:
+            if type(focus_id) is not GoalId:
+                raise TypeError("GoalBoard.foci_ids: invalid_entry_type")
+            if focus_id in foci_seen:
+                raise ValueError("GoalBoard.foci_ids: duplicate_goal_id")
+            foci_seen.add(focus_id)
+            focus = by_id.get(focus_id)
+            if focus is None:
+                raise ValueError("GoalBoard.foci_ids: missing_goal")
+            if focus.horizon is not GoalHorizon.CURRENT_INTENTION:
+                raise ValueError("GoalBoard.foci_ids: not_current_intention")
+            if focus.status is not GoalStatus.ACTIVE:
+                raise ValueError("GoalBoard.foci_ids: not_active")
+        object.__setattr__(self, "foci_ids", foci)
+        if isinstance(self.transition_intents, (set, frozenset, Mapping)):
+            raise TypeError("GoalBoard.transition_intents: not_ordered")
+        if isinstance(self.transition_intents, (str, bytes)) or not isinstance(
+            self.transition_intents, Sequence
+        ):
+            raise TypeError("GoalBoard.transition_intents: not_ordered")
+        intents = tuple(self.transition_intents)
+        if len(intents) > _MAX_GOAL_TRANSITION_INTENTS:
+            raise ValueError("GoalBoard.transition_intents: too_many")
+        for intent in intents:
+            if type(intent) is not GoalTransitionIntent:
+                raise TypeError("GoalBoard.transition_intents: invalid_entry_type")
+            if intent.owner_id != self.owner_id:
+                raise ValueError("GoalBoard.transition_intents: owner_mismatch")
+            if intent.tick != self.tick:
+                raise ValueError("GoalBoard.transition_intents: tick_mismatch")
+        object.__setattr__(self, "transition_intents", intents)
+        object.__setattr__(
+            self,
+            "confidence",
+            require_confidence("GoalBoard.confidence", self.confidence),
+        )
+        object.__setattr__(
+            self,
+            "policy_version",
+            require_bounded_text(
+                "GoalBoard.policy_version",
+                self.policy_version,
+                max_length=_MAX_COMPONENT_VERSION_CHARS,
+            ),
+        )
+        if type(self.decision_metadata) is not DecisionMetadata:
+            raise TypeError("GoalBoard.decision_metadata: invalid_type")
+
+    def __repr__(self) -> str:
+        return (
+            f"GoalBoard(owner_id={self.owner_id.value!r}, tick={self.tick}, "
+            f"goal_count={len(self.goals)}, foci_count={len(self.foci_ids)}, "
+            f"transition_count={len(self.transition_intents)}, "
+            f"policy_version={self.policy_version!r})"
         )
 
 
@@ -2574,6 +2758,7 @@ _STAGE_OUTPUT_TYPES: Final[frozenset[type]] = frozenset(
         SituationModel,
         SelfBeliefState,
         SelfModel,
+        GoalBoard,
         PossibleFutures,
         MotivationEvaluation,
         SelectedIntention,
@@ -2747,6 +2932,7 @@ class CognitiveLoopProposal:
     memory: RetrievedMemoryContext
     situation: SituationModel
     self_state: SelfModel
+    goal_board: GoalBoard
     futures: PossibleFutures
     motivation: MotivationEvaluation
     intention: SelectedIntention
@@ -2766,7 +2952,9 @@ class CognitiveLoopProposal:
         if type(self.agent_id) is not AgentId:
             raise TypeError("CognitiveLoopProposal.agent_id must be AgentId")
         if type(self.loop_input) is not CognitiveLoopInput:
-            raise TypeError("CognitiveLoopProposal.loop_input must be CognitiveLoopInput")
+            raise TypeError(
+                "CognitiveLoopProposal.loop_input must be CognitiveLoopInput"
+            )
         if self.loop_input.agent_id != self.agent_id:
             raise ValueError("CognitiveLoopProposal agent_id mismatch")
         if type(self.perception) is not InterpretedPerception:
@@ -2777,6 +2965,10 @@ class CognitiveLoopProposal:
             raise TypeError("situation must be SituationModel")
         if type(self.self_state) is not SelfModel:
             raise TypeError("self_state must be SelfModel")
+        if type(self.goal_board) is not GoalBoard:
+            raise TypeError("goal_board must be GoalBoard")
+        if self.goal_board.owner_id != self.agent_id:
+            raise ValueError("goal_board owner_id mismatch")
         if type(self.futures) is not PossibleFutures:
             raise TypeError("futures must be PossibleFutures")
         if type(self.motivation) is not MotivationEvaluation:
@@ -2799,7 +2991,9 @@ class CognitiveLoopProposal:
         records = tuple(self.boundary_records)
         for record in records:
             if type(record) is not ComponentBoundaryRecord:
-                raise TypeError("boundary_records entries must be ComponentBoundaryRecord")
+                raise TypeError(
+                    "boundary_records entries must be ComponentBoundaryRecord"
+                )
             if record.invocation_id != self.invocation_id:
                 raise ValueError("boundary record invocation_id mismatch")
             if record.component_kind is ComponentKind.MEMORY_UPDATE:

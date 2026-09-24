@@ -17,6 +17,7 @@ from typing import Protocol
 from agents.cognition.models import (
     ActionPlan,
     CognitiveLoopInput,
+    GoalBoard,
     InterpretedPerception,
     MemoryUpdateIntent,
     MotivationEvaluation,
@@ -41,6 +42,7 @@ __all__ = [
     "CognitionContractErrorCode",
     "CognitionStrategy",
     "FutureImagination",
+    "GoalManager",
     "IntentionSelector",
     "MemoryRetriever",
     "MemoryUpdateHook",
@@ -332,6 +334,18 @@ class SelfStateProjector(Protocol):
     ) -> SelfModel: ...
 
 
+class GoalManager(Protocol):
+    """Maintain hierarchical goals and emit a frozen ``GoalBoard``."""
+
+    async def manage(
+        self,
+        loop_input: CognitiveLoopInput,
+        situation: SituationModel,
+        self_state: SelfModel,
+        memory: RetrievedMemoryContext,
+    ) -> GoalBoard: ...
+
+
 class FutureImagination(Protocol):
     """Produce bounded imagined futures from subjective evidence only."""
 
@@ -341,6 +355,7 @@ class FutureImagination(Protocol):
         situation: SituationModel,
         self_state: SelfModel,
         memory: RetrievedMemoryContext,
+        goal_board: GoalBoard | None = None,
     ) -> PossibleFutures: ...
 
 
@@ -353,6 +368,7 @@ class MotivationEvaluator(Protocol):
         situation: SituationModel,
         self_state: SelfModel,
         futures: PossibleFutures,
+        goal_board: GoalBoard | None = None,
     ) -> MotivationEvaluation: ...
 
 
@@ -364,6 +380,7 @@ class IntentionSelector(Protocol):
         loop_input: CognitiveLoopInput,
         motivation: MotivationEvaluation,
         futures: PossibleFutures,
+        goal_board: GoalBoard | None = None,
     ) -> SelectedIntention: ...
 
 
@@ -376,6 +393,7 @@ class Planner(Protocol):
         intention: SelectedIntention,
         futures: PossibleFutures,
         memory: RetrievedMemoryContext | None = None,
+        goal_board: GoalBoard | None = None,
     ) -> ActionPlan: ...
 
 

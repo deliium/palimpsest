@@ -9,6 +9,7 @@ from __future__ import annotations
 from agents.cognition.contracts import (
     CognitionStrategy,
     FutureImagination,
+    GoalManager,
     IntentionSelector,
     MemoryRetriever,
     MemoryUpdateHook,
@@ -22,6 +23,7 @@ from agents.cognition.contracts import (
 from agents.cognition.models import (
     ActionPlan,
     CognitiveLoopInput,
+    GoalBoard,
     ImaginedFuture,
     IntentionCode,
     InternalAgentState,
@@ -124,6 +126,21 @@ class ScriptedSelfStateProjector:
         )
 
 
+class ScriptedGoalManager:
+    async def manage(
+        self,
+        loop_input: CognitiveLoopInput,
+        situation: SituationModel,
+        self_state: SelfModel,
+        memory: RetrievedMemoryContext,
+    ) -> GoalBoard:
+        from agents.cognition.goal_manager import PassthroughGoalManager
+
+        return await PassthroughGoalManager().manage(
+            loop_input, situation, self_state, memory
+        )
+
+
 class ScriptedFutureImagination:
     async def imagine(
         self,
@@ -131,6 +148,7 @@ class ScriptedFutureImagination:
         situation: SituationModel,
         self_state: SelfModel,
         memory: RetrievedMemoryContext,
+        goal_board: GoalBoard | None = None,
     ) -> PossibleFutures:
         _ = situation, self_state, memory
         return PossibleFutures(
@@ -153,6 +171,7 @@ class ScriptedMotivationEvaluator:
         situation: SituationModel,
         self_state: SelfModel,
         futures: PossibleFutures,
+        goal_board: GoalBoard | None = None,
     ) -> MotivationEvaluation:
         _ = situation, self_state, futures
         return MotivationEvaluation(
@@ -168,6 +187,7 @@ class ScriptedIntentionSelector:
         loop_input: CognitiveLoopInput,
         motivation: MotivationEvaluation,
         futures: PossibleFutures,
+        goal_board: GoalBoard | None = None,
     ) -> SelectedIntention:
         _ = motivation, futures
         return SelectedIntention(
@@ -185,6 +205,7 @@ class ScriptedPlanner:
         intention: SelectedIntention,
         futures: PossibleFutures,
         memory: RetrievedMemoryContext | None = None,
+        goal_board: GoalBoard | None = None,
     ) -> ActionPlan:
         _ = intention, futures, memory
         return ActionPlan(owner_id=loop_input.agent_id, command=Wait(), confidence=1.0)
@@ -208,6 +229,7 @@ def _assert_protocols_assignable() -> None:
     memory: MemoryRetriever = ScriptedMemoryRetriever()
     situation: SituationModeler = ScriptedSituationModeler()
     self_state: SelfStateProjector = ScriptedSelfStateProjector()
+    goal_manager: GoalManager = ScriptedGoalManager()
     futures: FutureImagination = ScriptedFutureImagination()
     motivation: MotivationEvaluator = ScriptedMotivationEvaluator()
     intention: IntentionSelector = ScriptedIntentionSelector()
@@ -218,6 +240,7 @@ def _assert_protocols_assignable() -> None:
         memory,
         situation,
         self_state,
+        goal_manager,
         futures,
         motivation,
         intention,

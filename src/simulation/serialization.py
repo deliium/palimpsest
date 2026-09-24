@@ -21,14 +21,21 @@ from agents.models import (
     DriveProfile,
     DriveState,
     Goal,
+    GoalCondition,
+    GoalHorizon,
     GoalId,
+    GoalOriginKind,
     GoalOutcome,
     GoalOutcomeKind,
     GoalProgress,
+    GoalProvenance,
+    GoalRelationEdge,
+    GoalRelationKind,
     GoalStatus,
     default_drive_profile,
     default_goal_outcome,
     default_goal_progress,
+    default_goal_provenance,
 )
 from memory.codec import (
     RECONSTRUCTED_MEMORY_TYPE,
@@ -959,6 +966,21 @@ _GOAL_V2_KEYS: Final[set[str]] = _LEGACY_GOAL_KEYS | {
     "outcome",
     "progress",
 }
+_GOAL_V3_KEYS: Final[set[str]] = _GOAL_V2_KEYS | {
+    "belief_refs",
+    "confidence",
+    "created_tick",
+    "deadline_tick",
+    "dependency_ids",
+    "drive_links",
+    "failure_conditions",
+    "horizon",
+    "parent_goal_id",
+    "provenance",
+    "relations",
+    "self_model_refs",
+    "success_conditions",
+}
 _LEGACY_AGENT_KEYS: Final[set[str]] = {"agent_id", "name", "goals"}
 _AGENT_V2_KEYS: Final[set[str]] = _LEGACY_AGENT_KEYS | {"model_version", "drives"}
 
@@ -1162,34 +1184,232 @@ def _decode_drive_state(data: dict[str, Any], *, path: str) -> DriveState:
         raise DomainSerializationError("invalid_model", path) from exc
 
 
+def _encode_goal_provenance(value: GoalProvenance) -> dict[str, Any]:
+    payload: dict[str, Any] = {"origin_kind": value.origin_kind.value}
+    if value.template_code is not None:
+        payload["template_code"] = value.template_code
+    if value.source_goal_id is not None:
+        payload["source_goal_id"] = value.source_goal_id.value
+    return payload
+
+
+def _decode_goal_provenance(data: dict[str, Any], *, path: str) -> GoalProvenance:
+    if "origin_kind" not in data:
+        raise DomainSerializationError("invalid_fields", path)
+    allowed = {"origin_kind"}
+    try:
+        origin_kind = GoalOriginKind(_str_field(data, "origin_kind", path=path))
+    except ValueError as exc:
+        raise DomainSerializationError("invalid_enum", f"{path}.origin_kind") from exc
+    template_code: str | None = None
+    source_goal_id: GoalId | None = None
+    if "template_code" in data:
+        allowed.add("template_code")
+        template_code = _str_field(data, "template_code", path=path)
+    if "source_goal_id" in data:
+        allowed.add("source_goal_id")
+        source_goal_id = GoalId(_str_field(data, "source_goal_id", path=path))
+    if set(data) != allowed:
+        raise DomainSerializationError("invalid_fields", path)
+    try:
+        return GoalProvenance(
+            origin_kind=origin_kind,
+            template_code=template_code,
+            source_goal_id=source_goal_id,
+        )
+    except (TypeError, ValueError) as exc:
+        raise DomainSerializationError("invalid_model", path) from exc
+
+
+def _encode_goal_relation(value: GoalRelationEdge) -> dict[str, Any]:
+    return {
+        "kind": value.kind.value,
+        "target_goal_id": value.target_goal_id.value,
+    }
+
+
+def _decode_goal_relation(data: dict[str, Any], *, path: str) -> GoalRelationEdge:
+    _require_keys(data, {"kind", "target_goal_id"}, path=path)
+    try:
+        return GoalRelationEdge(
+            kind=GoalRelationKind(_str_field(data, "kind", path=path)),
+            target_goal_id=GoalId(_str_field(data, "target_goal_id", path=path)),
+        )
+    except DomainSerializationError:
+        raise
+    except (TypeError, ValueError) as exc:
+        raise DomainSerializationError("invalid_model", path) from exc
+
+
+def _encode_goal_condition(value: GoalCondition) -> dict[str, Any]:
+    return {"outcome": _encode_goal_outcome(value.outcome)}
+
+
+def _decode_goal_condition(data: dict[str, Any], *, path: str) -> GoalCondition:
+    _require_keys(data, {"outcome"}, path=path)
+    outcome_raw = data["outcome"]
+    if not isinstance(outcome_raw, dict):
+        raise DomainSerializationError("invalid_object", f"{path}.outcome")
+    try:
+        return GoalCondition(
+            outcome=_decode_goal_outcome(outcome_raw, path=f"{path}.outcome")
+        )
+    except DomainSerializationError:
+        raise
+    except (TypeError, ValueError) as exc:
+        raise DomainSerializationError("invalid_model", path) from exc
+
+
+def _decode_goal_id_list(raw: object, *, path: str) -> tuple[GoalId, ...]:
+    if not isinstance(raw, list):
+        raise DomainSerializationError("invalid_array", path)
+    out: list[GoalId] = []
+    for index, item in enumerate(raw):
+        if not isinstance(item, str):
+            raise DomainSerializationError("invalid_string", f"{path}[{index}]")
+        try:
+            out.append(GoalId(item))
+        except (TypeError, ValueError) as exc:
+            raise DomainSerializationError("invalid_model", f"{path}[{index}]") from exc
+    return tuple(out)
+
+
+def _decode_str_list(raw: object, *, path: str) -> tuple[str, ...]:
+    if not isinstance(raw, list):
+        raise DomainSerializationError("invalid_array", path)
+    out: list[str] = []
+    for index, item in enumerate(raw):
+        if not isinstance(item, str):
+            raise DomainSerializationError("invalid_string", f"{path}[{index}]")
+        out.append(item)
+    return tuple(out)
+
+
+def _decode_drive_kind_list(raw: object, *, path: str) -> tuple[DriveKind, ...]:
+    if not isinstance(raw, list):
+        raise DomainSerializationError("invalid_array", path)
+    out: list[DriveKind] = []
+    for index, item in enumerate(raw):
+        if not isinstance(item, str):
+            raise DomainSerializationError("invalid_string", f"{path}[{index}]")
+        try:
+            out.append(DriveKind(item))
+        except ValueError as exc:
+            raise DomainSerializationError("invalid_enum", f"{path}[{index}]") from exc
+    return tuple(out)
+
+
+def _decode_goal_relation_list(
+    raw: object, *, path: str
+) -> tuple[GoalRelationEdge, ...]:
+    if not isinstance(raw, list):
+        raise DomainSerializationError("invalid_array", path)
+    out: list[GoalRelationEdge] = []
+    for index, item in enumerate(raw):
+        if not isinstance(item, dict):
+            raise DomainSerializationError("invalid_object", f"{path}[{index}]")
+        out.append(_decode_goal_relation(item, path=f"{path}[{index}]"))
+    return tuple(out)
+
+
+def _decode_goal_condition_list(
+    raw: object, *, path: str
+) -> tuple[GoalCondition, ...]:
+    if not isinstance(raw, list):
+        raise DomainSerializationError("invalid_array", path)
+    out: list[GoalCondition] = []
+    for index, item in enumerate(raw):
+        if not isinstance(item, dict):
+            raise DomainSerializationError("invalid_object", f"{path}[{index}]")
+        out.append(_decode_goal_condition(item, path=f"{path}[{index}]"))
+    return tuple(out)
+
+
+def _goal_from_v2_fields(
+    *,
+    goal_id: GoalId,
+    owner_id: AgentId,
+    description: str,
+    priority: float,
+    status: GoalStatus,
+    outcome: GoalOutcome,
+    progress: GoalProgress,
+) -> Goal:
+    """Intentional v2→v3 upgrade with documented hierarchical defaults."""
+    return Goal(
+        goal_id=goal_id,
+        owner_id=owner_id,
+        description=description,
+        priority=priority,
+        status=status,
+        outcome=outcome,
+        progress=progress,
+        horizon=GoalHorizon.MEDIUM_TERM,
+        confidence=progress.confidence,
+        provenance=default_goal_provenance(),
+        created_tick=0,
+        deadline_tick=None,
+        parent_goal_id=None,
+        dependency_ids=(),
+        relations=(),
+        drive_links=(),
+        belief_refs=(),
+        self_model_refs=(),
+        success_conditions=(),
+        failure_conditions=(),
+    )
+
+
 def _encode_goal(value: Goal) -> dict[str, Any]:
-    if value.outcome is None or value.progress is None:
+    if value.outcome is None or value.progress is None or value.provenance is None:
+        raise DomainSerializationError("invalid_model", "$")
+    if value.confidence is None:
         raise DomainSerializationError("invalid_model", "$")
     return {
+        "belief_refs": list(value.belief_refs),
+        "confidence": value.confidence,
+        "created_tick": value.created_tick,
+        "deadline_tick": value.deadline_tick,
+        "dependency_ids": [item.value for item in value.dependency_ids],
         "description": value.description,
+        "drive_links": [item.value for item in value.drive_links],
+        "failure_conditions": [
+            _encode_goal_condition(item) for item in value.failure_conditions
+        ],
         "goal_id": value.goal_id.value,
+        "horizon": value.horizon.value,
         "model_version": GOAL_MODEL_VERSION,
         "outcome": _encode_goal_outcome(value.outcome),
         "owner_id": value.owner_id.value,
+        "parent_goal_id": (
+            None if value.parent_goal_id is None else value.parent_goal_id.value
+        ),
         "priority": value.priority,
         "progress": _encode_goal_progress(value.progress),
+        "provenance": _encode_goal_provenance(value.provenance),
+        "relations": [_encode_goal_relation(item) for item in value.relations],
+        "self_model_refs": list(value.self_model_refs),
         "status": value.status.value,
+        "success_conditions": [
+            _encode_goal_condition(item) for item in value.success_conditions
+        ],
     }
 
 
 def _decode_goal(data: dict[str, Any], *, path: str) -> Goal:
     present = set(data)
     if present == _LEGACY_GOAL_KEYS:
-        # Intentional v1→v2 upgrade: default structured outcome/progress.
+        # Intentional v1→v3 upgrade: default structured outcome/progress + hierarchy.
         try:
-            return Goal(
+            progress = default_goal_progress()
+            return _goal_from_v2_fields(
                 goal_id=GoalId(_str_field(data, "goal_id", path=path)),
                 owner_id=AgentId(_str_field(data, "owner_id", path=path)),
                 description=_str_field(data, "description", path=path),
                 priority=_float_field(data, "priority", path=path),
                 status=GoalStatus(_str_field(data, "status", path=path)),
                 outcome=default_goal_outcome(),
-                progress=default_goal_progress(),
+                progress=progress,
             )
         except DomainSerializationError:
             raise
@@ -1200,17 +1420,64 @@ def _decode_goal(data: dict[str, Any], *, path: str) -> Goal:
             "unsupported_schema_version", f"{path}.model_version"
         )
     model_version = _int_field(data, "model_version", path=path)
+    if model_version == 2:
+        _require_keys(data, _GOAL_V2_KEYS, path=path)
+        outcome_raw = data["outcome"]
+        progress_raw = data["progress"]
+        if not isinstance(outcome_raw, dict):
+            raise DomainSerializationError("invalid_object", f"{path}.outcome")
+        if not isinstance(progress_raw, dict):
+            raise DomainSerializationError("invalid_object", f"{path}.progress")
+        try:
+            progress = _decode_goal_progress(progress_raw, path=f"{path}.progress")
+            return _goal_from_v2_fields(
+                goal_id=GoalId(_str_field(data, "goal_id", path=path)),
+                owner_id=AgentId(_str_field(data, "owner_id", path=path)),
+                description=_str_field(data, "description", path=path),
+                priority=_float_field(data, "priority", path=path),
+                status=GoalStatus(_str_field(data, "status", path=path)),
+                outcome=_decode_goal_outcome(outcome_raw, path=f"{path}.outcome"),
+                progress=progress,
+            )
+        except DomainSerializationError:
+            raise
+        except (TypeError, ValueError) as exc:
+            raise DomainSerializationError("invalid_model", path) from exc
     if model_version != GOAL_MODEL_VERSION:
         raise DomainSerializationError(
             "unsupported_schema_version", f"{path}.model_version"
         )
-    _require_keys(data, _GOAL_V2_KEYS, path=path)
+    _require_keys(data, _GOAL_V3_KEYS, path=path)
     outcome_raw = data["outcome"]
     progress_raw = data["progress"]
+    provenance_raw = data["provenance"]
     if not isinstance(outcome_raw, dict):
         raise DomainSerializationError("invalid_object", f"{path}.outcome")
     if not isinstance(progress_raw, dict):
         raise DomainSerializationError("invalid_object", f"{path}.progress")
+    if not isinstance(provenance_raw, dict):
+        raise DomainSerializationError("invalid_object", f"{path}.provenance")
+    parent_raw = data["parent_goal_id"]
+    parent_goal_id: GoalId | None
+    if parent_raw is None:
+        parent_goal_id = None
+    elif isinstance(parent_raw, str):
+        try:
+            parent_goal_id = GoalId(parent_raw)
+        except (TypeError, ValueError) as exc:
+            raise DomainSerializationError(
+                "invalid_model", f"{path}.parent_goal_id"
+            ) from exc
+    else:
+        raise DomainSerializationError("invalid_string", f"{path}.parent_goal_id")
+    deadline_raw = data["deadline_tick"]
+    deadline_tick: int | None
+    if deadline_raw is None:
+        deadline_tick = None
+    elif isinstance(deadline_raw, bool) or not isinstance(deadline_raw, int):
+        raise DomainSerializationError("invalid_int", f"{path}.deadline_tick")
+    else:
+        deadline_tick = deadline_raw
     try:
         return Goal(
             goal_id=GoalId(_str_field(data, "goal_id", path=path)),
@@ -1220,6 +1487,35 @@ def _decode_goal(data: dict[str, Any], *, path: str) -> Goal:
             status=GoalStatus(_str_field(data, "status", path=path)),
             outcome=_decode_goal_outcome(outcome_raw, path=f"{path}.outcome"),
             progress=_decode_goal_progress(progress_raw, path=f"{path}.progress"),
+            horizon=GoalHorizon(_str_field(data, "horizon", path=path)),
+            confidence=_float_field(data, "confidence", path=path),
+            provenance=_decode_goal_provenance(
+                provenance_raw, path=f"{path}.provenance"
+            ),
+            created_tick=_int_field(data, "created_tick", path=path),
+            deadline_tick=deadline_tick,
+            parent_goal_id=parent_goal_id,
+            dependency_ids=_decode_goal_id_list(
+                data["dependency_ids"], path=f"{path}.dependency_ids"
+            ),
+            relations=_decode_goal_relation_list(
+                data["relations"], path=f"{path}.relations"
+            ),
+            drive_links=_decode_drive_kind_list(
+                data["drive_links"], path=f"{path}.drive_links"
+            ),
+            belief_refs=_decode_str_list(
+                data["belief_refs"], path=f"{path}.belief_refs"
+            ),
+            self_model_refs=_decode_str_list(
+                data["self_model_refs"], path=f"{path}.self_model_refs"
+            ),
+            success_conditions=_decode_goal_condition_list(
+                data["success_conditions"], path=f"{path}.success_conditions"
+            ),
+            failure_conditions=_decode_goal_condition_list(
+                data["failure_conditions"], path=f"{path}.failure_conditions"
+            ),
         )
     except DomainSerializationError:
         raise

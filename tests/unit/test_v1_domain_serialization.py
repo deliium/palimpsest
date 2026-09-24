@@ -633,8 +633,9 @@ def test_agent_and_goal_round_trip_with_model_version() -> None:
     encoded_agent = encode_domain(agent)
     assert decode_domain(encoded_goal) == goal
     assert decode_domain(encoded_agent) == agent
-    assert b'"model_version":2' in encoded_goal
+    assert b'"model_version":3' in encoded_goal
     assert b'"model_version":2' in encoded_agent
+    assert b'"horizon":"medium_term"' in encoded_goal
     assert b"find-water-secret" in encoded_goal  # payload bytes may contain it
     # Errors and decode failures must not echo semantic payloads in exception text.
     with pytest.raises(DomainSerializationError) as unsupported:
@@ -662,6 +663,27 @@ def test_legacy_agent_and_goal_decode_intentionally() -> None:
     assert decoded_goal.status is GoalStatus.ACTIVE
     assert decoded_goal.outcome.kind is GoalOutcomeKind.PRESERVE_LIFE
     assert decoded_goal.progress.estimate == 0.0
+    assert decoded_goal.horizon.value == "medium_term"
+    assert decoded_goal.parent_goal_id is None
+    assert decoded_goal.created_tick == 0
+    assert decoded_goal.relations == ()
+
+    # Intentional v2→v3 upgrade: hierarchical defaults, confidence from progress.
+    v2_goal = (
+        b'{"data":{"description":"v2-secret-goal","goal_id":"goal-2",'
+        b'"model_version":2,"outcome":{"kind":"preserve_life"},'
+        b'"owner_id":"agent-1","priority":0.4,'
+        b'"progress":{"confidence":0.8,"estimate":0.3,"horizon_ticks":1,'
+        b'"stall_count":0},"status":"active"},'
+        b'"schema_version":1,"type":"goal"}'
+    )
+    decoded_v2 = decode_domain(v2_goal)
+    assert decoded_v2.horizon.value == "medium_term"
+    assert decoded_v2.confidence == 0.8
+    assert decoded_v2.progress.estimate == 0.3
+    assert decoded_v2.parent_goal_id is None
+    assert decoded_v2.dependency_ids == ()
+    assert "v2-secret-goal" not in repr(decoded_v2)
 
     legacy_agent = (
         b'{"data":{"agent_id":"agent-1","goals":[],"name":"Ada"},'

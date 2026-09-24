@@ -6,6 +6,7 @@ import pytest
 
 from agents.cognition.configuration import (
     CognitionDriveOverride,
+    CognitionGoalManagementMode,
     CognitionImaginationMode,
     CognitionLoopConfig,
     CognitionMemoryMode,
@@ -38,9 +39,23 @@ def test_production_defaults_match_legacy_default_loop() -> None:
     assert (
         config.mortality_appraisal_mode is CognitionMortalityAppraisalMode.ENABLED
     )
+    assert config.goal_management_mode is CognitionGoalManagementMode.ENABLED
     loop = default_cognitive_loop()
     assert type(loop._futures) is ImaginationEngine
     assert type(loop._motivation) is MotivationAppraisal
+    assert type(loop._goal_manager).__name__ == "HierarchicalGoalManager"
+
+
+def test_build_loop_selects_passthrough_goal_manager() -> None:
+    from agents.cognition.defaults import PassthroughGoalManager
+
+    config = CognitionLoopConfig(
+        goal_management_mode=CognitionGoalManagementMode.PASSTHROUGH,
+    )
+    loop = build_cognitive_loop(config)
+    assert type(loop._goal_manager) is PassthroughGoalManager
+    material = config.condition_fingerprint_material()
+    assert material["goal_management_mode"] == "passthrough"
 
 
 def test_build_loop_selects_present_state_and_disabled_mortality() -> None:
