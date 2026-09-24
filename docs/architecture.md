@@ -9,8 +9,8 @@ Palimpsest is a modular monolith under `src/`. Cross-module imports must target 
 | Package | Responsibility | May import |
 | --- | --- | --- |
 | `world` | Opaque IDs, typed observations, closed commands, immutable events. Private `World` / `WorldState` / operations / rules / physical / transitions | *(none)* |
-| `agents` | Agent identity, goals, and subjective `Agent` contracts | `world` (agent-facing only) |
-| `agents.cognition` | Async `CognitiveLoop`, stage protocols, reconstructive memory stage, `LLMMemoryReconstructor`, production subjective imagination/motivation/deliberation policies; sync `CognitionStrategy` retained | `world`, `agents`, `memory`, `social`, `llm` |
+| `agents` | Agent identity, hierarchical goals (`GOAL_MODEL_VERSION` 3), and subjective `Agent` contracts | `world` (agent-facing only) |
+| `agents.cognition` | Async `CognitiveLoop`, stage protocols (incl. `GoalManager` / `GoalBoard`), reconstructive memory stage, `LLMMemoryReconstructor`, production subjective goal/imagination/motivation/deliberation policies; sync `CognitionStrategy` retained | `world`, `agents`, `memory`, `social`, `llm` |
 | `memory` | Owner-scoped episodic `MemoryTrace`, semantic beliefs/revisions, `MemoryService`, reconstructive recall, scoring/decay | `world`, `agents` (opaque `EventId` only — never `WorldEvent`) |
 | `social` | Opaque communication envelopes and directed relationship profiles (trust/fear/affection/debt/respect/resentment/familiarity/dependency) | `world`, `agents` |
 | `llm` | Provider-neutral structured `LLMProvider` / `LLMResult` | *(none)* |
@@ -32,8 +32,8 @@ Import-linter (`pyproject.toml`) and `tests/architecture/boundary_checker.py` en
 Import packages, not private modules:
 
 - `world`: IDs, values, objective models, closed commands, `Observation`, causes/effects, `ActionProposal`, `ActionRequest` (non-authoritative), `WorldEvent`, `detached_mapping`
-- `agents`: `AgentId`, `Agent`, `Goal`, `IdentityTranslator`
-- `agents.cognition`: `CognitiveLoop`, stage protocols/defaults, production `ImaginationEngine` / `MotivationAppraisal` / `MultiCriteriaIntentionSelector` / `CommandPlanner`, `CognitionStrategy`, `Perspective`, `SelfModel`, `SubjectiveSnapshot`, `LLMMemoryReconstructor`
+- `agents`: `AgentId`, `Agent`, `Goal` (horizons/statuses/relations), `IdentityTranslator`
+- `agents.cognition`: `CognitiveLoop`, stage protocols/defaults, `GoalManager` / `GoalBoard` / `CognitionGoalManagementMode`, production `HierarchicalGoalManager` / `ImaginationEngine` / `MotivationAppraisal` / `MultiCriteriaIntentionSelector` / `CommandPlanner`, `CognitionStrategy`, `Perspective`, `SelfModel`, `SubjectiveSnapshot`, `LLMMemoryReconstructor`
 - `memory`: `MemoryTrace`, `MemoryService`, semantic belief contracts, recall/reconstruction, scoring/decay policies, legacy `Belief`, owner-bound stores, `OwnershipError`
 - `social`: `CommunicationEnvelope`, directed relationship profiles/revisions, legacy `Relationship`, `EnvelopeSender`
 - `llm`: `LLMProvider`, `LLMRequest`, `LLMResult`, `StructuredOutput`, prompts (incl. `reconstructive_memory/v1`), factory

@@ -12,6 +12,7 @@ Observation
 → memory retrieval
 → situation model
 → beliefs/self state
+→ goal management (GoalManager / GoalBoard)
 → possible futures (ImaginationEngine)
 → motivation evaluation (MotivationAppraisal)
 → intention selection (MultiCriteriaIntentionSelector)
@@ -43,7 +44,7 @@ Observation
 → planned action
 ```
 
-Beliefs, goals, emotional state, and ToM-unavailable placeholders are **trace-view projections** (not new `CognitiveLoop` stages). ToM records `unavailable` / `tom_not_implemented` until a later plan owns `advanced_social_inference`.
+Beliefs, emotional state, and ToM-unavailable placeholders are **trace-view projections** (not new `CognitiveLoop` stages). The scientific **goals** trace view prefers the live `GOAL_MANAGEMENT` / `GoalBoard` stage (horizon + status histograms, foci refs) and falls back to snapshot/motivation only when that stage is absent. ToM records `unavailable` / `tom_not_implemented` until a later plan owns `advanced_social_inference`.
 
 ### Package split
 
@@ -71,18 +72,37 @@ Never log observation/memory/belief text, prompts, CoT, raw provider bodies, cre
 
 | Policy | Module / class | Version constant |
 | --- | --- | --- |
+| Goal management | `HierarchicalGoalManager` (or `PassthroughGoalManager`) | `goals.v1` (`GOAL_POLICY_VERSION`) |
 | Imagination | `ImaginationEngine` | `imagination.v1` (`IMAGINATION_POLICY_VERSION`) |
 | Motivation / fear of death | `MotivationAppraisal` | `motivation.v1` (`MOTIVATION_POLICY_VERSION`) |
 | Intention selection | `MultiCriteriaIntentionSelector` | `deliberation.v1` (`DELIBERATION_POLICY_VERSION`) |
 | Command planning | `CommandPlanner` | `planner.v1` (`PLANNER_POLICY_VERSION`) |
 
+`CognitionGoalManagementMode` on `CognitionLoopConfig` selects `ENABLED` (hierarchical `goals.v1`) or `PASSTHROUGH` (re-emit snapshot goals without decompose/compete). Production defaults to **ENABLED**. This is always-on cognition policy — **not** a `V2CapabilityFlags` feature and **not** gated by `CognitionTraceSpec`.
+
 ### Drives
 
 Eleven independent drives remain simultaneously inspectable: hunger, thirst, safety, fatigue, belonging, curiosity, status, autonomy, competence, predictability, novelty. Each has a stable disposition/baseline and a contextual activation. Activations are not personality classes or a global reward. Conflicting pressures (for example urgent thirst vs. safety) stay visible as separate vectors.
 
-### Goals
+### Goals and GoalBoard
 
-`Goal` carries owner scope, priority, human-readable description, closed structured `GoalOutcome`, and `GoalProgress` lifecycle metadata. Only **active** goals enter deliberation. Goal effects on candidates stay separate from drive effects.
+`Goal` (`GOAL_MODEL_VERSION` 3) is owner-scoped and hierarchical:
+
+- **Horizons** (closed): `DESIRE`, `LONG_TERM`, `MEDIUM_TERM`, `SUBGOAL`, `CURRENT_INTENTION`
+- **Statuses**: `ACTIVE`, `COMPLETED`, `FAILED`, `ABANDONED`, `SUSPENDED`
+- **Parentage**: `parent_goal_id` only (no parallel parent relation kind)
+- **Relations**: ordered `DEPENDS_ON` | `COMPETES_WITH` | `REINFORCES`
+- Structured `GoalOutcome` / `GoalProgress`, confidence, provenance, drive links, success/failure conditions
+
+`GoalManager` (`ComponentKind.GOAL_MANAGEMENT`) emits a frozen `GoalBoard`: ordered goals, ordered `CURRENT_INTENTION` foci, transition intents, and decision metadata. Only **ACTIVE** board goals enter forward imagination/motivation/planning; suspended/failed/abandoned are excluded except as mortality outstanding-value inputs. Decomposition uses a **closed template registry** only (no free-text LLM structure). Cognition-local goal IDs are minted without importing `simulation`.
+
+**Current-intention foci ≠ `SelectedIntention`.** Foci are hierarchical planning foci on the board; tick command selection remains multi-criteria deliberation over imagined futures. Competition/reinforcement uses pairwise / veto / dominance over separate vectors — **never** a permanent total-reward or utility scalar on `DecisionMetadata`.
+
+Subjective impossibility (matching failure conditions against semantic beliefs) marks goals `FAILED` without deleting long-term parents; parent confidence/progress is dampened. ACTIVE/SUSPENDED children of `FAILED` / `ABANDONED` parents are cascade-`ABANDONED`, and goals past `deadline_tick` are abandoned as a terminal drop (distinct from suspend/resume). Critical physiological need can suspend competing medium-term work and resume it when the need drops.
+
+### Live agent mutation and scientific revisions
+
+Objective `GoalTransitionReceipt`s and subjective `GoalTransitionIntent`s are applied to live `Agent.goals` (ordered, owner-checked) so invocation **N+1** snapshots see updated statuses. Objective `COMPLETED` for observable outcome kinds wins over concurrent subjective `FAILED` on the same goal/tick. Scientific goal-revision evidence is published for both objective and subjective transitions; analysis `goal_completion` continues to consume **objective** receipts only.
 
 ### Imagination inputs and candidates
 
@@ -121,7 +141,7 @@ The selected future/intention is non-authoritative. `CommandPlanner` compiles on
 | --- | --- |
 | `CognitiveLoopInput` | One `Observation` + owning `AgentId` + immutable `InternalAgentState` + frozen `SubjectiveSnapshot` |
 | `SubjectiveSnapshot` | Owner-scoped goals, drives, semantic beliefs, directed relationships, owner-safe social identity |
-| Stage artifacts | Frozen perception/memory/situation/`SelfModel`/`PossibleFutures`/`MotivationEvaluation`/`SelectedIntention`/`ActionPlan` |
+| Stage artifacts | Frozen perception/memory/situation/`SelfModel`/`GoalBoard`/`PossibleFutures`/`MotivationEvaluation`/`SelectedIntention`/`ActionPlan` |
 | `SelfModel` | Deterministic projection of self-relevant semantic beliefs (no predefined traits/roles) |
 | `CognitiveLoopResult` | Exact closed `AgentCommand` + ordered boundary records + subjective update intents |
 | `MemoryUpdateIntent` | Post-cognition intents (`WRITE_MEMORY` / `WRITE_BELIEF` / `REVISE_BELIEF` / `REVISE_RELATIONSHIP`); stores are not mutated inside the loop |
@@ -153,12 +173,14 @@ Details: [Memory reconstruction](memory-reconstruction.md).
 | Logger | Levels | Allowed fields |
 | --- | --- | --- |
 | `agents.cognition.loop` | DEBUG stage start/complete; ERROR failure codes | invocation/agent ids, component/version, ordinal, status, confidence band, command type, counts |
+| `agents.cognition.goal_manager` | DEBUG `goal_manager_start` / `goal_manager_complete`; WARN truncation/cycle; ERROR ownership | policy version, owner/tick, mode, goal/status/horizon counts, transition counts by reason, foci_count, template_code counts |
 | `agents.cognition.imagination` | DEBUG start/result; WARN truncation; ERROR ownership | owner/tick, policy version, evidence counts, candidate count, direction codes, fallback |
 | `agents.cognition.motivation` | DEBUG appraisal complete | policy version, owner/tick, active-drive/goal counts, appraised-future count, risk-kind counts, uncertainty band |
-| `agents.cognition.deliberation` | DEBUG filter/selection/planner | policy version, candidate counts per filter, direction code, tie-break code, command type |
+| `agents.cognition.deliberation` | DEBUG filter/selection/planner | policy version, candidate counts per filter, direction code, tie-break code, command type, `goal_focus_support` |
 | `agents.cognition.memory` | DEBUG `memory_recall_mapped`; ERROR ownership codes | owner/tick, policy versions, source/reconstruction/pending counts, provider/fallback flags |
 | `agents.cognition.reconstruction` | DEBUG/INFO/WARN LLM reconstruct path | reconstruction/request IDs, tick, prompt/policy versions, counts, fallback flags |
-| `simulation.agent_runtime` | DEBUG lifecycle/cognition/apply; INFO start/terminal/`runtime_reconsolidation_committed`; WARN/ERROR codes | run/agent/tick/invocation/status/counts |
+| `simulation.agent_runtime` | DEBUG lifecycle/cognition/apply/goal-commit; INFO start/terminal/`runtime_reconsolidation_committed`; WARN/ERROR codes | run/agent/tick/invocation/status/counts; goal apply: owner, tick, goal_id, from→to, reason_code |
+| `simulation.runner` | DEBUG objective goal apply | owner, tick, goal_id, from→to, reason_code |
 
 **Never log:** observations, memories, belief claims/values, goal descriptions/targets, self-model propositions, relationship dimension values, reconstructions/narratives, candidate effect/risk vectors, mortality components, communications, cognitive artifact bodies, prompts, provider outputs, action/command text arguments, seeds, or credentials. Logs may include run/owner/invocation IDs, ticks, policy versions, counts, statuses, direction/command **type** codes, and stable reason codes only.
 

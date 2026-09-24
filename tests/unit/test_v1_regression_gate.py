@@ -156,3 +156,19 @@ async def test_flags_off_single_runner_constructs_and_runs() -> None:
     ) as runner:
         result = await runner.run()
     assert result.ticks_committed == 2
+
+
+def test_goal_management_always_on_not_capability_flag() -> None:
+    """Hierarchical GoalManager is production cognition config, not a V2 flag."""
+    from agents.cognition import (
+        CognitionGoalManagementMode,
+        production_cognition_config,
+    )
+
+    config = v1_regression_profile(_short_base())
+    assert config.capability_flags.enabled_names() == ()
+    assert config.cognition_trace.enabled is False
+    cognition = production_cognition_config()
+    assert cognition.goal_management_mode is CognitionGoalManagementMode.ENABLED
+    assert not hasattr(config, "goal_management_enabled")
+    assert "goal_management" not in config.capability_flags.__dataclass_fields__
