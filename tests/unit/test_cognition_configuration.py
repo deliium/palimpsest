@@ -37,6 +37,23 @@ from memory.models import (
 )
 
 
+def test_cognition_memory_mode_accepts_reconstructive_v2() -> None:
+    from agents.cognition.configuration import MEMORY_POLICY_VERSION
+    from simulation.runner_models import MemoryMode
+
+    assert MEMORY_POLICY_VERSION == "memory-policy-v1"
+    assert set(CognitionMemoryMode) == {
+        CognitionMemoryMode.REFERENCE,
+        CognitionMemoryMode.RECONSTRUCTIVE,
+        CognitionMemoryMode.RECONSTRUCTIVE_V2,
+    }
+    for mode in MemoryMode:
+        assert CognitionMemoryMode(mode.value) is CognitionMemoryMode(mode.value)
+    config = CognitionLoopConfig(memory_mode=CognitionMemoryMode.RECONSTRUCTIVE_V2)
+    assert config.memory_mode is CognitionMemoryMode.RECONSTRUCTIVE_V2
+    assert config.memory_policy_version == MEMORY_POLICY_VERSION
+
+
 def test_production_defaults_match_legacy_default_loop() -> None:
     config = production_cognition_config()
     assert config.memory_mode is CognitionMemoryMode.RECONSTRUCTIVE

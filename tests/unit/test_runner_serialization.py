@@ -99,6 +99,74 @@ def test_duplicate_keys_rejected() -> None:
     assert rejected.value.code == "duplicate_key"
 
 
+def test_reconstructive_v2_memory_mode_round_trips() -> None:
+    base = _config()
+    agent = base.agents[0]
+    config = SimulationRunnerConfig(
+        seed=base.seed,
+        stochastic_identity=base.stochastic_identity,
+        scenario=base.scenario,
+        agents=(
+            AgentRunnerSpec(
+                agent_id=agent.agent_id,
+                entity_id=agent.entity_id,
+                cognition=AgentCognitionSpec(
+                    agent_id=agent.agent_id,
+                    memory_mode=MemoryMode.RECONSTRUCTIVE_V2,
+                ),
+            ),
+        ),
+        stop_policy=base.stop_policy,
+    )
+    encoded = encode_runner_config(config)
+    document = json.loads(encoded.decode("utf-8"))
+    assert (
+        document["agents"][0]["cognition"]["memory_mode"] == "reconstructive_v2"
+    )
+    decoded = decode_runner_config(encoded)
+    assert decoded.agents[0].cognition.memory_mode is MemoryMode.RECONSTRUCTIVE_V2
+
+
+def test_unknown_memory_mode_string_fails_closed() -> None:
+    document = json.loads(encode_runner_config(_config()).decode("utf-8"))
+    document["agents"][0]["cognition"]["memory_mode"] = "perfect_recall"
+    with pytest.raises(RunnerSerializationError) as rejected:
+        decode_runner_config(
+            json.dumps(document, separators=(",", ":"), sort_keys=True).encode(
+                "utf-8"
+            )
+        )
+    assert rejected.value.code == "invalid_model"
+
+
+def test_default_memory_mode_still_encodes_reconstructive() -> None:
+    agent_id = AgentId("agent-default")
+    body = alive_body()
+    config = SimulationRunnerConfig(
+        seed=1,
+        stochastic_identity=StochasticIdentity("default-mem"),
+        scenario=WorldScenarioSpec(
+            world_id=WorldId("world-1"),
+            revision=WorldRevision(0),
+            physical_rules=default_physical_rules(),
+            locations=(make_location(),),
+            bodies=(body,),
+            weather=(make_weather(),),
+        ),
+        agents=(
+            AgentRunnerSpec(
+                agent_id=agent_id,
+                entity_id=body.entity_id,
+                cognition=AgentCognitionSpec(agent_id=agent_id),
+            ),
+        ),
+        stop_policy=RunnerStopPolicy(max_ticks=3),
+    )
+    document = json.loads(encode_runner_config(config).decode("utf-8"))
+    assert document["agents"][0]["cognition"]["memory_mode"] == "reconstructive"
+    assert AgentCognitionSpec(agent_id=agent_id).memory_mode is MemoryMode.RECONSTRUCTIVE
+
+
 def test_scenario_fingerprint_stable_across_cognition() -> None:
     left = _config()
     right_agent = left.agents[0]

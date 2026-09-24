@@ -53,6 +53,7 @@ class CognitionMemoryMode(StrEnum):
 
     REFERENCE = "reference"
     RECONSTRUCTIVE = "reconstructive"
+    RECONSTRUCTIVE_V2 = "reconstructive_v2"
 
 
 class CognitionImaginationMode(StrEnum):

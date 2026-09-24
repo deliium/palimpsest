@@ -135,6 +135,17 @@ def test_cognition_fingerprint_ignores_provider_and_run_identity() -> None:
     )
 
 
+def test_reconstructive_v2_distinct_from_v1_fingerprint() -> None:
+    v1 = _config(memory_mode=MemoryMode.RECONSTRUCTIVE)
+    v2 = _config(memory_mode=MemoryMode.RECONSTRUCTIVE_V2)
+    assert cognition_fingerprint(v1) != cognition_fingerprint(v2)
+    assert set(MemoryMode) == {
+        MemoryMode.REFERENCE,
+        MemoryMode.RECONSTRUCTIVE,
+        MemoryMode.RECONSTRUCTIVE_V2,
+    }
+
+
 def test_agent_runner_spec_defaults_name_and_accepts_goals() -> None:
     from agents.models import Goal, GoalId, GoalOutcome, GoalOutcomeKind, GoalStatus
 

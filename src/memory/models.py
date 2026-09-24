@@ -28,6 +28,7 @@ from world.identifiers import (
 __all__ = [
     "ACCESS_HISTORY_MODE_FAMILIARITY",
     "ACCESS_HISTORY_MODE_NOVELTY",
+    "MEMORY_DYNAMICS_POLICY_VERSION",
     "SCORE_QUANTUM",
     "AccessHistoryMode",
     "AgentId",
@@ -42,6 +43,8 @@ __all__ = [
     "MemoryAccessReceipt",
     "MemoryAgeSemantics",
     "MemoryApplyResult",
+    "MemoryDistortionCode",
+    "MemoryDynamicsPolicy",
     "MemoryEmbedding",
     "MemoryForgetRequest",
     "MemoryForgetResult",
@@ -71,6 +74,7 @@ __all__ = [
     "MemoryTrace",
     "MentionId",
     "OwnershipError",
+    "RecallAuditRecord",
     "RecallEvidence",
     "RecallSourceEvidence",
     "ReconsolidationIntent",
@@ -80,7 +84,9 @@ __all__ = [
     "ReconstructionRecord",
     "RelationEndpoint",
     "RelationEndpointKind",
+    "StrengthDeltaSummary",
     "WorldRevision",
+    "default_memory_dynamics_policy",
     "diagnostic_projection",
     "normalize_score_weights",
     "quantize_score",
@@ -847,11 +853,16 @@ class BeliefStore:
 # ---------------------------------------------------------------------------
 
 SCORE_QUANTUM: Final[float] = 1e-6
+MEMORY_DYNAMICS_POLICY_VERSION: Final[str] = "memory-dynamics-v1"
 _MAX_POLICY_ID_CHARS: Final[int] = 64
 _MAX_EMBEDDING_DIM: Final[int] = 4096
 _MAX_QUERY_LIMIT: Final[int] = 256
 _MAX_BATCH_ITEMS: Final[int] = 256
 _MAX_OPERATION_ID_CHARS: Final[int] = 128
+_MAX_AUDIT_IDS: Final[int] = 256
+_MAX_DISTORTION_CODES: Final[int] = 32
+_MAX_STRENGTH_DELTAS: Final[int] = 256
+_MAX_SEMANTICIZATION_REPEAT: Final[int] = 1024
 
 
 class AccessHistoryMode(StrEnum):
@@ -870,6 +881,19 @@ class MemoryAgeSemantics(StrEnum):
 
     EPISODE = "episode"
     STORAGE = "storage"
+
+
+class MemoryDistortionCode(StrEnum):
+    """Closed audit codes for V2 reconstructive dynamics (IDs only; no text)."""
+
+    TEMPORAL_DECAY = "temporal_decay"
+    INTERFERENCE = "interference"
+    COMPETITION = "competition"
+    SALIENCE_BIAS = "salience_bias"
+    CONFIDENCE_DEGRADATION = "confidence_degradation"
+    SOURCE_CONFUSION = "source_confusion"
+    TESTING_EFFECT = "testing_effect"
+    SEMANTICIZATION = "semanticization"
 
 
 # Stable aliases for documentation and diagnostics allowlists.
@@ -1978,6 +2002,216 @@ class MemoryReconstructionPolicy:
 
 
 @dataclass(frozen=True, slots=True)
+class MemoryDynamicsPolicy:
+    """Opt-in V2 reconstructive dynamics knobs (``memory-dynamics-v1``).
+
+    Absent on V1/REFERENCE recall requests (``dynamics_policy is None``).
+    All float knobs are quantized at ``SCORE_QUANTUM`` and fail closed on
+    non-finite / out-of-range values.
+    """
+
+    version: str = MEMORY_DYNAMICS_POLICY_VERSION
+    decay_rate: float = 0.02
+    interference_strength: float = 0.35
+    competition_blend: float = 0.25
+    salience_resistance: float = 0.5
+    confidence_floor: float = 0.05
+    source_confusion_mass: float = 0.15
+    testing_effect_gain: float = 0.08
+    testing_effect_loss: float = 0.04
+    semanticization_similarity_threshold: float = 0.7
+    semanticization_repeat_threshold: int = 3
+
+    def __post_init__(self) -> None:
+        object.__setattr__(
+            self,
+            "version",
+            require_bounded_text(
+                "MemoryDynamicsPolicy.version",
+                self.version,
+                max_length=_MAX_POLICY_ID_CHARS,
+            ),
+        )
+        if self.version != MEMORY_DYNAMICS_POLICY_VERSION:
+            raise ValueError("MemoryDynamicsPolicy.version: unsupported")
+        for name in (
+            "decay_rate",
+            "interference_strength",
+            "competition_blend",
+            "salience_resistance",
+            "confidence_floor",
+            "source_confusion_mass",
+            "testing_effect_gain",
+            "testing_effect_loss",
+            "semanticization_similarity_threshold",
+        ):
+            object.__setattr__(
+                self,
+                name,
+                quantize_score(
+                    _unit_interval(
+                        f"MemoryDynamicsPolicy.{name}", getattr(self, name)
+                    )
+                ),
+            )
+        repeats = require_exact_nonneg_int(
+            "MemoryDynamicsPolicy.semanticization_repeat_threshold",
+            self.semanticization_repeat_threshold,
+        )
+        if repeats < 1 or repeats > _MAX_SEMANTICIZATION_REPEAT:
+            raise ValueError(
+                "MemoryDynamicsPolicy.semanticization_repeat_threshold: out_of_range"
+            )
+        object.__setattr__(self, "semanticization_repeat_threshold", repeats)
+
+    def __repr__(self) -> str:
+        return (
+            f"MemoryDynamicsPolicy(version={self.version!r}, "
+            f"decay_rate={self.decay_rate}, "
+            f"interference_strength={self.interference_strength}, "
+            f"competition_blend={self.competition_blend})"
+        )
+
+
+def default_memory_dynamics_policy() -> MemoryDynamicsPolicy:
+    """Frozen ``memory-dynamics-v1`` defaults for ``RECONSTRUCTIVE_V2``."""
+
+    return MemoryDynamicsPolicy()
+
+
+@dataclass(frozen=True, slots=True)
+class StrengthDeltaSummary:
+    """Auditable retrieval-strength change (ID + quantized delta only)."""
+
+    memory_id: MemoryId
+    delta: float
+
+    def __post_init__(self) -> None:
+        if type(self.memory_id) is not MemoryId:
+            raise TypeError("StrengthDeltaSummary.memory_id: invalid_type")
+        if isinstance(self.delta, bool) or not isinstance(self.delta, (int, float)):
+            raise ValueError("StrengthDeltaSummary.delta: not_finite")
+        number = float(self.delta)
+        if not math.isfinite(number):
+            raise ValueError("StrengthDeltaSummary.delta: not_finite")
+        object.__setattr__(self, "delta", quantize_score(number))
+
+    def __repr__(self) -> str:
+        return (
+            f"StrengthDeltaSummary(memory_id={self.memory_id.value!r}, "
+            f"delta={self.delta})"
+        )
+
+
+@dataclass(frozen=True, slots=True)
+class RecallAuditRecord:
+    """Experiment-only recall audit; never agent-visible.
+
+    ``source_memory_ids`` are true provenance winners selected by dynamics
+    before any emotion re-ranking. ``selected_ids`` may include confused
+    agent-facing attribution targets when source confusion applies.
+    """
+
+    reconstruction_id: ReconstructionId
+    owner_id: AgentId
+    tick: int
+    source_memory_ids: tuple[MemoryId, ...]
+    competitor_ids: tuple[MemoryId, ...]
+    selected_ids: tuple[MemoryId, ...]
+    distortion_codes: tuple[MemoryDistortionCode, ...]
+    confidence_before: float
+    confidence_after: float
+    strength_deltas: tuple[StrengthDeltaSummary, ...] = ()
+
+    def __post_init__(self) -> None:
+        if type(self.reconstruction_id) is not ReconstructionId:
+            raise TypeError("RecallAuditRecord.reconstruction_id: invalid_type")
+        if type(self.owner_id) is not AgentId:
+            raise TypeError("RecallAuditRecord.owner_id: invalid_type")
+        object.__setattr__(
+            self,
+            "tick",
+            require_exact_nonneg_int("RecallAuditRecord.tick", self.tick),
+        )
+        object.__setattr__(
+            self,
+            "source_memory_ids",
+            _require_ordered_models(
+                "RecallAuditRecord.source_memory_ids",
+                self.source_memory_ids,
+                model_type=MemoryId,
+                max_items=_MAX_AUDIT_IDS,
+            ),
+        )
+        object.__setattr__(
+            self,
+            "competitor_ids",
+            _require_ordered_models(
+                "RecallAuditRecord.competitor_ids",
+                self.competitor_ids,
+                model_type=MemoryId,
+                max_items=_MAX_AUDIT_IDS,
+            ),
+        )
+        object.__setattr__(
+            self,
+            "selected_ids",
+            _require_ordered_models(
+                "RecallAuditRecord.selected_ids",
+                self.selected_ids,
+                model_type=MemoryId,
+                max_items=_MAX_AUDIT_IDS,
+            ),
+        )
+        codes = _require_ordered_models(
+            "RecallAuditRecord.distortion_codes",
+            self.distortion_codes,
+            model_type=MemoryDistortionCode,
+            max_items=_MAX_DISTORTION_CODES,
+        )
+        object.__setattr__(self, "distortion_codes", codes)
+        object.__setattr__(
+            self,
+            "confidence_before",
+            quantize_score(
+                _unit_interval(
+                    "RecallAuditRecord.confidence_before", self.confidence_before
+                )
+            ),
+        )
+        object.__setattr__(
+            self,
+            "confidence_after",
+            quantize_score(
+                _unit_interval(
+                    "RecallAuditRecord.confidence_after", self.confidence_after
+                )
+            ),
+        )
+        object.__setattr__(
+            self,
+            "strength_deltas",
+            _require_ordered_models(
+                "RecallAuditRecord.strength_deltas",
+                self.strength_deltas,
+                model_type=StrengthDeltaSummary,
+                max_items=_MAX_STRENGTH_DELTAS,
+            ),
+        )
+
+    def __repr__(self) -> str:
+        return (
+            f"RecallAuditRecord(reconstruction_id={self.reconstruction_id.value!r}, "
+            f"owner_id={self.owner_id.value!r}, "
+            f"tick={self.tick}, "
+            f"source_count={len(self.source_memory_ids)}, "
+            f"competitor_count={len(self.competitor_ids)}, "
+            f"selected_count={len(self.selected_ids)}, "
+            f"distortion_code_count={len(self.distortion_codes)})"
+        )
+
+
+@dataclass(frozen=True, slots=True)
 class MemoryRecallContext:
     """Subjective current-context signals available to reconstruction.
 
@@ -2252,6 +2486,7 @@ class MemoryRecallRequest:
     beliefs: tuple[Belief, ...] = ()
     recall_context: MemoryRecallContext = MemoryRecallContext()
     derived_memory_id: MemoryId | None = None
+    dynamics_policy: MemoryDynamicsPolicy | None = None
 
     def __post_init__(self) -> None:
         if type(self.retrieve) is not MemoryRetrieveRequest:
@@ -2293,14 +2528,22 @@ class MemoryRecallRequest:
             raise ValueError(
                 "MemoryRecallRequest.derived_memory_id: reconsolidate_disabled"
             )
+        if self.dynamics_policy is not None and type(self.dynamics_policy) is not (
+            MemoryDynamicsPolicy
+        ):
+            raise TypeError("MemoryRecallRequest.dynamics_policy: invalid_type")
 
     def __repr__(self) -> str:
+        dynamics_version = (
+            None if self.dynamics_policy is None else self.dynamics_policy.version
+        )
         return (
             f"MemoryRecallRequest(reconstruction_id={self.reconstruction_id.value!r}, "
             f"current_tick={self.retrieve.current_tick}, "
             f"policy_version={self.reconstruction_policy.version!r}, "
             f"belief_count={len(self.beliefs)}, "
-            f"reconsolidate={self.reconstruction_policy.reconsolidate})"
+            f"reconsolidate={self.reconstruction_policy.reconsolidate}, "
+            f"dynamics_policy_version={dynamics_version!r})"
         )
 
 
@@ -2678,6 +2921,7 @@ class MemoryRecallResult:
     pending_accesses: tuple[MemoryAccessReceipt, ...]
     evidence: RecallEvidence
     reconsolidation: ReconsolidationIntent | None = None
+    audits: tuple[RecallAuditRecord, ...] = ()
 
     def __post_init__(self) -> None:
         reconstructions = _require_ordered_models(
@@ -2713,10 +2957,23 @@ class MemoryRecallResult:
                 raise ValueError(
                     "MemoryRecallResult.reconsolidation: reconstruction_mismatch"
                 )
+        audits = _require_ordered_models(
+            "MemoryRecallResult.audits",
+            self.audits,
+            model_type=RecallAuditRecord,
+            max_items=_MAX_RECALL_SOURCES,
+        )
+        object.__setattr__(self, "audits", audits)
+        for audit in audits:
+            if audit.owner_id != self.evidence.owner_id:
+                raise ValueError("MemoryRecallResult.audits: owner_mismatch")
+            if audit.reconstruction_id != self.evidence.reconstruction_id:
+                raise ValueError("MemoryRecallResult.audits: reconstruction_mismatch")
 
     def __repr__(self) -> str:
         return (
             f"MemoryRecallResult(reconstruction_count={len(self.reconstructions)}, "
             f"pending_access_count={len(self.pending_accesses)}, "
-            f"has_reconsolidation={self.reconsolidation is not None})"
+            f"has_reconsolidation={self.reconsolidation is not None}, "
+            f"audit_count={len(self.audits)})"
         )
