@@ -10,8 +10,8 @@ Improved: 2026-09-24 (`/aif-improve`)
 - Docs: yes
 
 ## Roadmap Linkage
-Milestone: "M6 — Remaining V2 Capability Flags"
-Rationale: First incomplete roadmap milestone; this plan advances opt-in V2 cognitive realism via experiment-comparable memory policies (closed `MemoryMode` treatments), not by claiming a reserved `V2CapabilityFlags` slot.
+Milestone: "M5.4 — Reconstructive Memory Dynamics"
+Rationale: Registered after implementation (2026-09-25). Opt-in `MemoryMode.RECONSTRUCTIVE_V2` only; M6 remains open for remaining `V2CapabilityFlags`.
 
 ## Compatibility contract
 

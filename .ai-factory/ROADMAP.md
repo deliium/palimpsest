@@ -42,7 +42,7 @@ Establish the modular-monolith foundation: packaging, bounded packages, typed co
 
 **Out of scope until planned:** free-form affect narration, personality trait systems, HTTP debug UI for emotion, collapsing emotion+drives+goals into one reward scalar.
 
-**Plans:** none yet — create via `/aif-plan` when ready.
+**Plans:** none yet for flag ownership — create via `/aif-plan` when ready. Opt-in work that did not claim a flag already shipped as M5.4 and M5.5.
 
 ## V1 status
 
@@ -94,3 +94,15 @@ Owner-scoped hierarchical `GoalBoard` / `goals.v1` GoalManager stage, lifecycle 
 Owned flag `V2CapabilityFlags.short_term_emotional_state` (default off), closed-catalog `AgentEmotionalState` / `emotion.v1` stage, runtime carry, deterministic influence hooks, checkpoint codecs, live trace projection, and V1 regression under flags-off.
 
 **Plan:** `.ai-factory/plans/v2-short-term-emotional-state.md`
+
+### M5.4 — Reconstructive Memory Dynamics (complete, 2026-09-25)
+
+Opt-in `MemoryMode.RECONSTRUCTIVE_V2` for cue-dependent recall, interference, source confusion, and semanticization. Audits stay analysis-only (`memory_dynamics@1`). The extra Experiment A arm stays off the V1 regression gate. This is a cognition mode, not a capability flag.
+
+**Plan:** `.ai-factory/plans/v2-reconstructive-memory-dynamics.md`
+
+### M5.5 — Offline Memory Consolidation During Sleep (complete, 2026-09-25)
+
+Opt-in `ConsolidationMode` (default `DISABLED`) reorganizes owner-scoped traces when the effective command is `Sleep`: strengthen, merge, soft-forget, and revise beliefs, relationships, and goals from existing subjective evidence. Default configs stay `runner-config-v4`; `runner-config-v5` is written only when a mode is enabled. Experiment F and `offline_consolidation@1` stay off the V1 regression gate. This is a cognition mode, not a capability flag.
+
+**Plan:** `.ai-factory/plans/v2-offline-sleep-memory-consolidation.md`
