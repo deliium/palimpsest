@@ -384,3 +384,52 @@ def map_consolidation_audits_to_report(
         invocations,
     )
     return report
+
+
+def map_reflection_audits_to_report(
+    *,
+    run_id: str,
+    audits: tuple[object, ...],
+) -> object:
+    """Map in-run reflection audits into count-only analysis inputs."""
+    from agents.cognition.reflection import ReflectionAudit
+    from analysis.reflection_metrics import ReflectionReport
+
+    kind_fields = {
+        "revised_belief": "belief_revisions",
+        "updated_self_belief": "belief_revisions",
+        "new_hypothesis": "hypotheses",
+        "new_long_term_goal": "goals_adopted",
+        "abandoned_goal": "goals_abandoned",
+        "relationship_reassessment": "relationship_reassessments",
+    }
+
+    counts = {name: 0 for name in ReflectionReport.__dataclass_fields__}
+    invocations = 0
+    patterns = 0
+    for item in audits:
+        if type(item) is not ReflectionAudit:
+            raise TypeError("map_reflection_audits_to_report: invalid_audit")
+        invocations += 1
+        for kind, count in item.conclusion_kind_counts:
+            field = kind_fields.get(kind)
+            if field is None:
+                raise ValueError("map_reflection_audits_to_report: invalid_kind")
+            counts[field] += count
+            patterns += count
+    report = ReflectionReport(
+        run_id=run_id,
+        reflection_invocations=invocations,
+        belief_revisions=counts["belief_revisions"],
+        hypotheses=counts["hypotheses"],
+        goals_adopted=counts["goals_adopted"],
+        goals_abandoned=counts["goals_abandoned"],
+        relationship_reassessments=counts["relationship_reassessments"],
+        patterns_detected=patterns,
+    )
+    _LOG.debug(
+        "reflection_audit_composed run_id=%s audit_count=%s",
+        run_id,
+        invocations,
+    )
+    return report

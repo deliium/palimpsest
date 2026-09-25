@@ -98,6 +98,8 @@ def test_runner_config_write_is_v4_with_legacy_accepted() -> None:
     assert RUNNER_SCHEMA_VERSION_V3 in entry.accepted_restore
     assert RUNNER_SCHEMA_VERSION_V4 in entry.accepted_restore
     assert "runner-config-v5" in entry.accepted_restore
+    assert "runner-config-v6" in entry.accepted_restore
+    assert "consolidation-only" in entry.bump_trigger
     assert "A-E" in entry.v1_fixture_impact
     assert entry.write_version == "runner-config-v4"
 

@@ -73,6 +73,7 @@ def _run_level_bundle(
     *,
     memory_dynamics_report: object | None = None,
     offline_consolidation_report: object | None = None,
+    reflection_report: object | None = None,
 ):
     """Assemble run-level catalog metrics without requiring experiment membership."""
     from analysis.models import MemoryDynamicsReport
@@ -96,6 +97,7 @@ def _run_level_bundle(
         offline_consolidation_report=_optional_consolidation_report(
             offline_consolidation_report
         ),
+        reflection_report=_optional_reflection_report(reflection_report),
     )
     return assemble_metric_documents(inputs)
 
@@ -104,10 +106,12 @@ def collect_catalog_metrics(arm: Any) -> CollectorMetricDocument:
     """Attach catalog metric fingerprints for the completed arm."""
     report = _memory_dynamics_report_for(arm)
     consolidation = _offline_consolidation_report_for(arm)
+    reflection = _reflection_report_for(arm)
     bundle = _run_level_bundle(
         arm,
         memory_dynamics_report=report,
         offline_consolidation_report=consolidation,
+        reflection_report=reflection,
     )
     present = sum(
         1
@@ -156,6 +160,29 @@ def _offline_consolidation_report_for(arm: Any):
         run_id=arm.assignment.run_id.value,
         audits=tuple(audits),
     )
+
+
+def _reflection_report_for(arm: Any):
+    """Compose a count report from runner-harvested reflection audits."""
+    from experiments.composition import map_reflection_audits_to_report
+
+    audits = getattr(arm.runner_result, "reflection_audits", ())
+    if not audits:
+        return None
+    return map_reflection_audits_to_report(
+        run_id=arm.assignment.run_id.value,
+        audits=tuple(audits),
+    )
+
+
+def _optional_reflection_report(report: object | None) -> object | None:
+    from analysis.reflection_metrics import ReflectionReport
+
+    if report is None:
+        return None
+    if type(report) is not ReflectionReport:
+        raise TypeError("reflection_report must be ReflectionReport")
+    return report
 
 
 def _optional_consolidation_report(report: object | None) -> object | None:

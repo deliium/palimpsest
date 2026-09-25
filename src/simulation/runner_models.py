@@ -70,6 +70,7 @@ RUNNER_SCHEMA_VERSION_V2: Final[str] = "runner-config-v2"
 RUNNER_SCHEMA_VERSION_V3: Final[str] = "runner-config-v3"
 RUNNER_SCHEMA_VERSION_V4: Final[str] = "runner-config-v4"
 RUNNER_SCHEMA_VERSION_V5: Final[str] = "runner-config-v5"
+RUNNER_SCHEMA_VERSION_V6: Final[str] = "runner-config-v6"
 RUNNER_SCHEMA_VERSION: Final[str] = RUNNER_SCHEMA_VERSION_V4
 SUPPORTED_RUNNER_SCHEMA_VERSIONS: Final[frozenset[str]] = frozenset(
     {
@@ -78,6 +79,7 @@ SUPPORTED_RUNNER_SCHEMA_VERSIONS: Final[frozenset[str]] = frozenset(
         RUNNER_SCHEMA_VERSION_V3,
         RUNNER_SCHEMA_VERSION_V4,
         RUNNER_SCHEMA_VERSION_V5,
+        RUNNER_SCHEMA_VERSION_V6,
     }
 )
 RESULT_SCHEMA_VERSION_V1: Final[str] = "runner-result-v1"
@@ -156,6 +158,18 @@ class ConsolidationMode(StrEnum):
 
     Default is ``DISABLED``: physical sleep only. This is not a
     ``V2CapabilityFlags`` slot.
+    """
+
+    DISABLED = "disabled"
+    DETERMINISTIC = "deterministic"
+    LLM_ASSISTED = "llm_assisted"
+
+
+class ReflectionMode(StrEnum):
+    """Closed periodic-reflection treatments.
+
+    Default is ``DISABLED``. This is not a ``V2CapabilityFlags`` slot.
+    Lockstep with ``agents.cognition.CognitionReflectionMode``.
     """
 
     DISABLED = "disabled"
@@ -657,6 +671,7 @@ class SimulationRunnerResult:
     objective_state_hash: str | None = None
     memory_dynamics_audits: tuple[object, ...] = ()
     offline_consolidation_audits: tuple[object, ...] = ()
+    reflection_audits: tuple[object, ...] = ()
 
     def __post_init__(self) -> None:
         from simulation.models import RunId
@@ -719,6 +734,13 @@ class SimulationRunnerResult:
             self,
             "offline_consolidation_audits",
             tuple(self.offline_consolidation_audits),
+        )
+        if isinstance(self.reflection_audits, (set, frozenset)):
+            raise TypeError("reflection_audits must be ordered")
+        object.__setattr__(
+            self,
+            "reflection_audits",
+            tuple(self.reflection_audits),
         )
 
 
@@ -820,6 +842,7 @@ class AgentCognitionSpec:
     drive_overrides: tuple[DriveOverrideSpec, ...] = ()
     policy_version: str = COGNITION_POLICY_VERSION
     consolidation_mode: ConsolidationMode = ConsolidationMode.DISABLED
+    reflection_mode: ReflectionMode = ReflectionMode.DISABLED
 
     def __post_init__(self) -> None:
         if type(self.agent_id) is not AgentId:
@@ -833,6 +856,14 @@ class AgentCognitionSpec:
         if type(self.consolidation_mode) is not ConsolidationMode:
             raise TypeError(
                 "AgentCognitionSpec.consolidation_mode must be ConsolidationMode"
+            )
+        if type(self.reflection_mode) is not ReflectionMode:
+            _LOGGER.error(
+                "invalid_enum path=AgentCognitionSpec.reflection_mode "
+                "reason_code=invalid_mode"
+            )
+            raise TypeError(
+                "AgentCognitionSpec.reflection_mode must be ReflectionMode"
             )
         if self.policy_version != COGNITION_POLICY_VERSION:
             raise ValueError("unsupported cognition policy_version")
@@ -1311,7 +1342,11 @@ class SimulationRunnerConfig:
             for mode in consolidation_modes
             if mode is not ConsolidationMode.DISABLED
         )
-        if non_disabled and self.schema_version != RUNNER_SCHEMA_VERSION_V5:
+        consolidation_schemas = {
+            RUNNER_SCHEMA_VERSION_V5,
+            RUNNER_SCHEMA_VERSION_V6,
+        }
+        if non_disabled and self.schema_version not in consolidation_schemas:
             _LOGGER.error(
                 "invalid_fields path=agents.cognition.consolidation_mode "
                 "reason_code=consolidation_mode_requires_v5 schema_version=%s",
@@ -1319,7 +1354,7 @@ class SimulationRunnerConfig:
             )
             raise ValueError(
                 "non-disabled consolidation_mode requires runner-config-v5 "
-                "(code=consolidation_mode_requires_v5)"
+                "or runner-config-v6 (code=consolidation_mode_requires_v5)"
             )
         if self.schema_version == RUNNER_SCHEMA_VERSION_V5 and not non_disabled:
             _LOGGER.error(
@@ -1330,6 +1365,32 @@ class SimulationRunnerConfig:
             raise ValueError(
                 "runner-config-v5 requires a non-disabled consolidation_mode "
                 "(code=v5_requires_consolidation)"
+            )
+        reflection_modes = tuple(
+            agent.cognition.reflection_mode for agent in self.agents
+        )
+        reflecting = tuple(
+            mode for mode in reflection_modes if mode is not ReflectionMode.DISABLED
+        )
+        if reflecting and self.schema_version != RUNNER_SCHEMA_VERSION_V6:
+            _LOGGER.error(
+                "invalid_fields path=agents.cognition.reflection_mode "
+                "reason_code=reflection_mode_requires_v6 schema_version=%s",
+                self.schema_version,
+            )
+            raise ValueError(
+                "non-disabled reflection_mode requires runner-config-v6 "
+                "(code=reflection_mode_requires_v6)"
+            )
+        if self.schema_version == RUNNER_SCHEMA_VERSION_V6 and not reflecting:
+            _LOGGER.error(
+                "invalid_fields path=schema_version "
+                "reason_code=v6_requires_reflection schema_version=%s",
+                self.schema_version,
+            )
+            raise ValueError(
+                "runner-config-v6 requires a non-disabled reflection_mode "
+                "(code=v6_requires_reflection)"
             )
         if self.cognition_trace.enabled:
             _LOGGER.info(
@@ -1345,7 +1406,7 @@ class SimulationRunnerConfig:
             "location_count=%s max_ticks=%s mortality_mode=%s "
             "capability_flag_count=%s enabled_flag_count=%s "
             "cognition_trace_enabled=%s cognition_trace_detail=%s "
-            "consolidation_mode=%s",
+            "consolidation_mode=%s reflection_mode=%s",
             self.schema_version,
             len(self.agents),
             len(self.scenario.locations),
@@ -1356,11 +1417,14 @@ class SimulationRunnerConfig:
             self.cognition_trace.enabled,
             self.cognition_trace.detail.value,
             ",".join(mode.value for mode in consolidation_modes),
+            ",".join(mode.value for mode in reflection_modes),
         )
         _LOGGER.debug(
-            "runner_config_decoded schema_version=%s consolidation_mode=%s",
+            "runner_config_decoded schema_version=%s consolidation_mode=%s "
+            "reflection_mode=%s",
             self.schema_version,
             ",".join(mode.value for mode in consolidation_modes),
+            ",".join(mode.value for mode in reflection_modes),
         )
 
     def ordered_registrations(self) -> tuple[AgentRegistration, ...]:

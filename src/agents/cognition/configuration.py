@@ -21,6 +21,7 @@ from agents.cognition.contracts import (
     MotivationEvaluator,
 )
 from agents.cognition.loop import CognitiveLoop
+from agents.cognition.reflection import ReflectionPolicy
 from agents.models import (
     REQUIRED_DRIVE_KINDS,
     AgentId,
@@ -92,6 +93,14 @@ class CognitionConsolidationMode(StrEnum):
     LLM_ASSISTED = "llm_assisted"
 
 
+class CognitionReflectionMode(StrEnum):
+    """Lockstep with ``simulation.ReflectionMode``. Default is disabled."""
+
+    DISABLED = "disabled"
+    DETERMINISTIC = "deterministic"
+    LLM_ASSISTED = "llm_assisted"
+
+
 def _unit_interval(name: str, value: object) -> float:
     if isinstance(value, bool) or not isinstance(value, (int, float)):
         raise ValueError(f"{name}: not_unit_interval")
@@ -142,6 +151,8 @@ class CognitionLoopConfig:
         CognitionEmotionalStateMode.PASSTHROUGH
     )
     consolidation_mode: CognitionConsolidationMode = CognitionConsolidationMode.DISABLED
+    reflection_mode: CognitionReflectionMode = CognitionReflectionMode.DISABLED
+    reflection_policy: ReflectionPolicy | None = None
     drive_overrides: tuple[CognitionDriveOverride, ...] = ()
     memory_policy_version: str = MEMORY_POLICY_VERSION
     imagination_policy_version: str = IMAGINATION_POLICY_VERSION
@@ -166,6 +177,14 @@ class CognitionLoopConfig:
         if type(self.consolidation_mode) is not CognitionConsolidationMode:
             _LOG.error("invalid_enum path=consolidation_mode reason_code=invalid_mode")
             raise TypeError("consolidation_mode must be CognitionConsolidationMode")
+        if type(self.reflection_mode) is not CognitionReflectionMode:
+            _LOG.error("invalid_enum path=reflection_mode reason_code=invalid_mode")
+            raise TypeError("reflection_mode must be CognitionReflectionMode")
+        if (
+            self.reflection_policy is not None
+            and type(self.reflection_policy) is not ReflectionPolicy
+        ):
+            raise TypeError("reflection_policy must be ReflectionPolicy or None")
         if self.memory_policy_version != MEMORY_POLICY_VERSION:
             raise ValueError("unsupported memory_policy_version")
         if self.imagination_policy_version != IMAGINATION_POLICY_VERSION:
@@ -208,6 +227,12 @@ class CognitionLoopConfig:
                     "goal_management_mode": self.goal_management_mode.value,
                     "emotional_state_mode": self.emotional_state_mode.value,
                     "consolidation_mode": self.consolidation_mode.value,
+                    "reflection_mode": self.reflection_mode.value,
+                    "reflection_policy_version": (
+                        None
+                        if self.reflection_policy is None
+                        else self.reflection_policy.version
+                    ),
                     "drive_override_count": len(self.drive_overrides),
                     "status": "validated",
                 }
@@ -238,6 +263,7 @@ class CognitionLoopConfig:
         """Stable, payload-free material for condition fingerprints."""
         return {
             "consolidation_mode": self.consolidation_mode.value,
+            "reflection_mode": self.reflection_mode.value,
             "drive_overrides": [
                 {
                     "baseline": item.baseline,
@@ -278,6 +304,7 @@ def build_cognitive_loop(
     resolve_counterpart: object | None = None,
     pending_evidence: object | None = None,
     consolidation_selector: object | None = None,
+    reflection_selector: object | None = None,
 ) -> CognitiveLoop:
     """Assemble a ``CognitiveLoop`` from explicit policies.
 
@@ -413,4 +440,7 @@ def build_cognitive_loop(
         consolidation_mode=resolved.consolidation_mode,
         consolidation_policy=consolidation_policy,
         consolidation_selector=consolidation_selector,
+        reflection_mode=resolved.reflection_mode,
+        reflection_policy=resolved.reflection_policy,
+        reflection_selector=reflection_selector,
     )

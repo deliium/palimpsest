@@ -24,6 +24,12 @@ Strengthening appends `MemoryAccessReceipt` values with `operation_id` `offline-
 
 **Emotion × V2 ordering:** dynamics + audit complete inside `MemoryService.recall` first; optional `apply_*_emotion_bias` may re-rank agent-visible hits afterward. Audit `selected_ids` are pre-emotion.
 
+## Reflection evidence
+
+Periodic reflection, when enabled, reads the owner's observation, snapshot, prepare-stage self model, and the subjective decision journal. It does not query `WorldEvent`s, event repositories, or another agent's store. Opaque ids already copied onto observations or memory provenance may be kept; they are not dereferenced.
+
+Belief and relationship conclusions cite `MemoryId`s already in that context and copy a predicate from a cited `MemoryRelation`. `repeated_failure` and `prediction_error` are supported by decision-record ids and become goal intents, not beliefs. Decision records alone do not become beliefs. A false subjective predicate is not corrected from a fact the owner does not already hold. When sleep consolidation and reflection both run, consolidation writes first and reflection drops overlapping belief, relationship, and goal ids.
+
 ## Pipeline
 
 ```text

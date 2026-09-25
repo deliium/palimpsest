@@ -9,13 +9,23 @@ import pytest
 from agents.models import AgentId, DriveKind
 from simulation.models import StochasticIdentity
 from simulation.runner_models import (
+    COGNITION_POLICY_VERSION,
+    RUNNER_SCHEMA_VERSION,
+    RUNNER_SCHEMA_VERSION_V4,
+    RUNNER_SCHEMA_VERSION_V5,
+    RUNNER_SCHEMA_VERSION_V6,
     AgentCognitionSpec,
     AgentRunnerSpec,
+    CognitionTraceDetail,
+    CognitionTraceSpec,
     ConsolidationMode,
     DriveOverrideSpec,
     MemoryMode,
+    MortalityMode,
+    ReflectionMode,
     RunnerStopPolicy,
     SimulationRunnerConfig,
+    V2CapabilityFlags,
     WorldScenarioSpec,
 )
 from simulation.runner_serialization import (
@@ -441,3 +451,152 @@ def test_v4_rejects_non_disabled_consolidation_mode() -> None:
             ),
             stop_policy=base.stop_policy,
         )
+
+
+def _configured(
+    *,
+    schema_version: str,
+    consolidation_mode: ConsolidationMode = ConsolidationMode.DISABLED,
+    reflection_mode: ReflectionMode = ReflectionMode.DISABLED,
+    name: str = "Ada",
+) -> SimulationRunnerConfig:
+    base = _config()
+    agent = base.agents[0]
+    return SimulationRunnerConfig(
+        seed=base.seed,
+        stochastic_identity=base.stochastic_identity,
+        scenario=base.scenario,
+        agents=(
+            AgentRunnerSpec(
+                agent_id=agent.agent_id,
+                entity_id=agent.entity_id,
+                cognition=AgentCognitionSpec(
+                    agent_id=agent.agent_id,
+                    memory_mode=MemoryMode.REFERENCE,
+                    drive_overrides=agent.cognition.drive_overrides,
+                    consolidation_mode=consolidation_mode,
+                    reflection_mode=reflection_mode,
+                ),
+                name=name,
+                initial_goals=agent.initial_goals,
+            ),
+        ),
+        stop_policy=base.stop_policy,
+        capability_flags=V2CapabilityFlags(short_term_emotional_state=True),
+        cognition_trace=CognitionTraceSpec(
+            enabled=True,
+            detail=CognitionTraceDetail.SUMMARY,
+            sample_every_n_ticks=1,
+        ),
+        schema_version=schema_version,
+    )
+
+
+def test_v4_omits_reflection_mode_and_keeps_policy_version() -> None:
+    config = _config()
+    document = json.loads(encode_runner_config(config).decode("utf-8"))
+    cognition = document["agents"][0]["cognition"]
+    assert "reflection_mode" not in cognition
+    assert "consolidation_mode" not in cognition
+    assert cognition["policy_version"] == "cognition-policy-v1"
+    assert RUNNER_SCHEMA_VERSION == RUNNER_SCHEMA_VERSION_V4
+    assert COGNITION_POLICY_VERSION == "cognition-policy-v1"
+    assert config.schema_version == RUNNER_SCHEMA_VERSION_V4
+
+
+def test_v5_rejects_reflection_mode_key() -> None:
+    enabled = _configured(
+        schema_version=RUNNER_SCHEMA_VERSION_V5,
+        consolidation_mode=ConsolidationMode.DETERMINISTIC,
+    )
+    encoded = encode_runner_config(enabled)
+    document = json.loads(encoded.decode("utf-8"))
+    assert "reflection_mode" not in document["agents"][0]["cognition"]
+    decoded = decode_runner_config(encoded)
+    assert decoded.agents[0].cognition.reflection_mode is ReflectionMode.DISABLED
+    document["agents"][0]["cognition"]["reflection_mode"] = "deterministic"
+    with pytest.raises(RunnerSerializationError) as rejected:
+        decode_runner_config(
+            json.dumps(document, separators=(",", ":"), sort_keys=True).encode("utf-8")
+        )
+    assert rejected.value.code == "invalid_fields"
+    with pytest.raises(ValueError, match="v5_requires_consolidation"):
+        _configured(schema_version=RUNNER_SCHEMA_VERSION_V5)
+
+
+def test_v6_round_trips_reflection_names_flags_and_trace() -> None:
+    enabled = _configured(
+        schema_version=RUNNER_SCHEMA_VERSION_V6,
+        reflection_mode=ReflectionMode.DETERMINISTIC,
+    )
+    encoded = encode_runner_config(enabled)
+    document = json.loads(encoded.decode("utf-8"))
+    assert document["schema_version"] == "runner-config-v6"
+    cognition = document["agents"][0]["cognition"]
+    assert cognition["reflection_mode"] == "deterministic"
+    assert cognition["consolidation_mode"] == "disabled"
+    assert document["agents"][0]["name"] == "Ada"
+    assert document["capability_flags"]["short_term_emotional_state"] is True
+    assert document["cognition_trace"]["enabled"] is True
+    assert decode_runner_config(encoded) == enabled
+    both = _configured(
+        schema_version=RUNNER_SCHEMA_VERSION_V6,
+        consolidation_mode=ConsolidationMode.DETERMINISTIC,
+        reflection_mode=ReflectionMode.LLM_ASSISTED,
+    )
+    assert decode_runner_config(encode_runner_config(both)) == both
+
+
+def test_reflection_schema_fails_closed() -> None:
+    with pytest.raises(ValueError, match="reflection_mode_requires_v6"):
+        _configured(
+            schema_version=RUNNER_SCHEMA_VERSION_V4,
+            reflection_mode=ReflectionMode.DETERMINISTIC,
+        )
+    with pytest.raises(ValueError, match="reflection_mode_requires_v6"):
+        _configured(
+            schema_version=RUNNER_SCHEMA_VERSION_V5,
+            consolidation_mode=ConsolidationMode.DETERMINISTIC,
+            reflection_mode=ReflectionMode.DETERMINISTIC,
+        )
+    with pytest.raises(ValueError, match="v6_requires_reflection"):
+        _configured(schema_version=RUNNER_SCHEMA_VERSION_V6)
+    document = json.loads(
+        encode_runner_config(
+            _configured(
+                schema_version=RUNNER_SCHEMA_VERSION_V6,
+                reflection_mode=ReflectionMode.DETERMINISTIC,
+            )
+        ).decode("utf-8")
+    )
+    document["agents"][0]["cognition"]["reflection_mode"] = "scripted"
+    with pytest.raises(RunnerSerializationError) as rejected:
+        decode_runner_config(
+            json.dumps(document, separators=(",", ":"), sort_keys=True).encode("utf-8")
+        )
+    assert rejected.value.code == "invalid_enum"
+
+
+def test_cognition_config_for_builds_reflection_policy_from_mode() -> None:
+    from simulation.runner import _cognition_config_for
+
+    spec = _configured(
+        schema_version=RUNNER_SCHEMA_VERSION_V6,
+        reflection_mode=ReflectionMode.LLM_ASSISTED,
+    ).agents[0].cognition
+    assisted = _cognition_config_for(
+        spec,
+        mortality_mode=MortalityMode.ENABLED,
+        capability_flags=V2CapabilityFlags(),
+    )
+    assert assisted.reflection_mode.value == "llm_assisted"
+    assert assisted.reflection_policy is not None
+    assert assisted.reflection_policy.allow_provider is True
+    assert assisted.reflection_policy.version == "reflection-v1"
+    disabled = _cognition_config_for(
+        _config().agents[0].cognition,
+        mortality_mode=MortalityMode.ENABLED,
+        capability_flags=V2CapabilityFlags(),
+    )
+    assert disabled.reflection_mode.value == "disabled"
+    assert disabled.reflection_policy is None

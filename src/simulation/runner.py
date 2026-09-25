@@ -21,11 +21,13 @@ from agents.cognition.configuration import (
     CognitionLoopConfig,
     CognitionMemoryMode,
     CognitionMortalityAppraisalMode,
+    CognitionReflectionMode,
     build_cognitive_loop,
 )
 from agents.cognition.memory import ReferenceMemoryRetriever, ScopedMemoryRetriever
 from agents.cognition.models import ComponentKind
 from agents.cognition.reconstruction import LLMMemoryReconstructor
+from agents.cognition.reflection import default_reflection_policy
 from agents.models import Agent, AgentId, Goal, GoalStatus
 from llm.factory import (
     DeterministicFakeLLMProvider,
@@ -440,6 +442,17 @@ def _cognition_config_for(
         emotional_flag,
         emotional_mode.value,
     )
+    reflection_mode = CognitionReflectionMode(spec.reflection_mode.value)
+    reflection_policy = None
+    if reflection_mode is not CognitionReflectionMode.DISABLED:
+        reflection_policy = default_reflection_policy(
+            allow_provider=reflection_mode is CognitionReflectionMode.LLM_ASSISTED
+        )
+    _LOG.debug(
+        "cognition_config_reflection_mode mode=%s policy_version=%s",
+        reflection_mode.value,
+        None if reflection_policy is None else reflection_policy.version,
+    )
     return CognitionLoopConfig(
         memory_mode=CognitionMemoryMode(spec.memory_mode.value),
         imagination_mode=CognitionImaginationMode(spec.imagination_mode.value),
@@ -450,6 +463,8 @@ def _cognition_config_for(
         ),
         emotional_state_mode=emotional_mode,
         consolidation_mode=CognitionConsolidationMode(spec.consolidation_mode.value),
+        reflection_mode=reflection_mode,
+        reflection_policy=reflection_policy,
         drive_overrides=tuple(
             CognitionDriveOverride(
                 kind=item.kind,
@@ -523,6 +538,24 @@ def _consolidation_selector_for(
     ):
         return LLMOfflineConsolidationSelector(provider)  # type: ignore[arg-type]
     return LLMOfflineConsolidationSelector(None)
+
+
+def _reflection_selector_for(
+    settings: RunnerProviderSettings,
+    provider: AsyncCloseable,
+    mode: CognitionReflectionMode,
+) -> object | None:
+    """Bind a reflection selector only for LLM-assisted reflection."""
+    if mode is not CognitionReflectionMode.LLM_ASSISTED:
+        return None
+    from agents.cognition.reflection import LLMReflectionSelector
+
+    if (
+        settings.recording_policy is RecordingPolicy.LIVE
+        and settings.adapter_kind is ProviderAdapterKind.OPENAI_COMPATIBLE
+    ):
+        return LLMReflectionSelector(provider)  # type: ignore[arg-type]
+    return LLMReflectionSelector(None)
 
 
 def _reconstructor_for(
@@ -855,6 +888,11 @@ class SimulationRunner:
                         config.provider,
                         provider,
                         loop_config.consolidation_mode,
+                    ),
+                    reflection_selector=_reflection_selector_for(
+                        config.provider,
+                        provider,
+                        loop_config.reflection_mode,
                     ),
                 )
                 agent = Agent(
@@ -1576,6 +1614,7 @@ class SimulationRunner:
         await self._apply_objective_goal_receipts(goal_receipts)
         audits = self.export_memory_dynamics_audits()
         consolidation_audits = self.export_offline_consolidation_audits()
+        reflection_audits = self.export_reflection_audits()
         result = SimulationRunnerResult(
             run_id=self._run_id,
             ticks_committed=self._ticks_committed,
@@ -1588,6 +1627,7 @@ class SimulationRunner:
             objective_state_hash=objective_hash,
             memory_dynamics_audits=audits,
             offline_consolidation_audits=consolidation_audits,
+            reflection_audits=reflection_audits,
         )
         _LOG.info(
             "runner_finished run_id=%s ticks_committed=%s stop_reason=%s "
@@ -1645,6 +1685,27 @@ class SimulationRunner:
                 collected.append(audit)
         _LOG.debug(
             "offline_consolidation_audit_export run_id=%s audit_count=%s",
+            self._run_id.value,
+            len(collected),
+        )
+        return tuple(collected)
+
+    def export_reflection_audits(self) -> tuple[object, ...]:
+        """Harvest applied reflection audits. Not part of result JSON."""
+        from agents.cognition.reflection import ReflectionAudit
+
+        collected: list[ReflectionAudit] = []
+        for bundle in self._agents:
+            runtime = bundle.runtime
+            export = getattr(runtime, "export_reflection_audits", None)
+            if export is None:
+                continue
+            for audit in export():
+                if type(audit) is not ReflectionAudit:
+                    raise TypeError("reflection_audits: invalid_item")
+                collected.append(audit)
+        _LOG.debug(
+            "reflection_audit_export run_id=%s audit_count=%s",
             self._run_id.value,
             len(collected),
         )

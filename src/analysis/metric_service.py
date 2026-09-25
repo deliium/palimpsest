@@ -52,6 +52,7 @@ from analysis.offline_consolidation_metrics import (
     OfflineConsolidationReport,
     compute_offline_consolidation,
 )
+from analysis.reflection_metrics import ReflectionReport, compute_reflection
 from analysis.relationship_metrics import compute_relationship_stability
 from analysis.serialization import (
     encode_metric_document,
@@ -96,6 +97,7 @@ class MetricComputationInputs:
     memory_drift_report: MemoryDriftReport | None = None
     memory_dynamics_report: MemoryDynamicsReport | None = None
     offline_consolidation_report: OfflineConsolidationReport | None = None
+    reflection_report: ReflectionReport | None = None
     transmission_hops: Sequence[TransmissionHopRecord] = ()
     transmission_report: SocialTransmissionReport | None = None
     eligible_agent_ids: Sequence[str] = ()
@@ -291,6 +293,13 @@ def assemble_metric_documents(inputs: MetricComputationInputs) -> MetricBundle:
             "offline_consolidation",
             lambda: compute_offline_consolidation(
                 inputs.offline_consolidation_report, input_revision=revision
+            ),
+        )
+    if inputs.reflection_report is not None:
+        _safe(
+            "reflection",
+            lambda: compute_reflection(
+                inputs.reflection_report, input_revision=revision
             ),
         )
     _safe(

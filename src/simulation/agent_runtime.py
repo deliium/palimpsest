@@ -403,10 +403,12 @@ class AgentRuntime:
 
     __slots__ = (
         "_agent",
+        "_applied_reflection_operation_ids",
         "_belief_reader",
         "_belief_writer",
         "_cognition_trace_repository",
         "_cognition_trace_spec",
+        "_decision_journal",
         "_emotional_state",
         "_finalized_hashes",
         "_goal_revision_counters",
@@ -421,6 +423,9 @@ class AgentRuntime:
         "_offline_consolidation_audits",
         "_pending",
         "_processed_invocations",
+        "_reflection_audits",
+        "_reflection_capture",
+        "_reflection_cursor",
         "_relationship_reader",
         "_run_id",
         "_scientific_evidence",
@@ -484,6 +489,8 @@ class AgentRuntime:
         self._belief_writer = belief_writer
         self._memory_service = memory_service
         self._offline_consolidation_audits: list[object] = []
+        self._reflection_audits: list[object] = []
+        self._applied_reflection_operation_ids: set[str] = set()
         self._semantic_belief_reader = semantic_belief_reader
         self._relationship_reader = relationship_reader
         self._subjective_state = subjective_state
@@ -509,6 +516,9 @@ class AgentRuntime:
         self._status = AgentRuntimeStatus.CREATED
         self._internal_state = InternalAgentState(owner_id=agent.agent_id)
         self._emotional_state: AgentEmotionalState | None = None
+        self._reflection_cursor: object | None = None
+        self._decision_journal: tuple[object, ...] | None = None
+        self._reflection_capture: object | None = None
         self._last_observation_key: tuple[int, int] | None = None
         self._processed_invocations: set[str] = set()
         self._pending: PendingRuntimeFinalization | None = None
@@ -1157,7 +1167,10 @@ class AgentRuntime:
         )
         try:
             loop_result = await self._loop.complete(
-                prepared.proposal, effective_command=command
+                prepared.proposal,
+                effective_command=command,
+                reflection_cursor=self._reflection_cursor,
+                decision_journal=self._decision_journal,
             )
         except CognitiveLoopError as exc:
             await self._soft_append_cognition_trace(
@@ -1223,6 +1236,7 @@ class AgentRuntime:
             pending_reconsolidation=loop_result.pending_reconsolidation,
             pending_semanticization=loop_result.pending_semanticization,
             offline_consolidation=loop_result.offline_consolidation,
+            reflection=loop_result.reflection,
         )
         submission = ActionSubmission(
             token=prepared.token,
@@ -1266,6 +1280,11 @@ class AgentRuntime:
             has_futures_boundary=has_futures,
         )
         self._pending = pending
+        self._capture_reflection_facts(
+            prepared.proposal.loop_input.observation,
+            command,
+            prepared.proposal.loop_input.snapshot,
+        )
         _LOG.debug(
             "runtime_bind_complete",
             extra={
@@ -1361,13 +1380,20 @@ class AgentRuntime:
 
         await self._apply_pending_side_effects(pending)
         extra_goals = _consolidation_goal_intents(pending.loop_result)
+        reflection_goals = _reflection_goal_intents(
+            pending.loop_result, self._applied_reflection_operation_ids
+        )
         intent_receipts = self.apply_goal_transition_intents(
-            tuple(_goal_board_intents(pending.loop_result)) + extra_goals
+            tuple(_goal_board_intents(pending.loop_result))
+            + extra_goals
+            + reflection_goals
         )
         await self.publish_goal_revisions(intent_receipts)
         self._commit_emotional_state(
             _emotional_state_from_result(pending.loop_result)
         )
+        self._apply_reflection_journal(pending.tick)
+        self._record_reflection_application(pending)
         self._internal_state = pending.next_internal_state
         self._last_observation_key = pending.observation_key
         self._processed_invocations.add(pending.invocation_id)
@@ -1402,6 +1428,112 @@ class AgentRuntime:
             terminal=False,
         )
 
+    def _capture_reflection_facts(
+        self, observation: Observation, command: object, snapshot: object | None
+    ) -> None:
+        """Remember self-visible command facts until a successful finalize."""
+
+        from agents.cognition.configuration import CognitionReflectionMode
+
+        mode = getattr(self._loop, "_reflection_mode", None)
+        if mode is not CognitionReflectionMode.DETERMINISTIC and mode is not (
+            CognitionReflectionMode.LLM_ASSISTED
+        ):
+            self._reflection_capture = None
+            return
+        day_phase = (
+            None if observation.day_phase is None else observation.day_phase.value
+        )
+        place_id = None
+        body = observation.self_body
+        if body is not None and body.location_id is not None:
+            place_id = body.location_id.value
+        owner_entity = observation.observer_id
+        successes = 0
+        failures = 0
+        for occurrence in observation.occurrences:
+            if occurrence.actor_id != owner_entity:
+                continue
+            if occurrence.success is True:
+                successes += 1
+            elif occurrence.success is False:
+                failures += 1
+        from agents.cognition.reflection import classify_subjective_outcome
+
+        previous = classify_subjective_outcome(
+            perceived_success=successes > 0,
+            owner_failure_count=failures,
+            place_changed=False,
+        )
+        from social.relationships import DirectedRelationshipProfile
+
+        pairs: tuple[tuple[object, object, int], ...] = ()
+        relationships = getattr(snapshot, "relationships", ())
+        if relationships:
+            collected = []
+            for profile in relationships:
+                if type(profile) is not DirectedRelationshipProfile:
+                    continue
+                if profile.source_id != self._agent.agent_id:
+                    continue
+                collected.append(
+                    (profile.source_id, profile.target_id, profile.revision_ordinal)
+                )
+            pairs = tuple(collected)
+        self._reflection_capture = (
+            type(command).__name__,
+            day_phase,
+            place_id,
+            previous,
+            pairs,
+        )
+
+    def _apply_reflection_journal(self, tick: int) -> None:
+        """Append one decision record after a successful enabled finalize."""
+
+        from agents.cognition.configuration import CognitionReflectionMode
+        from agents.cognition.reflection import (
+            ReflectionCursor,
+            ReflectionPolicy,
+            advance_decision_journal,
+            remember_relationship_ordinals,
+        )
+
+        mode = getattr(self._loop, "_reflection_mode", None)
+        capture = self._reflection_capture
+        self._reflection_capture = None
+        if capture is None:
+            return
+        if mode is not CognitionReflectionMode.DETERMINISTIC and mode is not (
+            CognitionReflectionMode.LLM_ASSISTED
+        ):
+            return
+        policy = getattr(self._loop, "_reflection_policy", None)
+        if type(policy) is not ReflectionPolicy:
+            policy = ReflectionPolicy(
+                allow_provider=mode is CognitionReflectionMode.LLM_ASSISTED
+            )
+        cursor = self._reflection_cursor
+        if type(cursor) is not ReflectionCursor:
+            cursor = ReflectionCursor(owner_id=self._agent.agent_id)
+        journal = self._decision_journal
+        if journal is None:
+            journal = ()
+        command_kind, day_phase, place_id, previous, pairs = capture
+        cursor = remember_relationship_ordinals(cursor, pairs)
+        cursor, records = advance_decision_journal(
+            cursor=cursor,
+            journal=journal,
+            policy=policy,
+            tick=tick,
+            command_kind=command_kind,
+            day_phase=day_phase,
+            place_id=place_id,
+            previous_outcome=previous if journal else None,
+        )
+        self._reflection_cursor = cursor
+        self._decision_journal = records
+
     def abort_pending(self, pending: PendingRuntimeFinalization) -> None:
         """Discard an uncommitted pending transition without applying it."""
         if type(pending) is not PendingRuntimeFinalization:
@@ -1421,6 +1553,7 @@ class AgentRuntime:
                 tick=pending.tick,
             )
         self._pending = None
+        self._reflection_capture = None
         _LOG.warning(
             "runtime_pending_aborted",
             extra={
@@ -1511,6 +1644,8 @@ class AgentRuntime:
         self._internal_state = checkpoint.internal_state
         self._last_observation_key = checkpoint.last_observation_key
         self._emotional_state = checkpoint.emotional_state
+        self._reflection_cursor = checkpoint.reflection_cursor
+        self._decision_journal = checkpoint.decision_journal
         self._pending = None
         emotion = self._emotional_state
         _LOG.debug(
@@ -1542,6 +1677,8 @@ class AgentRuntime:
             finalized_hash_count=len(self._finalized_hashes),
             goals=self._agent.goals,
             emotional_state=self._emotional_state,
+            reflection_cursor=self._reflection_cursor,
+            decision_journal=self._decision_journal,
         )
 
     async def process_observation(
@@ -1622,6 +1759,7 @@ class AgentRuntime:
             pending_reconsolidation=pending.loop_result.pending_reconsolidation,
             pending_semanticization=pending.loop_result.pending_semanticization,
             offline_consolidation=pending.loop_result.offline_consolidation,
+            reflection=pending.loop_result.reflection,
         )
         await self._finish_offline_consolidation(pending)
 
@@ -1636,6 +1774,7 @@ class AgentRuntime:
         pending_reconsolidation: object | None,
         pending_semanticization: object | None = None,
         offline_consolidation: object | None = None,
+        reflection: object | None = None,
     ) -> SubjectiveMutationBatch | None:
         if self._subjective_state is None:
             return None
@@ -1704,6 +1843,12 @@ class AgentRuntime:
             belief_revisions=belief_revisions,
             relationship_revisions=relationship_revisions,
         )
+        _extend_reflection_writes(
+            reflection,
+            belief_revisions=belief_revisions,
+            relationship_revisions=relationship_revisions,
+            applied=self._applied_reflection_operation_ids,
+        )
         return SubjectiveMutationBatch(
             operation_id=subjective_operation_id(
                 owner_id=agent_id, invocation_id=invocation_id
@@ -1728,6 +1873,7 @@ class AgentRuntime:
         pending_reconsolidation: object | None = None,
         pending_semanticization: object | None = None,
         offline_consolidation: object | None = None,
+        reflection: object | None = None,
     ) -> None:
         from memory.beliefs import BeliefRevisionRequest
         from memory.models import ReconsolidationIntent, ReconstructionRecord
@@ -1899,6 +2045,12 @@ class AgentRuntime:
             belief_revisions=belief_revisions,
             relationship_revisions=relationship_revisions,
         )
+        _extend_reflection_writes(
+            reflection,
+            belief_revisions=belief_revisions,
+            relationship_revisions=relationship_revisions,
+            applied=self._applied_reflection_operation_ids,
+        )
         if self._memory_service is not None:
             if self._memory_service.scope.owner_id != agent_id:
                 raise AgentRuntimeError(
@@ -2018,6 +2170,50 @@ class AgentRuntime:
     def export_offline_consolidation_audits(self) -> tuple[object, ...]:
         return tuple(self._offline_consolidation_audits)
 
+    def export_reflection_audits(self) -> tuple[object, ...]:
+        return tuple(self._reflection_audits)
+
+    def _record_reflection_application(
+        self, pending: PendingRuntimeFinalization
+    ) -> None:
+        """Move the cursor only after a pass is applied. Journal stays separate."""
+
+        from agents.cognition.reflection import (
+            ReflectionCursor,
+            ReflectionPlan,
+            commit_reflection_cursor,
+            log_reflection_aborted,
+            log_reflection_applied,
+            reflection_operation_ids,
+        )
+
+        plan = pending.loop_result.reflection
+        if type(plan) is not ReflectionPlan:
+            return
+        operation_ids = reflection_operation_ids(plan)
+        applied = self._applied_reflection_operation_ids
+        if operation_ids and all(item in applied for item in operation_ids):
+            return
+        applied.update(operation_ids)
+        cursor = self._reflection_cursor
+        if type(cursor) is not ReflectionCursor:
+            cursor = ReflectionCursor(owner_id=self._agent.agent_id)
+        try:
+            self._reflection_cursor = commit_reflection_cursor(
+                cursor,
+                tick=pending.tick,
+                acknowledged_goal_ids=plan.acknowledged_goal_ids,
+            )
+        except (TypeError, ValueError):
+            log_reflection_aborted(
+                owner_id=self._agent.agent_id.value,
+                tick=pending.tick,
+                reason_code="schema_invalid",
+            )
+            raise
+        self._reflection_audits.append(plan.audit)
+        log_reflection_applied(plan)
+
 
 def _extend_consolidation_writes(
     plan: object | None,
@@ -2048,6 +2244,38 @@ def _consolidation_goal_intents(
     if type(plan) is not OfflineConsolidationPlan:
         return ()
     return plan.goal_intents
+
+
+def _extend_reflection_writes(
+    plan: object | None,
+    *,
+    belief_revisions: list[object],
+    relationship_revisions: list[object],
+    applied: set[str],
+) -> None:
+    if plan is None:
+        return
+    from agents.cognition.reflection import ReflectionPlan, without_applied_operations
+
+    if type(plan) is not ReflectionPlan:
+        return
+    filtered = without_applied_operations(plan, applied)
+    belief_revisions.extend(filtered.belief_revisions)
+    relationship_revisions.extend(filtered.relationship_revisions)
+
+
+def _reflection_goal_intents(
+    loop_result: CognitiveLoopResult,
+    applied: set[str],
+) -> tuple[GoalTransitionIntent, ...]:
+    plan = loop_result.reflection
+    if plan is None:
+        return ()
+    from agents.cognition.reflection import ReflectionPlan, without_applied_operations
+
+    if type(plan) is not ReflectionPlan:
+        return ()
+    return without_applied_operations(plan, applied).goal_intents
 
 
 def _goal_board_intents(
@@ -2094,6 +2322,8 @@ def _intent_reason_to_receipt_code(
     if reason is GoalTransitionIntentReason.DECOMPOSED:
         return GoalTransitionReasonCode.DECOMPOSED
     if reason is GoalTransitionIntentReason.REVISED:
+        return GoalTransitionReasonCode.REVISED
+    if reason is GoalTransitionIntentReason.ADOPTED:
         return GoalTransitionReasonCode.REVISED
     # PROGRESS_UPDATED / FOCUS_SELECTED are subjective revisions without a
     # dedicated objective receipt code.

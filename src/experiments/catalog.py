@@ -1,4 +1,4 @@
-"""Named builders for Experiments A-F."""
+"""Named builders for Experiments A-G."""
 
 from __future__ import annotations
 
@@ -17,6 +17,7 @@ from experiments.models import (
 from simulation.runner_models import (
     RUNNER_SCHEMA_VERSION_V4,
     RUNNER_SCHEMA_VERSION_V5,
+    RUNNER_SCHEMA_VERSION_V6,
     AgentCognitionSpec,
     AgentRunnerSpec,
     ConsolidationMode,
@@ -24,6 +25,7 @@ from simulation.runner_models import (
     ImaginationMode,
     MemoryMode,
     MortalityMode,
+    ReflectionMode,
     RunnerStopPolicy,
     SimulationRunnerConfig,
     WorldScenarioSpec,
@@ -42,6 +44,7 @@ def _with_agent_modes(
     mortality_mode: MortalityMode | None = None,
     drive_overrides: tuple[DriveOverrideSpec, ...] | None = None,
     consolidation_mode: ConsolidationMode | None = None,
+    reflection_mode: ReflectionMode | None = None,
     schema_version: str | None = None,
 ) -> SimulationRunnerConfig:
     agents: list[AgentRunnerSpec] = []
@@ -65,6 +68,11 @@ def _with_agent_modes(
                 consolidation_mode
                 if consolidation_mode is not None
                 else agent.cognition.consolidation_mode
+            ),
+            reflection_mode=(
+                reflection_mode
+                if reflection_mode is not None
+                else agent.cognition.reflection_mode
             ),
         )
         agents.append(
@@ -357,6 +365,42 @@ def experiment_f_sleep_consolidation(
         arms=(
             ("f-disabled", "consolidation_disabled", disabled),
             ("f-deterministic", "consolidation_deterministic", deterministic),
+        ),
+    )
+
+
+def experiment_g_reflection(
+    base: SimulationRunnerConfig,
+    *,
+    seed_matrix: ExperimentSeedMatrix | None = None,
+) -> ExperimentDefinition:
+    """Compare disabled reflection with the default deterministic interval."""
+    matrix = seed_matrix or ExperimentSeedMatrix(seeds=(base.seed,))
+    shared = replace(base, stop_policy=RunnerStopPolicy(max_ticks=8))
+    disabled = _with_agent_modes(
+        shared,
+        reflection_mode=ReflectionMode.DISABLED,
+        schema_version=RUNNER_SCHEMA_VERSION_V4,
+    )
+    deterministic = _with_agent_modes(
+        shared,
+        reflection_mode=ReflectionMode.DETERMINISTIC,
+        schema_version=RUNNER_SCHEMA_VERSION_V6,
+    )
+    _LOG.debug(
+        "experiment_g_built experiment_id=%s condition_ids=%s "
+        "reflection_modes=%s",
+        "experiment-g-reflection",
+        "g-disabled,g-deterministic",
+        "disabled,deterministic",
+    )
+    return _definition(
+        experiment_id="experiment-g-reflection",
+        base=shared,
+        seed_matrix=matrix,
+        arms=(
+            ("g-disabled", "reflection_disabled", disabled),
+            ("g-deterministic", "reflection_deterministic", deterministic),
         ),
     )
 

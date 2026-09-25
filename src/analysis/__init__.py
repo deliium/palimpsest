@@ -129,6 +129,10 @@ from analysis.offline_consolidation_metrics import (
     OFFLINE_CONSOLIDATION_METRIC_VERSION,
     compute_offline_consolidation,
 )
+from analysis.reflection_metrics import (
+    REFLECTION_METRIC_VERSION,
+    compute_reflection,
+)
 from analysis.relationship_metrics import compute_relationship_stability
 from analysis.serialization import (
     MetricSerializationError,
@@ -200,6 +204,7 @@ __all__ = [
     "MINIMUM_LIBRARY_VERSIONS",
     "OFFLINE_CONSOLIDATION_METRIC_VERSION",
     "PANDAS_NULL_SENTINEL_POLICY",
+    "REFLECTION_METRIC_VERSION",
     "SCIPY_DEGENERATE_POLICY",
     "SOCIAL_TRANSMISSION_METRIC_VERSION",
     "SUPPORTED_COMMUNITY_ALGORITHM",
@@ -286,6 +291,7 @@ __all__ = [
     "compute_memory_drift",
     "compute_memory_dynamics",
     "compute_offline_consolidation",
+    "compute_reflection",
     "compute_relationship_stability",
     "compute_repeated_conventions",
     "compute_resource_inequality",

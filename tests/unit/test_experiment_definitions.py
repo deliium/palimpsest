@@ -10,17 +10,20 @@ from experiments import (
     experiment_c_mortality,
     experiment_d_drives,
     experiment_f_sleep_consolidation,
+    experiment_g_reflection,
 )
 from experiments.catalog import base_runner_config_from_scenario
 from simulation.runner_models import (
     RUNNER_SCHEMA_VERSION_V4,
     RUNNER_SCHEMA_VERSION_V5,
+    RUNNER_SCHEMA_VERSION_V6,
     AgentCognitionSpec,
     AgentRunnerSpec,
     ConsolidationMode,
     ImaginationMode,
     MemoryMode,
     MortalityMode,
+    ReflectionMode,
     WorldScenarioSpec,
 )
 from tests.simulation_helpers import alive_body, make_location, make_weather
@@ -148,4 +151,33 @@ def test_experiment_f_pairs_disabled_v4_and_deterministic_v5() -> None:
     assert (
         disabled.runner_config.agents[0].cognition.memory_mode
         == deterministic.runner_config.agents[0].cognition.memory_mode
+    )
+
+
+def test_experiment_g_pairs_disabled_v4_and_deterministic_v6() -> None:
+    definition = experiment_g_reflection(_base())
+    assert [item.condition_id for item in definition.conditions] == [
+        "g-disabled",
+        "g-deterministic",
+    ]
+    disabled, deterministic = definition.conditions
+    assert disabled.runner_config.schema_version == RUNNER_SCHEMA_VERSION_V4
+    assert (
+        disabled.runner_config.agents[0].cognition.reflection_mode
+        is ReflectionMode.DISABLED
+    )
+    assert deterministic.runner_config.schema_version == RUNNER_SCHEMA_VERSION_V6
+    assert (
+        deterministic.runner_config.agents[0].cognition.reflection_mode
+        is ReflectionMode.DETERMINISTIC
+    )
+    assert disabled.runner_config.seed == deterministic.runner_config.seed
+    assert (
+        disabled.runner_config.stochastic_identity
+        == deterministic.runner_config.stochastic_identity
+    )
+    assert disabled.runner_config.stop_policy.max_ticks == 8
+    assert (
+        disabled.runner_config.agents[0].cognition.consolidation_mode
+        is deterministic.runner_config.agents[0].cognition.consolidation_mode
     )

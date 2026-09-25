@@ -1648,6 +1648,7 @@ class GoalTransitionIntentReason(StrEnum):
     ABANDONED = "abandoned"
     DECOMPOSED = "decomposed"
     REVISED = "revised"
+    ADOPTED = "adopted"
     PROGRESS_UPDATED = "progress_updated"
     FOCUS_SELECTED = "focus_selected"
 
@@ -3487,6 +3488,7 @@ class CognitiveLoopResult:
     pending_reconsolidation: ReconsolidationIntent | None = None
     pending_semanticization: BeliefRevisionRequest | None = None
     offline_consolidation: object | None = None
+    reflection: object | None = None
 
     def __post_init__(self) -> None:
         object.__setattr__(
@@ -3568,6 +3570,13 @@ class CognitiveLoopResult:
                 )
             if self.offline_consolidation.audit.owner_id != self.agent_id:
                 raise ValueError("offline_consolidation owner must match agent_id")
+        if self.reflection is not None:
+            from agents.cognition.reflection import ReflectionPlan
+
+            if type(self.reflection) is not ReflectionPlan:
+                raise TypeError("CognitiveLoopResult.reflection: invalid_type")
+            if self.reflection.audit.owner_id != self.agent_id:
+                raise ValueError("reflection owner must match agent_id")
         object.__setattr__(
             self,
             "final_confidence",

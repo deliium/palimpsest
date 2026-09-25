@@ -1,0 +1,21 @@
+{
+  "name": "reflection",
+  "version": "v1",
+  "messages": [
+    {
+      "role": "system",
+      "template": "system.txt",
+      "sha256": "d083931b33569b7e5da61e5ef8cef43c6549bd43a82703e29a4db7e4f5e6ace1"
+    },
+    {
+      "role": "user",
+      "template": "user.txt",
+      "sha256": "be77c922cb0db9baa77dd6ab755dc744131bc6f88a64a00d7d81357c7f6ffed4"
+    }
+  ],
+  "variables": [
+    "schema_name",
+    "schema_json",
+    "candidate_json"
+  ]
+}

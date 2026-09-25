@@ -94,6 +94,8 @@ reference = rendered.reference  # PromptReference(name, version, digest)
 
 Manifest digests are pinned in tests. Safe string substitution only; invalid names/values never appear in errors or logs.
 
+`llm/prompts/reflection/v1/` is the reflection selector (`reflection.selection.v1`). The payload is candidate ids, counts, and closed codes. The schema has no prose claim field. `DISABLED` and `DETERMINISTIC` never call the provider. A missing provider, `allow_provider=False`, a transport error, a schema failure, or a foreign id applies the deterministic candidate set and sets `fallback_used`. The provider never becomes an `AgentCommand` and never mutates world state. Logs on this path are `reflection_llm_start`, `reflection_llm_complete`, and `reflection_llm_rejected` with mode, counts, and `reason_code` only.
+
 ## Local OpenAI-compatible / Ollama / vLLM
 
 V1 ships one HTTP adapter (`OpenAICompatibleProvider`) aimed at OpenAI-compatible endpoints, including local Ollama and vLLM `/v1` servers. No vendor SDKs.

@@ -594,6 +594,8 @@ class AgentRuntimeCheckpoint:
     finalized_hash_count: int
     goals: tuple[Goal, ...]
     emotional_state: AgentEmotionalState | None = None
+    reflection_cursor: object | None = None
+    decision_journal: tuple[object, ...] | None = None
 
     def __post_init__(self) -> None:
         if type(self.agent_id) is not AgentId:
@@ -624,6 +626,25 @@ class AgentRuntimeCheckpoint:
                 raise TypeError("emotional_state must be AgentEmotionalState")
             if self.emotional_state.owner_id != self.agent_id:
                 raise ValueError("emotional_state owner_id mismatch")
+        if self.reflection_cursor is not None:
+            from agents.cognition.reflection import ReflectionCursor
+
+            if type(self.reflection_cursor) is not ReflectionCursor:
+                raise TypeError("reflection_cursor must be ReflectionCursor")
+            if self.reflection_cursor.owner_id != self.agent_id:
+                raise ValueError("reflection_cursor owner_id mismatch")
+        if self.decision_journal is not None:
+            from agents.cognition.reflection import SubjectiveDecisionRecord
+
+            if isinstance(self.decision_journal, (str, bytes)) or not isinstance(
+                self.decision_journal, tuple
+            ):
+                raise TypeError("decision_journal must be a tuple or None")
+            for item in self.decision_journal:
+                if type(item) is not SubjectiveDecisionRecord:
+                    raise TypeError("decision_journal entries must be records")
+                if item.owner_id != self.agent_id:
+                    raise ValueError("decision_journal owner_id mismatch")
 
 
 def encode_emotional_state(

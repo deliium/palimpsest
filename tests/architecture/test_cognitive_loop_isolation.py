@@ -126,6 +126,22 @@ def test_cognition_modules_forbid_orchestration_and_private_world() -> None:
     assert hits == []
 
 
+def test_reflection_module_does_not_import_objective_history() -> None:
+    path = COGNITION_ROOT / "reflection.py"
+    tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
+    banned = {"world.events", "simulation.replay", "simulation.journal"}
+    hits: list[str] = []
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Import):
+            for alias in node.names:
+                if alias.name in banned or alias.name.startswith("world.events"):
+                    hits.append(alias.name)
+        elif isinstance(node, ast.ImportFrom) and node.module:
+            if node.module in banned or node.module.startswith("world.events"):
+                hits.append(node.module)
+    assert hits == []
+
+
 def test_cognition_reconstruction_signature_omits_world_event() -> None:
     from agents.cognition.reconstruction import LLMMemoryReconstructor
 

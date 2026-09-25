@@ -50,7 +50,7 @@ __all__ = [
 ]
 
 METRIC_CATALOG_VERSION: Final[str] = "metric-catalog-v1"
-METRIC_FAMILY_COUNT: Final[int] = 17
+METRIC_FAMILY_COUNT: Final[int] = 18
 
 # Align with existing memory-drift / transmission document versions.
 _ALGO_V1: Final[str] = "1"
@@ -75,7 +75,7 @@ class MetricSpecificationError(ValueError):
 
 
 class MetricFamilyId(StrEnum):
-    """Closed catalog of metric families (V1, memory dynamics, sleep consolidation)."""
+    """Closed catalog of metric families (V1, memory, consolidation, reflection)."""
 
     RESOURCE_INEQUALITY = "resource_inequality"
     COOPERATION = "cooperation"
@@ -94,6 +94,7 @@ class MetricFamilyId(StrEnum):
     RUMOR_DISTORTION = "rumor_distortion"
     MEMORY_DYNAMICS = "memory_dynamics"
     OFFLINE_CONSOLIDATION = "offline_consolidation"
+    REFLECTION = "reflection"
 
 
 class DenominatorKind(StrEnum):
@@ -907,6 +908,47 @@ def _spec_memory_dynamics() -> MetricSpecification:
     )
 
 
+def _spec_reflection() -> MetricSpecification:
+    return _base(
+        family_id=MetricFamilyId.REFLECTION,
+        evidence_inputs=frozenset({EvidenceStage.BELIEF_REVISION_TESTIMONY}),
+        population="reflection_audits_per_run",
+        denominator="harvested reflection audits",
+        denominator_kind=DenominatorKind.OCCURRENCE,
+        cohort_window="run window covering harvested reflection passes",
+        deceased_policy="terminal agents stop new audits; existing audits remain",
+        zero_holding_policy="no audits -> availability=absent",
+        opportunity_vs_occurrence=(
+            "counts over harvested audits only; disabled arms absent"
+        ),
+        self_edge_policy="not_applicable",
+        censoring_policy="missing report -> omitted; never invent counts",
+        formulas={
+            "reflection_invocations": "count of harvested reflection audits",
+            "belief_revisions": "sum of revised and self-belief conclusion counts",
+            "hypotheses": "sum of new-hypothesis conclusion counts",
+            "goals_adopted": "sum of adopted long-term goal counts",
+            "goals_abandoned": "sum of abandoned goal counts",
+            "relationship_reassessments": "sum of relationship reassessment counts",
+            "patterns_detected": "sum of all conclusion kind counts",
+        },
+        value_keys=(
+            "reflection_invocations",
+            "belief_revisions",
+            "hypotheses",
+            "goals_adopted",
+            "goals_abandoned",
+            "relationship_reassessments",
+            "patterns_detected",
+        ),
+        empty_case="no audits -> availability=absent",
+        unknown_case=(
+            "incomplete audit export -> availability=unknown; "
+            "MetricAvailability.unknown"
+        ),
+    )
+
+
 def _spec_offline_consolidation() -> MetricSpecification:
     return _base(
         family_id=MetricFamilyId.OFFLINE_CONSOLIDATION,
@@ -1342,6 +1384,7 @@ _BUILDERS: Final[tuple[Callable[[], MetricSpecification], ...]] = (
     _spec_memory_drift,
     _spec_memory_dynamics,
     _spec_offline_consolidation,
+    _spec_reflection,
     _spec_belief_accuracy,
     _spec_false_belief_persistence,
     _spec_relationship_stability,

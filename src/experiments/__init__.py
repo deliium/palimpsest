@@ -14,6 +14,7 @@ from experiments.catalog import (
     experiment_d_drives,
     experiment_e_false_story,
     experiment_f_sleep_consolidation,
+    experiment_g_reflection,
     v1_regression_profile,
 )
 from experiments.collectors import (
@@ -34,6 +35,7 @@ from experiments.composition import (
     EvidenceCompositionService,
     map_consolidation_audits_to_report,
     map_recall_audits_to_dynamics_report,
+    map_reflection_audits_to_report,
     map_snapshot_to_analysis_sources,
 )
 from experiments.coordinator import (
@@ -173,9 +175,11 @@ __all__ = [
     "experiment_d_drives",
     "experiment_e_false_story",
     "experiment_f_sleep_consolidation",
+    "experiment_g_reflection",
     "make_false_story_intervention",
     "map_consolidation_audits_to_report",
     "map_recall_audits_to_dynamics_report",
+    "map_reflection_audits_to_report",
     "map_snapshot_to_analysis_sources",
     "materialize_assignments",
     "persist_metric_bundle",

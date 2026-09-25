@@ -24,6 +24,39 @@ Observation
 
 `Wait` does not consolidate. A trusted intervention that replaces `Sleep` skips consolidation; one that forces `Sleep` consolidates. The loop does not add a stage ordinal. Intents commit in `finalize_pending` only after the objective tick succeeds. `DISABLED` adds no consolidation calls and no new boundary records. Logs for this path carry mode, tick, counts, and reason codes only — never propositions, prompts, or trace text.
 
+## Reflection
+
+`ReflectionMode` on `AgentCognitionSpec` defaults to `DISABLED`. It is not a `V2CapabilityFlags` field and not a loop stage. When the mode is `DETERMINISTIC` or `LLM_ASSISTED`, `CognitiveLoop.complete` may call `ReflectionEngine` after the memory update and after any sleep consolidation. The command for this tick is already chosen. A reflection write can change a later command. It does not rewrite events already committed.
+
+| Mode | Schema written | Provider |
+| --- | --- | --- |
+| `DISABLED` | `runner-config-v4` (no `reflection_mode` key) | never |
+| `DETERMINISTIC` | `runner-config-v6` | never |
+| `LLM_ASSISTED` | `runner-config-v6` | `reflection.selection.v1` only |
+
+`runner-config-v5` stays consolidation-only and rejects `reflection_mode`. A non-disabled consolidation mode is legal on v5 or v6, so a v6 document may carry both. v6 is emitted only when some agent's reflection mode is not `DISABLED`. Thresholds stay on `ReflectionPolicy` (default interval and minimum gap `8`) and are not runner JSON keys.
+
+A pass runs only after the minimum gap and when at least one enabled trigger is true. Inside the gap, true triggers are recorded as skipped. `DISABLED` does not evaluate triggers.
+
+| Trigger | Fires when |
+| --- | --- |
+| `elapsed_ticks` | No prior pass and `tick + 1 >= interval`, or `tick - last_reflection_tick >= interval` |
+| `significant_occurrences` | This observation's occurrence kinds match the policy allowlist often enough |
+| `strong_emotion` | Owner emotional intensity meets the threshold (passthrough is false) |
+| `repeated_failure` | Enough subjective `NO_PROGRESS` records, or owner-actor failures on this observation |
+| `major_goal_completion` | A completed desire or long-term goal is not yet acknowledged |
+| `belief_contradiction` | An owned belief's contradiction mass or count meets the threshold |
+| `relationship_change` | A directed profile ordinal is newer than the ordinal already stored |
+
+The first time a relationship pair is seen, finalize stores its ordinal and does not treat that profile as a change. Pattern codes are labels copied from cited subjective evidence. They are not invented predicates.
+
+| Pattern | Writer |
+| --- | --- |
+| `repeated_action`, `repeated_help` | Belief revision (candidate when the subject and predicate are new) |
+| `prediction_error`, `repeated_failure` | Goal intent only; decision-record ids are not memory ids |
+
+Evidence ids must already be in the reflection context. A candidate whose ids are not is dropped. `LLM_ASSISTED` may return only ids from that candidate set. A foreign id, schema failure, or missing provider keeps the deterministic selection and sets `fallback_used`. Fatigue, sleep consolidation, and capability flags are unchanged.
+
 Each stage is a narrow async protocol under `agents.cognition`. Components are constructor-injected into `CognitiveLoop` with plain Python control flow (no LangGraph/LangChain/DAG engine). Every completed stage appends a versioned `ComponentBoundaryRecord` (typed I/O artifacts, confidence, status, decision metadata). Records are scientific receipts — not chain-of-thought, prompts, or raw provider responses.
 
 `final_confidence` on a successful result is the **planner-supplied** confidence only. It is not an aggregate statistical estimate.
@@ -205,7 +238,8 @@ Details: [Memory reconstruction](memory-reconstruction.md).
 | `agents.cognition.memory` | DEBUG `memory_recall_mapped`; ERROR ownership codes | owner/tick, policy versions, source/reconstruction/pending counts, provider/fallback flags |
 | `agents.cognition.reconstruction` | DEBUG/INFO/WARN LLM reconstruct path | reconstruction/request IDs, tick, prompt/policy versions, counts, fallback flags |
 | `simulation.agent_runtime` | DEBUG lifecycle/cognition/apply/goal-commit; INFO start/terminal/`runtime_reconsolidation_committed`; WARN/ERROR codes | run/agent/tick/invocation/status/counts; goal apply: owner, tick, goal_id, from→to, reason_code |
-| `simulation.runner` | DEBUG objective goal apply | owner, tick, goal_id, from→to, reason_code |
+| `agents.cognition.reflection` | DEBUG `reflection_triggers`, `reflection_decision_recorded`, `reflection_pending`, `reflection_applied`, `reflection_llm_start`, `reflection_llm_complete`; INFO `reflection_skipped`; ERROR `reflection_cursor_rejected`, `reflection_aborted`, `reflection_llm_rejected` (`foreign_id`, `schema_invalid`, `provider_error`) | mode, tick, trigger codes, counts, `fallback_used`, `reason_code` |
+| `simulation.runner` | DEBUG objective goal apply; DEBUG `cognition_config_reflection_mode`; DEBUG `reflection_audit_export` | owner, tick, goal_id, from→to, reason_code; reflection mode, policy version, run id, audit count |
 
 **Never log:** observations, memories, belief claims/values, goal descriptions/targets, self-model propositions, relationship dimension values, reconstructions/narratives, candidate effect/risk vectors, mortality components, communications, cognitive artifact bodies, prompts, provider outputs, action/command text arguments, seeds, or credentials. Logs may include run/owner/invocation IDs, ticks, policy versions, counts, statuses, direction/command **type** codes, and stable reason codes only.
 

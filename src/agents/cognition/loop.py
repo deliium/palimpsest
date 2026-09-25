@@ -156,6 +156,9 @@ class CognitiveLoop:
         "_motivation",
         "_perception",
         "_planner",
+        "_reflection_mode",
+        "_reflection_policy",
+        "_reflection_selector",
         "_self_state",
         "_situation",
     )
@@ -177,6 +180,9 @@ class CognitiveLoop:
         consolidation_mode: object | None = None,
         consolidation_policy: object | None = None,
         consolidation_selector: object | None = None,
+        reflection_mode: object | None = None,
+        reflection_policy: object | None = None,
+        reflection_selector: object | None = None,
     ) -> None:
         self._perception = perception
         self._memory = memory
@@ -201,6 +207,18 @@ class CognitiveLoop:
         self._consolidation_mode = mode
         self._consolidation_policy = consolidation_policy
         self._consolidation_selector = consolidation_selector
+        from agents.cognition.configuration import CognitionReflectionMode
+
+        reflection = (
+            CognitionReflectionMode.DISABLED
+            if reflection_mode is None
+            else reflection_mode
+        )
+        if type(reflection) is not CognitionReflectionMode:
+            raise TypeError("reflection_mode must be CognitionReflectionMode")
+        self._reflection_mode = reflection
+        self._reflection_policy = reflection_policy
+        self._reflection_selector = reflection_selector
 
     async def prepare(
         self,
@@ -387,6 +405,8 @@ class CognitiveLoop:
         proposal: CognitiveLoopProposal,
         *,
         effective_command: AgentCommand,
+        reflection_cursor: object | None = None,
+        decision_journal: tuple[object, ...] | None = None,
     ) -> CognitiveLoopResult:
         """Bind the effective command and complete memory-update / next state.
 
@@ -437,6 +457,13 @@ class CognitiveLoop:
             command=command,
             updates=updates,
         )
+        reflection = await self._plan_reflection(
+            proposal=proposal,
+            updates=updates,
+            consolidation=consolidation,
+            reflection_cursor=reflection_cursor,
+            decision_journal=decision_journal,
+        )
 
         next_state = InternalAgentState(
             owner_id=loop_input.agent_id,
@@ -480,6 +507,7 @@ class CognitiveLoop:
             pending_reconsolidation=proposal.memory.reconsolidation,
             pending_semanticization=proposal.memory.pending_semanticization,
             offline_consolidation=consolidation,
+            reflection=reflection,
         )
         _LOG.debug(
             "cognitive_loop_complete",
@@ -504,6 +532,189 @@ class CognitiveLoop:
         )
         _ = _STAGE_ORDER
         return result
+
+    async def _plan_reflection(
+        self,
+        *,
+        proposal: CognitiveLoopProposal,
+        updates: tuple[object, ...],
+        consolidation: object | None,
+        reflection_cursor: object | None,
+        decision_journal: tuple[object, ...] | None,
+    ) -> object | None:
+        from agents.cognition.configuration import CognitionReflectionMode
+        from agents.cognition.models import EmotionDriverCode, MemoryUpdateKind
+        from agents.cognition.reflection import (
+            LLMReflectionSelector,
+            ReflectionContext,
+            ReflectionCursor,
+            ReflectionEngine,
+            ReflectionTriggerInput,
+            SubjectiveDecisionRecord,
+            _drop_consolidation_overlaps,
+            default_reflection_policy,
+            drop_unprovenanced_candidates,
+            log_reflection_aborted,
+            materialize_reflection_candidates,
+            plan_reflection,
+        )
+        from agents.models import GoalId, GoalStatus
+        from memory.models import MemoryTrace
+        from social.relationships import DirectedRelationshipProfile
+
+        mode = self._reflection_mode
+        if mode is CognitionReflectionMode.DISABLED:
+            return None
+        owner = proposal.agent_id
+        observation = proposal.loop_input.observation
+        tick = observation.tick
+        if type(proposal.self_state) is not SelfModel:
+            log_reflection_aborted(
+                owner_id=owner.value, tick=tick, reason_code="invalid_type"
+            )
+            return None
+        snapshot = proposal.loop_input.snapshot
+        if snapshot is None or snapshot.owner_id != owner:
+            log_reflection_aborted(
+                owner_id=owner.value, tick=tick, reason_code="snapshot_missing"
+            )
+            return None
+        policy = self._reflection_policy
+        if policy is None:
+            policy = default_reflection_policy(
+                allow_provider=mode is CognitionReflectionMode.LLM_ASSISTED
+            )
+        cursor = reflection_cursor
+        if cursor is None:
+            cursor = ReflectionCursor(owner_id=owner)
+        if type(cursor) is not ReflectionCursor:
+            log_reflection_aborted(
+                owner_id=owner.value, tick=tick, reason_code="invalid_type"
+            )
+            return None
+        journal_items = () if decision_journal is None else decision_journal
+        journal: list[SubjectiveDecisionRecord] = []
+        for record in journal_items:
+            if type(record) is not SubjectiveDecisionRecord:
+                log_reflection_aborted(
+                    owner_id=owner.value, tick=tick, reason_code="invalid_type"
+                )
+                return None
+            if record.tick == tick and record.outcome_code.value == "unknown":
+                continue
+            journal.append(record)
+        evaluation = proposal.emotional_state
+        intensity = None
+        if EmotionDriverCode.PASSTHROUGH not in evaluation.driver_codes:
+            intensity = evaluation.state.max_intensity()
+        occurrence_kinds = tuple(item.kind for item in observation.occurrences)
+        failures = sum(
+            1
+            for item in observation.occurrences
+            if item.actor_id == observation.observer_id and item.success is False
+        )
+        horizons = set(policy.major_goal_horizons)
+        completed: list[GoalId] = []
+        for goal in snapshot.goals:
+            if goal.status is not GoalStatus.COMPLETED:
+                continue
+            if goal.horizon not in horizons:
+                continue
+            completed.append(goal.goal_id)
+        masses = tuple(
+            belief.confidence.contradiction_mass for belief in snapshot.semantic_beliefs
+        )
+        counts = tuple(
+            belief.evidence_contradiction_count for belief in snapshot.semantic_beliefs
+        )
+        ordinals: list[tuple[str, str, int]] = []
+        cited: list[str] = []
+        for profile in snapshot.relationships:
+            if type(profile) is not DirectedRelationshipProfile:
+                continue
+            if profile.source_id != owner:
+                continue
+            ordinals.append(
+                (
+                    profile.source_id.value,
+                    profile.target_id.value,
+                    profile.revision_ordinal,
+                )
+            )
+            for dimension in profile.dimensions:
+                for evidence in dimension.evidence:
+                    cited.append(evidence.memory_ref)
+        memories = list(snapshot.memories)
+        for intent in updates:
+            if (
+                type(intent) is MemoryUpdateIntent
+                and intent.kind is MemoryUpdateKind.WRITE_MEMORY
+                and type(intent.memory) is MemoryTrace
+            ):
+                memories.append(intent.memory)
+        try:
+            matched = ReflectionEngine().triggers(
+                ReflectionTriggerInput(
+                    owner_id=owner,
+                    tick=tick,
+                    policy=policy,
+                    cursor=cursor,
+                    mode=mode.value,
+                    occurrence_kinds=occurrence_kinds,
+                    emotion_max_intensity=intensity,
+                    journal=tuple(journal),
+                    observation_owner_failures=failures,
+                    completed_goal_ids=tuple(completed),
+                    contradiction_masses=masses,
+                    contradiction_counts=counts,
+                    relationship_ordinals=tuple(ordinals),
+                )
+            )
+            if not matched.matched:
+                return None
+            context = ReflectionContext(
+                owner_id=owner,
+                tick=tick,
+                policy=policy,
+                memories=tuple(memories),
+                beliefs=snapshot.semantic_beliefs,
+                goals=snapshot.goals,
+                decisions=tuple(journal),
+                owner_entity_id=observation.observer_id,
+                cited_memory_ids=tuple(dict.fromkeys(cited)),
+            )
+            candidates = _drop_consolidation_overlaps(
+                drop_unprovenanced_candidates(
+                    context, materialize_reflection_candidates(context)
+                ),
+                consolidation,
+            )
+            selected_ids = None
+            fallback_used = False
+            if mode is CognitionReflectionMode.LLM_ASSISTED:
+                selector = self._reflection_selector
+                if type(selector) is not LLMReflectionSelector:
+                    selector = LLMReflectionSelector(None)
+                selected_ids, fallback_used = await selector.select(
+                    candidates,
+                    policy=policy,
+                    owner_id=owner,
+                    tick=tick,
+                )
+            return plan_reflection(
+                context=context,
+                triggers=matched,
+                mode=mode.value,
+                consolidation=consolidation,
+                acknowledged_goal_ids=tuple(completed),
+                selected_ids=selected_ids,
+                fallback_used=fallback_used,
+            )
+        except (TypeError, ValueError):
+            log_reflection_aborted(
+                owner_id=owner.value, tick=tick, reason_code="schema_invalid"
+            )
+            return None
 
     async def _plan_sleep_consolidation(
         self,

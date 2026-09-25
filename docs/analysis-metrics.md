@@ -2,7 +2,7 @@
 
 [← Experiments](experiments.md) · [Memory reconstruction](memory-reconstruction.md) · [Back to README](../README.md)
 
-Executable formula, population, and edge-case policy for all seventeen metric families lives in `analysis.specifications`. Implementations must consume these specs; they do not redefine denominators ad hoc.
+Executable formula, population, and edge-case policy for all eighteen metric families lives in `analysis.specifications`. Implementations must consume these specs; they do not redefine denominators ad hoc.
 
 ## Catalog
 
@@ -18,6 +18,7 @@ Executable formula, population, and edge-case policy for all seventeen metric fa
 | `memory_drift` | `memory_drift@1` | agent-visible + memory stages |
 | `memory_dynamics` | `memory_dynamics@1` | V2 recall audits (reconstruction stage) |
 | `offline_consolidation` | `offline_consolidation@1` | harvested sleep-consolidation audits |
+| `reflection` | `reflection@1` | harvested reflection audits |
 | `belief_accuracy` | `belief_accuracy@1` | belief revision (ClaimTruthSpec only) |
 | `false_belief_persistence` | `false_belief_persistence@1` | belief revision + truth specs |
 | `relationship_stability` | `relationship_stability@1` | relationship revisions |
@@ -31,6 +32,8 @@ Catalog version: `metric-catalog-v1`. Document schema: `MetricDocument` schema `
 `memory_dynamics@1` values: `recall_accuracy`, `source_confusion`, `memory_survival`, `interference`, `confidence_calibration`. Assembled only when `MetricComputationInputs.memory_dynamics_report` is present (in-run V2 audit export). REFERENCE / V1 reconstructive arms leave the family absent.
 
 `offline_consolidation@1` values: `consolidation_invocations`, `traces_strengthened`, `traces_soft_forgotten`, `patterns_merged`, `belief_revisions`, `relationship_revisions`, `goal_transitions`. Assembled only when `offline_consolidation_report` is present. A missing report does not change V1 catalog assembly. Assembly logs `offline_consolidation_metrics_assembled` with the family id and value keys only.
+
+`reflection@1` values: `reflection_invocations`, `belief_revisions`, `hypotheses`, `goals_adopted`, `goals_abandoned`, `relationship_reassessments`, `patterns_detected`. Assembled only when `reflection_report` is present. Disabled arms and missing reports stay absent and do not change V1 catalog assembly. Assembly logs `reflection_metrics_assembled` with the family id and which value keys are present. Belief text and memory content are not logged.
 
 ### Supporting formulas (not a separate family)
 
