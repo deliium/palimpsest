@@ -217,6 +217,7 @@ class DirectSelfStateProjector:
         *,
         identity_mode: CognitionIdentityMode = CognitionIdentityMode.PASSTHROUGH,
         belief_histories: Sequence[SemanticBeliefHistory] = (),
+        identity_history: object | None = None,
     ) -> None:
         if type(identity_mode) is not CognitionIdentityMode:
             raise TypeError("identity_mode must be CognitionIdentityMode")
@@ -224,8 +225,11 @@ class DirectSelfStateProjector:
             belief_histories, Sequence
         ):
             raise TypeError("belief_histories must be ordered")
+        if identity_history is not None and not callable(identity_history):
+            raise TypeError("identity_history must be callable")
         self._identity_mode = identity_mode
         self._belief_histories = tuple(belief_histories)
+        self._identity_history = identity_history
 
     async def project(
         self,
@@ -267,6 +271,8 @@ class DirectSelfStateProjector:
                 if belief.claim.predicate.split(".", 1)[0] != "identity":
                     continue
                 history = by_id.get(belief.belief_id.value)
+                if history is None and self._identity_history is not None:
+                    history = self._identity_history(belief.belief_id)
                 if history is None:
                     _LOG.error(
                         "identity_projection_rejected",

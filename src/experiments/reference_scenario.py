@@ -12,7 +12,7 @@ import hashlib
 import json
 import logging
 from collections.abc import Callable, Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from enum import StrEnum
 from typing import Final
 
@@ -47,7 +47,16 @@ from simulation.runner_serialization import (
     runner_config_fingerprint,
     scenario_fingerprint,
 )
-from world.actions import AgentCommand, Attack, Drink, Eat, Move, Search, Tell
+from world.actions import (
+    AgentCommand,
+    Attack,
+    Drink,
+    Eat,
+    Flee,
+    Move,
+    Search,
+    Tell,
+)
 from world.communications import origin_utterance
 from world.identifiers import EntityId, WorldId, WorldRevision
 from world.models import (
@@ -645,4 +654,143 @@ def build_reference_scenario(
         scenario_fingerprint=scenario_fp,
         milestone_ids=milestone_ids,
         override_budget=override_budget,
+    )
+
+
+IDENTITY_DIVERGENCE_SCENARIO_ID: Final[str] = "identity-divergence-v1"
+_DIVERGENCE_AGENTS: Final[tuple[str, ...]] = ("agent-a", "agent-b")
+_DIVERGENCE_TICKS: Final[tuple[int, ...]] = (0, 1, 2)
+
+
+@dataclass(frozen=True, slots=True)
+class IdentityDivergenceBundle:
+    """Two matched agents and a search-versus-wait milestone schedule."""
+
+    scenario_id: str
+    config: SimulationRunnerConfig
+    arbiter: MilestoneInterventionArbiter
+    success_agent_id: AgentId
+    stalled_agent_id: AgentId
+
+
+def identity_divergence_scenario(
+    *,
+    success_agent_id: str = "agent-a",
+    seed: int = 251,
+    stochastic_identity: str = "identity-divergence",
+) -> IdentityDivergenceBundle:
+    """Same bodies, needs, location, and goals. One agent searches; one waits."""
+    if success_agent_id not in _DIVERGENCE_AGENTS:
+        raise ValueError("identity_divergence_scenario: unknown_agent")
+    stalled = "agent-b" if success_agent_id == "agent-a" else "agent-a"
+    location_id = "loc-camp"
+    camp = Location(
+        entity_id=EntityId(location_id),
+        name="Camp",
+        adjacent=(EntityId("loc-ridge"),),
+        body_capacity=BodyCapacity(8),
+        item_capacity=ItemCapacity(16),
+        base_temperature=TemperatureCelsius(20.0),
+        shelter_factor=UnitInterval(0.0),
+        visibility_factor=UnitInterval(0.0),
+    )
+    ridge = Location(
+        entity_id=EntityId("loc-ridge"),
+        name="Ridge",
+        adjacent=(EntityId(location_id),),
+        body_capacity=BodyCapacity(8),
+        item_capacity=ItemCapacity(16),
+        base_temperature=TemperatureCelsius(20.0),
+        shelter_factor=UnitInterval(0.0),
+        visibility_factor=UnitInterval(0.0),
+    )
+    locations = (camp, ridge)
+    bodies = (
+        _alive_body("body-a", location_id=location_id),
+        _alive_body("body-b", location_id=location_id),
+    )
+    resources = (
+        Resource(
+            entity_id=EntityId("res-camp-food"),
+            name="BerryBush",
+            kind=ResourceKind.FOOD,
+            location_id=EntityId(location_id),
+            quantity=5.0,
+            maximum_quantity=8.0,
+            regeneration_per_tick=0.5,
+            unit="portions",
+        ),
+    )
+    agents: list[AgentRunnerSpec] = []
+    for agent_value, body_value in (("agent-a", "body-a"), ("agent-b", "body-b")):
+        owner = AgentId(agent_value)
+        agents.append(
+            AgentRunnerSpec(
+                agent_id=owner,
+                entity_id=EntityId(body_value),
+                name=agent_value,
+                cognition=AgentCognitionSpec(
+                    agent_id=owner,
+                    memory_mode=MemoryMode.RECONSTRUCTIVE,
+                ),
+                initial_goals=(
+                    _goal(
+                        goal_id=f"goal-{agent_value}-search",
+                        owner_id=owner,
+                        description="map the camp",
+                        priority=0.6,
+                        outcome=GoalOutcome(
+                            kind=GoalOutcomeKind.GATHER_INFORMATION,
+                            outcome_code="map_area",
+                        ),
+                    ),
+                ),
+            )
+        )
+    scenario = WorldScenarioSpec(
+        world_id=WorldId(IDENTITY_DIVERGENCE_SCENARIO_ID),
+        revision=WorldRevision(0),
+        physical_rules=replace(
+            _reference_physical_rules(),
+            flee_success_probability=0.0,
+        ),
+        locations=locations,
+        bodies=bodies,
+        resources=resources,
+        weather=tuple(
+            Weather(location_id=location.entity_id, condition=WeatherCondition.CLEAR)
+            for location in locations
+        ),
+    )
+    config = SimulationRunnerConfig(
+        seed=seed,
+        stochastic_identity=StochasticIdentity(stochastic_identity),
+        scenario=scenario,
+        agents=tuple(agents),
+        stop_policy=RunnerStopPolicy(max_ticks=4),
+    )
+    milestones: list[MilestoneOverride] = []
+    for tick in _DIVERGENCE_TICKS:
+        milestones.append(
+            MilestoneOverride(
+                milestone_id=f"id-search-{success_agent_id}-t{tick}",
+                tick=tick,
+                agent_id=AgentId(success_agent_id),
+                build_command=Search,
+            )
+        )
+        milestones.append(
+            MilestoneOverride(
+                milestone_id=f"id-wait-{stalled}-t{tick}",
+                tick=tick,
+                agent_id=AgentId(stalled),
+                build_command=Flee,
+            )
+        )
+    return IdentityDivergenceBundle(
+        scenario_id=IDENTITY_DIVERGENCE_SCENARIO_ID,
+        config=config,
+        arbiter=MilestoneInterventionArbiter(milestones, override_budget=8),
+        success_agent_id=AgentId(success_agent_id),
+        stalled_agent_id=AgentId(stalled),
     )

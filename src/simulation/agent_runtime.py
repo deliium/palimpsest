@@ -403,6 +403,7 @@ class AgentRuntime:
 
     __slots__ = (
         "_agent",
+        "_applied_identity_operation_ids",
         "_applied_reflection_operation_ids",
         "_belief_reader",
         "_belief_writer",
@@ -412,6 +413,7 @@ class AgentRuntime:
         "_emotional_state",
         "_finalized_hashes",
         "_goal_revision_counters",
+        "_identity_cursor",
         "_inbox",
         "_internal_state",
         "_invocation_ids",
@@ -490,6 +492,7 @@ class AgentRuntime:
         self._memory_service = memory_service
         self._offline_consolidation_audits: list[object] = []
         self._reflection_audits: list[object] = []
+        self._applied_identity_operation_ids: set[str] = set()
         self._applied_reflection_operation_ids: set[str] = set()
         self._semantic_belief_reader = semantic_belief_reader
         self._relationship_reader = relationship_reader
@@ -516,6 +519,7 @@ class AgentRuntime:
         self._status = AgentRuntimeStatus.CREATED
         self._internal_state = InternalAgentState(owner_id=agent.agent_id)
         self._emotional_state: AgentEmotionalState | None = None
+        self._identity_cursor: object | None = None
         self._reflection_cursor: object | None = None
         self._decision_journal: tuple[object, ...] | None = None
         self._reflection_capture: object | None = None
@@ -1647,6 +1651,24 @@ class AgentRuntime:
         self._emotional_state = checkpoint.emotional_state
         self._reflection_cursor = checkpoint.reflection_cursor
         self._decision_journal = checkpoint.decision_journal
+        self._identity_cursor = checkpoint.identity_cursor
+        if checkpoint.identity_cursor is None:
+            self._applied_identity_operation_ids = set()
+            _LOG.debug(
+                "identity_cursor_absent",
+                extra={"owner_id": self._agent.agent_id.value},
+            )
+        else:
+            self._applied_identity_operation_ids = set(
+                checkpoint.identity_cursor.operation_ids
+            )
+            _LOG.debug(
+                "identity_cursor_restored",
+                extra={
+                    "tick": checkpoint.identity_cursor.last_applied_tick,
+                    "operation_count": len(checkpoint.identity_cursor.operation_ids),
+                },
+            )
         self._pending = None
         emotion = self._emotional_state
         _LOG.debug(
@@ -1680,6 +1702,7 @@ class AgentRuntime:
             emotional_state=self._emotional_state,
             reflection_cursor=self._reflection_cursor,
             decision_journal=self._decision_journal,
+            identity_cursor=self._identity_cursor,
         )
 
     async def process_observation(
@@ -1757,6 +1780,7 @@ class AgentRuntime:
             self._log_identity_applied(
                 pending.loop_result.identity_revisions,
                 batch_idempotent=receipt.idempotent,
+                tick=pending.tick,
             )
             await self._finish_offline_consolidation(pending)
             return
@@ -1867,6 +1891,7 @@ class AgentRuntime:
             tick=tick,
             invocation_id=invocation_id,
             belief_revisions=belief_revisions,
+            applied=self._applied_identity_operation_ids,
         )
         return SubjectiveMutationBatch(
             operation_id=subjective_operation_id(
@@ -2050,6 +2075,7 @@ class AgentRuntime:
             self._log_identity_applied(
                 identity_revisions,
                 batch_idempotent=receipt.idempotent,
+                tick=tick,
             )
             return
 
@@ -2086,6 +2112,7 @@ class AgentRuntime:
             tick=tick,
             invocation_id=invocation_id,
             belief_revisions=belief_revisions,
+            applied=self._applied_identity_operation_ids,
         )
         if self._memory_service is not None:
             if self._memory_service.scope.owner_id != agent_id:
@@ -2175,7 +2202,9 @@ class AgentRuntime:
         requests: Sequence[object],
         *,
         batch_idempotent: bool,
+        tick: int,
     ) -> None:
+        from agents.cognition.identity import IdentityCursor
         from memory.beliefs import BeliefRevisionRequest
 
         identity_requests = tuple(
@@ -2183,6 +2212,21 @@ class AgentRuntime:
         )
         if not identity_requests:
             return
+        fresh: list[str] = []
+        for request in identity_requests:
+            operation_id = request.operation_id
+            if operation_id in self._applied_identity_operation_ids:
+                continue
+            if operation_id in fresh:
+                continue
+            fresh.append(operation_id)
+        if fresh:
+            self._applied_identity_operation_ids.update(fresh)
+            self._identity_cursor = IdentityCursor(
+                owner_id=self._agent.agent_id,
+                last_applied_tick=tick,
+                operation_ids=tuple(fresh),
+            )
         if batch_idempotent:
             created = 0
             revised = 0
@@ -2327,14 +2371,17 @@ def _extend_identity_revisions(
     tick: int,
     invocation_id: str,
     belief_revisions: list[object],
+    applied: set[str] | None = None,
 ) -> None:
     from memory.beliefs import BeliefRevisionRequest
 
+    already = set() if applied is None else applied
     seen = {
         item.operation_id
         for item in belief_revisions
         if type(item) is BeliefRevisionRequest
     }
+    skipped = 0
     for request in identity_revisions:
         if type(request) is not BeliefRevisionRequest:
             raise AgentRuntimeError(
@@ -2350,10 +2397,17 @@ def _extend_identity_revisions(
                 invocation_id=invocation_id,
                 tick=tick,
             )
-        if request.operation_id in seen:
+        if request.operation_id in already or request.operation_id in seen:
+            if request.operation_id in already:
+                skipped += 1
             continue
         belief_revisions.append(request)
         seen.add(request.operation_id)
+    if skipped:
+        _LOG.debug(
+            "identity_apply_skipped_idempotent",
+            extra={"tick": tick, "skipped_count": skipped},
+        )
 
 
 def _extend_consolidation_writes(

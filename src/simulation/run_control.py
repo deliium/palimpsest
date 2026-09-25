@@ -596,6 +596,7 @@ class AgentRuntimeCheckpoint:
     emotional_state: AgentEmotionalState | None = None
     reflection_cursor: object | None = None
     decision_journal: tuple[object, ...] | None = None
+    identity_cursor: object | None = None
 
     def __post_init__(self) -> None:
         if type(self.agent_id) is not AgentId:
@@ -633,6 +634,13 @@ class AgentRuntimeCheckpoint:
                 raise TypeError("reflection_cursor must be ReflectionCursor")
             if self.reflection_cursor.owner_id != self.agent_id:
                 raise ValueError("reflection_cursor owner_id mismatch")
+        if self.identity_cursor is not None:
+            from agents.cognition.identity import IdentityCursor
+
+            if type(self.identity_cursor) is not IdentityCursor:
+                raise TypeError("identity_cursor must be IdentityCursor")
+            if self.identity_cursor.owner_id != self.agent_id:
+                raise ValueError("identity_cursor owner_id mismatch")
         if self.decision_journal is not None:
             from agents.cognition.reflection import SubjectiveDecisionRecord
 

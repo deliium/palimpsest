@@ -27,6 +27,11 @@ from analysis.evidence import (
     closed_evidence_stages,
     require_evidence_stage,
 )
+from analysis.identity_dynamics_metrics import (
+    IDENTITY_DYNAMICS_METRIC_VERSION,
+    build_identity_audit,
+    compute_identity_dynamics,
+)
 from analysis.memory_drift import (
     AGENT_VISIBLE_PROJECTOR_VERSION,
     DRIFT_METRIC_VERSION,
@@ -196,6 +201,7 @@ __all__ = [
     "EVENT_FACT_PROJECTOR_VERSION",
     "EVIDENCE_STAGE_SCHEMA_VERSION",
     "GRAPH_NODE_ORDER_POLICY",
+    "IDENTITY_DYNAMICS_METRIC_VERSION",
     "INTERMEDIATE_DTYPE",
     "MEMORY_DYNAMICS_METRIC_VERSION",
     "METRIC_CATALOG_VERSION",
@@ -270,6 +276,7 @@ __all__ = [
     "all_metric_specifications",
     "applied_actions_from_world_events",
     "assemble_metric_documents",
+    "build_identity_audit",
     "build_lineage_edges",
     "build_reconstruction_chains",
     "build_signed_trust_digraph",
@@ -287,6 +294,7 @@ __all__ = [
     "compute_false_belief_persistence",
     "compute_goal_completion",
     "compute_group_community_structure",
+    "compute_identity_dynamics",
     "compute_knowledge_diffusion",
     "compute_memory_drift",
     "compute_memory_dynamics",

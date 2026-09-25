@@ -1,4 +1,4 @@
-"""Named builders for Experiments A-G."""
+"""Named builders for Experiments A-H."""
 
 from __future__ import annotations
 
@@ -28,6 +28,7 @@ from simulation.runner_models import (
     ReflectionMode,
     RunnerStopPolicy,
     SimulationRunnerConfig,
+    V2CapabilityFlags,
     WorldScenarioSpec,
     capability_flags_digest,
 )
@@ -401,6 +402,46 @@ def experiment_g_reflection(
         arms=(
             ("g-disabled", "reflection_disabled", disabled),
             ("g-deterministic", "reflection_deterministic", deterministic),
+        ),
+    )
+
+
+def experiment_h_identity(
+    base: SimulationRunnerConfig,
+    *,
+    seed_matrix: ExperimentSeedMatrix | None = None,
+) -> ExperimentDefinition:
+    """Paired arms share seed, scenario, and stochastic identity.
+
+    ``h-enabled`` turns on ``extended_self_model`` and stays on
+    ``runner-config-v4``. ``h-disabled`` leaves the flag off.
+    """
+    matrix = seed_matrix or ExperimentSeedMatrix(seeds=(base.seed,))
+    shared = replace(base, schema_version=RUNNER_SCHEMA_VERSION_V4)
+    disabled = replace(shared, capability_flags=V2CapabilityFlags())
+    enabled = replace(
+        shared,
+        capability_flags=V2CapabilityFlags(extended_self_model=True),
+    )
+    for arm_id, flag, config in (
+        ("h-disabled", False, disabled),
+        ("h-enabled", True, enabled),
+    ):
+        _LOG.debug(
+            "experiment_h_built experiment_id=%s arm_id=%s schema_version=%s "
+            "extended_self_model=%s",
+            "experiment-h-identity",
+            arm_id,
+            config.schema_version,
+            flag,
+        )
+    return _definition(
+        experiment_id="experiment-h-identity",
+        base=shared,
+        seed_matrix=matrix,
+        arms=(
+            ("h-disabled", "identity_disabled", disabled),
+            ("h-enabled", "identity_enabled", enabled),
         ),
     )
 

@@ -801,6 +801,61 @@ class IdentityState:
         )
 
 
+_MAX_CURSOR_OPERATIONS: Final[int] = 64
+
+
+@dataclass(frozen=True, slots=True)
+class IdentityCursor:
+    """Last applied identity tick and the operation ids from that tick.
+
+    In-memory runtime state. Not a JSON document and not a belief row.
+    """
+
+    owner_id: AgentId
+    last_applied_tick: int
+    operation_ids: tuple[str, ...]
+
+    def __post_init__(self) -> None:
+        if type(self.owner_id) is not AgentId:
+            raise TypeError("IdentityCursor.owner_id: invalid_type")
+        object.__setattr__(
+            self,
+            "last_applied_tick",
+            require_exact_nonneg_int(
+                "IdentityCursor.last_applied_tick", self.last_applied_tick
+            ),
+        )
+        if isinstance(self.operation_ids, (set, frozenset, Mapping)):
+            raise TypeError("IdentityCursor.operation_ids: not_ordered")
+        if isinstance(self.operation_ids, (str, bytes, bytearray)) or not isinstance(
+            self.operation_ids, Sequence
+        ):
+            raise TypeError("IdentityCursor.operation_ids: not_ordered")
+        items = tuple(self.operation_ids)
+        if not items:
+            raise _reason("IdentityCursor.operation_ids", "empty")
+        if len(items) > _MAX_CURSOR_OPERATIONS:
+            raise _reason("IdentityCursor.operation_ids", "exceeds_max_length")
+        seen: set[str] = set()
+        copied: list[str] = []
+        for item in items:
+            if type(item) is not str:
+                raise TypeError("IdentityCursor.operation_ids: invalid_type")
+            stable = require_stable_id("IdentityCursor.operation_ids", item)
+            if stable in seen:
+                raise _reason("IdentityCursor.operation_ids", "duplicate")
+            seen.add(stable)
+            copied.append(stable)
+        object.__setattr__(self, "operation_ids", tuple(copied))
+
+    def __repr__(self) -> str:
+        return (
+            f"IdentityCursor(owner_id={self.owner_id.value!r}, "
+            f"last_applied_tick={self.last_applied_tick}, "
+            f"operation_count={len(self.operation_ids)})"
+        )
+
+
 def aggregate_identity_confidence(views: Sequence[IdentityBeliefView]) -> float:
     """Quantized mean confidence. An empty tuple is ``0.0``."""
     items = tuple(views)

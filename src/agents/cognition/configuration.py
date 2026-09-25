@@ -318,6 +318,7 @@ def build_cognitive_loop(
     pending_evidence: object | None = None,
     consolidation_selector: object | None = None,
     reflection_selector: object | None = None,
+    identity_history: object | None = None,
 ) -> CognitiveLoop:
     """Assemble a ``CognitiveLoop`` from explicit policies.
 
@@ -433,7 +434,10 @@ def build_cognitive_loop(
         perception=LiteralPerceptionInterpreter(),
         memory=memory,
         situation=DirectSituationModeler(emotion_bias=emotion_bias),
-        self_state=DirectSelfStateProjector(identity_mode=resolved.identity_mode),
+        self_state=DirectSelfStateProjector(
+            identity_mode=resolved.identity_mode,
+            identity_history=identity_history,
+        ),
         goal_manager=goal_manager,
         emotional_state=emotional_state,
         futures=futures,

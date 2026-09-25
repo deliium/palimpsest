@@ -50,7 +50,7 @@ __all__ = [
 ]
 
 METRIC_CATALOG_VERSION: Final[str] = "metric-catalog-v1"
-METRIC_FAMILY_COUNT: Final[int] = 18
+METRIC_FAMILY_COUNT: Final[int] = 19
 
 # Align with existing memory-drift / transmission document versions.
 _ALGO_V1: Final[str] = "1"
@@ -95,6 +95,7 @@ class MetricFamilyId(StrEnum):
     MEMORY_DYNAMICS = "memory_dynamics"
     OFFLINE_CONSOLIDATION = "offline_consolidation"
     REFLECTION = "reflection"
+    IDENTITY_DYNAMICS = "identity_dynamics"
 
 
 class DenominatorKind(StrEnum):
@@ -949,6 +950,69 @@ def _spec_reflection() -> MetricSpecification:
     )
 
 
+def _spec_identity_dynamics() -> MetricSpecification:
+    return _base(
+        family_id=MetricFamilyId.IDENTITY_DYNAMICS,
+        evidence_inputs=frozenset({EvidenceStage.BELIEF_REVISION_TESTIMONY}),
+        population="identity_audits_per_run",
+        denominator="owners with history-derived identity beliefs",
+        denominator_kind=DenominatorKind.OCCURRENCE,
+        cohort_window="run window covering harvested identity belief heads",
+        deceased_policy="terminal agents stop new heads; existing heads remain",
+        zero_holding_policy="no identity predicates -> availability=absent",
+        opportunity_vs_occurrence=(
+            "counts over harvested identity heads only; flags-off runs absent"
+        ),
+        self_edge_policy="not_applicable",
+        censoring_policy="missing report -> omitted; never invent counts",
+        formulas={
+            "aspect_ability": "count of ability views across owners",
+            "aspect_weakness": "count of weakness views across owners",
+            "aspect_recurring_behavior": "count of recurring-behavior views",
+            "aspect_inferred_value": "count of inferred-value views",
+            "aspect_social_role": "count of social-role views",
+            "aspect_relationship": "count of relationship views",
+            "aspect_commitment": "count of commitment views",
+            "aspect_perceived_status": "count of perceived-status views",
+            "aspect_reliability": "count of reliability views",
+            "aspect_risk_tolerance": "count of risk-tolerance views",
+            "aspect_competence": "count of competence views",
+            "stability_low": "views in the low stability band",
+            "stability_mid": "views in the mid stability band",
+            "stability_high": "views in the high stability band",
+            "dissonance_commitment_command": "commitment conflict notices",
+            "dissonance_inferred_value_command": "inferred-value conflict notices",
+            "dissonance_risk_above_tolerance": "risk-tolerance conflict notices",
+            "owner_divergence": "mean pairwise aspect-multiset distance",
+        },
+        value_keys=(
+            "aspect_ability",
+            "aspect_weakness",
+            "aspect_recurring_behavior",
+            "aspect_inferred_value",
+            "aspect_social_role",
+            "aspect_relationship",
+            "aspect_commitment",
+            "aspect_perceived_status",
+            "aspect_reliability",
+            "aspect_risk_tolerance",
+            "aspect_competence",
+            "stability_low",
+            "stability_mid",
+            "stability_high",
+            "dissonance_commitment_command",
+            "dissonance_inferred_value_command",
+            "dissonance_risk_above_tolerance",
+            "owner_divergence",
+        ),
+        empty_case="no identity predicates -> availability=absent",
+        unknown_case=(
+            "incomplete audit export -> availability=unknown; "
+            "MetricAvailability.unknown"
+        ),
+    )
+
+
 def _spec_offline_consolidation() -> MetricSpecification:
     return _base(
         family_id=MetricFamilyId.OFFLINE_CONSOLIDATION,
@@ -1385,6 +1449,7 @@ _BUILDERS: Final[tuple[Callable[[], MetricSpecification], ...]] = (
     _spec_memory_dynamics,
     _spec_offline_consolidation,
     _spec_reflection,
+    _spec_identity_dynamics,
     _spec_belief_accuracy,
     _spec_false_belief_persistence,
     _spec_relationship_stability,

@@ -11,6 +11,7 @@ from experiments import (
     experiment_d_drives,
     experiment_f_sleep_consolidation,
     experiment_g_reflection,
+    experiment_h_identity,
 )
 from experiments.catalog import base_runner_config_from_scenario
 from simulation.runner_models import (
@@ -181,3 +182,34 @@ def test_experiment_g_pairs_disabled_v4_and_deterministic_v6() -> None:
         disabled.runner_config.agents[0].cognition.consolidation_mode
         is deterministic.runner_config.agents[0].cognition.consolidation_mode
     )
+
+
+def test_experiment_h_pairs_v4_flag_off_and_on(caplog) -> None:
+    import logging
+
+    from experiments.models import EXPERIMENT_SCHEMA_VERSION
+
+    caplog.set_level(logging.DEBUG, logger="experiments.catalog")
+    definition = experiment_h_identity(_base())
+    assert definition.experiment_id == "experiment-h-identity"
+    assert definition.schema_version == EXPERIMENT_SCHEMA_VERSION
+    assert [item.condition_id for item in definition.conditions] == [
+        "h-disabled",
+        "h-enabled",
+    ]
+    disabled, enabled = definition.conditions
+    assert disabled.runner_config.schema_version == RUNNER_SCHEMA_VERSION_V4
+    assert enabled.runner_config.schema_version == RUNNER_SCHEMA_VERSION_V4
+    assert disabled.runner_config.capability_flags.extended_self_model is False
+    assert enabled.runner_config.capability_flags.extended_self_model is True
+    assert disabled.runner_config.seed == enabled.runner_config.seed
+    assert (
+        disabled.runner_config.stochastic_identity
+        == enabled.runner_config.stochastic_identity
+    )
+    assert disabled.runner_config.scenario == enabled.runner_config.scenario
+    text = " ".join(record.message for record in caplog.records)
+    assert "experiment-h-identity" in text
+    assert "h-enabled" in text
+    assert RUNNER_SCHEMA_VERSION_V4 in text
+    assert "identity." not in text

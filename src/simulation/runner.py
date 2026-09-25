@@ -897,6 +897,7 @@ class SimulationRunner:
                     loop_config,
                     memory=memory_retriever,
                     resolve_counterpart=counterpart,
+                    identity_history=owner_bundle.semantic_belief_reader.history,
                     consolidation_selector=_consolidation_selector_for(
                         config.provider,
                         provider,
