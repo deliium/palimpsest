@@ -17,6 +17,7 @@ from agents.cognition.configuration import (
     CognitionConsolidationMode,
     CognitionDriveOverride,
     CognitionEmotionalStateMode,
+    CognitionIdentityMode,
     CognitionImaginationMode,
     CognitionLoopConfig,
     CognitionMemoryMode,
@@ -442,6 +443,17 @@ def _cognition_config_for(
         emotional_flag,
         emotional_mode.value,
     )
+    identity_flag = capability_flags.extended_self_model
+    identity_mode = (
+        CognitionIdentityMode.ENABLED
+        if identity_flag
+        else CognitionIdentityMode.PASSTHROUGH
+    )
+    _LOG.debug(
+        "cognition_config_identity_mode flag=%s mode=%s",
+        identity_flag,
+        identity_mode.value,
+    )
     reflection_mode = CognitionReflectionMode(spec.reflection_mode.value)
     reflection_policy = None
     if reflection_mode is not CognitionReflectionMode.DISABLED:
@@ -462,6 +474,7 @@ def _cognition_config_for(
             else CognitionMortalityAppraisalMode.ENABLED
         ),
         emotional_state_mode=emotional_mode,
+        identity_mode=identity_mode,
         consolidation_mode=CognitionConsolidationMode(spec.consolidation_mode.value),
         reflection_mode=reflection_mode,
         reflection_policy=reflection_policy,
@@ -935,6 +948,7 @@ class SimulationRunner:
                     "runner_agent_constructed ordinal=%s memory_mode=%s "
                     "imagination_mode=%s mortality_mode=%s "
                     "emotional_state_mode=%s short_term_emotional_state=%s "
+                    "identity_mode=%s extended_self_model=%s "
                     "allow_provider=%s",
                     ordinal,
                     agent_spec.cognition.memory_mode.value,
@@ -942,6 +956,8 @@ class SimulationRunner:
                     config.mortality_mode.value,
                     loop_config.emotional_state_mode.value,
                     config.capability_flags.short_term_emotional_state,
+                    loop_config.identity_mode.value,
+                    config.capability_flags.extended_self_model,
                     allow_provider,
                 )
 

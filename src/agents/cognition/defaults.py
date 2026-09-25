@@ -9,10 +9,13 @@ for retrieval quality and never import or invoke an LLM provider.
 from __future__ import annotations
 
 import logging
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
+from dataclasses import replace
 from typing import Final
 
+from agents.cognition.configuration import CognitionIdentityMode
 from agents.cognition.goal_manager import PassthroughGoalManager
+from agents.cognition.identity import identity_stability_band
 from agents.cognition.loop import CognitiveLoop
 from agents.cognition.models import (
     ActionPlan,
@@ -34,10 +37,11 @@ from agents.cognition.models import (
     SelfModel,
     SituationClaimCode,
     SituationModel,
+    project_identity_state,
     project_self_model,
 )
 from agents.models import GoalId, GoalStatus
-from memory.beliefs import SemanticBelief
+from memory.beliefs import SemanticBelief, SemanticBeliefHistory
 from memory.models import BeliefId
 from world.actions import Wait
 from world.models import LifeStatus
@@ -208,6 +212,21 @@ class DirectSituationModeler:
 class DirectSelfStateProjector:
     """Project an emergent ``SelfModel`` from semantic beliefs and situation."""
 
+    def __init__(
+        self,
+        *,
+        identity_mode: CognitionIdentityMode = CognitionIdentityMode.PASSTHROUGH,
+        belief_histories: Sequence[SemanticBeliefHistory] = (),
+    ) -> None:
+        if type(identity_mode) is not CognitionIdentityMode:
+            raise TypeError("identity_mode must be CognitionIdentityMode")
+        if isinstance(belief_histories, (str, bytes)) or not isinstance(
+            belief_histories, Sequence
+        ):
+            raise TypeError("belief_histories must be ordered")
+        self._identity_mode = identity_mode
+        self._belief_histories = tuple(belief_histories)
+
     async def project(
         self,
         loop_input: CognitiveLoopInput,
@@ -235,6 +254,44 @@ class DirectSelfStateProjector:
             beliefs=beliefs,
             goal_ids=goal_ids,
         )
+        identity_state = None
+        if self._identity_mode is CognitionIdentityMode.ENABLED:
+            by_id = {
+                history.belief.belief_id.value: history
+                for history in self._belief_histories
+            }
+            selected_histories: list[SemanticBeliefHistory] = []
+            for belief in beliefs:
+                if type(belief) is not SemanticBelief:
+                    continue
+                if belief.claim.predicate.split(".", 1)[0] != "identity":
+                    continue
+                history = by_id.get(belief.belief_id.value)
+                if history is None:
+                    _LOG.error(
+                        "identity_projection_rejected",
+                        extra={
+                            "reason_code": "missing_history",
+                            "owner_id": loop_input.agent_id.value,
+                        },
+                    )
+                    raise ValueError("project_identity_state: missing_history")
+                selected_histories.append(history)
+            identity_state = project_identity_state(
+                owner_id=loop_input.agent_id,
+                histories=selected_histories,
+            )
+            model = replace(model, identity=identity_state)
+        band_counts = {"low": 0, "mid": 0, "high": 0}
+        identity_candidate_count = 0
+        identity_active_count = 0
+        if identity_state is not None:
+            for view in identity_state.views:
+                band_counts[identity_stability_band(view.derived_stability)] += 1
+                if view.activation.value == "candidate":
+                    identity_candidate_count += 1
+                elif view.activation.value == "active":
+                    identity_active_count += 1
         _LOG.debug(
             "self_model_projected",
             extra={
@@ -245,6 +302,15 @@ class DirectSelfStateProjector:
                 "candidate_count": model.candidate_count,
                 "selected_count": len(model.beliefs),
                 "aggregate_confidence": model.confidence,
+                "identity_mode": self._identity_mode.value,
+                "identity_belief_count": (
+                    0 if identity_state is None else len(identity_state.views)
+                ),
+                "identity_candidate_count": identity_candidate_count,
+                "active_count": identity_active_count,
+                "stability_band_low": band_counts["low"],
+                "stability_band_mid": band_counts["mid"],
+                "stability_band_high": band_counts["high"],
                 "status": "complete",
             },
         )

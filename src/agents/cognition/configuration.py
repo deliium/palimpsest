@@ -101,6 +101,13 @@ class CognitionReflectionMode(StrEnum):
     LLM_ASSISTED = "llm_assisted"
 
 
+class CognitionIdentityMode(StrEnum):
+    """History-derived self-beliefs. Passthrough leaves the V1 self-model."""
+
+    PASSTHROUGH = "passthrough"
+    ENABLED = "enabled"
+
+
 def _unit_interval(name: str, value: object) -> float:
     if isinstance(value, bool) or not isinstance(value, (int, float)):
         raise ValueError(f"{name}: not_unit_interval")
@@ -153,6 +160,7 @@ class CognitionLoopConfig:
     consolidation_mode: CognitionConsolidationMode = CognitionConsolidationMode.DISABLED
     reflection_mode: CognitionReflectionMode = CognitionReflectionMode.DISABLED
     reflection_policy: ReflectionPolicy | None = None
+    identity_mode: CognitionIdentityMode = CognitionIdentityMode.PASSTHROUGH
     drive_overrides: tuple[CognitionDriveOverride, ...] = ()
     memory_policy_version: str = MEMORY_POLICY_VERSION
     imagination_policy_version: str = IMAGINATION_POLICY_VERSION
@@ -180,6 +188,9 @@ class CognitionLoopConfig:
         if type(self.reflection_mode) is not CognitionReflectionMode:
             _LOG.error("invalid_enum path=reflection_mode reason_code=invalid_mode")
             raise TypeError("reflection_mode must be CognitionReflectionMode")
+        if type(self.identity_mode) is not CognitionIdentityMode:
+            _LOG.error("invalid_enum path=identity_mode reason_code=invalid_mode")
+            raise TypeError("identity_mode must be CognitionIdentityMode")
         if (
             self.reflection_policy is not None
             and type(self.reflection_policy) is not ReflectionPolicy
@@ -228,6 +239,7 @@ class CognitionLoopConfig:
                     "emotional_state_mode": self.emotional_state_mode.value,
                     "consolidation_mode": self.consolidation_mode.value,
                     "reflection_mode": self.reflection_mode.value,
+                    "identity_mode": self.identity_mode.value,
                     "reflection_policy_version": (
                         None
                         if self.reflection_policy is None
@@ -277,6 +289,7 @@ class CognitionLoopConfig:
             "goal_management_policy_version": self.goal_management_policy_version,
             "emotional_state_mode": self.emotional_state_mode.value,
             "emotional_state_policy_version": self.emotional_state_policy_version,
+            "identity_mode": self.identity_mode.value,
             "imagination_mode": self.imagination_mode.value,
             "imagination_policy_version": self.imagination_policy_version,
             "memory_mode": self.memory_mode.value,
@@ -399,6 +412,7 @@ def build_cognitive_loop(
                 "mortality_appraisal_mode": resolved.mortality_appraisal_mode.value,
                 "goal_management_mode": resolved.goal_management_mode.value,
                 "emotional_state_mode": resolved.emotional_state_mode.value,
+                "identity_mode": resolved.identity_mode.value,
                 "emotion_bias": emotion_bias,
                 "has_counterpart_resolver": counterpart is not None,
                 "status": "built",
@@ -419,7 +433,7 @@ def build_cognitive_loop(
         perception=LiteralPerceptionInterpreter(),
         memory=memory,
         situation=DirectSituationModeler(emotion_bias=emotion_bias),
-        self_state=DirectSelfStateProjector(),
+        self_state=DirectSelfStateProjector(identity_mode=resolved.identity_mode),
         goal_manager=goal_manager,
         emotional_state=emotional_state,
         futures=futures,
@@ -443,4 +457,5 @@ def build_cognitive_loop(
         reflection_mode=resolved.reflection_mode,
         reflection_policy=resolved.reflection_policy,
         reflection_selector=reflection_selector,
+        identity_mode=resolved.identity_mode,
     )

@@ -1237,6 +1237,7 @@ class AgentRuntime:
             pending_semanticization=loop_result.pending_semanticization,
             offline_consolidation=loop_result.offline_consolidation,
             reflection=loop_result.reflection,
+            identity_revisions=loop_result.identity_revisions,
         )
         submission = ActionSubmission(
             token=prepared.token,
@@ -1716,6 +1717,11 @@ class AgentRuntime:
             try:
                 receipt = await self._subjective_state.commit(pending.subjective_batch)
             except SubjectiveStateError as exc:
+                if pending.loop_result.identity_revisions:
+                    _LOG.error(
+                        "identity_apply_rejected",
+                        extra={"reason_code": exc.code.value},
+                    )
                 _LOG.error(
                     "runtime_subjective_apply_failed",
                     extra={
@@ -1748,6 +1754,10 @@ class AgentRuntime:
                     }
                 },
             )
+            self._log_identity_applied(
+                pending.loop_result.identity_revisions,
+                batch_idempotent=receipt.idempotent,
+            )
             await self._finish_offline_consolidation(pending)
             return
         await self._apply_memory_side_effects(
@@ -1760,6 +1770,7 @@ class AgentRuntime:
             pending_semanticization=pending.loop_result.pending_semanticization,
             offline_consolidation=pending.loop_result.offline_consolidation,
             reflection=pending.loop_result.reflection,
+            identity_revisions=pending.loop_result.identity_revisions,
         )
         await self._finish_offline_consolidation(pending)
 
@@ -1775,6 +1786,7 @@ class AgentRuntime:
         pending_semanticization: object | None = None,
         offline_consolidation: object | None = None,
         reflection: object | None = None,
+        identity_revisions: Sequence[object] = (),
     ) -> SubjectiveMutationBatch | None:
         if self._subjective_state is None:
             return None
@@ -1849,6 +1861,13 @@ class AgentRuntime:
             relationship_revisions=relationship_revisions,
             applied=self._applied_reflection_operation_ids,
         )
+        _extend_identity_revisions(
+            identity_revisions,
+            agent_id=agent_id,
+            tick=tick,
+            invocation_id=invocation_id,
+            belief_revisions=belief_revisions,
+        )
         return SubjectiveMutationBatch(
             operation_id=subjective_operation_id(
                 owner_id=agent_id, invocation_id=invocation_id
@@ -1874,6 +1893,7 @@ class AgentRuntime:
         pending_semanticization: object | None = None,
         offline_consolidation: object | None = None,
         reflection: object | None = None,
+        identity_revisions: Sequence[object] = (),
     ) -> None:
         from memory.beliefs import BeliefRevisionRequest
         from memory.models import ReconsolidationIntent, ReconstructionRecord
@@ -1985,6 +2005,11 @@ class AgentRuntime:
             try:
                 receipt = await self._subjective_state.commit(subjective_batch)
             except SubjectiveStateError as exc:
+                if identity_revisions:
+                    _LOG.error(
+                        "identity_apply_rejected",
+                        extra={"reason_code": exc.code.value},
+                    )
                 _LOG.error(
                     "runtime_subjective_apply_failed",
                     extra={
@@ -2022,6 +2047,10 @@ class AgentRuntime:
                     }
                 },
             )
+            self._log_identity_applied(
+                identity_revisions,
+                batch_idempotent=receipt.idempotent,
+            )
             return
 
         if belief_revisions or relationship_revisions:
@@ -2050,6 +2079,13 @@ class AgentRuntime:
             belief_revisions=belief_revisions,
             relationship_revisions=relationship_revisions,
             applied=self._applied_reflection_operation_ids,
+        )
+        _extend_identity_revisions(
+            identity_revisions,
+            agent_id=agent_id,
+            tick=tick,
+            invocation_id=invocation_id,
+            belief_revisions=belief_revisions,
         )
         if self._memory_service is not None:
             if self._memory_service.scope.owner_id != agent_id:
@@ -2134,6 +2170,36 @@ class AgentRuntime:
         for write in writes:
             self._memory_writer.write(write)
 
+    def _log_identity_applied(
+        self,
+        requests: Sequence[object],
+        *,
+        batch_idempotent: bool,
+    ) -> None:
+        from memory.beliefs import BeliefRevisionRequest
+
+        identity_requests = tuple(
+            item for item in requests if type(item) is BeliefRevisionRequest
+        )
+        if not identity_requests:
+            return
+        if batch_idempotent:
+            created = 0
+            revised = 0
+            idempotent = len(identity_requests)
+        else:
+            created, revised, idempotent = _classify_identity_results(
+                identity_requests, self._semantic_belief_reader
+            )
+        _LOG.debug(
+            "identity_applied",
+            extra={
+                "created_count": created,
+                "revised_count": revised,
+                "idempotent_count": idempotent,
+            },
+        )
+
     async def _finish_offline_consolidation(
         self, pending: PendingRuntimeFinalization
     ) -> None:
@@ -2213,6 +2279,81 @@ class AgentRuntime:
             raise
         self._reflection_audits.append(plan.audit)
         log_reflection_applied(plan)
+
+
+def _classify_identity_results(
+    requests: Sequence[object],
+    reader: object | None,
+) -> tuple[int, int, int]:
+    from memory.belief_formation import belief_id_for_claim, revision_id_for
+    from memory.beliefs import BeliefRevisionRequest, SemanticBeliefHistory
+
+    history_fn = getattr(reader, "history", None)
+    if not callable(history_fn):
+        return 0, 0, 0
+    created = 0
+    revised = 0
+    for request in requests:
+        if type(request) is not BeliefRevisionRequest:
+            continue
+        belief_id = request.belief_id or belief_id_for_claim(
+            owner_id=request.owner_id, claim=request.claim
+        )
+        history = history_fn(belief_id)
+        if type(history) is not SemanticBeliefHistory:
+            continue
+        for revision in history.revisions:
+            expected = revision_id_for(
+                belief_id=revision.belief_id,
+                ordinal=revision.ordinal,
+                logical_tick=revision.logical_tick,
+                claim=revision.claim,
+                operation_id=request.operation_id,
+            )
+            if revision.revision_id != expected:
+                continue
+            if revision.ordinal == 0:
+                created += 1
+            else:
+                revised += 1
+            break
+    return created, revised, 0
+
+
+def _extend_identity_revisions(
+    identity_revisions: Sequence[object],
+    *,
+    agent_id: AgentId,
+    tick: int,
+    invocation_id: str,
+    belief_revisions: list[object],
+) -> None:
+    from memory.beliefs import BeliefRevisionRequest
+
+    seen = {
+        item.operation_id
+        for item in belief_revisions
+        if type(item) is BeliefRevisionRequest
+    }
+    for request in identity_revisions:
+        if type(request) is not BeliefRevisionRequest:
+            raise AgentRuntimeError(
+                AgentRuntimeErrorCode.INVALID_UPDATE,
+                agent_id=agent_id.value,
+                invocation_id=invocation_id,
+                tick=tick,
+            )
+        if request.owner_id != agent_id:
+            raise AgentRuntimeError(
+                AgentRuntimeErrorCode.OWNERSHIP,
+                agent_id=agent_id.value,
+                invocation_id=invocation_id,
+                tick=tick,
+            )
+        if request.operation_id in seen:
+            continue
+        belief_revisions.append(request)
+        seen.add(request.operation_id)
 
 
 def _extend_consolidation_writes(

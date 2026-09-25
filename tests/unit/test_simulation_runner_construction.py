@@ -347,6 +347,38 @@ async def test_from_config_flags_off_uses_emotional_passthrough(
     assert any(
         "emotional_state_mode=passthrough" in record.getMessage()
         and "short_term_emotional_state=False" in record.getMessage()
+        and "identity_mode=passthrough" in record.getMessage()
+        and "extended_self_model=False" in record.getMessage()
+        for record in caplog.records
+    )
+
+
+@pytest.mark.asyncio
+async def test_from_config_allows_owned_identity_flag(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    from agents.cognition.configuration import CognitionIdentityMode
+    from simulation.runner_models import RUNNER_SCHEMA_VERSION_V4, V2CapabilityFlags
+
+    base = _config()
+    config = SimulationRunnerConfig(
+        seed=base.seed,
+        stochastic_identity=base.stochastic_identity,
+        scenario=base.scenario,
+        agents=base.agents,
+        stop_policy=base.stop_policy,
+        capability_flags=V2CapabilityFlags(extended_self_model=True),
+    )
+    assert config.schema_version == RUNNER_SCHEMA_VERSION_V4
+    with caplog.at_level(logging.DEBUG, logger="simulation.runner"):
+        async with await SimulationRunner.from_config(
+            config, run_id=RunId("run-identity-cap")
+        ) as runner:
+            loop = runner.runtimes[0]._loop
+            assert loop._self_state._identity_mode is CognitionIdentityMode.ENABLED
+    assert any(
+        "identity_mode=enabled" in record.getMessage()
+        and "extended_self_model=True" in record.getMessage()
         for record in caplog.records
     )
 

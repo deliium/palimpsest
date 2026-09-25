@@ -41,6 +41,7 @@ from agents.cognition.models import (
     InternalAgentState,
     InterpretedPerception,
     MemoryUpdateIntent,
+    MemoryUpdateKind,
     MotivationEvaluation,
     PossibleFutures,
     RetrievedMemoryContext,
@@ -140,6 +141,26 @@ class CognitiveLoopFailure:
         )
 
 
+def _tick_memories(
+    proposal: CognitiveLoopProposal, updates: tuple[object, ...]
+) -> tuple[object, ...]:
+    from memory.models import MemoryTrace
+
+    snapshot = proposal.loop_input.snapshot
+    memories: list[MemoryTrace] = [] if snapshot is None else list(snapshot.memories)
+    seen = {memory.memory_id.value for memory in memories}
+    for intent in updates:
+        if type(intent) is not MemoryUpdateIntent:
+            continue
+        if intent.kind is not MemoryUpdateKind.WRITE_MEMORY:
+            continue
+        memory = intent.memory
+        if type(memory) is not MemoryTrace or memory.memory_id.value in seen:
+            continue
+        memories.append(memory)
+        seen.add(memory.memory_id.value)
+    return tuple(memories)
+
 class CognitiveLoop:
     """Sequential cognitive pipeline returning one closed ``AgentCommand``."""
 
@@ -147,9 +168,11 @@ class CognitiveLoop:
         "_consolidation_mode",
         "_consolidation_policy",
         "_consolidation_selector",
+        "_deferred_dissonance",
         "_emotional_state",
         "_futures",
         "_goal_manager",
+        "_identity_mode",
         "_intention",
         "_memory",
         "_memory_updates",
@@ -183,6 +206,7 @@ class CognitiveLoop:
         reflection_mode: object | None = None,
         reflection_policy: object | None = None,
         reflection_selector: object | None = None,
+        identity_mode: object | None = None,
     ) -> None:
         self._perception = perception
         self._memory = memory
@@ -219,6 +243,17 @@ class CognitiveLoop:
         self._reflection_mode = reflection
         self._reflection_policy = reflection_policy
         self._reflection_selector = reflection_selector
+        from agents.cognition.configuration import CognitionIdentityMode
+
+        identity = (
+            CognitionIdentityMode.PASSTHROUGH
+            if identity_mode is None
+            else identity_mode
+        )
+        if type(identity) is not CognitionIdentityMode:
+            raise TypeError("identity_mode must be CognitionIdentityMode")
+        self._identity_mode = identity
+        self._deferred_dissonance: tuple[object, ...] = ()
 
     async def prepare(
         self,
@@ -464,6 +499,13 @@ class CognitiveLoop:
             reflection_cursor=reflection_cursor,
             decision_journal=decision_journal,
         )
+        identity_revisions, identity_dissonance = self._identity_revisions(
+            proposal=proposal,
+            updates=updates,
+            consolidation=consolidation,
+            reflection=reflection,
+            command=command,
+        )
 
         next_state = InternalAgentState(
             owner_id=loop_input.agent_id,
@@ -508,6 +550,8 @@ class CognitiveLoop:
             pending_semanticization=proposal.memory.pending_semanticization,
             offline_consolidation=consolidation,
             reflection=reflection,
+            identity_revisions=identity_revisions,
+            identity_dissonance=identity_dissonance,
         )
         _LOG.debug(
             "cognitive_loop_complete",
@@ -532,6 +576,89 @@ class CognitiveLoop:
         )
         _ = _STAGE_ORDER
         return result
+
+    def _identity_revisions(
+            self,
+            *,
+            proposal: CognitiveLoopProposal,
+            updates: tuple[object, ...],
+            consolidation: object | None,
+            reflection: object | None,
+            command: object,
+        ) -> tuple[tuple[object, ...], tuple[object, ...]]:
+            from agents.cognition.configuration import CognitionIdentityMode
+            from agents.cognition.identity import (
+                appraise_identity,
+                detect_identity_dissonance,
+                parse_identity_predicate,
+                without_overlapping_identity_requests,
+            )
+            from social.relationships import DirectedRelationshipProfile
+
+            if self._identity_mode is not CognitionIdentityMode.ENABLED:
+                return (), ()
+            snapshot = proposal.loop_input.snapshot
+            memories = list(_tick_memories(proposal, updates))
+            relationships = (
+                ()
+                if snapshot is None
+                else tuple(
+                    item
+                    for item in snapshot.relationships
+                    if type(item) is DirectedRelationshipProfile
+                )
+            )
+            beliefs = () if snapshot is None else snapshot.semantic_beliefs
+            appraisal = appraise_identity(
+                owner_id=proposal.agent_id,
+                tick=proposal.loop_input.observation.tick,
+                memories=tuple(memories),
+                occurrences=proposal.loop_input.observation.occurrences,
+                goals=proposal.goal_board.goals,
+                relationships=relationships,
+                futures=proposal.futures,
+                beliefs=beliefs,
+                self_model=proposal.self_state,
+            )
+            kept = without_overlapping_identity_requests(
+                appraisal.requests,
+                consolidation=consolidation,
+                reflection=reflection,
+            )
+            aspect_counts: dict[str, int] = {}
+            for request in kept:
+                aspect, _provenance, _token = parse_identity_predicate(
+                    request.claim.predicate
+                )
+                aspect_counts[aspect.value] = aspect_counts.get(aspect.value, 0) + 1
+            _LOG.debug(
+                "identity_pending",
+                extra={
+                    "request_count": len(kept),
+                    "aspect_counts": aspect_counts,
+                },
+            )
+            selected_future_id = getattr(proposal.intention, "selected_future_id", None)
+            dissonance = detect_identity_dissonance(
+                owner_id=proposal.agent_id,
+                tick=proposal.loop_input.observation.tick,
+                command=command,
+                goals=proposal.goal_board.goals,
+                futures=proposal.futures,
+                identity=proposal.self_state.identity,
+                memories=tuple(memories),
+                selected_future_id=(
+                    selected_future_id if type(selected_future_id) is str else None
+                ),
+                deferred=self._deferred_dissonance,  # type: ignore[arg-type]
+            )
+            self._deferred_dissonance = dissonance.deferred
+            combined = without_overlapping_identity_requests(
+                (*kept, *dissonance.requests),
+                consolidation=consolidation,
+                reflection=reflection,
+            )
+            return combined, dissonance.notices
 
     async def _plan_reflection(
         self,

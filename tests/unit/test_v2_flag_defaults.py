@@ -97,7 +97,16 @@ def test_reference_scenario_default_off_flags(caplog: pytest.LogCaptureFixture) 
     assert v1_regression_profile(bundle.config) is bundle.config
 
 
-def test_v1_regression_profile_rejects_enabled_flag() -> None:
+def test_extended_self_model_is_owned_and_default_documents_stay_v4() -> None:
+    base = _base()
+    assert base.schema_version == RUNNER_SCHEMA_VERSION_V4
+    assert base.capability_flags == V2CapabilityFlags()
+    assert base.capability_flags.extended_self_model is False
+    owned = V2CapabilityFlags(extended_self_model=True)
+    assert owned.unimplemented_enabled_names() == ()
+    assert owned.owned_enabled_names() == ("extended_self_model",)
+    unowned = V2CapabilityFlags(advanced_social_inference=True)
+    assert unowned.unimplemented_enabled_names() == ("advanced_social_inference",)
     base = _base()
     enabled = SimulationRunnerConfig(
         seed=base.seed,

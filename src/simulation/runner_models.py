@@ -103,7 +103,7 @@ _V2_CAPABILITY_FLAG_NAMES: Final[tuple[str, ...]] = (
 
 # Flags owned by an implemented plan may be enabled without fail-closed.
 _V2_OWNED_CAPABILITY_FLAGS: Final[frozenset[str]] = frozenset(
-    {"short_term_emotional_state"}
+    {"extended_self_model", "short_term_emotional_state"}
 )
 
 _OVERRIDEABLE_DRIVE_KINDS: Final[frozenset[DriveKind]] = frozenset(
@@ -184,8 +184,8 @@ class V2CapabilityFlags:
     Defaults are all off (V1-equivalent wiring). Enabling a flag that is not
     yet owned by an implemented plan must fail closed at runner construction
     (``capability_unimplemented``). Owned flags (currently
-    ``short_term_emotional_state``) may be enabled. These are not cognition
-    plugins.
+    ``extended_self_model`` and ``short_term_emotional_state``) may be enabled.
+    These are not cognition plugins.
     """
 
     advanced_social_inference: bool = False

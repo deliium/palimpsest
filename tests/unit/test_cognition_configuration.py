@@ -8,6 +8,7 @@ from agents.cognition.configuration import (
     CognitionDriveOverride,
     CognitionEmotionalStateMode,
     CognitionGoalManagementMode,
+    CognitionIdentityMode,
     CognitionImaginationMode,
     CognitionLoopConfig,
     CognitionMemoryMode,
@@ -107,6 +108,27 @@ def test_build_loop_selects_emotional_state_modes() -> None:
     ).condition_fingerprint_material()
     assert material["emotional_state_mode"] == "enabled"
     assert material["emotional_state_policy_version"] == "emotion.v1"
+
+
+def test_build_loop_threads_identity_mode() -> None:
+    from agents.cognition.defaults import DirectSelfStateProjector
+
+    passthrough = build_cognitive_loop(CognitionLoopConfig())
+    assert type(passthrough._self_state) is DirectSelfStateProjector
+    assert (
+        passthrough._self_state._identity_mode is CognitionIdentityMode.PASSTHROUGH
+    )
+    enabled = build_cognitive_loop(
+        CognitionLoopConfig(identity_mode=CognitionIdentityMode.ENABLED)
+    )
+    assert enabled._self_state._identity_mode is CognitionIdentityMode.ENABLED
+    material = CognitionLoopConfig(
+        identity_mode=CognitionIdentityMode.ENABLED
+    ).condition_fingerprint_material()
+    assert material["identity_mode"] == "enabled"
+    assert production_cognition_config().identity_mode is (
+        CognitionIdentityMode.PASSTHROUGH
+    )
 
 
 def test_build_loop_selects_present_state_and_disabled_mortality() -> None:

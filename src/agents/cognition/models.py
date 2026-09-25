@@ -8,12 +8,27 @@ command or world authority here.
 
 from __future__ import annotations
 
+import logging
 import math
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from enum import StrEnum
 from typing import Final
 
+from agents.cognition.identity import (
+    IDENTITY_POLICY_ID,
+    IDENTITY_POLICY_VERSION,
+    IdentityBeliefView,
+    IdentityDissonanceNotice,
+    IdentityPolicy,
+    IdentityRevisionPoint,
+    IdentityRevisionSummary,
+    IdentityState,
+    aggregate_identity_confidence,
+    derive_identity_rate,
+    derive_identity_stability,
+    parse_identity_predicate,
+)
 from agents.models import (
     AgentId,
     DriveKind,
@@ -31,6 +46,7 @@ from memory.beliefs import (
     BeliefValueKind,
     ClaimSubjectKind,
     SemanticBelief,
+    SemanticBeliefHistory,
     SemanticClaim,
     canonical_claim_identity,
 )
@@ -61,6 +77,8 @@ from world.identifiers import (
 )
 from world.models import LifeStatus
 from world.observations import Observation
+
+_LOG: Final[logging.Logger] = logging.getLogger("agents.cognition.models")
 
 __all__ = [
     "BOUNDARY_SCHEMA_VERSION",
@@ -129,6 +147,7 @@ __all__ = [
     "episode_facts",
     "intensity_band",
     "intention_for_action_direction",
+    "project_identity_state",
     "project_legacy_self_belief_state",
     "project_self_model",
     "require_confidence",
@@ -1564,6 +1583,7 @@ class SelfModel:
     confidence: float
     candidate_count: int
     decision_metadata: DecisionMetadata = DecisionMetadata()
+    identity: IdentityState | None = None
 
     def __post_init__(self) -> None:
         if type(self.owner_id) is not AgentId:
@@ -1624,6 +1644,11 @@ class SelfModel:
         )
         if type(self.decision_metadata) is not DecisionMetadata:
             raise TypeError("SelfModel.decision_metadata must be DecisionMetadata")
+        if self.identity is not None:
+            if type(self.identity) is not IdentityState:
+                raise TypeError("SelfModel.identity: invalid_type")
+            if self.identity.owner_id != self.owner_id:
+                raise ValueError("SelfModel.identity: owner_mismatch")
 
     @property
     def belief_ids(self) -> tuple[BeliefId, ...]:
@@ -1635,7 +1660,9 @@ class SelfModel:
             f"policy_version={self.policy_version!r}, "
             f"belief_count={len(self.beliefs)}, "
             f"candidate_count={self.candidate_count}, "
-            f"goal_count={len(self.goal_ids)}, confidence={self.confidence})"
+            f"goal_count={len(self.goal_ids)}, confidence={self.confidence}, "
+            f"identity_count="
+            f"{0 if self.identity is None else len(self.identity.views)})"
         )
 
 
@@ -2262,6 +2289,168 @@ def project_self_model(
             candidate_count=len(candidates),
             selection_codes=tuple(item.belief_id.value for item in selected_refs),
         ),
+        identity=None,
+    )
+
+
+def _chain_memory_ids(
+    history: SemanticBeliefHistory,
+) -> tuple[tuple[MemoryId, ...], tuple[MemoryId, ...]]:
+    latest: dict[str, tuple[str, MemoryId]] = {}
+    order: list[str] = []
+    for revision in history.revisions:
+        grouped = (
+            ("supporting", revision.evidence.supporting),
+            ("contradicting", revision.evidence.contradicting),
+        )
+        for stance, items in grouped:
+            for item in items:
+                key = item.memory_id.value
+                if key not in latest:
+                    order.append(key)
+                latest[key] = (stance, item.memory_id)
+    supporting = tuple(
+        latest[key][1] for key in order if latest[key][0] == "supporting"
+    )
+    contradicting = tuple(
+        latest[key][1] for key in order if latest[key][0] == "contradicting"
+    )
+    return supporting, contradicting
+
+
+def _reason_code(exc: ValueError) -> str:
+    text = str(exc)
+    if ": " in text:
+        return text.rsplit(": ", 1)[-1]
+    return "invalid"
+
+
+def _history_revision_inputs(
+    history: SemanticBeliefHistory,
+) -> tuple[tuple[IdentityRevisionPoint, ...], tuple[IdentityRevisionSummary, ...]]:
+    points: list[IdentityRevisionPoint] = []
+    summaries: list[IdentityRevisionSummary] = []
+    previous_contradictions = 0
+    for revision in history.revisions:
+        contradiction_count = len(revision.evidence.contradicting)
+        contradicted = contradiction_count > previous_contradictions
+        previous_contradictions = contradiction_count
+        points.append(
+            IdentityRevisionPoint(
+                ordinal=revision.ordinal,
+                tick=revision.logical_tick,
+                confidence=revision.confidence.confidence,
+                contradicted=contradicted,
+            )
+        )
+        summaries.append(
+            IdentityRevisionSummary(
+                ordinal=revision.ordinal,
+                tick=revision.logical_tick,
+                activation=revision.activation_state,
+            )
+        )
+    return tuple(points), tuple(summaries)
+
+
+def project_identity_state(
+    *,
+    owner_id: AgentId,
+    histories: Sequence[SemanticBeliefHistory],
+    policy: IdentityPolicy | None = None,
+    dissonance_notices: Sequence[IdentityDissonanceNotice] = (),
+) -> IdentityState:
+    """Project identity views. Unknown predicate segments fail closed."""
+    if type(owner_id) is not AgentId:
+        raise TypeError("project_identity_state: invalid_owner")
+    active = policy if policy is not None else IdentityPolicy()
+    if type(active) is not IdentityPolicy:
+        raise TypeError("project_identity_state: invalid_policy")
+    if isinstance(histories, (set, frozenset, Mapping)):
+        raise TypeError("project_identity_state.histories: not_ordered")
+    if isinstance(histories, (str, bytes)) or not isinstance(histories, Sequence):
+        raise TypeError("project_identity_state.histories: not_ordered")
+    views: list[IdentityBeliefView] = []
+    seen: set[str] = set()
+    for history in histories:
+        if type(history) is not SemanticBeliefHistory:
+            raise TypeError("project_identity_state: invalid_history")
+        belief = history.belief
+        if belief.owner_id != owner_id:
+            _LOG.error(
+                "identity_projection_rejected",
+                extra={
+                    "reason_code": "owner_mismatch",
+                    "owner_id": owner_id.value,
+                },
+            )
+            raise ValueError("project_identity_state: owner_mismatch")
+        predicate = belief.claim.predicate
+        if predicate.split(".", 1)[0] != "identity":
+            continue
+        try:
+            aspect, provenance, token = parse_identity_predicate(predicate)
+        except ValueError as exc:
+            code = _reason_code(exc)
+            _LOG.error(
+                "identity_projection_rejected",
+                extra={"reason_code": code, "owner_id": owner_id.value},
+            )
+            raise
+        if (
+            belief.claim.value.kind is not BeliefValueKind.BOOL
+            or belief.claim.value.bool_value is not True
+        ):
+            continue
+        if belief.activation_state is BeliefActivationState.RETIRED:
+            continue
+        if belief.activation_state not in (
+            BeliefActivationState.CANDIDATE,
+            BeliefActivationState.ACTIVE,
+        ):
+            continue
+        if belief.confidence.confidence < active.min_confidence:
+            continue
+        if belief.belief_id.value in seen:
+            raise ValueError("project_identity_state: duplicate_belief_id")
+        seen.add(belief.belief_id.value)
+        points, summaries = _history_revision_inputs(history)
+        support_ids, contradict_ids = _chain_memory_ids(history)
+        views.append(
+            IdentityBeliefView(
+                belief_id=belief.belief_id,
+                aspect=aspect,
+                provenance=provenance,
+                evidence_token=token,
+                claim=belief.claim,
+                confidence=belief.confidence.confidence,
+                derived_rate=derive_identity_rate(
+                    support_count=belief.evidence_support_count,
+                    contradiction_count=belief.evidence_contradiction_count,
+                ),
+                supporting_memory_ids=support_ids,
+                contradicting_memory_ids=contradict_ids,
+                derived_stability=derive_identity_stability(points, policy=active),
+                activation=belief.activation_state,
+                revisions=summaries,
+            )
+        )
+    views.sort(
+        key=lambda item: (
+            item.aspect.value,
+            item.provenance.value,
+            -item.confidence,
+            item.belief_id.value,
+        )
+    )
+    selected = tuple(views[: active.max_beliefs])
+    return IdentityState(
+        owner_id=owner_id,
+        policy_id=IDENTITY_POLICY_ID,
+        policy_version=IDENTITY_POLICY_VERSION,
+        views=selected,
+        aggregate_confidence=aggregate_identity_confidence(selected),
+        dissonance_notices=tuple(dissonance_notices),
     )
 
 
@@ -3489,6 +3678,8 @@ class CognitiveLoopResult:
     pending_semanticization: BeliefRevisionRequest | None = None
     offline_consolidation: object | None = None
     reflection: object | None = None
+    identity_revisions: tuple[BeliefRevisionRequest, ...] = ()
+    identity_dissonance: tuple[IdentityDissonanceNotice, ...] = ()
 
     def __post_init__(self) -> None:
         object.__setattr__(
@@ -3577,6 +3768,38 @@ class CognitiveLoopResult:
                 raise TypeError("CognitiveLoopResult.reflection: invalid_type")
             if self.reflection.audit.owner_id != self.agent_id:
                 raise ValueError("reflection owner must match agent_id")
+        if isinstance(self.identity_revisions, (set, frozenset, Mapping)):
+            raise TypeError("CognitiveLoopResult.identity_revisions must be ordered")
+        if isinstance(self.identity_revisions, (str, bytes)) or not isinstance(
+            self.identity_revisions, Sequence
+        ):
+            raise TypeError("CognitiveLoopResult.identity_revisions must be ordered")
+        identity_revisions = tuple(self.identity_revisions)
+        for request in identity_revisions:
+            if type(request) is not BeliefRevisionRequest:
+                raise TypeError(
+                    "CognitiveLoopResult.identity_revisions entries must be "
+                    "BeliefRevisionRequest"
+                )
+            if request.owner_id != self.agent_id:
+                raise ValueError("identity revision owner must match agent_id")
+        object.__setattr__(self, "identity_revisions", identity_revisions)
+        if isinstance(self.identity_dissonance, (set, frozenset, Mapping)):
+            raise TypeError("CognitiveLoopResult.identity_dissonance must be ordered")
+        if isinstance(self.identity_dissonance, (str, bytes)) or not isinstance(
+            self.identity_dissonance, Sequence
+        ):
+            raise TypeError("CognitiveLoopResult.identity_dissonance must be ordered")
+        identity_dissonance = tuple(self.identity_dissonance)
+        for notice in identity_dissonance:
+            if type(notice) is not IdentityDissonanceNotice:
+                raise TypeError(
+                    "CognitiveLoopResult.identity_dissonance entries must be "
+                    "IdentityDissonanceNotice"
+                )
+            if notice.owner_id != self.agent_id:
+                raise ValueError("identity dissonance owner must match agent_id")
+        object.__setattr__(self, "identity_dissonance", identity_dissonance)
         object.__setattr__(
             self,
             "final_confidence",
@@ -3600,6 +3823,8 @@ class CognitiveLoopResult:
             f"memory_update_count={len(self.memory_update_intents)}, "
             f"pending_access_count={len(self.pending_accesses)}, "
             f"has_semanticization={self.pending_semanticization is not None}, "
+            f"identity_revision_count={len(self.identity_revisions)}, "
+            f"identity_dissonance_count={len(self.identity_dissonance)}, "
             f"final_confidence={self.final_confidence})"
         )
 
