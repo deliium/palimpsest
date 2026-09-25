@@ -125,6 +125,10 @@ from analysis.objective_metrics import (
     compute_survival,
     living_agent_ticks,
 )
+from analysis.offline_consolidation_metrics import (
+    OFFLINE_CONSOLIDATION_METRIC_VERSION,
+    compute_offline_consolidation,
+)
 from analysis.relationship_metrics import compute_relationship_stability
 from analysis.serialization import (
     MetricSerializationError,
@@ -194,6 +198,7 @@ __all__ = [
     "METRIC_DOCUMENT_SCHEMA_VERSION",
     "METRIC_FAMILY_COUNT",
     "MINIMUM_LIBRARY_VERSIONS",
+    "OFFLINE_CONSOLIDATION_METRIC_VERSION",
     "PANDAS_NULL_SENTINEL_POLICY",
     "SCIPY_DEGENERATE_POLICY",
     "SOCIAL_TRANSMISSION_METRIC_VERSION",
@@ -280,6 +285,7 @@ __all__ = [
     "compute_knowledge_diffusion",
     "compute_memory_drift",
     "compute_memory_dynamics",
+    "compute_offline_consolidation",
     "compute_relationship_stability",
     "compute_repeated_conventions",
     "compute_resource_inequality",

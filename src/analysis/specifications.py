@@ -50,7 +50,7 @@ __all__ = [
 ]
 
 METRIC_CATALOG_VERSION: Final[str] = "metric-catalog-v1"
-METRIC_FAMILY_COUNT: Final[int] = 16
+METRIC_FAMILY_COUNT: Final[int] = 17
 
 # Align with existing memory-drift / transmission document versions.
 _ALGO_V1: Final[str] = "1"
@@ -75,7 +75,7 @@ class MetricSpecificationError(ValueError):
 
 
 class MetricFamilyId(StrEnum):
-    """Closed catalog of sixteen metric families (V1 + memory_dynamics)."""
+    """Closed catalog of metric families (V1, memory dynamics, sleep consolidation)."""
 
     RESOURCE_INEQUALITY = "resource_inequality"
     COOPERATION = "cooperation"
@@ -93,6 +93,7 @@ class MetricFamilyId(StrEnum):
     KNOWLEDGE_DIFFUSION = "knowledge_diffusion"
     RUMOR_DISTORTION = "rumor_distortion"
     MEMORY_DYNAMICS = "memory_dynamics"
+    OFFLINE_CONSOLIDATION = "offline_consolidation"
 
 
 class DenominatorKind(StrEnum):
@@ -906,6 +907,47 @@ def _spec_memory_dynamics() -> MetricSpecification:
     )
 
 
+def _spec_offline_consolidation() -> MetricSpecification:
+    return _base(
+        family_id=MetricFamilyId.OFFLINE_CONSOLIDATION,
+        evidence_inputs=frozenset({EvidenceStage.RECONSTRUCTION}),
+        population="offline_consolidation_audits_per_run",
+        denominator="harvested sleep-consolidation audits",
+        denominator_kind=DenominatorKind.OCCURRENCE,
+        cohort_window="run window covering harvested sleep consolidations",
+        deceased_policy="terminal agents stop new audits; existing audits remain",
+        zero_holding_policy="no audits -> availability=absent",
+        opportunity_vs_occurrence=(
+            "counts over harvested audits only; disabled arms absent"
+        ),
+        self_edge_policy="not_applicable",
+        censoring_policy="missing report -> omitted; never invent counts",
+        formulas={
+            "consolidation_invocations": "count of harvested audits",
+            "traces_strengthened": "sum of strengthen counts",
+            "traces_soft_forgotten": "sum of soft-forget counts",
+            "patterns_merged": "sum of merge counts",
+            "belief_revisions": "sum of belief revision counts",
+            "relationship_revisions": "sum of relationship revision counts",
+            "goal_transitions": "sum of goal transition counts",
+        },
+        value_keys=(
+            "consolidation_invocations",
+            "traces_strengthened",
+            "traces_soft_forgotten",
+            "patterns_merged",
+            "belief_revisions",
+            "relationship_revisions",
+            "goal_transitions",
+        ),
+        empty_case="no audits -> availability=absent",
+        unknown_case=(
+            "incomplete audit export -> availability=unknown; "
+            "MetricAvailability.unknown"
+        ),
+    )
+
+
 def _spec_belief_accuracy() -> MetricSpecification:
     return _base(
         family_id=MetricFamilyId.BELIEF_ACCURACY,
@@ -1299,6 +1341,7 @@ _BUILDERS: Final[tuple[Callable[[], MetricSpecification], ...]] = (
     _spec_behavioral_specialization,
     _spec_memory_drift,
     _spec_memory_dynamics,
+    _spec_offline_consolidation,
     _spec_belief_accuracy,
     _spec_false_belief_persistence,
     _spec_relationship_stability,
@@ -1310,7 +1353,7 @@ _BUILDERS: Final[tuple[Callable[[], MetricSpecification], ...]] = (
 
 
 def all_metric_specifications() -> tuple[MetricSpecification, ...]:
-    """Return the closed ordered catalog of sixteen family specifications."""
+    """Return the closed ordered catalog of family specifications."""
     return tuple(builder() for builder in _BUILDERS)
 
 

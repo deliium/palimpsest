@@ -13,6 +13,7 @@ from experiments.catalog import (
     experiment_c_mortality,
     experiment_d_drives,
     experiment_e_false_story,
+    experiment_f_sleep_consolidation,
     v1_regression_profile,
 )
 from experiments.collectors import (
@@ -31,6 +32,7 @@ from experiments.collectors import (
 from experiments.composition import (
     EvidenceCompositionError,
     EvidenceCompositionService,
+    map_consolidation_audits_to_report,
     map_recall_audits_to_dynamics_report,
     map_snapshot_to_analysis_sources,
 )
@@ -170,7 +172,9 @@ __all__ = [
     "experiment_c_mortality",
     "experiment_d_drives",
     "experiment_e_false_story",
+    "experiment_f_sleep_consolidation",
     "make_false_story_intervention",
+    "map_consolidation_audits_to_report",
     "map_recall_audits_to_dynamics_report",
     "map_snapshot_to_analysis_sources",
     "materialize_assignments",

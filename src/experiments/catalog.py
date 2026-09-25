@@ -1,8 +1,9 @@
-"""Named builders for Experiments A-E."""
+"""Named builders for Experiments A-F."""
 
 from __future__ import annotations
 
 import logging
+from dataclasses import replace
 from typing import Final
 
 from agents.models import DriveKind
@@ -14,8 +15,11 @@ from experiments.models import (
     require_stochastic,
 )
 from simulation.runner_models import (
+    RUNNER_SCHEMA_VERSION_V4,
+    RUNNER_SCHEMA_VERSION_V5,
     AgentCognitionSpec,
     AgentRunnerSpec,
+    ConsolidationMode,
     DriveOverrideSpec,
     ImaginationMode,
     MemoryMode,
@@ -25,6 +29,7 @@ from simulation.runner_models import (
     WorldScenarioSpec,
     capability_flags_digest,
 )
+from world.values import Fatigue
 
 _LOG: Final[logging.Logger] = logging.getLogger("experiments.catalog")
 
@@ -36,6 +41,8 @@ def _with_agent_modes(
     imagination_mode: ImaginationMode | None = None,
     mortality_mode: MortalityMode | None = None,
     drive_overrides: tuple[DriveOverrideSpec, ...] | None = None,
+    consolidation_mode: ConsolidationMode | None = None,
+    schema_version: str | None = None,
 ) -> SimulationRunnerConfig:
     agents: list[AgentRunnerSpec] = []
     for agent in base.agents:
@@ -53,6 +60,11 @@ def _with_agent_modes(
                 drive_overrides
                 if drive_overrides is not None
                 else agent.cognition.drive_overrides
+            ),
+            consolidation_mode=(
+                consolidation_mode
+                if consolidation_mode is not None
+                else agent.cognition.consolidation_mode
             ),
         )
         agents.append(
@@ -78,7 +90,9 @@ def _with_agent_modes(
         persistence=base.persistence,
         experiment=base.experiment,
         capability_flags=base.capability_flags,
-        schema_version=base.schema_version,
+        schema_version=(
+            schema_version if schema_version is not None else base.schema_version
+        ),
         derivation_version=base.derivation_version,
         mortality_policy_version=base.mortality_policy_version,
     )
@@ -297,6 +311,52 @@ def experiment_e_false_story(
         arms=(
             ("e-control", "story_control", base),
             ("e-intervention", "story_intervention", base),
+        ),
+    )
+
+
+def experiment_f_sleep_consolidation(
+    base: SimulationRunnerConfig,
+    *,
+    seed_matrix: ExperimentSeedMatrix | None = None,
+) -> ExperimentDefinition:
+    """Compare physical sleep with consolidation disabled versus deterministic."""
+    matrix = seed_matrix or ExperimentSeedMatrix(seeds=(base.seed,))
+    fatigued = replace(
+        base.scenario,
+        physical_rules=replace(
+            base.scenario.physical_rules,
+            sleep_fatigue_recovery=0.0,
+        ),
+        bodies=tuple(
+            replace(body, fatigue=Fatigue(80)) for body in base.scenario.bodies
+        ),
+    )
+    shared = replace(base, scenario=fatigued)
+    disabled = _with_agent_modes(
+        shared,
+        consolidation_mode=ConsolidationMode.DISABLED,
+        schema_version=RUNNER_SCHEMA_VERSION_V4,
+    )
+    deterministic = _with_agent_modes(
+        shared,
+        consolidation_mode=ConsolidationMode.DETERMINISTIC,
+        schema_version=RUNNER_SCHEMA_VERSION_V5,
+    )
+    _LOG.debug(
+        "experiment_f_built experiment_id=%s condition_ids=%s "
+        "consolidation_modes=%s",
+        "experiment-f-sleep-consolidation",
+        "f-disabled,f-deterministic",
+        "disabled,deterministic",
+    )
+    return _definition(
+        experiment_id="experiment-f-sleep-consolidation",
+        base=shared,
+        seed_matrix=matrix,
+        arms=(
+            ("f-disabled", "consolidation_disabled", disabled),
+            ("f-deterministic", "consolidation_deterministic", deterministic),
         ),
     )
 

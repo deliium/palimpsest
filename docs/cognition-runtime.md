@@ -19,7 +19,10 @@ Observation
 → intention selection (MultiCriteriaIntentionSelector)
 → planning (CommandPlanner)
 → one structured AgentCommand
+→ optional offline consolidation when the effective command is Sleep
 ```
+
+`Wait` does not consolidate. A trusted intervention that replaces `Sleep` skips consolidation; one that forces `Sleep` consolidates. The loop does not add a stage ordinal. Intents commit in `finalize_pending` only after the objective tick succeeds. `DISABLED` adds no consolidation calls and no new boundary records. Logs for this path carry mode, tick, counts, and reason codes only — never propositions, prompts, or trace text.
 
 Each stage is a narrow async protocol under `agents.cognition`. Components are constructor-injected into `CognitiveLoop` with plain Python control flow (no LangGraph/LangChain/DAG engine). Every completed stage appends a versioned `ComponentBoundaryRecord` (typed I/O artifacts, confidence, status, decision metadata). Records are scientific receipts — not chain-of-thought, prompts, or raw provider responses.
 

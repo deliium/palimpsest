@@ -9,11 +9,15 @@ from experiments import (
     experiment_b_imagination,
     experiment_c_mortality,
     experiment_d_drives,
+    experiment_f_sleep_consolidation,
 )
 from experiments.catalog import base_runner_config_from_scenario
 from simulation.runner_models import (
+    RUNNER_SCHEMA_VERSION_V4,
+    RUNNER_SCHEMA_VERSION_V5,
     AgentCognitionSpec,
     AgentRunnerSpec,
+    ConsolidationMode,
     ImaginationMode,
     MemoryMode,
     MortalityMode,
@@ -78,7 +82,9 @@ def test_experiment_a_pairs_reference_and_reconstructive() -> None:
     )
     v1 = experiment_a_memory_v1_arms(_base())
     assert len(v1.conditions) == 2
-    assert {item.condition_id for item in v1.conditions} == EXPERIMENT_A_V1_CONDITION_IDS
+    assert {item.condition_id for item in v1.conditions} == (
+        EXPERIMENT_A_V1_CONDITION_IDS
+    )
     assert MemoryMode.RECONSTRUCTIVE_V2 not in {
         item.runner_config.agents[0].cognition.memory_mode for item in v1.conditions
     }
@@ -113,4 +119,33 @@ def test_experiment_b_c_d_and_stable_fingerprint() -> None:
     # Builder order independence: re-building yields same fingerprint.
     assert definition_fingerprint(experiment_a_memory(base)) == definition_fingerprint(
         experiment_a_memory(base)
+    )
+
+
+def test_experiment_f_pairs_disabled_v4_and_deterministic_v5() -> None:
+    definition = experiment_f_sleep_consolidation(_base())
+    assert [item.condition_id for item in definition.conditions] == [
+        "f-disabled",
+        "f-deterministic",
+    ]
+    disabled, deterministic = definition.conditions
+    assert disabled.runner_config.schema_version == RUNNER_SCHEMA_VERSION_V4
+    assert (
+        disabled.runner_config.agents[0].cognition.consolidation_mode
+        is ConsolidationMode.DISABLED
+    )
+    assert deterministic.runner_config.schema_version == RUNNER_SCHEMA_VERSION_V5
+    assert (
+        deterministic.runner_config.agents[0].cognition.consolidation_mode
+        is ConsolidationMode.DETERMINISTIC
+    )
+    assert disabled.runner_config.seed == deterministic.runner_config.seed
+    assert (
+        disabled.runner_config.stochastic_identity
+        == deterministic.runner_config.stochastic_identity
+    )
+    assert disabled.runner_config.scenario.bodies[0].fatigue.value == 80
+    assert (
+        disabled.runner_config.agents[0].cognition.memory_mode
+        == deterministic.runner_config.agents[0].cognition.memory_mode
     )

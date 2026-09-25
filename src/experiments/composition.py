@@ -35,6 +35,7 @@ __all__ = [
     "EvidenceCompositionError",
     "EvidenceCompositionService",
     "constrain_snapshot_to_manifest",
+    "map_consolidation_audits_to_report",
     "map_recall_audits_to_dynamics_report",
     "map_snapshot_to_analysis_sources",
 ]
@@ -337,5 +338,49 @@ def map_recall_audits_to_dynamics_report(
             "audit_export_count": len(rows),
             "memory_mode": memory_mode,
         },
+    )
+    return report
+
+
+def map_consolidation_audits_to_report(
+    *,
+    run_id: str,
+    audits: tuple[object, ...],
+) -> object:
+    """Map in-run consolidation audits into count-only analysis inputs."""
+    from analysis.offline_consolidation_metrics import OfflineConsolidationReport
+    from memory.models import OfflineConsolidationAudit
+
+    invocations = 0
+    strengthened = 0
+    forgotten = 0
+    merged = 0
+    beliefs = 0
+    relationships = 0
+    goals = 0
+    for item in audits:
+        if type(item) is not OfflineConsolidationAudit:
+            raise TypeError("map_consolidation_audits_to_report: invalid_audit")
+        invocations += 1
+        strengthened += item.strengthen_count
+        forgotten += item.soft_forget_count
+        merged += item.merge_count
+        beliefs += item.belief_count
+        relationships += item.relationship_count
+        goals += item.goal_count
+    report = OfflineConsolidationReport(
+        run_id=run_id,
+        consolidation_invocations=invocations,
+        traces_strengthened=strengthened,
+        traces_soft_forgotten=forgotten,
+        patterns_merged=merged,
+        belief_revisions=beliefs,
+        relationship_revisions=relationships,
+        goal_transitions=goals,
+    )
+    _LOG.debug(
+        "offline_consolidation_audit_composed run_id=%s audit_count=%s",
+        run_id,
+        invocations,
     )
     return report

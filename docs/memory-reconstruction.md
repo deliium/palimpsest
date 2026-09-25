@@ -14,6 +14,12 @@ Downstream cognition consumes `ReconstructedMemory` episodes as subjective exper
 
 V2 is selected by injecting `MemoryRecallRequest.dynamics_policy` (`memory-dynamics-v1` defaults). When `dynamics_policy is None`, the V1 path stays bit-identical. Soft-forget remains the only deactivation path — V2 never hard-deletes by age.
 
+## Offline consolidation during sleep
+
+Optional `ConsolidationMode` on `AgentCognitionSpec` (default `DISABLED`) reorganizes traces the agent already holds when the effective command is `Sleep`. `DETERMINISTIC` is a pure policy (`offline-consolidation-v1`). `LLM_ASSISTED` may only select IDs from that candidate set (`offline_consolidation.selection.v1`); any foreign ID or provider failure applies the deterministic selection (`fallback_used`). Consolidation does not read world state, analysis reports, or other agents, and it does not rewrite a false memory toward a fact the owner does not already hold.
+
+Strengthening appends `MemoryAccessReceipt` values with `operation_id` `offline-consolidation:{tick}:{memory_id}`. Soft-forget stamps `forgotten_at_tick` on selected IDs only. Audits (`OfflineConsolidationAudit`) stay in-run and are not written into the result JSON document.
+
 **Agent vs audit split:** agent-facing `ReconstructedMemory` / `RetrievedMemoryContext` never carry `RecallAuditRecord`. True provenance, competitors, and distortion codes live on `MemoryRecallResult.audits` only and export into `MemoryDynamicsReport` for metrics.
 
 **Emotion × V2 ordering:** dynamics + audit complete inside `MemoryService.recall` first; optional `apply_*_emotion_bias` may re-rank agent-visible hits afterward. Audit `selected_ids` are pre-emotion.

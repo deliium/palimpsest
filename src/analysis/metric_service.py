@@ -12,13 +12,13 @@ from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from typing import Final
 
-from analysis.belief_metrics import (
-    compute_belief_accuracy,
-    compute_false_belief_persistence,
-)
 from analysis.behavior_metrics import (
     compute_behavioral_specialization,
     compute_repeated_conventions,
+)
+from analysis.belief_metrics import (
+    compute_belief_accuracy,
+    compute_false_belief_persistence,
 )
 from analysis.memory_drift import compute_memory_drift
 from analysis.memory_dynamics_metrics import compute_memory_dynamics
@@ -47,6 +47,10 @@ from analysis.objective_metrics import (
     compute_goal_completion,
     compute_resource_inequality,
     compute_survival,
+)
+from analysis.offline_consolidation_metrics import (
+    OfflineConsolidationReport,
+    compute_offline_consolidation,
 )
 from analysis.relationship_metrics import compute_relationship_stability
 from analysis.serialization import (
@@ -91,6 +95,7 @@ class MetricComputationInputs:
     death_ticks: Mapping[str, int] | None = None
     memory_drift_report: MemoryDriftReport | None = None
     memory_dynamics_report: MemoryDynamicsReport | None = None
+    offline_consolidation_report: OfflineConsolidationReport | None = None
     transmission_hops: Sequence[TransmissionHopRecord] = ()
     transmission_report: SocialTransmissionReport | None = None
     eligible_agent_ids: Sequence[str] = ()
@@ -279,6 +284,13 @@ def assemble_metric_documents(inputs: MetricComputationInputs) -> MetricBundle:
             "memory_dynamics",
             lambda: compute_memory_dynamics(
                 inputs.memory_dynamics_report, input_revision=revision
+            ),
+        )
+    if inputs.offline_consolidation_report is not None:
+        _safe(
+            "offline_consolidation",
+            lambda: compute_offline_consolidation(
+                inputs.offline_consolidation_report, input_revision=revision
             ),
         )
     _safe(

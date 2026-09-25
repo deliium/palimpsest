@@ -68,7 +68,12 @@ def collect_trajectory_stats(arm: Any) -> CollectorMetricDocument:
     )
 
 
-def _run_level_bundle(arm: Any, *, memory_dynamics_report: object | None = None):
+def _run_level_bundle(
+    arm: Any,
+    *,
+    memory_dynamics_report: object | None = None,
+    offline_consolidation_report: object | None = None,
+):
     """Assemble run-level catalog metrics without requiring experiment membership."""
     from analysis.models import MemoryDynamicsReport
 
@@ -88,6 +93,9 @@ def _run_level_bundle(arm: Any, *, memory_dynamics_report: object | None = None)
         agent_ids=agent_ids,
         eligible_agent_ids=agent_ids,
         memory_dynamics_report=report,
+        offline_consolidation_report=_optional_consolidation_report(
+            offline_consolidation_report
+        ),
     )
     return assemble_metric_documents(inputs)
 
@@ -95,7 +103,12 @@ def _run_level_bundle(arm: Any, *, memory_dynamics_report: object | None = None)
 def collect_catalog_metrics(arm: Any) -> CollectorMetricDocument:
     """Attach catalog metric fingerprints for the completed arm."""
     report = _memory_dynamics_report_for(arm)
-    bundle = _run_level_bundle(arm, memory_dynamics_report=report)
+    consolidation = _offline_consolidation_report_for(arm)
+    bundle = _run_level_bundle(
+        arm,
+        memory_dynamics_report=report,
+        offline_consolidation_report=consolidation,
+    )
     present = sum(
         1
         for doc in bundle.documents
@@ -130,6 +143,31 @@ def _memory_dynamics_report_for(arm: Any):
         memory_mode=mode,
         audits=tuple(audits),
     )
+
+
+def _offline_consolidation_report_for(arm: Any):
+    """Compose a count report from runner-harvested consolidation audits."""
+    from experiments.composition import map_consolidation_audits_to_report
+
+    audits = getattr(arm.runner_result, "offline_consolidation_audits", ())
+    if not audits:
+        return None
+    return map_consolidation_audits_to_report(
+        run_id=arm.assignment.run_id.value,
+        audits=tuple(audits),
+    )
+
+
+def _optional_consolidation_report(report: object | None) -> object | None:
+    from analysis.offline_consolidation_metrics import OfflineConsolidationReport
+
+    if report is None:
+        return None
+    if type(report) is not OfflineConsolidationReport:
+        raise TypeError(
+            "offline_consolidation_report must be OfflineConsolidationReport"
+        )
+    return report
 
 
 def collect_memory_drift(arm: Any) -> CollectorMetricDocument:

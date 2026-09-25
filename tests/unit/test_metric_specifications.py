@@ -41,8 +41,8 @@ from tests.unit.metric_fixtures import (
 
 def test_catalog_has_sixteen_unique_families() -> None:
     specs = validate_metric_catalog()
-    assert len(specs) == METRIC_FAMILY_COUNT == 16
-    assert len({spec.family_id for spec in specs}) == 16
+    assert len(specs) == METRIC_FAMILY_COUNT == 17
+    assert len({spec.family_id for spec in specs}) == 17
     assert frozenset(spec.family_id for spec in specs) == frozenset(MetricFamilyId)
     assert METRIC_CATALOG_VERSION.startswith("metric-catalog-")
 
@@ -245,6 +245,41 @@ def test_fixture_repr_omits_expected_numeric_payload_details() -> None:
     assert fx.fixture_id in text
     assert "gini" not in text
     assert "0.8" not in text
+
+
+def test_offline_consolidation_counts_and_missing_report() -> None:
+    from analysis.metric_service import (
+        MetricComputationInputs,
+        assemble_metric_documents,
+    )
+    from analysis.offline_consolidation_metrics import (
+        OfflineConsolidationReport,
+        compute_offline_consolidation,
+    )
+
+    report = OfflineConsolidationReport(
+        run_id="run-1",
+        consolidation_invocations=2,
+        traces_strengthened=3,
+        traces_soft_forgotten=1,
+        patterns_merged=1,
+        belief_revisions=1,
+        relationship_revisions=0,
+        goal_transitions=0,
+    )
+    document = compute_offline_consolidation(report, input_revision="rev-1")
+    assert document.availability is MetricAvailability.PRESENT
+    assert document.values["traces_strengthened"] == quantize_float(3.0)
+    assert document.metric_family == "offline_consolidation"
+    inputs = MetricComputationInputs(
+        run_id="run-1",
+        input_revision="rev-1",
+        window_end=1,
+    )
+    bundle = assemble_metric_documents(inputs)
+    assert "offline_consolidation" not in {
+        item.metric_family for item in bundle.documents
+    }
 
 
 def test_spec_repr_is_metadata_only() -> None:

@@ -8,7 +8,7 @@ The `experiments` package is trusted outer orchestration. It may coordinate publ
 
 Objective instrumentation is post-commit observation only. Collectors never flow back into cognition, memory formation, prompts, or action selection.
 
-## Catalog (A–E)
+## Catalog (A–F)
 
 | ID | Treatment |
 | --- | --- |
@@ -17,6 +17,7 @@ Objective instrumentation is post-commit observation only. Collectors never flow
 | C | Mortality disabled vs enabled (non-lethal physical rules overlay) |
 | D | Controlled curiosity / safety / belonging / status drive profiles |
 | E | Inject one controlled false `Tell` through ordinary communication; measure propagation without exposing the objective truth label to agents |
+| F | Sleep consolidation `DISABLED` (`runner-config-v4`) vs `DETERMINISTIC` (`runner-config-v5`), shared seed and scenario. Not on the V1 regression gate |
 
 Builders share scenario, seed, and stochastic identity across paired arms; only declared treatment dimensions differ. Condition/config fingerprints change when treatments change.
 
@@ -24,7 +25,7 @@ Builders share scenario, seed, and stochastic identity across paired arms; only 
 
 Catalog builders emit current write schema (`runner-config-v4`) with all `V2CapabilityFlags` default-off and `CognitionTraceSpec` disabled. Use `experiments.catalog.v1_regression_profile(config)` to assert the V1-equivalent profile (raises `v1_regression_flags_enabled` if any flag is on, or `v1_regression_trace_enabled` if tracing is enabled). Capability flags and tracing are configuration identifiers only; they do not change experiment-definition schema (`experiment-definition-v1`).
 
-Network-free regression gate: `tests/unit/test_v1_regression_gate.py` (short ticks, catalog A–E + reference scenario).
+Network-free regression gate: `tests/unit/test_v1_regression_gate.py` (short ticks, catalog A–E + reference scenario). Experiment F is additive and is not part of that gate. The default config write stays `runner-config-v4`; `runner-config-v5` is emitted only when some agent's consolidation mode is not `DISABLED`.
 
 ## Reference scenario (V1 gate)
 

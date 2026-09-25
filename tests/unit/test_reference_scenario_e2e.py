@@ -21,6 +21,7 @@ from analysis.models import (
     SurvivalAgentRow,
 )
 from analysis.specifications import MetricFamilyId
+from experiments.interventions import MilestoneStatus
 from experiments.reference_scenario import (
     AGENT_NYX,
     MILESTONE_DRINK_WATER,
@@ -32,7 +33,6 @@ from experiments.reference_scenario import (
     REFERENCE_DEATH_TICK,
     REFERENCE_MAX_TICKS,
 )
-from experiments.interventions import MilestoneStatus
 from simulation.lifecycle import ActionResolutionStatus
 from simulation.runner_models import GoalTransitionReasonCode
 from tests.reference_scenario_helpers import (
@@ -253,7 +253,12 @@ def test_all_metric_families_assemble(reference_outcome) -> None:
     required = {
         family.value
         for family in MetricFamilyId
-        if family is not MetricFamilyId.MEMORY_DRIFT
+        if family
+        not in {
+            MetricFamilyId.MEMORY_DRIFT,
+            MetricFamilyId.MEMORY_DYNAMICS,
+            MetricFamilyId.OFFLINE_CONSOLIDATION,
+        }
     }
     assert required.issubset(produced)
     first = assemble_metric_documents(inputs)

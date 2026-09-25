@@ -39,7 +39,7 @@ An observation for open tick `N` is projected from the tick-start snapshot plus 
 | Search | Eligible local resource + free ground slot; Bernoulli success; miss is event-only; success extracts 1.0 and creates a ground item |
 | Take / Drop / Give | Capacity-checked atomic transfers |
 | Eat / Drink | Consume held food / held water or local water resource; hunger −30 / thirst −40 |
-| Sleep | Fatigue −30 this tick (shelter does not gate) |
+| Sleep | Fatigue −30 this tick (shelter does not gate). Recovery does not depend on consolidation mode. |
 | Attack | Hit 0.75, damage [10, 20]; miss event-only; lethal hit emits Attacked then Died under the same action cause |
 | Flee | Success 0.80 then uniform eligible destination; +10 fatigue on success |
 | Help | Target health +10 (cap 100), helper +5 fatigue; no revival |
