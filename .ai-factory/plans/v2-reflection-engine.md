@@ -186,14 +186,14 @@ Reflection must not query objective `WorldEvent`s. Perceived occurrences are the
 
 ## Verification checklist
 
-- [ ] Default `ReflectionMode.DISABLED`; default write stays `runner-config-v4`; A–E trajectory hashes and v4 fingerprints stay unchanged
-- [ ] `runner-config-v5` still means consolidation-only; a non-disabled consolidation mode is also legal on `runner-config-v6`; v6 is accepted only when some agent enables reflection, and that document round-trips names, flags, and cognition trace
-- [ ] `V2CapabilityFlags`, cognition-trace schema, and `runner-result-v2` are unchanged; no new Alembic revision
-- [ ] Reflection does not run on ticks inside the minimum gap, and `DISABLED` never calls the engine
-- [ ] Conclusions cite only subjective evidence and do not import or query `WorldEvent`s
-- [ ] `LLM_ASSISTED` selects only candidate ids and falls back when validation fails
-- [ ] The reflection tick's command and committed event hashes match the disabled arm; a later command can differ; those earlier hashes stay unchanged after the subjective write
-- [ ] Experiment G compares `g-disabled` and `g-deterministic` under a shared seed
-- [ ] `reflection@1` assembles from audits; missing reports do not break V1 metric assembly
-- [ ] Logs for the new path are metadata-only
-- [ ] Each commit runs `ruff check` on the full plan diff, including `tests/fakes/` and `CognitiveLoop` signature stubs
+- [x] Default `ReflectionMode.DISABLED`; default write stays `runner-config-v4`; A–E trajectory hashes and v4 fingerprints stay unchanged
+- [x] `runner-config-v5` still means consolidation-only; a non-disabled consolidation mode is also legal on `runner-config-v6`; v6 is accepted only when some agent enables reflection, and that document round-trips names, flags, and cognition trace
+- [x] `V2CapabilityFlags`, cognition-trace schema, and `runner-result-v2` are unchanged; no new Alembic revision
+- [x] Reflection does not run on ticks inside the minimum gap, and `DISABLED` never calls the engine
+- [x] Conclusions cite only subjective evidence and do not import or query `WorldEvent`s
+- [x] `LLM_ASSISTED` selects only candidate ids and falls back when validation fails
+- [x] The reflection tick's command and committed event hashes match the disabled arm; a later command can differ; those earlier hashes stay unchanged after the subjective write
+- [x] Experiment G compares `g-disabled` and `g-deterministic` under a shared seed
+- [x] `reflection@1` assembles from audits; missing reports do not break V1 metric assembly
+- [x] Logs for the new path are metadata-only
+- [x] Each commit runs `ruff check` on the full plan diff, including `tests/fakes/` and `CognitiveLoop` signature stubs
