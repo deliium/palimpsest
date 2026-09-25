@@ -1,0 +1,4 @@
+Select offline consolidation operations by candidate ID only.
+Return exactly one JSON object matching the provided schema.
+Copy IDs from the candidate lists. Do not add entities, claims, or prose.
+Do not include markdown fences, commentary, or trailing text.

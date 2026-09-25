@@ -144,6 +144,9 @@ class CognitiveLoop:
     """Sequential cognitive pipeline returning one closed ``AgentCommand``."""
 
     __slots__ = (
+        "_consolidation_mode",
+        "_consolidation_policy",
+        "_consolidation_selector",
         "_emotional_state",
         "_futures",
         "_goal_manager",
@@ -171,6 +174,9 @@ class CognitiveLoop:
         intention: IntentionSelector,
         planner: Planner,
         memory_updates: MemoryUpdateHook,
+        consolidation_mode: object | None = None,
+        consolidation_policy: object | None = None,
+        consolidation_selector: object | None = None,
     ) -> None:
         self._perception = perception
         self._memory = memory
@@ -183,6 +189,18 @@ class CognitiveLoop:
         self._intention = intention
         self._planner = planner
         self._memory_updates = memory_updates
+        from agents.cognition.configuration import CognitionConsolidationMode
+
+        mode = (
+            CognitionConsolidationMode.DISABLED
+            if consolidation_mode is None
+            else consolidation_mode
+        )
+        if type(mode) is not CognitionConsolidationMode:
+            raise TypeError("consolidation_mode must be CognitionConsolidationMode")
+        self._consolidation_mode = mode
+        self._consolidation_policy = consolidation_policy
+        self._consolidation_selector = consolidation_selector
 
     async def prepare(
         self,
@@ -414,6 +432,11 @@ class CognitiveLoop:
             expected_type=tuple,
         )
         assert type(updates) is tuple
+        consolidation = await self._plan_sleep_consolidation(
+            proposal=proposal,
+            command=command,
+            updates=updates,
+        )
 
         next_state = InternalAgentState(
             owner_id=loop_input.agent_id,
@@ -425,6 +448,26 @@ class CognitiveLoop:
             ),
             last_command_kind=type(command).__name__.lower(),
         )
+        pending_accesses = proposal.memory.pending_accesses
+        if consolidation is not None:
+            from memory.models import MemoryAccessReceipt
+
+            stored_ids = {
+                trace.memory_id
+                for trace in proposal.loop_input.snapshot.memories
+            }
+            pending_accesses = pending_accesses + tuple(
+                MemoryAccessReceipt(
+                    memory_id=memory_id,
+                    access_tick=consolidation.audit.tick,
+                    operation_id=(
+                        f"offline-consolidation:{consolidation.audit.tick}:"
+                        f"{memory_id.value}"
+                    ),
+                )
+                for memory_id in consolidation.selection.strengthen_ids
+                if memory_id in stored_ids
+            )
         result = CognitiveLoopResult(
             invocation_id=invocation_id,
             agent_id=loop_input.agent_id,
@@ -433,9 +476,10 @@ class CognitiveLoop:
             memory_update_intents=updates,
             final_confidence=proposal.final_confidence,
             internal_state=next_state,
-            pending_accesses=proposal.memory.pending_accesses,
+            pending_accesses=pending_accesses,
             pending_reconsolidation=proposal.memory.reconsolidation,
             pending_semanticization=proposal.memory.pending_semanticization,
+            offline_consolidation=consolidation,
         )
         _LOG.debug(
             "cognitive_loop_complete",
@@ -460,6 +504,95 @@ class CognitiveLoop:
         )
         _ = _STAGE_ORDER
         return result
+
+    async def _plan_sleep_consolidation(
+        self,
+        *,
+        proposal: CognitiveLoopProposal,
+        command: AgentCommand,
+        updates: tuple[object, ...],
+    ) -> object | None:
+        from agents.cognition.configuration import CognitionConsolidationMode
+        from agents.cognition.consolidation import orchestrate_offline_consolidation
+        from agents.cognition.models import MemoryUpdateIntent, MemoryUpdateKind
+        from memory.models import OfflineConsolidationPolicy
+        from world.actions import Sleep
+        from world.models import LifeStatus
+
+        mode = self._consolidation_mode
+        terminal = proposal.perception.life_status is LifeStatus.DEAD
+        is_sleep = type(command) is Sleep
+        if mode is CognitionConsolidationMode.DISABLED or not is_sleep or terminal:
+            if is_sleep or mode is not CognitionConsolidationMode.DISABLED:
+                if mode is CognitionConsolidationMode.DISABLED:
+                    reason = "disabled"
+                elif terminal and is_sleep:
+                    reason = "terminal"
+                else:
+                    reason = "not_sleep"
+                _LOG.info(
+                    "offline_consolidation_skipped reason=%s agent_id=%s tick=%s",
+                    reason,
+                    proposal.agent_id.value,
+                    proposal.loop_input.observation.tick,
+                )
+            return None
+        snapshot = proposal.loop_input.snapshot
+        if snapshot is None:
+            _LOG.error(
+                "offline_consolidation_aborted agent_id=%s tick=%s "
+                "reason_code=snapshot_missing",
+                proposal.agent_id.value,
+                proposal.loop_input.observation.tick,
+            )
+            return None
+        write_intents = tuple(
+            intent
+            for intent in updates
+            if type(intent) is MemoryUpdateIntent
+            and intent.kind is MemoryUpdateKind.WRITE_MEMORY
+        )
+        policy = self._consolidation_policy
+        if type(policy) is not OfflineConsolidationPolicy:
+            policy = OfflineConsolidationPolicy(
+                allow_provider=mode is CognitionConsolidationMode.LLM_ASSISTED
+            )
+        plan = orchestrate_offline_consolidation(
+            snapshot=snapshot,
+            self_model=proposal.self_state,
+            write_intents=write_intents,
+            tick=proposal.loop_input.observation.tick,
+            mode=mode.value,
+            policy=policy,
+        )
+        if mode is CognitionConsolidationMode.LLM_ASSISTED:
+            from agents.cognition.consolidation import LLMOfflineConsolidationSelector
+
+            selector = self._consolidation_selector
+            if type(selector) is not LLMOfflineConsolidationSelector:
+                selector = LLMOfflineConsolidationSelector(None)
+            restricted = await selector.restrict(plan.selection, policy=policy)
+            if restricted != plan.selection:
+                plan = orchestrate_offline_consolidation(
+                    snapshot=snapshot,
+                    self_model=proposal.self_state,
+                    write_intents=write_intents,
+                    tick=proposal.loop_input.observation.tick,
+                    mode=mode.value,
+                    policy=policy,
+                    selection_override=restricted,
+                )
+        _LOG.debug(
+            "offline_consolidation_pending agent_id=%s tick=%s mode=%s "
+            "merge_count=%s strengthen_count=%s soft_forget_count=%s",
+            proposal.agent_id.value,
+            plan.audit.tick,
+            mode.value,
+            plan.audit.merge_count,
+            plan.audit.strengthen_count,
+            plan.audit.soft_forget_count,
+        )
+        return plan
 
     async def run(
         self,

@@ -3486,6 +3486,7 @@ class CognitiveLoopResult:
     pending_accesses: tuple[MemoryAccessReceipt, ...] = ()
     pending_reconsolidation: ReconsolidationIntent | None = None
     pending_semanticization: BeliefRevisionRequest | None = None
+    offline_consolidation: object | None = None
 
     def __post_init__(self) -> None:
         object.__setattr__(
@@ -3558,6 +3559,15 @@ class CognitiveLoopResult:
                 )
             if self.pending_semanticization.owner_id != self.agent_id:
                 raise ValueError("pending_semanticization owner must match agent_id")
+        if self.offline_consolidation is not None:
+            from agents.cognition.consolidation import OfflineConsolidationPlan
+
+            if type(self.offline_consolidation) is not OfflineConsolidationPlan:
+                raise TypeError(
+                    "CognitiveLoopResult.offline_consolidation: invalid_type"
+                )
+            if self.offline_consolidation.audit.owner_id != self.agent_id:
+                raise ValueError("offline_consolidation owner must match agent_id")
         object.__setattr__(
             self,
             "final_confidence",

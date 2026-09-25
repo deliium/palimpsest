@@ -30,6 +30,10 @@ from agents.cognition.configuration import (
 from agents.cognition.configuration import (
     IMAGINATION_POLICY_VERSION as COGNITION_IMAGINATION_POLICY_VERSION,
 )
+from agents.cognition.consolidation import (
+    OfflineConsolidationPlan,
+    orchestrate_offline_consolidation,
+)
 from agents.cognition.contracts import (
     CognitionContractError,
     CognitionContractErrorCode,
@@ -307,6 +311,7 @@ __all__ = [
     "MotivationEvaluator",
     "MotivationScore",
     "MultiCriteriaIntentionSelector",
+    "OfflineConsolidationPlan",
     "OptionSpaceChange",
     "OwnerSafeSocialIdentity",
     "PassthroughEmotionalStateAppraiser",
@@ -360,6 +365,7 @@ __all__ = [
     "episode_facts",
     "intensity_band",
     "intention_for_action_direction",
+    "orchestrate_offline_consolidation",
     "production_cognition_config",
     "project_cognition_trace_stages",
     "project_legacy_self_belief_state",

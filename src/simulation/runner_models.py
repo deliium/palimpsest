@@ -656,6 +656,7 @@ class SimulationRunnerResult:
     final_objective_projection: DetachedObjectiveProjection | None = None
     objective_state_hash: str | None = None
     memory_dynamics_audits: tuple[object, ...] = ()
+    offline_consolidation_audits: tuple[object, ...] = ()
 
     def __post_init__(self) -> None:
         from simulation.models import RunId
@@ -711,6 +712,13 @@ class SimulationRunnerResult:
             raise TypeError("memory_dynamics_audits must be ordered")
         object.__setattr__(
             self, "memory_dynamics_audits", tuple(self.memory_dynamics_audits)
+        )
+        if isinstance(self.offline_consolidation_audits, (set, frozenset)):
+            raise TypeError("offline_consolidation_audits must be ordered")
+        object.__setattr__(
+            self,
+            "offline_consolidation_audits",
+            tuple(self.offline_consolidation_audits),
         )
 
 

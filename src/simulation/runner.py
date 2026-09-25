@@ -507,6 +507,24 @@ def _default_provider(
     return create_llm_provider(factory_config, sleep=sleep, monotonic=monotonic)
 
 
+def _consolidation_selector_for(
+    settings: RunnerProviderSettings,
+    provider: AsyncCloseable,
+    mode: CognitionConsolidationMode,
+) -> object | None:
+    """Bind a consolidation selector only for LLM-assisted sleep."""
+    if mode is not CognitionConsolidationMode.LLM_ASSISTED:
+        return None
+    from agents.cognition.consolidation import LLMOfflineConsolidationSelector
+
+    if (
+        settings.recording_policy is RecordingPolicy.LIVE
+        and settings.adapter_kind is ProviderAdapterKind.OPENAI_COMPATIBLE
+    ):
+        return LLMOfflineConsolidationSelector(provider)  # type: ignore[arg-type]
+    return LLMOfflineConsolidationSelector(None)
+
+
 def _reconstructor_for(
     settings: RunnerProviderSettings,
     provider: AsyncCloseable,
@@ -833,6 +851,11 @@ class SimulationRunner:
                     loop_config,
                     memory=memory_retriever,
                     resolve_counterpart=counterpart,
+                    consolidation_selector=_consolidation_selector_for(
+                        config.provider,
+                        provider,
+                        loop_config.consolidation_mode,
+                    ),
                 )
                 agent = Agent(
                     agent_id=owner,
@@ -1552,6 +1575,7 @@ class SimulationRunner:
         self._goal_transition_receipts.extend(goal_receipts)
         await self._apply_objective_goal_receipts(goal_receipts)
         audits = self.export_memory_dynamics_audits()
+        consolidation_audits = self.export_offline_consolidation_audits()
         result = SimulationRunnerResult(
             run_id=self._run_id,
             ticks_committed=self._ticks_committed,
@@ -1563,6 +1587,7 @@ class SimulationRunner:
             final_objective_projection=projection,
             objective_state_hash=objective_hash,
             memory_dynamics_audits=audits,
+            offline_consolidation_audits=consolidation_audits,
         )
         _LOG.info(
             "runner_finished run_id=%s ticks_committed=%s stop_reason=%s "
@@ -1601,6 +1626,27 @@ class SimulationRunner:
                     "audit_export_count": len(collected),
                 }
             },
+        )
+        return tuple(collected)
+
+    def export_offline_consolidation_audits(self) -> tuple[object, ...]:
+        """Harvest applied sleep-consolidation audits. Not part of result JSON."""
+        from memory.models import OfflineConsolidationAudit
+
+        collected: list[OfflineConsolidationAudit] = []
+        for bundle in self._agents:
+            runtime = bundle.runtime
+            export = getattr(runtime, "export_offline_consolidation_audits", None)
+            if export is None:
+                continue
+            for audit in export():
+                if type(audit) is not OfflineConsolidationAudit:
+                    raise TypeError("offline_consolidation_audits: invalid_item")
+                collected.append(audit)
+        _LOG.debug(
+            "offline_consolidation_audit_export run_id=%s audit_count=%s",
+            self._run_id.value,
+            len(collected),
         )
         return tuple(collected)
 

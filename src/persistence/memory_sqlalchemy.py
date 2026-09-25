@@ -521,6 +521,46 @@ class SqlAlchemyMemoryService:
         )
         return MemoryForgetResult(forgotten_count=forgotten, examined_count=examined)
 
+    async def forget_selected_ids(
+        self, memory_ids: tuple[MemoryId, ...], *, tick: int
+    ) -> int:
+        if isinstance(memory_ids, (str, bytes)) or not isinstance(memory_ids, tuple):
+            raise MemoryServiceError(MemoryServiceErrorCode.INVALID_REQUEST)
+        if isinstance(tick, bool) or not isinstance(tick, int) or tick < 0:
+            raise MemoryServiceError(MemoryServiceErrorCode.INVALID_REQUEST)
+        for memory_id in memory_ids:
+            if type(memory_id) is not MemoryId:
+                raise MemoryServiceError(MemoryServiceErrorCode.INVALID_REQUEST)
+        if not memory_ids:
+            return 0
+        async with session_scope(self._session_factory) as session:
+            result = await session.execute(
+                update(MemoryTraceOrm)
+                .where(
+                    MemoryTraceOrm.run_id == self._scope.run_id.value,
+                    MemoryTraceOrm.owner_id == self._scope.owner_id.value,
+                    MemoryTraceOrm.memory_id.in_(
+                        tuple(memory_id.value for memory_id in memory_ids)
+                    ),
+                    MemoryTraceOrm.forgotten_at_tick.is_(None),
+                )
+                .values(forgotten_at_tick=tick)
+            )
+            await session.commit()
+        forgotten = int(result.rowcount or 0)
+        _LOG.info(
+            "memory_forget_selected",
+            extra={
+                "operation": "forget_selected",
+                "run_id": self._scope.run_id.value,
+                "owner_id": self._scope.owner_id.value,
+                "tick": tick,
+                "requested_count": len(memory_ids),
+                "forgotten_count": forgotten,
+            },
+        )
+        return forgotten
+
     async def _load_filtered_traces(
         self, session: AsyncSession, filters: MemoryQueryFilters
     ) -> tuple[MemoryTrace, ...]:

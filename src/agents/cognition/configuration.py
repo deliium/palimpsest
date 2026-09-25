@@ -277,6 +277,7 @@ def build_cognitive_loop(
     emotional_state: EmotionalStateAppraiser | None = None,
     resolve_counterpart: object | None = None,
     pending_evidence: object | None = None,
+    consolidation_selector: object | None = None,
 ) -> CognitiveLoop:
     """Assemble a ``CognitiveLoop`` from explicit policies.
 
@@ -377,6 +378,16 @@ def build_cognitive_loop(
             }
         },
     )
+    from memory.models import OfflineConsolidationPolicy
+
+    consolidation_policy = None
+    if resolved.consolidation_mode is not CognitionConsolidationMode.DISABLED:
+        consolidation_policy = OfflineConsolidationPolicy(
+            allow_provider=(
+                resolved.consolidation_mode
+                is CognitionConsolidationMode.LLM_ASSISTED
+            )
+        )
     return CognitiveLoop(
         perception=LiteralPerceptionInterpreter(),
         memory=memory,
@@ -399,4 +410,7 @@ def build_cognitive_loop(
             ),
             pending=pending,
         ),
+        consolidation_mode=resolved.consolidation_mode,
+        consolidation_policy=consolidation_policy,
+        consolidation_selector=consolidation_selector,
     )

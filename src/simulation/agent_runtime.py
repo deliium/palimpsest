@@ -418,6 +418,7 @@ class AgentRuntime:
         "_memory_reader",
         "_memory_service",
         "_memory_writer",
+        "_offline_consolidation_audits",
         "_pending",
         "_processed_invocations",
         "_relationship_reader",
@@ -482,6 +483,7 @@ class AgentRuntime:
         self._belief_reader = belief_reader
         self._belief_writer = belief_writer
         self._memory_service = memory_service
+        self._offline_consolidation_audits: list[object] = []
         self._semantic_belief_reader = semantic_belief_reader
         self._relationship_reader = relationship_reader
         self._subjective_state = subjective_state
@@ -1220,6 +1222,7 @@ class AgentRuntime:
             pending_accesses=loop_result.pending_accesses,
             pending_reconsolidation=loop_result.pending_reconsolidation,
             pending_semanticization=loop_result.pending_semanticization,
+            offline_consolidation=loop_result.offline_consolidation,
         )
         submission = ActionSubmission(
             token=prepared.token,
@@ -1357,8 +1360,9 @@ class AgentRuntime:
             )
 
         await self._apply_pending_side_effects(pending)
+        extra_goals = _consolidation_goal_intents(pending.loop_result)
         intent_receipts = self.apply_goal_transition_intents(
-            _goal_board_intents(pending.loop_result)
+            tuple(_goal_board_intents(pending.loop_result)) + extra_goals
         )
         await self.publish_goal_revisions(intent_receipts)
         self._commit_emotional_state(
@@ -1607,6 +1611,7 @@ class AgentRuntime:
                     }
                 },
             )
+            await self._finish_offline_consolidation(pending)
             return
         await self._apply_memory_side_effects(
             agent_id=self._agent.agent_id,
@@ -1616,7 +1621,9 @@ class AgentRuntime:
             pending_accesses=pending.loop_result.pending_accesses,
             pending_reconsolidation=pending.loop_result.pending_reconsolidation,
             pending_semanticization=pending.loop_result.pending_semanticization,
+            offline_consolidation=pending.loop_result.offline_consolidation,
         )
+        await self._finish_offline_consolidation(pending)
 
     def _build_subjective_batch(
         self,
@@ -1628,6 +1635,7 @@ class AgentRuntime:
         pending_accesses: Sequence[MemoryAccessReceipt],
         pending_reconsolidation: object | None,
         pending_semanticization: object | None = None,
+        offline_consolidation: object | None = None,
     ) -> SubjectiveMutationBatch | None:
         if self._subjective_state is None:
             return None
@@ -1690,6 +1698,12 @@ class AgentRuntime:
                     }
                 },
             )
+        _extend_consolidation_writes(
+            offline_consolidation,
+            writes=writes,
+            belief_revisions=belief_revisions,
+            relationship_revisions=relationship_revisions,
+        )
         return SubjectiveMutationBatch(
             operation_id=subjective_operation_id(
                 owner_id=agent_id, invocation_id=invocation_id
@@ -1713,6 +1727,7 @@ class AgentRuntime:
         pending_accesses: Sequence[MemoryAccessReceipt],
         pending_reconsolidation: object | None = None,
         pending_semanticization: object | None = None,
+        offline_consolidation: object | None = None,
     ) -> None:
         from memory.beliefs import BeliefRevisionRequest
         from memory.models import ReconsolidationIntent, ReconstructionRecord
@@ -1878,6 +1893,12 @@ class AgentRuntime:
                 },
             )
 
+        _extend_consolidation_writes(
+            offline_consolidation,
+            writes=writes,
+            belief_revisions=belief_revisions,
+            relationship_revisions=relationship_revisions,
+        )
         if self._memory_service is not None:
             if self._memory_service.scope.owner_id != agent_id:
                 raise AgentRuntimeError(
@@ -1960,6 +1981,73 @@ class AgentRuntime:
             )
         for write in writes:
             self._memory_writer.write(write)
+
+    async def _finish_offline_consolidation(
+        self, pending: PendingRuntimeFinalization
+    ) -> None:
+        plan = pending.loop_result.offline_consolidation
+        if plan is None:
+            return
+        forget_ids = plan.selection.soft_forget_ids
+        try:
+            if self._memory_service is not None and forget_ids:
+                await self._memory_service.forget_selected_ids(
+                    forget_ids, tick=pending.tick
+                )
+        except Exception as exc:
+            _LOG.error(
+                "offline_consolidation_aborted agent_id=%s tick=%s "
+                "reason_code=apply_failed error_type=%s",
+                self._agent.agent_id.value,
+                pending.tick,
+                type(exc).__name__,
+            )
+            raise
+        self._offline_consolidation_audits.append(plan.audit)
+        _LOG.debug(
+            "offline_consolidation_applied agent_id=%s tick=%s mode=%s "
+            "merge_count=%s strengthen_count=%s soft_forget_count=%s",
+            self._agent.agent_id.value,
+            pending.tick,
+            plan.audit.mode,
+            plan.audit.merge_count,
+            plan.audit.strengthen_count,
+            plan.audit.soft_forget_count,
+        )
+
+    def export_offline_consolidation_audits(self) -> tuple[object, ...]:
+        return tuple(self._offline_consolidation_audits)
+
+
+def _extend_consolidation_writes(
+    plan: object | None,
+    *,
+    writes: list[MemoryTrace],
+    belief_revisions: list[object],
+    relationship_revisions: list[object],
+) -> None:
+    if plan is None:
+        return
+    from agents.cognition.consolidation import OfflineConsolidationPlan
+
+    if type(plan) is not OfflineConsolidationPlan:
+        return
+    writes.extend(plan.selection.derived_traces)
+    belief_revisions.extend(plan.belief_revisions)
+    relationship_revisions.extend(plan.relationship_revisions)
+
+
+def _consolidation_goal_intents(
+    loop_result: CognitiveLoopResult,
+) -> tuple[GoalTransitionIntent, ...]:
+    plan = loop_result.offline_consolidation
+    if plan is None:
+        return ()
+    from agents.cognition.consolidation import OfflineConsolidationPlan
+
+    if type(plan) is not OfflineConsolidationPlan:
+        return ()
+    return plan.goal_intents
 
 
 def _goal_board_intents(

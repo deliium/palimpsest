@@ -399,6 +399,7 @@ forbidden_modules = ["pydantic", "pydantic_core"]
 # llm owns the only allowed Pydantic surface; cognition must not import pydantic
 # directly.
 ignore_imports = [
+    "agents.cognition.consolidation -> llm",
     "agents.cognition.reconstruction -> llm",
     "simulation.runner_models -> llm.models",
     "simulation.runner_models -> llm.factory",

@@ -409,3 +409,39 @@ class InMemoryMemoryService:
             },
         )
         return MemoryForgetResult(forgotten_count=forgotten, examined_count=examined)
+
+    async def forget_selected_ids(
+        self, memory_ids: tuple[MemoryId, ...], *, tick: int
+    ) -> int:
+        if isinstance(memory_ids, (str, bytes)) or not isinstance(memory_ids, tuple):
+            raise MemoryServiceError(MemoryServiceErrorCode.INVALID_REQUEST)
+        resolved_tick = tick
+        if isinstance(resolved_tick, bool) or not isinstance(resolved_tick, int):
+            raise MemoryServiceError(MemoryServiceErrorCode.INVALID_REQUEST)
+        if resolved_tick < 0:
+            raise MemoryServiceError(MemoryServiceErrorCode.INVALID_REQUEST)
+        forgotten = 0
+        for memory_id in memory_ids:
+            if type(memory_id) is not MemoryId:
+                raise MemoryServiceError(MemoryServiceErrorCode.INVALID_REQUEST)
+            trace = self._records.get(memory_id)
+            if trace is None or trace.forgotten_at_tick is not None:
+                continue
+            if resolved_tick < trace.created_tick:
+                raise MemoryServiceError(MemoryServiceErrorCode.INVALID_REQUEST)
+            self._records[memory_id] = replace(
+                trace, forgotten_at_tick=resolved_tick
+            )
+            forgotten += 1
+        _LOG.info(
+            "memory_forget_selected",
+            extra={
+                "operation": "forget_selected",
+                "run_id": self._scope.run_id.value,
+                "owner_id": self._scope.owner_id.value,
+                "tick": resolved_tick,
+                "requested_count": len(memory_ids),
+                "forgotten_count": forgotten,
+            },
+        )
+        return forgotten

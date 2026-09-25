@@ -154,3 +154,9 @@ class MemoryService(Protocol):
     async def forget(self, request: MemoryForgetRequest) -> MemoryForgetResult:
         """Soft-forget traces under the bound scope at an explicit tick."""
         ...
+
+    async def forget_selected_ids(
+        self, memory_ids: tuple[MemoryId, ...], *, tick: int
+    ) -> int:
+        """Stamp ``forgotten_at_tick`` on the given IDs only."""
+        ...

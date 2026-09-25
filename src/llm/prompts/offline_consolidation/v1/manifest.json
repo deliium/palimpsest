@@ -1,0 +1,21 @@
+{
+  "name": "offline_consolidation",
+  "version": "v1",
+  "messages": [
+    {
+      "role": "system",
+      "template": "system.txt",
+      "sha256": "9ad7162f186163c6097fb6c62d9ea2cb8a33b3d1a38e75b29453255637fd671b"
+    },
+    {
+      "role": "user",
+      "template": "user.txt",
+      "sha256": "be77c922cb0db9baa77dd6ab755dc744131bc6f88a64a00d7d81357c7f6ffed4"
+    }
+  ],
+  "variables": [
+    "schema_name",
+    "schema_json",
+    "candidate_json"
+  ]
+}
