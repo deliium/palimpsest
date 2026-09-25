@@ -2,7 +2,7 @@
 
 [← Experiments](experiments.md) · [Memory reconstruction](memory-reconstruction.md) · [Back to README](../README.md)
 
-Executable formula, population, and edge-case policy for all eighteen metric families lives in `analysis.specifications`. Implementations must consume these specs; they do not redefine denominators ad hoc.
+Executable formula, population, and edge-case policy for all nineteen metric families lives in `analysis.specifications`. Implementations must consume these specs; they do not redefine denominators ad hoc.
 
 ## Catalog
 
@@ -19,6 +19,7 @@ Executable formula, population, and edge-case policy for all eighteen metric fam
 | `memory_dynamics` | `memory_dynamics@1` | V2 recall audits (reconstruction stage) |
 | `offline_consolidation` | `offline_consolidation@1` | harvested sleep-consolidation audits |
 | `reflection` | `reflection@1` | harvested reflection audits |
+| `identity_dynamics` | `identity_dynamics@1` | identity audit (belief-revision testimony stage) |
 | `belief_accuracy` | `belief_accuracy@1` | belief revision (ClaimTruthSpec only) |
 | `false_belief_persistence` | `false_belief_persistence@1` | belief revision + truth specs |
 | `relationship_stability` | `relationship_stability@1` | relationship revisions |
@@ -34,6 +35,8 @@ Catalog version: `metric-catalog-v1`. Document schema: `MetricDocument` schema `
 `offline_consolidation@1` values: `consolidation_invocations`, `traces_strengthened`, `traces_soft_forgotten`, `patterns_merged`, `belief_revisions`, `relationship_revisions`, `goal_transitions`. Assembled only when `offline_consolidation_report` is present. A missing report does not change V1 catalog assembly. Assembly logs `offline_consolidation_metrics_assembled` with the family id and value keys only.
 
 `reflection@1` values: `reflection_invocations`, `belief_revisions`, `hypotheses`, `goals_adopted`, `goals_abandoned`, `relationship_reassessments`, `patterns_detected`. Assembled only when `reflection_report` is present. Disabled arms and missing reports stay absent and do not change V1 catalog assembly. Assembly logs `reflection_metrics_assembled` with the family id and which value keys are present. Belief text and memory content are not logged.
+
+`identity_dynamics@1` values: `aspect_*` counts for the eleven identity topics, `stability_low` / `stability_mid` / `stability_high`, dissonance counts for `commitment_command`, `inferred_value_command`, and `risk_above_tolerance`, and `owner_divergence`. A missing audit or a flags-off run with no qualifying heads is absent, not zeros. The mapper logs `identity_dynamics_mapped` with schema version, owner count, and present/absent. It does not store claim text. Live cognition does not read the report.
 
 ### Supporting formulas (not a separate family)
 

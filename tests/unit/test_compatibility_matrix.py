@@ -101,6 +101,8 @@ def test_runner_config_write_is_v4_with_legacy_accepted() -> None:
     assert "runner-config-v6" in entry.accepted_restore
     assert "consolidation-only" in entry.bump_trigger
     assert "A-E" in entry.v1_fixture_impact
+    assert "extended_self_model" in entry.v1_fixture_impact
+    assert "V1 gate" in entry.v1_fixture_impact
     assert entry.write_version == "runner-config-v4"
 
 

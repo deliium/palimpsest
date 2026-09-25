@@ -82,6 +82,33 @@ Each stage is a narrow async protocol under `agents.cognition`. Components are c
 
 **Non-goals:** free-form emotional prose, personality traits, writing emotion into objective world state, collapsing emotion+drives+goals into one reward scalar, enabling other reserved V2 flags.
 
+## Extended self-model (V2 owned flag)
+
+`V2CapabilityFlags.extended_self_model` (default **off**) owns history-derived, revisable self-beliefs. It does not add a runner JSON key, a persisted `SelfModel` row, or a cognition-trace stage. Default write stays `runner-config-v4`. Runner maps the flag to `CognitionIdentityMode`:
+
+| Flag | Mode | Behavior |
+| --- | --- | --- |
+| off | `PASSTHROUGH` | V1 `project_self_model`; `SelfModel.identity` stays `None`; no identity influence |
+| on | `ENABLED` | `IdentityState` from `identity.<aspect>.<provenance>.<token>` beliefs, including `CANDIDATE` |
+
+Aspects are topics (`ability`, `weakness`, `recurring_behavior`, `inferred_value`, `social_role`, `relationship`, `commitment`, `perceived_status`, `reliability`, `risk_tolerance`, `competence`). They are not person classes. Forbidden tokens (`warrior`, `leader`, `trader`, `good_person`, `evil_person`, `friend`, `enemy`, and the compacted good/evil forms) fail at claim construction. Stored claims are owner-subject `BOOL` `true`. Rate and stability are derived from the revision chain. Identity does not read the decision journal or the reflection cursor, and it does not copy `MemoryRelation` predicates.
+
+The same initial configuration plus different histories yields different self-models. Experiment H (`experiment-h-identity`, `identity-divergence-v1`) pairs `h-disabled` and `h-enabled` on `runner-config-v4` with a shared seed. It is not part of the V1 regression gate. Flags-off command sequence and `exact_trajectory_hash` match identity passthrough.
+
+| Surface | Flag on |
+| --- | --- |
+| Goals | Keep active goals whose commands match a strong competence view; suspend non-critical medium-term goals that match a strong weakness |
+| Planning | One pairwise vote from commitment, inferred value, or risk tolerance. The winning future still compiles to one command. The last feasible future stays. Critical physiological vetoes stay |
+| Social reading | Relationship and reliability views scale trust inside 0.85–1.15, then clamp to `[0, 1]` |
+| Reflection | When reflection is also enabled, dissonant memory ids are preferred. Identity does not write those beliefs again |
+| Dissonance | A conflicting action still proceeds. The next revision adds contradicting evidence instead of replacing the `BOOL` claim |
+
+Dissonance applies on the following tick. Resume stores the last applied tick and operation ids on an in-memory `identity_cursor`. It does not add a subjective table.
+
+**Non-goals:** person classes, a second belief table, LLM-authored identity, and hard bans on conflicting actions.
+
+**Logging:** metadata only. DEBUG events include `self_model_projected` (`identity_mode`, belief and stability-band counts), `identity_appraisal_start`, `identity_appraisal_complete`, `identity_pending`, `identity_dissonance`, `identity_dissonance_deferred`, `identity_goal_bias`, `identity_violation_cost`, `identity_social_scale`, `identity_reflection_cue`, `identity_applied`, `identity_apply_skipped_idempotent`, `identity_cursor_restored`, and `identity_cursor_absent`. Construction logs `identity_mode` and the flag bool. Do not log claim text, predicates, memory bodies, or command arguments.
+
 ## Optional cognition execution trace
 
 In-memory `ComponentBoundaryRecord` receipts are not durable. An optional, default-off **cognition execution trace** projects those receipts (plus snapshot context) into a stable scientific stage sequence for debugger / experiment consumers — without influencing `WorldEngine`, admission, or objective replay.
@@ -200,7 +227,7 @@ The selected future/intention is non-authoritative. `CommandPlanner` compiles on
 | `CognitiveLoopInput` | One `Observation` + owning `AgentId` + immutable `InternalAgentState` + frozen `SubjectiveSnapshot` |
 | `SubjectiveSnapshot` | Owner-scoped goals, drives, semantic beliefs, directed relationships, owner-safe social identity |
 | Stage artifacts | Frozen perception/memory/situation/`SelfModel`/`GoalBoard`/`PossibleFutures`/`MotivationEvaluation`/`SelectedIntention`/`ActionPlan` |
-| `SelfModel` | Deterministic projection of self-relevant semantic beliefs (no predefined traits/roles) |
+| `SelfModel` | Deterministic projection of self-relevant semantic beliefs (no predefined traits/roles). `identity` is `None` unless `extended_self_model` is on |
 | `CognitiveLoopResult` | Exact closed `AgentCommand` + ordered boundary records + subjective update intents |
 | `MemoryUpdateIntent` | Post-cognition intents (`WRITE_MEMORY` / `WRITE_BELIEF` / `REVISE_BELIEF` / `REVISE_RELATIONSHIP`); stores are not mutated inside the loop |
 
@@ -287,7 +314,7 @@ Integration coverage is in-memory (no PostgreSQL/Docker/network/LLM). Divergence
 | --- | --- |
 | Stage protocols | Constructor-injected into `CognitiveLoop`; replace one stage at a time |
 | Modes | `AgentCognitionSpec.memory_mode` / `imagination_mode`; run-level mortality |
-| Capability flags | Run-level `V2CapabilityFlags` on `SimulationRunnerConfig` — not stage plugins; default off wires V1 policies; **owned** flags (currently `short_term_emotional_state`) may enable; other flags still fail closed (`capability_unimplemented`) |
+| Capability flags | Run-level `V2CapabilityFlags` on `SimulationRunnerConfig` — not stage plugins; default off wires V1 policies; **owned** flags (`extended_self_model`, `short_term_emotional_state`) may enable; other flags still fail closed (`capability_unimplemented`) |
 | Cognition execution trace | Top-level `CognitionTraceSpec` (`runner-config-v4`, default off) — not a capability flag; ports only; no HTTP yet |
 | Subjective finalization | `AgentRuntime` commits episodic/belief/relationship batches only |
 | LLM lifecycle | Remains `api` / `llm.factory` composition — **not** encoded on runner fingerprints |

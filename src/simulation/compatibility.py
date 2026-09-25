@@ -174,7 +174,9 @@ _MATRIX: dict[str, CompatibilityEntry] = {
         owner_package="simulation.runner_models / simulation.runner_serialization",
         v1_fixture_impact=(
             "Golden runner-config-v1/v2/v3/v4 fixtures must decode; "
-            "catalog A-E fingerprints stay on v4"
+            "catalog A-E fingerprints stay on v4; "
+            "extended_self_model is an owned default-off flag on existing keys "
+            "and is off the V1 gate"
         ),
     ),
     "runner_result": CompatibilityEntry(

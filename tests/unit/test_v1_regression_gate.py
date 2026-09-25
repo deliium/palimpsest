@@ -93,8 +93,11 @@ async def test_catalog_experiment_executes_flags_off(
         len(definition.conditions),
         base.stop_policy.max_ticks,
     )
+    assert experiment_id != "experiment-h-identity"
     for condition in definition.conditions:
         assert condition.runner_config.schema_version == RUNNER_SCHEMA_VERSION_V4
+        assert condition.runner_config.capability_flags.extended_self_model is False
+        assert condition.runner_config.capability_flags.enabled_names() == ()
         v1_regression_profile(condition.runner_config)
         _LOG.debug(
             "v1_regression_gate_condition experiment_id=%s condition_id=%s "
@@ -124,6 +127,7 @@ async def test_reference_scenario_short_horizon_flags_off() -> None:
         death_tick=1,
     )
     assert bundle.scenario_id == REFERENCE_SCENARIO_ID
+    assert bundle.config.capability_flags.extended_self_model is False
     v1_regression_profile(bundle.config)
     assert bundle.config.schema_version == RUNNER_SCHEMA_VERSION_V4
     _LOG.info(
@@ -167,6 +171,7 @@ def test_goal_management_always_on_not_capability_flag() -> None:
 
     config = v1_regression_profile(_short_base())
     assert config.capability_flags.enabled_names() == ()
+    assert config.capability_flags.extended_self_model is False
     assert config.cognition_trace.enabled is False
     cognition = production_cognition_config()
     assert cognition.goal_management_mode is CognitionGoalManagementMode.ENABLED

@@ -174,14 +174,14 @@ Extend the V1 self-model so an agent can form subjective, revisable beliefs abou
 
 ### Phase 5: Regression Gate and Documentation
 
-- [ ] Task 14: Prove flags-off parity and keep flag-on results off the V1 gate.
+- [x] Task 14: Prove flags-off parity and keep flag-on results off the V1 gate.
   - Deliverable: Extend `tests/unit/test_v1_regression_gate.py` only enough to assert `extended_self_model` is off in the V1 profile and that enabling it is not required for catalog A–E or the short reference. Add a focused flags-off vs current-main behavioral check on a short seeded run: command sequence and `exact_trajectory_hash` match the flags-off path with identity mode passthrough. Add a flag-on test that the hash may differ once influence is active, and that this run is not part of the V1 gate. Update `docs/architecture.md` only in Task 15; this task updates the compatibility assertions in `tests/unit/test_compatibility_matrix.py` if the owned-flag narrative is encoded there, without dropping accepted runner versions.
   - Expected behavior: V1 gate command and the existing A–E expectations stay green with tracing off and every capability flag off. `extended_self_model=True` does not raise `capability_unimplemented`. An unowned flag still does.
   - Files: `tests/unit/test_v1_regression_gate.py`, `tests/unit/test_identity_flag_gating.py`, `tests/unit/test_compatibility_matrix.py` when that text lists owned flags, `src/simulation/compatibility.py` if the matrix string must name the new owned flag.
   - Logging requirements: Gate tests assert log records for identity, if any, contain no observation, belief, or memory payloads. Construction failure still logs `capability_unimplemented`.
   - Dependencies: Tasks 3, 7, 8, 13.
 
-- [ ] Task 15: Document the identity seam.
+- [x] Task 15: Document the identity seam.
   - Deliverable: Update `docs/cognition-runtime.md` (SelfModel contract, identity mode, influence table, dissonance, metadata-only log names). Update `docs/architecture.md` Downstream V2 checklist item 2 so owned flags include `extended_self_model`, and the experiment seam so H is listed as off the V1 gate. Update `docs/experiments.md` catalog table and `docs/analysis-metrics.md` with `identity_dynamics@1`. State the non-goals: no person classes, no persisted self-model row, no LLM identity. This task is the mandatory docs checkpoint for Docs: yes.
   - Expected behavior: A reader can see how to enable the flag, what stays byte-for-behavior identical when it is off, and which experiment demonstrates history divergence.
   - Files: `docs/cognition-runtime.md`, `docs/architecture.md`, `docs/experiments.md`, `docs/analysis-metrics.md`.
