@@ -39,8 +39,8 @@ from agents.models import (
     GoalHorizon,
     GoalId,
     GoalOutcome,
-    GoalStatus,
     GoalOutcomeKind,
+    GoalStatus,
 )
 from memory.beliefs import BeliefActivationState, BeliefValueKind, ClaimValue
 from memory.models import BeliefId, MemoryId

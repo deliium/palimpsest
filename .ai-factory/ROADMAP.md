@@ -36,13 +36,17 @@ Establish the modular-monolith foundation: packaging, bounded packages, typed co
 
 ## Next
 
-### M6 — Remaining V2 Capability Flags (not started)
+### M6 — Remaining V2 Capability Flags (in progress)
 
-**Goal:** Own additional default-off `V2CapabilityFlags` beyond short-term emotion (for example `advanced_social_inference` and other reserved flags), each with fail-closed allowlist ownership, V1 regression gates green when flags-off, and no LLM→world shortcuts.
+**Goal:** Own the remaining default-off `V2CapabilityFlags` beyond short-term emotion, each with fail-closed allowlist ownership, V1 regression gates green when flags-off, and no LLM→world shortcuts.
+
+**Started:** `extended_self_model` is owned and default off. When enabled it forms history-derived, revisable self-beliefs (abilities, weaknesses, commitments, and the other closed identity aspects). It is not a person class, a persisted self-model row, or a second belief store. Experiment H and `identity_dynamics@1` stay off the V1 regression gate. `short_term_emotional_state` was already owned in M5.3.
+
+**Still unimplemented:** `advanced_social_inference`, `multi_hop_testimony_tracking`, and `predictive_world_model`. Enabling any of them still fails closed with `capability_unimplemented`.
 
 **Out of scope until planned:** free-form affect narration, personality trait systems, HTTP debug UI for emotion, collapsing emotion+drives+goals into one reward scalar.
 
-**Plans:** none yet for flag ownership — create via `/aif-plan` when ready. Opt-in work that did not claim a flag already shipped as M5.4 and M5.5.
+**Plan:** `.ai-factory/plans/v2-emergent-dynamic-identity.md` (owns `extended_self_model` only). Opt-in work that did not claim a flag already shipped as M5.4 and M5.5.
 
 ## V1 status
 
