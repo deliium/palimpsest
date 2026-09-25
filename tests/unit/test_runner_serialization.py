@@ -11,6 +11,7 @@ from simulation.models import StochasticIdentity
 from simulation.runner_models import (
     AgentCognitionSpec,
     AgentRunnerSpec,
+    ConsolidationMode,
     DriveOverrideSpec,
     MemoryMode,
     RunnerStopPolicy,
@@ -19,6 +20,7 @@ from simulation.runner_models import (
 )
 from simulation.runner_serialization import (
     RunnerSerializationError,
+    cognition_fingerprint,
     decode_runner_config,
     encode_runner_config,
     provider_fingerprint,
@@ -120,9 +122,7 @@ def test_reconstructive_v2_memory_mode_round_trips() -> None:
     )
     encoded = encode_runner_config(config)
     document = json.loads(encoded.decode("utf-8"))
-    assert (
-        document["agents"][0]["cognition"]["memory_mode"] == "reconstructive_v2"
-    )
+    assert document["agents"][0]["cognition"]["memory_mode"] == "reconstructive_v2"
     decoded = decode_runner_config(encoded)
     assert decoded.agents[0].cognition.memory_mode is MemoryMode.RECONSTRUCTIVE_V2
 
@@ -132,9 +132,7 @@ def test_unknown_memory_mode_string_fails_closed() -> None:
     document["agents"][0]["cognition"]["memory_mode"] = "perfect_recall"
     with pytest.raises(RunnerSerializationError) as rejected:
         decode_runner_config(
-            json.dumps(document, separators=(",", ":"), sort_keys=True).encode(
-                "utf-8"
-            )
+            json.dumps(document, separators=(",", ":"), sort_keys=True).encode("utf-8")
         )
     assert rejected.value.code == "invalid_model"
 
@@ -164,7 +162,9 @@ def test_default_memory_mode_still_encodes_reconstructive() -> None:
     )
     document = json.loads(encode_runner_config(config).decode("utf-8"))
     assert document["agents"][0]["cognition"]["memory_mode"] == "reconstructive"
-    assert AgentCognitionSpec(agent_id=agent_id).memory_mode is MemoryMode.RECONSTRUCTIVE
+    assert (
+        AgentCognitionSpec(agent_id=agent_id).memory_mode is MemoryMode.RECONSTRUCTIVE
+    )
 
 
 def test_scenario_fingerprint_stable_across_cognition() -> None:
@@ -363,3 +363,81 @@ def test_v3_rejects_extra_capability_flag_field() -> None:
             json.dumps(document, separators=(",", ":"), sort_keys=True).encode("utf-8")
         )
     assert rejected.value.code == "invalid_fields"
+
+
+def test_v4_omits_consolidation_mode_and_rejects_the_key() -> None:
+    config = _config()
+    encoded = encode_runner_config(config)
+    document = json.loads(encoded.decode("utf-8"))
+    assert "consolidation_mode" not in document["agents"][0]["cognition"]
+    decoded = decode_runner_config(encoded)
+    assert decoded.agents[0].cognition.consolidation_mode is ConsolidationMode.DISABLED
+    assert cognition_fingerprint(decoded) == cognition_fingerprint(config)
+    document["agents"][0]["cognition"]["consolidation_mode"] = "disabled"
+    with pytest.raises(RunnerSerializationError) as rejected:
+        decode_runner_config(
+            json.dumps(document, separators=(",", ":"), sort_keys=True).encode("utf-8")
+        )
+    assert rejected.value.code == "invalid_fields"
+
+
+def test_v5_round_trips_consolidation_mode() -> None:
+    from simulation.runner_models import RUNNER_SCHEMA_VERSION_V5
+
+    base = _config()
+    agent = base.agents[0]
+    enabled = SimulationRunnerConfig(
+        seed=base.seed,
+        stochastic_identity=base.stochastic_identity,
+        scenario=base.scenario,
+        agents=(
+            AgentRunnerSpec(
+                agent_id=agent.agent_id,
+                entity_id=agent.entity_id,
+                cognition=AgentCognitionSpec(
+                    agent_id=agent.agent_id,
+                    memory_mode=MemoryMode.REFERENCE,
+                    drive_overrides=agent.cognition.drive_overrides,
+                    consolidation_mode=ConsolidationMode.DETERMINISTIC,
+                ),
+                name=agent.name,
+                initial_goals=agent.initial_goals,
+            ),
+        ),
+        stop_policy=base.stop_policy,
+        schema_version=RUNNER_SCHEMA_VERSION_V5,
+    )
+    encoded = encode_runner_config(enabled)
+    document = json.loads(encoded.decode("utf-8"))
+    assert document["schema_version"] == RUNNER_SCHEMA_VERSION_V5
+    assert document["agents"][0]["cognition"]["consolidation_mode"] == "deterministic"
+    decoded = decode_runner_config(encoded)
+    assert decoded == enabled
+    document["agents"][0]["cognition"]["consolidation_mode"] = "scripted"
+    with pytest.raises(RunnerSerializationError) as rejected:
+        decode_runner_config(
+            json.dumps(document, separators=(",", ":"), sort_keys=True).encode("utf-8")
+        )
+    assert rejected.value.code == "invalid_enum"
+
+
+def test_v4_rejects_non_disabled_consolidation_mode() -> None:
+    base = _config()
+    agent = base.agents[0]
+    with pytest.raises(ValueError, match="consolidation_mode_requires_v5"):
+        SimulationRunnerConfig(
+            seed=base.seed,
+            stochastic_identity=base.stochastic_identity,
+            scenario=base.scenario,
+            agents=(
+                AgentRunnerSpec(
+                    agent_id=agent.agent_id,
+                    entity_id=agent.entity_id,
+                    cognition=AgentCognitionSpec(
+                        agent_id=agent.agent_id,
+                        consolidation_mode=ConsolidationMode.LLM_ASSISTED,
+                    ),
+                ),
+            ),
+            stop_policy=base.stop_policy,
+        )

@@ -69,6 +69,7 @@ RUNNER_SCHEMA_VERSION_V1: Final[str] = "runner-config-v1"
 RUNNER_SCHEMA_VERSION_V2: Final[str] = "runner-config-v2"
 RUNNER_SCHEMA_VERSION_V3: Final[str] = "runner-config-v3"
 RUNNER_SCHEMA_VERSION_V4: Final[str] = "runner-config-v4"
+RUNNER_SCHEMA_VERSION_V5: Final[str] = "runner-config-v5"
 RUNNER_SCHEMA_VERSION: Final[str] = RUNNER_SCHEMA_VERSION_V4
 SUPPORTED_RUNNER_SCHEMA_VERSIONS: Final[frozenset[str]] = frozenset(
     {
@@ -76,6 +77,7 @@ SUPPORTED_RUNNER_SCHEMA_VERSIONS: Final[frozenset[str]] = frozenset(
         RUNNER_SCHEMA_VERSION_V2,
         RUNNER_SCHEMA_VERSION_V3,
         RUNNER_SCHEMA_VERSION_V4,
+        RUNNER_SCHEMA_VERSION_V5,
     }
 )
 RESULT_SCHEMA_VERSION_V1: Final[str] = "runner-result-v1"
@@ -149,6 +151,18 @@ class MortalityMode(StrEnum):
     ENABLED = "enabled"
 
 
+class ConsolidationMode(StrEnum):
+    """Closed offline sleep-consolidation treatments.
+
+    Default is ``DISABLED``: physical sleep only. This is not a
+    ``V2CapabilityFlags`` slot.
+    """
+
+    DISABLED = "disabled"
+    DETERMINISTIC = "deterministic"
+    LLM_ASSISTED = "llm_assisted"
+
+
 @dataclass(frozen=True, slots=True)
 class V2CapabilityFlags:
     """Run-level reserved V2 capability identifiers (configuration only).
@@ -176,9 +190,7 @@ class V2CapabilityFlags:
         return any(getattr(self, name) for name in _V2_CAPABILITY_FLAG_NAMES)
 
     def enabled_names(self) -> tuple[str, ...]:
-        return tuple(
-            name for name in _V2_CAPABILITY_FLAG_NAMES if getattr(self, name)
-        )
+        return tuple(name for name in _V2_CAPABILITY_FLAG_NAMES if getattr(self, name))
 
     def unimplemented_enabled_names(self) -> tuple[str, ...]:
         """Enabled flags that are not yet owned by an implementation plan."""
@@ -191,9 +203,7 @@ class V2CapabilityFlags:
     def owned_enabled_names(self) -> tuple[str, ...]:
         """Enabled flags owned by an implemented plan."""
         return tuple(
-            name
-            for name in self.enabled_names()
-            if name in _V2_OWNED_CAPABILITY_FLAGS
+            name for name in self.enabled_names() if name in _V2_OWNED_CAPABILITY_FLAGS
         )
 
 
@@ -801,6 +811,7 @@ class AgentCognitionSpec:
     imagination_mode: ImaginationMode = ImaginationMode.ENABLED
     drive_overrides: tuple[DriveOverrideSpec, ...] = ()
     policy_version: str = COGNITION_POLICY_VERSION
+    consolidation_mode: ConsolidationMode = ConsolidationMode.DISABLED
 
     def __post_init__(self) -> None:
         if type(self.agent_id) is not AgentId:
@@ -810,6 +821,10 @@ class AgentCognitionSpec:
         if type(self.imagination_mode) is not ImaginationMode:
             raise TypeError(
                 "AgentCognitionSpec.imagination_mode must be ImaginationMode"
+            )
+        if type(self.consolidation_mode) is not ConsolidationMode:
+            raise TypeError(
+                "AgentCognitionSpec.consolidation_mode must be ConsolidationMode"
             )
         if self.policy_version != COGNITION_POLICY_VERSION:
             raise ValueError("unsupported cognition policy_version")
@@ -1241,8 +1256,7 @@ class SimulationRunnerConfig:
         if self.mortality_policy_version != MORTALITY_POLICY_VERSION:
             raise ValueError("unsupported mortality_policy_version")
         if (
-            self.schema_version
-            in {RUNNER_SCHEMA_VERSION_V1, RUNNER_SCHEMA_VERSION_V2}
+            self.schema_version in {RUNNER_SCHEMA_VERSION_V1, RUNNER_SCHEMA_VERSION_V2}
             and self.capability_flags.any_enabled()
         ):
             raise ValueError(
@@ -1281,6 +1295,34 @@ class SimulationRunnerConfig:
                 len(enabled),
                 ",".join(enabled),
             )
+        consolidation_modes = tuple(
+            agent.cognition.consolidation_mode for agent in self.agents
+        )
+        non_disabled = tuple(
+            mode
+            for mode in consolidation_modes
+            if mode is not ConsolidationMode.DISABLED
+        )
+        if non_disabled and self.schema_version != RUNNER_SCHEMA_VERSION_V5:
+            _LOGGER.error(
+                "invalid_fields path=agents.cognition.consolidation_mode "
+                "reason_code=consolidation_mode_requires_v5 schema_version=%s",
+                self.schema_version,
+            )
+            raise ValueError(
+                "non-disabled consolidation_mode requires runner-config-v5 "
+                "(code=consolidation_mode_requires_v5)"
+            )
+        if self.schema_version == RUNNER_SCHEMA_VERSION_V5 and not non_disabled:
+            _LOGGER.error(
+                "invalid_fields path=schema_version "
+                "reason_code=v5_requires_consolidation schema_version=%s",
+                self.schema_version,
+            )
+            raise ValueError(
+                "runner-config-v5 requires a non-disabled consolidation_mode "
+                "(code=v5_requires_consolidation)"
+            )
         if self.cognition_trace.enabled:
             _LOGGER.info(
                 "runner_config_cognition_trace_enabled schema_version=%s "
@@ -1294,7 +1336,8 @@ class SimulationRunnerConfig:
             "runner_config_validated schema_version=%s agent_count=%s "
             "location_count=%s max_ticks=%s mortality_mode=%s "
             "capability_flag_count=%s enabled_flag_count=%s "
-            "cognition_trace_enabled=%s cognition_trace_detail=%s",
+            "cognition_trace_enabled=%s cognition_trace_detail=%s "
+            "consolidation_mode=%s",
             self.schema_version,
             len(self.agents),
             len(self.scenario.locations),
@@ -1304,6 +1347,12 @@ class SimulationRunnerConfig:
             len(enabled),
             self.cognition_trace.enabled,
             self.cognition_trace.detail.value,
+            ",".join(mode.value for mode in consolidation_modes),
+        )
+        _LOGGER.debug(
+            "runner_config_decoded schema_version=%s consolidation_mode=%s",
+            self.schema_version,
+            ",".join(mode.value for mode in consolidation_modes),
         )
 
     def ordered_registrations(self) -> tuple[AgentRegistration, ...]:
@@ -1674,13 +1723,11 @@ def _outcome_satisfied(
     kind = outcome.kind
     if kind is GoalOutcomeKind.REACH_PLACE:
         return (
-            outcome.place_id is not None
-            and body.location_id.value == outcome.place_id
+            outcome.place_id is not None and body.location_id.value == outcome.place_id
         )
     if kind is GoalOutcomeKind.OBTAIN_ENTITY:
-        return (
-            outcome.entity_id is not None
-            and any(item.value == outcome.entity_id for item in body.inventory)
+        return outcome.entity_id is not None and any(
+            item.value == outcome.entity_id for item in body.inventory
         )
     if kind is GoalOutcomeKind.AVOID_ENTITY:
         if outcome.entity_id is None:
@@ -1771,8 +1818,7 @@ def evaluate_goals_after_finalization(
                 )
             )
             _LOGGER.debug(
-                "goal_transition goal_id=%s owner_id=%s tick=%s "
-                "reason=%s to_status=%s",
+                "goal_transition goal_id=%s owner_id=%s tick=%s reason=%s to_status=%s",
                 goal.goal_id.value,
                 goal.owner_id.value,
                 evidence.tick,
@@ -1793,8 +1839,7 @@ def evaluate_goals_after_finalization(
                 )
             )
             _LOGGER.debug(
-                "goal_transition goal_id=%s owner_id=%s tick=%s "
-                "reason=%s to_status=%s",
+                "goal_transition goal_id=%s owner_id=%s tick=%s reason=%s to_status=%s",
                 goal.goal_id.value,
                 goal.owner_id.value,
                 evidence.tick,
@@ -1815,17 +1860,14 @@ def evaluate_goals_after_finalization(
                 )
             )
             _LOGGER.debug(
-                "goal_transition goal_id=%s owner_id=%s tick=%s "
-                "reason=%s to_status=%s",
+                "goal_transition goal_id=%s owner_id=%s tick=%s reason=%s to_status=%s",
                 goal.goal_id.value,
                 goal.owner_id.value,
                 evidence.tick,
                 GoalTransitionReasonCode.RUN_END.value,
                 GoalStatus.ABANDONED.value,
             )
-    receipts.sort(
-        key=lambda item: (item.tick, item.owner_id.value, item.goal_id.value)
-    )
+    receipts.sort(key=lambda item: (item.tick, item.owner_id.value, item.goal_id.value))
     _LOGGER.debug(
         "goal_eval_complete tick=%s run_ending=%s transition_count=%s",
         evidence.tick,

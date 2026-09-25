@@ -48,6 +48,7 @@ from simulation.runner_models import (
     RUNNER_SCHEMA_VERSION,
     RUNNER_SCHEMA_VERSION_V3,
     RUNNER_SCHEMA_VERSION_V4,
+    RUNNER_SCHEMA_VERSION_V5,
     SUPPORTED_RESULT_SCHEMA_VERSIONS,
     SUPPORTED_RUNNER_SCHEMA_VERSIONS,
 )
@@ -83,6 +84,7 @@ __all__ = [
     "METRIC_DOCUMENT_SCHEMA_VERSION",
     "RUNNER_SCHEMA_VERSION_V3",
     "RUNNER_SCHEMA_VERSION_V4",
+    "RUNNER_SCHEMA_VERSION_V5",
     "STREAM_ENVELOPE_VERSION",
     "WS_PROTOCOL_VERSION",
     "CompatibilityEntry",
@@ -159,14 +161,16 @@ _MATRIX: dict[str, CompatibilityEntry] = {
         accepted_restore=_versions(*sorted(SUPPORTED_RUNNER_SCHEMA_VERSIONS)),
         bump_trigger=(
             "New runner fields require a versioned exact key set "
-            f"(write {RUNNER_SCHEMA_VERSION_V4} for cognition_trace; "
+            f"(default write stays {RUNNER_SCHEMA_VERSION_V4}; "
+            f"{RUNNER_SCHEMA_VERSION_V5} is accepted and emitted only when "
+            "consolidation_mode is not disabled; "
             f"{RUNNER_SCHEMA_VERSION_V3} retained for capability flags; "
-            "v1/v2/v3 decode + default-off upgrade retained)."
+            "v1-v4 omit consolidation_mode and restore DISABLED)."
         ),
         owner_package="simulation.runner_models / simulation.runner_serialization",
         v1_fixture_impact=(
-            "Golden runner-config-v1/v2/v3 fixtures must decode; "
-            "config_fingerprint may change under v4 write"
+            "Golden runner-config-v1/v2/v3/v4 fixtures must decode; "
+            "catalog A-E fingerprints stay on v4"
         ),
     ),
     "runner_result": CompatibilityEntry(
@@ -186,9 +190,7 @@ _MATRIX: dict[str, CompatibilityEntry] = {
         entry_id="cognition_trace",
         write_version=COGNITION_TRACE_SCHEMA_VERSION,
         accepted_restore=_versions(COGNITION_TRACE_SCHEMA_VERSION),
-        bump_trigger=(
-            "Wire shape change for durable cognition-trace stage envelopes"
-        ),
+        bump_trigger=("Wire shape change for durable cognition-trace stage envelopes"),
         owner_package="simulation.cognition_trace / cognition_trace_serialization",
         v1_fixture_impact=(
             "Non-authoritative; outside EvidenceManifest / objective replay"
@@ -261,7 +263,7 @@ _MATRIX: dict[str, CompatibilityEntry] = {
         accepted_restore=_versions(METRIC_DOCUMENT_SCHEMA_VERSION),
         bump_trigger="Analysis metric document schema changes",
         owner_package="analysis.models",
-        v1_fixture_impact="Schema \"1\" documents remain loadable",
+        v1_fixture_impact='Schema "1" documents remain loadable',
     ),
     "metric_catalog": CompatibilityEntry(
         entry_id="metric_catalog",
@@ -329,6 +331,7 @@ _LOG.debug(
         "runner_write": RUNNER_SCHEMA_VERSION,
         "runner_v3": RUNNER_SCHEMA_VERSION_V3,
         "runner_v4": RUNNER_SCHEMA_VERSION_V4,
+        "runner_v5": RUNNER_SCHEMA_VERSION_V5,
         "alembic_head": ALEMBIC_HEAD_REVISION,
         "accepted_event_count": len(ACCEPTED_EVENT_SCHEMA_VERSIONS),
     },

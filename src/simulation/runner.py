@@ -14,6 +14,7 @@ from enum import StrEnum
 from typing import Final, Protocol
 
 from agents.cognition.configuration import (
+    CognitionConsolidationMode,
     CognitionDriveOverride,
     CognitionEmotionalStateMode,
     CognitionImaginationMode,
@@ -448,6 +449,7 @@ def _cognition_config_for(
             else CognitionMortalityAppraisalMode.ENABLED
         ),
         emotional_state_mode=emotional_mode,
+        consolidation_mode=CognitionConsolidationMode(spec.consolidation_mode.value),
         drive_overrides=tuple(
             CognitionDriveOverride(
                 kind=item.kind,
@@ -679,9 +681,7 @@ class SimulationRunner:
         try:
             enabled_flags = config.capability_flags.enabled_names()
             owned_enabled = config.capability_flags.owned_enabled_names()
-            unimplemented_flags = (
-                config.capability_flags.unimplemented_enabled_names()
-            )
+            unimplemented_flags = config.capability_flags.unimplemented_enabled_names()
             _LOG.debug(
                 "runner_construction_start schema_version=%s agent_count=%s "
                 "mortality_mode=%s durable=%s capability_flag_count=%s "

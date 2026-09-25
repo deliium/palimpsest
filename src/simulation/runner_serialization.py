@@ -26,6 +26,7 @@ from simulation.runner_models import (
     RUNNER_SCHEMA_VERSION_V2,
     RUNNER_SCHEMA_VERSION_V3,
     RUNNER_SCHEMA_VERSION_V4,
+    RUNNER_SCHEMA_VERSION_V5,
     SUPPORTED_RUNNER_SCHEMA_VERSIONS,
     AgentCognitionSpec,
     AgentRunnerSpec,
@@ -33,6 +34,7 @@ from simulation.runner_models import (
     CognitionFailurePolicy,
     CognitionTraceDetail,
     CognitionTraceSpec,
+    ConsolidationMode,
     DriveOverrideSpec,
     ExactReproducibilityMode,
     ExperimentAssignmentRef,
@@ -206,8 +208,23 @@ def _decode_drive_override(data: dict[str, Any], *, path: str) -> DriveOverrideS
         raise RunnerSerializationError("invalid_model", path) from exc
 
 
-def _encode_cognition(value: AgentCognitionSpec) -> dict[str, Any]:
-    return {
+_COGNITION_KEYS_V4: Final[set[str]] = {
+    "agent_id",
+    "memory_mode",
+    "imagination_mode",
+    "drive_overrides",
+    "policy_version",
+}
+_COGNITION_KEYS_V5: Final[set[str]] = {
+    *_COGNITION_KEYS_V4,
+    "consolidation_mode",
+}
+
+
+def _encode_cognition(
+    value: AgentCognitionSpec, *, schema_version: str
+) -> dict[str, Any]:
+    payload: dict[str, Any] = {
         "agent_id": value.agent_id.value,
         "drive_overrides": [
             _encode_drive_override(item) for item in value.drive_overrides
@@ -216,20 +233,30 @@ def _encode_cognition(value: AgentCognitionSpec) -> dict[str, Any]:
         "memory_mode": value.memory_mode.value,
         "policy_version": value.policy_version,
     }
+    if schema_version == RUNNER_SCHEMA_VERSION_V5:
+        payload["consolidation_mode"] = value.consolidation_mode.value
+    return payload
 
 
-def _decode_cognition(data: dict[str, Any], *, path: str) -> AgentCognitionSpec:
-    _require_keys(
-        data,
-        {
-            "agent_id",
-            "memory_mode",
-            "imagination_mode",
-            "drive_overrides",
-            "policy_version",
-        },
-        path=path,
-    )
+def _decode_cognition(
+    data: dict[str, Any], *, path: str, schema_version: str
+) -> AgentCognitionSpec:
+    if schema_version == RUNNER_SCHEMA_VERSION_V5:
+        _require_keys(data, _COGNITION_KEYS_V5, path=path)
+    else:
+        _require_keys(data, _COGNITION_KEYS_V4, path=path)
+    consolidation_mode = ConsolidationMode.DISABLED
+    if schema_version == RUNNER_SCHEMA_VERSION_V5:
+        try:
+            consolidation_mode = ConsolidationMode(
+                _str_field(data, "consolidation_mode", path=path)
+            )
+        except RunnerSerializationError:
+            raise
+        except ValueError as exc:
+            raise RunnerSerializationError(
+                "invalid_enum", f"{path}.consolidation_mode"
+            ) from exc
     overrides_raw = data["drive_overrides"]
     if not isinstance(overrides_raw, list):
         raise RunnerSerializationError("invalid_array", f"{path}.drive_overrides")
@@ -251,6 +278,7 @@ def _decode_cognition(data: dict[str, Any], *, path: str) -> AgentCognitionSpec:
             ),
             drive_overrides=tuple(overrides),
             policy_version=_str_field(data, "policy_version", path=path),
+            consolidation_mode=consolidation_mode,
         )
     except RunnerSerializationError:
         raise
@@ -261,13 +289,14 @@ def _decode_cognition(data: dict[str, Any], *, path: str) -> AgentCognitionSpec:
 def _encode_agent(value: AgentRunnerSpec, *, schema_version: str) -> dict[str, Any]:
     payload: dict[str, Any] = {
         "agent_id": value.agent_id.value,
-        "cognition": _encode_cognition(value.cognition),
+        "cognition": _encode_cognition(value.cognition, schema_version=schema_version),
         "entity_id": value.entity_id.value,
     }
     if schema_version in {
         RUNNER_SCHEMA_VERSION_V2,
         RUNNER_SCHEMA_VERSION_V3,
         RUNNER_SCHEMA_VERSION_V4,
+        RUNNER_SCHEMA_VERSION_V5,
     }:
         assert value.name is not None
         payload["name"] = value.name
@@ -289,7 +318,11 @@ def _decode_agent(
             return AgentRunnerSpec(
                 agent_id=agent_id,
                 entity_id=EntityId(_str_field(data, "entity_id", path=path)),
-                cognition=_decode_cognition(cognition_raw, path=f"{path}.cognition"),
+                cognition=_decode_cognition(
+                    cognition_raw,
+                    path=f"{path}.cognition",
+                    schema_version=schema_version,
+                ),
                 name=agent_id.value,
                 initial_goals=(),
             )
@@ -323,7 +356,11 @@ def _decode_agent(
         return AgentRunnerSpec(
             agent_id=AgentId(_str_field(data, "agent_id", path=path)),
             entity_id=EntityId(_str_field(data, "entity_id", path=path)),
-            cognition=_decode_cognition(cognition_raw, path=f"{path}.cognition"),
+            cognition=_decode_cognition(
+                cognition_raw,
+                path=f"{path}.cognition",
+                schema_version=schema_version,
+            ),
             name=_str_field(data, "name", path=path),
             initial_goals=tuple(goals),
         )
@@ -688,11 +725,13 @@ def _encode_runner_document(config: SimulationRunnerConfig) -> dict[str, Any]:
     if config.schema_version in {
         RUNNER_SCHEMA_VERSION_V3,
         RUNNER_SCHEMA_VERSION_V4,
+        RUNNER_SCHEMA_VERSION_V5,
     }:
-        document["capability_flags"] = _encode_capability_flags(
-            config.capability_flags
-        )
-    if config.schema_version == RUNNER_SCHEMA_VERSION_V4:
+        document["capability_flags"] = _encode_capability_flags(config.capability_flags)
+    if config.schema_version in {
+        RUNNER_SCHEMA_VERSION_V4,
+        RUNNER_SCHEMA_VERSION_V5,
+    }:
         document["cognition_trace"] = _encode_cognition_trace(config.cognition_trace)
     if config.experiment is not None:
         document["experiment"] = {
@@ -731,7 +770,7 @@ def decode_runner_config(payload: bytes) -> SimulationRunnerConfig:
         raise RunnerSerializationError("invalid_string", "$.schema_version")
     if schema_version not in SUPPORTED_RUNNER_SCHEMA_VERSIONS:
         raise RunnerSerializationError("unsupported_version", "$.schema_version")
-    if schema_version == RUNNER_SCHEMA_VERSION_V4:
+    if schema_version in {RUNNER_SCHEMA_VERSION_V4, RUNNER_SCHEMA_VERSION_V5}:
         root_keys = _RUNNER_ROOT_KEYS_V4
     elif schema_version == RUNNER_SCHEMA_VERSION_V3:
         root_keys = _RUNNER_ROOT_KEYS_V3
@@ -802,14 +841,18 @@ def decode_runner_config(payload: bytes) -> SimulationRunnerConfig:
             )
         except (TypeError, ValueError) as exc:
             raise RunnerSerializationError("invalid_model", "$.experiment") from exc
-    if schema_version in {RUNNER_SCHEMA_VERSION_V3, RUNNER_SCHEMA_VERSION_V4}:
+    if schema_version in {
+        RUNNER_SCHEMA_VERSION_V3,
+        RUNNER_SCHEMA_VERSION_V4,
+        RUNNER_SCHEMA_VERSION_V5,
+    }:
         capability_flags = _decode_capability_flags(
             data["capability_flags"], path="$.capability_flags"
         )
     else:
         # Legacy v1/v2 decode upgrades to default-off flags.
         capability_flags = V2CapabilityFlags()
-    if schema_version == RUNNER_SCHEMA_VERSION_V4:
+    if schema_version in {RUNNER_SCHEMA_VERSION_V4, RUNNER_SCHEMA_VERSION_V5}:
         cognition_trace = _decode_cognition_trace(
             data["cognition_trace"], path="$.cognition_trace"
         )
@@ -902,7 +945,9 @@ def cognition_fingerprint(config: SimulationRunnerConfig) -> str:
         "agents": [
             {
                 "agent_id": agent.agent_id.value,
-                "cognition": _encode_cognition(agent.cognition),
+                "cognition": _encode_cognition(
+                    agent.cognition, schema_version=config.schema_version
+                ),
             }
             for agent in config.agents
         ],

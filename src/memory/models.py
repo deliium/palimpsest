@@ -14,7 +14,7 @@ from dataclasses import dataclass
 from enum import StrEnum
 from typing import Final
 
-from agents.models import AgentId
+from agents.models import AgentId, GoalId
 from world.identifiers import (
     EntityId,
     EventId,
@@ -29,6 +29,7 @@ __all__ = [
     "ACCESS_HISTORY_MODE_FAMILIARITY",
     "ACCESS_HISTORY_MODE_NOVELTY",
     "MEMORY_DYNAMICS_POLICY_VERSION",
+    "OFFLINE_CONSOLIDATION_POLICY_VERSION",
     "SCORE_QUANTUM",
     "AccessHistoryMode",
     "AgentId",
@@ -73,6 +74,11 @@ __all__ = [
     "MemoryStore",
     "MemoryTrace",
     "MentionId",
+    "OfflineConsolidationAudit",
+    "OfflineConsolidationCandidateSet",
+    "OfflineConsolidationPolicy",
+    "OfflineConsolidationReasonCode",
+    "OfflineConsolidationSelection",
     "OwnershipError",
     "PendingSemanticizationIntent",
     "RecallAuditRecord",
@@ -88,6 +94,7 @@ __all__ = [
     "StrengthDeltaSummary",
     "WorldRevision",
     "default_memory_dynamics_policy",
+    "default_offline_consolidation_policy",
     "diagnostic_projection",
     "normalize_score_weights",
     "quantize_score",
@@ -855,6 +862,7 @@ class BeliefStore:
 
 SCORE_QUANTUM: Final[float] = 1e-6
 MEMORY_DYNAMICS_POLICY_VERSION: Final[str] = "memory-dynamics-v1"
+OFFLINE_CONSOLIDATION_POLICY_VERSION: Final[str] = "offline-consolidation-v1"
 _MAX_POLICY_ID_CHARS: Final[int] = 64
 _MAX_EMBEDDING_DIM: Final[int] = 4096
 _MAX_QUERY_LIMIT: Final[int] = 256
@@ -864,6 +872,11 @@ _MAX_AUDIT_IDS: Final[int] = 256
 _MAX_DISTORTION_CODES: Final[int] = 32
 _MAX_STRENGTH_DELTAS: Final[int] = 256
 _MAX_SEMANTICIZATION_REPEAT: Final[int] = 1024
+_MAX_CONSOLIDATION_TRACES: Final[int] = 256
+_MAX_CONSOLIDATION_CLUSTERS: Final[int] = 64
+_OFFLINE_CONSOLIDATION_MODES: Final[frozenset[str]] = frozenset(
+    {"disabled", "deterministic", "llm_assisted"}
+)
 
 
 class AccessHistoryMode(StrEnum):
@@ -2050,9 +2063,7 @@ class MemoryDynamicsPolicy:
                 self,
                 name,
                 quantize_score(
-                    _unit_interval(
-                        f"MemoryDynamicsPolicy.{name}", getattr(self, name)
-                    )
+                    _unit_interval(f"MemoryDynamicsPolicy.{name}", getattr(self, name))
                 ),
             )
         repeats = require_exact_nonneg_int(
@@ -3043,4 +3054,512 @@ class MemoryRecallResult:
             f"has_reconsolidation={self.reconsolidation is not None}, "
             f"audit_count={len(self.audits)}, "
             f"has_semanticization={self.pending_semanticization is not None})"
+        )
+
+
+class OfflineConsolidationReasonCode(StrEnum):
+    """Closed offline-consolidation reason codes. IDs only; no prose."""
+
+    REPEATED_PATTERN = "repeated_pattern"
+    MERGED = "merged"
+    STRENGTHENED = "strengthened"
+    SOFT_FORGOTTEN = "soft_forgotten"
+    BELIEF_CANDIDATE = "belief_candidate"
+    LOW_RETENTION = "low_retention"
+    ISOLATED = "isolated"
+    FALLBACK_DETERMINISTIC = "fallback_deterministic"
+
+
+def _quantize_unit(name: str, value: object) -> float:
+    return quantize_score(_unit_interval(name, value))
+
+
+def _unique_memory_ids(
+    name: str, values: Sequence[object], *, max_items: int
+) -> tuple[MemoryId, ...]:
+    items = _require_ordered_models(
+        name, values, model_type=MemoryId, max_items=max_items
+    )
+    if len(set(items)) != len(items):
+        raise ValueError(f"{name}: duplicate_id")
+    return items
+
+
+def _memory_id_groups(
+    name: str,
+    values: Sequence[object],
+    *,
+    max_groups: int,
+    min_size: int,
+) -> tuple[tuple[MemoryId, ...], ...]:
+    if isinstance(values, (set, frozenset, Mapping)):
+        raise TypeError(f"{name}: not_ordered_sequence")
+    if isinstance(values, (str, bytes, bytearray)) or not isinstance(values, Sequence):
+        raise TypeError(f"{name}: not_ordered_sequence")
+    groups = tuple(values)
+    if len(groups) > max_groups:
+        raise ValueError(f"{name}: exceeds_max_length")
+    seen: set[MemoryId] = set()
+    copied: list[tuple[MemoryId, ...]] = []
+    for index, group in enumerate(groups):
+        members = _unique_memory_ids(
+            f"{name}[{index}]",
+            group,
+            max_items=_MAX_CONSOLIDATION_TRACES,
+        )
+        if len(members) < min_size:
+            raise ValueError(f"{name}: cluster_too_small")
+        overlap = seen.intersection(members)
+        if overlap:
+            raise ValueError(f"{name}: overlapping_cluster")
+        seen.update(members)
+        copied.append(members)
+    return tuple(copied)
+
+
+def _ids_cover(name: str, ids: tuple[MemoryId, ...], allowed: set[MemoryId]) -> None:
+    for memory_id in ids:
+        if memory_id not in allowed:
+            raise ValueError(f"{name}: unknown_memory_id")
+
+
+@dataclass(frozen=True, slots=True)
+class OfflineConsolidationPolicy:
+    """Pure episodic knobs for ``offline-consolidation-v1``.
+
+    Float knobs are quantized at ``SCORE_QUANTUM``. ``allow_provider`` stays
+    false unless a later composition root builds an LLM-assisted policy.
+    """
+
+    version: str = OFFLINE_CONSOLIDATION_POLICY_VERSION
+    cluster_similarity: float = 0.5
+    strengthen_retention_floor: float = 0.4
+    soft_forget_threshold: float = 0.15
+    allow_provider: bool = False
+
+    def __post_init__(self) -> None:
+        object.__setattr__(
+            self,
+            "version",
+            require_bounded_text(
+                "OfflineConsolidationPolicy.version",
+                self.version,
+                max_length=_MAX_POLICY_ID_CHARS,
+            ),
+        )
+        if self.version != OFFLINE_CONSOLIDATION_POLICY_VERSION:
+            raise ValueError("OfflineConsolidationPolicy.version: unsupported")
+        object.__setattr__(
+            self,
+            "cluster_similarity",
+            _quantize_unit(
+                "OfflineConsolidationPolicy.cluster_similarity",
+                self.cluster_similarity,
+            ),
+        )
+        object.__setattr__(
+            self,
+            "strengthen_retention_floor",
+            _quantize_unit(
+                "OfflineConsolidationPolicy.strengthen_retention_floor",
+                self.strengthen_retention_floor,
+            ),
+        )
+        object.__setattr__(
+            self,
+            "soft_forget_threshold",
+            _quantize_unit(
+                "OfflineConsolidationPolicy.soft_forget_threshold",
+                self.soft_forget_threshold,
+            ),
+        )
+        if self.soft_forget_threshold >= self.strengthen_retention_floor:
+            raise ValueError(
+                "OfflineConsolidationPolicy.soft_forget_threshold: "
+                "forget_above_strengthen"
+            )
+        if type(self.allow_provider) is not bool:
+            raise TypeError("OfflineConsolidationPolicy.allow_provider: invalid_type")
+
+    def __repr__(self) -> str:
+        return (
+            f"OfflineConsolidationPolicy(version={self.version!r}, "
+            f"cluster_similarity={self.cluster_similarity}, "
+            f"strengthen_retention_floor={self.strengthen_retention_floor}, "
+            f"soft_forget_threshold={self.soft_forget_threshold}, "
+            f"allow_provider={self.allow_provider})"
+        )
+
+
+def default_offline_consolidation_policy() -> OfflineConsolidationPolicy:
+    """Frozen ``offline-consolidation-v1`` defaults (provider disabled)."""
+
+    return OfflineConsolidationPolicy()
+
+
+@dataclass(frozen=True, slots=True)
+class OfflineConsolidationCandidateSet:
+    """Episodic candidate window for one owner. No beliefs, goals, or relationships."""
+
+    owner_id: AgentId
+    tick: int
+    policy: OfflineConsolidationPolicy
+    traces: tuple[MemoryTrace, ...]
+    cluster_ids: tuple[tuple[MemoryId, ...], ...] = ()
+    belief_source_ids: tuple[MemoryId, ...] = ()
+    strengthen_ids: tuple[MemoryId, ...] = ()
+    soft_forget_ids: tuple[MemoryId, ...] = ()
+
+    def __post_init__(self) -> None:
+        if type(self.owner_id) is not AgentId:
+            raise TypeError("OfflineConsolidationCandidateSet.owner_id: invalid_type")
+        if type(self.policy) is not OfflineConsolidationPolicy:
+            raise TypeError("OfflineConsolidationCandidateSet.policy: invalid_type")
+        object.__setattr__(
+            self,
+            "tick",
+            require_exact_nonneg_int(
+                "OfflineConsolidationCandidateSet.tick", self.tick
+            ),
+        )
+        traces = _require_ordered_models(
+            "OfflineConsolidationCandidateSet.traces",
+            self.traces,
+            model_type=MemoryTrace,
+            max_items=_MAX_CONSOLIDATION_TRACES,
+        )
+        seen: set[MemoryId] = set()
+        for trace in traces:
+            if trace.owner_id != self.owner_id:
+                raise ValueError(
+                    "OfflineConsolidationCandidateSet.traces: owner_mismatch"
+                )
+            if trace.memory_id in seen:
+                raise ValueError(
+                    "OfflineConsolidationCandidateSet.traces: duplicate_id"
+                )
+            seen.add(trace.memory_id)
+        object.__setattr__(self, "traces", traces)
+        clusters = _memory_id_groups(
+            "OfflineConsolidationCandidateSet.cluster_ids",
+            self.cluster_ids,
+            max_groups=_MAX_CONSOLIDATION_CLUSTERS,
+            min_size=2,
+        )
+        belief_ids = _unique_memory_ids(
+            "OfflineConsolidationCandidateSet.belief_source_ids",
+            self.belief_source_ids,
+            max_items=_MAX_CONSOLIDATION_TRACES,
+        )
+        strengthen_ids = _unique_memory_ids(
+            "OfflineConsolidationCandidateSet.strengthen_ids",
+            self.strengthen_ids,
+            max_items=_MAX_CONSOLIDATION_TRACES,
+        )
+        forget_ids = _unique_memory_ids(
+            "OfflineConsolidationCandidateSet.soft_forget_ids",
+            self.soft_forget_ids,
+            max_items=_MAX_CONSOLIDATION_TRACES,
+        )
+        for group in clusters:
+            _ids_cover("OfflineConsolidationCandidateSet.cluster_ids", group, seen)
+        _ids_cover(
+            "OfflineConsolidationCandidateSet.belief_source_ids", belief_ids, seen
+        )
+        _ids_cover(
+            "OfflineConsolidationCandidateSet.strengthen_ids", strengthen_ids, seen
+        )
+        _ids_cover("OfflineConsolidationCandidateSet.soft_forget_ids", forget_ids, seen)
+        if set(strengthen_ids) & set(forget_ids):
+            raise ValueError(
+                "OfflineConsolidationCandidateSet: strengthen_forget_overlap"
+            )
+        object.__setattr__(self, "cluster_ids", clusters)
+        object.__setattr__(self, "belief_source_ids", belief_ids)
+        object.__setattr__(self, "strengthen_ids", strengthen_ids)
+        object.__setattr__(self, "soft_forget_ids", forget_ids)
+
+    def trace_ids(self) -> tuple[MemoryId, ...]:
+        return tuple(trace.memory_id for trace in self.traces)
+
+    def __repr__(self) -> str:
+        return (
+            f"OfflineConsolidationCandidateSet(owner_id={self.owner_id.value!r}, "
+            f"tick={self.tick}, policy_version={self.policy.version!r}, "
+            f"trace_count={len(self.traces)}, "
+            f"cluster_count={len(self.cluster_ids)}, "
+            f"belief_source_count={len(self.belief_source_ids)}, "
+            f"strengthen_count={len(self.strengthen_ids)}, "
+            f"soft_forget_count={len(self.soft_forget_ids)})"
+        )
+
+
+@dataclass(frozen=True, slots=True)
+class OfflineConsolidationSelection:
+    """Deterministic or provider-filtered episodic selection. Repr is counts only."""
+
+    owner_id: AgentId
+    tick: int
+    policy_version: str
+    merge_groups: tuple[tuple[MemoryId, ...], ...] = ()
+    strengthen_ids: tuple[MemoryId, ...] = ()
+    soft_forget_ids: tuple[MemoryId, ...] = ()
+    belief_source_ids: tuple[MemoryId, ...] = ()
+    derived_traces: tuple[MemoryTrace, ...] = ()
+    reason_codes: tuple[OfflineConsolidationReasonCode, ...] = ()
+    used_provider: bool = False
+    fallback_used: bool = False
+
+    def __post_init__(self) -> None:
+        if type(self.owner_id) is not AgentId:
+            raise TypeError("OfflineConsolidationSelection.owner_id: invalid_type")
+        object.__setattr__(
+            self,
+            "tick",
+            require_exact_nonneg_int("OfflineConsolidationSelection.tick", self.tick),
+        )
+        object.__setattr__(
+            self,
+            "policy_version",
+            require_bounded_text(
+                "OfflineConsolidationSelection.policy_version",
+                self.policy_version,
+                max_length=_MAX_POLICY_ID_CHARS,
+            ),
+        )
+        if self.policy_version != OFFLINE_CONSOLIDATION_POLICY_VERSION:
+            raise ValueError(
+                "OfflineConsolidationSelection.policy_version: unsupported"
+            )
+        merge_groups = _memory_id_groups(
+            "OfflineConsolidationSelection.merge_groups",
+            self.merge_groups,
+            max_groups=_MAX_CONSOLIDATION_CLUSTERS,
+            min_size=2,
+        )
+        strengthen_ids = _unique_memory_ids(
+            "OfflineConsolidationSelection.strengthen_ids",
+            self.strengthen_ids,
+            max_items=_MAX_CONSOLIDATION_TRACES,
+        )
+        forget_ids = _unique_memory_ids(
+            "OfflineConsolidationSelection.soft_forget_ids",
+            self.soft_forget_ids,
+            max_items=_MAX_CONSOLIDATION_TRACES,
+        )
+        belief_ids = _unique_memory_ids(
+            "OfflineConsolidationSelection.belief_source_ids",
+            self.belief_source_ids,
+            max_items=_MAX_CONSOLIDATION_TRACES,
+        )
+        if set(strengthen_ids) & set(forget_ids):
+            raise ValueError("OfflineConsolidationSelection: strengthen_forget_overlap")
+        derived = _require_ordered_models(
+            "OfflineConsolidationSelection.derived_traces",
+            self.derived_traces,
+            model_type=MemoryTrace,
+            max_items=_MAX_CONSOLIDATION_CLUSTERS,
+        )
+        derived_ids: set[MemoryId] = set()
+        for trace in derived:
+            if trace.owner_id != self.owner_id:
+                raise ValueError(
+                    "OfflineConsolidationSelection.derived_traces: owner_mismatch"
+                )
+            if trace.memory_id in derived_ids:
+                raise ValueError(
+                    "OfflineConsolidationSelection.derived_traces: duplicate_id"
+                )
+            derived_ids.add(trace.memory_id)
+        codes = _require_ordered_models(
+            "OfflineConsolidationSelection.reason_codes",
+            self.reason_codes,
+            model_type=OfflineConsolidationReasonCode,
+            max_items=32,
+        )
+        if type(self.used_provider) is not bool:
+            raise TypeError("OfflineConsolidationSelection.used_provider: invalid_type")
+        if type(self.fallback_used) is not bool:
+            raise TypeError("OfflineConsolidationSelection.fallback_used: invalid_type")
+        object.__setattr__(self, "merge_groups", merge_groups)
+        object.__setattr__(self, "strengthen_ids", strengthen_ids)
+        object.__setattr__(self, "soft_forget_ids", forget_ids)
+        object.__setattr__(self, "belief_source_ids", belief_ids)
+        object.__setattr__(self, "derived_traces", derived)
+        object.__setattr__(self, "reason_codes", codes)
+
+    def __repr__(self) -> str:
+        return (
+            f"OfflineConsolidationSelection(owner_id={self.owner_id.value!r}, "
+            f"tick={self.tick}, policy_version={self.policy_version!r}, "
+            f"merge_count={len(self.merge_groups)}, "
+            f"strengthen_count={len(self.strengthen_ids)}, "
+            f"soft_forget_count={len(self.soft_forget_ids)}, "
+            f"belief_source_count={len(self.belief_source_ids)}, "
+            f"derived_count={len(self.derived_traces)}, "
+            f"reason_code_count={len(self.reason_codes)}, "
+            f"used_provider={self.used_provider}, "
+            f"fallback_used={self.fallback_used})"
+        )
+
+
+def _stable_relationship_ids(
+    values: Sequence[object],
+) -> tuple[str, ...]:
+    if isinstance(values, (set, frozenset, Mapping)):
+        raise TypeError(
+            "OfflineConsolidationAudit.relationship_ids: not_ordered_sequence"
+        )
+    if isinstance(values, (str, bytes, bytearray)) or not isinstance(values, Sequence):
+        raise TypeError(
+            "OfflineConsolidationAudit.relationship_ids: not_ordered_sequence"
+        )
+    items = tuple(values)
+    if len(items) > _MAX_CONSOLIDATION_TRACES:
+        raise ValueError(
+            "OfflineConsolidationAudit.relationship_ids: exceeds_max_length"
+        )
+    copied: list[str] = []
+    for item in items:
+        if type(item) is not str:
+            raise TypeError(
+                "OfflineConsolidationAudit.relationship_ids: invalid_item_type"
+            )
+        copied.append(
+            require_stable_id("OfflineConsolidationAudit.relationship_ids", item)
+        )
+    if len(set(copied)) != len(copied):
+        raise ValueError("OfflineConsolidationAudit.relationship_ids: duplicate_id")
+    return tuple(copied)
+
+
+@dataclass(frozen=True, slots=True)
+class OfflineConsolidationAudit:
+    """In-run analysis audit. Counts and closed IDs only; safe to repr."""
+
+    owner_id: AgentId
+    tick: int
+    mode: str
+    memory_ids: tuple[MemoryId, ...] = ()
+    belief_ids: tuple[BeliefId, ...] = ()
+    relationship_ids: tuple[str, ...] = ()
+    goal_ids: tuple[GoalId, ...] = ()
+    strengthen_ids: tuple[MemoryId, ...] = ()
+    soft_forget_ids: tuple[MemoryId, ...] = ()
+    merge_groups: tuple[tuple[MemoryId, ...], ...] = ()
+    reason_codes: tuple[OfflineConsolidationReasonCode, ...] = ()
+    fallback_used: bool = False
+
+    def __post_init__(self) -> None:
+        if type(self.owner_id) is not AgentId:
+            raise TypeError("OfflineConsolidationAudit.owner_id: invalid_type")
+        object.__setattr__(
+            self,
+            "tick",
+            require_exact_nonneg_int("OfflineConsolidationAudit.tick", self.tick),
+        )
+        if type(self.mode) is not str or self.mode not in _OFFLINE_CONSOLIDATION_MODES:
+            raise ValueError("OfflineConsolidationAudit.mode: invalid_mode")
+        memory_ids = _unique_memory_ids(
+            "OfflineConsolidationAudit.memory_ids",
+            self.memory_ids,
+            max_items=_MAX_CONSOLIDATION_TRACES,
+        )
+        belief_ids = _require_ordered_models(
+            "OfflineConsolidationAudit.belief_ids",
+            self.belief_ids,
+            model_type=BeliefId,
+            max_items=_MAX_CONSOLIDATION_TRACES,
+        )
+        if len(set(belief_ids)) != len(belief_ids):
+            raise ValueError("OfflineConsolidationAudit.belief_ids: duplicate_id")
+        relationship_ids = _stable_relationship_ids(self.relationship_ids)
+        goal_ids = _require_ordered_models(
+            "OfflineConsolidationAudit.goal_ids",
+            self.goal_ids,
+            model_type=GoalId,
+            max_items=_MAX_CONSOLIDATION_TRACES,
+        )
+        if len(set(goal_ids)) != len(goal_ids):
+            raise ValueError("OfflineConsolidationAudit.goal_ids: duplicate_id")
+        strengthen_ids = _unique_memory_ids(
+            "OfflineConsolidationAudit.strengthen_ids",
+            self.strengthen_ids,
+            max_items=_MAX_CONSOLIDATION_TRACES,
+        )
+        forget_ids = _unique_memory_ids(
+            "OfflineConsolidationAudit.soft_forget_ids",
+            self.soft_forget_ids,
+            max_items=_MAX_CONSOLIDATION_TRACES,
+        )
+        merge_groups = _memory_id_groups(
+            "OfflineConsolidationAudit.merge_groups",
+            self.merge_groups,
+            max_groups=_MAX_CONSOLIDATION_CLUSTERS,
+            min_size=2,
+        )
+        covered = set(memory_ids)
+        _ids_cover("OfflineConsolidationAudit.strengthen_ids", strengthen_ids, covered)
+        _ids_cover("OfflineConsolidationAudit.soft_forget_ids", forget_ids, covered)
+        for group in merge_groups:
+            _ids_cover("OfflineConsolidationAudit.merge_groups", group, covered)
+        if set(strengthen_ids) & set(forget_ids):
+            raise ValueError("OfflineConsolidationAudit: strengthen_forget_overlap")
+        codes = _require_ordered_models(
+            "OfflineConsolidationAudit.reason_codes",
+            self.reason_codes,
+            model_type=OfflineConsolidationReasonCode,
+            max_items=32,
+        )
+        if type(self.fallback_used) is not bool:
+            raise TypeError("OfflineConsolidationAudit.fallback_used: invalid_type")
+        object.__setattr__(self, "memory_ids", memory_ids)
+        object.__setattr__(self, "belief_ids", belief_ids)
+        object.__setattr__(self, "relationship_ids", relationship_ids)
+        object.__setattr__(self, "goal_ids", goal_ids)
+        object.__setattr__(self, "strengthen_ids", strengthen_ids)
+        object.__setattr__(self, "soft_forget_ids", forget_ids)
+        object.__setattr__(self, "merge_groups", merge_groups)
+        object.__setattr__(self, "reason_codes", codes)
+
+    @property
+    def trace_count(self) -> int:
+        return len(self.memory_ids)
+
+    @property
+    def merge_count(self) -> int:
+        return len(self.merge_groups)
+
+    @property
+    def strengthen_count(self) -> int:
+        return len(self.strengthen_ids)
+
+    @property
+    def soft_forget_count(self) -> int:
+        return len(self.soft_forget_ids)
+
+    @property
+    def belief_count(self) -> int:
+        return len(self.belief_ids)
+
+    @property
+    def relationship_count(self) -> int:
+        return len(self.relationship_ids)
+
+    @property
+    def goal_count(self) -> int:
+        return len(self.goal_ids)
+
+    def __repr__(self) -> str:
+        return (
+            f"OfflineConsolidationAudit(owner_id={self.owner_id.value!r}, "
+            f"tick={self.tick}, mode={self.mode!r}, "
+            f"trace_count={self.trace_count}, merge_count={self.merge_count}, "
+            f"strengthen_count={self.strengthen_count}, "
+            f"soft_forget_count={self.soft_forget_count}, "
+            f"belief_count={self.belief_count}, "
+            f"relationship_count={self.relationship_count}, "
+            f"goal_count={self.goal_count}, "
+            f"reason_code_count={len(self.reason_codes)}, "
+            f"fallback_used={self.fallback_used})"
         )

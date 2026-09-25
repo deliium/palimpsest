@@ -84,6 +84,14 @@ class CognitionEmotionalStateMode(StrEnum):
     PASSTHROUGH = "passthrough"
 
 
+class CognitionConsolidationMode(StrEnum):
+    """Lockstep with ``simulation.ConsolidationMode``. Default is disabled."""
+
+    DISABLED = "disabled"
+    DETERMINISTIC = "deterministic"
+    LLM_ASSISTED = "llm_assisted"
+
+
 def _unit_interval(name: str, value: object) -> float:
     if isinstance(value, bool) or not isinstance(value, (int, float)):
         raise ValueError(f"{name}: not_unit_interval")
@@ -133,6 +141,7 @@ class CognitionLoopConfig:
     emotional_state_mode: CognitionEmotionalStateMode = (
         CognitionEmotionalStateMode.PASSTHROUGH
     )
+    consolidation_mode: CognitionConsolidationMode = CognitionConsolidationMode.DISABLED
     drive_overrides: tuple[CognitionDriveOverride, ...] = ()
     memory_policy_version: str = MEMORY_POLICY_VERSION
     imagination_policy_version: str = IMAGINATION_POLICY_VERSION
@@ -151,13 +160,12 @@ class CognitionLoopConfig:
                 "mortality_appraisal_mode must be CognitionMortalityAppraisalMode"
             )
         if type(self.goal_management_mode) is not CognitionGoalManagementMode:
-            raise TypeError(
-                "goal_management_mode must be CognitionGoalManagementMode"
-            )
+            raise TypeError("goal_management_mode must be CognitionGoalManagementMode")
         if type(self.emotional_state_mode) is not CognitionEmotionalStateMode:
-            raise TypeError(
-                "emotional_state_mode must be CognitionEmotionalStateMode"
-            )
+            raise TypeError("emotional_state_mode must be CognitionEmotionalStateMode")
+        if type(self.consolidation_mode) is not CognitionConsolidationMode:
+            _LOG.error("invalid_enum path=consolidation_mode reason_code=invalid_mode")
+            raise TypeError("consolidation_mode must be CognitionConsolidationMode")
         if self.memory_policy_version != MEMORY_POLICY_VERSION:
             raise ValueError("unsupported memory_policy_version")
         if self.imagination_policy_version != IMAGINATION_POLICY_VERSION:
@@ -199,6 +207,7 @@ class CognitionLoopConfig:
                     "mortality_appraisal_mode": self.mortality_appraisal_mode.value,
                     "goal_management_mode": self.goal_management_mode.value,
                     "emotional_state_mode": self.emotional_state_mode.value,
+                    "consolidation_mode": self.consolidation_mode.value,
                     "drive_override_count": len(self.drive_overrides),
                     "status": "validated",
                 }
@@ -228,6 +237,7 @@ class CognitionLoopConfig:
     def condition_fingerprint_material(self) -> dict[str, object]:
         """Stable, payload-free material for condition fingerprints."""
         return {
+            "consolidation_mode": self.consolidation_mode.value,
             "drive_overrides": [
                 {
                     "baseline": item.baseline,
@@ -328,19 +338,14 @@ def build_cognitive_loop(
         else:
             goal_manager = HierarchicalGoalManager()
     if emotional_state is None:
-        if (
-            resolved.emotional_state_mode
-            is CognitionEmotionalStateMode.PASSTHROUGH
-        ):
+        if resolved.emotional_state_mode is CognitionEmotionalStateMode.PASSTHROUGH:
             emotional_state = PassthroughEmotionalStateAppraiser()
         else:
             from agents.cognition.emotion import EmotionalStateEngine
 
             emotional_state = EmotionalStateEngine()
 
-    emotion_bias = (
-        resolved.emotional_state_mode is CognitionEmotionalStateMode.ENABLED
-    )
+    emotion_bias = resolved.emotional_state_mode is CognitionEmotionalStateMode.ENABLED
 
     pending: PendingEvidenceAccumulator
     if pending_evidence is None:
