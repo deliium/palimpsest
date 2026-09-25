@@ -1372,6 +1372,88 @@ def satisfying_command_kinds(goal: Goal) -> frozenset[str]:
     return frozenset()
 
 
+def identity_violation_cost(
+    *,
+    owner_id: AgentId,
+    direction: str,
+    identity: IdentityState,
+    goals: Sequence[Goal],
+    futures: object | None,
+    policy: IdentityPolicy | None = None,
+) -> float:
+    """Highest commitment or inferred-value cost for one direction.
+
+    ``0.0`` means that direction does not conflict with those views.
+    """
+    if type(owner_id) is not AgentId:
+        raise TypeError("identity_violation_cost.owner_id: invalid_type")
+    if type(identity) is not IdentityState:
+        raise TypeError("identity_violation_cost.identity: invalid_type")
+    if identity.owner_id != owner_id:
+        raise ValueError("identity_violation_cost: owner_mismatch")
+    if not isinstance(direction, str) or isinstance(direction, bool):
+        raise TypeError("identity_violation_cost.direction: invalid_type")
+    active = policy if policy is not None else IdentityPolicy()
+    if type(active) is not IdentityPolicy:
+        raise TypeError("identity_violation_cost.policy: invalid_type")
+    indexed: dict[str, Goal] = {}
+    for goal in goals:
+        if type(goal) is not Goal:
+            raise TypeError("identity_violation_cost.goals: invalid_type")
+        if goal.owner_id == owner_id:
+            indexed[goal.goal_id.value] = goal
+    highest = 0.0
+    for view in identity.views:
+        if view.aspect not in {
+            IdentityAspect.COMMITMENT,
+            IdentityAspect.INFERRED_VALUE,
+        }:
+            continue
+        if view.activation not in _OPEN_ACTIVATION:
+            continue
+        conflict = _conflict_for_view(
+            view,
+            direction=direction,
+            goals_by_id=indexed,
+            futures=futures,
+            selected_future_id=None,
+            policy=active,
+        )
+        if conflict is None:
+            continue
+        cost = quantize_score(
+            min(1.0, view.confidence * view.derived_stability * active.conflict_weight)
+        )
+        if cost > highest:
+            highest = cost
+    return highest
+
+
+def reflection_cue_memory_ids(
+    identity: IdentityState, *, policy: IdentityPolicy | None = None
+) -> tuple[str, ...]:
+    """Memory ids dissonance or contradiction mass should prefer."""
+    if type(identity) is not IdentityState:
+        raise TypeError("reflection_cue_memory_ids.identity: invalid_type")
+    active = policy if policy is not None else IdentityPolicy()
+    if type(active) is not IdentityPolicy:
+        raise TypeError("reflection_cue_memory_ids.policy: invalid_type")
+    noticed = {notice.belief_id.value for notice in identity.dissonance_notices}
+    ordered: list[str] = []
+    seen: set[str] = set()
+    for view in identity.views:
+        total = len(view.supporting_memory_ids) + len(view.contradicting_memory_ids)
+        mass = 0.0 if total == 0 else len(view.contradicting_memory_ids) / total
+        if view.belief_id.value not in noticed and mass <= active.dissonance_cue_floor:
+            continue
+        for memory_id in view.contradicting_memory_ids:
+            if memory_id.value in seen:
+                continue
+            seen.add(memory_id.value)
+            ordered.append(memory_id.value)
+    return tuple(ordered)
+
+
 def detect_identity_dissonance(
     *,
     owner_id: AgentId,

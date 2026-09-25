@@ -550,8 +550,9 @@ class FakeIntentionSelector:
         futures: PossibleFutures,
         goal_board=None,
         emotional_state=None,
+        self_state=None,
     ) -> SelectedIntention:
-        _ = loop_input, motivation, futures, goal_board, emotional_state
+        _ = loop_input, motivation, futures, goal_board, emotional_state, self_state
         output = self._queue.consume(invocation_id=_active_invocation(), ordinal=8)
         assert type(output) is SelectedIntention
         return output
@@ -605,8 +606,9 @@ class FakeMemoryUpdateHook:
         perception: InterpretedPerception,
         memory: RetrievedMemoryContext,
         intention: SelectedIntention,
+        self_state: object | None = None,
     ) -> tuple[MemoryUpdateIntent, ...]:
-        _ = loop_input, plan, perception, memory, intention
+        _ = loop_input, plan, perception, memory, intention, self_state
         output = self._queue.consume(invocation_id=_active_invocation(), ordinal=10)
         assert type(output) is tuple
         return output

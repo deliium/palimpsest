@@ -26,6 +26,7 @@ from agents.cognition.models import (
     PossibleFutures,
     RetrievedMemoryContext,
     SelectedIntention,
+    SelfModel,
     SubjectiveRiskKind,
     SubjectiveSnapshot,
     intention_for_action_direction,
@@ -115,6 +116,7 @@ class MultiCriteriaIntentionSelector:
         futures: PossibleFutures,
         goal_board: GoalBoard | None = None,
         emotional_state: EmotionalStateEvaluation | None = None,
+        self_state: SelfModel | None = None,
     ) -> SelectedIntention:
         owner = loop_input.agent_id
         tick = loop_input.observation.tick
@@ -193,7 +195,15 @@ class MultiCriteriaIntentionSelector:
         if not undominated:
             undominated = surviving
 
-        winner, tie_break = _pairwise_select(undominated, futures_by_id, motivation)
+        identity_costs = _identity_direction_costs(
+            owner=owner,
+            identity=None if self_state is None else self_state.identity,
+            goals=() if goal_board is None else goal_board.goals,
+            futures=futures,
+        )
+        winner, tie_break = _pairwise_select(
+            undominated, futures_by_id, motivation, identity_costs
+        )
         future = futures_by_id.get(winner.future_id)
         direction = ActionDirection.WAIT if future is None else future.direction
         intention = intention_for_action_direction(direction)
@@ -242,6 +252,24 @@ class MultiCriteriaIntentionSelector:
                 }
             },
         )
+        if identity_costs is not None:
+            from agents.cognition.identity import identity_stability_band
+
+            _LOG.debug(
+                "identity_violation_cost",
+                extra={
+                    "owner_id": owner.value,
+                    "tick": tick,
+                    "candidate_count": len(undominated),
+                    "winning_direction": direction.value,
+                    "cost_band": identity_stability_band(
+                        identity_costs.get(winner.future_id, 0.0)
+                    ),
+                    "identity_vote": _identity_vote_for_winner(
+                        winner.future_id, undominated, identity_costs
+                    ),
+                },
+            )
         return result
 
 
@@ -662,10 +690,66 @@ def _dominates(left: tuple[float, ...], right: tuple[float, ...]) -> bool:
     return strictly_better
 
 
+def _identity_direction_costs(
+    *,
+    owner: AgentId,
+    identity: object | None,
+    goals: Sequence[object],
+    futures: PossibleFutures,
+) -> dict[str, float] | None:
+    from agents.cognition.identity import IdentityState, identity_violation_cost
+    from agents.models import Goal
+
+    if identity is None:
+        return None
+    if type(identity) is not IdentityState:
+        raise TypeError("identity_violation_cost.identity: invalid_type")
+    if identity.owner_id != owner:
+        _LOG.error(
+            "identity_violation_cost_rejected",
+            extra={"reason_code": "owner_mismatch", "owner_id": owner.value},
+        )
+        raise ValueError("identity_violation_cost: owner_mismatch")
+    owned_goals = tuple(goal for goal in goals if type(goal) is Goal)
+    costs: dict[str, float] = {}
+    for future in futures.futures:
+        costs[future.future_id] = identity_violation_cost(
+            owner_id=owner,
+            direction=future.direction.value,
+            identity=identity,
+            goals=owned_goals,
+            futures=futures,
+        )
+    return costs
+
+
+def _identity_vote_for_winner(
+    winner_id: str,
+    appraisals: Sequence[FutureAppraisal],
+    costs: Mapping[str, float],
+) -> int:
+    votes: list[int] = []
+    winner_cost = costs.get(winner_id, 0.0)
+    for item in appraisals:
+        if item.future_id == winner_id:
+            continue
+        other = costs.get(item.future_id, 0.0)
+        if winner_cost < other:
+            votes.append(1)
+        elif winner_cost > other:
+            votes.append(-1)
+        else:
+            votes.append(0)
+    if not votes or any(vote != votes[0] for vote in votes):
+        return 0
+    return votes[0]
+
+
 def _pairwise_select(
     appraisals: Sequence[FutureAppraisal],
     futures_by_id: Mapping[str, ImaginedFuture],
     motivation: MotivationEvaluation,
+    identity_costs: Mapping[str, float] | None = None,
 ) -> tuple[FutureAppraisal, str]:
     if len(appraisals) == 1:
         return appraisals[0], _TIE_BREAK_NONE
@@ -673,7 +757,9 @@ def _pairwise_select(
     scores: dict[str, int] = {item.future_id: 0 for item in appraisals}
     for index, left in enumerate(appraisals):
         for right in appraisals[index + 1 :]:
-            cmp = _pairwise_compare(left, right, futures_by_id, motivation)
+            cmp = _pairwise_compare(
+                left, right, futures_by_id, motivation, identity_costs
+            )
             if cmp > 0:
                 scores[left.future_id] += 1
             elif cmp < 0:
@@ -705,6 +791,7 @@ def _pairwise_compare(
     right: FutureAppraisal,
     futures_by_id: Mapping[str, ImaginedFuture],
     motivation: MotivationEvaluation,
+    identity_costs: Mapping[str, float] | None = None,
 ) -> int:
     """Return positive if left preferred, negative if right preferred, else 0."""
     active_drives = set(motivation.active_drive_kinds)
@@ -775,8 +862,22 @@ def _pairwise_compare(
         elif right_future.confidence > left_future.confidence:
             conf_votes -= 1
 
+    identity_vote = 0
+    if identity_costs is not None:
+        left_cost = identity_costs.get(left.future_id, 0.0)
+        right_cost = identity_costs.get(right.future_id, 0.0)
+        if left_cost < right_cost:
+            identity_vote = 1
+        elif right_cost < left_cost:
+            identity_vote = -1
     total = (
-        drive_votes + goal_votes + social_votes + risk_votes + unc_votes + conf_votes
+        drive_votes
+        + goal_votes
+        + social_votes
+        + risk_votes
+        + unc_votes
+        + conf_votes
+        + identity_vote
     )
     if total > 0:
         return 1

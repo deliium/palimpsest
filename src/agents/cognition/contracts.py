@@ -416,6 +416,7 @@ class IntentionSelector(Protocol):
         futures: PossibleFutures,
         goal_board: GoalBoard | None = None,
         emotional_state: EmotionalStateEvaluation | None = None,
+        self_state: SelfModel | None = None,
     ) -> SelectedIntention: ...
 
 
@@ -459,4 +460,5 @@ class MemoryUpdateHook(Protocol):
         perception: InterpretedPerception,
         memory: RetrievedMemoryContext,
         intention: SelectedIntention,
+        self_state: SelfModel | None = None,
     ) -> tuple[MemoryUpdateIntent, ...]: ...

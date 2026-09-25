@@ -211,8 +211,9 @@ async def test_runtime_applies_service_batch_after_successful_cognition() -> Non
             perception: object,
             memory: object,
             intention: object,
+            self_state: object | None = None,
         ) -> tuple[MemoryUpdateIntent, ...]:
-            _ = plan, perception, memory, intention
+            _ = plan, perception, memory, intention, self_state
             obs = loop_input.observation
             return (
                 MemoryUpdateIntent(

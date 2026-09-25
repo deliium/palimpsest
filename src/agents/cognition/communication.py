@@ -107,6 +107,75 @@ def project_trust_inputs(profile: object | None) -> tuple[float, float]:
     return trust, trust_state.confidence.confidence
 
 
+def identity_social_scale_factor(
+    identity: object | None,
+    counterpart_id: str,
+) -> float:
+    """Bound the trust multiplier from relationship and reliability views.
+
+    Missing views yield ``1``. The factor stays inside the identity policy
+    floor and ceiling.
+    """
+    from agents.cognition.identity import IdentityAspect, IdentityPolicy, IdentityState
+    from memory.models import quantize_score
+
+    if identity is None:
+        return 1.0
+    if type(identity) is not IdentityState:
+        raise TypeError("identity_social_scale.identity: invalid_type")
+    if not isinstance(counterpart_id, str) or not counterpart_id:
+        raise TypeError("identity_social_scale.counterpart_id: invalid_type")
+    policy = IdentityPolicy()
+    floor = policy.social_scale_floor
+    ceiling = policy.social_scale_ceiling
+    span = ceiling - floor
+
+    def _mapped(rate: float) -> float:
+        return floor + span * rate
+
+    relationship = [
+        view.derived_rate
+        for view in identity.views
+        if view.aspect is IdentityAspect.RELATIONSHIP
+        and view.evidence_token == counterpart_id
+    ]
+    reliability = [
+        view.derived_rate
+        for view in identity.views
+        if view.aspect is IdentityAspect.RELIABILITY
+    ]
+    parts: list[float] = []
+    if relationship:
+        parts.append(_mapped(sum(relationship) / len(relationship)))
+    if reliability:
+        parts.append(_mapped(sum(reliability) / len(reliability)))
+    if not parts:
+        return 1.0
+    factor = quantize_score(sum(parts) / len(parts))
+    if factor < floor:
+        return floor
+    if factor > ceiling:
+        return ceiling
+    return factor
+
+
+def scale_trust_for_identity(
+    trust: float, *, identity: object | None, counterpart_id: str
+) -> tuple[float, float]:
+    """Return clamped trust and the factor. ``identity is None`` leaves trust."""
+    from memory.models import quantize_score
+
+    factor = identity_social_scale_factor(identity, counterpart_id)
+    if identity is None:
+        return trust, factor
+    product = quantize_score(trust * factor)
+    if product < 0.0:
+        product = 0.0
+    elif product > 1.0:
+        product = 1.0
+    return quantize_score(product), factor
+
+
 def receiver_confidence_for_transmission(
     *, sender_confidence: float, hop_count: int
 ) -> float:
@@ -268,8 +337,9 @@ class CommunicatedMemoryUpdateHook:
         perception: InterpretedPerception,
         memory: RetrievedMemoryContext,
         intention: SelectedIntention,
+        self_state: object | None = None,
     ) -> tuple[MemoryUpdateIntent, ...]:
-        _ = plan, intention, memory
+        _ = plan, intention, memory, self_state
         owner = loop_input.agent_id
         observation = loop_input.observation
         tick = observation.tick
@@ -506,6 +576,7 @@ class CompositeMemoryUpdateHook:
         perception: InterpretedPerception,
         memory: RetrievedMemoryContext,
         intention: SelectedIntention,
+        self_state: object | None = None,
     ) -> tuple[MemoryUpdateIntent, ...]:
         self._pending.clear()
         intents: list[MemoryUpdateIntent] = []
@@ -513,7 +584,9 @@ class CompositeMemoryUpdateHook:
             propose = getattr(hook, "propose_updates", None)
             if propose is None:
                 raise TypeError("hook missing propose_updates")
-            batch = await propose(loop_input, plan, perception, memory, intention)
+            batch = await propose(
+                loop_input, plan, perception, memory, intention, self_state
+            )
             if not isinstance(batch, tuple):
                 raise TypeError("propose_updates must return a tuple")
             for item in batch:

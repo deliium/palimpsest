@@ -373,6 +373,7 @@ class CognitiveLoop:
                 futures,
                 goal_board,
                 emotional_evaluation,
+                self_state,
             ),
             expected_type=SelectedIntention,
         )
@@ -483,6 +484,7 @@ class CognitiveLoop:
                 proposal.perception,
                 proposal.memory,
                 proposal.intention,
+                proposal.self_state,
             ),
             expected_type=tuple,
         )
@@ -799,6 +801,31 @@ class CognitiveLoop:
             )
             if not matched.matched:
                 return None
+            from agents.cognition.configuration import CognitionIdentityMode
+            from agents.cognition.identity import (
+                IdentityState,
+                reflection_cue_memory_ids,
+            )
+
+            identity = proposal.self_state.identity
+            if (
+                self._identity_mode is CognitionIdentityMode.ENABLED
+                and type(identity) is IdentityState
+            ):
+                cues = reflection_cue_memory_ids(identity)
+                cited.extend(cues)
+                known = {trace.memory_id.value for trace in memories}
+                preferred = sum(1 for item in dict.fromkeys(cues) if item in known)
+                remaining = policy.max_memories - min(preferred, policy.max_memories)
+                _LOG.debug(
+                    "identity_reflection_cue",
+                    extra={
+                        "owner_id": owner.value,
+                        "tick": tick,
+                        "preferred_count": preferred,
+                        "remaining_cap": remaining,
+                    },
+                )
             context = ReflectionContext(
                 owner_id=owner,
                 tick=tick,

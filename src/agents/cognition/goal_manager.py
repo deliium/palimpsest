@@ -538,6 +538,191 @@ def _emit_transition(
     )
 
 
+def _identity_tokens(
+    identity: object, aspect: object, floor: float
+) -> frozenset[str]:
+    from agents.cognition.identity import IdentityAspect, IdentityBeliefView
+
+    if type(aspect) is not IdentityAspect:
+        raise TypeError("identity_goal_bias.aspect: invalid_type")
+    tokens: set[str] = set()
+    for view in getattr(identity, "views", ()):
+        if type(view) is not IdentityBeliefView or view.aspect is not aspect:
+            continue
+        if view.confidence < floor:
+            continue
+        tokens.add(view.evidence_token)
+    return frozenset(tokens)
+
+
+def _identity_should_suspend(
+    goal: Goal,
+    *,
+    weakness_tokens: frozenset[str],
+    protected_tokens: frozenset[str],
+    critical: bool,
+    critical_drives: frozenset[DriveKind],
+    require_active: bool = True,
+) -> bool:
+    from agents.cognition.identity import satisfying_command_kinds
+
+    if require_active and goal.status is not GoalStatus.ACTIVE:
+        return False
+    if goal.horizon is not GoalHorizon.MEDIUM_TERM:
+        return False
+    if critical and _goal_serves_drives(goal, critical_drives):
+        return False
+    kinds = satisfying_command_kinds(goal)
+    if not kinds or kinds.isdisjoint(weakness_tokens):
+        return False
+    return kinds.isdisjoint(protected_tokens)
+
+
+def _supporting_identity_refs(goal: Goal, identity: object) -> tuple[str, ...]:
+    from agents.cognition.identity import (
+        IdentityAspect,
+        IdentityBeliefView,
+        satisfying_command_kinds,
+    )
+
+    kinds = satisfying_command_kinds(goal)
+    refs: list[str] = []
+    seen: set[str] = set()
+    for view in getattr(identity, "views", ()):
+        if type(view) is not IdentityBeliefView:
+            continue
+        matched = (
+            view.aspect is IdentityAspect.COMMITMENT
+            and view.evidence_token == goal.goal_id.value
+        ) or (
+            view.aspect is IdentityAspect.COMPETENCE and view.evidence_token in kinds
+        )
+        if not matched or view.belief_id.value in seen:
+            continue
+        seen.add(view.belief_id.value)
+        refs.append(view.belief_id.value)
+    return tuple(refs)
+
+
+def _apply_identity_goal_bias(
+    *,
+    owner: AgentId,
+    tick: int,
+    goals_list: list[Goal],
+    intents: list[GoalTransitionIntent],
+    selection_codes: list[str],
+    identity: object,
+    critical: bool,
+    critical_drives: frozenset[DriveKind],
+) -> None:
+    from agents.cognition.identity import (
+        IdentityAspect,
+        IdentityPolicy,
+        IdentityState,
+        satisfying_command_kinds,
+    )
+
+    if type(identity) is not IdentityState:
+        return
+    policy = IdentityPolicy()
+    weakness_tokens = _identity_tokens(
+        identity, IdentityAspect.WEAKNESS, policy.weakness_floor
+    )
+    protected_tokens = _identity_tokens(
+        identity, IdentityAspect.COMPETENCE, policy.competence_floor
+    )
+
+    view_ids = {view.belief_id.value for view in identity.views}
+    kept = 0
+    suspended_count = 0
+    ref_count = 0
+    for goal in tuple(goals_list):
+        kinds = satisfying_command_kinds(goal)
+        if (
+            goal.status is GoalStatus.ACTIVE
+            and kinds
+            and not kinds.isdisjoint(protected_tokens)
+        ):
+            kept += 1
+            if "identity_competence_keep" not in selection_codes:
+                selection_codes.append("identity_competence_keep")
+        if not _identity_should_suspend(
+            goal,
+            weakness_tokens=weakness_tokens,
+            protected_tokens=protected_tokens,
+            critical=critical,
+            critical_drives=critical_drives,
+        ):
+            continue
+        suspended = replace(goal, status=GoalStatus.SUSPENDED)
+        _replace_goal(goals_list, suspended)
+        intents.append(
+            _emit_transition(
+                goal_id=suspended.goal_id,
+                owner=owner,
+                tick=tick,
+                from_status=GoalStatus.ACTIVE,
+                to_status=GoalStatus.SUSPENDED,
+                reason=GoalTransitionIntentReason.SUSPENDED,
+                resulting_goal=suspended,
+            )
+        )
+        suspended_count += 1
+        if "identity_weakness_suspend" not in selection_codes:
+            selection_codes.append("identity_weakness_suspend")
+
+    for index, goal in enumerate(tuple(goals_list)):
+        if goal.status is not GoalStatus.ACTIVE:
+            continue
+        supporting = _supporting_identity_refs(goal, identity)
+        stale = tuple(ref for ref in goal.self_model_refs if ref not in view_ids)
+        if stale:
+            _LOG.warning(
+                "identity_goal_ref_rejected",
+                extra={
+                    "reason_code": "belief_not_in_view",
+                    "owner_id": owner.value,
+                    "tick": tick,
+                    "rejected_count": len(stale),
+                },
+            )
+        if not supporting and not stale:
+            continue
+        refreshed = replace(goal, self_model_refs=supporting)
+        if refreshed == goal:
+            continue
+        goals_list[index] = refreshed
+        ref_count += len(supporting)
+        replaced_intent = False
+        for intent_index, intent in enumerate(intents):
+            if intent.goal_id != goal.goal_id or intent.resulting_goal is None:
+                continue
+            intents[intent_index] = replace(intent, resulting_goal=refreshed)
+            replaced_intent = True
+        if not replaced_intent:
+            intents.append(
+                _emit_transition(
+                    goal_id=refreshed.goal_id,
+                    owner=owner,
+                    tick=tick,
+                    from_status=goal.status,
+                    to_status=goal.status,
+                    reason=GoalTransitionIntentReason.ADOPTED,
+                    resulting_goal=refreshed,
+                )
+            )
+    _LOG.debug(
+        "identity_goal_bias",
+        extra={
+            "owner_id": owner.value,
+            "tick": tick,
+            "kept_count": kept,
+            "suspended_count": suspended_count,
+            "ref_count": ref_count,
+        },
+    )
+
+
 def _dependencies_ready(goal: Goal, by_id: Mapping[GoalId, Goal]) -> bool:
     for dep_id in goal.dependency_ids:
         dep = by_id.get(dep_id)
@@ -866,7 +1051,6 @@ class HierarchicalGoalManager:
         self_state: SelfModel,
         memory: RetrievedMemoryContext,
     ) -> GoalBoard:
-        del self_state  # owner-scoped; goals come from snapshot + policy
         owner = loop_input.agent_id
         tick = loop_input.observation.tick
         _LOG.debug(
@@ -1024,10 +1208,35 @@ class HierarchicalGoalManager:
                 if "critical_need_suspend" not in selection_codes:
                     selection_codes.append("critical_need_suspend")
         else:
+            weakness_tokens: frozenset[str] = frozenset()
+            protected_tokens: frozenset[str] = frozenset()
+            if self_state.identity is not None:
+                from agents.cognition.identity import IdentityAspect, IdentityPolicy
+
+                identity_policy = IdentityPolicy()
+                weakness_tokens = _identity_tokens(
+                    self_state.identity,
+                    IdentityAspect.WEAKNESS,
+                    identity_policy.weakness_floor,
+                )
+                protected_tokens = _identity_tokens(
+                    self_state.identity,
+                    IdentityAspect.COMPETENCE,
+                    identity_policy.competence_floor,
+                )
             for goal in tuple(goals_list):
                 if goal.status is not GoalStatus.SUSPENDED:
                     continue
                 if goal.horizon is GoalHorizon.LONG_TERM:
+                    continue
+                if weakness_tokens and _identity_should_suspend(
+                    goal,
+                    weakness_tokens=weakness_tokens,
+                    protected_tokens=protected_tokens,
+                    critical=False,
+                    critical_drives=critical_drives,
+                    require_active=False,
+                ):
                     continue
                 resumed = replace(goal, status=GoalStatus.ACTIVE)
                 _replace_goal(goals_list, resumed)
@@ -1047,6 +1256,18 @@ class HierarchicalGoalManager:
                     selection_codes.append("critical_need_resume")
 
         by_id = {goal.goal_id: goal for goal in goals_list}
+        if self_state.identity is not None:
+            _apply_identity_goal_bias(
+                owner=owner,
+                tick=tick,
+                goals_list=goals_list,
+                intents=intents,
+                selection_codes=selection_codes,
+                identity=self_state.identity,
+                critical=critical,
+                critical_drives=critical_drives,
+            )
+            by_id = {goal.goal_id: goal for goal in goals_list}
 
         # 4) REINFORCES: child ACTIVE progress bumps parent conservatively.
         for goal in tuple(goals_list):

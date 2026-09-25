@@ -122,27 +122,27 @@ Extend the V1 self-model so an agent can form subjective, revisable beliefs abou
 
 ### Phase 3: Influence on Cognition
 
-- [ ] Task 7: Let identity bias goal selection.
+- [x] Task 7: Let identity bias goal selection.
   - Deliverable: In `HierarchicalGoalManager.manage`, when `self_state.identity` is not `None`, read competence, weakness, and commitment views. High competence (at or above `IdentityPolicy.competence_floor`) on the command kind tied to an active goal adds a stable reason to keep it active. A weakness view at or above `IdentityPolicy.weakness_floor` may suspend a competing medium-term goal that is not critical, using the existing suspend path. New or refreshed adopted goals copy the supporting identity `belief_id` values into `Goal.self_model_refs`. `PASSTHROUGH` (`identity is None`) keeps the current discard of `self_state` and writes no new refs.
   - Expected behavior: Two agents with the same board and different identity views produce different suspend/keep outcomes. An empty identity state matches today's goal board for the same situation. `self_model_refs` round-trip through the existing goal codec.
   - Files: `src/agents/cognition/goal_manager.py`, `tests/unit/test_identity_goal_influence.py`, `tests/unit/test_goal_manager.py` for the passthrough parity case.
   - Logging requirements: DEBUG `identity_goal_bias` with owner, tick, kept count, suspended count, and ref count. WARN if a ref belief id is not in the identity view. No goal description text.
   - Dependencies: Tasks 2, 5.
 
-- [ ] Task 8: Let identity add one pairwise vote for keeping or breaking a commitment.
+- [x] Task 8: Let identity add one pairwise vote for keeping or breaking a commitment.
   - Deliverable: Thread the prepare-stage `SelfModel` into `MultiCriteriaIntentionSelector.select` by extending `IntentionSelector` in `src/agents/cognition/contracts.py` and the call in `CognitiveLoop`. When `self_state.identity` is not `None`, `_pairwise_compare` in `src/agents/cognition/deliberation.py` adds one identity vote from `violation_cost` against commitment and inferred-value views (`CANDIDATE` or `ACTIVE`). Do not drop a feasible future solely for that cost, and do not alter `_critical_vetoes`. `identity is None` adds zero and leaves today's vote total unchanged. Do not change `_compile_command` or `CommandPlanner.plan`: the planner still compiles the winning future into one `AgentCommand` with `candidate_count=1`. Update the stable intention placeholder so the new argument is accepted and ignored.
   - Expected behavior: A high-stability commitment can lose the pairwise contest to a non-violating feasible future and can still lose to a stronger drive or a critical survival veto. The same inputs with `identity is None` select the same future and compile the same command as today. The planner never chooses among a list of extra commands.
   - Files: `src/agents/cognition/deliberation.py`, `src/agents/cognition/contracts.py`, `src/agents/cognition/loop.py`, `src/agents/cognition/defaults.py`, `tests/unit/test_identity_intention_influence.py`.
   - Logging requirements: DEBUG `identity_violation_cost` with candidate count, winning direction code, cost band, and `identity_vote` (`-1`, `0`, or `1`). ERROR on owner mismatch. No command argument text.
   - Dependencies: Tasks 2, 6.
 
-- [ ] Task 9: Let identity scale interpretation of social feedback.
+- [x] Task 9: Let identity scale interpretation of social feedback.
   - Deliverable: In the cognition path that builds trust inputs for `evaluate_communicated_testimony` (`SubjectiveRevisionHook.propose_updates` and the `project_trust_inputs` call site in `src/agents/cognition/defaults.py`), when identity mode is enabled, multiply the unit-interval trust by a quantized factor from the `RELATIONSHIP` view for that counterpart and the owner's `RELIABILITY` view. Clamp the factor to `IdentityPolicy.social_scale_floor`..`IdentityPolicy.social_scale_ceiling` (default 0.85–1.15). Clamp the product back to `[0, 1]` before testimony evaluation. Missing views use factor `1`. Do not change `merge_revision`, relationship dimension enums, or the reverse edge. Low reliability scales the owner's reading; it does not rewrite the speaker's utterance.
   - Files: `src/agents/cognition/defaults.py`, `src/agents/cognition/communication.py` if the trust call lives there, `tests/unit/test_identity_social_interpretation.py`.
   - Logging requirements: DEBUG `identity_social_scale` with owner, counterpart id, factor band, and testimony decision code. Never log utterance text, trust prose, or claim values.
   - Dependencies: Tasks 2, 3, 4.
 
-- [ ] Task 10: Keep learning and reflection from double-writing identity, and let dissonance cue reflection.
+- [x] Task 10: Keep learning and reflection from double-writing identity, and let dissonance cue reflection.
   - Deliverable: Confirm Task 5's overlap drop covers consolidation and reflection belief ids, with a regression test if a revision would otherwise target the same id. When `CognitionReflectionMode` is not `DISABLED` and identity mode is `ENABLED`, append memory ids cited by an `IdentityDissonanceNotice`, or by a view whose contradiction mass is above `IdentityPolicy.dissonance_cue_floor`, onto `ReflectionContext.cited_memory_ids`. `_select_memories` already prefers that tuple and still caps at `max_memories`. Do not add a `self_model` field to `ReflectionContext`. Do not let reflection emit `identity.` predicates. Identity appraisal still skips every predicate copied from a `MemoryRelation`.
   - Expected behavior: One tick produces at most one revision request per belief id across consolidation, reflection, and identity. A dissonant memory moves earlier in the reflection window. Reflection-disabled runs do not change reflection code paths. Identity-disabled runs keep today's memory ranking.
   - Files: `src/agents/cognition/identity.py`, `src/agents/cognition/reflection.py`, `src/agents/cognition/loop.py`, `tests/unit/test_identity_reflection_cues.py`.

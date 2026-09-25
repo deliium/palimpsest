@@ -729,8 +729,9 @@ class DirectObservationMemoryUpdateHook:
         perception: InterpretedPerception,
         memory: RetrievedMemoryContext,
         intention: SelectedIntention,
+        self_state: object | None = None,
     ) -> tuple[MemoryUpdateIntent, ...]:
-        _ = plan, intention, memory
+        _ = plan, intention, memory, self_state
         owner = loop_input.agent_id
         observation = loop_input.observation
         tick = observation.tick

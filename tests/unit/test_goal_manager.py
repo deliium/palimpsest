@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+from dataclasses import replace
 
 import pytest
 
@@ -711,3 +712,50 @@ async def test_hierarchical_empty_snapshot_yields_empty_board() -> None:
     assert board.foci_ids == ()
     assert board.transition_intents == ()
     assert board.confidence == 0.0
+
+
+@pytest.mark.asyncio
+async def test_empty_identity_matches_unbiased_board_and_passthrough() -> None:
+    from agents.cognition.identity import (
+        IDENTITY_POLICY_ID,
+        IDENTITY_POLICY_VERSION,
+        IdentityState,
+    )
+
+    explore = _goal(
+        goal_id="mt-explore",
+        description="reach camp",
+        outcome=GoalOutcome(
+            kind=GoalOutcomeKind.GATHER_INFORMATION, outcome_code="map_area"
+        ),
+    )
+    loop_input = _loop_input(goals=(explore,), thirst=10.0)
+    empty = replace(
+        _self_model(),
+        identity=IdentityState(
+            owner_id=_OWNER,
+            policy_id=IDENTITY_POLICY_ID,
+            policy_version=IDENTITY_POLICY_VERSION,
+            views=(),
+            aggregate_confidence=0.0,
+        ),
+    )
+    absent = await HierarchicalGoalManager().manage(
+        loop_input, _situation(), _self_model(), _memory()
+    )
+    present = await HierarchicalGoalManager().manage(
+        loop_input, _situation(), empty, _memory()
+    )
+    assert tuple(goal.status for goal in absent.goals) == tuple(
+        goal.status for goal in present.goals
+    )
+    assert all(goal.self_model_refs == () for goal in present.goals)
+    passthrough_absent = await PassthroughGoalManager().manage(
+        loop_input, _situation(), _self_model(), _memory()
+    )
+    passthrough_present = await PassthroughGoalManager().manage(
+        loop_input, _situation(), empty, _memory()
+    )
+    assert passthrough_absent.goals == passthrough_present.goals
+    assert passthrough_present.goals[0].self_model_refs == ()
+    assert "reach camp" not in str(passthrough_present.decision_metadata)

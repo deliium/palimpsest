@@ -220,8 +220,9 @@ class ScriptedIntentionSelector:
         futures: PossibleFutures,
         goal_board: GoalBoard | None = None,
         emotional_state: object | None = None,
+        self_state: object | None = None,
     ) -> SelectedIntention:
-        _ = motivation, futures, goal_board, emotional_state
+        _ = motivation, futures, goal_board, emotional_state, self_state
         return SelectedIntention(
             owner_id=loop_input.agent_id,
             intention=IntentionCode.WAIT,
@@ -252,8 +253,9 @@ class ScriptedMemoryUpdateHook:
         perception: InterpretedPerception,
         memory: RetrievedMemoryContext,
         intention: SelectedIntention,
+        self_state: object | None = None,
     ) -> tuple[MemoryUpdateIntent, ...]:
-        _ = loop_input, plan, perception, memory, intention
+        _ = loop_input, plan, perception, memory, intention, self_state
         return ()
 
 

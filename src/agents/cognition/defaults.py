@@ -501,8 +501,9 @@ class StableIntentionSelector:
         futures: PossibleFutures | None = None,
         goal_board: GoalBoard | None = None,
         emotional_state: object | None = None,
+        self_state: object | None = None,
     ) -> SelectedIntention:
-        _ = futures, goal_board, emotional_state
+        _ = futures, goal_board, emotional_state, self_state
         if not motivation.scores:
             intention = IntentionCode.WAIT
             source = MotivationCode.WAIT
@@ -564,8 +565,9 @@ class EmptyMemoryUpdateHook:
         perception: InterpretedPerception,
         memory: RetrievedMemoryContext,
         intention: SelectedIntention,
+        self_state: object | None = None,
     ) -> tuple[MemoryUpdateIntent, ...]:
-        _ = loop_input, plan, perception, memory, intention
+        _ = loop_input, plan, perception, memory, intention, self_state
         return ()
 
 
@@ -621,6 +623,7 @@ class SubjectiveRevisionHook:
         perception: InterpretedPerception,
         memory: RetrievedMemoryContext,
         intention: SelectedIntention,
+        self_state: object | None = None,
     ) -> tuple[MemoryUpdateIntent, ...]:
         _ = plan, intention
         from agents.models import AgentId
@@ -693,7 +696,11 @@ class SubjectiveRevisionHook:
             policy=self._belief_policy,
             trace_index=index,
         )
-        from agents.cognition.communication import project_trust_inputs
+        from agents.cognition.communication import (
+            project_trust_inputs,
+            scale_trust_for_identity,
+        )
+        from agents.cognition.identity import IdentityState
         from memory.belief_formation import (
             BeliefEvidenceCandidate as EvidenceCandidate,
         )
@@ -730,10 +737,18 @@ class SubjectiveRevisionHook:
                 if type(resolved) is AgentId:
                     speaker_agent = resolved
             trust, trust_conf = (0.5, 0.2)
+            social_factor = 1.0
             if speaker_agent is not None:
                 trust, trust_conf = trust_by_speaker.get(
                     speaker_agent.value, (0.5, 0.2)
                 )
+                identity = getattr(self_state, "identity", None)
+                if type(identity) is IdentityState:
+                    trust, social_factor = scale_trust_for_identity(
+                        trust,
+                        identity=identity,
+                        counterpart_id=speaker_agent.value,
+                    )
             factors = evaluate_communicated_testimony(
                 sender_confidence=meta.sender_confidence,
                 receiver_confidence=meta.receiver_confidence,
@@ -760,6 +775,25 @@ class SubjectiveRevisionHook:
                     }
                 },
             )
+            if (
+                speaker_agent is not None
+                and type(getattr(self_state, "identity", None)) is IdentityState
+            ):
+                if social_factor < 0.95:
+                    factor_band = "low"
+                elif social_factor > 1.05:
+                    factor_band = "high"
+                else:
+                    factor_band = "mid"
+                _LOG.debug(
+                    "identity_social_scale",
+                    extra={
+                        "owner_id": owner.value,
+                        "counterpart_id": speaker_agent.value,
+                        "factor_band": factor_band,
+                        "decision": factors.decision.value,
+                    },
+                )
             if factors.decision is CommunicatedEvidenceDecision.DEFER:
                 continue
             stance = candidate.stance

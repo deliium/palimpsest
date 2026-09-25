@@ -305,8 +305,9 @@ async def test_memory_updates_apply_after_success() -> None:
             perception: InterpretedPerception,
             memory: RetrievedMemoryContext,
             intention: SelectedIntention,
+            self_state: object | None = None,
         ) -> tuple[MemoryUpdateIntent, ...]:
-            _ = plan, perception, memory, intention
+            _ = plan, perception, memory, intention, self_state
             obs = loop_input.observation
             return (
                 MemoryUpdateIntent(

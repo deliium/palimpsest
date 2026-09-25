@@ -176,6 +176,7 @@ async def test_loop_runs_exact_stage_order_once(
             futures,
             goal_board=None,
             emotional_state=None,
+            self_state=None,
         ):  # type: ignore[no-untyped-def]
             calls.append("intention")
             return await super().select(loop_input, motivation, futures, goal_board)
@@ -197,7 +198,7 @@ async def test_loop_runs_exact_stage_order_once(
 
     class TrackingUpdates(ScriptedMemoryUpdateHook):
         async def propose_updates(  # type: ignore[no-untyped-def]
-            self, loop_input, plan, perception, memory, intention
+            self, loop_input, plan, perception, memory, intention, self_state=None
         ):
             calls.append("memory_update")
             return await super().propose_updates(
@@ -340,6 +341,7 @@ async def test_cancellation_records_cancelled_boundary() -> None:
             futures,
             goal_board=None,
             emotional_state=None,
+            self_state=None,
         ):  # type: ignore[no-untyped-def]
             raise asyncio.CancelledError
 
@@ -444,8 +446,9 @@ async def test_prepare_excludes_memory_update_and_complete_binds_effective() -> 
             self.commands: list[str] = []
 
         async def propose_updates(
-            self, loop_input, plan, perception, memory, intention
+            self, loop_input, plan, perception, memory, intention, self_state=None
         ):
+            _ = self_state
             self.commands.append(type(plan.command).__name__)
             return ()
 
