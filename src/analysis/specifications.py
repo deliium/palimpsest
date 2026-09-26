@@ -50,7 +50,7 @@ __all__ = [
 ]
 
 METRIC_CATALOG_VERSION: Final[str] = "metric-catalog-v1"
-METRIC_FAMILY_COUNT: Final[int] = 21
+METRIC_FAMILY_COUNT: Final[int] = 22
 
 # Align with existing memory-drift / transmission document versions.
 _ALGO_V1: Final[str] = "1"
@@ -98,6 +98,7 @@ class MetricFamilyId(StrEnum):
     IDENTITY_DYNAMICS = "identity_dynamics"
     CAUSAL_WORLD_MODEL = "causal_world_model"
     PROSPECTIVE_IMAGINATION = "prospective_imagination"
+    COUNTERFACTUAL_REASONING = "counterfactual_reasoning"
 
 
 class DenominatorKind(StrEnum):
@@ -1012,6 +1013,30 @@ def _spec_prospective_imagination() -> MetricSpecification:
     )
 
 
+def _spec_counterfactual_reasoning() -> MetricSpecification:
+    return _base(
+        family_id=MetricFamilyId.COUNTERFACTUAL_REASONING,
+        evidence_inputs=frozenset({EvidenceStage.OBJECTIVE_EVENT_STATE}),
+        population="counterfactual_audits_per_run",
+        denominator="harvested counterfactual audits",
+        denominator_kind=DenominatorKind.OCCURRENCE,
+        cohort_window="run window covering committed events and audits",
+        deceased_policy="terminal agents stop new audits; existing audits remain",
+        zero_holding_policy="no audits -> availability=absent",
+        opportunity_vs_occurrence=(
+            "counts harvested scenario audits against committed event ids "
+            "after the run"
+        ),
+        self_edge_policy="not_applicable",
+        censoring_policy="audits without a scenario count stay absent",
+        formulas={
+            "scenario_count": "sum of audit scenario counts",
+            "event_overlap_count": "scenario ids that equal a committed event id",
+        },
+        value_keys=("scenario_count", "event_overlap_count"),
+    )
+
+
 def _spec_identity_dynamics() -> MetricSpecification:
     return _base(
         family_id=MetricFamilyId.IDENTITY_DYNAMICS,
@@ -1521,6 +1546,7 @@ _BUILDERS: Final[tuple[Callable[[], MetricSpecification], ...]] = (
     _spec_group_community,
     _spec_knowledge_diffusion,
     _spec_rumor_distortion,
+    _spec_counterfactual_reasoning,
 )
 
 

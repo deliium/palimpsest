@@ -134,7 +134,7 @@ Each checkpoint is a git commit on `main` created when those tasks are done. Do 
 
 ### Phase 3: Distinction Proofs, Experiment, and Docs
 
-- [ ] Task 7: Add Experiment K and the analysis-only metric.
+- [x] Task 7: Add Experiment K and the analysis-only metric.
   - Deliverable: two catalog arms share seed, scenario, and stochastic identity. `k-off` leaves counterfactual mode `DISABLED` and stays on `runner-config-v4`. `k-on` sets `DETERMINISTIC` and uses `runner-config-v8`. Register Experiment K beside Experiment J in `src/experiments/catalog.py`. Do not add it to `tests/unit/test_v1_regression_gate.py`.
   - Required catalog outcome: `k-off` produces an empty audit tuple; `k-on` produces at least one audit whose provenance code is `IMAGINED_ALTERNATIVE` after a salient remembered decision. The metric return value is not an argument to `CognitiveLoop`.
   - `counterfactual_reasoning@1` reads audits and committed event ids without importing the generator. It reports scenario count and a zero overlap with event ids. Register the spec the same way as `prospective_imagination@1`. Bump `METRIC_FAMILY_COUNT` from 21 to 22.
@@ -142,7 +142,7 @@ Each checkpoint is a git commit on `main` created when those tasks are done. Do 
   - Depends on tasks 2 and 6.
   - Files: `src/experiments/catalog.py`, `src/experiments/__init__.py`, `src/analysis/counterfactual_metrics.py`, `src/analysis/specifications.py`, `src/analysis/__init__.py`, `tests/unit/test_counterfactual_reasoning.py`, `tests/unit/test_counterfactual_experiment.py`.
 
-- [ ] Task 8: Prove the five-way distinction and the objective-history boundary.
+- [x] Task 8: Prove the five-way distinction and the objective-history boundary.
   - Deliverable: `tests/unit/test_counterfactual_distinction.py` builds one of each and shows they stay distinct:
     - memory: a `MemoryTrace` with `MemorySourceKind.DIRECT_OBSERVATION`
     - belief: a `SemanticBelief` whose predicate is not `counterfactual_alternative`, plus the counterfactual belief from task 5
@@ -163,7 +163,7 @@ Each checkpoint is a git commit on `main` created when those tasks are done. Do 
   - Depends on tasks 4, 5, and 7.
   - Files: `tests/unit/test_counterfactual_distinction.py`, `tests/architecture/test_cognitive_loop_isolation.py`.
 
-- [ ] Task 9: Document the mode, the five-way distinction, and Experiment K.
+- [x] Task 9: Document the mode, the five-way distinction, and Experiment K.
   - Deliverable: mandatory docs checkpoint through `/aif-docs`. Update `docs/cognition-runtime.md` with counterfactual mode default-off, the subjective alternative, the provenance constant, and the rule that scenarios are not futures, memories, or events. Update the Downstream V2 checklist sentence in `docs/architecture.md` so Experiment K (`counterfactual_reasoning@1`) stays off the V1 regression gate beside Experiment J. Extend `docs/experiments.md` so the catalog runs through K, and state that J and K stay off `tests/unit/test_v1_regression_gate.py`. Add a `counterfactual_reasoning@1` paragraph to `docs/analysis-metrics.md`: the family is present only when the audit exists, and assembly logs no scenario payload. Note that `runner-config-v8` is the counterfactual schema and that v8 may also carry consolidation, reflection, and prospective mode. Do not document an objective rewind.
   - Logging: none in docs. Implementation logs stay metadata-only as specified above.
   - Depends on tasks 4 and 7.

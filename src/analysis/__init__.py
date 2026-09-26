@@ -21,6 +21,10 @@ from analysis.contracts import (
     MemoryEvidenceSource,
     ObjectiveEventSource,
 )
+from analysis.counterfactual_metrics import (
+    COUNTERFACTUAL_REASONING_METRIC_VERSION,
+    compute_counterfactual_reasoning_metrics,
+)
 from analysis.evidence import (
     EVIDENCE_STAGE_SCHEMA_VERSION,
     EvidenceStage,
@@ -206,6 +210,7 @@ __all__ = [
     "CANONICAL_OUTPUT_CLAIM",
     "CAUSAL_WORLD_MODEL_METRIC_VERSION",
     "CLAIM_TRUTH_SCHEMA_VERSION",
+    "COUNTERFACTUAL_REASONING_METRIC_VERSION",
     "DRIFT_METRIC_VERSION",
     "EVENT_FACT_PROJECTOR_VERSION",
     "EVIDENCE_STAGE_SCHEMA_VERSION",
@@ -302,6 +307,7 @@ __all__ = [
     "compute_causal_world_model_metrics",
     "compute_conflict",
     "compute_cooperation",
+    "compute_counterfactual_reasoning_metrics",
     "compute_false_belief_persistence",
     "compute_goal_completion",
     "compute_group_community_structure",

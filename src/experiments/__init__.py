@@ -18,6 +18,7 @@ from experiments.catalog import (
     experiment_h_identity,
     experiment_i_causal,
     experiment_j_prospective,
+    experiment_k_counterfactual,
     v1_regression_profile,
 )
 from experiments.collectors import (
@@ -182,6 +183,7 @@ __all__ = [
     "experiment_h_identity",
     "experiment_i_causal",
     "experiment_j_prospective",
+    "experiment_k_counterfactual",
     "make_false_story_intervention",
     "map_consolidation_audits_to_report",
     "map_recall_audits_to_dynamics_report",

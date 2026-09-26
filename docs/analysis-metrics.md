@@ -27,6 +27,7 @@ Executable formula, population, and edge-case policy for all nineteen metric fam
 | `group_community_structure` | `group_community_structure@1` | nonnegative trust projection |
 | `knowledge_diffusion` | `knowledge_diffusion@1` | delivery / traces / beliefs / reconstruction |
 | `rumor_distortion` | `rumor_distortion@1` | multi-hop structured content |
+| `counterfactual_reasoning` | `counterfactual_reasoning@1` | harvested counterfactual audits plus committed event ids |
 
 Catalog version: `metric-catalog-v1`. Document schema: `MetricDocument` schema `1`.
 
@@ -37,6 +38,8 @@ Catalog version: `metric-catalog-v1`. Document schema: `MetricDocument` schema `
 `reflection@1` values: `reflection_invocations`, `belief_revisions`, `hypotheses`, `goals_adopted`, `goals_abandoned`, `relationship_reassessments`, `patterns_detected`. Assembled only when `reflection_report` is present. Disabled arms and missing reports stay absent and do not change V1 catalog assembly. Assembly logs `reflection_metrics_assembled` with the family id and which value keys are present. Belief text and memory content are not logged.
 
 `identity_dynamics@1` values: `aspect_*` counts for the eleven identity topics, `stability_low` / `stability_mid` / `stability_high`, dissonance counts for `commitment_command`, `inferred_value_command`, and `risk_above_tolerance`, and `owner_divergence`. A missing audit or a flags-off run with no qualifying heads is absent, not zeros. The mapper logs `identity_dynamics_mapped` with schema version, owner count, and present/absent. It does not store claim text. Live cognition does not read the report.
+
+`counterfactual_reasoning@1` values: `scenario_count` and `event_overlap_count`. The family is present only when a counterfactual audit exists; a disabled run with an empty audit tuple stays absent. It compares harvested audit counts with committed event ids after the run and reports that no scenario id equals a world event id when the overlap is zero. Assembly logs `counterfactual_metric` with the arm id, scenario count, and overlap count. It does not log scenario payloads. `runner-config-v8` is the counterfactual schema and may also carry consolidation, reflection, and prospective imagination. The document is not an input to the cognitive loop.
 
 ### Supporting formulas (not a separate family)
 

@@ -1,4 +1,4 @@
-"""Named builders for Experiments A-J."""
+"""Named builders for Experiments A-K."""
 
 from __future__ import annotations
 
@@ -19,6 +19,7 @@ from simulation.runner_models import (
     RUNNER_SCHEMA_VERSION_V5,
     RUNNER_SCHEMA_VERSION_V6,
     RUNNER_SCHEMA_VERSION_V7,
+    RUNNER_SCHEMA_VERSION_V8,
     AgentCognitionSpec,
     AgentRunnerSpec,
     ConsolidationMode,
@@ -541,6 +542,45 @@ def experiment_j_prospective(
         arms=(
             ("j-shallow", "prospective_disabled", shallow),
             ("j-deep", "prospective_deterministic", deep),
+        ),
+    )
+
+
+def experiment_k_counterfactual(
+    base: SimulationRunnerConfig,
+    *,
+    seed_matrix: ExperimentSeedMatrix | None = None,
+) -> ExperimentDefinition:
+    """Paired arms share seed, scenario, and stochastic identity.
+
+    ``k-off`` leaves counterfactual mode disabled on ``runner-config-v4``.
+    ``k-on`` uses deterministic counterfactuals on ``runner-config-v8``.
+    """
+    matrix = seed_matrix or ExperimentSeedMatrix(seeds=(base.seed,))
+    off = _with_agent_modes(
+        base,
+        counterfactual_mode=CounterfactualMode.DISABLED,
+        schema_version=RUNNER_SCHEMA_VERSION_V4,
+    )
+    on = _with_agent_modes(
+        base,
+        counterfactual_mode=CounterfactualMode.DETERMINISTIC,
+        schema_version=RUNNER_SCHEMA_VERSION_V8,
+    )
+    for condition_id, config in (("k-off", off), ("k-on", on)):
+        _LOG.debug(
+            "experiment_k_built experiment_id=%s condition_id=%s schema_version=%s",
+            "experiment-k-counterfactual",
+            condition_id,
+            config.schema_version,
+        )
+    return _definition(
+        experiment_id="experiment-k-counterfactual",
+        base=replace(base, schema_version=RUNNER_SCHEMA_VERSION_V4),
+        seed_matrix=matrix,
+        arms=(
+            ("k-off", "counterfactual_disabled", off),
+            ("k-on", "counterfactual_deterministic", on),
         ),
     )
 
