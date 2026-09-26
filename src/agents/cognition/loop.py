@@ -966,6 +966,7 @@ class CognitiveLoop:
                 acknowledged_goal_ids=tuple(completed),
                 selected_ids=selected_ids,
                 fallback_used=fallback_used,
+                causal_world_model=proposal.causal_world_model,
             )
         except (TypeError, ValueError):
             log_reflection_aborted(

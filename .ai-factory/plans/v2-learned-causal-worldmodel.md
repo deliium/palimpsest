@@ -162,7 +162,7 @@ Experiments and unit tests compare subjective confidence with objective empirica
   - Depends on task 4.
   - Files: `src/agents/cognition/imagination.py`, `src/agents/cognition/deliberation.py`, `src/agents/cognition/motivation.py` only if drive effects must carry the search bias, `src/agents/cognition/loop.py`, `tests/unit/test_causal_world_model_runtime.py`.
 
-- [ ] Task 6: Use reconstructed memories as extra episodes and let reflection cite counters.
+- [x] Task 6: Use reconstructed memories as extra episodes and let reflection cite counters.
   - Deliverable: a memory whose provenance is not already on the observation can create or support a hypothesis. Reflection's `prediction_error` goal intent may cite hypothesis ids that just received `COUNTER`. Reflection does not write the world model and does not emit belief revisions for those ids.
   - Call the reconstruction episode helper from the prepare update in task 4. In `src/agents/cognition/reflection.py`, add a sibling of `_goal_pattern_candidates` for hypothesis ids whose latest reason is `COUNTER`. Leave the `SubjectiveDecisionRecord` grouping unchanged. Drop the sibling when reflection mode is disabled, and skip it when this pass already emitted a decision-record `prediction_error` goal. Hypothesis ids must not enter `BeliefRevisionRequest`.
   - Logging: DEBUG `world_model_memory_episodes` with owner id, tick, memory episode count, skipped duplicate count. DEBUG `world_model_reflection_prediction_error` with owner id, tick, cited hypothesis count. No memory text. Logger `agents.cognition.world_model` and `agents.cognition.reflection`.

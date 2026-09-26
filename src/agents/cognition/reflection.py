@@ -1100,6 +1100,91 @@ def _goal_pattern_candidates(
     return emitted
 
 
+def causal_counter_goal_candidate(
+    context: ReflectionContext,
+    model: object | None,
+    *,
+    existing: tuple[ReflectionCandidate, ...],
+) -> ReflectionCandidate | None:
+    """Sibling of a prediction-error goal, citing counter-updated hypotheses.
+
+    Hypothesis ids stay off belief revisions and decision-record evidence.
+    """
+    if model is None:
+        return None
+    from agents.cognition.world_model import (
+        CausalUpdateReason,
+        CausalWorldModel,
+    )
+
+    if type(context) is not ReflectionContext:
+        raise TypeError("causal_counter_goal_candidate: invalid_context")
+    if type(model) is not CausalWorldModel:
+        raise TypeError("causal_counter_goal_candidate: invalid_model")
+    if model.owner_id != context.owner_id:
+        raise ValueError("causal_counter_goal_candidate: owner_mismatch")
+    cited = tuple(
+        sorted(
+            item.hypothesis_id
+            for item in model.hypotheses
+            if item.latest_reason() is CausalUpdateReason.COUNTER
+        )
+    )
+    _LOG.debug(
+        "world_model_reflection_prediction_error owner_id=%s tick=%s "
+        "hypothesis_count=%s",
+        context.owner_id.value,
+        context.tick,
+        len(cited),
+    )
+    already = any(
+        item.pattern_code is ReflectionPatternCode.PREDICTION_ERROR
+        and item.kind is ReflectionConclusionKind.NEW_LONG_TERM_GOAL
+        and item.goal_intent is not None
+        for item in existing
+    )
+    if already or not cited:
+        return None
+    pattern = ReflectionPatternCode.PREDICTION_ERROR
+    goal_id = GoalId(
+        f"goal-reflection:{context.owner_id.value}:{context.tick}:"
+        f"{pattern.value}:causal"
+    )
+    adopted = Goal(
+        goal_id=goal_id,
+        owner_id=context.owner_id,
+        description=pattern.value,
+        priority=0.5,
+        status=GoalStatus.ACTIVE,
+        outcome=GoalOutcome(
+            kind=GoalOutcomeKind.ACHIEVE_CODE,
+            outcome_code=pattern.value,
+        ),
+        horizon=GoalHorizon.LONG_TERM,
+        provenance=GoalProvenance(origin_kind=GoalOriginKind.INFERRED),
+        created_tick=context.tick,
+        belief_refs=cited,
+    )
+    adopt_intent = GoalTransitionIntent(
+        goal_id=goal_id,
+        owner_id=context.owner_id,
+        from_status=GoalStatus.ACTIVE,
+        to_status=GoalStatus.ACTIVE,
+        reason_code=GoalTransitionIntentReason.ADOPTED,
+        tick=context.tick,
+        resulting_goal=adopted,
+    )
+    return _candidate(
+        context=context,
+        kind=ReflectionConclusionKind.NEW_LONG_TERM_GOAL,
+        pattern=pattern,
+        evidence=cited,
+        count=len(cited),
+        candidate_suffix="causal-counter",
+        goal_intent=adopt_intent,
+    )
+
+
 def _candidate(
     *,
     context: ReflectionContext,
@@ -1338,6 +1423,7 @@ def plan_reflection(
     acknowledged_goal_ids: tuple[GoalId, ...] = (),
     selected_ids: tuple[str, ...] | None = None,
     fallback_used: bool = False,
+    causal_world_model: object | None = None,
 ) -> ReflectionPlan | None:
     """Materialize a pass when triggers matched. ``None`` means no pass."""
 
@@ -1357,6 +1443,11 @@ def plan_reflection(
     )
     if selected_ids is not None:
         kept = _select_candidate_ids(kept, selected_ids)
+    sibling = causal_counter_goal_candidate(
+        context, causal_world_model, existing=kept
+    )
+    if sibling is not None:
+        kept = (*kept, sibling)
     counts: dict[str, int] = {}
     evidence: set[str] = set()
     beliefs: list[BeliefRevisionRequest] = []

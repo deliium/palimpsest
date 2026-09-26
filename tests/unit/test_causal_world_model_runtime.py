@@ -18,6 +18,8 @@ from agents.cognition.models import (
     ActionDirection,
     DriveEffect,
     FutureAppraisal,
+    GoalTransitionIntent,
+    GoalTransitionIntentReason,
     ImaginedFuture,
     MotivationCode,
     MotivationEvaluation,
@@ -26,15 +28,42 @@ from agents.cognition.models import (
     SituationClaimCode,
     SubjectiveRiskKind,
 )
+from agents.cognition.reflection import (
+    ReflectionConclusionKind,
+    ReflectionContext,
+    ReflectionPatternCode,
+    ReflectionPolicy,
+    ReflectionTriggerKind,
+    ReflectionTriggerResult,
+    causal_counter_goal_candidate,
+    plan_reflection,
+)
 from agents.cognition.world_model import (
     CausalAtom,
+    CausalEpisode,
+    CausalEpisodeRole,
     CausalHypothesis,
     CausalOutcome,
     CausalProvenanceKind,
     CausalSlot,
     CausalWorldModel,
+    default_world_model_policy,
+    empty_world_model,
+    update_world_model,
 )
-from agents.models import Agent, AgentId, DriveKind
+from agents.models import (
+    Agent,
+    AgentId,
+    DriveKind,
+    Goal,
+    GoalHorizon,
+    GoalId,
+    GoalOriginKind,
+    GoalOutcome,
+    GoalOutcomeKind,
+    GoalProvenance,
+    GoalStatus,
+)
 from memory.models import BeliefStore, MemoryStore
 from simulation.agent_runtime import (
     AgentRuntime,
@@ -566,3 +595,146 @@ async def test_help_and_held_search_success_prefer_matching_directions() -> None
         ),
     )
     assert helped.direction is ActionDirection.COMMUNICATE
+
+
+def _countered_model() -> CausalWorldModel:
+    owner = AgentId("agent-1")
+    atoms = (
+        CausalAtom(slot=CausalSlot.LOCATION, value="loc-1"),
+        CausalAtom(slot=CausalSlot.DAY_PHASE, value="night"),
+    )
+    policy = default_world_model_policy()
+
+    def episode(tick: int, evidence_id: str, role: CausalEpisodeRole) -> CausalEpisode:
+        return CausalEpisode(
+            owner_id=owner,
+            tick=tick,
+            outcome=CausalOutcome.DANGER,
+            atoms=atoms,
+            evidence_id=evidence_id,
+            provenance_kind=CausalProvenanceKind.OBSERVATION,
+            role=role,
+        )
+
+    supported = update_world_model(
+        empty_world_model(owner),
+        (episode(1, "evt-harm", CausalEpisodeRole.SUPPORT),),
+        policy,
+        tick=1,
+    )
+    return update_world_model(
+        supported,
+        (episode(2, "evt-quiet", CausalEpisodeRole.COUNTER),),
+        policy,
+        tick=2,
+    )
+
+
+def _reflection_context() -> ReflectionContext:
+    return ReflectionContext(
+        owner_id=AgentId("agent-1"),
+        tick=4,
+        policy=ReflectionPolicy(interval_ticks=1, min_gap_ticks=1),
+        owner_entity_id=EntityId("body-1"),
+    )
+
+
+def _matched_triggers() -> ReflectionTriggerResult:
+    return ReflectionTriggerResult(
+        matched=(ReflectionTriggerKind.ELAPSED_TICKS,),
+        skipped=(),
+        gap_elapsed=True,
+    )
+
+
+def test_countered_hypotheses_become_a_reflection_goal(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    caplog.set_level(logging.DEBUG, logger="agents.cognition.reflection")
+    model = _countered_model()
+    cited = tuple(
+        item.hypothesis_id
+        for item in model.hypotheses
+        if item.latest_reason() is not None and item.latest_reason().value == "counter"
+    )
+    assert cited
+    plan = plan_reflection(
+        context=_reflection_context(),
+        triggers=_matched_triggers(),
+        mode="deterministic",
+        causal_world_model=model,
+    )
+    assert plan is not None
+    goals = [
+        intent
+        for intent in plan.goal_intents
+        if intent.resulting_goal is not None
+        and intent.resulting_goal.goal_id.value.endswith(":prediction_error:causal")
+    ]
+    assert len(goals) == 1
+    assert set(goals[0].resulting_goal.belief_refs) == set(cited)
+    for request in plan.belief_revisions:
+        for item in request.evidence.supporting:
+            assert item.memory_id.value not in cited
+    messages = [
+        record.getMessage()
+        for record in caplog.records
+        if "world_model_reflection_prediction_error" in record.getMessage()
+    ]
+    assert messages
+    assert "hypothesis_count=" in messages[-1]
+
+
+def test_existing_prediction_error_goal_skips_the_causal_sibling(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    caplog.set_level(logging.DEBUG, logger="agents.cognition.reflection")
+    owner = AgentId("agent-1")
+    context = _reflection_context()
+    goal = Goal(
+        goal_id=GoalId("goal-reflection:agent-1:4:prediction_error"),
+        owner_id=owner,
+        description="prediction_error",
+        priority=0.5,
+        status=GoalStatus.ACTIVE,
+        outcome=GoalOutcome(
+            kind=GoalOutcomeKind.ACHIEVE_CODE,
+            outcome_code="prediction_error",
+        ),
+        horizon=GoalHorizon.LONG_TERM,
+        provenance=GoalProvenance(origin_kind=GoalOriginKind.INFERRED),
+        created_tick=4,
+        belief_refs=("decision-1",),
+    )
+    intent = GoalTransitionIntent(
+        goal_id=goal.goal_id,
+        owner_id=owner,
+        from_status=GoalStatus.ACTIVE,
+        to_status=GoalStatus.ACTIVE,
+        reason_code=GoalTransitionIntentReason.ADOPTED,
+        tick=4,
+        resulting_goal=goal,
+    )
+    from agents.cognition.reflection import ReflectionCandidate
+
+    existing = ReflectionCandidate(
+        candidate_id="cand-prediction_error-new_long_term_goal-existing",
+        owner_id=owner,
+        tick=4,
+        kind=ReflectionConclusionKind.NEW_LONG_TERM_GOAL,
+        pattern_code=ReflectionPatternCode.PREDICTION_ERROR,
+        evidence_ids=("decision-1",),
+        count=1,
+        goal_intent=intent,
+    )
+    sibling = causal_counter_goal_candidate(
+        context, _countered_model(), existing=(existing,)
+    )
+    assert sibling is None
+    logged = [
+        record.getMessage()
+        for record in caplog.records
+        if "world_model_reflection_prediction_error" in record.getMessage()
+    ]
+    assert logged
+    assert "hypothesis_count=" in logged[-1]
