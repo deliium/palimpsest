@@ -9,7 +9,7 @@ from __future__ import annotations
 import logging
 from asyncio import CancelledError
 from collections.abc import Awaitable
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import Any, Final, TypeVar, cast
 
 from agents.cognition.contracts import (
@@ -184,6 +184,8 @@ class CognitiveLoop:
         "_reflection_selector",
         "_self_state",
         "_situation",
+        "_world_model_mode",
+        "_world_model_policy",
     )
 
     def __init__(
@@ -207,6 +209,8 @@ class CognitiveLoop:
         reflection_policy: object | None = None,
         reflection_selector: object | None = None,
         identity_mode: object | None = None,
+        world_model_mode: object | None = None,
+        world_model_policy: object | None = None,
     ) -> None:
         self._perception = perception
         self._memory = memory
@@ -253,7 +257,97 @@ class CognitiveLoop:
         if type(identity) is not CognitionIdentityMode:
             raise TypeError("identity_mode must be CognitionIdentityMode")
         self._identity_mode = identity
+        from agents.cognition.configuration import CognitionWorldModelMode
+        from agents.cognition.world_model import WorldModelPolicy
+
+        world_mode = (
+            CognitionWorldModelMode.PASSTHROUGH
+            if world_model_mode is None
+            else world_model_mode
+        )
+        if type(world_mode) is not CognitionWorldModelMode:
+            raise TypeError("world_model_mode must be CognitionWorldModelMode")
+        if world_model_policy is None:
+            policy = None
+        elif type(world_model_policy) is not WorldModelPolicy:
+            raise TypeError("world_model_policy must be WorldModelPolicy")
+        else:
+            policy = world_model_policy
+        self._world_model_mode = world_mode
+        self._world_model_policy = policy
         self._deferred_dissonance: tuple[object, ...] = ()
+
+    def _prepare_world_model(
+        self,
+        loop_input: CognitiveLoopInput,
+        emotional_evaluation: EmotionalStateEvaluation,
+        memory: RetrievedMemoryContext,
+    ) -> object | None:
+        from agents.cognition.configuration import CognitionWorldModelMode
+        from agents.cognition.emotion import PassthroughEmotionalStateAppraiser
+        from agents.cognition.world_model import (
+            CausalWorldModel,
+            empty_world_model,
+            episodes_from_observation,
+            episodes_from_reconstructions,
+            update_world_model,
+        )
+
+        owner = loop_input.agent_id
+        tick = loop_input.observation.tick
+        mode = self._world_model_mode
+        if mode is not CognitionWorldModelMode.ENABLED:
+            _LOG.debug(
+                "world_model_prepare owner_id=%s tick=%s mode=%s hypothesis_count=%s",
+                owner.value,
+                tick,
+                mode.value,
+                0,
+            )
+            return None
+        snapshot = loop_input.snapshot
+        carried = None if snapshot is None else snapshot.causal_world_model
+        prior = (
+            carried
+            if type(carried) is CausalWorldModel
+            else empty_world_model(owner)
+        )
+        policy = self._world_model_policy
+        if policy is None:
+            from agents.cognition.world_model import default_world_model_policy
+
+            policy = default_world_model_policy(allow_provider=False)
+        emotion = None
+        if type(self._emotional_state) is not PassthroughEmotionalStateAppraiser:
+            emotion = emotional_evaluation.state
+        health = None
+        body = loop_input.observation.self_body
+        if body is not None:
+            health = body.health.value
+        observed = episodes_from_observation(loop_input.observation, owner, prior)
+        recalled = episodes_from_reconstructions(
+            memory,
+            owner_id=owner,
+            observer_id=loop_input.observation.observer_id,
+            used_provenance_ids=tuple(episode.evidence_id for episode in observed),
+        )
+        episodes = observed + tuple(replace(episode, tick=tick) for episode in recalled)
+        updated = update_world_model(
+            prior,
+            episodes,
+            policy,
+            tick=tick,
+            observed_health=health,
+            emotional_state=emotion,
+        )
+        _LOG.debug(
+            "world_model_prepare owner_id=%s tick=%s mode=%s hypothesis_count=%s",
+            owner.value,
+            tick,
+            mode.value,
+            len(updated.hypotheses),
+        )
+        return updated
 
     async def prepare(
         self,
@@ -335,6 +429,9 @@ class CognitiveLoop:
             ),
             expected_type=EmotionalStateEvaluation,
         )
+        world_model = self._prepare_world_model(
+            loop_input, emotional_evaluation, memory
+        )
         futures = await run_stage(
             kind=ComponentKind.FUTURES,
             ordinal=6,
@@ -346,6 +443,7 @@ class CognitiveLoop:
                 memory,
                 goal_board,
                 emotional_evaluation,
+                causal_world_model=world_model,
             ),
             expected_type=PossibleFutures,
         )
@@ -360,6 +458,7 @@ class CognitiveLoop:
                 futures,
                 goal_board,
                 emotional_evaluation,
+                causal_world_model=world_model,
             ),
             expected_type=MotivationEvaluation,
         )
@@ -374,6 +473,7 @@ class CognitiveLoop:
                 goal_board,
                 emotional_evaluation,
                 self_state,
+                causal_world_model=world_model,
             ),
             expected_type=SelectedIntention,
         )
@@ -388,6 +488,7 @@ class CognitiveLoop:
                 memory,
                 goal_board,
                 emotional_evaluation,
+                causal_world_model=world_model,
             ),
             expected_type=ActionPlan,
         )
@@ -419,6 +520,7 @@ class CognitiveLoop:
             proposed_command=command,
             boundary_records=tuple(records),
             final_confidence=plan.confidence,
+            causal_world_model=world_model,
         )
         _LOG.debug(
             "cognitive_loop_prepared",
@@ -554,6 +656,7 @@ class CognitiveLoop:
             reflection=reflection,
             identity_revisions=identity_revisions,
             identity_dissonance=identity_dissonance,
+            causal_world_model=proposal.causal_world_model,
         )
         _LOG.debug(
             "cognitive_loop_complete",

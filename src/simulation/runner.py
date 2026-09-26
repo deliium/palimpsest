@@ -23,7 +23,9 @@ from agents.cognition.configuration import (
     CognitionMemoryMode,
     CognitionMortalityAppraisalMode,
     CognitionReflectionMode,
+    CognitionWorldModelMode,
     build_cognitive_loop,
+    default_world_model_policy,
 )
 from agents.cognition.memory import ReferenceMemoryRetriever, ScopedMemoryRetriever
 from agents.cognition.models import ComponentKind
@@ -454,6 +456,19 @@ def _cognition_config_for(
         identity_flag,
         identity_mode.value,
     )
+    world_model_flag = capability_flags.predictive_world_model
+    world_model_mode = (
+        CognitionWorldModelMode.ENABLED
+        if world_model_flag
+        else CognitionWorldModelMode.PASSTHROUGH
+    )
+    world_model_policy = default_world_model_policy(allow_provider=False)
+    _LOG.debug(
+        "cognition_config_world_model_mode flag=%s mode=%s policy_version=%s",
+        world_model_flag,
+        world_model_mode.value,
+        world_model_policy.version,
+    )
     reflection_mode = CognitionReflectionMode(spec.reflection_mode.value)
     reflection_policy = None
     if reflection_mode is not CognitionReflectionMode.DISABLED:
@@ -475,6 +490,8 @@ def _cognition_config_for(
         ),
         emotional_state_mode=emotional_mode,
         identity_mode=identity_mode,
+        world_model_mode=world_model_mode,
+        world_model_policy=world_model_policy,
         consolidation_mode=CognitionConsolidationMode(spec.consolidation_mode.value),
         reflection_mode=reflection_mode,
         reflection_policy=reflection_policy,
@@ -950,6 +967,7 @@ class SimulationRunner:
                     "imagination_mode=%s mortality_mode=%s "
                     "emotional_state_mode=%s short_term_emotional_state=%s "
                     "identity_mode=%s extended_self_model=%s "
+                    "world_model_mode=%s predictive_world_model=%s "
                     "allow_provider=%s",
                     ordinal,
                     agent_spec.cognition.memory_mode.value,
@@ -959,6 +977,8 @@ class SimulationRunner:
                     config.capability_flags.short_term_emotional_state,
                     loop_config.identity_mode.value,
                     config.capability_flags.extended_self_model,
+                    loop_config.world_model_mode.value,
+                    config.capability_flags.predictive_world_model,
                     allow_provider,
                 )
 

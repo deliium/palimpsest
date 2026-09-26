@@ -22,6 +22,7 @@ from agents.cognition.contracts import (
 )
 from agents.cognition.loop import CognitiveLoop
 from agents.cognition.reflection import ReflectionPolicy
+from agents.cognition.world_model import WorldModelPolicy, default_world_model_policy
 from agents.models import (
     REQUIRED_DRIVE_KINDS,
     AgentId,
@@ -108,6 +109,13 @@ class CognitionIdentityMode(StrEnum):
     ENABLED = "enabled"
 
 
+class CognitionWorldModelMode(StrEnum):
+    """Causal world-model treatment. Passthrough leaves commands unchanged."""
+
+    PASSTHROUGH = "passthrough"
+    ENABLED = "enabled"
+
+
 def _unit_interval(name: str, value: object) -> float:
     if isinstance(value, bool) or not isinstance(value, (int, float)):
         raise ValueError(f"{name}: not_unit_interval")
@@ -161,6 +169,8 @@ class CognitionLoopConfig:
     reflection_mode: CognitionReflectionMode = CognitionReflectionMode.DISABLED
     reflection_policy: ReflectionPolicy | None = None
     identity_mode: CognitionIdentityMode = CognitionIdentityMode.PASSTHROUGH
+    world_model_mode: CognitionWorldModelMode = CognitionWorldModelMode.PASSTHROUGH
+    world_model_policy: WorldModelPolicy | None = None
     drive_overrides: tuple[CognitionDriveOverride, ...] = ()
     memory_policy_version: str = MEMORY_POLICY_VERSION
     imagination_policy_version: str = IMAGINATION_POLICY_VERSION
@@ -191,6 +201,21 @@ class CognitionLoopConfig:
         if type(self.identity_mode) is not CognitionIdentityMode:
             _LOG.error("invalid_enum path=identity_mode reason_code=invalid_mode")
             raise TypeError("identity_mode must be CognitionIdentityMode")
+        if type(self.world_model_mode) is not CognitionWorldModelMode:
+            _LOG.error("invalid_enum path=world_model_mode reason_code=invalid_mode")
+            raise TypeError("world_model_mode must be CognitionWorldModelMode")
+        if self.world_model_policy is None:
+            if self.world_model_mode is CognitionWorldModelMode.ENABLED:
+                object.__setattr__(
+                    self,
+                    "world_model_policy",
+                    default_world_model_policy(allow_provider=False),
+                )
+        elif type(self.world_model_policy) is not WorldModelPolicy:
+            _LOG.error(
+                "invalid_enum path=world_model_policy reason_code=invalid_type"
+            )
+            raise TypeError("world_model_policy must be WorldModelPolicy or None")
         if (
             self.reflection_policy is not None
             and type(self.reflection_policy) is not ReflectionPolicy
@@ -240,6 +265,7 @@ class CognitionLoopConfig:
                     "consolidation_mode": self.consolidation_mode.value,
                     "reflection_mode": self.reflection_mode.value,
                     "identity_mode": self.identity_mode.value,
+                    "world_model_mode": self.world_model_mode.value,
                     "reflection_policy_version": (
                         None
                         if self.reflection_policy is None
@@ -290,6 +316,12 @@ class CognitionLoopConfig:
             "emotional_state_mode": self.emotional_state_mode.value,
             "emotional_state_policy_version": self.emotional_state_policy_version,
             "identity_mode": self.identity_mode.value,
+            "world_model_mode": self.world_model_mode.value,
+            "world_model_policy_version": (
+                None
+                if self.world_model_policy is None
+                else self.world_model_policy.version
+            ),
             "imagination_mode": self.imagination_mode.value,
             "imagination_policy_version": self.imagination_policy_version,
             "memory_mode": self.memory_mode.value,
@@ -414,6 +446,7 @@ def build_cognitive_loop(
                 "goal_management_mode": resolved.goal_management_mode.value,
                 "emotional_state_mode": resolved.emotional_state_mode.value,
                 "identity_mode": resolved.identity_mode.value,
+                "world_model_mode": resolved.world_model_mode.value,
                 "emotion_bias": emotion_bias,
                 "has_counterpart_resolver": counterpart is not None,
                 "status": "built",
@@ -462,4 +495,6 @@ def build_cognitive_loop(
         reflection_policy=resolved.reflection_policy,
         reflection_selector=reflection_selector,
         identity_mode=resolved.identity_mode,
+        world_model_mode=resolved.world_model_mode,
+        world_model_policy=resolved.world_model_policy,
     )

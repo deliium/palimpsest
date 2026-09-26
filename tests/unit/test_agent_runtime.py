@@ -239,6 +239,7 @@ async def test_cognition_failure_does_not_mutate_memory() -> None:
             futures,
             goal_board=None,
             emotional_state=None,
+            causal_world_model=None,
         ):
             raise RuntimeError("secret motivation")
 

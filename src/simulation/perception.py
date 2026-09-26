@@ -124,6 +124,7 @@ def build_perspective(
     goals: Sequence[Goal] = (),
     drives: DriveProfile | None = None,
     emotional_state: object | None = None,
+    causal_world_model: object | None = None,
 ) -> Perspective:
     """Pair one ``AgentId`` with exactly its registered entity observation.
 
@@ -269,6 +270,26 @@ def build_perspective(
                 PerspectiveOwnershipCode.FOREIGN_EMOTIONAL_STATE,
                 "emotional_state owner_id must match perspective agent",
             )
+    if causal_world_model is not None:
+        from agents.cognition.world_model import CausalWorldModel
+
+        if type(causal_world_model) is not CausalWorldModel:
+            _LOGGER.error(
+                "%s reason=causal_world_model_type agent=%s",
+                PerspectiveOwnershipCode.INVALID_INPUT.value,
+                agent_id.value,
+            )
+            raise TypeError("causal_world_model must be CausalWorldModel")
+        if causal_world_model.owner_id != agent_id:
+            _LOGGER.warning(
+                "%s agent=%s",
+                PerspectiveOwnershipCode.INVALID_INPUT.value,
+                agent_id.value,
+            )
+            raise PerspectiveOwnershipError(
+                PerspectiveOwnershipCode.INVALID_INPUT,
+                "causal_world_model owner_id must match perspective agent",
+            )
 
     perspective = Perspective(
         agent_id=agent_id,
@@ -283,6 +304,7 @@ def build_perspective(
         drives=drive_profile,
         social_identity=social_identity,
         emotional_state=emotional_state,
+        causal_world_model=causal_world_model,
     )
     _ = SemanticBelief, DirectedRelationshipProfile
     emotion_kind_count = (

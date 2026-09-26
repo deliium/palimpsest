@@ -407,6 +407,7 @@ class AgentRuntime:
         "_applied_reflection_operation_ids",
         "_belief_reader",
         "_belief_writer",
+        "_causal_world_model",
         "_cognition_trace_repository",
         "_cognition_trace_spec",
         "_decision_journal",
@@ -519,6 +520,7 @@ class AgentRuntime:
         self._status = AgentRuntimeStatus.CREATED
         self._internal_state = InternalAgentState(owner_id=agent.agent_id)
         self._emotional_state: AgentEmotionalState | None = None
+        self._causal_world_model: object | None = None
         self._identity_cursor: object | None = None
         self._reflection_cursor: object | None = None
         self._decision_journal: tuple[object, ...] | None = None
@@ -585,6 +587,34 @@ class AgentRuntime:
                     "max_intensity": state.max_intensity(),
                 }
             },
+        )
+
+    def _commit_world_model(self, model: object | None, tick: int) -> None:
+        """Store the tentative world model after a successful resolve."""
+        owner = self._agent.agent_id.value
+        if model is None:
+            _LOG.debug(
+                "world_model_commit_skipped owner_id=%s tick=%s world_model_present=%s",
+                owner,
+                tick,
+                False,
+            )
+            return
+        from agents.cognition.world_model import CausalWorldModel
+
+        if type(model) is not CausalWorldModel:
+            raise TypeError("causal_world_model must be CausalWorldModel")
+        if model.owner_id != self._agent.agent_id:
+            raise AgentRuntimeError(
+                AgentRuntimeErrorCode.OWNERSHIP,
+                agent_id=owner,
+            )
+        self._causal_world_model = model
+        _LOG.debug(
+            "world_model_committed owner_id=%s tick=%s world_model_present=%s",
+            owner,
+            tick,
+            True,
         )
 
     def apply_goal_status_transitions(
@@ -1003,6 +1033,7 @@ class AgentRuntime:
                 goals=self._agent.goals,
                 drives=self._agent.drives,
                 emotional_state=self._emotional_state,
+                causal_world_model=self._causal_world_model,
             )
         except TypeError:
             raise
@@ -1397,6 +1428,7 @@ class AgentRuntime:
         self._commit_emotional_state(
             _emotional_state_from_result(pending.loop_result)
         )
+        self._commit_world_model(pending.loop_result.causal_world_model, pending.tick)
         self._apply_reflection_journal(pending.tick)
         self._record_reflection_application(pending)
         self._internal_state = pending.next_internal_state
@@ -1649,6 +1681,7 @@ class AgentRuntime:
         self._internal_state = checkpoint.internal_state
         self._last_observation_key = checkpoint.last_observation_key
         self._emotional_state = checkpoint.emotional_state
+        self._causal_world_model = checkpoint.causal_world_model
         self._reflection_cursor = checkpoint.reflection_cursor
         self._decision_journal = checkpoint.decision_journal
         self._identity_cursor = checkpoint.identity_cursor
@@ -1700,6 +1733,7 @@ class AgentRuntime:
             finalized_hash_count=len(self._finalized_hashes),
             goals=self._agent.goals,
             emotional_state=self._emotional_state,
+            causal_world_model=self._causal_world_model,
             reflection_cursor=self._reflection_cursor,
             decision_journal=self._decision_journal,
             identity_cursor=self._identity_cursor,

@@ -12,6 +12,7 @@ from collections.abc import Sequence
 from dataclasses import dataclass, replace
 from typing import Final
 
+from agents.cognition.emotion_bias import scale_subjective_risks
 from agents.cognition.models import (
     ActionDirection,
     CognitiveLoopInput,
@@ -34,6 +35,13 @@ from agents.cognition.models import (
     UncertaintyBand,
     episode_facts,
     require_confidence,
+)
+from agents.cognition.world_model import (
+    CausalHypothesis,
+    CausalOutcome,
+    CausalWorldModel,
+    contemplated_situation_atoms,
+    match_hypothesis,
 )
 from agents.models import (
     AgentId,
@@ -148,6 +156,7 @@ class ImaginationEngine:
         memory: RetrievedMemoryContext,
         goal_board: GoalBoard | None = None,
         emotional_state: EmotionalStateEvaluation | None = None,
+        causal_world_model: object | None = None,
     ) -> PossibleFutures:
         owner = loop_input.agent_id
         tick = loop_input.observation.tick
@@ -248,20 +257,30 @@ class ImaginationEngine:
             )
             raise
 
-        from agents.cognition.emotion_bias import scale_subjective_risks
-
         biased: list[ImaginedFuture] = []
         risk_bias_applied = False
         for future in futures:
-            scaled, changed = scale_subjective_risks(
-                future.risks, emotional_state
-            )
+            scaled, changed = scale_subjective_risks(future.risks, emotional_state)
             if changed:
                 risk_bias_applied = True
                 biased.append(replace(future, risks=scaled))
             else:
                 biased.append(future)
         futures = tuple(biased)
+        if causal_world_model is None:
+            _LOG.debug(
+                "world_model_imagination_bias owner_id=%s tick=%s status=skipped",
+                owner.value,
+                tick,
+            )
+        else:
+            futures = _apply_world_model_imagination(
+                futures,
+                observation=loop_input.observation,
+                model=causal_world_model,
+                owner_id=owner,
+                tick=tick,
+            )
 
         if evidence.ignored_belief_count > 0:
             _LOG.warning(
@@ -310,6 +329,142 @@ class ImaginationEngine:
             },
         )
         return result
+
+
+def _apply_world_model_imagination(
+    futures: tuple[ImaginedFuture, ...],
+    *,
+    observation: Observation,
+    model: object,
+    owner_id: AgentId,
+    tick: int,
+) -> tuple[ImaginedFuture, ...]:
+    if type(model) is not CausalWorldModel:
+        raise TypeError("causal_world_model must be CausalWorldModel")
+    adjusted: list[ImaginedFuture] = []
+    for future in futures:
+        atoms = contemplated_situation_atoms(
+            observation,
+            direction=future.direction,
+            target_entity_id=future.target_entity_id,
+        )
+        risks = future.risks
+        drives = future.drive_effects
+        danger = match_hypothesis(model, outcome=CausalOutcome.DANGER, atoms=atoms)
+        if danger is not None and future.direction in {
+            ActionDirection.MOVE,
+            ActionDirection.SEARCH,
+        }:
+            risks = _raise_physical_harm(risks, danger.confidence)
+            _log_imagination_bias(owner_id, tick, danger, future.direction)
+        help_match = match_hypothesis(
+            model, outcome=CausalOutcome.HELP, atoms=atoms
+        )
+        if (
+            help_match is not None
+            and future.direction is ActionDirection.COMMUNICATE
+        ):
+            drives = _shift_drive(drives, DriveKind.BELONGING, help_match.confidence)
+            _log_imagination_bias(owner_id, tick, help_match, future.direction)
+        if future.direction is ActionDirection.SEARCH:
+            failure = match_hypothesis(
+                model, outcome=CausalOutcome.SEARCH_FAILURE, atoms=atoms
+            )
+            success = match_hypothesis(
+                model, outcome=CausalOutcome.SEARCH_SUCCESS, atoms=atoms
+            )
+            if failure is not None:
+                drives = _shift_drive(
+                    drives, DriveKind.CURIOSITY, -failure.confidence
+                )
+                _log_imagination_bias(owner_id, tick, failure, future.direction)
+            if success is not None:
+                drives = _shift_drive(
+                    drives, DriveKind.CURIOSITY, success.confidence
+                )
+                _log_imagination_bias(owner_id, tick, success, future.direction)
+        if risks is future.risks and drives is future.drive_effects:
+            adjusted.append(future)
+        else:
+            adjusted.append(replace(future, risks=risks, drive_effects=drives))
+    return tuple(adjusted)
+
+
+def _log_imagination_bias(
+    owner_id: AgentId,
+    tick: int,
+    hypothesis: CausalHypothesis,
+    direction: ActionDirection,
+) -> None:
+    _LOG.debug(
+        "world_model_imagination_bias owner_id=%s tick=%s hypothesis_id=%s "
+        "outcome=%s confidence=%s direction=%s",
+        owner_id.value,
+        tick,
+        hypothesis.hypothesis_id,
+        hypothesis.outcome.value,
+        hypothesis.confidence,
+        direction.value,
+    )
+
+
+def _raise_physical_harm(
+    risks: tuple[SubjectiveRisk, ...], magnitude: float
+) -> tuple[SubjectiveRisk, ...]:
+    updated: list[SubjectiveRisk] = []
+    found = False
+    for risk in risks:
+        if risk.kind is not SubjectiveRiskKind.PHYSICAL_HARM:
+            updated.append(risk)
+            continue
+        found = True
+        updated.append(
+            SubjectiveRisk(
+                kind=risk.kind,
+                severity=_quantize_unit(risk.severity + magnitude),
+                likelihood=_quantize_unit(risk.likelihood + magnitude),
+                confidence=risk.confidence,
+            )
+        )
+    if not found:
+        updated.append(
+            SubjectiveRisk(
+                kind=SubjectiveRiskKind.PHYSICAL_HARM,
+                severity=_quantize_unit(magnitude),
+                likelihood=_quantize_unit(magnitude),
+                confidence=_quantize_unit(magnitude),
+            )
+        )
+    return tuple(updated)
+
+
+def _shift_drive(
+    effects: tuple[DriveEffect, ...], kind: DriveKind, magnitude: float
+) -> tuple[DriveEffect, ...]:
+    updated: list[DriveEffect] = []
+    found = False
+    for effect in effects:
+        if effect.kind is not kind:
+            updated.append(effect)
+            continue
+        found = True
+        updated.append(
+            DriveEffect(
+                kind=effect.kind,
+                delta=_clamp_signed(effect.delta + magnitude),
+                confidence=effect.confidence,
+            )
+        )
+    if not found:
+        updated.append(
+            DriveEffect(
+                kind=kind,
+                delta=_clamp_signed(magnitude),
+                confidence=_quantize_unit(max(magnitude, 0.0)),
+            )
+        )
+    by_kind = {effect.kind: effect for effect in updated}
+    return tuple(by_kind[item] for item in DriveKind if item in by_kind)
 
 
 def _eligible_planning_goals(

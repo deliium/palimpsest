@@ -117,6 +117,7 @@ class MultiCriteriaIntentionSelector:
         goal_board: GoalBoard | None = None,
         emotional_state: EmotionalStateEvaluation | None = None,
         self_state: SelfModel | None = None,
+        causal_world_model: object | None = None,
     ) -> SelectedIntention:
         owner = loop_input.agent_id
         tick = loop_input.observation.tick
@@ -163,6 +164,23 @@ class MultiCriteriaIntentionSelector:
         if not surviving:
             surviving = feasible
 
+        world_bias: dict[str, float] | None = None
+        if causal_world_model is None:
+            _LOG.debug(
+                "world_model_deliberation_bias owner_id=%s tick=%s status=skipped",
+                owner.value,
+                tick,
+            )
+        else:
+            world_bias = _world_model_direction_bias(
+                surviving,
+                futures_by_id,
+                loop_input.observation,
+                causal_world_model,
+                owner_id=owner,
+                tick=tick,
+            )
+
         focus_supported = _prefer_goal_focus_support(
             surviving, futures_by_id, goal_board
         )
@@ -202,7 +220,11 @@ class MultiCriteriaIntentionSelector:
             futures=futures,
         )
         winner, tie_break = _pairwise_select(
-            undominated, futures_by_id, motivation, identity_costs
+            undominated,
+            futures_by_id,
+            motivation,
+            identity_costs,
+            world_bias,
         )
         future = futures_by_id.get(winner.future_id)
         direction = ActionDirection.WAIT if future is None else future.direction
@@ -293,6 +315,7 @@ class CommandPlanner:
         memory: RetrievedMemoryContext | None = None,
         goal_board: GoalBoard | None = None,
         emotional_state: EmotionalStateEvaluation | None = None,
+        causal_world_model: object | None = None,
     ) -> ActionPlan:
         _ = goal_board
         owner = loop_input.agent_id
@@ -745,11 +768,125 @@ def _identity_vote_for_winner(
     return votes[0]
 
 
+def _world_model_direction_bias(
+    appraisals: Sequence[FutureAppraisal],
+    futures_by_id: Mapping[str, ImaginedFuture],
+    observation: Observation,
+    model: object,
+    *,
+    owner_id: AgentId,
+    tick: int,
+) -> dict[str, float]:
+    from decimal import Decimal
+
+    from agents.cognition.world_model import (
+        CausalOutcome,
+        CausalSlot,
+        CausalWorldModel,
+        WorldModelPolicy,
+        contemplated_situation_atoms,
+        default_world_model_policy,
+        match_hypothesis,
+    )
+
+    if type(model) is not CausalWorldModel:
+        raise TypeError("causal_world_model must be CausalWorldModel")
+    policy = default_world_model_policy()
+    if type(policy) is not WorldModelPolicy:
+        raise TypeError("world_model_policy must be WorldModelPolicy")
+    threshold = policy.action_threshold
+    biases: dict[str, float] = {}
+    for appraisal in appraisals:
+        future = futures_by_id.get(appraisal.future_id)
+        if future is None:
+            continue
+        atoms = contemplated_situation_atoms(
+            observation,
+            direction=future.direction,
+            target_entity_id=future.target_entity_id,
+        )
+        net = 0.0
+        danger = match_hypothesis(
+            model,
+            outcome=CausalOutcome.DANGER,
+            atoms=atoms,
+            minimum_confidence=threshold,
+        )
+        if danger is not None and future.direction in {
+            ActionDirection.MOVE,
+            ActionDirection.SEARCH,
+        }:
+            net -= danger.confidence
+            _log_deliberation_bias(owner_id, tick, danger, future.direction)
+        help_match = match_hypothesis(
+            model,
+            outcome=CausalOutcome.HELP,
+            atoms=atoms,
+            minimum_confidence=threshold,
+        )
+        if (
+            help_match is not None
+            and future.direction is ActionDirection.COMMUNICATE
+        ):
+            net += help_match.confidence
+            _log_deliberation_bias(owner_id, tick, help_match, future.direction)
+        if future.direction is ActionDirection.SEARCH:
+            failure = match_hypothesis(
+                model,
+                outcome=CausalOutcome.SEARCH_FAILURE,
+                atoms=atoms,
+                minimum_confidence=threshold,
+            )
+            success = match_hypothesis(
+                model,
+                outcome=CausalOutcome.SEARCH_SUCCESS,
+                atoms=atoms,
+                minimum_confidence=threshold,
+            )
+            if failure is not None:
+                net -= failure.confidence
+                _log_deliberation_bias(owner_id, tick, failure, future.direction)
+            if success is not None and any(
+                atom.slot is CausalSlot.HELD_ITEM_KIND for atom in success.atoms
+            ):
+                net += success.confidence
+                _log_deliberation_bias(owner_id, tick, success, future.direction)
+        if net != 0.0:
+            steps = round(net / _EFFECT_QUANTUM)
+            biases[future.future_id] = float(
+                Decimal(steps) * Decimal(str(_EFFECT_QUANTUM))
+            )
+    return biases
+
+
+def _log_deliberation_bias(
+    owner_id: AgentId,
+    tick: int,
+    hypothesis: object,
+    direction: ActionDirection,
+) -> None:
+    from agents.cognition.world_model import CausalHypothesis
+
+    if type(hypothesis) is not CausalHypothesis:
+        raise TypeError("hypothesis must be CausalHypothesis")
+    _LOG.debug(
+        "world_model_deliberation_bias owner_id=%s tick=%s hypothesis_id=%s "
+        "outcome=%s confidence=%s direction=%s",
+        owner_id.value,
+        tick,
+        hypothesis.hypothesis_id,
+        hypothesis.outcome.value,
+        hypothesis.confidence,
+        direction.value,
+    )
+
+
 def _pairwise_select(
     appraisals: Sequence[FutureAppraisal],
     futures_by_id: Mapping[str, ImaginedFuture],
     motivation: MotivationEvaluation,
     identity_costs: Mapping[str, float] | None = None,
+    world_bias: Mapping[str, float] | None = None,
 ) -> tuple[FutureAppraisal, str]:
     if len(appraisals) == 1:
         return appraisals[0], _TIE_BREAK_NONE
@@ -758,7 +895,12 @@ def _pairwise_select(
     for index, left in enumerate(appraisals):
         for right in appraisals[index + 1 :]:
             cmp = _pairwise_compare(
-                left, right, futures_by_id, motivation, identity_costs
+                left,
+                right,
+                futures_by_id,
+                motivation,
+                identity_costs,
+                world_bias,
             )
             if cmp > 0:
                 scores[left.future_id] += 1
@@ -792,6 +934,7 @@ def _pairwise_compare(
     futures_by_id: Mapping[str, ImaginedFuture],
     motivation: MotivationEvaluation,
     identity_costs: Mapping[str, float] | None = None,
+    world_bias: Mapping[str, float] | None = None,
 ) -> int:
     """Return positive if left preferred, negative if right preferred, else 0."""
     active_drives = set(motivation.active_drive_kinds)
@@ -870,6 +1013,14 @@ def _pairwise_compare(
             identity_vote = 1
         elif right_cost < left_cost:
             identity_vote = -1
+    model_vote = 0
+    if world_bias is not None:
+        left_bias = world_bias.get(left.future_id, 0.0)
+        right_bias = world_bias.get(right.future_id, 0.0)
+        if left_bias > right_bias:
+            model_vote = 1
+        elif right_bias > left_bias:
+            model_vote = -1
     total = (
         drive_votes
         + goal_votes
@@ -878,6 +1029,7 @@ def _pairwise_compare(
         + unc_votes
         + conf_votes
         + identity_vote
+        + model_vote
     )
     if total > 0:
         return 1

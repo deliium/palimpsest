@@ -179,8 +179,16 @@ class ScriptedFutureImagination:
         memory: RetrievedMemoryContext,
         goal_board: GoalBoard | None = None,
         emotional_state: object | None = None,
+        causal_world_model: object | None = None,
     ) -> PossibleFutures:
-        _ = situation, self_state, memory, goal_board, emotional_state
+        _ = (
+            situation,
+            self_state,
+            memory,
+            goal_board,
+            emotional_state,
+            causal_world_model,
+        )
         return PossibleFutures(
             owner_id=loop_input.agent_id,
             futures=(
@@ -203,8 +211,16 @@ class ScriptedMotivationEvaluator:
         futures: PossibleFutures,
         goal_board: GoalBoard | None = None,
         emotional_state: object | None = None,
+        causal_world_model: object | None = None,
     ) -> MotivationEvaluation:
-        _ = situation, self_state, futures, goal_board, emotional_state
+        _ = (
+            situation,
+            self_state,
+            futures,
+            goal_board,
+            emotional_state,
+            causal_world_model,
+        )
         return MotivationEvaluation(
             owner_id=loop_input.agent_id,
             scores=(MotivationScore(motive=MotivationCode.WAIT, score=1.0),),
@@ -221,8 +237,16 @@ class ScriptedIntentionSelector:
         goal_board: GoalBoard | None = None,
         emotional_state: object | None = None,
         self_state: object | None = None,
+        causal_world_model: object | None = None,
     ) -> SelectedIntention:
-        _ = motivation, futures, goal_board, emotional_state, self_state
+        _ = (
+            motivation,
+            futures,
+            goal_board,
+            emotional_state,
+            self_state,
+            causal_world_model,
+        )
         return SelectedIntention(
             owner_id=loop_input.agent_id,
             intention=IntentionCode.WAIT,
@@ -240,8 +264,16 @@ class ScriptedPlanner:
         memory: RetrievedMemoryContext | None = None,
         goal_board: GoalBoard | None = None,
         emotional_state: object | None = None,
+        causal_world_model: object | None = None,
     ) -> ActionPlan:
-        _ = intention, futures, memory, goal_board, emotional_state
+        _ = (
+            intention,
+            futures,
+            memory,
+            goal_board,
+            emotional_state,
+            causal_world_model,
+        )
         return ActionPlan(owner_id=loop_input.agent_id, command=Wait(), confidence=1.0)
 
 

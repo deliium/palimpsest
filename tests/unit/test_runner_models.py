@@ -346,13 +346,19 @@ def test_owned_capability_flag_helpers() -> None:
     assert identity.enabled_names() == ("extended_self_model",)
     assert identity.owned_enabled_names() == ("extended_self_model",)
     assert identity.unimplemented_enabled_names() == ()
+    world_model = V2CapabilityFlags(predictive_world_model=True)
+    assert world_model.enabled_names() == ("predictive_world_model",)
+    assert world_model.owned_enabled_names() == ("predictive_world_model",)
+    assert world_model.unimplemented_enabled_names() == ()
     mixed = V2CapabilityFlags(
         short_term_emotional_state=True,
         predictive_world_model=True,
         extended_self_model=True,
+        advanced_social_inference=True,
     )
-    assert mixed.unimplemented_enabled_names() == ("predictive_world_model",)
+    assert mixed.unimplemented_enabled_names() == ("advanced_social_inference",)
     assert mixed.owned_enabled_names() == (
+        "predictive_world_model",
         "extended_self_model",
         "short_term_emotional_state",
     )

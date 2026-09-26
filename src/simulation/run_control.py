@@ -594,6 +594,7 @@ class AgentRuntimeCheckpoint:
     finalized_hash_count: int
     goals: tuple[Goal, ...]
     emotional_state: AgentEmotionalState | None = None
+    causal_world_model: object | None = None
     reflection_cursor: object | None = None
     decision_journal: tuple[object, ...] | None = None
     identity_cursor: object | None = None
@@ -627,6 +628,13 @@ class AgentRuntimeCheckpoint:
                 raise TypeError("emotional_state must be AgentEmotionalState")
             if self.emotional_state.owner_id != self.agent_id:
                 raise ValueError("emotional_state owner_id mismatch")
+        if self.causal_world_model is not None:
+            from agents.cognition.world_model import CausalWorldModel
+
+            if type(self.causal_world_model) is not CausalWorldModel:
+                raise TypeError("causal_world_model must be CausalWorldModel")
+            if self.causal_world_model.owner_id != self.agent_id:
+                raise ValueError("causal_world_model owner_id mismatch")
         if self.reflection_cursor is not None:
             from agents.cognition.reflection import ReflectionCursor
 

@@ -334,6 +334,7 @@ class PlaceholderFutureImagination:
         memory: RetrievedMemoryContext | None = None,
         goal_board: GoalBoard | None = None,
         emotional_state: object | None = None,
+        causal_world_model: object | None = None,
     ) -> PossibleFutures:
         _ = self_state, memory, goal_board, emotional_state
         futures: list[ImaginedFuture] = []
@@ -395,6 +396,7 @@ class PresentStateImagination:
         memory: RetrievedMemoryContext | None = None,
         goal_board: GoalBoard | None = None,
         emotional_state: object | None = None,
+        causal_world_model: object | None = None,
     ) -> PossibleFutures:
         _ = self_state, memory, goal_board, emotional_state
         if SituationClaimCode.TERMINAL_SELF in situation.claim_codes:
@@ -430,6 +432,7 @@ class StableMotivationEvaluator:
         futures: PossibleFutures,
         goal_board: GoalBoard | None = None,
         emotional_state: object | None = None,
+        causal_world_model: object | None = None,
     ) -> MotivationEvaluation:
         _ = self_state, futures, goal_board, emotional_state
         scores: dict[MotivationCode, float] = {
@@ -508,6 +511,7 @@ class StableIntentionSelector:
         goal_board: GoalBoard | None = None,
         emotional_state: object | None = None,
         self_state: object | None = None,
+        causal_world_model: object | None = None,
     ) -> SelectedIntention:
         _ = futures, goal_board, emotional_state, self_state
         if not motivation.scores:
@@ -548,6 +552,7 @@ class WaitFallbackPlanner:
         memory: RetrievedMemoryContext | None = None,
         goal_board: GoalBoard | None = None,
         emotional_state: object | None = None,
+        causal_world_model: object | None = None,
     ) -> ActionPlan:
         _ = intention, futures, memory, goal_board, emotional_state
         return ActionPlan(

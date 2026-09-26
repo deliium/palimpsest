@@ -495,8 +495,17 @@ class FakeFutureImagination:
         memory: RetrievedMemoryContext,
         goal_board=None,
         emotional_state=None,
+        causal_world_model=None,
     ) -> PossibleFutures:
-        _ = loop_input, situation, self_state, memory, goal_board, emotional_state
+        _ = (
+            loop_input,
+            situation,
+            self_state,
+            memory,
+            goal_board,
+            emotional_state,
+            causal_world_model,
+        )
         output = self._queue.consume(invocation_id=_active_invocation(), ordinal=6)
         assert type(output) is PossibleFutures
         return output
@@ -523,8 +532,17 @@ class FakeMotivationEvaluator:
         futures: PossibleFutures,
         goal_board=None,
         emotional_state=None,
+        causal_world_model=None,
     ) -> MotivationEvaluation:
-        _ = loop_input, situation, self_state, futures, goal_board, emotional_state
+        _ = (
+            loop_input,
+            situation,
+            self_state,
+            futures,
+            goal_board,
+            emotional_state,
+            causal_world_model,
+        )
         output = self._queue.consume(invocation_id=_active_invocation(), ordinal=7)
         assert type(output) is MotivationEvaluation
         return output
@@ -551,6 +569,7 @@ class FakeIntentionSelector:
         goal_board=None,
         emotional_state=None,
         self_state=None,
+        causal_world_model=None,
     ) -> SelectedIntention:
         _ = loop_input, motivation, futures, goal_board, emotional_state, self_state
         output = self._queue.consume(invocation_id=_active_invocation(), ordinal=8)
@@ -579,8 +598,17 @@ class FakePlanner:
         memory: RetrievedMemoryContext | None = None,
         goal_board: object | None = None,
         emotional_state: object | None = None,
+        causal_world_model: object | None = None,
     ) -> ActionPlan:
-        _ = loop_input, intention, futures, memory, goal_board, emotional_state
+        _ = (
+            loop_input,
+            intention,
+            futures,
+            memory,
+            goal_board,
+            emotional_state,
+            causal_world_model,
+        )
         output = self._queue.consume(invocation_id=_active_invocation(), ordinal=9)
         assert type(output) is ActionPlan
         return output

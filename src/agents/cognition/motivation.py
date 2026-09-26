@@ -185,10 +185,11 @@ class MotivationAppraisal:
         futures: PossibleFutures,
         goal_board: GoalBoard | None = None,
         emotional_state: EmotionalStateEvaluation | None = None,
+        causal_world_model: object | None = None,
     ) -> MotivationEvaluation:
         owner = loop_input.agent_id
         tick = loop_input.observation.tick
-        _ = emotional_state  # risk already scaled in imagination; reserved for votes
+        _ = emotional_state, causal_world_model
         _LOG.debug(
             "motivation_start",
             extra={

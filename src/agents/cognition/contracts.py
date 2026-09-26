@@ -144,6 +144,7 @@ class Perspective:
     drives: DriveProfile | None = None
     social_identity: OwnerSafeSocialIdentity | None = None
     emotional_state: object | None = None
+    causal_world_model: object | None = None
 
     def __post_init__(self) -> None:
         if type(self.agent_id) is not AgentId:
@@ -258,6 +259,13 @@ class Perspective:
                 raise TypeError("Perspective.emotional_state: invalid_type")
             if self.emotional_state.owner_id != self.agent_id:
                 raise ValueError("Perspective.emotional_state: ownership")
+        if self.causal_world_model is not None:
+            from agents.cognition.world_model import CausalWorldModel
+
+            if type(self.causal_world_model) is not CausalWorldModel:
+                raise TypeError("Perspective.causal_world_model: invalid_type")
+            if self.causal_world_model.owner_id != self.agent_id:
+                raise ValueError("Perspective.causal_world_model: ownership")
 
     def to_snapshot(self) -> SubjectiveSnapshot:
         """Freeze this perspective into a ``SubjectiveSnapshot``."""
@@ -278,6 +286,7 @@ class Perspective:
             inbox=self.inbox,
             social_identity=self.social_identity,
             emotional_state=emotion,  # type: ignore[arg-type]
+            causal_world_model=self.causal_world_model,
         )
 
     def __repr__(self) -> str:
@@ -389,6 +398,7 @@ class FutureImagination(Protocol):
         memory: RetrievedMemoryContext,
         goal_board: GoalBoard | None = None,
         emotional_state: EmotionalStateEvaluation | None = None,
+        causal_world_model: object | None = None,
     ) -> PossibleFutures: ...
 
 
@@ -403,6 +413,7 @@ class MotivationEvaluator(Protocol):
         futures: PossibleFutures,
         goal_board: GoalBoard | None = None,
         emotional_state: EmotionalStateEvaluation | None = None,
+        causal_world_model: object | None = None,
     ) -> MotivationEvaluation: ...
 
 
@@ -417,6 +428,7 @@ class IntentionSelector(Protocol):
         goal_board: GoalBoard | None = None,
         emotional_state: EmotionalStateEvaluation | None = None,
         self_state: SelfModel | None = None,
+        causal_world_model: object | None = None,
     ) -> SelectedIntention: ...
 
 
@@ -431,6 +443,7 @@ class Planner(Protocol):
         memory: RetrievedMemoryContext | None = None,
         goal_board: GoalBoard | None = None,
         emotional_state: EmotionalStateEvaluation | None = None,
+        causal_world_model: object | None = None,
     ) -> ActionPlan: ...
 
 
