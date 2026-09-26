@@ -24,8 +24,10 @@ from simulation.runner import (
 from simulation.runner_models import (
     RUNNER_SCHEMA_VERSION_V6,
     RUNNER_SCHEMA_VERSION_V7,
+    RUNNER_SCHEMA_VERSION_V8,
     AgentCognitionSpec,
     AgentRunnerSpec,
+    CounterfactualMode,
     DriveOverrideSpec,
     ImaginationMode,
     MemoryMode,
@@ -59,6 +61,7 @@ def _config(
         ProspectiveImaginationMode.DISABLED
     ),
     reflection_mode: ReflectionMode = ReflectionMode.DISABLED,
+    counterfactual_mode: CounterfactualMode = CounterfactualMode.DISABLED,
 ) -> SimulationRunnerConfig:
     locations = (make_location(),)
     bodies = tuple(alive_body(f"body-{i + 1}") for i in range(agent_count))
@@ -77,6 +80,7 @@ def _config(
                 ),
                 prospective_mode=prospective_mode,
                 reflection_mode=reflection_mode,
+                counterfactual_mode=counterfactual_mode,
             ),
         )
         for i in range(agent_count)
@@ -317,9 +321,7 @@ async def test_from_config_fails_closed_when_capability_flag_enabled() -> None:
     )
     with pytest.raises(RunnerConstructionError) as exc_info:
         await SimulationRunner.from_config(config, run_id=RunId("run-cap-on"))
-    assert (
-        exc_info.value.code is RunnerConstructionErrorCode.CAPABILITY_UNIMPLEMENTED
-    )
+    assert exc_info.value.code is RunnerConstructionErrorCode.CAPABILITY_UNIMPLEMENTED
 
 
 @pytest.mark.asyncio
@@ -477,3 +479,59 @@ async def test_v7_prospective_config_constructs_with_policy(caplog) -> None:
         "cognition_config_prospective_mode mode=deterministic "
         "policy_version=prospective-v1" in messages
     )
+
+
+@pytest.mark.asyncio
+async def test_v8_counterfactual_config_constructs_with_policy(caplog) -> None:
+    caplog.set_level(logging.DEBUG, logger="simulation.runner")
+    with pytest.raises(ValueError, match="counterfactual_mode_requires_v8"):
+        _config(
+            counterfactual_mode=CounterfactualMode.DETERMINISTIC,
+            schema_version=RUNNER_SCHEMA_VERSION_V7,
+            prospective_mode=ProspectiveImaginationMode.DETERMINISTIC,
+        )
+    kept = _config(
+        schema_version=RUNNER_SCHEMA_VERSION_V7,
+        prospective_mode=ProspectiveImaginationMode.DETERMINISTIC,
+    )
+    assert kept.agents[0].cognition.counterfactual_mode is CounterfactualMode.DISABLED
+    enabled = _config(
+        schema_version=RUNNER_SCHEMA_VERSION_V8,
+        counterfactual_mode=CounterfactualMode.DETERMINISTIC,
+    )
+    async with await SimulationRunner.from_config(
+        enabled, run_id=RunId("run-v8")
+    ) as runner:
+        config = runner.runtimes[0]._loop
+        assert config is not None
+    from simulation.runner import _cognition_config_for
+    from simulation.runner_models import V2CapabilityFlags
+
+    built = _cognition_config_for(
+        enabled.agents[0].cognition,
+        mortality_mode=MortalityMode.ENABLED,
+        capability_flags=V2CapabilityFlags(),
+    )
+    assert built.counterfactual_policy is not None
+    assert built.counterfactual_policy.allow_provider is False
+    assert built.counterfactual_policy.version == "counterfactual-v1"
+    combined = _config(
+        schema_version=RUNNER_SCHEMA_VERSION_V8,
+        reflection_mode=ReflectionMode.DETERMINISTIC,
+        prospective_mode=ProspectiveImaginationMode.DETERMINISTIC,
+        counterfactual_mode=CounterfactualMode.LLM_ASSISTED,
+    )
+    async with await SimulationRunner.from_config(
+        combined, run_id=RunId("run-v8-combined")
+    ) as runner:
+        assert runner.runtimes
+    messages = " ".join(record.getMessage() for record in caplog.records)
+    assert (
+        "cognition_config_counterfactual_mode mode=deterministic "
+        "policy_version=counterfactual-v1" in messages
+    )
+    assert (
+        "cognition_config_counterfactual_mode mode=llm_assisted "
+        "policy_version=counterfactual-v1" in messages
+    )
+    assert "direction_bonus" not in messages

@@ -72,7 +72,7 @@ from social.models import CommunicationEnvelope
 from world.actions import AgentCommand, require_agent_command
 from world.identifiers import require_stable_id
 from world.models import LifeStatus
-from world.observations import Observation
+from world.observations import Observation, ObservationAudienceRole
 
 if TYPE_CHECKING:
     from simulation.persistence import ScientificEvidenceRepository
@@ -410,6 +410,7 @@ class AgentRuntime:
         "_causal_world_model",
         "_cognition_trace_repository",
         "_cognition_trace_spec",
+        "_counterfactual_capture",
         "_decision_journal",
         "_emotional_state",
         "_finalized_hashes",
@@ -431,6 +432,7 @@ class AgentRuntime:
         "_reflection_capture",
         "_reflection_cursor",
         "_relationship_reader",
+        "_remembered_decisions",
         "_run_id",
         "_scientific_evidence",
         "_semantic_belief_reader",
@@ -528,7 +530,9 @@ class AgentRuntime:
         self._identity_cursor: object | None = None
         self._reflection_cursor: object | None = None
         self._decision_journal: tuple[object, ...] | None = None
+        self._remembered_decisions: tuple[object, ...] | None = None
         self._reflection_capture: object | None = None
+        self._counterfactual_capture: object | None = None
         self._last_observation_key: tuple[int, int] | None = None
         self._processed_invocations: set[str] = set()
         self._pending: PendingRuntimeFinalization | None = None
@@ -1353,6 +1357,9 @@ class AgentRuntime:
             command,
             prepared.proposal.loop_input.snapshot,
         )
+        self._capture_counterfactual_observation(
+            prepared.proposal.loop_input.observation
+        )
         _LOG.debug(
             "runtime_bind_complete",
             extra={
@@ -1447,6 +1454,8 @@ class AgentRuntime:
             )
 
         await self._apply_pending_side_effects(pending)
+        if self._counterfactual_capture_enabled():
+            self._append_remembered_decision(pending)
         extra_goals = _consolidation_goal_intents(pending.loop_result)
         reflection_goals = _reflection_goal_intents(
             pending.loop_result, self._applied_reflection_operation_ids
@@ -1496,6 +1505,140 @@ class AgentRuntime:
             submission=pending.submission,
             loop_result=pending.loop_result,
             terminal=False,
+        )
+
+    def _counterfactual_capture_enabled(self) -> bool:
+        from agents.cognition.configuration import CognitionCounterfactualMode
+
+        mode = getattr(self._loop, "_counterfactual_mode", None)
+        return mode is CognitionCounterfactualMode.DETERMINISTIC or (
+            mode is CognitionCounterfactualMode.LLM_ASSISTED
+        )
+
+    def _capture_counterfactual_observation(self, observation: Observation) -> None:
+        """Hold the subjective observation until a successful finalize."""
+
+        if not self._counterfactual_capture_enabled():
+            self._counterfactual_capture = None
+            return
+        self._counterfactual_capture = observation
+
+    def _append_remembered_decision(self, pending: PendingRuntimeFinalization) -> None:
+        """Append one remembered decision after this tick's traces commit."""
+
+        from agents.cognition.configuration import CognitionCounterfactualMode
+        from agents.cognition.counterfactual import (
+            CounterfactualPolicy,
+            RememberedDecision,
+            communication_counterpart,
+            decision_id_for,
+            default_counterfactual_policy,
+            direct_observation_memory_id,
+            trim_remembered_decisions,
+        )
+        from agents.cognition.reflection import classify_subjective_outcome
+        from agents.models import GoalStatus
+        from memory.models import MemorySourceKind
+
+        mode = getattr(self._loop, "_counterfactual_mode", None)
+        if mode is not CognitionCounterfactualMode.DETERMINISTIC and mode is not (
+            CognitionCounterfactualMode.LLM_ASSISTED
+        ):
+            _LOG.warning("remembered_decision_skipped reason_code=disabled")
+            return
+        observation = self._counterfactual_capture
+        self._counterfactual_capture = None
+        if type(observation) is not Observation:
+            return
+        command = pending.submission.command
+        command_kind = command.kind
+        owner_entity = observation.observer_id.value
+        successes = 0
+        failures = 0
+        for occurrence in observation.occurrences:
+            if occurrence.actor_id != observation.observer_id:
+                continue
+            if occurrence.audience_role is not ObservationAudienceRole.ACTOR:
+                continue
+            if occurrence.success is True:
+                successes += 1
+            elif occurrence.success is False:
+                failures += 1
+        outcome = classify_subjective_outcome(
+            perceived_success=successes > 0,
+            owner_failure_count=failures,
+            place_changed=False,
+        )
+        body = observation.self_body
+        place_id = None
+        if body is not None and body.location_id is not None:
+            place_id = body.location_id.value
+        counterpart_id = None
+        if command_kind == "help":
+            target = getattr(command, "target_id", None)
+            if target is not None:
+                counterpart_id = target.value
+        elif command_kind == "wait":
+            counterpart_id = communication_counterpart(
+                observation.occurrences, owner_entity
+            )
+        traces: list[object] = []
+        if pending.subjective_batch is not None:
+            traces.extend(pending.subjective_batch.memory_writes)
+        else:
+            for intent in pending.loop_result.memory_update_intents:
+                if (
+                    intent.kind is MemoryUpdateKind.WRITE_MEMORY
+                    and intent.memory is not None
+                    and intent.memory.provenance.kind
+                    is MemorySourceKind.DIRECT_OBSERVATION
+                ):
+                    traces.append(intent.memory)
+        memory_id = direct_observation_memory_id(traces, command_kind)
+        goal_ids = tuple(
+            goal.goal_id.value
+            for goal in self._agent.goals
+            if goal.status is GoalStatus.ACTIVE
+        )
+        policy = getattr(self._loop, "_counterfactual_policy", None)
+        if type(policy) is not CounterfactualPolicy:
+            policy = default_counterfactual_policy(
+                allow_provider=mode is CognitionCounterfactualMode.LLM_ASSISTED
+            )
+        decision_id = decision_id_for(
+            owner_id=self._agent.agent_id,
+            tick=pending.tick,
+            command_kind=command_kind,
+            outcome_code=outcome,
+            place_id=place_id,
+            counterpart_id=counterpart_id,
+            memory_id=memory_id,
+            goal_ids=goal_ids,
+        )
+        decision = RememberedDecision(
+            decision_id=decision_id,
+            owner_id=self._agent.agent_id,
+            tick=pending.tick,
+            command_kind=command_kind,
+            outcome_code=outcome,
+            place_id=place_id,
+            counterpart_id=counterpart_id,
+            memory_id=memory_id,
+            goal_ids=goal_ids,
+        )
+        current = self._remembered_decisions
+        store = None if current is None else tuple(current)
+        self._remembered_decisions = trim_remembered_decisions(
+            store, decision, max_decisions=policy.max_decisions
+        )
+        _LOG.debug(
+            "remembered_decision_appended owner_id=%s tick=%s command_kind=%s "
+            "outcome_code=%s decision_count=%s",
+            self._agent.agent_id.value,
+            pending.tick,
+            command_kind,
+            outcome.value,
+            len(self._remembered_decisions),
         )
 
     def _capture_reflection_facts(
@@ -1624,6 +1767,7 @@ class AgentRuntime:
             )
         self._pending = None
         self._reflection_capture = None
+        self._counterfactual_capture = None
         _LOG.warning(
             "runtime_pending_aborted",
             extra={
@@ -1717,6 +1861,7 @@ class AgentRuntime:
         self._causal_world_model = checkpoint.causal_world_model
         self._reflection_cursor = checkpoint.reflection_cursor
         self._decision_journal = checkpoint.decision_journal
+        self._remembered_decisions = checkpoint.remembered_decisions
         self._identity_cursor = checkpoint.identity_cursor
         if checkpoint.identity_cursor is None:
             self._applied_identity_operation_ids = set()
@@ -1769,6 +1914,7 @@ class AgentRuntime:
             causal_world_model=self._causal_world_model,
             reflection_cursor=self._reflection_cursor,
             decision_journal=self._decision_journal,
+            remembered_decisions=self._remembered_decisions,
             identity_cursor=self._identity_cursor,
         )
 

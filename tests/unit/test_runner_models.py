@@ -362,3 +362,68 @@ def test_owned_capability_flag_helpers() -> None:
         "extended_self_model",
         "short_term_emotional_state",
     )
+
+
+def test_counterfactual_mode_requires_v8_and_v7_stays_prospective(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    import logging
+    from dataclasses import replace
+
+    from simulation.runner_models import (
+        RUNNER_SCHEMA_VERSION_V4,
+        RUNNER_SCHEMA_VERSION_V7,
+        RUNNER_SCHEMA_VERSION_V8,
+        CounterfactualMode,
+        ProspectiveImaginationMode,
+        ReflectionMode,
+    )
+
+    base = _config()
+
+    def configured(schema_version: str, **cognition: object) -> SimulationRunnerConfig:
+        agent = base.agents[0]
+        spec = replace(agent.cognition, **cognition)
+        return replace(
+            base,
+            agents=(replace(agent, cognition=spec),),
+            schema_version=schema_version,
+        )
+
+    caplog.set_level(logging.ERROR, logger="simulation.runner_models")
+    with pytest.raises(ValueError, match="counterfactual_mode_requires_v8"):
+        configured(
+            RUNNER_SCHEMA_VERSION_V4,
+            counterfactual_mode=CounterfactualMode.DETERMINISTIC,
+        )
+    with pytest.raises(ValueError, match="counterfactual_mode_requires_v8"):
+        configured(
+            RUNNER_SCHEMA_VERSION_V7,
+            prospective_mode=ProspectiveImaginationMode.DETERMINISTIC,
+            counterfactual_mode=CounterfactualMode.DETERMINISTIC,
+        )
+    with pytest.raises(ValueError, match="v8_requires_counterfactual"):
+        configured(RUNNER_SCHEMA_VERSION_V8)
+    kept = configured(
+        RUNNER_SCHEMA_VERSION_V7,
+        prospective_mode=ProspectiveImaginationMode.DETERMINISTIC,
+    )
+    assert kept.agents[0].cognition.counterfactual_mode is CounterfactualMode.DISABLED
+    enabled = configured(
+        RUNNER_SCHEMA_VERSION_V8,
+        counterfactual_mode=CounterfactualMode.DETERMINISTIC,
+    )
+    assert (
+        enabled.agents[0].cognition.counterfactual_mode
+        is CounterfactualMode.DETERMINISTIC
+    )
+    combined = configured(
+        RUNNER_SCHEMA_VERSION_V8,
+        reflection_mode=ReflectionMode.DETERMINISTIC,
+        prospective_mode=ProspectiveImaginationMode.DETERMINISTIC,
+        counterfactual_mode=CounterfactualMode.LLM_ASSISTED,
+    )
+    assert combined.schema_version == RUNNER_SCHEMA_VERSION_V8
+    messages = " ".join(record.getMessage() for record in caplog.records)
+    assert "reason_code=counterfactual_mode_requires_v8" in messages
+    assert "reason_code=v8_requires_counterfactual" in messages

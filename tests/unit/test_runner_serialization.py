@@ -15,11 +15,13 @@ from simulation.runner_models import (
     RUNNER_SCHEMA_VERSION_V5,
     RUNNER_SCHEMA_VERSION_V6,
     RUNNER_SCHEMA_VERSION_V7,
+    RUNNER_SCHEMA_VERSION_V8,
     AgentCognitionSpec,
     AgentRunnerSpec,
     CognitionTraceDetail,
     CognitionTraceSpec,
     ConsolidationMode,
+    CounterfactualMode,
     DriveOverrideSpec,
     MemoryMode,
     MortalityMode,
@@ -463,6 +465,7 @@ def _configured(
     prospective_mode: ProspectiveImaginationMode = (
         ProspectiveImaginationMode.DISABLED
     ),
+    counterfactual_mode: CounterfactualMode = CounterfactualMode.DISABLED,
     name: str = "Ada",
 ) -> SimulationRunnerConfig:
     base = _config()
@@ -482,6 +485,7 @@ def _configured(
                     consolidation_mode=consolidation_mode,
                     reflection_mode=reflection_mode,
                     prospective_mode=prospective_mode,
+                    counterfactual_mode=counterfactual_mode,
                 ),
                 name=name,
                 initial_goals=agent.initial_goals,
@@ -586,10 +590,14 @@ def test_reflection_schema_fails_closed() -> None:
 def test_cognition_config_for_builds_reflection_policy_from_mode() -> None:
     from simulation.runner import _cognition_config_for
 
-    spec = _configured(
-        schema_version=RUNNER_SCHEMA_VERSION_V6,
-        reflection_mode=ReflectionMode.LLM_ASSISTED,
-    ).agents[0].cognition
+    spec = (
+        _configured(
+            schema_version=RUNNER_SCHEMA_VERSION_V6,
+            reflection_mode=ReflectionMode.LLM_ASSISTED,
+        )
+        .agents[0]
+        .cognition
+    )
     assisted = _cognition_config_for(
         spec,
         mortality_mode=MortalityMode.ENABLED,
@@ -650,10 +658,14 @@ def test_cognition_config_for_builds_prospective_policy_from_mode(caplog) -> Non
     from simulation.runner import _cognition_config_for
 
     caplog.set_level(logging.DEBUG, logger="simulation.runner")
-    spec = _configured(
-        schema_version=RUNNER_SCHEMA_VERSION_V7,
-        prospective_mode=ProspectiveImaginationMode.LLM_ASSISTED,
-    ).agents[0].cognition
+    spec = (
+        _configured(
+            schema_version=RUNNER_SCHEMA_VERSION_V7,
+            prospective_mode=ProspectiveImaginationMode.LLM_ASSISTED,
+        )
+        .agents[0]
+        .cognition
+    )
     assisted = _cognition_config_for(
         spec,
         mortality_mode=MortalityMode.ENABLED,
@@ -667,4 +679,28 @@ def test_cognition_config_for_builds_prospective_policy_from_mode(caplog) -> Non
     assert (
         "cognition_config_prospective_mode mode=llm_assisted "
         "policy_version=prospective-v1" in messages
+    )
+
+
+def test_counterfactual_mode_round_trips_only_on_v8() -> None:
+    enabled = _configured(
+        schema_version=RUNNER_SCHEMA_VERSION_V8,
+        counterfactual_mode=CounterfactualMode.DETERMINISTIC,
+    )
+    encoded = encode_runner_config(enabled)
+    document = json.loads(encoded.decode("utf-8"))
+    cognition = document["agents"][0]["cognition"]
+    assert cognition["counterfactual_mode"] == "deterministic"
+    assert "min_confidence" not in cognition
+    assert "direction_bonus" not in cognition
+    assert decode_runner_config(encoded) == enabled
+    prospective = _configured(
+        schema_version=RUNNER_SCHEMA_VERSION_V7,
+        prospective_mode=ProspectiveImaginationMode.DETERMINISTIC,
+    )
+    prospective_doc = json.loads(encode_runner_config(prospective).decode("utf-8"))
+    assert "counterfactual_mode" not in prospective_doc["agents"][0]["cognition"]
+    restored = decode_runner_config(encode_runner_config(prospective))
+    assert (
+        restored.agents[0].cognition.counterfactual_mode is CounterfactualMode.DISABLED
     )

@@ -15,6 +15,7 @@ from typing import Final, Protocol
 
 from agents.cognition.configuration import (
     CognitionConsolidationMode,
+    CognitionCounterfactualMode,
     CognitionDriveOverride,
     CognitionEmotionalStateMode,
     CognitionIdentityMode,
@@ -28,6 +29,7 @@ from agents.cognition.configuration import (
     build_cognitive_loop,
     default_world_model_policy,
 )
+from agents.cognition.counterfactual import default_counterfactual_policy
 from agents.cognition.memory import ReferenceMemoryRetriever, ScopedMemoryRetriever
 from agents.cognition.models import ComponentKind
 from agents.cognition.prospective import default_prospective_policy
@@ -486,14 +488,25 @@ def _cognition_config_for(
     prospective_policy = None
     if prospective_mode is not CognitionProspectiveMode.DISABLED:
         prospective_policy = default_prospective_policy(
-            allow_provider=(
-                prospective_mode is CognitionProspectiveMode.LLM_ASSISTED
-            )
+            allow_provider=(prospective_mode is CognitionProspectiveMode.LLM_ASSISTED)
         )
     _LOG.debug(
         "cognition_config_prospective_mode mode=%s policy_version=%s",
         prospective_mode.value,
         None if prospective_policy is None else prospective_policy.version,
+    )
+    counterfactual_mode = CognitionCounterfactualMode(spec.counterfactual_mode.value)
+    counterfactual_policy = None
+    if counterfactual_mode is not CognitionCounterfactualMode.DISABLED:
+        counterfactual_policy = default_counterfactual_policy(
+            allow_provider=(
+                counterfactual_mode is CognitionCounterfactualMode.LLM_ASSISTED
+            )
+        )
+    _LOG.debug(
+        "cognition_config_counterfactual_mode mode=%s policy_version=%s",
+        counterfactual_mode.value,
+        None if counterfactual_policy is None else counterfactual_policy.version,
     )
     return CognitionLoopConfig(
         memory_mode=CognitionMemoryMode(spec.memory_mode.value),
@@ -512,6 +525,8 @@ def _cognition_config_for(
         reflection_policy=reflection_policy,
         prospective_mode=prospective_mode,
         prospective_policy=prospective_policy,
+        counterfactual_mode=counterfactual_mode,
+        counterfactual_policy=counterfactual_policy,
         drive_overrides=tuple(
             CognitionDriveOverride(
                 kind=item.kind,

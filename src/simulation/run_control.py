@@ -597,6 +597,7 @@ class AgentRuntimeCheckpoint:
     causal_world_model: object | None = None
     reflection_cursor: object | None = None
     decision_journal: tuple[object, ...] | None = None
+    remembered_decisions: tuple[object, ...] | None = None
     identity_cursor: object | None = None
 
     def __post_init__(self) -> None:
@@ -661,6 +662,20 @@ class AgentRuntimeCheckpoint:
                     raise TypeError("decision_journal entries must be records")
                 if item.owner_id != self.agent_id:
                     raise ValueError("decision_journal owner_id mismatch")
+        if self.remembered_decisions is not None:
+            from agents.cognition.counterfactual import RememberedDecision
+
+            if isinstance(self.remembered_decisions, (str, bytes)) or not isinstance(
+                self.remembered_decisions, tuple
+            ):
+                raise TypeError("remembered_decisions must be a tuple or None")
+            for item in self.remembered_decisions:
+                if type(item) is not RememberedDecision:
+                    raise TypeError(
+                        "remembered_decisions entries must be RememberedDecision"
+                    )
+                if item.owner_id != self.agent_id:
+                    raise ValueError("remembered_decisions owner_id mismatch")
 
 
 def encode_emotional_state(

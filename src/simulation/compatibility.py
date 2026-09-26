@@ -51,6 +51,7 @@ from simulation.runner_models import (
     RUNNER_SCHEMA_VERSION_V5,
     RUNNER_SCHEMA_VERSION_V6,
     RUNNER_SCHEMA_VERSION_V7,
+    RUNNER_SCHEMA_VERSION_V8,
     SUPPORTED_RESULT_SCHEMA_VERSIONS,
     SUPPORTED_RUNNER_SCHEMA_VERSIONS,
 )
@@ -89,6 +90,7 @@ __all__ = [
     "RUNNER_SCHEMA_VERSION_V5",
     "RUNNER_SCHEMA_VERSION_V6",
     "RUNNER_SCHEMA_VERSION_V7",
+    "RUNNER_SCHEMA_VERSION_V8",
     "STREAM_ENVELOPE_VERSION",
     "WS_PROTOCOL_VERSION",
     "CompatibilityEntry",
@@ -171,10 +173,15 @@ _MATRIX: dict[str, CompatibilityEntry] = {
             "and may also carry consolidation; "
             f"{RUNNER_SCHEMA_VERSION_V7} is accepted when prospective imagination "
             "is enabled and may also carry consolidation and reflection; "
+            f"{RUNNER_SCHEMA_VERSION_V8} is accepted when counterfactual mode "
+            "is enabled and may also carry consolidation, reflection, and "
+            "prospective imagination; "
             f"{RUNNER_SCHEMA_VERSION_V3} retained for capability flags; "
-            "v1-v4 omit consolidation_mode, reflection_mode, and prospective_mode "
-            "and restore DISABLED; v5 omits reflection_mode and prospective_mode; "
-            "v6 omits prospective_mode)."
+            "v1-v4 omit consolidation_mode, reflection_mode, prospective_mode, "
+            "and counterfactual_mode and restore DISABLED; "
+            "v5 omits reflection_mode, prospective_mode, and counterfactual_mode; "
+            "v6 omits prospective_mode and counterfactual_mode; "
+            "v7 omits counterfactual_mode and restores DISABLED)."
         ),
         owner_package="simulation.runner_models / simulation.runner_serialization",
         v1_fixture_impact=(
@@ -346,6 +353,7 @@ _LOG.debug(
         "runner_v5": RUNNER_SCHEMA_VERSION_V5,
         "runner_v6": RUNNER_SCHEMA_VERSION_V6,
         "runner_v7": RUNNER_SCHEMA_VERSION_V7,
+        "runner_v8": RUNNER_SCHEMA_VERSION_V8,
         "alembic_head": ALEMBIC_HEAD_REVISION,
         "accepted_event_count": len(ACCEPTED_EVENT_SCHEMA_VERSIONS),
     },

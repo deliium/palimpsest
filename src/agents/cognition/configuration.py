@@ -20,6 +20,10 @@ from agents.cognition.contracts import (
     MemoryRetriever,
     MotivationEvaluator,
 )
+from agents.cognition.counterfactual import (
+    CounterfactualPolicy,
+    default_counterfactual_policy,
+)
 from agents.cognition.loop import CognitiveLoop
 from agents.cognition.prospective import ProspectivePolicy, default_prospective_policy
 from agents.cognition.reflection import ReflectionPolicy
@@ -129,6 +133,18 @@ class CognitionProspectiveMode(StrEnum):
     LLM_ASSISTED = "llm_assisted"
 
 
+class CognitionCounterfactualMode(StrEnum):
+    """Subjective counterfactuals. Disabled captures nothing.
+
+    Lockstep with ``simulation.CounterfactualMode``. This is not a
+    ``V2CapabilityFlags`` slot.
+    """
+
+    DISABLED = "disabled"
+    DETERMINISTIC = "deterministic"
+    LLM_ASSISTED = "llm_assisted"
+
+
 def _unit_interval(name: str, value: object) -> float:
     if isinstance(value, bool) or not isinstance(value, (int, float)):
         raise ValueError(f"{name}: not_unit_interval")
@@ -186,6 +202,10 @@ class CognitionLoopConfig:
     world_model_policy: WorldModelPolicy | None = None
     prospective_mode: CognitionProspectiveMode = CognitionProspectiveMode.DISABLED
     prospective_policy: ProspectivePolicy | None = None
+    counterfactual_mode: CognitionCounterfactualMode = (
+        CognitionCounterfactualMode.DISABLED
+    )
+    counterfactual_policy: CounterfactualPolicy | None = None
     drive_overrides: tuple[CognitionDriveOverride, ...] = ()
     memory_policy_version: str = MEMORY_POLICY_VERSION
     imagination_policy_version: str = IMAGINATION_POLICY_VERSION
@@ -227,14 +247,10 @@ class CognitionLoopConfig:
                     default_world_model_policy(allow_provider=False),
                 )
         elif type(self.world_model_policy) is not WorldModelPolicy:
-            _LOG.error(
-                "invalid_enum path=world_model_policy reason_code=invalid_type"
-            )
+            _LOG.error("invalid_enum path=world_model_policy reason_code=invalid_type")
             raise TypeError("world_model_policy must be WorldModelPolicy or None")
         if type(self.prospective_mode) is not CognitionProspectiveMode:
-            _LOG.error(
-                "invalid_enum path=prospective_mode reason_code=invalid_mode"
-            )
+            _LOG.error("invalid_enum path=prospective_mode reason_code=invalid_mode")
             raise TypeError("prospective_mode must be CognitionProspectiveMode")
         if self.prospective_mode is CognitionProspectiveMode.DISABLED:
             object.__setattr__(self, "prospective_policy", None)
@@ -249,10 +265,31 @@ class CognitionLoopConfig:
                 ),
             )
         elif type(self.prospective_policy) is not ProspectivePolicy:
-            _LOG.error(
-                "invalid_enum path=prospective_policy reason_code=invalid_type"
-            )
+            _LOG.error("invalid_enum path=prospective_policy reason_code=invalid_type")
             raise TypeError("prospective_policy must be ProspectivePolicy or None")
+        if type(self.counterfactual_mode) is not CognitionCounterfactualMode:
+            _LOG.error("invalid_enum path=counterfactual_mode reason_code=invalid_mode")
+            raise TypeError("counterfactual_mode must be CognitionCounterfactualMode")
+        if self.counterfactual_mode is CognitionCounterfactualMode.DISABLED:
+            object.__setattr__(self, "counterfactual_policy", None)
+        elif self.counterfactual_policy is None:
+            object.__setattr__(
+                self,
+                "counterfactual_policy",
+                default_counterfactual_policy(
+                    allow_provider=(
+                        self.counterfactual_mode
+                        is CognitionCounterfactualMode.LLM_ASSISTED
+                    )
+                ),
+            )
+        elif type(self.counterfactual_policy) is not CounterfactualPolicy:
+            _LOG.error(
+                "invalid_enum path=counterfactual_policy reason_code=invalid_type"
+            )
+            raise TypeError(
+                "counterfactual_policy must be CounterfactualPolicy or None"
+            )
         if (
             self.reflection_policy is not None
             and type(self.reflection_policy) is not ReflectionPolicy
@@ -304,6 +341,7 @@ class CognitionLoopConfig:
                     "identity_mode": self.identity_mode.value,
                     "world_model_mode": self.world_model_mode.value,
                     "prospective_mode": self.prospective_mode.value,
+                    "counterfactual_mode": self.counterfactual_mode.value,
                     "reflection_policy_version": (
                         None
                         if self.reflection_policy is None
@@ -365,6 +403,12 @@ class CognitionLoopConfig:
                 None
                 if self.prospective_policy is None
                 else self.prospective_policy.version
+            ),
+            "counterfactual_mode": self.counterfactual_mode.value,
+            "counterfactual_policy_version": (
+                None
+                if self.counterfactual_policy is None
+                else self.counterfactual_policy.version
             ),
             "imagination_mode": self.imagination_mode.value,
             "imagination_policy_version": self.imagination_policy_version,
@@ -504,8 +548,7 @@ def build_cognitive_loop(
     if resolved.consolidation_mode is not CognitionConsolidationMode.DISABLED:
         consolidation_policy = OfflineConsolidationPolicy(
             allow_provider=(
-                resolved.consolidation_mode
-                is CognitionConsolidationMode.LLM_ASSISTED
+                resolved.consolidation_mode is CognitionConsolidationMode.LLM_ASSISTED
             )
         )
     return CognitiveLoop(
@@ -544,4 +587,6 @@ def build_cognitive_loop(
         world_model_policy=resolved.world_model_policy,
         world_model_provider=world_model_provider,
         prospective_policy=resolved.prospective_policy,
+        counterfactual_mode=resolved.counterfactual_mode,
+        counterfactual_policy=resolved.counterfactual_policy,
     )

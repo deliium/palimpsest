@@ -168,6 +168,8 @@ class CognitiveLoop:
         "_consolidation_mode",
         "_consolidation_policy",
         "_consolidation_selector",
+        "_counterfactual_mode",
+        "_counterfactual_policy",
         "_deferred_dissonance",
         "_emotional_state",
         "_futures",
@@ -215,6 +217,8 @@ class CognitiveLoop:
         world_model_policy: object | None = None,
         world_model_provider: object | None = None,
         prospective_policy: object | None = None,
+        counterfactual_mode: object | None = None,
+        counterfactual_policy: object | None = None,
     ) -> None:
         self._perception = perception
         self._memory = memory
@@ -286,6 +290,22 @@ class CognitiveLoop:
             if type(prospective_policy) is not ProspectivePolicy:
                 raise TypeError("prospective_policy must be ProspectivePolicy")
         self._prospective_policy = prospective_policy
+        from agents.cognition.configuration import CognitionCounterfactualMode
+
+        counterfactual = (
+            CognitionCounterfactualMode.DISABLED
+            if counterfactual_mode is None
+            else counterfactual_mode
+        )
+        if type(counterfactual) is not CognitionCounterfactualMode:
+            raise TypeError("counterfactual_mode must be CognitionCounterfactualMode")
+        if counterfactual_policy is not None:
+            from agents.cognition.counterfactual import CounterfactualPolicy
+
+            if type(counterfactual_policy) is not CounterfactualPolicy:
+                raise TypeError("counterfactual_policy must be CounterfactualPolicy")
+        self._counterfactual_mode = counterfactual
+        self._counterfactual_policy = counterfactual_policy
         self._deferred_dissonance: tuple[object, ...] = ()
 
     def _prepare_world_model(

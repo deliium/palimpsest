@@ -22,6 +22,7 @@ from simulation.runner_models import (
     AgentCognitionSpec,
     AgentRunnerSpec,
     ConsolidationMode,
+    CounterfactualMode,
     DriveOverrideSpec,
     ImaginationMode,
     MemoryMode,
@@ -49,6 +50,7 @@ def _with_agent_modes(
     consolidation_mode: ConsolidationMode | None = None,
     reflection_mode: ReflectionMode | None = None,
     prospective_mode: ProspectiveImaginationMode | None = None,
+    counterfactual_mode: CounterfactualMode | None = None,
     schema_version: str | None = None,
 ) -> SimulationRunnerConfig:
     agents: list[AgentRunnerSpec] = []
@@ -82,6 +84,11 @@ def _with_agent_modes(
                 prospective_mode
                 if prospective_mode is not None
                 else agent.cognition.prospective_mode
+            ),
+            counterfactual_mode=(
+                counterfactual_mode
+                if counterfactual_mode is not None
+                else agent.cognition.counterfactual_mode
             ),
         )
         agents.append(
