@@ -351,6 +351,7 @@ def build_cognitive_loop(
     consolidation_selector: object | None = None,
     reflection_selector: object | None = None,
     identity_history: object | None = None,
+    world_model_provider: object | None = None,
 ) -> CognitiveLoop:
     """Assemble a ``CognitiveLoop`` from explicit policies.
 
@@ -497,4 +498,5 @@ def build_cognitive_loop(
         identity_mode=resolved.identity_mode,
         world_model_mode=resolved.world_model_mode,
         world_model_policy=resolved.world_model_policy,
+        world_model_provider=world_model_provider,
     )

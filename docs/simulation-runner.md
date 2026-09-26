@@ -27,8 +27,11 @@ versions. Separate fingerprints cover:
 - provider settings (adapter kind/model/request knobs only; no secrets)
 
 Run-level `V2CapabilityFlags` ride in `runner-config-v3+` (all default off).
-Legacy v1/v2 payloads decode to default-off flags. Enabling any reserved flag
-fails closed at construction (`capability_unimplemented`) until a later plan owns it.
+Legacy v1/v2 payloads decode to default-off flags. Owned flags
+(`predictive_world_model`, `extended_self_model`, `short_term_emotional_state`)
+may be enabled. Any other reserved flag fails closed at construction
+(`capability_unimplemented`). `predictive_world_model` off is a passthrough:
+no hypotheses, no command bias, and no world-model audit.
 
 Top-level `CognitionTraceSpec` (default disabled) rides in `runner-config-v4` only.
 Prior versions decode to a disabled spec. Tracing is **not** a capability flag;

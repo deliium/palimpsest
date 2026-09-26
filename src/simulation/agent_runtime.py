@@ -436,6 +436,7 @@ class AgentRuntime:
         "_status",
         "_subjective_state",
         "_translator",
+        "_world_model_audits",
     )
 
     def __init__(
@@ -493,6 +494,7 @@ class AgentRuntime:
         self._memory_service = memory_service
         self._offline_consolidation_audits: list[object] = []
         self._reflection_audits: list[object] = []
+        self._world_model_audits: list[object] = []
         self._applied_identity_operation_ids: set[str] = set()
         self._applied_reflection_operation_ids: set[str] = set()
         self._semantic_belief_reader = semantic_belief_reader
@@ -610,6 +612,9 @@ class AgentRuntime:
                 agent_id=owner,
             )
         self._causal_world_model = model
+        from agents.cognition.world_model import build_world_model_audit
+
+        self._world_model_audits.append(build_world_model_audit(model))
         _LOG.debug(
             "world_model_committed owner_id=%s tick=%s world_model_present=%s",
             owner,
@@ -2316,6 +2321,9 @@ class AgentRuntime:
 
     def export_reflection_audits(self) -> tuple[object, ...]:
         return tuple(self._reflection_audits)
+
+    def export_world_model_audits(self) -> tuple[object, ...]:
+        return tuple(self._world_model_audits)
 
     def _record_reflection_application(
         self, pending: PendingRuntimeFinalization

@@ -11,7 +11,7 @@ import hashlib
 import logging
 import math
 from collections.abc import Mapping, Sequence
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from decimal import Decimal
 from enum import StrEnum
 from typing import Final
@@ -22,6 +22,7 @@ from agents.cognition.models import (
     RetrievedMemoryContext,
 )
 from agents.models import AgentId
+from llm.models import LLMRequest, LLMRequestContext, StructuredOutput
 from memory.models import MemoryId, ReconstructedMemory
 from world.identifiers import EntityId, require_exact_nonneg_int, require_stable_id
 from world.observations import (
@@ -341,6 +342,8 @@ class CausalWorldModel:
     hypotheses: tuple[CausalHypothesis, ...] = ()
     last_observed_health: float | None = None
     last_tick: int | None = None
+    preferred_ids: tuple[str, ...] = ()
+    selection_fallback_used: bool = False
 
     def __post_init__(self) -> None:
         if type(self.owner_id) is not AgentId:
@@ -359,6 +362,15 @@ class CausalWorldModel:
             except ValueError as exc:
                 raise _fail("last_tick", "not_positive") from exc
             object.__setattr__(self, "last_tick", tick)
+        known = {item.hypothesis_id for item in hypotheses}
+        preferred = _id_tuple("preferred_ids", self.preferred_ids)
+        if len(set(preferred)) != len(preferred):
+            raise _fail("preferred_ids", "schema_invalid")
+        if any(item not in known for item in preferred):
+            raise _fail("preferred_ids", "foreign_id")
+        object.__setattr__(self, "preferred_ids", preferred)
+        if type(self.selection_fallback_used) is not bool:
+            raise _fail("selection_fallback_used", "invalid_type")
         _LOG.debug(
             "causal_world_model_constructed owner_id=%s policy_version=%s "
             "hypothesis_count=%s",
@@ -825,6 +837,11 @@ def match_hypothesis(
     ]
     if not matches:
         return None
+    preferred = set(model.preferred_ids)
+    if preferred:
+        chosen = [item for item in matches if item.hypothesis_id in preferred]
+        if chosen:
+            matches = chosen
     matches.sort(key=lambda item: item.hypothesis_id)
     matches.sort(key=lambda item: len(item.atoms), reverse=True)
     matches.sort(key=lambda item: item.confidence, reverse=True)
@@ -1659,6 +1676,290 @@ def _action_values() -> frozenset[str]:
             "give",
             "rest",
         }
+    )
+
+
+def confidence_band(confidence: float, *, threshold: float) -> str:
+    """Discrete band. The LLM payload never carries a probability."""
+    if confidence >= 0.8:
+        return "high"
+    if confidence >= threshold:
+        return "mid"
+    return "low"
+
+
+def canonical_atom_tokens(atoms: Sequence[CausalAtom]) -> tuple[str, ...]:
+    """Ordered ``slot=value`` tokens. No evidence payload."""
+    ordered = tuple(sorted(atoms, key=lambda item: _SLOT_ORDER[item.slot]))
+    return tuple(f"{item.slot.value}={item.value}" for item in ordered)
+
+
+@dataclass(frozen=True, slots=True)
+class WorldModelHypothesisSnapshot:
+    """One audit row. Ids and quantized confidence only."""
+
+    hypothesis_id: str
+    atom_tokens: tuple[str, ...]
+    outcome: str
+    confidence: float
+
+    def __post_init__(self) -> None:
+        try:
+            hypothesis_id = require_stable_id("hypothesis_id", self.hypothesis_id)
+        except ValueError as exc:
+            raise _fail("hypothesis_id", "invalid_value") from exc
+        object.__setattr__(self, "hypothesis_id", hypothesis_id)
+        tokens = _id_tuple("atom_tokens", self.atom_tokens)
+        object.__setattr__(self, "atom_tokens", tokens)
+        if self.outcome not in {item.value for item in CausalOutcome}:
+            raise _fail("outcome", "unknown_outcome")
+        object.__setattr__(
+            self, "confidence", _unit_quantum("confidence", self.confidence)
+        )
+
+
+@dataclass(frozen=True, slots=True)
+class WorldModelAudit:
+    """In-run audit. Not written by runner-result serialization."""
+
+    owner_id: AgentId
+    tick: int
+    mode: str
+    hypothesis_count: int
+    update_count: int
+    max_confidence: float
+    fallback_used: bool
+    snapshots: tuple[WorldModelHypothesisSnapshot, ...] = ()
+
+    def __post_init__(self) -> None:
+        if type(self.owner_id) is not AgentId:
+            raise _fail("owner_id", "invalid_type")
+        try:
+            tick = require_exact_nonneg_int("tick", self.tick)
+        except ValueError as exc:
+            raise _fail("tick", "not_positive") from exc
+        object.__setattr__(self, "tick", tick)
+        if self.mode != "enabled":
+            raise _fail("mode", "invalid_mode")
+        for name, value, upper in (
+            ("hypothesis_count", self.hypothesis_count, _MAX_HYPOTHESES),
+            (
+                "update_count",
+                self.update_count,
+                _MAX_HYPOTHESES * _MAX_HISTORY,
+            ),
+        ):
+            try:
+                number = require_exact_nonneg_int(name, value)
+            except ValueError as exc:
+                raise _fail(name, "not_positive") from exc
+            if number > upper:
+                raise _fail(name, "out_of_bounds")
+            object.__setattr__(self, name, number)
+        object.__setattr__(
+            self, "max_confidence", _unit_quantum("max_confidence", self.max_confidence)
+        )
+        if type(self.fallback_used) is not bool:
+            raise _fail("fallback_used", "invalid_type")
+        if isinstance(self.snapshots, (set, frozenset, Mapping, str)):
+            raise _fail("snapshots", "not_ordered")
+        snapshots = tuple(self.snapshots)
+        if len(snapshots) > _MAX_HYPOTHESES:
+            raise _fail("snapshots", "exceeds_max_length")
+        for item in snapshots:
+            if type(item) is not WorldModelHypothesisSnapshot:
+                raise _fail("snapshots", "invalid_type")
+        object.__setattr__(self, "snapshots", snapshots)
+
+
+def build_world_model_audit(model: CausalWorldModel) -> WorldModelAudit:
+    """Snapshot the committed model. Omits evidence ids and episode payloads."""
+    if type(model) is not CausalWorldModel:
+        raise _fail("model", "invalid_type")
+    snapshots = tuple(
+        WorldModelHypothesisSnapshot(
+            hypothesis_id=item.hypothesis_id,
+            atom_tokens=canonical_atom_tokens(item.atoms),
+            outcome=item.outcome.value,
+            confidence=item.confidence,
+        )
+        for item in model.hypotheses
+    )
+    tick = 0 if model.last_tick is None else model.last_tick
+    update_count = sum(
+        1
+        for item in model.hypotheses
+        for record in item.update_history
+        if record.tick == tick
+    )
+    maximum = max((item.confidence for item in model.hypotheses), default=0.0)
+    return WorldModelAudit(
+        owner_id=model.owner_id,
+        tick=tick,
+        mode="enabled",
+        hypothesis_count=len(model.hypotheses),
+        update_count=update_count,
+        max_confidence=maximum,
+        fallback_used=model.selection_fallback_used,
+        snapshots=snapshots,
+    )
+
+
+_WORLD_MODEL_SCHEMA = "world_model.selection.v1"
+_WORLD_MODEL_PROMPT = "world_model"
+_WORLD_MODEL_PROMPT_VERSION = "v1"
+
+
+class WorldModelSelectionOutput(StructuredOutput):
+    """Hypothesis ids only. No probability and no atom field."""
+
+    selected_ids: tuple[str, ...]
+
+
+def _candidate_payload(
+    model: CausalWorldModel, policy: WorldModelPolicy
+) -> dict[str, object]:
+    rows = []
+    for item in model.hypotheses:
+        rows.append(
+            {
+                "hypothesis_id": item.hypothesis_id,
+                "outcome": item.outcome.value,
+                "atom_count": len(item.atoms),
+                "confidence_band": confidence_band(
+                    item.confidence, threshold=policy.action_threshold
+                ),
+            }
+        )
+    return {"candidates": rows}
+
+
+async def select_world_model_hypotheses(
+    model: CausalWorldModel,
+    policy: WorldModelPolicy,
+    *,
+    provider: object | None,
+    tick: int,
+) -> CausalWorldModel:
+    """Re-rank existing ids. Failures keep confidence order."""
+    if type(model) is not CausalWorldModel:
+        raise _fail("model", "invalid_type")
+    if type(policy) is not WorldModelPolicy:
+        raise _fail("policy", "invalid_type")
+    try:
+        require_exact_nonneg_int("tick", tick)
+    except ValueError as exc:
+        raise _fail("tick", "not_positive") from exc
+    candidates = tuple(item.hypothesis_id for item in model.hypotheses)
+    if not policy.allow_provider or not candidates:
+        return model
+    if provider is None or not hasattr(provider, "generate"):
+        _LOG.warning("world_model_llm_fallback reason_code=%s", "missing_provider")
+        _LOG.debug(
+            "world_model_llm_selection owner_id=%s tick=%s candidate_count=%s "
+            "selected_count=%s fallback_used=%s",
+            model.owner_id.value,
+            tick,
+            len(candidates),
+            len(candidates),
+            True,
+        )
+        return replace(model, selection_fallback_used=True)
+    try:
+        selected = await _generate_world_model_selection(
+            model, policy, provider=provider, tick=tick
+        )
+        _accepted_selection(candidates, selected)
+    except Exception as exc:
+        reason = "transport"
+        message = str(exc)
+        if type(exc) is ValueError and message in {
+            "foreign_id",
+            "schema_invalid",
+            "schema_rejected",
+        }:
+            reason = "schema_rejected" if message != "foreign_id" else "foreign_id"
+        _LOG.warning("world_model_llm_fallback reason_code=%s", reason)
+        _LOG.debug(
+            "world_model_llm_selection owner_id=%s tick=%s candidate_count=%s "
+            "selected_count=%s fallback_used=%s",
+            model.owner_id.value,
+            tick,
+            len(candidates),
+            len(candidates),
+            True,
+        )
+        return replace(model, selection_fallback_used=True)
+    _LOG.debug(
+        "world_model_llm_selection owner_id=%s tick=%s candidate_count=%s "
+        "selected_count=%s fallback_used=%s",
+        model.owner_id.value,
+        tick,
+        len(candidates),
+        len(selected),
+        False,
+    )
+    return replace(model, preferred_ids=selected, selection_fallback_used=False)
+
+
+def _accepted_selection(
+    candidates: tuple[str, ...], selected: tuple[str, ...]
+) -> tuple[str, ...]:
+    allowed = set(candidates)
+    if len(set(selected)) != len(selected):
+        raise ValueError("schema_invalid")
+    if any(item not in allowed for item in selected):
+        raise ValueError("foreign_id")
+    return selected
+
+
+async def _generate_world_model_selection(
+    model: CausalWorldModel,
+    policy: WorldModelPolicy,
+    *,
+    provider: object,
+    tick: int,
+) -> tuple[str, ...]:
+    import json
+
+    from llm.prompts.loader import render_prompt
+
+    rendered = render_prompt(
+        _WORLD_MODEL_PROMPT,
+        _WORLD_MODEL_PROMPT_VERSION,
+        {
+            "schema_name": _WORLD_MODEL_SCHEMA,
+            "schema_json": json.dumps(
+                WorldModelSelectionOutput.model_json_schema(),
+                sort_keys=True,
+                separators=(",", ":"),
+            ),
+            "candidate_json": json.dumps(
+                _candidate_payload(model, policy),
+                sort_keys=True,
+                separators=(",", ":"),
+            ),
+        },
+    )
+    result = await provider.generate(  # type: ignore[attr-defined]
+        LLMRequest(
+            messages=rendered.messages,
+            response_model=WorldModelSelectionOutput,
+            context=LLMRequestContext(
+                run_id="world-model",
+                agent_id=model.owner_id.value,
+                tick=tick,
+                llm_request_id=f"world-model-{tick}-{model.owner_id.value}",
+            ),
+            prompt=rendered.reference,
+        )
+    )
+    output = result.output
+    if type(output) is not WorldModelSelectionOutput:
+        raise ValueError("schema_rejected")
+    return _accepted_selection(
+        tuple(item.hypothesis_id for item in model.hypotheses),
+        output.selected_ids,
     )
 
 

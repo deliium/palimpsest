@@ -1665,6 +1665,7 @@ class SimulationRunner:
             memory_dynamics_audits=audits,
             offline_consolidation_audits=consolidation_audits,
             reflection_audits=reflection_audits,
+            world_model_audits=self.export_world_model_audits(),
         )
         _LOG.info(
             "runner_finished run_id=%s ticks_committed=%s stop_reason=%s "
@@ -1703,6 +1704,27 @@ class SimulationRunner:
                     "audit_export_count": len(collected),
                 }
             },
+        )
+        return tuple(collected)
+
+    def export_world_model_audits(self) -> tuple[object, ...]:
+        """Harvest causal world-model audits. Not part of result JSON."""
+        from agents.cognition.world_model import WorldModelAudit
+
+        collected: list[WorldModelAudit] = []
+        for bundle in self._agents:
+            runtime = bundle.runtime
+            export = getattr(runtime, "export_world_model_audits", None)
+            if export is None:
+                continue
+            for audit in export():
+                if type(audit) is not WorldModelAudit:
+                    raise TypeError("world_model_audits: invalid_item")
+                collected.append(audit)
+        _LOG.debug(
+            "world_model_audit_export run_id=%s audit_count=%s",
+            self._run_id.value,
+            len(collected),
         )
         return tuple(collected)
 

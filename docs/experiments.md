@@ -8,7 +8,7 @@ The `experiments` package is trusted outer orchestration. It may coordinate publ
 
 Objective instrumentation is post-commit observation only. Collectors never flow back into cognition, memory formation, prompts, or action selection.
 
-## Catalog (A–H)
+## Catalog (A–I)
 
 | ID | Treatment |
 | --- | --- |
@@ -20,6 +20,7 @@ Objective instrumentation is post-commit observation only. Collectors never flow
 | F | Sleep consolidation `DISABLED` (`runner-config-v4`) vs `DETERMINISTIC` (`runner-config-v5`), shared seed and scenario. Not on the V1 regression gate |
 | G | Reflection `DISABLED` (`runner-config-v4`) vs `DETERMINISTIC` (`runner-config-v6`), shared seed and scenario, default interval. Not on the V1 regression gate |
 | H | Identity `extended_self_model` off vs on, both arms `runner-config-v4`, scenario `identity-divergence-v1`. One agent gets repeated search success and the other a failed flee. Not on the V1 regression gate |
+| I | Causal world model `predictive_world_model` off vs on, both arms `runner-config-v4`, shared seed and scenario. Comparison metric `causal_world_model@1` runs after the run. Not on the V1 regression gate |
 
 Builders share scenario, seed, and stochastic identity across paired arms; only declared treatment dimensions differ. Condition/config fingerprints change when treatments change.
 
@@ -27,7 +28,7 @@ Builders share scenario, seed, and stochastic identity across paired arms; only 
 
 Catalog builders emit current write schema (`runner-config-v4`) with all `V2CapabilityFlags` default-off and `CognitionTraceSpec` disabled. Use `experiments.catalog.v1_regression_profile(config)` to assert the V1-equivalent profile (raises `v1_regression_flags_enabled` if any flag is on, or `v1_regression_trace_enabled` if tracing is enabled). Capability flags and tracing are configuration identifiers only; they do not change experiment-definition schema (`experiment-definition-v1`).
 
-Network-free regression gate: `tests/unit/test_v1_regression_gate.py` (short ticks, catalog A–E + reference scenario). Experiments F, G, and H are additive and are not part of that gate. The default config write stays `runner-config-v4`. `runner-config-v5` is emitted only when some agent's consolidation mode is not `DISABLED`. `runner-config-v6` is emitted only when some agent's reflection mode is not `DISABLED`, and that document may also carry consolidation. Experiment G checks a shared objective hash through the reflection tick and an audit on the deterministic arm only. It does not preload the decision-divergence memories, and it does not require a later command to change.
+Network-free regression gate: `tests/unit/test_v1_regression_gate.py` (short ticks, catalog A–E + reference scenario). Experiments F, G, H, and I are additive and are not part of that gate. The default config write stays `runner-config-v4`. `runner-config-v5` is emitted only when some agent's consolidation mode is not `DISABLED`. `runner-config-v6` is emitted only when some agent's reflection mode is not `DISABLED`, and that document may also carry consolidation. Experiment G checks a shared objective hash through the reflection tick and an audit on the deterministic arm only. It does not preload the decision-divergence memories, and it does not require a later command to change.
 
 ## Reference scenario (V1 gate)
 

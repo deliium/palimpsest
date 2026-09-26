@@ -186,6 +186,7 @@ class CognitiveLoop:
         "_situation",
         "_world_model_mode",
         "_world_model_policy",
+        "_world_model_provider",
     )
 
     def __init__(
@@ -211,6 +212,7 @@ class CognitiveLoop:
         identity_mode: object | None = None,
         world_model_mode: object | None = None,
         world_model_policy: object | None = None,
+        world_model_provider: object | None = None,
     ) -> None:
         self._perception = perception
         self._memory = memory
@@ -275,6 +277,7 @@ class CognitiveLoop:
             policy = world_model_policy
         self._world_model_mode = world_mode
         self._world_model_policy = policy
+        self._world_model_provider = world_model_provider
         self._deferred_dissonance: tuple[object, ...] = ()
 
     def _prepare_world_model(
@@ -432,6 +435,20 @@ class CognitiveLoop:
         world_model = self._prepare_world_model(
             loop_input, emotional_evaluation, memory
         )
+        policy = self._world_model_policy
+        if (
+            world_model is not None
+            and policy is not None
+            and policy.allow_provider
+        ):
+            from agents.cognition.world_model import select_world_model_hypotheses
+
+            world_model = await select_world_model_hypotheses(
+                world_model,
+                policy,
+                provider=self._world_model_provider,
+                tick=loop_input.observation.tick,
+            )
         futures = await run_stage(
             kind=ComponentKind.FUTURES,
             ordinal=6,

@@ -1,0 +1,4 @@
+Select causal hypothesis ids from the candidate set only.
+Return exactly one JSON object matching the provided schema.
+Copy ids from the candidate list. Do not add probabilities, atoms, or commands.
+Do not include markdown fences, commentary, or trailing text.

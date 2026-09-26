@@ -677,6 +677,7 @@ class SimulationRunnerResult:
     memory_dynamics_audits: tuple[object, ...] = ()
     offline_consolidation_audits: tuple[object, ...] = ()
     reflection_audits: tuple[object, ...] = ()
+    world_model_audits: tuple[object, ...] = ()
 
     def __post_init__(self) -> None:
         from simulation.models import RunId
@@ -746,6 +747,13 @@ class SimulationRunnerResult:
             self,
             "reflection_audits",
             tuple(self.reflection_audits),
+        )
+        if isinstance(self.world_model_audits, (set, frozenset)):
+            raise TypeError("world_model_audits must be ordered")
+        object.__setattr__(
+            self,
+            "world_model_audits",
+            tuple(self.world_model_audits),
         )
 
 

@@ -314,7 +314,7 @@ Integration coverage is in-memory (no PostgreSQL/Docker/network/LLM). Divergence
 | --- | --- |
 | Stage protocols | Constructor-injected into `CognitiveLoop`; replace one stage at a time |
 | Modes | `AgentCognitionSpec.memory_mode` / `imagination_mode`; run-level mortality |
-| Capability flags | Run-level `V2CapabilityFlags` on `SimulationRunnerConfig` — not stage plugins; default off wires V1 policies; **owned** flags (`extended_self_model`, `short_term_emotional_state`) may enable; other flags still fail closed (`capability_unimplemented`) |
+| Capability flags | Run-level `V2CapabilityFlags` on `SimulationRunnerConfig` — not stage plugins; default off wires V1 policies; **owned** flags (`predictive_world_model`, `extended_self_model`, `short_term_emotional_state`) may enable; other flags still fail closed (`capability_unimplemented`) |
 | Cognition execution trace | Top-level `CognitionTraceSpec` (`runner-config-v4`, default off) — not a capability flag; ports only; no HTTP yet |
 | Subjective finalization | `AgentRuntime` commits episodic/belief/relationship batches only |
 | LLM lifecycle | Remains `api` / `llm.factory` composition — **not** encoded on runner fingerprints |

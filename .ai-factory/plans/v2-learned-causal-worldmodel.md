@@ -171,7 +171,7 @@ Experiments and unit tests compare subjective confidence with objective empirica
 
 ### Phase 3: Optional LLM Ranking, Experiment, Proofs, and Docs
 
-- [ ] Task 7: Add optional structured LLM selection over existing hypotheses.
+- [x] Task 7: Add optional structured LLM selection over existing hypotheses.
   - Deliverable: when `allow_provider` is true, the provider returns a subset of hypothesis ids and planning prefers those that also pass the deterministic match. Failures fall back to confidence order and set `fallback_used`. Default policy never calls the provider.
   - Add schema `world_model.selection.v1` under the existing LLM prompt/schema layout used by `llm/prompts/reflection/v1/`. Payload fields are ids, outcome codes, atom counts, and confidence bands. Reject responses that contain a probability, a new atom, or an unknown id.
   - Attach `WorldModelAudit` on `SimulationRunnerResult` for enabled agents only, following `reflection_audits` in `src/simulation/runner.py`. Include the bounded snapshot tuple (hypothesis id, canonical atom tokens, outcome, quantized confidence) and keep the field out of runner-result serialization.
@@ -179,14 +179,14 @@ Experiments and unit tests compare subjective confidence with objective empirica
   - Depends on tasks 4 and 5.
   - Files: `src/agents/cognition/world_model.py`, `llm/prompts/world_model/v1/`, `src/simulation/runner.py`, `tests/unit/test_causal_world_model.py`.
 
-- [ ] Task 8: Add Experiment I and the post-hoc comparison metric.
+- [x] Task 8: Add Experiment I and the post-hoc comparison metric.
   - Deliverable: two arms share seed, scenario, and stochastic identity. `i-disabled` leaves the flag off. `i-enabled` sets `predictive_world_model=True` and stays on `runner-config-v4`. The disabled arm's objective hash matches the same base config. The enabled arm may diverge after a hypothesis crosses threshold. The experiment is registered beside Experiment H in `src/experiments/catalog.py` and is not added to `tests/unit/test_v1_regression_gate.py`.
   - `causal_world_model@1` in `src/analysis/causal_world_model_metrics.py` joins audit snapshots to committed events and writes predicted confidence, empirical rate, absolute error, and match status. Match `LOCATION` through `WorldEvent.occurrence.origin_location_id`. Derive day phase in analysis from the run's physical rules. If an atom such as `WEATHER` is absent from the event, set `empirical_status=unmatched` and leave the rate empty. Register the spec the same way as `identity_dynamics@1` / `reflection@1` (`src/analysis/specifications.py`, `src/analysis/__init__.py`). Do not import `update_world_model`. The metric result is not an input to `CognitiveLoop`.
   - Logging: DEBUG `experiment_i_built` with experiment id and condition ids, logger `experiments.catalog`. DEBUG `causal_world_model_metric` with hypothesis count, matched count, unmatched count, logger `analysis.causal_world_model_metrics`. Do not log per-hypothesis empirical rates at INFO.
   - Depends on tasks 2 and 7.
   - Files: `src/experiments/catalog.py`, `src/experiments/__init__.py`, `src/analysis/causal_world_model_metrics.py`, `src/analysis/specifications.py`, `src/analysis/__init__.py`, `tests/unit/test_causal_world_model_experiment.py`.
 
-- [ ] Task 9: Prove false beliefs can form and persist, and prove objective probabilities stay hidden.
+- [x] Task 9: Prove false beliefs can form and persist, and prove objective probabilities stay hidden.
   - Deliverable: tests that fail if a salient false hypothesis is erased by mild counter-evidence, if overgeneral parents do not form, if missing weather invents a weather atom, or if cognition can see engine probabilities.
   - Required cases in `tests/unit/test_causal_world_model.py` and `tests/unit/test_causal_world_model_runtime.py`:
     - One harm episode at `self_body.location_id` during `NIGHT` yields confidence `0.8` for `LOCATION+DAY_PHASE → DANGER`. Two later night episodes with no harm leave confidence at `4/7`, which is above `0.55` under `_EFFECT_QUANTUM`. The hypothesis is still the one planning would match. Three mild counters fall below the threshold.
@@ -200,7 +200,7 @@ Experiments and unit tests compare subjective confidence with objective empirica
   - Depends on tasks 3, 5, and 8.
   - Files: `tests/unit/test_causal_world_model.py`, `tests/unit/test_causal_world_model_runtime.py`, `tests/unit/test_causal_world_model_experiment.py`, `tests/unit/test_v1_regression_gate.py` (assert Experiment I is absent only if the gate enumerates experiment ids).
 
-- [ ] Task 10: Document the owned flag and the subjective/objective split.
+- [x] Task 10: Document the owned flag and the subjective/objective split.
   - Deliverable: readers can see that `predictive_world_model` is owned and default off, that agents do not receive engine probabilities, and that `causal_world_model@1` is analysis-only. Route the edits through `/aif-docs`.
   - Update the owned-flag lists and downstream checklist examples in `docs/architecture.md`, the capability table in `docs/cognition-runtime.md`, and the fail-closed paragraph in `docs/simulation-runner.md`. State Experiment I and `causal_world_model@1` stay off the V1 regression gate.
   - Logging: none in docs. Implementation touchpoints already log mode, update counts, fallback, and metric match counts as specified above.

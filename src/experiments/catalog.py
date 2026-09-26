@@ -1,4 +1,4 @@
-"""Named builders for Experiments A-H."""
+"""Named builders for Experiments A-I."""
 
 from __future__ import annotations
 
@@ -442,6 +442,46 @@ def experiment_h_identity(
         arms=(
             ("h-disabled", "identity_disabled", disabled),
             ("h-enabled", "identity_enabled", enabled),
+        ),
+    )
+
+
+def experiment_i_causal(
+    base: SimulationRunnerConfig,
+    *,
+    seed_matrix: ExperimentSeedMatrix | None = None,
+) -> ExperimentDefinition:
+    """Paired arms share seed, scenario, and stochastic identity.
+
+    ``i-enabled`` turns on ``predictive_world_model`` and stays on
+    ``runner-config-v4``. ``i-disabled`` leaves the flag off.
+    """
+    matrix = seed_matrix or ExperimentSeedMatrix(seeds=(base.seed,))
+    shared = replace(base, schema_version=RUNNER_SCHEMA_VERSION_V4)
+    disabled = replace(shared, capability_flags=V2CapabilityFlags())
+    enabled = replace(
+        shared,
+        capability_flags=V2CapabilityFlags(predictive_world_model=True),
+    )
+    for arm_id, flag, config in (
+        ("i-disabled", False, disabled),
+        ("i-enabled", True, enabled),
+    ):
+        _LOG.debug(
+            "experiment_i_built experiment_id=%s arm_id=%s schema_version=%s "
+            "predictive_world_model=%s",
+            "experiment-i-causal",
+            arm_id,
+            config.schema_version,
+            flag,
+        )
+    return _definition(
+        experiment_id="experiment-i-causal",
+        base=shared,
+        seed_matrix=matrix,
+        arms=(
+            ("i-disabled", "world_model_disabled", disabled),
+            ("i-enabled", "world_model_enabled", enabled),
         ),
     )
 

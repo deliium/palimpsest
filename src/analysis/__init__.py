@@ -11,6 +11,10 @@ from analysis.belief_metrics import (
     compute_false_belief_persistence,
     evaluate_claim_against_truth,
 )
+from analysis.causal_world_model_metrics import (
+    CAUSAL_WORLD_MODEL_METRIC_VERSION,
+    compute_causal_world_model_metrics,
+)
 from analysis.contracts import (
     EventSource,
     ExportSource,
@@ -196,6 +200,7 @@ __all__ = [
     "AGENT_VISIBLE_PROJECTOR_VERSION",
     "CANONICAL_FLOAT_DECIMAL_PLACES",
     "CANONICAL_OUTPUT_CLAIM",
+    "CAUSAL_WORLD_MODEL_METRIC_VERSION",
     "CLAIM_TRUTH_SCHEMA_VERSION",
     "DRIFT_METRIC_VERSION",
     "EVENT_FACT_PROJECTOR_VERSION",
@@ -289,6 +294,7 @@ __all__ = [
     "compute_action_resolution_rates",
     "compute_behavioral_specialization",
     "compute_belief_accuracy",
+    "compute_causal_world_model_metrics",
     "compute_conflict",
     "compute_cooperation",
     "compute_false_belief_persistence",

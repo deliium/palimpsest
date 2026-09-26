@@ -16,6 +16,7 @@ from experiments.catalog import (
     experiment_f_sleep_consolidation,
     experiment_g_reflection,
     experiment_h_identity,
+    experiment_i_causal,
     v1_regression_profile,
 )
 from experiments.collectors import (
@@ -178,6 +179,7 @@ __all__ = [
     "experiment_f_sleep_consolidation",
     "experiment_g_reflection",
     "experiment_h_identity",
+    "experiment_i_causal",
     "make_false_story_intervention",
     "map_consolidation_audits_to_report",
     "map_recall_audits_to_dynamics_report",

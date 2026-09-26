@@ -1,0 +1,21 @@
+{
+  "name": "world_model",
+  "version": "v1",
+  "messages": [
+    {
+      "role": "system",
+      "template": "system.txt",
+      "sha256": "fb5573ccd23f6666e7b9c74b9d8a771b7a654ff25b7ec824b9bab89de03a2572"
+    },
+    {
+      "role": "user",
+      "template": "user.txt",
+      "sha256": "da47fd860793190bb14f01d0529160349f61e6f14bb11c2b7bfde15579263507"
+    }
+  ],
+  "variables": [
+    "schema_name",
+    "schema_json",
+    "candidate_json"
+  ]
+}
