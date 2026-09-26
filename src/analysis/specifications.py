@@ -50,7 +50,7 @@ __all__ = [
 ]
 
 METRIC_CATALOG_VERSION: Final[str] = "metric-catalog-v1"
-METRIC_FAMILY_COUNT: Final[int] = 20
+METRIC_FAMILY_COUNT: Final[int] = 21
 
 # Align with existing memory-drift / transmission document versions.
 _ALGO_V1: Final[str] = "1"
@@ -97,6 +97,7 @@ class MetricFamilyId(StrEnum):
     REFLECTION = "reflection"
     IDENTITY_DYNAMICS = "identity_dynamics"
     CAUSAL_WORLD_MODEL = "causal_world_model"
+    PROSPECTIVE_IMAGINATION = "prospective_imagination"
 
 
 class DenominatorKind(StrEnum):
@@ -981,6 +982,36 @@ def _spec_causal_world_model() -> MetricSpecification:
     )
 
 
+def _spec_prospective_imagination() -> MetricSpecification:
+    return _base(
+        family_id=MetricFamilyId.PROSPECTIVE_IMAGINATION,
+        evidence_inputs=frozenset({EvidenceStage.OBJECTIVE_EVENT_STATE}),
+        population="prospective_audits_per_run",
+        denominator="harvested prospective audits",
+        denominator_kind=DenominatorKind.OCCURRENCE,
+        cohort_window="run window covering committed events and audits",
+        deceased_policy="terminal agents stop new audits; existing audits remain",
+        zero_holding_policy="no audits -> availability=absent",
+        opportunity_vs_occurrence=(
+            "compares harvested audits with committed events after the run"
+        ),
+        self_edge_policy="not_applicable",
+        censoring_policy="missing command events stay unmatched",
+        formulas={
+            "matched_count": "audits whose direction matches the first command",
+            "unmatched_count": "audits whose direction does not match",
+            "harm_count": "harm events at the copied place id",
+            "absolute_error": "largest gap between confidence band and harm",
+        },
+        value_keys=(
+            "matched_count",
+            "unmatched_count",
+            "harm_count",
+            "absolute_error",
+        ),
+    )
+
+
 def _spec_identity_dynamics() -> MetricSpecification:
     return _base(
         family_id=MetricFamilyId.IDENTITY_DYNAMICS,
@@ -1482,6 +1513,7 @@ _BUILDERS: Final[tuple[Callable[[], MetricSpecification], ...]] = (
     _spec_reflection,
     _spec_identity_dynamics,
     _spec_causal_world_model,
+    _spec_prospective_imagination,
     _spec_belief_accuracy,
     _spec_false_belief_persistence,
     _spec_relationship_stability,

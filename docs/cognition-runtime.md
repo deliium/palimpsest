@@ -202,6 +202,8 @@ It must **never** receive `WorldState`, `ObservationBatch`, objective event repo
 
 Each candidate states a feasible direction/target, horizon, expected need/goal changes, typed risks, social effects, confidence, uncertainty, mortality appraisal components, and subjective provenance IDs.
 
+Prospective imagination is default-off (`ProspectiveImaginationMode.DISABLED`) and is not a capability flag. Off keeps the one-step `imagination.v1` path. When a run uses `runner-config-v7`, each agent may roll a subjective chain — possible action, predicted subjective outcome, next action — using beliefs, the read-only causal world model, relationships, goals, the self-model, emotional state, and drives already derived from the current observation. Search stops on five hard budgets: max branches, max depth, max LLM calls, max tokens, and timeout. `CommandPlanner` still compiles exactly one closed command for the current tick. The optional provider may only rank transition ids the deterministic rollout already created.
+
 ### Motivation and fear of death
 
 `MotivationAppraisal` activates drives from perceived need pressures, appraises active-goal progress and social/self-model fit per future, and computes typed subjective risks. **Fear of death** is opportunity foreclosure (`MortalityOpportunityForeclosure`): subjective mortality estimate combined with outstanding goal value, attachment/dependency effects, safety activation, autonomy loss, and reduction of future option space. There is **no** hard-coded `death_penalty` and **no** permanent total reward scalar.

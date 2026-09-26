@@ -399,6 +399,8 @@ class FutureImagination(Protocol):
         goal_board: GoalBoard | None = None,
         emotional_state: EmotionalStateEvaluation | None = None,
         causal_world_model: object | None = None,
+        prospective_policy: object | None = None,
+        llm_provider: object | None = None,
     ) -> PossibleFutures: ...
 
 

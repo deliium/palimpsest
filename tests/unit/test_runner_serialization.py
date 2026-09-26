@@ -14,6 +14,7 @@ from simulation.runner_models import (
     RUNNER_SCHEMA_VERSION_V4,
     RUNNER_SCHEMA_VERSION_V5,
     RUNNER_SCHEMA_VERSION_V6,
+    RUNNER_SCHEMA_VERSION_V7,
     AgentCognitionSpec,
     AgentRunnerSpec,
     CognitionTraceDetail,
@@ -22,6 +23,7 @@ from simulation.runner_models import (
     DriveOverrideSpec,
     MemoryMode,
     MortalityMode,
+    ProspectiveImaginationMode,
     ReflectionMode,
     RunnerStopPolicy,
     SimulationRunnerConfig,
@@ -458,6 +460,9 @@ def _configured(
     schema_version: str,
     consolidation_mode: ConsolidationMode = ConsolidationMode.DISABLED,
     reflection_mode: ReflectionMode = ReflectionMode.DISABLED,
+    prospective_mode: ProspectiveImaginationMode = (
+        ProspectiveImaginationMode.DISABLED
+    ),
     name: str = "Ada",
 ) -> SimulationRunnerConfig:
     base = _config()
@@ -476,6 +481,7 @@ def _configured(
                     drive_overrides=agent.cognition.drive_overrides,
                     consolidation_mode=consolidation_mode,
                     reflection_mode=reflection_mode,
+                    prospective_mode=prospective_mode,
                 ),
                 name=name,
                 initial_goals=agent.initial_goals,
@@ -600,3 +606,65 @@ def test_cognition_config_for_builds_reflection_policy_from_mode() -> None:
     )
     assert disabled.reflection_mode.value == "disabled"
     assert disabled.reflection_policy is None
+    assert disabled.prospective_mode.value == "disabled"
+    assert disabled.prospective_policy is None
+
+
+def test_prospective_mode_requires_v7_and_round_trips() -> None:
+    with pytest.raises(ValueError, match="prospective_mode_requires_v7"):
+        _configured(
+            schema_version=RUNNER_SCHEMA_VERSION_V4,
+            prospective_mode=ProspectiveImaginationMode.DETERMINISTIC,
+        )
+    with pytest.raises(ValueError, match="v7_requires_prospective"):
+        _configured(schema_version=RUNNER_SCHEMA_VERSION_V7)
+    enabled = _configured(
+        schema_version=RUNNER_SCHEMA_VERSION_V7,
+        prospective_mode=ProspectiveImaginationMode.DETERMINISTIC,
+    )
+    encoded = encode_runner_config(enabled)
+    document = json.loads(encoded.decode("utf-8"))
+    cognition = document["agents"][0]["cognition"]
+    assert cognition["prospective_mode"] == "deterministic"
+    assert "horizon" not in cognition
+    assert "max_branches" not in cognition
+    assert decode_runner_config(encoded) == enabled
+    reflected = _configured(
+        schema_version=RUNNER_SCHEMA_VERSION_V7,
+        reflection_mode=ReflectionMode.DETERMINISTIC,
+        prospective_mode=ProspectiveImaginationMode.LLM_ASSISTED,
+    )
+    assert decode_runner_config(encode_runner_config(reflected)) == reflected
+    shallow = _configured(
+        schema_version=RUNNER_SCHEMA_VERSION_V6,
+        reflection_mode=ReflectionMode.DETERMINISTIC,
+    )
+    shallow_doc = json.loads(encode_runner_config(shallow).decode("utf-8"))
+    assert "prospective_mode" not in shallow_doc["agents"][0]["cognition"]
+    assert decode_runner_config(encode_runner_config(shallow)) == shallow
+
+
+def test_cognition_config_for_builds_prospective_policy_from_mode(caplog) -> None:
+    import logging
+
+    from simulation.runner import _cognition_config_for
+
+    caplog.set_level(logging.DEBUG, logger="simulation.runner")
+    spec = _configured(
+        schema_version=RUNNER_SCHEMA_VERSION_V7,
+        prospective_mode=ProspectiveImaginationMode.LLM_ASSISTED,
+    ).agents[0].cognition
+    assisted = _cognition_config_for(
+        spec,
+        mortality_mode=MortalityMode.ENABLED,
+        capability_flags=V2CapabilityFlags(),
+    )
+    assert assisted.prospective_mode.value == "llm_assisted"
+    assert assisted.prospective_policy is not None
+    assert assisted.prospective_policy.allow_provider is True
+    assert assisted.prospective_policy.version == "prospective-v1"
+    messages = " ".join(record.getMessage() for record in caplog.records)
+    assert (
+        "cognition_config_prospective_mode mode=llm_assisted "
+        "policy_version=prospective-v1" in messages
+    )

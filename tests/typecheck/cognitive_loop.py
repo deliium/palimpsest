@@ -180,6 +180,8 @@ class ScriptedFutureImagination:
         goal_board: GoalBoard | None = None,
         emotional_state: object | None = None,
         causal_world_model: object | None = None,
+        prospective_policy: object | None = None,
+        llm_provider: object | None = None,
     ) -> PossibleFutures:
         _ = (
             situation,
@@ -188,6 +190,8 @@ class ScriptedFutureImagination:
             goal_board,
             emotional_state,
             causal_world_model,
+            prospective_policy,
+            llm_provider,
         )
         return PossibleFutures(
             owner_id=loop_input.agent_id,

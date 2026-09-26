@@ -22,12 +22,16 @@ from simulation.runner import (
     SimulationRunner,
 )
 from simulation.runner_models import (
+    RUNNER_SCHEMA_VERSION_V6,
+    RUNNER_SCHEMA_VERSION_V7,
     AgentCognitionSpec,
     AgentRunnerSpec,
     DriveOverrideSpec,
     ImaginationMode,
     MemoryMode,
     MortalityMode,
+    ProspectiveImaginationMode,
+    ReflectionMode,
     RunnerPersistenceSpec,
     RunnerStopPolicy,
     SimulationRunnerConfig,
@@ -50,6 +54,11 @@ def _config(
     mortality_mode: MortalityMode = MortalityMode.ENABLED,
     agent_count: int = 1,
     durable: bool = False,
+    schema_version: str | None = None,
+    prospective_mode: ProspectiveImaginationMode = (
+        ProspectiveImaginationMode.DISABLED
+    ),
+    reflection_mode: ReflectionMode = ReflectionMode.DISABLED,
 ) -> SimulationRunnerConfig:
     locations = (make_location(),)
     bodies = tuple(alive_body(f"body-{i + 1}") for i in range(agent_count))
@@ -66,6 +75,8 @@ def _config(
                         kind=DriveKind.CURIOSITY, baseline=0.7, sensitivity=0.5
                     ),
                 ),
+                prospective_mode=prospective_mode,
+                reflection_mode=reflection_mode,
             ),
         )
         for i in range(agent_count)
@@ -85,6 +96,7 @@ def _config(
         stop_policy=RunnerStopPolicy(max_ticks=5),
         mortality_mode=mortality_mode,
         persistence=RunnerPersistenceSpec(durable=durable),
+        **({} if schema_version is None else {"schema_version": schema_version}),
     )
 
 
@@ -430,3 +442,38 @@ async def test_runtimes_not_started_after_construction() -> None:
         _config(), run_id=RunId("run-created")
     ) as runner:
         assert all(rt.status is AgentRuntimeStatus.CREATED for rt in runner.runtimes)
+
+
+@pytest.mark.asyncio
+async def test_v7_prospective_config_constructs_with_policy(caplog) -> None:
+    caplog.set_level(logging.DEBUG, logger="simulation.runner")
+    with pytest.raises(ValueError, match="prospective_mode_requires_v7"):
+        _config(
+            prospective_mode=ProspectiveImaginationMode.DETERMINISTIC,
+            schema_version="runner-config-v4",
+        )
+    reflected = _config(
+        schema_version=RUNNER_SCHEMA_VERSION_V6,
+        reflection_mode=ReflectionMode.DETERMINISTIC,
+    )
+    async with await SimulationRunner.from_config(
+        reflected, run_id=RunId("run-v6")
+    ) as runner:
+        assert runner.runtimes[0]._loop._prospective_policy is None
+    deep = _config(
+        schema_version=RUNNER_SCHEMA_VERSION_V7,
+        reflection_mode=ReflectionMode.DETERMINISTIC,
+        prospective_mode=ProspectiveImaginationMode.DETERMINISTIC,
+    )
+    async with await SimulationRunner.from_config(
+        deep, run_id=RunId("run-v7")
+    ) as runner:
+        policy = runner.runtimes[0]._loop._prospective_policy
+        assert policy is not None
+        assert policy.allow_provider is False
+        assert policy.version == "prospective-v1"
+    messages = " ".join(record.getMessage() for record in caplog.records)
+    assert (
+        "cognition_config_prospective_mode mode=deterministic "
+        "policy_version=prospective-v1" in messages
+    )

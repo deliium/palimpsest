@@ -146,7 +146,13 @@ class _CandidateSeed:
 class ImaginationEngine:
     """Deterministic V1 imagination over typed observation affordances."""
 
-    __slots__ = ()
+    __slots__ = ("_prospective_audit",)
+
+    def __init__(self) -> None:
+        self._prospective_audit: object | None = None
+
+    def last_prospective_audit(self) -> object | None:
+        return self._prospective_audit
 
     async def imagine(
         self,
@@ -157,6 +163,8 @@ class ImaginationEngine:
         goal_board: GoalBoard | None = None,
         emotional_state: EmotionalStateEvaluation | None = None,
         causal_world_model: object | None = None,
+        prospective_policy: object | None = None,
+        llm_provider: object | None = None,
     ) -> PossibleFutures:
         owner = loop_input.agent_id
         tick = loop_input.observation.tick
@@ -183,6 +191,13 @@ class ImaginationEngine:
                 }
             },
         )
+        if prospective_policy is None:
+            self._prospective_audit = None
+            _LOG.debug(
+                "prospective_skipped owner_id=%s tick=%s status=skipped",
+                owner.value,
+                tick,
+            )
 
         try:
             futures: tuple[ImaginedFuture, ...]
@@ -209,6 +224,24 @@ class ImaginationEngine:
                     },
                 )
                 raise ValueError("RetrievedMemoryContext: ownership")
+            elif prospective_policy is not None:
+                evidence = _collect_evidence(
+                    owner=owner,
+                    loop_input=loop_input,
+                    memory=memory,
+                    self_state=self_state,
+                )
+                futures = await self._prospective_futures(
+                    loop_input=loop_input,
+                    situation=situation,
+                    self_state=self_state,
+                    memory=memory,
+                    goal_board=goal_board,
+                    emotional_state=emotional_state,
+                    causal_world_model=causal_world_model,
+                    prospective_policy=prospective_policy,
+                    llm_provider=llm_provider,
+                )
             else:
                 evidence = _collect_evidence(
                     owner=owner,
@@ -329,6 +362,122 @@ class ImaginationEngine:
             },
         )
         return result
+
+    async def _prospective_futures(
+        self,
+        *,
+        loop_input: CognitiveLoopInput,
+        situation: SituationModel,
+        self_state: SelfModel,
+        memory: RetrievedMemoryContext,
+        goal_board: GoalBoard | None,
+        emotional_state: EmotionalStateEvaluation | None,
+        causal_world_model: object | None,
+        prospective_policy: object,
+        llm_provider: object | None,
+    ) -> tuple[ImaginedFuture, ...]:
+        from dataclasses import replace
+
+        from agents.cognition.prospective import (
+            ProspectivePolicy,
+            ProspectivePruneReason,
+            build_prospective_audit,
+            collapse_prospective_future,
+            rollout_prospective,
+            selection_token_floor,
+        )
+
+        if type(prospective_policy) is not ProspectivePolicy:
+            raise TypeError("prospective_policy must be ProspectivePolicy")
+        rollout = rollout_prospective(
+            loop_input,
+            situation,
+            self_state,
+            memory,
+            prospective_policy,
+            goal_board=goal_board,
+            emotional_state=emotional_state,
+            causal_world_model=causal_world_model,
+        )
+        preferred: tuple[str, ...] = ()
+        extra: list[ProspectivePruneReason] = []
+        fallback_used = False
+        llm_calls = 0
+        token_count = 0
+        if prospective_policy.allow_provider:
+            floor = selection_token_floor()
+            if prospective_policy.max_llm_calls < 1:
+                extra.append(ProspectivePruneReason.BUDGET_LLM)
+                fallback_used = True
+                _log_selection_budget(
+                    loop_input, rollout, reason_code="budget_llm"
+                )
+            elif prospective_policy.max_tokens < floor:
+                extra.append(ProspectivePruneReason.BUDGET_TOKENS)
+                fallback_used = True
+                _log_selection_budget(
+                    loop_input, rollout, reason_code="budget_tokens"
+                )
+            else:
+                from agents.cognition.prospective_selection import (
+                    rank_prospective_transitions,
+                )
+
+                ranked = await rank_prospective_transitions(
+                    rollout,
+                    prospective_policy,
+                    provider=llm_provider,
+                    tick=loop_input.observation.tick,
+                    output_tokens=floor,
+                )
+                preferred = ranked.selected_ids
+                fallback_used = ranked.fallback_used
+                llm_calls = ranked.llm_call_count
+                token_count = ranked.token_count
+        if extra or llm_calls or fallback_used:
+            rollout = replace(
+                rollout,
+                budgets_exhausted=(*rollout.budgets_exhausted, *extra),
+                llm_call_count=llm_calls,
+                token_count=token_count,
+                fallback_used=fallback_used,
+            )
+        future = collapse_prospective_future(
+            rollout,
+            loop_input=loop_input,
+            situation=situation,
+            self_state=self_state,
+            memory=memory,
+            goal_board=goal_board,
+            preferred_ids=preferred,
+        )
+        self._prospective_audit = build_prospective_audit(
+            rollout,
+            tick=loop_input.observation.tick,
+            future=future,
+        )
+        return (future,)
+
+
+def _log_selection_budget(
+    loop_input: CognitiveLoopInput,
+    rollout: object,
+    *,
+    reason_code: str,
+) -> None:
+    from agents.cognition.prospective import log_prospective_llm_selection
+
+    transitions = getattr(rollout, "transitions", ())
+    kept = sum(1 for item in transitions if item.prune_reason is None)
+    log_prospective_llm_selection(
+        owner_id=loop_input.agent_id.value,
+        tick=loop_input.observation.tick,
+        candidate_count=kept,
+        selected_count=0,
+        token_count=0,
+        fallback_used=True,
+        reason_code=reason_code,
+    )
 
 
 def _apply_world_model_imagination(

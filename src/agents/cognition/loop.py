@@ -179,6 +179,7 @@ class CognitiveLoop:
         "_motivation",
         "_perception",
         "_planner",
+        "_prospective_policy",
         "_reflection_mode",
         "_reflection_policy",
         "_reflection_selector",
@@ -213,6 +214,7 @@ class CognitiveLoop:
         world_model_mode: object | None = None,
         world_model_policy: object | None = None,
         world_model_provider: object | None = None,
+        prospective_policy: object | None = None,
     ) -> None:
         self._perception = perception
         self._memory = memory
@@ -278,6 +280,12 @@ class CognitiveLoop:
         self._world_model_mode = world_mode
         self._world_model_policy = policy
         self._world_model_provider = world_model_provider
+        if prospective_policy is not None:
+            from agents.cognition.prospective import ProspectivePolicy
+
+            if type(prospective_policy) is not ProspectivePolicy:
+                raise TypeError("prospective_policy must be ProspectivePolicy")
+        self._prospective_policy = prospective_policy
         self._deferred_dissonance: tuple[object, ...] = ()
 
     def _prepare_world_model(
@@ -463,6 +471,8 @@ class CognitiveLoop:
                 goal_board,
                 emotional_evaluation,
                 causal_world_model=world_model,
+                prospective_policy=self._prospective_policy,
+                llm_provider=self._world_model_provider,
             ),
             expected_type=PossibleFutures,
         )

@@ -165,7 +165,7 @@ Every later V2 feature plan must satisfy this checklist before merge:
 4. **Schema bumps use accepted-set + exact key-set discipline** — never drop accepted V1 versions in the same change that adds a write version; runner JSON uses versioned `_require_keys` (no silent extra fields on an existing schema id).
 5. **No scripted emergence** — no hard-coded friend/enemy/leader/culture roles or milestone scripts that fake social outcomes beyond existing trusted override patterns.
 6. **No LLM → world shortcuts** — validated LLM shape still requires cognition translation + normal admission; never direct `WorldState` mutation.
-7. **Experiments stay reproducible** — `experiment-definition-v1`; flags ride in runner JSON; paired arms keep shared seed/scenario/stochastic identity; prefer deterministic fakes or recorded LLM paths. Experiment H (`extended_self_model`) and Experiment I (`predictive_world_model`, metric `causal_world_model@1`) stay off the V1 regression gate.
+7. **Experiments stay reproducible** — `experiment-definition-v1`; flags ride in runner JSON; paired arms keep shared seed/scenario/stochastic identity; prefer deterministic fakes or recorded LLM paths. Experiment H (`extended_self_model`), Experiment I (`predictive_world_model`, metric `causal_world_model@1`), and Experiment J (`prospective_imagination@1`) stay off the V1 regression gate.
 8. **Optional tracing stays outside the objective fold** — cognition-trace tables are non-authoritative and must not enter `EvidenceManifest` / objective high-water; tracing on vs off must not change `exact_trajectory_hash`.
 
 Register roadmap milestones via `/aif-roadmap` (e.g. M5 for this scaffolding) — not from individual feature plans inventing milestone IDs ad hoc.

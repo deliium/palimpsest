@@ -71,6 +71,7 @@ RUNNER_SCHEMA_VERSION_V3: Final[str] = "runner-config-v3"
 RUNNER_SCHEMA_VERSION_V4: Final[str] = "runner-config-v4"
 RUNNER_SCHEMA_VERSION_V5: Final[str] = "runner-config-v5"
 RUNNER_SCHEMA_VERSION_V6: Final[str] = "runner-config-v6"
+RUNNER_SCHEMA_VERSION_V7: Final[str] = "runner-config-v7"
 RUNNER_SCHEMA_VERSION: Final[str] = RUNNER_SCHEMA_VERSION_V4
 SUPPORTED_RUNNER_SCHEMA_VERSIONS: Final[frozenset[str]] = frozenset(
     {
@@ -80,6 +81,7 @@ SUPPORTED_RUNNER_SCHEMA_VERSIONS: Final[frozenset[str]] = frozenset(
         RUNNER_SCHEMA_VERSION_V4,
         RUNNER_SCHEMA_VERSION_V5,
         RUNNER_SCHEMA_VERSION_V6,
+        RUNNER_SCHEMA_VERSION_V7,
     }
 )
 RESULT_SCHEMA_VERSION_V1: Final[str] = "runner-result-v1"
@@ -174,6 +176,19 @@ class ReflectionMode(StrEnum):
 
     Default is ``DISABLED``. This is not a ``V2CapabilityFlags`` slot.
     Lockstep with ``agents.cognition.CognitionReflectionMode``.
+    """
+
+    DISABLED = "disabled"
+    DETERMINISTIC = "deterministic"
+    LLM_ASSISTED = "llm_assisted"
+
+
+class ProspectiveImaginationMode(StrEnum):
+    """Closed bounded prospective-imagination treatments.
+
+    Default is ``DISABLED``, which keeps the one-step ``imagination.v1`` path.
+    This is not a ``V2CapabilityFlags`` slot. Lockstep with
+    ``agents.cognition.CognitionProspectiveMode``.
     """
 
     DISABLED = "disabled"
@@ -678,6 +693,7 @@ class SimulationRunnerResult:
     offline_consolidation_audits: tuple[object, ...] = ()
     reflection_audits: tuple[object, ...] = ()
     world_model_audits: tuple[object, ...] = ()
+    prospective_audits: tuple[object, ...] = ()
 
     def __post_init__(self) -> None:
         from simulation.models import RunId
@@ -754,6 +770,13 @@ class SimulationRunnerResult:
             self,
             "world_model_audits",
             tuple(self.world_model_audits),
+        )
+        if isinstance(self.prospective_audits, (set, frozenset)):
+            raise TypeError("prospective_audits must be ordered")
+        object.__setattr__(
+            self,
+            "prospective_audits",
+            tuple(self.prospective_audits),
         )
 
 
@@ -856,6 +879,7 @@ class AgentCognitionSpec:
     policy_version: str = COGNITION_POLICY_VERSION
     consolidation_mode: ConsolidationMode = ConsolidationMode.DISABLED
     reflection_mode: ReflectionMode = ReflectionMode.DISABLED
+    prospective_mode: ProspectiveImaginationMode = ProspectiveImaginationMode.DISABLED
 
     def __post_init__(self) -> None:
         if type(self.agent_id) is not AgentId:
@@ -877,6 +901,15 @@ class AgentCognitionSpec:
             )
             raise TypeError(
                 "AgentCognitionSpec.reflection_mode must be ReflectionMode"
+            )
+        if type(self.prospective_mode) is not ProspectiveImaginationMode:
+            _LOGGER.error(
+                "invalid_enum path=AgentCognitionSpec.prospective_mode "
+                "reason_code=invalid_mode"
+            )
+            raise TypeError(
+                "AgentCognitionSpec.prospective_mode must be "
+                "ProspectiveImaginationMode"
             )
         if self.policy_version != COGNITION_POLICY_VERSION:
             raise ValueError("unsupported cognition policy_version")
@@ -1358,6 +1391,7 @@ class SimulationRunnerConfig:
         consolidation_schemas = {
             RUNNER_SCHEMA_VERSION_V5,
             RUNNER_SCHEMA_VERSION_V6,
+            RUNNER_SCHEMA_VERSION_V7,
         }
         if non_disabled and self.schema_version not in consolidation_schemas:
             _LOGGER.error(
@@ -1366,8 +1400,9 @@ class SimulationRunnerConfig:
                 self.schema_version,
             )
             raise ValueError(
-                "non-disabled consolidation_mode requires runner-config-v5 "
-                "or runner-config-v6 (code=consolidation_mode_requires_v5)"
+                "non-disabled consolidation_mode requires runner-config-v5, "
+                "runner-config-v6, or runner-config-v7 "
+                "(code=consolidation_mode_requires_v5)"
             )
         if self.schema_version == RUNNER_SCHEMA_VERSION_V5 and not non_disabled:
             _LOGGER.error(
@@ -1385,7 +1420,11 @@ class SimulationRunnerConfig:
         reflecting = tuple(
             mode for mode in reflection_modes if mode is not ReflectionMode.DISABLED
         )
-        if reflecting and self.schema_version != RUNNER_SCHEMA_VERSION_V6:
+        reflection_schemas = {
+            RUNNER_SCHEMA_VERSION_V6,
+            RUNNER_SCHEMA_VERSION_V7,
+        }
+        if reflecting and self.schema_version not in reflection_schemas:
             _LOGGER.error(
                 "invalid_fields path=agents.cognition.reflection_mode "
                 "reason_code=reflection_mode_requires_v6 schema_version=%s",
@@ -1393,7 +1432,7 @@ class SimulationRunnerConfig:
             )
             raise ValueError(
                 "non-disabled reflection_mode requires runner-config-v6 "
-                "(code=reflection_mode_requires_v6)"
+                "or runner-config-v7 (code=reflection_mode_requires_v6)"
             )
         if self.schema_version == RUNNER_SCHEMA_VERSION_V6 and not reflecting:
             _LOGGER.error(
@@ -1404,6 +1443,34 @@ class SimulationRunnerConfig:
             raise ValueError(
                 "runner-config-v6 requires a non-disabled reflection_mode "
                 "(code=v6_requires_reflection)"
+            )
+        prospective_modes = tuple(
+            agent.cognition.prospective_mode for agent in self.agents
+        )
+        planning = tuple(
+            mode
+            for mode in prospective_modes
+            if mode is not ProspectiveImaginationMode.DISABLED
+        )
+        if planning and self.schema_version != RUNNER_SCHEMA_VERSION_V7:
+            _LOGGER.error(
+                "invalid_fields path=agents.cognition.prospective_mode "
+                "reason_code=prospective_mode_requires_v7 schema_version=%s",
+                self.schema_version,
+            )
+            raise ValueError(
+                "non-disabled prospective_mode requires runner-config-v7 "
+                "(code=prospective_mode_requires_v7)"
+            )
+        if self.schema_version == RUNNER_SCHEMA_VERSION_V7 and not planning:
+            _LOGGER.error(
+                "invalid_fields path=schema_version "
+                "reason_code=v7_requires_prospective schema_version=%s",
+                self.schema_version,
+            )
+            raise ValueError(
+                "runner-config-v7 requires a non-disabled prospective_mode "
+                "(code=v7_requires_prospective)"
             )
         if self.cognition_trace.enabled:
             _LOGGER.info(
@@ -1419,7 +1486,7 @@ class SimulationRunnerConfig:
             "location_count=%s max_ticks=%s mortality_mode=%s "
             "capability_flag_count=%s enabled_flag_count=%s "
             "cognition_trace_enabled=%s cognition_trace_detail=%s "
-            "consolidation_mode=%s reflection_mode=%s",
+            "consolidation_mode=%s reflection_mode=%s prospective_mode=%s",
             self.schema_version,
             len(self.agents),
             len(self.scenario.locations),
@@ -1431,13 +1498,15 @@ class SimulationRunnerConfig:
             self.cognition_trace.detail.value,
             ",".join(mode.value for mode in consolidation_modes),
             ",".join(mode.value for mode in reflection_modes),
+            ",".join(mode.value for mode in prospective_modes),
         )
         _LOGGER.debug(
             "runner_config_decoded schema_version=%s consolidation_mode=%s "
-            "reflection_mode=%s",
+            "reflection_mode=%s prospective_mode=%s",
             self.schema_version,
             ",".join(mode.value for mode in consolidation_modes),
             ",".join(mode.value for mode in reflection_modes),
+            ",".join(mode.value for mode in prospective_modes),
         )
 
     def ordered_registrations(self) -> tuple[AgentRegistration, ...]:

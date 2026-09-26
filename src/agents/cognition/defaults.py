@@ -335,8 +335,11 @@ class PlaceholderFutureImagination:
         goal_board: GoalBoard | None = None,
         emotional_state: object | None = None,
         causal_world_model: object | None = None,
+        prospective_policy: object | None = None,
+        llm_provider: object | None = None,
     ) -> PossibleFutures:
-        _ = self_state, memory, goal_board, emotional_state
+        _ = self_state, memory, goal_board, emotional_state, prospective_policy
+        _ = llm_provider
         futures: list[ImaginedFuture] = []
         if SituationClaimCode.TERMINAL_SELF in situation.claim_codes:
             futures.append(
@@ -397,8 +400,11 @@ class PresentStateImagination:
         goal_board: GoalBoard | None = None,
         emotional_state: object | None = None,
         causal_world_model: object | None = None,
+        prospective_policy: object | None = None,
+        llm_provider: object | None = None,
     ) -> PossibleFutures:
-        _ = self_state, memory, goal_board, emotional_state
+        _ = self_state, memory, goal_board, emotional_state, prospective_policy
+        _ = llm_provider
         if SituationClaimCode.TERMINAL_SELF in situation.claim_codes:
             claim_codes = (SituationClaimCode.TERMINAL_SELF,)
             future_id = "present-terminal"

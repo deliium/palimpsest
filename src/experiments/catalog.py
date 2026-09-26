@@ -1,4 +1,4 @@
-"""Named builders for Experiments A-I."""
+"""Named builders for Experiments A-J."""
 
 from __future__ import annotations
 
@@ -18,6 +18,7 @@ from simulation.runner_models import (
     RUNNER_SCHEMA_VERSION_V4,
     RUNNER_SCHEMA_VERSION_V5,
     RUNNER_SCHEMA_VERSION_V6,
+    RUNNER_SCHEMA_VERSION_V7,
     AgentCognitionSpec,
     AgentRunnerSpec,
     ConsolidationMode,
@@ -25,6 +26,7 @@ from simulation.runner_models import (
     ImaginationMode,
     MemoryMode,
     MortalityMode,
+    ProspectiveImaginationMode,
     ReflectionMode,
     RunnerStopPolicy,
     SimulationRunnerConfig,
@@ -46,6 +48,7 @@ def _with_agent_modes(
     drive_overrides: tuple[DriveOverrideSpec, ...] | None = None,
     consolidation_mode: ConsolidationMode | None = None,
     reflection_mode: ReflectionMode | None = None,
+    prospective_mode: ProspectiveImaginationMode | None = None,
     schema_version: str | None = None,
 ) -> SimulationRunnerConfig:
     agents: list[AgentRunnerSpec] = []
@@ -74,6 +77,11 @@ def _with_agent_modes(
                 reflection_mode
                 if reflection_mode is not None
                 else agent.cognition.reflection_mode
+            ),
+            prospective_mode=(
+                prospective_mode
+                if prospective_mode is not None
+                else agent.cognition.prospective_mode
             ),
         )
         agents.append(
@@ -482,6 +490,50 @@ def experiment_i_causal(
         arms=(
             ("i-disabled", "world_model_disabled", disabled),
             ("i-enabled", "world_model_enabled", enabled),
+        ),
+    )
+
+
+def experiment_j_prospective(
+    base: SimulationRunnerConfig,
+    *,
+    seed_matrix: ExperimentSeedMatrix | None = None,
+) -> ExperimentDefinition:
+    """Paired arms share seed, scenario, and stochastic identity.
+
+    ``j-shallow`` keeps prospective imagination disabled on ``runner-config-v4``.
+    ``j-deep`` uses deterministic prospective imagination on ``runner-config-v7``.
+    """
+    matrix = seed_matrix or ExperimentSeedMatrix(seeds=(base.seed,))
+    shallow = _with_agent_modes(
+        base,
+        prospective_mode=ProspectiveImaginationMode.DISABLED,
+        schema_version=RUNNER_SCHEMA_VERSION_V4,
+    )
+    deep = _with_agent_modes(
+        base,
+        prospective_mode=ProspectiveImaginationMode.DETERMINISTIC,
+        schema_version=RUNNER_SCHEMA_VERSION_V7,
+    )
+    for arm_id, mode, config in (
+        ("j-shallow", ProspectiveImaginationMode.DISABLED, shallow),
+        ("j-deep", ProspectiveImaginationMode.DETERMINISTIC, deep),
+    ):
+        _LOG.debug(
+            "experiment_j_built experiment_id=%s arm_id=%s schema_version=%s "
+            "prospective_mode=%s",
+            "experiment-j-prospective",
+            arm_id,
+            config.schema_version,
+            mode.value,
+        )
+    return _definition(
+        experiment_id="experiment-j-prospective",
+        base=replace(base, schema_version=RUNNER_SCHEMA_VERSION_V4),
+        seed_matrix=matrix,
+        arms=(
+            ("j-shallow", "prospective_disabled", shallow),
+            ("j-deep", "prospective_deterministic", deep),
         ),
     )
 

@@ -258,6 +258,7 @@ def test_all_metric_families_assemble(reference_outcome) -> None:
             MetricFamilyId.MEMORY_DRIFT,
             MetricFamilyId.MEMORY_DYNAMICS,
             MetricFamilyId.OFFLINE_CONSOLIDATION,
+            MetricFamilyId.PROSPECTIVE_IMAGINATION,
         }
     }
     assert required.issubset(produced)

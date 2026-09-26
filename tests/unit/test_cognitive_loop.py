@@ -148,7 +148,10 @@ async def test_loop_runs_exact_stage_order_once(
             goal_board=None,
             emotional_state=None,
             causal_world_model=None,
+            prospective_policy=None,
+            llm_provider=None,
         ):  # type: ignore[no-untyped-def]
+            _ = prospective_policy, llm_provider
             calls.append("futures")
             return await super().imagine(
                 loop_input, situation, self_state, memory, goal_board

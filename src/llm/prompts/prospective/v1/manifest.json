@@ -1,0 +1,21 @@
+{
+  "name": "prospective",
+  "version": "v1",
+  "messages": [
+    {
+      "role": "system",
+      "template": "system.txt",
+      "sha256": "f9890db8fc37fbc02f254e3afc32fd68ffe89a8497878531de3fb181bc1bc333"
+    },
+    {
+      "role": "user",
+      "template": "user.txt",
+      "sha256": "3fb0afd0541da4d617bd2122dfbe696d2bbcdcddf9f43b3626fceb02adbd0e24"
+    }
+  ],
+  "variables": [
+    "schema_name",
+    "schema_json",
+    "candidate_json"
+  ]
+}

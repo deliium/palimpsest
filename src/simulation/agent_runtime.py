@@ -426,6 +426,7 @@ class AgentRuntime:
         "_offline_consolidation_audits",
         "_pending",
         "_processed_invocations",
+        "_prospective_audits",
         "_reflection_audits",
         "_reflection_capture",
         "_reflection_cursor",
@@ -495,6 +496,7 @@ class AgentRuntime:
         self._offline_consolidation_audits: list[object] = []
         self._reflection_audits: list[object] = []
         self._world_model_audits: list[object] = []
+        self._prospective_audits: list[object] = []
         self._applied_identity_operation_ids: set[str] = set()
         self._applied_reflection_operation_ids: set[str] = set()
         self._semantic_belief_reader = semantic_belief_reader
@@ -620,6 +622,31 @@ class AgentRuntime:
             owner,
             tick,
             True,
+        )
+
+    def _commit_prospective_audit(self, tick: int) -> None:
+        """Keep the in-run prospective audit when this tick produced one."""
+        owner = self._agent.agent_id
+        futures = getattr(self._loop, "_futures", None)
+        reader = getattr(futures, "last_prospective_audit", None)
+        audit = reader() if reader is not None else None
+        if audit is None:
+            return
+        from agents.cognition.prospective import ProspectiveAudit
+
+        if type(audit) is not ProspectiveAudit:
+            raise TypeError("prospective audit must be ProspectiveAudit")
+        if audit.owner_id != owner or audit.tick != tick:
+            return
+        self._prospective_audits.append(audit)
+        _LOG.debug(
+            "prospective_audit owner_id=%s tick=%s expanded_count=%s "
+            "pruned_count=%s timeout_hit=%s",
+            owner.value,
+            tick,
+            audit.expanded_count,
+            audit.pruned_count,
+            audit.timeout_hit,
         )
 
     def apply_goal_status_transitions(
@@ -1434,6 +1461,7 @@ class AgentRuntime:
             _emotional_state_from_result(pending.loop_result)
         )
         self._commit_world_model(pending.loop_result.causal_world_model, pending.tick)
+        self._commit_prospective_audit(pending.tick)
         self._apply_reflection_journal(pending.tick)
         self._record_reflection_application(pending)
         self._internal_state = pending.next_internal_state
@@ -2324,6 +2352,9 @@ class AgentRuntime:
 
     def export_world_model_audits(self) -> tuple[object, ...]:
         return tuple(self._world_model_audits)
+
+    def export_prospective_audits(self) -> tuple[object, ...]:
+        return tuple(self._prospective_audits)
 
     def _record_reflection_application(
         self, pending: PendingRuntimeFinalization

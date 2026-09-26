@@ -22,6 +22,7 @@ from agents.cognition.configuration import (
     CognitionLoopConfig,
     CognitionMemoryMode,
     CognitionMortalityAppraisalMode,
+    CognitionProspectiveMode,
     CognitionReflectionMode,
     CognitionWorldModelMode,
     build_cognitive_loop,
@@ -29,6 +30,7 @@ from agents.cognition.configuration import (
 )
 from agents.cognition.memory import ReferenceMemoryRetriever, ScopedMemoryRetriever
 from agents.cognition.models import ComponentKind
+from agents.cognition.prospective import default_prospective_policy
 from agents.cognition.reconstruction import LLMMemoryReconstructor
 from agents.cognition.reflection import default_reflection_policy
 from agents.models import Agent, AgentId, Goal, GoalStatus
@@ -480,6 +482,19 @@ def _cognition_config_for(
         reflection_mode.value,
         None if reflection_policy is None else reflection_policy.version,
     )
+    prospective_mode = CognitionProspectiveMode(spec.prospective_mode.value)
+    prospective_policy = None
+    if prospective_mode is not CognitionProspectiveMode.DISABLED:
+        prospective_policy = default_prospective_policy(
+            allow_provider=(
+                prospective_mode is CognitionProspectiveMode.LLM_ASSISTED
+            )
+        )
+    _LOG.debug(
+        "cognition_config_prospective_mode mode=%s policy_version=%s",
+        prospective_mode.value,
+        None if prospective_policy is None else prospective_policy.version,
+    )
     return CognitionLoopConfig(
         memory_mode=CognitionMemoryMode(spec.memory_mode.value),
         imagination_mode=CognitionImaginationMode(spec.imagination_mode.value),
@@ -495,6 +510,8 @@ def _cognition_config_for(
         consolidation_mode=CognitionConsolidationMode(spec.consolidation_mode.value),
         reflection_mode=reflection_mode,
         reflection_policy=reflection_policy,
+        prospective_mode=prospective_mode,
+        prospective_policy=prospective_policy,
         drive_overrides=tuple(
             CognitionDriveOverride(
                 kind=item.kind,
@@ -1666,6 +1683,7 @@ class SimulationRunner:
             offline_consolidation_audits=consolidation_audits,
             reflection_audits=reflection_audits,
             world_model_audits=self.export_world_model_audits(),
+            prospective_audits=self.export_prospective_audits(),
         )
         _LOG.info(
             "runner_finished run_id=%s ticks_committed=%s stop_reason=%s "
@@ -1704,6 +1722,37 @@ class SimulationRunner:
                     "audit_export_count": len(collected),
                 }
             },
+        )
+        return tuple(collected)
+
+    def export_prospective_audits(self) -> tuple[object, ...]:
+        """Harvest prospective audits. Not part of result JSON."""
+        from agents.cognition.prospective import ProspectiveAudit
+
+        collected: list[ProspectiveAudit] = []
+        for bundle in self._agents:
+            runtime = bundle.runtime
+            export = getattr(runtime, "export_prospective_audits", None)
+            if export is None:
+                continue
+            for audit in export():
+                if type(audit) is not ProspectiveAudit:
+                    raise TypeError("prospective_audits: invalid_item")
+                collected.append(audit)
+                _LOG.debug(
+                    "prospective_audit run_id=%s owner_id=%s tick=%s "
+                    "expanded_count=%s pruned_count=%s timeout_hit=%s",
+                    self._run_id.value,
+                    audit.owner_id.value,
+                    audit.tick,
+                    audit.expanded_count,
+                    audit.pruned_count,
+                    audit.timeout_hit,
+                )
+        _LOG.debug(
+            "prospective_audit run_id=%s audit_count=%s",
+            self._run_id.value,
+            len(collected),
         )
         return tuple(collected)
 

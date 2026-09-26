@@ -17,6 +17,7 @@ from experiments.catalog import (
     experiment_g_reflection,
     experiment_h_identity,
     experiment_i_causal,
+    experiment_j_prospective,
     v1_regression_profile,
 )
 from experiments.collectors import (
@@ -180,6 +181,7 @@ __all__ = [
     "experiment_g_reflection",
     "experiment_h_identity",
     "experiment_i_causal",
+    "experiment_j_prospective",
     "make_false_story_intervention",
     "map_consolidation_audits_to_report",
     "map_recall_audits_to_dynamics_report",

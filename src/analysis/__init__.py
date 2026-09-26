@@ -138,6 +138,10 @@ from analysis.offline_consolidation_metrics import (
     OFFLINE_CONSOLIDATION_METRIC_VERSION,
     compute_offline_consolidation,
 )
+from analysis.prospective_imagination_metrics import (
+    PROSPECTIVE_IMAGINATION_METRIC_VERSION,
+    compute_prospective_imagination_metrics,
+)
 from analysis.reflection_metrics import (
     REFLECTION_METRIC_VERSION,
     compute_reflection,
@@ -215,6 +219,7 @@ __all__ = [
     "MINIMUM_LIBRARY_VERSIONS",
     "OFFLINE_CONSOLIDATION_METRIC_VERSION",
     "PANDAS_NULL_SENTINEL_POLICY",
+    "PROSPECTIVE_IMAGINATION_METRIC_VERSION",
     "REFLECTION_METRIC_VERSION",
     "SCIPY_DEGENERATE_POLICY",
     "SOCIAL_TRANSMISSION_METRIC_VERSION",
@@ -305,6 +310,7 @@ __all__ = [
     "compute_memory_drift",
     "compute_memory_dynamics",
     "compute_offline_consolidation",
+    "compute_prospective_imagination_metrics",
     "compute_reflection",
     "compute_relationship_stability",
     "compute_repeated_conventions",

@@ -21,6 +21,7 @@ from agents.cognition.contracts import (
     MotivationEvaluator,
 )
 from agents.cognition.loop import CognitiveLoop
+from agents.cognition.prospective import ProspectivePolicy, default_prospective_policy
 from agents.cognition.reflection import ReflectionPolicy
 from agents.cognition.world_model import WorldModelPolicy, default_world_model_policy
 from agents.models import (
@@ -116,6 +117,18 @@ class CognitionWorldModelMode(StrEnum):
     ENABLED = "enabled"
 
 
+class CognitionProspectiveMode(StrEnum):
+    """Bounded prospective imagination. Disabled keeps the one-step path.
+
+    Lockstep with ``simulation.ProspectiveImaginationMode``. This is not a
+    ``V2CapabilityFlags`` slot.
+    """
+
+    DISABLED = "disabled"
+    DETERMINISTIC = "deterministic"
+    LLM_ASSISTED = "llm_assisted"
+
+
 def _unit_interval(name: str, value: object) -> float:
     if isinstance(value, bool) or not isinstance(value, (int, float)):
         raise ValueError(f"{name}: not_unit_interval")
@@ -171,6 +184,8 @@ class CognitionLoopConfig:
     identity_mode: CognitionIdentityMode = CognitionIdentityMode.PASSTHROUGH
     world_model_mode: CognitionWorldModelMode = CognitionWorldModelMode.PASSTHROUGH
     world_model_policy: WorldModelPolicy | None = None
+    prospective_mode: CognitionProspectiveMode = CognitionProspectiveMode.DISABLED
+    prospective_policy: ProspectivePolicy | None = None
     drive_overrides: tuple[CognitionDriveOverride, ...] = ()
     memory_policy_version: str = MEMORY_POLICY_VERSION
     imagination_policy_version: str = IMAGINATION_POLICY_VERSION
@@ -216,6 +231,28 @@ class CognitionLoopConfig:
                 "invalid_enum path=world_model_policy reason_code=invalid_type"
             )
             raise TypeError("world_model_policy must be WorldModelPolicy or None")
+        if type(self.prospective_mode) is not CognitionProspectiveMode:
+            _LOG.error(
+                "invalid_enum path=prospective_mode reason_code=invalid_mode"
+            )
+            raise TypeError("prospective_mode must be CognitionProspectiveMode")
+        if self.prospective_mode is CognitionProspectiveMode.DISABLED:
+            object.__setattr__(self, "prospective_policy", None)
+        elif self.prospective_policy is None:
+            object.__setattr__(
+                self,
+                "prospective_policy",
+                default_prospective_policy(
+                    allow_provider=(
+                        self.prospective_mode is CognitionProspectiveMode.LLM_ASSISTED
+                    )
+                ),
+            )
+        elif type(self.prospective_policy) is not ProspectivePolicy:
+            _LOG.error(
+                "invalid_enum path=prospective_policy reason_code=invalid_type"
+            )
+            raise TypeError("prospective_policy must be ProspectivePolicy or None")
         if (
             self.reflection_policy is not None
             and type(self.reflection_policy) is not ReflectionPolicy
@@ -266,6 +303,7 @@ class CognitionLoopConfig:
                     "reflection_mode": self.reflection_mode.value,
                     "identity_mode": self.identity_mode.value,
                     "world_model_mode": self.world_model_mode.value,
+                    "prospective_mode": self.prospective_mode.value,
                     "reflection_policy_version": (
                         None
                         if self.reflection_policy is None
@@ -321,6 +359,12 @@ class CognitionLoopConfig:
                 None
                 if self.world_model_policy is None
                 else self.world_model_policy.version
+            ),
+            "prospective_mode": self.prospective_mode.value,
+            "prospective_policy_version": (
+                None
+                if self.prospective_policy is None
+                else self.prospective_policy.version
             ),
             "imagination_mode": self.imagination_mode.value,
             "imagination_policy_version": self.imagination_policy_version,
@@ -499,4 +543,5 @@ def build_cognitive_loop(
         world_model_mode=resolved.world_model_mode,
         world_model_policy=resolved.world_model_policy,
         world_model_provider=world_model_provider,
+        prospective_policy=resolved.prospective_policy,
     )
