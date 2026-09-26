@@ -6,6 +6,8 @@ Positive cases must type-check. Negative authority substitutions live under
 
 from __future__ import annotations
 
+from collections.abc import Mapping
+
 from agents.cognition.contracts import (
     CognitionStrategy,
     EmotionalStateAppraiser,
@@ -152,6 +154,8 @@ class ScriptedEmotionalStateAppraiser:
         self_state: SelfModel,
         goal_board: GoalBoard,
         prior_state: object | None = None,
+        *,
+        counterfactual_scenarios: tuple[object, ...] = (),
     ):
         from agents.cognition.emotion import PassthroughEmotionalStateAppraiser
         from agents.cognition.models import AgentEmotionalState
@@ -167,6 +171,7 @@ class ScriptedEmotionalStateAppraiser:
             self_state,
             goal_board,
             prior,
+            counterfactual_scenarios=counterfactual_scenarios,
         )
 
 
@@ -242,6 +247,8 @@ class ScriptedIntentionSelector:
         emotional_state: object | None = None,
         self_state: object | None = None,
         causal_world_model: object | None = None,
+        *,
+        counterfactual_bias: Mapping[str, float] | None = None,
     ) -> SelectedIntention:
         _ = (
             motivation,
@@ -250,6 +257,7 @@ class ScriptedIntentionSelector:
             emotional_state,
             self_state,
             causal_world_model,
+            counterfactual_bias,
         )
         return SelectedIntention(
             owner_id=loop_input.agent_id,

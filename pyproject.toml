@@ -403,6 +403,7 @@ ignore_imports = [
     "agents.cognition.reconstruction -> llm",
     "agents.cognition.reflection -> llm",
     "agents.cognition.prospective_selection -> llm",
+    "agents.cognition.counterfactual_selection -> llm",
     "agents.cognition.world_model_selection -> llm",
     "simulation.runner_models -> llm.models",
     "simulation.runner_models -> llm.factory",

@@ -126,6 +126,7 @@ async def test_loop_runs_exact_stage_order_once(
             self_state,
             goal_board,
             prior_state=None,
+            counterfactual_scenarios=(),
         ):
             calls.append("emotional_state")
             return await super().appraise(
@@ -136,6 +137,7 @@ async def test_loop_runs_exact_stage_order_once(
                 self_state,
                 goal_board,
                 prior_state,
+                counterfactual_scenarios=counterfactual_scenarios,
             )
 
     class TrackingFutures(ScriptedFutureImagination):
@@ -183,9 +185,16 @@ async def test_loop_runs_exact_stage_order_once(
             emotional_state=None,
             self_state=None,
             causal_world_model=None,
+            counterfactual_bias=None,
         ):  # type: ignore[no-untyped-def]
             calls.append("intention")
-            return await super().select(loop_input, motivation, futures, goal_board)
+            return await super().select(
+                loop_input,
+                motivation,
+                futures,
+                goal_board,
+                counterfactual_bias=counterfactual_bias,
+            )
 
     class TrackingPlanner(ScriptedPlanner):
         async def plan(
@@ -352,6 +361,7 @@ async def test_cancellation_records_cancelled_boundary() -> None:
             emotional_state=None,
             self_state=None,
             causal_world_model=None,
+            counterfactual_bias=None,
         ):  # type: ignore[no-untyped-def]
             raise asyncio.CancelledError
 

@@ -9,7 +9,7 @@ for retrieval quality and never import or invoke an LLM provider.
 from __future__ import annotations
 
 import logging
-from collections.abc import Callable, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import replace
 from typing import Final
 
@@ -518,8 +518,10 @@ class StableIntentionSelector:
         emotional_state: object | None = None,
         self_state: object | None = None,
         causal_world_model: object | None = None,
+        *,
+        counterfactual_bias: Mapping[str, float] | None = None,
     ) -> SelectedIntention:
-        _ = futures, goal_board, emotional_state, self_state
+        _ = futures, goal_board, emotional_state, self_state, counterfactual_bias
         if not motivation.scores:
             intention = IntentionCode.WAIT
             source = MotivationCode.WAIT
@@ -983,7 +985,11 @@ class SubjectiveRevisionHook:
 
 
 def default_cognitive_loop() -> CognitiveLoop:
-    """Build a CognitiveLoop wired with deterministic V1 cognition policies."""
+    """Build a CognitiveLoop whose counterfactual mode stays disabled.
+
+    ``prepare`` still accepts remembered decisions. The disabled policy
+    records no scenarios before emotional appraisal.
+    """
     from agents.cognition.configuration import (
         build_cognitive_loop,
         production_cognition_config,

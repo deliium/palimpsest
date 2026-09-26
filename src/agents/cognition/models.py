@@ -282,6 +282,7 @@ class EmotionDriverCode(StrEnum):
     DECAY = "decay"
     REGULATION = "regulation"
     PASSTHROUGH = "passthrough"
+    COUNTERFACTUAL = "counterfactual"
 
 
 class MotivationCode(StrEnum):

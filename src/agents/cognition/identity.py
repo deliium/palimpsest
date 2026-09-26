@@ -1776,3 +1776,60 @@ def _harm_exceeds_minimum(
             return False
         selected_harm = max(matching)
     return selected_harm > minimum
+
+
+def counterfactual_regret_request(
+    scenario: object,
+    *,
+    owner_id: AgentId,
+    tick: int,
+) -> BeliefRevisionRequest | None:
+    """One weakness self-belief when a regret scenario cites a memory."""
+    from agents.cognition.counterfactual import (
+        CounterfactualAffectCode,
+        CounterfactualScenario,
+    )
+    from memory.models import MemoryId
+
+    if type(scenario) is not CounterfactualScenario:
+        raise TypeError("scenario must be CounterfactualScenario")
+    if scenario.emotional_impact.code is not CounterfactualAffectCode.REGRET:
+        return None
+    memory_text = scenario.decision.memory_id
+    if memory_text is None:
+        _LOG.debug(
+            "counterfactual_effect owner_id=%s tick=%s effect_code=identity "
+            "reason_code=no_memory_evidence",
+            owner_id.value,
+            tick,
+        )
+        return None
+    predicate = identity_predicate(
+        IdentityAspect.WEAKNESS,
+        IdentityProvenanceKind.OWN_CHOICE,
+        "counterfactual_regret",
+    )
+    claim = build_identity_claim(
+        owner_id,
+        predicate,
+        ClaimValue(kind=BeliefValueKind.BOOL, bool_value=True),
+    )
+    memory_id = MemoryId(memory_text)
+    digest = hashlib.sha256(
+        f"{owner_id.value}|{scenario.scenario_id}|identity".encode()
+    ).hexdigest()[:24]
+    request = BeliefRevisionRequest(
+        owner_id=owner_id,
+        operation_id=f"identity-weakness-{digest}",
+        logical_tick=tick,
+        claim=claim,
+        evidence=_evidence_bundle((memory_id,)),
+        policy=DEFAULT_BELIEF_FORMATION_POLICY.as_ref(),
+    )
+    _LOG.debug(
+        "counterfactual_effect owner_id=%s tick=%s effect_code=identity "
+        "reason_code=applied",
+        owner_id.value,
+        tick,
+    )
+    return request

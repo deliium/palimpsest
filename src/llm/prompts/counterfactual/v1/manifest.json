@@ -1,0 +1,21 @@
+{
+  "name": "counterfactual",
+  "version": "v1",
+  "messages": [
+    {
+      "role": "system",
+      "template": "system.txt",
+      "sha256": "1828b10e251f6de17275defeafa6b8cfaa430e1888cc138f90d4e85232caaa16"
+    },
+    {
+      "role": "user",
+      "template": "user.txt",
+      "sha256": "37423649213c7f0911f66eca2e00ebf85bfb220c202a8cfd90493b13db7c8bd7"
+    }
+  ],
+  "variables": [
+    "schema_name",
+    "schema_json",
+    "candidate_json"
+  ]
+}

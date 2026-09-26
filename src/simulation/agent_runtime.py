@@ -410,7 +410,9 @@ class AgentRuntime:
         "_causal_world_model",
         "_cognition_trace_repository",
         "_cognition_trace_spec",
+        "_counterfactual_audits",
         "_counterfactual_capture",
+        "_counterfactual_state",
         "_decision_journal",
         "_emotional_state",
         "_finalized_hashes",
@@ -499,6 +501,7 @@ class AgentRuntime:
         self._reflection_audits: list[object] = []
         self._world_model_audits: list[object] = []
         self._prospective_audits: list[object] = []
+        self._counterfactual_audits: list[object] = []
         self._applied_identity_operation_ids: set[str] = set()
         self._applied_reflection_operation_ids: set[str] = set()
         self._semantic_belief_reader = semantic_belief_reader
@@ -531,6 +534,9 @@ class AgentRuntime:
         self._reflection_cursor: object | None = None
         self._decision_journal: tuple[object, ...] | None = None
         self._remembered_decisions: tuple[object, ...] | None = None
+        from agents.cognition.counterfactual import CounterfactualState
+
+        self._counterfactual_state = CounterfactualState()
         self._reflection_capture: object | None = None
         self._counterfactual_capture: object | None = None
         self._last_observation_key: tuple[int, int] | None = None
@@ -1170,7 +1176,14 @@ class AgentRuntime:
             snapshot=snapshot,
         )
         try:
-            proposal = await self._loop.prepare(loop_input, invocation_id=invocation_id)
+            proposal = await self._loop.prepare(
+                loop_input,
+                invocation_id=invocation_id,
+                remembered_decisions=self._remembered_decisions or (),
+            )
+            state = getattr(self._loop, "counterfactual_state", None)
+            if callable(state):
+                self._counterfactual_state = state()
         except CognitiveLoopError as exc:
             _LOG.error(
                 "runtime_cognition_failed",
@@ -1471,6 +1484,7 @@ class AgentRuntime:
         )
         self._commit_world_model(pending.loop_result.causal_world_model, pending.tick)
         self._commit_prospective_audit(pending.tick)
+        self._commit_counterfactual_audit(pending.tick)
         self._apply_reflection_journal(pending.tick)
         self._record_reflection_application(pending)
         self._internal_state = pending.next_internal_state
@@ -2501,6 +2515,27 @@ class AgentRuntime:
 
     def export_prospective_audits(self) -> tuple[object, ...]:
         return tuple(self._prospective_audits)
+
+    def export_counterfactual_audits(self) -> tuple[object, ...]:
+        return tuple(self._counterfactual_audits)
+
+    def _commit_counterfactual_audit(self, tick: int) -> None:
+        reader = getattr(self._loop, "last_counterfactual_audit", None)
+        if not callable(reader):
+            return
+        audit = reader(owner_id=self._agent.agent_id, tick=tick)
+        if audit is None:
+            return
+        self._counterfactual_audits.append(audit)
+        _LOG.debug(
+            "counterfactual_audit owner_id=%s tick=%s scenario_count=%s "
+            "regret_count=%s fallback_used=%s",
+            self._agent.agent_id.value,
+            tick,
+            audit.scenario_count,
+            audit.regret_count,
+            audit.fallback_used,
+        )
 
     def _record_reflection_application(
         self, pending: PendingRuntimeFinalization

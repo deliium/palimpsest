@@ -81,6 +81,8 @@ class RelationshipSignalKind(StrEnum):
     PROTECTION_GIVEN = "protection_given"
     CORROBORATION_RECEIVED = "corroboration_received"
     CONTRADICTION_RECEIVED = "contradiction_received"
+    COUNTERFACTUAL_TRUST_UP = "counterfactual_trust_up"
+    COUNTERFACTUAL_TRUST_DOWN = "counterfactual_trust_down"
 
 
 class RelationshipActivationState(StrEnum):
@@ -657,6 +659,12 @@ _SIGNAL_EFFECTS: Final[
         (RelationshipDimension.AFFECTION, 0.15),
         (RelationshipDimension.RESPECT, 0.1),
         (RelationshipDimension.FAMILIARITY, 0.1),
+    ),
+    RelationshipSignalKind.COUNTERFACTUAL_TRUST_UP: (
+        (RelationshipDimension.TRUST, 0.1),
+    ),
+    RelationshipSignalKind.COUNTERFACTUAL_TRUST_DOWN: (
+        (RelationshipDimension.TRUST, -0.1),
     ),
 }
 

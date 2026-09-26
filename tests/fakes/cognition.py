@@ -449,6 +449,8 @@ class FakeEmotionalStateAppraiser:
         self_state: SelfModel,
         goal_board: GoalBoard,
         prior_state: object | None = None,
+        *,
+        counterfactual_scenarios: tuple[object, ...] = (),
     ) -> EmotionalStateEvaluation:
         if self._queue is None:
             return await self._passthrough.appraise(
@@ -459,6 +461,7 @@ class FakeEmotionalStateAppraiser:
                 self_state,
                 goal_board,
                 prior_state,  # type: ignore[arg-type]
+                counterfactual_scenarios=counterfactual_scenarios,
             )
         _ = (
             loop_input,
@@ -574,8 +577,18 @@ class FakeIntentionSelector:
         emotional_state=None,
         self_state=None,
         causal_world_model=None,
+        *,
+        counterfactual_bias=None,
     ) -> SelectedIntention:
-        _ = loop_input, motivation, futures, goal_board, emotional_state, self_state
+        _ = (
+            loop_input,
+            motivation,
+            futures,
+            goal_board,
+            emotional_state,
+            self_state,
+            counterfactual_bias,
+        )
         output = self._queue.consume(invocation_id=_active_invocation(), ordinal=8)
         assert type(output) is SelectedIntention
         return output

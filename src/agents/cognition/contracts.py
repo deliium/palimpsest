@@ -9,7 +9,7 @@ agent's observation.
 
 from __future__ import annotations
 
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from enum import StrEnum
 from typing import Protocol
@@ -384,6 +384,8 @@ class EmotionalStateAppraiser(Protocol):
         self_state: SelfModel,
         goal_board: GoalBoard,
         prior_state: AgentEmotionalState | None = None,
+        *,
+        counterfactual_scenarios: tuple[object, ...] = (),
     ) -> EmotionalStateEvaluation: ...
 
 
@@ -431,6 +433,8 @@ class IntentionSelector(Protocol):
         emotional_state: EmotionalStateEvaluation | None = None,
         self_state: SelfModel | None = None,
         causal_world_model: object | None = None,
+        *,
+        counterfactual_bias: Mapping[str, float] | None = None,
     ) -> SelectedIntention: ...
 
 

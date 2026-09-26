@@ -1699,6 +1699,7 @@ class SimulationRunner:
             reflection_audits=reflection_audits,
             world_model_audits=self.export_world_model_audits(),
             prospective_audits=self.export_prospective_audits(),
+            counterfactual_audits=self.export_counterfactual_audits(),
         )
         _LOG.info(
             "runner_finished run_id=%s ticks_committed=%s stop_reason=%s "
@@ -1738,6 +1739,32 @@ class SimulationRunner:
                 }
             },
         )
+        return tuple(collected)
+
+    def export_counterfactual_audits(self) -> tuple[object, ...]:
+        """Harvest counterfactual audits. Not part of result JSON."""
+        from agents.cognition.counterfactual import CounterfactualAudit
+
+        collected: list[CounterfactualAudit] = []
+        for bundle in self._agents:
+            runtime = bundle.runtime
+            export = getattr(runtime, "export_counterfactual_audits", None)
+            if export is None:
+                continue
+            for audit in export():
+                if type(audit) is not CounterfactualAudit:
+                    raise TypeError("counterfactual_audits: invalid_item")
+                collected.append(audit)
+                _LOG.debug(
+                    "counterfactual_audit run_id=%s owner_id=%s tick=%s "
+                    "scenario_count=%s regret_count=%s fallback_used=%s",
+                    self._run_id.value,
+                    audit.owner_id.value,
+                    audit.tick,
+                    audit.scenario_count,
+                    audit.regret_count,
+                    audit.fallback_used,
+                )
         return tuple(collected)
 
     def export_prospective_audits(self) -> tuple[object, ...]:

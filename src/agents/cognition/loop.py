@@ -168,14 +168,19 @@ class CognitiveLoop:
         "_consolidation_mode",
         "_consolidation_policy",
         "_consolidation_selector",
+        "_counterfactual_fallback",
+        "_counterfactual_llm_calls",
         "_counterfactual_mode",
         "_counterfactual_policy",
+        "_counterfactual_skipped",
+        "_counterfactual_state",
         "_deferred_dissonance",
         "_emotional_state",
         "_futures",
         "_goal_manager",
         "_identity_mode",
         "_intention",
+        "_last_counterfactual_scenarios",
         "_memory",
         "_memory_updates",
         "_motivation",
@@ -306,6 +311,13 @@ class CognitiveLoop:
                 raise TypeError("counterfactual_policy must be CounterfactualPolicy")
         self._counterfactual_mode = counterfactual
         self._counterfactual_policy = counterfactual_policy
+        self._last_counterfactual_scenarios: tuple[object, ...] = ()
+        from agents.cognition.counterfactual import CounterfactualState
+
+        self._counterfactual_state = CounterfactualState()
+        self._counterfactual_skipped = 0
+        self._counterfactual_fallback = False
+        self._counterfactual_llm_calls = 0
         self._deferred_dissonance: tuple[object, ...] = ()
 
     def _prepare_world_model(
@@ -385,6 +397,7 @@ class CognitiveLoop:
         loop_input: CognitiveLoopInput,
         *,
         invocation_id: str,
+        remembered_decisions: tuple[object, ...] = (),
     ) -> CognitiveLoopProposal:
         """Run perception through planning without memory updates or next state."""
         if type(loop_input) is not CognitiveLoopInput:
@@ -442,6 +455,22 @@ class CognitiveLoop:
             ),
             expected_type=GoalBoard,
         )
+        considered, skipped = self._consider(
+            loop_input,
+            remembered_decisions,
+            memory=memory,
+            goal_board=goal_board,
+            self_model=self_state,
+        )
+        self._counterfactual_skipped = skipped
+        self._last_counterfactual_scenarios = await self._rank_counterfactuals(
+            loop_input, considered
+        )
+        from agents.cognition.counterfactual import counterfactual_state_for
+
+        self._counterfactual_state = counterfactual_state_for(
+            self._last_counterfactual_scenarios  # type: ignore[arg-type]
+        )
         prior_emotion = None
         if loop_input.snapshot is not None:
             prior_emotion = loop_input.snapshot.emotional_state
@@ -457,6 +486,7 @@ class CognitiveLoop:
                 self_state,
                 goal_board,
                 prior_emotion,
+                counterfactual_scenarios=self._last_counterfactual_scenarios,
             ),
             expected_type=EmotionalStateEvaluation,
         )
@@ -523,6 +553,7 @@ class CognitiveLoop:
                 emotional_evaluation,
                 self_state,
                 causal_world_model=world_model,
+                counterfactual_bias=self._counterfactual_bias(loop_input, futures),
             ),
             expected_type=SelectedIntention,
         )
@@ -658,6 +689,11 @@ class CognitiveLoop:
             consolidation=consolidation,
             reflection=reflection,
             command=command,
+        )
+        updates, identity_revisions = self._merge_counterfactual_conclusions(
+            proposal=proposal,
+            updates=updates,
+            identity_revisions=identity_revisions,
         )
 
         next_state = InternalAgentState(
@@ -1112,14 +1148,197 @@ class CognitiveLoop:
         )
         return plan
 
+    def last_counterfactual_scenarios(self) -> tuple[object, ...]:
+        """Scenarios from the latest prepare. Not a proposal field."""
+        return self._last_counterfactual_scenarios
+
+    def counterfactual_state(self) -> object:
+        """Latest regret-like affect. Not an ``EmotionKind``."""
+        return self._counterfactual_state
+
+    def _counterfactual_bias(
+        self, loop_input: CognitiveLoopInput, futures: object
+    ) -> dict[str, float] | None:
+        policy = self._counterfactual_policy
+        scenarios = self._last_counterfactual_scenarios
+        if policy is None or not scenarios:
+            return None
+        from agents.cognition.counterfactual import counterfactual_direction_bias
+
+        members = getattr(futures, "futures", ())
+        return counterfactual_direction_bias(
+            scenarios,  # type: ignore[arg-type]
+            members,
+            bonus=policy.direction_bonus,
+            owner_id=loop_input.agent_id,
+            tick=loop_input.observation.tick,
+        )
+
+    def _merge_counterfactual_conclusions(
+        self,
+        *,
+        proposal: CognitiveLoopProposal,
+        updates: tuple[object, ...],
+        identity_revisions: tuple[object, ...],
+    ) -> tuple[tuple[object, ...], tuple[object, ...]]:
+        policy = self._counterfactual_policy
+        scenarios = self._last_counterfactual_scenarios
+        if policy is None or not scenarios:
+            return updates, identity_revisions
+        from agents.cognition.configuration import CognitionIdentityMode
+        from agents.cognition.counterfactual import (
+            counterfactual_belief_requests,
+            counterfactual_relationship_requests,
+        )
+        from agents.cognition.identity import counterfactual_regret_request
+
+        owner = proposal.agent_id
+        tick = proposal.loop_input.observation.tick
+        beliefs = counterfactual_belief_requests(
+            scenarios,  # type: ignore[arg-type]
+            policy=policy,
+            owner_id=owner,
+            tick=tick,
+        )
+        relationships = counterfactual_relationship_requests(
+            scenarios,  # type: ignore[arg-type]
+            policy=policy,
+            owner_id=owner,
+            tick=tick,
+            resolve_counterpart=getattr(
+                self._memory_updates, "_resolve_counterpart", None
+            ),
+        )
+        extra: list[MemoryUpdateIntent] = []
+        for request in beliefs:
+            extra.append(
+                MemoryUpdateIntent(
+                    owner_id=owner,
+                    kind=MemoryUpdateKind.REVISE_SEMANTIC_BELIEF,
+                    belief_revision=request,
+                )
+            )
+        for request in relationships:
+            extra.append(
+                MemoryUpdateIntent(
+                    owner_id=owner,
+                    kind=MemoryUpdateKind.REVISE_RELATIONSHIP,
+                    relationship_revision=request,
+                )
+            )
+        identity = identity_revisions
+        if self._identity_mode is CognitionIdentityMode.ENABLED:
+            regret = [
+                request
+                for scenario in scenarios
+                if (
+                    request := counterfactual_regret_request(
+                        scenario, owner_id=owner, tick=tick
+                    )
+                )
+                is not None
+            ]
+            identity = (*identity_revisions, *regret)
+        return (*updates, *extra), identity
+
+    def _consider(
+        self,
+        loop_input: CognitiveLoopInput,
+        remembered_decisions: tuple[object, ...],
+        *,
+        memory: object,
+        goal_board: object,
+        self_model: object,
+    ) -> tuple[tuple[object, ...], int]:
+        from agents.cognition.configuration import CognitionCounterfactualMode
+        from agents.cognition.counterfactual import consider_counterfactuals
+
+        if (
+            self._counterfactual_mode is CognitionCounterfactualMode.DISABLED
+            or self._counterfactual_policy is None
+        ):
+            return (), 0
+        relationships: tuple[object, ...] = ()
+        if loop_input.snapshot is not None:
+            relationships = loop_input.snapshot.relationships
+        skipped: list[int] = []
+        scenarios = consider_counterfactuals(
+            loop_input,
+            remembered_decisions,  # type: ignore[arg-type]
+            policy=self._counterfactual_policy,
+            memory=memory,
+            goal_board=goal_board,
+            self_model=self_model,
+            relationships=relationships,
+            skipped_out=skipped,
+        )
+        return scenarios, skipped[0] if skipped else 0
+
+    async def _rank_counterfactuals(
+        self,
+        loop_input: CognitiveLoopInput,
+        scenarios: tuple[object, ...],
+    ) -> tuple[object, ...]:
+        policy = self._counterfactual_policy
+        self._counterfactual_fallback = False
+        self._counterfactual_llm_calls = 0
+        if policy is None or not policy.allow_provider or not scenarios:
+            return scenarios
+        from agents.cognition.counterfactual_selection import (
+            rank_counterfactual_scenarios,
+        )
+
+        result = await rank_counterfactual_scenarios(
+            scenarios,  # type: ignore[arg-type]
+            policy,
+            provider=self._world_model_provider,
+            owner_id=loop_input.agent_id.value,
+            tick=loop_input.observation.tick,
+        )
+        self._counterfactual_fallback = result.fallback_used
+        self._counterfactual_llm_calls = result.llm_call_count
+        if result.fallback_used:
+            return scenarios
+        chosen = set(result.selected_ids)
+        return tuple(item for item in scenarios if item.scenario_id in chosen)
+
+    def last_counterfactual_audit(
+        self, *, owner_id: object, tick: int
+    ) -> object | None:
+        """Audit for the latest prepare. Disabled mode returns none."""
+        from agents.cognition.configuration import CognitionCounterfactualMode
+        from agents.cognition.counterfactual import build_counterfactual_audit
+        from agents.models import AgentId
+
+        if (
+            self._counterfactual_mode is CognitionCounterfactualMode.DISABLED
+            or self._counterfactual_policy is None
+            or type(owner_id) is not AgentId
+        ):
+            return None
+        return build_counterfactual_audit(
+            owner_id=owner_id,
+            tick=tick,
+            mode=self._counterfactual_mode.value,
+            scenarios=self._last_counterfactual_scenarios,  # type: ignore[arg-type]
+            skipped_count=self._counterfactual_skipped,
+            llm_call_count=self._counterfactual_llm_calls,
+            fallback_used=self._counterfactual_fallback,
+        )
+
     async def run(
         self,
         loop_input: CognitiveLoopInput,
         *,
         invocation_id: str,
+        remembered_decisions: tuple[object, ...] = (),
     ) -> CognitiveLoopResult:
         """Prepare then complete with the proposed command (one-call path)."""
-        proposal = await self.prepare(loop_input, invocation_id=invocation_id)
+        proposal = await self.prepare(
+            loop_input,
+            invocation_id=invocation_id,
+            remembered_decisions=remembered_decisions,
+        )
         return await self.complete(
             proposal, effective_command=proposal.proposed_command
         )

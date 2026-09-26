@@ -118,6 +118,8 @@ class MultiCriteriaIntentionSelector:
         emotional_state: EmotionalStateEvaluation | None = None,
         self_state: SelfModel | None = None,
         causal_world_model: object | None = None,
+        *,
+        counterfactual_bias: Mapping[str, float] | None = None,
     ) -> SelectedIntention:
         owner = loop_input.agent_id
         tick = loop_input.observation.tick
@@ -225,6 +227,7 @@ class MultiCriteriaIntentionSelector:
             motivation,
             identity_costs,
             world_bias,
+            counterfactual_bias,
         )
         future = futures_by_id.get(winner.future_id)
         direction = ActionDirection.WAIT if future is None else future.direction
@@ -887,6 +890,7 @@ def _pairwise_select(
     motivation: MotivationEvaluation,
     identity_costs: Mapping[str, float] | None = None,
     world_bias: Mapping[str, float] | None = None,
+    counterfactual_bias: Mapping[str, float] | None = None,
 ) -> tuple[FutureAppraisal, str]:
     if len(appraisals) == 1:
         return appraisals[0], _TIE_BREAK_NONE
@@ -901,6 +905,7 @@ def _pairwise_select(
                 motivation,
                 identity_costs,
                 world_bias,
+                counterfactual_bias,
             )
             if cmp > 0:
                 scores[left.future_id] += 1
@@ -935,6 +940,7 @@ def _pairwise_compare(
     motivation: MotivationEvaluation,
     identity_costs: Mapping[str, float] | None = None,
     world_bias: Mapping[str, float] | None = None,
+    counterfactual_bias: Mapping[str, float] | None = None,
 ) -> int:
     """Return positive if left preferred, negative if right preferred, else 0."""
     active_drives = set(motivation.active_drive_kinds)
@@ -1021,6 +1027,14 @@ def _pairwise_compare(
             model_vote = 1
         elif right_bias > left_bias:
             model_vote = -1
+    counterfactual_vote = 0
+    if counterfactual_bias is not None:
+        left_bias = counterfactual_bias.get(left.future_id, 0.0)
+        right_bias = counterfactual_bias.get(right.future_id, 0.0)
+        if left_bias > right_bias:
+            counterfactual_vote = 1
+        elif right_bias > left_bias:
+            counterfactual_vote = -1
     total = (
         drive_votes
         + goal_votes
@@ -1030,6 +1044,7 @@ def _pairwise_compare(
         + conf_votes
         + identity_vote
         + model_vote
+        + counterfactual_vote
     )
     if total > 0:
         return 1

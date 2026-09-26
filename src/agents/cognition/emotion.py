@@ -37,7 +37,7 @@ from agents.cognition.models import (
     require_confidence,
 )
 from agents.cognition.motivation import derive_need_pressures
-from agents.models import GoalStatus
+from agents.models import AgentId, GoalStatus
 from memory.models import quantize_score
 from social.relationships import DirectedRelationshipProfile, RelationshipDimension
 from world.models import LifeStatus
@@ -105,6 +105,39 @@ def _clamp_unit(value: float) -> float:
     return value
 
 
+def _drive_counterfactual(
+    scenarios: tuple[object, ...],
+    deltas: dict[EmotionKind, float],
+    *,
+    enabled: frozenset[EmotionKind],
+    owner_id: AgentId,
+    tick: int,
+) -> bool:
+    from agents.cognition.counterfactual import (
+        CounterfactualAffectCode,
+        CounterfactualScenario,
+        log_counterfactual_affect,
+    )
+
+    applied = False
+    for scenario in scenarios:
+        if type(scenario) is not CounterfactualScenario:
+            continue
+        code = scenario.emotional_impact.code
+        if code is CounterfactualAffectCode.REGRET:
+            kind = EmotionKind.SADNESS
+        elif code is CounterfactualAffectCode.RELIEF:
+            kind = EmotionKind.RELIEF
+        else:
+            continue
+        amount = quantize_score(0.25 * scenario.emotional_impact.magnitude)
+        if _add_delta(deltas, kind, amount, enabled=enabled):
+            applied = True
+    if applied:
+        log_counterfactual_affect(owner_id, tick, "applied")
+    return applied
+
+
 def _add_delta(
     acc: dict[EmotionKind, float],
     kind: EmotionKind,
@@ -132,8 +165,11 @@ class PassthroughEmotionalStateAppraiser:
         self_state: SelfModel,
         goal_board: GoalBoard,
         prior_state: AgentEmotionalState | None = None,
+        *,
+        counterfactual_scenarios: tuple[object, ...] = (),
     ) -> EmotionalStateEvaluation:
         del perception, situation, memory, self_state, goal_board
+        del counterfactual_scenarios
         owner = loop_input.agent_id
         tick = loop_input.observation.tick
         if prior_state is not None:
@@ -228,6 +264,8 @@ class EmotionalStateEngine:
         self_state: SelfModel,
         goal_board: GoalBoard,
         prior_state: AgentEmotionalState | None = None,
+        *,
+        counterfactual_scenarios: tuple[object, ...] = (),
     ) -> EmotionalStateEvaluation:
         owner = loop_input.agent_id
         tick = loop_input.observation.tick
@@ -316,6 +354,17 @@ class EmotionalStateEngine:
         if _drive_physical(loop_input, perception, deltas, enabled=enabled):
             _record_driver(
                 driver_codes, driver_counts, EmotionDriverCode.PHYSICAL_CONDITION
+            )
+
+        if _drive_counterfactual(
+            counterfactual_scenarios,
+            deltas,
+            enabled=enabled,
+            owner_id=owner,
+            tick=tick,
+        ):
+            _record_driver(
+                driver_codes, driver_counts, EmotionDriverCode.COUNTERFACTUAL
             )
 
         intensities = _finalize_intensities(

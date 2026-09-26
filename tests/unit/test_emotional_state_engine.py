@@ -646,6 +646,44 @@ async def test_disabled_kind_rejected_from_prior(
     )
 
 
+def _regret_scenarios() -> tuple[object, ...]:
+    from agents.cognition.counterfactual import (
+        RememberedDecision,
+        consider_counterfactuals,
+        decision_id_for,
+        default_counterfactual_policy,
+    )
+    from agents.cognition.reflection import DecisionOutcomeCode
+
+    owner = _OWNER
+    outcome = DecisionOutcomeCode.NO_PROGRESS
+    decision_id = decision_id_for(
+        owner_id=owner,
+        tick=_TICK,
+        command_kind="help",
+        outcome_code=outcome,
+        place_id="place-a",
+        counterpart_id="bob",
+        memory_id="memory-help",
+        goal_ids=(),
+    )
+    decision = RememberedDecision(
+        decision_id=decision_id,
+        owner_id=owner,
+        tick=_TICK,
+        command_kind="help",
+        outcome_code=outcome,
+        place_id="place-a",
+        counterpart_id="bob",
+        memory_id="memory-help",
+    )
+    return consider_counterfactuals(
+        _loop_input(),
+        (decision,),
+        policy=default_counterfactual_policy(),
+    )
+
+
 @pytest.mark.parametrize(
     ("driver", "kwargs", "kind", "min_intensity"),
     [
@@ -747,6 +785,12 @@ async def test_disabled_kind_rejected_from_prior(
             },
             EmotionKind.CONFIDENCE,
             0.25,
+        ),
+        (
+            EmotionDriverCode.COUNTERFACTUAL,
+            {"counterfactual_scenarios": lambda: _regret_scenarios()},
+            EmotionKind.SADNESS,
+            0.05,
         ),
     ],
 )

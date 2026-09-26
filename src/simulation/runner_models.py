@@ -708,6 +708,7 @@ class SimulationRunnerResult:
     reflection_audits: tuple[object, ...] = ()
     world_model_audits: tuple[object, ...] = ()
     prospective_audits: tuple[object, ...] = ()
+    counterfactual_audits: tuple[object, ...] = ()
 
     def __post_init__(self) -> None:
         from simulation.models import RunId
@@ -791,6 +792,13 @@ class SimulationRunnerResult:
             self,
             "prospective_audits",
             tuple(self.prospective_audits),
+        )
+        if isinstance(self.counterfactual_audits, (set, frozenset)):
+            raise TypeError("counterfactual_audits must be ordered")
+        object.__setattr__(
+            self,
+            "counterfactual_audits",
+            tuple(self.counterfactual_audits),
         )
 
 
