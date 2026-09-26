@@ -21,6 +21,7 @@ from memory.beliefs import SemanticBelief
 from memory.models import MemorySourceKind, MemoryTrace
 from memory.service import InMemoryMemoryService
 from tests.unit.test_counterfactual_reasoning import _decision, _input
+from tests.unit.test_goal_manager import _belief
 from tests.unit.test_identity_runtime import _occurrence
 from tests.unit.test_memory_dynamics_fixtures import _recall_request
 from tests.unit.test_prospective_imagination import (
@@ -32,7 +33,7 @@ from tests.unit.test_prospective_imagination import (
 )
 from world.events import WorldEvent
 from world.identifiers import EntityId, WorldRevision
-from world.observations import ObservationSourceKind, ObservedOccurrence
+from world.observations import Observation, ObservationSourceKind, ObservedOccurrence
 
 ROOT = Path(__file__).resolve().parents[2]
 
@@ -58,16 +59,20 @@ def test_scenario_is_not_a_memory_belief_future_or_event(caplog) -> None:
         occurrence=occurrence,
         location_id=EntityId("loc-1"),
     )
-    ordinary = SemanticBelief  # type marker for the ordinary belief class
+    ordinary = _belief(predicate="at_location")
     requests = counterfactual_belief_requests(
         scenarios,
         policy=CounterfactualPolicy(),
         owner_id=AgentId("agent-owner"),
         tick=3,
     )
+    assert type(ordinary) is SemanticBelief
+    assert ordinary.claim.predicate != "counterfactual_alternative"
+    assert type(loop_input.observation) is Observation
     assert type(scenario) is not MemoryTrace
-    assert type(scenario) is not ordinary
+    assert type(scenario) is not SemanticBelief
     assert type(scenario) is not ImaginedFuture
+    assert type(scenario) is not Observation
     assert type(scenario) is not ObservedOccurrence
     assert type(scenario) is not WorldEvent
     assert type(trace) is MemoryTrace
