@@ -40,13 +40,17 @@ Establish the modular-monolith foundation: packaging, bounded packages, typed co
 
 **Goal:** Own the remaining default-off `V2CapabilityFlags` beyond short-term emotion, each with fail-closed allowlist ownership, V1 regression gates green when flags-off, and no LLM→world shortcuts.
 
-**Started:** `extended_self_model` is owned and default off. When enabled it forms history-derived, revisable self-beliefs (abilities, weaknesses, commitments, and the other closed identity aspects). It is not a person class, a persisted self-model row, or a second belief store. Experiment H and `identity_dynamics@1` stay off the V1 regression gate. `short_term_emotional_state` was already owned in M5.3.
+**Started:** `extended_self_model` is owned and default off. When enabled it forms history-derived, revisable self-beliefs (abilities, weaknesses, commitments, and the other closed identity aspects). It is not a person class, a persisted self-model row, or a second belief store. Experiment H and `identity_dynamics@1` stay off the V1 regression gate.
 
-**Still unimplemented:** `advanced_social_inference`, `multi_hop_testimony_tracking`, and `predictive_world_model`. Enabling any of them still fails closed with `capability_unimplemented`.
+`predictive_world_model` is owned and default off (2026-09-26). When enabled, each agent keeps a private causal world model updated from its own observations and reconstructed memories, and matching hypotheses bias imagination and planning. Off is a passthrough: no hypotheses, no command bias, no audit. Confidence is subjective support, not an engine probability. Hypotheses are not semantic beliefs. Experiment I and `causal_world_model@1` stay analysis-only and off the V1 regression gate.
+
+`short_term_emotional_state` was already owned in M5.3.
+
+**Still unimplemented:** `advanced_social_inference` and `multi_hop_testimony_tracking`. Enabling either still fails closed with `capability_unimplemented`.
 
 **Out of scope until planned:** free-form affect narration, personality trait systems, HTTP debug UI for emotion, collapsing emotion+drives+goals into one reward scalar.
 
-**Plan:** `.ai-factory/plans/v2-emergent-dynamic-identity.md` (owns `extended_self_model` only). Opt-in work that did not claim a flag already shipped as M5.4 and M5.5.
+**Plans:** `.ai-factory/plans/v2-emergent-dynamic-identity.md` (owns `extended_self_model` only). `.ai-factory/plans/v2-learned-causal-worldmodel.md` (owns `predictive_world_model` only). Opt-in work that did not claim a flag already shipped as M5.4 and M5.5.
 
 ## V1 status
 
