@@ -441,7 +441,9 @@ class CognitiveLoop:
             and policy is not None
             and policy.allow_provider
         ):
-            from agents.cognition.world_model import select_world_model_hypotheses
+            from agents.cognition.world_model_selection import (
+                select_world_model_hypotheses,
+            )
 
             world_model = await select_world_model_hypotheses(
                 world_model,

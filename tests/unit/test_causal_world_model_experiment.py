@@ -16,13 +16,15 @@ from agents.cognition.world_model import (
     CausalProvenanceKind,
     CausalSlot,
     CausalWorldModel,
-    WorldModelSelectionOutput,
     build_world_model_audit,
     default_world_model_policy,
     empty_world_model,
     match_hypothesis,
-    select_world_model_hypotheses,
     update_world_model,
+)
+from agents.cognition.world_model_selection import (
+    WorldModelSelectionOutput,
+    select_world_model_hypotheses,
 )
 from agents.models import AgentId
 from analysis.causal_world_model_metrics import compute_causal_world_model_metrics
