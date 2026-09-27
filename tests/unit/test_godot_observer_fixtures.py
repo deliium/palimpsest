@@ -10,6 +10,7 @@ import pytest
 from observer.contracts import (
     ObserverAgent,
     ObserverBodyMeasures,
+    ObserverContractError,
     ObserverEvent,
     ObserverFrame,
     ObserverItem,
@@ -31,6 +32,14 @@ ROOT = Path(__file__).resolve().parents[2]
 FIXTURES = ROOT / "clients" / "godot-observer" / "fixtures" / "protocol"
 EVENTS = FIXTURES / "events"
 FRAME = FIXTURES / "reference_frame.json"
+SMOKE = (
+    ROOT
+    / "clients"
+    / "godot-observer"
+    / "fixtures"
+    / "smoke"
+    / "reference_session.json"
+)
 
 
 def test_event_fixtures_cover_closed_semantic_types() -> None:
@@ -46,6 +55,21 @@ def test_event_fixtures_construct_observer_events() -> None:
         assert event.type == path.stem
         assert event.protocol_version == OBSERVER_PROTOCOL_VERSION
         assert event.type in SEMANTIC_EVENT_TYPES
+
+
+def test_smoke_fixture_keeps_known_events_on_the_protocol() -> None:
+    document = json.loads(SMOKE.read_text(encoding="utf-8"))
+    unknown_seen = False
+    for raw in document["events"]:
+        event_type = str(raw["type"])
+        if event_type not in SEMANTIC_EVENT_TYPES:
+            unknown_seen = True
+            with pytest.raises(ObserverContractError):
+                ObserverEvent(**raw)
+            continue
+        event = ObserverEvent(**raw)
+        assert event.type == event_type
+    assert unknown_seen is True
 
 
 def test_reference_frame_uses_wire_anchors_and_a_null_cursor() -> None:

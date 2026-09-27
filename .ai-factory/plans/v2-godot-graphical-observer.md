@@ -202,25 +202,25 @@ Each checkpoint is a git commit on `main` created when those tasks are done. Do 
 
 ### Phase 6: Speech, Inspector, Smoke, and Docs
 
-- [ ] Task 13: Show speech bubbles and a durable event log.
+- [x] Task 13: Show speech bubbles and a durable event log.
   - Deliverable: talk, ask, and tell open a short bubble on the actor. The bubble text is the semantic label plus the other id, never invented speech. The UI event log appends every applied event, including unknown types, in `(tick, sequence)` order, and keeps them after the bubble hides. High playback speed may skip the bubble and must still append the log line.
   - Logging: `[observer.speech] bubble_shown type=%s actor_id=%s` at DEBUG. `[observer.log_view] line_appended tick=%s sequence=%s type=%s` at DEBUG. No message body.
   - Depends on task 12.
   - Files: `clients/godot-observer/scripts/view/effects_layer.gd`, `clients/godot-observer/scenes/ui/event_log.tscn`, `clients/godot-observer/scripts/ui/event_log.gd`.
 
-- [ ] Task 14: Open an inspector when an agent is clicked.
+- [x] Task 14: Open an inspector when an agent is clicked.
   - Deliverable: the inspector shows identity (`agent_id` and `entity_id`), location display name, `life_status`, inventory summary resolved from frame items (name and kind, or the id when the item is absent), and the latest logical event type for that agent. Health, hunger, thirst, fatigue, and temperature render only when `measures` is present. Clicking empty map space clears the inspector. No memory, emotion, goal, or relationship section, and no call to the relationship route.
   - Logging: `[observer.inspector] opened entity_id=%s` at DEBUG. `[observer.inspector] measures_hidden entity_id=%s reason_code=measures_absent` at DEBUG. No measure values and no token.
   - Depends on tasks 9 and 12.
   - Files: `clients/godot-observer/scenes/ui/inspector.tscn`, `clients/godot-observer/scripts/ui/inspector.gd`.
 
-- [ ] Task 15: Add deterministic fixture playback for visual smoke.
+- [x] Task 15: Add deterministic fixture playback for visual smoke.
   - Deliverable: `clients/godot-observer/fixtures/smoke/reference_session.json` contains a frame on the reference locations and an ordered event list: an `AGENT_MOVED` from `loc-camp` to `loc-grove`, one sample of each other visual type that the protocol can express, and a final unknown type. A UI action `Play fixture` applies that file with the same reducer and views as the live session and does not open a socket. A GDScript test applies the file at high speed and asserts the moved agent's logical location is the destination and the unknown type is in the log model. Document the headless command. Default pytest does not require the Godot binary; the Python fixture test only checks that the known events in the smoke file still construct `ObserverEvent` and that the unknown type is outside `SEMANTIC_EVENT_TYPES`.
   - Logging: `[observer.fixture] playback_started event_count=%s` at INFO. `[observer.fixture] playback_finished last_tick=%s last_sequence=%s` at INFO.
   - Depends on tasks 12, 13, and 14.
   - Files: `clients/godot-observer/fixtures/smoke/reference_session.json`, `clients/godot-observer/scripts/net/fixture_player.gd`, `clients/godot-observer/tests/test_fixture_playback.gd`, `tests/unit/test_godot_observer_fixtures.py`.
 
-- [ ] Task 16: Document the client for researchers.
+- [x] Task 16: Document the client for researchers.
   - Deliverable: add `docs/godot-observer.md` and link it from `README.md` and `docs/observer.md`. State the Godot 4.7.2 Compatibility Web target, the `clients/godot-observer/` path, read-only routes, same-origin setup, where to put a local token without committing it, fixture playback, and the headless GDScript command. Replace the sentence that says Godot is not in this repository. Note that animation and camera motion do not change the run. Route this page through the docs checkpoint (`/aif-docs`).
   - Logging: no runtime logger. The page lists the log setting `palimpsest/log_level` and the fields that must stay out of logs (token, seed, utterance text).
   - Depends on tasks 6 and 15.

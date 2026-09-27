@@ -2,7 +2,7 @@
 
 [← Architecture](architecture.md) · [Research API](research-api.md) · [Back to README](../README.md)
 
-The observer shows a run to a human or a future Godot client. It does not decide what the run does. Godot is not in this repository. `simulation.WorldEngine` remains the only authority that commits a tick. Presentation coordinates come from a layout catalog and are not simulation coordinates.
+The observer shows a run to a human or to the read-only [Godot observer](godot-observer.md). It does not decide what the run does. The client lives in `clients/godot-observer/` and is not part of the Python package. `simulation.WorldEngine` remains the only authority that commits a tick. Presentation coordinates come from a layout catalog and are not simulation coordinates. Camera motion and playback speed do not change the run.
 
 Protocol version: `observer-protocol-v1`. Layout documents use `observer-layout-v1`. The default catalog id is `reference-v1`.
 

@@ -46,6 +46,8 @@ src/
                          # security.py (capability credentials), simulation_manager.py
                          # streaming.py (durable outbox catch-up + live handoff)
   infrastructure/        # settings (PALIMPSEST_*), logging, database adapters
+clients/godot-observer/  # read-only Godot 4.7 presentation client; not a Python package
+                         # HTTP GET + observer WebSocket only; no import from src/
 alembic/versions/        # migrations through 0013 (optional cognition-trace tables)
                          # V2 scaffolding: no 0013 — capability flags live in runner JSON only
 docs/                    # contributor docs (architecture, memory, social-communication, …)
@@ -83,6 +85,7 @@ tests/
 - ❌ Agents, cognition, memory, reconstruction protocols, and runtime composition must not import, receive, or dereference `WorldEvent`, event repositories, replay services, snapshots, or private world state (opaque `EventId` only)
 - ❌ Cognition must not feed analysis results back into live planning or memory formation
 - ❌ Experiment collectors, truth specifications, and objective snapshots must never flow into cognition, memory formation, prompts, or action selection
+- ❌ `src/` must not import or reference `clients/godot-observer`; the Godot client is presentation only and is not a Hatch package
 
 ## Layer/Module Communication
 

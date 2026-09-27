@@ -1,0 +1,553 @@
+{
+  "frame": {
+    "protocol_version": "observer-protocol-v1",
+    "cursor": {
+      "run_id": "run-reference",
+      "mode": "live",
+      "tick": 2,
+      "protocol_version": "observer-protocol-v1",
+      "sequence": null,
+      "after_tick": null,
+      "after_sequence": null
+    },
+    "world": {
+      "tick": 2,
+      "revision": 2,
+      "locations": [
+        {
+          "location_id": "loc-camp",
+          "name": "Camp",
+          "display_name": "Camp",
+          "neighbor_ids": [
+            "loc-spring",
+            "loc-grove",
+            "loc-ridge"
+          ],
+          "presentation": {
+            "screen_position": {
+              "x": 0.0,
+              "y": 0.0
+            },
+            "visual_bounds": {
+              "x": -40.0,
+              "y": -30.0,
+              "width": 80.0,
+              "height": 60.0
+            },
+            "theme": "camp",
+            "icon_ref": "icon-camp",
+            "background_ref": "bg-camp",
+            "connection_anchors": [
+              [
+                "loc-spring",
+                {
+                  "x": 0.0,
+                  "y": -28.0
+                }
+              ],
+              [
+                "loc-grove",
+                {
+                  "x": -28.0,
+                  "y": 12.0
+                }
+              ],
+              [
+                "loc-ridge",
+                {
+                  "x": 28.0,
+                  "y": 12.0
+                }
+              ]
+            ],
+            "slot_anchors": [
+              {
+                "x": -12.0,
+                "y": 0.0
+              },
+              {
+                "x": 0.0,
+                "y": 8.0
+              },
+              {
+                "x": 12.0,
+                "y": 0.0
+              }
+            ]
+          }
+        },
+        {
+          "location_id": "loc-spring",
+          "name": "Spring",
+          "display_name": "Spring",
+          "neighbor_ids": [
+            "loc-camp"
+          ],
+          "presentation": {
+            "screen_position": {
+              "x": 0.0,
+              "y": -80.0
+            },
+            "visual_bounds": {
+              "x": -24.0,
+              "y": -96.0,
+              "width": 48.0,
+              "height": 32.0
+            },
+            "theme": "spring",
+            "icon_ref": "icon-spring",
+            "background_ref": "bg-spring",
+            "connection_anchors": [
+              [
+                "loc-camp",
+                {
+                  "x": 0.0,
+                  "y": -64.0
+                }
+              ]
+            ],
+            "slot_anchors": [
+              {
+                "x": -8.0,
+                "y": -80.0
+              },
+              {
+                "x": 8.0,
+                "y": -80.0
+              }
+            ]
+          }
+        },
+        {
+          "location_id": "loc-grove",
+          "name": "Grove",
+          "display_name": "Grove",
+          "neighbor_ids": [
+            "loc-camp"
+          ],
+          "presentation": {
+            "screen_position": {
+              "x": -80.0,
+              "y": 40.0
+            },
+            "visual_bounds": {
+              "x": -104.0,
+              "y": 24.0,
+              "width": 48.0,
+              "height": 32.0
+            },
+            "theme": "grove",
+            "icon_ref": "icon-grove",
+            "background_ref": "bg-grove",
+            "connection_anchors": [
+              [
+                "loc-camp",
+                {
+                  "x": -56.0,
+                  "y": 40.0
+                }
+              ]
+            ],
+            "slot_anchors": [
+              {
+                "x": -88.0,
+                "y": 40.0
+              },
+              {
+                "x": -72.0,
+                "y": 40.0
+              }
+            ]
+          }
+        },
+        {
+          "location_id": "loc-ridge",
+          "name": "Ridge",
+          "display_name": "Ridge",
+          "neighbor_ids": [
+            "loc-camp"
+          ],
+          "presentation": {
+            "screen_position": {
+              "x": 80.0,
+              "y": 40.0
+            },
+            "visual_bounds": {
+              "x": 56.0,
+              "y": 24.0,
+              "width": 48.0,
+              "height": 32.0
+            },
+            "theme": "ridge",
+            "icon_ref": "icon-ridge",
+            "background_ref": "bg-ridge",
+            "connection_anchors": [
+              [
+                "loc-camp",
+                {
+                  "x": 56.0,
+                  "y": 40.0
+                }
+              ]
+            ],
+            "slot_anchors": [
+              {
+                "x": 72.0,
+                "y": 40.0
+              },
+              {
+                "x": 88.0,
+                "y": 40.0
+              }
+            ]
+          }
+        }
+      ],
+      "agents": [
+        {
+          "entity_id": "body-ada",
+          "location_id": "loc-camp",
+          "life_status": "alive",
+          "inventory_ids": [
+            "item-flask"
+          ],
+          "measures": {
+            "health": 90.0,
+            "hunger": 10.0,
+            "thirst": 12.0,
+            "fatigue": 4.0,
+            "temperature": 36.5
+          },
+          "agent_id": "ada",
+          "presentation_slot": {
+            "slot_index": 0,
+            "local_x": -12.0,
+            "local_y": 0.0
+          }
+        }
+      ],
+      "items": [
+        {
+          "item_id": "item-flask",
+          "name": "Flask",
+          "kind": "container",
+          "location_id": null,
+          "holder_id": "body-ada"
+        }
+      ],
+      "resources": [
+        {
+          "resource_id": "res-water",
+          "name": "Water",
+          "kind": "water",
+          "location_id": "loc-spring",
+          "quantity": 12.0,
+          "unit": "liters"
+        }
+      ],
+      "weather": [
+        {
+          "location_id": "loc-camp",
+          "condition": "clear"
+        }
+      ]
+    },
+    "events": []
+  },
+  "events": [
+    {
+      "protocol_version": "observer-protocol-v1",
+      "type": "AGENT_MOVED",
+      "domain_kind": "move",
+      "event_id": "evt-smoke-0",
+      "tick": 3,
+      "sequence": 0,
+      "actor_id": "body-ada",
+      "target_id": null,
+      "item_id": null,
+      "resource_id": null,
+      "origin_location_id": "loc-camp",
+      "destination_location_id": "loc-grove"
+    },
+    {
+      "protocol_version": "observer-protocol-v1",
+      "type": "AGENT_SEARCHED",
+      "domain_kind": "search",
+      "event_id": "evt-smoke-1",
+      "tick": 3,
+      "sequence": 1,
+      "actor_id": "body-ada",
+      "target_id": null,
+      "item_id": null,
+      "resource_id": "res-water",
+      "origin_location_id": "loc-grove",
+      "destination_location_id": null
+    },
+    {
+      "protocol_version": "observer-protocol-v1",
+      "type": "RESOURCE_REGENERATED",
+      "domain_kind": "resource_regenerated",
+      "event_id": "evt-smoke-2",
+      "tick": 3,
+      "sequence": 2,
+      "actor_id": null,
+      "target_id": null,
+      "item_id": null,
+      "resource_id": "res-water",
+      "origin_location_id": "loc-spring",
+      "destination_location_id": null
+    },
+    {
+      "protocol_version": "observer-protocol-v1",
+      "type": "AGENT_TOOK_ITEM",
+      "domain_kind": "take",
+      "event_id": "evt-smoke-3",
+      "tick": 3,
+      "sequence": 3,
+      "actor_id": "body-ada",
+      "target_id": null,
+      "item_id": "item-flask",
+      "resource_id": null,
+      "origin_location_id": "loc-camp",
+      "destination_location_id": null
+    },
+    {
+      "protocol_version": "observer-protocol-v1",
+      "type": "AGENT_DROPPED_ITEM",
+      "domain_kind": "drop",
+      "event_id": "evt-smoke-4",
+      "tick": 3,
+      "sequence": 4,
+      "actor_id": "body-ada",
+      "target_id": null,
+      "item_id": "item-flask",
+      "resource_id": null,
+      "origin_location_id": null,
+      "destination_location_id": "loc-grove"
+    },
+    {
+      "protocol_version": "observer-protocol-v1",
+      "type": "AGENT_GAVE_ITEM",
+      "domain_kind": "give",
+      "event_id": "evt-smoke-5",
+      "tick": 3,
+      "sequence": 5,
+      "actor_id": "body-ada",
+      "target_id": "body-bo",
+      "item_id": "item-flask",
+      "resource_id": null,
+      "origin_location_id": null,
+      "destination_location_id": null
+    },
+    {
+      "protocol_version": "observer-protocol-v1",
+      "type": "AGENT_ATE_ITEM",
+      "domain_kind": "eat",
+      "event_id": "evt-smoke-6",
+      "tick": 3,
+      "sequence": 6,
+      "actor_id": "body-ada",
+      "target_id": null,
+      "item_id": "item-ration",
+      "resource_id": null,
+      "origin_location_id": null,
+      "destination_location_id": null
+    },
+    {
+      "protocol_version": "observer-protocol-v1",
+      "type": "AGENT_DRANK",
+      "domain_kind": "drink",
+      "event_id": "evt-smoke-7",
+      "tick": 3,
+      "sequence": 7,
+      "actor_id": "body-ada",
+      "target_id": null,
+      "item_id": null,
+      "resource_id": "res-water",
+      "origin_location_id": "loc-spring",
+      "destination_location_id": null
+    },
+    {
+      "protocol_version": "observer-protocol-v1",
+      "type": "AGENT_SLEPT",
+      "domain_kind": "sleep",
+      "event_id": "evt-smoke-8",
+      "tick": 3,
+      "sequence": 8,
+      "actor_id": "body-ada",
+      "target_id": null,
+      "item_id": null,
+      "resource_id": null,
+      "origin_location_id": "loc-camp",
+      "destination_location_id": null
+    },
+    {
+      "protocol_version": "observer-protocol-v1",
+      "type": "AGENT_ATTACKED",
+      "domain_kind": "attack",
+      "event_id": "evt-smoke-9",
+      "tick": 3,
+      "sequence": 9,
+      "actor_id": "body-ada",
+      "target_id": "body-bo",
+      "item_id": null,
+      "resource_id": null,
+      "origin_location_id": null,
+      "destination_location_id": null
+    },
+    {
+      "protocol_version": "observer-protocol-v1",
+      "type": "AGENT_FLED",
+      "domain_kind": "flee",
+      "event_id": "evt-smoke-10",
+      "tick": 3,
+      "sequence": 10,
+      "actor_id": "body-ada",
+      "target_id": null,
+      "item_id": null,
+      "resource_id": null,
+      "origin_location_id": null,
+      "destination_location_id": null
+    },
+    {
+      "protocol_version": "observer-protocol-v1",
+      "type": "AGENT_HELPED",
+      "domain_kind": "help",
+      "event_id": "evt-smoke-11",
+      "tick": 3,
+      "sequence": 11,
+      "actor_id": "body-ada",
+      "target_id": "body-bo",
+      "item_id": null,
+      "resource_id": null,
+      "origin_location_id": null,
+      "destination_location_id": null
+    },
+    {
+      "protocol_version": "observer-protocol-v1",
+      "type": "AGENT_DIED",
+      "domain_kind": "died",
+      "event_id": "evt-smoke-12",
+      "tick": 3,
+      "sequence": 12,
+      "actor_id": null,
+      "target_id": "body-ada",
+      "item_id": null,
+      "resource_id": null,
+      "origin_location_id": "loc-grove",
+      "destination_location_id": null
+    },
+    {
+      "protocol_version": "observer-protocol-v1",
+      "type": "AGENT_TALKED",
+      "domain_kind": "talk",
+      "event_id": "evt-smoke-13",
+      "tick": 3,
+      "sequence": 13,
+      "actor_id": "body-ada",
+      "target_id": "body-bo",
+      "item_id": null,
+      "resource_id": null,
+      "origin_location_id": "loc-camp",
+      "destination_location_id": null
+    },
+    {
+      "protocol_version": "observer-protocol-v1",
+      "type": "AGENT_ASKED",
+      "domain_kind": "ask",
+      "event_id": "evt-smoke-14",
+      "tick": 3,
+      "sequence": 14,
+      "actor_id": "body-ada",
+      "target_id": "body-bo",
+      "item_id": null,
+      "resource_id": null,
+      "origin_location_id": "loc-camp",
+      "destination_location_id": null
+    },
+    {
+      "protocol_version": "observer-protocol-v1",
+      "type": "AGENT_TOLD",
+      "domain_kind": "tell",
+      "event_id": "evt-smoke-15",
+      "tick": 3,
+      "sequence": 15,
+      "actor_id": "body-ada",
+      "target_id": "body-bo",
+      "item_id": null,
+      "resource_id": null,
+      "origin_location_id": "loc-camp",
+      "destination_location_id": null
+    },
+    {
+      "protocol_version": "observer-protocol-v1",
+      "type": "WEATHER_CHANGED",
+      "domain_kind": "weather_changed",
+      "event_id": "evt-smoke-16",
+      "tick": 3,
+      "sequence": 16,
+      "actor_id": null,
+      "target_id": null,
+      "item_id": null,
+      "resource_id": null,
+      "origin_location_id": "loc-grove",
+      "destination_location_id": null
+    },
+    {
+      "protocol_version": "observer-protocol-v1",
+      "type": "AGENT_WAITED",
+      "domain_kind": "wait",
+      "event_id": "evt-smoke-17",
+      "tick": 3,
+      "sequence": 17,
+      "actor_id": "body-ada",
+      "target_id": null,
+      "item_id": null,
+      "resource_id": null,
+      "origin_location_id": "loc-camp",
+      "destination_location_id": null
+    },
+    {
+      "protocol_version": "observer-protocol-v1",
+      "type": "NEEDS_APPLIED",
+      "domain_kind": "needs_applied",
+      "event_id": "evt-smoke-18",
+      "tick": 3,
+      "sequence": 18,
+      "actor_id": null,
+      "target_id": "body-ada",
+      "item_id": null,
+      "resource_id": null,
+      "origin_location_id": null,
+      "destination_location_id": null
+    },
+    {
+      "protocol_version": "observer-protocol-v1",
+      "type": "EXPOSURE_APPLIED",
+      "domain_kind": "exposure_applied",
+      "event_id": "evt-smoke-19",
+      "tick": 3,
+      "sequence": 19,
+      "actor_id": null,
+      "target_id": "body-ada",
+      "item_id": null,
+      "resource_id": null,
+      "origin_location_id": "loc-ridge",
+      "destination_location_id": null
+    },
+    {
+      "protocol_version": "observer-protocol-v1",
+      "type": "RESOURCE_FOUND",
+      "domain_kind": "found",
+      "event_id": "evt-smoke-unknown",
+      "tick": 3,
+      "sequence": 20,
+      "actor_id": "body-ada",
+      "target_id": null,
+      "item_id": null,
+      "resource_id": null,
+      "origin_location_id": "loc-grove",
+      "destination_location_id": null
+    }
+  ]
+}

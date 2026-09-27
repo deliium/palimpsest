@@ -8,6 +8,7 @@ signal zoom_out_requested
 signal reset_requested
 signal focus_requested
 signal speed_changed(speed: float)
+signal play_fixture_requested
 
 
 func _ready() -> void:
@@ -23,7 +24,20 @@ func _ready() -> void:
 	$Controls/Speed2.pressed.connect(func() -> void: speed_changed.emit(2.0))
 	$Controls/Speed4.pressed.connect(func() -> void: speed_changed.emit(4.0))
 	$Controls/Speed8.pressed.connect(func() -> void: speed_changed.emit(8.0))
+	$Controls/PlayFixture.pressed.connect(func() -> void: play_fixture_requested.emit())
 
 
 func show_status(code: String, detail: String) -> void:
 	$StatusBar.show_state(code, detail)
+
+
+func append_event(event: Variant) -> void:
+	$EventLog.append_event(event)
+
+
+func show_inspector(snapshot: Dictionary) -> void:
+	$Inspector.show_agent(snapshot)
+
+
+func clear_inspector() -> void:
+	$Inspector.clear_agent()

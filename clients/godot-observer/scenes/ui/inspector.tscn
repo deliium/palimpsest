@@ -1,0 +1,21 @@
+[gd_scene load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/ui/inspector.gd" id="1_inspector"]
+
+[node name="Inspector" type="PanelContainer"]
+offset_left = 16.0
+offset_top = 112.0
+offset_right = 360.0
+offset_bottom = 360.0
+script = ExtResource("1_inspector")
+
+[node name="Margin" type="VBoxContainer" parent="."]
+layout_mode = 2
+
+[node name="Body" type="Label" parent="Margin"]
+layout_mode = 2
+text = ""
+
+[node name="Measures" type="Label" parent="Margin"]
+layout_mode = 2
+text = ""

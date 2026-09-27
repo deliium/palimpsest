@@ -17,6 +17,14 @@ var _reducer = ReducerScript.new()
 @onready var _effects: Node2D = $EffectsLayer
 @onready var _camera: Camera2D = $Camera2D
 
+signal inspect_requested(snapshot: Dictionary)
+signal inspect_cleared
+
+
+func _ready() -> void:
+	_agents.agent_selected.connect(_on_agent_selected)
+	_agents.selection_cleared.connect(func() -> void: inspect_cleared.emit())
+
 
 func show_world(world: Variant) -> void:
 	_world_state = world
@@ -64,6 +72,40 @@ func focus_selected() -> void:
 	if selected == null:
 		return
 	_camera.focus_on(selected)
+
+
+func _on_agent_selected(entity_id: String) -> void:
+	if _world_state == null:
+		return
+	var agent = null
+	for candidate in _world_state.agents:
+		if str(candidate.entity_id) == entity_id:
+			agent = candidate
+			break
+	if agent == null:
+		return
+	var location_name := entity_id
+	for location in _world_state.locations:
+		if str(location.location_id) == str(agent.location_id):
+			location_name = str(location.display_name) if str(location.display_name) != "" else str(location.name)
+			break
+	var inventory: Array[String] = []
+	for item_id in agent.inventory_ids:
+		var summary := str(item_id)
+		for item in _world_state.items:
+			if str(item.item_id) == str(item_id):
+				summary = "%s (%s)" % [item.name, item.kind]
+				break
+		inventory.append(summary)
+	inspect_requested.emit({
+		"entity_id": str(agent.entity_id),
+		"agent_id": "" if agent.agent_id == null else str(agent.agent_id),
+		"location_name": location_name,
+		"life_status": str(agent.life_status),
+		"inventory": inventory,
+		"latest_event": _reducer.activity_for(entity_id),
+		"measures": agent.measures,
+	})
 
 
 func _centroid() -> Vector2:
