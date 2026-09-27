@@ -11,6 +11,7 @@ from fastapi.responses import JSONResponse
 
 from api.errors import ApiError, api_error_handler
 from api.middleware import RequestIdMiddleware
+from api.observer_service import ObserverReadService
 from api.persistence_services import (
     PersistenceInspectionService,
     PersistenceMetricReadService,
@@ -19,6 +20,8 @@ from api.persistence_services import (
 from api.routes import (
     health_router,
     inspection_router,
+    observer_router,
+    observer_stream_router,
     replay_router,
     simulations_router,
     streams_router,
@@ -94,6 +97,12 @@ def _attach_persistence_services(app: FastAPI, session_factory: object) -> None:
             "[FIX] replay_api_service_attached",
             service="PersistenceReplayApiService",
         )
+    if getattr(app.state, "observer_service", None) is None:
+        app.state.observer_service = ObserverReadService(replay=replay)
+        _LOGGER.info(
+            "observer_service_attached",
+            service="ObserverReadService",
+        )
 
 
 async def _api_error_exception_handler(
@@ -117,10 +126,7 @@ async def _lifespan(app: FastAPI) -> AsyncIterator[None]:
         raise
     app.state.database = resources
     if hasattr(resources, "session_factory"):
-        if (
-            manager is None
-            and getattr(app.state, "attach_default_manager", True)
-        ):
+        if manager is None and getattr(app.state, "attach_default_manager", True):
             run_control = create_run_control_repository(
                 resources.session_factory  # type: ignore[arg-type]
             )
@@ -178,4 +184,6 @@ def create_app(
     app.include_router(inspection_router)
     app.include_router(replay_router)
     app.include_router(streams_router)
+    app.include_router(observer_router)
+    app.include_router(observer_stream_router)
     return app

@@ -15,6 +15,7 @@ from simulation.engine import WorldEngine
 from simulation.journal import PersistenceSerializationError, verify_commit_chain
 from simulation.lifecycle import EngineDiagnosticCode
 from simulation.models import DERIVATION_VERSION, RunId
+from simulation.observer_facts import ObjectiveScene, scene_from_facts
 from simulation.persistence import (
     ACCEPTED_EVENT_SCHEMA_VERSIONS,
     ACCEPTED_PERSISTENCE_CODEC_VERSIONS,
@@ -45,8 +46,11 @@ from simulation.service import PersistentSimulationService
 _LOGGER = logging.getLogger("simulation.replay")
 
 __all__ = [
+    "FoldedObjectiveHistory",
+    "ObserverHistoryError",
     "ReplayOutcome",
     "ReplayService",
+    "scene_at_tick",
 ]
 
 _DEFAULT_PAGE_SIZE = 100
@@ -95,6 +99,71 @@ class ReplayOutcome:
             raise ValueError("OK replay outcomes require an engine")
         if self.result.status is not ReplayStatus.OK and self.engine is not None:
             raise ValueError("failed replay outcomes must not include an engine")
+
+
+class ObserverHistoryError(RuntimeError):
+    """Replay could not produce a detached objective scene."""
+
+    def __init__(self, reason_code: str, result: ReplayResult) -> None:
+        self.reason_code = reason_code
+        self.result = result
+        super().__init__(reason_code)
+
+
+@dataclass(frozen=True, slots=True)
+class FoldedObjectiveHistory:
+    """Detached fold. Never retains a ``WorldEngine``."""
+
+    scene: ObjectiveScene
+    events: tuple[WorldEvent, ...]
+    result: ReplayResult
+    snapshot_location_ids: tuple[str, ...]
+    snapshot_body_locations: tuple[tuple[str, str], ...]
+
+    def __post_init__(self) -> None:
+        if type(self.scene) is not ObjectiveScene:
+            raise TypeError("FoldedObjectiveHistory.scene must be ObjectiveScene")
+        if type(self.result) is not ReplayResult:
+            raise TypeError("FoldedObjectiveHistory.result must be ReplayResult")
+
+
+async def scene_at_tick(
+    service: ReplayService,
+    run_id: RunId,
+    *,
+    target_tick: Tick | None,
+) -> FoldedObjectiveHistory:
+    """Replay to a cursor, copy facts, and drop the restored engine."""
+    if type(service) is not ReplayService:
+        raise TypeError("scene_at_tick requires ReplayService")
+    if type(run_id) is not RunId:
+        raise TypeError("run_id must be RunId")
+    if target_tick is not None and type(target_tick) is not Tick:
+        raise TypeError("target_tick must be Tick or None")
+    outcome = await service.replay(
+        ReplayRequest(run_id=run_id, target_tick=target_tick)
+    )
+    if outcome.result.status is not ReplayStatus.OK or outcome.engine is None:
+        raise ObserverHistoryError(outcome.result.status.value, outcome.result)
+    engine = outcome.engine
+    scene = scene_from_facts(engine.detached_objective_facts())
+    events = tuple(engine._snapshot.event_history)
+    raw_locations = tuple(
+        location.entity_id.value for location in engine._bootstrap.locations
+    )
+    raw_bodies = tuple(
+        (body.entity_id.value, body.location_id.value)
+        for body in engine._bootstrap.bodies
+    )
+    history = FoldedObjectiveHistory(
+        scene=scene,
+        events=events,
+        result=outcome.result,
+        snapshot_location_ids=raw_locations,
+        snapshot_body_locations=raw_bodies,
+    )
+    del engine
+    return history
 
 
 class ReplayService:

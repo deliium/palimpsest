@@ -6,6 +6,7 @@ from typing import cast
 
 from fastapi import Request
 
+from api.observer_service import ObserverReadService
 from api.services import InspectionService, MetricReadService, ReplayApiService
 from api.simulation_manager import SimulationManager
 from infrastructure.database import DatabaseResources
@@ -108,6 +109,13 @@ def get_metric_read_service(request: Request) -> MetricReadService:
     if service is None:
         return MetricReadService()
     return cast(MetricReadService, service)
+
+
+def get_observer_service(request: Request) -> ObserverReadService:
+    service = getattr(request.app.state, "observer_service", None)
+    if service is None:
+        return ObserverReadService(replay=get_replay_service(request))
+    return cast(ObserverReadService, service)
 
 
 def get_replay_api_service(request: Request) -> ReplayApiService:
