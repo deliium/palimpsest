@@ -7,3 +7,42 @@
 script = ExtResource("1_ui")
 
 [node name="StatusBar" parent="." instance=ExtResource("2_status")]
+
+[node name="Controls" type="HBoxContainer" parent="."]
+offset_left = 16.0
+offset_top = 64.0
+offset_right = 640.0
+offset_bottom = 100.0
+theme_override_constants/separation = 8
+
+[node name="ZoomIn" type="Button" parent="Controls"]
+layout_mode = 2
+text = "Zoom +"
+
+[node name="ZoomOut" type="Button" parent="Controls"]
+layout_mode = 2
+text = "Zoom -"
+
+[node name="Reset" type="Button" parent="Controls"]
+layout_mode = 2
+text = "Reset"
+
+[node name="Focus" type="Button" parent="Controls"]
+layout_mode = 2
+text = "Focus"
+
+[node name="Speed1" type="Button" parent="Controls"]
+layout_mode = 2
+text = "1x"
+
+[node name="Speed2" type="Button" parent="Controls"]
+layout_mode = 2
+text = "2x"
+
+[node name="Speed4" type="Button" parent="Controls"]
+layout_mode = 2
+text = "4x"
+
+[node name="Speed8" type="Button" parent="Controls"]
+layout_mode = 2
+text = "8x"

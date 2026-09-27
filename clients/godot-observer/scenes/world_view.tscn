@@ -1,6 +1,7 @@
-[gd_scene load_steps=7 format=3]
+[gd_scene load_steps=8 format=3]
 
 [ext_resource type="Script" path="res://scripts/view/world_view.gd" id="1_view"]
+[ext_resource type="Script" path="res://scripts/view/camera_rig.gd" id="7_camera"]
 [ext_resource type="PackedScene" path="res://scenes/layers/location_layer.tscn" id="2_locations"]
 [ext_resource type="PackedScene" path="res://scenes/layers/connection_layer.tscn" id="3_connections"]
 [ext_resource type="PackedScene" path="res://scenes/layers/object_layer.tscn" id="4_objects"]
@@ -11,6 +12,7 @@
 script = ExtResource("1_view")
 
 [node name="Camera2D" type="Camera2D" parent="."]
+script = ExtResource("7_camera")
 
 [node name="LocationLayer" parent="." instance=ExtResource("2_locations")]
 

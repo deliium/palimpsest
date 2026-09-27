@@ -175,25 +175,25 @@ Each checkpoint is a git commit on `main` created when those tasks are done. Do 
 
 ### Phase 5: Agents, Motion, and Effects
 
-- [ ] Task 9: Place agent tokens in deterministic slots.
+- [x] Task 9: Place agent tokens in deterministic slots.
   - Deliverable: one placeholder token per agent, keyed by `entity_id`. Color and shape are stable for `agent_id` when it is present, otherwise `entity_id`. The token shows that label, a dead marker when `life_status` is `dead`, and a short activity label for the latest logical event whose acting or target body is this `entity_id`. Tokens in one location use task 4 slot placement in layout space, without adding `screen_position` and without negating Y. Selecting a token stores the `entity_id` locally. Tokens sharing a location do not overlap when slot coordinates exist.
   - Logging: `[observer.agents] tokens_built agent_count=%s` at DEBUG. `[observer.agents] slot_fallback entity_id=%s slot_index=%s` at DEBUG when coordinates were missing. `[observer.agents] selected entity_id=%s` at DEBUG.
   - Depends on tasks 4 and 8.
   - Files: `clients/godot-observer/scripts/view/agent_layer.gd`, `clients/godot-observer/scripts/view/agent_token.gd`, `clients/godot-observer/scripts/presentation/identity.gd`, `clients/godot-observer/scenes/layers/agent_token.tscn`.
 
-- [ ] Task 10: Pan, zoom, and reset the camera.
+- [x] Task 10: Pan, zoom, and reset the camera.
   - Deliverable: drag on empty map space pans. Mouse wheel and on-screen buttons zoom within a fixed min and max. Reset returns to zoom 1 centered on the selected token, or on the map centroid when nothing is selected. A focus action recenters on the selected token without changing the simulation. `UILayer` also has a client-only playback-speed control that sets the multiplier consumed by the task 4 policy. Changing it does not call the simulation. Input stays in the UI and camera scripts.
   - Logging: `[observer.camera] view_changed zoom=%s reason=%s` at DEBUG for `pan`, `zoom`, `reset`, and `focus`.
   - Depends on task 7.
   - Files: `clients/godot-observer/scripts/view/camera_rig.gd`, `clients/godot-observer/scenes/world_view.tscn`, `clients/godot-observer/scripts/ui/ui_layer.gd`.
 
-- [ ] Task 11: Animate movement without delaying ticks.
+- [x] Task 11: Animate movement without delaying ticks.
   - Deliverable: `AGENT_MOVED` and `AGENT_FLED` (when a destination exists) select the token whose `entity_id` equals `actor_id`, set that agent's logical `location_id` immediately, recompute the destination slot in layout space, and tween the token along the already drawn connection. The tween uses task 4 playback policy, including the speed control from task 10 when that control already exists. A newer logical location replaces the tween target. The WebSocket and the tick-driven state refresh keep running during the tween. Tests on the playback and logical reducer show that applying two moves at high speed ends at the second location without a wait, and that a move does not also replay events embedded in a frame.
   - Logging: `[observer.motion] move_started entity_id=%s origin=%s destination=%s speed=%s` at DEBUG. `[observer.motion] move_snapped entity_id=%s reason_code=%s` at DEBUG. No coordinates at INFO.
   - Depends on tasks 6 and 9.
   - Files: `clients/godot-observer/scripts/protocol/reducer.gd`, `clients/godot-observer/scripts/view/effects_layer.gd`, `clients/godot-observer/tests/test_reducer.gd`.
 
-- [ ] Task 12: Play the remaining event visuals, including weather.
+- [x] Task 12: Play the remaining event visuals, including weather.
   - Deliverable: effects for every row in Semantic visuals. Select the token by `entity_id`. For `AGENT_DIED`, `NEEDS_APPLIED`, and `EXPOSURE_APPLIED`, that id is `target_id`. For the other types it is `actor_id`. `AGENT_DIED` switches that token to the dead marker even when `actor_id` is null. `WEATHER_CHANGED` pulses the origin zone; the condition tint updates only when the frame refresh arrives. Closed types that are activity-only still set that token's activity label. An unknown `type` does not change positions and does not raise. Applying the golden fixture set plus one extra unknown event leaves the last known logical location intact. Applying a frame that already contains those events in `events` does not move tokens a second time.
   - Logging: `[observer.effects] played type=%s event_id=%s` at DEBUG. `[observer.effects] unknown_event type=%s event_id=%s` at WARN. `[observer.effects] effect_skipped type=%s reason_code=playback_speed` at DEBUG.
   - Depends on task 11.
