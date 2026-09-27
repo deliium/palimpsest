@@ -22,7 +22,7 @@ static func build_websocket(
 	world_tick: int,
 ) -> Dictionary:
 	var query := {}
-	if _resume_allowed(after_tick, after_sequence):
+	if resume_allowed(after_tick, after_sequence):
 		if int(after_tick) >= world_tick:
 			ObserverLog.debug("net", "url_built route=%s" % path)
 			return {
@@ -86,7 +86,7 @@ static func _build(origin: String, path: String, query: Dictionary, method: Stri
 		if query[key] == null:
 			continue
 		params[name] = query[key]
-	if _resume_allowed(query.get("after_tick", null), query.get("after_sequence", null)):
+	if resume_allowed(query.get("after_tick", null), query.get("after_sequence", null)):
 		params["after_tick"] = int(query["after_tick"])
 		params["after_sequence"] = int(query["after_sequence"])
 	var url := _join(origin, path)
@@ -95,7 +95,7 @@ static func _build(origin: String, path: String, query: Dictionary, method: Stri
 	return {"ok": true, "method": "GET", "route": route, "url": url, "reason_code": ""}
 
 
-static func _resume_allowed(after_tick: Variant, after_sequence: Variant) -> bool:
+static func resume_allowed(after_tick: Variant, after_sequence: Variant) -> bool:
 	if after_tick == null or after_sequence == null:
 		return false
 	if int(after_sequence) < 0 or int(after_tick) < 0:

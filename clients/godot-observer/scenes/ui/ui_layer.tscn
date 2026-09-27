@@ -1,0 +1,9 @@
+[gd_scene load_steps=3 format=3]
+
+[ext_resource type="Script" path="res://scripts/ui/ui_layer.gd" id="1_ui"]
+[ext_resource type="PackedScene" path="res://scenes/ui/status_bar.tscn" id="2_status"]
+
+[node name="UILayer" type="CanvasLayer"]
+script = ExtResource("1_ui")
+
+[node name="StatusBar" parent="." instance=ExtResource("2_status")]

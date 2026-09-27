@@ -1,0 +1,28 @@
+[gd_scene load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/ui/status_bar.gd" id="1_status"]
+
+[node name="StatusBar" type="PanelContainer"]
+anchors_preset = 10
+anchor_right = 1.0
+offset_bottom = 56.0
+script = ExtResource("1_status")
+
+[node name="Row" type="HBoxContainer" parent="."]
+layout_mode = 2
+theme_override_constants/separation = 12
+
+[node name="RunId" type="LineEdit" parent="Row"]
+layout_mode = 2
+size_flags_horizontal = 3
+placeholder_text = "Run id"
+custom_minimum_size = Vector2(280, 0)
+
+[node name="Connect" type="Button" parent="Row"]
+layout_mode = 2
+text = "Connect"
+
+[node name="State" type="Label" parent="Row"]
+layout_mode = 2
+size_flags_horizontal = 3
+text = "Loading"

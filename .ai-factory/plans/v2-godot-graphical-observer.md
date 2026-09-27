@@ -146,13 +146,13 @@ Each checkpoint is a git commit on `main` created when those tasks are done. Do 
 
 ### Phase 3: Live Session
 
-- [ ] Task 5: Bootstrap over HTTP and show loading and error states.
+- [x] Task 5: Bootstrap over HTTP and show loading and error states.
   - Deliverable: `Session` loads manifest, then current state, then renders `world` before any tween. Run id comes from the UI or `palimpsest/run_id`. Layout stays the presentation already embedded in the frame (`reference-v1` on the current stream). `frame.events` is folded history: do not tween it and do not copy it into the live event log. Keep `cursor.after_tick` and `cursor.after_sequence` as the resume pair, including JSON null. Auth header is `x-palimpsest-token` from a gitignored local setting. Loading, `observer_origin_missing`, `unsupported_observer_protocol`, unauthorized, and not-found states are visible in the UI and do not throw. Failed bootstrap does not open the socket.
   - Logging: `[observer.session] bootstrap_started run_id=%s` at INFO. `[observer.session] bootstrap_ready tick=%s` at INFO. `[observer.session] bootstrap_failed reason_code=%s` at ERROR. `[observer.http] get_finished route=%s status=%s` at DEBUG. No token.
   - Depends on tasks 2 and 4.
   - Files: `clients/godot-observer/scripts/net/http_client.gd`, `clients/godot-observer/scripts/net/session.gd`, `clients/godot-observer/scenes/ui/status_bar.tscn`, `clients/godot-observer/scripts/ui/status_bar.gd`.
 
-- [ ] Task 6: Stream live events and reconnect from the cursor.
+- [x] Task 6: Stream live events and reconnect from the cursor.
   - Deliverable: after a successful bootstrap, open `/v1/simulations/{run_id}/observer/stream` using the task 4 resume rules. Set `WebSocketPeer.supported_protocols` to `palimpsest.v1` and `palimpsest.token.<token>`. Do not put the token in `handshake_headers`. Handle `hello`, `event`, `tick`, `heartbeat`, `rejected`, and `completion`. `hello` replaces logical `world` when its cursor is newer and does not enqueue `hello.frame.events`. `event` applies logical changes and queues a visual. `tick` starts a state GET that does not wait for tweens; the refresh replaces agents, items, resources, weather, and measures and does not enqueue that frame’s `events`. `rejected` shows `client_mutation_rejected` and sends nothing further. On socket loss, backoff, GET the event gap page by page until a short page, refresh state, then resume the socket at the last applied event. Omit both resume parameters when the cursor is null or `after_sequence < 0`. Close codes 4400, 4401, 4404, and 4409 map to visible errors. An unknown envelope `kind` is logged and ignored. A test resumes from a null cursor without query parameters, and from `(after_tick, after_sequence) = (world.tick, 0)` is rejected by the client before connect because `after_tick` must stay strictly below `world.tick`.
   - Logging: `[observer.stream] socket_opened run_id=%s after_tick=%s after_sequence=%s` at INFO. `[observer.stream] envelope kind=%s tick=%s sequence=%s` at DEBUG. `[observer.stream] socket_closed reason_code=%s` at WARN. `[observer.stream] gap_filled event_count=%s` at INFO. No token and no raw credential subprotocol.
   - Depends on task 5.
@@ -160,13 +160,13 @@ Each checkpoint is a git commit on `main` created when those tasks are done. Do 
 
 ### Phase 4: Location Map
 
-- [ ] Task 7: Split the view into scenes.
+- [x] Task 7: Split the view into scenes.
   - Deliverable: `Main` instances `WorldView` and `UILayer`. `WorldView` contains `LocationLayer`, `ConnectionLayer`, `AgentLayer`, `ObjectLayer`, `EffectsLayer`, and a `Camera2D`. Each layer has its own scene and script. `UILayer` instances the status bar from task 5 rather than a second status view. `main.gd` only wires the session to those layers. No layer script parses HTTP.
   - Logging: `[observer.view] scene_ready layer=%s` at DEBUG for each layer.
   - Depends on tasks 1 and 5.
   - Files: `clients/godot-observer/scenes/main.tscn`, `clients/godot-observer/scenes/world_view.tscn`, `clients/godot-observer/scenes/layers/location_layer.tscn`, `clients/godot-observer/scenes/layers/connection_layer.tscn`, `clients/godot-observer/scenes/layers/agent_layer.tscn`, `clients/godot-observer/scenes/layers/object_layer.tscn`, `clients/godot-observer/scenes/layers/effects_layer.tscn`, `clients/godot-observer/scenes/ui/ui_layer.tscn`, and the matching scripts under `clients/godot-observer/scripts/view/` and `clients/godot-observer/scripts/ui/ui_layer.gd`.
 
-- [ ] Task 8: Draw zones, names, connections, themes, and resources.
+- [x] Task 8: Draw zones, names, connections, themes, and resources.
   - Deliverable: each location is a zone from `visual_bounds` scaled by `pixels_per_unit`, drawn at that rectangle in layout space, with `display_name` (fallback `name`). Do not offset the rectangle by `screen_position` and do not negate Y. Theme colors come from a small GDScript catalog keyed by the presentation `theme` string (`camp`, `spring`, `grove`, `ridge`, and a default). Unknown themes use the default and log `theme_unknown`. Connection lines follow `neighbor_ids` only, using each `[neighbor_id, {x, y}]` anchor in layout space when present. Ground items and resources appear in `ObjectLayer`. Resource labels show name, quantity, and unit from the frame. Weather condition tints the matching zone from the frame. Rebuilding the map does not allocate simulation state.
   - Logging: `[observer.locations] map_built location_count=%s connection_count=%s` at DEBUG. `[observer.locations] layout_position_missing location_id=%s` at WARN. `[observer.locations] theme_unknown theme=%s` at DEBUG. Do not log coordinates at INFO.
   - Depends on tasks 4 and 7.

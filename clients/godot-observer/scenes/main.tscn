@@ -1,20 +1,16 @@
-[gd_scene load_steps=2 format=3]
+[gd_scene load_steps=5 format=3]
 
 [ext_resource type="Script" path="res://scripts/main.gd" id="1_main"]
+[ext_resource type="PackedScene" path="res://scenes/world_view.tscn" id="2_world"]
+[ext_resource type="PackedScene" path="res://scenes/ui/ui_layer.tscn" id="3_ui"]
+[ext_resource type="Script" path="res://scripts/net/session.gd" id="4_session"]
 
-[node name="Main" type="Control"]
-layout_mode = 3
-anchors_preset = 15
-anchor_right = 1.0
-anchor_bottom = 1.0
-grow_horizontal = 2
-grow_vertical = 2
+[node name="Main" type="Node"]
 script = ExtResource("1_main")
 
-[node name="LoadingLabel" type="Label" parent="."]
-layout_mode = 0
-offset_left = 24.0
-offset_top = 24.0
-offset_right = 480.0
-offset_bottom = 64.0
-text = "Loading"
+[node name="WorldView" parent="." instance=ExtResource("2_world")]
+
+[node name="UILayer" parent="." instance=ExtResource("3_ui")]
+
+[node name="Session" type="Node" parent="."]
+script = ExtResource("4_session")
