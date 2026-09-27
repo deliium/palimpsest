@@ -20,6 +20,21 @@ func show_world(world: Variant, zone_centers: Dictionary) -> void:
 	queue_redraw()
 
 
+func segment(origin_id: String, destination_id: String) -> Dictionary:
+	if not _index.has(origin_id) or not _index.has(destination_id):
+		return {"drawn": false, "from": Vector2.ZERO, "to": Vector2.ZERO}
+	var origin = _index[origin_id]
+	var destination = _index[destination_id]
+	if not _linked(origin, destination_id) and not _linked(destination, origin_id):
+		return {"drawn": false, "from": Vector2.ZERO, "to": Vector2.ZERO}
+	var centers: Dictionary = get_meta("zone_centers", {})
+	return {
+		"drawn": true,
+		"from": _anchor(origin, destination_id, centers),
+		"to": _anchor(destination, origin_id, centers),
+	}
+
+
 func _draw() -> void:
 	var centers: Dictionary = get_meta("zone_centers", {})
 	var drawn := {}
@@ -44,6 +59,13 @@ func _anchor(location: Variant, neighbor_id: String, centers: Dictionary) -> Vec
 			if str(pair[0]) == neighbor_id:
 				return Scale.to_pixels(float(pair[1].x), float(pair[1].y))
 	return centers.get(location.location_id, Vector2.ZERO)
+
+
+func _linked(location: Variant, neighbor_id: String) -> bool:
+	for candidate in location.neighbor_ids:
+		if str(candidate) == neighbor_id:
+			return true
+	return false
 
 
 func _pair_key(left: String, right: String) -> String:

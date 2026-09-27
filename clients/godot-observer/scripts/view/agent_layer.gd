@@ -5,6 +5,7 @@ const Slots := preload("res://scripts/protocol/slots.gd")
 const Scale := preload("res://scripts/presentation/scale.gd")
 const Identity := preload("res://scripts/presentation/identity.gd")
 const TokenScene := preload("res://scenes/layers/agent_token.tscn")
+const MotionPath := preload("res://scripts/view/motion_path.gd")
 
 signal agent_selected(entity_id: String)
 signal selection_cleared
@@ -80,7 +81,7 @@ func set_dead(entity_id: String) -> void:
 		_tokens[entity_id].set_dead(true)
 
 
-func move_token(entity_id: String, destination: Vector2, duration: float, skip: bool, speed: float, origin: String, dest_id: String) -> void:
+func move_token(entity_id: String, destination: Vector2, duration: float, skip: bool, speed: float, origin: String, dest_id: String, path: PackedVector2Array = PackedVector2Array()) -> void:
 	if not _tokens.has(entity_id):
 		return
 	var token = _tokens[entity_id]
@@ -96,15 +97,29 @@ func move_token(entity_id: String, destination: Vector2, duration: float, skip: 
 			"move_snapped entity_id=%s reason_code=playback_speed" % entity_id,
 		)
 		return
+	var points: PackedVector2Array = path
+	if points.size() < 2:
+		points = MotionPath.straight(token.position, destination)
+	var path_kind := "direct"
+	if points.size() > 2:
+		path_kind = "connection"
 	_motions += 1
 	ObserverLog.debug(
 		"motion",
 		"move_started entity_id=%s origin=%s destination=%s speed=%s" % [entity_id, origin, dest_id, speed],
 	)
-	var start: Vector2 = token.position
+	ObserverLog.debug("motion", "move_path entity_id=%s path_kind=%s" % [entity_id, path_kind])
+	token.set_meta("path", points)
 	var tween := create_tween()
 	token.set_meta("motion", tween)
-	tween.tween_method(func(weight: float) -> void: token.position = start.lerp(destination, weight), 0.0, 1.0, duration)
+	tween.tween_method(
+		func(weight: float) -> void:
+			var captured: PackedVector2Array = token.get_meta("path")
+			token.position = MotionPath.sample(captured, weight),
+		0.0,
+		1.0,
+		duration,
+	)
 	tween.finished.connect(func() -> void:
 		_motions = maxi(_motions - 1, 0)
 	)

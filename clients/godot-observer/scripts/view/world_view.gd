@@ -44,9 +44,11 @@ func play_event(event: Variant) -> void:
 		return
 	var pending: int = _agents.active_motions() + _effects.active_count()
 	var policy: Dictionary = Playback.policy(playback_speed, pending)
+	var ground: Vector2 = _item_ground(event)
 	var logical: Dictionary = _reducer.apply_event(_world_state, event)
 	var command: Dictionary = Router.route(event, policy, logical)
-	_effects.play(command, _agents, _locations)
+	command["ground"] = ground
+	_effects.play(command, _agents, _locations, _connections, _objects)
 
 
 func set_playback_speed(speed: float) -> void:
@@ -106,6 +108,34 @@ func _on_agent_selected(entity_id: String) -> void:
 		"latest_event": _reducer.activity_for(entity_id),
 		"measures": agent.measures,
 	})
+
+
+func _item_ground(event: Variant) -> Vector2:
+	var type_name := str(event.type)
+	if type_name != "AGENT_TOOK_ITEM" and type_name != "AGENT_DROPPED_ITEM":
+		return Vector2.ZERO
+	var location_id := ""
+	if type_name == "AGENT_TOOK_ITEM":
+		location_id = _item_location(event.item_id)
+		if location_id == "" and event.origin_location_id != null:
+			location_id = str(event.origin_location_id)
+	elif event.destination_location_id != null:
+		location_id = str(event.destination_location_id)
+	elif event.origin_location_id != null:
+		location_id = str(event.origin_location_id)
+	if location_id == "":
+		return Vector2.ZERO
+	var item_id := "" if event.item_id == null else str(event.item_id)
+	return _objects.ground_point(location_id, item_id)
+
+
+func _item_location(item_id: Variant) -> String:
+	if item_id == null or _world_state == null:
+		return ""
+	for item in _world_state.items:
+		if str(item.item_id) == str(item_id) and item.location_id != null:
+			return str(item.location_id)
+	return ""
 
 
 func _centroid() -> Vector2:

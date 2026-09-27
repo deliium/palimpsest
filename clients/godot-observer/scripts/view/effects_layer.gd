@@ -1,9 +1,12 @@
 extends Node2D
 
 const ObserverLog := preload("res://scripts/log.gd")
+const MotionPath := preload("res://scripts/view/motion_path.gd")
+const ItemTravel := preload("res://scripts/view/item_travel.gd")
 
 var _marks: Array = []
 var _bubbles: Array = []
+var _objects: Node = null
 
 
 func _ready() -> void:
@@ -14,11 +17,14 @@ func active_count() -> int:
 	return _marks.size() + _bubbles.size()
 
 
-func play(command: Dictionary, agents: Node, locations: Node) -> void:
+func play(command: Dictionary, agents: Node, locations: Node, connections: Node = null, objects: Node = null) -> void:
+	if objects != null:
+		_objects = objects
 	var action := str(command.get("action", ""))
 	var type_name := str(command.get("type", ""))
 	var event_id := str(command.get("event_id", ""))
 	var entity_id := str(command.get("entity_id", ""))
+	var skip := bool(command.get("skip", false))
 	if action == "unknown":
 		ObserverLog.warn("effects", "unknown_event type=%s event_id=%s" % [type_name, event_id])
 		return
@@ -28,16 +34,27 @@ func play(command: Dictionary, agents: Node, locations: Node) -> void:
 		agents.set_activity(entity_id, type_name)
 	if action == "move":
 		var destination: Vector2 = agents.slot_for(entity_id)
+		var path := PackedVector2Array()
+		if not skip:
+			path = _move_path(command, agents.token_position(entity_id), destination, connections)
 		agents.move_token(
 			entity_id,
 			destination,
 			float(command.get("duration", 0.6)),
-			bool(command.get("skip", false)),
+			skip,
 			float(command.get("speed", 1.0)),
 			str(command.get("origin", "")),
 			str(command.get("destination", "")),
+			path,
 		)
-	if bool(command.get("skip", false)) and action != "died":
+	if skip and action != "died":
+		if action == "item":
+			ObserverLog.debug(
+				"motion",
+				"item_snapped type=%s item_id=%s reason_code=playback_speed" % [type_name, str(command.get("item_id", ""))],
+			)
+			if _objects != null:
+				_objects.queue_redraw()
 		ObserverLog.debug("effects", "effect_skipped type=%s reason_code=playback_speed" % type_name)
 		return
 	ObserverLog.debug("effects", "played type=%s event_id=%s" % [type_name, event_id])
@@ -45,6 +62,9 @@ func play(command: Dictionary, agents: Node, locations: Node) -> void:
 		return
 	if action == "speech":
 		_show_bubble(agents, entity_id, "%s %s" % [type_name, str(command.get("other_id", ""))], float(command.get("speech_duration", 2.0)))
+		return
+	if action == "item":
+		_show_item(command, agents)
 		return
 	var point := _point_for(action, command, agents, locations)
 	_marks.append({
@@ -65,6 +85,8 @@ func _process(delta: float) -> void:
 		mark["age"] = float(mark["age"]) + delta
 		if float(mark["age"]) < float(mark["life"]):
 			kept.append(mark)
+		elif str(mark.get("action", "")) == "item" and _objects != null:
+			_objects.release_item(str(mark.get("item_id", "")))
 	_marks = kept
 	var bubbles: Array = []
 	for bubble in _bubbles:
@@ -91,7 +113,10 @@ func _draw() -> void:
 			"link":
 				draw_line(point, mark["target"], Color(0.45, 0.8, 0.55, alpha), 2.0)
 			"item":
-				draw_rect(Rect2(point - Vector2(4, 4), Vector2(8, 8)), color, true)
+				var origin_point: Vector2 = mark["from"]
+				var dest_point: Vector2 = mark["to"]
+				var traveled: Vector2 = origin_point.lerp(dest_point, clampf(float(mark["age"]) / float(mark["life"]), 0.0, 1.0))
+				draw_rect(Rect2(traveled - Vector2(5, 5), Vector2(10, 10)), Color(0.86, 0.72, 0.38, alpha), true)
 			_:
 				draw_circle(point, 4.0, color)
 	var font := ThemeDB.fallback_font
@@ -107,6 +132,37 @@ func _show_bubble(agents: Node, entity_id: String, text: String, life: float) ->
 		"point": agents.token_position(entity_id),
 		"text": text,
 		"life": life,
+		"age": 0.0,
+	})
+	queue_redraw()
+
+
+func _move_path(command: Dictionary, start: Vector2, finish: Vector2, connections: Node) -> PackedVector2Array:
+	if connections != null and connections.has_method("segment"):
+		var linked: Dictionary = connections.segment(str(command.get("origin", "")), str(command.get("destination", "")))
+		if bool(linked.get("drawn", false)):
+			return MotionPath.along_connection(start, linked["from"], linked["to"], finish)
+	return MotionPath.straight(start, finish)
+
+
+func _show_item(command: Dictionary, agents: Node) -> void:
+	var type_name := str(command.get("type", ""))
+	var item_id := str(command.get("item_id", ""))
+	var actor: Vector2 = agents.token_position(str(command.get("entity_id", "")))
+	var target: Vector2 = _target_point(command, agents)
+	var ground: Vector2 = command.get("ground", Vector2.ZERO)
+	var travel: Dictionary = ItemTravel.endpoints(type_name, actor, target, ground)
+	if _objects != null:
+		_objects.hold_item(item_id)
+	ObserverLog.debug("motion", "item_started type=%s item_id=%s" % [type_name, item_id])
+	_marks.append({
+		"action": "item",
+		"from": travel["from"],
+		"to": travel["to"],
+		"item_id": item_id,
+		"point": travel["from"],
+		"target": travel["to"],
+		"life": maxf(float(command.get("duration", 0.6)), 0.05),
 		"age": 0.0,
 	})
 	queue_redraw()

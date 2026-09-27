@@ -5,6 +5,7 @@ const ObserverLog := preload("res://scripts/log.gd")
 var _items: Array = []
 var _resources: Array = []
 var _centers := {}
+var _hidden := {}
 
 
 func _ready() -> void:
@@ -15,6 +16,35 @@ func show_world(world: Variant, zone_centers: Dictionary) -> void:
 	_items = world.items
 	_resources = world.resources
 	_centers = zone_centers
+	_hidden = {}
+	queue_redraw()
+
+
+func ground_point(location_id: String, item_id: String) -> Vector2:
+	var index := 0
+	var found := false
+	for item in _items:
+		if str(item.item_id) == item_id:
+			found = true
+			break
+		if item.location_id != null and str(item.location_id) == location_id:
+			index += 1
+	if not found:
+		for item in _items:
+			if item.location_id != null and str(item.location_id) == location_id:
+				index += 1
+	return _ground_origin(location_id, index)
+
+
+func hold_item(item_id: String) -> void:
+	if item_id == "":
+		return
+	_hidden[item_id] = true
+	queue_redraw()
+
+
+func release_item(item_id: String) -> void:
+	_hidden.erase(item_id)
 	queue_redraw()
 
 
@@ -36,7 +66,13 @@ func _draw() -> void:
 			continue
 		var seen: int = int(ground_index.get(item.location_id, 0))
 		ground_index[item.location_id] = seen + 1
-		var center: Vector2 = _centers.get(item.location_id, Vector2.ZERO)
-		var point := center + Vector2(24.0, 16.0 + seen * 18.0)
+		if _hidden.has(str(item.item_id)):
+			continue
+		var point := _ground_origin(str(item.location_id), seen)
 		draw_rect(Rect2(point - Vector2(5, 5), Vector2(10, 10)), Color(0.86, 0.72, 0.38), true)
 		draw_string(font, point + Vector2(10, 4), item.name, HORIZONTAL_ALIGNMENT_LEFT, -1, font_size, Color(0.96, 0.92, 0.82))
+
+
+func _ground_origin(location_id: String, index: int) -> Vector2:
+	var center: Vector2 = _centers.get(location_id, Vector2.ZERO)
+	return center + Vector2(24.0, 16.0 + float(index) * 18.0)
