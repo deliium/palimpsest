@@ -1,0 +1,14 @@
+{
+  "protocol_version": "observer-protocol-v1",
+  "type": "AGENT_GAVE_ITEM",
+  "domain_kind": "give",
+  "event_id": "evt-agent-gave-item",
+  "tick": 2,
+  "sequence": 0,
+  "actor_id": "body-ada",
+  "target_id": "body-bo",
+  "item_id": "item-flask",
+  "resource_id": null,
+  "origin_location_id": null,
+  "destination_location_id": null
+}

@@ -1,0 +1,14 @@
+{
+  "protocol_version": "observer-protocol-v1",
+  "type": "AGENT_WAITED",
+  "domain_kind": "wait",
+  "event_id": "evt-agent-waited",
+  "tick": 4,
+  "sequence": 2,
+  "actor_id": "body-ada",
+  "target_id": null,
+  "item_id": null,
+  "resource_id": null,
+  "origin_location_id": "loc-camp",
+  "destination_location_id": null
+}

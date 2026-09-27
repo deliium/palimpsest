@@ -1,0 +1,130 @@
+extends RefCounted
+
+const Protocol := preload("res://scripts/protocol/models.gd")
+
+
+func run() -> Array:
+	var failures: Array = []
+	_expect(failures, _every_semantic_fixture(), "semantic fixtures parse")
+	_expect(failures, _reference_frame(), "reference frame parses")
+	_expect(failures, _unknown_event(), "unknown event is structured")
+	_expect(failures, _rejects_foreign_protocol(), "foreign protocol is rejected")
+	_expect(failures, _rejects_catalog_anchor_dict(), "catalog anchor dict is rejected")
+	return failures
+
+
+func _every_semantic_fixture() -> String:
+	for type_name in Protocol.KNOWN_TYPES:
+		var path := "res://fixtures/protocol/events/%s.json" % type_name
+		var parsed = Protocol.parse_text("event", FileAccess.get_file_as_string(path))
+		if parsed == null or not parsed.ok:
+			return "event fixture failed %s" % type_name
+		if not parsed.value.known or parsed.value.type != type_name:
+			return "event fixture mismatch %s" % type_name
+		if parsed.value.protocol_version != Protocol.PROTOCOL_VERSION:
+			return "event protocol mismatch %s" % type_name
+	return ""
+
+
+func _reference_frame() -> String:
+	var text := FileAccess.get_file_as_string("res://fixtures/protocol/reference_frame.json")
+	var parsed = Protocol.parse_text("frame", text)
+	if not parsed.ok:
+		return "frame parse %s" % parsed.reason_code
+	var frame = parsed.value
+	if not frame.events_are_folded_history:
+		return "folded history flag"
+	if frame.cursor.after_tick != null or frame.cursor.after_sequence != null:
+		return "null resume cursor was filled"
+	if frame.cursor.sequence != null:
+		return "sequence was not null"
+	if frame.world.locations.size() != 4:
+		return "location count"
+	var expected := ["loc-camp", "loc-spring", "loc-grove", "loc-ridge"]
+	for index in expected.size():
+		if frame.world.locations[index].location_id != expected[index]:
+			return "location order"
+	var camp = frame.world.locations[0]
+	var anchors: Array = camp.presentation.connection_anchors
+	if anchors.is_empty() or anchors[0][0] != "loc-spring":
+		return "wire connection anchor"
+	if not is_equal_approx(float(anchors[0][1].y), -28.0):
+		return "anchor y was negated"
+	var spring = frame.world.locations[1]
+	if not is_equal_approx(spring.presentation.screen_position.y, -80.0):
+		return "spring y was negated"
+	if frame.events.is_empty():
+		return "folded events missing"
+	if frame.world.agents[0].location_id != frame.events[0].destination_location_id:
+		return "folded move was not already in world"
+	return ""
+
+
+func _unknown_event() -> String:
+	var parsed = Protocol.parse_event({
+		"type": "RESOURCE_FOUND",
+		"event_id": "evt-unknown",
+		"tick": 4,
+		"sequence": 0,
+	})
+	if not parsed.ok or parsed.value.known:
+		return "unknown event raised or was marked known"
+	if parsed.value.type != "RESOURCE_FOUND":
+		return "unknown type dropped"
+	return ""
+
+
+func _rejects_foreign_protocol() -> String:
+	var event = Protocol.parse_event({
+		"protocol_version": "observer-protocol-v0",
+		"type": "AGENT_MOVED",
+		"domain_kind": "move",
+		"event_id": "evt-bad",
+		"tick": 1,
+		"sequence": 0,
+	})
+	if event.ok or event.reason_code != "unsupported_observer_protocol":
+		return "known event protocol"
+	var frame = Protocol.parse_frame({"world": {}})
+	if frame.ok or frame.reason_code != "unsupported_observer_protocol":
+		return "missing frame protocol"
+	var manifest = Protocol.parse_manifest({"layout_id": "reference-v1"})
+	if manifest.ok or manifest.reason_code != "unsupported_observer_protocol":
+		return "missing manifest protocol"
+	return ""
+
+
+func _rejects_catalog_anchor_dict() -> String:
+	var parsed = Protocol.parse_frame({
+		"protocol_version": Protocol.PROTOCOL_VERSION,
+		"cursor": {
+			"run_id": "run-1",
+			"mode": "live",
+			"tick": 0,
+			"protocol_version": Protocol.PROTOCOL_VERSION,
+			"sequence": null,
+			"after_tick": null,
+			"after_sequence": null,
+		},
+		"world": {
+			"tick": 0,
+			"revision": 0,
+			"locations": [{
+				"location_id": "loc-camp",
+				"name": "Camp",
+				"display_name": "Camp",
+				"neighbor_ids": ["loc-spring"],
+				"presentation": {
+					"connection_anchors": {"loc-spring": {"x": 0.0, "y": -28.0}},
+				},
+			}],
+		},
+	})
+	if parsed.ok or parsed.reason_code != "invalid_connection_anchors":
+		return "dict anchors parsed as wire shape"
+	return ""
+
+
+func _expect(failures: Array, message: String, label: String) -> void:
+	if message != "":
+		failures.append("%s: %s" % [label, message])

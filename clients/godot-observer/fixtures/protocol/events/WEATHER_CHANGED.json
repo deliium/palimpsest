@@ -1,0 +1,14 @@
+{
+  "protocol_version": "observer-protocol-v1",
+  "type": "WEATHER_CHANGED",
+  "domain_kind": "weather_changed",
+  "event_id": "evt-weather-changed",
+  "tick": 4,
+  "sequence": 3,
+  "actor_id": null,
+  "target_id": null,
+  "item_id": null,
+  "resource_id": null,
+  "origin_location_id": "loc-grove",
+  "destination_location_id": null
+}

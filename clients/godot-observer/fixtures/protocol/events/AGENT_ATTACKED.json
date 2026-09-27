@@ -1,0 +1,14 @@
+{
+  "protocol_version": "observer-protocol-v1",
+  "type": "AGENT_ATTACKED",
+  "domain_kind": "attack",
+  "event_id": "evt-agent-attacked",
+  "tick": 4,
+  "sequence": 0,
+  "actor_id": "body-ada",
+  "target_id": "body-bo",
+  "item_id": null,
+  "resource_id": null,
+  "origin_location_id": null,
+  "destination_location_id": null
+}

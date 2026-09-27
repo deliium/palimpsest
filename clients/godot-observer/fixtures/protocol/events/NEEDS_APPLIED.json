@@ -1,0 +1,14 @@
+{
+  "protocol_version": "observer-protocol-v1",
+  "type": "NEEDS_APPLIED",
+  "domain_kind": "needs_applied",
+  "event_id": "evt-needs-applied",
+  "tick": 5,
+  "sequence": 1,
+  "actor_id": null,
+  "target_id": "body-ada",
+  "item_id": null,
+  "resource_id": null,
+  "origin_location_id": null,
+  "destination_location_id": null
+}

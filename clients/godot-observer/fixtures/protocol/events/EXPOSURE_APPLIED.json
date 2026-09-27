@@ -1,0 +1,14 @@
+{
+  "protocol_version": "observer-protocol-v1",
+  "type": "EXPOSURE_APPLIED",
+  "domain_kind": "exposure_applied",
+  "event_id": "evt-exposure-applied",
+  "tick": 5,
+  "sequence": 2,
+  "actor_id": null,
+  "target_id": "body-ada",
+  "item_id": null,
+  "resource_id": null,
+  "origin_location_id": "loc-ridge",
+  "destination_location_id": null
+}

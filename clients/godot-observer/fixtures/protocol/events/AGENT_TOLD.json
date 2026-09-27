@@ -1,0 +1,14 @@
+{
+  "protocol_version": "observer-protocol-v1",
+  "type": "AGENT_TOLD",
+  "domain_kind": "tell",
+  "event_id": "evt-agent-told",
+  "tick": 3,
+  "sequence": 2,
+  "actor_id": "body-ada",
+  "target_id": "body-bo",
+  "item_id": null,
+  "resource_id": null,
+  "origin_location_id": "loc-camp",
+  "destination_location_id": null
+}

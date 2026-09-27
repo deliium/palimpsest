@@ -1,0 +1,14 @@
+{
+  "protocol_version": "observer-protocol-v1",
+  "type": "AGENT_TALKED",
+  "domain_kind": "talk",
+  "event_id": "evt-agent-talked",
+  "tick": 3,
+  "sequence": 0,
+  "actor_id": "body-ada",
+  "target_id": "body-bo",
+  "item_id": null,
+  "resource_id": null,
+  "origin_location_id": "loc-camp",
+  "destination_location_id": null
+}

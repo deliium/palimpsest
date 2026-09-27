@@ -1,0 +1,14 @@
+{
+  "protocol_version": "observer-protocol-v1",
+  "type": "RESOURCE_REGENERATED",
+  "domain_kind": "resource_regenerated",
+  "event_id": "evt-resource-regenerated",
+  "tick": 5,
+  "sequence": 0,
+  "actor_id": null,
+  "target_id": null,
+  "item_id": null,
+  "resource_id": "res-water",
+  "origin_location_id": "loc-spring",
+  "destination_location_id": null
+}

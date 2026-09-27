@@ -216,3 +216,8 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+# Godot observer client (editor cache, web export, local token override)
+clients/godot-observer/.godot/
+clients/godot-observer/build/
+clients/godot-observer/override.cfg

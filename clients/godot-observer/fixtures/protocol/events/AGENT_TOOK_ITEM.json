@@ -1,0 +1,14 @@
+{
+  "protocol_version": "observer-protocol-v1",
+  "type": "AGENT_TOOK_ITEM",
+  "domain_kind": "take",
+  "event_id": "evt-agent-took-item",
+  "tick": 1,
+  "sequence": 2,
+  "actor_id": "body-ada",
+  "target_id": null,
+  "item_id": "item-flask",
+  "resource_id": null,
+  "origin_location_id": "loc-camp",
+  "destination_location_id": null
+}

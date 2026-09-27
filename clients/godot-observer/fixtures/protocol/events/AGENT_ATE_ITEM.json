@@ -1,0 +1,14 @@
+{
+  "protocol_version": "observer-protocol-v1",
+  "type": "AGENT_ATE_ITEM",
+  "domain_kind": "eat",
+  "event_id": "evt-agent-ate-item",
+  "tick": 2,
+  "sequence": 1,
+  "actor_id": "body-ada",
+  "target_id": null,
+  "item_id": "item-ration",
+  "resource_id": null,
+  "origin_location_id": null,
+  "destination_location_id": null
+}

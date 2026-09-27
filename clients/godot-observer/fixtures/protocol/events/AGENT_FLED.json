@@ -1,0 +1,14 @@
+{
+  "protocol_version": "observer-protocol-v1",
+  "type": "AGENT_FLED",
+  "domain_kind": "flee",
+  "event_id": "evt-agent-fled",
+  "tick": 4,
+  "sequence": 1,
+  "actor_id": "body-ada",
+  "target_id": null,
+  "item_id": null,
+  "resource_id": null,
+  "origin_location_id": "loc-grove",
+  "destination_location_id": "loc-camp"
+}

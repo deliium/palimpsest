@@ -1,0 +1,529 @@
+extends RefCounted
+class_name ObserverProtocol
+
+const ObserverLog := preload("res://scripts/log.gd")
+
+const PROTOCOL_VERSION := "observer-protocol-v1"
+
+const KNOWN_TYPES: Array[String] = [
+	"AGENT_MOVED",
+	"AGENT_SEARCHED",
+	"AGENT_TOOK_ITEM",
+	"AGENT_DROPPED_ITEM",
+	"AGENT_GAVE_ITEM",
+	"AGENT_ATE_ITEM",
+	"AGENT_DRANK",
+	"AGENT_SLEPT",
+	"AGENT_TALKED",
+	"AGENT_ASKED",
+	"AGENT_TOLD",
+	"AGENT_HELPED",
+	"AGENT_ATTACKED",
+	"AGENT_FLED",
+	"AGENT_WAITED",
+	"WEATHER_CHANGED",
+	"RESOURCE_REGENERATED",
+	"NEEDS_APPLIED",
+	"EXPOSURE_APPLIED",
+	"AGENT_DIED",
+]
+
+const BODY_FROM_TARGET: Array[String] = [
+	"AGENT_DIED",
+	"NEEDS_APPLIED",
+	"EXPOSURE_APPLIED",
+]
+
+
+class ParseResult:
+	extends RefCounted
+	var ok: bool = false
+	var reason_code: String = ""
+	var value: Variant = null
+
+	static func success(parsed: Variant, kind: String, id_count: int) -> ParseResult:
+		ObserverLog.debug("protocol", "parsed kind=%s id_count=%s" % [kind, id_count])
+		var result := ParseResult.new()
+		result.ok = true
+		result.value = parsed
+		return result
+
+	static func failure(reason: String) -> ParseResult:
+		ObserverLog.error("protocol", "parse_failed reason_code=%s" % reason)
+		var result := ParseResult.new()
+		result.ok = false
+		result.reason_code = reason
+		return result
+
+
+class PointModel:
+	extends RefCounted
+	var x: float = 0.0
+	var y: float = 0.0
+
+
+class BoundsModel:
+	extends RefCounted
+	var x: float = 0.0
+	var y: float = 0.0
+	var width: float = 0.0
+	var height: float = 0.0
+
+
+class SlotModel:
+	extends RefCounted
+	var slot_index: int = 0
+	var local_x: Variant = null
+	var local_y: Variant = null
+
+	func has_coordinates() -> bool:
+		return local_x != null and local_y != null
+
+
+class PresentationModel:
+	extends RefCounted
+	var screen_position: PointModel = null
+	var visual_bounds: BoundsModel = null
+	var theme: Variant = null
+	var icon_ref: Variant = null
+	var background_ref: Variant = null
+	var connection_anchors: Array = []
+	var slot_anchors: Array = []
+
+
+class LocationModel:
+	extends RefCounted
+	var location_id: String = ""
+	var name: String = ""
+	var display_name: String = ""
+	var neighbor_ids: Array[String] = []
+	var presentation: PresentationModel = null
+
+
+class MeasuresModel:
+	extends RefCounted
+	var health: float = 0.0
+	var hunger: float = 0.0
+	var thirst: float = 0.0
+	var fatigue: float = 0.0
+	var temperature: float = 0.0
+
+
+class AgentModel:
+	extends RefCounted
+	var entity_id: String = ""
+	var location_id: String = ""
+	var life_status: String = ""
+	var inventory_ids: Array[String] = []
+	var measures: MeasuresModel = null
+	var agent_id: Variant = null
+	var presentation_slot: SlotModel = null
+
+
+class ItemModel:
+	extends RefCounted
+	var item_id: String = ""
+	var name: String = ""
+	var kind: String = ""
+	var location_id: Variant = null
+	var holder_id: Variant = null
+
+
+class ResourceModel:
+	extends RefCounted
+	var resource_id: String = ""
+	var name: String = ""
+	var kind: String = ""
+	var location_id: String = ""
+	var quantity: float = 0.0
+	var unit: String = ""
+
+
+class WeatherModel:
+	extends RefCounted
+	var location_id: String = ""
+	var condition: String = ""
+
+
+class WorldModel:
+	extends RefCounted
+	var tick: int = 0
+	var revision: int = 0
+	var locations: Array = []
+	var agents: Array = []
+	var items: Array = []
+	var resources: Array = []
+	var weather: Array = []
+
+	func id_count() -> int:
+		return locations.size() + agents.size() + items.size() + resources.size()
+
+
+class CursorModel:
+	extends RefCounted
+	var run_id: String = ""
+	var mode: String = ""
+	var tick: int = 0
+	var protocol_version: String = ""
+	var sequence: Variant = null
+	var after_tick: Variant = null
+	var after_sequence: Variant = null
+
+
+class EventModel:
+	extends RefCounted
+	var known: bool = false
+	var protocol_version: String = ""
+	var type: String = ""
+	var domain_kind: String = ""
+	var event_id: String = ""
+	var tick: int = 0
+	var sequence: int = 0
+	var actor_id: Variant = null
+	var target_id: Variant = null
+	var item_id: Variant = null
+	var resource_id: Variant = null
+	var origin_location_id: Variant = null
+	var destination_location_id: Variant = null
+
+	func affected_entity_id() -> Variant:
+		if type in BODY_FROM_TARGET:
+			return target_id
+		return actor_id
+
+
+class FrameModel:
+	extends RefCounted
+	var protocol_version: String = ""
+	var cursor: CursorModel = null
+	var world: WorldModel = null
+	var events: Array = []
+	## Events already folded into world. They are not a second animation list.
+	var events_are_folded_history: bool = true
+
+
+class ManifestModel:
+	extends RefCounted
+	var protocol_version: String = ""
+	var layout_schema_version: String = ""
+	var layout_id: String = ""
+	var layout_hash: String = ""
+	var ordering: String = ""
+	var read_only: bool = false
+	var event_types: Array[String] = []
+	var event_schema_version: int = 0
+	var projector_version: String = ""
+
+
+class EventPageModel:
+	extends RefCounted
+	var count: int = 0
+	var events: Array = []
+	var limit: int = 0
+
+
+static func parse_manifest(data: Variant) -> ParseResult:
+	if typeof(data) != TYPE_DICTIONARY:
+		return ParseResult.failure("unsupported_observer_protocol")
+	if not _protocol_matches(data):
+		return ParseResult.failure("unsupported_observer_protocol")
+	var manifest := ManifestModel.new()
+	manifest.protocol_version = PROTOCOL_VERSION
+	manifest.layout_schema_version = str(data.get("layout_schema_version", ""))
+	manifest.layout_id = str(data.get("layout_id", ""))
+	manifest.layout_hash = str(data.get("layout_hash", ""))
+	manifest.ordering = str(data.get("ordering", ""))
+	manifest.read_only = bool(data.get("read_only", false))
+	manifest.event_schema_version = int(data.get("event_schema_version", 0))
+	manifest.projector_version = str(data.get("projector_version", ""))
+	var raw_types: Variant = data.get("event_types", [])
+	if raw_types is Array:
+		for item in raw_types:
+			manifest.event_types.append(str(item))
+	return ParseResult.success(manifest, "manifest", manifest.event_types.size())
+
+
+static func parse_frame(data: Variant) -> ParseResult:
+	if typeof(data) != TYPE_DICTIONARY:
+		return ParseResult.failure("unsupported_observer_protocol")
+	if not _protocol_matches(data):
+		return ParseResult.failure("unsupported_observer_protocol")
+	var cursor = _cursor(data.get("cursor", null))
+	if cursor is String:
+		return ParseResult.failure(cursor)
+	var world = _world(data.get("world", null))
+	if world is String:
+		return ParseResult.failure(world)
+	var frame := FrameModel.new()
+	frame.protocol_version = PROTOCOL_VERSION
+	frame.cursor = cursor
+	frame.world = world
+	frame.events_are_folded_history = true
+	var raw_events: Variant = data.get("events", null)
+	if raw_events is Array:
+		for item in raw_events:
+			var parsed := parse_event(item)
+			if not parsed.ok:
+				return parsed
+			frame.events.append(parsed.value)
+	return ParseResult.success(frame, "frame", 1)
+
+
+static func parse_event(data: Variant) -> ParseResult:
+	if typeof(data) != TYPE_DICTIONARY:
+		return ParseResult.failure("invalid_event")
+	var type_name := str(data.get("type", ""))
+	var known := KNOWN_TYPES.has(type_name)
+	if known and not _protocol_matches(data):
+		return ParseResult.failure("unsupported_observer_protocol")
+	var event := EventModel.new()
+	event.known = known
+	event.protocol_version = str(data.get("protocol_version", ""))
+	event.type = type_name
+	event.domain_kind = str(data.get("domain_kind", ""))
+	event.event_id = str(data.get("event_id", ""))
+	event.tick = int(data.get("tick", 0))
+	event.sequence = int(data.get("sequence", 0))
+	event.actor_id = _optional_text(data, "actor_id")
+	event.target_id = _optional_text(data, "target_id")
+	event.item_id = _optional_text(data, "item_id")
+	event.resource_id = _optional_text(data, "resource_id")
+	event.origin_location_id = _optional_text(data, "origin_location_id")
+	event.destination_location_id = _optional_text(data, "destination_location_id")
+	return ParseResult.success(event, "event", 1)
+
+
+static func parse_event_page(data: Variant) -> ParseResult:
+	if typeof(data) != TYPE_DICTIONARY:
+		return ParseResult.failure("invalid_event_page")
+	var page := EventPageModel.new()
+	page.count = int(data.get("count", 0))
+	page.limit = int(data.get("limit", 0))
+	var raw_events: Variant = data.get("events", [])
+	if raw_events is Array:
+		for item in raw_events:
+			var parsed := parse_event(item)
+			if not parsed.ok:
+				return parsed
+			page.events.append(parsed.value)
+	return ParseResult.success(page, "event_page", page.events.size())
+
+
+static func parse_text(kind: String, text: String) -> ParseResult:
+	var parsed: Variant = JSON.parse_string(text)
+	match kind:
+		"manifest":
+			return parse_manifest(parsed)
+		"frame":
+			return parse_frame(parsed)
+		"event":
+			return parse_event(parsed)
+		"event_page":
+			return parse_event_page(parsed)
+		_:
+			return ParseResult.failure("unsupported_observer_protocol")
+
+
+static func _protocol_matches(data: Dictionary) -> bool:
+	if not data.has("protocol_version") or data["protocol_version"] == null:
+		return false
+	return str(data["protocol_version"]) == PROTOCOL_VERSION
+
+
+static func _optional_text(data: Dictionary, key: String) -> Variant:
+	if not data.has(key) or data[key] == null:
+		return null
+	return str(data[key])
+
+
+static func _optional_number(data: Dictionary, key: String) -> Variant:
+	if not data.has(key) or data[key] == null:
+		return null
+	return float(data[key])
+
+
+static func _cursor(data: Variant) -> Variant:
+	if typeof(data) != TYPE_DICTIONARY:
+		return "unsupported_observer_protocol"
+	if not _protocol_matches(data):
+		return "unsupported_observer_protocol"
+	var cursor := CursorModel.new()
+	cursor.run_id = str(data.get("run_id", ""))
+	cursor.mode = str(data.get("mode", ""))
+	cursor.tick = int(data.get("tick", 0))
+	cursor.protocol_version = PROTOCOL_VERSION
+	cursor.sequence = _optional_number(data, "sequence")
+	if cursor.sequence != null and is_equal_approx(float(cursor.sequence), floor(float(cursor.sequence))):
+		cursor.sequence = int(cursor.sequence)
+	cursor.after_tick = _optional_number(data, "after_tick")
+	if cursor.after_tick != null:
+		cursor.after_tick = int(cursor.after_tick)
+	cursor.after_sequence = _optional_number(data, "after_sequence")
+	if cursor.after_sequence != null:
+		cursor.after_sequence = int(cursor.after_sequence)
+	return cursor
+
+
+static func _world(data: Variant) -> Variant:
+	if typeof(data) != TYPE_DICTIONARY:
+		return "invalid_world"
+	var world := WorldModel.new()
+	world.tick = int(data.get("tick", 0))
+	world.revision = int(data.get("revision", 0))
+	for item in _array(data, "locations"):
+		var location = _location(item)
+		if location is String:
+			return location
+		world.locations.append(location)
+	for item in _array(data, "agents"):
+		var agent = _agent(item)
+		if agent is String:
+			return agent
+		world.agents.append(agent)
+	for item in _array(data, "items"):
+		world.items.append(_item(item))
+	for item in _array(data, "resources"):
+		world.resources.append(_resource(item))
+	for item in _array(data, "weather"):
+		world.weather.append(_weather(item))
+	return world
+
+
+static func _array(data: Dictionary, key: String) -> Array:
+	var raw: Variant = data.get(key, [])
+	if raw is Array:
+		return raw
+	return []
+
+
+static func _location(data: Variant) -> Variant:
+	if typeof(data) != TYPE_DICTIONARY:
+		return "invalid_location"
+	var location := LocationModel.new()
+	location.location_id = str(data.get("location_id", ""))
+	location.name = str(data.get("name", ""))
+	location.display_name = str(data.get("display_name", ""))
+	for neighbor in _array(data, "neighbor_ids"):
+		location.neighbor_ids.append(str(neighbor))
+	var presentation = _presentation(data.get("presentation", null))
+	if presentation is String:
+		return presentation
+	location.presentation = presentation
+	return location
+
+
+static func _presentation(data: Variant) -> Variant:
+	if data == null:
+		return null
+	if typeof(data) != TYPE_DICTIONARY:
+		return "invalid_presentation"
+	var raw_anchors: Variant = data.get("connection_anchors", [])
+	if raw_anchors is Dictionary:
+		return "invalid_connection_anchors"
+	var presentation := PresentationModel.new()
+	presentation.screen_position = _point(data.get("screen_position", null))
+	presentation.visual_bounds = _bounds(data.get("visual_bounds", null))
+	presentation.theme = _optional_text(data, "theme")
+	presentation.icon_ref = _optional_text(data, "icon_ref")
+	presentation.background_ref = _optional_text(data, "background_ref")
+	if raw_anchors is Array:
+		for pair in raw_anchors:
+			if not pair is Array or pair.size() < 2:
+				return "invalid_connection_anchors"
+			var point := _point(pair[1])
+			if point == null:
+				return "invalid_connection_anchors"
+			presentation.connection_anchors.append([str(pair[0]), point])
+	elif raw_anchors != null:
+		return "invalid_connection_anchors"
+	for anchor in _array(data, "slot_anchors"):
+		var point := _point(anchor)
+		if point != null:
+			presentation.slot_anchors.append(point)
+	return presentation
+
+
+static func _point(data: Variant) -> PointModel:
+	if typeof(data) != TYPE_DICTIONARY:
+		return null
+	var point := PointModel.new()
+	point.x = float(data.get("x", 0.0))
+	point.y = float(data.get("y", 0.0))
+	return point
+
+
+static func _bounds(data: Variant) -> BoundsModel:
+	if typeof(data) != TYPE_DICTIONARY:
+		return null
+	var bounds := BoundsModel.new()
+	bounds.x = float(data.get("x", 0.0))
+	bounds.y = float(data.get("y", 0.0))
+	bounds.width = float(data.get("width", 0.0))
+	bounds.height = float(data.get("height", 0.0))
+	return bounds
+
+
+static func _agent(data: Variant) -> Variant:
+	if typeof(data) != TYPE_DICTIONARY:
+		return "invalid_agent"
+	var agent := AgentModel.new()
+	agent.entity_id = str(data.get("entity_id", ""))
+	agent.location_id = str(data.get("location_id", ""))
+	agent.life_status = str(data.get("life_status", ""))
+	agent.agent_id = _optional_text(data, "agent_id")
+	for item_id in _array(data, "inventory_ids"):
+		agent.inventory_ids.append(str(item_id))
+	var measures = _measures(data.get("measures", null))
+	if measures is String:
+		return measures
+	agent.measures = measures
+	var slot_raw: Variant = data.get("presentation_slot", null)
+	if slot_raw is Dictionary:
+		var slot := SlotModel.new()
+		slot.slot_index = int(slot_raw.get("slot_index", 0))
+		slot.local_x = _optional_number(slot_raw, "local_x")
+		slot.local_y = _optional_number(slot_raw, "local_y")
+		agent.presentation_slot = slot
+	return agent
+
+
+static func _measures(data: Variant) -> Variant:
+	if data == null:
+		return null
+	if typeof(data) != TYPE_DICTIONARY:
+		return "invalid_measures"
+	var measures := MeasuresModel.new()
+	measures.health = float(data.get("health", 0.0))
+	measures.hunger = float(data.get("hunger", 0.0))
+	measures.thirst = float(data.get("thirst", 0.0))
+	measures.fatigue = float(data.get("fatigue", 0.0))
+	measures.temperature = float(data.get("temperature", 0.0))
+	return measures
+
+
+static func _item(data: Dictionary) -> ItemModel:
+	var item := ItemModel.new()
+	item.item_id = str(data.get("item_id", ""))
+	item.name = str(data.get("name", ""))
+	item.kind = str(data.get("kind", ""))
+	item.location_id = _optional_text(data, "location_id")
+	item.holder_id = _optional_text(data, "holder_id")
+	return item
+
+
+static func _resource(data: Dictionary) -> ResourceModel:
+	var resource := ResourceModel.new()
+	resource.resource_id = str(data.get("resource_id", ""))
+	resource.name = str(data.get("name", ""))
+	resource.kind = str(data.get("kind", ""))
+	resource.location_id = str(data.get("location_id", ""))
+	resource.quantity = float(data.get("quantity", 0.0))
+	resource.unit = str(data.get("unit", ""))
+	return resource
+
+
+static func _weather(data: Dictionary) -> WeatherModel:
+	var weather := WeatherModel.new()
+	weather.location_id = str(data.get("location_id", ""))
+	weather.condition = str(data.get("condition", ""))
+	return weather
