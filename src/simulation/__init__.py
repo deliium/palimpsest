@@ -165,6 +165,13 @@ from simulation.models import (
     require_stochastic_identity,
     stochastic_identity_fingerprint,
 )
+from simulation.observer_facts import (
+    ObjectiveFacts,
+    ObjectiveFactsError,
+    ObjectiveScene,
+    scene_from_facts,
+    scene_from_snapshot,
+)
 from simulation.perception import (
     PerspectiveOwnershipCode,
     PerspectiveOwnershipError,
@@ -444,6 +451,9 @@ __all__ = [
     "MemoryMode",
     "MortalityMode",
     "NullCognitionTraceRepository",
+    "ObjectiveFacts",
+    "ObjectiveFactsError",
+    "ObjectiveScene",
     "ObservationBatch",
     "OpaqueCanonicalEnvelope",
     "PayloadHash",
@@ -627,6 +637,8 @@ __all__ = [
     "runner_result_fingerprint",
     "sample_stream",
     "scenario_fingerprint",
+    "scene_from_facts",
+    "scene_from_snapshot",
     "select_cognition_trace_repository",
     "stochastic_identity_fingerprint",
     "subjective_operation_id",

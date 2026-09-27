@@ -104,6 +104,7 @@ from world.observations import Observation, ObservationContext
 from world.values import WeatherCondition, clamp_unit_interval
 
 if TYPE_CHECKING:
+    from simulation.observer_facts import ObjectiveFacts
     from simulation.runner_models import DetachedObjectiveProjection
 
 _LOGGER = logging.getLogger("simulation.engine")
@@ -376,6 +377,42 @@ class WorldEngine:
     def last_tick_result(self) -> TickResult | None:
         """Most recent committed TickResult, if any."""
         return self._last_tick_result
+
+    def detached_objective_facts(self) -> ObjectiveFacts:
+        """Copied locations, bodies, items, resources, weather, and registrations.
+
+        Reads the folded world only. Does not commit a tick or replace state.
+        """
+        from simulation.observer_facts import ObjectiveFacts
+
+        state = self._snapshot.world.state
+        tick_before = self._snapshot.tick
+        revision_before = state.revision
+        facts = ObjectiveFacts(
+            run_id=self._run_id.value,
+            world_id=self.world_id.value,
+            tick=self.tick.value,
+            revision=self.revision.value,
+            locations=tuple(
+                sorted(state.locations.values(), key=lambda item: item.entity_id.value)
+            ),
+            bodies=self.detached_bodies(),
+            items=tuple(
+                sorted(state.items.values(), key=lambda item: item.entity_id.value)
+            ),
+            resources=tuple(
+                sorted(
+                    state.resources.values(), key=lambda item: item.entity_id.value
+                )
+            ),
+            weather=tuple(
+                sorted(state.weather.values(), key=lambda item: item.location_id.value)
+            ),
+            registrations=tuple(self._registrations),
+        )
+        if self._snapshot.tick != tick_before or state.revision != revision_before:
+            raise RuntimeError("detached_objective_facts mutated engine state")
+        return facts
 
     def detached_bodies(self) -> tuple[AgentBody, ...]:
         """Ordered immutable body copies for public objective projection."""
