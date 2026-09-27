@@ -31,6 +31,7 @@ PACKAGES = (
     "analysis",
     "infrastructure",
     "persistence",
+    "observer",
 )
 
 

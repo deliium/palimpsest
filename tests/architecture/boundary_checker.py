@@ -29,6 +29,7 @@ BOUNDED_PACKAGES: Final[frozenset[str]] = frozenset(
         "analysis",
         "infrastructure",
         "persistence",
+        "observer",
     }
 )
 
@@ -45,6 +46,7 @@ BOUNDED_LAYERS: Final[tuple[str, ...]] = (
     "analysis",
     "infrastructure",
     "persistence",
+    "observer",
 )
 
 ALLOWED_IMPORTS: Final[dict[str, frozenset[str]]] = {
@@ -61,10 +63,13 @@ ALLOWED_IMPORTS: Final[dict[str, frozenset[str]]] = {
         {"simulation", "analysis", "agents", "world", "memory"}
     ),
 
-    "api": frozenset({"simulation", "infrastructure", "persistence"}),
+    "api": frozenset({"simulation", "infrastructure", "persistence", "observer"}),
+    "observer": frozenset({"world", "simulation"}),
     "analysis": frozenset({"world", "simulation", "memory"}),
     "infrastructure": frozenset(),
-    "persistence": frozenset({"simulation", "infrastructure", "memory", "social", "experiments"}),
+    "persistence": frozenset(
+        {"simulation", "infrastructure", "memory", "social", "experiments"}
+    ),
 }
 
 PRIVATE_WORLD_MODULES: Final[frozenset[str]] = frozenset(
@@ -147,6 +152,7 @@ DOMAIN_NO_PYDANTIC: Final[frozenset[str]] = frozenset(
         "social",
         "simulation",
         "analysis",
+        "observer",
     }
 )
 PROVIDER_SDKS: Final[frozenset[str]] = frozenset(

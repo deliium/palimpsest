@@ -60,6 +60,7 @@ packages = [
     "analysis",
     "infrastructure",
     "persistence",
+    "observer",
 ]
 
 [tool.hatch.build.targets.wheel]
@@ -75,6 +76,7 @@ packages = [
     "src/analysis",
     "src/infrastructure",
     "src/persistence",
+    "src/observer",
 ]
 
 [tool.hatch.build.targets.sdist]
@@ -125,6 +127,7 @@ source_pkgs = [
     "analysis",
     "infrastructure",
     "persistence",
+    "observer",
 ]
 omit = [
     "*/tests/*",
@@ -194,6 +197,7 @@ root_packages = [
     "analysis",
     "infrastructure",
     "persistence",
+    "observer",
 ]
 include_external_packages = true
 exclude_type_checking_imports = false
@@ -213,6 +217,7 @@ forbidden_modules = [
     "analysis",
     "infrastructure",
     "persistence",
+    "observer",
 ]
 
 [[tool.importlinter.contracts]]
@@ -243,6 +248,7 @@ forbidden_modules = [
     "analysis",
     "infrastructure",
     "persistence",
+    "observer",
 ]
 
 [[tool.importlinter.contracts]]
@@ -260,6 +266,7 @@ forbidden_modules = [
     "api",
     "analysis",
     "persistence",
+    "observer",
 ]
 
 [[tool.importlinter.contracts]]
@@ -267,7 +274,13 @@ id = "simulation_does_not_import_api_or_analysis"
 name = "Simulation must not import api, analysis, infrastructure, or persistence"
 type = "forbidden"
 source_modules = ["simulation"]
-forbidden_modules = ["api", "analysis", "infrastructure", "persistence"]
+forbidden_modules = [
+    "api",
+    "analysis",
+    "infrastructure",
+    "persistence",
+    "observer",
+]
 
 [[tool.importlinter.contracts]]
 id = "persistence_adapter_boundaries"
@@ -280,6 +293,7 @@ forbidden_modules = [
     "llm",
     "api",
     "analysis",
+    "observer",
 ]
 # Domain types flow through public simulation/memory/social contracts; only direct imports are gated.
 # Intentional persistence -> social for subjective relationship persistence.
@@ -315,6 +329,7 @@ forbidden_modules = [
     "api",
     "infrastructure",
     "persistence",
+    "observer",
 ]
 # memory -> agents is transitive; gate direct agents imports only.
 allow_indirect_imports = true
@@ -364,6 +379,7 @@ source_modules = [
     "simulation",
     "analysis",
     "infrastructure",
+    "observer",
 ]
 forbidden_modules = ["fastapi", "starlette", "uvicorn"]
 
@@ -379,6 +395,7 @@ source_modules = [
     "llm",
     "simulation",
     "analysis",
+    "observer",
 ]
 forbidden_modules = ["sqlalchemy", "alembic", "asyncpg"]
 
@@ -393,6 +410,7 @@ source_modules = [
     "social",
     "simulation",
     "analysis",
+    "observer",
 ]
 forbidden_modules = ["pydantic", "pydantic_core"]
 # Cognition may import the provider-neutral llm facade (ARCHITECTURE.md).
@@ -445,28 +463,62 @@ id = "agents_must_not_import_orchestration"
 name = "Agents package may not import orchestration or infrastructure"
 type = "forbidden"
 source_modules = ["agents"]
-forbidden_modules = ["simulation", "api", "analysis", "infrastructure", "persistence", "experiments"]
+forbidden_modules = [
+    "simulation",
+    "api",
+    "analysis",
+    "infrastructure",
+    "persistence",
+    "experiments",
+    "observer",
+]
 
 [[tool.importlinter.contracts]]
 id = "memory_must_not_import_non_agent_layers"
 name = "Memory may not import non-agent domain layers"
 type = "forbidden"
 source_modules = ["memory"]
-forbidden_modules = ["llm", "simulation", "api", "analysis", "infrastructure", "persistence", "experiments"]
+forbidden_modules = [
+    "llm",
+    "simulation",
+    "api",
+    "analysis",
+    "infrastructure",
+    "persistence",
+    "experiments",
+    "observer",
+]
 
 [[tool.importlinter.contracts]]
 id = "social_must_not_import_non_agent_layers"
 name = "Social may not import non-agent domain layers"
 type = "forbidden"
 source_modules = ["social"]
-forbidden_modules = ["llm", "simulation", "api", "analysis", "infrastructure", "persistence", "experiments"]
+forbidden_modules = [
+    "llm",
+    "simulation",
+    "api",
+    "analysis",
+    "infrastructure",
+    "persistence",
+    "experiments",
+    "observer",
+]
 
 [[tool.importlinter.contracts]]
 id = "cognition_must_not_import_orchestration"
 name = "Cognition may not import orchestration or infrastructure"
 type = "forbidden"
 source_modules = ["agents.cognition"]
-forbidden_modules = ["simulation", "api", "analysis", "infrastructure", "persistence", "experiments"]
+forbidden_modules = [
+    "simulation",
+    "api",
+    "analysis",
+    "infrastructure",
+    "persistence",
+    "experiments",
+    "observer",
+]
 
 [[tool.importlinter.contracts]]
 id = "subjective_layers_forbid_objective_event_modules"
@@ -492,6 +544,7 @@ forbidden_modules = [
     "api",
     "infrastructure",
     "persistence",
+    "observer",
 ]
 # Evidence composition lives here: may import analysis + simulation + memory,
 # never concrete SQLAlchemy/persistence. Composition roots inject readers.
@@ -517,4 +570,31 @@ name = "Simulation does not import experiments"
 type = "forbidden"
 source_modules = ["simulation"]
 forbidden_modules = ["experiments"]
+
+[[tool.importlinter.contracts]]
+id = "observer_is_presentation_only"
+name = "Observer must not import frameworks, persistence, or live authority"
+type = "forbidden"
+source_modules = ["observer"]
+forbidden_modules = [
+    "fastapi",
+    "starlette",
+    "uvicorn",
+    "pydantic",
+    "pydantic_core",
+    "sqlalchemy",
+    "alembic",
+    "asyncpg",
+    "persistence",
+    "api",
+    "infrastructure",
+    "simulation.engine",
+    "simulation.randomness",
+    "world._state",
+    "world._operations",
+    "world._rules",
+    "world._replay",
+    "world._perception",
+    "world._physical",
+]
 
