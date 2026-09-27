@@ -84,3 +84,24 @@ def test_persistence_allowlist_includes_subjective_packages_only() -> None:
     assert "observer" not in ALLOWED_IMPORTS["persistence"]
     assert "observer" in ALLOWED_IMPORTS["api"]
     assert "observer" not in ALLOWED_IMPORTS["simulation"]
+
+
+def test_observer_does_not_commit_ticks() -> None:
+    needles = (".step(", ".commit(", ".submit(", "WorldEngine")
+    offenders = [
+        f"{path.name}:{needle}"
+        for path in sorted(OBSERVER.rglob("*.py"))
+        for needle in needles
+        if needle in path.read_text(encoding="utf-8")
+    ]
+    assert offenders == []
+
+
+def test_engine_and_world_do_not_mention_presentation() -> None:
+    engine = (SRC / "simulation" / "engine.py").read_text(encoding="utf-8")
+    assert "LocationVisualSpec" not in engine
+    assert "project_frame" not in engine
+    world_text = "\n".join(
+        path.read_text(encoding="utf-8") for path in (SRC / "world").rglob("*.py")
+    )
+    assert "LocationVisualSpec" not in world_text

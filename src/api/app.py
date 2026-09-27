@@ -46,6 +46,7 @@ from persistence import (
     create_stream_repository,
     create_tick_journal_repository,
 )
+from persistence.subjective_sqlalchemy import RelationshipDimensionReader
 from simulation.replay import ReplayService
 
 _LOGGER = get_logger("api.app")
@@ -98,7 +99,10 @@ def _attach_persistence_services(app: FastAPI, session_factory: object) -> None:
             service="PersistenceReplayApiService",
         )
     if getattr(app.state, "observer_service", None) is None:
-        app.state.observer_service = ObserverReadService(replay=replay)
+        app.state.observer_service = ObserverReadService(
+            replay=replay,
+            relationships=RelationshipDimensionReader(session_factory),  # type: ignore[arg-type]
+        )
         _LOGGER.info(
             "observer_service_attached",
             service="ObserverReadService",

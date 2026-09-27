@@ -164,6 +164,9 @@ async def test_observer_reads_and_rejects_bad_cursors(
                 params={"after_tick": 9, "after_sequence": 0},
             )
             posted = await client.post(f"/v1/simulations/{RUN_ID}/observer/state")
+            debug = await client.get(
+                f"/v1/simulations/{RUN_ID}/observer/agents/{BODY_ID}/relationships"
+            )
     assert manifest.status_code == 200
     assert manifest.json()["layout_id"] == "reference-v1"
     assert live.status_code == 200
@@ -191,5 +194,7 @@ async def test_observer_reads_and_rejects_bad_cursors(
     assert ahead.status_code == 409
     assert ahead.json()["code"] == "cursor_ahead_of_high_water"
     assert posted.status_code == 405
+    assert debug.status_code == 403
+    assert debug.json()["code"] == "debug_disabled"
     assert "route_observer_state" in caplog.text
     assert "route_observer_events" in caplog.text

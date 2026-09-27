@@ -15,7 +15,7 @@ import json
 import logging
 from typing import Any, Final
 
-from sqlalchemy import func, select
+from sqlalchemy import and_, func, select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
@@ -299,6 +299,76 @@ def _belief_claim_columns(claim: SemanticClaim) -> dict[str, Any]:
     }
 
 
+async def read_current_relationship_values(
+    session_factory: async_sessionmaker[AsyncSession],
+    *,
+    run_id: str,
+    owner_id: str,
+) -> tuple[tuple[str, str, str, float], ...]:
+    """Read current dimension values. Does not select evidence rows."""
+    statement = (
+        select(
+            DirectedRelationshipOrm.target_id,
+            RelationshipDimensionStateOrm.dimension,
+            RelationshipDimensionStateOrm.value,
+        )
+        .join(
+            RelationshipDimensionStateOrm,
+            and_(
+                RelationshipDimensionStateOrm.run_id == DirectedRelationshipOrm.run_id,
+                RelationshipDimensionStateOrm.source_id
+                == DirectedRelationshipOrm.source_id,
+                RelationshipDimensionStateOrm.relationship_id
+                == DirectedRelationshipOrm.relationship_id,
+                RelationshipDimensionStateOrm.revision_id
+                == DirectedRelationshipOrm.current_revision_id,
+            ),
+        )
+        .where(
+            DirectedRelationshipOrm.run_id == run_id,
+            DirectedRelationshipOrm.source_id == owner_id,
+        )
+        .order_by(
+            DirectedRelationshipOrm.target_id,
+            RelationshipDimensionStateOrm.dimension,
+        )
+    )
+    async with session_scope(session_factory) as session:
+        result = await session.execute(statement)
+        rows = tuple(
+            (owner_id, str(target_id), str(dimension), float(value))
+            for target_id, dimension, value in result.all()
+        )
+    _LOG.debug(
+        "relationship_dimension_values_read",
+        extra={
+            "operation": "read",
+            "run_id": run_id,
+            "owner_id": owner_id,
+            "row_count": len(rows),
+        },
+    )
+    return rows
+
+
+class RelationshipDimensionReader:
+    """Run-wide read port used by the observer API. Drops evidence items."""
+
+    __slots__ = ("_session_factory",)
+
+    def __init__(self, session_factory: async_sessionmaker[AsyncSession]) -> None:
+        self._session_factory = session_factory
+
+    async def read_relationship_dimension_values(
+        self, run_id: str, owner_id: str
+    ) -> tuple[tuple[str, str, str, float], ...]:
+        return await read_current_relationship_values(
+            self._session_factory,
+            run_id=run_id,
+            owner_id=owner_id,
+        )
+
+
 class SqlAlchemySubjectiveStateService:
     """Async PostgreSQL subjective commit service bound to one ``MemoryScope``."""
 
@@ -364,6 +434,18 @@ class SqlAlchemySubjectiveStateService:
     @property
     def revision(self) -> int:
         return self._revision
+
+    async def read_relationship_dimension_values(
+        self, run_id: str, owner_id: str
+    ) -> tuple[tuple[str, str, str, float], ...]:
+        """Current dimension code and value for one owner. Evidence stays in SQL."""
+        if run_id != self._scope.run_id.value or owner_id != self._scope.owner_id.value:
+            raise ValueError("relationship_scope_mismatch")
+        return await read_current_relationship_values(
+            self._session_factory,
+            run_id=run_id,
+            owner_id=owner_id,
+        )
 
     async def commit(self, batch: SubjectiveMutationBatch) -> SubjectiveApplyReceipt:
         if type(batch) is not SubjectiveMutationBatch:

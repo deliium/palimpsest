@@ -13,6 +13,7 @@ from api.observer_schemas import (
     ObserverEventPageOut,
     ObserverFrameOut,
     ObserverManifestOut,
+    ObserverRelationshipPageOut,
     ObserverRunOut,
     ObserverTickPageOut,
 )
@@ -29,6 +30,12 @@ _LOGGER = get_logger("api.routes.observer")
 def _inspect(request: Request, settings: Settings = Depends(get_settings)) -> None:
     require_http_capability(
         request, settings, capability=ApiCapability.OBJECTIVE_INSPECTION
+    )
+
+
+def _debug(request: Request, settings: Settings = Depends(get_settings)) -> None:
+    require_http_capability(
+        request, settings, capability=ApiCapability.SUBJECTIVE_DEBUG
     )
 
 
@@ -189,6 +196,33 @@ async def get_observer_run(
         run_id=run_id,
         duration_ms=round((time.perf_counter() - started) * 1000, 3),
         tick=result.tick,
+    )
+    del request
+    return result
+
+
+@router.get(
+    "/{run_id}/observer/agents/{agent_id}/relationships",
+    response_model=ObserverRelationshipPageOut,
+)
+async def get_observer_relationships(
+    run_id: str,
+    agent_id: str,
+    request: Request,
+    _: None = Depends(_debug),
+    service: ObserverReadService = Depends(get_observer_service),
+) -> ObserverRelationshipPageOut:
+    started = time.perf_counter()
+    result = await service.relationships(run_id, agent_id)
+    _LOGGER.info(
+        "route_observer_relationships",
+        route_template=(
+            "GET /v1/simulations/{run_id}/observer/agents/{agent_id}/relationships"
+        ),
+        status=200,
+        run_id=run_id,
+        duration_ms=round((time.perf_counter() - started) * 1000, 3),
+        count=result.count,
     )
     del request
     return result

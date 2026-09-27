@@ -3,13 +3,17 @@
 from __future__ import annotations
 
 import logging
+from typing import Protocol
 
 from api.errors import bad_request, conflict, not_found
 from api.observer_schemas import (
+    ObserverDimensionScoreOut,
     ObserverEventOut,
     ObserverEventPageOut,
     ObserverFrameOut,
     ObserverManifestOut,
+    ObserverRelationshipPageOut,
+    ObserverRelationshipSummaryOut,
     ObserverRunOut,
     ObserverTickPageOut,
     ObserverTickSummaryOut,
@@ -20,10 +24,12 @@ from observer.contracts import (
     ObserverFrame,
     ObserverManifest,
     ObserverPresentation,
+    ObserverRelationshipSummary,
     ScreenPoint,
     VisualBounds,
 )
 from observer.layout import ObserverLayoutCatalog, ObserverLayoutError, load_layout
+from observer.relationships import project_relationship_summaries
 from observer.sources import LiveObserverSource, ReplayObserverSource
 from observer.version import DEFAULT_LAYOUT_ID, OBSERVER_PROTOCOL_VERSION
 from simulation.clock import Tick
@@ -38,15 +44,26 @@ from simulation.replay import (
 _LOGGER = logging.getLogger("api.observer")
 
 
+class RelationshipScoreSource(Protocol):
+    async def read_relationship_dimension_values(
+        self, run_id: str, owner_id: str
+    ) -> tuple[tuple[str, str, str, float], ...]: ...
+
+
 class ObserverReadService:
     """Read-only observer queries. Route handlers must not advance a tick."""
 
-    __slots__ = ("_replay",)
+    __slots__ = ("_relationships", "_replay")
 
-    def __init__(self, replay: ReplayService) -> None:
+    def __init__(
+        self,
+        replay: ReplayService,
+        relationships: RelationshipScoreSource | None = None,
+    ) -> None:
         if type(replay) is not ReplayService:
             raise TypeError("ObserverReadService requires ReplayService")
         self._replay = replay
+        self._relationships = relationships
 
     @property
     def replay(self) -> ReplayService:
@@ -169,6 +186,22 @@ class ObserverReadService:
             tick=history.scene.tick,
             latest_tick=latest_tick,
             latest_sequence=latest_sequence,
+        )
+
+    async def relationships(
+        self, run_id: str, owner_id: str
+    ) -> ObserverRelationshipPageOut:
+        if self._relationships is None:
+            raise not_found(code="observer_relationships_unavailable", run_id=run_id)
+        rows = await self._relationships.read_relationship_dimension_values(
+            run_id, owner_id
+        )
+        summaries = project_relationship_summaries(rows)
+        return ObserverRelationshipPageOut(
+            run_id=run_id,
+            owner_id=owner_id,
+            count=len(summaries),
+            items=tuple(_relationship_out(item) for item in summaries),
         )
 
     async def _history(
@@ -385,4 +418,18 @@ def _manifest_out(manifest: ObserverManifest) -> ObserverManifestOut:
     )
 
 
-__all__ = ["ObserverReadService"]
+def _relationship_out(
+    summary: ObserverRelationshipSummary,
+) -> ObserverRelationshipSummaryOut:
+    return ObserverRelationshipSummaryOut(
+        owner_id=summary.owner_id,
+        target_id=summary.target_id,
+        protocol_version=summary.protocol_version,
+        dimensions=tuple(
+            ObserverDimensionScoreOut(dimension=item.dimension, value=item.value)
+            for item in summary.dimensions
+        ),
+    )
+
+
+__all__ = ["ObserverReadService", "RelationshipScoreSource"]

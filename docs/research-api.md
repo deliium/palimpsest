@@ -25,6 +25,7 @@ Secrets use strong `SecretStr` values. Query-string secrets are rejected. Prefer
 - Objective world, commits/events (keyset pagination), agent-visible observation
 - Metric catalog and immutable metric documents
 - Replay-to-tick endpoints (detached projection; never live `WorldEngine`)
+- Read-only observer manifest, state, events, ticks, run metadata, and live stream. See [Read-only observer](observer.md). Presentation coordinates are not simulation coordinates. Researcher relationship summaries stay on the debug capability.
 
 Stable problem-detail errors carry closed reason codes. Lifecycle conflicts return conflict responses without leaking configuration or evidence payloads.
 
