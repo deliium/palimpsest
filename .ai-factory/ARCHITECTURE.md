@@ -27,6 +27,8 @@ src/
   llm/                   # provider-neutral StructuredOutput / LLMResult (no vendor SDKs)
   llm/prompts/           # immutable versioned prompt package resources
   llm/providers/         # OpenAI-compatible HTTP adapter + pure codec
+  observer/              # read-only presentation: contracts, layouts, frames, semantic events
+                         # no tick authority; must not import the engine or private world
   simulation/            # WorldEngine, AgentRuntime, SimulationRunner, codecs, replay
                          # run_control.py (resume modes + finalization-command contracts)
                          # inspection.py (detached objective/agent-visible projection; no live observe)
@@ -40,7 +42,7 @@ src/
                          # evidence stages, claim truth, numerical policy, canonical codecs
                          # MemoryDriftAnalysisService + SocialTransmissionAnalysisService
   api/                   # FastAPI composition root: /health + /v1 simulation
-                         # control/inspection/replay + WebSocket stream
+                         # control/inspection/replay/observer + WebSocket stream
                          # security.py (capability credentials), simulation_manager.py
                          # streaming.py (durable outbox catch-up + live handoff)
   infrastructure/        # settings (PALIMPSEST_*), logging, database adapters
@@ -59,13 +61,14 @@ tests/
 - ✅ `llm` imports no domain, simulation, API, persistence, or infrastructure module
 - ✅ `llm` uses stdlib `logging` only (metadata allowlist; no `exc_info` / structlog / payload fields)
 - ✅ `agents.cognition` may import public contracts from agents/world/memory/social/llm
-- ✅ `simulation` may import domain public contracts; must not import `api`, `analysis`, `experiments`, `infrastructure`, or `persistence`
+- ✅ `simulation` may import domain public contracts; must not import `api`, `analysis`, `experiments`, `infrastructure`, `persistence`, or `observer`
+- ✅ `observer` may import public `world` and detached simulation facts; must not import `simulation.engine`, private `world._*` modules, `api`, `persistence`, or frameworks
 - ✅ Simulation owns immutable `EvidenceManifest` high-water marks (counts/hashes only — never truth payloads)
 - ✅ `experiments` may import public `simulation`, read-only `analysis`, and `memory` contracts; must not import `api`, `infrastructure`, or concrete SQLAlchemy/`persistence`
 - ✅ `experiments.composition` is the legal outer composition boundary that maps neutral detached persistence rows into analysis sources; persistence adapters implement `experiments.persistence` ports only
 - ✅ `persistence` may import public `simulation` contracts, public `memory` and `social` facades, `infrastructure`, and `experiments.persistence` ports only
 - ✅ `persistence` identity types for subjective/transmission mapping come from `memory.models` (re-exported `EntityId`) — never import `world` from persistence
-- ✅ `api` may import `simulation`, `infrastructure`, and `persistence`
+- ✅ `api` may import `simulation`, `infrastructure`, `persistence`, and `observer`
 - ✅ `analysis` is read-only; may import `world`, `simulation`, and `memory` contracts (not live infra/agents/persistence)
 - ✅ `infrastructure` imports no domain policy
 - ❌ `analysis` and `persistence` must not import each other
