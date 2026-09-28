@@ -109,7 +109,7 @@ The normal start pulls a published image. It does not install Godot, open the ed
 
 When the stack is ready the script prints `INFO startup_ready url=http://127.0.0.1:8080/`. Open that page. `PALIMPSEST_API_PUBLISH_PORT` changes the host port. `./run.sh --open` launches a browser when `xdg-open` or `open` exists.
 
-`./run.sh` does not build. If the release image is not published yet, the pull fails and the message points at `./run-dev.sh`. That contributor command builds `compose.dev.yaml` with the pinned editor inside the image export stage.
+`./run.sh` does not build. If the release image is not published yet, the pull fails and the message points at `./run-dev.sh`. That contributor command builds `compose.dev.yaml` with the pinned editor inside the image export stage. It exports `PALIMPSEST_REVISION` from `git rev-parse HEAD`, or `unknown` when git cannot provide a revision. The image stores that value, and `GET /version` reports it as `revision`.
 
 ```bash
 ./run-dev.sh

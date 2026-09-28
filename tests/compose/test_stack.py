@@ -103,6 +103,14 @@ def _free_port() -> int:
         return int(sock.getsockname()[1])
 
 
+def _database_image() -> str:
+    for line in COMPOSE_FILE.read_text(encoding="utf-8").splitlines():
+        stripped = line.strip()
+        if stripped.startswith("image: pgvector/"):
+            return stripped.split("image:", 1)[1].strip()
+    raise AssertionError("database image pin missing")
+
+
 @pytest.fixture
 def running_stack() -> Iterator[tuple[str, str, dict[str, str]]]:
     docker = _docker()
@@ -118,6 +126,9 @@ def running_stack() -> Iterator[tuple[str, str, dict[str, str]]]:
             env=env,
         )
         env["PALIMPSEST_API_IMAGE"] = image
+        database = _database_image()
+        _LOGGER.debug("[FIX] database_image_pull image=%s", database)
+        _run([docker, "pull", database], env=env)
         _LOGGER.debug("compose_up_wait project=%s", project)
         _run(
             [
