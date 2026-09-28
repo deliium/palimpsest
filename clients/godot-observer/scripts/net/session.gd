@@ -785,12 +785,20 @@ func _schedule_gap_fill() -> void:
 	if not accepts_gap():
 		ObserverLog.debug("stream", "gap_ignored reason_code=replay_cursor")
 		return
+	# Headless doubles are not in the tree, so they cannot wait on a scene timer.
+	if not is_inside_tree():
+		_open_gap()
+		return
 	if _reconnect_pending:
 		return
 	_reconnect_pending = true
 	await get_tree().create_timer(0.5).timeout
 	_reconnect_pending = false
-	if _failed:
+	_open_gap()
+
+
+func _open_gap() -> void:
+	if _failed or not accepts_gap():
 		return
 	if not Urls.resume_allowed(cursor_after_tick, cursor_after_sequence):
 		_open_socket()
