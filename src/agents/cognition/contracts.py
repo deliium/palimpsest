@@ -145,6 +145,7 @@ class Perspective:
     social_identity: OwnerSafeSocialIdentity | None = None
     emotional_state: object | None = None
     causal_world_model: object | None = None
+    theory_of_mind: object | None = None
 
     def __post_init__(self) -> None:
         if type(self.agent_id) is not AgentId:
@@ -266,6 +267,13 @@ class Perspective:
                 raise TypeError("Perspective.causal_world_model: invalid_type")
             if self.causal_world_model.owner_id != self.agent_id:
                 raise ValueError("Perspective.causal_world_model: ownership")
+        from agents.cognition.theory_of_mind import require_owner_theory
+
+        require_owner_theory(
+            self.theory_of_mind,
+            self.agent_id,
+            field_name="Perspective.theory_of_mind",
+        )
 
     def to_snapshot(self) -> SubjectiveSnapshot:
         """Freeze this perspective into a ``SubjectiveSnapshot``."""
@@ -287,6 +295,7 @@ class Perspective:
             social_identity=self.social_identity,
             emotional_state=emotion,  # type: ignore[arg-type]
             causal_world_model=self.causal_world_model,
+            theory_of_mind=self.theory_of_mind,
         )
 
     def __repr__(self) -> str:
@@ -401,6 +410,7 @@ class FutureImagination(Protocol):
         goal_board: GoalBoard | None = None,
         emotional_state: EmotionalStateEvaluation | None = None,
         causal_world_model: object | None = None,
+        theory_of_mind: object | None = None,
         prospective_policy: object | None = None,
         llm_provider: object | None = None,
     ) -> PossibleFutures: ...
@@ -418,6 +428,7 @@ class MotivationEvaluator(Protocol):
         goal_board: GoalBoard | None = None,
         emotional_state: EmotionalStateEvaluation | None = None,
         causal_world_model: object | None = None,
+        theory_of_mind: object | None = None,
     ) -> MotivationEvaluation: ...
 
 
@@ -433,6 +444,7 @@ class IntentionSelector(Protocol):
         emotional_state: EmotionalStateEvaluation | None = None,
         self_state: SelfModel | None = None,
         causal_world_model: object | None = None,
+        theory_of_mind: object | None = None,
         *,
         counterfactual_bias: Mapping[str, float] | None = None,
     ) -> SelectedIntention: ...
@@ -450,6 +462,7 @@ class Planner(Protocol):
         goal_board: GoalBoard | None = None,
         emotional_state: EmotionalStateEvaluation | None = None,
         causal_world_model: object | None = None,
+        theory_of_mind: object | None = None,
     ) -> ActionPlan: ...
 
 
@@ -466,6 +479,7 @@ class SocialMessagePolicy(Protocol):
         preferred_recipient_id: object | None = None,
         snapshot_memories: object = (),
         emotional_state: EmotionalStateEvaluation | None = None,
+        mind: object | None = None,
     ) -> object | None: ...
 
 

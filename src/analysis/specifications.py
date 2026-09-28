@@ -50,7 +50,7 @@ __all__ = [
 ]
 
 METRIC_CATALOG_VERSION: Final[str] = "metric-catalog-v1"
-METRIC_FAMILY_COUNT: Final[int] = 22
+METRIC_FAMILY_COUNT: Final[int] = 23
 
 # Align with existing memory-drift / transmission document versions.
 _ALGO_V1: Final[str] = "1"
@@ -97,6 +97,7 @@ class MetricFamilyId(StrEnum):
     REFLECTION = "reflection"
     IDENTITY_DYNAMICS = "identity_dynamics"
     CAUSAL_WORLD_MODEL = "causal_world_model"
+    THEORY_OF_MIND = "theory_of_mind"
     PROSPECTIVE_IMAGINATION = "prospective_imagination"
     COUNTERFACTUAL_REASONING = "counterfactual_reasoning"
 
@@ -983,6 +984,36 @@ def _spec_causal_world_model() -> MetricSpecification:
     )
 
 
+def _spec_theory_of_mind() -> MetricSpecification:
+    return _base(
+        family_id=MetricFamilyId.THEORY_OF_MIND,
+        evidence_inputs=frozenset({EvidenceStage.OBJECTIVE_EVENT_STATE}),
+        population="future_action_snapshots_per_run",
+        denominator="harvested future-action snapshots",
+        denominator_kind=DenominatorKind.OCCURRENCE,
+        cohort_window="run window covering committed events and audits",
+        deceased_policy="terminal agents stop new audits; existing audits remain",
+        zero_holding_policy="no snapshots -> availability=absent",
+        opportunity_vs_occurrence=(
+            "compares harvested future actions with later occurrences"
+        ),
+        self_edge_policy="not_applicable",
+        censoring_policy="no later occurrence stays unmatched; never invent a rate",
+        formulas={
+            "hypothesis_count": "count of harvested future-action snapshots",
+            "matched_count": "snapshots with a later occurrence by that subject",
+            "unmatched_count": "snapshots with no later occurrence",
+            "max_absolute_error": "largest absolute confidence error among matches",
+        },
+        value_keys=(
+            "hypothesis_count",
+            "matched_count",
+            "unmatched_count",
+            "max_absolute_error",
+        ),
+    )
+
+
 def _spec_prospective_imagination() -> MetricSpecification:
     return _base(
         family_id=MetricFamilyId.PROSPECTIVE_IMAGINATION,
@@ -1538,6 +1569,7 @@ _BUILDERS: Final[tuple[Callable[[], MetricSpecification], ...]] = (
     _spec_reflection,
     _spec_identity_dynamics,
     _spec_causal_world_model,
+    _spec_theory_of_mind,
     _spec_prospective_imagination,
     _spec_belief_accuracy,
     _spec_false_belief_persistence,

@@ -105,8 +105,11 @@ def test_extended_self_model_is_owned_and_default_documents_stay_v4() -> None:
     owned = V2CapabilityFlags(extended_self_model=True)
     assert owned.unimplemented_enabled_names() == ()
     assert owned.owned_enabled_names() == ("extended_self_model",)
-    unowned = V2CapabilityFlags(advanced_social_inference=True)
-    assert unowned.unimplemented_enabled_names() == ("advanced_social_inference",)
+    mind = V2CapabilityFlags(advanced_social_inference=True)
+    assert mind.unimplemented_enabled_names() == ()
+    assert mind.owned_enabled_names() == ("advanced_social_inference",)
+    unowned = V2CapabilityFlags(multi_hop_testimony_tracking=True)
+    assert unowned.unimplemented_enabled_names() == ("multi_hop_testimony_tracking",)
     base = _base()
     enabled = SimulationRunnerConfig(
         seed=base.seed,

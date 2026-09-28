@@ -426,6 +426,7 @@ class AgentRuntime:
         "_memory_reader",
         "_memory_service",
         "_memory_writer",
+        "_mind_audits",
         "_offline_consolidation_audits",
         "_pending",
         "_processed_invocations",
@@ -440,6 +441,7 @@ class AgentRuntime:
         "_semantic_belief_reader",
         "_status",
         "_subjective_state",
+        "_theory_of_mind",
         "_translator",
         "_world_model_audits",
     )
@@ -500,6 +502,7 @@ class AgentRuntime:
         self._offline_consolidation_audits: list[object] = []
         self._reflection_audits: list[object] = []
         self._world_model_audits: list[object] = []
+        self._mind_audits: list[object] = []
         self._prospective_audits: list[object] = []
         self._counterfactual_audits: list[object] = []
         self._applied_identity_operation_ids: set[str] = set()
@@ -530,6 +533,7 @@ class AgentRuntime:
         self._internal_state = InternalAgentState(owner_id=agent.agent_id)
         self._emotional_state: AgentEmotionalState | None = None
         self._causal_world_model: object | None = None
+        self._theory_of_mind: object | None = None
         self._identity_cursor: object | None = None
         self._reflection_cursor: object | None = None
         self._decision_journal: tuple[object, ...] | None = None
@@ -629,6 +633,38 @@ class AgentRuntime:
         self._world_model_audits.append(build_world_model_audit(model))
         _LOG.debug(
             "world_model_committed owner_id=%s tick=%s world_model_present=%s",
+            owner,
+            tick,
+            True,
+        )
+
+    def _commit_theory_of_mind(self, model: object | None, tick: int) -> None:
+        """Store the tentative mind model after a successful resolve."""
+        owner = self._agent.agent_id.value
+        if model is None:
+            _LOG.debug(
+                "theory_of_mind_commit_skipped owner_id=%s tick=%s "
+                "theory_of_mind_present=%s",
+                owner,
+                tick,
+                False,
+            )
+            return
+        from agents.cognition.theory_of_mind import TheoryOfMind
+
+        if type(model) is not TheoryOfMind:
+            raise TypeError("theory_of_mind must be TheoryOfMind")
+        if model.owner_id != self._agent.agent_id:
+            raise AgentRuntimeError(
+                AgentRuntimeErrorCode.OWNERSHIP,
+                agent_id=owner,
+            )
+        self._theory_of_mind = model
+        from agents.cognition.theory_of_mind import build_mind_audit
+
+        self._mind_audits.append(build_mind_audit(model))
+        _LOG.debug(
+            "theory_of_mind_committed owner_id=%s tick=%s theory_of_mind_present=%s",
             owner,
             tick,
             True,
@@ -1076,6 +1112,7 @@ class AgentRuntime:
                 drives=self._agent.drives,
                 emotional_state=self._emotional_state,
                 causal_world_model=self._causal_world_model,
+                theory_of_mind=self._theory_of_mind,
             )
         except TypeError:
             raise
@@ -1483,6 +1520,7 @@ class AgentRuntime:
             _emotional_state_from_result(pending.loop_result)
         )
         self._commit_world_model(pending.loop_result.causal_world_model, pending.tick)
+        self._commit_theory_of_mind(pending.loop_result.theory_of_mind, pending.tick)
         self._commit_prospective_audit(pending.tick)
         self._commit_counterfactual_audit(pending.tick)
         self._apply_reflection_journal(pending.tick)
@@ -1873,6 +1911,7 @@ class AgentRuntime:
         self._last_observation_key = checkpoint.last_observation_key
         self._emotional_state = checkpoint.emotional_state
         self._causal_world_model = checkpoint.causal_world_model
+        self._theory_of_mind = checkpoint.theory_of_mind
         self._reflection_cursor = checkpoint.reflection_cursor
         self._decision_journal = checkpoint.decision_journal
         self._remembered_decisions = checkpoint.remembered_decisions
@@ -1926,6 +1965,7 @@ class AgentRuntime:
             goals=self._agent.goals,
             emotional_state=self._emotional_state,
             causal_world_model=self._causal_world_model,
+            theory_of_mind=self._theory_of_mind,
             reflection_cursor=self._reflection_cursor,
             decision_journal=self._decision_journal,
             remembered_decisions=self._remembered_decisions,
@@ -2512,6 +2552,9 @@ class AgentRuntime:
 
     def export_world_model_audits(self) -> tuple[object, ...]:
         return tuple(self._world_model_audits)
+
+    def export_mind_audits(self) -> tuple[object, ...]:
+        return tuple(self._mind_audits)
 
     def export_prospective_audits(self) -> tuple[object, ...]:
         return tuple(self._prospective_audits)

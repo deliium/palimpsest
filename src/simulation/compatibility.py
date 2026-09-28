@@ -187,9 +187,9 @@ _MATRIX: dict[str, CompatibilityEntry] = {
         v1_fixture_impact=(
             "Golden runner-config-v1/v2/v3/v4 fixtures must decode; "
             "catalog A-E fingerprints stay on v4; "
-            "extended_self_model, predictive_world_model, and "
-            "short_term_emotional_state are owned default-off flags on existing "
-            "keys and are off the V1 gate"
+            "extended_self_model, predictive_world_model, "
+            "short_term_emotional_state, and advanced_social_inference are "
+            "owned default-off flags on existing keys and are off the V1 gate"
         ),
     ),
     "runner_result": CompatibilityEntry(

@@ -118,6 +118,7 @@ class MultiCriteriaIntentionSelector:
         emotional_state: EmotionalStateEvaluation | None = None,
         self_state: SelfModel | None = None,
         causal_world_model: object | None = None,
+        theory_of_mind: object | None = None,
         *,
         counterfactual_bias: Mapping[str, float] | None = None,
     ) -> SelectedIntention:
@@ -181,6 +182,54 @@ class MultiCriteriaIntentionSelector:
                 causal_world_model,
                 owner_id=owner,
                 tick=tick,
+            )
+
+        from agents.cognition.theory_of_mind import mind_direction_deltas
+
+        observation = loop_input.observation
+        candidates = tuple(
+            (
+                item.future_id,
+                futures_by_id[item.future_id].direction.value,
+                futures_by_id[item.future_id].target_entity_id,
+            )
+            for item in surviving
+            if item.future_id in futures_by_id
+        )
+        deltas, mind_status, mind_direction, mind_confidence, mind_id, mind_aspect = (
+            mind_direction_deltas(
+                theory_of_mind,
+                candidates=candidates,
+                visible_destinations=frozenset(
+                    item.destination_id.value for item in observation.exits
+                ),
+                visible_entities=frozenset(
+                    body.entity_id.value for body in observation.visible_bodies
+                ),
+            )
+        )
+        if mind_status == "skipped" or not deltas:
+            _LOG.debug(
+                "theory_of_mind_deliberation_bias owner_id=%s tick=%s status=%s",
+                owner.value,
+                tick,
+                "skipped" if mind_status == "skipped" else "none",
+            )
+        else:
+            if world_bias is None:
+                world_bias = {}
+            for future_id, delta in deltas:
+                world_bias[future_id] = world_bias.get(future_id, 0.0) + delta
+            _LOG.debug(
+                "theory_of_mind_deliberation_bias owner_id=%s tick=%s status=%s "
+                "hypothesis_id=%s aspect=%s confidence=%s direction=%s",
+                owner.value,
+                tick,
+                mind_status,
+                mind_id,
+                mind_aspect,
+                mind_confidence,
+                mind_direction,
             )
 
         focus_supported = _prefer_goal_focus_support(
@@ -319,6 +368,7 @@ class CommandPlanner:
         goal_board: GoalBoard | None = None,
         emotional_state: EmotionalStateEvaluation | None = None,
         causal_world_model: object | None = None,
+        theory_of_mind: object | None = None,
     ) -> ActionPlan:
         _ = goal_board
         owner = loop_input.agent_id
@@ -350,6 +400,7 @@ class CommandPlanner:
                 social_messages=self._social_messages,
                 snapshot=loop_input.snapshot,
                 emotional_state=emotional_state,
+                theory_of_mind=theory_of_mind,
             )
             if compiled is None:
                 used_fallback = True
@@ -827,10 +878,7 @@ def _world_model_direction_bias(
             atoms=atoms,
             minimum_confidence=threshold,
         )
-        if (
-            help_match is not None
-            and future.direction is ActionDirection.COMMUNICATE
-        ):
+        if help_match is not None and future.direction is ActionDirection.COMMUNICATE:
             net += help_match.confidence
             _log_deliberation_bias(owner_id, tick, help_match, future.direction)
         if future.direction is ActionDirection.SEARCH:
@@ -1139,6 +1187,7 @@ def _compile_command(
     social_messages: object | None = None,
     snapshot: SubjectiveSnapshot | None = None,
     emotional_state: EmotionalStateEvaluation | None = None,
+    theory_of_mind: object | None = None,
 ) -> AgentCommand | None:
     direction = future.direction
     target = future.target_entity_id
@@ -1234,6 +1283,7 @@ def _compile_command(
             preferred_recipient_id=preferred,
             snapshot_memories=(() if snapshot is None else snapshot.memories),
             emotional_state=emotional_state,
+            mind=theory_of_mind,
         )
         if decision is None:
             return None

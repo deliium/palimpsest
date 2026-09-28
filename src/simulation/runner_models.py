@@ -108,6 +108,7 @@ _V2_CAPABILITY_FLAG_NAMES: Final[tuple[str, ...]] = (
 # Flags owned by an implemented plan may be enabled without fail-closed.
 _V2_OWNED_CAPABILITY_FLAGS: Final[frozenset[str]] = frozenset(
     {
+        "advanced_social_inference",
         "extended_self_model",
         "predictive_world_model",
         "short_term_emotional_state",
@@ -217,8 +218,9 @@ class V2CapabilityFlags:
     Defaults are all off (V1-equivalent wiring). Enabling a flag that is not
     yet owned by an implemented plan must fail closed at runner construction
     (``capability_unimplemented``). Owned flags (currently
-    ``extended_self_model``, ``predictive_world_model``, and
-    ``short_term_emotional_state``) may be enabled.
+    ``advanced_social_inference``, ``extended_self_model``,
+    ``predictive_world_model``, and ``short_term_emotional_state``) may be
+    enabled.
     These are not cognition plugins.
     """
 
@@ -707,6 +709,7 @@ class SimulationRunnerResult:
     offline_consolidation_audits: tuple[object, ...] = ()
     reflection_audits: tuple[object, ...] = ()
     world_model_audits: tuple[object, ...] = ()
+    mind_audits: tuple[object, ...] = ()
     prospective_audits: tuple[object, ...] = ()
     counterfactual_audits: tuple[object, ...] = ()
 
@@ -785,6 +788,13 @@ class SimulationRunnerResult:
             self,
             "world_model_audits",
             tuple(self.world_model_audits),
+        )
+        if isinstance(self.mind_audits, (set, frozenset)):
+            raise TypeError("mind_audits must be ordered")
+        object.__setattr__(
+            self,
+            "mind_audits",
+            tuple(self.mind_audits),
         )
         if isinstance(self.prospective_audits, (set, frozenset)):
             raise TypeError("prospective_audits must be ordered")

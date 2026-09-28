@@ -25,8 +25,10 @@ from agents.cognition.configuration import (
     CognitionMortalityAppraisalMode,
     CognitionProspectiveMode,
     CognitionReflectionMode,
+    CognitionTheoryOfMindMode,
     CognitionWorldModelMode,
     build_cognitive_loop,
+    default_theory_of_mind_policy,
     default_world_model_policy,
 )
 from agents.cognition.counterfactual import default_counterfactual_policy
@@ -473,6 +475,19 @@ def _cognition_config_for(
         world_model_mode.value,
         world_model_policy.version,
     )
+    mind_flag = capability_flags.advanced_social_inference
+    mind_mode = (
+        CognitionTheoryOfMindMode.ENABLED
+        if mind_flag
+        else CognitionTheoryOfMindMode.PASSTHROUGH
+    )
+    mind_policy = default_theory_of_mind_policy(allow_provider=False)
+    _LOG.debug(
+        "cognition_config_theory_of_mind_mode flag=%s mode=%s policy_version=%s",
+        mind_flag,
+        mind_mode.value,
+        mind_policy.version,
+    )
     reflection_mode = CognitionReflectionMode(spec.reflection_mode.value)
     reflection_policy = None
     if reflection_mode is not CognitionReflectionMode.DISABLED:
@@ -520,6 +535,8 @@ def _cognition_config_for(
         identity_mode=identity_mode,
         world_model_mode=world_model_mode,
         world_model_policy=world_model_policy,
+        theory_of_mind_mode=mind_mode,
+        theory_of_mind_policy=mind_policy,
         consolidation_mode=CognitionConsolidationMode(spec.consolidation_mode.value),
         reflection_mode=reflection_mode,
         reflection_policy=reflection_policy,
@@ -1698,6 +1715,7 @@ class SimulationRunner:
             offline_consolidation_audits=consolidation_audits,
             reflection_audits=reflection_audits,
             world_model_audits=self.export_world_model_audits(),
+            mind_audits=self.export_mind_audits(),
             prospective_audits=self.export_prospective_audits(),
             counterfactual_audits=self.export_counterfactual_audits(),
         )
@@ -1814,6 +1832,27 @@ class SimulationRunner:
                 collected.append(audit)
         _LOG.debug(
             "world_model_audit_export run_id=%s audit_count=%s",
+            self._run_id.value,
+            len(collected),
+        )
+        return tuple(collected)
+
+    def export_mind_audits(self) -> tuple[object, ...]:
+        """Harvest theory-of-mind audits. Not part of result JSON."""
+        from agents.cognition.theory_of_mind import MindAudit
+
+        collected: list[MindAudit] = []
+        for bundle in self._agents:
+            runtime = bundle.runtime
+            export = getattr(runtime, "export_mind_audits", None)
+            if export is None:
+                continue
+            for audit in export():
+                if type(audit) is not MindAudit:
+                    raise TypeError("mind_audits: invalid_item")
+                collected.append(audit)
+        _LOG.debug(
+            "mind_audit_export run_id=%s audit_count=%s",
             self._run_id.value,
             len(collected),
         )

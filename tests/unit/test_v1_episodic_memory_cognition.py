@@ -292,6 +292,7 @@ async def test_failed_cognition_does_not_mutate_memory_service() -> None:
             goal_board=None,
             emotional_state=None,
             causal_world_model=None,
+            theory_of_mind=None,
         ) -> ActionPlan:
             _ = loop_input, intention, futures, memory, goal_board, emotional_state
             raise RuntimeError("planner boom")

@@ -317,7 +317,7 @@ async def test_from_config_fails_closed_when_capability_flag_enabled() -> None:
         scenario=base.scenario,
         agents=base.agents,
         stop_policy=base.stop_policy,
-        capability_flags=V2CapabilityFlags(advanced_social_inference=True),
+        capability_flags=V2CapabilityFlags(multi_hop_testimony_tracking=True),
     )
     with pytest.raises(RunnerConstructionError) as exc_info:
         await SimulationRunner.from_config(config, run_id=RunId("run-cap-on"))
@@ -368,6 +368,11 @@ async def test_from_config_flags_off_uses_emotional_passthrough(
     assert any(
         "cognition_config_world_model_mode flag=False mode=passthrough "
         "policy_version=world-model-v1" in record.getMessage()
+        for record in caplog.records
+    )
+    assert any(
+        "cognition_config_theory_of_mind_mode flag=False mode=passthrough "
+        "policy_version=theory-of-mind-v1" in record.getMessage()
         for record in caplog.records
     )
 
@@ -436,6 +441,34 @@ async def test_from_config_allows_owned_world_model_flag(
         for message in mode_logs
     )
     assert CognitionWorldModelMode.ENABLED.value == "enabled"
+
+
+@pytest.mark.asyncio
+async def test_from_config_allows_owned_theory_of_mind_flag(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    from simulation.runner_models import RUNNER_SCHEMA_VERSION_V4, V2CapabilityFlags
+
+    base = _config()
+    config = SimulationRunnerConfig(
+        seed=base.seed,
+        stochastic_identity=base.stochastic_identity,
+        scenario=base.scenario,
+        agents=base.agents,
+        stop_policy=base.stop_policy,
+        capability_flags=V2CapabilityFlags(advanced_social_inference=True),
+    )
+    assert config.schema_version == RUNNER_SCHEMA_VERSION_V4
+    with caplog.at_level(logging.DEBUG, logger="simulation.runner"):
+        async with await SimulationRunner.from_config(
+            config, run_id=RunId("run-theory-of-mind-cap")
+        ) as runner:
+            assert runner.runtimes
+    assert any(
+        "cognition_config_theory_of_mind_mode flag=True mode=enabled "
+        "policy_version=theory-of-mind-v1" in record.getMessage()
+        for record in caplog.records
+    )
 
 
 @pytest.mark.asyncio

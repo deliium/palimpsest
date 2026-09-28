@@ -185,6 +185,7 @@ class ScriptedFutureImagination:
         goal_board: GoalBoard | None = None,
         emotional_state: object | None = None,
         causal_world_model: object | None = None,
+        theory_of_mind: object | None = None,
         prospective_policy: object | None = None,
         llm_provider: object | None = None,
     ) -> PossibleFutures:
@@ -221,6 +222,7 @@ class ScriptedMotivationEvaluator:
         goal_board: GoalBoard | None = None,
         emotional_state: object | None = None,
         causal_world_model: object | None = None,
+        theory_of_mind: object | None = None,
     ) -> MotivationEvaluation:
         _ = (
             situation,
@@ -247,6 +249,7 @@ class ScriptedIntentionSelector:
         emotional_state: object | None = None,
         self_state: object | None = None,
         causal_world_model: object | None = None,
+        theory_of_mind: object | None = None,
         *,
         counterfactual_bias: Mapping[str, float] | None = None,
     ) -> SelectedIntention:
@@ -277,6 +280,7 @@ class ScriptedPlanner:
         goal_board: GoalBoard | None = None,
         emotional_state: object | None = None,
         causal_world_model: object | None = None,
+        theory_of_mind: object | None = None,
     ) -> ActionPlan:
         _ = (
             intention,

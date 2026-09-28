@@ -150,6 +150,7 @@ async def test_loop_runs_exact_stage_order_once(
             goal_board=None,
             emotional_state=None,
             causal_world_model=None,
+            theory_of_mind=None,
             prospective_policy=None,
             llm_provider=None,
         ):  # type: ignore[no-untyped-def]
@@ -169,6 +170,7 @@ async def test_loop_runs_exact_stage_order_once(
             goal_board=None,
             emotional_state=None,
             causal_world_model=None,
+            theory_of_mind=None,
         ):  # type: ignore[no-untyped-def]
             calls.append("motivation")
             return await super().evaluate(
@@ -185,6 +187,7 @@ async def test_loop_runs_exact_stage_order_once(
             emotional_state=None,
             self_state=None,
             causal_world_model=None,
+            theory_of_mind=None,
             counterfactual_bias=None,
         ):  # type: ignore[no-untyped-def]
             calls.append("intention")
@@ -206,6 +209,7 @@ async def test_loop_runs_exact_stage_order_once(
             goal_board=None,
             emotional_state=None,
             causal_world_model=None,
+            theory_of_mind=None,
         ):  # type: ignore[no-untyped-def]
             calls.append("planning")
             return await super().plan(
@@ -286,6 +290,7 @@ async def test_component_replacement_changes_command() -> None:
             goal_board=None,
             emotional_state=None,
             causal_world_model=None,
+            theory_of_mind=None,
         ):  # type: ignore[no-untyped-def]
             return ActionPlan(
                 owner_id=loop_input.agent_id,
@@ -336,6 +341,7 @@ async def test_component_exception_short_circuits() -> None:
             goal_board=None,
             emotional_state=None,
             causal_world_model=None,
+            theory_of_mind=None,
         ):  # type: ignore[no-untyped-def]
             raise RuntimeError("secret motive payload")
 
@@ -361,6 +367,7 @@ async def test_cancellation_records_cancelled_boundary() -> None:
             emotional_state=None,
             self_state=None,
             causal_world_model=None,
+            theory_of_mind=None,
             counterfactual_bias=None,
         ):  # type: ignore[no-untyped-def]
             raise asyncio.CancelledError
@@ -441,6 +448,7 @@ async def test_input_propagation_uses_prior_outputs() -> None:
             goal_board=None,
             emotional_state=None,
             causal_world_model=None,
+            theory_of_mind=None,
         ):  # type: ignore[no-untyped-def]
             seen["situation"] = situation
             seen["futures"] = futures

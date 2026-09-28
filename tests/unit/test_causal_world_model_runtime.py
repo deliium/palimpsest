@@ -157,6 +157,7 @@ class _BoomPlanner:
         goal_board: object | None = None,
         emotional_state: object | None = None,
         causal_world_model: object | None = None,
+        theory_of_mind: object | None = None,
     ) -> object:
         _ = (
             loop_input,

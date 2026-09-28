@@ -27,6 +27,10 @@ from agents.cognition.counterfactual import (
 from agents.cognition.loop import CognitiveLoop
 from agents.cognition.prospective import ProspectivePolicy, default_prospective_policy
 from agents.cognition.reflection import ReflectionPolicy
+from agents.cognition.theory_of_mind import (
+    TheoryOfMindPolicy,
+    default_theory_of_mind_policy,
+)
 from agents.cognition.world_model import WorldModelPolicy, default_world_model_policy
 from agents.models import (
     REQUIRED_DRIVE_KINDS,
@@ -121,6 +125,13 @@ class CognitionWorldModelMode(StrEnum):
     ENABLED = "enabled"
 
 
+class CognitionTheoryOfMindMode(StrEnum):
+    """First-order theory of mind. Passthrough stores no hypotheses."""
+
+    PASSTHROUGH = "passthrough"
+    ENABLED = "enabled"
+
+
 class CognitionProspectiveMode(StrEnum):
     """Bounded prospective imagination. Disabled keeps the one-step path.
 
@@ -200,6 +211,10 @@ class CognitionLoopConfig:
     identity_mode: CognitionIdentityMode = CognitionIdentityMode.PASSTHROUGH
     world_model_mode: CognitionWorldModelMode = CognitionWorldModelMode.PASSTHROUGH
     world_model_policy: WorldModelPolicy | None = None
+    theory_of_mind_mode: CognitionTheoryOfMindMode = (
+        CognitionTheoryOfMindMode.PASSTHROUGH
+    )
+    theory_of_mind_policy: TheoryOfMindPolicy | None = None
     prospective_mode: CognitionProspectiveMode = CognitionProspectiveMode.DISABLED
     prospective_policy: ProspectivePolicy | None = None
     counterfactual_mode: CognitionCounterfactualMode = (
@@ -249,6 +264,21 @@ class CognitionLoopConfig:
         elif type(self.world_model_policy) is not WorldModelPolicy:
             _LOG.error("invalid_enum path=world_model_policy reason_code=invalid_type")
             raise TypeError("world_model_policy must be WorldModelPolicy or None")
+        if type(self.theory_of_mind_mode) is not CognitionTheoryOfMindMode:
+            _LOG.error("invalid_enum path=theory_of_mind_mode reason_code=invalid_mode")
+            raise TypeError("theory_of_mind_mode must be CognitionTheoryOfMindMode")
+        if self.theory_of_mind_policy is None:
+            if self.theory_of_mind_mode is CognitionTheoryOfMindMode.ENABLED:
+                object.__setattr__(
+                    self,
+                    "theory_of_mind_policy",
+                    default_theory_of_mind_policy(allow_provider=False),
+                )
+        elif type(self.theory_of_mind_policy) is not TheoryOfMindPolicy:
+            _LOG.error(
+                "invalid_enum path=theory_of_mind_policy reason_code=invalid_type"
+            )
+            raise TypeError("theory_of_mind_policy must be TheoryOfMindPolicy or None")
         if type(self.prospective_mode) is not CognitionProspectiveMode:
             _LOG.error("invalid_enum path=prospective_mode reason_code=invalid_mode")
             raise TypeError("prospective_mode must be CognitionProspectiveMode")
@@ -340,6 +370,7 @@ class CognitionLoopConfig:
                     "reflection_mode": self.reflection_mode.value,
                     "identity_mode": self.identity_mode.value,
                     "world_model_mode": self.world_model_mode.value,
+                    "theory_of_mind_mode": self.theory_of_mind_mode.value,
                     "prospective_mode": self.prospective_mode.value,
                     "counterfactual_mode": self.counterfactual_mode.value,
                     "reflection_policy_version": (
@@ -397,6 +428,12 @@ class CognitionLoopConfig:
                 None
                 if self.world_model_policy is None
                 else self.world_model_policy.version
+            ),
+            "theory_of_mind_mode": self.theory_of_mind_mode.value,
+            "theory_of_mind_policy_version": (
+                None
+                if self.theory_of_mind_policy is None
+                else self.theory_of_mind_policy.version
             ),
             "prospective_mode": self.prospective_mode.value,
             "prospective_policy_version": (
@@ -586,6 +623,8 @@ def build_cognitive_loop(
         world_model_mode=resolved.world_model_mode,
         world_model_policy=resolved.world_model_policy,
         world_model_provider=world_model_provider,
+        theory_of_mind_mode=resolved.theory_of_mind_mode,
+        theory_of_mind_policy=resolved.theory_of_mind_policy,
         prospective_policy=resolved.prospective_policy,
         counterfactual_mode=resolved.counterfactual_mode,
         counterfactual_policy=resolved.counterfactual_policy,

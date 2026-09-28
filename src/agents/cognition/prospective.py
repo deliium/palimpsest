@@ -86,6 +86,7 @@ def log_prospective_llm_selection(
         reason_code,
     )
 
+
 PROSPECTIVE_POLICY_VERSION: Final[str] = "prospective-v1"
 _ID_PREFIX: Final[str] = "pt-"
 _SELECTION_OUTPUT_TOKENS: Final[int] = 64
@@ -100,9 +101,7 @@ _MATCH_OUTCOMES: Final[tuple[CausalOutcome, ...]] = (
     CausalOutcome.SEARCH_SUCCESS,
     CausalOutcome.SEARCH_FAILURE,
 )
-_BANDS: Final[frozenset[str]] = frozenset(
-    item.value for item in UncertaintyBand
-)
+_BANDS: Final[frozenset[str]] = frozenset(item.value for item in UncertaintyBand)
 
 
 class ProspectivePruneReason(StrEnum):
@@ -330,9 +329,7 @@ class ImaginedTransition:
         )
         if self.transition_id != expected:
             raise _fail("transition_id", "id_mismatch")
-        object.__setattr__(
-            self, "confidence", _unit("confidence", self.confidence)
-        )
+        object.__setattr__(self, "confidence", _unit("confidence", self.confidence))
         if type(self.uncertainty) is not SubjectiveUncertainty:
             raise _fail("uncertainty", "invalid_type")
         _unit("epistemic", self.uncertainty.epistemic)
@@ -639,6 +636,7 @@ def _score_seed(
     credited_goal_ids: frozenset[str],
     emotional_state: EmotionalStateEvaluation | None,
     model: CausalWorldModel | None,
+    theory_of_mind: object | None = None,
 ) -> _ScoredSeed:
     future = _build_future(
         seed=seed,
@@ -663,6 +661,36 @@ def _score_seed(
         danger = match_hypothesis(model, outcome=CausalOutcome.DANGER, atoms=atoms)
         if danger is not None:
             risks = _raise_physical_harm(risks, danger.confidence)
+    from agents.cognition.theory_of_mind import mind_imagination_deltas
+
+    harm, belonging, hypothesis_id, action_atom = mind_imagination_deltas(
+        theory_of_mind,
+        direction=seed.direction.value,
+        target_id=seed.target_entity_id,
+    )
+    if harm:
+        risks = _raise_physical_harm(risks, harm)
+        _LOG.debug(
+            "theory_of_mind_prospective_bias owner_id=%s tick=%s "
+            "hypothesis_id=%s action=%s confidence=%s direction=%s",
+            loop_input.agent_id.value,
+            loop_input.observation.tick,
+            hypothesis_id,
+            action_atom,
+            harm,
+            seed.direction.value,
+        )
+    if belonging:
+        _LOG.debug(
+            "theory_of_mind_prospective_bias owner_id=%s tick=%s "
+            "hypothesis_id=%s action=%s confidence=%s direction=%s",
+            loop_input.agent_id.value,
+            loop_input.observation.tick,
+            hypothesis_id,
+            action_atom,
+            belonging,
+            seed.direction.value,
+        )
     effects = tuple(
         effect
         for effect in _chain_goal_effects(
@@ -670,7 +698,7 @@ def _score_seed(
         )
         if effect.goal_id.value not in credited_goal_ids
     )
-    progress = sum(effect.progress_delta for effect in effects)
+    progress = sum(effect.progress_delta for effect in effects) + belonging
     step_value = _quantize(progress - _risk_cost(risks))
     confidence = _quantize_unit(parent_confidence * future.confidence)
     epistemic = _quantize_unit(min(1.0, parent_epistemic + _EPISTEMIC_STEP))
@@ -836,6 +864,7 @@ def rollout_prospective(
     goal_board: object | None = None,
     emotional_state: EmotionalStateEvaluation | None = None,
     causal_world_model: object | None = None,
+    theory_of_mind: object | None = None,
     **forbidden: object,
 ) -> ProspectiveRollout:
     """Expand action, predicted outcome, and next action under hard budgets."""
@@ -843,6 +872,7 @@ def rollout_prospective(
         _reject_objective(value, name)
         raise TypeError(f"{name} is not a subjective input")
     _reject_objective(causal_world_model, "causal_world_model")
+    _reject_objective(theory_of_mind, "theory_of_mind")
     _reject_objective(loop_input, "loop_input")
     if type(policy) is not ProspectivePolicy:
         raise _fail("policy", "invalid_type")
@@ -948,6 +978,7 @@ def rollout_prospective(
                 credited_goal_ids=current.credited_goal_ids,
                 emotional_state=emotional_state,
                 model=model,
+                theory_of_mind=theory_of_mind,
             )
             for seed in seeds
         ]

@@ -186,10 +186,11 @@ class MotivationAppraisal:
         goal_board: GoalBoard | None = None,
         emotional_state: EmotionalStateEvaluation | None = None,
         causal_world_model: object | None = None,
+        theory_of_mind: object | None = None,
     ) -> MotivationEvaluation:
         owner = loop_input.agent_id
         tick = loop_input.observation.tick
-        _ = emotional_state, causal_world_model
+        _ = emotional_state, causal_world_model, theory_of_mind
         _LOG.debug(
             "motivation_start",
             extra={

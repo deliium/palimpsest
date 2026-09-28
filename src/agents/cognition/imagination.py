@@ -163,6 +163,7 @@ class ImaginationEngine:
         goal_board: GoalBoard | None = None,
         emotional_state: EmotionalStateEvaluation | None = None,
         causal_world_model: object | None = None,
+        theory_of_mind: object | None = None,
         prospective_policy: object | None = None,
         llm_provider: object | None = None,
     ) -> PossibleFutures:
@@ -239,6 +240,7 @@ class ImaginationEngine:
                     goal_board=goal_board,
                     emotional_state=emotional_state,
                     causal_world_model=causal_world_model,
+                    theory_of_mind=theory_of_mind,
                     prospective_policy=prospective_policy,
                     llm_provider=llm_provider,
                 )
@@ -314,6 +316,43 @@ class ImaginationEngine:
                 owner_id=owner,
                 tick=tick,
             )
+        from agents.cognition.theory_of_mind import mind_imagination_deltas
+
+        if theory_of_mind is None:
+            _LOG.debug(
+                "theory_of_mind_imagination_bias owner_id=%s tick=%s status=skipped",
+                owner.value,
+                tick,
+            )
+        else:
+            mind_adjusted: list[ImaginedFuture] = []
+            for future in futures:
+                harm, belonging, hypothesis_id, action_atom = mind_imagination_deltas(
+                    theory_of_mind,
+                    direction=future.direction.value,
+                    target_id=future.target_entity_id,
+                )
+                risks = future.risks
+                drives = future.drive_effects
+                if harm:
+                    risks = _raise_physical_harm(risks, harm)
+                if belonging:
+                    drives = _shift_drive(drives, DriveKind.BELONGING, belonging)
+                if risks is future.risks and drives is future.drive_effects:
+                    mind_adjusted.append(future)
+                    continue
+                mind_adjusted.append(replace(future, risks=risks, drive_effects=drives))
+                _LOG.debug(
+                    "theory_of_mind_imagination_bias owner_id=%s tick=%s "
+                    "hypothesis_id=%s action=%s confidence=%s direction=%s",
+                    owner.value,
+                    tick,
+                    hypothesis_id,
+                    action_atom,
+                    harm or belonging,
+                    future.direction.value,
+                )
+            futures = tuple(mind_adjusted)
 
         if evidence.ignored_belief_count > 0:
             _LOG.warning(
@@ -373,6 +412,7 @@ class ImaginationEngine:
         goal_board: GoalBoard | None,
         emotional_state: EmotionalStateEvaluation | None,
         causal_world_model: object | None,
+        theory_of_mind: object | None,
         prospective_policy: object,
         llm_provider: object | None,
     ) -> tuple[ImaginedFuture, ...]:
@@ -398,6 +438,7 @@ class ImaginationEngine:
             goal_board=goal_board,
             emotional_state=emotional_state,
             causal_world_model=causal_world_model,
+            theory_of_mind=theory_of_mind,
         )
         preferred: tuple[str, ...] = ()
         extra: list[ProspectivePruneReason] = []
@@ -409,15 +450,11 @@ class ImaginationEngine:
             if prospective_policy.max_llm_calls < 1:
                 extra.append(ProspectivePruneReason.BUDGET_LLM)
                 fallback_used = True
-                _log_selection_budget(
-                    loop_input, rollout, reason_code="budget_llm"
-                )
+                _log_selection_budget(loop_input, rollout, reason_code="budget_llm")
             elif prospective_policy.max_tokens < floor:
                 extra.append(ProspectivePruneReason.BUDGET_TOKENS)
                 fallback_used = True
-                _log_selection_budget(
-                    loop_input, rollout, reason_code="budget_tokens"
-                )
+                _log_selection_budget(loop_input, rollout, reason_code="budget_tokens")
             else:
                 from agents.cognition.prospective_selection import (
                     rank_prospective_transitions,
@@ -506,13 +543,8 @@ def _apply_world_model_imagination(
         }:
             risks = _raise_physical_harm(risks, danger.confidence)
             _log_imagination_bias(owner_id, tick, danger, future.direction)
-        help_match = match_hypothesis(
-            model, outcome=CausalOutcome.HELP, atoms=atoms
-        )
-        if (
-            help_match is not None
-            and future.direction is ActionDirection.COMMUNICATE
-        ):
+        help_match = match_hypothesis(model, outcome=CausalOutcome.HELP, atoms=atoms)
+        if help_match is not None and future.direction is ActionDirection.COMMUNICATE:
             drives = _shift_drive(drives, DriveKind.BELONGING, help_match.confidence)
             _log_imagination_bias(owner_id, tick, help_match, future.direction)
         if future.direction is ActionDirection.SEARCH:
@@ -523,14 +555,10 @@ def _apply_world_model_imagination(
                 model, outcome=CausalOutcome.SEARCH_SUCCESS, atoms=atoms
             )
             if failure is not None:
-                drives = _shift_drive(
-                    drives, DriveKind.CURIOSITY, -failure.confidence
-                )
+                drives = _shift_drive(drives, DriveKind.CURIOSITY, -failure.confidence)
                 _log_imagination_bias(owner_id, tick, failure, future.direction)
             if success is not None:
-                drives = _shift_drive(
-                    drives, DriveKind.CURIOSITY, success.confidence
-                )
+                drives = _shift_drive(drives, DriveKind.CURIOSITY, success.confidence)
                 _log_imagination_bias(owner_id, tick, success, future.direction)
         if risks is future.risks and drives is future.drive_effects:
             adjusted.append(future)

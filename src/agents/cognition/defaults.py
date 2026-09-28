@@ -335,6 +335,7 @@ class PlaceholderFutureImagination:
         goal_board: GoalBoard | None = None,
         emotional_state: object | None = None,
         causal_world_model: object | None = None,
+        theory_of_mind: object | None = None,
         prospective_policy: object | None = None,
         llm_provider: object | None = None,
     ) -> PossibleFutures:
@@ -400,6 +401,7 @@ class PresentStateImagination:
         goal_board: GoalBoard | None = None,
         emotional_state: object | None = None,
         causal_world_model: object | None = None,
+        theory_of_mind: object | None = None,
         prospective_policy: object | None = None,
         llm_provider: object | None = None,
     ) -> PossibleFutures:
@@ -439,6 +441,7 @@ class StableMotivationEvaluator:
         goal_board: GoalBoard | None = None,
         emotional_state: object | None = None,
         causal_world_model: object | None = None,
+        theory_of_mind: object | None = None,
     ) -> MotivationEvaluation:
         _ = self_state, futures, goal_board, emotional_state
         scores: dict[MotivationCode, float] = {
@@ -518,6 +521,7 @@ class StableIntentionSelector:
         emotional_state: object | None = None,
         self_state: object | None = None,
         causal_world_model: object | None = None,
+        theory_of_mind: object | None = None,
         *,
         counterfactual_bias: Mapping[str, float] | None = None,
     ) -> SelectedIntention:
@@ -561,6 +565,7 @@ class WaitFallbackPlanner:
         goal_board: GoalBoard | None = None,
         emotional_state: object | None = None,
         causal_world_model: object | None = None,
+        theory_of_mind: object | None = None,
     ) -> ActionPlan:
         _ = intention, futures, memory, goal_board, emotional_state
         return ActionPlan(

@@ -708,6 +708,7 @@ class SubjectiveSnapshot:
     social_identity: OwnerSafeSocialIdentity | None = None
     emotional_state: AgentEmotionalState | None = None
     causal_world_model: object | None = None
+    theory_of_mind: object | None = None
 
     def __post_init__(self) -> None:
         if type(self.owner_id) is not AgentId:
@@ -838,6 +839,13 @@ class SubjectiveSnapshot:
                 raise TypeError("SubjectiveSnapshot.causal_world_model: invalid_type")
             if self.causal_world_model.owner_id != self.owner_id:
                 raise ValueError("SubjectiveSnapshot.causal_world_model: ownership")
+        from agents.cognition.theory_of_mind import require_owner_theory
+
+        require_owner_theory(
+            self.theory_of_mind,
+            self.owner_id,
+            field_name="SubjectiveSnapshot.theory_of_mind",
+        )
 
     def __repr__(self) -> str:
         drive_count = 0 if self.drives is None else len(self.drives.dispositions)
@@ -3588,6 +3596,7 @@ class CognitiveLoopProposal:
     boundary_records: tuple[ComponentBoundaryRecord, ...]
     final_confidence: float
     causal_world_model: object | None = None
+    theory_of_mind: object | None = None
 
     def __post_init__(self) -> None:
         object.__setattr__(
@@ -3628,6 +3637,13 @@ class CognitiveLoopProposal:
                 raise TypeError("causal_world_model must be CausalWorldModel")
             if self.causal_world_model.owner_id != self.agent_id:
                 raise ValueError("causal_world_model owner_id mismatch")
+        from agents.cognition.theory_of_mind import require_owner_theory
+
+        require_owner_theory(
+            self.theory_of_mind,
+            self.agent_id,
+            field_name="CognitiveLoopProposal.theory_of_mind",
+        )
         if type(self.futures) is not PossibleFutures:
             raise TypeError("futures must be PossibleFutures")
         if type(self.motivation) is not MotivationEvaluation:
@@ -3698,6 +3714,7 @@ class CognitiveLoopResult:
     identity_revisions: tuple[BeliefRevisionRequest, ...] = ()
     identity_dissonance: tuple[IdentityDissonanceNotice, ...] = ()
     causal_world_model: object | None = None
+    theory_of_mind: object | None = None
 
     def __post_init__(self) -> None:
         object.__setattr__(
@@ -3714,6 +3731,13 @@ class CognitiveLoopResult:
                 raise TypeError("causal_world_model must be CausalWorldModel")
             if self.causal_world_model.owner_id != self.agent_id:
                 raise ValueError("causal_world_model owner_id mismatch")
+        from agents.cognition.theory_of_mind import require_owner_theory
+
+        require_owner_theory(
+            self.theory_of_mind,
+            self.agent_id,
+            field_name="CognitiveLoopResult.theory_of_mind",
+        )
         object.__setattr__(self, "command", require_agent_command(self.command))
         if isinstance(self.boundary_records, (set, frozenset, Mapping)):
             raise TypeError("CognitiveLoopResult.boundary_records must be ordered")

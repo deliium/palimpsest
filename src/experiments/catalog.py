@@ -585,6 +585,41 @@ def experiment_k_counterfactual(
     )
 
 
+def experiment_l_theory_of_mind(
+    base: SimulationRunnerConfig,
+    *,
+    seed_matrix: ExperimentSeedMatrix | None = None,
+) -> ExperimentDefinition:
+    """Paired arms share seed, scenario, and stochastic identity.
+
+    ``l-disabled`` leaves ``advanced_social_inference`` off on
+    ``runner-config-v4``. ``l-enabled`` turns that flag on and stays on
+    ``runner-config-v4``.
+    """
+    matrix = seed_matrix or ExperimentSeedMatrix(seeds=(base.seed,))
+    shared = replace(base, schema_version=RUNNER_SCHEMA_VERSION_V4)
+    disabled = replace(shared, capability_flags=V2CapabilityFlags())
+    enabled = replace(
+        shared,
+        capability_flags=V2CapabilityFlags(advanced_social_inference=True),
+    )
+    for condition_id, _config in (("l-disabled", disabled), ("l-enabled", enabled)):
+        _LOG.debug(
+            "experiment_l_built experiment_id=%s condition_id=%s",
+            "experiment-l-theory-of-mind",
+            condition_id,
+        )
+    return _definition(
+        experiment_id="experiment-l-theory-of-mind",
+        base=shared,
+        seed_matrix=matrix,
+        arms=(
+            ("l-disabled", "theory_of_mind_disabled", disabled),
+            ("l-enabled", "theory_of_mind_enabled", enabled),
+        ),
+    )
+
+
 def base_runner_config_from_scenario(
     *,
     seed: int,

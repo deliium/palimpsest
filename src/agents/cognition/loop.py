@@ -161,6 +161,7 @@ def _tick_memories(
         seen.add(memory.memory_id.value)
     return tuple(memories)
 
+
 class CognitiveLoop:
     """Sequential cognitive pipeline returning one closed ``AgentCommand``."""
 
@@ -192,6 +193,8 @@ class CognitiveLoop:
         "_reflection_selector",
         "_self_state",
         "_situation",
+        "_theory_of_mind_mode",
+        "_theory_of_mind_policy",
         "_world_model_mode",
         "_world_model_policy",
         "_world_model_provider",
@@ -221,6 +224,8 @@ class CognitiveLoop:
         world_model_mode: object | None = None,
         world_model_policy: object | None = None,
         world_model_provider: object | None = None,
+        theory_of_mind_mode: object | None = None,
+        theory_of_mind_policy: object | None = None,
         prospective_policy: object | None = None,
         counterfactual_mode: object | None = None,
         counterfactual_policy: object | None = None,
@@ -289,6 +294,24 @@ class CognitiveLoop:
         self._world_model_mode = world_mode
         self._world_model_policy = policy
         self._world_model_provider = world_model_provider
+        from agents.cognition.configuration import CognitionTheoryOfMindMode
+        from agents.cognition.theory_of_mind import TheoryOfMindPolicy
+
+        mind_mode = (
+            CognitionTheoryOfMindMode.PASSTHROUGH
+            if theory_of_mind_mode is None
+            else theory_of_mind_mode
+        )
+        if type(mind_mode) is not CognitionTheoryOfMindMode:
+            raise TypeError("theory_of_mind_mode must be CognitionTheoryOfMindMode")
+        if theory_of_mind_policy is None:
+            mind_policy = None
+        elif type(theory_of_mind_policy) is not TheoryOfMindPolicy:
+            raise TypeError("theory_of_mind_policy must be TheoryOfMindPolicy")
+        else:
+            mind_policy = theory_of_mind_policy
+        self._theory_of_mind_mode = mind_mode
+        self._theory_of_mind_policy = mind_policy
         if prospective_policy is not None:
             from agents.cognition.prospective import ProspectivePolicy
 
@@ -351,9 +374,7 @@ class CognitiveLoop:
         snapshot = loop_input.snapshot
         carried = None if snapshot is None else snapshot.causal_world_model
         prior = (
-            carried
-            if type(carried) is CausalWorldModel
-            else empty_world_model(owner)
+            carried if type(carried) is CausalWorldModel else empty_world_model(owner)
         )
         policy = self._world_model_policy
         if policy is None:
@@ -385,6 +406,84 @@ class CognitiveLoop:
         )
         _LOG.debug(
             "world_model_prepare owner_id=%s tick=%s mode=%s hypothesis_count=%s",
+            owner.value,
+            tick,
+            mode.value,
+            len(updated.hypotheses),
+        )
+        return updated
+
+    def _prepare_theory_of_mind(
+        self,
+        loop_input: CognitiveLoopInput,
+        emotional_evaluation: EmotionalStateEvaluation,
+        memory: RetrievedMemoryContext,
+    ) -> object | None:
+        from agents.cognition.configuration import CognitionTheoryOfMindMode
+        from agents.cognition.theory_of_mind import (
+            TheoryOfMind,
+            cues_from_observation,
+            cues_from_reconstructions,
+            default_theory_of_mind_policy,
+            empty_theory_of_mind,
+            update_theory_of_mind,
+        )
+
+        owner = loop_input.agent_id
+        tick = loop_input.observation.tick
+        mode = self._theory_of_mind_mode
+        if mode is not CognitionTheoryOfMindMode.ENABLED:
+            _LOG.debug(
+                "theory_of_mind_prepare owner_id=%s tick=%s mode=%s "
+                "hypothesis_count=%s",
+                owner.value,
+                tick,
+                mode.value,
+                0,
+            )
+            return None
+        snapshot = loop_input.snapshot
+        carried = None if snapshot is None else snapshot.theory_of_mind
+        prior = (
+            carried if type(carried) is TheoryOfMind else empty_theory_of_mind(owner)
+        )
+        policy = self._theory_of_mind_policy
+        if policy is None:
+            policy = default_theory_of_mind_policy(allow_provider=False)
+        intensity = None
+        state = emotional_evaluation.state
+        if state is not None:
+            intensity = state.max_intensity()
+        profiles = () if snapshot is None else snapshot.relationships
+        observed = cues_from_observation(
+            loop_input.observation,
+            owner_id=owner,
+            profiles=profiles,
+            cue_cursor=prior.cue_cursor,
+            owner_emotion_intensity=intensity,
+            model=prior,
+            policy=policy,
+        )
+        used = tuple(
+            cue.evidence_id
+            for cue in observed
+            if cue.drop_code is None and cue.evidence_id
+        )
+        recalled = cues_from_reconstructions(
+            memory,
+            owner_id=owner,
+            observer_id=loop_input.observation.observer_id,
+            used_provenance_ids=used,
+            policy=policy,
+        )
+        updated = update_theory_of_mind(
+            prior,
+            observed + recalled,
+            policy,
+            owner_entity_id=loop_input.observation.observer_id,
+        )
+        _LOG.debug(
+            "theory_of_mind_prepare owner_id=%s tick=%s mode=%s hypothesis_count=%s",
             owner.value,
             tick,
             mode.value,
@@ -493,12 +592,9 @@ class CognitiveLoop:
         world_model = self._prepare_world_model(
             loop_input, emotional_evaluation, memory
         )
+        mind = self._prepare_theory_of_mind(loop_input, emotional_evaluation, memory)
         policy = self._world_model_policy
-        if (
-            world_model is not None
-            and policy is not None
-            and policy.allow_provider
-        ):
+        if world_model is not None and policy is not None and policy.allow_provider:
             from agents.cognition.world_model_selection import (
                 select_world_model_hypotheses,
             )
@@ -506,6 +602,18 @@ class CognitiveLoop:
             world_model = await select_world_model_hypotheses(
                 world_model,
                 policy,
+                provider=self._world_model_provider,
+                tick=loop_input.observation.tick,
+            )
+        mind_policy = self._theory_of_mind_policy
+        if mind is not None and mind_policy is not None and mind_policy.allow_provider:
+            from agents.cognition.theory_of_mind_selection import (
+                select_theory_of_mind_hypotheses,
+            )
+
+            mind = await select_theory_of_mind_hypotheses(
+                mind,
+                mind_policy,
                 provider=self._world_model_provider,
                 tick=loop_input.observation.tick,
             )
@@ -521,6 +629,7 @@ class CognitiveLoop:
                 goal_board,
                 emotional_evaluation,
                 causal_world_model=world_model,
+                theory_of_mind=mind,
                 prospective_policy=self._prospective_policy,
                 llm_provider=self._world_model_provider,
             ),
@@ -538,6 +647,7 @@ class CognitiveLoop:
                 goal_board,
                 emotional_evaluation,
                 causal_world_model=world_model,
+                theory_of_mind=mind,
             ),
             expected_type=MotivationEvaluation,
         )
@@ -553,6 +663,7 @@ class CognitiveLoop:
                 emotional_evaluation,
                 self_state,
                 causal_world_model=world_model,
+                theory_of_mind=mind,
                 counterfactual_bias=self._counterfactual_bias(loop_input, futures),
             ),
             expected_type=SelectedIntention,
@@ -569,6 +680,7 @@ class CognitiveLoop:
                 goal_board,
                 emotional_evaluation,
                 causal_world_model=world_model,
+                theory_of_mind=mind,
             ),
             expected_type=ActionPlan,
         )
@@ -601,6 +713,7 @@ class CognitiveLoop:
             boundary_records=tuple(records),
             final_confidence=plan.confidence,
             causal_world_model=world_model,
+            theory_of_mind=mind,
         )
         _LOG.debug(
             "cognitive_loop_prepared",
@@ -711,8 +824,7 @@ class CognitiveLoop:
             from memory.models import MemoryAccessReceipt
 
             stored_ids = {
-                trace.memory_id
-                for trace in proposal.loop_input.snapshot.memories
+                trace.memory_id for trace in proposal.loop_input.snapshot.memories
             }
             pending_accesses = pending_accesses + tuple(
                 MemoryAccessReceipt(
@@ -742,6 +854,7 @@ class CognitiveLoop:
             identity_revisions=identity_revisions,
             identity_dissonance=identity_dissonance,
             causal_world_model=proposal.causal_world_model,
+            theory_of_mind=proposal.theory_of_mind,
         )
         _LOG.debug(
             "cognitive_loop_complete",
@@ -768,87 +881,87 @@ class CognitiveLoop:
         return result
 
     def _identity_revisions(
-            self,
-            *,
-            proposal: CognitiveLoopProposal,
-            updates: tuple[object, ...],
-            consolidation: object | None,
-            reflection: object | None,
-            command: object,
-        ) -> tuple[tuple[object, ...], tuple[object, ...]]:
-            from agents.cognition.configuration import CognitionIdentityMode
-            from agents.cognition.identity import (
-                appraise_identity,
-                detect_identity_dissonance,
-                parse_identity_predicate,
-                without_overlapping_identity_requests,
-            )
-            from social.relationships import DirectedRelationshipProfile
+        self,
+        *,
+        proposal: CognitiveLoopProposal,
+        updates: tuple[object, ...],
+        consolidation: object | None,
+        reflection: object | None,
+        command: object,
+    ) -> tuple[tuple[object, ...], tuple[object, ...]]:
+        from agents.cognition.configuration import CognitionIdentityMode
+        from agents.cognition.identity import (
+            appraise_identity,
+            detect_identity_dissonance,
+            parse_identity_predicate,
+            without_overlapping_identity_requests,
+        )
+        from social.relationships import DirectedRelationshipProfile
 
-            if self._identity_mode is not CognitionIdentityMode.ENABLED:
-                return (), ()
-            snapshot = proposal.loop_input.snapshot
-            memories = list(_tick_memories(proposal, updates))
-            relationships = (
-                ()
-                if snapshot is None
-                else tuple(
-                    item
-                    for item in snapshot.relationships
-                    if type(item) is DirectedRelationshipProfile
-                )
+        if self._identity_mode is not CognitionIdentityMode.ENABLED:
+            return (), ()
+        snapshot = proposal.loop_input.snapshot
+        memories = list(_tick_memories(proposal, updates))
+        relationships = (
+            ()
+            if snapshot is None
+            else tuple(
+                item
+                for item in snapshot.relationships
+                if type(item) is DirectedRelationshipProfile
             )
-            beliefs = () if snapshot is None else snapshot.semantic_beliefs
-            appraisal = appraise_identity(
-                owner_id=proposal.agent_id,
-                tick=proposal.loop_input.observation.tick,
-                memories=tuple(memories),
-                occurrences=proposal.loop_input.observation.occurrences,
-                goals=proposal.goal_board.goals,
-                relationships=relationships,
-                futures=proposal.futures,
-                beliefs=beliefs,
-                self_model=proposal.self_state,
+        )
+        beliefs = () if snapshot is None else snapshot.semantic_beliefs
+        appraisal = appraise_identity(
+            owner_id=proposal.agent_id,
+            tick=proposal.loop_input.observation.tick,
+            memories=tuple(memories),
+            occurrences=proposal.loop_input.observation.occurrences,
+            goals=proposal.goal_board.goals,
+            relationships=relationships,
+            futures=proposal.futures,
+            beliefs=beliefs,
+            self_model=proposal.self_state,
+        )
+        kept = without_overlapping_identity_requests(
+            appraisal.requests,
+            consolidation=consolidation,
+            reflection=reflection,
+        )
+        aspect_counts: dict[str, int] = {}
+        for request in kept:
+            aspect, _provenance, _token = parse_identity_predicate(
+                request.claim.predicate
             )
-            kept = without_overlapping_identity_requests(
-                appraisal.requests,
-                consolidation=consolidation,
-                reflection=reflection,
-            )
-            aspect_counts: dict[str, int] = {}
-            for request in kept:
-                aspect, _provenance, _token = parse_identity_predicate(
-                    request.claim.predicate
-                )
-                aspect_counts[aspect.value] = aspect_counts.get(aspect.value, 0) + 1
-            _LOG.debug(
-                "identity_pending",
-                extra={
-                    "request_count": len(kept),
-                    "aspect_counts": aspect_counts,
-                },
-            )
-            selected_future_id = getattr(proposal.intention, "selected_future_id", None)
-            dissonance = detect_identity_dissonance(
-                owner_id=proposal.agent_id,
-                tick=proposal.loop_input.observation.tick,
-                command=command,
-                goals=proposal.goal_board.goals,
-                futures=proposal.futures,
-                identity=proposal.self_state.identity,
-                memories=tuple(memories),
-                selected_future_id=(
-                    selected_future_id if type(selected_future_id) is str else None
-                ),
-                deferred=self._deferred_dissonance,  # type: ignore[arg-type]
-            )
-            self._deferred_dissonance = dissonance.deferred
-            combined = without_overlapping_identity_requests(
-                (*kept, *dissonance.requests),
-                consolidation=consolidation,
-                reflection=reflection,
-            )
-            return combined, dissonance.notices
+            aspect_counts[aspect.value] = aspect_counts.get(aspect.value, 0) + 1
+        _LOG.debug(
+            "identity_pending",
+            extra={
+                "request_count": len(kept),
+                "aspect_counts": aspect_counts,
+            },
+        )
+        selected_future_id = getattr(proposal.intention, "selected_future_id", None)
+        dissonance = detect_identity_dissonance(
+            owner_id=proposal.agent_id,
+            tick=proposal.loop_input.observation.tick,
+            command=command,
+            goals=proposal.goal_board.goals,
+            futures=proposal.futures,
+            identity=proposal.self_state.identity,
+            memories=tuple(memories),
+            selected_future_id=(
+                selected_future_id if type(selected_future_id) is str else None
+            ),
+            deferred=self._deferred_dissonance,  # type: ignore[arg-type]
+        )
+        self._deferred_dissonance = dissonance.deferred
+        combined = without_overlapping_identity_requests(
+            (*kept, *dissonance.requests),
+            consolidation=consolidation,
+            reflection=reflection,
+        )
+        return combined, dissonance.notices
 
     async def _plan_reflection(
         self,

@@ -440,9 +440,7 @@ class CognitionTraceStageSummary:
                 "unavailable_requires_reason",
                 "unavailable stage summaries require reason_code",
             )
-        reject_forbidden_trace_attributes(
-            self, type_name="CognitionTraceStageSummary"
-        )
+        reject_forbidden_trace_attributes(self, type_name="CognitionTraceStageSummary")
         _LOG.debug(
             "cognition_trace_stage_summary_constructed",
             extra={
@@ -476,6 +474,75 @@ def unavailable_stage_summary(
         status=CognitionTraceStageStatus.UNAVAILABLE,
         ordinal=ordinal,
         reason_code=reason_code,
+    )
+
+
+def _project_theory_of_mind(
+    *,
+    snap: SubjectiveSnapshot | None,
+    loop_result: CognitiveLoopResult | None,
+    ordinal: int,
+) -> CognitionTraceStageSummary:
+    from agents.cognition.theory_of_mind import (
+        TheoryOfMind,
+        default_theory_of_mind_policy,
+    )
+
+    carried = None if snap is None else snap.theory_of_mind
+    if carried is None and loop_result is not None:
+        carried = loop_result.theory_of_mind
+    owner = ""
+    if type(carried) is TheoryOfMind:
+        owner = carried.owner_id.value
+        threshold = default_theory_of_mind_policy().action_threshold
+        aspects: list[str] = []
+        refs: list[CognitionTraceIdRef] = []
+        seen: set[str] = set()
+        claims = 0
+        peak = 0.0
+        for item in carried.hypotheses:
+            if item.aspect.value not in aspects:
+                aspects.append(item.aspect.value)
+            if item.subject_id.value not in seen:
+                seen.add(item.subject_id.value)
+                refs.append(
+                    CognitionTraceIdRef(
+                        kind=CognitionTraceRefKind.AGENT,
+                        value=item.subject_id.value,
+                    )
+                )
+            if item.confidence >= threshold:
+                claims += 1
+            peak = max(peak, item.confidence)
+        _LOG.debug(
+            "theory_of_mind_trace owner_id=%s status=completed hypothesis_count=%s "
+            "reason_code=%s",
+            owner,
+            len(carried.hypotheses),
+            "none",
+        )
+        return CognitionTraceStageSummary(
+            stage_kind=CognitionTraceStageKind.THEORY_OF_MIND,
+            status=CognitionTraceStageStatus.COMPLETED,
+            ordinal=ordinal,
+            confidence=peak,
+            selection_codes=tuple(aspects),
+            counts={
+                CognitionTraceCountKey.CANDIDATE_COUNT.value: len(carried.hypotheses),
+                CognitionTraceCountKey.CLAIM_COUNT.value: claims,
+            },
+            id_refs=tuple(refs),
+        )
+    _LOG.debug(
+        "theory_of_mind_trace owner_id=%s status=unavailable hypothesis_count=0 "
+        "reason_code=%s",
+        owner,
+        TOM_UNAVAILABLE_REASON,
+    )
+    return unavailable_stage_summary(
+        CognitionTraceStageKind.THEORY_OF_MIND,
+        ordinal=ordinal,
+        reason_code=TOM_UNAVAILABLE_REASON,
     )
 
 
@@ -608,10 +675,10 @@ def project_cognition_trace_stages(
             )
         elif stage_kind is CognitionTraceStageKind.THEORY_OF_MIND:
             stages.append(
-                unavailable_stage_summary(
-                    CognitionTraceStageKind.THEORY_OF_MIND,
+                _project_theory_of_mind(
+                    snap=snap,
+                    loop_result=loop_result,
                     ordinal=ordinal,
-                    reason_code=TOM_UNAVAILABLE_REASON,
                 )
             )
         elif stage_kind is CognitionTraceStageKind.SELECTED_INTENTION:
@@ -688,9 +755,7 @@ def _resolve_identity(
     if loop_input is not None:
         resolved_agent = resolved_agent or loop_input.agent_id.value
         resolved_tick = (
-            resolved_tick
-            if resolved_tick is not None
-            else loop_input.observation.tick
+            resolved_tick if resolved_tick is not None else loop_input.observation.tick
         )
     if resolved_invocation is None and records:
         resolved_invocation = records[0].invocation_id
@@ -1434,9 +1499,7 @@ def _project_planned_action(
         status = _status_from_component(record.status)
         confidence = record.confidence
         decision = record.decision_metadata
-        reason = (
-            None if record.failure_reason is None else record.failure_reason.value
-        )
+        reason = None if record.failure_reason is None else record.failure_reason.value
         output = record.output_artifact
         if type(output) is ActionPlan:
             command_kind = _command_kind(output.command)
@@ -1469,9 +1532,7 @@ def stage_summaries_content_hash(
 ) -> str:
     """Deterministic SHA-256 hex digest over canonical stage summary bytes."""
     payload = [_stage_summary_canonical(stage) for stage in stages]
-    encoded = json.dumps(payload, sort_keys=True, separators=(",", ":")).encode(
-        "utf-8"
-    )
+    encoded = json.dumps(payload, sort_keys=True, separators=(",", ":")).encode("utf-8")
     digest = hashlib.sha256(encoded).hexdigest()
     _LOG.debug(
         "cognition_trace_stage_hash",
@@ -1507,9 +1568,7 @@ def _stage_summary_canonical(stage: CognitionTraceStageSummary) -> dict[str, obj
         "ordinal": stage.ordinal,
         "confidence": stage.confidence,
         "uncertainty_band": (
-            None
-            if stage.uncertainty_band is None
-            else stage.uncertainty_band.value
+            None if stage.uncertainty_band is None else stage.uncertainty_band.value
         ),
         "selection_codes": list(stage.selection_codes),
         "id_refs": [

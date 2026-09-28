@@ -129,7 +129,7 @@ Observation
 → planned action
 ```
 
-Beliefs and ToM-unavailable placeholders are **trace-view projections** (not new `CognitiveLoop` stages). The scientific **emotional state** and **goals** trace views prefer live `EMOTIONAL_STATE` / `GOAL_MANAGEMENT` stage outputs (intensities + driver codes; horizon + status histograms) and fall back to drive/salience or snapshot/motivation only when those stages are absent/PASSTHROUGH-neutral. ToM records `unavailable` / `tom_not_implemented` until a later plan owns `advanced_social_inference`.
+Beliefs and theory-of-mind views are **trace-view projections** (not new `CognitiveLoop` stages). The scientific **emotional state** and **goals** trace views prefer live `EMOTIONAL_STATE` / `GOAL_MANAGEMENT` stage outputs (intensities + driver codes; horizon + status histograms) and fall back to drive/salience or snapshot/motivation only when those stages are absent/PASSTHROUGH-neutral. `advanced_social_inference` (default off) owns a private first-order model. Off, the trace stays `unavailable` / `tom_not_implemented`. On, a present `TheoryOfMind` projects a completed summary from hypothesis counts, aspect codes, subject ids, and max confidence. The model reads only the owner's observation, retrieved memories, relationship profiles, and cue cursor. It does not receive another agent's goals, drives, beliefs, or mind. `theory_of_mind@1` compares future-action snapshots with later occurrences after the run and is not fed back into the loop. Experiment L and that metric stay off the V1 regression gate. `multi_hop_testimony_tracking` is still unowned.
 
 ### Package split
 
@@ -318,7 +318,7 @@ Integration coverage is in-memory (no PostgreSQL/Docker/network/LLM). Divergence
 | --- | --- |
 | Stage protocols | Constructor-injected into `CognitiveLoop`; replace one stage at a time |
 | Modes | `AgentCognitionSpec.memory_mode` / `imagination_mode`; run-level mortality |
-| Capability flags | Run-level `V2CapabilityFlags` on `SimulationRunnerConfig` — not stage plugins; default off wires V1 policies; **owned** flags (`predictive_world_model`, `extended_self_model`, `short_term_emotional_state`) may enable; other flags still fail closed (`capability_unimplemented`) |
+| Capability flags | Run-level `V2CapabilityFlags` on `SimulationRunnerConfig` — not stage plugins; default off wires V1 policies; **owned** flags (`advanced_social_inference`, `predictive_world_model`, `extended_self_model`, `short_term_emotional_state`) may enable; `multi_hop_testimony_tracking` still fails closed (`capability_unimplemented`) |
 | Cognition execution trace | Top-level `CognitionTraceSpec` (`runner-config-v4`, default off) — not a capability flag; ports only; no HTTP yet |
 | Subjective finalization | `AgentRuntime` commits episodic/belief/relationship batches only |
 | LLM lifecycle | Remains `api` / `llm.factory` composition — **not** encoded on runner fingerprints |

@@ -121,8 +121,17 @@ class _FixedCommandPlanner:
         goal_board: object | None = None,
         emotional_state: object | None = None,
         causal_world_model: object | None = None,
+        theory_of_mind: object | None = None,
     ) -> ActionPlan:
-        _ = intention, futures, memory, goal_board, emotional_state, causal_world_model
+        _ = (
+            intention,
+            futures,
+            memory,
+            goal_board,
+            emotional_state,
+            causal_world_model,
+            theory_of_mind,
+        )
         return ActionPlan(
             owner_id=loop_input.agent_id,
             command=self._command,  # type: ignore[arg-type]
@@ -237,6 +246,7 @@ async def test_cognition_failure_yields_no_submission() -> None:
             goal_board=None,
             emotional_state=None,
             causal_world_model=None,
+            theory_of_mind=None,
         ):  # type: ignore[no-untyped-def]
             raise RuntimeError("secret planner boom")
 

@@ -499,6 +499,7 @@ class FakeFutureImagination:
         goal_board=None,
         emotional_state=None,
         causal_world_model=None,
+        theory_of_mind=None,
         prospective_policy=None,
         llm_provider=None,
     ) -> PossibleFutures:
@@ -540,6 +541,7 @@ class FakeMotivationEvaluator:
         goal_board=None,
         emotional_state=None,
         causal_world_model=None,
+        theory_of_mind=None,
     ) -> MotivationEvaluation:
         _ = (
             loop_input,
@@ -577,6 +579,7 @@ class FakeIntentionSelector:
         emotional_state=None,
         self_state=None,
         causal_world_model=None,
+        theory_of_mind=None,
         *,
         counterfactual_bias=None,
     ) -> SelectedIntention:
@@ -616,6 +619,7 @@ class FakePlanner:
         goal_board: object | None = None,
         emotional_state: object | None = None,
         causal_world_model: object | None = None,
+        theory_of_mind: object | None = None,
     ) -> ActionPlan:
         _ = (
             loop_input,

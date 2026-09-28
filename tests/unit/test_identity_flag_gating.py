@@ -110,7 +110,7 @@ async def test_unowned_flag_still_fails_closed(
 ) -> None:
     config = replace(
         _short_base(max_ticks=1),
-        capability_flags=V2CapabilityFlags(advanced_social_inference=True),
+        capability_flags=V2CapabilityFlags(multi_hop_testimony_tracking=True),
     )
     with caplog.at_level(logging.ERROR, logger="simulation.runner"):
         with pytest.raises(RunnerConstructionError) as caught:
@@ -120,6 +120,6 @@ async def test_unowned_flag_still_fails_closed(
     assert caught.value.code is RunnerConstructionErrorCode.CAPABILITY_UNIMPLEMENTED
     assert any(
         "capability_unimplemented" in record.getMessage()
-        and "advanced_social_inference" in record.getMessage()
+        and "multi_hop_testimony_tracking" in record.getMessage()
         for record in caplog.records
     )

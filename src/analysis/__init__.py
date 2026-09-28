@@ -188,6 +188,10 @@ from analysis.specifications import (
     validate_metric_catalog,
     validate_metric_specification,
 )
+from analysis.theory_of_mind_metrics import (
+    THEORY_OF_MIND_METRIC_VERSION,
+    compute_theory_of_mind_metrics,
+)
 from analysis.transmission_metrics import (
     compute_knowledge_diffusion,
     compute_rumor_distortion,
@@ -229,6 +233,7 @@ __all__ = [
     "SCIPY_DEGENERATE_POLICY",
     "SOCIAL_TRANSMISSION_METRIC_VERSION",
     "SUPPORTED_COMMUNITY_ALGORITHM",
+    "THEORY_OF_MIND_METRIC_VERSION",
     "ActionResolutionRow",
     "AdoptionStage",
     "AppliedActionRow",
@@ -323,6 +328,7 @@ __all__ = [
     "compute_resource_inequality",
     "compute_rumor_distortion",
     "compute_survival",
+    "compute_theory_of_mind_metrics",
     "compute_trust_network_structure",
     "concept_jaccard_loss",
     "cumulative_drift",

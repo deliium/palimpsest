@@ -650,6 +650,7 @@ class SocialMessagePolicy(Protocol):
         snapshot_memories: Sequence[MemoryTrace] = (),
         selected_belief_ids: Sequence[BeliefId] = (),
         emotional_state: object | None = None,
+        mind: object | None = None,
     ) -> SocialMessageDecision | None: ...
 
 
@@ -669,6 +670,7 @@ class DeterministicSocialMessagePolicy:
         snapshot_memories: Sequence[MemoryTrace] = (),
         selected_belief_ids: Sequence[BeliefId] = (),
         emotional_state: object | None = None,
+        mind: object | None = None,
     ) -> SocialMessageDecision | None:
         recipients = _eligible_recipients(observation)
         candidate_count = len(recipients)
@@ -684,7 +686,57 @@ class DeterministicSocialMessagePolicy:
                     }
                 },
             )
+            _LOG.warning(
+                "theory_of_mind_message_skipped owner_id=%s tick=%s "
+                "reason_code=no_eligible_recipient",
+                owner_id.value,
+                observation.tick,
+            )
             return None
+        from agents.cognition.theory_of_mind import MindMessageHint, mind_message_hint
+
+        hint = mind_message_hint(
+            mind,
+            recipient_ids=tuple(item.value for item in recipients),
+        )
+        if type(hint) is MindMessageHint:
+            if hint.excluded_front_id is not None and recipients:
+                front = recipients[0].value
+                if (
+                    front == hint.excluded_front_id
+                    and front != hint.preferred_recipient_id
+                ):
+                    recipients = (*recipients[1:], recipients[0])
+            if hint.preferred_recipient_id is not None:
+                preferred = next(
+                    (
+                        item
+                        for item in recipients
+                        if item.value == hint.preferred_recipient_id
+                    ),
+                    None,
+                )
+                if preferred is not None:
+                    preferred_recipient_id = preferred
+            _LOG.debug(
+                "theory_of_mind_message owner_id=%s tick=%s action_kind=%s "
+                "recipient_id=%s aspect=%s concept_count=%s confidence_band=%s "
+                "mind_present=%s",
+                owner_id.value,
+                observation.tick,
+                "ask" if hint.concept is not None else "unspecified",
+                hint.preferred_recipient_id,
+                hint.aspect,
+                0 if hint.concept is None else 1,
+                confidence_band(hint.confidence),
+                True,
+            )
+        elif mind is None:
+            _LOG.warning(
+                "theory_of_mind_message_skipped owner_id=%s tick=%s status=skipped",
+                owner_id.value,
+                observation.tick,
+            )
         recipient = preferred_recipient_id
         if recipient is None or recipient not in recipients:
             recipient = recipients[0]
@@ -773,7 +825,30 @@ class DeterministicSocialMessagePolicy:
                 },
             )
 
-        if decision is None and act_pref == "ask":
+        if (
+            decision is None
+            and type(hint) is MindMessageHint
+            and hint.concept is not None
+            and not selected_ids
+        ):
+            utterance = origin_utterance(
+                text=_SAFE_ASK_TEXT,
+                speaker_id=speaker_id,
+                communication_id=f"plan-ask-{hint.hypothesis_id}",
+                sender_confidence=hint.confidence,
+                source_basis=CommunicationSourceBasis.UNREFERENCED,
+                concepts=(hint.concept,),
+            )
+            decision = SocialMessageDecision(
+                command=Ask(recipient_id=recipient, utterance=utterance),
+                action_kind="ask",
+                source_basis=CommunicationSourceBasis.UNREFERENCED,
+                hop_count=0,
+                sender_confidence=hint.confidence,
+                fallback=False,
+                candidate_count=candidate_count,
+            )
+        elif decision is None and act_pref == "ask":
             utterance = origin_utterance(
                 text=_SAFE_ASK_TEXT,
                 speaker_id=speaker_id,
