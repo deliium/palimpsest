@@ -7,6 +7,7 @@ from api.routes.observer_stream import router as observer_stream_router
 from api.routes.replay import router as replay_router
 from api.routes.simulations import router as simulations_router
 from api.routes.streams import router as streams_router
+from api.routes.version import router as version_router
 
 __all__ = [
     "health_router",
@@ -16,4 +17,5 @@ __all__ = [
     "replay_router",
     "simulations_router",
     "streams_router",
+    "version_router",
 ]

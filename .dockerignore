@@ -22,3 +22,6 @@ docs
 *.md
 compose.override.yml
 compose.override.yaml
+clients/godot-observer/override.cfg
+clients/godot-observer/.godot/
+clients/godot-observer/build/

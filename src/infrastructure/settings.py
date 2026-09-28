@@ -188,6 +188,8 @@ class Settings(BaseSettings):
     api_drain_timeout_seconds: Annotated[float, Field(gt=0)] = (
         _DEFAULT_API_DRAIN_TIMEOUT_SECONDS
     )
+    presentation_web_root: Path | None = None
+    revision: str = ""
 
     @field_validator(
         "api_port",
@@ -221,6 +223,24 @@ class Settings(BaseSettings):
     @classmethod
     def reject_boolean_floats(cls, value: object) -> object:
         return _reject_bool(value)
+
+    @field_validator("presentation_web_root", mode="before")
+    @classmethod
+    def empty_presentation_root_is_unset(cls, value: object) -> object:
+        if value is None:
+            return None
+        if isinstance(value, str) and not value.strip():
+            return None
+        return value
+
+    @field_validator("revision", mode="before")
+    @classmethod
+    def blank_revision_is_unset(cls, value: object) -> str:
+        if value is None:
+            return ""
+        if isinstance(value, str):
+            return value.strip()
+        raise ValueError("revision must be a string")
 
     @field_validator("default_run_seed")
     @classmethod
@@ -300,7 +320,8 @@ class Settings(BaseSettings):
             raise ValueError("API credential must be a non-blank string")
         if len(raw) < _MIN_API_CREDENTIAL_LENGTH:
             raise ValueError(
-                f"API credential must be at least {_MIN_API_CREDENTIAL_LENGTH} characters"
+                "API credential must be at least "
+                f"{_MIN_API_CREDENTIAL_LENGTH} characters"
             )
         if any(ch.isspace() for ch in raw):
             raise ValueError("API credential must not contain whitespace")
@@ -447,6 +468,8 @@ class Settings(BaseSettings):
             "has_api_debug_credential": self.api_debug_credential is not None,
             "api_max_page_size": self.api_max_page_size,
             "api_stream_queue_size": self.api_stream_queue_size,
+            "has_presentation_web_root": self.presentation_web_root is not None,
+            "has_revision": bool(self.revision),
         }
 
     def __repr__(self) -> str:

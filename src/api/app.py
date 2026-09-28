@@ -17,6 +17,7 @@ from api.persistence_services import (
     PersistenceMetricReadService,
     PersistenceReplayApiService,
 )
+from api.presentation_static import mount_presentation
 from api.routes import (
     health_router,
     inspection_router,
@@ -25,6 +26,7 @@ from api.routes import (
     replay_router,
     simulations_router,
     streams_router,
+    version_router,
 )
 from api.simulation_manager import SimulationManager
 from infrastructure.database import create_database_resources, dispose_engine
@@ -190,4 +192,6 @@ def create_app(
     app.include_router(streams_router)
     app.include_router(observer_router)
     app.include_router(observer_stream_router)
+    app.include_router(version_router)
+    mount_presentation(app, resolved)
     return app
