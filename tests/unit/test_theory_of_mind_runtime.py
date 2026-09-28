@@ -46,6 +46,33 @@ async def test_enabled_prepare_stores_a_model(
     )
 
 
+@pytest.mark.asyncio
+async def test_flag_off_matches_passthrough_and_trace() -> None:
+    from agents.cognition.trace import (
+        CognitionTraceStageKind,
+        project_cognition_trace_stages,
+    )
+
+    loop_input = build_loop_input(build_observation())
+    off = await build_cognitive_loop(CognitionLoopConfig()).run(
+        loop_input, invocation_id="off"
+    )
+    passthrough = await build_cognitive_loop(
+        CognitionLoopConfig(
+            theory_of_mind_mode=CognitionTheoryOfMindMode.PASSTHROUGH
+        )
+    ).run(loop_input, invocation_id="pass")
+    assert off.theory_of_mind is None
+    assert off.command == passthrough.command
+    stages = project_cognition_trace_stages(loop_result=off)
+    theory = next(
+        stage
+        for stage in stages
+        if stage.stage_kind is CognitionTraceStageKind.THEORY_OF_MIND
+    )
+    assert theory.reason_code == "tom_not_implemented"
+
+
 def test_eat_bias_prefers_help_and_two_counters_stay_above_threshold() -> None:
     from agents.cognition.theory_of_mind import (
         MindAspect,

@@ -46,11 +46,13 @@ Establish the modular-monolith foundation: packaging, bounded packages, typed co
 
 `short_term_emotional_state` was already owned in M5.3.
 
-**Still unimplemented:** `advanced_social_inference` and `multi_hop_testimony_tracking`. Enabling either still fails closed with `capability_unimplemented`.
+`advanced_social_inference` is owned and default off. When enabled, each agent keeps a private first-order model of other agents from its own observations and uses it to bias social action. Off is a passthrough: no hypotheses, no command bias, no audit. The model can be wrong. Experiment L and `theory_of_mind@1` stay analysis-only and off the V1 regression gate. One agent does not receive another agent's private cognition.
+
+**Still unimplemented:** `multi_hop_testimony_tracking`. Enabling it still fails closed with `capability_unimplemented`.
 
 **Out of scope until planned:** free-form affect narration, personality trait systems, HTTP debug UI for emotion, collapsing emotion+drives+goals into one reward scalar.
 
-**Plans:** `.ai-factory/plans/v2-emergent-dynamic-identity.md` (owns `extended_self_model` only). `.ai-factory/plans/v2-learned-causal-worldmodel.md` (owns `predictive_world_model` only). Opt-in work that did not claim a flag already shipped as M5.4 and M5.5.
+**Plans:** `.ai-factory/plans/v2-emergent-dynamic-identity.md` (owns `extended_self_model` only). `.ai-factory/plans/v2-learned-causal-worldmodel.md` (owns `predictive_world_model` only). `.ai-factory/plans/v2-first-order-theory-of-mind.md` (owns `advanced_social_inference` only). Opt-in work that did not claim a flag already shipped as M5.4 and M5.5.
 
 ## V1 status
 

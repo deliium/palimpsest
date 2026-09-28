@@ -695,6 +695,7 @@ class DeterministicSocialMessagePolicy:
             return None
         from agents.cognition.theory_of_mind import MindMessageHint, mind_message_hint
 
+        caller_recipient = preferred_recipient_id
         hint = mind_message_hint(
             mind,
             recipient_ids=tuple(item.value for item in recipients),
@@ -707,7 +708,7 @@ class DeterministicSocialMessagePolicy:
                     and front != hint.preferred_recipient_id
                 ):
                     recipients = (*recipients[1:], recipients[0])
-            if hint.preferred_recipient_id is not None:
+            if caller_recipient is None and hint.preferred_recipient_id is not None:
                 preferred = next(
                     (
                         item

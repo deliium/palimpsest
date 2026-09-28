@@ -59,9 +59,6 @@ _NESTED_MIND_PREDICATES: Final[frozenset[str]] = frozenset(
         "feels",
         "knows",
         "intends",
-        "trusts",
-        "distrusts",
-        "fears",
     }
 )
 _BELIEF_PREDICATES: Final[frozenset[str]] = frozenset({"at", "has", "empty", "danger"})

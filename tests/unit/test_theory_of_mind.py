@@ -332,11 +332,26 @@ def _watch(
     )
 
 
+def _help_bias(
+    model: TheoryOfMind,
+) -> tuple[tuple[tuple[str, float], ...], str, str]:
+    from agents.cognition.theory_of_mind import mind_direction_deltas
+
+    deltas, status, direction, _confidence, _hypothesis_id, _aspect = (
+        mind_direction_deltas(
+            model,
+            candidates=(("help-bob", "help", "body-bob"), ("wait", "wait", None)),
+            visible_destinations=frozenset(),
+            visible_entities=frozenset({"body-bob"}),
+        )
+    )
+    return deltas, status, direction
+
+
 def _need(model: TheoryOfMind, kind: str) -> MindHypothesis:
     matches = [
         item
         for item in model.hypotheses
-        if item.aspect is MindAspect.NEED
         if item.aspect is MindAspect.NEED
         and any(
             atom.slot is MindSlot.NEED_KIND and atom.value == kind
@@ -381,6 +396,10 @@ def test_witnessed_eat_persists_through_two_mild_counters(
     hunger = _need(model, "hunger")
     assert hunger.confidence == pytest.approx(4.0 / 7.0, abs=_EFFECT_QUANTUM)
     assert hunger.confidence > policy.action_threshold
+    stayed, stayed_status, stayed_direction = _help_bias(model)
+    assert stayed_status == "applied"
+    assert stayed_direction == "help"
+    assert dict(stayed)["help-bob"] == pytest.approx(hunger.confidence)
     third = _watch(
         tick=4,
         occurrences=(
@@ -393,6 +412,10 @@ def test_witnessed_eat_persists_through_two_mild_counters(
         policy,
     )
     assert _need(model, "hunger").confidence == pytest.approx(0.5)
+    stopped, stopped_status, stopped_direction = _help_bias(model)
+    assert stopped == ()
+    assert stopped_status == "none"
+    assert stopped_direction == ""
     assert "aspect=need" in caplog.text
     assert "reason_code=support" in caplog.text
     assert "resulting_hunger" not in caplog.text
@@ -584,3 +607,353 @@ def test_updater_source_excludes_private_authority_types() -> None:
         "PhysicalRules",
     ):
         assert forbidden not in text
+
+
+def test_false_hunger_does_not_read_the_body() -> None:
+    from dataclasses import replace
+
+    from tests.simulation_helpers import alive_body
+    from world.values import Hunger
+
+    body = replace(alive_body("body-bob", location_id="loc-camp"), hunger=Hunger(12))
+    before = body.hunger
+    owner = AgentId("agent-alice")
+    policy = default_theory_of_mind_policy()
+    watched = _watch(
+        tick=1,
+        occurrences=(_occurrence("eat", tick=1, actor="body-bob", event="evt-eat"),),
+    )
+    model = update_theory_of_mind(
+        empty_theory_of_mind(owner),
+        cues_from_observation(watched, owner_id=owner, policy=policy),
+        policy,
+    )
+    hunger = _need(model, "hunger")
+    assert body.hunger == before
+    assert body.hunger.value == 12
+    assert "Hunger" not in repr(hunger)
+    assert "Goal" not in repr(hunger)
+    assert all(atom.value != "12" for atom in hunger.atoms)
+    assert all(
+        atom.value not in {"weather", "rain"} for atom in hunger.atoms
+    )
+    assert not hasattr(model, "empirical_action")
+
+
+def test_food_ask_is_unreferenced_and_distrust_does_not_steer() -> None:
+    from agents.cognition.communication import DeterministicSocialMessagePolicy
+    from agents.cognition.models import DecisionMetadata, RetrievedMemoryContext
+    from social.relationships import (
+        DirectedRelationshipProfile,
+        RelationshipActivationState,
+        RelationshipConfidence,
+        RelationshipDimension,
+        RelationshipDimensionState,
+        RelationshipId,
+        RelationshipPolicyRef,
+        RelationshipRevisionId,
+    )
+    from world.actions import Ask
+    from world.communications import CommunicationSourceBasis, origin_utterance
+
+    policy = default_theory_of_mind_policy()
+    owner = AgentId("agent-alice")
+    speaker = EntityId("body-bob")
+    food = origin_utterance(text="note", speaker_id=speaker, concepts=("food",))
+    watched = _watch(
+        tick=1,
+        bodies=("body-ann", "body-bob"),
+        communications=(
+            ObservedCommunication(
+                provenance=ObservationProvenance(
+                    source_kind=ObservationSourceKind.COMMUNICATION,
+                    source_tick=0,
+                    source_event_id=EventId("evt-food"),
+                ),
+                speaker_id=speaker,
+                listener_id=EntityId("body-alice"),
+                utterance=food,
+                action_kind="tell",
+            ),
+        ),
+    )
+    model = update_theory_of_mind(
+        empty_theory_of_mind(owner),
+        cues_from_observation(watched, owner_id=owner, policy=policy),
+        policy,
+    )
+    assert _need(model, "hunger").confidence == pytest.approx(2.0 / 3.0)
+    assert "note" not in repr(model)
+    memory = RetrievedMemoryContext(
+        owner_id=owner,
+        memory_ids=(),
+        belief_ids=(),
+        confidence=1.0,
+        decision_metadata=DecisionMetadata(candidate_count=0),
+    )
+    messages = DeterministicSocialMessagePolicy()
+    decision = messages.select(
+        owner_id=owner,
+        speaker_id=EntityId("body-alice"),
+        observation=watched,
+        memory=memory,
+        mind=model,
+    )
+    assert decision is not None
+    assert type(decision.command) is Ask
+    assert decision.command.recipient_id == EntityId("body-bob")
+    assert decision.command.utterance.content.concepts == ("food",)
+    assert (
+        decision.command.utterance.declared.source_basis
+        is CommunicationSourceBasis.UNREFERENCED
+    )
+    assert decision.sender_confidence == pytest.approx(
+        _need(model, "hunger").confidence
+    )
+    kept = messages.select(
+        owner_id=owner,
+        speaker_id=EntityId("body-alice"),
+        observation=watched,
+        memory=memory,
+        preferred_recipient_id=EntityId("body-ann"),
+        mind=model,
+    )
+    assert kept is not None
+    assert kept.command.recipient_id == EntityId("body-ann")
+    policy_ref = RelationshipPolicyRef(policy_id="rel-v1", version="1")
+    low_trust = DirectedRelationshipProfile(
+        relationship_id=RelationshipId("rel-bob"),
+        source_id=owner,
+        target_id=AgentId("body-bob"),
+        dimensions=(
+            RelationshipDimensionState(
+                dimension=RelationshipDimension.TRUST,
+                value=-0.2,
+                confidence=RelationshipConfidence(
+                    confidence=0.9,
+                    support_mass=0.9,
+                    contradiction_mass=0.0,
+                ),
+                evidence=(),
+                logical_tick=1,
+                policy=policy_ref,
+            ),
+        ),
+        activation_state=RelationshipActivationState.ACTIVE,
+        current_revision_id=RelationshipRevisionId("rrev-1"),
+        revision_ordinal=1,
+        created_tick=1,
+        updated_tick=1,
+        policy=policy_ref,
+    )
+    distrusted = update_theory_of_mind(
+        empty_theory_of_mind(owner),
+        cues_from_observation(
+            watched, owner_id=owner, profiles=(low_trust,), policy=policy
+        ),
+        policy,
+    )
+    assert _need(distrusted, "hunger").confidence == pytest.approx(0.5)
+    baseline = messages.select(
+        owner_id=owner,
+        speaker_id=EntityId("body-alice"),
+        observation=watched,
+        memory=memory,
+    )
+    unchanged = messages.select(
+        owner_id=owner,
+        speaker_id=EntityId("body-alice"),
+        observation=watched,
+        memory=memory,
+        mind=distrusted,
+    )
+    assert baseline is not None and unchanged is not None
+    assert unchanged.command == baseline.command
+
+
+def test_move_exit_and_false_attack_choose_direction() -> None:
+    from agents.cognition.theory_of_mind import mind_direction_deltas
+    from world.communications import CommunicationRelation, origin_utterance
+
+    policy = default_theory_of_mind_policy()
+    owner = AgentId("agent-alice")
+    moved = _watch(
+        tick=1,
+        occurrences=(
+            _occurrence(
+                "move",
+                tick=1,
+                actor="body-bob",
+                destination="loc-north",
+                event="evt-move",
+            ),
+        ),
+    )
+    model = update_theory_of_mind(
+        empty_theory_of_mind(owner),
+        cues_from_observation(moved, owner_id=owner, policy=policy),
+        policy,
+        owner_entity_id=moved.observer_id,
+    )
+    goal = next(item for item in model.hypotheses if item.aspect is MindAspect.GOAL)
+    assert any(atom.value == "reach_place" for atom in goal.atoms)
+    candidates = (
+        ("move-north", "move", "loc-north"),
+        ("help-bob", "help", "body-bob"),
+    )
+    _with_exit, status, direction, *_rest = mind_direction_deltas(
+        model,
+        candidates=candidates,
+        visible_destinations=frozenset({"loc-north"}),
+        visible_entities=frozenset({"body-bob"}),
+    )
+    assert status == "applied"
+    assert direction == "move"
+    _without_exit, closed_status, closed_direction, *_rest = mind_direction_deltas(
+        model,
+        candidates=candidates,
+        visible_destinations=frozenset(),
+        visible_entities=frozenset({"body-bob"}),
+    )
+    assert closed_status == "applied"
+    assert closed_direction == "help"
+    attacked = _watch(
+        tick=1,
+        occurrences=(
+            _occurrence(
+                "attack",
+                tick=1,
+                actor="body-bob",
+                other="body-alice",
+                event="evt-attack",
+            ),
+        ),
+    )
+    threatened = update_theory_of_mind(
+        empty_theory_of_mind(owner),
+        cues_from_observation(attacked, owner_id=owner, policy=policy),
+        policy,
+        owner_entity_id=attacked.observer_id,
+    )
+    future = next(
+        item
+        for item in threatened.hypotheses
+        if item.aspect is MindAspect.FUTURE_ACTION
+    )
+    stored = future.confidence
+    deltas, flee_status, flee_direction, *_rest = mind_direction_deltas(
+        threatened,
+        candidates=(
+            ("flee", "flee", "body-bob"),
+            ("attack", "attack", "body-bob"),
+            ("wait", "wait", None),
+        ),
+        visible_destinations=frozenset(),
+        visible_entities=frozenset({"body-bob", "body-alice"}),
+    )
+    assert flee_status == "applied"
+    assert flee_direction == "flee"
+    assert dict(deltas)["attack"] < 0
+    assert future.confidence == stored
+    assert not hasattr(threatened, "empirical_action")
+    lie = origin_utterance(
+        text="note",
+        speaker_id=EntityId("body-bob"),
+        relations=(
+            CommunicationRelation(
+                subject="body-bob",
+                predicate="distrusts",
+                object="body-carol",
+            ),
+        ),
+    )
+    told = _watch(
+        tick=1,
+        bodies=("body-bob", "body-carol"),
+        communications=(
+            ObservedCommunication(
+                provenance=ObservationProvenance(
+                    source_kind=ObservationSourceKind.COMMUNICATION,
+                    source_tick=0,
+                    source_event_id=EventId("evt-carol"),
+                ),
+                speaker_id=EntityId("body-bob"),
+                listener_id=EntityId("body-alice"),
+                utterance=lie,
+                action_kind="tell",
+            ),
+        ),
+    )
+    social = update_theory_of_mind(
+        empty_theory_of_mind(owner),
+        cues_from_observation(told, owner_id=owner, policy=policy),
+        policy,
+    )
+    relationship = next(
+        item for item in social.hypotheses if item.aspect is MindAspect.RELATIONSHIP
+    )
+    assert any(atom.value == "negative" for atom in relationship.atoms)
+    assert any(atom.value == "body-carol" for atom in relationship.atoms)
+    from agents.cognition.communication import DeterministicSocialMessagePolicy
+    from agents.cognition.models import DecisionMetadata, RetrievedMemoryContext
+
+    decision = DeterministicSocialMessagePolicy().select(
+        owner_id=owner,
+        speaker_id=EntityId("body-alice"),
+        observation=told,
+        memory=RetrievedMemoryContext(
+            owner_id=owner,
+            memory_ids=(),
+            belief_ids=(),
+            confidence=1.0,
+            decision_metadata=DecisionMetadata(candidate_count=0),
+        ),
+        mind=social,
+    )
+    assert decision is not None
+    assert decision.command.recipient_id != EntityId("body-carol")
+    nested = origin_utterance(
+        text="note",
+        speaker_id=EntityId("body-bob"),
+        relations=(
+            CommunicationRelation(
+                subject="body-bob",
+                predicate="believes",
+                object="hungry",
+            ),
+        ),
+    )
+    nested_watch = _watch(
+        tick=1,
+        communications=(
+            ObservedCommunication(
+                provenance=ObservationProvenance(
+                    source_kind=ObservationSourceKind.COMMUNICATION,
+                    source_tick=0,
+                    source_event_id=EventId("evt-nested"),
+                ),
+                speaker_id=EntityId("body-bob"),
+                listener_id=EntityId("body-alice"),
+                utterance=nested,
+                action_kind="tell",
+            ),
+        ),
+    )
+    rejected = cues_from_observation(nested_watch, owner_id=owner, policy=policy)
+    assert any(cue.drop_code == "nested_mind_rejected" for cue in rejected)
+    stored_nested = update_theory_of_mind(
+        empty_theory_of_mind(owner), rejected, policy
+    )
+    assert stored_nested.hypotheses == ()
+    with pytest.raises(ValueError, match="nested_mind_rejected"):
+        MindHypothesis(
+            owner_id=owner,
+            subject_id=EntityId("body-bob"),
+            aspect=MindAspect.BELIEF,
+            atoms=(_atom(MindSlot.CLAIM_PREDICATE, "wants"),),
+            support=1.0,
+            counter=0.0,
+            evidence_ids=("prov-1",),
+            counter_evidence_ids=(),
+            channel=MindEvidenceChannel.COMMUNICATION,
+        )
