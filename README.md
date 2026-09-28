@@ -22,23 +22,26 @@ Locked installs do not re-resolve dependencies. Copy `.env.example` to `.env` on
 ## Quick start
 
 ```bash
-# Full stack (Postgres + migrations + API) via Docker Compose
-./scripts/up.sh
+./run.sh
+```
 
-# Or: API on the host with Compose Postgres only (reload)
+Then open `http://127.0.0.1:8080/` (`PALIMPSEST_API_PUBLISH_PORT` when set). That start pulls the published image and does not install Godot, open the editor, install export templates, export, or copy web files. `docker compose up -d` on `compose.yaml` is the same path.
+
+```bash
+# Host API with Compose Postgres only (reload)
 ./scripts/api.sh
 
-# Unit and architecture tests (no Docker, no PostgreSQL)
+# Unit and architecture tests (no Docker, no PostgreSQL, no Godot)
 uv run --frozen --python 3.12.14 pytest
-
-# API liveness
-curl -s http://127.0.0.1:8080/health
-# {"status":"ok"}
 ```
+
+`GET /health` returns exactly `{"status":"ok"}`.
 
 | Script | Purpose |
 | --- | --- |
-| `./scripts/up.sh` | `docker compose up --build` (full stack) |
+| `./run.sh` | Pull the published image and start the stack |
+| `./run-dev.sh` | Contributor build, including the web export |
+| `./scripts/up.sh` | Same pull path as `./run.sh` |
 | `./scripts/api.sh` | Host Uvicorn + Compose `db`, migrate, `--reload` |
 | `./scripts/migrate.sh` | `alembic upgrade head` against configured DSN |
 | `./scripts/down.sh` | `docker compose down` (add `--volumes` to drop data) |
@@ -55,7 +58,7 @@ Development credentials in `compose.yaml` are **not production**. `docker compos
 | [Analysis metrics](docs/analysis-metrics.md) | V1 metric catalog, populations/denominators, numerical policy, known-answer fixtures |
 | [Research API](docs/research-api.md) | FastAPI control/inspection/debug, WebSocket cursors/backpressure, capability credentials |
 | [Read-only observer](docs/observer.md) | Observer protocol, frames, and the read-only HTTP and WebSocket routes |
-| [Godot observer](docs/godot-observer.md) | Godot 4.7.2 Compatibility client, same-origin setup, local token, fixture playback |
+| [Godot observer](docs/godot-observer.md) | Prebuilt Web client served by the API, version strip, `?run_id=` |
 | [Cognition and agent runtime](docs/cognition-runtime.md) | `CognitiveLoop`, drives/goals, subjective imagination/motivation/intention, `AgentRuntime`, metadata-only logs |
 | [Memory reconstruction](docs/memory-reconstruction.md) | Subjective recall, reconsolidation, lineage, drift analysis, Alembic `0006`/`0007`/`0008`, safe logging |
 | [Social communication](docs/social-communication.md) | Talk/Ask/Tell delivery vs testimony, owner-scoped traces, trust-weighted beliefs, transmission analysis |

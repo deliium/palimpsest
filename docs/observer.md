@@ -13,7 +13,7 @@ Protocol version: `observer-protocol-v1`. Layout documents use `observer-layout-
 | `WorldEngine` | Commits objective events and the world. |
 | `simulation.observer_facts` | Copies locations, bodies, items, resources, weather, and registrations after a fold. No seed field. |
 | `observer` | Adapts events and projects frames. It does not call engine methods that commit ticks. |
-| `api` | Serves the frames over HTTP and WebSocket. |
+| `api` | Serves observer frames over HTTP and WebSocket, and serves the prebuilt presentation tree at `/` when `PALIMPSEST_PRESENTATION_WEB_ROOT` is set. It does not import the client. |
 
 `simulation`, `world`, `agents`, `memory`, `social`, `llm`, `persistence`, and `experiments` do not import `observer`.
 

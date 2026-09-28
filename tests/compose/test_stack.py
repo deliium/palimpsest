@@ -63,7 +63,10 @@ def test_dockerfile_pins_python_digest_and_frozen_lock() -> None:
     assert "USER palimpsest" in text
     assert "--port" in text
     assert "8080" in text
-    assert "curl" not in text.lower()
+    runtime = text.split("FROM ${PYTHON_IMAGE} AS runtime", 1)[1]
+    assert "curl" not in runtime.lower()
+    assert "PALIMPSEST_PRESENTATION_WEB_ROOT=/app/share/observer-web" in runtime
+    assert "AS observer-export" in text
 
 
 def test_compose_pins_pgvector_and_startup_order() -> None:
@@ -76,6 +79,11 @@ def test_compose_pins_pgvector_and_startup_order() -> None:
     assert "non-production" in text
     assert "not secret-safe" in text
     assert "PALIMPSEST_API_PUBLISH_PORT" in text
+    assert text.count(
+        "image: ${PALIMPSEST_API_IMAGE:-ghcr.io/deliium/palimpsest:0.1.0}"
+    ) == 2
+    assert "build:" not in text
+    assert ":latest" not in text
 
 
 def test_compose_config_quiet() -> None:
@@ -103,6 +111,13 @@ def running_stack() -> Iterator[tuple[str, str, dict[str, str]]]:
     env = os.environ.copy()
     env["PALIMPSEST_API_PUBLISH_PORT"] = port
     try:
+        _LOGGER.debug("compose_config_wait")
+        image = f"palimpsest-api:compose-{secrets.token_hex(4)}"
+        _run(
+            [docker, "build", "--network", "host", "-t", image, str(ROOT)],
+            env=env,
+        )
+        env["PALIMPSEST_API_IMAGE"] = image
         _LOGGER.debug("compose_up_wait project=%s", project)
         _run(
             [
@@ -114,7 +129,8 @@ def running_stack() -> Iterator[tuple[str, str, dict[str, str]]]:
                 str(COMPOSE_FILE),
                 "up",
                 "-d",
-                "--build",
+                "--pull",
+                "never",
                 "--wait",
                 "--wait-timeout",
                 "180",

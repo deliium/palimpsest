@@ -2,7 +2,7 @@
 
 [← Read-only observer](observer.md) · [Research API](research-api.md) · [Back to README](../README.md)
 
-The Godot observer is a read-only 2D presentation of a running world. It lives in `clients/godot-observer/` and is not a Python package. Simulation code does not import it, and FastAPI does not serve the web export.
+The Godot observer is a read-only 2D presentation of a running world. It lives in `clients/godot-observer/` and is not a Python package. Simulation code does not import it. The published API serves the already-exported files at `/` and does not import the client.
 
 Opening the client, moving the camera, or changing playback speed does not change seeds, event ids, or `exact_trajectory_hash`.
 
@@ -26,9 +26,13 @@ The relationship route is out of scope. The client does not request cognition tr
 
 ## Same-origin setup
 
-URL code joins an origin string and a path. On a Web export the origin is `window.location.origin`. Off Web it is the project setting `palimpsest/observer_origin`. An empty origin shows `observer_origin_missing`. Scripts under `clients/godot-observer/scripts/` do not contain a loopback host.
+URL code joins an origin string and a path. On a Web export the origin is `window.location.origin`, and `GET /version` fills the status strip. Off Web, a configured `palimpsest/observer_origin` loads that origin's `/version`. With no origin the strip uses the protocol constant `observer-protocol-v1`, the export engine `4.7.2-stable`, the application version from `build-info.json` when the export wrote it, and revision `unknown`.
 
-Host the Web export on the same origin as the API with a reverse proxy. The API does not mount the client.
+The four status lines are application version, protocol, export engine, and backend revision. A bad manifest, frame, or known event shows `unsupported_observer_protocol` and is not applied. The log line is `[observer.protocol] parse_failed reason_code=unsupported_observer_protocol`.
+
+`./run.sh` prints `INFO startup_ready url=http://127.0.0.1:8080/`. On a Web export, `/?run_id=<id>` fills the run field and starts the session. The log is `[observer.session] web_run_id_applied run_id=<id>`. The query never carries a token. A URL with no query, or an empty `run_id`, waits for Connect.
+
+Scripts under `clients/godot-observer/scripts/` do not contain a loopback host. There is no second reverse proxy: `/health`, `/version`, `/v1`, and the observer WebSocket stay on the same origin as `index.html`.
 
 ## Local token
 

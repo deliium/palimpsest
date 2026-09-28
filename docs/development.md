@@ -74,7 +74,7 @@ Convenience wrappers live under `scripts/` (repo root as cwd):
 
 | Script | Equivalent |
 | --- | --- |
-| `./scripts/up.sh` | `docker compose up --build` |
+| `./scripts/up.sh` | Same pull path as `./run.sh` |
 | `./scripts/down.sh` | `docker compose down` |
 | `./scripts/api.sh` | Compose `db` → `alembic upgrade head` → host Uvicorn `--reload` |
 | `./scripts/migrate.sh` | `uv run --frozen --python 3.12.14 alembic upgrade head` |
@@ -99,14 +99,28 @@ uv run --frozen --python 3.12.14 uvicorn api.app:create_app --factory --host 127
 
 ## Docker Compose
 
+The normal start pulls a published image. It does not install Godot, open the editor, install export templates, export the client, or copy web files.
+
 ```bash
-./scripts/up.sh
-# or: docker compose up --build
+./run.sh
+# or: ./scripts/up.sh
+# or: docker compose up -d
 ```
 
-Order: database health → one-shot `alembic upgrade head` → API. The API image runs Uvicorn as uid **1001** on port 8080. Healthcheck uses Python `urllib`, not `curl`.
+When the stack is ready the script prints `INFO startup_ready url=http://127.0.0.1:8080/`. Open that page. `PALIMPSEST_API_PUBLISH_PORT` changes the host port. `./run.sh --open` launches a browser when `xdg-open` or `open` exists.
 
-Images are digest-pinned (Python 3.12.14 slim, pgvector PostgreSQL 17). Install uses `uv sync --frozen --no-dev --no-editable`. Compose builds use `network: host` so `uv` can resolve PyPI when the Docker bridge DNS is unavailable. Manual image builds on the same hosts may need `docker build --network=host`.
+`./run.sh` does not build. If the release image is not published yet, the pull fails and the message points at `./run-dev.sh`. That contributor command builds `compose.dev.yaml` with the pinned editor inside the image export stage.
+
+```bash
+./run-dev.sh
+docker build --target observer-export --output type=local,dest=clients/godot-observer/build/web .
+```
+
+The second command extracts the web files without opening the editor. A URL `/?run_id=<id>` starts that session. The query never carries a token. A missing or mismatched observer protocol is `[observer.protocol] parse_failed reason_code=unsupported_observer_protocol`. When the page supplies a run id, the client logs `[observer.session] web_run_id_applied run_id=%s`.
+
+Order: database health → one-shot `alembic upgrade head` → API. The API image runs Uvicorn as uid **1001** on port 8080. Healthcheck uses Python `urllib`, not `curl`. Host `./scripts/api.sh` leaves `PALIMPSEST_PRESENTATION_WEB_ROOT` unset, so it does not mount the export.
+
+The database image stays digest-pinned. The API image is `PALIMPSEST_API_IMAGE` or `ghcr.io/deliium/palimpsest:0.1.0`. Application install uses `uv sync --frozen --no-dev --no-editable`. Contributor builds set `network: host` so `uv` can resolve PyPI when the Docker bridge DNS is unavailable. Manual image builds on the same hosts may need `docker build --network=host`.
 
 Development passwords in `compose.yaml` are **non-production**. Expanded `docker compose config` output is **not secret-safe**. Production extension-privilege design is deferred.
 
