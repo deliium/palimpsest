@@ -10,6 +10,7 @@ const _LEVELS := {
 
 static var _threshold: int = 10
 static var _started: bool = false
+static var recent: Array[String] = []
 
 
 static func start() -> void:
@@ -44,6 +45,10 @@ static func error(area: String, message: String) -> void:
 static func _write(level: int, area: String, message: String) -> void:
 	if not _started:
 		start()
+	var line := "[observer.%s] %s" % [area, message]
+	recent.append(line)
+	if recent.size() > 80:
+		recent.pop_front()
 	if level < _threshold:
 		return
-	print("[observer.%s] %s" % [area, message])
+	print(line)

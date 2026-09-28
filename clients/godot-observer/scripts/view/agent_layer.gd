@@ -59,6 +59,48 @@ func active_motions() -> int:
 	return _motions
 
 
+func clear_motions() -> void:
+	for entity_id in _tokens.keys():
+		var token = _tokens[entity_id]
+		if token.has_meta("motion"):
+			var motion: Tween = token.get_meta("motion")
+			if motion != null and motion.is_valid():
+				motion.kill()
+	_motions = 0
+
+
+func capture_positions() -> Dictionary:
+	var positions := {}
+	for entity_id in _tokens.keys():
+		positions[str(entity_id)] = _tokens[entity_id].position
+	return positions
+
+
+func restore_position(entity_id: String, point: Vector2) -> void:
+	if _tokens.has(entity_id):
+		_tokens[entity_id].position = point
+
+
+static func selection_for(selected_id: String, agents: Array) -> Dictionary:
+	for agent in agents:
+		if str(agent.entity_id) == selected_id:
+			return {"keep": true, "dead": str(agent.life_status) == "dead"}
+	return {"keep": false, "dead": false}
+
+
+func highlight(entity_id: String) -> bool:
+	selected_entity_id = entity_id
+	var found := false
+	for token_id in _tokens.keys():
+		var selected := str(token_id) == entity_id
+		_tokens[token_id].set_selected(selected)
+		if selected:
+			found = true
+	if not found:
+		selected_entity_id = ""
+	return found
+
+
 func token_position(entity_id: String) -> Vector2:
 	if not _tokens.has(entity_id):
 		return Vector2.ZERO

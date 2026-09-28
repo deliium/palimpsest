@@ -1,9 +1,10 @@
-[gd_scene load_steps=5 format=3]
+[gd_scene load_steps=6 format=3]
 
 [ext_resource type="Script" path="res://scripts/ui/ui_layer.gd" id="1_ui"]
 [ext_resource type="PackedScene" path="res://scenes/ui/status_bar.tscn" id="2_status"]
 [ext_resource type="PackedScene" path="res://scenes/ui/event_log.tscn" id="3_log"]
 [ext_resource type="PackedScene" path="res://scenes/ui/inspector.tscn" id="4_inspector"]
+[ext_resource type="PackedScene" path="res://scenes/ui/timeline.tscn" id="5_timeline"]
 
 [node name="UILayer" type="CanvasLayer"]
 script = ExtResource("1_ui")
@@ -52,6 +53,91 @@ text = "8x"
 [node name="PlayFixture" type="Button" parent="Controls"]
 layout_mode = 2
 text = "Play fixture"
+
+[node name="Playback" type="HBoxContainer" parent="."]
+offset_left = 16.0
+offset_top = 108.0
+offset_right = 1400.0
+offset_bottom = 144.0
+theme_override_constants/separation = 8
+
+[node name="Play" type="Button" parent="Playback"]
+layout_mode = 2
+text = "Play"
+
+[node name="Pause" type="Button" parent="Playback"]
+layout_mode = 2
+text = "Pause"
+
+[node name="PreviousEvent" type="Button" parent="Playback"]
+layout_mode = 2
+text = "Previous Event"
+
+[node name="NextEvent" type="Button" parent="Playback"]
+layout_mode = 2
+text = "Next Event"
+
+[node name="PreviousTick" type="Button" parent="Playback"]
+layout_mode = 2
+text = "Previous Tick"
+
+[node name="NextTick" type="Button" parent="Playback"]
+layout_mode = 2
+text = "Next Tick"
+
+[node name="JumpTick" type="SpinBox" parent="Playback"]
+layout_mode = 2
+min_value = 0.0
+max_value = 1000000.0
+rounded = true
+
+[node name="JumpToTick" type="Button" parent="Playback"]
+layout_mode = 2
+text = "Jump to Tick"
+
+[node name="JumpSequence" type="SpinBox" parent="Playback"]
+layout_mode = 2
+min_value = 0.0
+max_value = 1000000.0
+rounded = true
+
+[node name="JumpToEvent" type="Button" parent="Playback"]
+layout_mode = 2
+text = "Jump to Event"
+
+[node name="ReturnToLive" type="Button" parent="Playback"]
+layout_mode = 2
+text = "Return to Live"
+
+[node name="SpeedQuarter" type="Button" parent="Playback"]
+layout_mode = 2
+text = "0.25x"
+
+[node name="SpeedHalf" type="Button" parent="Playback"]
+layout_mode = 2
+text = "0.5x"
+
+[node name="Speed1" type="Button" parent="Playback"]
+layout_mode = 2
+text = "1x"
+
+[node name="Speed2" type="Button" parent="Playback"]
+layout_mode = 2
+text = "2x"
+
+[node name="Speed4" type="Button" parent="Playback"]
+layout_mode = 2
+text = "4x"
+
+[node name="Speed8" type="Button" parent="Playback"]
+layout_mode = 2
+text = "8x"
+
+[node name="Speed16" type="Button" parent="Playback"]
+layout_mode = 2
+text = "16x"
+
+[node name="Timeline" parent="." instance=ExtResource("5_timeline")]
 
 [node name="EventLog" parent="." instance=ExtResource("3_log")]
 

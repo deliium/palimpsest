@@ -81,7 +81,7 @@ static func _build(origin: String, path: String, query: Dictionary, method: Stri
 	var params := {}
 	for key in query.keys():
 		var name := str(key)
-		if name not in ["limit", "tick", "layout_id"]:
+		if name not in ["limit", "tick", "layout_id", "through_sequence", "from_tick", "to_tick"]:
 			continue
 		if query[key] == null:
 			continue

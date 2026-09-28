@@ -17,6 +17,16 @@ func active_count() -> int:
 	return _marks.size() + _bubbles.size()
 
 
+func clear_motions() -> void:
+	if _objects != null:
+		for mark in _marks:
+			if str(mark.get("action", "")) == "item":
+				_objects.release_item(str(mark.get("item_id", "")))
+	_marks.clear()
+	_bubbles.clear()
+	queue_redraw()
+
+
 func play(command: Dictionary, agents: Node, locations: Node, connections: Node = null, objects: Node = null) -> void:
 	if objects != null:
 		_objects = objects

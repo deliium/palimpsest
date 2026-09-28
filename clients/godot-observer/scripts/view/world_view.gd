@@ -1,5 +1,6 @@
 extends Node2D
 
+const ObserverLog := preload("res://scripts/log.gd")
 const Playback := preload("res://scripts/protocol/playback.gd")
 const ReducerScript := preload("res://scripts/protocol/reducer.gd")
 const Router := preload("res://scripts/protocol/event_router.gd")
@@ -24,6 +25,25 @@ signal inspect_cleared
 func _ready() -> void:
 	_agents.agent_selected.connect(_on_agent_selected)
 	_agents.selection_cleared.connect(func() -> void: inspect_cleared.emit())
+
+
+func replace_sought_frame(frame: Variant, event: Variant, forward: bool) -> void:
+	var prior: Dictionary = _agents.capture_positions()
+	var selected := _agents.selected_entity_id
+	_agents.clear_motions()
+	_effects.clear_motions()
+	ObserverLog.debug("view", "motions_cleared")
+	show_world(frame.world)
+	if selected == "":
+		_maybe_tween(event, forward, prior)
+		return
+	var choice: Dictionary = _agents.selection_for(selected, frame.world.agents)
+	if not bool(choice.get("keep", false)) or not _agents.highlight(selected):
+		inspect_cleared.emit()
+		_maybe_tween(event, forward, prior)
+		return
+	_on_agent_selected(selected)
+	_maybe_tween(event, forward, prior)
 
 
 func show_world(world: Variant) -> void:
@@ -74,6 +94,30 @@ func focus_selected() -> void:
 	if selected == null:
 		return
 	_camera.focus_on(selected)
+
+
+func _maybe_tween(event: Variant, forward: bool, prior: Dictionary) -> void:
+	if event == null or not forward or not bool(event.known):
+		return
+	var pending: int = _agents.active_motions() + _effects.active_count()
+	var policy: Dictionary = Playback.policy(playback_speed, pending)
+	if bool(policy.get("skip", false)):
+		return
+	var body := ""
+	if event.has_method("affected_entity_id"):
+		var affected: Variant = event.affected_entity_id()
+		body = "" if affected == null else str(affected)
+	var logical := {
+		"entity_id": body,
+		"origin": "" if event.origin_location_id == null else str(event.origin_location_id),
+		"destination": "" if event.destination_location_id == null else str(event.destination_location_id),
+		"moved": str(event.type) == "AGENT_MOVED" or str(event.type) == "AGENT_FLED",
+	}
+	var command: Dictionary = Router.route(event, policy, logical)
+	command["ground"] = _item_ground(event)
+	if str(command.get("action", "")) == "move" and body != "" and prior.has(body):
+		_agents.restore_position(body, prior[body])
+	_effects.play(command, _agents, _locations, _connections, _objects)
 
 
 func _on_agent_selected(entity_id: String) -> void:

@@ -8,7 +8,14 @@ signal zoom_out_requested
 signal reset_requested
 signal focus_requested
 signal speed_changed(speed: float)
+signal speed_selected(speed: float)
+signal control_pressed(action: String)
+signal event_seek_requested(tick: int, sequence: int)
+signal timeline_seek_requested(tick: int, sequence: int)
 signal play_fixture_requested
+
+var _live_tick := 0
+var _selected_id := ""
 
 
 func _ready() -> void:
@@ -20,11 +27,52 @@ func _ready() -> void:
 	$Controls/ZoomOut.pressed.connect(func() -> void: zoom_out_requested.emit())
 	$Controls/Reset.pressed.connect(func() -> void: reset_requested.emit())
 	$Controls/Focus.pressed.connect(func() -> void: focus_requested.emit())
-	$Controls/Speed1.pressed.connect(func() -> void: speed_changed.emit(1.0))
-	$Controls/Speed2.pressed.connect(func() -> void: speed_changed.emit(2.0))
-	$Controls/Speed4.pressed.connect(func() -> void: speed_changed.emit(4.0))
-	$Controls/Speed8.pressed.connect(func() -> void: speed_changed.emit(8.0))
+	$Controls/Speed1.pressed.connect(func() -> void: _select_speed(1.0))
+	$Controls/Speed2.pressed.connect(func() -> void: _select_speed(2.0))
+	$Controls/Speed4.pressed.connect(func() -> void: _select_speed(4.0))
+	$Controls/Speed8.pressed.connect(func() -> void: _select_speed(8.0))
 	$Controls/PlayFixture.pressed.connect(func() -> void: play_fixture_requested.emit())
+	$Playback/Play.pressed.connect(func() -> void: _press("play"))
+	$Playback/Pause.pressed.connect(func() -> void: _press("pause"))
+	$Playback/PreviousEvent.pressed.connect(func() -> void: _press("previous_event"))
+	$Playback/NextEvent.pressed.connect(func() -> void: _press("next_event"))
+	$Playback/PreviousTick.pressed.connect(func() -> void: _press("previous_tick"))
+	$Playback/NextTick.pressed.connect(func() -> void: _press("next_tick"))
+	$Playback/JumpToTick.pressed.connect(func() -> void: _press("jump_tick"))
+	$Playback/JumpToEvent.pressed.connect(func() -> void: _press("jump_event"))
+	$Playback/ReturnToLive.pressed.connect(func() -> void: _press("return_live"))
+	$Playback/SpeedQuarter.pressed.connect(func() -> void: _select_speed(0.25))
+	$Playback/SpeedHalf.pressed.connect(func() -> void: _select_speed(0.5))
+	$Playback/Speed1.pressed.connect(func() -> void: _select_speed(1.0))
+	$Playback/Speed2.pressed.connect(func() -> void: _select_speed(2.0))
+	$Playback/Speed4.pressed.connect(func() -> void: _select_speed(4.0))
+	$Playback/Speed8.pressed.connect(func() -> void: _select_speed(8.0))
+	$Playback/Speed16.pressed.connect(func() -> void: _select_speed(16.0))
+	$EventLog.seek_requested.connect(func(tick: int, sequence: int) -> void:
+		event_seek_requested.emit(tick, sequence)
+	)
+	$Timeline.seek_requested.connect(func(tick: int, sequence: int) -> void:
+		timeline_seek_requested.emit(tick, sequence)
+	)
+
+
+func jump_tick_value() -> int:
+	return int($Playback/JumpTick.value)
+
+
+func jump_sequence_value() -> int:
+	return int($Playback/JumpSequence.value)
+
+
+func _press(action: String) -> void:
+	ObserverLog.debug("ui", "control_pressed action=%s" % action)
+	control_pressed.emit(action)
+
+
+func _select_speed(speed: float) -> void:
+	ObserverLog.debug("ui", "speed_selected speed=%s" % speed)
+	speed_changed.emit(speed)
+	speed_selected.emit(speed)
 
 
 func show_status(code: String, detail: String) -> void:
@@ -33,6 +81,22 @@ func show_status(code: String, detail: String) -> void:
 
 func append_event(event: Variant) -> void:
 	$EventLog.append_event(event)
+
+
+func replace_events(events: Array, focus_tick: int, focus_sequence: int, world: Variant) -> void:
+	$EventLog.set_world(world)
+	$EventLog.replace_window(events, focus_tick, focus_sequence)
+	$Timeline.set_window(events, focus_tick, _live_tick, _selected_id)
+
+
+func note_live_tick(live_tick: int) -> void:
+	_live_tick = live_tick
+	$Timeline.set_live_tick(live_tick)
+
+
+func note_selection(entity_id: String) -> void:
+	_selected_id = entity_id
+	$Timeline.set_selected(entity_id)
 
 
 func show_inspector(snapshot: Dictionary) -> void:

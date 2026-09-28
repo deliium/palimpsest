@@ -22,4 +22,15 @@ func run() -> Array:
 	var held: Dictionary = Playback.policy(1.0, 3)
 	if held["skip"]:
 		failures.append("three pending motions should still play")
+	var slow: Dictionary = Playback.policy(0.25, 0)
+	if slow["skip"] or not is_equal_approx(float(slow["duration"]), 2.4):
+		failures.append("speed 0.25 should lengthen the tween")
+	if not is_equal_approx(float(slow["speech_duration"]), 8.0):
+		failures.append("speed 0.25 should lengthen speech")
+	var half: Dictionary = Playback.policy(0.5, 0)
+	if half["skip"] or not is_equal_approx(float(half["duration"]), 1.2):
+		failures.append("speed 0.5 should lengthen the tween")
+	var sixteen: Dictionary = Playback.policy(16.0, 0)
+	if not sixteen["skip"] or float(sixteen["duration"]) != 0.0:
+		failures.append("speed 16 should skip")
 	return failures

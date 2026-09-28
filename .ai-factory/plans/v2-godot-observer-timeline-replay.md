@@ -101,19 +101,19 @@ Each checkpoint is a git commit on `main` created when those tasks are done. Do 
 
 ### Phase 2: Playback Cursor and Controls
 
-- [ ] Task 3: Add a client playback cursor and speed table.
+- [x] Task 3: Add a client playback cursor and speed table.
   - Deliverable: `clients/godot-observer/scripts/protocol/transport.gd` is a `RefCounted` model with the cursor fields from Design Decisions. The viewed tick and sequence are the event pair, not `frame.world.tick`. Pure functions choose the next event, the previous event (`sequence - 1` when `sequence > 0`, otherwise the previous tick's `last_sequence`), the next and previous tick, and the live head. Below speed 8 the step target is one event. At speed `>= 8` the step target is the last event of the next tick. Speed policy in `scripts/protocol/playback.gd` accepts `0.25` and `0.5` (longer tweens) and treats `8` and `16` as skip. `tests/test_playback.gd` and a new `tests/test_transport.gd` are registered in `tests/run_protocol.gd`.
   - Logging: `[observer.transport] cursor_set mode=%s tick=%s sequence=%s speed=%s paused=%s` at DEBUG. `[observer.playback] motion_skipped speed=%s pending=%s` stays at DEBUG.
   - Depends on task 2.
   - Files: `clients/godot-observer/scripts/protocol/transport.gd`, `clients/godot-observer/scripts/protocol/playback.gd`, `clients/godot-observer/tests/test_transport.gd`, `clients/godot-observer/tests/test_playback.gd`, `clients/godot-observer/tests/run_protocol.gd`.
 
-- [ ] Task 4: Seek by replacing the frame, including backward steps.
+- [x] Task 4: Seek by replacing the frame, including backward steps.
   - Deliverable: `scripts/net/session.gd` gains read-only requests for `state?tick=`, `state?tick=&through_sequence=`, `events`, `ticks`, and `run`. Each GET has its own request id. Ignore a response older than the latest seek. Do not key the in-flight kind only by path. URLs stay GET and still omit a negative resume pair. Entering `REPLAY` closes the socket with the existing client-stop path. A seek response goes through `world_view` as a full replace: clear motions on the agent and effects layers, then `show_world`. Do not call the local reducer to undo a move, death, item, resource, or weather change. After the rebuild, highlight the selected `entity_id` again when that agent remains, including `dead`, and refresh the inspector from the new record. If the id is absent, clear the selection and the inspector. `frame.events` is not animated and is not copied into the log. The viewed tick stored on the transport cursor is `cursor.after_tick`. The applied event, if the caller passes it, may tween only in the forward direction and only when the speed policy does not skip.
   - Logging: `[observer.session] seek_started tick=%s sequence=%s` at DEBUG. `[observer.session] seek_applied mode=%s tick=%s sequence=%s` at INFO. `[observer.view] motions_cleared` at DEBUG. `[observer.session] seek_failed reason_code=%s` at ERROR. `[observer.session] seek_ignored reason_code=stale_response` at DEBUG.
   - Depends on task 3.
   - Files: `clients/godot-observer/scripts/net/session.gd`, `clients/godot-observer/scripts/protocol/urls.gd`, `clients/godot-observer/scripts/view/world_view.gd`, `clients/godot-observer/scripts/view/agent_layer.gd`, `clients/godot-observer/scripts/view/effects_layer.gd`.
 
-- [ ] Task 5: Add the transport controls.
+- [x] Task 5: Add the transport controls.
   - Deliverable: the controls row in `scenes/ui/ui_layer.tscn` gains Play, Pause, Previous Event, Next Event, Previous Tick, Next Tick, Jump to Tick, Jump to Event, and Return to Live, plus speed buttons `0.25x`, `0.5x`, `1x`, `2x`, `4x`, `8x`, and `16x`. Existing zoom, reset, focus, and Play fixture stay. Buttons emit signals only. They do not build HTTP URLs in the scene script. Changing speed does not seek and does not write a project setting to the server. `scripts/main.gd` wires the signals to the session and the transport model.
   - Logging: `[observer.ui] control_pressed action=%s` at DEBUG. `[observer.ui] speed_selected speed=%s` at DEBUG.
   - Depends on task 4.
@@ -123,19 +123,19 @@ Each checkpoint is a git commit on `main` created when those tasks are done. Do 
 
 ### Phase 3: Log, Live Pause, and Timeline
 
-- [ ] Task 6: Show a textual event log that can seek.
+- [x] Task 6: Show a textual event log that can seek.
   - Deliverable: On seek, `Session` loads one events page around that cursor and `scripts/ui/event_log.gd` replaces its lines with that page, capped near 200 lines, then focuses the sought row. The line is `{tick}:{sequence} {type} {actor} {target} {description}`. The subject is `target_id` for `AGENT_DIED`, `NEEDS_APPLIED`, and `EXPOSURE_APPLIED`, and `actor_id` otherwise. Labels prefer `agent_id` from the current frame, then the raw id. Location names prefer `display_name`, then `name`. The description is a short phrase for the closed semantic types (moved, searched, took, dropped, gave, ate, drank, slept, talked, asked, told, helped, attacked, fled, waited, weather, resource regenerated, needs, exposure, died). Unknown types still render and do not raise. Clicking a row emits `seek_requested(tick, sequence)`, wired to the task 4 seek path. Three filters (agent, event type, location) hide non-matching rows and do not request a new route. Empty filters show every loaded line. Live append still sorts by `(tick, sequence)`. Do not page from tick 0 to fill the log.
   - Logging: `[observer.log_view] line_appended tick=%s sequence=%s type=%s` stays at DEBUG. `[observer.log_view] seek_clicked tick=%s sequence=%s` at DEBUG. `[observer.log_view] filter_set agent=%s type=%s location=%s shown=%s` at DEBUG. `[observer.log_view] window_replaced count=%s tick=%s sequence=%s` at DEBUG. No utterance text.
   - Depends on tasks 4 and 5.
   - Files: `clients/godot-observer/scripts/ui/event_log.gd`, `clients/godot-observer/scenes/ui/event_log.tscn`, `clients/godot-observer/scripts/ui/ui_layer.gd`.
 
-- [ ] Task 7: Pause on the live run, show when the view falls behind, and return to live.
+- [x] Task 7: Pause on the live run, show when the view falls behind, and return to live.
   - Deliverable: while `mode=LIVE` and `paused` is true, `Session` buffers up to 256 `kind=event` envelopes and does not call `play_event` or the reducer. Event 257 discards the buffer and sets `behind_live`. The status bar shows `behind live` until Return to Live or a successful catch-up. Play applies a surviving buffer in order, or reloads through the events keyset and `GET .../state` after a discard, then continues. `REPLAY` keeps the socket closed for the whole replay and polls `GET .../observer/run`. That poll updates `live_tick`, `latest_tick`, and `latest_sequence` and does not replace `world`. `behind live` is also shown when the viewed event is behind that head. A gap or envelope during replay or pause does not move the viewed world. Return to Live performs the unscoped state GET, updates `live_tick` from the run response, clears the buffer and tweens, sets `mode=LIVE` and `paused=false`, and opens the socket at the head cursor. A socket close while live and unpaused keeps today's gap-fill. The status text is visible without reading the log.
   - Logging: `[observer.session] live_paused tick=%s sequence=%s` at INFO. `[observer.session] live_buffer_discarded count=%s reason_code=buffer_limit` at WARN. `[observer.session] return_to_live tick=%s sequence=%s` at INFO. `[observer.session] live_head_polled tick=%s` at DEBUG. `[observer.stream] gap_ignored reason_code=replay_cursor` at DEBUG.
   - Depends on tasks 4 and 5.
   - Files: `clients/godot-observer/scripts/net/session.gd`, `clients/godot-observer/scripts/ui/status_bar.gd`, `clients/godot-observer/scripts/protocol/transport.gd`.
 
-- [ ] Task 8: Draw a compact timeline.
+- [x] Task 8: Draw a compact timeline.
   - Deliverable: a new `scripts/ui/timeline.gd` and `scenes/ui/timeline.tscn`, instanced from `ui_layer.tscn`. It shows the viewed event tick and the live tick. `AGENT_DIED` marks come only from the bounded log window. Selected-agent marks use that same window and stay off until toggled. Clicking a mark emits the same seek signal as the log. The control does not plot series, heatmaps, or metrics, and it does not page the journal to discover marks. It does not call the relationship route.
   - Logging: `[observer.timeline] marks_set death_count=%s selected_count=%s viewed_tick=%s live_tick=%s` at DEBUG. `[observer.timeline] mark_clicked tick=%s sequence=%s` at DEBUG.
   - Depends on tasks 6 and 7.

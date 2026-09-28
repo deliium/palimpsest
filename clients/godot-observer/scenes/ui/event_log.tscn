@@ -7,11 +7,30 @@ anchors_preset = 11
 anchor_left = 1.0
 anchor_right = 1.0
 anchor_bottom = 1.0
-offset_left = -280.0
-offset_top = 108.0
+offset_left = -320.0
+offset_top = 160.0
 offset_bottom = -16.0
 script = ExtResource("1_log")
 
-[node name="Items" type="ItemList" parent="."]
+[node name="Column" type="VBoxContainer" parent="."]
 layout_mode = 2
-custom_minimum_size = Vector2(260, 240)
+
+[node name="Filters" type="VBoxContainer" parent="Column"]
+layout_mode = 2
+
+[node name="Agent" type="LineEdit" parent="Column/Filters"]
+layout_mode = 2
+placeholder_text = "Agent"
+
+[node name="Type" type="LineEdit" parent="Column/Filters"]
+layout_mode = 2
+placeholder_text = "Event type"
+
+[node name="Location" type="LineEdit" parent="Column/Filters"]
+layout_mode = 2
+placeholder_text = "Location"
+
+[node name="Items" type="ItemList" parent="Column"]
+layout_mode = 2
+custom_minimum_size = Vector2(300, 240)
+size_flags_vertical = 3
