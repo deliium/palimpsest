@@ -80,6 +80,7 @@ from world.values import (
 __all__: list[str] = [
     "ProjectionError",
     "ProjectionErrorCode",
+    "project_event_prefix",
     "project_events",
 ]
 
@@ -135,6 +136,85 @@ def project_events(
     transitions (0 or +1 per tick), duplicate rejection, and graph invariants.
     Does not call ``evaluate_operation`` / ``apply_operation``.
     """
+    normalized, schema_version, run_id = _prepare_events(
+        state,
+        events,
+        expected_run_id=expected_run_id,
+        expected_world_id=expected_world_id,
+    )
+    if not normalized:
+        return state
+
+    working = state
+    base_revision = state.revision
+    seen_ids: set[EventId] = set()
+    previous_tick: int | None = None
+
+    for group in _group_by_tick(normalized):
+        if previous_tick is not None and group.tick <= previous_tick:
+            raise ProjectionError(ProjectionErrorCode.INVALID_ORDERING)
+        previous_tick = group.tick
+        working, base_revision = _project_tick_group(
+            working,
+            group,
+            expected_run_id=run_id,
+            expected_world_id=expected_world_id,
+            base_revision=base_revision,
+            seen_ids=seen_ids,
+            schema_version=schema_version,
+            assign_revision=True,
+        )
+    return working
+
+
+def project_event_prefix(
+    state: WorldState,
+    events: Sequence[WorldEvent],
+    *,
+    expected_run_id: str,
+    expected_world_id: WorldId,
+    includes_last_event: bool,
+) -> WorldState:
+    """Fold one tick prefix without treating a partial tick as complete.
+
+    Applies effects in sequence order. The tick's resulting revision is
+    assigned only when ``includes_last_event`` is true. A shorter prefix
+    keeps the start-of-tick revision even when a later event in that tick
+    records a higher revision.
+    """
+    if type(includes_last_event) is not bool:
+        raise TypeError("includes_last_event must be bool")
+    normalized, schema_version, run_id = _prepare_events(
+        state,
+        events,
+        expected_run_id=expected_run_id,
+        expected_world_id=expected_world_id,
+    )
+    if not normalized:
+        raise ProjectionError(ProjectionErrorCode.INVALID_SEQUENCE)
+    groups = _group_by_tick(normalized)
+    if len(groups) != 1:
+        raise ProjectionError(ProjectionErrorCode.INVALID_ORDERING)
+    projected, _revision = _project_tick_group(
+        state,
+        groups[0],
+        expected_run_id=run_id,
+        expected_world_id=expected_world_id,
+        base_revision=state.revision,
+        seen_ids=set(),
+        schema_version=schema_version,
+        assign_revision=includes_last_event,
+    )
+    return projected
+
+
+def _prepare_events(
+    state: WorldState,
+    events: Sequence[WorldEvent],
+    *,
+    expected_run_id: str,
+    expected_world_id: WorldId,
+) -> tuple[tuple[WorldEvent, ...], int, str]:
     if type(state) is not WorldState:
         raise TypeError("project_events requires WorldState")
     if type(expected_world_id) is not WorldId:
@@ -154,7 +234,7 @@ def project_events(
         raise ProjectionError(ProjectionErrorCode.INVALID_SEQUENCE) from exc
 
     if not normalized:
-        return state
+        return normalized, state.revision.value, run_id
 
     schema_version = normalized[0].schema_version
     for event in normalized:
@@ -167,26 +247,7 @@ def project_events(
             EVENT_SCHEMA_REPLAY_V5,
         }:
             raise ProjectionError(ProjectionErrorCode.UNSUPPORTED_SCHEMA)
-
-    working = state
-    base_revision = state.revision
-    seen_ids: set[EventId] = set()
-    previous_tick: int | None = None
-
-    for group in _group_by_tick(normalized):
-        if previous_tick is not None and group.tick <= previous_tick:
-            raise ProjectionError(ProjectionErrorCode.INVALID_ORDERING)
-        previous_tick = group.tick
-        working, base_revision = _project_tick_group(
-            working,
-            group,
-            expected_run_id=run_id,
-            expected_world_id=expected_world_id,
-            base_revision=base_revision,
-            seen_ids=seen_ids,
-            schema_version=schema_version,
-        )
-    return working
+    return normalized, schema_version, run_id
 
 
 def _group_by_tick(events: tuple[WorldEvent, ...]) -> tuple[_TickGroup, ...]:
@@ -214,6 +275,7 @@ def _project_tick_group(
     base_revision: WorldRevision,
     seen_ids: set[EventId],
     schema_version: int,
+    assign_revision: bool,
 ) -> tuple[WorldState, WorldRevision]:
     resulting_revision = group.events[0].resulting_revision
     for event in group.events:
@@ -236,6 +298,11 @@ def _project_tick_group(
         )
         working = next_state
         mutated = mutated or changed
+
+    if not assign_revision:
+        if working.revision != base_revision:
+            raise ProjectionError(ProjectionErrorCode.REVISION_MISMATCH)
+        return working, base_revision
 
     if mutated:
         expected = WorldRevision(base_revision.value + 1)

@@ -11,7 +11,7 @@ import logging
 from dataclasses import dataclass
 
 from simulation.clock import Tick
-from simulation.engine import WorldEngine
+from simulation.engine import EventPrefixError, WorldEngine
 from simulation.journal import PersistenceSerializationError, verify_commit_chain
 from simulation.lifecycle import EngineDiagnosticCode
 from simulation.models import DERIVATION_VERSION, RunId
@@ -51,6 +51,7 @@ __all__ = [
     "ReplayOutcome",
     "ReplayService",
     "scene_at_tick",
+    "scene_through_event",
 ]
 
 _DEFAULT_PAGE_SIZE = 100
@@ -163,6 +164,107 @@ async def scene_at_tick(
         snapshot_body_locations=raw_bodies,
     )
     del engine
+    return history
+
+
+async def scene_through_event(
+    service: ReplayService,
+    run_id: RunId,
+    *,
+    tick: Tick,
+    through_sequence: int,
+) -> FoldedObjectiveHistory:
+    """Replay to the start of ``tick``, fold one event prefix, and drop the engine.
+
+    Does not call ``open_durable`` and does not write a snapshot. A complete
+    tick matches ``scene_at_tick`` of ``tick + 1``, including ``world.tick``.
+    A shorter prefix keeps the start-of-tick clock.
+    """
+    if type(service) is not ReplayService:
+        raise TypeError("scene_through_event requires ReplayService")
+    if type(run_id) is not RunId:
+        raise TypeError("run_id must be RunId")
+    if type(tick) is not Tick:
+        raise TypeError("tick must be Tick")
+    if isinstance(through_sequence, bool) or type(through_sequence) is not int:
+        raise TypeError("through_sequence must be int")
+    if through_sequence < 0:
+        raise ValueError("through_sequence must be >= 0")
+
+    outcome = await service.replay(ReplayRequest(run_id=run_id, target_tick=tick))
+    if outcome.result.status is not ReplayStatus.OK or outcome.engine is None:
+        raise ObserverHistoryError(outcome.result.status.value, outcome.result)
+
+    engine = outcome.engine
+    try:
+        journal_events = await service._journal.list_events(
+            run_id,
+            from_tick=tick,
+            to_tick=tick,
+            limit=10_000_000,
+            offset=0,
+        )
+        selected = tuple(
+            sorted(
+                (event for event in journal_events if event.tick == tick.value),
+                key=lambda event: event.sequence,
+            )
+        )
+        if not any(event.sequence == through_sequence for event in selected):
+            _LOGGER.error(
+                "%s code=observer_event_not_found run_id=%s tick=%s "
+                "through_sequence=%s",
+                EngineDiagnosticCode.CHECKPOINT_CORRUPT.value,
+                run_id.value,
+                tick.value,
+                through_sequence,
+            )
+            raise ObserverHistoryError("observer_event_not_found", outcome.result)
+        prefix = tuple(
+            event for event in selected if event.sequence <= through_sequence
+        )
+        last_sequence = max(event.sequence for event in selected)
+        includes_last = through_sequence == last_sequence
+        snapshot_next = outcome.result.snapshot_next_tick
+        _LOGGER.debug(
+            "observer_event_fold run_id=%s tick=%s through_sequence=%s "
+            "event_count=%s snapshot_next_tick=%s",
+            run_id.value,
+            tick.value,
+            through_sequence,
+            len(prefix),
+            None if snapshot_next is None else snapshot_next.value,
+        )
+        try:
+            engine._apply_event_prefix(prefix, includes_last_event=includes_last)
+        except EventPrefixError as exc:
+            _LOGGER.error(
+                "%s code=%s run_id=%s tick=%s through_sequence=%s",
+                EngineDiagnosticCode.PROJECTION_FAILED.value,
+                exc.code,
+                run_id.value,
+                tick.value,
+                through_sequence,
+            )
+            raise ObserverHistoryError(exc.code, outcome.result) from exc
+        scene = scene_from_facts(engine.detached_objective_facts())
+        events = tuple(engine._snapshot.event_history)
+        raw_locations = tuple(
+            location.entity_id.value for location in engine._bootstrap.locations
+        )
+        raw_bodies = tuple(
+            (body.entity_id.value, body.location_id.value)
+            for body in engine._bootstrap.bodies
+        )
+        history = FoldedObjectiveHistory(
+            scene=scene,
+            events=events,
+            result=outcome.result,
+            snapshot_location_ids=raw_locations,
+            snapshot_body_locations=raw_bodies,
+        )
+    finally:
+        del engine
     return history
 
 

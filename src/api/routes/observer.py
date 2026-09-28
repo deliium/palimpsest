@@ -72,11 +72,25 @@ async def get_observer_state(
     service: ObserverReadService = Depends(get_observer_service),
     settings: Settings = Depends(get_settings),
     tick: int | None = Query(default=None, ge=0),
+    through_sequence: int | None = Query(default=None, ge=0),
     layout_id: str = Query(default=DEFAULT_LAYOUT_ID),
 ) -> ObserverFrameOut:
     del settings
+    if through_sequence is not None and tick is None:
+        raise bad_request(code="incomplete_event_cursor")
+    _LOGGER.debug(
+        "route_observer_state_cursor",
+        run_id=run_id,
+        tick=tick,
+        through_sequence=through_sequence,
+    )
     started = time.perf_counter()
-    result = await service.state(run_id, tick=tick, layout_id=layout_id)
+    result = await service.state(
+        run_id,
+        tick=tick,
+        through_sequence=through_sequence,
+        layout_id=layout_id,
+    )
     _LOGGER.info(
         "route_observer_state",
         route_template="GET /v1/simulations/{run_id}/observer/state",

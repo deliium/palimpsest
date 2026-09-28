@@ -9,7 +9,12 @@ from tests.simulation_helpers import (
     make_item,
     weather_for_locations,
 )
-from world._replay import ProjectionError, ProjectionErrorCode, project_events
+from world._replay import (
+    ProjectionError,
+    ProjectionErrorCode,
+    project_event_prefix,
+    project_events,
+)
 from world._state import WorldState
 from world.events import (
     Dropped,
@@ -259,6 +264,62 @@ def test_rejects_mixed_run_world_duplicate_gap_and_revision() -> None:
     with pytest.raises(ProjectionError) as rev:
         project_events(state, bad_rev, expected_run_id=_RUN, expected_world_id=_WORLD)
     assert rev.value.code == ProjectionErrorCode.REVISION_MISMATCH.value
+
+
+def test_non_mutating_prefix_keeps_revision_until_the_tick_is_complete() -> None:
+    ground = make_item("item-1", name="Rock", location_id="loc-1")
+    state = _base_state(items=(ground,))
+    waited = _event(
+        event_id="evt-wait",
+        tick=0,
+        sequence=0,
+        revision=1,
+        details=Waited(),
+    )
+    taken = _event(
+        event_id="evt-take",
+        tick=0,
+        sequence=1,
+        revision=1,
+        details=Taken(EntityId("item-1"), resulting_holder_id=EntityId("body-1")),
+    )
+    with pytest.raises(ProjectionError) as mismatch:
+        project_events(state, (waited,), expected_run_id=_RUN, expected_world_id=_WORLD)
+    assert mismatch.value.code == ProjectionErrorCode.REVISION_MISMATCH.value
+
+    prefix = project_event_prefix(
+        state,
+        (waited,),
+        expected_run_id=_RUN,
+        expected_world_id=_WORLD,
+        includes_last_event=False,
+    )
+    assert prefix.revision == state.revision
+    assert prefix.items[EntityId("item-1")].holder_id is None
+    assert EntityId("item-1") not in prefix.bodies[EntityId("body-1")].inventory
+
+    full_prefix = project_event_prefix(
+        state,
+        (waited, taken),
+        expected_run_id=_RUN,
+        expected_world_id=_WORLD,
+        includes_last_event=True,
+    )
+    whole_tick = project_events(
+        state, (waited, taken), expected_run_id=_RUN, expected_world_id=_WORLD
+    )
+    assert full_prefix.revision == WorldRevision(1)
+    assert full_prefix.revision == whole_tick.revision
+    assert (
+        full_prefix.items[EntityId("item-1")].holder_id
+        == whole_tick.items[EntityId("item-1")].holder_id
+        == EntityId("body-1")
+    )
+    assert EntityId("item-1") in full_prefix.bodies[EntityId("body-1")].inventory
+    assert (
+        full_prefix.bodies[EntityId("body-1")].inventory
+        == whole_tick.bodies[EntityId("body-1")].inventory
+    )
 
 
 def test_projector_does_not_import_rules_module() -> None:

@@ -78,7 +78,7 @@ from world._operations import (
 )
 from world._perception import PerceptionService
 from world._physical import apply_autonomous_physical_step
-from world._replay import ProjectionError, project_events
+from world._replay import ProjectionError, project_event_prefix, project_events
 from world._rules import (
     find_eligible_flee_destinations,
     find_eligible_search_resource,
@@ -109,12 +109,20 @@ if TYPE_CHECKING:
 
 _LOGGER = logging.getLogger("simulation.engine")
 
-__all__ = ["EnginePhase", "WorldEngine"]
+__all__ = ["EnginePhase", "EventPrefixError", "WorldEngine"]
 
 
 class EnginePhase(StrEnum):
     AWAITING_OBSERVATION = "awaiting_observation"
     AWAITING_SUBMISSIONS = "awaiting_submissions"
+
+
+class EventPrefixError(ValueError):
+    """A same-tick event prefix could not be folded. ``code`` is stable."""
+
+    def __init__(self, code: str) -> None:
+        self.code = code
+        super().__init__(code)
 
 
 @dataclass(frozen=True, slots=True)
@@ -413,6 +421,68 @@ class WorldEngine:
         if self._snapshot.tick != tick_before or state.revision != revision_before:
             raise RuntimeError("detached_objective_facts mutated engine state")
         return facts
+
+    def _apply_event_prefix(
+        self,
+        events: Sequence[WorldEvent],
+        *,
+        includes_last_event: bool,
+    ) -> None:
+        """Fold one tick's event prefix onto this restored engine.
+
+        Effects apply in sequence order. The tick revision and the clock
+        (``committed_through_tick + 1``) advance only when the prefix includes
+        that tick's last event. Does not write a snapshot.
+        """
+        if type(includes_last_event) is not bool:
+            raise TypeError("includes_last_event must be bool")
+        if isinstance(events, (str, bytes, set, frozenset)) or not isinstance(
+            events, Sequence
+        ):
+            raise TypeError("events must be an ordered sequence")
+        state = self._snapshot.world.state
+        tick_before = self._snapshot.tick
+        try:
+            projected = project_event_prefix(
+                state,
+                events,
+                expected_run_id=self._run_id.value,
+                expected_world_id=self.world_id,
+                includes_last_event=includes_last_event,
+            )
+        except ProjectionError as exc:
+            _LOGGER.error(
+                "%s code=%s run_id=%s tick=%s",
+                EngineDiagnosticCode.PROJECTION_FAILED.value,
+                exc.code,
+                self._run_id.value,
+                tick_before.value,
+            )
+            raise EventPrefixError(exc.code) from exc
+        restored_tick = (
+            Tick(tick_before.value + 1) if includes_last_event else tick_before
+        )
+        folded = self._snapshot.event_history + tuple(events)
+        world = _materialize_projected_world(world_id=self.world_id, state=projected)
+        self._snapshot = _EngineSnapshot(
+            world=world,
+            tick=restored_tick,
+            phase=self._snapshot.phase,
+            token=None,
+            observation_batch=None,
+            resolution_history=self._snapshot.resolution_history,
+            event_history=folded,
+            prior_event_window=self._snapshot.prior_event_window,
+        )
+        _LOGGER.debug(
+            "event_prefix_applied tick=%s sequence_count=%s includes_last=%s "
+            "revision=%s restored_tick=%s",
+            tick_before.value,
+            len(folded),
+            includes_last_event,
+            projected.revision.value,
+            restored_tick.value,
+        )
 
     def detached_bodies(self) -> tuple[AgentBody, ...]:
         """Ordered immutable body copies for public objective projection."""

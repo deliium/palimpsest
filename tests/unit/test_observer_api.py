@@ -198,3 +198,71 @@ async def test_observer_reads_and_rejects_bad_cursors(
     assert debug.json()["code"] == "debug_disabled"
     assert "route_observer_state" in caplog.text
     assert "route_observer_events" in caplog.text
+
+
+@pytest.mark.asyncio
+async def test_state_event_cursor_is_optional_and_read_only(
+    logging_sandbox: None,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    del logging_sandbox
+    app = _app()
+    with caplog.at_level(logging.DEBUG):
+        async with _client(app) as client:
+            tick_only = await client.get(
+                f"/v1/simulations/{RUN_ID}/observer/state", params={"tick": 0}
+            )
+            first = await client.get(
+                f"/v1/simulations/{RUN_ID}/observer/state",
+                params={"tick": 0, "through_sequence": 0},
+            )
+            second = await client.get(
+                f"/v1/simulations/{RUN_ID}/observer/state",
+                params={"tick": 0, "through_sequence": 1},
+            )
+            finished = await client.get(
+                f"/v1/simulations/{RUN_ID}/observer/state", params={"tick": 1}
+            )
+            backward = await client.get(
+                f"/v1/simulations/{RUN_ID}/observer/state",
+                params={"tick": 0, "through_sequence": 0},
+            )
+            missing_tick = await client.get(
+                f"/v1/simulations/{RUN_ID}/observer/state",
+                params={"through_sequence": 0},
+            )
+            missing_event = await client.get(
+                f"/v1/simulations/{RUN_ID}/observer/state",
+                params={"tick": 0, "through_sequence": 9},
+            )
+            ahead = await client.get(
+                f"/v1/simulations/{RUN_ID}/observer/state",
+                params={"tick": 9, "through_sequence": 0},
+            )
+    assert tick_only.status_code == 200
+    tick_agents = {
+        item["entity_id"]: item for item in tick_only.json()["world"]["agents"]
+    }
+    assert tick_agents[BODY_ID]["location_id"] == LOC_CAMP
+    assert tick_only.json()["cursor"]["mode"] == "replay"
+    assert first.status_code == 200
+    first_agents = {item["entity_id"]: item for item in first.json()["world"]["agents"]}
+    assert first_agents[BODY_ID]["location_id"] == LOC_SPRING
+    assert first.json()["world"]["tick"] == 0
+    assert first.json()["cursor"]["after_sequence"] == 0
+    assert second.status_code == 200
+    assert second.json()["world"] == finished.json()["world"]
+    assert second.json()["world"]["tick"] == 1
+    assert backward.json()["world"] == first.json()["world"]
+    types = [item["type"] for item in backward.json()["events"]]
+    assert types == ["AGENT_MOVED"]
+    assert missing_tick.status_code == 400
+    assert missing_tick.json()["code"] == "incomplete_event_cursor"
+    assert missing_event.status_code == 404
+    assert missing_event.json()["code"] == "observer_event_not_found"
+    assert ahead.status_code == 409
+    assert ahead.json()["code"] == "cursor_ahead_of_high_water"
+    assert "route_observer_state_cursor" in caplog.text
+    assert "observer_event_fold" in caplog.text
+    assert "through_sequence=" in caplog.text
+    assert "observer_replay_loaded" in caplog.text

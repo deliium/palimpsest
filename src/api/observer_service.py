@@ -39,6 +39,7 @@ from simulation.replay import (
     ObserverHistoryError,
     ReplayService,
     scene_at_tick,
+    scene_through_event,
 )
 
 _LOGGER = logging.getLogger("api.observer")
@@ -81,11 +82,26 @@ class ObserverReadService:
         *,
         tick: int | None,
         layout_id: str,
+        through_sequence: int | None = None,
     ) -> ObserverFrameOut:
-        target = None if tick is None else Tick(tick)
-        history = await self._history(run_id, target_tick=target)
+        if through_sequence is not None and tick is None:
+            raise bad_request(code="incomplete_event_cursor", run_id=run_id)
+        if through_sequence is not None and (
+            isinstance(through_sequence, bool)
+            or type(through_sequence) is not int
+            or through_sequence < 0
+        ):
+            raise bad_request(code="incomplete_event_cursor", run_id=run_id)
+        if through_sequence is not None:
+            assert tick is not None
+            history = await self._history_through_event(
+                run_id, tick=tick, through_sequence=through_sequence
+            )
+        else:
+            target = None if tick is None else Tick(tick)
+            history = await self._history(run_id, target_tick=target)
         layout = _layout(layout_id)
-        mode = "live" if tick is None else "replay"
+        mode = "replay" if tick is not None or through_sequence is not None else "live"
         source = _source(history, layout, mode=mode)
         return _frame_out(source.frame())
 
@@ -213,6 +229,54 @@ class ObserverReadService:
         except ObserverHistoryError as exc:
             _LOGGER.error("observer_replay_failed reason_code=%s", exc.reason_code)
             raise not_found(code=exc.reason_code, run_id=run_id) from exc
+        self._log_loaded(
+            run_id, history, target_tick=target_tick, through_sequence=None
+        )
+        if hasattr(history, "engine"):
+            raise RuntimeError("observer history retained an engine")
+        return history
+
+    async def _history_through_event(
+        self, run_id: str, *, tick: int, through_sequence: int
+    ) -> FoldedObjectiveHistory:
+        typed = _run_id(run_id)
+        live = await self._history(run_id, target_tick=None)
+        if tick >= live.scene.tick:
+            raise conflict(code="cursor_ahead_of_high_water", run_id=run_id)
+        try:
+            history = await scene_through_event(
+                self._replay,
+                typed,
+                tick=Tick(tick),
+                through_sequence=through_sequence,
+            )
+        except ObserverHistoryError as exc:
+            _LOGGER.error("observer_replay_failed reason_code=%s", exc.reason_code)
+            if exc.reason_code == "observer_event_not_found":
+                raise not_found(code="observer_event_not_found", run_id=run_id) from exc
+            if exc.reason_code == "target_unreachable":
+                raise conflict(
+                    code="cursor_ahead_of_high_water", run_id=run_id
+                ) from exc
+            raise not_found(code=exc.reason_code, run_id=run_id) from exc
+        self._log_loaded(
+            run_id,
+            history,
+            target_tick=Tick(tick),
+            through_sequence=through_sequence,
+        )
+        if hasattr(history, "engine"):
+            raise RuntimeError("observer history retained an engine")
+        return history
+
+    def _log_loaded(
+        self,
+        run_id: str,
+        history: FoldedObjectiveHistory,
+        *,
+        target_tick: Tick | None,
+        through_sequence: int | None,
+    ) -> None:
         snapshot_tick = (
             None
             if history.result.snapshot_next_tick is None
@@ -220,15 +284,13 @@ class ObserverReadService:
         )
         _LOGGER.debug(
             "observer_replay_loaded run_id=%s target_tick=%s "
-            "snapshot_next_tick=%s event_count=%s",
+            "snapshot_next_tick=%s event_count=%s through_sequence=%s",
             run_id,
             None if target_tick is None else target_tick.value,
             snapshot_tick,
             len(history.events),
+            "-" if through_sequence is None else through_sequence,
         )
-        if hasattr(history, "engine"):
-            raise RuntimeError("observer history retained an engine")
-        return history
 
 
 def _run_id(run_id: str) -> RunId:
