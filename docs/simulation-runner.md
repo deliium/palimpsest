@@ -33,8 +33,12 @@ Legacy v1/v2 payloads decode to default-off flags. Owned flags
 is still unowned and fails closed at construction (`capability_unimplemented`).
 `predictive_world_model` off is a passthrough: no hypotheses, no command bias,
 and no world-model audit. `advanced_social_inference` off is a passthrough:
-no mind hypotheses, no command bias, and no mind audit. One agent does not
-receive another agent's private cognition.
+no mind hypotheses, no epistemic ledger, no command bias, and no mind audit.
+When that flag is on, the same owner-scoped mind also keeps a flat epistemic
+ledger (`max_depth` default 2, hard cap 3). Speech-act selection may judge a
+belief as new, already known, secret, uncertain, or contradictory. Secret is
+not a stored attitude. One agent does not receive another agent's private
+cognition. Experiment M stays off the V1 regression gate.
 
 Top-level `CognitionTraceSpec` (default disabled) rides in `runner-config-v4` only.
 Prior versions decode to a disabled spec. Tracing is **not** a capability flag;

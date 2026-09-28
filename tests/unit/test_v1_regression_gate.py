@@ -96,6 +96,7 @@ async def test_catalog_experiment_executes_flags_off(
     assert experiment_id != "experiment-h-identity"
     assert experiment_id != "experiment-i-causal"
     assert experiment_id != "experiment-l-theory-of-mind"
+    assert experiment_id != "experiment-m-epistemic-asymmetry"
     for condition in definition.conditions:
         assert condition.runner_config.schema_version == RUNNER_SCHEMA_VERSION_V4
         assert condition.runner_config.capability_flags.extended_self_model is False

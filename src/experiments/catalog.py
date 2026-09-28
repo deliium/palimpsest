@@ -1,4 +1,4 @@
-"""Named builders for Experiments A-K."""
+"""Named builders for Experiments A-M."""
 
 from __future__ import annotations
 
@@ -616,6 +616,41 @@ def experiment_l_theory_of_mind(
         arms=(
             ("l-disabled", "theory_of_mind_disabled", disabled),
             ("l-enabled", "theory_of_mind_enabled", enabled),
+        ),
+    )
+
+
+def experiment_m_epistemic_asymmetry(
+    base: SimulationRunnerConfig,
+    *,
+    seed_matrix: ExperimentSeedMatrix | None = None,
+) -> ExperimentDefinition:
+    """Paired arms share seed, scenario, and stochastic identity.
+
+    ``m-disabled`` leaves ``advanced_social_inference`` off on
+    ``runner-config-v4``. ``m-enabled`` turns that flag on and stays on
+    ``runner-config-v4``. The enabled arm is what turns the epistemic ledger on.
+    """
+    matrix = seed_matrix or ExperimentSeedMatrix(seeds=(base.seed,))
+    shared = replace(base, schema_version=RUNNER_SCHEMA_VERSION_V4)
+    disabled = replace(shared, capability_flags=V2CapabilityFlags())
+    enabled = replace(
+        shared,
+        capability_flags=V2CapabilityFlags(advanced_social_inference=True),
+    )
+    for condition_id, _config in (("m-disabled", disabled), ("m-enabled", enabled)):
+        _LOG.debug(
+            "experiment_m_built experiment_id=%s condition_id=%s",
+            "experiment-m-epistemic-asymmetry",
+            condition_id,
+        )
+    return _definition(
+        experiment_id="experiment-m-epistemic-asymmetry",
+        base=shared,
+        seed_matrix=matrix,
+        arms=(
+            ("m-disabled", "epistemic_ledger_disabled", disabled),
+            ("m-enabled", "epistemic_ledger_enabled", enabled),
         ),
     )
 

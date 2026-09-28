@@ -489,6 +489,40 @@ class EpistemicDisclosure:
         )
 
 
+@dataclass(frozen=True, slots=True)
+class EpistemicAuditSnapshot:
+    """In-memory audit row. No utterance text and no masses."""
+
+    attribution_id: str
+    nesting_level: int
+    attitude: str
+    source: str
+    confidence: float
+    proposition_ref: str
+
+    def __post_init__(self) -> None:
+        try:
+            require_stable_id("attribution_id", self.attribution_id)
+        except ValueError as exc:
+            raise _fail("attribution_id", "invalid_value") from exc
+        if isinstance(self.nesting_level, bool) or not isinstance(
+            self.nesting_level, int
+        ):
+            raise _fail("nesting_level", "invalid_type")
+        if self.nesting_level < 1 or self.nesting_level > _MAX_EPISTEMIC_DEPTH:
+            raise _fail("nesting_level", "epistemic_depth_rejected")
+        if self.attitude not in {item.value for item in EpistemicAttitude}:
+            raise _fail("attitude", "unknown_enum")
+        if self.source not in {item.value for item in EpistemicSource}:
+            raise _fail("source", "unknown_enum")
+        object.__setattr__(
+            self, "confidence", _unit_quantum("confidence", self.confidence)
+        )
+        object.__setattr__(
+            self, "proposition_ref", _validate_proposition(self.proposition_ref)
+        )
+
+
 def _reject_forbidden(value: object, field_name: str) -> None:
     if type(value).__name__ in _FORBIDDEN_TYPES:
         raise TypeError(f"{field_name} must not be {type(value).__name__}")
@@ -1180,3 +1214,28 @@ def epistemic_disclosure(
         disclosure.confidence,
     )
     return disclosure
+
+
+def audit_snapshots(model: TheoryOfMind) -> tuple[EpistemicAuditSnapshot, ...]:
+    """Project ledger rows for an in-memory mind audit."""
+    if type(model) is not TheoryOfMind:
+        raise TypeError("model must be TheoryOfMind")
+    snapshots = tuple(
+        EpistemicAuditSnapshot(
+            attribution_id=item.attribution_id,
+            nesting_level=item.nesting_level,
+            attitude=item.attitude.value,
+            source=item.source.value,
+            confidence=item.confidence,
+            proposition_ref=item.proposition_ref,
+        )
+        for item in model.attributions
+    )
+    tick = 0 if model.last_tick is None else model.last_tick
+    _LOG.debug(
+        "epistemic_audit owner_id=%s tick=%s snapshot_count=%s",
+        model.owner_id.value,
+        tick,
+        len(snapshots),
+    )
+    return snapshots

@@ -2214,6 +2214,7 @@ class MindAudit:
     max_confidence: float
     fallback_used: bool
     snapshots: tuple[MindHypothesisSnapshot, ...] = ()
+    epistemic: tuple[object, ...] = ()
 
     def __post_init__(self) -> None:
         if type(self.owner_id) is not AgentId:
@@ -2237,6 +2238,15 @@ class MindAudit:
             if type(item) is not MindHypothesisSnapshot:
                 raise _fail("snapshots", "invalid_type")
         object.__setattr__(self, "snapshots", snapshots)
+        from agents.cognition.epistemic import EpistemicAuditSnapshot
+
+        if isinstance(self.epistemic, (set, frozenset, str)):
+            raise _fail("epistemic", "not_ordered")
+        epistemic = tuple(self.epistemic)
+        for item in epistemic:
+            if type(item) is not EpistemicAuditSnapshot:
+                raise _fail("epistemic", "invalid_type")
+        object.__setattr__(self, "epistemic", epistemic)
 
 
 def build_mind_audit(model: TheoryOfMind) -> MindAudit:
@@ -2254,8 +2264,11 @@ def build_mind_audit(model: TheoryOfMind) -> MindAudit:
         )
         for item in model.hypotheses
     )
+    from agents.cognition.epistemic import audit_snapshots
+
     peak = max((item.confidence for item in model.hypotheses), default=0.0)
     updates = sum(len(item.update_history) for item in model.hypotheses)
+    epistemic = audit_snapshots(model)
     return MindAudit(
         owner_id=model.owner_id,
         tick=0 if model.last_tick is None else model.last_tick,
@@ -2265,4 +2278,5 @@ def build_mind_audit(model: TheoryOfMind) -> MindAudit:
         max_confidence=peak,
         fallback_used=model.selection_fallback_used,
         snapshots=snapshots,
+        epistemic=epistemic,
     )

@@ -20,6 +20,7 @@ from experiments.catalog import (
     experiment_j_prospective,
     experiment_k_counterfactual,
     experiment_l_theory_of_mind,
+    experiment_m_epistemic_asymmetry,
     v1_regression_profile,
 )
 from experiments.collectors import (
@@ -186,6 +187,7 @@ __all__ = [
     "experiment_j_prospective",
     "experiment_k_counterfactual",
     "experiment_l_theory_of_mind",
+    "experiment_m_epistemic_asymmetry",
     "make_false_story_intervention",
     "map_consolidation_audits_to_report",
     "map_recall_audits_to_dynamics_report",
