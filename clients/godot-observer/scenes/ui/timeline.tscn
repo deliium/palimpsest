@@ -5,9 +5,9 @@
 [node name="Timeline" type="Control"]
 custom_minimum_size = Vector2(640, 36)
 offset_left = 16.0
-offset_top = 152.0
+offset_top = 216.0
 offset_right = 900.0
-offset_bottom = 188.0
+offset_bottom = 252.0
 script = ExtResource("1_timeline")
 
 [node name="Toggle" type="CheckButton" parent="."]

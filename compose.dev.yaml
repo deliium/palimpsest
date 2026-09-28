@@ -1,0 +1,19 @@
+# Local image build for contributors. Compose does not load this file
+# automatically. `./run-dev.sh` passes it explicitly with compose.yaml.
+
+services:
+  migrate:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      network: host
+      args:
+        PALIMPSEST_REVISION: ${PALIMPSEST_REVISION:-unknown}
+
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      network: host
+      args:
+        PALIMPSEST_REVISION: ${PALIMPSEST_REVISION:-unknown}

@@ -21,6 +21,7 @@ const CLOSE_REASONS := {
 }
 
 signal status_changed(code: String, detail: String)
+signal run_id_applied(value: String)
 signal world_replaced(world: Variant)
 signal live_event(event: Variant)
 signal frame_sought(frame: Variant, event: Variant, forward: bool)
@@ -79,10 +80,26 @@ func _ready() -> void:
 
 
 func begin() -> void:
+	if OS.has_feature("web"):
+		if apply_web_query(Origin.web_search()):
+			return
+		status_changed.emit("idle", "Connect")
+		return
 	var configured := str(ProjectSettings.get_setting("palimpsest/run_id", "")).strip_edges()
 	if run_id.is_empty():
 		run_id = configured
 	_start()
+
+
+func apply_web_query(search: String) -> bool:
+	var parsed := Origin.web_run_id(search)
+	if parsed.is_empty():
+		return false
+	run_id = parsed
+	ObserverLog.info("session", "web_run_id_applied run_id=%s" % run_id)
+	run_id_applied.emit(run_id)
+	_start()
+	return true
 
 
 func start_with_run_id(requested: String) -> void:

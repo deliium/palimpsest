@@ -23,11 +23,7 @@ services:
       - postgres_data:/var/lib/postgresql/data
 
   migrate:
-    build:
-      context: .
-      dockerfile: Dockerfile
-      # Host network during build so `uv sync` can reach PyPI when bridge DNS fails.
-      network: host
+    image: ${PALIMPSEST_API_IMAGE:-ghcr.io/deliium/palimpsest:0.1.0}
     command: ["alembic", "upgrade", "head"]
     environment:
       PALIMPSEST_ENVIRONMENT: production
@@ -39,10 +35,7 @@ services:
     restart: "no"
 
   api:
-    build:
-      context: .
-      dockerfile: Dockerfile
-      network: host
+    image: ${PALIMPSEST_API_IMAGE:-ghcr.io/deliium/palimpsest:0.1.0}
     environment:
       PALIMPSEST_ENVIRONMENT: production
       PALIMPSEST_LOG_LEVEL: INFO

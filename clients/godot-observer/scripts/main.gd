@@ -21,6 +21,7 @@ func _ready() -> void:
 	_world.inspect_requested.connect(_ui.show_inspector)
 	_world.inspect_cleared.connect(_ui.clear_inspector)
 	_ui.connect_requested.connect(_session.start_with_run_id)
+	_session.run_id_applied.connect(_ui.set_run_id)
 	_ui.zoom_in_requested.connect(_world.zoom_in)
 	_ui.zoom_out_requested.connect(_world.zoom_out)
 	_ui.reset_requested.connect(_world.reset_view)

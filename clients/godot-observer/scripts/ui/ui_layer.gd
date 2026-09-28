@@ -75,6 +75,10 @@ func _select_speed(speed: float) -> void:
 	speed_selected.emit(speed)
 
 
+func set_run_id(value: String) -> void:
+	$StatusBar.set_run_id(value)
+
+
 func show_status(code: String, detail: String) -> void:
 	$StatusBar.show_state(code, detail)
 

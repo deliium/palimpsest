@@ -1,11 +1,16 @@
 #!/usr/bin/env bash
-# Start the full local stack (PostgreSQL, migrations, API) via Docker Compose.
+# Start the published stack. This is the same pull path as ./run.sh.
 set -euo pipefail
 
-# shellcheck source=scripts/_common.sh
-source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/_common.sh"
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+cd "$ROOT"
 
-require_cmd docker
+for arg in "$@"; do
+  if [[ "$arg" == "--build" ]]; then
+    printf 'The published start does not build. Use ./run-dev.sh\n' >&2
+    printf 'ERROR startup_failed reason_code=%s\n' "build_refused" >&2
+    exit 1
+  fi
+done
 
-echo "starting palimpsest (docker compose)…"
-exec docker compose up --build "$@"
+exec "$ROOT/run.sh" "$@"

@@ -10,6 +10,7 @@ func run() -> Array:
 	_expect(failures, _unknown_event(), "unknown event is structured")
 	_expect(failures, _rejects_foreign_protocol(), "foreign protocol is rejected")
 	_expect(failures, _rejects_catalog_anchor_dict(), "catalog anchor dict is rejected")
+	_expect(failures, _status_shows_versions_and_protocol_failure(), "status shows protocol failure")
 	return failures
 
 
@@ -122,6 +123,57 @@ func _rejects_catalog_anchor_dict() -> String:
 	})
 	if parsed.ok or parsed.reason_code != "invalid_connection_anchors":
 		return "dict anchors parsed as wire shape"
+	return ""
+
+
+func _status_shows_versions_and_protocol_failure() -> String:
+	var event = Protocol.parse_event({
+		"protocol_version": "observer-protocol-v0",
+		"type": "AGENT_MOVED",
+		"domain_kind": "move",
+		"event_id": "evt-bad",
+		"tick": 1,
+		"sequence": 0,
+	})
+	var frame = Protocol.parse_frame({"world": {}})
+	var manifest = Protocol.parse_manifest({"layout_id": "reference-v1"})
+	if event.ok or frame.ok or manifest.ok:
+		return "payload was applied"
+	var tree := Engine.get_main_loop() as SceneTree
+	if tree == null:
+		return "scene tree missing"
+	var bar: Node = load("res://scenes/ui/status_bar.tscn").instantiate()
+	tree.root.add_child(bar)
+	var lines := preload("res://scripts/net/version_client.gd").local_lines()
+	if str(lines["protocol_version"]) != Protocol.PROTOCOL_VERSION:
+		bar.queue_free()
+		return "local protocol constant"
+	if str(lines["export_engine"]) != "4.7.2-stable":
+		bar.queue_free()
+		return "local export engine"
+	if str(lines["revision"]) != "unknown":
+		bar.queue_free()
+		return "local revision"
+	bar.show_state(event.reason_code, event.reason_code)
+	var text := bar.status_text()
+	bar.show_state(frame.reason_code, frame.reason_code)
+	text = bar.status_text()
+	bar.show_state(manifest.reason_code, manifest.reason_code)
+	text = bar.status_text()
+	bar.queue_free()
+	if "observer-protocol-v1" not in text:
+		return "status missing protocol"
+	if "4.7.2-stable" not in text:
+		return "status missing export engine"
+	if "revision unknown" not in text:
+		return "status missing revision"
+	if "unsupported_observer_protocol" not in text:
+		return "status missing protocol failure"
+	var logged := "\n".join(preload("res://scripts/log.gd").recent)
+	if "version_loaded application=" not in logged:
+		return "version_loaded missing"
+	if "protocol=observer-protocol-v1" not in logged:
+		return "version_loaded protocol"
 	return ""
 
 
