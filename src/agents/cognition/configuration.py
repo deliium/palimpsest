@@ -24,6 +24,7 @@ from agents.cognition.counterfactual import (
     CounterfactualPolicy,
     default_counterfactual_policy,
 )
+from agents.cognition.epistemic import EpistemicPolicy, default_epistemic_policy
 from agents.cognition.loop import CognitiveLoop
 from agents.cognition.prospective import ProspectivePolicy, default_prospective_policy
 from agents.cognition.reflection import ReflectionPolicy
@@ -215,6 +216,7 @@ class CognitionLoopConfig:
         CognitionTheoryOfMindMode.PASSTHROUGH
     )
     theory_of_mind_policy: TheoryOfMindPolicy | None = None
+    epistemic_policy: EpistemicPolicy | None = None
     prospective_mode: CognitionProspectiveMode = CognitionProspectiveMode.DISABLED
     prospective_policy: ProspectivePolicy | None = None
     counterfactual_mode: CognitionCounterfactualMode = (
@@ -279,6 +281,13 @@ class CognitionLoopConfig:
                 "invalid_enum path=theory_of_mind_policy reason_code=invalid_type"
             )
             raise TypeError("theory_of_mind_policy must be TheoryOfMindPolicy or None")
+        if self.theory_of_mind_mode is not CognitionTheoryOfMindMode.ENABLED:
+            object.__setattr__(self, "epistemic_policy", None)
+        elif self.epistemic_policy is None:
+            object.__setattr__(self, "epistemic_policy", default_epistemic_policy())
+        elif type(self.epistemic_policy) is not EpistemicPolicy:
+            _LOG.error("invalid_enum path=epistemic_policy reason_code=invalid_type")
+            raise TypeError("epistemic_policy must be EpistemicPolicy or None")
         if type(self.prospective_mode) is not CognitionProspectiveMode:
             _LOG.error("invalid_enum path=prospective_mode reason_code=invalid_mode")
             raise TypeError("prospective_mode must be CognitionProspectiveMode")
@@ -434,6 +443,11 @@ class CognitionLoopConfig:
                 None
                 if self.theory_of_mind_policy is None
                 else self.theory_of_mind_policy.version
+            ),
+            "epistemic_policy_version": (
+                None
+                if self.epistemic_policy is None
+                else self.epistemic_policy.version
             ),
             "prospective_mode": self.prospective_mode.value,
             "prospective_policy_version": (
@@ -625,6 +639,7 @@ def build_cognitive_loop(
         world_model_provider=world_model_provider,
         theory_of_mind_mode=resolved.theory_of_mind_mode,
         theory_of_mind_policy=resolved.theory_of_mind_policy,
+        epistemic_policy=resolved.epistemic_policy,
         prospective_policy=resolved.prospective_policy,
         counterfactual_mode=resolved.counterfactual_mode,
         counterfactual_policy=resolved.counterfactual_policy,

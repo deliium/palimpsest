@@ -447,12 +447,18 @@ class TheoryOfMind:
     last_tick: int | None = None
     preferred_ids: tuple[str, ...] = ()
     selection_fallback_used: bool = False
+    attributions: tuple[object, ...] = ()
 
     def __post_init__(self) -> None:
         if type(self.owner_id) is not AgentId:
             raise _fail("owner_id", "invalid_type")
         hypotheses = _hypotheses_tuple(self.owner_id, self.hypotheses)
         object.__setattr__(self, "hypotheses", hypotheses)
+        object.__setattr__(
+            self,
+            "attributions",
+            _attributions_tuple(self.owner_id, self.attributions),
+        )
         object.__setattr__(self, "cue_cursor", _id_tuple("cue_cursor", self.cue_cursor))
         if self.last_tick is not None:
             try:
@@ -640,6 +646,29 @@ def _history_tuple(
         if item.hypothesis_id != hypothesis_id:
             raise _fail("update_history", "owner_mismatch")
     return records
+
+
+def _attributions_tuple(
+    owner_id: AgentId, values: object
+) -> tuple[object, ...]:
+    from agents.cognition.epistemic import EpistemicAttribution
+
+    if isinstance(values, (str, bytes, set, frozenset)) or not isinstance(
+        values, Sequence
+    ):
+        raise _fail("attributions", "invalid_type")
+    resolved: list[EpistemicAttribution] = []
+    seen: set[str] = set()
+    for item in values:
+        if type(item) is not EpistemicAttribution:
+            raise _fail("attributions", "invalid_type")
+        if item.owner_id != owner_id:
+            raise _fail("attributions", "owner_mismatch")
+        if item.attribution_id in seen:
+            raise _fail("attributions", "duplicate_attribution")
+        seen.add(item.attribution_id)
+        resolved.append(item)
+    return tuple(resolved)
 
 
 def _hypotheses_tuple(
@@ -1716,6 +1745,7 @@ def derive_future_actions(
         hypotheses=hypotheses,
         cue_cursor=model.cue_cursor,
         last_tick=tick if tick is not None else model.last_tick,
+        attributions=model.attributions,
     )
 
 
@@ -1858,6 +1888,7 @@ def update_theory_of_mind(
         hypotheses=hypotheses,
         cue_cursor=tuple(cursor),
         last_tick=last_tick,
+        attributions=model.attributions,
     )
     derived = derive_future_actions(
         updated_model,

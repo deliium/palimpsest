@@ -13,10 +13,12 @@ from agents.cognition.configuration import (
     CognitionLoopConfig,
     CognitionMemoryMode,
     CognitionMortalityAppraisalMode,
+    CognitionTheoryOfMindMode,
     build_cognitive_loop,
     production_cognition_config,
 )
 from agents.cognition.defaults import PresentStateImagination, default_cognitive_loop
+from agents.cognition.epistemic import EPISTEMIC_POLICY_VERSION, EpistemicPolicy
 from agents.cognition.imagination import ImaginationEngine
 from agents.cognition.models import (
     ReferenceEpisode,
@@ -247,3 +249,24 @@ def test_retrieved_context_rejects_mixed_episode_channels() -> None:
             reconstructions=(reconstructed,),
             reference_episodes=(reference,),
         )
+
+
+def test_epistemic_policy_follows_theory_of_mind_mode() -> None:
+    off = CognitionLoopConfig()
+    assert off.epistemic_policy is None
+    assert off.condition_fingerprint_material()["epistemic_policy_version"] is None
+    on = CognitionLoopConfig(theory_of_mind_mode=CognitionTheoryOfMindMode.ENABLED)
+    assert type(on.epistemic_policy) is EpistemicPolicy
+    assert on.epistemic_policy.max_depth == 2
+    assert (
+        on.condition_fingerprint_material()["epistemic_policy_version"]
+        == EPISTEMIC_POLICY_VERSION
+    )
+    loop = build_cognitive_loop(on)
+    assert loop._epistemic_policy is on.epistemic_policy
+    custom = CognitionLoopConfig(
+        theory_of_mind_mode=CognitionTheoryOfMindMode.ENABLED,
+        epistemic_policy=EpistemicPolicy(max_depth=1),
+    )
+    assert custom.epistemic_policy is not None
+    assert custom.epistemic_policy.max_depth == 1

@@ -177,6 +177,7 @@ class CognitiveLoop:
         "_counterfactual_state",
         "_deferred_dissonance",
         "_emotional_state",
+        "_epistemic_policy",
         "_futures",
         "_goal_manager",
         "_identity_mode",
@@ -226,6 +227,7 @@ class CognitiveLoop:
         world_model_provider: object | None = None,
         theory_of_mind_mode: object | None = None,
         theory_of_mind_policy: object | None = None,
+        epistemic_policy: object | None = None,
         prospective_policy: object | None = None,
         counterfactual_mode: object | None = None,
         counterfactual_policy: object | None = None,
@@ -312,6 +314,12 @@ class CognitiveLoop:
             mind_policy = theory_of_mind_policy
         self._theory_of_mind_mode = mind_mode
         self._theory_of_mind_policy = mind_policy
+        if epistemic_policy is not None:
+            from agents.cognition.epistemic import EpistemicPolicy
+
+            if type(epistemic_policy) is not EpistemicPolicy:
+                raise TypeError("epistemic_policy must be EpistemicPolicy")
+        self._epistemic_policy = epistemic_policy
         if prospective_policy is not None:
             from agents.cognition.prospective import ProspectivePolicy
 
@@ -441,6 +449,11 @@ class CognitiveLoop:
                 mode.value,
                 0,
             )
+            _LOG.debug(
+                "epistemic_prepare_skipped owner_id=%s tick=%s status=passthrough",
+                owner.value,
+                tick,
+            )
             return None
         snapshot = loop_input.snapshot
         carried = None if snapshot is None else snapshot.theory_of_mind
@@ -488,6 +501,39 @@ class CognitiveLoop:
             tick,
             mode.value,
             len(updated.hypotheses),
+        )
+        from agents.cognition.epistemic import (
+            default_epistemic_policy,
+            update_epistemic_state,
+        )
+
+        epistemic = self._epistemic_policy
+        if epistemic is None:
+            epistemic = default_epistemic_policy()
+        beliefs = memory.semantic_beliefs
+        if not beliefs and snapshot is not None:
+            beliefs = snapshot.semantic_beliefs
+        if epistemic.max_depth == 0:
+            _LOG.debug(
+                "epistemic_prepare_skipped owner_id=%s tick=%s status=depth_zero",
+                owner.value,
+                tick,
+            )
+            return updated
+        updated = update_epistemic_state(
+            updated,
+            loop_input.observation,
+            beliefs,
+            epistemic,
+        )
+        _LOG.debug(
+            "epistemic_prepare owner_id=%s tick=%s mode=%s max_depth=%s "
+            "attribution_count=%s",
+            owner.value,
+            tick,
+            mode.value,
+            epistemic.max_depth,
+            len(updated.attributions),
         )
         return updated
 

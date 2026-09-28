@@ -44,6 +44,57 @@ async def test_enabled_prepare_stores_a_model(
         and "mode=enabled" in record.getMessage()
         for record in caplog.records
     )
+    assert any(
+        "epistemic_prepare" in record.getMessage()
+        and "mode=enabled" in record.getMessage()
+        and "max_depth=2" in record.getMessage()
+        and "attribution_count=" in record.getMessage()
+        for record in caplog.records
+    )
+
+
+@pytest.mark.asyncio
+async def test_passthrough_skips_the_epistemic_update(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    caplog.set_level(logging.DEBUG, logger=_LOOP)
+    loop = build_cognitive_loop(CognitionLoopConfig())
+    result = await loop.run(build_loop_input(build_observation()), invocation_id="off")
+    assert result.theory_of_mind is None
+    assert any(
+        "epistemic_prepare_skipped" in record.getMessage()
+        and "status=passthrough" in record.getMessage()
+        for record in caplog.records
+    )
+    assert not any(
+        record.getMessage().startswith("epistemic_prepare ")
+        for record in caplog.records
+    )
+
+
+@pytest.mark.asyncio
+async def test_depth_zero_skips_the_ledger_update(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    from agents.cognition.epistemic import EpistemicPolicy
+
+    caplog.set_level(logging.DEBUG, logger=_LOOP)
+    loop = build_cognitive_loop(
+        CognitionLoopConfig(
+            theory_of_mind_mode=CognitionTheoryOfMindMode.ENABLED,
+            epistemic_policy=EpistemicPolicy(max_depth=0),
+        )
+    )
+    result = await loop.run(
+        build_loop_input(build_observation()), invocation_id="depth-zero"
+    )
+    assert type(result.theory_of_mind) is TheoryOfMind
+    assert result.theory_of_mind.attributions == ()
+    assert any(
+        "epistemic_prepare_skipped" in record.getMessage()
+        and "status=depth_zero" in record.getMessage()
+        for record in caplog.records
+    )
 
 
 @pytest.mark.asyncio
