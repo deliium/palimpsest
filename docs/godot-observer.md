@@ -18,6 +18,7 @@ HTTP GET only:
 - `/v1/simulations/{run_id}/observer/state`
 - `/v1/simulations/{run_id}/observer/events`
 - `/v1/simulations/{run_id}/observer/run`
+- `/v1/simulations/{run_id}/observer/ticks`
 
 It also opens `/v1/simulations/{run_id}/observer/stream` and never sends a text or binary WebSocket payload. Protocol `observer-protocol-v1` is required. A different `protocol_version` is shown as `unsupported_observer_protocol` and is not applied.
 
@@ -50,6 +51,49 @@ Do not commit that file. `project.godot` leaves `api_token` empty.
 The run id comes from the field at the top of the window or from `palimpsest/run_id`. Connect loads the manifest, then the current state, then the stream. Folded `frame.events` are history already in `world`. They are not tweened and they are not copied into the live event log.
 
 **Play fixture** applies `clients/godot-observer/fixtures/smoke/reference_session.json` through the same reducer and views. It does not open a socket.
+
+## Timeline controls
+
+The playback row is read-only. None of these controls pause, step, or reseed the simulation, and none of them change the run.
+
+| Control | Effect |
+| --- | --- |
+| Play | While replaying, step forward through committed events. While live, resume applying events that were held during pause. |
+| Pause | Stop playback locally. A live run keeps committing. The socket stays open. |
+| Previous Event / Next Event | Move one committed `(tick, sequence)`. They do not wrap at the first or latest event. |
+| Previous Tick / Next Tick | Land on the last event of the neighboring tick that has events. |
+| Jump to Tick | `GET .../state?tick=` for the start of that tick, and focus the first event of that tick when the log page contains it. |
+| Jump to Event | `GET .../state?tick=&through_sequence=` for that committed event. |
+| Return to Live | Drop the replay buffer, load the unscoped state, and open the socket at the head cursor. |
+| `0.25x` `0.5x` `1x` `2x` `4x` `8x` `16x` | Local tween speed only. Slower than `1x` lengthens motion and speech. `8x` and `16x` step a whole tick and skip tweens. Changing speed does not seek and is not sent to the server. |
+
+Going backward requests a reconstructed frame. It does not play a reverse tween.
+
+## Event log
+
+The log is one bounded page, near 200 lines, replaced on each seek. A line is `tick:sequence type actor target description`. The subject is `target_id` for `AGENT_DIED`, `NEEDS_APPLIED`, and `EXPOSURE_APPLIED`, and `actor_id` otherwise. Labels prefer `agent_id`, then the raw id. Location names prefer `display_name`, then `name`. Clicking a line seeks that event. Utterance text is not printed.
+
+Three filters hide loaded lines and do not request another route:
+
+- agent: actor, target, or label
+- event type: exact semantic type
+- location: origin, destination, or location name
+
+Empty filters show every loaded line.
+
+## Timeline
+
+The bar shows the viewed event tick and the live tick from `GET .../observer/run`. `AGENT_DIED` marks come from the loaded log window. Selected-agent marks use that same window and stay off until the Selected agent toggle is on. Clicking a mark seeks that event. The client does not page the whole run to paint marks.
+
+## Pause and behind live
+
+Pause does not pause the run. New live events sit in a buffer of at most 256 and are not applied until Play. Event 257 discards that buffer. The status bar shows `behind live` until Return to Live or a successful catch-up. The same status is shown when the viewed event is behind the run head. Return to Live ignores the buffer, reloads the head, and resumes the socket.
+
+A completed seek logs in this shape, with no token:
+
+```text
+[observer.session] seek_applied mode=REPLAY tick=4 sequence=1
+```
 
 ## Headless checks
 

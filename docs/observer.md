@@ -25,7 +25,8 @@ All HTTP methods are GET. The capability is `objective_inspection` except the re
 | --- | --- |
 | `GET /v1/simulations/{run_id}/observer/manifest` | Layout and protocol identity |
 | `GET /v1/simulations/{run_id}/observer/state` | Current frame |
-| `GET /v1/simulations/{run_id}/observer/state?tick=` | Frame at that tick |
+| `GET /v1/simulations/{run_id}/observer/state?tick=` | Frame at the start of that tick |
+| `GET /v1/simulations/{run_id}/observer/state?tick=&through_sequence=` | Frame through one committed event |
 | `GET /v1/simulations/{run_id}/observer/events` | Adapted events after an exclusive cursor |
 | `GET /v1/simulations/{run_id}/observer/ticks` | Tick summaries |
 | `GET /v1/simulations/{run_id}/observer/events/{event_id}` | One adapted event |
@@ -39,7 +40,11 @@ Optional `layout_id` defaults to `reference-v1`. Event cursors are `after_tick` 
 
 A live frame uses `scene_at_tick` with no target, which is the durable head. A `tick` query builds a new frame from a fresh replay to that tick. Seeking does not append events and does not change the clock. A tick past the high water returns the existing unreachable replay status.
 
-The snapshot `next_tick` is the replay cursor. Events folded for a target have `event.tick` strictly before that cursor.
+The snapshot `next_tick` is the replay cursor. Events folded for a tick-only target have `event.tick` strictly before that cursor. That tick-only query is unchanged: `world.tick` is the requested tick, and omitting `tick` is still the live head.
+
+`through_sequence` is optional and requires `tick`. The fold includes every committed event with `(event.tick, event.sequence) <= (tick, through_sequence)`. It is a read-only prefix of that tick: the server does not write a snapshot and does not keep the restored engine. A shorter prefix keeps the start-of-tick clock and revision, while still showing the occupancy, items, resources, weather, and life status those events produced. When the prefix is the whole tick, the frame matches `GET .../state?tick={event_tick + 1}`, including `world.tick`.
+
+`through_sequence` without `tick` is `incomplete_event_cursor`. A pair past the durable head is `cursor_ahead_of_high_water`. A pair that is not a committed event is `observer_event_not_found`. There is no inverse event. Playback speed is never a query parameter. These reads do not change the run.
 
 ## Reconnect
 

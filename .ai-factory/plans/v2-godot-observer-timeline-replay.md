@@ -145,7 +145,7 @@ Each checkpoint is a git commit on `main` created when those tasks are done. Do 
 
 ### Phase 4: Navigation Tests and Docs
 
-- [ ] Task 9: Cover the playback cases in the headless runner.
+- [x] Task 9: Cover the playback cases in the headless runner.
   - Deliverable: GDScript tests, wired into `tests/run_protocol.gd`, exercise the pure pieces and session doubles (no network) for the cases below. Python tests from tasks 1 and 2 already own the prefix revision, snapshot jumps, and the intra-tick fold. Do not start Godot from default pytest.
     - Below speed 8, forward playback advances one event and requests `through_sequence`. At speed `>= 8`, the step target is the last event of the next tick.
     - Backward event navigation requests the previous pair and replaces state from the frame.
@@ -161,7 +161,7 @@ Each checkpoint is a git commit on `main` created when those tasks are done. Do 
   - Depends on tasks 3–8.
   - Files: `clients/godot-observer/tests/test_transport.gd`, `clients/godot-observer/tests/test_session_cursor.gd`, `clients/godot-observer/tests/test_playback.gd`, `clients/godot-observer/tests/test_event_log.gd`, `clients/godot-observer/tests/run_protocol.gd`.
 
-- [ ] Task 10: Document the controls and the event query.
+- [x] Task 10: Document the controls and the event query.
   - Deliverable: `docs/observer.md` documents `through_sequence`, the unchanged tick-only query, and that a partial tick is a read-only fold. `docs/godot-observer.md` lists the controls, the speed steps, the log columns, the three filters, the timeline marks, pause versus the continuing run, `behind live`, and Return to Live. Both pages state that these controls do not change the run. Route `/aif-docs` for the docs checkpoint; do not mount the client from FastAPI.
   - Logging: no production logger. Doc examples use the `[observer.session] seek_applied` shape and do not include a token.
   - Depends on tasks 2 and 5–8.
