@@ -636,6 +636,176 @@ class SocialMessageDecision:
         )
 
 
+_EPISTEMIC_CONCEPTS: Final[frozenset[str]] = frozenset(
+    {"food", "water", "rest", "danger"}
+)
+
+
+def _allowlisted_claim_token(claim: object) -> str | None:
+    from memory import BeliefValueKind, SemanticBelief
+
+    if type(claim) is not SemanticBelief:
+        return None
+    if claim.claim.predicate in _EPISTEMIC_CONCEPTS:
+        return claim.claim.predicate
+    value = claim.claim.value
+    if value.kind is BeliefValueKind.TEXT and value.text_value in _EPISTEMIC_CONCEPTS:
+        return value.text_value
+    return None
+
+
+def _select_belief_utterance(
+    *,
+    owner_id: AgentId,
+    speaker_id: EntityId,
+    recipient: EntityId,
+    observation: Observation,
+    beliefs: Sequence[object],
+    mind: object | None,
+    act_pref: str,
+    selected_ids: frozenset[object],
+    candidate_count: int,
+) -> SocialMessageDecision | None:
+    """Tell the first unblocked belief, or ask when the judgment is uncertain."""
+    from agents.cognition.epistemic import (
+        EpistemicJudgment,
+        default_epistemic_policy,
+        epistemic_disclosure,
+        epistemic_proposition_ref,
+    )
+    from agents.cognition.theory_of_mind import TheoryOfMind
+    from memory import SemanticBelief
+
+    _LOG.debug(
+        "epistemic_message_select_start owner_id=%s tick=%s",
+        owner_id.value,
+        observation.tick,
+    )
+    policy = default_epistemic_policy()
+    has_ledger = type(mind) is TheoryOfMind and bool(mind.attributions)
+    if mind is None or type(mind) is not TheoryOfMind:
+        _LOG.debug(
+            "epistemic_message_skipped owner_id=%s tick=%s status=skipped",
+            owner_id.value,
+            observation.tick,
+        )
+    elif not has_ledger:
+        _LOG.debug(
+            "epistemic_message_skipped owner_id=%s tick=%s reason=empty_ledger",
+            owner_id.value,
+            observation.tick,
+        )
+    blocking = {
+        EpistemicJudgment.ALREADY_KNOWN,
+        EpistemicJudgment.SECRET,
+        EpistemicJudgment.CONTRADICTORY,
+    }
+    for claim in beliefs:
+        if type(claim) is not SemanticBelief:
+            raise TypeError("beliefs must be SemanticBelief")
+        if claim.confidence.confidence < 0.5:
+            continue
+        proposition = epistemic_proposition_ref(belief_id=claim.belief_id.value)
+        disclosure = (
+            epistemic_disclosure(mind, recipient.value, proposition, policy)
+            if has_ledger and type(mind) is TheoryOfMind
+            else None
+        )
+        judgment = None if disclosure is None else disclosure.judgment
+        band = confidence_band(
+            claim.confidence.confidence if disclosure is None else disclosure.confidence
+        )
+        if judgment in blocking:
+            _LOG.debug(
+                "epistemic_message owner_id=%s tick=%s action_kind=%s "
+                "recipient_id=%s judgment=%s confidence_band=%s",
+                owner_id.value,
+                observation.tick,
+                "tell",
+                recipient.value,
+                judgment.value,
+                band,
+            )
+            continue
+        if judgment is EpistemicJudgment.UNCERTAIN:
+            token = _allowlisted_claim_token(claim)
+            _LOG.debug(
+                "epistemic_message owner_id=%s tick=%s action_kind=%s "
+                "recipient_id=%s judgment=%s confidence_band=%s",
+                owner_id.value,
+                observation.tick,
+                "ask" if token is not None else "tell",
+                recipient.value,
+                judgment.value,
+                band,
+            )
+            if token is None:
+                return None
+            utterance = origin_utterance(
+                text=token,
+                speaker_id=speaker_id,
+                communication_id=f"plan-ask-{claim.belief_id.value}",
+                sender_confidence=claim.confidence.confidence,
+                source_basis=CommunicationSourceBasis.UNREFERENCED,
+                concepts=(token,),
+            )
+            return SocialMessageDecision(
+                command=Ask(recipient_id=recipient, utterance=utterance),
+                action_kind="ask",
+                source_basis=CommunicationSourceBasis.UNREFERENCED,
+                hop_count=0,
+                sender_confidence=claim.confidence.confidence,
+                fallback=False,
+                candidate_count=candidate_count,
+            )
+        if judgment is EpistemicJudgment.NEW:
+            _LOG.debug(
+                "epistemic_message owner_id=%s tick=%s action_kind=%s "
+                "recipient_id=%s judgment=%s confidence_band=%s",
+                owner_id.value,
+                observation.tick,
+                "tell",
+                recipient.value,
+                judgment.value,
+                band,
+            )
+        conf = claim.confidence.confidence
+        utterance = origin_utterance(
+            text=f"claim:{claim.belief_id.value}",
+            speaker_id=speaker_id,
+            communication_id=f"plan-tell-{claim.belief_id.value}",
+            sender_confidence=conf,
+            source_basis=CommunicationSourceBasis.BELIEF,
+            concepts=(claim.belief_id.value,),
+        )
+        _LOG.debug(
+            "social_message_belief_testify",
+            extra={
+                "cognition": {
+                    "owner_id": owner_id.value,
+                    "policy_version": SOCIAL_MESSAGE_POLICY_VERSION,
+                    "reason_code": (
+                        "emotion_prefer_tell"
+                        if act_pref == "tell" and not selected_ids
+                        else "selected_belief_testify"
+                    ),
+                    "selected_belief_count": len(selected_ids),
+                    "confidence_band": confidence_band(conf),
+                }
+            },
+        )
+        return SocialMessageDecision(
+            command=Tell(recipient_id=recipient, utterance=utterance),
+            action_kind="tell",
+            source_basis=CommunicationSourceBasis.BELIEF,
+            hop_count=0,
+            sender_confidence=conf,
+            fallback=False,
+            candidate_count=candidate_count,
+        )
+    return None
+
+
 class SocialMessagePolicy(Protocol):
     """Replaceable port for structured talk/ask/tell generation."""
 
@@ -777,41 +947,17 @@ class DeterministicSocialMessagePolicy:
 
         decision: SocialMessageDecision | None = None
         allow_belief_tell = bool(selected_ids) or act_pref == "tell"
-        if allow_belief_tell and beliefs and beliefs[0].confidence.confidence >= 0.5:
-            claim = beliefs[0]
-            conf = claim.confidence.confidence
-            utterance = origin_utterance(
-                text=f"claim:{claim.belief_id.value}",
+        if allow_belief_tell and beliefs:
+            decision = _select_belief_utterance(
+                owner_id=owner_id,
                 speaker_id=speaker_id,
-                communication_id=f"plan-tell-{claim.belief_id.value}",
-                sender_confidence=conf,
-                source_basis=CommunicationSourceBasis.BELIEF,
-                concepts=(claim.belief_id.value,),
-            )
-            decision = SocialMessageDecision(
-                command=Tell(recipient_id=recipient, utterance=utterance),
-                action_kind="tell",
-                source_basis=CommunicationSourceBasis.BELIEF,
-                hop_count=0,
-                sender_confidence=conf,
-                fallback=False,
+                recipient=recipient,
+                observation=observation,
+                beliefs=beliefs,
+                mind=mind,
+                act_pref=act_pref,
+                selected_ids=selected_ids,
                 candidate_count=candidate_count,
-            )
-            _LOG.debug(
-                "social_message_belief_testify",
-                extra={
-                    "cognition": {
-                        "owner_id": owner_id.value,
-                        "policy_version": SOCIAL_MESSAGE_POLICY_VERSION,
-                        "reason_code": (
-                            "emotion_prefer_tell"
-                            if act_pref == "tell" and not selected_ids
-                            else "selected_belief_testify"
-                        ),
-                        "selected_belief_count": len(selected_ids),
-                        "confidence_band": confidence_band(conf),
-                    }
-                },
             )
         elif not selected_ids and beliefs and beliefs[0].confidence.confidence >= 0.5:
             _LOG.debug(

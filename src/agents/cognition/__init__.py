@@ -111,6 +111,7 @@ from agents.cognition.epistemic import (
     EpistemicSource,
     default_epistemic_policy,
     epistemic_attribution_id_for,
+    epistemic_disclosure,
     epistemic_proposition_ref,
     update_epistemic_state,
 )
@@ -600,6 +601,7 @@ __all__ = [
     "episodes_from_observation",
     "episodes_from_reconstructions",
     "epistemic_attribution_id_for",
+    "epistemic_disclosure",
     "epistemic_proposition_ref",
     "hypothesis_id_for",
     "identity_predicate",

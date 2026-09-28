@@ -1080,3 +1080,103 @@ def update_epistemic_state(
         dropped,
     )
     return _with_attributions(model, tuple(kept))
+
+
+def _positive_level2(
+    rows: Sequence[EpistemicAttribution],
+    *,
+    recipient_id: str,
+    proposition_ref: str,
+    policy: EpistemicPolicy,
+) -> tuple[bool, bool]:
+    knows = False
+    ignorant = False
+    positive = {EpistemicAttitude.KNOWS, EpistemicAttitude.BELIEVES}
+    for row in rows:
+        if row.nesting_level != 2 or row.proposition_ref != proposition_ref:
+            continue
+        if row.modeled_agents != (recipient_id,):
+            continue
+        if row.confidence < policy.action_threshold:
+            continue
+        if row.attitude in positive:
+            knows = True
+        if row.attitude is EpistemicAttitude.DOES_NOT_KNOW:
+            ignorant = True
+    return knows, ignorant
+
+
+def epistemic_disclosure(
+    model: TheoryOfMind | None,
+    recipient_id: str,
+    proposition_ref: str,
+    policy: EpistemicPolicy,
+) -> EpistemicDisclosure | None:
+    """Closed judgment for one recipient. A ``fact:`` key does not select a Tell."""
+    if type(policy) is not EpistemicPolicy:
+        raise TypeError("policy must be EpistemicPolicy")
+    if model is None:
+        _LOG.debug("epistemic_disclosure_skipped reason=no_model")
+        return None
+    if type(model) is not TheoryOfMind:
+        raise TypeError("model must be TheoryOfMind")
+    if policy.max_depth == 0:
+        _LOG.debug("epistemic_disclosure_skipped reason=depth_zero")
+        return None
+    if not model.attributions:
+        _LOG.debug("epistemic_disclosure_skipped reason=empty_ledger")
+        return None
+    try:
+        recipient = require_stable_id("recipient_id", recipient_id)
+        proposition = _validate_proposition(proposition_ref)
+    except ValueError:
+        _LOG.debug("epistemic_disclosure_skipped reason=unknown_proposition")
+        return None
+    level1 = _find(model.attributions, nesting_level=1, proposition_ref=proposition)
+    if level1 is None:
+        _LOG.debug("epistemic_disclosure_skipped reason=unknown_proposition")
+        return None
+    knows, ignorant = _positive_level2(
+        model.attributions,
+        recipient_id=recipient,
+        proposition_ref=proposition,
+        policy=policy,
+    )
+    if (
+        level1.contradiction_mass >= policy.contradiction_threshold
+        or (knows and ignorant)
+    ):
+        judgment = EpistemicJudgment.CONTRADICTORY
+    elif level1.attitude is EpistemicAttitude.UNCERTAIN:
+        judgment = EpistemicJudgment.UNCERTAIN
+    elif knows and not ignorant:
+        judgment = EpistemicJudgment.ALREADY_KNOWN
+    elif not level1.witness_ids and (ignorant or not knows):
+        judgment = EpistemicJudgment.SECRET
+    elif (
+        level1.attitude in {EpistemicAttitude.KNOWS, EpistemicAttitude.BELIEVES}
+        and level1.witness_ids
+        and recipient not in level1.witness_ids
+        and (ignorant or not knows)
+    ):
+        judgment = EpistemicJudgment.NEW
+    else:
+        _LOG.debug("epistemic_disclosure_skipped reason=no_judgment")
+        return None
+    disclosure = EpistemicDisclosure(
+        judgment=judgment,
+        proposition_ref=proposition,
+        recipient_id=recipient,
+        attribution_id=level1.attribution_id,
+        confidence=level1.confidence,
+    )
+    _LOG.debug(
+        "epistemic_disclosure owner_id=%s recipient_id=%s judgment=%s "
+        "nesting_level=%s confidence=%s",
+        model.owner_id.value,
+        recipient,
+        judgment.value,
+        level1.nesting_level,
+        disclosure.confidence,
+    )
+    return disclosure
