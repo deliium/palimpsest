@@ -348,6 +348,128 @@ class MultiCriteriaIntentionSelector:
         return result
 
 
+def _reputation_skip(owner_id: AgentId, reason: str) -> None:
+    _LOG.debug(
+        "reputation_testimony_skipped owner_id=%s reason=%s",
+        owner_id.value,
+        reason,
+    )
+
+
+def _reputation_testimony_command(
+    command: AgentCommand,
+    *,
+    owner_id: AgentId,
+    observation: Observation,
+    snapshot: SubjectiveSnapshot | None,
+    ledger: object | None,
+    mode: object | None,
+    policy: object | None,
+) -> AgentCommand:
+    """Replace a selected Wait with one origin Tell when a head is strong."""
+    from agents.cognition.configuration import CognitionReputationMode
+    from agents.cognition.reputation import (
+        ReputationDimension,
+        ReputationFormationPolicy,
+        ReputationLedger,
+        canonical_signed_decimal,
+    )
+    from world.actions import Tell
+    from world.communications import CommunicationRelation, origin_utterance
+
+    if mode is None:
+        return command
+    if type(mode) is not CognitionReputationMode:
+        raise TypeError("reputation_mode must be CognitionReputationMode")
+    if mode is not CognitionReputationMode.DETERMINISTIC:
+        _reputation_skip(owner_id, "mode_disabled")
+        return command
+    if type(command) is not Wait:
+        _reputation_skip(owner_id, "command_already_selected")
+        return command
+    if type(ledger) is not ReputationLedger or snapshot is None:
+        _reputation_skip(owner_id, "below_threshold")
+        return command
+    active = policy
+    if active is None:
+        from agents.cognition.reputation import default_reputation_policy
+
+        active = default_reputation_policy()
+    if type(active) is not ReputationFormationPolicy:
+        raise TypeError("reputation_policy must be ReputationFormationPolicy")
+    identity = snapshot.social_identity
+    if identity is None:
+        _reputation_skip(owner_id, "no_recipient")
+        return command
+    threshold = active.reading_threshold
+    chosen = None
+    for profile in sorted(ledger.profiles, key=lambda item: item.target_id.value):
+        named = tuple(
+            dimension
+            for dimension in ReputationDimension
+            if abs(profile.dimension_state(dimension).value) >= threshold
+        )
+        if named:
+            chosen = (profile, named)
+            break
+    if chosen is None:
+        _reputation_skip(owner_id, "below_threshold")
+        return command
+    profile, dimensions = chosen
+    target_entity = next(
+        (
+            binding.entity_id
+            for binding in identity.counterparts
+            if binding.agent_id == profile.target_id
+        ),
+        None,
+    )
+    if target_entity is None:
+        _reputation_skip(owner_id, "no_recipient")
+        return command
+    recipients = [
+        body.entity_id
+        for body in observation.visible_bodies
+        if body.entity_id != identity.owner_entity_id
+        and body.entity_id != target_entity
+        and observation_allows_communication_target(
+            visibility=observation.visibility,
+            visible_body_ids=tuple(
+                item.entity_id for item in observation.visible_bodies
+            ),
+            recipient_id=body.entity_id,
+            visibility_threshold=CONTENT_VISIBILITY_THRESHOLD,
+        )
+    ]
+    if not recipients:
+        _reputation_skip(owner_id, "no_recipient")
+        return command
+    recipient = min(recipients, key=lambda entity: entity.value)
+    relations = tuple(
+        CommunicationRelation(
+            subject=target_entity.value,
+            predicate=dimension.value,
+            object=canonical_signed_decimal(profile.dimension_state(dimension).value),
+        )
+        for dimension in dimensions[:4]
+    )
+    utterance = origin_utterance(
+        text=dimensions[0].value,
+        speaker_id=identity.owner_entity_id,
+        communication_id=f"reputation-{owner_id.value}-{observation.tick}",
+        relations=relations,
+    )
+    _LOG.debug(
+        "reputation_testimony_emitted owner_id=%s recipient_id=%s target_id=%s "
+        "dimensions=%s",
+        owner_id.value,
+        recipient.value,
+        profile.target_id.value,
+        ",".join(dimension.value for dimension in dimensions[:4]),
+    )
+    return Tell(recipient_id=recipient, utterance=utterance)
+
+
 class CommandPlanner:
     """Compile selected direction+target into one fresh closed AgentCommand."""
 
@@ -373,6 +495,9 @@ class CommandPlanner:
         self_model: object | None = None,
         strategy_mode: object | None = None,
         strategy_policy: object | None = None,
+        reputation: object | None = None,
+        reputation_mode: object | None = None,
+        reputation_policy: object | None = None,
     ) -> ActionPlan:
         owner = loop_input.agent_id
         tick = loop_input.observation.tick
@@ -464,6 +589,17 @@ class CommandPlanner:
             used_fallback = True
             communication_intent = None
             communication_intent_audit = None
+
+        command = _reputation_testimony_command(
+            command,
+            owner_id=owner,
+            observation=loop_input.observation,
+            snapshot=loop_input.snapshot,
+            ledger=reputation,
+            mode=reputation_mode,
+            policy=reputation_policy,
+        )
+        command_type = type(command).__name__
 
         confidence = intention.confidence if not used_fallback else 1.0
         plan = ActionPlan(

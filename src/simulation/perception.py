@@ -126,6 +126,7 @@ def build_perspective(
     emotional_state: object | None = None,
     causal_world_model: object | None = None,
     theory_of_mind: object | None = None,
+    reputation: object | None = None,
 ) -> Perspective:
     """Pair one ``AgentId`` with exactly its registered entity observation.
 
@@ -307,6 +308,7 @@ def build_perspective(
         emotional_state=emotional_state,
         causal_world_model=causal_world_model,
         theory_of_mind=theory_of_mind,
+        reputation=reputation,
     )
     _ = SemanticBelief, DirectedRelationshipProfile
     emotion_kind_count = (

@@ -437,6 +437,7 @@ class AgentRuntime:
         "_reflection_cursor",
         "_relationship_reader",
         "_remembered_decisions",
+        "_reputation",
         "_run_id",
         "_scientific_evidence",
         "_semantic_belief_reader",
@@ -536,6 +537,7 @@ class AgentRuntime:
         self._emotional_state: AgentEmotionalState | None = None
         self._causal_world_model: object | None = None
         self._theory_of_mind: object | None = None
+        self._reputation: object | None = None
         self._identity_cursor: object | None = None
         self._reflection_cursor: object | None = None
         self._decision_journal: tuple[object, ...] | None = None
@@ -670,6 +672,42 @@ class AgentRuntime:
             owner,
             tick,
             True,
+        )
+
+    def _commit_reputation(self, ledger: object | None, tick: int) -> None:
+        """Store the owner's ledger after a successful enabled tick."""
+        from agents.cognition.configuration import CognitionReputationMode
+        from agents.cognition.reputation import ReputationLedger
+
+        owner = self._agent.agent_id
+        mode = getattr(self._loop, "_reputation_mode", CognitionReputationMode.DISABLED)
+        mode_name = getattr(mode, "value", "disabled")
+        if mode is not CognitionReputationMode.DETERMINISTIC or ledger is None:
+            if mode is not CognitionReputationMode.DETERMINISTIC:
+                self._reputation = None
+            _LOG.debug(
+                "reputation_ledger_skipped owner_id=%s tick=%s mode=%s "
+                "profile_count=%s",
+                owner.value,
+                tick,
+                mode_name,
+                0,
+            )
+            return
+        if type(ledger) is not ReputationLedger:
+            raise TypeError("reputation must be ReputationLedger")
+        if ledger.owner_id != owner:
+            raise AgentRuntimeError(
+                AgentRuntimeErrorCode.OWNERSHIP,
+                agent_id=owner.value,
+            )
+        self._reputation = ledger
+        _LOG.debug(
+            "reputation_ledger_carried owner_id=%s tick=%s mode=%s profile_count=%s",
+            owner.value,
+            tick,
+            mode_name,
+            len(ledger.profiles),
         )
 
     def _commit_prospective_audit(self, tick: int) -> None:
@@ -1115,6 +1153,7 @@ class AgentRuntime:
                 emotional_state=self._emotional_state,
                 causal_world_model=self._causal_world_model,
                 theory_of_mind=self._theory_of_mind,
+                reputation=self._reputation,
             )
         except TypeError:
             raise
@@ -1523,6 +1562,7 @@ class AgentRuntime:
         )
         self._commit_world_model(pending.loop_result.causal_world_model, pending.tick)
         self._commit_theory_of_mind(pending.loop_result.theory_of_mind, pending.tick)
+        self._commit_reputation(pending.loop_result.reputation, pending.tick)
         self._commit_communication_intent(pending.loop_result, pending.tick)
         self._commit_prospective_audit(pending.tick)
         self._commit_counterfactual_audit(pending.tick)
@@ -1915,6 +1955,7 @@ class AgentRuntime:
         self._emotional_state = checkpoint.emotional_state
         self._causal_world_model = checkpoint.causal_world_model
         self._theory_of_mind = checkpoint.theory_of_mind
+        self._reputation = checkpoint.reputation
         self._reflection_cursor = checkpoint.reflection_cursor
         self._decision_journal = checkpoint.decision_journal
         self._remembered_decisions = checkpoint.remembered_decisions
@@ -1969,6 +2010,7 @@ class AgentRuntime:
             emotional_state=self._emotional_state,
             causal_world_model=self._causal_world_model,
             theory_of_mind=self._theory_of_mind,
+            reputation=self._reputation,
             reflection_cursor=self._reflection_cursor,
             decision_journal=self._decision_journal,
             remembered_decisions=self._remembered_decisions,

@@ -740,4 +740,6 @@ def build_cognitive_loop(
         counterfactual_policy=resolved.counterfactual_policy,
         communication_strategy_mode=resolved.communication_strategy_mode,
         communication_strategy_policy=resolved.communication_strategy_policy,
+        reputation_mode=resolved.reputation_mode,
+        reputation_policy=resolved.reputation_policy,
     )

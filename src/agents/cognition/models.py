@@ -709,6 +709,7 @@ class SubjectiveSnapshot:
     emotional_state: AgentEmotionalState | None = None
     causal_world_model: object | None = None
     theory_of_mind: object | None = None
+    reputation: object | None = None
 
     def __post_init__(self) -> None:
         if type(self.owner_id) is not AgentId:
@@ -845,6 +846,13 @@ class SubjectiveSnapshot:
             self.theory_of_mind,
             self.owner_id,
             field_name="SubjectiveSnapshot.theory_of_mind",
+        )
+        from agents.cognition.reputation import require_owner_reputation
+
+        require_owner_reputation(
+            self.reputation,
+            self.owner_id,
+            field_name="SubjectiveSnapshot.reputation",
         )
 
     def __repr__(self) -> str:
@@ -3622,6 +3630,7 @@ class CognitiveLoopProposal:
     theory_of_mind: object | None = None
     communication_intent: object | None = None
     communication_intent_audit: object | None = None
+    reputation: object | None = None
 
     def __post_init__(self) -> None:
         object.__setattr__(
@@ -3668,6 +3677,13 @@ class CognitiveLoopProposal:
             self.theory_of_mind,
             self.agent_id,
             field_name="CognitiveLoopProposal.theory_of_mind",
+        )
+        from agents.cognition.reputation import require_owner_reputation
+
+        require_owner_reputation(
+            self.reputation,
+            self.agent_id,
+            field_name="CognitiveLoopProposal.reputation",
         )
         if type(self.futures) is not PossibleFutures:
             raise TypeError("futures must be PossibleFutures")
@@ -3742,6 +3758,7 @@ class CognitiveLoopResult:
     theory_of_mind: object | None = None
     communication_intent: object | None = None
     communication_intent_audit: object | None = None
+    reputation: object | None = None
 
     def __post_init__(self) -> None:
         object.__setattr__(
@@ -3764,6 +3781,13 @@ class CognitiveLoopResult:
             self.theory_of_mind,
             self.agent_id,
             field_name="CognitiveLoopResult.theory_of_mind",
+        )
+        from agents.cognition.reputation import require_owner_reputation
+
+        require_owner_reputation(
+            self.reputation,
+            self.agent_id,
+            field_name="CognitiveLoopResult.reputation",
         )
         object.__setattr__(self, "command", require_agent_command(self.command))
         if isinstance(self.boundary_records, (set, frozenset, Mapping)):

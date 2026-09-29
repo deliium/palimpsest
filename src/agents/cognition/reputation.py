@@ -10,6 +10,7 @@ from __future__ import annotations
 import hashlib
 import logging
 import math
+import re
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
 from decimal import Decimal
@@ -18,8 +19,11 @@ from typing import Final
 
 from agents.cognition.models import OwnerSafeSocialIdentity
 from agents.models import AgentId
+from memory.models import MemorySourceKind, MemoryTrace
+from social.models import CommunicationEnvelope
+from world.communications import StructuredUtterance
 from world.identifiers import EntityId, require_exact_nonneg_int, require_stable_id
-from world.observations import Observation, ObservedOccurrence
+from world.observations import Observation, ObservedCommunication, ObservedOccurrence
 
 _LOG: Final[logging.Logger] = logging.getLogger("agents.cognition.reputation")
 
@@ -33,6 +37,10 @@ _MAX_EVIDENCE: Final[int] = 64
 _LOW_TRUST_BELOW: Final[float] = 0.35
 _HIGH_TRUST_FROM: Final[float] = 0.65
 _DIRECT_SCALE: Final[float] = 1.0
+_CANONICAL_DECIMAL: Final[re.Pattern[str]] = re.compile(
+    r"^-?(?:0|[1-9]\d*)(?:\.\d{1,6})?$"
+)
+_MAX_UTTERANCE_RELATIONS: Final[int] = 4
 _FORBIDDEN_INPUTS: Final[frozenset[str]] = frozenset(
     {"WorldState", "WorldEvent", "PhysicalRules", "AgentBody"}
 )
@@ -568,10 +576,344 @@ def _drop(owner_id: AgentId, tick: int, reason: str) -> None:
     )
 
 
+def _skip_memory(owner_id: AgentId, tick: int, memory_id: str, reason: str) -> None:
+    _LOG.warning(
+        "reputation_memory_skipped owner_id=%s tick=%s memory_id=%s reason=%s",
+        owner_id.value,
+        tick,
+        memory_id,
+        reason,
+    )
+
+
+def _interaction_cue(trace: MemoryTrace) -> str | None:
+    for concept in trace.concepts:
+        if (
+            concept.mention_id.value == "c-kind"
+            and concept.concept in _OBSERVATION_DELTAS
+        ):
+            return concept.concept
+    return None
+
+
+def _mentioned_entity(trace: MemoryTrace, mention_id: str) -> EntityId | None:
+    for entity in trace.entities:
+        if entity.mention_id.value == mention_id:
+            return entity.entity_id
+    return None
+
+
+def canonical_signed_decimal(value: float) -> str:
+    """Quantized signed decimal without exponent, sign prefix, or trailing zeros."""
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        raise _fail("value", "not_finite")
+    number = float(value)
+    if not math.isfinite(number):
+        raise _fail("value", "not_finite")
+    if number < -1.0 or number > 1.0:
+        raise _fail("value", "out_of_range")
+    steps = round(number / 1e-6)
+    text = format(Decimal(steps) * _QUANTUM, "f")
+    if "." in text:
+        text = text.rstrip("0").rstrip(".")
+    if text in {"", "-0"}:
+        return "0"
+    return text
+
+
+def _parse_canonical_signed(token: object) -> float | None:
+    if not isinstance(token, str) or _CANONICAL_DECIMAL.fullmatch(token) is None:
+        return None
+    try:
+        number = float(token)
+    except ValueError:
+        return None
+    if not math.isfinite(number) or number < -1.0 or number > 1.0:
+        return None
+    if canonical_signed_decimal(number) != token:
+        return None
+    return _quantize(number)
+
+
+def _resolve_social_agent(
+    identity: OwnerSafeSocialIdentity, entity_id: EntityId | None
+) -> AgentId | None:
+    if type(entity_id) is not EntityId:
+        return None
+    if entity_id == identity.owner_entity_id:
+        return identity.owner_id
+    return _counterpart_agent(identity, entity_id)
+
+
+def _reject_testimony(
+    owner_id: AgentId, tick: int, reason: str
+) -> None:
+    _LOG.warning(
+        "reputation_testimony_rejected owner_id=%s tick=%s reason=%s",
+        owner_id.value,
+        tick,
+        reason,
+    )
+
+
+def _entity_from_token(token: str) -> EntityId | None:
+    try:
+        return EntityId(token)
+    except ValueError:
+        return None
+
+
+def _direct_lineages(profiles: Sequence[ReputationProfile]) -> set[str]:
+    return {
+        item.lineage_ref
+        for profile in profiles
+        for item in profile.evidence
+        if item.channel is ReputationChannel.DIRECT_OBSERVATION
+    }
+
+
 def _occurrence_applies(occurrence: ObservedOccurrence) -> bool:
     if occurrence.kind == "attack":
         return occurrence.success is True
     return occurrence.success is not False
+
+
+def _known_agent(identity: OwnerSafeSocialIdentity, agent_id: AgentId) -> bool:
+    if agent_id == identity.owner_id:
+        return True
+    return any(binding.agent_id == agent_id for binding in identity.counterparts)
+
+
+def _adopt_testified_dimension(
+    *,
+    owner_id: AgentId,
+    tick: int,
+    target_id: AgentId,
+    speaker_id: AgentId,
+    dimension: ReputationDimension,
+    channel: ReputationChannel,
+    testified: float,
+    lineage: str,
+    trust: float,
+    band: ReputationSourceTrustBand,
+    policy: ReputationFormationPolicy,
+    profiles: list[ReputationProfile],
+    index_by_target: dict[AgentId, int],
+) -> None:
+    index = index_by_target.get(target_id)
+    profile = None if index is None else profiles[index]
+    if profile is not None and any(
+        item.channel is channel
+        and item.lineage_ref == lineage
+        and item.dimension is dimension
+        for item in profile.evidence
+    ):
+        return
+    if profile is None and len(profiles) >= policy.max_profiles:
+        _drop(owner_id, tick, "cap_exceeded")
+        return
+    if profile is not None and len(profile.evidence) >= policy.max_evidence:
+        _drop(owner_id, tick, "cap_exceeded")
+        return
+    current = 0.0 if profile is None else profile.dimension_state(dimension).value
+    pre_scale = _clamp_signed((testified - current) * policy.speech_rate)
+    applied = _quantize(pre_scale * trust)
+    if profile is None:
+        profile = ReputationProfile(
+            profile_id=reputation_profile_id(owner_id, target_id),
+            owner_id=owner_id,
+            target_id=target_id,
+            reliability=neutral_dimension_state(),
+            harm=neutral_dimension_state(),
+            generosity=neutral_dimension_state(),
+            competence=neutral_dimension_state(),
+        )
+    evidence = (
+        *profile.evidence,
+        ReputationEvidenceItem(
+            owner_id=owner_id,
+            target_id=target_id,
+            dimension=dimension,
+            channel=channel,
+            lineage_ref=lineage,
+            source_id=speaker_id,
+            pre_scale_delta=pre_scale,
+            source_trust_band=band,
+            tick=tick,
+            policy_version=policy.version,
+            profile_id=profile.profile_id,
+            ordinal=len(profile.evidence),
+        ),
+    )
+    updated = _with_dimension(
+        profile,
+        dimension,
+        _moved_state(profile.dimension_state(dimension), applied),
+        evidence,
+    )
+    if index is None:
+        index_by_target[target_id] = len(profiles)
+        profiles.append(updated)
+    else:
+        profiles[index] = updated
+    _LOG.debug(
+        "reputation_testimony_applied owner_id=%s tick=%s speaker_id=%s "
+        "target_id=%s channel=%s dimension=%s source_trust_band=%s",
+        owner_id.value,
+        tick,
+        speaker_id.value,
+        target_id.value,
+        channel.value,
+        dimension.value,
+        band.value,
+    )
+
+
+def _bounded_trust(field_name: str, value: float | None) -> float | None:
+    if value is None:
+        return None
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        raise _fail(field_name, "not_finite")
+    number = float(value)
+    if not math.isfinite(number) or number < 0.0 or number > 1.0:
+        raise _fail(field_name, "out_of_range")
+    return number
+
+
+def _trust_for_speaker(
+    speaker_id: AgentId,
+    by_speaker: Mapping[str, float] | None,
+    fallback: float | None,
+) -> tuple[float, bool]:
+    if by_speaker is not None and speaker_id.value in by_speaker:
+        resolved = _bounded_trust(
+            "source_trust", by_speaker[speaker_id.value]
+        )
+        if resolved is None:
+            return 0.5, True
+        return resolved, False
+    if fallback is None:
+        return 0.5, True
+    return fallback, False
+
+
+def _apply_testimony(
+    *,
+    owner_id: AgentId,
+    tick: int,
+    identity: OwnerSafeSocialIdentity,
+    observation: Observation,
+    inbox: Sequence[CommunicationEnvelope] | None,
+    profiles: list[ReputationProfile],
+    index_by_target: dict[AgentId, int],
+    policy: ReputationFormationPolicy,
+    source_trust: float | None,
+    source_trust_by_speaker: Mapping[str, float] | None,
+) -> None:
+    speeches: list[tuple[StructuredUtterance, AgentId, AgentId]] = []
+    for communication in observation.communications:
+        _reject_forbidden("communication", communication)
+        if type(communication) is not ObservedCommunication:
+            _reject_testimony(owner_id, tick, "invalid_testimony")
+            continue
+        speaker = _resolve_social_agent(identity, communication.speaker_id)
+        listener = _resolve_social_agent(identity, communication.listener_id)
+        if speaker is None or listener is None:
+            _reject_testimony(owner_id, tick, "unresolved_entity")
+            continue
+        speeches.append((communication.utterance, speaker, listener))
+    if inbox is not None:
+        if isinstance(inbox, (str, bytes, set, frozenset)) or not isinstance(
+            inbox, Sequence
+        ):
+            raise _fail("inbox", "invalid_type")
+        for envelope in inbox:
+            _reject_forbidden("inbox", envelope)
+            if type(envelope) is not CommunicationEnvelope:
+                _reject_testimony(owner_id, tick, "invalid_testimony")
+                continue
+            if envelope.recipient_id != owner_id:
+                continue
+            utterance = next(
+                (
+                    value
+                    for value in envelope.payload.values()
+                    if type(value) is StructuredUtterance
+                ),
+                None,
+            )
+            if utterance is None or not _known_agent(identity, envelope.sender_id):
+                _reject_testimony(owner_id, tick, "unresolved_entity")
+                continue
+            speeches.append((utterance, envelope.sender_id, envelope.recipient_id))
+    fallback = _bounded_trust("source_trust", source_trust)
+    logged_missing: set[str] = set()
+    for utterance, speaker_id, listener_id in speeches:
+        if utterance.declared.hop_count > 1:
+            _reject_testimony(owner_id, tick, "hop_dropped")
+            continue
+        trust, missing_trust = _trust_for_speaker(
+            speaker_id,
+            source_trust_by_speaker,
+            fallback,
+        )
+        band = source_trust_band_for(trust)
+        chosen: AgentId | None = None
+        adopted = 0
+        for relation in utterance.content.relations:
+            if adopted >= _MAX_UTTERANCE_RELATIONS:
+                break
+            try:
+                dimension = ReputationDimension(relation.predicate)
+            except ValueError:
+                _reject_testimony(owner_id, tick, "invalid_testimony")
+                continue
+            testified = _parse_canonical_signed(relation.object)
+            if testified is None:
+                _reject_testimony(owner_id, tick, "invalid_testimony")
+                continue
+            subject = _resolve_social_agent(
+                identity, _entity_from_token(relation.subject)
+            )
+            if subject is None:
+                _reject_testimony(owner_id, tick, "unresolved_entity")
+                continue
+            if subject == listener_id:
+                _reject_testimony(owner_id, tick, "self_subject")
+                continue
+            if chosen is None:
+                chosen = subject
+            elif subject != chosen:
+                continue
+            channel = (
+                ReputationChannel.COMMUNICATION
+                if subject == speaker_id
+                else ReputationChannel.THIRD_PARTY_STORY
+            )
+            _adopt_testified_dimension(
+                owner_id=owner_id,
+                tick=tick,
+                target_id=subject,
+                speaker_id=speaker_id,
+                dimension=dimension,
+                channel=channel,
+                testified=testified,
+                lineage=utterance.declared.communication_id.value,
+                trust=trust,
+                band=band,
+                policy=policy,
+                profiles=profiles,
+                index_by_target=index_by_target,
+            )
+            adopted += 1
+            if missing_trust and speaker_id.value not in logged_missing:
+                _LOG.debug(
+                    "reputation_source_trust owner_id=%s tick=%s "
+                    "reason=source_trust_missing",
+                    owner_id.value,
+                    tick,
+                )
+                logged_missing.add(speaker_id.value)
 
 
 def apply_reputation_update(
@@ -582,6 +924,10 @@ def apply_reputation_update(
     social_identity: OwnerSafeSocialIdentity,
     ledger: ReputationLedger | None = None,
     policy: ReputationFormationPolicy | None = None,
+    memories: Sequence[MemoryTrace] | None = None,
+    source_trust: float | None = None,
+    source_trust_by_speaker: Mapping[str, float] | None = None,
+    inbox: Sequence[CommunicationEnvelope] | None = None,
     **forbidden: object,
 ) -> ReputationLedger:
     """Adopt this tick's qualifying occurrences into the owner's ledger.
@@ -703,6 +1049,141 @@ def apply_reputation_update(
                 ReputationChannel.DIRECT_OBSERVATION.value,
                 _sign_label(pre_scale),
             )
+    if memories is not None:
+        if isinstance(memories, (str, bytes, set, frozenset)) or not isinstance(
+            memories, Sequence
+        ):
+            raise _fail("memories", "invalid_type")
+        seen_memory_ids: set[str] = set()
+        for trace in memories:
+            _reject_forbidden("memory", trace)
+            if type(trace) is not MemoryTrace:
+                _skip_memory(owner_id, resolved_tick, "unknown", "no_cue")
+                continue
+            memory_id = trace.memory_id.value
+            if trace.owner_id != owner_id:
+                raise _fail("memories.owner_id", "owner_mismatch")
+            if trace.provenance.kind is not MemorySourceKind.DIRECT_OBSERVATION:
+                _skip_memory(owner_id, resolved_tick, memory_id, "no_cue")
+                continue
+            if trace.provenance.source_tick >= resolved_tick:
+                _skip_memory(owner_id, resolved_tick, memory_id, "too_recent")
+                continue
+            cue = _interaction_cue(trace)
+            if cue is None:
+                _skip_memory(owner_id, resolved_tick, memory_id, "no_cue")
+                continue
+            actor_entity = _mentioned_entity(trace, "e-actor")
+            other_entity = _mentioned_entity(trace, "e-other")
+            owner_entity = social_identity.owner_entity_id
+            target_entity: EntityId | None
+            if actor_entity == owner_entity and other_entity not in (
+                None,
+                owner_entity,
+            ):
+                target_entity = other_entity
+            elif other_entity == owner_entity and actor_entity not in (
+                None,
+                owner_entity,
+            ):
+                target_entity = actor_entity
+            else:
+                _skip_memory(owner_id, resolved_tick, memory_id, "not_participant")
+                continue
+            observed = trace.provenance.observed_source_id
+            if observed is not None and observed.value in _direct_lineages(profiles):
+                _skip_memory(owner_id, resolved_tick, memory_id, "already_observed")
+                continue
+            if memory_id in seen_memory_ids:
+                continue
+            target_id = _counterpart_agent(social_identity, target_entity)
+            if target_id is None:
+                _skip_memory(owner_id, resolved_tick, memory_id, "unresolved_entity")
+                continue
+            applied_any = False
+            for dimension, pre_scale in _OBSERVATION_DELTAS[cue]:
+                index = index_by_target.get(target_id)
+                profile = None if index is None else profiles[index]
+                if profile is not None and any(
+                    item.channel is ReputationChannel.REMEMBERED_INTERACTION
+                    and item.lineage_ref == memory_id
+                    and item.dimension is dimension
+                    for item in profile.evidence
+                ):
+                    continue
+                if profile is None and len(profiles) >= active.max_profiles:
+                    _drop(owner_id, resolved_tick, "cap_exceeded")
+                    continue
+                if (
+                    profile is not None
+                    and len(profile.evidence) >= active.max_evidence
+                ):
+                    _drop(owner_id, resolved_tick, "cap_exceeded")
+                    continue
+                if profile is None:
+                    profile = ReputationProfile(
+                        profile_id=reputation_profile_id(owner_id, target_id),
+                        owner_id=owner_id,
+                        target_id=target_id,
+                        reliability=neutral_dimension_state(),
+                        harm=neutral_dimension_state(),
+                        generosity=neutral_dimension_state(),
+                        competence=neutral_dimension_state(),
+                    )
+                applied = _quantize(pre_scale * active.remembered_scale)
+                evidence = (
+                    *profile.evidence,
+                    ReputationEvidenceItem(
+                        owner_id=owner_id,
+                        target_id=target_id,
+                        dimension=dimension,
+                        channel=ReputationChannel.REMEMBERED_INTERACTION,
+                        lineage_ref=memory_id,
+                        source_id=owner_id,
+                        pre_scale_delta=pre_scale,
+                        source_trust_band=ReputationSourceTrustBand.UNMEDIATED,
+                        tick=resolved_tick,
+                        policy_version=active.version,
+                        profile_id=profile.profile_id,
+                        ordinal=len(profile.evidence),
+                    ),
+                )
+                updated = _with_dimension(
+                    profile,
+                    dimension,
+                    _moved_state(profile.dimension_state(dimension), applied),
+                    evidence,
+                )
+                if index is None:
+                    index_by_target[target_id] = len(profiles)
+                    profiles.append(updated)
+                else:
+                    profiles[index] = updated
+                applied_any = True
+                _LOG.debug(
+                    "reputation_memory_applied owner_id=%s tick=%s memory_id=%s "
+                    "target_id=%s dimension=%s sign=%s",
+                    owner_id.value,
+                    resolved_tick,
+                    memory_id,
+                    target_id.value,
+                    dimension.value,
+                    _sign_label(pre_scale),
+                )
+            if applied_any:
+                seen_memory_ids.add(memory_id)
+    _apply_testimony(
+        owner_id=owner_id,
+        tick=resolved_tick,
+        identity=social_identity,
+        observation=observation,
+        inbox=inbox,
+        profiles=profiles,
+        index_by_target=index_by_target,
+        policy=active,
+        source_trust=source_trust,
+        source_trust_by_speaker=source_trust_by_speaker,
+    )
     result = ReputationLedger(owner_id=owner_id, profiles=tuple(profiles))
     evidence_count = sum(len(profile.evidence) for profile in result.profiles)
     _LOG.info(

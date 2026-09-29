@@ -195,6 +195,8 @@ class CognitiveLoop:
         "_reflection_mode",
         "_reflection_policy",
         "_reflection_selector",
+        "_reputation_mode",
+        "_reputation_policy",
         "_self_state",
         "_situation",
         "_theory_of_mind_mode",
@@ -236,6 +238,8 @@ class CognitiveLoop:
         counterfactual_policy: object | None = None,
         communication_strategy_mode: object | None = None,
         communication_strategy_policy: object | None = None,
+        reputation_mode: object | None = None,
+        reputation_policy: object | None = None,
     ) -> None:
         self._perception = perception
         self._memory = memory
@@ -382,7 +386,89 @@ class CognitiveLoop:
             message_policy = communication_strategy_policy
         self._communication_strategy_mode = message_mode
         self._communication_strategy_policy = message_policy
+        from agents.cognition.configuration import CognitionReputationMode
+        from agents.cognition.reputation import ReputationFormationPolicy
+
+        reputation = (
+            CognitionReputationMode.DISABLED
+            if reputation_mode is None
+            else reputation_mode
+        )
+        if type(reputation) is not CognitionReputationMode:
+            raise TypeError("reputation_mode must be CognitionReputationMode")
+        if reputation is CognitionReputationMode.DISABLED:
+            reputation_policy = None
+        elif reputation_policy is None:
+            from agents.cognition.reputation import default_reputation_policy
+
+            reputation_policy = default_reputation_policy()
+        elif type(reputation_policy) is not ReputationFormationPolicy:
+            raise TypeError("reputation_policy must be ReputationFormationPolicy")
+        self._reputation_mode = reputation
+        self._reputation_policy = reputation_policy
         self._deferred_dissonance: tuple[object, ...] = ()
+
+    def _prepare_reputation(self, loop_input: CognitiveLoopInput) -> object | None:
+        from agents.cognition.configuration import CognitionReputationMode
+        from agents.cognition.reputation import (
+            ReputationLedger,
+            apply_reputation_update,
+        )
+
+        if self._reputation_mode is not CognitionReputationMode.DETERMINISTIC:
+            return None
+        snapshot = loop_input.snapshot
+        if snapshot is None or snapshot.social_identity is None:
+            return None
+        from agents.cognition.communication import project_trust_inputs
+
+        carried = snapshot.reputation
+        ledger = carried if type(carried) is ReputationLedger else None
+        trust_by_speaker: dict[str, float] = {}
+        identity = snapshot.social_identity
+        for communication in loop_input.observation.communications:
+            speaker = _reputation_agent(identity, communication.speaker_id)
+            if speaker is None or speaker.value in trust_by_speaker:
+                continue
+            profile = next(
+                (
+                    item
+                    for item in snapshot.relationships
+                    if getattr(item, "target_id", None) == speaker
+                ),
+                None,
+            )
+            if profile is None:
+                continue
+            trust, _confidence = project_trust_inputs(profile)
+            trust_by_speaker[speaker.value] = trust
+        for envelope in snapshot.inbox:
+            speaker_id = envelope.sender_id
+            if speaker_id.value in trust_by_speaker:
+                continue
+            profile = next(
+                (
+                    item
+                    for item in snapshot.relationships
+                    if getattr(item, "target_id", None) == speaker_id
+                ),
+                None,
+            )
+            if profile is None:
+                continue
+            trust, _confidence = project_trust_inputs(profile)
+            trust_by_speaker[speaker_id.value] = trust
+        return apply_reputation_update(
+            owner_id=loop_input.agent_id,
+            tick=loop_input.observation.tick,
+            observation=loop_input.observation,
+            social_identity=identity,
+            ledger=ledger,
+            policy=self._reputation_policy,
+            memories=snapshot.memories,
+            source_trust_by_speaker=trust_by_speaker,
+            inbox=snapshot.inbox,
+        )
 
     def _prepare_world_model(
         self,
@@ -672,6 +758,7 @@ class CognitiveLoop:
             loop_input, emotional_evaluation, memory
         )
         mind = self._prepare_theory_of_mind(loop_input, emotional_evaluation, memory)
+        reputation = self._prepare_reputation(loop_input)
         policy = self._world_model_policy
         if world_model is not None and policy is not None and policy.allow_provider:
             from agents.cognition.world_model_selection import (
@@ -765,6 +852,9 @@ class CognitiveLoop:
                     self_model=self_state,
                     strategy_mode=self._communication_strategy_mode,
                     strategy_policy=self._communication_strategy_policy,
+                    reputation=reputation,
+                    reputation_mode=self._reputation_mode,
+                    reputation_policy=self._reputation_policy,
                 ),
             ),
             expected_type=ActionPlan,
@@ -799,6 +889,7 @@ class CognitiveLoop:
             final_confidence=plan.confidence,
             causal_world_model=world_model,
             theory_of_mind=mind,
+            reputation=reputation,
             communication_intent=plan.communication_intent,
             communication_intent_audit=plan.communication_intent_audit,
         )
@@ -944,6 +1035,7 @@ class CognitiveLoop:
             identity_dissonance=identity_dissonance,
             causal_world_model=proposal.causal_world_model,
             theory_of_mind=proposal.theory_of_mind,
+            reputation=proposal.reputation,
             communication_intent=proposal.communication_intent,
             communication_intent_audit=proposal.communication_intent_audit,
         )
@@ -1738,6 +1830,21 @@ class CognitiveLoop:
             return output
 
         return run_stage
+
+
+def _reputation_agent(identity: object, entity_id: object) -> object | None:
+    from agents.models import AgentId
+
+    owner_entity = getattr(identity, "owner_entity_id", None)
+    owner_id = getattr(identity, "owner_id", None)
+    if entity_id == owner_entity and type(owner_id) is AgentId:
+        return owner_id
+    for binding in getattr(identity, "counterparts", ()):
+        if getattr(binding, "entity_id", None) == entity_id:
+            agent_id = getattr(binding, "agent_id", None)
+            if type(agent_id) is AgentId:
+                return agent_id
+    return None
 
 
 def _planner_options(

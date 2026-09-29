@@ -146,6 +146,7 @@ class Perspective:
     emotional_state: object | None = None
     causal_world_model: object | None = None
     theory_of_mind: object | None = None
+    reputation: object | None = None
 
     def __post_init__(self) -> None:
         if type(self.agent_id) is not AgentId:
@@ -274,6 +275,13 @@ class Perspective:
             self.agent_id,
             field_name="Perspective.theory_of_mind",
         )
+        from agents.cognition.reputation import require_owner_reputation
+
+        require_owner_reputation(
+            self.reputation,
+            self.agent_id,
+            field_name="Perspective.reputation",
+        )
 
     def to_snapshot(self) -> SubjectiveSnapshot:
         """Freeze this perspective into a ``SubjectiveSnapshot``."""
@@ -296,6 +304,7 @@ class Perspective:
             emotional_state=emotion,  # type: ignore[arg-type]
             causal_world_model=self.causal_world_model,
             theory_of_mind=self.theory_of_mind,
+            reputation=self.reputation,
         )
 
     def __repr__(self) -> str:
@@ -466,6 +475,9 @@ class Planner(Protocol):
         self_model: object | None = None,
         strategy_mode: object | None = None,
         strategy_policy: object | None = None,
+        reputation: object | None = None,
+        reputation_mode: object | None = None,
+        reputation_policy: object | None = None,
     ) -> ActionPlan: ...
 
 

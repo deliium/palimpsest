@@ -596,6 +596,7 @@ class AgentRuntimeCheckpoint:
     emotional_state: AgentEmotionalState | None = None
     causal_world_model: object | None = None
     theory_of_mind: object | None = None
+    reputation: object | None = None
     reflection_cursor: object | None = None
     decision_journal: tuple[object, ...] | None = None
     remembered_decisions: tuple[object, ...] | None = None
@@ -643,6 +644,13 @@ class AgentRuntimeCheckpoint:
             self.theory_of_mind,
             self.agent_id,
             field_name="theory_of_mind",
+        )
+        from agents.cognition.reputation import require_owner_reputation
+
+        require_owner_reputation(
+            self.reputation,
+            self.agent_id,
+            field_name="reputation",
         )
         if self.reflection_cursor is not None:
             from agents.cognition.reflection import ReflectionCursor

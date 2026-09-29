@@ -35,6 +35,7 @@ from world.observations import (
     ObservationAudienceRole,
     ObservationProvenance,
     ObservationSourceKind,
+    ObservedCommunication,
     ObservedOccurrence,
 )
 
@@ -503,6 +504,326 @@ def test_owner_mismatch_on_update_is_an_error(
             social_identity=_identity("owner-b", "body-b", ("focal", "body-focal")),
         )
     assert "reason_code=owner_mismatch" in caplog.text
+
+
+def _memory_trace(
+    owner: AgentId,
+    occurrence: ObservedOccurrence,
+    *,
+    observation_tick: int = 2,
+):
+    from agents.cognition.memory import build_direct_observation_memory_trace
+
+    return build_direct_observation_memory_trace(
+        owner_id=owner,
+        observation_tick=observation_tick,
+        observation_revision=WorldRevision(1),
+        occurrence=occurrence,
+        location_id=None,
+    )
+
+
+def test_remembered_interaction_uses_half_scale_once(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    caplog.set_level(logging.DEBUG, logger=_LOGGER)
+    owner = _agent("owner-a")
+    identity = _identity("owner-a", "body-owner", ("focal", "body-focal"))
+    trace = _memory_trace(
+        owner,
+        _occurrence(
+            "help",
+            actor="body-focal",
+            other="body-owner",
+            event="evt-memory",
+            source_tick=1,
+        ),
+    )
+    blank = _memory_trace(
+        owner,
+        _occurrence("flee", actor="body-focal", other="body-owner", event="evt-flee"),
+    )
+    first = apply_reputation_update(
+        owner_id=owner,
+        tick=3,
+        observation=_observation(tick=3),
+        social_identity=identity,
+        memories=(trace, blank),
+    )
+    profile = first.profile_for(_agent("focal"))
+    assert profile is not None
+    assert profile.generosity.value == 0.125
+    assert profile.reliability.value == 0.05
+    assert profile.harm.value == -0.025
+    assert profile.competence.value == 0.0
+    assert {item.channel.value for item in profile.evidence} == {
+        "remembered_interaction"
+    }
+    second = apply_reputation_update(
+        owner_id=owner,
+        tick=4,
+        observation=_observation(tick=4),
+        social_identity=identity,
+        ledger=first,
+        memories=(trace,),
+    )
+    again = second.profile_for(_agent("focal"))
+    assert again is not None
+    assert len(again.evidence) == len(profile.evidence)
+    assert again.generosity.value == 0.125
+    messages = " ".join(
+        record.getMessage()
+        for record in caplog.records
+        if record.levelno < logging.INFO or "reputation_memory" in record.getMessage()
+    )
+    assert "reputation_memory_applied" in messages
+    assert "memory_id=" in messages
+    assert "dimension=generosity" in messages
+    assert "sign=positive" in messages
+    assert "reason=no_cue" in messages
+    assert "c-kind" not in messages
+
+
+def test_remembered_trace_skips_when_already_observed() -> None:
+    owner = _agent("owner-a")
+    identity = _identity("owner-a", "body-owner", ("focal", "body-focal"))
+    seen = apply_reputation_update(
+        owner_id=owner,
+        tick=2,
+        observation=_observation(
+            _occurrence("help", actor="body-focal", event="evt-help")
+        ),
+        social_identity=identity,
+    )
+    trace = _memory_trace(
+        owner,
+        _occurrence(
+            "help",
+            actor="body-focal",
+            other="body-owner",
+            event="evt-help",
+        ),
+    )
+    updated = apply_reputation_update(
+        owner_id=owner,
+        tick=3,
+        observation=_observation(tick=3),
+        social_identity=identity,
+        ledger=seen,
+        memories=(trace,),
+    )
+    profile = updated.profile_for(_agent("focal"))
+    assert profile is not None
+    assert profile.generosity.value == 0.25
+    assert all(item.channel.value == "direct_observation" for item in profile.evidence)
+
+
+def _tell(
+    *,
+    speaker: str,
+    text: str,
+    subject: str,
+    predicate: str,
+    object_text: str,
+    communication_id: str,
+    hop: int = 0,
+):
+    from world.communications import (
+        CommunicationRelation,
+        origin_utterance,
+        retell_utterance,
+    )
+
+    origin = origin_utterance(
+        text=text,
+        speaker_id=EntityId(speaker if hop == 0 else "body-origin"),
+        communication_id="comm-origin" if hop else communication_id,
+        relations=(
+            CommunicationRelation(
+                subject=subject, predicate=predicate, object=object_text
+            ),
+        ),
+    )
+    if hop == 0:
+        return origin
+    prior = origin
+    speakers = ("body-mid", speaker) if hop >= 2 else (speaker,)
+    current = prior
+    for index, speaker_entity in enumerate(speakers[:hop]):
+        current = retell_utterance(
+            prior=current,
+            speaker_id=EntityId(speaker_entity),
+            communication_id=(
+                communication_id if index == hop - 1 else f"comm-hop-{index}"
+            ),
+            text=text,
+            relations=current.content.relations,
+        )
+    return current
+
+
+def _heard(
+    utterance,
+    *,
+    speaker: str,
+    listener: str,
+    tick: int = 2,
+    event: str = "evt-tell",
+) -> Observation:
+    return Observation(
+        observer_id=EntityId(listener),
+        world_id=WorldId("world-1"),
+        revision=WorldRevision(1),
+        tick=tick,
+        communications=(
+            ObservedCommunication(
+                provenance=ObservationProvenance(
+                    source_kind=ObservationSourceKind.COMMUNICATION,
+                    source_tick=tick - 1,
+                    source_event_id=EventId(event),
+                ),
+                speaker_id=EntityId(speaker),
+                listener_id=EntityId(listener),
+                utterance=utterance,
+                action_kind="tell",
+            ),
+        ),
+    )
+
+
+def test_source_trust_scales_third_party_testimony(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    caplog.set_level(logging.DEBUG, logger=_LOGGER)
+    owner = _agent("west-b")
+    identity = _identity(
+        "west-b",
+        "body-west-b",
+        ("focal", "body-focal"),
+        ("west-a", "body-west-a"),
+    )
+    utterance = _tell(
+        speaker="body-west-a",
+        text="harm",
+        subject="body-focal",
+        predicate="harm",
+        object_text="0.8",
+        communication_id="comm-harm",
+    )
+    trusting = apply_reputation_update(
+        owner_id=owner,
+        tick=2,
+        observation=_heard(utterance, speaker="body-west-a", listener="body-west-b"),
+        social_identity=identity,
+        source_trust=1.0,
+    )
+    profile = trusting.profile_for(_agent("focal"))
+    assert profile is not None
+    assert profile.harm.value == 0.4
+    assert profile.evidence[0].channel.value == "third_party_story"
+    assert profile.evidence[0].source_trust_band.value == "high"
+    cautious = apply_reputation_update(
+        owner_id=owner,
+        tick=2,
+        observation=_heard(utterance, speaker="body-west-a", listener="body-west-b"),
+        social_identity=identity,
+        source_trust=0.2,
+    )
+    missing = apply_reputation_update(
+        owner_id=owner,
+        tick=2,
+        observation=_heard(utterance, speaker="body-west-a", listener="body-west-b"),
+        social_identity=identity,
+    )
+    cautious_profile = cautious.profile_for(_agent("focal"))
+    missing_profile = missing.profile_for(_agent("focal"))
+    assert cautious_profile is not None and missing_profile is not None
+    trusted_harm = trusting.profile_for(_agent("focal")).harm.value
+    assert cautious_profile.harm.value < trusted_harm
+    assert missing_profile.harm.value == 0.2
+    assert "source_trust_missing" in caplog.text
+    applied = [
+        record.getMessage()
+        for record in caplog.records
+        if "reputation_testimony_applied" in record.getMessage()
+    ]
+    assert applied
+    assert all("channel=third_party_story" in line for line in applied)
+    assert all("dimension=harm" in line for line in applied)
+    assert all("0.8" not in line for line in applied)
+
+
+def test_self_report_is_communication_and_hop_two_is_dropped() -> None:
+    owner = _agent("west-b")
+    identity = _identity(
+        "west-b", "body-west-b", ("west-a", "body-west-a")
+    )
+    self_report = _tell(
+        speaker="body-west-a",
+        text="reliability",
+        subject="body-west-a",
+        predicate="reliability",
+        object_text="0.8",
+        communication_id="comm-self",
+    )
+    updated = apply_reputation_update(
+        owner_id=owner,
+        tick=2,
+        observation=_heard(
+            self_report, speaker="body-west-a", listener="body-west-b", event="evt-self"
+        ),
+        social_identity=identity,
+        source_trust=1.0,
+    )
+    profile = updated.profile_for(_agent("west-a"))
+    assert profile is not None
+    assert profile.evidence[0].channel.value == "communication"
+    dropped = _tell(
+        speaker="body-west-a",
+        text="harm",
+        subject="body-west-a",
+        predicate="harm",
+        object_text="0.8",
+        communication_id="comm-hop-1",
+        hop=2,
+    )
+    assert dropped.declared.hop_count == 2
+    untouched = apply_reputation_update(
+        owner_id=owner,
+        tick=2,
+        observation=_heard(
+            dropped, speaker="body-west-a", listener="body-west-b", event="evt-hop"
+        ),
+        social_identity=identity,
+        source_trust=1.0,
+    )
+    assert untouched.profiles == ()
+
+
+def test_noncanonical_testimony_is_ignored() -> None:
+    owner = _agent("west-b")
+    identity = _identity(
+        "west-b",
+        "body-west-b",
+        ("focal", "body-focal"),
+        ("west-a", "body-west-a"),
+    )
+    utterance = _tell(
+        speaker="body-west-a",
+        text="harm",
+        subject="body-focal",
+        predicate="harm",
+        object_text="0.80",
+        communication_id="comm-bad",
+    )
+    updated = apply_reputation_update(
+        owner_id=owner,
+        tick=2,
+        observation=_heard(utterance, speaker="body-west-a", listener="body-west-b"),
+        social_identity=identity,
+        source_trust=1.0,
+    )
+    assert updated.profiles == ()
 
 
 def test_policy_rejects_thresholds_and_trust_band_is_closed() -> None:
