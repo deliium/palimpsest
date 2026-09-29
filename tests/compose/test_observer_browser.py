@@ -216,7 +216,10 @@ def test_published_observer_page_reaches_camp(
                 joined = "\n".join(console)
                 if "[observer.locations] map_built location_count=4" in joined:
                     break
-                time.sleep(0.5)
+                # Sync Playwright delivers console and socket events only
+                # while a Playwright call is in progress. time.sleep never
+                # sees the map log.
+                page.wait_for_timeout(500)
             else:
                 _LOGGER.error(
                     "observer_browser_failed reason_code=%s",
@@ -237,7 +240,7 @@ def test_published_observer_page_reaches_camp(
             assert context is not None
             socket_deadline = time.monotonic() + 30
             while time.monotonic() < socket_deadline and not hello["seen"]:
-                time.sleep(0.25)
+                page.wait_for_timeout(250)
             assert hello["seen"] is True
             browser.close()
     except Exception as exc:
