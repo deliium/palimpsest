@@ -15,6 +15,7 @@ import logging
 from collections.abc import Sequence
 
 from alembic import op
+from sqlalchemy import text
 
 revision: str = "0006"
 down_revision: str | None = "0005"
@@ -178,7 +179,8 @@ def upgrade() -> None:
     )
     # Backfill supersedes_memory_id as a single direct derivation edge.
     result = op.get_bind().execute(
-        """
+        text(
+            """
         INSERT INTO memory_derivation_sources (
             run_id, owner_id, derived_memory_id, source_memory_id, ordinal,
             reconstruction_id
@@ -200,7 +202,8 @@ def upgrade() -> None:
                 AND parent.memory_id = memory_traces.supersedes_memory_id
           )
         ON CONFLICT DO NOTHING
-        """
+            """
+        )
     )
     backfill_count = result.rowcount if result.rowcount is not None else 0
     _LOG.info(
