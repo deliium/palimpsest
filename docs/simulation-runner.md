@@ -45,10 +45,17 @@ cognition. Experiment M stays off the V1 regression gate.
 `DETERMINISTIC`. That document carries every `runner-config-v8` cognition key
 plus `communication_strategy_mode`. `DETERMINISTIC` is rejected on v1–v8, and
 v9 is rejected when every agent's mode is `DISABLED`. A non-disabled
-counterfactual mode is accepted on v8 or v9. The write default stays
+counterfactual mode is accepted on v8 or v9. A non-disabled communication
+strategy is accepted on v9 or v10. `runner-config-v10` is accepted and is
+emitted only when some agent's `ReputationMode` is `DETERMINISTIC`. That
+document carries every `runner-config-v9` cognition key plus `reputation_mode`.
+`DETERMINISTIC` reputation is rejected on v1–v9, and v10 is rejected when
+every agent's reputation mode is `DISABLED`. The write default stays
 `runner-config-v4`. Experiments N, O, and P pair a disabled v4 arm with a
-deterministic v9 arm and stay off the V1 regression gate. `v1_regression_profile`
-still checks flags and tracing only.
+deterministic v9 arm. Experiment Q pairs a disabled v4 arm with a deterministic
+v10 arm. Those experiments stay off the V1 regression gate.
+`v1_regression_profile` still checks flags and tracing only. No capability
+flag was added for reputation. `distributed_reputation@1` is analysis-only.
 
 Top-level `CognitionTraceSpec` (default disabled) rides in `runner-config-v4` only.
 Prior versions decode to a disabled spec. Tracing is **not** a capability flag;

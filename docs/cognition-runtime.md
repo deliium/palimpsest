@@ -213,7 +213,14 @@ Communication strategy is default-off (`CommunicationStrategyMode.DISABLED`) and
 | `DISABLED` | `runner-config-v4` (no `communication_strategy_mode` key) | today's command; `intent is None` |
 | `DETERMINISTIC` | `runner-config-v9` | one closed strategy for that utterance; audit stays in memory |
 
-`runner-config-v9` also accepts the v8 cognition keys. Thresholds stay on `CommunicationStrategyPolicy` and are not runner JSON keys. Enabling this mode does not enable theory of mind, emotion, identity, prospective imagination, or counterfactual reasoning.
+`runner-config-v9` also accepts the v8 cognition keys. A non-disabled strategy is also accepted on `runner-config-v10`. Thresholds stay on `CommunicationStrategyPolicy` and are not runner JSON keys. Enabling this mode does not enable theory of mind, emotion, identity, prospective imagination, counterfactual reasoning, or reputation.
+
+Reputation is default-off (`ReputationMode.DISABLED`) and is not a capability flag. Off leaves `snapshot.reputation` unset and adds no command. When a run uses `runner-config-v10`, each owner keeps a private dimensional ledger. A selected `Wait` may become one `Tell` whose text and predicates are dimension names. `Help`, `Attack`, `Give`, and `Move` stay selected. Colloquial readings exist only in `distributed_reputation@1`.
+
+| Mode | Schema written | Effect |
+| --- | --- | --- |
+| `DISABLED` | `runner-config-v4` (no `reputation_mode` key) | no ledger and no reputation `Tell` |
+| `DETERMINISTIC` | `runner-config-v10` | owner-scoped ledger; `Wait` may become one testimony `Tell` |
 
 ### Motivation and fear of death
 
