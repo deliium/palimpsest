@@ -155,6 +155,10 @@ from analysis.reflection_metrics import (
     compute_reflection,
 )
 from analysis.relationship_metrics import compute_relationship_stability
+from analysis.reputation_metrics import (
+    DISTRIBUTED_REPUTATION_METRIC_VERSION,
+    compute_distributed_reputation,
+)
 from analysis.serialization import (
     MetricSerializationError,
     decode_metric_document,
@@ -220,6 +224,7 @@ __all__ = [
     "CLAIM_TRUTH_SCHEMA_VERSION",
     "COMMUNICATION_STRATEGY_METRIC_VERSION",
     "COUNTERFACTUAL_REASONING_METRIC_VERSION",
+    "DISTRIBUTED_REPUTATION_METRIC_VERSION",
     "DRIFT_METRIC_VERSION",
     "EVENT_FACT_PROJECTOR_VERSION",
     "EVIDENCE_STAGE_SCHEMA_VERSION",
@@ -319,6 +324,7 @@ __all__ = [
     "compute_conflict",
     "compute_cooperation",
     "compute_counterfactual_reasoning_metrics",
+    "compute_distributed_reputation",
     "compute_false_belief_persistence",
     "compute_goal_completion",
     "compute_group_community_structure",

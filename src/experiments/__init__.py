@@ -24,6 +24,7 @@ from experiments.catalog import (
     experiment_n_communication_trust,
     experiment_o_deception_detection,
     experiment_p_information_cascade,
+    experiment_q_distributed_reputation,
     v1_regression_profile,
 )
 from experiments.collectors import (
@@ -112,6 +113,7 @@ from experiments.reference_scenario import (
     ReferenceScenarioBundle,
     build_reference_scenario,
 )
+from experiments.reputation_scenario import distributed_reputation_scenario
 
 __all__ = [
     "DEFAULT_OVERRIDE_BUDGET",
@@ -177,6 +179,7 @@ __all__ = [
     "compare_compatible_bundles",
     "condition_fingerprint",
     "definition_fingerprint",
+    "distributed_reputation_scenario",
     "experiment_a_memory",
     "experiment_a_memory_v1_arms",
     "experiment_b_imagination",
@@ -194,6 +197,7 @@ __all__ = [
     "experiment_n_communication_trust",
     "experiment_o_deception_detection",
     "experiment_p_information_cascade",
+    "experiment_q_distributed_reputation",
     "make_false_story_intervention",
     "map_consolidation_audits_to_report",
     "map_recall_audits_to_dynamics_report",

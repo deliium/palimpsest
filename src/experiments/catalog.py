@@ -21,6 +21,7 @@ from simulation.runner_models import (
     RUNNER_SCHEMA_VERSION_V7,
     RUNNER_SCHEMA_VERSION_V8,
     RUNNER_SCHEMA_VERSION_V9,
+    RUNNER_SCHEMA_VERSION_V10,
     AgentCognitionSpec,
     AgentRunnerSpec,
     CommunicationStrategyMode,
@@ -32,6 +33,7 @@ from simulation.runner_models import (
     MortalityMode,
     ProspectiveImaginationMode,
     ReflectionMode,
+    ReputationMode,
     RunnerStopPolicy,
     SimulationRunnerConfig,
     V2CapabilityFlags,
@@ -55,6 +57,7 @@ def _with_agent_modes(
     prospective_mode: ProspectiveImaginationMode | None = None,
     counterfactual_mode: CounterfactualMode | None = None,
     communication_strategy_mode: CommunicationStrategyMode | None = None,
+    reputation_mode: ReputationMode | None = None,
     schema_version: str | None = None,
 ) -> SimulationRunnerConfig:
     agents: list[AgentRunnerSpec] = []
@@ -98,6 +101,11 @@ def _with_agent_modes(
                 communication_strategy_mode
                 if communication_strategy_mode is not None
                 else agent.cognition.communication_strategy_mode
+            ),
+            reputation_mode=(
+                reputation_mode
+                if reputation_mode is not None
+                else agent.cognition.reputation_mode
             ),
         )
         agents.append(
@@ -759,6 +767,61 @@ def experiment_p_information_cascade(
         enabled_id="p-enabled",
         disabled_label="communication_strategy_disabled",
         enabled_label="communication_strategy_deterministic",
+    )
+
+
+def experiment_q_distributed_reputation(
+    base: SimulationRunnerConfig,
+    *,
+    seed_matrix: ExperimentSeedMatrix | None = None,
+) -> ExperimentDefinition:
+    """Paired arms share seed, scenario, and stochastic identity.
+
+    ``q-disabled`` leaves reputation disabled on ``runner-config-v4``.
+    ``q-enabled`` uses deterministic reputation on ``runner-config-v10``.
+    The catalog checks that pairing. It does not run the metric.
+    """
+    matrix = seed_matrix or ExperimentSeedMatrix(seeds=(base.seed,))
+    disabled = _with_agent_modes(
+        base,
+        reputation_mode=ReputationMode.DISABLED,
+        schema_version=RUNNER_SCHEMA_VERSION_V4,
+    )
+    enabled = _with_agent_modes(
+        base,
+        reputation_mode=ReputationMode.DETERMINISTIC,
+        schema_version=RUNNER_SCHEMA_VERSION_V10,
+    )
+    if disabled.seed != enabled.seed:
+        raise ValueError("experiment_q: seed_mismatch")
+    if disabled.stochastic_identity != enabled.stochastic_identity:
+        raise ValueError("experiment_q: stochastic_mismatch")
+    if disabled.scenario != enabled.scenario:
+        raise ValueError("experiment_q: scenario_mismatch")
+    if any(
+        agent.cognition.reputation_mode is not ReputationMode.DISABLED
+        for agent in disabled.agents
+    ):
+        raise ValueError("experiment_q: disabled_reputation")
+    if any(
+        agent.cognition.reputation_mode is not ReputationMode.DETERMINISTIC
+        for agent in enabled.agents
+    ):
+        raise ValueError("experiment_q: enabled_reputation")
+    condition_ids = ("q-disabled", "q-enabled")
+    _LOG.debug(
+        "experiment_q_built experiment_id=%s condition_ids=%s",
+        "experiment-q-distributed-reputation",
+        ",".join(condition_ids),
+    )
+    return _definition(
+        experiment_id="experiment-q-distributed-reputation",
+        base=replace(base, schema_version=RUNNER_SCHEMA_VERSION_V4),
+        seed_matrix=matrix,
+        arms=(
+            ("q-disabled", "reputation_disabled", disabled),
+            ("q-enabled", "reputation_deterministic", enabled),
+        ),
     )
 
 

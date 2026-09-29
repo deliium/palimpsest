@@ -50,7 +50,7 @@ __all__ = [
 ]
 
 METRIC_CATALOG_VERSION: Final[str] = "metric-catalog-v1"
-METRIC_FAMILY_COUNT: Final[int] = 24
+METRIC_FAMILY_COUNT: Final[int] = 25
 
 # Align with existing memory-drift / transmission document versions.
 _ALGO_V1: Final[str] = "1"
@@ -101,6 +101,7 @@ class MetricFamilyId(StrEnum):
     COMMUNICATION_STRATEGY = "communication_strategy"
     PROSPECTIVE_IMAGINATION = "prospective_imagination"
     COUNTERFACTUAL_REASONING = "counterfactual_reasoning"
+    DISTRIBUTED_REPUTATION = "distributed_reputation"
 
 
 class DenominatorKind(StrEnum):
@@ -985,6 +986,37 @@ def _spec_causal_world_model() -> MetricSpecification:
     )
 
 
+def _spec_distributed_reputation() -> MetricSpecification:
+    return _base(
+        family_id=MetricFamilyId.DISTRIBUTED_REPUTATION,
+        evidence_inputs=frozenset({EvidenceStage.AGENT_VISIBLE_PROJECTION}),
+        population="owner_ledgers_per_neighborhood",
+        denominator="owner heads for the requested target",
+        denominator_kind=DenominatorKind.POPULATION_SIZE,
+        cohort_window="caller-supplied ledgers and neighborhood map",
+        deceased_policy="not_applicable",
+        zero_holding_policy="empty ledgers -> availability=absent",
+        opportunity_vs_occurrence=(
+            "means of private heads; no score across dimensions"
+        ),
+        self_edge_policy="not_applicable",
+        censoring_policy="owners outside the map are omitted; never invent a mean",
+        formulas={
+            "reliability_gap": "max neighborhood mean minus min for reliability",
+            "harm_gap": "max neighborhood mean minus min for harm",
+            "generosity_gap": "max neighborhood mean minus min for generosity",
+            "competence_gap": "max neighborhood mean minus min for competence",
+        },
+        value_keys=(
+            "reliability_gap",
+            "harm_gap",
+            "generosity_gap",
+            "competence_gap",
+        ),
+        empty_case="availability=absent; omit numeric values",
+    )
+
+
 def _spec_theory_of_mind() -> MetricSpecification:
     return _base(
         family_id=MetricFamilyId.THEORY_OF_MIND,
@@ -1617,6 +1649,7 @@ _BUILDERS: Final[tuple[Callable[[], MetricSpecification], ...]] = (
     _spec_knowledge_diffusion,
     _spec_rumor_distortion,
     _spec_counterfactual_reasoning,
+    _spec_distributed_reputation,
 )
 
 
