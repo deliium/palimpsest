@@ -1,4 +1,4 @@
-"""Pin Alembic head at 0013 for durable cognition traces."""
+"""Pin Alembic head at 0014 for derivation-v3 stochastic identity."""
 
 from __future__ import annotations
 
@@ -14,13 +14,13 @@ ROOT = Path(__file__).resolve().parents[2]
 VERSIONS = ROOT / "alembic" / "versions"
 
 
-def test_alembic_head_is_0013_with_cognition_trace() -> None:
-    assert ALEMBIC_HEAD_REVISION == "0013"
+def test_alembic_head_is_0014_with_stochastic_identity() -> None:
+    assert ALEMBIC_HEAD_REVISION == "0014"
     entry = compatibility_entry("alembic_head")
-    assert entry.write_version == "0013"
-    assert (VERSIONS / "0012_v1_scientific_evidence.py").is_file()
+    assert entry.write_version == "0014"
     assert (VERSIONS / "0013_v2_cognition_trace.py").is_file()
-    assert sorted(VERSIONS.glob("0014_*.py")) == []
+    assert (VERSIONS / "0014_stochastic_identity.py").is_file()
+    assert sorted(VERSIONS.glob("0015_*.py")) == []
 
 
 def test_cognition_trace_tables_outside_authoritative() -> None:

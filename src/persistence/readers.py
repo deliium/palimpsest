@@ -193,6 +193,9 @@ def manifest_from_run_orm(row: SimulationRunOrm) -> RunManifest:
         config_data["derivation_version"] = row.derivation_version
         if row.physical_rules_fingerprint is not None:
             config_data["rules_fingerprint"] = row.physical_rules_fingerprint
+    if row.stochastic_identity is not None:
+        config_data["derivation_version"] = row.derivation_version
+        config_data["stochastic_identity"] = row.stochastic_identity
     data = {
         "config": config_data,
         "derivation_version": row.derivation_version,

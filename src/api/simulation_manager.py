@@ -197,6 +197,20 @@ class SimulationManager:
                 config_fingerprint=config_fingerprint,
                 config_payload=config_payload,
             )
+            if self._runner_factory is not None and handle.runner is None:
+                try:
+                    handle.runner = await self._runner_factory(record)
+                except Exception as exc:
+                    code = getattr(exc, "code", None)
+                    reason = getattr(code, "value", None) or type(exc).__name__
+                    stage = getattr(exc, "stage", None)
+                    _LOGGER.error(
+                        "simulation_runner_failed",
+                        run_id=run_id,
+                        reason_code=reason,
+                        stage=stage if isinstance(stage, str) else "-",
+                    )
+                    raise
             stored = await self._run_control.upsert_configured(record)
             status = self._status_from_record(stored)
             if idempotency_key is not None:
@@ -551,9 +565,27 @@ class SimulationManager:
         )
 
     async def _execute_one_tick(self, run_id: str) -> TickExecutionResult:
-        if self._tick_executor is None:
+        if self._tick_executor is not None:
+            return await self._tick_executor(run_id)
+        handle = await self._handle_for(run_id)
+        runner = handle.runner
+        run_tick = getattr(runner, "run_tick", None)
+        if runner is None or not callable(run_tick):
             raise bad_request(code="tick_executor_unset", run_id=run_id)
-        return await self._tick_executor(run_id)
+        receipt = await run_tick()
+        stop = getattr(receipt, "stop_reason", None)
+        stop_text = None if stop is None else str(getattr(stop, "value", stop))
+        committed = getattr(runner, "ticks_committed", None)
+        ticks = (
+            committed
+            if isinstance(committed, int)
+            else int(getattr(receipt, "tick", 0)) + 1
+        )
+        return TickExecutionResult(
+            ticks_committed=ticks,
+            stop_reason=stop_text,
+            completed=stop is not None,
+        )
 
     async def _run_until_stop(self, run_id: str) -> None:
         handle = await self._handle_for(run_id)

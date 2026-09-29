@@ -19,6 +19,7 @@ from sqlalchemy import (
     CheckConstraint,
     Float,
     ForeignKeyConstraint,
+    Identity,
     Index,
     Integer,
     LargeBinary,
@@ -165,6 +166,9 @@ class SimulationRunOrm(Base):
     )
     physical_rules_canonical: Mapped[dict[str, object] | None] = mapped_column(
         JSONB, nullable=True
+    )
+    stochastic_identity: Mapped[str | None] = mapped_column(
+        String(_STABLE_ID_LEN), nullable=True
     )
 
 
@@ -607,7 +611,7 @@ class RunnerPendingFinalizationOrm(Base):
     payload_json: Mapped[dict] = mapped_column(JSONB, nullable=False)
     status: Mapped[str] = mapped_column(String(32), nullable=False)
     created_ordinal: Mapped[int] = mapped_column(
-        BigInteger, nullable=False, autoincrement=True
+        BigInteger, Identity(always=False), nullable=False
     )
 
 
@@ -641,7 +645,7 @@ class RunnerAttemptStateOrm(Base):
     codec_version: Mapped[str] = mapped_column(String(32), nullable=False)
     payload_json: Mapped[dict] = mapped_column(JSONB, nullable=False)
     created_ordinal: Mapped[int] = mapped_column(
-        BigInteger, nullable=False, autoincrement=True
+        BigInteger, Identity(always=False), nullable=False
     )
 
 
@@ -666,7 +670,7 @@ class ExperimentDefinitionOrm(Base):
         String(SHA256_HEX_LEN), nullable=False
     )
     created_ordinal: Mapped[int] = mapped_column(
-        BigInteger, nullable=False, autoincrement=True
+        BigInteger, Identity(always=False), nullable=False
     )
 
 
@@ -707,7 +711,7 @@ class ExperimentAssignmentOrm(Base):
         String(SHA256_HEX_LEN), nullable=False
     )
     created_ordinal: Mapped[int] = mapped_column(
-        BigInteger, nullable=False, autoincrement=True
+        BigInteger, Identity(always=False), nullable=False
     )
 
 
@@ -735,7 +739,7 @@ class ExperimentResultOrm(Base):
     stop_reason: Mapped[str] = mapped_column(String(64), nullable=False)
     ticks_committed: Mapped[int] = mapped_column(BigInteger, nullable=False)
     created_ordinal: Mapped[int] = mapped_column(
-        BigInteger, nullable=False, autoincrement=True
+        BigInteger, Identity(always=False), nullable=False
     )
 
 
@@ -851,7 +855,7 @@ class RunLifecycleTransitionOrm(Base):
     reason_code: Mapped[str] = mapped_column(String(64), nullable=False)
     operation_id: Mapped[str] = mapped_column(String(_STABLE_ID_LEN), nullable=False)
     created_ordinal: Mapped[int] = mapped_column(
-        BigInteger, nullable=False, autoincrement=True
+        BigInteger, Identity(always=False), nullable=False
     )
 
 
@@ -883,7 +887,7 @@ class EvidenceManifestOrm(Base):
     )
     high_water_json: Mapped[dict[str, object]] = mapped_column(JSONB, nullable=False)
     created_ordinal: Mapped[int] = mapped_column(
-        BigInteger, nullable=False, autoincrement=True
+        BigInteger, Identity(always=False), nullable=False
     )
 
 
@@ -917,7 +921,7 @@ class GoalRevisionOrm(Base):
     content_hash: Mapped[str] = mapped_column(String(SHA256_HEX_LEN), nullable=False)
     payload: Mapped[bytes] = mapped_column(LargeBinary, nullable=False)
     created_ordinal: Mapped[int] = mapped_column(
-        BigInteger, nullable=False, autoincrement=True
+        BigInteger, Identity(always=False), nullable=False
     )
 
 
@@ -951,7 +955,7 @@ class ActionResolutionOrm(Base):
     content_hash: Mapped[str] = mapped_column(String(SHA256_HEX_LEN), nullable=False)
     payload: Mapped[bytes] = mapped_column(LargeBinary, nullable=False)
     created_ordinal: Mapped[int] = mapped_column(
-        BigInteger, nullable=False, autoincrement=True
+        BigInteger, Identity(always=False), nullable=False
     )
 
 
@@ -999,7 +1003,7 @@ class ClaimTruthSpecOrm(Base):
     )
     payload: Mapped[bytes | None] = mapped_column(LargeBinary, nullable=True)
     created_ordinal: Mapped[int] = mapped_column(
-        BigInteger, nullable=False, autoincrement=True
+        BigInteger, Identity(always=False), nullable=False
     )
 
 
@@ -1092,7 +1096,7 @@ class MetricDocumentOrm(Base):
     content_hash: Mapped[str] = mapped_column(String(SHA256_HEX_LEN), nullable=False)
     payload: Mapped[bytes] = mapped_column(LargeBinary, nullable=False)
     created_ordinal: Mapped[int] = mapped_column(
-        BigInteger, nullable=False, autoincrement=True
+        BigInteger, Identity(always=False), nullable=False
     )
 
 
@@ -1159,7 +1163,7 @@ class RunStreamRecordOrm(Base):
     payload: Mapped[bytes] = mapped_column(LargeBinary, nullable=False)
     related_tick: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
     created_ordinal: Mapped[int] = mapped_column(
-        BigInteger, nullable=False, autoincrement=True
+        BigInteger, Identity(always=False), nullable=False
     )
 
 
@@ -1212,5 +1216,5 @@ class CognitionTraceInvocationOrm(Base):
     )
     final_confidence: Mapped[float | None] = mapped_column(Float, nullable=True)
     created_ordinal: Mapped[int] = mapped_column(
-        BigInteger, nullable=False, autoincrement=True
+        BigInteger, Identity(always=False), nullable=False
     )

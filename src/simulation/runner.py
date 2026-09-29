@@ -781,6 +781,10 @@ class SimulationRunner:
         return self._run_id
 
     @property
+    def ticks_committed(self) -> int:
+        return self._ticks_committed
+
+    @property
     def run_config(self) -> SimulationRunConfig:
         return self._run_config
 
@@ -1385,7 +1389,7 @@ class SimulationRunner:
                     stop_reason=RunnerStopReasonCode.COGNITION_FAILURE,
                 )
             raise
-        except Exception:
+        except Exception as exc:
             for pending in reversed(pendings):
                 try:
                     self._runtimes_by_agent(pending.submission.agent_id).abort_pending(
@@ -1394,9 +1398,11 @@ class SimulationRunner:
                 except AgentRuntimeError:
                     pass
             _LOG.error(
-                "runner_authority_failed run_id=%s tick=%s",
+                "runner_authority_failed run_id=%s tick=%s reason=%s",
                 self._run_id.value,
                 tick_value,
+                type(exc).__name__,
+                exc_info=True,
             )
             return RunnerAttemptReceipt(
                 tick=tick_value,

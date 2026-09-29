@@ -167,6 +167,11 @@ class SqlAlchemySimulationRunRepository:
                         physical_rules_version=rules_version,
                         physical_rules_fingerprint=rules_fingerprint,
                         physical_rules_canonical=rules_canonical,
+                        stochastic_identity=(
+                            None
+                            if request.config.stochastic_identity is None
+                            else request.config.stochastic_identity.value
+                        ),
                     )
                 )
                 if request.experiment_assignment is not None:

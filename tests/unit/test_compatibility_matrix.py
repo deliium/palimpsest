@@ -108,13 +108,13 @@ def test_runner_config_write_is_v4_with_legacy_accepted() -> None:
     assert entry.write_version == "runner-config-v4"
 
 
-def test_alembic_head_pin_and_0013_exists() -> None:
+def test_alembic_head_pin_and_0014_exists() -> None:
     entry = compatibility_entry("alembic_head")
-    assert entry.write_version == ALEMBIC_HEAD_REVISION == "0013"
+    assert entry.write_version == ALEMBIC_HEAD_REVISION == "0014"
     versions = ROOT / "alembic" / "versions"
-    assert (versions / "0012_v1_scientific_evidence.py").is_file()
     assert (versions / "0013_v2_cognition_trace.py").is_file()
-    assert sorted(versions.glob("0014_*.py")) == []
+    assert (versions / "0014_stochastic_identity.py").is_file()
+    assert sorted(versions.glob("0015_*.py")) == []
 
 
 def test_cross_package_mirrors_stay_in_sync() -> None:

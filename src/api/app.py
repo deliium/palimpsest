@@ -9,6 +9,7 @@ from typing import Protocol
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 
+from api.durable_runner import make_durable_runner_factory
 from api.errors import ApiError, api_error_handler
 from api.middleware import RequestIdMiddleware
 from api.observer_service import ObserverReadService
@@ -143,6 +144,9 @@ async def _lifespan(app: FastAPI) -> AsyncIterator[None]:
             app.state.simulation_manager = SimulationManager(
                 settings=settings,
                 run_control=run_control,
+                runner_factory=make_durable_runner_factory(
+                    resources.session_factory  # type: ignore[arg-type]
+                ),
             )
         _attach_persistence_services(app, resources.session_factory)
     log_lifecycle("app_started")

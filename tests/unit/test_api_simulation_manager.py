@@ -14,7 +14,7 @@ from api.simulation_manager import SimulationManager, TickExecutionResult
 from infrastructure.settings import load_settings
 from simulation.memory_run_control import InMemoryRunControlRepository
 from simulation.models import RunId
-from simulation.run_control import RunLifecycleState
+from simulation.run_control import RunControlRecord, RunLifecycleState
 
 pytestmark = pytest.mark.unit
 
@@ -65,6 +65,45 @@ def _manager(
         clock_ms=lambda: now[0],
     )
     return manager, repo, executed
+
+
+@pytest.mark.asyncio
+async def test_create_builds_runner_before_control_row_and_tick_uses_it() -> None:
+    repo = InMemoryRunControlRepository()
+    order: list[str] = []
+
+    class _Runner:
+        ticks_committed = 0
+
+        async def run_tick(self) -> object:
+            order.append("tick")
+            self.ticks_committed = 1
+            return type("Receipt", (), {"tick": 0, "stop_reason": None})()
+
+    runner = _Runner()
+
+    async def factory(record: RunControlRecord) -> _Runner:
+        order.append("factory")
+        assert await repo.get(record.run_id) is None
+        return runner
+
+    manager = SimulationManager(
+        settings=load_settings(env_file=False),
+        run_control=repo,
+        runner_factory=factory,
+    )
+    created = await manager.create(
+        run_id="run-durable",
+        config_schema_version="runner-config-v4",
+        config_fingerprint=_FINGERPRINT,
+        config_payload=_PAYLOAD,
+    )
+    assert created.lifecycle_state.value == "configured"
+    assert order == ["factory"]
+    await manager.start(run_id="run-durable")
+    ticked = await manager.tick(run_id="run-durable")
+    assert ticked.ticks_committed == 1
+    assert order == ["factory", "tick"]
 
 
 @pytest.mark.asyncio
