@@ -206,6 +206,15 @@ Prospective imagination is default-off (`ProspectiveImaginationMode.DISABLED`) a
 
 Counterfactual reasoning is also default-off (`CounterfactualMode.DISABLED`) and is not a capability flag. Off captures no remembered decision and writes no scenario, belief, relationship revision, planning bias, identity request, emotion driver, or audit. When a run uses `runner-config-v8`, an agent may ask what might have followed a different action it already remembers. The alternative is a frozen `CounterfactualScenario` with provenance `IMAGINED_ALTERNATIVE`, predicted from the same subjective transition rules cognition already uses. A scenario is not an `ImaginedFuture`, not a memory trace, not a semantic belief, not an observation, and not a `WorldEvent`. The optional provider may only rank scenario ids the deterministic generator already created.
 
+Communication strategy is default-off (`CommunicationStrategyMode.DISABLED`) and is not a capability flag. Off keeps the honest selector and writes no intent audit. When a run uses `runner-config-v9`, a speaker may choose one render for one claim. The world receives only the command. Omission is `Wait`.
+
+| Mode | Schema written | Effect |
+| --- | --- | --- |
+| `DISABLED` | `runner-config-v4` (no `communication_strategy_mode` key) | today's command; `intent is None` |
+| `DETERMINISTIC` | `runner-config-v9` | one closed strategy for that utterance; audit stays in memory |
+
+`runner-config-v9` also accepts the v8 cognition keys. Thresholds stay on `CommunicationStrategyPolicy` and are not runner JSON keys. Enabling this mode does not enable theory of mind, emotion, identity, prospective imagination, or counterfactual reasoning.
+
 ### Motivation and fear of death
 
 `MotivationAppraisal` activates drives from perceived need pressures, appraises active-goal progress and social/self-model fit per future, and computes typed subjective risks. **Fear of death** is opportunity foreclosure (`MortalityOpportunityForeclosure`): subjective mortality estimate combined with outstanding goal value, attachment/dependency effects, safety activation, autonomy loss, and reduction of future option space. There is **no** hard-coded `death_penalty` and **no** permanent total reward scalar.

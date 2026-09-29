@@ -12,7 +12,15 @@ Eligibility is private world policy: living sender, distinct living recipient, c
 
 `StructuredUtterance` carries speaker-declared lineage: communication id, immediate source, optional parent communication correlation, ordered source-agent chain, hop count, sender confidence, and source basis. Receivers may distrust, ignore, or reinterpret that lineage. World-verified fields remain event id, actor, recipient, tick, and delivery outcome.
 
-Retelling uses `retell_utterance`: append the new speaker and hop; never copy another agent's memory, reconstruction, belief, or relationship ids.
+Retelling uses `retell_utterance`: append the new speaker and hop; never copy another agent's memory, reconstruction, belief, or relationship ids. A retell whose hop count is greater than 1 stays dropped. `multi_hop_testimony_tracking` is still unowned.
+
+## Per-utterance strategy
+
+`CommunicationStrategyMode` defaults to `DISABLED` and is not a capability flag. Disabled selection returns today's command and no intent. `DETERMINISTIC` may render one claim as truthful, uncertain, a `decline` refusal, an omission, a selective disclosure, an exaggeration, or one substituted token the speaker already holds.
+
+The choice is a `CommunicationIntent`. The world receives only the `Talk`, `Ask`, or `Tell`. An omission keeps the intent with `delivered=False` and the planner emits `Wait`. The utterance does not carry strategy, stance, or an analysis category.
+
+`communication_strategy@1` assigns the labels after the run. `memory_error` is only an `assert_match` whose `cited_event_id` names a committed occurrence that does not cover the source tokens. `uncertain_inference` and `deliberate_deception` are the other two failure labels. Refusal and omission are `not_asserted`. The listener's observation, memory trace, and trust update do not receive those labels. An uncontradicted false statement does not itself change trust; a later contradiction still uses the existing testimony path.
 
 ## Owner-scoped derivation (cognition / memory)
 

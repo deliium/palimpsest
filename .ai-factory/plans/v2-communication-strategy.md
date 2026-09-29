@@ -202,7 +202,7 @@ A receiver cannot read the category off the utterance, the observation, or their
   - Depends on task 2.
   - Files: `src/experiments/catalog.py`, `src/experiments/__init__.py`, `tests/unit/test_communication_strategy_experiment.py`.
 
-- [ ] Task 8: Prove the three categories stay distinct and invisible to the receiver.
+- [x] Task 8: Prove the three categories stay distinct and invisible to the receiver.
   - Deliverable: tests that fail if a trait field appears, if a receiver is handed a category, or if the three labels collapse into one strategy.
   - Required cases in `tests/unit/test_communication_strategy.py` and `tests/unit/test_communication_strategy_runtime.py`:
     - High-confidence reconstruction, no profile, no risk, no mind model: strategy `truthful`, stance `assert_match`. The audit's `cited_event_id` points at a constructed `WorldEvent` whose public tokens do not cover the source tokens. The metric category is `memory_error`. The same stance with `cited_event_id` left `None` is `unmatched`. The listener `MemoryTrace` has no category field.
@@ -226,14 +226,14 @@ A receiver cannot read the category off the utterance, the observation, or their
 
 ### Phase 5: Documentation
 
-- [ ] Task 9: Keep the V1 gate green when the mode is disabled.
+- [x] Task 9: Keep the V1 gate green when the mode is disabled.
   - Deliverable: flags-off, strategy-disabled, tracing-off catalog A–E and the reference scenario keep their current hashes. Leave `v1_regression_profile` unchanged. It checks capability flags and tracing only, so catalog A–E stay green by continuing to write `runner-config-v4` with `communication_strategy_mode` `DISABLED`. Do not add a schema rejection there. Replay of a disabled run is unchanged.
   - Logging: existing regression DEBUG lines only. Add no payload logs.
   - Control: levels follow `PALIMPSEST_LOG_LEVEL`.
   - Depends on tasks 2 and 4.
   - Files: `tests/unit/test_v1_regression_gate.py`.
 
-- [ ] Task 10: Document intent, render, and the analysis-only categories.
+- [x] Task 10: Document intent, render, and the analysis-only categories.
   - Deliverable: readers can see that strategy is per utterance, that the three categories are analysis labels, and that another agent never receives them. Route the edits through `/aif-docs`.
   - Update `docs/social-communication.md` with the intent-versus-utterance split, the `Wait` omission path, and the leak boundary. Update the downstream checklist in `docs/architecture.md` so `runner-config-v9` carries the v8 cognition keys plus `communication_strategy_mode`, Experiments N, O, and P are named, `communication_strategy@1` assigns `memory_error` only from `cited_event_id`, and `multi_hop_testimony_tracking` is still unowned. State that `v1_regression_profile` is unchanged. Update the mode table in `docs/cognition-runtime.md` and the schema paragraph in `docs/simulation-runner.md`. State that no capability flag was added. Update `.ai-factory/DESCRIPTION.md` only where the runner-schema sentence would otherwise stay stale.
   - Logging: none in docs. Implementation touchpoints already log mode, strategy, stance, fallback, audit export, and metric counts as specified above.

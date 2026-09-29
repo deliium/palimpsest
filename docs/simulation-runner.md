@@ -40,6 +40,16 @@ belief as new, already known, secret, uncertain, or contradictory. Secret is
 not a stored attitude. One agent does not receive another agent's private
 cognition. Experiment M stays off the V1 regression gate.
 
+`CommunicationStrategyMode` defaults to `DISABLED` and is not a capability flag.
+`runner-config-v9` is accepted and is emitted only when some agent's mode is
+`DETERMINISTIC`. That document carries every `runner-config-v8` cognition key
+plus `communication_strategy_mode`. `DETERMINISTIC` is rejected on v1–v8, and
+v9 is rejected when every agent's mode is `DISABLED`. A non-disabled
+counterfactual mode is accepted on v8 or v9. The write default stays
+`runner-config-v4`. Experiments N, O, and P pair a disabled v4 arm with a
+deterministic v9 arm and stay off the V1 regression gate. `v1_regression_profile`
+still checks flags and tracing only.
+
 Top-level `CognitionTraceSpec` (default disabled) rides in `runner-config-v4` only.
 Prior versions decode to a disabled spec. Tracing is **not** a capability flag;
 when enabled it may change `config_fingerprint` but must not change
