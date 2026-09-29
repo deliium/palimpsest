@@ -16,10 +16,12 @@ from simulation.runner_models import (
     RUNNER_SCHEMA_VERSION_V6,
     RUNNER_SCHEMA_VERSION_V7,
     RUNNER_SCHEMA_VERSION_V8,
+    RUNNER_SCHEMA_VERSION_V9,
     AgentCognitionSpec,
     AgentRunnerSpec,
     CognitionTraceDetail,
     CognitionTraceSpec,
+    CommunicationStrategyMode,
     ConsolidationMode,
     CounterfactualMode,
     DriveOverrideSpec,
@@ -466,6 +468,9 @@ def _configured(
         ProspectiveImaginationMode.DISABLED
     ),
     counterfactual_mode: CounterfactualMode = CounterfactualMode.DISABLED,
+    communication_strategy_mode: CommunicationStrategyMode = (
+        CommunicationStrategyMode.DISABLED
+    ),
     name: str = "Ada",
 ) -> SimulationRunnerConfig:
     base = _config()
@@ -486,6 +491,7 @@ def _configured(
                     reflection_mode=reflection_mode,
                     prospective_mode=prospective_mode,
                     counterfactual_mode=counterfactual_mode,
+                    communication_strategy_mode=communication_strategy_mode,
                 ),
                 name=name,
                 initial_goals=agent.initial_goals,
@@ -704,3 +710,42 @@ def test_counterfactual_mode_round_trips_only_on_v8() -> None:
     assert (
         restored.agents[0].cognition.counterfactual_mode is CounterfactualMode.DISABLED
     )
+
+
+def test_communication_strategy_mode_round_trips_only_on_v9() -> None:
+    enabled = _configured(
+        schema_version=RUNNER_SCHEMA_VERSION_V9,
+        counterfactual_mode=CounterfactualMode.DETERMINISTIC,
+        reflection_mode=ReflectionMode.DETERMINISTIC,
+        prospective_mode=ProspectiveImaginationMode.DETERMINISTIC,
+        consolidation_mode=ConsolidationMode.DETERMINISTIC,
+        communication_strategy_mode=CommunicationStrategyMode.DETERMINISTIC,
+    )
+    encoded = encode_runner_config(enabled)
+    document = json.loads(encoded.decode("utf-8"))
+    cognition = document["agents"][0]["cognition"]
+    assert cognition["communication_strategy_mode"] == "deterministic"
+    assert cognition["counterfactual_mode"] == "deterministic"
+    assert cognition["reflection_mode"] == "deterministic"
+    assert cognition["prospective_mode"] == "deterministic"
+    assert cognition["consolidation_mode"] == "deterministic"
+    assert "relationship_high" not in cognition
+    assert decode_runner_config(encoded) == enabled
+    disabled = _config()
+    disabled_doc = json.loads(encode_runner_config(disabled).decode("utf-8"))
+    assert disabled_doc["schema_version"] == RUNNER_SCHEMA_VERSION
+    assert (
+        "communication_strategy_mode"
+        not in disabled_doc["agents"][0]["cognition"]
+    )
+    with pytest.raises(ValueError, match="communication_strategy_mode_requires_v9"):
+        _configured(
+            schema_version=RUNNER_SCHEMA_VERSION_V8,
+            counterfactual_mode=CounterfactualMode.DETERMINISTIC,
+            communication_strategy_mode=CommunicationStrategyMode.DETERMINISTIC,
+        )
+    with pytest.raises(ValueError, match="v9_requires_communication_strategy"):
+        _configured(
+            schema_version=RUNNER_SCHEMA_VERSION_V9,
+            communication_strategy_mode=CommunicationStrategyMode.DISABLED,
+        )

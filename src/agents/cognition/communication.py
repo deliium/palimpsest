@@ -13,6 +13,7 @@ from collections.abc import Sequence
 from dataclasses import dataclass
 from typing import Final, Literal, Protocol
 
+from agents.cognition.epistemic import EpistemicJudgment
 from agents.cognition.models import (
     ActionPlan,
     CognitiveLoopInput,
@@ -69,6 +70,7 @@ __all__ = [
     "PendingEvidenceAccumulator",
     "SocialMessageDecision",
     "SocialMessagePolicy",
+    "SocialMessageSelection",
     "build_communicated_memory_trace",
     "project_trust_inputs",
     "receiver_confidence_for_transmission",
@@ -613,6 +615,37 @@ class CompositeMemoryUpdateHook:
 
 
 @dataclass(frozen=True, slots=True)
+class SocialMessageSelection:
+    """One social command plus an optional hidden intent.
+
+    ``DISABLED`` leaves ``intent`` unset. The command is the only object the
+    world receives.
+    """
+
+    command: Talk | Ask | Tell | None
+    intent: object | None
+    action_kind: str
+    source_basis: CommunicationSourceBasis
+    hop_count: int
+    sender_confidence: float
+    fallback: bool
+    candidate_count: int = 0
+    audit: object | None = None
+
+    def __repr__(self) -> str:
+        strategy = "none"
+        if self.intent is not None:
+            strategy = str(getattr(self.intent, "strategy", "none"))
+            value = getattr(strategy, "value", None)
+            if value is not None:
+                strategy = str(value)
+        return (
+            f"SocialMessageSelection(strategy={strategy}, "
+            f"confidence_band={confidence_band(self.sender_confidence)!r})"
+        )
+
+
+@dataclass(frozen=True, slots=True)
 class SocialMessageDecision:
     """One validated social command plus metadata-only selection diagnostics."""
 
@@ -665,6 +698,7 @@ def _select_belief_utterance(
     act_pref: str,
     selected_ids: frozenset[object],
     candidate_count: int,
+    retain_secret: bool = False,
 ) -> SocialMessageDecision | None:
     """Tell the first unblocked belief, or ask when the judgment is uncertain."""
     from agents.cognition.epistemic import (
@@ -715,7 +749,9 @@ def _select_belief_utterance(
         band = confidence_band(
             claim.confidence.confidence if disclosure is None else disclosure.confidence
         )
-        if judgment in blocking:
+        if judgment in blocking and not (
+            retain_secret and judgment is EpistemicJudgment.SECRET
+        ):
             _LOG.debug(
                 "epistemic_message owner_id=%s tick=%s action_kind=%s "
                 "recipient_id=%s judgment=%s confidence_band=%s",
@@ -821,7 +857,14 @@ class SocialMessagePolicy(Protocol):
         selected_belief_ids: Sequence[BeliefId] = (),
         emotional_state: object | None = None,
         mind: object | None = None,
-    ) -> SocialMessageDecision | None: ...
+        strategy_mode: object | None = None,
+        goal_board: object | None = None,
+        relationships: object | None = None,
+        risks: object | None = None,
+        self_model: object | None = None,
+        norms: object | None = None,
+        strategy_policy: object | None = None,
+    ) -> SocialMessageSelection | None: ...
 
 
 class DeterministicSocialMessagePolicy:
@@ -841,7 +884,14 @@ class DeterministicSocialMessagePolicy:
         selected_belief_ids: Sequence[BeliefId] = (),
         emotional_state: object | None = None,
         mind: object | None = None,
-    ) -> SocialMessageDecision | None:
+        strategy_mode: object | None = None,
+        goal_board: object | None = None,
+        relationships: object | None = None,
+        risks: object | None = None,
+        self_model: object | None = None,
+        norms: object | None = None,
+        strategy_policy: object | None = None,
+    ) -> SocialMessageSelection | None:
         recipients = _eligible_recipients(observation)
         candidate_count = len(recipients)
         if not recipients:
@@ -861,6 +911,16 @@ class DeterministicSocialMessagePolicy:
                 "reason_code=no_eligible_recipient",
                 owner_id.value,
                 observation.tick,
+            )
+            _LOG.warning(
+                "communication_strategy_skipped reason_code=no_candidate",
+                extra={
+                    "cognition": {
+                        "owner_id": owner_id.value,
+                        "tick": observation.tick,
+                        "reason_code": "no_candidate",
+                    }
+                },
             )
             return None
         from agents.cognition.theory_of_mind import MindMessageHint, mind_message_hint
@@ -939,6 +999,18 @@ class DeterministicSocialMessagePolicy:
         from agents.cognition.models import EmotionalStateEvaluation
 
         emotion_eval: EmotionalStateEvaluation | None = None
+        from agents.cognition.configuration import CognitionCommunicationStrategyMode
+
+        mode = (
+            CognitionCommunicationStrategyMode.DISABLED
+            if strategy_mode is None
+            else strategy_mode
+        )
+        if type(mode) is not CognitionCommunicationStrategyMode:
+            raise TypeError(
+                "strategy_mode must be CognitionCommunicationStrategyMode"
+            )
+        retain_secret = mode is CognitionCommunicationStrategyMode.DETERMINISTIC
         if emotional_state is not None:
             if type(emotional_state) is not EmotionalStateEvaluation:
                 raise TypeError("emotional_state must be EmotionalStateEvaluation")
@@ -958,6 +1030,7 @@ class DeterministicSocialMessagePolicy:
                 act_pref=act_pref,
                 selected_ids=selected_ids,
                 candidate_count=candidate_count,
+                retain_secret=retain_secret,
             )
         elif not selected_ids and beliefs and beliefs[0].confidence.confidence >= 0.5:
             _LOG.debug(
@@ -992,42 +1065,6 @@ class DeterministicSocialMessagePolicy:
                 source_basis=CommunicationSourceBasis.UNREFERENCED,
                 hop_count=0,
                 sender_confidence=hint.confidence,
-                fallback=False,
-                candidate_count=candidate_count,
-            )
-        elif decision is None and act_pref == "ask":
-            utterance = origin_utterance(
-                text=_SAFE_ASK_TEXT,
-                speaker_id=speaker_id,
-                communication_id="plan-ask-emotion",
-                sender_confidence=0.5,
-                source_basis=CommunicationSourceBasis.DIRECT_OBSERVATION,
-                concepts=(),
-            )
-            decision = SocialMessageDecision(
-                command=Ask(recipient_id=recipient, utterance=utterance),
-                action_kind="ask",
-                source_basis=CommunicationSourceBasis.DIRECT_OBSERVATION,
-                hop_count=0,
-                sender_confidence=utterance.declared.sender_confidence,
-                fallback=False,
-                candidate_count=candidate_count,
-            )
-        elif decision is None and act_pref == "talk":
-            utterance = origin_utterance(
-                text=_SAFE_TALK_TEXT,
-                speaker_id=speaker_id,
-                communication_id="plan-talk-emotion",
-                sender_confidence=0.5,
-                source_basis=CommunicationSourceBasis.DIRECT_OBSERVATION,
-                concepts=(),
-            )
-            decision = SocialMessageDecision(
-                command=Talk(recipient_id=recipient, utterance=utterance),
-                action_kind="talk",
-                source_basis=CommunicationSourceBasis.DIRECT_OBSERVATION,
-                hop_count=0,
-                sender_confidence=utterance.declared.sender_confidence,
                 fallback=False,
                 candidate_count=candidate_count,
             )
@@ -1115,7 +1152,246 @@ class DeterministicSocialMessagePolicy:
                 }
             },
         )
-        return decision
+        return _present_selection(
+            decision,
+            owner_id=owner_id,
+            speaker_id=speaker_id,
+            recipient=recipient,
+            observation=observation,
+            memory=memory,
+            snapshot_memories=snapshot_memories,
+            mind=mind,
+            mode=mode,
+            goal_board=goal_board,
+            relationships=relationships,
+            risks=risks,
+            self_model=self_model,
+            norms=norms,
+            emotional_state=emotion_eval,
+            strategy_policy=strategy_policy,
+        )
+
+
+def _present_selection(
+    decision: SocialMessageDecision,
+    *,
+    owner_id: AgentId,
+    speaker_id: EntityId,
+    recipient: EntityId,
+    observation: Observation,
+    memory: RetrievedMemoryContext,
+    snapshot_memories: Sequence[MemoryTrace],
+    mind: object | None,
+    mode: object,
+    goal_board: object | None,
+    relationships: object | None,
+    risks: object | None,
+    self_model: object | None,
+    norms: object | None,
+    emotional_state: object | None,
+    strategy_policy: object | None = None,
+) -> SocialMessageSelection:
+    """Return today's command when disabled, or the strategy render when on."""
+    from agents.cognition.communication_strategy import (
+        CommunicationStrategyPolicy,
+        apply_communication_strategy,
+    )
+    from agents.cognition.configuration import CognitionCommunicationStrategyMode
+    from agents.cognition.models import (
+        EmotionalStateEvaluation,
+        GoalBoard,
+        SelfModel,
+        SubjectiveRisk,
+    )
+    from agents.cognition.theory_of_mind import TheoryOfMind
+    from social.relationships import DirectedRelationshipProfile
+
+    kind = (
+        decision.action_kind if decision.command is not None else "wait"
+    )
+    if mode is not CognitionCommunicationStrategyMode.DETERMINISTIC:
+        _LOG.debug(
+            "communication_strategy_message",
+            extra={
+                "cognition": {
+                    "owner_id": owner_id.value,
+                    "tick": observation.tick,
+                    "mode": "disabled",
+                    "action_kind": kind,
+                    "recipient_id": recipient.value,
+                    "strategy": "none",
+                    "intent_present": False,
+                }
+            },
+        )
+        _LOG.warning(
+            "communication_strategy_skipped reason_code=mode_disabled",
+            extra={
+                "cognition": {
+                    "owner_id": owner_id.value,
+                    "reason_code": "mode_disabled",
+                }
+            },
+        )
+        return SocialMessageSelection(
+            command=decision.command,
+            intent=None,
+            action_kind=decision.action_kind,
+            source_basis=decision.source_basis,
+            hop_count=decision.hop_count,
+            sender_confidence=decision.sender_confidence,
+            fallback=decision.fallback,
+            candidate_count=decision.candidate_count,
+            audit=None,
+        )
+    utterance = decision.command.utterance if decision.command is not None else None
+    atoms = () if utterance is None else utterance.content.concepts
+    if decision.fallback and not atoms:
+        atoms = ()
+    cited: str | None = None
+    if (
+        utterance is not None
+        and decision.source_basis is CommunicationSourceBasis.RECONSTRUCTED_MEMORY
+    ):
+        cited = _cited_event_for_concepts(snapshot_memories, atoms)
+    judgment = _judgment_for_candidate(
+        decision,
+        memory=memory,
+        mind=mind if type(mind) is TheoryOfMind else None,
+        recipient=recipient,
+    )
+    board = goal_board if type(goal_board) is GoalBoard else None
+    if goal_board is not None and board is None:
+        raise TypeError("goal_board must be GoalBoard")
+    model = self_model if type(self_model) is SelfModel else None
+    if self_model is not None and model is None:
+        raise TypeError("self_model must be SelfModel")
+    policy = strategy_policy
+    if policy is not None and type(policy) is not CommunicationStrategyPolicy:
+        raise TypeError("strategy_policy must be CommunicationStrategyPolicy")
+    emotion = emotional_state
+    if emotion is not None and type(emotion) is not EmotionalStateEvaluation:
+        raise TypeError("emotional_state must be EmotionalStateEvaluation")
+    profile_rows: tuple[DirectedRelationshipProfile, ...] | None
+    if relationships is None:
+        profile_rows = None
+    else:
+        profile_rows = tuple(relationships)
+    risk_rows: tuple[SubjectiveRisk, ...] | None
+    if risks is None:
+        risk_rows = None
+    else:
+        risk_rows = tuple(risks)
+    command, intent, audit = apply_communication_strategy(
+        owner_id=owner_id,
+        recipient_id=AgentId(recipient.value),
+        recipient_entity_id=recipient,
+        speaker_id=speaker_id,
+        tick=observation.tick,
+        source_basis=decision.source_basis,
+        source_confidence=decision.sender_confidence,
+        source_atom_tokens=atoms,
+        action_kind=decision.action_kind,
+        cited_event_id=cited,
+        policy=policy,
+        goal_board=board,
+        relationships=profile_rows,
+        mind=mind if type(mind) is TheoryOfMind else None,
+        risks=risk_rows,
+        self_model=model,
+        emotional_state=emotion,
+        observation=observation,
+        owner_entity_id=speaker_id,
+        epistemic_judgment=judgment,
+        norms=norms,
+    )
+    rendered_kind = "wait" if command is None else command.kind
+    confidence = decision.sender_confidence
+    if command is not None:
+        confidence = command.utterance.declared.sender_confidence
+    strategy = "none" if intent is None else intent.strategy.value
+    _LOG.debug(
+        "communication_strategy_message",
+        extra={
+            "cognition": {
+                "owner_id": owner_id.value,
+                "tick": observation.tick,
+                "mode": "deterministic",
+                "action_kind": rendered_kind,
+                "recipient_id": recipient.value,
+                "strategy": strategy,
+                "intent_present": intent is not None,
+            }
+        },
+    )
+    return SocialMessageSelection(
+        command=command,
+        intent=intent,
+        action_kind=rendered_kind,
+        source_basis=decision.source_basis,
+        hop_count=decision.hop_count,
+        sender_confidence=confidence,
+        fallback=decision.fallback,
+        candidate_count=decision.candidate_count,
+        audit=audit,
+    )
+
+
+def _cited_event_for_concepts(
+    snapshot_memories: Sequence[MemoryTrace],
+    atoms: tuple[str, ...],
+) -> str | None:
+    if not atoms:
+        return None
+    wanted = set(atoms)
+    for trace in snapshot_memories:
+        source = trace.provenance.observed_source_id
+        if source is None:
+            continue
+        concepts = {item.concept for item in trace.concepts}
+        if wanted <= concepts:
+            return source.value
+    return None
+
+
+def _judgment_for_candidate(
+    decision: SocialMessageDecision,
+    *,
+    memory: RetrievedMemoryContext,
+    mind: object | None,
+    recipient: EntityId,
+) -> EpistemicJudgment | None:
+    from agents.cognition.epistemic import (
+        default_epistemic_policy,
+        epistemic_disclosure,
+        epistemic_proposition_ref,
+    )
+    from agents.cognition.theory_of_mind import TheoryOfMind
+
+    if type(mind) is not TheoryOfMind or decision.command is None:
+        return None
+    communication_id = decision.command.utterance.declared.communication_id.value
+    token = ""
+    for prefix in ("plan-tell-", "plan-ask-"):
+        if communication_id.startswith(prefix):
+            token = communication_id[len(prefix) :]
+            break
+    if not token:
+        return None
+    matched = any(
+        belief.belief_id.value == token for belief in memory.semantic_beliefs
+    )
+    if not matched:
+        return None
+    disclosure = epistemic_disclosure(
+        mind,
+        recipient.value,
+        epistemic_proposition_ref(belief_id=token),
+        default_epistemic_policy(),
+    )
+    if disclosure is None:
+        return None
+    return disclosure.judgment
 
 
 def _owned_communicated_traces(

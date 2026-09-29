@@ -183,6 +183,9 @@ async def test_defaults_replaceable_planner() -> None:
             emotional_state=None,
             causal_world_model=None,
             theory_of_mind=None,
+            self_model=None,
+            strategy_mode=None,
+            strategy_policy=None,
         ):  # type: ignore[no-untyped-def]
             plan = await super().plan(loop_input, intention, futures)
             assert type(plan.command) is Wait

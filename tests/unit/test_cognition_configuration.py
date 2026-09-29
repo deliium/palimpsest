@@ -270,3 +270,18 @@ def test_epistemic_policy_follows_theory_of_mind_mode() -> None:
     )
     assert custom.epistemic_policy is not None
     assert custom.epistemic_policy.max_depth == 1
+
+
+def test_communication_strategy_mode_defaults_off() -> None:
+    from agents.cognition.configuration import CognitionCommunicationStrategyMode
+
+    off = CognitionLoopConfig()
+    assert off.communication_strategy_mode is (
+        CognitionCommunicationStrategyMode.DISABLED
+    )
+    assert off.communication_strategy_policy is None
+    on = CognitionLoopConfig(
+        communication_strategy_mode=CognitionCommunicationStrategyMode.DETERMINISTIC
+    )
+    assert on.communication_strategy_policy is not None
+    assert on.communication_strategy_policy.version == "communication-strategy.v1"

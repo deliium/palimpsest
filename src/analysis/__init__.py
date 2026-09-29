@@ -15,6 +15,10 @@ from analysis.causal_world_model_metrics import (
     CAUSAL_WORLD_MODEL_METRIC_VERSION,
     compute_causal_world_model_metrics,
 )
+from analysis.communication_strategy_metrics import (
+    COMMUNICATION_STRATEGY_METRIC_VERSION,
+    compute_communication_strategy_metrics,
+)
 from analysis.contracts import (
     EventSource,
     ExportSource,
@@ -214,6 +218,7 @@ __all__ = [
     "CANONICAL_OUTPUT_CLAIM",
     "CAUSAL_WORLD_MODEL_METRIC_VERSION",
     "CLAIM_TRUTH_SCHEMA_VERSION",
+    "COMMUNICATION_STRATEGY_METRIC_VERSION",
     "COUNTERFACTUAL_REASONING_METRIC_VERSION",
     "DRIFT_METRIC_VERSION",
     "EVENT_FACT_PROJECTOR_VERSION",
@@ -310,6 +315,7 @@ __all__ = [
     "compute_behavioral_specialization",
     "compute_belief_accuracy",
     "compute_causal_world_model_metrics",
+    "compute_communication_strategy_metrics",
     "compute_conflict",
     "compute_cooperation",
     "compute_counterfactual_reasoning_metrics",

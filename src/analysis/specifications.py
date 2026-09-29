@@ -50,7 +50,7 @@ __all__ = [
 ]
 
 METRIC_CATALOG_VERSION: Final[str] = "metric-catalog-v1"
-METRIC_FAMILY_COUNT: Final[int] = 23
+METRIC_FAMILY_COUNT: Final[int] = 24
 
 # Align with existing memory-drift / transmission document versions.
 _ALGO_V1: Final[str] = "1"
@@ -98,6 +98,7 @@ class MetricFamilyId(StrEnum):
     IDENTITY_DYNAMICS = "identity_dynamics"
     CAUSAL_WORLD_MODEL = "causal_world_model"
     THEORY_OF_MIND = "theory_of_mind"
+    COMMUNICATION_STRATEGY = "communication_strategy"
     PROSPECTIVE_IMAGINATION = "prospective_imagination"
     COUNTERFACTUAL_REASONING = "counterfactual_reasoning"
 
@@ -1014,6 +1015,42 @@ def _spec_theory_of_mind() -> MetricSpecification:
     )
 
 
+def _spec_communication_strategy() -> MetricSpecification:
+    return _base(
+        family_id=MetricFamilyId.COMMUNICATION_STRATEGY,
+        evidence_inputs=frozenset({EvidenceStage.OBJECTIVE_EVENT_STATE}),
+        population="communication_intent_audits_per_run",
+        denominator="harvested communication intent audits",
+        denominator_kind=DenominatorKind.OCCURRENCE,
+        cohort_window="run window covering committed events and audits",
+        deceased_policy="terminal agents stop new audits; existing audits remain",
+        zero_holding_policy="no audits -> availability=absent",
+        opportunity_vs_occurrence=(
+            "joins hidden audits to committed occurrences; does not invent a rate"
+        ),
+        self_edge_policy="not_applicable",
+        censoring_policy="missing cited events stay unmatched; never invent a rate",
+        formulas={
+            "memory_error": "assert_match whose cited occurrence does not cover atoms",
+            "uncertain_inference": "hedged utterances",
+            "deliberate_deception": "substituted, inflated, or dropped atoms",
+            "not_asserted": "refusals and omissions",
+            "veridical": "assert_match covered by the cited occurrence",
+            "unmatched": "assert_match with no cited occurrence",
+            "cascade_count": "later assert_match repeats a substituted render",
+        },
+        value_keys=(
+            "memory_error",
+            "uncertain_inference",
+            "deliberate_deception",
+            "not_asserted",
+            "veridical",
+            "unmatched",
+            "cascade_count",
+        ),
+    )
+
+
 def _spec_prospective_imagination() -> MetricSpecification:
     return _base(
         family_id=MetricFamilyId.PROSPECTIVE_IMAGINATION,
@@ -1570,6 +1607,7 @@ _BUILDERS: Final[tuple[Callable[[], MetricSpecification], ...]] = (
     _spec_identity_dynamics,
     _spec_causal_world_model,
     _spec_theory_of_mind,
+    _spec_communication_strategy,
     _spec_prospective_imagination,
     _spec_belief_accuracy,
     _spec_false_belief_persistence,

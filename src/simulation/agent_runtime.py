@@ -410,6 +410,7 @@ class AgentRuntime:
         "_causal_world_model",
         "_cognition_trace_repository",
         "_cognition_trace_spec",
+        "_communication_intent_audits",
         "_counterfactual_audits",
         "_counterfactual_capture",
         "_counterfactual_state",
@@ -505,6 +506,7 @@ class AgentRuntime:
         self._mind_audits: list[object] = []
         self._prospective_audits: list[object] = []
         self._counterfactual_audits: list[object] = []
+        self._communication_intent_audits: list[object] = []
         self._applied_identity_operation_ids: set[str] = set()
         self._applied_reflection_operation_ids: set[str] = set()
         self._semantic_belief_reader = semantic_belief_reader
@@ -1521,6 +1523,7 @@ class AgentRuntime:
         )
         self._commit_world_model(pending.loop_result.causal_world_model, pending.tick)
         self._commit_theory_of_mind(pending.loop_result.theory_of_mind, pending.tick)
+        self._commit_communication_intent(pending.loop_result, pending.tick)
         self._commit_prospective_audit(pending.tick)
         self._commit_counterfactual_audit(pending.tick)
         self._apply_reflection_journal(pending.tick)
@@ -2561,6 +2564,66 @@ class AgentRuntime:
 
     def export_counterfactual_audits(self) -> tuple[object, ...]:
         return tuple(self._counterfactual_audits)
+
+    def export_communication_intent_audits(self) -> tuple[object, ...]:
+        return tuple(self._communication_intent_audits)
+
+    def _commit_communication_intent(self, result: object, tick: int) -> None:
+        """Copy one hidden intent onto the run audit after a successful finalize."""
+        from agents.cognition.communication_strategy import (
+            CommunicationIntent,
+            CommunicationIntentAudit,
+        )
+
+        owner = self._agent.agent_id
+        intent = getattr(result, "communication_intent", None)
+        if intent is None:
+            _LOG.debug(
+                "communication_intent_audit_skipped owner_id=%s tick=%s "
+                "audit_present=%s strategy=%s",
+                owner.value,
+                tick,
+                False,
+                "none",
+            )
+            return
+        if type(intent) is not CommunicationIntent:
+            raise TypeError("communication_intent must be CommunicationIntent")
+        if intent.owner_id != owner:
+            raise AgentRuntimeError(
+                AgentRuntimeErrorCode.OWNERSHIP,
+                agent_id=owner.value,
+            )
+        stored = getattr(result, "communication_intent_audit", None)
+        if type(stored) is CommunicationIntentAudit:
+            audit = stored
+        else:
+            audit = CommunicationIntentAudit(
+                intent_id=intent.intent_id,
+                owner_id=intent.owner_id,
+                recipient_id=intent.recipient_id,
+                tick=intent.tick,
+                strategy=intent.strategy,
+                stance=intent.stance,
+                divergence=intent.divergence,
+                source_basis=intent.source_basis,
+                source_confidence=intent.source_confidence,
+                source_atom_tokens=intent.source_atom_tokens,
+                cited_event_id=intent.cited_event_id,
+                factor_codes=intent.factor_codes,
+                delivered=intent.delivered,
+                fallback_used=False,
+            )
+        self._communication_intent_audits.append(audit)
+        _LOG.debug(
+            "communication_intent_audit_committed owner_id=%s tick=%s "
+            "audit_present=%s strategy=%s stance=%s",
+            owner.value,
+            tick,
+            True,
+            intent.strategy.value,
+            intent.stance.value,
+        )
 
     def _commit_counterfactual_audit(self, tick: int) -> None:
         reader = getattr(self._loop, "last_counterfactual_audit", None)

@@ -158,6 +158,9 @@ class _BoomPlanner:
         emotional_state: object | None = None,
         causal_world_model: object | None = None,
         theory_of_mind: object | None = None,
+        self_model: object | None = None,
+        strategy_mode: object | None = None,
+        strategy_policy: object | None = None,
     ) -> object:
         _ = (
             loop_input,
@@ -167,6 +170,10 @@ class _BoomPlanner:
             goal_board,
             emotional_state,
             causal_world_model,
+            theory_of_mind,
+            self_model,
+            strategy_mode,
+            strategy_policy,
         )
         raise RuntimeError("planner boom")
 

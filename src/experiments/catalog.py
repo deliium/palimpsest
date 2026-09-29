@@ -1,4 +1,4 @@
-"""Named builders for Experiments A-M."""
+"""Named builders for Experiments A-P."""
 
 from __future__ import annotations
 
@@ -20,8 +20,10 @@ from simulation.runner_models import (
     RUNNER_SCHEMA_VERSION_V6,
     RUNNER_SCHEMA_VERSION_V7,
     RUNNER_SCHEMA_VERSION_V8,
+    RUNNER_SCHEMA_VERSION_V9,
     AgentCognitionSpec,
     AgentRunnerSpec,
+    CommunicationStrategyMode,
     ConsolidationMode,
     CounterfactualMode,
     DriveOverrideSpec,
@@ -52,6 +54,7 @@ def _with_agent_modes(
     reflection_mode: ReflectionMode | None = None,
     prospective_mode: ProspectiveImaginationMode | None = None,
     counterfactual_mode: CounterfactualMode | None = None,
+    communication_strategy_mode: CommunicationStrategyMode | None = None,
     schema_version: str | None = None,
 ) -> SimulationRunnerConfig:
     agents: list[AgentRunnerSpec] = []
@@ -90,6 +93,11 @@ def _with_agent_modes(
                 counterfactual_mode
                 if counterfactual_mode is not None
                 else agent.cognition.counterfactual_mode
+            ),
+            communication_strategy_mode=(
+                communication_strategy_mode
+                if communication_strategy_mode is not None
+                else agent.cognition.communication_strategy_mode
             ),
         )
         agents.append(
@@ -652,6 +660,105 @@ def experiment_m_epistemic_asymmetry(
             ("m-disabled", "epistemic_ledger_disabled", disabled),
             ("m-enabled", "epistemic_ledger_enabled", enabled),
         ),
+    )
+
+
+def _communication_strategy_experiment(
+    base: SimulationRunnerConfig,
+    *,
+    seed_matrix: ExperimentSeedMatrix | None,
+    experiment_id: str,
+    built_event: str,
+    disabled_id: str,
+    enabled_id: str,
+    disabled_label: str,
+    enabled_label: str,
+) -> ExperimentDefinition:
+    """Pair a disabled v4 arm with a deterministic v9 arm.
+
+    Arms share seed, scenario, and stochastic identity. The catalog does not
+    run the metric and does not require a live lie, trust change, or cascade.
+    """
+    matrix = seed_matrix or ExperimentSeedMatrix(seeds=(base.seed,))
+    disabled = _with_agent_modes(
+        base,
+        communication_strategy_mode=CommunicationStrategyMode.DISABLED,
+        schema_version=RUNNER_SCHEMA_VERSION_V4,
+    )
+    enabled = _with_agent_modes(
+        base,
+        communication_strategy_mode=CommunicationStrategyMode.DETERMINISTIC,
+        schema_version=RUNNER_SCHEMA_VERSION_V9,
+    )
+    for condition_id in (disabled_id, enabled_id):
+        _LOG.debug(
+            "%s experiment_id=%s condition_id=%s",
+            built_event,
+            experiment_id,
+            condition_id,
+        )
+    return _definition(
+        experiment_id=experiment_id,
+        base=disabled,
+        seed_matrix=matrix,
+        arms=(
+            (disabled_id, disabled_label, disabled),
+            (enabled_id, enabled_label, enabled),
+        ),
+    )
+
+
+def experiment_n_communication_trust(
+    base: SimulationRunnerConfig,
+    *,
+    seed_matrix: ExperimentSeedMatrix | None = None,
+) -> ExperimentDefinition:
+    """Paired trust arms. Disabled stays on v4; deterministic requires v9."""
+    return _communication_strategy_experiment(
+        base,
+        seed_matrix=seed_matrix,
+        experiment_id="experiment-n-communication-trust",
+        built_event="experiment_n_built",
+        disabled_id="n-disabled",
+        enabled_id="n-enabled",
+        disabled_label="communication_strategy_disabled",
+        enabled_label="communication_strategy_deterministic",
+    )
+
+
+def experiment_o_deception_detection(
+    base: SimulationRunnerConfig,
+    *,
+    seed_matrix: ExperimentSeedMatrix | None = None,
+) -> ExperimentDefinition:
+    """Paired detection arms. Disabled stays on v4; deterministic requires v9."""
+    return _communication_strategy_experiment(
+        base,
+        seed_matrix=seed_matrix,
+        experiment_id="experiment-o-deception-detection",
+        built_event="experiment_o_built",
+        disabled_id="o-disabled",
+        enabled_id="o-enabled",
+        disabled_label="communication_strategy_disabled",
+        enabled_label="communication_strategy_deterministic",
+    )
+
+
+def experiment_p_information_cascade(
+    base: SimulationRunnerConfig,
+    *,
+    seed_matrix: ExperimentSeedMatrix | None = None,
+) -> ExperimentDefinition:
+    """Paired cascade arms. Disabled stays on v4; deterministic requires v9."""
+    return _communication_strategy_experiment(
+        base,
+        seed_matrix=seed_matrix,
+        experiment_id="experiment-p-information-cascade",
+        built_event="experiment_p_built",
+        disabled_id="p-disabled",
+        enabled_id="p-enabled",
+        disabled_label="communication_strategy_disabled",
+        enabled_label="communication_strategy_deterministic",
     )
 
 

@@ -21,6 +21,9 @@ from experiments.catalog import (
     experiment_k_counterfactual,
     experiment_l_theory_of_mind,
     experiment_m_epistemic_asymmetry,
+    experiment_n_communication_trust,
+    experiment_o_deception_detection,
+    experiment_p_information_cascade,
     v1_regression_profile,
 )
 from experiments.collectors import (
@@ -188,6 +191,9 @@ __all__ = [
     "experiment_k_counterfactual",
     "experiment_l_theory_of_mind",
     "experiment_m_epistemic_asymmetry",
+    "experiment_n_communication_trust",
+    "experiment_o_deception_detection",
+    "experiment_p_information_cascade",
     "make_false_story_intervention",
     "map_consolidation_audits_to_report",
     "map_recall_audits_to_dynamics_report",

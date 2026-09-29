@@ -13,7 +13,11 @@ from dataclasses import dataclass
 from enum import StrEnum
 from typing import Final, Protocol
 
+from agents.cognition.communication_strategy import (
+    default_communication_strategy_policy,
+)
 from agents.cognition.configuration import (
+    CognitionCommunicationStrategyMode,
     CognitionConsolidationMode,
     CognitionCounterfactualMode,
     CognitionDriveOverride,
@@ -523,6 +527,17 @@ def _cognition_config_for(
         counterfactual_mode.value,
         None if counterfactual_policy is None else counterfactual_policy.version,
     )
+    strategy_mode = CognitionCommunicationStrategyMode(
+        spec.communication_strategy_mode.value
+    )
+    strategy_policy = None
+    if strategy_mode is CognitionCommunicationStrategyMode.DETERMINISTIC:
+        strategy_policy = default_communication_strategy_policy()
+    _LOG.debug(
+        "cognition_config_communication_strategy_mode mode=%s policy_version=%s",
+        strategy_mode.value,
+        None if strategy_policy is None else strategy_policy.version,
+    )
     return CognitionLoopConfig(
         memory_mode=CognitionMemoryMode(spec.memory_mode.value),
         imagination_mode=CognitionImaginationMode(spec.imagination_mode.value),
@@ -544,6 +559,8 @@ def _cognition_config_for(
         prospective_policy=prospective_policy,
         counterfactual_mode=counterfactual_mode,
         counterfactual_policy=counterfactual_policy,
+        communication_strategy_mode=strategy_mode,
+        communication_strategy_policy=strategy_policy,
         drive_overrides=tuple(
             CognitionDriveOverride(
                 kind=item.kind,
@@ -1718,6 +1735,7 @@ class SimulationRunner:
             mind_audits=self.export_mind_audits(),
             prospective_audits=self.export_prospective_audits(),
             counterfactual_audits=self.export_counterfactual_audits(),
+            communication_intent_audits=self.export_communication_intent_audits(),
         )
         _LOG.info(
             "runner_finished run_id=%s ticks_committed=%s stop_reason=%s "
@@ -1811,6 +1829,27 @@ class SimulationRunner:
                 )
         _LOG.debug(
             "prospective_audit run_id=%s audit_count=%s",
+            self._run_id.value,
+            len(collected),
+        )
+        return tuple(collected)
+
+    def export_communication_intent_audits(self) -> tuple[object, ...]:
+        """Harvest per-utterance strategy audits. Not part of result JSON."""
+        from agents.cognition.communication_strategy import CommunicationIntentAudit
+
+        collected: list[CommunicationIntentAudit] = []
+        for bundle in self._agents:
+            runtime = bundle.runtime
+            export = getattr(runtime, "export_communication_intent_audits", None)
+            if export is None:
+                continue
+            for audit in export():
+                if type(audit) is not CommunicationIntentAudit:
+                    raise TypeError("communication_intent_audits: invalid_item")
+                collected.append(audit)
+        _LOG.debug(
+            "communication_intent_audit_export run_id=%s audit_count=%s",
             self._run_id.value,
             len(collected),
         )

@@ -8,8 +8,9 @@ from __future__ import annotations
 
 import logging
 from asyncio import CancelledError
-from collections.abc import Awaitable
+from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, replace
+from inspect import Parameter, signature
 from typing import Any, Final, TypeVar, cast
 
 from agents.cognition.contracts import (
@@ -166,6 +167,8 @@ class CognitiveLoop:
     """Sequential cognitive pipeline returning one closed ``AgentCommand``."""
 
     __slots__ = (
+        "_communication_strategy_mode",
+        "_communication_strategy_policy",
         "_consolidation_mode",
         "_consolidation_policy",
         "_consolidation_selector",
@@ -231,6 +234,8 @@ class CognitiveLoop:
         prospective_policy: object | None = None,
         counterfactual_mode: object | None = None,
         counterfactual_policy: object | None = None,
+        communication_strategy_mode: object | None = None,
+        communication_strategy_policy: object | None = None,
     ) -> None:
         self._perception = perception
         self._memory = memory
@@ -349,6 +354,34 @@ class CognitiveLoop:
         self._counterfactual_skipped = 0
         self._counterfactual_fallback = False
         self._counterfactual_llm_calls = 0
+        from agents.cognition.communication_strategy import CommunicationStrategyPolicy
+        from agents.cognition.configuration import CognitionCommunicationStrategyMode
+
+        message_mode = (
+            CognitionCommunicationStrategyMode.DISABLED
+            if communication_strategy_mode is None
+            else communication_strategy_mode
+        )
+        if type(message_mode) is not CognitionCommunicationStrategyMode:
+            raise TypeError(
+                "communication_strategy_mode must be CognitionCommunicationStrategyMode"
+            )
+        if message_mode is CognitionCommunicationStrategyMode.DISABLED:
+            message_policy = None
+        elif communication_strategy_policy is None:
+            from agents.cognition.communication_strategy import (
+                default_communication_strategy_policy,
+            )
+
+            message_policy = default_communication_strategy_policy()
+        elif type(communication_strategy_policy) is not CommunicationStrategyPolicy:
+            raise TypeError(
+                "communication_strategy_policy must be CommunicationStrategyPolicy"
+            )
+        else:
+            message_policy = communication_strategy_policy
+        self._communication_strategy_mode = message_mode
+        self._communication_strategy_policy = message_policy
         self._deferred_dissonance: tuple[object, ...] = ()
 
     def _prepare_world_model(
@@ -725,8 +758,14 @@ class CognitiveLoop:
                 memory,
                 goal_board,
                 emotional_evaluation,
-                causal_world_model=world_model,
-                theory_of_mind=mind,
+                **_planner_options(
+                    self._planner.plan,
+                    causal_world_model=world_model,
+                    theory_of_mind=mind,
+                    self_model=self_state,
+                    strategy_mode=self._communication_strategy_mode,
+                    strategy_policy=self._communication_strategy_policy,
+                ),
             ),
             expected_type=ActionPlan,
         )
@@ -760,6 +799,8 @@ class CognitiveLoop:
             final_confidence=plan.confidence,
             causal_world_model=world_model,
             theory_of_mind=mind,
+            communication_intent=plan.communication_intent,
+            communication_intent_audit=plan.communication_intent_audit,
         )
         _LOG.debug(
             "cognitive_loop_prepared",
@@ -814,6 +855,8 @@ class CognitiveLoop:
             command=command,
             confidence=proposal.plan.confidence,
             decision_metadata=proposal.plan.decision_metadata,
+            communication_intent=proposal.plan.communication_intent,
+            communication_intent_audit=proposal.plan.communication_intent_audit,
         )
         updates = await run_stage(
             kind=ComponentKind.MEMORY_UPDATE,
@@ -901,6 +944,8 @@ class CognitiveLoop:
             identity_dissonance=identity_dissonance,
             causal_world_model=proposal.causal_world_model,
             theory_of_mind=proposal.theory_of_mind,
+            communication_intent=proposal.communication_intent,
+            communication_intent_audit=proposal.communication_intent_audit,
         )
         _LOG.debug(
             "cognitive_loop_complete",
@@ -1693,3 +1738,16 @@ class CognitiveLoop:
             return output
 
         return run_stage
+
+
+def _planner_options(
+    plan: Callable[..., object], **options: object
+) -> dict[str, object]:
+    """Pass planner keywords the injected planner actually accepts."""
+    parameters = signature(plan).parameters
+    accepts_extra = any(
+        parameter.kind is Parameter.VAR_KEYWORD for parameter in parameters.values()
+    )
+    if accepts_extra:
+        return dict(options)
+    return {key: value for key, value in options.items() if key in parameters}

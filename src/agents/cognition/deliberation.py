@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import logging
 from collections.abc import Mapping, Sequence
+from dataclasses import dataclass
 from typing import Final
 
 from agents.cognition.models import (
@@ -369,14 +370,18 @@ class CommandPlanner:
         emotional_state: EmotionalStateEvaluation | None = None,
         causal_world_model: object | None = None,
         theory_of_mind: object | None = None,
+        self_model: object | None = None,
+        strategy_mode: object | None = None,
+        strategy_policy: object | None = None,
     ) -> ActionPlan:
-        _ = goal_board
         owner = loop_input.agent_id
         tick = loop_input.observation.tick
         future = _resolve_future(intention, futures)
         command: AgentCommand = Wait()
         command_type = "Wait"
         used_fallback = False
+        communication_intent: object | None = None
+        communication_intent_audit: object | None = None
 
         if future is None or intention.direction is None:
             used_fallback = True
@@ -401,6 +406,10 @@ class CommandPlanner:
                 snapshot=loop_input.snapshot,
                 emotional_state=emotional_state,
                 theory_of_mind=theory_of_mind,
+                goal_board=goal_board,
+                self_model=self_model,
+                strategy_mode=strategy_mode,
+                strategy_policy=strategy_policy,
             )
             if compiled is None:
                 used_fallback = True
@@ -417,7 +426,12 @@ class CommandPlanner:
                     },
                 )
             else:
-                command = compiled
+                if isinstance(compiled, _StrategyHold):
+                    communication_intent = compiled.intent
+                    communication_intent_audit = compiled.audit
+                    command = Wait() if compiled.command is None else compiled.command
+                else:
+                    command = compiled
                 command_type = type(command).__name__
 
         if type(command) not in {
@@ -448,6 +462,8 @@ class CommandPlanner:
             command = Wait()
             command_type = "Wait"
             used_fallback = True
+            communication_intent = None
+            communication_intent_audit = None
 
         confidence = intention.confidence if not used_fallback else 1.0
         plan = ActionPlan(
@@ -458,6 +474,8 @@ class CommandPlanner:
                 selection_codes=(command_type.lower(), PLANNER_POLICY_VERSION),
                 candidate_count=1,
             ),
+            communication_intent=communication_intent,
+            communication_intent_audit=communication_intent_audit,
         )
         band = (
             "high" if confidence >= 0.75 else "medium" if confidence >= 0.4 else "low"
@@ -1178,6 +1196,15 @@ def _resolve_future(
     return None
 
 
+@dataclass(frozen=True, slots=True)
+class _StrategyHold:
+    """Planner-local carrier so omission can keep an intent beside Wait."""
+
+    command: AgentCommand | None
+    intent: object | None
+    audit: object | None
+
+
 def _compile_command(
     future: ImaginedFuture,
     observation: Observation,
@@ -1188,7 +1215,11 @@ def _compile_command(
     snapshot: SubjectiveSnapshot | None = None,
     emotional_state: EmotionalStateEvaluation | None = None,
     theory_of_mind: object | None = None,
-) -> AgentCommand | None:
+    goal_board: GoalBoard | None = None,
+    self_model: object | None = None,
+    strategy_mode: object | None = None,
+    strategy_policy: object | None = None,
+) -> AgentCommand | _StrategyHold | None:
     direction = future.direction
     target = future.target_entity_id
     if direction is ActionDirection.WAIT:
@@ -1284,10 +1315,22 @@ def _compile_command(
             snapshot_memories=(() if snapshot is None else snapshot.memories),
             emotional_state=emotional_state,
             mind=theory_of_mind,
+            strategy_mode=strategy_mode,
+            goal_board=goal_board,
+            relationships=None if snapshot is None else snapshot.relationships,
+            risks=future.risks,
+            self_model=self_model,
+            strategy_policy=strategy_policy,
         )
-        if decision is None:
+        if decision is None or (
+            decision.command is None and getattr(decision, "intent", None) is None
+        ):
             return None
-        return decision.command
+        intent = getattr(decision, "intent", None)
+        audit = getattr(decision, "audit", None)
+        if intent is None:
+            return decision.command
+        return _StrategyHold(decision.command, intent, audit)
     if direction is ActionDirection.HELP:
         helped = _resolve_social_entity(target, observation)
         if helped is None:

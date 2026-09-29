@@ -13,6 +13,10 @@ from dataclasses import dataclass
 from enum import StrEnum
 from typing import Final
 
+from agents.cognition.communication_strategy import (
+    CommunicationStrategyPolicy,
+    default_communication_strategy_policy,
+)
 from agents.cognition.contracts import (
     EmotionalStateAppraiser,
     FutureImagination,
@@ -157,6 +161,17 @@ class CognitionCounterfactualMode(StrEnum):
     LLM_ASSISTED = "llm_assisted"
 
 
+class CognitionCommunicationStrategyMode(StrEnum):
+    """Per-utterance strategy. Disabled leaves commands and audits unchanged.
+
+    Lockstep with ``simulation.CommunicationStrategyMode``. This is not a
+    ``V2CapabilityFlags`` slot.
+    """
+
+    DISABLED = "disabled"
+    DETERMINISTIC = "deterministic"
+
+
 def _unit_interval(name: str, value: object) -> float:
     if isinstance(value, bool) or not isinstance(value, (int, float)):
         raise ValueError(f"{name}: not_unit_interval")
@@ -223,6 +238,10 @@ class CognitionLoopConfig:
         CognitionCounterfactualMode.DISABLED
     )
     counterfactual_policy: CounterfactualPolicy | None = None
+    communication_strategy_mode: CognitionCommunicationStrategyMode = (
+        CognitionCommunicationStrategyMode.DISABLED
+    )
+    communication_strategy_policy: CommunicationStrategyPolicy | None = None
     drive_overrides: tuple[CognitionDriveOverride, ...] = ()
     memory_policy_version: str = MEMORY_POLICY_VERSION
     imagination_policy_version: str = IMAGINATION_POLICY_VERSION
@@ -328,6 +347,37 @@ class CognitionLoopConfig:
             )
             raise TypeError(
                 "counterfactual_policy must be CounterfactualPolicy or None"
+            )
+        if type(self.communication_strategy_mode) is not (
+            CognitionCommunicationStrategyMode
+        ):
+            _LOG.error(
+                "invalid_enum path=communication_strategy_mode "
+                "reason_code=invalid_mode"
+            )
+            raise TypeError(
+                "communication_strategy_mode must be CognitionCommunicationStrategyMode"
+            )
+        if self.communication_strategy_mode is (
+            CognitionCommunicationStrategyMode.DISABLED
+        ):
+            object.__setattr__(self, "communication_strategy_policy", None)
+        elif self.communication_strategy_policy is None:
+            object.__setattr__(
+                self,
+                "communication_strategy_policy",
+                default_communication_strategy_policy(),
+            )
+        elif type(self.communication_strategy_policy) is not (
+            CommunicationStrategyPolicy
+        ):
+            _LOG.error(
+                "invalid_enum path=communication_strategy_policy "
+                "reason_code=invalid_type"
+            )
+            raise TypeError(
+                "communication_strategy_policy must be "
+                "CommunicationStrategyPolicy or None"
             )
         if (
             self.reflection_policy is not None
@@ -460,6 +510,12 @@ class CognitionLoopConfig:
                 None
                 if self.counterfactual_policy is None
                 else self.counterfactual_policy.version
+            ),
+            "communication_strategy_mode": self.communication_strategy_mode.value,
+            "communication_strategy_policy_version": (
+                None
+                if self.communication_strategy_policy is None
+                else self.communication_strategy_policy.version
             ),
             "imagination_mode": self.imagination_mode.value,
             "imagination_policy_version": self.imagination_policy_version,
@@ -643,4 +699,6 @@ def build_cognitive_loop(
         prospective_policy=resolved.prospective_policy,
         counterfactual_mode=resolved.counterfactual_mode,
         counterfactual_policy=resolved.counterfactual_policy,
+        communication_strategy_mode=resolved.communication_strategy_mode,
+        communication_strategy_policy=resolved.communication_strategy_policy,
     )

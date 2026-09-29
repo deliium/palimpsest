@@ -25,8 +25,10 @@ from simulation.runner_models import (
     RUNNER_SCHEMA_VERSION_V6,
     RUNNER_SCHEMA_VERSION_V7,
     RUNNER_SCHEMA_VERSION_V8,
+    RUNNER_SCHEMA_VERSION_V9,
     AgentCognitionSpec,
     AgentRunnerSpec,
+    CommunicationStrategyMode,
     CounterfactualMode,
     DriveOverrideSpec,
     ImaginationMode,
@@ -62,6 +64,9 @@ def _config(
     ),
     reflection_mode: ReflectionMode = ReflectionMode.DISABLED,
     counterfactual_mode: CounterfactualMode = CounterfactualMode.DISABLED,
+    communication_strategy_mode: CommunicationStrategyMode = (
+        CommunicationStrategyMode.DISABLED
+    ),
 ) -> SimulationRunnerConfig:
     locations = (make_location(),)
     bodies = tuple(alive_body(f"body-{i + 1}") for i in range(agent_count))
@@ -81,6 +86,7 @@ def _config(
                 prospective_mode=prospective_mode,
                 reflection_mode=reflection_mode,
                 counterfactual_mode=counterfactual_mode,
+                communication_strategy_mode=communication_strategy_mode,
             ),
         )
         for i in range(agent_count)
@@ -568,3 +574,60 @@ async def test_v8_counterfactual_config_constructs_with_policy(caplog) -> None:
         "policy_version=counterfactual-v1" in messages
     )
     assert "direction_bonus" not in messages
+
+
+@pytest.mark.asyncio
+async def test_v9_communication_strategy_config_constructs_with_policy(
+    caplog,
+) -> None:
+    caplog.set_level(logging.DEBUG, logger="simulation.runner")
+    with pytest.raises(ValueError, match="communication_strategy_mode_requires_v9"):
+        _config(
+            communication_strategy_mode=CommunicationStrategyMode.DETERMINISTIC,
+        )
+    enabled = _config(
+        schema_version=RUNNER_SCHEMA_VERSION_V9,
+        communication_strategy_mode=CommunicationStrategyMode.DETERMINISTIC,
+        counterfactual_mode=CounterfactualMode.DETERMINISTIC,
+        reflection_mode=ReflectionMode.DETERMINISTIC,
+        prospective_mode=ProspectiveImaginationMode.DETERMINISTIC,
+    )
+    async with await SimulationRunner.from_config(
+        enabled, run_id=RunId("run-v9")
+    ) as runner:
+        assert runner.runtimes
+    from simulation.runner import _cognition_config_for
+    from simulation.runner_models import V2CapabilityFlags
+
+    built = _cognition_config_for(
+        enabled.agents[0].cognition,
+        mortality_mode=MortalityMode.ENABLED,
+        capability_flags=V2CapabilityFlags(),
+    )
+    assert built.communication_strategy_mode.value == "deterministic"
+    assert built.communication_strategy_policy is not None
+    assert built.communication_strategy_policy.version == "communication-strategy.v1"
+    strategy_logs = [
+        record.getMessage()
+        for record in caplog.records
+        if "cognition_config_communication_strategy_mode" in record.getMessage()
+    ]
+    assert any(
+        "mode=deterministic policy_version=communication-strategy.v1" in line
+        for line in strategy_logs
+    )
+    assert all("0.4" not in line and "0.55" not in line for line in strategy_logs)
+    blocked = _config(
+        schema_version=RUNNER_SCHEMA_VERSION_V9,
+        communication_strategy_mode=CommunicationStrategyMode.DETERMINISTIC,
+        counterfactual_mode=CounterfactualMode.DETERMINISTIC,
+    )
+    from dataclasses import replace
+
+    flagged = replace(
+        blocked,
+        capability_flags=V2CapabilityFlags(multi_hop_testimony_tracking=True),
+    )
+    with pytest.raises(RunnerConstructionError) as caught:
+        await SimulationRunner.from_config(flagged, run_id=RunId("run-v9-unowned"))
+    assert caught.value.code is RunnerConstructionErrorCode.CAPABILITY_UNIMPLEMENTED

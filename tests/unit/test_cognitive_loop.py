@@ -210,6 +210,9 @@ async def test_loop_runs_exact_stage_order_once(
             emotional_state=None,
             causal_world_model=None,
             theory_of_mind=None,
+            self_model=None,
+            strategy_mode=None,
+            strategy_policy=None,
         ):  # type: ignore[no-untyped-def]
             calls.append("planning")
             return await super().plan(
@@ -291,6 +294,9 @@ async def test_component_replacement_changes_command() -> None:
             emotional_state=None,
             causal_world_model=None,
             theory_of_mind=None,
+            self_model=None,
+            strategy_mode=None,
+            strategy_policy=None,
         ):  # type: ignore[no-untyped-def]
             return ActionPlan(
                 owner_id=loop_input.agent_id,

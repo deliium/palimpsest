@@ -463,6 +463,9 @@ class Planner(Protocol):
         emotional_state: EmotionalStateEvaluation | None = None,
         causal_world_model: object | None = None,
         theory_of_mind: object | None = None,
+        self_model: object | None = None,
+        strategy_mode: object | None = None,
+        strategy_policy: object | None = None,
     ) -> ActionPlan: ...
 
 
@@ -480,6 +483,13 @@ class SocialMessagePolicy(Protocol):
         snapshot_memories: object = (),
         emotional_state: EmotionalStateEvaluation | None = None,
         mind: object | None = None,
+        strategy_mode: object | None = None,
+        goal_board: object | None = None,
+        relationships: object | None = None,
+        risks: object | None = None,
+        self_model: object | None = None,
+        norms: object | None = None,
+        strategy_policy: object | None = None,
     ) -> object | None: ...
 
 

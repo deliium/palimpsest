@@ -3303,6 +3303,8 @@ class ActionPlan:
     command: AgentCommand
     confidence: float
     decision_metadata: DecisionMetadata = DecisionMetadata()
+    communication_intent: object | None = None
+    communication_intent_audit: object | None = None
 
     def __post_init__(self) -> None:
         if type(self.owner_id) is not AgentId:
@@ -3315,6 +3317,27 @@ class ActionPlan:
         )
         if type(self.decision_metadata) is not DecisionMetadata:
             raise TypeError("ActionPlan.decision_metadata must be DecisionMetadata")
+        if self.communication_intent is not None or (
+            self.communication_intent_audit is not None
+        ):
+            from agents.cognition.communication_strategy import (
+                CommunicationIntent,
+                CommunicationIntentAudit,
+            )
+
+            if self.communication_intent is not None and (
+                type(self.communication_intent) is not CommunicationIntent
+            ):
+                raise TypeError("communication_intent must be CommunicationIntent")
+            if self.communication_intent_audit is not None and (
+                type(self.communication_intent_audit) is not CommunicationIntentAudit
+            ):
+                raise TypeError(
+                    "communication_intent_audit must be CommunicationIntentAudit"
+                )
+            intent = self.communication_intent
+            if intent is not None and intent.owner_id != self.owner_id:
+                raise ValueError("owner_mismatch")
 
     def __repr__(self) -> str:
         return (
@@ -3597,6 +3620,8 @@ class CognitiveLoopProposal:
     final_confidence: float
     causal_world_model: object | None = None
     theory_of_mind: object | None = None
+    communication_intent: object | None = None
+    communication_intent_audit: object | None = None
 
     def __post_init__(self) -> None:
         object.__setattr__(
@@ -3715,6 +3740,8 @@ class CognitiveLoopResult:
     identity_dissonance: tuple[IdentityDissonanceNotice, ...] = ()
     causal_world_model: object | None = None
     theory_of_mind: object | None = None
+    communication_intent: object | None = None
+    communication_intent_audit: object | None = None
 
     def __post_init__(self) -> None:
         object.__setattr__(

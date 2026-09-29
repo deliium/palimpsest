@@ -433,3 +433,57 @@ def test_counterfactual_mode_requires_v8_and_v7_stays_prospective(
     messages = " ".join(record.getMessage() for record in caplog.records)
     assert "reason_code=counterfactual_mode_requires_v8" in messages
     assert "reason_code=v8_requires_counterfactual" in messages
+
+
+def test_communication_strategy_mode_requires_v9(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    import logging
+    from dataclasses import replace
+
+    from simulation.runner_models import (
+        RUNNER_SCHEMA_VERSION_V4,
+        RUNNER_SCHEMA_VERSION_V8,
+        RUNNER_SCHEMA_VERSION_V9,
+        CommunicationStrategyMode,
+        CounterfactualMode,
+    )
+
+    base = _config()
+
+    def configured(schema_version: str, **cognition: object) -> SimulationRunnerConfig:
+        agent = base.agents[0]
+        spec = replace(agent.cognition, **cognition)
+        return replace(
+            base,
+            agents=(replace(agent, cognition=spec),),
+            schema_version=schema_version,
+        )
+
+    caplog.set_level(logging.ERROR, logger="simulation.runner_models")
+    with pytest.raises(ValueError, match="communication_strategy_mode_requires_v9"):
+        configured(
+            RUNNER_SCHEMA_VERSION_V4,
+            communication_strategy_mode=CommunicationStrategyMode.DETERMINISTIC,
+        )
+    with pytest.raises(ValueError, match="communication_strategy_mode_requires_v9"):
+        configured(
+            RUNNER_SCHEMA_VERSION_V8,
+            counterfactual_mode=CounterfactualMode.DETERMINISTIC,
+            communication_strategy_mode=CommunicationStrategyMode.DETERMINISTIC,
+        )
+    with pytest.raises(ValueError, match="v9_requires_communication_strategy"):
+        configured(RUNNER_SCHEMA_VERSION_V9)
+    enabled = configured(
+        RUNNER_SCHEMA_VERSION_V9,
+        communication_strategy_mode=CommunicationStrategyMode.DETERMINISTIC,
+        counterfactual_mode=CounterfactualMode.DETERMINISTIC,
+    )
+    assert (
+        enabled.agents[0].cognition.communication_strategy_mode
+        is CommunicationStrategyMode.DETERMINISTIC
+    )
+    assert enabled.schema_version == RUNNER_SCHEMA_VERSION_V9
+    messages = " ".join(record.getMessage() for record in caplog.records)
+    assert "reason_code=communication_strategy_mode_requires_v9" in messages
+    assert "reason_code=v9_requires_communication_strategy" in messages
