@@ -17,6 +17,7 @@ from simulation.runner_models import (
     RUNNER_SCHEMA_VERSION_V7,
     RUNNER_SCHEMA_VERSION_V8,
     RUNNER_SCHEMA_VERSION_V9,
+    RUNNER_SCHEMA_VERSION_V10,
     AgentCognitionSpec,
     AgentRunnerSpec,
     CognitionTraceDetail,
@@ -29,6 +30,7 @@ from simulation.runner_models import (
     MortalityMode,
     ProspectiveImaginationMode,
     ReflectionMode,
+    ReputationMode,
     RunnerStopPolicy,
     SimulationRunnerConfig,
     V2CapabilityFlags,
@@ -471,6 +473,7 @@ def _configured(
     communication_strategy_mode: CommunicationStrategyMode = (
         CommunicationStrategyMode.DISABLED
     ),
+    reputation_mode: ReputationMode = ReputationMode.DISABLED,
     name: str = "Ada",
 ) -> SimulationRunnerConfig:
     base = _config()
@@ -492,6 +495,7 @@ def _configured(
                     prospective_mode=prospective_mode,
                     counterfactual_mode=counterfactual_mode,
                     communication_strategy_mode=communication_strategy_mode,
+                    reputation_mode=reputation_mode,
                 ),
                 name=name,
                 initial_goals=agent.initial_goals,
@@ -748,4 +752,48 @@ def test_communication_strategy_mode_round_trips_only_on_v9() -> None:
         _configured(
             schema_version=RUNNER_SCHEMA_VERSION_V9,
             communication_strategy_mode=CommunicationStrategyMode.DISABLED,
+        )
+
+
+def test_reputation_mode_round_trips_only_on_v10() -> None:
+    enabled = _configured(
+        schema_version=RUNNER_SCHEMA_VERSION_V10,
+        counterfactual_mode=CounterfactualMode.DETERMINISTIC,
+        reflection_mode=ReflectionMode.DETERMINISTIC,
+        prospective_mode=ProspectiveImaginationMode.DETERMINISTIC,
+        consolidation_mode=ConsolidationMode.DETERMINISTIC,
+        communication_strategy_mode=CommunicationStrategyMode.DETERMINISTIC,
+        reputation_mode=ReputationMode.DETERMINISTIC,
+    )
+    encoded = encode_runner_config(enabled)
+    document = json.loads(encoded.decode("utf-8"))
+    assert document["schema_version"] == "runner-config-v10"
+    cognition = document["agents"][0]["cognition"]
+    assert cognition["reputation_mode"] == "deterministic"
+    assert cognition["communication_strategy_mode"] == "deterministic"
+    assert "speech_rate" not in cognition
+    assert "reading_threshold" not in cognition
+    assert decode_runner_config(encoded) == enabled
+    strategy_only = _configured(
+        schema_version=RUNNER_SCHEMA_VERSION_V9,
+        communication_strategy_mode=CommunicationStrategyMode.DETERMINISTIC,
+    )
+    strategy_doc = json.loads(encode_runner_config(strategy_only).decode("utf-8"))
+    assert strategy_doc["schema_version"] == "runner-config-v9"
+    assert "reputation_mode" not in strategy_doc["agents"][0]["cognition"]
+    disabled = _config()
+    disabled_doc = json.loads(encode_runner_config(disabled).decode("utf-8"))
+    assert disabled_doc["schema_version"] == RUNNER_SCHEMA_VERSION
+    assert "reputation_mode" not in disabled_doc["agents"][0]["cognition"]
+    with pytest.raises(ValueError, match="reputation_mode_requires_v10"):
+        _configured(
+            schema_version=RUNNER_SCHEMA_VERSION_V9,
+            communication_strategy_mode=CommunicationStrategyMode.DETERMINISTIC,
+            reputation_mode=ReputationMode.DETERMINISTIC,
+        )
+    with pytest.raises(ValueError, match="v10_requires_reputation"):
+        _configured(
+            schema_version=RUNNER_SCHEMA_VERSION_V10,
+            reputation_mode=ReputationMode.DISABLED,
+            communication_strategy_mode=CommunicationStrategyMode.DETERMINISTIC,
         )

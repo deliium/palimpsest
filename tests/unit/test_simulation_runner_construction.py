@@ -26,6 +26,7 @@ from simulation.runner_models import (
     RUNNER_SCHEMA_VERSION_V7,
     RUNNER_SCHEMA_VERSION_V8,
     RUNNER_SCHEMA_VERSION_V9,
+    RUNNER_SCHEMA_VERSION_V10,
     AgentCognitionSpec,
     AgentRunnerSpec,
     CommunicationStrategyMode,
@@ -36,6 +37,7 @@ from simulation.runner_models import (
     MortalityMode,
     ProspectiveImaginationMode,
     ReflectionMode,
+    ReputationMode,
     RunnerPersistenceSpec,
     RunnerStopPolicy,
     SimulationRunnerConfig,
@@ -67,6 +69,7 @@ def _config(
     communication_strategy_mode: CommunicationStrategyMode = (
         CommunicationStrategyMode.DISABLED
     ),
+    reputation_mode: ReputationMode = ReputationMode.DISABLED,
 ) -> SimulationRunnerConfig:
     locations = (make_location(),)
     bodies = tuple(alive_body(f"body-{i + 1}") for i in range(agent_count))
@@ -87,6 +90,7 @@ def _config(
                 reflection_mode=reflection_mode,
                 counterfactual_mode=counterfactual_mode,
                 communication_strategy_mode=communication_strategy_mode,
+                reputation_mode=reputation_mode,
             ),
         )
         for i in range(agent_count)
@@ -630,4 +634,61 @@ async def test_v9_communication_strategy_config_constructs_with_policy(
     )
     with pytest.raises(RunnerConstructionError) as caught:
         await SimulationRunner.from_config(flagged, run_id=RunId("run-v9-unowned"))
+    assert caught.value.code is RunnerConstructionErrorCode.CAPABILITY_UNIMPLEMENTED
+
+
+@pytest.mark.asyncio
+async def test_v10_reputation_config_constructs_without_a_new_flag(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    caplog.set_level(logging.DEBUG, logger="simulation.runner")
+    disabled = _config()
+    assert disabled.schema_version == "runner-config-v4"
+    assert disabled.agents[0].cognition.reputation_mode is ReputationMode.DISABLED
+    with pytest.raises(ValueError, match="reputation_mode_requires_v10"):
+        _config(reputation_mode=ReputationMode.DETERMINISTIC)
+    enabled = _config(
+        schema_version=RUNNER_SCHEMA_VERSION_V10,
+        reputation_mode=ReputationMode.DETERMINISTIC,
+        communication_strategy_mode=CommunicationStrategyMode.DETERMINISTIC,
+        counterfactual_mode=CounterfactualMode.DETERMINISTIC,
+    )
+    async with await SimulationRunner.from_config(
+        enabled, run_id=RunId("run-v10")
+    ) as runner:
+        assert runner.runtimes
+    from simulation.runner import _cognition_config_for
+    from simulation.runner_models import V2CapabilityFlags
+
+    built = _cognition_config_for(
+        enabled.agents[0].cognition,
+        mortality_mode=MortalityMode.ENABLED,
+        capability_flags=V2CapabilityFlags(),
+    )
+    assert built.reputation_mode.value == "deterministic"
+    assert built.reputation_policy is not None
+    assert built.reputation_policy.version == "reputation-formation.v1"
+    assert built.communication_strategy_mode.value == "deterministic"
+    reputation_logs = [
+        record.getMessage()
+        for record in caplog.records
+        if "cognition_config_reputation_mode" in record.getMessage()
+    ]
+    assert any(
+        "mode=deterministic policy_version=reputation-formation.v1" in line
+        for line in reputation_logs
+    )
+    assert all("0.4" not in line and "0.5" not in line for line in reputation_logs)
+    flagged = _config(
+        schema_version=RUNNER_SCHEMA_VERSION_V10,
+        reputation_mode=ReputationMode.DETERMINISTIC,
+    )
+    from dataclasses import replace
+
+    unowned = replace(
+        flagged,
+        capability_flags=V2CapabilityFlags(multi_hop_testimony_tracking=True),
+    )
+    with pytest.raises(RunnerConstructionError) as caught:
+        await SimulationRunner.from_config(unowned, run_id=RunId("run-v10-unowned"))
     assert caught.value.code is RunnerConstructionErrorCode.CAPABILITY_UNIMPLEMENTED

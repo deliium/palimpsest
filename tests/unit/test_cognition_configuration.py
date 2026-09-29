@@ -285,3 +285,22 @@ def test_communication_strategy_mode_defaults_off() -> None:
     )
     assert on.communication_strategy_policy is not None
     assert on.communication_strategy_policy.version == "communication-strategy.v1"
+
+
+def test_reputation_mode_defaults_off() -> None:
+    from agents.cognition.configuration import CognitionReputationMode
+
+    off = CognitionLoopConfig()
+    assert off.reputation_mode is CognitionReputationMode.DISABLED
+    assert off.reputation_policy is None
+    material = off.condition_fingerprint_material()
+    assert material["reputation_mode"] == "disabled"
+    assert material["reputation_policy_version"] is None
+    on = CognitionLoopConfig(reputation_mode=CognitionReputationMode.DETERMINISTIC)
+    assert on.reputation_policy is not None
+    assert on.reputation_policy.version == "reputation-formation.v1"
+    assert on.communication_strategy_mode.value == "disabled"
+    assert (
+        on.condition_fingerprint_material()["reputation_policy_version"]
+        == "reputation-formation.v1"
+    )

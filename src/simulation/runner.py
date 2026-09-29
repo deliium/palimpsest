@@ -29,6 +29,7 @@ from agents.cognition.configuration import (
     CognitionMortalityAppraisalMode,
     CognitionProspectiveMode,
     CognitionReflectionMode,
+    CognitionReputationMode,
     CognitionTheoryOfMindMode,
     CognitionWorldModelMode,
     build_cognitive_loop,
@@ -41,6 +42,7 @@ from agents.cognition.models import ComponentKind
 from agents.cognition.prospective import default_prospective_policy
 from agents.cognition.reconstruction import LLMMemoryReconstructor
 from agents.cognition.reflection import default_reflection_policy
+from agents.cognition.reputation import default_reputation_policy
 from agents.models import Agent, AgentId, Goal, GoalStatus
 from llm.factory import (
     DeterministicFakeLLMProvider,
@@ -538,6 +540,15 @@ def _cognition_config_for(
         strategy_mode.value,
         None if strategy_policy is None else strategy_policy.version,
     )
+    reputation_mode = CognitionReputationMode(spec.reputation_mode.value)
+    reputation_policy = None
+    if reputation_mode is CognitionReputationMode.DETERMINISTIC:
+        reputation_policy = default_reputation_policy()
+    _LOG.debug(
+        "cognition_config_reputation_mode mode=%s policy_version=%s",
+        reputation_mode.value,
+        None if reputation_policy is None else reputation_policy.version,
+    )
     return CognitionLoopConfig(
         memory_mode=CognitionMemoryMode(spec.memory_mode.value),
         imagination_mode=CognitionImaginationMode(spec.imagination_mode.value),
@@ -561,6 +572,8 @@ def _cognition_config_for(
         counterfactual_policy=counterfactual_policy,
         communication_strategy_mode=strategy_mode,
         communication_strategy_policy=strategy_policy,
+        reputation_mode=reputation_mode,
+        reputation_policy=reputation_policy,
         drive_overrides=tuple(
             CognitionDriveOverride(
                 kind=item.kind,

@@ -31,6 +31,7 @@ from simulation.runner_models import (
     RUNNER_SCHEMA_VERSION_V7,
     RUNNER_SCHEMA_VERSION_V8,
     RUNNER_SCHEMA_VERSION_V9,
+    RUNNER_SCHEMA_VERSION_V10,
     SUPPORTED_RUNNER_SCHEMA_VERSIONS,
     AgentCognitionSpec,
     AgentRunnerSpec,
@@ -51,6 +52,7 @@ from simulation.runner_models import (
     ProspectiveImaginationMode,
     RecordingPolicy,
     ReflectionMode,
+    ReputationMode,
     RunnerCheckpointPolicy,
     RunnerConfigDiagnostics,
     RunnerPersistenceSpec,
@@ -243,6 +245,10 @@ _COGNITION_KEYS_V9: Final[set[str]] = {
     *_COGNITION_KEYS_V8,
     "communication_strategy_mode",
 }
+_COGNITION_KEYS_V10: Final[set[str]] = {
+    *_COGNITION_KEYS_V9,
+    "reputation_mode",
+}
 _COGNITION_SCHEMA_CONSOLIDATION: Final[frozenset[str]] = frozenset(
     {
         RUNNER_SCHEMA_VERSION_V5,
@@ -250,6 +256,7 @@ _COGNITION_SCHEMA_CONSOLIDATION: Final[frozenset[str]] = frozenset(
         RUNNER_SCHEMA_VERSION_V7,
         RUNNER_SCHEMA_VERSION_V8,
         RUNNER_SCHEMA_VERSION_V9,
+        RUNNER_SCHEMA_VERSION_V10,
     }
 )
 _COGNITION_SCHEMA_REFLECTION: Final[frozenset[str]] = frozenset(
@@ -258,6 +265,7 @@ _COGNITION_SCHEMA_REFLECTION: Final[frozenset[str]] = frozenset(
         RUNNER_SCHEMA_VERSION_V7,
         RUNNER_SCHEMA_VERSION_V8,
         RUNNER_SCHEMA_VERSION_V9,
+        RUNNER_SCHEMA_VERSION_V10,
     }
 )
 _COGNITION_SCHEMA_PROSPECTIVE: Final[frozenset[str]] = frozenset(
@@ -265,10 +273,18 @@ _COGNITION_SCHEMA_PROSPECTIVE: Final[frozenset[str]] = frozenset(
         RUNNER_SCHEMA_VERSION_V7,
         RUNNER_SCHEMA_VERSION_V8,
         RUNNER_SCHEMA_VERSION_V9,
+        RUNNER_SCHEMA_VERSION_V10,
     }
 )
 _COGNITION_SCHEMA_COUNTERFACTUAL: Final[frozenset[str]] = frozenset(
-    {RUNNER_SCHEMA_VERSION_V8, RUNNER_SCHEMA_VERSION_V9}
+    {
+        RUNNER_SCHEMA_VERSION_V8,
+        RUNNER_SCHEMA_VERSION_V9,
+        RUNNER_SCHEMA_VERSION_V10,
+    }
+)
+_COGNITION_SCHEMA_STRATEGY: Final[frozenset[str]] = frozenset(
+    {RUNNER_SCHEMA_VERSION_V9, RUNNER_SCHEMA_VERSION_V10}
 )
 
 
@@ -292,15 +308,21 @@ def _encode_cognition(
         payload["prospective_mode"] = value.prospective_mode.value
     if schema_version in _COGNITION_SCHEMA_COUNTERFACTUAL:
         payload["counterfactual_mode"] = value.counterfactual_mode.value
-    if schema_version == RUNNER_SCHEMA_VERSION_V9:
-        payload["communication_strategy_mode"] = value.communication_strategy_mode.value
+    if schema_version in _COGNITION_SCHEMA_STRATEGY:
+        payload["communication_strategy_mode"] = (
+            value.communication_strategy_mode.value
+        )
+    if schema_version == RUNNER_SCHEMA_VERSION_V10:
+        payload["reputation_mode"] = value.reputation_mode.value
     return payload
 
 
 def _decode_cognition(
     data: dict[str, Any], *, path: str, schema_version: str
 ) -> AgentCognitionSpec:
-    if schema_version == RUNNER_SCHEMA_VERSION_V9:
+    if schema_version == RUNNER_SCHEMA_VERSION_V10:
+        _require_keys(data, _COGNITION_KEYS_V10, path=path)
+    elif schema_version == RUNNER_SCHEMA_VERSION_V9:
         _require_keys(data, _COGNITION_KEYS_V9, path=path)
     elif schema_version == RUNNER_SCHEMA_VERSION_V8:
         _require_keys(data, _COGNITION_KEYS_V8, path=path)
@@ -317,6 +339,7 @@ def _decode_cognition(
     prospective_mode = ProspectiveImaginationMode.DISABLED
     counterfactual_mode = CounterfactualMode.DISABLED
     communication_strategy_mode = CommunicationStrategyMode.DISABLED
+    reputation_mode = ReputationMode.DISABLED
     if schema_version in _COGNITION_SCHEMA_CONSOLIDATION:
         try:
             consolidation_mode = ConsolidationMode(
@@ -361,7 +384,7 @@ def _decode_cognition(
             raise RunnerSerializationError(
                 "invalid_enum", f"{path}.counterfactual_mode"
             ) from exc
-    if schema_version == RUNNER_SCHEMA_VERSION_V9:
+    if schema_version in _COGNITION_SCHEMA_STRATEGY:
         try:
             communication_strategy_mode = CommunicationStrategyMode(
                 _str_field(data, "communication_strategy_mode", path=path)
@@ -371,6 +394,17 @@ def _decode_cognition(
         except ValueError as exc:
             raise RunnerSerializationError(
                 "invalid_enum", f"{path}.communication_strategy_mode"
+            ) from exc
+    if schema_version == RUNNER_SCHEMA_VERSION_V10:
+        try:
+            reputation_mode = ReputationMode(
+                _str_field(data, "reputation_mode", path=path)
+            )
+        except RunnerSerializationError:
+            raise
+        except ValueError as exc:
+            raise RunnerSerializationError(
+                "invalid_enum", f"{path}.reputation_mode"
             ) from exc
     overrides_raw = data["drive_overrides"]
     if not isinstance(overrides_raw, list):
@@ -398,6 +432,7 @@ def _decode_cognition(
             prospective_mode=prospective_mode,
             counterfactual_mode=counterfactual_mode,
             communication_strategy_mode=communication_strategy_mode,
+            reputation_mode=reputation_mode,
         )
     except RunnerSerializationError:
         raise
@@ -420,6 +455,7 @@ def _encode_agent(value: AgentRunnerSpec, *, schema_version: str) -> dict[str, A
         RUNNER_SCHEMA_VERSION_V7,
         RUNNER_SCHEMA_VERSION_V8,
         RUNNER_SCHEMA_VERSION_V9,
+        RUNNER_SCHEMA_VERSION_V10,
     }:
         assert value.name is not None
         payload["name"] = value.name
@@ -853,6 +889,7 @@ def _encode_runner_document(config: SimulationRunnerConfig) -> dict[str, Any]:
         RUNNER_SCHEMA_VERSION_V7,
         RUNNER_SCHEMA_VERSION_V8,
         RUNNER_SCHEMA_VERSION_V9,
+        RUNNER_SCHEMA_VERSION_V10,
     }:
         document["capability_flags"] = _encode_capability_flags(config.capability_flags)
     if config.schema_version in {
@@ -862,6 +899,7 @@ def _encode_runner_document(config: SimulationRunnerConfig) -> dict[str, Any]:
         RUNNER_SCHEMA_VERSION_V7,
         RUNNER_SCHEMA_VERSION_V8,
         RUNNER_SCHEMA_VERSION_V9,
+        RUNNER_SCHEMA_VERSION_V10,
     }:
         document["cognition_trace"] = _encode_cognition_trace(config.cognition_trace)
     if config.experiment is not None:
@@ -908,6 +946,7 @@ def decode_runner_config(payload: bytes) -> SimulationRunnerConfig:
         RUNNER_SCHEMA_VERSION_V7,
         RUNNER_SCHEMA_VERSION_V8,
         RUNNER_SCHEMA_VERSION_V9,
+        RUNNER_SCHEMA_VERSION_V10,
     }:
         root_keys = _RUNNER_ROOT_KEYS_V4
     elif schema_version == RUNNER_SCHEMA_VERSION_V3:
@@ -987,6 +1026,7 @@ def decode_runner_config(payload: bytes) -> SimulationRunnerConfig:
         RUNNER_SCHEMA_VERSION_V7,
         RUNNER_SCHEMA_VERSION_V8,
         RUNNER_SCHEMA_VERSION_V9,
+        RUNNER_SCHEMA_VERSION_V10,
     }:
         capability_flags = _decode_capability_flags(
             data["capability_flags"], path="$.capability_flags"
@@ -1001,6 +1041,7 @@ def decode_runner_config(payload: bytes) -> SimulationRunnerConfig:
         RUNNER_SCHEMA_VERSION_V7,
         RUNNER_SCHEMA_VERSION_V8,
         RUNNER_SCHEMA_VERSION_V9,
+        RUNNER_SCHEMA_VERSION_V10,
     }:
         cognition_trace = _decode_cognition_trace(
             data["cognition_trace"], path="$.cognition_trace"

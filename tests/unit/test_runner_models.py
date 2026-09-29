@@ -487,3 +487,52 @@ def test_communication_strategy_mode_requires_v9(
     messages = " ".join(record.getMessage() for record in caplog.records)
     assert "reason_code=communication_strategy_mode_requires_v9" in messages
     assert "reason_code=v9_requires_communication_strategy" in messages
+
+
+def test_reputation_mode_requires_v10(caplog: pytest.LogCaptureFixture) -> None:
+    import logging
+    from dataclasses import replace
+
+    from simulation.runner_models import (
+        RUNNER_SCHEMA_VERSION_V9,
+        RUNNER_SCHEMA_VERSION_V10,
+        CommunicationStrategyMode,
+        ReputationMode,
+    )
+
+    base = _config()
+
+    def configured(schema_version: str, **cognition: object) -> SimulationRunnerConfig:
+        agent = base.agents[0]
+        spec = replace(agent.cognition, **cognition)
+        return replace(
+            base,
+            agents=(replace(agent, cognition=spec),),
+            schema_version=schema_version,
+        )
+
+    caplog.set_level(logging.ERROR, logger="simulation.runner_models")
+    with pytest.raises(ValueError, match="reputation_mode_requires_v10"):
+        configured(
+            RUNNER_SCHEMA_VERSION_V9,
+            communication_strategy_mode=CommunicationStrategyMode.DETERMINISTIC,
+            reputation_mode=ReputationMode.DETERMINISTIC,
+        )
+    with pytest.raises(ValueError, match="v10_requires_reputation"):
+        configured(
+            RUNNER_SCHEMA_VERSION_V10,
+            communication_strategy_mode=CommunicationStrategyMode.DETERMINISTIC,
+        )
+    enabled = configured(
+        RUNNER_SCHEMA_VERSION_V10,
+        reputation_mode=ReputationMode.DETERMINISTIC,
+    )
+    assert enabled.schema_version == "runner-config-v10"
+    assert enabled.agents[0].cognition.reputation_mode is ReputationMode.DETERMINISTIC
+    assert (
+        enabled.agents[0].cognition.communication_strategy_mode
+        is CommunicationStrategyMode.DISABLED
+    )
+    messages = " ".join(record.getMessage() for record in caplog.records)
+    assert "reason_code=reputation_mode_requires_v10" in messages
+    assert "reason_code=v10_requires_reputation" in messages

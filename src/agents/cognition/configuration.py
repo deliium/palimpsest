@@ -32,6 +32,10 @@ from agents.cognition.epistemic import EpistemicPolicy, default_epistemic_policy
 from agents.cognition.loop import CognitiveLoop
 from agents.cognition.prospective import ProspectivePolicy, default_prospective_policy
 from agents.cognition.reflection import ReflectionPolicy
+from agents.cognition.reputation import (
+    ReputationFormationPolicy,
+    default_reputation_policy,
+)
 from agents.cognition.theory_of_mind import (
     TheoryOfMindPolicy,
     default_theory_of_mind_policy,
@@ -172,6 +176,17 @@ class CognitionCommunicationStrategyMode(StrEnum):
     DETERMINISTIC = "deterministic"
 
 
+class CognitionReputationMode(StrEnum):
+    """Owner-scoped reputation ledger. Disabled leaves the snapshot unset.
+
+    Lockstep with ``simulation.ReputationMode``. This is not a
+    ``V2CapabilityFlags`` slot.
+    """
+
+    DISABLED = "disabled"
+    DETERMINISTIC = "deterministic"
+
+
 def _unit_interval(name: str, value: object) -> float:
     if isinstance(value, bool) or not isinstance(value, (int, float)):
         raise ValueError(f"{name}: not_unit_interval")
@@ -242,6 +257,8 @@ class CognitionLoopConfig:
         CognitionCommunicationStrategyMode.DISABLED
     )
     communication_strategy_policy: CommunicationStrategyPolicy | None = None
+    reputation_mode: CognitionReputationMode = CognitionReputationMode.DISABLED
+    reputation_policy: ReputationFormationPolicy | None = None
     drive_overrides: tuple[CognitionDriveOverride, ...] = ()
     memory_policy_version: str = MEMORY_POLICY_VERSION
     imagination_policy_version: str = IMAGINATION_POLICY_VERSION
@@ -379,6 +396,18 @@ class CognitionLoopConfig:
                 "communication_strategy_policy must be "
                 "CommunicationStrategyPolicy or None"
             )
+        if type(self.reputation_mode) is not CognitionReputationMode:
+            _LOG.error("invalid_enum path=reputation_mode reason_code=invalid_mode")
+            raise TypeError("reputation_mode must be CognitionReputationMode")
+        if self.reputation_mode is CognitionReputationMode.DISABLED:
+            object.__setattr__(self, "reputation_policy", None)
+        elif self.reputation_policy is None:
+            object.__setattr__(self, "reputation_policy", default_reputation_policy())
+        elif type(self.reputation_policy) is not ReputationFormationPolicy:
+            _LOG.error("invalid_enum path=reputation_policy reason_code=invalid_type")
+            raise TypeError(
+                "reputation_policy must be ReputationFormationPolicy or None"
+            )
         if (
             self.reflection_policy is not None
             and type(self.reflection_policy) is not ReflectionPolicy
@@ -432,6 +461,10 @@ class CognitionLoopConfig:
                     "theory_of_mind_mode": self.theory_of_mind_mode.value,
                     "prospective_mode": self.prospective_mode.value,
                     "counterfactual_mode": self.counterfactual_mode.value,
+                    "communication_strategy_mode": (
+                        self.communication_strategy_mode.value
+                    ),
+                    "reputation_mode": self.reputation_mode.value,
                     "reflection_policy_version": (
                         None
                         if self.reflection_policy is None
@@ -516,6 +549,12 @@ class CognitionLoopConfig:
                 None
                 if self.communication_strategy_policy is None
                 else self.communication_strategy_policy.version
+            ),
+            "reputation_mode": self.reputation_mode.value,
+            "reputation_policy_version": (
+                None
+                if self.reputation_policy is None
+                else self.reputation_policy.version
             ),
             "imagination_mode": self.imagination_mode.value,
             "imagination_policy_version": self.imagination_policy_version,

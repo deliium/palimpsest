@@ -22,6 +22,7 @@ from simulation.runner_models import (
     AgentCognitionSpec,
     AgentRunnerSpec,
     CognitionTraceSpec,
+    ReputationMode,
     SimulationRunnerConfig,
     V2CapabilityFlags,
     WorldScenarioSpec,
@@ -78,6 +79,7 @@ def test_catalog_conditions_default_off_flags(builder: object) -> None:
     for condition in definition.conditions:
         config = condition.runner_config
         assert config.schema_version == RUNNER_SCHEMA_VERSION_V4
+        assert config.agents[0].cognition.reputation_mode is ReputationMode.DISABLED
         assert config.capability_flags == V2CapabilityFlags()
         assert config.cognition_trace == CognitionTraceSpec()
         assert v1_regression_profile(config) is config

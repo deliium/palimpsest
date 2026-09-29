@@ -74,6 +74,7 @@ RUNNER_SCHEMA_VERSION_V6: Final[str] = "runner-config-v6"
 RUNNER_SCHEMA_VERSION_V7: Final[str] = "runner-config-v7"
 RUNNER_SCHEMA_VERSION_V8: Final[str] = "runner-config-v8"
 RUNNER_SCHEMA_VERSION_V9: Final[str] = "runner-config-v9"
+RUNNER_SCHEMA_VERSION_V10: Final[str] = "runner-config-v10"
 RUNNER_SCHEMA_VERSION: Final[str] = RUNNER_SCHEMA_VERSION_V4
 SUPPORTED_RUNNER_SCHEMA_VERSIONS: Final[frozenset[str]] = frozenset(
     {
@@ -86,6 +87,7 @@ SUPPORTED_RUNNER_SCHEMA_VERSIONS: Final[frozenset[str]] = frozenset(
         RUNNER_SCHEMA_VERSION_V7,
         RUNNER_SCHEMA_VERSION_V8,
         RUNNER_SCHEMA_VERSION_V9,
+        RUNNER_SCHEMA_VERSION_V10,
     }
 )
 RESULT_SCHEMA_VERSION_V1: Final[str] = "runner-result-v1"
@@ -219,6 +221,18 @@ class CommunicationStrategyMode(StrEnum):
     Default is ``DISABLED``, which leaves commands and audits unchanged.
     This is not a ``V2CapabilityFlags`` slot. Lockstep with
     ``agents.cognition.CognitionCommunicationStrategyMode``.
+    """
+
+    DISABLED = "disabled"
+    DETERMINISTIC = "deterministic"
+
+
+class ReputationMode(StrEnum):
+    """Closed owner-scoped reputation treatments.
+
+    Default is ``DISABLED``, which leaves commands, memories, relationships,
+    beliefs, and audits unchanged. This is not a ``V2CapabilityFlags`` slot.
+    Lockstep with ``agents.cognition.CognitionReputationMode``.
     """
 
     DISABLED = "disabled"
@@ -940,6 +954,7 @@ class AgentCognitionSpec:
     communication_strategy_mode: CommunicationStrategyMode = (
         CommunicationStrategyMode.DISABLED
     )
+    reputation_mode: ReputationMode = ReputationMode.DISABLED
 
     def __post_init__(self) -> None:
         if type(self.agent_id) is not AgentId:
@@ -984,6 +999,14 @@ class AgentCognitionSpec:
             raise TypeError(
                 "AgentCognitionSpec.communication_strategy_mode must be "
                 "CommunicationStrategyMode"
+            )
+        if type(self.reputation_mode) is not ReputationMode:
+            _LOGGER.error(
+                "invalid_enum path=AgentCognitionSpec.reputation_mode "
+                "reason_code=invalid_mode"
+            )
+            raise TypeError(
+                "AgentCognitionSpec.reputation_mode must be ReputationMode"
             )
         if self.policy_version != COGNITION_POLICY_VERSION:
             raise ValueError("unsupported cognition policy_version")
@@ -1468,6 +1491,7 @@ class SimulationRunnerConfig:
             RUNNER_SCHEMA_VERSION_V7,
             RUNNER_SCHEMA_VERSION_V8,
             RUNNER_SCHEMA_VERSION_V9,
+            RUNNER_SCHEMA_VERSION_V10,
         }
         if non_disabled and self.schema_version not in consolidation_schemas:
             _LOGGER.error(
@@ -1478,7 +1502,7 @@ class SimulationRunnerConfig:
             raise ValueError(
                 "non-disabled consolidation_mode requires runner-config-v5, "
                 "runner-config-v6, runner-config-v7, runner-config-v8, "
-                "or runner-config-v9 "
+                "runner-config-v9, or runner-config-v10 "
                 "(code=consolidation_mode_requires_v5)"
             )
         if self.schema_version == RUNNER_SCHEMA_VERSION_V5 and not non_disabled:
@@ -1502,6 +1526,7 @@ class SimulationRunnerConfig:
             RUNNER_SCHEMA_VERSION_V7,
             RUNNER_SCHEMA_VERSION_V8,
             RUNNER_SCHEMA_VERSION_V9,
+            RUNNER_SCHEMA_VERSION_V10,
         }
         if reflecting and self.schema_version not in reflection_schemas:
             _LOGGER.error(
@@ -1511,7 +1536,8 @@ class SimulationRunnerConfig:
             )
             raise ValueError(
                 "non-disabled reflection_mode requires runner-config-v6, "
-                "runner-config-v7, runner-config-v8, or runner-config-v9 "
+                "runner-config-v7, runner-config-v8, runner-config-v9, "
+                "or runner-config-v10 "
                 "(code=reflection_mode_requires_v6)"
             )
         if self.schema_version == RUNNER_SCHEMA_VERSION_V6 and not reflecting:
@@ -1536,6 +1562,7 @@ class SimulationRunnerConfig:
             RUNNER_SCHEMA_VERSION_V7,
             RUNNER_SCHEMA_VERSION_V8,
             RUNNER_SCHEMA_VERSION_V9,
+            RUNNER_SCHEMA_VERSION_V10,
         }
         if planning and self.schema_version not in prospective_schemas:
             _LOGGER.error(
@@ -1545,7 +1572,7 @@ class SimulationRunnerConfig:
             )
             raise ValueError(
                 "non-disabled prospective_mode requires runner-config-v7, "
-                "runner-config-v8, or runner-config-v9 "
+                "runner-config-v8, runner-config-v9, or runner-config-v10 "
                 "(code=prospective_mode_requires_v7)"
             )
         if self.schema_version == RUNNER_SCHEMA_VERSION_V7 and not planning:
@@ -1569,6 +1596,7 @@ class SimulationRunnerConfig:
         counterfactual_schemas = {
             RUNNER_SCHEMA_VERSION_V8,
             RUNNER_SCHEMA_VERSION_V9,
+            RUNNER_SCHEMA_VERSION_V10,
         }
         if considering and self.schema_version not in counterfactual_schemas:
             _LOGGER.error(
@@ -1577,8 +1605,9 @@ class SimulationRunnerConfig:
                 self.schema_version,
             )
             raise ValueError(
-                "non-disabled counterfactual_mode requires runner-config-v8 "
-                "or runner-config-v9 (code=counterfactual_mode_requires_v8)"
+                "non-disabled counterfactual_mode requires runner-config-v8, "
+                "runner-config-v9, or runner-config-v10 "
+                "(code=counterfactual_mode_requires_v8)"
             )
         if self.schema_version == RUNNER_SCHEMA_VERSION_V8 and not considering:
             _LOGGER.error(
@@ -1598,7 +1627,10 @@ class SimulationRunnerConfig:
             for mode in strategy_modes
             if mode is not CommunicationStrategyMode.DISABLED
         )
-        if strategizing and self.schema_version != RUNNER_SCHEMA_VERSION_V9:
+        if strategizing and self.schema_version not in {
+            RUNNER_SCHEMA_VERSION_V9,
+            RUNNER_SCHEMA_VERSION_V10,
+        }:
             _LOGGER.error(
                 "invalid_fields path=agents.cognition.communication_strategy_mode "
                 "reason_code=communication_strategy_mode_requires_v9 "
@@ -1607,7 +1639,8 @@ class SimulationRunnerConfig:
             )
             raise ValueError(
                 "non-disabled communication_strategy_mode requires "
-                "runner-config-v9 (code=communication_strategy_mode_requires_v9)"
+                "runner-config-v9 or runner-config-v10 "
+                "(code=communication_strategy_mode_requires_v9)"
             )
         if self.schema_version == RUNNER_SCHEMA_VERSION_V9 and not strategizing:
             _LOGGER.error(
@@ -1619,6 +1652,32 @@ class SimulationRunnerConfig:
                 "runner-config-v9 requires a non-disabled "
                 "communication_strategy_mode "
                 "(code=v9_requires_communication_strategy)"
+            )
+        reputation_modes = tuple(
+            agent.cognition.reputation_mode for agent in self.agents
+        )
+        reputing = tuple(
+            mode for mode in reputation_modes if mode is not ReputationMode.DISABLED
+        )
+        if reputing and self.schema_version != RUNNER_SCHEMA_VERSION_V10:
+            _LOGGER.error(
+                "invalid_fields path=agents.cognition.reputation_mode "
+                "reason_code=reputation_mode_requires_v10 schema_version=%s",
+                self.schema_version,
+            )
+            raise ValueError(
+                "non-disabled reputation_mode requires runner-config-v10 "
+                "(code=reputation_mode_requires_v10)"
+            )
+        if self.schema_version == RUNNER_SCHEMA_VERSION_V10 and not reputing:
+            _LOGGER.error(
+                "invalid_fields path=schema_version "
+                "reason_code=v10_requires_reputation schema_version=%s",
+                self.schema_version,
+            )
+            raise ValueError(
+                "runner-config-v10 requires a non-disabled reputation_mode "
+                "(code=v10_requires_reputation)"
             )
         if self.cognition_trace.enabled:
             _LOGGER.info(
@@ -1635,7 +1694,8 @@ class SimulationRunnerConfig:
             "capability_flag_count=%s enabled_flag_count=%s "
             "cognition_trace_enabled=%s cognition_trace_detail=%s "
             "consolidation_mode=%s reflection_mode=%s prospective_mode=%s "
-            "counterfactual_mode=%s communication_strategy_mode=%s",
+            "counterfactual_mode=%s communication_strategy_mode=%s "
+            "reputation_mode=%s",
             self.schema_version,
             len(self.agents),
             len(self.scenario.locations),
@@ -1650,17 +1710,19 @@ class SimulationRunnerConfig:
             ",".join(mode.value for mode in prospective_modes),
             ",".join(mode.value for mode in counterfactual_modes),
             ",".join(mode.value for mode in strategy_modes),
+            ",".join(mode.value for mode in reputation_modes),
         )
         _LOGGER.debug(
             "runner_config_decoded schema_version=%s consolidation_mode=%s "
             "reflection_mode=%s prospective_mode=%s counterfactual_mode=%s "
-            "communication_strategy_mode=%s",
+            "communication_strategy_mode=%s reputation_mode=%s",
             self.schema_version,
             ",".join(mode.value for mode in consolidation_modes),
             ",".join(mode.value for mode in reflection_modes),
             ",".join(mode.value for mode in prospective_modes),
             ",".join(mode.value for mode in counterfactual_modes),
             ",".join(mode.value for mode in strategy_modes),
+            ",".join(mode.value for mode in reputation_modes),
         )
 
     def ordered_registrations(self) -> tuple[AgentRegistration, ...]:
