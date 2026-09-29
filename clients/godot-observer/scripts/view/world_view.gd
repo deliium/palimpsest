@@ -29,7 +29,7 @@ func _ready() -> void:
 
 func replace_sought_frame(frame: Variant, event: Variant, forward: bool) -> void:
 	var prior: Dictionary = _agents.capture_positions()
-	var selected := _agents.selected_entity_id
+	var selected: String = _agents.selected_entity_id
 	_agents.clear_motions()
 	_effects.clear_motions()
 	ObserverLog.debug("view", "motions_cleared")

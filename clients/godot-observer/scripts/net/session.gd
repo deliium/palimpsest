@@ -34,7 +34,7 @@ var origin := ""
 var world: Variant = null
 var cursor_after_tick: Variant = null
 var cursor_after_sequence: Variant = null
-var transport = TransportScript.new()
+var transport := TransportScript.new()
 
 var _token := ""
 var _http: Node

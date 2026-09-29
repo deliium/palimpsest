@@ -29,7 +29,7 @@ func run() -> Array:
 	var behind: Dictionary = Urls.build_websocket(ORIGIN, STREAM, 3, 0, 4)
 	if not behind["connect"] or "after_tick=3" not in str(behind["url"]) or "after_sequence=0" not in str(behind["url"]):
 		failures.append("cursor behind world.tick should send both resume parameters")
-	var session: Node = SessionScript.new()
+	var session: SessionScript = SessionScript.new()
 	var viewed := Mark.new()
 	viewed.tick = 3
 	viewed.marker = "paused-world"
@@ -118,7 +118,7 @@ class Frame:
 	var cursor: FrameCursor
 
 
-func _assert_steps(session: Node, failures: Array) -> void:
+func _assert_steps(session: SessionScript, failures: Array) -> void:
 	session._event_window = [_note(4, 0), _note(4, 1), _note(5, 0), _note(5, 2)]
 	session.transport.set_cursor(session.transport.MODE_REPLAY, 4, 0, 1.0, false)
 	session.request_log.clear()
@@ -165,7 +165,7 @@ func _assert_steps(session: Node, failures: Array) -> void:
 		failures.append("the replaced frame should view the sought event")
 
 
-func _state_query(session: Node) -> Dictionary:
+func _state_query(session: SessionScript) -> Dictionary:
 	var found := {}
 	for item in session.request_log:
 		if str(item.get("kind", "")) == "state_cursor":

@@ -1,6 +1,7 @@
 extends RefCounted
 
 const Protocol := preload("res://scripts/protocol/models.gd")
+const StatusBar := preload("res://scripts/ui/status_bar.gd")
 
 
 func run() -> Array:
@@ -142,7 +143,9 @@ func _status_shows_versions_and_protocol_failure() -> String:
 	var tree := Engine.get_main_loop() as SceneTree
 	if tree == null:
 		return "scene tree missing"
-	var bar: Node = load("res://scenes/ui/status_bar.tscn").instantiate()
+	var bar: StatusBar = load("res://scenes/ui/status_bar.tscn").instantiate() as StatusBar
+	if bar == null:
+		return "status bar missing"
 	tree.root.add_child(bar)
 	var lines := preload("res://scripts/net/version_client.gd").local_lines()
 	if str(lines["protocol_version"]) != Protocol.PROTOCOL_VERSION:
