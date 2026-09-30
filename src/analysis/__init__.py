@@ -29,6 +29,10 @@ from analysis.counterfactual_metrics import (
     COUNTERFACTUAL_REASONING_METRIC_VERSION,
     compute_counterfactual_reasoning_metrics,
 )
+from analysis.cultural_transmission_metrics import (
+    CULTURAL_TRANSMISSION_METRIC_VERSION,
+    compute_cultural_transmission,
+)
 from analysis.evidence import (
     EVIDENCE_STAGE_SCHEMA_VERSION,
     EvidenceStage,
@@ -228,6 +232,7 @@ __all__ = [
     "CLAIM_TRUTH_SCHEMA_VERSION",
     "COMMUNICATION_STRATEGY_METRIC_VERSION",
     "COUNTERFACTUAL_REASONING_METRIC_VERSION",
+    "CULTURAL_TRANSMISSION_METRIC_VERSION",
     "DISTRIBUTED_REPUTATION_METRIC_VERSION",
     "DRIFT_METRIC_VERSION",
     "EVENT_FACT_PROJECTOR_VERSION",
@@ -329,6 +334,7 @@ __all__ = [
     "compute_conflict",
     "compute_cooperation",
     "compute_counterfactual_reasoning_metrics",
+    "compute_cultural_transmission",
     "compute_distributed_reputation",
     "compute_false_belief_persistence",
     "compute_goal_completion",

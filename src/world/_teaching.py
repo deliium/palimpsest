@@ -700,3 +700,117 @@ def fold_teaching_opportunities(
     return ledger.apply_summed_deltas(sums)
 
 
+def reject_supplied_offers_without_policy(supplied: object | None) -> None:
+    """Disabled resume must not carry a caller offer set."""
+    if supplied in (None, ()):
+        return
+    _LOG.error(
+        "teaching_offer_mismatch reason_code=%s",
+        "teaching_offer_mismatch",
+    )
+    raise ValueError("teaching_offer_mismatch")
+
+
+def _event_tick_groups(
+    events: Sequence[object],
+) -> tuple[tuple[int, tuple[object, ...]], ...]:
+    grouped: dict[int, list[object]] = {}
+    for event in events:
+        grouped.setdefault(int(event.tick), []).append(event)
+    return tuple((tick, tuple(grouped[tick])) for tick in sorted(grouped))
+
+
+def _offer_signature(offer: TeachingOffer) -> tuple[object, ...]:
+    return (
+        offer.speaker_id,
+        offer.recipient_id,
+        offer.act,
+        offer.domain,
+        offer.delivery_tick,
+    )
+
+
+def refold_teaching_offers(
+    events: Sequence[object],
+    policy: TeachingInteractionPolicy,
+    teaching_entity_ids: frozenset[EntityId],
+    *,
+    tick: int,
+    untargeted_request_ids: frozenset[str] = frozenset(),
+    project_prefix: object | None = None,
+    initial_state: object | None = None,
+    expected_run_id: str = "",
+    expected_world_id: object | None = None,
+    supplied: Sequence[object] | None = None,
+) -> tuple[TeachingOffer, ...]:
+    """Rebuild open offers at ``tick`` from committed events.
+
+    Earlier tick groups are projected when a prefix projector is supplied.
+    A caller-supplied set that disagrees fails with ``teaching_offer_mismatch``.
+    """
+    if type(policy) is not TeachingInteractionPolicy:
+        raise TypeError("policy must be TeachingInteractionPolicy")
+    if type(teaching_entity_ids) is not frozenset:
+        raise TypeError("teaching_entity_ids must be a frozenset")
+    groups = _event_tick_groups(events)
+    if project_prefix is not None:
+        prefix: list[object] = []
+        for event_tick, group in groups:
+            if event_tick >= tick:
+                break
+            prefix.extend(group)
+            project_prefix(
+                initial_state,
+                tuple(prefix),
+                expected_run_id,
+                expected_world_id,
+            )
+    prior = tuple(event for event in events if int(event.tick) < tick)
+    participants = teaching_entity_ids
+    offers = _offers_from_events(prior, participants)
+    successes = _prior_successes(prior, untargeted_request_ids)
+    open_rows: list[TeachingOffer] = []
+    for offer in offers:
+        if not _in_window(offer, tick, policy.offer_window):
+            continue
+        if offer.act is TeachingAct.DEMONSTRATE and _consumed(
+            offer,
+            successes,
+            before_tick=tick,
+            offer_window=policy.offer_window,
+        ):
+            continue
+        if offer.act is TeachingAct.PRACTICE_TOGETHER and _joint_consumed(
+            offer,
+            prior,
+            before_tick=tick,
+            offer_window=policy.offer_window,
+            untargeted_request_ids=untargeted_request_ids,
+        ):
+            continue
+        open_rows.append(offer)
+    derived = tuple(open_rows)
+    _LOG.debug(
+        "teaching_offers_refolded tick=%s open_count=%s",
+        tick,
+        len(derived),
+    )
+    if supplied is None:
+        return derived
+    supplied_rows = tuple(supplied)
+    for row in supplied_rows:
+        if type(row) is not TeachingOffer:
+            _LOG.error(
+                "teaching_offer_mismatch reason_code=%s",
+                "teaching_offer_mismatch",
+            )
+            raise ValueError("teaching_offer_mismatch")
+    if tuple(sorted(_offer_signature(row) for row in supplied_rows)) != tuple(
+        sorted(_offer_signature(row) for row in derived)
+    ):
+        _LOG.error(
+            "teaching_offer_mismatch reason_code=%s",
+            "teaching_offer_mismatch",
+        )
+        raise ValueError("teaching_offer_mismatch")
+    return derived

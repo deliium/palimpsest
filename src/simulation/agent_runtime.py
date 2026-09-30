@@ -402,6 +402,7 @@ class AgentRuntime:
     """Trusted per-agent composition boundary for cognition and submission."""
 
     __slots__ = (
+        "_advice",
         "_agent",
         "_applied_identity_operation_ids",
         "_applied_reflection_operation_ids",
@@ -540,6 +541,7 @@ class AgentRuntime:
         self._theory_of_mind: object | None = None
         self._reputation: object | None = None
         self._competence: object | None = None
+        self._advice: object | None = None
         self._identity_cursor: object | None = None
         self._reflection_cursor: object | None = None
         self._decision_journal: tuple[object, ...] | None = None
@@ -736,6 +738,35 @@ class AgentRuntime:
             "competence_model_carried owner_id=%s tick=%s",
             owner.value,
             tick,
+        )
+
+    def _commit_advice(self, store: object | None, tick: int) -> None:
+        from agents.cognition.configuration import CognitionTeachingInteractionMode
+        from agents.cognition.teaching import AdviceStore
+
+        owner = self._agent.agent_id
+        mode = getattr(
+            self._loop,
+            "_teaching_mode",
+            CognitionTeachingInteractionMode.DISABLED,
+        )
+        if mode is not CognitionTeachingInteractionMode.DETERMINISTIC or store is None:
+            if mode is not CognitionTeachingInteractionMode.DETERMINISTIC:
+                self._advice = None
+            return
+        if type(store) is not AdviceStore:
+            raise TypeError("declarative_advice must be AdviceStore")
+        if store.owner_id != owner:
+            raise AgentRuntimeError(
+                AgentRuntimeErrorCode.OWNERSHIP,
+                agent_id=owner.value,
+            )
+        self._advice = store
+        _LOG.debug(
+            "declarative_advice_carried owner_id=%s tick=%s row_count=%s",
+            owner.value,
+            tick,
+            len(store.rows),
         )
 
     def _commit_prospective_audit(self, tick: int) -> None:
@@ -1183,6 +1214,7 @@ class AgentRuntime:
                 theory_of_mind=self._theory_of_mind,
                 reputation=self._reputation,
                 competence_model=self._competence,
+                declarative_advice=self._advice,
             )
         except TypeError:
             raise
@@ -1595,6 +1627,9 @@ class AgentRuntime:
         self._commit_competence(
             getattr(pending.loop_result, "competence_model", None), pending.tick
         )
+        self._commit_advice(
+            getattr(pending.loop_result, "declarative_advice", None), pending.tick
+        )
         self._commit_communication_intent(pending.loop_result, pending.tick)
         self._commit_prospective_audit(pending.tick)
         self._commit_counterfactual_audit(pending.tick)
@@ -1989,6 +2024,7 @@ class AgentRuntime:
         self._theory_of_mind = checkpoint.theory_of_mind
         self._reputation = checkpoint.reputation
         self._competence = checkpoint.competence_model
+        self._advice = checkpoint.declarative_advice
         self._reflection_cursor = checkpoint.reflection_cursor
         self._decision_journal = checkpoint.decision_journal
         self._remembered_decisions = checkpoint.remembered_decisions
@@ -2045,6 +2081,7 @@ class AgentRuntime:
             theory_of_mind=self._theory_of_mind,
             reputation=self._reputation,
             competence_model=self._competence,
+            declarative_advice=self._advice,
             reflection_cursor=self._reflection_cursor,
             decision_journal=self._decision_journal,
             remembered_decisions=self._remembered_decisions,

@@ -50,7 +50,7 @@ __all__ = [
 ]
 
 METRIC_CATALOG_VERSION: Final[str] = "metric-catalog-v1"
-METRIC_FAMILY_COUNT: Final[int] = 26
+METRIC_FAMILY_COUNT: Final[int] = 27
 
 # Align with existing memory-drift / transmission document versions.
 _ALGO_V1: Final[str] = "1"
@@ -103,6 +103,7 @@ class MetricFamilyId(StrEnum):
     COUNTERFACTUAL_REASONING = "counterfactual_reasoning"
     DISTRIBUTED_REPUTATION = "distributed_reputation"
     SKILL_LEARNING = "skill_learning"
+    CULTURAL_TRANSMISSION = "cultural_transmission"
 
 
 class DenominatorKind(StrEnum):
@@ -1041,6 +1042,45 @@ def _spec_skill_learning() -> MetricSpecification:
     )
 
 
+def _spec_cultural_transmission() -> MetricSpecification:
+    return _base(
+        family_id=MetricFamilyId.CULTURAL_TRANSMISSION,
+        evidence_inputs=frozenset({EvidenceStage.AGENT_VISIBLE_PROJECTION}),
+        population="teaching_audit_rows_and_practice_events",
+        denominator="harvested teaching rows",
+        denominator_kind=DenominatorKind.OCCURRENCE,
+        cohort_window="audits harvested after the run",
+        deceased_policy="not_applicable",
+        zero_holding_policy="empty skill mass -> availability=unknown",
+        opportunity_vs_occurrence="entropy of harvested objective vectors",
+        self_edge_policy="not_applicable",
+        censoring_policy="a missing side is unmatched and is not guessed",
+        formulas={
+            "normalized_entropy": "mean Shannon entropy of objective skill vectors",
+            "js_divergence": (
+                "mean Jensen-Shannon divergence from the population mixture"
+            ),
+            "advice_count": "count of advice rows",
+            "belief_matches_advice": (
+                "explain rows whose band matches the believed band"
+            ),
+            "objective_gains_without_practice": (
+                "positive objective rows with no practice event"
+            ),
+            "misinformation_count": (
+                "high explain bands whose source objective level is below the low band"
+            ),
+        },
+        value_keys=(
+            "advice_count",
+            "belief_matches_advice",
+            "misinformation_count",
+            "normalized_entropy",
+        ),
+        empty_case="availability=unknown; empty skill mass is not zero",
+    )
+
+
 def _spec_theory_of_mind() -> MetricSpecification:
     return _base(
         family_id=MetricFamilyId.THEORY_OF_MIND,
@@ -1675,6 +1715,7 @@ _BUILDERS: Final[tuple[Callable[[], MetricSpecification], ...]] = (
     _spec_counterfactual_reasoning,
     _spec_distributed_reputation,
     _spec_skill_learning,
+    _spec_cultural_transmission,
 )
 
 

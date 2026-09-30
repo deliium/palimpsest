@@ -317,6 +317,48 @@ class SkillAudit:
         )
 
 
+class TeachingAuditStore(StrEnum):
+    """Which teaching store a harvested row copies."""
+
+    ADVICE = "advice"
+    BELIEF = "belief"
+    OBJECTIVE = "objective"
+
+
+@dataclass(frozen=True, slots=True)
+class TeachingAudit:
+    """Analysis-only teaching row. Not stored on the runner-result document."""
+
+    agent_id: AgentId
+    store: TeachingAuditStore
+    token: str
+    band_or_level: str
+    tick: int
+    domain: str
+    source_agent_id: AgentId | None = None
+
+    def __post_init__(self) -> None:
+        if type(self.agent_id) is not AgentId:
+            raise TypeError("TeachingAudit.agent_id must be AgentId")
+        if type(self.store) is not TeachingAuditStore:
+            raise TypeError("TeachingAudit.store must be TeachingAuditStore")
+        if type(self.token) is not str or not self.token:
+            raise ValueError("TeachingAudit.token unknown_token")
+        if type(self.band_or_level) is not str or not self.band_or_level:
+            raise ValueError("TeachingAudit.band_or_level unknown_token")
+        if type(self.domain) is not str or self.domain not in _SKILL_AUDIT_DOMAINS:
+            raise ValueError("TeachingAudit.domain unknown_domain")
+        if self.source_agent_id is not None and type(self.source_agent_id) is not (
+            AgentId
+        ):
+            raise TypeError("TeachingAudit.source_agent_id must be AgentId")
+        object.__setattr__(
+            self,
+            "tick",
+            require_exact_nonneg_int("TeachingAudit.tick", self.tick),
+        )
+
+
 _SKILL_RATE_NAMES: Final[tuple[str, ...]] = (
     "practice_rate",
     "success_rate",
@@ -936,6 +978,7 @@ class SimulationRunnerResult:
     counterfactual_audits: tuple[object, ...] = ()
     communication_intent_audits: tuple[object, ...] = ()
     skill_audits: tuple[object, ...] = ()
+    teaching_audits: tuple[object, ...] = ()
 
     def __post_init__(self) -> None:
         from simulation.models import RunId
@@ -1050,6 +1093,13 @@ class SimulationRunnerResult:
             if type(row) is not SkillAudit:
                 raise TypeError("skill_audits: invalid_item")
         object.__setattr__(self, "skill_audits", skill_rows)
+        if isinstance(self.teaching_audits, (set, frozenset)):
+            raise TypeError("teaching_audits must be ordered")
+        teaching_rows = tuple(self.teaching_audits)
+        for row in teaching_rows:
+            if type(row) is not TeachingAudit:
+                raise TypeError("teaching_audits: invalid_item")
+        object.__setattr__(self, "teaching_audits", teaching_rows)
 
 
 class CognitionFailurePolicy(StrEnum):

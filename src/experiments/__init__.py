@@ -26,6 +26,8 @@ from experiments.catalog import (
     experiment_p_information_cascade,
     experiment_q_distributed_reputation,
     experiment_r_skill_learning,
+    experiment_s_cultural_transmission,
+    experiment_t_skill_specialization,
     v1_regression_profile,
 )
 from experiments.collectors import (
@@ -200,6 +202,8 @@ __all__ = [
     "experiment_p_information_cascade",
     "experiment_q_distributed_reputation",
     "experiment_r_skill_learning",
+    "experiment_s_cultural_transmission",
+    "experiment_t_skill_specialization",
     "make_false_story_intervention",
     "map_consolidation_audits_to_report",
     "map_recall_audits_to_dynamics_report",

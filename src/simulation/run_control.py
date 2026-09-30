@@ -598,6 +598,7 @@ class AgentRuntimeCheckpoint:
     theory_of_mind: object | None = None
     reputation: object | None = None
     competence_model: object | None = None
+    declarative_advice: object | None = None
     reflection_cursor: object | None = None
     decision_journal: tuple[object, ...] | None = None
     remembered_decisions: tuple[object, ...] | None = None
@@ -659,6 +660,13 @@ class AgentRuntimeCheckpoint:
             self.competence_model,
             self.agent_id,
             field_name="competence_model",
+        )
+        from agents.cognition.teaching import require_owner_advice
+
+        require_owner_advice(
+            self.declarative_advice,
+            self.agent_id,
+            field_name="declarative_advice",
         )
         if self.reflection_cursor is not None:
             from agents.cognition.reflection import ReflectionCursor

@@ -1,4 +1,4 @@
-"""Named builders for Experiments A-P."""
+"""Named builders for Experiments A-T."""
 
 from __future__ import annotations
 
@@ -23,6 +23,7 @@ from simulation.runner_models import (
     RUNNER_SCHEMA_VERSION_V9,
     RUNNER_SCHEMA_VERSION_V10,
     RUNNER_SCHEMA_VERSION_V11,
+    RUNNER_SCHEMA_VERSION_V12,
     AgentCognitionSpec,
     AgentRunnerSpec,
     CommunicationStrategyMode,
@@ -38,6 +39,7 @@ from simulation.runner_models import (
     RunnerStopPolicy,
     SimulationRunnerConfig,
     SkillLearningMode,
+    TeachingInteractionMode,
     V2CapabilityFlags,
     WorldScenarioSpec,
     capability_flags_digest,
@@ -61,6 +63,7 @@ def _with_agent_modes(
     communication_strategy_mode: CommunicationStrategyMode | None = None,
     reputation_mode: ReputationMode | None = None,
     skill_learning_mode: SkillLearningMode | None = None,
+    teaching_interaction_mode: TeachingInteractionMode | None = None,
     schema_version: str | None = None,
 ) -> SimulationRunnerConfig:
     agents: list[AgentRunnerSpec] = []
@@ -115,6 +118,18 @@ def _with_agent_modes(
                 if skill_learning_mode is not None
                 else agent.cognition.skill_learning_mode
             ),
+            teaching_interaction_mode=(
+                teaching_interaction_mode
+                if teaching_interaction_mode is not None
+                else agent.cognition.teaching_interaction_mode
+            ),
+            demonstration_rate=agent.cognition.demonstration_rate,
+            practice_together_rate=agent.cognition.practice_together_rate,
+            offer_window=agent.cognition.offer_window,
+            belief_explain_rate=agent.cognition.belief_explain_rate,
+            explain_low_below=agent.cognition.explain_low_below,
+            explain_high_at=agent.cognition.explain_high_at,
+            teaching_response_weight=agent.cognition.teaching_response_weight,
             practice_rate=agent.cognition.practice_rate,
             success_rate=agent.cognition.success_rate,
             failure_rate=agent.cognition.failure_rate,
@@ -895,6 +910,108 @@ def experiment_r_skill_learning(
         arms=(
             ("r-disabled", "skill_learning_disabled", disabled),
             ("r-enabled", "skill_learning_deterministic", enabled),
+        ),
+    )
+
+
+def _teaching_arm_pair(
+    base: SimulationRunnerConfig,
+) -> tuple[SimulationRunnerConfig, SimulationRunnerConfig]:
+    disabled = _with_agent_modes(
+        base,
+        skill_learning_mode=SkillLearningMode.DETERMINISTIC,
+        teaching_interaction_mode=TeachingInteractionMode.DISABLED,
+        schema_version=RUNNER_SCHEMA_VERSION_V11,
+    )
+    enabled = _with_agent_modes(
+        base,
+        skill_learning_mode=SkillLearningMode.DETERMINISTIC,
+        teaching_interaction_mode=TeachingInteractionMode.DETERMINISTIC,
+        schema_version=RUNNER_SCHEMA_VERSION_V12,
+    )
+    if disabled.seed != enabled.seed:
+        raise ValueError("teaching_experiment: seed_mismatch")
+    if disabled.stochastic_identity != enabled.stochastic_identity:
+        raise ValueError("teaching_experiment: stochastic_mismatch")
+    if disabled.scenario != enabled.scenario:
+        raise ValueError("teaching_experiment: scenario_mismatch")
+    return disabled, enabled
+
+
+def experiment_s_cultural_transmission(
+    base: SimulationRunnerConfig,
+    *,
+    seed_matrix: ExperimentSeedMatrix | None = None,
+) -> ExperimentDefinition:
+    """Paired arms share seed, scenario, and stochastic identity.
+
+    ``s-disabled`` keeps teaching off on ``runner-config-v11`` with skill
+    learning on. ``s-enabled`` uses both modes on ``runner-config-v12``.
+    """
+    matrix = seed_matrix or ExperimentSeedMatrix(seeds=(base.seed,))
+    disabled, enabled = _teaching_arm_pair(base)
+    experiment_id = "experiment-s-cultural-transmission"
+    arms = (
+        ("s-disabled", disabled.schema_version, TeachingInteractionMode.DISABLED.value),
+        (
+            "s-enabled",
+            enabled.schema_version,
+            TeachingInteractionMode.DETERMINISTIC.value,
+        ),
+    )
+    for arm_id, schema_version, teaching_mode in arms:
+        _LOG.info(
+            "experiment_s_built experiment_id=%s arm_id=%s schema_version=%s "
+            "teaching_mode=%s",
+            experiment_id,
+            arm_id,
+            schema_version,
+            teaching_mode,
+        )
+    return _definition(
+        experiment_id=experiment_id,
+        base=replace(base, schema_version=RUNNER_SCHEMA_VERSION_V4),
+        seed_matrix=matrix,
+        arms=(
+            ("s-disabled", "teaching_disabled", disabled),
+            ("s-enabled", "teaching_deterministic", enabled),
+        ),
+    )
+
+
+def experiment_t_skill_specialization(
+    base: SimulationRunnerConfig,
+    *,
+    seed_matrix: ExperimentSeedMatrix | None = None,
+) -> ExperimentDefinition:
+    """Same mode pair and shared identity as experiment S."""
+    matrix = seed_matrix or ExperimentSeedMatrix(seeds=(base.seed,))
+    disabled, enabled = _teaching_arm_pair(base)
+    experiment_id = "experiment-t-skill-specialization"
+    arms = (
+        ("t-disabled", disabled.schema_version, TeachingInteractionMode.DISABLED.value),
+        (
+            "t-enabled",
+            enabled.schema_version,
+            TeachingInteractionMode.DETERMINISTIC.value,
+        ),
+    )
+    for arm_id, schema_version, teaching_mode in arms:
+        _LOG.info(
+            "experiment_t_built experiment_id=%s arm_id=%s schema_version=%s "
+            "teaching_mode=%s",
+            experiment_id,
+            arm_id,
+            schema_version,
+            teaching_mode,
+        )
+    return _definition(
+        experiment_id=experiment_id,
+        base=replace(base, schema_version=RUNNER_SCHEMA_VERSION_V4),
+        seed_matrix=matrix,
+        arms=(
+            ("t-disabled", "teaching_disabled", disabled),
+            ("t-enabled", "teaching_deterministic", enabled),
         ),
     )
 

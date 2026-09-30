@@ -143,6 +143,8 @@ from simulation.runner_models import (
     SkillAudit,
     SkillAuditSide,
     SkillLearningMode,
+    TeachingAudit,
+    TeachingAuditStore,
     TeachingInteractionMode,
     V2CapabilityFlags,
     build_detached_objective_projection,
@@ -1855,6 +1857,7 @@ class SimulationRunner:
             counterfactual_audits=self.export_counterfactual_audits(),
             communication_intent_audits=self.export_communication_intent_audits(),
             skill_audits=self.export_skill_audits(),
+            teaching_audits=self.export_teaching_audits(),
         )
         _LOG.info(
             "runner_finished run_id=%s ticks_committed=%s stop_reason=%s "
@@ -2016,6 +2019,86 @@ class SimulationRunner:
                         tick=tick,
                     )
                 )
+        return tuple(rows)
+
+    def export_teaching_audits(self) -> tuple[TeachingAudit, ...]:
+        """Harvest advice, belief, and objective teaching rows.
+
+        Objective rows copy the skill audit's agent id. The ledger stays in the
+        engine. Disabled teaching returns no rows.
+        """
+        from agents.cognition.competence import CompetenceDomain
+
+        participants = {
+            agent.agent_id
+            for agent in self._config.agents
+            if agent.cognition.teaching_interaction_mode
+            is TeachingInteractionMode.DETERMINISTIC
+        }
+        if not participants:
+            return ()
+        tick = self._engine.tick.value
+        rows: list[TeachingAudit] = []
+        for runtime in self._runtimes:
+            if runtime.agent_id not in participants:
+                continue
+            checkpoint = runtime.export_runtime_checkpoint()
+            advice = getattr(checkpoint, "declarative_advice", None)
+            if advice is not None and getattr(advice, "owner_id", None) == (
+                runtime.agent_id
+            ):
+                for record in advice.rows:
+                    rows.append(
+                        TeachingAudit(
+                            agent_id=runtime.agent_id,
+                            store=TeachingAuditStore.ADVICE,
+                            token=record.act.value,
+                            band_or_level=record.band.value,
+                            tick=record.delivery_tick,
+                            domain=record.domain.value,
+                            source_agent_id=record.source_agent_id,
+                        )
+                    )
+            model = getattr(checkpoint, "competence_model", None)
+            if model is None or getattr(model, "owner_id", None) != runtime.agent_id:
+                continue
+            for domain in CompetenceDomain:
+                belief = model.belief_for(domain)
+                level = round(belief.believed_level / 1e-6) * 1e-6
+                rows.append(
+                    TeachingAudit(
+                        agent_id=runtime.agent_id,
+                        store=TeachingAuditStore.BELIEF,
+                        token=domain.value,
+                        band_or_level=format(level, ".6f"),
+                        tick=tick,
+                        domain=domain.value,
+                    )
+                )
+        for skill_row in self.export_skill_audits():
+            if skill_row.side is not SkillAuditSide.OBJECTIVE:
+                continue
+            if skill_row.agent_id not in participants:
+                continue
+            level = round(skill_row.level / 1e-6) * 1e-6
+            rows.append(
+                TeachingAudit(
+                    agent_id=skill_row.agent_id,
+                    store=TeachingAuditStore.OBJECTIVE,
+                    token=skill_row.domain,
+                    band_or_level=format(level, ".6f"),
+                    tick=skill_row.tick,
+                    domain=skill_row.domain,
+                )
+            )
+        for row in rows:
+            _LOG.debug(
+                "teaching_audit agent_id=%s store=%s domain=%s tick=%s",
+                row.agent_id.value,
+                row.store.value,
+                row.domain,
+                row.tick,
+            )
         return tuple(rows)
 
     def export_world_model_audits(self) -> tuple[object, ...]:

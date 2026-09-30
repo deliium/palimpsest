@@ -281,6 +281,7 @@ class WorldEngine:
         skill_untargeted_request_ids: object | None = None,
         teaching_policy: object | None = None,
         teaching_entity_ids: Sequence[object] | None = None,
+        teaching_offers: object | None = None,
     ) -> WorldEngine:
         """Restore an engine at ``AWAITING_OBSERVATION`` from a checkpoint.
 
@@ -427,6 +428,14 @@ class WorldEngine:
         engine._bind_teaching_state(
             teaching_policy=teaching_policy,
             teaching_entity_ids=teaching_entity_ids,
+        )
+        engine._require_refolded_teaching_offers(
+            teaching_offers=teaching_offers,
+            initial_state=base_state,
+            events=normalized_events,
+            expected_run_id=snapshot.run_id.value,
+            expected_world_id=snapshot.world_id,
+            tick=restored_tick.value,
         )
         _LOGGER.info(
             "%s run_id=%s snapshot_id=%s next_tick=%s revision=%s "
@@ -1617,6 +1626,38 @@ class WorldEngine:
             enabled.append(entity_id)
         self._teaching_policy = teaching_policy
         self._teaching_entity_ids = frozenset(enabled)
+
+    def _require_refolded_teaching_offers(
+        self,
+        *,
+        teaching_offers: object | None,
+        initial_state: object,
+        events: Sequence[object],
+        expected_run_id: str,
+        expected_world_id: object,
+        tick: int,
+    ) -> None:
+        """Refold open offers. A disagreeing caller set fails closed."""
+        if self._teaching_policy is None:
+            from world._teaching import reject_supplied_offers_without_policy
+
+            reject_supplied_offers_without_policy(teaching_offers)
+            return
+        from world._teaching import refold_teaching_offers
+
+        supplied = None if teaching_offers is None else tuple(teaching_offers)
+        refold_teaching_offers(
+            events,
+            self._teaching_policy,
+            self._teaching_entity_ids,
+            tick=tick,
+            untargeted_request_ids=self._skill_untargeted_requests,
+            project_prefix=_project_skill_prefix,
+            initial_state=initial_state,
+            expected_run_id=expected_run_id,
+            expected_world_id=expected_world_id,
+            supplied=supplied,
+        )
 
     def _refolded_skill_ledger(
         self,
