@@ -1,0 +1,21 @@
+{
+  "name": "competence",
+  "version": "v1",
+  "messages": [
+    {
+      "role": "system",
+      "template": "system.txt",
+      "sha256": "a25f5656f58dba92468354e0c719912c5af3d1802d6f372ee06cec913cdfecf6"
+    },
+    {
+      "role": "user",
+      "template": "user.txt",
+      "sha256": "f2a9cc92af3796dcc904d26d503a416338a9957aad6a1ec95965fdac32f7a8f2"
+    }
+  ],
+  "variables": [
+    "schema_name",
+    "schema_json",
+    "candidate_json"
+  ]
+}

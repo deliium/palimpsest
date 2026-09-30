@@ -122,6 +122,8 @@ class MultiCriteriaIntentionSelector:
         theory_of_mind: object | None = None,
         *,
         counterfactual_bias: Mapping[str, float] | None = None,
+        competence_policy: object | None = None,
+        competence_model: object | None = None,
     ) -> SelectedIntention:
         owner = loop_input.agent_id
         tick = loop_input.observation.tick
@@ -271,6 +273,9 @@ class MultiCriteriaIntentionSelector:
             goals=() if goal_board is None else goal_board.goals,
             futures=futures,
         )
+        active_model = competence_model
+        if active_model is None and loop_input.snapshot is not None:
+            active_model = loop_input.snapshot.competence_model
         winner, tie_break = _pairwise_select(
             undominated,
             futures_by_id,
@@ -278,6 +283,9 @@ class MultiCriteriaIntentionSelector:
             identity_costs,
             world_bias,
             counterfactual_bias,
+            active_model,
+            _competence_weight(competence_policy),
+            owner,
         )
         future = futures_by_id.get(winner.future_id)
         direction = ActionDirection.WAIT if future is None else future.direction
@@ -498,6 +506,7 @@ class CommandPlanner:
         reputation: object | None = None,
         reputation_mode: object | None = None,
         reputation_policy: object | None = None,
+        competence_model: object | None = None,
     ) -> ActionPlan:
         owner = loop_input.agent_id
         tick = loop_input.observation.tick
@@ -535,6 +544,8 @@ class CommandPlanner:
                 self_model=self_model,
                 strategy_mode=strategy_mode,
                 strategy_policy=strategy_policy,
+                futures=futures,
+                competence_model=competence_model,
             )
             if compiled is None:
                 used_fallback = True
@@ -1086,6 +1097,15 @@ def _log_deliberation_bias(
     )
 
 
+def _competence_weight(policy: object | None) -> float:
+    if policy is None:
+        return 0.0
+    weight = getattr(policy, "belief_action_weight", None)
+    if type(weight) is not float:
+        return 0.0
+    return weight
+
+
 def _pairwise_select(
     appraisals: Sequence[FutureAppraisal],
     futures_by_id: Mapping[str, ImaginedFuture],
@@ -1093,6 +1113,9 @@ def _pairwise_select(
     identity_costs: Mapping[str, float] | None = None,
     world_bias: Mapping[str, float] | None = None,
     counterfactual_bias: Mapping[str, float] | None = None,
+    competence_model: object | None = None,
+    competence_weight: float = 0.0,
+    owner_id: AgentId | None = None,
 ) -> tuple[FutureAppraisal, str]:
     if len(appraisals) == 1:
         return appraisals[0], _TIE_BREAK_NONE
@@ -1108,6 +1131,9 @@ def _pairwise_select(
                 identity_costs,
                 world_bias,
                 counterfactual_bias,
+                competence_model,
+                competence_weight,
+                owner_id,
             )
             if cmp > 0:
                 scores[left.future_id] += 1
@@ -1143,6 +1169,9 @@ def _pairwise_compare(
     identity_costs: Mapping[str, float] | None = None,
     world_bias: Mapping[str, float] | None = None,
     counterfactual_bias: Mapping[str, float] | None = None,
+    competence_model: object | None = None,
+    competence_weight: float = 0.0,
+    owner_id: AgentId | None = None,
 ) -> int:
     """Return positive if left preferred, negative if right preferred, else 0."""
     active_drives = set(motivation.active_drive_kinds)
@@ -1248,6 +1277,30 @@ def _pairwise_compare(
         + model_vote
         + counterfactual_vote
     )
+    if competence_model is not None and owner_id is not None:
+        from agents.cognition.competence import competence_direction_term
+
+        left_future = futures_by_id.get(left.future_id)
+        right_future = futures_by_id.get(right.future_id)
+        left_term = competence_direction_term(
+            competence_model,
+            direction=None if left_future is None else left_future.direction,
+            targeted_search=(
+                left_future is not None and left_future.target_entity_id is not None
+            ),
+            owner_id=owner_id,
+            weight=competence_weight,
+        )
+        right_term = competence_direction_term(
+            competence_model,
+            direction=None if right_future is None else right_future.direction,
+            targeted_search=(
+                right_future is not None and right_future.target_entity_id is not None
+            ),
+            owner_id=owner_id,
+            weight=competence_weight,
+        )
+        total = total + (left_term - right_term)
     if total > 0:
         return 1
     if total < 0:
@@ -1341,6 +1394,70 @@ class _StrategyHold:
     audit: object | None
 
 
+def _visible_search_target(target: str, observation: Observation) -> bool:
+    target_id = EntityId(target)
+    return any(item.entity_id == target_id for item in observation.items) or any(
+        resource.entity_id == target_id for resource in observation.resources
+    )
+
+
+def _preferred_search_target(
+    future: ImaginedFuture,
+    observation: Observation,
+    snapshot: SubjectiveSnapshot | None,
+    futures: PossibleFutures | None,
+    competence_model: object | None = None,
+) -> EntityId | None:
+    """Prefer untargeted or targeted search from believed levels of legal searches."""
+    target = future.target_entity_id
+    chosen: EntityId | None = None if target is None else EntityId(target)
+    if chosen is not None and not _visible_search_target(target or "", observation):
+        chosen = None
+    model = (
+        snapshot.competence_model
+        if competence_model is None and snapshot is not None
+        else competence_model
+    )
+    if (
+        model is None
+        or type(model).__name__ != "CompetenceSelfModel"
+        or futures is None
+    ):
+        return chosen
+    from agents.cognition.competence import CompetenceDomain
+
+    allowed = set(model.preferred_domains) or {
+        CompetenceDomain.FORAGING.value,
+        CompetenceDomain.RESOURCE_DETECTION.value,
+    }
+    if model.selection_fallback_used:
+        allowed = {
+            CompetenceDomain.FORAGING.value,
+            CompetenceDomain.RESOURCE_DETECTION.value,
+        }
+    foraging = model.belief_for(CompetenceDomain.FORAGING).believed_level
+    detection = model.belief_for(CompetenceDomain.RESOURCE_DETECTION).believed_level
+    legal = tuple(
+        item
+        for item in futures.futures
+        if item.direction is ActionDirection.SEARCH
+        and _is_feasible(item.direction, item.target_entity_id, observation)
+    )
+    if (
+        foraging > detection
+        and CompetenceDomain.FORAGING.value in allowed
+        and any(item.target_entity_id is None for item in legal)
+    ):
+        return None
+    if detection > foraging and CompetenceDomain.RESOURCE_DETECTION.value in allowed:
+        targeted = tuple(item for item in legal if item.target_entity_id is not None)
+        if targeted and _visible_search_target(
+            targeted[0].target_entity_id or "", observation
+        ):
+            return EntityId(targeted[0].target_entity_id or "")
+    return chosen
+
+
 def _compile_command(
     future: ImaginedFuture,
     observation: Observation,
@@ -1355,6 +1472,8 @@ def _compile_command(
     self_model: object | None = None,
     strategy_mode: object | None = None,
     strategy_policy: object | None = None,
+    futures: PossibleFutures | None = None,
+    competence_model: object | None = None,
 ) -> AgentCommand | _StrategyHold | None:
     direction = future.direction
     target = future.target_entity_id
@@ -1363,15 +1482,9 @@ def _compile_command(
     if direction is ActionDirection.SLEEP:
         return Sleep()
     if direction is ActionDirection.SEARCH:
-        target_id = None if target is None else EntityId(target)
-        if (
-            target_id is not None
-            and not any(item.entity_id == target_id for item in observation.items)
-            and not any(
-                resource.entity_id == target_id for resource in observation.resources
-            )
-        ):
-            target_id = None
+        target_id = _preferred_search_target(
+            future, observation, snapshot, futures, competence_model
+        )
         return Search(target_id=target_id)
     if direction is ActionDirection.DRINK:
         source = _resolve_entity(target, observation, kind="water")

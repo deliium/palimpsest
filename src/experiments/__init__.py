@@ -25,6 +25,7 @@ from experiments.catalog import (
     experiment_o_deception_detection,
     experiment_p_information_cascade,
     experiment_q_distributed_reputation,
+    experiment_r_skill_learning,
     v1_regression_profile,
 )
 from experiments.collectors import (
@@ -198,6 +199,7 @@ __all__ = [
     "experiment_o_deception_detection",
     "experiment_p_information_cascade",
     "experiment_q_distributed_reputation",
+    "experiment_r_skill_learning",
     "make_false_story_intervention",
     "map_consolidation_audits_to_report",
     "map_recall_audits_to_dynamics_report",

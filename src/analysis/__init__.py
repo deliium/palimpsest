@@ -166,6 +166,10 @@ from analysis.serialization import (
     metric_document_fingerprint,
 )
 from analysis.service import MemoryDriftAnalysisService
+from analysis.skill_learning_metrics import (
+    SKILL_LEARNING_METRIC_VERSION,
+    compute_skill_learning,
+)
 from analysis.social_transmission import (
     SocialTransmissionAnalysisService,
     build_lineage_edges,
@@ -241,6 +245,7 @@ __all__ = [
     "PROSPECTIVE_IMAGINATION_METRIC_VERSION",
     "REFLECTION_METRIC_VERSION",
     "SCIPY_DEGENERATE_POLICY",
+    "SKILL_LEARNING_METRIC_VERSION",
     "SOCIAL_TRANSMISSION_METRIC_VERSION",
     "SUPPORTED_COMMUNITY_ALGORITHM",
     "THEORY_OF_MIND_METRIC_VERSION",
@@ -339,6 +344,7 @@ __all__ = [
     "compute_repeated_conventions",
     "compute_resource_inequality",
     "compute_rumor_distortion",
+    "compute_skill_learning",
     "compute_survival",
     "compute_theory_of_mind_metrics",
     "compute_trust_network_structure",

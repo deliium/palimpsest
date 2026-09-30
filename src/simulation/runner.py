@@ -139,6 +139,8 @@ from simulation.runner_models import (
     RunnerStopReasonCode,
     SimulationRunnerConfig,
     SimulationRunnerResult,
+    SkillAudit,
+    SkillAuditSide,
     SkillLearningMode,
     V2CapabilityFlags,
     build_detached_objective_projection,
@@ -1802,6 +1804,7 @@ class SimulationRunner:
             prospective_audits=self.export_prospective_audits(),
             counterfactual_audits=self.export_counterfactual_audits(),
             communication_intent_audits=self.export_communication_intent_audits(),
+            skill_audits=self.export_skill_audits(),
         )
         _LOG.info(
             "runner_finished run_id=%s ticks_committed=%s stop_reason=%s "
@@ -1920,6 +1923,50 @@ class SimulationRunner:
             len(collected),
         )
         return tuple(collected)
+
+    def export_skill_audits(self) -> tuple[SkillAudit, ...]:
+        """Harvest objective and subjective skill rows. Not part of result JSON."""
+        from world._skills import SkillDomain
+
+        ledger = self._engine._skill_ledger
+        if ledger is None:
+            return ()
+        tick = self._engine.tick.value
+        agent_for = {agent.entity_id: agent.agent_id for agent in self._config.agents}
+        rows: list[SkillAudit] = []
+        for entity_id in ledger.entity_ids():
+            agent_id = agent_for.get(entity_id)
+            if agent_id is None:
+                continue
+            for domain in SkillDomain:
+                rows.append(
+                    SkillAudit(
+                        agent_id=agent_id,
+                        side=SkillAuditSide.OBJECTIVE,
+                        domain=domain.value,
+                        level=ledger.level(entity_id, domain),
+                        tick=tick,
+                    )
+                )
+        for runtime in self._runtimes:
+            checkpoint = runtime.export_runtime_checkpoint()
+            model = getattr(checkpoint, "competence_model", None)
+            if model is None:
+                continue
+            owner = getattr(model, "owner_id", None)
+            beliefs = getattr(model, "beliefs", ())
+            for belief in beliefs:
+                domain = belief.domain.value
+                rows.append(
+                    SkillAudit(
+                        agent_id=owner,
+                        side=SkillAuditSide.SUBJECTIVE,
+                        domain=domain,
+                        level=belief.believed_level,
+                        tick=tick,
+                    )
+                )
+        return tuple(rows)
 
     def export_world_model_audits(self) -> tuple[object, ...]:
         """Harvest causal world-model audits. Not part of result JSON."""

@@ -235,6 +235,8 @@ class CompetenceSelfModel:
     owner_id: AgentId
     beliefs: tuple[CompetenceBelief, ...]
     cursors: tuple[CompetenceDomainCursor, ...]
+    preferred_domains: tuple[str, ...] = ()
+    selection_fallback_used: bool = False
 
     def __post_init__(self) -> None:
         if type(self.owner_id) is not AgentId:
@@ -254,6 +256,22 @@ class CompetenceSelfModel:
                 or cursor.domain is not domain
             ):
                 raise _fail("domain", "unknown_domain")
+        if isinstance(self.preferred_domains, (str, bytes)) or not isinstance(
+            self.preferred_domains, tuple
+        ):
+            raise _fail("preferred_domains", "invalid_type")
+        for token in self.preferred_domains:
+            try:
+                CompetenceDomain(token)
+            except ValueError:
+                _LOG.error(
+                    "competence_bias owner_id=%s domain=%s reason_code=unknown_domain",
+                    self.owner_id.value,
+                    token,
+                )
+                raise _fail("preferred_domains", "unknown_domain") from None
+        if type(self.selection_fallback_used) is not bool:
+            raise _fail("selection_fallback_used", "invalid_type")
 
     def belief_for(self, domain: CompetenceDomain) -> CompetenceBelief:
         checked = _require_domain(domain)
@@ -329,6 +347,8 @@ def apply_belief_channel(
         owner_id=model.owner_id,
         beliefs=tuple(beliefs),
         cursors=model.cursors,
+        preferred_domains=model.preferred_domains,
+        selection_fallback_used=model.selection_fallback_used,
     )
 
 
@@ -347,6 +367,60 @@ def require_owner_competence(
         raise TypeError(f"{field_name} must be CompetenceSelfModel")
     if model.owner_id != owner_id:
         raise ValueError(f"{field_name} owner_id mismatch")
+
+
+def competence_direction_term(
+    model: object,
+    *,
+    direction: object,
+    targeted_search: bool,
+    owner_id: AgentId,
+    weight: float,
+) -> float:
+    """Belief weight for one existing direction. A missing model adds nothing."""
+    if model is None:
+        return 0.0
+    if type(model) is not CompetenceSelfModel:
+        raise TypeError("competence model must be CompetenceSelfModel")
+    domain = _direction_domain(
+        direction, targeted_search=targeted_search, owner_id=owner_id
+    )
+    if domain is None:
+        return 0.0
+    believed = model.belief_for(domain).believed_level
+    _LOG.debug(
+        "competence_bias owner_id=%s domain=%s believed=%s weight=%s",
+        owner_id.value,
+        domain.value,
+        believed,
+        weight,
+    )
+    return weight * believed
+
+
+def _direction_domain(
+    direction: object, *, targeted_search: bool, owner_id: AgentId
+) -> CompetenceDomain | None:
+    from agents.cognition.models import ActionDirection
+
+    if type(direction) is not ActionDirection:
+        _LOG.error(
+            "competence_bias owner_id=%s domain=%s reason_code=unknown_domain",
+            owner_id.value,
+            getattr(direction, "value", direction),
+        )
+        return None
+    if direction is ActionDirection.SEARCH:
+        if targeted_search:
+            return CompetenceDomain.RESOURCE_DETECTION
+        return CompetenceDomain.FORAGING
+    if direction is ActionDirection.MOVE or direction is ActionDirection.FLEE:
+        return CompetenceDomain.NAVIGATION
+    if direction is ActionDirection.HELP:
+        return CompetenceDomain.HEALING
+    if direction is ActionDirection.COMMUNICATE:
+        return CompetenceDomain.COMMUNICATION
+    return None
 
 
 def update_competence(
@@ -549,4 +623,6 @@ def _remember(
         owner_id=model.owner_id,
         beliefs=model.beliefs,
         cursors=tuple(cursors),
+        preferred_domains=model.preferred_domains,
+        selection_fallback_used=model.selection_fallback_used,
     )

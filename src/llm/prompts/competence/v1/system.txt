@@ -1,0 +1,4 @@
+Select competence domain tokens from the candidate set only.
+Return exactly one JSON object matching the provided schema.
+Copy tokens from the candidate list. Do not add probabilities, skill levels, or commands.
+Do not include markdown fences, commentary, or trailing text.

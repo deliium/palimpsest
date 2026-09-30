@@ -254,6 +254,55 @@ class SkillLearningMode(StrEnum):
     DETERMINISTIC = "deterministic"
 
 
+class SkillAuditSide(StrEnum):
+    """Which store a harvested skill row came from."""
+
+    OBJECTIVE = "objective"
+    SUBJECTIVE = "subjective"
+
+
+_SKILL_AUDIT_DOMAINS: Final[frozenset[str]] = frozenset(
+    {
+        "foraging",
+        "navigation",
+        "resource_detection",
+        "crafting",
+        "building",
+        "healing",
+        "communication",
+        "teaching",
+    }
+)
+
+
+@dataclass(frozen=True, slots=True)
+class SkillAudit:
+    """Analysis-only skill row. Not stored on the runner-result document."""
+
+    agent_id: AgentId
+    side: SkillAuditSide
+    domain: str
+    level: float
+    tick: int
+
+    def __post_init__(self) -> None:
+        if type(self.agent_id) is not AgentId:
+            raise TypeError("SkillAudit.agent_id must be AgentId")
+        if type(self.side) is not SkillAuditSide:
+            raise TypeError("SkillAudit.side must be SkillAuditSide")
+        if type(self.domain) is not str or self.domain not in _SKILL_AUDIT_DOMAINS:
+            raise ValueError("SkillAudit.domain unknown_domain")
+        if type(self.level) is not float or self.level != self.level:
+            raise ValueError("SkillAudit.level not_finite")
+        if self.level < 0.0 or self.level > 1.0:
+            raise ValueError("SkillAudit.level out_of_range")
+        object.__setattr__(
+            self,
+            "tick",
+            require_exact_nonneg_int("SkillAudit.tick", self.tick),
+        )
+
+
 _SKILL_RATE_NAMES: Final[tuple[str, ...]] = (
     "practice_rate",
     "success_rate",
@@ -278,29 +327,49 @@ def skill_rate_tuple(spec: AgentCognitionSpec) -> tuple[float, ...]:
 
 
 def _validate_shared_skill_rates(spec: AgentCognitionSpec) -> None:
-    """Reject a v11 rate tuple the objective or belief policy would refuse."""
-    from agents.cognition.competence import CompetenceBeliefPolicy
-    from world._skills import ObjectiveSkillPolicy
+    """Reject a v11 rate tuple the objective or belief policy would refuse.
 
-    ObjectiveSkillPolicy(
-        practice_rate=spec.practice_rate,
-        success_rate=spec.success_rate,
-        failure_rate=spec.failure_rate,
-        instruction_rate=spec.instruction_rate,
-        observation_rate=spec.observation_rate,
-        probability_gain=spec.probability_gain,
-        efficiency_gain=spec.efficiency_gain,
-    )
-    CompetenceBeliefPolicy(
-        belief_practice_rate=spec.belief_practice_rate,
-        belief_success_rate=spec.belief_success_rate,
-        belief_failure_rate=spec.belief_failure_rate,
-        belief_instruction_rate=spec.belief_instruction_rate,
-        belief_observation_rate=spec.belief_observation_rate,
-        belief_prior=spec.belief_prior,
-        belief_action_weight=spec.belief_action_weight,
-        allow_provider=False,
-    )
+    Checked here so runner configuration does not import the private skill
+    module. The objective and belief constructors use the same bounds.
+    """
+    _skill_number("practice_rate", spec.practice_rate, unit=False)
+    _skill_number("success_rate", spec.success_rate, unit=False)
+    _skill_number("failure_rate", spec.failure_rate, unit=False)
+    _skill_number("instruction_rate", spec.instruction_rate, unit=False)
+    _skill_number("observation_rate", spec.observation_rate, unit=False)
+    _skill_number("probability_gain", spec.probability_gain, unit=True)
+    _skill_number("efficiency_gain", spec.efficiency_gain, unit=True)
+    _skill_number("belief_practice_rate", spec.belief_practice_rate, unit=False)
+    _skill_number("belief_success_rate", spec.belief_success_rate, unit=False)
+    _skill_number("belief_failure_rate", spec.belief_failure_rate, unit=False)
+    _skill_number("belief_instruction_rate", spec.belief_instruction_rate, unit=False)
+    _skill_number("belief_observation_rate", spec.belief_observation_rate, unit=False)
+    _skill_number("belief_prior", spec.belief_prior, unit=False)
+    _skill_number("belief_action_weight", spec.belief_action_weight, unit=True)
+
+
+def _skill_number(field_name: str, value: object, *, unit: bool) -> None:
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        _LOGGER.error(
+            "skill_rate_invalid field=%s reason_code=not_finite",
+            field_name,
+        )
+        raise ValueError(f"{field_name}: not_finite")
+    number = float(value)
+    if not math.isfinite(number):
+        _LOGGER.error(
+            "skill_rate_invalid field=%s reason_code=not_finite",
+            field_name,
+        )
+        raise ValueError(f"{field_name}: not_finite")
+    if number < 0.0 or (unit and number > 1.0):
+        code = "out_of_range" if unit else "negative_rate"
+        _LOGGER.error(
+            "skill_rate_invalid field=%s reason_code=%s",
+            field_name,
+            code,
+        )
+        raise ValueError(f"{field_name}: {code}")
 
 
 @dataclass(frozen=True, slots=True)
@@ -805,6 +874,7 @@ class SimulationRunnerResult:
     prospective_audits: tuple[object, ...] = ()
     counterfactual_audits: tuple[object, ...] = ()
     communication_intent_audits: tuple[object, ...] = ()
+    skill_audits: tuple[object, ...] = ()
 
     def __post_init__(self) -> None:
         from simulation.models import RunId
@@ -912,6 +982,13 @@ class SimulationRunnerResult:
             if type(audit) is not CommunicationIntentAudit:
                 raise TypeError("communication_intent_audits: invalid_item")
         object.__setattr__(self, "communication_intent_audits", audits)
+        if isinstance(self.skill_audits, (set, frozenset)):
+            raise TypeError("skill_audits must be ordered")
+        skill_rows = tuple(self.skill_audits)
+        for row in skill_rows:
+            if type(row) is not SkillAudit:
+                raise TypeError("skill_audits: invalid_item")
+        object.__setattr__(self, "skill_audits", skill_rows)
 
 
 class CognitionFailurePolicy(StrEnum):
@@ -1084,9 +1161,7 @@ class AgentCognitionSpec:
                 "invalid_enum path=AgentCognitionSpec.reputation_mode "
                 "reason_code=invalid_mode"
             )
-            raise TypeError(
-                "AgentCognitionSpec.reputation_mode must be ReputationMode"
-            )
+            raise TypeError("AgentCognitionSpec.reputation_mode must be ReputationMode")
         if type(self.skill_learning_mode) is not SkillLearningMode:
             _LOGGER.error(
                 "invalid_enum path=AgentCognitionSpec.skill_learning_mode "

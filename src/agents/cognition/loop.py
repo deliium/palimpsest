@@ -810,6 +810,20 @@ class CognitiveLoop:
         mind = self._prepare_theory_of_mind(loop_input, emotional_evaluation, memory)
         reputation = self._prepare_reputation(loop_input)
         competence = self._prepare_competence(loop_input, memory)
+        competence_policy = self._competence_policy
+        if (
+            competence is not None
+            and competence_policy is not None
+            and competence_policy.allow_provider
+        ):
+            from agents.cognition.competence_selection import select_competence_domains
+
+            competence = await select_competence_domains(
+                competence,
+                competence_policy,
+                provider=self._world_model_provider,
+                tick=loop_input.observation.tick,
+            )
         policy = self._world_model_policy
         if world_model is not None and policy is not None and policy.allow_provider:
             from agents.cognition.world_model_selection import (
@@ -882,6 +896,8 @@ class CognitiveLoop:
                 causal_world_model=world_model,
                 theory_of_mind=mind,
                 counterfactual_bias=self._counterfactual_bias(loop_input, futures),
+                competence_policy=self._competence_policy,
+                competence_model=competence,
             ),
             expected_type=SelectedIntention,
         )
@@ -906,6 +922,7 @@ class CognitiveLoop:
                     reputation=reputation,
                     reputation_mode=self._reputation_mode,
                     reputation_policy=self._reputation_policy,
+                    competence_model=competence,
                 ),
             ),
             expected_type=ActionPlan,

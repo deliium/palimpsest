@@ -50,7 +50,7 @@ __all__ = [
 ]
 
 METRIC_CATALOG_VERSION: Final[str] = "metric-catalog-v1"
-METRIC_FAMILY_COUNT: Final[int] = 25
+METRIC_FAMILY_COUNT: Final[int] = 26
 
 # Align with existing memory-drift / transmission document versions.
 _ALGO_V1: Final[str] = "1"
@@ -102,6 +102,7 @@ class MetricFamilyId(StrEnum):
     PROSPECTIVE_IMAGINATION = "prospective_imagination"
     COUNTERFACTUAL_REASONING = "counterfactual_reasoning"
     DISTRIBUTED_REPUTATION = "distributed_reputation"
+    SKILL_LEARNING = "skill_learning"
 
 
 class DenominatorKind(StrEnum):
@@ -1017,6 +1018,29 @@ def _spec_distributed_reputation() -> MetricSpecification:
     )
 
 
+def _spec_skill_learning() -> MetricSpecification:
+    return _base(
+        family_id=MetricFamilyId.SKILL_LEARNING,
+        evidence_inputs=frozenset({EvidenceStage.AGENT_VISIBLE_PROJECTION}),
+        population="skill_audit_rows_per_agent_domain",
+        denominator="joined objective and subjective rows",
+        denominator_kind=DenominatorKind.OCCURRENCE,
+        cohort_window="audits harvested after the run",
+        deceased_policy="not_applicable",
+        zero_holding_policy="no rows -> availability=absent",
+        opportunity_vs_occurrence="absolute gap between harvested sides",
+        self_edge_policy="not_applicable",
+        censoring_policy="a missing side is unmatched and is not guessed",
+        formulas={
+            "gap": "absolute difference of quantized objective and believed levels",
+            "matched_count": "agent-domain pairs with both sides",
+            "unmatched_count": "agent-domain pairs missing one side",
+        },
+        value_keys=("matched_count", "unmatched_count", "max_gap"),
+        empty_case="availability=absent; omit numeric values",
+    )
+
+
 def _spec_theory_of_mind() -> MetricSpecification:
     return _base(
         family_id=MetricFamilyId.THEORY_OF_MIND,
@@ -1650,6 +1674,7 @@ _BUILDERS: Final[tuple[Callable[[], MetricSpecification], ...]] = (
     _spec_rumor_distortion,
     _spec_counterfactual_reasoning,
     _spec_distributed_reputation,
+    _spec_skill_learning,
 )
 
 

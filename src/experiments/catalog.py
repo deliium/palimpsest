@@ -22,6 +22,7 @@ from simulation.runner_models import (
     RUNNER_SCHEMA_VERSION_V8,
     RUNNER_SCHEMA_VERSION_V9,
     RUNNER_SCHEMA_VERSION_V10,
+    RUNNER_SCHEMA_VERSION_V11,
     AgentCognitionSpec,
     AgentRunnerSpec,
     CommunicationStrategyMode,
@@ -36,6 +37,7 @@ from simulation.runner_models import (
     ReputationMode,
     RunnerStopPolicy,
     SimulationRunnerConfig,
+    SkillLearningMode,
     V2CapabilityFlags,
     WorldScenarioSpec,
     capability_flags_digest,
@@ -58,6 +60,7 @@ def _with_agent_modes(
     counterfactual_mode: CounterfactualMode | None = None,
     communication_strategy_mode: CommunicationStrategyMode | None = None,
     reputation_mode: ReputationMode | None = None,
+    skill_learning_mode: SkillLearningMode | None = None,
     schema_version: str | None = None,
 ) -> SimulationRunnerConfig:
     agents: list[AgentRunnerSpec] = []
@@ -107,6 +110,25 @@ def _with_agent_modes(
                 if reputation_mode is not None
                 else agent.cognition.reputation_mode
             ),
+            skill_learning_mode=(
+                skill_learning_mode
+                if skill_learning_mode is not None
+                else agent.cognition.skill_learning_mode
+            ),
+            practice_rate=agent.cognition.practice_rate,
+            success_rate=agent.cognition.success_rate,
+            failure_rate=agent.cognition.failure_rate,
+            instruction_rate=agent.cognition.instruction_rate,
+            observation_rate=agent.cognition.observation_rate,
+            probability_gain=agent.cognition.probability_gain,
+            efficiency_gain=agent.cognition.efficiency_gain,
+            belief_practice_rate=agent.cognition.belief_practice_rate,
+            belief_success_rate=agent.cognition.belief_success_rate,
+            belief_failure_rate=agent.cognition.belief_failure_rate,
+            belief_instruction_rate=agent.cognition.belief_instruction_rate,
+            belief_observation_rate=agent.cognition.belief_observation_rate,
+            belief_prior=agent.cognition.belief_prior,
+            belief_action_weight=agent.cognition.belief_action_weight,
         )
         agents.append(
             AgentRunnerSpec(
@@ -821,6 +843,58 @@ def experiment_q_distributed_reputation(
         arms=(
             ("q-disabled", "reputation_disabled", disabled),
             ("q-enabled", "reputation_deterministic", enabled),
+        ),
+    )
+
+
+def experiment_r_skill_learning(
+    base: SimulationRunnerConfig,
+    *,
+    seed_matrix: ExperimentSeedMatrix | None = None,
+) -> ExperimentDefinition:
+    """Paired arms share seed, scenario, and stochastic identity.
+
+    ``r-disabled`` leaves skill learning off on ``runner-config-v4``.
+    ``r-enabled`` uses deterministic skill learning on ``runner-config-v11``.
+    """
+    matrix = seed_matrix or ExperimentSeedMatrix(seeds=(base.seed,))
+    disabled = _with_agent_modes(
+        base,
+        skill_learning_mode=SkillLearningMode.DISABLED,
+        schema_version=RUNNER_SCHEMA_VERSION_V4,
+    )
+    enabled = _with_agent_modes(
+        base,
+        skill_learning_mode=SkillLearningMode.DETERMINISTIC,
+        schema_version=RUNNER_SCHEMA_VERSION_V11,
+    )
+    if disabled.seed != enabled.seed:
+        raise ValueError("experiment_r: seed_mismatch")
+    if disabled.stochastic_identity != enabled.stochastic_identity:
+        raise ValueError("experiment_r: stochastic_mismatch")
+    if disabled.scenario != enabled.scenario:
+        raise ValueError("experiment_r: scenario_mismatch")
+    experiment_id = "experiment-r-skill-learning"
+    arms = (
+        ("r-disabled", disabled.schema_version, SkillLearningMode.DISABLED.value),
+        ("r-enabled", enabled.schema_version, SkillLearningMode.DETERMINISTIC.value),
+    )
+    for arm_id, schema_version, skill_mode in arms:
+        _LOG.info(
+            "experiment_r_built experiment_id=%s arm_id=%s schema_version=%s "
+            "skill_mode=%s",
+            experiment_id,
+            arm_id,
+            schema_version,
+            skill_mode,
+        )
+    return _definition(
+        experiment_id=experiment_id,
+        base=replace(base, schema_version=RUNNER_SCHEMA_VERSION_V4),
+        seed_matrix=matrix,
+        arms=(
+            ("r-disabled", "skill_learning_disabled", disabled),
+            ("r-enabled", "skill_learning_deterministic", enabled),
         ),
     )
 
