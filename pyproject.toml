@@ -425,6 +425,7 @@ ignore_imports = [
     "agents.cognition.world_model_selection -> llm",
     "agents.cognition.theory_of_mind_selection -> llm",
     "agents.cognition.competence_selection -> llm",
+    "agents.cognition.teaching_selection -> llm",
     "simulation.runner_models -> llm.models",
     "simulation.runner_models -> llm.factory",
     "simulation.runner_serialization -> llm.factory",

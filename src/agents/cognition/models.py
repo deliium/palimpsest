@@ -711,6 +711,7 @@ class SubjectiveSnapshot:
     theory_of_mind: object | None = None
     reputation: object | None = None
     competence_model: object | None = None
+    declarative_advice: object | None = None
 
     def __post_init__(self) -> None:
         if type(self.owner_id) is not AgentId:
@@ -861,6 +862,13 @@ class SubjectiveSnapshot:
             self.competence_model,
             self.owner_id,
             field_name="SubjectiveSnapshot.competence_model",
+        )
+        from agents.cognition.teaching import require_owner_advice
+
+        require_owner_advice(
+            self.declarative_advice,
+            self.owner_id,
+            field_name="SubjectiveSnapshot.declarative_advice",
         )
 
     def __repr__(self) -> str:
@@ -3640,6 +3648,7 @@ class CognitiveLoopProposal:
     communication_intent_audit: object | None = None
     reputation: object | None = None
     competence_model: object | None = None
+    declarative_advice: object | None = None
 
     def __post_init__(self) -> None:
         object.__setattr__(
@@ -3700,6 +3709,13 @@ class CognitiveLoopProposal:
             self.competence_model,
             self.agent_id,
             field_name="CognitiveLoopProposal.competence_model",
+        )
+        from agents.cognition.teaching import require_owner_advice
+
+        require_owner_advice(
+            self.declarative_advice,
+            self.agent_id,
+            field_name="CognitiveLoopProposal.declarative_advice",
         )
         if type(self.futures) is not PossibleFutures:
             raise TypeError("futures must be PossibleFutures")
@@ -3776,6 +3792,7 @@ class CognitiveLoopResult:
     communication_intent_audit: object | None = None
     reputation: object | None = None
     competence_model: object | None = None
+    declarative_advice: object | None = None
 
     def __post_init__(self) -> None:
         object.__setattr__(
@@ -3812,6 +3829,13 @@ class CognitiveLoopResult:
             self.competence_model,
             self.agent_id,
             field_name="CognitiveLoopResult.competence_model",
+        )
+        from agents.cognition.teaching import require_owner_advice
+
+        require_owner_advice(
+            self.declarative_advice,
+            self.agent_id,
+            field_name="CognitiveLoopResult.declarative_advice",
         )
         object.__setattr__(self, "command", require_agent_command(self.command))
         if isinstance(self.boundary_records, (set, frozenset, Mapping)):

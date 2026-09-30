@@ -252,6 +252,9 @@ class ScriptedIntentionSelector:
         theory_of_mind: object | None = None,
         *,
         counterfactual_bias: Mapping[str, float] | None = None,
+        competence_policy: object | None = None,
+        competence_model: object | None = None,
+        teaching_policy: object | None = None,
     ) -> SelectedIntention:
         _ = (
             motivation,

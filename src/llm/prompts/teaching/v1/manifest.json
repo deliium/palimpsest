@@ -1,0 +1,21 @@
+{
+  "name": "teaching",
+  "version": "v1",
+  "messages": [
+    {
+      "role": "system",
+      "template": "system.txt",
+      "sha256": "c55ad17cf1b06b4599c409e446d0edebbbe2579bb278c3cc43d1cc32750d0bb0"
+    },
+    {
+      "role": "user",
+      "template": "user.txt",
+      "sha256": "5f20d2a332a5d54e88a0dea38fcc917b4a1e0256897fd11fd1fdf441226dfc90"
+    }
+  ],
+  "variables": [
+    "schema_name",
+    "schema_json",
+    "candidate_json"
+  ]
+}

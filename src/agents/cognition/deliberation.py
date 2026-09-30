@@ -124,6 +124,7 @@ class MultiCriteriaIntentionSelector:
         counterfactual_bias: Mapping[str, float] | None = None,
         competence_policy: object | None = None,
         competence_model: object | None = None,
+        teaching_policy: object | None = None,
     ) -> SelectedIntention:
         owner = loop_input.agent_id
         tick = loop_input.observation.tick
@@ -286,6 +287,8 @@ class MultiCriteriaIntentionSelector:
             active_model,
             _competence_weight(competence_policy),
             owner,
+            teaching_policy,
+            loop_input.observation,
         )
         future = futures_by_id.get(winner.future_id)
         direction = ActionDirection.WAIT if future is None else future.direction
@@ -507,6 +510,9 @@ class CommandPlanner:
         reputation_mode: object | None = None,
         reputation_policy: object | None = None,
         competence_model: object | None = None,
+        teaching_mode: object | None = None,
+        teaching_policy: object | None = None,
+        teaching_selection: tuple[object, object] | None = None,
     ) -> ActionPlan:
         owner = loop_input.agent_id
         tick = loop_input.observation.tick
@@ -546,6 +552,9 @@ class CommandPlanner:
                 strategy_policy=strategy_policy,
                 futures=futures,
                 competence_model=competence_model,
+                teaching_mode=teaching_mode,
+                teaching_policy=teaching_policy,
+                teaching_selection=teaching_selection,
             )
             if compiled is None:
                 used_fallback = True
@@ -1116,6 +1125,8 @@ def _pairwise_select(
     competence_model: object | None = None,
     competence_weight: float = 0.0,
     owner_id: AgentId | None = None,
+    teaching_policy: object | None = None,
+    observation: object | None = None,
 ) -> tuple[FutureAppraisal, str]:
     if len(appraisals) == 1:
         return appraisals[0], _TIE_BREAK_NONE
@@ -1134,6 +1145,8 @@ def _pairwise_select(
                 competence_model,
                 competence_weight,
                 owner_id,
+                teaching_policy,
+                observation,
             )
             if cmp > 0:
                 scores[left.future_id] += 1
@@ -1172,6 +1185,8 @@ def _pairwise_compare(
     competence_model: object | None = None,
     competence_weight: float = 0.0,
     owner_id: AgentId | None = None,
+    teaching_policy: object | None = None,
+    observation: object | None = None,
 ) -> int:
     """Return positive if left preferred, negative if right preferred, else 0."""
     active_drives = set(motivation.active_drive_kinds)
@@ -1301,6 +1316,22 @@ def _pairwise_compare(
             weight=competence_weight,
         )
         total = total + (left_term - right_term)
+    from agents.cognition.teaching import teaching_response_term
+
+    left_future = futures_by_id.get(left.future_id)
+    right_future = futures_by_id.get(right.future_id)
+    total += teaching_response_term(
+        observation,
+        teaching_policy,
+        None if left_future is None else left_future.direction,
+        owner_id,
+    )
+    total -= teaching_response_term(
+        observation,
+        teaching_policy,
+        None if right_future is None else right_future.direction,
+        owner_id,
+    )
     if total > 0:
         return 1
     if total < 0:
@@ -1474,6 +1505,9 @@ def _compile_command(
     strategy_policy: object | None = None,
     futures: PossibleFutures | None = None,
     competence_model: object | None = None,
+    teaching_mode: object | None = None,
+    teaching_policy: object | None = None,
+    teaching_selection: tuple[object, object] | None = None,
 ) -> AgentCommand | _StrategyHold | None:
     direction = future.direction
     target = future.target_entity_id
@@ -1577,15 +1611,51 @@ def _compile_command(
             return None
         intent = getattr(decision, "intent", None)
         audit = getattr(decision, "audit", None)
+        command = _with_teaching_act(
+            decision.command,
+            model=competence_model,
+            policy=teaching_policy,
+            observation=observation,
+            mode=teaching_mode,
+            selection=teaching_selection,
+        )
         if intent is None:
-            return decision.command
-        return _StrategyHold(decision.command, intent, audit)
+            return command
+        return _StrategyHold(command, intent, audit)
     if direction is ActionDirection.HELP:
         helped = _resolve_social_entity(target, observation)
         if helped is None:
             return None
         return Help(target_id=helped)
     return None
+
+
+def _with_teaching_act(
+    command: object | None,
+    *,
+    model: object | None,
+    policy: object | None,
+    observation: object,
+    mode: object | None,
+    selection: tuple[object, object] | None,
+) -> object | None:
+    if command is None:
+        return None
+    from agents.cognition.teaching import AdviceAct, AdviceDomain, attach_teaching_act
+
+    chosen: tuple[AdviceAct, AdviceDomain] | None = None
+    if selection is not None:
+        act, domain = selection
+        if type(act) is AdviceAct and type(domain) is AdviceDomain:
+            chosen = (act, domain)
+    return attach_teaching_act(
+        command,
+        model=model,
+        policy=policy,
+        observation=observation,
+        mode=mode,
+        selection=chosen,
+    )
 
 
 def _resolve_entity(

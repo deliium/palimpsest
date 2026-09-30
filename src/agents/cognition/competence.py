@@ -1,7 +1,8 @@
 """Owner-scoped belief about skill. This is not the objective ledger.
 
 Support and counter mass live on the owner. Believed level is
-``support / (support + counter + prior)``. Counter mass stays ``0``.
+``support / (support + counter + prior)``. Skill channels write counter
+mass ``0``. A teaching update may store a positive counter.
 This module does not import ``world._skills``.
 """
 
@@ -188,13 +189,11 @@ class CompetenceBelief:
         object.__setattr__(self, "domain", domain)
         support = _nonnegative_rate("support_mass", self.support_mass)
         counter = _nonnegative_rate("counter_mass", self.counter_mass)
-        if counter != 0.0:
-            raise _fail("counter_mass", "counter_mass")
         believed = _finite_number("believed_level", self.believed_level)
         if believed < 0.0 or believed > 1.0:
             raise _fail("believed_level", "out_of_range")
         object.__setattr__(self, "support_mass", support)
-        object.__setattr__(self, "counter_mass", 0.0)
+        object.__setattr__(self, "counter_mass", counter)
         object.__setattr__(self, "believed_level", believed)
 
 
@@ -311,7 +310,7 @@ def apply_belief_channel(
     policy: CompetenceBeliefPolicy,
     **forbidden: object,
 ) -> CompetenceSelfModel:
-    """Add one channel's support. Counter mass stays ``0``.
+    """Add one channel's support. This channel writes counter mass ``0``.
 
     Objective ledger and world state are not parameters. Extra keywords raise
     ``TypeError``.

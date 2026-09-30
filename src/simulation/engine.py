@@ -1105,9 +1105,18 @@ class WorldEngine:
             tick=snap.tick.value,
             skill_efficiency=self._skill_efficiency_map(rules=physical_rules),
         )
-        folded_ledger = self._fold_skill_ledger(
+        start_ledger = self._skill_ledger
+        folded_ledger, skill_facts = self._fold_skill_ledger(
             snap=snap, pending=pending, requests=batch_requests, rules=physical_rules
         )
+        if self._teaching_policy is not None:
+            folded_ledger = self._fold_teaching_ledger(
+                snap=snap,
+                rules=physical_rules,
+                start_ledger=start_ledger,
+                folded_ledger=folded_ledger,
+                skill_facts=skill_facts,
+            )
         _LOGGER.debug(
             "%s tick=%s pending_actions=%s pending_events=%s mutation=%s",
             EngineDiagnosticCode.SUBMISSION_ADMITTED.value,
@@ -1315,9 +1324,9 @@ class WorldEngine:
         pending: object,
         requests: tuple[ActionRequest, ...],
         rules: object,
-    ) -> object | None:
+    ) -> tuple[object | None, tuple[object, ...]]:
         if self._skill_ledger is None or self._skill_policy is None:
-            return None
+            return None, ()
         from world._operations import PendingBatch
         from world._skills import SkillGrowthInput, fold_skill_growth
         from world.effects import ActionCause
@@ -1369,13 +1378,45 @@ class WorldEngine:
                         untargeted_search=untargeted,
                     )
                 )
-        return fold_skill_growth(
+        folded = fold_skill_growth(
             self._skill_ledger,
             tuple(facts),
             self._skill_policy,
             world_state=snap.world.state,
             tick=snap.tick.value,
             rules=rules,
+        )
+        return folded, tuple(facts)
+
+    def _fold_teaching_ledger(
+        self,
+        *,
+        snap: _EngineSnapshot,
+        rules: object,
+        start_ledger: object | None,
+        folded_ledger: object | None,
+        skill_facts: tuple[object, ...],
+    ) -> object | None:
+        if start_ledger is None or folded_ledger is None:
+            _LOGGER.error(
+                "teaching_validation_failed field=%s reason_code=%s",
+                "entity_id",
+                "missing_entity",
+            )
+            return folded_ledger
+        from world._teaching import fold_teaching_opportunities
+
+        return fold_teaching_opportunities(
+            folded_ledger,
+            start_ledger=start_ledger,
+            applied_actions=skill_facts,
+            prior_events=snap.event_history,
+            policy=self._teaching_policy,
+            teaching_entity_ids=self._teaching_entity_ids,
+            world_state=snap.world.state,
+            tick=snap.tick.value,
+            rules=rules,
+            untargeted_request_ids=frozenset(self._skill_untargeted_requests),
         )
 
     def _resolve_system_effects(

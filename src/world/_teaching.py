@@ -252,3 +252,451 @@ def parse_teaching_relation(
         return None
     return act, domain, ClaimBand.UNSPECIFIED
 
+
+def _require_world_state(value: object) -> object:
+    kind = type(value)
+    if kind.__module__ != "world._state" or kind.__name__ != "WorldState":
+        raise TypeError("world_state must be WorldState")
+    return value
+
+
+def _practice_domain(details: object, *, untargeted: bool | None) -> SkillDomain | None:
+    from world.events import Fled, Helped, Moved, Searched
+
+    if type(details) is Searched:
+        if untargeted is True or (untargeted is None and details.target_id is None):
+            return SkillDomain.FORAGING
+        return SkillDomain.RESOURCE_DETECTION
+    if type(details) is Fled or type(details) is Moved:
+        return SkillDomain.NAVIGATION
+    if type(details) is Helped:
+        return SkillDomain.HEALING
+    return None
+
+
+def _is_public_success(details: object) -> bool:
+    from world.events import Fled, Helped, Moved, Searched
+
+    if type(details) is Searched or type(details) is Fled:
+        return details.success is True
+    return type(details) is Moved or type(details) is Helped
+
+
+def _is_applied_practice(details: object) -> bool:
+    from world.events import Fled, Helped, Moved, Searched
+
+    if type(details) is Searched or type(details) is Fled:
+        return type(details.success) is bool
+    return type(details) is Moved or type(details) is Helped
+
+
+@dataclass(frozen=True, slots=True)
+class _PracticeFact:
+    actor_id: EntityId
+    domain: SkillDomain
+    success: bool
+    origin_location_id: EntityId | None
+
+
+def _visibility(
+    rules: object,
+    world_state: object,
+    location_id: EntityId,
+    tick: int,
+) -> float | None:
+    from world.models import PhysicalRules, WeatherCondition
+
+    if type(rules) is not PhysicalRules:
+        raise TypeError("rules must be PhysicalRules")
+    if location_id not in world_state.locations:  # type: ignore[attr-defined]
+        return None
+    location = world_state.locations[location_id]  # type: ignore[attr-defined]
+    weather = world_state.weather.get(location_id)  # type: ignore[attr-defined]
+    condition = weather.condition if weather is not None else WeatherCondition.CLEAR
+    return rules.effective_visibility(
+        location_visibility=location.visibility_factor.value,
+        phase=rules.day_phase_for_tick(tick),
+        condition=condition,
+    )
+
+
+def _living_witness(
+    world_state: object,
+    entity_id: EntityId,
+    origin: EntityId | None,
+    rules: object,
+    tick: int,
+) -> bool:
+    from world.models import LifeStatus
+
+    if origin is None:
+        return False
+    body = world_state.bodies.get(entity_id)  # type: ignore[attr-defined]
+    if body is None or body.life_status is not LifeStatus.ALIVE:
+        return False
+    if body.location_id != origin:
+        return False
+    visibility = _visibility(rules, world_state, origin, tick)
+    return visibility is not None and visibility >= 0.5
+
+
+def _offers_from_events(
+    events: Sequence[object],
+    participants: frozenset[EntityId],
+) -> tuple[TeachingOffer, ...]:
+    from world.events import Asked, Talked, Told, WorldEvent
+
+    offers: list[TeachingOffer] = []
+    for event in events:
+        if type(event) is not WorldEvent or event.actor_id is None:
+            continue
+        details = event.details
+        if (
+            type(details) is not Talked
+            and type(details) is not Asked
+            and type(details) is not Told
+        ):
+            continue
+        relations = tuple(details.utterance.content.relations)
+        if len(relations) != 1:
+            continue
+        parsed = parse_teaching_relation(relations[0])
+        if parsed is None:
+            continue
+        act, domain, _band = parsed
+        if act.value not in _OFFER_ACTS:
+            continue
+        if (
+            event.actor_id not in participants
+            or details.recipient_id not in participants
+        ):
+            continue
+        offers.append(
+            TeachingOffer(
+                speaker_id=event.actor_id,
+                recipient_id=details.recipient_id,
+                act=act,
+                domain=domain,
+                delivery_tick=event.tick,
+            )
+        )
+    return tuple(offers)
+
+
+def _prior_successes(
+    events: Sequence[object],
+    untargeted_request_ids: frozenset[str],
+) -> tuple[tuple[int, EntityId, SkillDomain], ...]:
+    from world.events import WorldEvent
+
+    found: list[tuple[int, EntityId, SkillDomain]] = []
+    for event in events:
+        if type(event) is not WorldEvent or event.actor_id is None:
+            continue
+        if not _is_public_success(event.details):
+            continue
+        untargeted = event.request_id.value in untargeted_request_ids
+        domain = _practice_domain(event.details, untargeted=untargeted)
+        if domain is None:
+            continue
+        found.append((event.tick, event.actor_id, domain))
+    return tuple(found)
+
+
+def _joint_consumed(
+    offer: TeachingOffer,
+    events: Sequence[object],
+    *,
+    before_tick: int,
+    offer_window: int,
+    untargeted_request_ids: frozenset[str],
+) -> bool:
+    from world.events import WorldEvent
+
+    by_tick: dict[int, set[EntityId]] = {}
+    for event in events:
+        if type(event) is not WorldEvent or event.actor_id is None:
+            continue
+        if event.tick <= offer.delivery_tick or event.tick >= before_tick:
+            continue
+        if event.tick - offer.delivery_tick > offer_window:
+            continue
+        untargeted = event.request_id.value in untargeted_request_ids
+        domain = _practice_domain(event.details, untargeted=untargeted)
+        if domain is not offer.domain or not _is_applied_practice(event.details):
+            continue
+        if event.actor_id not in {offer.speaker_id, offer.recipient_id}:
+            continue
+        by_tick.setdefault(event.tick, set()).add(event.actor_id)
+    pair = {offer.speaker_id, offer.recipient_id}
+    return any(pair <= actors for actors in by_tick.values())
+
+
+def _consumed(
+    offer: TeachingOffer,
+    successes: Sequence[tuple[int, EntityId, SkillDomain]],
+    *,
+    before_tick: int,
+    offer_window: int,
+) -> bool:
+    for success_tick, actor_id, domain in successes:
+        if actor_id != offer.speaker_id or domain is not offer.domain:
+            continue
+        if success_tick <= offer.delivery_tick or success_tick >= before_tick:
+            continue
+        if success_tick - offer.delivery_tick <= offer_window:
+            return True
+    return False
+
+
+def _in_window(offer: TeachingOffer, tick: int, offer_window: int) -> bool:
+    elapsed = tick - offer.delivery_tick
+    return 0 < elapsed <= offer_window
+
+
+def _add_bonus(
+    sums: dict[EntityId, dict[SkillDomain, float]],
+    *,
+    ledger: object,
+    entity_id: EntityId,
+    domain: SkillDomain,
+    amount: float,
+    tick: int,
+    act: TeachingAct,
+) -> None:
+    from world._skills import ObjectiveSkillLedger
+
+    if type(ledger) is not ObjectiveSkillLedger or entity_id not in ledger.entity_ids():
+        _LOG.error(
+            "teaching_validation_failed field=%s reason_code=%s",
+            "entity_id",
+            "missing_entity",
+        )
+        return
+    _LOG.debug(
+        "teaching_opportunity tick=%s entity_id=%s act=%s domain=%s",
+        tick,
+        entity_id.value,
+        act.value,
+        domain.value,
+    )
+    domains = sums.setdefault(entity_id, {})
+    domains[domain] = domains.get(domain, 0.0) + amount
+
+
+def fold_teaching_opportunities(
+    ledger: object,
+    *,
+    start_ledger: object,
+    applied_actions: Sequence[object],
+    prior_events: Sequence[object],
+    policy: TeachingInteractionPolicy,
+    teaching_entity_ids: frozenset[EntityId],
+    world_state: object,
+    tick: int,
+    rules: object,
+    untargeted_request_ids: frozenset[str] = frozenset(),
+) -> object:
+    """Add demonstration and joint-practice bonuses onto an already folded ledger.
+
+    Start-of-tick levels come from ``start_ledger``. The other body's level is
+    not an operand. ``explain`` and ``request_instruction`` add nothing.
+    """
+    from world._skills import ObjectiveSkillLedger, SkillGrowthInput
+    from world.models import PhysicalRules
+
+    if type(ledger) is not ObjectiveSkillLedger:
+        raise TypeError("ledger must be ObjectiveSkillLedger")
+    if type(start_ledger) is not ObjectiveSkillLedger:
+        raise TypeError("start_ledger must be ObjectiveSkillLedger")
+    if type(policy) is not TeachingInteractionPolicy:
+        raise TypeError("policy must be TeachingInteractionPolicy")
+    if type(teaching_entity_ids) is not frozenset:
+        raise TypeError("teaching_entity_ids must be a frozenset")
+    if type(rules) is not PhysicalRules:
+        raise TypeError("rules must be PhysicalRules")
+    _require_world_state(world_state)
+    if isinstance(tick, bool) or type(tick) is not int:
+        raise _fail("tick", "invalid_type")
+    if isinstance(applied_actions, (str, bytes)) or not isinstance(
+        applied_actions, Sequence
+    ):
+        raise TypeError("applied_actions must be an ordered sequence")
+    if isinstance(prior_events, (str, bytes)) or not isinstance(prior_events, Sequence):
+        raise TypeError("prior_events must be an ordered sequence")
+    if type(untargeted_request_ids) is not frozenset:
+        raise TypeError("untargeted_request_ids must be a frozenset")
+
+    for entity_id in teaching_entity_ids:
+        if type(entity_id) is not EntityId:
+            raise TypeError("teaching_entity_ids entries must be EntityId")
+    enabled = set(start_ledger.entity_ids())
+    for action in applied_actions:
+        if type(action) is not SkillGrowthInput:
+            raise TypeError("applied_actions entries must be SkillGrowthInput")
+        if action.actor_id in teaching_entity_ids and action.actor_id not in enabled:
+            _LOG.error(
+                "teaching_validation_failed field=%s reason_code=%s",
+                "entity_id",
+                "missing_entity",
+            )
+
+    offers = _offers_from_events(prior_events, teaching_entity_ids)
+    earlier = _prior_successes(prior_events, untargeted_request_ids)
+    current: list[_PracticeFact] = []
+    for action in applied_actions:
+        if type(action) is not SkillGrowthInput or action.status != "applied":
+            continue
+        if action.actor_id not in teaching_entity_ids:
+            continue
+        domain = _practice_domain(action.details, untargeted=action.untargeted_search)
+        if domain is None or not _is_applied_practice(action.details):
+            continue
+        current.append(
+            _PracticeFact(
+                actor_id=action.actor_id,
+                domain=domain,
+                success=_is_public_success(action.details),
+                origin_location_id=action.origin_location_id,
+            )
+        )
+
+    sums: dict[EntityId, dict[SkillDomain, float]] = {}
+    paid_demonstrate: set[tuple[EntityId, EntityId, SkillDomain, int]] = set()
+    for offer in offers:
+        if offer.act is not TeachingAct.DEMONSTRATE:
+            continue
+        if not _in_window(offer, tick, policy.offer_window):
+            continue
+        if _consumed(
+            offer, earlier, before_tick=tick, offer_window=policy.offer_window
+        ):
+            continue
+        key = (
+            offer.speaker_id,
+            offer.recipient_id,
+            offer.domain,
+            offer.delivery_tick,
+        )
+        if key in paid_demonstrate:
+            continue
+        matched = next(
+            (
+                fact
+                for fact in current
+                if fact.success
+                and fact.actor_id == offer.speaker_id
+                and fact.domain is offer.domain
+                and _living_witness(
+                    world_state,
+                    offer.recipient_id,
+                    fact.origin_location_id,
+                    rules,
+                    tick,
+                )
+            ),
+            None,
+        )
+        if matched is None:
+            continue
+        if offer.recipient_id not in enabled:
+            _LOG.error(
+                "teaching_validation_failed field=%s reason_code=%s",
+                "entity_id",
+                "missing_entity",
+            )
+            continue
+        start_level = start_ledger.level(offer.recipient_id, offer.domain)
+        _add_bonus(
+            sums,
+            ledger=ledger,
+            entity_id=offer.recipient_id,
+            domain=offer.domain,
+            amount=policy.demonstration_rate * (1.0 - start_level),
+            tick=tick,
+            act=offer.act,
+        )
+        paid_demonstrate.add(key)
+
+    paid_joint: set[tuple[EntityId, EntityId, SkillDomain, int]] = set()
+    for offer in offers:
+        if offer.act is not TeachingAct.PRACTICE_TOGETHER:
+            continue
+        if not _in_window(offer, tick, policy.offer_window):
+            continue
+        if _joint_consumed(
+            offer,
+            prior_events,
+            before_tick=tick,
+            offer_window=policy.offer_window,
+            untargeted_request_ids=untargeted_request_ids,
+        ):
+            continue
+        key = (
+            offer.speaker_id,
+            offer.recipient_id,
+            offer.domain,
+            offer.delivery_tick,
+        )
+        if key in paid_joint:
+            continue
+        speaker_facts = [
+            fact
+            for fact in current
+            if fact.actor_id == offer.speaker_id and fact.domain is offer.domain
+        ]
+        recipient_facts = [
+            fact
+            for fact in current
+            if fact.actor_id == offer.recipient_id and fact.domain is offer.domain
+        ]
+        if not speaker_facts or not recipient_facts:
+            continue
+        shared = next(
+            (
+                left.origin_location_id
+                for left in speaker_facts
+                for right in recipient_facts
+                if left.origin_location_id is not None
+                and left.origin_location_id == right.origin_location_id
+                and _living_witness(
+                    world_state,
+                    offer.speaker_id,
+                    left.origin_location_id,
+                    rules,
+                    tick,
+                )
+                and _living_witness(
+                    world_state,
+                    offer.recipient_id,
+                    left.origin_location_id,
+                    rules,
+                    tick,
+                )
+            ),
+            None,
+        )
+        if shared is None:
+            continue
+        for entity_id in (offer.speaker_id, offer.recipient_id):
+            if entity_id not in enabled:
+                _LOG.error(
+                    "teaching_validation_failed field=%s reason_code=%s",
+                    "entity_id",
+                    "missing_entity",
+                )
+                continue
+            start_level = start_ledger.level(entity_id, offer.domain)
+            _add_bonus(
+                sums,
+                ledger=ledger,
+                entity_id=entity_id,
+                domain=offer.domain,
+                amount=policy.practice_together_rate * (1.0 - start_level),
+                tick=tick,
+                act=offer.act,
+            )
+        paid_joint.add(key)
+    return ledger.apply_summed_deltas(sums)
+
+

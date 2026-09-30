@@ -1,0 +1,4 @@
+Select one teaching act and one skill-domain token from the candidate pairs only.
+Return exactly one JSON object matching the provided schema.
+Copy an act and a domain from the candidate list. Do not add a band, a skill level, or a command.
+Do not include markdown fences, commentary, or trailing text.

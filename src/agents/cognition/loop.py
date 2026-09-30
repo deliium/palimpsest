@@ -546,6 +546,54 @@ class CognitiveLoop:
             self._competence_policy,
         )
 
+    def _prepare_teaching(
+        self, loop_input: CognitiveLoopInput, competence: object | None
+    ) -> tuple[object | None, object | None]:
+        from agents.cognition.competence import empty_competence_model
+        from agents.cognition.configuration import CognitionTeachingInteractionMode
+        from agents.cognition.teaching import (
+            AdviceStore,
+            apply_teaching_belief,
+            empty_advice_store,
+            record_teaching,
+        )
+
+        if self._teaching_mode is not CognitionTeachingInteractionMode.DETERMINISTIC:
+            return competence, None
+        snapshot = loop_input.snapshot
+        carried = None if snapshot is None else snapshot.declarative_advice
+        owner = loop_input.agent_id
+        advice = (
+            carried
+            if type(carried) is AdviceStore and carried.owner_id == owner
+            else empty_advice_store(owner)
+        )
+        identity = None if snapshot is None else snapshot.social_identity
+        relationships = () if snapshot is None else snapshot.relationships
+        updated_advice = record_teaching(
+            advice,
+            loop_input.observation,
+            relationships,
+            self._teaching_policy,
+            identity,
+        )
+        prior_ids = {row.occurrence_id for row in advice.rows}
+        delta = tuple(
+            row for row in updated_advice.rows if row.occurrence_id not in prior_ids
+        )
+        model = (
+            competence
+            if competence is not None
+            else empty_competence_model(owner)
+        )
+        updated_model = apply_teaching_belief(
+            model,
+            delta,
+            self._teaching_policy,
+            relationships,
+        )
+        return updated_model, updated_advice
+
     def _prepare_world_model(
         self,
         loop_input: CognitiveLoopInput,
@@ -836,6 +884,7 @@ class CognitiveLoop:
         mind = self._prepare_theory_of_mind(loop_input, emotional_evaluation, memory)
         reputation = self._prepare_reputation(loop_input)
         competence = self._prepare_competence(loop_input, memory)
+        competence, advice = self._prepare_teaching(loop_input, competence)
         competence_policy = self._competence_policy
         if (
             competence is not None
@@ -850,6 +899,24 @@ class CognitiveLoop:
                 provider=self._world_model_provider,
                 tick=loop_input.observation.tick,
             )
+        teaching_selection = None
+        claim_policy = self._teaching_policy
+        if (
+            claim_policy is not None
+            and claim_policy.allow_provider
+            and competence is not None
+        ):
+            from agents.cognition.teaching_selection import select_teaching_act
+
+            chosen_act = await select_teaching_act(
+                competence,
+                claim_policy,
+                provider=self._world_model_provider,
+                tick=loop_input.observation.tick,
+                observation=loop_input.observation,
+            )
+            if chosen_act is not None and not chosen_act.fallback_used:
+                teaching_selection = (chosen_act.act, chosen_act.domain)
         policy = self._world_model_policy
         if world_model is not None and policy is not None and policy.allow_provider:
             from agents.cognition.world_model_selection import (
@@ -921,9 +988,15 @@ class CognitiveLoop:
                 self_state,
                 causal_world_model=world_model,
                 theory_of_mind=mind,
-                counterfactual_bias=self._counterfactual_bias(loop_input, futures),
-                competence_policy=self._competence_policy,
-                competence_model=competence,
+                **_planner_options(
+                    self._intention.select,
+                    counterfactual_bias=self._counterfactual_bias(
+                        loop_input, futures
+                    ),
+                    competence_policy=self._competence_policy,
+                    competence_model=competence,
+                    teaching_policy=self._teaching_policy,
+                ),
             ),
             expected_type=SelectedIntention,
         )
@@ -949,6 +1022,9 @@ class CognitiveLoop:
                     reputation_mode=self._reputation_mode,
                     reputation_policy=self._reputation_policy,
                     competence_model=competence,
+                    teaching_mode=self._teaching_mode,
+                    teaching_policy=self._teaching_policy,
+                    teaching_selection=teaching_selection,
                 ),
             ),
             expected_type=ActionPlan,
@@ -985,6 +1061,7 @@ class CognitiveLoop:
             theory_of_mind=mind,
             reputation=reputation,
             competence_model=competence,
+            declarative_advice=advice,
             communication_intent=plan.communication_intent,
             communication_intent_audit=plan.communication_intent_audit,
         )
@@ -1132,6 +1209,7 @@ class CognitiveLoop:
             theory_of_mind=proposal.theory_of_mind,
             reputation=proposal.reputation,
             competence_model=proposal.competence_model,
+            declarative_advice=proposal.declarative_advice,
             communication_intent=proposal.communication_intent,
             communication_intent_audit=proposal.communication_intent_audit,
         )
