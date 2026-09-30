@@ -713,6 +713,7 @@ class ReplayRequest:
     skill_policy: object | None = None
     skill_entity_ids: Sequence[object] | None = None
     skill_ledger: object | None = None
+    skill_untargeted_request_ids: frozenset[str] | None = None
 
     def __post_init__(self) -> None:
         if type(self.run_id) is not RunId:

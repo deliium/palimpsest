@@ -572,6 +572,7 @@ class ReplayService:
                 skill_policy=request.skill_policy,
                 skill_entity_ids=request.skill_entity_ids,
                 skill_ledger=request.skill_ledger,
+                skill_untargeted_request_ids=request.skill_untargeted_request_ids,
             )
         except Exception as exc:
             _LOGGER.error(

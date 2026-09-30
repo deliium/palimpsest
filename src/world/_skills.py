@@ -95,6 +95,14 @@ def _require_domain(value: object) -> SkillDomain:
     return value
 
 
+def _require_world_state(value: object) -> object:
+    """Accept a world state without importing the private state module."""
+    kind = type(value)
+    if kind.__module__ != "world._state" or kind.__name__ != "WorldState":
+        raise TypeError("world_state must be WorldState")
+    return value
+
+
 def _clamp_quantized(value: float) -> float:
     quantized = _quantize(value)
     if quantized < 0.0:
@@ -417,15 +425,13 @@ def fold_skill_growth(
     Same-tick moves do not change the witness set. ``crafting`` and ``building``
     grow only through instruction. Attack adds nothing.
     """
-    from world._state import WorldState
     from world.models import PhysicalRules
 
     if type(ledger) is not ObjectiveSkillLedger:
         raise TypeError("ledger must be ObjectiveSkillLedger")
     if type(policy) is not ObjectiveSkillPolicy:
         raise TypeError("policy must be ObjectiveSkillPolicy")
-    if type(world_state) is not WorldState:
-        raise TypeError("world_state must be WorldState")
+    _require_world_state(world_state)
     if type(rules) is not PhysicalRules:
         raise TypeError("rules must be PhysicalRules")
     if isinstance(tick, bool) or type(tick) is not int:
@@ -460,7 +466,6 @@ def _fold_one(
     rules: object,
     sums: dict[EntityId, dict[SkillDomain, float]],
 ) -> None:
-    from world._state import WorldState
     from world.events import (
         Asked,
         Attacked,
@@ -473,7 +478,7 @@ def _fold_one(
     )
     from world.models import PhysicalRules
 
-    assert type(world_state) is WorldState
+    _require_world_state(world_state)
     assert type(rules) is PhysicalRules
     if action.status != "applied":
         if action.status == "rejected":
@@ -724,11 +729,10 @@ def _observe_public(
     rules: object,
     sums: dict[EntityId, dict[SkillDomain, float]],
 ) -> None:
-    from world._state import WorldState
     from world.models import LifeStatus, PhysicalRules
     from world.values import WeatherCondition
 
-    assert type(world_state) is WorldState
+    _require_world_state(world_state)
     assert type(rules) is PhysicalRules
     origin = action.origin_location_id
     if origin is None or origin not in world_state.locations:
@@ -772,10 +776,9 @@ def _add_channel(
     tick: int,
     sums: dict[EntityId, dict[SkillDomain, float]],
 ) -> None:
-    from world._state import WorldState
     from world.models import LifeStatus
 
-    assert type(world_state) is WorldState
+    _require_world_state(world_state)
     if entity_id not in ledger.entity_ids():
         _drop(tick, entity_id, "actor_disabled")
         return
@@ -811,6 +814,19 @@ def _drop(tick: int, entity_id: EntityId, reason_code: str) -> None:
     )
 
 
+def _untargeted_request_ids(value: object | None) -> frozenset[str]:
+    if value is None:
+        return frozenset()
+    if isinstance(value, (str, bytes)) or not isinstance(value, frozenset):
+        raise TypeError("untargeted_request_ids must be a frozenset of request ids")
+    checked: set[str] = set()
+    for item in value:
+        if type(item) is not str or not item:
+            raise TypeError("untargeted_request_ids entries must be request ids")
+        checked.add(item)
+    return frozenset(checked)
+
+
 def refold_objective_ledger(
     initial_state: object,
     events: Sequence[object],
@@ -820,21 +836,27 @@ def refold_objective_ledger(
     rules: object,
     expected_run_id: str,
     expected_world_id: object,
+    project_prefix: object,
+    untargeted_request_ids: object | None = None,
 ) -> ObjectiveSkillLedger:
     """Rebuild levels by folding each tick against that tick's start state.
 
     Projects only earlier ticks before witnesses are chosen, so a move in tick
-    T does not change who can see T.
+    T does not change who can see T. ``project_prefix`` is supplied by the
+    simulation engine so this module does not import the private replay module.
+    ``untargeted_request_ids`` marks searches whose command had no target.
+    A committed search still stores the found resource, so the command flag
+    is the only signal that the domain is foraging.
     """
-    from world._replay import project_events
-    from world._state import WorldState
     from world.effects import ActionCause
     from world.events import Searched, WorldEvent
     from world.identifiers import WorldId
     from world.models import PhysicalRules
 
-    if type(initial_state) is not WorldState:
-        raise TypeError("initial_state must be WorldState")
+    _require_world_state(initial_state)
+    if not callable(project_prefix):
+        raise TypeError("project_prefix must be callable")
+    untargeted_ids = _untargeted_request_ids(untargeted_request_ids)
     if type(policy) is not ObjectiveSkillPolicy:
         raise TypeError("policy must be ObjectiveSkillPolicy")
     if type(rules) is not PhysicalRules:
@@ -859,7 +881,11 @@ def refold_objective_ledger(
             origin = None if occurrence is None else occurrence.origin_location_id
             untargeted = None
             if type(event.details) is Searched:
-                untargeted = event.details.target_id is None
+                request_id = event.request_id.value
+                if request_id in untargeted_ids:
+                    untargeted = True
+                else:
+                    untargeted = event.details.target_id is None
             facts.append(
                 SkillGrowthInput(
                     actor_id=event.actor_id,
@@ -879,11 +905,11 @@ def refold_objective_ledger(
             rules=rules,
         )
         prior.extend(group)
-        state = project_events(
+        state = project_prefix(
             initial_state,
             tuple(prior),
-            expected_run_id=expected_run_id,
-            expected_world_id=expected_world_id,
+            expected_run_id,
+            expected_world_id,
         )
     return ledger
 

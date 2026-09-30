@@ -192,3 +192,40 @@ def test_enabled_refold_matches_search_witness_and_private_instruction(
         )
     assert "reason_code=skill_ledger_mismatch" in caplog.text
     assert "quiet" not in caplog.text
+
+
+def test_untargeted_search_refold_stays_on_foraging() -> None:
+    fixture = two_location_fixture(item_on_ground=False)
+    policy = default_objective_skill_policy()
+    from world.models import PhysicalRules
+
+    live = WorldEngine(
+        config=physical_config(7, rules=PhysicalRules(search_base_probability=1.0)),
+        bootstrap=fixture.as_bootstrap(),
+        skill_policy=policy,
+        skill_entity_ids=(EntityId("body-1"),),
+    )
+    snapshot = _snapshot_at_start(live)
+    batch = live.observe()
+    live.resolve_tick((ActionSubmission(batch.token, AgentId("agent-1"), Search()),))
+    assert live.skill_untargeted_request_ids()
+    restored = WorldEngine.restore_from_snapshot(
+        snapshot,
+        events=live._snapshot.event_history,
+        committed_through_tick=Tick(live.tick.value - 1),
+        skill_policy=policy,
+        skill_entity_ids=(EntityId("body-1"),),
+        skill_untargeted_request_ids=live.skill_untargeted_request_ids(),
+    )
+    assert restored._skill_ledger is not None
+    assert live._skill_ledger is not None
+    assert live._skill_ledger.level(
+        EntityId("body-1"), SkillDomain.FORAGING
+    ) == _quantize(0.07)
+    assert restored._skill_ledger.level(
+        EntityId("body-1"), SkillDomain.FORAGING
+    ) == live._skill_ledger.level(EntityId("body-1"), SkillDomain.FORAGING)
+    assert (
+        restored._skill_ledger.level(EntityId("body-1"), SkillDomain.RESOURCE_DETECTION)
+        == 0.0
+    )

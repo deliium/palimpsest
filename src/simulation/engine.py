@@ -150,6 +150,35 @@ class _PreparedTickCandidate:
     skill_ledger: object | None = None
 
 
+def _request_id_set(value: object | None) -> set[str]:
+    if value is None:
+        return set()
+    if isinstance(value, (str, bytes)) or not isinstance(value, frozenset):
+        raise TypeError("skill_untargeted_request_ids must be a frozenset")
+    checked: set[str] = set()
+    for item in value:
+        if type(item) is not str or not item:
+            raise TypeError("skill_untargeted_request_ids entries must be request ids")
+        checked.add(item)
+    return checked
+
+
+def _project_skill_prefix(
+    initial_state: object,
+    events: object,
+    expected_run_id: str,
+    expected_world_id: object,
+) -> object:
+    from world._replay import project_events
+
+    return project_events(
+        initial_state,
+        events,
+        expected_run_id=expected_run_id,
+        expected_world_id=expected_world_id,
+    )
+
+
 class WorldEngine:
     """Public authority for observation and ordered tick resolution."""
 
@@ -164,6 +193,7 @@ class WorldEngine:
         "_skill_entity_ids",
         "_skill_ledger",
         "_skill_policy",
+        "_skill_untargeted_requests",
         "_snapshot",
         "_translator",
     )
@@ -178,6 +208,7 @@ class WorldEngine:
         skill_policy: object | None = None,
         skill_entity_ids: Sequence[object] | None = None,
         skill_ledger: object | None = None,
+        skill_untargeted_request_ids: object | None = None,
     ) -> None:
         if type(config) is not SimulationRunConfig:
             raise TypeError("WorldEngine requires SimulationRunConfig")
@@ -217,6 +248,7 @@ class WorldEngine:
             skill_policy=skill_policy,
             skill_entity_ids=skill_entity_ids,
             skill_ledger=skill_ledger,
+            skill_untargeted_request_ids=skill_untargeted_request_ids,
             restored=False,
         )
         _LOGGER.debug(
@@ -238,6 +270,7 @@ class WorldEngine:
         skill_policy: object | None = None,
         skill_entity_ids: Sequence[object] | None = None,
         skill_ledger: object | None = None,
+        skill_untargeted_request_ids: object | None = None,
     ) -> WorldEngine:
         """Restore an engine at ``AWAITING_OBSERVATION`` from a checkpoint.
 
@@ -376,7 +409,9 @@ class WorldEngine:
                 rules=snapshot.config.physical_rules,
                 expected_run_id=snapshot.run_id.value,
                 expected_world_id=snapshot.world_id,
+                untargeted_request_ids=skill_untargeted_request_ids,
             ),
+            skill_untargeted_request_ids=skill_untargeted_request_ids,
             restored=True,
         )
         _LOGGER.info(
@@ -917,6 +952,14 @@ class WorldEngine:
     def export_events(self) -> SimulationExport:
         return make_export(self._config, self._run_id, self._snapshot.event_history)
 
+    def skill_untargeted_request_ids(self) -> frozenset[str]:
+        """Request ids whose search command had no target.
+
+        A committed search event stores the found resource, so replay uses
+        this set to keep untargeted search on foraging.
+        """
+        return frozenset(self._skill_untargeted_requests)
+
     def _validate_token(self, submitted: TickToken, expected: TickToken) -> None:
         if type(submitted) is not TickToken:
             raise TypeError("submission token must be TickToken")
@@ -1284,6 +1327,12 @@ class WorldEngine:
             untargeted = None
             if type(request.command) is Search:
                 untargeted = request.command.target_id is None
+                if untargeted:
+                    self._skill_untargeted_requests.add(request.request_id.value)
+                    _LOGGER.debug(
+                        "skill_search_command request_id=%s untargeted=true",
+                        request.request_id.value,
+                    )
             matched = by_request.get(outcome.request_id, [])
             if not matched:
                 facts.append(
@@ -1419,6 +1468,7 @@ class WorldEngine:
         skill_policy: object | None,
         skill_entity_ids: Sequence[object] | None,
         skill_ledger: object | None,
+        skill_untargeted_request_ids: object | None = None,
         restored: bool,
     ) -> None:
         from world._skills import (
@@ -1440,6 +1490,7 @@ class WorldEngine:
             self._skill_policy = None
             self._skill_entity_ids = frozenset()
             self._skill_ledger = None
+            self._skill_untargeted_requests = set()
             _LOGGER.debug("skill_ledger=absent")
             return
         if type(skill_policy) is not ObjectiveSkillPolicy:
@@ -1464,6 +1515,7 @@ class WorldEngine:
         self._skill_policy = skill_policy
         self._skill_entity_ids = frozenset(enabled)
         self._skill_ledger = ledger
+        self._skill_untargeted_requests = _request_id_set(skill_untargeted_request_ids)
         if restored:
             _LOGGER.info(
                 "skill_ledger_restored entity_count=%s domain_count=%s",
@@ -1488,6 +1540,7 @@ class WorldEngine:
         rules: object,
         expected_run_id: str,
         expected_world_id: object,
+        untargeted_request_ids: object | None = None,
     ) -> object | None:
         if skill_policy is None:
             return skill_ledger
@@ -1519,6 +1572,8 @@ class WorldEngine:
             rules=physical_rules,
             expected_run_id=expected_run_id,
             expected_world_id=expected_world_id,
+            project_prefix=_project_skill_prefix,
+            untargeted_request_ids=untargeted_request_ids,
         )
         if skill_ledger is None:
             return refolded
