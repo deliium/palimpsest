@@ -50,12 +50,19 @@ strategy is accepted on v9 or v10. `runner-config-v10` is accepted and is
 emitted only when some agent's `ReputationMode` is `DETERMINISTIC`. That
 document carries every `runner-config-v9` cognition key plus `reputation_mode`.
 `DETERMINISTIC` reputation is rejected on v1–v9, and v10 is rejected when
-every agent's reputation mode is `DISABLED`. The write default stays
+every agent's reputation mode is `DISABLED`. `runner-config-v11` is accepted and is
+emitted only when some agent's `SkillLearningMode` is `DETERMINISTIC`. That
+document carries every `runner-config-v10` cognition key plus `skill_learning_mode`
+and the locked rate keys. Reputation and the earlier cognition modes are accepted
+on v11. `DETERMINISTIC` skill learning is rejected on v1–v10, and v11 is rejected
+when every agent's skill mode is `DISABLED`. The write default stays
 `runner-config-v4`. Experiments N, O, and P pair a disabled v4 arm with a
 deterministic v9 arm. Experiment Q pairs a disabled v4 arm with a deterministic
-v10 arm. Those experiments stay off the V1 regression gate.
+v10 arm. Experiment R pairs a disabled v4 arm with a deterministic v11 arm.
+Those experiments stay off the V1 regression gate.
 `v1_regression_profile` still checks flags and tracing only. No capability
-flag was added for reputation. `distributed_reputation@1` is analysis-only.
+flag was added for reputation or skill learning. `distributed_reputation@1` and
+`skill_learning@1` are analysis-only.
 
 Top-level `CognitionTraceSpec` (default disabled) rides in `runner-config-v4` only.
 Prior versions decode to a disabled spec. Tracing is **not** a capability flag;

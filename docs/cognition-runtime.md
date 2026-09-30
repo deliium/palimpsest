@@ -222,6 +222,15 @@ Reputation is default-off (`ReputationMode.DISABLED`) and is not a capability fl
 | `DISABLED` | `runner-config-v4` (no `reputation_mode` key) | no ledger and no reputation `Tell` |
 | `DETERMINISTIC` | `runner-config-v10` | owner-scoped ledger; `Wait` may become one testimony `Tell` |
 
+`runner-config-v11` accepts reputation and the earlier cognition modes. `DETERMINISTIC` reputation is therefore legal on v10 or v11.
+
+Skill learning is default-off (`SkillLearningMode.DISABLED`) and is not a capability flag. Off does not change probabilities, fatigue, help gain, commands, memories, beliefs, or audits. When a run uses `runner-config-v11`, each enabled owner has a private `CompetenceSelfModel`. Believed level is `support / (support + counter + prior)`, quantized into `[0, 1]`. Counter mass stays `0`. Objective growth is visible at the end of tick T. Belief moves on prepare of tick T+1, when that occurrence is on the owner's observation. Same-tick belief is unchanged. After one own successful untargeted search, support is `0.10` and believed level is `quantize(0.10 / 1.10)`. Pairwise selection adds `belief_action_weight * believed_level` as a float difference before the sign check. The maximum term is `0.25`, so a nonzero integer vote still wins. Untargeted search uses believed foraging and targeted search uses believed resource detection. That bias does not change the Bernoulli draw or an efficiency constant.
+
+| Mode | Schema written | Effect |
+| --- | --- | --- |
+| `DISABLED` | `runner-config-v4` (no `skill_learning_mode` key) | today's formulas and no competence model |
+| `DETERMINISTIC` | `runner-config-v11` | objective ledger plus owner-scoped competence beliefs |
+
 ### Motivation and fear of death
 
 `MotivationAppraisal` activates drives from perceived need pressures, appraises active-goal progress and social/self-model fit per future, and computes typed subjective risks. **Fear of death** is opportunity foreclosure (`MortalityOpportunityForeclosure`): subjective mortality estimate combined with outstanding goal value, attachment/dependency effects, safety activation, autonomy loss, and reduction of future option space. There is **no** hard-coded `death_penalty` and **no** permanent total reward scalar.

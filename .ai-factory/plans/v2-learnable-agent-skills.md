@@ -207,7 +207,7 @@ All objective rates and gains are finite and `>= 0`. Belief rates are finite and
 
 ### Phase 4: Documentation
 
-- [ ] Task 9: Document objective skill rules and subjective competence.
+- [x] Task 9: Document objective skill rules and subjective competence.
   - Deliverable: a reader can see that skill changes probability or efficiency only through WorldEngine, that competence beliefs can disagree, and that v11 is opt-in.
   - Update `docs/physical-simulation.md` with the eight domains, the search/move/flee/help formulas, the growth channels, the start-of-tick witness rule, the level-0 identity rule, and the refold that does not add a snapshot key. Update `docs/cognition-runtime.md` with the competence model, the one-tick lag, the `quantize(0.10 / 1.10)` fixture, and the pairwise selection bias. Update `docs/architecture.md` Downstream V2 plan contract with one short paragraph: `SkillLearningMode` defaults to `DISABLED`, `runner-config-v11` is emitted only when that mode is `DETERMINISTIC`, no capability flag was added, and Experiment R plus `skill_learning@1` stay off the V1 regression gate. Update `docs/experiments.md` for Experiment R. Update `docs/simulation-runner.md` so the schema paragraph emits `runner-config-v11` only when some agent's skill mode is `DETERMINISTIC`, keeps the default write at `runner-config-v4`, and accepts reputation and the earlier cognition modes on v11. Update the owned-mode notes in `.ai-factory/DESCRIPTION.md` and `.ai-factory/ARCHITECTURE.md` only where they list runner schema versions, so v11 is mentioned beside v10. Do not mark M6 complete and do not edit `ROADMAP.md` from this plan.
   - Logging: documentation only. No new runtime log lines.
