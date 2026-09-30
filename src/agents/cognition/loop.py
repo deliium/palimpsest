@@ -169,6 +169,7 @@ class CognitiveLoop:
     __slots__ = (
         "_communication_strategy_mode",
         "_communication_strategy_policy",
+        "_competence_policy",
         "_consolidation_mode",
         "_consolidation_policy",
         "_consolidation_selector",
@@ -199,6 +200,7 @@ class CognitiveLoop:
         "_reputation_policy",
         "_self_state",
         "_situation",
+        "_skill_learning_mode",
         "_theory_of_mind_mode",
         "_theory_of_mind_policy",
         "_world_model_mode",
@@ -240,6 +242,8 @@ class CognitiveLoop:
         communication_strategy_policy: object | None = None,
         reputation_mode: object | None = None,
         reputation_policy: object | None = None,
+        skill_learning_mode: object | None = None,
+        competence_belief_policy: object | None = None,
     ) -> None:
         self._perception = perception
         self._memory = memory
@@ -406,6 +410,26 @@ class CognitiveLoop:
             raise TypeError("reputation_policy must be ReputationFormationPolicy")
         self._reputation_mode = reputation
         self._reputation_policy = reputation_policy
+        from agents.cognition.competence import CompetenceBeliefPolicy
+        from agents.cognition.configuration import CognitionSkillLearningMode
+
+        skill_mode = (
+            CognitionSkillLearningMode.DISABLED
+            if skill_learning_mode is None
+            else skill_learning_mode
+        )
+        if type(skill_mode) is not CognitionSkillLearningMode:
+            raise TypeError("skill_learning_mode must be CognitionSkillLearningMode")
+        if skill_mode is CognitionSkillLearningMode.DISABLED:
+            competence_belief_policy = None
+        elif competence_belief_policy is None:
+            from agents.cognition.competence import default_competence_belief_policy
+
+            competence_belief_policy = default_competence_belief_policy()
+        elif type(competence_belief_policy) is not CompetenceBeliefPolicy:
+            raise TypeError("competence_belief_policy must be CompetenceBeliefPolicy")
+        self._skill_learning_mode = skill_mode
+        self._competence_policy = competence_belief_policy
         self._deferred_dissonance: tuple[object, ...] = ()
 
     def _prepare_reputation(self, loop_input: CognitiveLoopInput) -> object | None:
@@ -468,6 +492,32 @@ class CognitiveLoop:
             memories=snapshot.memories,
             source_trust_by_speaker=trust_by_speaker,
             inbox=snapshot.inbox,
+        )
+
+    def _prepare_competence(
+        self, loop_input: CognitiveLoopInput, memory: object
+    ) -> object | None:
+        from agents.cognition.competence import (
+            empty_competence_model,
+            update_competence,
+        )
+        from agents.cognition.configuration import CognitionSkillLearningMode
+
+        if self._skill_learning_mode is not CognitionSkillLearningMode.DETERMINISTIC:
+            return None
+        snapshot = loop_input.snapshot
+        carried = None if snapshot is None else snapshot.competence_model
+        model = (
+            carried
+            if type(carried).__name__ == "CompetenceSelfModel"
+            else empty_competence_model(loop_input.agent_id)
+        )
+        reconstructions = tuple(getattr(memory, "reconstructions", ()))
+        return update_competence(
+            model,
+            loop_input.observation,
+            reconstructions,
+            self._competence_policy,
         )
 
     def _prepare_world_model(
@@ -759,6 +809,7 @@ class CognitiveLoop:
         )
         mind = self._prepare_theory_of_mind(loop_input, emotional_evaluation, memory)
         reputation = self._prepare_reputation(loop_input)
+        competence = self._prepare_competence(loop_input, memory)
         policy = self._world_model_policy
         if world_model is not None and policy is not None and policy.allow_provider:
             from agents.cognition.world_model_selection import (
@@ -890,6 +941,7 @@ class CognitiveLoop:
             causal_world_model=world_model,
             theory_of_mind=mind,
             reputation=reputation,
+            competence_model=competence,
             communication_intent=plan.communication_intent,
             communication_intent_audit=plan.communication_intent_audit,
         )
@@ -1036,6 +1088,7 @@ class CognitiveLoop:
             causal_world_model=proposal.causal_world_model,
             theory_of_mind=proposal.theory_of_mind,
             reputation=proposal.reputation,
+            competence_model=proposal.competence_model,
             communication_intent=proposal.communication_intent,
             communication_intent_audit=proposal.communication_intent_audit,
         )

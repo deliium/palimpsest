@@ -147,6 +147,7 @@ class Perspective:
     causal_world_model: object | None = None
     theory_of_mind: object | None = None
     reputation: object | None = None
+    competence_model: object | None = None
 
     def __post_init__(self) -> None:
         if type(self.agent_id) is not AgentId:
@@ -282,6 +283,13 @@ class Perspective:
             self.agent_id,
             field_name="Perspective.reputation",
         )
+        from agents.cognition.competence import require_owner_competence
+
+        require_owner_competence(
+            self.competence_model,
+            self.agent_id,
+            field_name="Perspective.competence_model",
+        )
 
     def to_snapshot(self) -> SubjectiveSnapshot:
         """Freeze this perspective into a ``SubjectiveSnapshot``."""
@@ -305,6 +313,7 @@ class Perspective:
             causal_world_model=self.causal_world_model,
             theory_of_mind=self.theory_of_mind,
             reputation=self.reputation,
+            competence_model=self.competence_model,
         )
 
     def __repr__(self) -> str:

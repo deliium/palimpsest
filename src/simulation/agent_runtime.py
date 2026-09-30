@@ -411,6 +411,7 @@ class AgentRuntime:
         "_cognition_trace_repository",
         "_cognition_trace_spec",
         "_communication_intent_audits",
+        "_competence",
         "_counterfactual_audits",
         "_counterfactual_capture",
         "_counterfactual_state",
@@ -538,6 +539,7 @@ class AgentRuntime:
         self._causal_world_model: object | None = None
         self._theory_of_mind: object | None = None
         self._reputation: object | None = None
+        self._competence: object | None = None
         self._identity_cursor: object | None = None
         self._reflection_cursor: object | None = None
         self._decision_journal: tuple[object, ...] | None = None
@@ -708,6 +710,32 @@ class AgentRuntime:
             tick,
             mode_name,
             len(ledger.profiles),
+        )
+
+    def _commit_competence(self, model: object | None, tick: int) -> None:
+        from agents.cognition.competence import CompetenceSelfModel
+        from agents.cognition.configuration import CognitionSkillLearningMode
+
+        owner = self._agent.agent_id
+        mode = getattr(
+            self._loop, "_skill_learning_mode", CognitionSkillLearningMode.DISABLED
+        )
+        if mode is not CognitionSkillLearningMode.DETERMINISTIC or model is None:
+            if mode is not CognitionSkillLearningMode.DETERMINISTIC:
+                self._competence = None
+            return
+        if type(model) is not CompetenceSelfModel:
+            raise TypeError("competence_model must be CompetenceSelfModel")
+        if model.owner_id != owner:
+            raise AgentRuntimeError(
+                AgentRuntimeErrorCode.OWNERSHIP,
+                agent_id=owner.value,
+            )
+        self._competence = model
+        _LOG.debug(
+            "competence_model_carried owner_id=%s tick=%s",
+            owner.value,
+            tick,
         )
 
     def _commit_prospective_audit(self, tick: int) -> None:
@@ -1154,6 +1182,7 @@ class AgentRuntime:
                 causal_world_model=self._causal_world_model,
                 theory_of_mind=self._theory_of_mind,
                 reputation=self._reputation,
+                competence_model=self._competence,
             )
         except TypeError:
             raise
@@ -1563,6 +1592,9 @@ class AgentRuntime:
         self._commit_world_model(pending.loop_result.causal_world_model, pending.tick)
         self._commit_theory_of_mind(pending.loop_result.theory_of_mind, pending.tick)
         self._commit_reputation(pending.loop_result.reputation, pending.tick)
+        self._commit_competence(
+            getattr(pending.loop_result, "competence_model", None), pending.tick
+        )
         self._commit_communication_intent(pending.loop_result, pending.tick)
         self._commit_prospective_audit(pending.tick)
         self._commit_counterfactual_audit(pending.tick)
@@ -1956,6 +1988,7 @@ class AgentRuntime:
         self._causal_world_model = checkpoint.causal_world_model
         self._theory_of_mind = checkpoint.theory_of_mind
         self._reputation = checkpoint.reputation
+        self._competence = checkpoint.competence_model
         self._reflection_cursor = checkpoint.reflection_cursor
         self._decision_journal = checkpoint.decision_journal
         self._remembered_decisions = checkpoint.remembered_decisions
@@ -2011,6 +2044,7 @@ class AgentRuntime:
             causal_world_model=self._causal_world_model,
             theory_of_mind=self._theory_of_mind,
             reputation=self._reputation,
+            competence_model=self._competence,
             reflection_cursor=self._reflection_cursor,
             decision_journal=self._decision_journal,
             remembered_decisions=self._remembered_decisions,

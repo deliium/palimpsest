@@ -27,6 +27,7 @@ from simulation.runner_models import (
     RUNNER_SCHEMA_VERSION_V8,
     RUNNER_SCHEMA_VERSION_V9,
     RUNNER_SCHEMA_VERSION_V10,
+    RUNNER_SCHEMA_VERSION_V11,
     AgentCognitionSpec,
     AgentRunnerSpec,
     CommunicationStrategyMode,
@@ -41,6 +42,7 @@ from simulation.runner_models import (
     RunnerPersistenceSpec,
     RunnerStopPolicy,
     SimulationRunnerConfig,
+    SkillLearningMode,
     WorldScenarioSpec,
 )
 from tests.simulation_helpers import alive_body, make_location, make_weather
@@ -70,6 +72,7 @@ def _config(
         CommunicationStrategyMode.DISABLED
     ),
     reputation_mode: ReputationMode = ReputationMode.DISABLED,
+    skill_learning_mode: SkillLearningMode = SkillLearningMode.DISABLED,
 ) -> SimulationRunnerConfig:
     locations = (make_location(),)
     bodies = tuple(alive_body(f"body-{i + 1}") for i in range(agent_count))
@@ -91,6 +94,7 @@ def _config(
                 counterfactual_mode=counterfactual_mode,
                 communication_strategy_mode=communication_strategy_mode,
                 reputation_mode=reputation_mode,
+                skill_learning_mode=skill_learning_mode,
             ),
         )
         for i in range(agent_count)
@@ -692,3 +696,48 @@ async def test_v10_reputation_config_constructs_without_a_new_flag(
     with pytest.raises(RunnerConstructionError) as caught:
         await SimulationRunner.from_config(unowned, run_id=RunId("run-v10-unowned"))
     assert caught.value.code is RunnerConstructionErrorCode.CAPABILITY_UNIMPLEMENTED
+
+
+@pytest.mark.asyncio
+async def test_v11_skill_learning_config_logs_mode_without_rates(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    caplog.set_level(logging.DEBUG, logger="simulation.runner")
+    disabled = _config()
+    assert disabled.schema_version == "runner-config-v4"
+    assert (
+        disabled.agents[0].cognition.skill_learning_mode is SkillLearningMode.DISABLED
+    )
+    with pytest.raises(ValueError, match="skill_learning_mode_requires_v11"):
+        _config(skill_learning_mode=SkillLearningMode.DETERMINISTIC)
+    enabled = _config(
+        schema_version=RUNNER_SCHEMA_VERSION_V11,
+        skill_learning_mode=SkillLearningMode.DETERMINISTIC,
+        reputation_mode=ReputationMode.DETERMINISTIC,
+    )
+    async with await SimulationRunner.from_config(
+        enabled, run_id=RunId("run-v11")
+    ) as runner:
+        assert runner.runtimes
+    from simulation.runner import _cognition_config_for
+    from simulation.runner_models import V2CapabilityFlags
+
+    built = _cognition_config_for(
+        enabled.agents[0].cognition,
+        mortality_mode=MortalityMode.ENABLED,
+        capability_flags=V2CapabilityFlags(),
+    )
+    assert built.skill_learning_mode.value == "deterministic"
+    assert built.competence_belief_policy is not None
+    assert built.competence_belief_policy.version == "competence-belief-v1"
+    assert built.competence_belief_policy.allow_provider is False
+    skill_logs = [
+        record.getMessage()
+        for record in caplog.records
+        if "cognition_config_skill_learning_mode" in record.getMessage()
+    ]
+    assert any(
+        "mode=deterministic policy_version=competence-belief-v1" in line
+        for line in skill_logs
+    )
+    assert all("0.02" not in line and "0.25" not in line for line in skill_logs)

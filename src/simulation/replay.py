@@ -569,6 +569,9 @@ class ReplayService:
                 snapshot,
                 events=events,
                 committed_through_tick=committed_through,
+                skill_policy=request.skill_policy,
+                skill_entity_ids=request.skill_entity_ids,
+                skill_ledger=request.skill_ledger,
             )
         except Exception as exc:
             _LOGGER.error(

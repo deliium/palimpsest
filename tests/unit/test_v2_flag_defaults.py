@@ -19,11 +19,13 @@ from experiments.catalog import (
 from experiments.reference_scenario import build_reference_scenario
 from simulation.runner_models import (
     RUNNER_SCHEMA_VERSION_V4,
+    RUNNER_SCHEMA_VERSION_V11,
     AgentCognitionSpec,
     AgentRunnerSpec,
     CognitionTraceSpec,
     ReputationMode,
     SimulationRunnerConfig,
+    SkillLearningMode,
     V2CapabilityFlags,
     WorldScenarioSpec,
 )
@@ -137,3 +139,26 @@ def test_v1_regression_profile_rejects_enabled_tracing() -> None:
     )
     with pytest.raises(ValueError, match="v1_regression_trace_enabled"):
         v1_regression_profile(enabled)
+
+
+def test_v1_regression_profile_ignores_skill_learning_mode() -> None:
+    base = _base()
+    agent = base.agents[0]
+    from dataclasses import replace
+
+    learning = replace(
+        agent.cognition,
+        skill_learning_mode=SkillLearningMode.DETERMINISTIC,
+    )
+    enabled = replace(
+        base,
+        schema_version=RUNNER_SCHEMA_VERSION_V11,
+        agents=(replace(agent, cognition=learning),),
+    )
+    assert enabled.capability_flags == V2CapabilityFlags()
+    assert v1_regression_profile(enabled) is enabled
+    import json
+
+    document = json.loads(encode_runner_config(base).decode("utf-8"))
+    assert document["schema_version"] == "runner-config-v4"
+    assert "skill_learning_mode" not in document["agents"][0]["cognition"]

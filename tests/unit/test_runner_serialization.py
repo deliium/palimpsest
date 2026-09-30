@@ -18,6 +18,7 @@ from simulation.runner_models import (
     RUNNER_SCHEMA_VERSION_V8,
     RUNNER_SCHEMA_VERSION_V9,
     RUNNER_SCHEMA_VERSION_V10,
+    RUNNER_SCHEMA_VERSION_V11,
     AgentCognitionSpec,
     AgentRunnerSpec,
     CognitionTraceDetail,
@@ -33,6 +34,7 @@ from simulation.runner_models import (
     ReputationMode,
     RunnerStopPolicy,
     SimulationRunnerConfig,
+    SkillLearningMode,
     V2CapabilityFlags,
     WorldScenarioSpec,
 )
@@ -474,6 +476,7 @@ def _configured(
         CommunicationStrategyMode.DISABLED
     ),
     reputation_mode: ReputationMode = ReputationMode.DISABLED,
+    skill_learning_mode: SkillLearningMode = SkillLearningMode.DISABLED,
     name: str = "Ada",
 ) -> SimulationRunnerConfig:
     base = _config()
@@ -496,6 +499,7 @@ def _configured(
                     counterfactual_mode=counterfactual_mode,
                     communication_strategy_mode=communication_strategy_mode,
                     reputation_mode=reputation_mode,
+                    skill_learning_mode=skill_learning_mode,
                 ),
                 name=name,
                 initial_goals=agent.initial_goals,
@@ -796,4 +800,74 @@ def test_reputation_mode_round_trips_only_on_v10() -> None:
             schema_version=RUNNER_SCHEMA_VERSION_V10,
             reputation_mode=ReputationMode.DISABLED,
             communication_strategy_mode=CommunicationStrategyMode.DETERMINISTIC,
+        )
+
+
+def test_skill_learning_mode_round_trips_only_on_v11() -> None:
+    enabled = _configured(
+        schema_version=RUNNER_SCHEMA_VERSION_V11,
+        reputation_mode=ReputationMode.DETERMINISTIC,
+        communication_strategy_mode=CommunicationStrategyMode.DETERMINISTIC,
+        skill_learning_mode=SkillLearningMode.DETERMINISTIC,
+    )
+    encoded = encode_runner_config(enabled)
+    document = json.loads(encoded.decode("utf-8"))
+    assert document["schema_version"] == "runner-config-v11"
+    cognition = document["agents"][0]["cognition"]
+    assert cognition["skill_learning_mode"] == "deterministic"
+    assert cognition["reputation_mode"] == "deterministic"
+    assert cognition["practice_rate"] == 0.02
+    assert cognition["belief_action_weight"] == 0.25
+    assert cognition["belief_success_rate"] == 0.1
+    expected = {
+        "agent_id",
+        "memory_mode",
+        "imagination_mode",
+        "drive_overrides",
+        "policy_version",
+        "consolidation_mode",
+        "reflection_mode",
+        "prospective_mode",
+        "counterfactual_mode",
+        "communication_strategy_mode",
+        "reputation_mode",
+        "skill_learning_mode",
+        "practice_rate",
+        "success_rate",
+        "failure_rate",
+        "instruction_rate",
+        "observation_rate",
+        "probability_gain",
+        "efficiency_gain",
+        "belief_practice_rate",
+        "belief_success_rate",
+        "belief_failure_rate",
+        "belief_instruction_rate",
+        "belief_observation_rate",
+        "belief_prior",
+        "belief_action_weight",
+    }
+    assert set(cognition) == expected
+    assert decode_runner_config(encoded) == enabled
+    reputation_only = _configured(
+        schema_version=RUNNER_SCHEMA_VERSION_V10,
+        reputation_mode=ReputationMode.DETERMINISTIC,
+    )
+    reputation_doc = json.loads(encode_runner_config(reputation_only).decode("utf-8"))
+    assert reputation_doc["schema_version"] == "runner-config-v10"
+    assert "skill_learning_mode" not in reputation_doc["agents"][0]["cognition"]
+    disabled = _config()
+    disabled_doc = json.loads(encode_runner_config(disabled).decode("utf-8"))
+    assert disabled_doc["schema_version"] == RUNNER_SCHEMA_VERSION
+    assert "skill_learning_mode" not in disabled_doc["agents"][0]["cognition"]
+    with pytest.raises(ValueError, match="skill_learning_mode_requires_v11"):
+        _configured(
+            schema_version=RUNNER_SCHEMA_VERSION_V10,
+            reputation_mode=ReputationMode.DETERMINISTIC,
+            skill_learning_mode=SkillLearningMode.DETERMINISTIC,
+        )
+    with pytest.raises(ValueError, match="v11_requires_skill_learning"):
+        _configured(
+            schema_version=RUNNER_SCHEMA_VERSION_V11,
+            skill_learning_mode=SkillLearningMode.DISABLED,
         )

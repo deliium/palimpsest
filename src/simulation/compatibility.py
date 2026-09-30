@@ -54,6 +54,7 @@ from simulation.runner_models import (
     RUNNER_SCHEMA_VERSION_V8,
     RUNNER_SCHEMA_VERSION_V9,
     RUNNER_SCHEMA_VERSION_V10,
+    RUNNER_SCHEMA_VERSION_V11,
     SUPPORTED_RESULT_SCHEMA_VERSIONS,
     SUPPORTED_RUNNER_SCHEMA_VERSIONS,
 )
@@ -95,6 +96,7 @@ __all__ = [
     "RUNNER_SCHEMA_VERSION_V8",
     "RUNNER_SCHEMA_VERSION_V9",
     "RUNNER_SCHEMA_VERSION_V10",
+    "RUNNER_SCHEMA_VERSION_V11",
     "STREAM_ENVELOPE_VERSION",
     "WS_PROTOCOL_VERSION",
     "CompatibilityEntry",
@@ -187,7 +189,11 @@ _MATRIX: dict[str, CompatibilityEntry] = {
             "strategy is accepted on v9 or v10; "
             f"{RUNNER_SCHEMA_VERSION_V10} is accepted when reputation mode is "
             "deterministic and carries every v9 cognition key plus "
-            "reputation_mode; "
+            "reputation_mode; reputation and earlier cognition modes stay "
+            f"legal on {RUNNER_SCHEMA_VERSION_V11}; "
+            f"{RUNNER_SCHEMA_VERSION_V11} is emitted only when some agent's "
+            "skill learning mode is deterministic and carries every v10 "
+            "cognition key plus skill_learning_mode and the locked rate keys; "
             f"{RUNNER_SCHEMA_VERSION_V3} retained for capability flags; "
             "v1-v4 omit consolidation_mode, reflection_mode, prospective_mode, "
             "counterfactual_mode, communication_strategy_mode, and "
@@ -375,6 +381,7 @@ _LOG.debug(
         "runner_v8": RUNNER_SCHEMA_VERSION_V8,
         "runner_v9": RUNNER_SCHEMA_VERSION_V9,
         "runner_v10": RUNNER_SCHEMA_VERSION_V10,
+        "runner_v11": RUNNER_SCHEMA_VERSION_V11,
         "alembic_head": ALEMBIC_HEAD_REVISION,
         "accepted_event_count": len(ACCEPTED_EVENT_SCHEMA_VERSIONS),
     },

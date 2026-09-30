@@ -710,6 +710,9 @@ class ReplayRequest:
     run_id: RunId
     target_tick: Tick | None
     fallback_policy: ReplayFallbackPolicy = ReplayFallbackPolicy.LATEST_AT_OR_BEFORE
+    skill_policy: object | None = None
+    skill_entity_ids: Sequence[object] | None = None
+    skill_ledger: object | None = None
 
     def __post_init__(self) -> None:
         if type(self.run_id) is not RunId:

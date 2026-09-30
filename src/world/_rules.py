@@ -1000,6 +1000,7 @@ def apply_operation(
     rules: PhysicalRules | None = None,
     resolved: ResolvedActionEffects | None = None,
     tick: int | None = None,
+    skill_efficiency: object | None = None,
 ) -> RuleApplication:
     """Evaluate then apply immutable physical or event-only effects.
 
@@ -1007,6 +1008,11 @@ def apply_operation(
     Revision bumping is owned by batch preparation, not by this helper.
     """
     physical_rules = _require_rules(rules)
+    if skill_efficiency is not None:
+        from world._skills import SkillEfficiencyOverride
+
+        if type(skill_efficiency) is not SkillEfficiencyOverride:
+            raise TypeError("skill_efficiency must be SkillEfficiencyOverride")
     if resolved is not None and type(resolved) is not ResolvedActionEffects:
         raise TypeError("apply_operation resolved must be ResolvedActionEffects")
     result = evaluate_operation(
@@ -1031,13 +1037,20 @@ def apply_operation(
         )
     if type(operation) is _FleeOp:
         return _apply_flee(
-            state, operation, result=result, rules=physical_rules, resolved=resolved
+            state,
+            operation,
+            result=result,
+            rules=physical_rules,
+            resolved=resolved,
+            skill_efficiency=skill_efficiency,
         )
     details = _event_details_for(state, operation, rules=physical_rules)
     if result.disposition is RuleDisposition.EVENT_ONLY:
         return RuleApplication(result=result, next_state=state, event_details=details)
     assert result.disposition is RuleDisposition.MUTATE
-    next_state = _apply_mutation(state, operation, rules=physical_rules)
+    next_state = _apply_mutation(
+        state, operation, rules=physical_rules, skill_efficiency=skill_efficiency
+    )
     # Recompute details from next_state for resulting physiology facts where needed.
     details = _event_details_for(
         state, operation, rules=physical_rules, next_state=next_state
@@ -1167,6 +1180,7 @@ def _apply_flee(
     result: RuleResult,
     rules: PhysicalRules,
     resolved: ResolvedActionEffects | None,
+    skill_efficiency: object | None = None,
 ) -> RuleApplication:
     if resolved is None:
         raise ValueError("flee apply requires ResolvedActionEffects")
@@ -1186,7 +1200,21 @@ def _apply_flee(
     if effect.destination_index >= len(eligible):
         raise ValueError("flee destination_index out of range for eligible set")
     destination_id = eligible[effect.destination_index]
-    next_state = _mutate_flee(state, operation.actor_id, destination_id, rules=rules)
+    if skill_efficiency is None:
+        next_state = _mutate_flee(
+            state, operation.actor_id, destination_id, rules=rules
+        )
+    else:
+        from world._skills import SkillEfficiencyOverride
+
+        assert type(skill_efficiency) is SkillEfficiencyOverride
+        next_state = _mutate_flee(
+            state,
+            operation.actor_id,
+            destination_id,
+            rules=rules,
+            flee_fatigue=skill_efficiency.flee_fatigue,
+        )
     prior = state.bodies[operation.actor_id]
     resulting = next_state.bodies[operation.actor_id]
     return RuleApplication(
@@ -1313,10 +1341,22 @@ def _apply_mutation(
     operation: ValidatedWorldOperation,
     *,
     rules: PhysicalRules,
+    skill_efficiency: object | None = None,
 ) -> WorldState:
     match operation:
         case _MoveOp(actor_id=actor_id, destination_id=destination_id):
-            return _mutate_move(state, actor_id, destination_id, rules=rules)
+            if skill_efficiency is None:
+                return _mutate_move(state, actor_id, destination_id, rules=rules)
+            from world._skills import SkillEfficiencyOverride
+
+            assert type(skill_efficiency) is SkillEfficiencyOverride
+            return _mutate_move(
+                state,
+                actor_id,
+                destination_id,
+                rules=rules,
+                move_fatigue=skill_efficiency.move_fatigue,
+            )
         case _TakeOp(actor_id=actor_id, item_id=item_id):
             return _mutate_take(state, actor_id, item_id)
         case _DropOp(actor_id=actor_id, item_id=item_id):
@@ -1330,7 +1370,18 @@ def _apply_mutation(
         case _SleepOp(actor_id=actor_id):
             return _mutate_sleep(state, actor_id, rules=rules)
         case _HelpOp(actor_id=actor_id, target_id=target_id):
-            return _mutate_help(state, actor_id, target_id, rules=rules)
+            if skill_efficiency is None:
+                return _mutate_help(state, actor_id, target_id, rules=rules)
+            from world._skills import SkillEfficiencyOverride
+
+            assert type(skill_efficiency) is SkillEfficiencyOverride
+            return _mutate_help(
+                state,
+                actor_id,
+                target_id,
+                rules=rules,
+                help_health_gain=skill_efficiency.help_health_gain,
+            )
         case _:
             raise TypeError(f"mutation unsupported for {type(operation).__name__}")
 
@@ -1341,11 +1392,11 @@ def _mutate_move(
     destination_id: EntityId,
     *,
     rules: PhysicalRules,
+    move_fatigue: float | None = None,
 ) -> WorldState:
     actor = state.bodies[actor_id]
-    fatigue = Fatigue(
-        clamp_need(round_physical(actor.fatigue.value + rules.move_fatigue))
-    )
+    fatigue_cost = rules.move_fatigue if move_fatigue is None else move_fatigue
+    fatigue = Fatigue(clamp_need(round_physical(actor.fatigue.value + fatigue_cost)))
     bodies = dict(state.bodies)
     bodies[actor_id] = copy_body(actor, location_id=destination_id, fatigue=fatigue)
     return rebuild_world_state(state, bodies=bodies)
@@ -1474,12 +1525,14 @@ def _mutate_help(
     target_id: EntityId,
     *,
     rules: PhysicalRules,
+    help_health_gain: float | None = None,
 ) -> WorldState:
     actor = state.bodies[actor_id]
     target = state.bodies[target_id]
-    health = Health(
-        clamp_need(round_physical(target.health.value + rules.help_health_gain))
+    health_gain = (
+        rules.help_health_gain if help_health_gain is None else help_health_gain
     )
+    health = Health(clamp_need(round_physical(target.health.value + health_gain)))
     fatigue = Fatigue(
         clamp_need(round_physical(actor.fatigue.value + rules.help_fatigue))
     )
@@ -1495,11 +1548,11 @@ def _mutate_flee(
     destination_id: EntityId,
     *,
     rules: PhysicalRules,
+    flee_fatigue: float | None = None,
 ) -> WorldState:
     actor = state.bodies[actor_id]
-    fatigue = Fatigue(
-        clamp_need(round_physical(actor.fatigue.value + rules.flee_fatigue))
-    )
+    fatigue_cost = rules.flee_fatigue if flee_fatigue is None else flee_fatigue
+    fatigue = Fatigue(clamp_need(round_physical(actor.fatigue.value + fatigue_cost)))
     bodies = dict(state.bodies)
     bodies[actor_id] = copy_body(actor, location_id=destination_id, fatigue=fatigue)
     return rebuild_world_state(state, bodies=bodies)

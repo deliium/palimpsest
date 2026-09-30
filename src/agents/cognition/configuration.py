@@ -17,6 +17,10 @@ from agents.cognition.communication_strategy import (
     CommunicationStrategyPolicy,
     default_communication_strategy_policy,
 )
+from agents.cognition.competence import (
+    CompetenceBeliefPolicy,
+    default_competence_belief_policy,
+)
 from agents.cognition.contracts import (
     EmotionalStateAppraiser,
     FutureImagination,
@@ -187,6 +191,17 @@ class CognitionReputationMode(StrEnum):
     DETERMINISTIC = "deterministic"
 
 
+class CognitionSkillLearningMode(StrEnum):
+    """Opt-in skill learning. Disabled does not change probabilities or beliefs.
+
+    Lockstep with ``simulation.SkillLearningMode``. This is not a
+    ``V2CapabilityFlags`` slot.
+    """
+
+    DISABLED = "disabled"
+    DETERMINISTIC = "deterministic"
+
+
 def _unit_interval(name: str, value: object) -> float:
     if isinstance(value, bool) or not isinstance(value, (int, float)):
         raise ValueError(f"{name}: not_unit_interval")
@@ -259,6 +274,10 @@ class CognitionLoopConfig:
     communication_strategy_policy: CommunicationStrategyPolicy | None = None
     reputation_mode: CognitionReputationMode = CognitionReputationMode.DISABLED
     reputation_policy: ReputationFormationPolicy | None = None
+    skill_learning_mode: CognitionSkillLearningMode = (
+        CognitionSkillLearningMode.DISABLED
+    )
+    competence_belief_policy: CompetenceBeliefPolicy | None = None
     drive_overrides: tuple[CognitionDriveOverride, ...] = ()
     memory_policy_version: str = MEMORY_POLICY_VERSION
     imagination_policy_version: str = IMAGINATION_POLICY_VERSION
@@ -408,6 +427,26 @@ class CognitionLoopConfig:
             raise TypeError(
                 "reputation_policy must be ReputationFormationPolicy or None"
             )
+        if type(self.skill_learning_mode) is not CognitionSkillLearningMode:
+            _LOG.error(
+                "invalid_enum path=skill_learning_mode reason_code=invalid_mode"
+            )
+            raise TypeError("skill_learning_mode must be CognitionSkillLearningMode")
+        if self.skill_learning_mode is CognitionSkillLearningMode.DISABLED:
+            object.__setattr__(self, "competence_belief_policy", None)
+        elif self.competence_belief_policy is None:
+            object.__setattr__(
+                self,
+                "competence_belief_policy",
+                default_competence_belief_policy(),
+            )
+        elif type(self.competence_belief_policy) is not CompetenceBeliefPolicy:
+            _LOG.error(
+                "invalid_enum path=competence_belief_policy reason_code=invalid_type"
+            )
+            raise TypeError(
+                "competence_belief_policy must be CompetenceBeliefPolicy or None"
+            )
         if (
             self.reflection_policy is not None
             and type(self.reflection_policy) is not ReflectionPolicy
@@ -465,6 +504,7 @@ class CognitionLoopConfig:
                         self.communication_strategy_mode.value
                     ),
                     "reputation_mode": self.reputation_mode.value,
+                    "skill_learning_mode": self.skill_learning_mode.value,
                     "reflection_policy_version": (
                         None
                         if self.reflection_policy is None
@@ -555,6 +595,12 @@ class CognitionLoopConfig:
                 None
                 if self.reputation_policy is None
                 else self.reputation_policy.version
+            ),
+            "skill_learning_mode": self.skill_learning_mode.value,
+            "competence_belief_policy_version": (
+                None
+                if self.competence_belief_policy is None
+                else self.competence_belief_policy.version
             ),
             "imagination_mode": self.imagination_mode.value,
             "imagination_policy_version": self.imagination_policy_version,
@@ -742,4 +788,6 @@ def build_cognitive_loop(
         communication_strategy_policy=resolved.communication_strategy_policy,
         reputation_mode=resolved.reputation_mode,
         reputation_policy=resolved.reputation_policy,
+        skill_learning_mode=resolved.skill_learning_mode,
+        competence_belief_policy=resolved.competence_belief_policy,
     )

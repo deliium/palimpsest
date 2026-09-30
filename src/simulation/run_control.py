@@ -597,6 +597,7 @@ class AgentRuntimeCheckpoint:
     causal_world_model: object | None = None
     theory_of_mind: object | None = None
     reputation: object | None = None
+    competence_model: object | None = None
     reflection_cursor: object | None = None
     decision_journal: tuple[object, ...] | None = None
     remembered_decisions: tuple[object, ...] | None = None
@@ -651,6 +652,13 @@ class AgentRuntimeCheckpoint:
             self.reputation,
             self.agent_id,
             field_name="reputation",
+        )
+        from agents.cognition.competence import require_owner_competence
+
+        require_owner_competence(
+            self.competence_model,
+            self.agent_id,
+            field_name="competence_model",
         )
         if self.reflection_cursor is not None:
             from agents.cognition.reflection import ReflectionCursor

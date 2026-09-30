@@ -536,3 +536,72 @@ def test_reputation_mode_requires_v10(caplog: pytest.LogCaptureFixture) -> None:
     messages = " ".join(record.getMessage() for record in caplog.records)
     assert "reason_code=reputation_mode_requires_v10" in messages
     assert "reason_code=v10_requires_reputation" in messages
+
+
+def test_skill_learning_mode_requires_v11_and_shared_rates(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    import logging
+    from dataclasses import replace
+
+    from simulation.runner_models import (
+        RUNNER_SCHEMA_VERSION_V10,
+        RUNNER_SCHEMA_VERSION_V11,
+        ReputationMode,
+        SkillLearningMode,
+    )
+
+    base = _config()
+
+    def configured(schema_version: str, **cognition: object) -> SimulationRunnerConfig:
+        agent = base.agents[0]
+        spec = replace(agent.cognition, **cognition)
+        return replace(
+            base,
+            agents=(replace(agent, cognition=spec),),
+            schema_version=schema_version,
+        )
+
+    caplog.set_level(logging.ERROR, logger="simulation.runner_models")
+    with pytest.raises(ValueError, match="skill_learning_mode_requires_v11"):
+        configured(
+            RUNNER_SCHEMA_VERSION_V10,
+            reputation_mode=ReputationMode.DETERMINISTIC,
+            skill_learning_mode=SkillLearningMode.DETERMINISTIC,
+        )
+    with pytest.raises(ValueError, match="v11_requires_skill_learning"):
+        configured(RUNNER_SCHEMA_VERSION_V11)
+    enabled = configured(
+        RUNNER_SCHEMA_VERSION_V11,
+        skill_learning_mode=SkillLearningMode.DETERMINISTIC,
+        reputation_mode=ReputationMode.DETERMINISTIC,
+    )
+    assert enabled.schema_version == "runner-config-v11"
+    assert (
+        enabled.agents[0].cognition.skill_learning_mode
+        is SkillLearningMode.DETERMINISTIC
+    )
+    other = alive_body("body-2")
+    first = enabled.agents[0]
+    second_spec = replace(
+        first.cognition,
+        agent_id=AgentId("agent-2"),
+        practice_rate=0.03,
+    )
+    second = AgentRunnerSpec(
+        agent_id=AgentId("agent-2"),
+        entity_id=other.entity_id,
+        cognition=second_spec,
+    )
+    scenario = replace(
+        enabled.scenario,
+        bodies=(enabled.scenario.bodies[0], other),
+    )
+    with pytest.raises(ValueError, match="skill_rate_mismatch"):
+        replace(enabled, scenario=scenario, agents=(first, second))
+    messages = " ".join(record.getMessage() for record in caplog.records)
+    assert "reason_code=skill_learning_mode_requires_v11" in messages
+    assert "reason_code=v11_requires_skill_learning" in messages
+    assert "reason_code=skill_rate_mismatch" in messages
+    assert "agent_count=2" in messages
+    assert "0.03" not in messages

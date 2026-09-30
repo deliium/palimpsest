@@ -16,6 +16,7 @@ from typing import Final, Protocol
 from agents.cognition.communication_strategy import (
     default_communication_strategy_policy,
 )
+from agents.cognition.competence import CompetenceBeliefPolicy
 from agents.cognition.configuration import (
     CognitionCommunicationStrategyMode,
     CognitionConsolidationMode,
@@ -30,6 +31,7 @@ from agents.cognition.configuration import (
     CognitionProspectiveMode,
     CognitionReflectionMode,
     CognitionReputationMode,
+    CognitionSkillLearningMode,
     CognitionTheoryOfMindMode,
     CognitionWorldModelMode,
     build_cognitive_loop,
@@ -137,6 +139,7 @@ from simulation.runner_models import (
     RunnerStopReasonCode,
     SimulationRunnerConfig,
     SimulationRunnerResult,
+    SkillLearningMode,
     V2CapabilityFlags,
     build_detached_objective_projection,
     describe_runner_config,
@@ -549,6 +552,24 @@ def _cognition_config_for(
         reputation_mode.value,
         None if reputation_policy is None else reputation_policy.version,
     )
+    skill_mode = CognitionSkillLearningMode(spec.skill_learning_mode.value)
+    belief_policy = None
+    if skill_mode is CognitionSkillLearningMode.DETERMINISTIC:
+        belief_policy = CompetenceBeliefPolicy(
+            belief_practice_rate=spec.belief_practice_rate,
+            belief_success_rate=spec.belief_success_rate,
+            belief_failure_rate=spec.belief_failure_rate,
+            belief_instruction_rate=spec.belief_instruction_rate,
+            belief_observation_rate=spec.belief_observation_rate,
+            belief_prior=spec.belief_prior,
+            belief_action_weight=spec.belief_action_weight,
+            allow_provider=False,
+        )
+    _LOG.debug(
+        "cognition_config_skill_learning_mode mode=%s policy_version=%s",
+        skill_mode.value,
+        None if belief_policy is None else belief_policy.version,
+    )
     return CognitionLoopConfig(
         memory_mode=CognitionMemoryMode(spec.memory_mode.value),
         imagination_mode=CognitionImaginationMode(spec.imagination_mode.value),
@@ -574,6 +595,8 @@ def _cognition_config_for(
         communication_strategy_policy=strategy_policy,
         reputation_mode=reputation_mode,
         reputation_policy=reputation_policy,
+        skill_learning_mode=skill_mode,
+        competence_belief_policy=belief_policy,
         drive_overrides=tuple(
             CognitionDriveOverride(
                 kind=item.kind,
@@ -920,10 +943,34 @@ class SimulationRunner:
             )
 
             stage = "engine"
+            skill_ids = tuple(
+                agent.entity_id
+                for agent in config.agents
+                if agent.cognition.skill_learning_mode
+                is SkillLearningMode.DETERMINISTIC
+            )
+            skill_kwargs: dict[str, object] = {}
+            if skill_ids:
+                from world._skills import ObjectiveSkillPolicy
+
+                rate_spec = config.agents[0].cognition
+                skill_kwargs = {
+                    "skill_policy": ObjectiveSkillPolicy(
+                        practice_rate=rate_spec.practice_rate,
+                        success_rate=rate_spec.success_rate,
+                        failure_rate=rate_spec.failure_rate,
+                        instruction_rate=rate_spec.instruction_rate,
+                        observation_rate=rate_spec.observation_rate,
+                        probability_gain=rate_spec.probability_gain,
+                        efficiency_gain=rate_spec.efficiency_gain,
+                    ),
+                    "skill_entity_ids": skill_ids,
+                }
             engine = WorldEngine(
                 config=run_config,
                 bootstrap=bootstrap,
                 run_id=resolved_run_id,
+                **skill_kwargs,
             )
 
             stage = "agents"

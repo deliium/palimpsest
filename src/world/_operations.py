@@ -7,7 +7,7 @@ not stop hostile reflection.
 
 from __future__ import annotations
 
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from enum import StrEnum
 from typing import Final
@@ -637,6 +637,7 @@ def prepare_action_batch(
     resolved_effects: object | None = None,
     rules: object | None = None,
     tick: int | None = None,
+    skill_efficiency: object | None = None,
 ) -> PendingBatch:
     """Resolve ordered requests into pending effects against one evolving state.
 
@@ -668,6 +669,21 @@ def prepare_action_batch(
         physical_rules = rules
     else:
         raise TypeError("prepare_action_batch rules must be PhysicalRules")
+    efficiency_map = None
+    if skill_efficiency is not None:
+        from world._skills import SkillEfficiencyOverride
+
+        if not isinstance(skill_efficiency, Mapping):
+            raise TypeError("skill_efficiency must be a mapping")
+        efficiency_map = {}
+        for entity_id, override in skill_efficiency.items():
+            if type(entity_id) is not EntityId:
+                raise TypeError("skill_efficiency keys must be EntityId")
+            if type(override) is not SkillEfficiencyOverride:
+                raise TypeError(
+                    "skill_efficiency values must be SkillEfficiencyOverride"
+                )
+            efficiency_map[entity_id] = override
     request_tuple = tuple(requests)
     resolved = resolved_effects
 
@@ -748,12 +764,16 @@ def prepare_action_batch(
 
         assert type(work_validation) is OperationAccepted
         state_before = working
+        actor_efficiency = None
+        if efficiency_map is not None:
+            actor_efficiency = efficiency_map.get(request.actor_id)
         application = apply_operation(
             working,
             work_validation.operation,
             rules=physical_rules,
             resolved=resolved,
             tick=tick,
+            skill_efficiency=actor_efficiency,
         )
         if application.result.disposition is RuleDisposition.REJECT:
             outcomes.append(

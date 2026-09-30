@@ -84,7 +84,7 @@ from world._rules import (
     find_eligible_search_resource,
 )
 from world._state import World
-from world.actions import ActionRequest, Attack, Flee, Search
+from world.actions import ActionRequest, Attack, Flee, Help, Move, Search
 from world.effects import (
     ActionCause,
     ResolvedActionEffect,
@@ -147,6 +147,7 @@ class _PreparedTickCandidate:
     result: TickResult
     next_snapshot: _EngineSnapshot
     events: tuple[WorldEvent, ...]
+    skill_ledger: object | None = None
 
 
 class WorldEngine:
@@ -160,6 +161,9 @@ class WorldEngine:
         "_perception",
         "_registrations",
         "_run_id",
+        "_skill_entity_ids",
+        "_skill_ledger",
+        "_skill_policy",
         "_snapshot",
         "_translator",
     )
@@ -171,6 +175,9 @@ class WorldEngine:
         bootstrap: WorldBootstrap,
         run_id: RunId | None = None,
         start_tick: Tick | None = None,
+        skill_policy: object | None = None,
+        skill_entity_ids: Sequence[object] | None = None,
+        skill_ledger: object | None = None,
     ) -> None:
         if type(config) is not SimulationRunConfig:
             raise TypeError("WorldEngine requires SimulationRunConfig")
@@ -206,6 +213,12 @@ class WorldEngine:
             event_history=(),
             prior_event_window=(),
         )
+        self._bind_skill_state(
+            skill_policy=skill_policy,
+            skill_entity_ids=skill_entity_ids,
+            skill_ledger=skill_ledger,
+            restored=False,
+        )
         _LOGGER.debug(
             "%s world_id=%s revision=%s tick=%s registrations=%s",
             EngineDiagnosticCode.BOOTSTRAP_VALIDATED.value,
@@ -222,6 +235,9 @@ class WorldEngine:
         *,
         events: Sequence[WorldEvent] = (),
         committed_through_tick: Tick | None = None,
+        skill_policy: object | None = None,
+        skill_entity_ids: Sequence[object] | None = None,
+        skill_ledger: object | None = None,
     ) -> WorldEngine:
         """Restore an engine at ``AWAITING_OBSERVATION`` from a checkpoint.
 
@@ -347,6 +363,21 @@ class WorldEngine:
             prior_event_window=_prior_event_window_for_tick(
                 normalized_events, observation_tick=restored_tick.value
             ),
+        )
+        engine._bind_skill_state(
+            skill_policy=skill_policy,
+            skill_entity_ids=skill_entity_ids,
+            skill_ledger=engine._refolded_skill_ledger(
+                skill_policy=skill_policy,
+                skill_entity_ids=skill_entity_ids,
+                skill_ledger=skill_ledger,
+                initial_state=base_state,
+                events=normalized_events,
+                rules=snapshot.config.physical_rules,
+                expected_run_id=snapshot.run_id.value,
+                expected_world_id=snapshot.world_id,
+            ),
+            restored=True,
         )
         _LOGGER.info(
             "%s run_id=%s snapshot_id=%s next_tick=%s revision=%s "
@@ -817,7 +848,7 @@ class WorldEngine:
         typed = tuple(require_action_submission(item) for item in submissions)
         for submission in typed:
             self._validate_token(submission.token, snap.token)
-        resolutions, events, candidate_world = self._resolve_ordered(
+        resolutions, events, candidate_world, next_ledger = self._resolve_ordered(
             snap=snap, submissions=typed
         )
         result = TickResult(
@@ -848,6 +879,7 @@ class WorldEngine:
             result=result,
             next_snapshot=next_snapshot,
             events=events,
+            skill_ledger=next_ledger,
         )
 
     def _finalize_tick_candidate(self, candidate: _PreparedTickCandidate) -> TickResult:
@@ -862,6 +894,7 @@ class WorldEngine:
             len(candidate.events),
         )
         self._snapshot = candidate.next_snapshot
+        self._skill_ledger = candidate.skill_ledger
         result = candidate.result
         self._last_tick_result = result
         death_count = sum(
@@ -1003,6 +1036,9 @@ class WorldEngine:
             request_ordinals=request_ordinals,
             rules=physical_rules,
         )
+        self._log_skill_efficiency(
+            snap=snap, requests=batch_requests, rules=physical_rules
+        )
         pending = prepare_action_batch(
             world_id=self.world_id,
             starting_state=snap.world.state,
@@ -1010,6 +1046,10 @@ class WorldEngine:
             resolved_effects=resolved_effects,
             rules=physical_rules,
             tick=snap.tick.value,
+            skill_efficiency=self._skill_efficiency_map(rules=physical_rules),
+        )
+        folded_ledger = self._fold_skill_ledger(
+            snap=snap, pending=pending, requests=batch_requests, rules=physical_rules
         )
         _LOGGER.debug(
             "%s tick=%s pending_actions=%s pending_events=%s mutation=%s",
@@ -1209,7 +1249,71 @@ class WorldEngine:
             _log_resolution(status, snap.tick.value, ordinal, request.request_id.value)
 
         candidate_world = World(self.world_id, prepared.candidate_state)
-        return tuple(resolutions), prepared.events, candidate_world
+        return tuple(resolutions), prepared.events, candidate_world, folded_ledger
+
+    def _fold_skill_ledger(
+        self,
+        *,
+        snap: _EngineSnapshot,
+        pending: object,
+        requests: tuple[ActionRequest, ...],
+        rules: object,
+    ) -> object | None:
+        if self._skill_ledger is None or self._skill_policy is None:
+            return None
+        from world._operations import PendingBatch
+        from world._skills import SkillGrowthInput, fold_skill_growth
+        from world.effects import ActionCause
+
+        if type(pending) is not PendingBatch:
+            raise TypeError("pending must be PendingBatch")
+        if type(self._skill_ledger).__name__ == "CompetenceSelfModel":
+            raise TypeError("skill growth accepts only the objective skill ledger")
+        by_request: dict[object, list[object]] = {}
+        for pending_event in pending.pending_events:
+            cause = pending_event.cause
+            if type(cause) is not ActionCause:
+                continue
+            by_request.setdefault(cause.request_id, []).append(pending_event)
+        requests_by_id = {request.request_id: request for request in requests}
+        facts: list[SkillGrowthInput] = []
+        for outcome in pending.outcomes:
+            request = requests_by_id.get(outcome.request_id)
+            if request is None:
+                continue
+            untargeted = None
+            if type(request.command) is Search:
+                untargeted = request.command.target_id is None
+            matched = by_request.get(outcome.request_id, [])
+            if not matched:
+                facts.append(
+                    SkillGrowthInput(
+                        actor_id=request.actor_id,
+                        status=outcome.status.value,
+                        action_kind=outcome.action_kind,
+                        untargeted_search=untargeted,
+                    )
+                )
+                continue
+            for pending_event in matched:
+                facts.append(
+                    SkillGrowthInput(
+                        actor_id=request.actor_id,
+                        status=outcome.status.value,
+                        action_kind=outcome.action_kind,
+                        details=pending_event.details,
+                        origin_location_id=pending_event.occurrence.origin_location_id,
+                        untargeted_search=untargeted,
+                    )
+                )
+        return fold_skill_growth(
+            self._skill_ledger,
+            tuple(facts),
+            self._skill_policy,
+            world_state=snap.world.state,
+            tick=snap.tick.value,
+            rules=rules,
+        )
 
     def _resolve_system_effects(
         self,
@@ -1309,6 +1413,231 @@ class WorldEngine:
                     by_request[request.request_id] = flee_effect
         return ResolvedActionEffects(by_request=by_request)
 
+    def _bind_skill_state(
+        self,
+        *,
+        skill_policy: object | None,
+        skill_entity_ids: Sequence[object] | None,
+        skill_ledger: object | None,
+        restored: bool,
+    ) -> None:
+        from world._skills import (
+            OBJECTIVE_SKILL_POLICY_VERSION,
+            ObjectiveSkillLedger,
+            ObjectiveSkillPolicy,
+            SkillDomain,
+        )
+        from world.identifiers import EntityId
+
+        if type(skill_policy).__name__ == "CompetenceSelfModel" or (
+            skill_ledger is not None
+            and type(skill_ledger).__name__ == "CompetenceSelfModel"
+        ):
+            raise TypeError("skill state accepts only the objective skill ledger")
+        if skill_policy is None:
+            if skill_entity_ids is not None or skill_ledger is not None:
+                raise TypeError("skill_policy is required with skill ids or a ledger")
+            self._skill_policy = None
+            self._skill_entity_ids = frozenset()
+            self._skill_ledger = None
+            _LOGGER.debug("skill_ledger=absent")
+            return
+        if type(skill_policy) is not ObjectiveSkillPolicy:
+            raise TypeError("skill_policy must be ObjectiveSkillPolicy")
+        if (
+            skill_entity_ids is None
+            or isinstance(skill_entity_ids, (str, bytes, set, frozenset))
+            or not isinstance(skill_entity_ids, Sequence)
+        ):
+            raise TypeError("skill_entity_ids must be an ordered sequence")
+        enabled: list[EntityId] = []
+        for entity_id in skill_entity_ids:
+            if type(entity_id) is not EntityId:
+                raise TypeError("skill_entity_ids entries must be EntityId")
+            enabled.append(entity_id)
+        if skill_ledger is None:
+            ledger = ObjectiveSkillLedger.bootstrap(tuple(enabled))
+        elif type(skill_ledger) is not ObjectiveSkillLedger:
+            raise TypeError("skill_ledger must be ObjectiveSkillLedger")
+        else:
+            ledger = skill_ledger
+        self._skill_policy = skill_policy
+        self._skill_entity_ids = frozenset(enabled)
+        self._skill_ledger = ledger
+        if restored:
+            _LOGGER.info(
+                "skill_ledger_restored entity_count=%s domain_count=%s",
+                len(ledger.entity_ids()),
+                len(SkillDomain),
+            )
+        else:
+            _LOGGER.debug(
+                "skill_ledger_bound policy_version=%s entity_count=%s",
+                OBJECTIVE_SKILL_POLICY_VERSION,
+                len(enabled),
+            )
+
+    def _refolded_skill_ledger(
+        self,
+        *,
+        skill_policy: object | None,
+        skill_entity_ids: Sequence[object] | None,
+        skill_ledger: object | None,
+        initial_state: object,
+        events: Sequence[object],
+        rules: object,
+        expected_run_id: str,
+        expected_world_id: object,
+    ) -> object | None:
+        if skill_policy is None:
+            return skill_ledger
+        from world._skills import (
+            ObjectiveSkillLedger,
+            ObjectiveSkillPolicy,
+            refold_objective_ledger,
+            skill_ledger_mismatch,
+        )
+        from world.identifiers import EntityId
+        from world.models import PhysicalRules, default_physical_rules
+
+        if type(skill_policy) is not ObjectiveSkillPolicy:
+            raise TypeError("skill_policy must be ObjectiveSkillPolicy")
+        if skill_entity_ids is None:
+            raise TypeError("skill_entity_ids must be an ordered sequence")
+        entity_ids = tuple(entity for entity in skill_entity_ids)
+        for entity_id in entity_ids:
+            if type(entity_id) is not EntityId:
+                raise TypeError("skill_entity_ids entries must be EntityId")
+        physical_rules = rules if rules is not None else default_physical_rules()
+        if type(physical_rules) is not PhysicalRules:
+            raise TypeError("rules must be PhysicalRules")
+        refolded = refold_objective_ledger(
+            initial_state,
+            events,
+            skill_policy,
+            entity_ids,
+            rules=physical_rules,
+            expected_run_id=expected_run_id,
+            expected_world_id=expected_world_id,
+        )
+        if skill_ledger is None:
+            return refolded
+        if type(skill_ledger) is not ObjectiveSkillLedger:
+            raise TypeError("skill_ledger must be ObjectiveSkillLedger")
+        mismatch = skill_ledger_mismatch(skill_ledger, refolded)
+        if mismatch is not None:
+            entity_id, domain = mismatch
+            _LOGGER.error(
+                "skill_ledger_mismatch entity_id=%s domain=%s "
+                "reason_code=skill_ledger_mismatch",
+                entity_id.value,
+                domain.value,
+            )
+            raise ValueError("skill_ledger_mismatch")
+        return refolded
+
+    def _skill_level(
+        self,
+        entity_id: object,
+        domain: object,
+        *,
+        ledger: object,
+        tick: Tick,
+    ) -> float:
+        from world._skills import ObjectiveSkillLedger, SkillDomain
+        from world.identifiers import EntityId
+
+        assert type(ledger) is ObjectiveSkillLedger
+        assert type(entity_id) is EntityId
+        assert type(domain) is SkillDomain
+        try:
+            return ledger.level(entity_id, domain)
+        except ValueError:
+            _LOGGER.error(
+                "skill_modifier_failed tick=%s entity_id=%s domain=%s "
+                "reason_code=missing_domain",
+                tick.value,
+                entity_id.value,
+                domain.value,
+            )
+            raise ValueError("missing_domain") from None
+
+    def _skill_efficiency_map(self, *, rules: object) -> dict[object, object] | None:
+        if self._skill_policy is None or self._skill_ledger is None:
+            return None
+        from world._skills import (
+            SkillDomain,
+            SkillEfficiencyOverride,
+            adjusted_flee_fatigue,
+            adjusted_help_gain,
+            adjusted_move_fatigue,
+        )
+        from world.models import PhysicalRules
+
+        assert type(rules) is PhysicalRules
+        overrides: dict[object, object] = {}
+        for entity_id in self._skill_entity_ids:
+            navigation = self._skill_level(
+                entity_id,
+                SkillDomain.NAVIGATION,
+                ledger=self._skill_ledger,
+                tick=self._snapshot.tick,
+            )
+            healing = self._skill_level(
+                entity_id,
+                SkillDomain.HEALING,
+                ledger=self._skill_ledger,
+                tick=self._snapshot.tick,
+            )
+            overrides[entity_id] = SkillEfficiencyOverride(
+                move_fatigue=adjusted_move_fatigue(
+                    rules.move_fatigue, navigation, self._skill_policy
+                ),
+                flee_fatigue=adjusted_flee_fatigue(
+                    rules.flee_fatigue, navigation, self._skill_policy
+                ),
+                help_health_gain=adjusted_help_gain(
+                    rules.help_health_gain, healing, self._skill_policy
+                ),
+            )
+        return overrides
+
+    def _log_skill_efficiency(
+        self,
+        *,
+        snap: _EngineSnapshot,
+        requests: tuple[ActionRequest, ...],
+        rules: object,
+    ) -> None:
+        if self._skill_policy is None or self._skill_ledger is None:
+            return
+        from world._skills import SkillDomain
+
+        del rules
+        for request in requests:
+            if request.actor_id not in self._skill_entity_ids:
+                continue
+            if type(request.command) is Move or type(request.command) is Flee:
+                domain = SkillDomain.NAVIGATION
+            elif type(request.command) is Help:
+                domain = SkillDomain.HEALING
+            else:
+                continue
+            level = self._skill_level(
+                request.actor_id,
+                domain,
+                ledger=self._skill_ledger,
+                tick=snap.tick,
+            )
+            _LOGGER.debug(
+                "skill_modifier tick=%s entity_id=%s domain=%s level=%s outcome=%s",
+                snap.tick.value,
+                request.actor_id.value,
+                domain.value,
+                level,
+                "efficiency",
+            )
+
     def _resolve_search_effect(
         self,
         *,
@@ -1317,7 +1646,15 @@ class WorldEngine:
         request_ordinals: dict[RequestId, tuple[int, AgentId]],
         rules: object,
         starting_state: object,
+        skill_ledger: object | None = None,
     ) -> ResolvedSearchEffect | None:
+        if type(skill_ledger).__name__ == "CompetenceSelfModel":
+            raise TypeError("search resolution accepts only the objective skill ledger")
+        if skill_ledger is not None:
+            from world._skills import ObjectiveSkillLedger
+
+            if type(skill_ledger) is not ObjectiveSkillLedger:
+                raise TypeError("skill_ledger must be ObjectiveSkillLedger")
         from world._state import WorldState
         from world.models import PhysicalRules
 
@@ -1339,9 +1676,44 @@ class WorldEngine:
             phase=rules.day_phase_for_tick(snap.tick.value),
             condition=condition,
         )
-        probability = clamp_unit_interval(
-            rules.search_base_probability + rules.search_visibility_weight * visibility
-        )
+        ledger = self._skill_ledger if skill_ledger is None else skill_ledger
+        if (
+            self._skill_policy is not None
+            and request.actor_id in self._skill_entity_ids
+            and ledger is not None
+        ):
+            from world._skills import SkillDomain, adjusted_search_probability
+
+            foraging = self._skill_level(
+                request.actor_id, SkillDomain.FORAGING, ledger=ledger, tick=snap.tick
+            )
+            detection = self._skill_level(
+                request.actor_id,
+                SkillDomain.RESOURCE_DETECTION,
+                ledger=ledger,
+                tick=snap.tick,
+            )
+            probability = adjusted_search_probability(
+                search_base_probability=rules.search_base_probability,
+                search_visibility_weight=rules.search_visibility_weight,
+                visibility=visibility,
+                foraging_level=foraging,
+                resource_detection_level=detection,
+                policy=self._skill_policy,
+            )
+            domain = (
+                SkillDomain.FORAGING
+                if request.command.target_id is None
+                else SkillDomain.RESOURCE_DETECTION
+            )
+            logged_level = foraging if domain is SkillDomain.FORAGING else detection
+        else:
+            probability = clamp_unit_interval(
+                rules.search_base_probability
+                + rules.search_visibility_weight * visibility
+            )
+            domain = None
+            logged_level = None
         scope = physical_action_effect_scope(
             config=self._config,
             run_id=self._run_id,
@@ -1354,6 +1726,15 @@ class WorldEngine:
         success = sample_bernoulli(
             create_named_stream(self._config, scope), probability
         )
+        if domain is not None:
+            _LOGGER.debug(
+                "skill_modifier tick=%s entity_id=%s domain=%s level=%s outcome=%s",
+                snap.tick.value,
+                request.actor_id.value,
+                domain.value,
+                logged_level,
+                "success" if success else "miss",
+            )
         created_item_id = None
         if success:
             created_item_id = derive_entity_id(
