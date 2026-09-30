@@ -28,6 +28,8 @@ Objective instrumentation is post-commit observation only. Collectors never flow
 | P | Same arm shape as N, for information cascades. Not on the V1 regression gate |
 | Q | Reputation `DISABLED` (`runner-config-v4`) vs `DETERMINISTIC` (`runner-config-v10`), shared seed and scenario. Comparison metric `distributed_reputation@1` is analysis-only and is not run by the catalog. Not on the V1 regression gate |
 | R | Skill learning `DISABLED` (`runner-config-v4`) vs `DETERMINISTIC` (`runner-config-v11`), shared seed and scenario. Comparison metric `skill_learning@1` is analysis-only and is not run by the catalog. Not on the V1 regression gate |
+| S | Teaching `DISABLED` on `runner-config-v11` with skill learning `DETERMINISTIC`, vs both modes `DETERMINISTIC` on `runner-config-v12`. Shared seed, scenario, and stochastic identity. Comparison metric `cultural_transmission@1` is analysis-only and is not run by the catalog. Not on the V1 regression gate |
+| T | Same mode pair and shared identity as S, for skill specialization. `cultural_transmission@1` stays off the V1 regression gate |
 
 Builders share scenario, seed, and stochastic identity across paired arms; only declared treatment dimensions differ. Condition/config fingerprints change when treatments change.
 

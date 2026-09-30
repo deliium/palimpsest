@@ -59,6 +59,8 @@ Growth folds committed facts. One tick uses start-of-tick levels and the start-o
 
 Replay rebuilds the ledger by grouping committed events by tick, projecting earlier ticks, then folding tick T. World-snapshot JSON has no skill key. An unknown snapshot field still fails with `unknown_field`. A committed search stores the found resource, so resume classifies a search as foraging only when the caller passes that request id in `skill_untargeted_request_ids`. Omitting the set leaves a successful untargeted search on resource detection.
 
+Teaching, when the policy is present, adds two more deltas on the ledger that skill growth already returned. A witnessed demonstration inside the offer window adds `demonstration_rate * (1 - recipient_start_level)` to the addressed recipient. Joint practice, when both bodies apply the same domain in that tick and share a start-of-tick location, adds `practice_together_rate * (1 - own_start_level)` to each. The default window is `8` ticks after the delivery tick. Neither bonus multiplies by the other body's level. The existing `instruct` channel stays `instruction_rate * teacher_teaching_level`. Offers are refolded from committed events. A disagreeing caller set fails with `teaching_offer_mismatch`. World-snapshot JSON still has no teaching key.
+
 ## Physiology and death
 
 Close-of-tick order for living bodies: needs (+2 hunger, +3 thirst, +1 fatigue) → combined needs damage → optional Died(`combined_needs`) → else temperature lerp with shelter → exposure damage → optional Died(`exposure`). Health clamps to 0. Death is terminal; dead bodies occupy capacity and keep inventory.

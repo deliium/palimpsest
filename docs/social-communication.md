@@ -8,6 +8,8 @@ This note distinguishes **objective delivery**, **declared testimony**, **owner-
 
 Eligibility is private world policy: living sender, distinct living recipient, compatible location/range, and perception/visibility at resolution time. Delivery is recipient-private and appears on the next observation window. The world does not auto-answer `Ask`, infer truth from `Tell`, or mutate relationships.
 
+`TeachingInteractionMode` defaults to `DISABLED`. When both the speaker and the recipient are in the run's teaching set, a delivered `Talk`, `Ask`, or `Tell` may carry exactly one closed relation: `request_instruction`, `explain`, `demonstrate`, or `practice_together`. An `explain` object is `{domain}:{band}` with band `low`, `uncertain`, or `high`. The band is the speaker's own quantized believed level: below `0.34` is `low`, below `0.67` is `uncertain`, and `0.67` and above is `high`. Belief uptake uses the owner's trust toward the speaker. A missing profile uses `0.5`. The recipient does not receive the speaker's hidden objective level, support mass, or relationship profile.
+
 ## Declared testimony (speaker-owned)
 
 `StructuredUtterance` carries speaker-declared lineage: communication id, immediate source, optional parent communication correlation, ordered source-agent chain, hop count, sender confidence, and source basis. Receivers may distrust, ignore, or reinterpret that lineage. World-verified fields remain event id, actor, recipient, tick, and delivery outcome.
