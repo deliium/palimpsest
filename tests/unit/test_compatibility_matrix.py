@@ -33,6 +33,7 @@ from simulation.runner_models import (
     RUNNER_SCHEMA_VERSION_V2,
     RUNNER_SCHEMA_VERSION_V3,
     RUNNER_SCHEMA_VERSION_V4,
+    RUNNER_SCHEMA_VERSION_V12,
     SUPPORTED_RUNNER_SCHEMA_VERSIONS,
 )
 
@@ -101,6 +102,10 @@ def test_runner_config_write_is_v4_with_legacy_accepted() -> None:
     assert "runner-config-v6" in entry.accepted_restore
     assert "runner-config-v7" in entry.accepted_restore
     assert "runner-config-v8" in entry.accepted_restore
+    assert RUNNER_SCHEMA_VERSION_V12 == "runner-config-v12"
+    assert RUNNER_SCHEMA_VERSION_V12 in SUPPORTED_RUNNER_SCHEMA_VERSIONS
+    assert "runner-config-v12" in entry.accepted_restore
+    assert "teaching interaction mode is deterministic" in entry.bump_trigger
     assert "consolidation-only" in entry.bump_trigger
     assert "A-E" in entry.v1_fixture_impact
     assert "extended_self_model" in entry.v1_fixture_impact

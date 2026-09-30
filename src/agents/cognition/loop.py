@@ -201,6 +201,8 @@ class CognitiveLoop:
         "_self_state",
         "_situation",
         "_skill_learning_mode",
+        "_teaching_mode",
+        "_teaching_policy",
         "_theory_of_mind_mode",
         "_theory_of_mind_policy",
         "_world_model_mode",
@@ -244,6 +246,8 @@ class CognitiveLoop:
         reputation_policy: object | None = None,
         skill_learning_mode: object | None = None,
         competence_belief_policy: object | None = None,
+        teaching_interaction_mode: object | None = None,
+        teaching_claim_policy: object | None = None,
     ) -> None:
         self._perception = perception
         self._memory = memory
@@ -430,6 +434,28 @@ class CognitiveLoop:
             raise TypeError("competence_belief_policy must be CompetenceBeliefPolicy")
         self._skill_learning_mode = skill_mode
         self._competence_policy = competence_belief_policy
+        from agents.cognition.configuration import CognitionTeachingInteractionMode
+        from agents.cognition.teaching import TeachingClaimPolicy
+
+        teaching_mode = (
+            CognitionTeachingInteractionMode.DISABLED
+            if teaching_interaction_mode is None
+            else teaching_interaction_mode
+        )
+        if type(teaching_mode) is not CognitionTeachingInteractionMode:
+            raise TypeError(
+                "teaching_interaction_mode must be CognitionTeachingInteractionMode"
+            )
+        if teaching_mode is CognitionTeachingInteractionMode.DISABLED:
+            teaching_policy = None
+        elif teaching_claim_policy is None:
+            teaching_policy = TeachingClaimPolicy()
+        elif type(teaching_claim_policy) is not TeachingClaimPolicy:
+            raise TypeError("teaching_claim_policy must be TeachingClaimPolicy")
+        else:
+            teaching_policy = teaching_claim_policy
+        self._teaching_mode = teaching_mode
+        self._teaching_policy = teaching_policy
         self._deferred_dissonance: tuple[object, ...] = ()
 
     def _prepare_reputation(self, loop_input: CognitiveLoopInput) -> object | None:

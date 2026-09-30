@@ -19,6 +19,7 @@ from simulation.runner_models import (
     RUNNER_SCHEMA_VERSION_V9,
     RUNNER_SCHEMA_VERSION_V10,
     RUNNER_SCHEMA_VERSION_V11,
+    RUNNER_SCHEMA_VERSION_V12,
     AgentCognitionSpec,
     AgentRunnerSpec,
     CognitionTraceDetail,
@@ -35,6 +36,7 @@ from simulation.runner_models import (
     RunnerStopPolicy,
     SimulationRunnerConfig,
     SkillLearningMode,
+    TeachingInteractionMode,
     V2CapabilityFlags,
     WorldScenarioSpec,
 )
@@ -477,6 +479,9 @@ def _configured(
     ),
     reputation_mode: ReputationMode = ReputationMode.DISABLED,
     skill_learning_mode: SkillLearningMode = SkillLearningMode.DISABLED,
+    teaching_interaction_mode: TeachingInteractionMode = (
+        TeachingInteractionMode.DISABLED
+    ),
     name: str = "Ada",
 ) -> SimulationRunnerConfig:
     base = _config()
@@ -500,6 +505,7 @@ def _configured(
                     communication_strategy_mode=communication_strategy_mode,
                     reputation_mode=reputation_mode,
                     skill_learning_mode=skill_learning_mode,
+                    teaching_interaction_mode=teaching_interaction_mode,
                 ),
                 name=name,
                 initial_goals=agent.initial_goals,
@@ -870,4 +876,41 @@ def test_skill_learning_mode_round_trips_only_on_v11() -> None:
         _configured(
             schema_version=RUNNER_SCHEMA_VERSION_V11,
             skill_learning_mode=SkillLearningMode.DISABLED,
+        )
+
+
+def test_teaching_round_trips_only_on_v12() -> None:
+    enabled = _configured(
+        schema_version=RUNNER_SCHEMA_VERSION_V12,
+        skill_learning_mode=SkillLearningMode.DETERMINISTIC,
+        teaching_interaction_mode=TeachingInteractionMode.DETERMINISTIC,
+    )
+    encoded = encode_runner_config(enabled)
+    document = json.loads(encoded.decode("utf-8"))
+    assert document["schema_version"] == "runner-config-v12"
+    cognition = document["agents"][0]["cognition"]
+    assert cognition["teaching_interaction_mode"] == "deterministic"
+    assert cognition["skill_learning_mode"] == "deterministic"
+    assert cognition["demonstration_rate"] == 0.02
+    assert cognition["offer_window"] == 8
+    assert cognition["explain_low_below"] == 0.34
+    assert cognition["teaching_response_weight"] == 0.25
+    assert decode_runner_config(encoded) == enabled
+    skill_only = _configured(
+        schema_version=RUNNER_SCHEMA_VERSION_V11,
+        skill_learning_mode=SkillLearningMode.DETERMINISTIC,
+    )
+    skill_doc = json.loads(encode_runner_config(skill_only).decode("utf-8"))
+    assert skill_doc["schema_version"] == "runner-config-v11"
+    assert "teaching_interaction_mode" not in skill_doc["agents"][0]["cognition"]
+    with pytest.raises(ValueError, match="teaching_interaction_mode_requires_v12"):
+        _configured(
+            schema_version=RUNNER_SCHEMA_VERSION_V11,
+            skill_learning_mode=SkillLearningMode.DETERMINISTIC,
+            teaching_interaction_mode=TeachingInteractionMode.DETERMINISTIC,
+        )
+    with pytest.raises(ValueError, match="v12_requires_teaching"):
+        _configured(
+            schema_version=RUNNER_SCHEMA_VERSION_V12,
+            skill_learning_mode=SkillLearningMode.DETERMINISTIC,
         )

@@ -76,6 +76,7 @@ RUNNER_SCHEMA_VERSION_V8: Final[str] = "runner-config-v8"
 RUNNER_SCHEMA_VERSION_V9: Final[str] = "runner-config-v9"
 RUNNER_SCHEMA_VERSION_V10: Final[str] = "runner-config-v10"
 RUNNER_SCHEMA_VERSION_V11: Final[str] = "runner-config-v11"
+RUNNER_SCHEMA_VERSION_V12: Final[str] = "runner-config-v12"
 RUNNER_SCHEMA_VERSION: Final[str] = RUNNER_SCHEMA_VERSION_V4
 SUPPORTED_RUNNER_SCHEMA_VERSIONS: Final[frozenset[str]] = frozenset(
     {
@@ -90,6 +91,7 @@ SUPPORTED_RUNNER_SCHEMA_VERSIONS: Final[frozenset[str]] = frozenset(
         RUNNER_SCHEMA_VERSION_V9,
         RUNNER_SCHEMA_VERSION_V10,
         RUNNER_SCHEMA_VERSION_V11,
+        RUNNER_SCHEMA_VERSION_V12,
     }
 )
 RESULT_SCHEMA_VERSION_V1: Final[str] = "runner-result-v1"
@@ -254,6 +256,18 @@ class SkillLearningMode(StrEnum):
     DETERMINISTIC = "deterministic"
 
 
+class TeachingInteractionMode(StrEnum):
+    """Closed teaching treatments.
+
+    Default is ``DISABLED``, which does not change skill growth, probabilities,
+    commands, memories, beliefs, or audits. This is not a ``V2CapabilityFlags``
+    slot. Lockstep with ``agents.cognition.CognitionTeachingInteractionMode``.
+    """
+
+    DISABLED = "disabled"
+    DETERMINISTIC = "deterministic"
+
+
 class SkillAuditSide(StrEnum):
     """Which store a harvested skill row came from."""
 
@@ -319,6 +333,53 @@ _SKILL_RATE_NAMES: Final[tuple[str, ...]] = (
     "belief_prior",
     "belief_action_weight",
 )
+
+
+_TEACHING_WEIGHT_NAMES: Final[tuple[str, ...]] = (
+    "demonstration_rate",
+    "practice_together_rate",
+    "offer_window",
+    "belief_explain_rate",
+    "explain_low_below",
+    "explain_high_at",
+    "teaching_response_weight",
+)
+_SKILL_SCHEMAS: Final[frozenset[str]] = frozenset(
+    {RUNNER_SCHEMA_VERSION_V11, RUNNER_SCHEMA_VERSION_V12}
+)
+
+
+def teaching_weight_tuple(spec: AgentCognitionSpec) -> tuple[float | int, ...]:
+    """Shared numeric contract for one v12 agent. Values are not logged."""
+    return tuple(getattr(spec, name) for name in _TEACHING_WEIGHT_NAMES)
+
+
+def _validate_shared_teaching_weights(spec: AgentCognitionSpec) -> None:
+    """Reject a v12 weight tuple the teaching policy would refuse."""
+    _skill_number("demonstration_rate", spec.demonstration_rate, unit=False)
+    _skill_number("practice_together_rate", spec.practice_together_rate, unit=False)
+    _skill_number("belief_explain_rate", spec.belief_explain_rate, unit=False)
+    _skill_number("explain_low_below", spec.explain_low_below, unit=True)
+    _skill_number("explain_high_at", spec.explain_high_at, unit=True)
+    _skill_number("teaching_response_weight", spec.teaching_response_weight, unit=True)
+    if isinstance(spec.offer_window, bool) or not isinstance(spec.offer_window, int):
+        _LOGGER.error(
+            "teaching_weight_invalid field=%s reason_code=invalid_type",
+            "offer_window",
+        )
+        raise ValueError("offer_window: invalid_type")
+    if spec.offer_window < 1 or spec.offer_window > 64:
+        _LOGGER.error(
+            "teaching_weight_invalid field=%s reason_code=offer_window",
+            "offer_window",
+        )
+        raise ValueError("offer_window: offer_window")
+    if spec.explain_low_below >= spec.explain_high_at:
+        _LOGGER.error(
+            "teaching_weight_invalid field=%s reason_code=threshold_order",
+            "explain_low_below",
+        )
+        raise ValueError("explain_low_below: threshold_order")
 
 
 def skill_rate_tuple(spec: AgentCognitionSpec) -> tuple[float, ...]:
@@ -1097,6 +1158,9 @@ class AgentCognitionSpec:
     )
     reputation_mode: ReputationMode = ReputationMode.DISABLED
     skill_learning_mode: SkillLearningMode = SkillLearningMode.DISABLED
+    teaching_interaction_mode: TeachingInteractionMode = (
+        TeachingInteractionMode.DISABLED
+    )
     practice_rate: float = 0.02
     success_rate: float = 0.05
     failure_rate: float = 0.01
@@ -1111,6 +1175,13 @@ class AgentCognitionSpec:
     belief_observation_rate: float = 0.02
     belief_prior: float = 1.0
     belief_action_weight: float = 0.25
+    demonstration_rate: float = 0.02
+    practice_together_rate: float = 0.02
+    offer_window: int = 8
+    belief_explain_rate: float = 0.08
+    explain_low_below: float = 0.34
+    explain_high_at: float = 0.67
+    teaching_response_weight: float = 0.25
 
     def __post_init__(self) -> None:
         if type(self.agent_id) is not AgentId:
@@ -1169,6 +1240,15 @@ class AgentCognitionSpec:
             )
             raise TypeError(
                 "AgentCognitionSpec.skill_learning_mode must be SkillLearningMode"
+            )
+        if type(self.teaching_interaction_mode) is not TeachingInteractionMode:
+            _LOGGER.error(
+                "invalid_enum path=AgentCognitionSpec.teaching_interaction_mode "
+                "reason_code=invalid_mode"
+            )
+            raise TypeError(
+                "AgentCognitionSpec.teaching_interaction_mode must be "
+                "TeachingInteractionMode"
             )
         if self.policy_version != COGNITION_POLICY_VERSION:
             raise ValueError("unsupported cognition policy_version")
@@ -1655,6 +1735,7 @@ class SimulationRunnerConfig:
             RUNNER_SCHEMA_VERSION_V9,
             RUNNER_SCHEMA_VERSION_V10,
             RUNNER_SCHEMA_VERSION_V11,
+            RUNNER_SCHEMA_VERSION_V12,
         }
         if non_disabled and self.schema_version not in consolidation_schemas:
             _LOGGER.error(
@@ -1665,7 +1746,8 @@ class SimulationRunnerConfig:
             raise ValueError(
                 "non-disabled consolidation_mode requires runner-config-v5, "
                 "runner-config-v6, runner-config-v7, runner-config-v8, "
-                "runner-config-v9, runner-config-v10, or runner-config-v11 "
+                "runner-config-v9, runner-config-v10, runner-config-v11, "
+                "or runner-config-v12 "
                 "(code=consolidation_mode_requires_v5)"
             )
         if self.schema_version == RUNNER_SCHEMA_VERSION_V5 and not non_disabled:
@@ -1691,6 +1773,7 @@ class SimulationRunnerConfig:
             RUNNER_SCHEMA_VERSION_V9,
             RUNNER_SCHEMA_VERSION_V10,
             RUNNER_SCHEMA_VERSION_V11,
+            RUNNER_SCHEMA_VERSION_V12,
         }
         if reflecting and self.schema_version not in reflection_schemas:
             _LOGGER.error(
@@ -1701,7 +1784,7 @@ class SimulationRunnerConfig:
             raise ValueError(
                 "non-disabled reflection_mode requires runner-config-v6, "
                 "runner-config-v7, runner-config-v8, runner-config-v9, "
-                "runner-config-v10, or runner-config-v11 "
+                "runner-config-v10, runner-config-v11, or runner-config-v12 "
                 "(code=reflection_mode_requires_v6)"
             )
         if self.schema_version == RUNNER_SCHEMA_VERSION_V6 and not reflecting:
@@ -1728,6 +1811,7 @@ class SimulationRunnerConfig:
             RUNNER_SCHEMA_VERSION_V9,
             RUNNER_SCHEMA_VERSION_V10,
             RUNNER_SCHEMA_VERSION_V11,
+            RUNNER_SCHEMA_VERSION_V12,
         }
         if planning and self.schema_version not in prospective_schemas:
             _LOGGER.error(
@@ -1738,7 +1822,7 @@ class SimulationRunnerConfig:
             raise ValueError(
                 "non-disabled prospective_mode requires runner-config-v7, "
                 "runner-config-v8, runner-config-v9, runner-config-v10, "
-                "or runner-config-v11 "
+                "runner-config-v11, or runner-config-v12 "
                 "(code=prospective_mode_requires_v7)"
             )
         if self.schema_version == RUNNER_SCHEMA_VERSION_V7 and not planning:
@@ -1764,6 +1848,7 @@ class SimulationRunnerConfig:
             RUNNER_SCHEMA_VERSION_V9,
             RUNNER_SCHEMA_VERSION_V10,
             RUNNER_SCHEMA_VERSION_V11,
+            RUNNER_SCHEMA_VERSION_V12,
         }
         if considering and self.schema_version not in counterfactual_schemas:
             _LOGGER.error(
@@ -1773,7 +1858,8 @@ class SimulationRunnerConfig:
             )
             raise ValueError(
                 "non-disabled counterfactual_mode requires runner-config-v8, "
-                "runner-config-v9, runner-config-v10, or runner-config-v11 "
+                "runner-config-v9, runner-config-v10, runner-config-v11, "
+                "or runner-config-v12 "
                 "(code=counterfactual_mode_requires_v8)"
             )
         if self.schema_version == RUNNER_SCHEMA_VERSION_V8 and not considering:
@@ -1798,6 +1884,7 @@ class SimulationRunnerConfig:
             RUNNER_SCHEMA_VERSION_V9,
             RUNNER_SCHEMA_VERSION_V10,
             RUNNER_SCHEMA_VERSION_V11,
+            RUNNER_SCHEMA_VERSION_V12,
         }:
             _LOGGER.error(
                 "invalid_fields path=agents.cognition.communication_strategy_mode "
@@ -1807,7 +1894,8 @@ class SimulationRunnerConfig:
             )
             raise ValueError(
                 "non-disabled communication_strategy_mode requires "
-                "runner-config-v9, runner-config-v10, or runner-config-v11 "
+                "runner-config-v9, runner-config-v10, runner-config-v11, "
+                "or runner-config-v12 "
                 "(code=communication_strategy_mode_requires_v9)"
             )
         if self.schema_version == RUNNER_SCHEMA_VERSION_V9 and not strategizing:
@@ -1830,6 +1918,7 @@ class SimulationRunnerConfig:
         if reputing and self.schema_version not in {
             RUNNER_SCHEMA_VERSION_V10,
             RUNNER_SCHEMA_VERSION_V11,
+            RUNNER_SCHEMA_VERSION_V12,
         }:
             _LOGGER.error(
                 "invalid_fields path=agents.cognition.reputation_mode "
@@ -1837,8 +1926,9 @@ class SimulationRunnerConfig:
                 self.schema_version,
             )
             raise ValueError(
-                "non-disabled reputation_mode requires runner-config-v10 "
-                "or runner-config-v11 (code=reputation_mode_requires_v10)"
+                "non-disabled reputation_mode requires runner-config-v10, "
+                "runner-config-v11, or runner-config-v12 "
+                "(code=reputation_mode_requires_v10)"
             )
         if self.schema_version == RUNNER_SCHEMA_VERSION_V10 and not reputing:
             _LOGGER.error(
@@ -1856,7 +1946,7 @@ class SimulationRunnerConfig:
         learning = tuple(
             mode for mode in skill_modes if mode is not SkillLearningMode.DISABLED
         )
-        if learning and self.schema_version != RUNNER_SCHEMA_VERSION_V11:
+        if learning and self.schema_version not in _SKILL_SCHEMAS:
             _LOGGER.error(
                 "invalid_fields path=agents.cognition.skill_learning_mode "
                 "reason_code=skill_learning_mode_requires_v11 schema_version=%s",
@@ -1864,6 +1954,7 @@ class SimulationRunnerConfig:
             )
             raise ValueError(
                 "non-disabled skill_learning_mode requires runner-config-v11 "
+                "or runner-config-v12 "
                 "(code=skill_learning_mode_requires_v11)"
             )
         if self.schema_version == RUNNER_SCHEMA_VERSION_V11 and not learning:
@@ -1876,7 +1967,55 @@ class SimulationRunnerConfig:
                 "runner-config-v11 requires a deterministic skill_learning_mode "
                 "(code=v11_requires_skill_learning)"
             )
-        if self.schema_version == RUNNER_SCHEMA_VERSION_V11:
+        teaching_modes = tuple(
+            agent.cognition.teaching_interaction_mode for agent in self.agents
+        )
+        teaching = tuple(
+            mode
+            for mode in teaching_modes
+            if mode is not TeachingInteractionMode.DISABLED
+        )
+        missing_skill = tuple(
+            agent
+            for agent in self.agents
+            if agent.cognition.teaching_interaction_mode
+            is TeachingInteractionMode.DETERMINISTIC
+            and agent.cognition.skill_learning_mode
+            is not SkillLearningMode.DETERMINISTIC
+        )
+        if missing_skill:
+            _LOGGER.error(
+                "teaching_requires_skill_learning agent_count=%s "
+                "reason_code=teaching_requires_skill_learning",
+                len(self.agents),
+            )
+            raise ValueError(
+                "deterministic teaching requires deterministic skill learning "
+                "(code=teaching_requires_skill_learning)"
+            )
+        if teaching and self.schema_version != RUNNER_SCHEMA_VERSION_V12:
+            _LOGGER.error(
+                "invalid_fields path=agents.cognition.teaching_interaction_mode "
+                "reason_code=teaching_interaction_mode_requires_v12 "
+                "schema_version=%s",
+                self.schema_version,
+            )
+            raise ValueError(
+                "non-disabled teaching_interaction_mode requires "
+                "runner-config-v12 "
+                "(code=teaching_interaction_mode_requires_v12)"
+            )
+        if self.schema_version == RUNNER_SCHEMA_VERSION_V12 and not teaching:
+            _LOGGER.error(
+                "invalid_fields path=schema_version "
+                "reason_code=v12_requires_teaching schema_version=%s",
+                self.schema_version,
+            )
+            raise ValueError(
+                "runner-config-v12 requires a deterministic "
+                "teaching_interaction_mode (code=v12_requires_teaching)"
+            )
+        if self.schema_version in _SKILL_SCHEMAS:
             shared = skill_rate_tuple(self.agents[0].cognition)
             if any(
                 skill_rate_tuple(agent.cognition) != shared for agent in self.agents
@@ -1887,9 +2026,25 @@ class SimulationRunnerConfig:
                     len(self.agents),
                 )
                 raise ValueError(
-                    "v11 agents must share skill rates (code=skill_rate_mismatch)"
+                    "skill agents must share skill rates (code=skill_rate_mismatch)"
                 )
             _validate_shared_skill_rates(self.agents[0].cognition)
+        if self.schema_version == RUNNER_SCHEMA_VERSION_V12:
+            shared_teaching = teaching_weight_tuple(self.agents[0].cognition)
+            if any(
+                teaching_weight_tuple(agent.cognition) != shared_teaching
+                for agent in self.agents
+            ):
+                _LOGGER.error(
+                    "teaching_weight_mismatch agent_count=%s "
+                    "reason_code=teaching_weight_mismatch",
+                    len(self.agents),
+                )
+                raise ValueError(
+                    "v12 agents must share teaching weights "
+                    "(code=teaching_weight_mismatch)"
+                )
+            _validate_shared_teaching_weights(self.agents[0].cognition)
         if self.cognition_trace.enabled:
             _LOGGER.info(
                 "runner_config_cognition_trace_enabled schema_version=%s "
@@ -1906,7 +2061,7 @@ class SimulationRunnerConfig:
             "cognition_trace_enabled=%s cognition_trace_detail=%s "
             "consolidation_mode=%s reflection_mode=%s prospective_mode=%s "
             "counterfactual_mode=%s communication_strategy_mode=%s "
-            "reputation_mode=%s skill_learning_mode=%s",
+            "reputation_mode=%s skill_learning_mode=%s teaching_interaction_mode=%s",
             self.schema_version,
             len(self.agents),
             len(self.scenario.locations),
@@ -1923,6 +2078,7 @@ class SimulationRunnerConfig:
             ",".join(mode.value for mode in strategy_modes),
             ",".join(mode.value for mode in reputation_modes),
             ",".join(mode.value for mode in skill_modes),
+            ",".join(mode.value for mode in teaching_modes),
         )
         _LOGGER.debug(
             "runner_config_decoded schema_version=%s consolidation_mode=%s "

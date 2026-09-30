@@ -195,6 +195,8 @@ class WorldEngine:
         "_skill_policy",
         "_skill_untargeted_requests",
         "_snapshot",
+        "_teaching_entity_ids",
+        "_teaching_policy",
         "_translator",
     )
 
@@ -209,6 +211,8 @@ class WorldEngine:
         skill_entity_ids: Sequence[object] | None = None,
         skill_ledger: object | None = None,
         skill_untargeted_request_ids: object | None = None,
+        teaching_policy: object | None = None,
+        teaching_entity_ids: Sequence[object] | None = None,
     ) -> None:
         if type(config) is not SimulationRunConfig:
             raise TypeError("WorldEngine requires SimulationRunConfig")
@@ -251,6 +255,10 @@ class WorldEngine:
             skill_untargeted_request_ids=skill_untargeted_request_ids,
             restored=False,
         )
+        self._bind_teaching_state(
+            teaching_policy=teaching_policy,
+            teaching_entity_ids=teaching_entity_ids,
+        )
         _LOGGER.debug(
             "%s world_id=%s revision=%s tick=%s registrations=%s",
             EngineDiagnosticCode.BOOTSTRAP_VALIDATED.value,
@@ -271,6 +279,8 @@ class WorldEngine:
         skill_entity_ids: Sequence[object] | None = None,
         skill_ledger: object | None = None,
         skill_untargeted_request_ids: object | None = None,
+        teaching_policy: object | None = None,
+        teaching_entity_ids: Sequence[object] | None = None,
     ) -> WorldEngine:
         """Restore an engine at ``AWAITING_OBSERVATION`` from a checkpoint.
 
@@ -413,6 +423,10 @@ class WorldEngine:
             ),
             skill_untargeted_request_ids=skill_untargeted_request_ids,
             restored=True,
+        )
+        engine._bind_teaching_state(
+            teaching_policy=teaching_policy,
+            teaching_entity_ids=teaching_entity_ids,
         )
         _LOGGER.info(
             "%s run_id=%s snapshot_id=%s next_tick=%s revision=%s "
@@ -1528,6 +1542,40 @@ class WorldEngine:
                 OBJECTIVE_SKILL_POLICY_VERSION,
                 len(enabled),
             )
+
+    def _bind_teaching_state(
+        self,
+        *,
+        teaching_policy: object | None,
+        teaching_entity_ids: Sequence[object] | None,
+    ) -> None:
+        """Store the opt-in teaching policy. ``None`` skips the teaching fold."""
+        from world._teaching import TeachingInteractionPolicy
+        from world.identifiers import EntityId
+
+        if teaching_policy is None:
+            if teaching_entity_ids not in (None, (), frozenset()):
+                raise TypeError(
+                    "teaching_policy is required with teaching entity ids"
+                )
+            self._teaching_policy = None
+            self._teaching_entity_ids = frozenset()
+            return
+        if type(teaching_policy) is not TeachingInteractionPolicy:
+            raise TypeError("teaching_policy must be TeachingInteractionPolicy")
+        if teaching_entity_ids is None or isinstance(
+            teaching_entity_ids, (str, bytes, set)
+        ):
+            raise TypeError("teaching_entity_ids must be an ordered sequence")
+        if not isinstance(teaching_entity_ids, (Sequence, frozenset)):
+            raise TypeError("teaching_entity_ids must be an ordered sequence")
+        enabled: list[EntityId] = []
+        for entity_id in teaching_entity_ids:
+            if type(entity_id) is not EntityId:
+                raise TypeError("teaching_entity_ids entries must be EntityId")
+            enabled.append(entity_id)
+        self._teaching_policy = teaching_policy
+        self._teaching_entity_ids = frozenset(enabled)
 
     def _refolded_skill_ledger(
         self,

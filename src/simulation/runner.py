@@ -32,6 +32,7 @@ from agents.cognition.configuration import (
     CognitionReflectionMode,
     CognitionReputationMode,
     CognitionSkillLearningMode,
+    CognitionTeachingInteractionMode,
     CognitionTheoryOfMindMode,
     CognitionWorldModelMode,
     build_cognitive_loop,
@@ -142,6 +143,7 @@ from simulation.runner_models import (
     SkillAudit,
     SkillAuditSide,
     SkillLearningMode,
+    TeachingInteractionMode,
     V2CapabilityFlags,
     build_detached_objective_projection,
     describe_runner_config,
@@ -572,6 +574,27 @@ def _cognition_config_for(
         skill_mode.value,
         None if belief_policy is None else belief_policy.version,
     )
+    from agents.cognition.teaching import TeachingClaimPolicy
+
+    teaching_mode = CognitionTeachingInteractionMode(
+        spec.teaching_interaction_mode.value
+    )
+    teaching_policy = None
+    teaching_policy_version = None
+    if teaching_mode is CognitionTeachingInteractionMode.DETERMINISTIC:
+        teaching_policy = TeachingClaimPolicy(
+            belief_explain_rate=spec.belief_explain_rate,
+            explain_low_below=spec.explain_low_below,
+            explain_high_at=spec.explain_high_at,
+            teaching_response_weight=spec.teaching_response_weight,
+            belief_prior=spec.belief_prior,
+        )
+        teaching_policy_version = teaching_policy.version
+    _LOG.debug(
+        "cognition_config_teaching_mode mode=%s policy_version=%s",
+        teaching_mode.value,
+        teaching_policy_version,
+    )
     return CognitionLoopConfig(
         memory_mode=CognitionMemoryMode(spec.memory_mode.value),
         imagination_mode=CognitionImaginationMode(spec.imagination_mode.value),
@@ -599,6 +622,8 @@ def _cognition_config_for(
         reputation_policy=reputation_policy,
         skill_learning_mode=skill_mode,
         competence_belief_policy=belief_policy,
+        teaching_interaction_mode=teaching_mode,
+        teaching_claim_policy=teaching_policy,
         drive_overrides=tuple(
             CognitionDriveOverride(
                 kind=item.kind,
@@ -968,11 +993,36 @@ class SimulationRunner:
                     ),
                     "skill_entity_ids": skill_ids,
                 }
+            teaching_ids = frozenset(
+                agent.entity_id
+                for agent in config.agents
+                if agent.cognition.teaching_interaction_mode
+                is TeachingInteractionMode.DETERMINISTIC
+            )
+            teaching_kwargs: dict[str, object] = {}
+            if teaching_ids:
+                from world._teaching import TeachingInteractionPolicy
+
+                rate_spec = config.agents[0].cognition
+                teaching_kwargs = {
+                    "teaching_policy": TeachingInteractionPolicy(
+                        demonstration_rate=rate_spec.demonstration_rate,
+                        practice_together_rate=rate_spec.practice_together_rate,
+                        offer_window=rate_spec.offer_window,
+                        belief_explain_rate=rate_spec.belief_explain_rate,
+                        explain_low_below=rate_spec.explain_low_below,
+                        explain_high_at=rate_spec.explain_high_at,
+                        teaching_response_weight=rate_spec.teaching_response_weight,
+                        allow_provider=False,
+                    ),
+                    "teaching_entity_ids": teaching_ids,
+                }
             engine = WorldEngine(
                 config=run_config,
                 bootstrap=bootstrap,
                 run_id=resolved_run_id,
                 **skill_kwargs,
+                **teaching_kwargs,
             )
 
             stage = "agents"

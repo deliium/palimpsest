@@ -202,6 +202,17 @@ class CognitionSkillLearningMode(StrEnum):
     DETERMINISTIC = "deterministic"
 
 
+class CognitionTeachingInteractionMode(StrEnum):
+    """Opt-in teaching acts. Disabled does not change skill growth or beliefs.
+
+    Lockstep with ``simulation.TeachingInteractionMode``. This is not a
+    ``V2CapabilityFlags`` slot.
+    """
+
+    DISABLED = "disabled"
+    DETERMINISTIC = "deterministic"
+
+
 def _unit_interval(name: str, value: object) -> float:
     if isinstance(value, bool) or not isinstance(value, (int, float)):
         raise ValueError(f"{name}: not_unit_interval")
@@ -278,6 +289,10 @@ class CognitionLoopConfig:
         CognitionSkillLearningMode.DISABLED
     )
     competence_belief_policy: CompetenceBeliefPolicy | None = None
+    teaching_interaction_mode: CognitionTeachingInteractionMode = (
+        CognitionTeachingInteractionMode.DISABLED
+    )
+    teaching_claim_policy: object | None = None
     drive_overrides: tuple[CognitionDriveOverride, ...] = ()
     memory_policy_version: str = MEMORY_POLICY_VERSION
     imagination_policy_version: str = IMAGINATION_POLICY_VERSION
@@ -388,8 +403,7 @@ class CognitionLoopConfig:
             CognitionCommunicationStrategyMode
         ):
             _LOG.error(
-                "invalid_enum path=communication_strategy_mode "
-                "reason_code=invalid_mode"
+                "invalid_enum path=communication_strategy_mode reason_code=invalid_mode"
             )
             raise TypeError(
                 "communication_strategy_mode must be CognitionCommunicationStrategyMode"
@@ -428,9 +442,7 @@ class CognitionLoopConfig:
                 "reputation_policy must be ReputationFormationPolicy or None"
             )
         if type(self.skill_learning_mode) is not CognitionSkillLearningMode:
-            _LOG.error(
-                "invalid_enum path=skill_learning_mode reason_code=invalid_mode"
-            )
+            _LOG.error("invalid_enum path=skill_learning_mode reason_code=invalid_mode")
             raise TypeError("skill_learning_mode must be CognitionSkillLearningMode")
         if self.skill_learning_mode is CognitionSkillLearningMode.DISABLED:
             object.__setattr__(self, "competence_belief_policy", None)
@@ -447,6 +459,29 @@ class CognitionLoopConfig:
             raise TypeError(
                 "competence_belief_policy must be CompetenceBeliefPolicy or None"
             )
+        if type(self.teaching_interaction_mode) is not CognitionTeachingInteractionMode:
+            _LOG.error(
+                "invalid_enum path=teaching_interaction_mode reason_code=invalid_mode"
+            )
+            raise TypeError(
+                "teaching_interaction_mode must be CognitionTeachingInteractionMode"
+            )
+        if self.teaching_interaction_mode is CognitionTeachingInteractionMode.DISABLED:
+            object.__setattr__(self, "teaching_claim_policy", None)
+        elif self.teaching_claim_policy is None:
+            from agents.cognition.teaching import TeachingClaimPolicy
+
+            object.__setattr__(self, "teaching_claim_policy", TeachingClaimPolicy())
+        else:
+            from agents.cognition.teaching import TeachingClaimPolicy
+
+            if type(self.teaching_claim_policy) is not TeachingClaimPolicy:
+                _LOG.error(
+                    "invalid_enum path=teaching_claim_policy reason_code=invalid_type"
+                )
+                raise TypeError(
+                    "teaching_claim_policy must be TeachingClaimPolicy or None"
+                )
         if (
             self.reflection_policy is not None
             and type(self.reflection_policy) is not ReflectionPolicy
@@ -505,6 +540,7 @@ class CognitionLoopConfig:
                     ),
                     "reputation_mode": self.reputation_mode.value,
                     "skill_learning_mode": self.skill_learning_mode.value,
+                    "teaching_interaction_mode": self.teaching_interaction_mode.value,
                     "reflection_policy_version": (
                         None
                         if self.reflection_policy is None
@@ -568,9 +604,7 @@ class CognitionLoopConfig:
                 else self.theory_of_mind_policy.version
             ),
             "epistemic_policy_version": (
-                None
-                if self.epistemic_policy is None
-                else self.epistemic_policy.version
+                None if self.epistemic_policy is None else self.epistemic_policy.version
             ),
             "prospective_mode": self.prospective_mode.value,
             "prospective_policy_version": (
@@ -597,6 +631,7 @@ class CognitionLoopConfig:
                 else self.reputation_policy.version
             ),
             "skill_learning_mode": self.skill_learning_mode.value,
+            "teaching_interaction_mode": self.teaching_interaction_mode.value,
             "competence_belief_policy_version": (
                 None
                 if self.competence_belief_policy is None
@@ -790,4 +825,6 @@ def build_cognitive_loop(
         reputation_policy=resolved.reputation_policy,
         skill_learning_mode=resolved.skill_learning_mode,
         competence_belief_policy=resolved.competence_belief_policy,
+        teaching_interaction_mode=resolved.teaching_interaction_mode,
+        teaching_claim_policy=resolved.teaching_claim_policy,
     )
