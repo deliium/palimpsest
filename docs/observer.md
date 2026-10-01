@@ -23,6 +23,16 @@ A frame may include `structures`. Each record has `structure_id`, `location_id`,
 
 The six production semantic types are `RESOURCE_HARVESTED`, `CRAFT_STARTED`, `ITEM_CRAFTED`, `STRUCTURE_BUILT`, `STRUCTURE_REPAIRED`, and `ITEM_STORED`. `ObserverEvent` adds `recipe_id` and `structure_id` only when they are set. Protocol version stays `observer-protocol-v1`. Godot is not required to read the projection. The current client ignores unknown event types and unknown world keys, so a frame that adds `structures` still parses as protocol v1.
 
+## Environment tokens
+
+When a run has an environmental dynamics spec, a frame at any tick carries the current season, the temperature band at each location, and the hazards active at each location. A dynamics-off frame omits those keys. Resource `quantity` is the folded quantity. Depleted means `quantity == 0`.
+
+The six environment semantic types are `SEASON_CHANGED`, `TEMPERATURE_BAND_CHANGED`, `RESOURCE_NODE_DEPLETED`, `RESOURCE_NODE_RECOVERED`, `ENVIRONMENTAL_HAZARD_STARTED`, and `ENVIRONMENTAL_HAZARD_ENDED`. `public_mapping` includes `season`, `temperature_band`, and `hazard_kind` only when they are set. Domain events and frames do not carry color, sprite, pixel, or coordinate commands.
+
+The Godot client replaces its world from `state_tick` through `world_replaced`. `theme_catalog.gd` maps the season, weather, band, hazard, and depleted tokens to local colors after that replacement. It does not read a color or a sprite from the server.
+
+`observer.project` and `observer.adapt` log `environment_projected`. An unknown kind logs `unknown_event_kind`. A presentation command logs `presentation_instruction_forbidden`.
+
 Visible structures use the same content visibility threshold as local resources (`0.5`). The actor always sees their own production occurrence. `recipe_id` is a public fact for that actor and for a bystander who passes the visibility check.
 
 ## Routes

@@ -83,15 +83,29 @@ Replay schema v6 and persistence codec `v3` (`structures`, `production_jobs`, `t
 
 Loggers: `world.production`, `world.events`, `world._production`, `simulation.engine`, `simulation.replay`, `world._perception`, `agents.cognition.production`, `simulation.agent_runtime`, `simulation.runner`, `observer.project`, and `observer.adapt`. Catalog mismatch logs the SHA-256 digest only.
 
+## Environmental dynamics
+
+Seasons, temperature bands, resource seasonality, depletion, regeneration, temporary shortages, and hazards are off unless a run carries an `EnvironmentalDynamicsSpec`. `None` keeps the day/night cycle, the Markov weather chain, and constant `regeneration_per_tick`. It is not a capability flag. `multi_hop_testimony_tracking` stays unowned.
+
+`WorldEngine` is the only writer. The calendar, multipliers, windows, and hazard rules live on the spec and on `runner-config-v14`. They are not fields of `WorldState` and they are not copied onto `Observation`. Agents see the current season, the current local temperature band, current local hazard kinds, and current resource quantities. A causal model may record which season followed the last one it saw when `predictive_world_model` is enabled. It does not receive the spec.
+
+Season is `(tick // season_length_ticks) % 4`, in the order spring, summer, autumn, winter. Tick `0` is spring. Ambient with a spec is base + weather offset + phase offset + season offset. Bands are derived: cold below `10`, hot at or above `30`, otherwise mild. Regeneration is the configured rate times the season multiplier, then `0` inside a matching shortage window. Search extraction is not multiplied. A node witness records a quantity crossing zero. It does not apply a second delta on replay.
+
+A hazard starts when its season, weather, and band match and that kind is not already active at the location. Exposure adds the rule extra only while `PhysicalRules.exposure_damage` is not `0`. Death cause stays `EXPOSURE`.
+
+`runner-config-v14` is written only when the spec is set. Replay-v7 and persistence codec `v4` are written only for that run. Replay-v7 also accepts production details. A production-only run still writes replay-v6 and codec `v3`. The default event write stays replay-v5 and the default codec stays `v2`. A dynamics-off checkpoint rejects `active_hazards`.
+
+Loggers: `world.environment`, `world.events`, `simulation.engine`, `world._perception`, `simulation.replay`, `simulation.runner`, `observer.project`, `observer.adapt`, and `experiments.catalog`. Reason codes include `yield_undefined`, `duplicate_shortage_window`, `environment_witness_mismatch`, `environment_spec_mismatch`, and `presentation_instruction_forbidden`. Do not log seeds.
+
 ## Seeds and schemas
 
 - Named streams: run, world, tick, ordinal or system entity, purpose, derivation-v2 (rules fingerprint). Never module-global RNG or Python `hash()`.
 - **Never log seeds**, random draws, inventories, event payloads, observation contents, communication text, or full snapshots.
-- Audit schema v1: decode/export only. Replay schema v2: legacy projector. Replay schema v3: physical runs without occurrence context (readable). Replay schema v4: physical runs with occurrence context (new writes). Runs do not mix replay schemas.
+- Audit schema v1: decode/export only. Replay schema v2: legacy projector. Replay schema v3: physical runs without occurrence context (readable). Replay schema v4: physical runs with occurrence context (new writes). Replay-v7 is accepted and is written only when an environmental dynamics spec is set. The default write stays replay-v5. Runs do not mix replay schemas.
 
 ## Snapshot contents
 
-Checkpoints capture locations (adjacency/capacities/environment), bodies (physiology + carry capacity), items (kind/load/placement), resources (kind/quantity/max/regen), weather (condition), revision, next tick, and integrity hashes. Physical rules version/fingerprint/canonical bytes persist on the run.
+Checkpoints capture locations (adjacency/capacities/environment), bodies (physiology + carry capacity), items (kind/load/placement), resources (kind/quantity/max/regen), weather (condition), revision, next tick, and integrity hashes. A dynamics-on checkpoint also stores active hazards. Physical rules version/fingerprint/canonical bytes persist on the run. `PhysicalRules` stays `physical-v1`.
 
 ## Tests
 

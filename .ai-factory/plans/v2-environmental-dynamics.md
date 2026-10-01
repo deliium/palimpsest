@@ -166,7 +166,7 @@ Each checkpoint is a git commit on `main` created when those tasks are done. Do 
   - Depends on tasks 6 and 8.
   - Files: `clients/godot-observer/scripts/protocol/models.gd`, `clients/godot-observer/scripts/protocol/event_router.gd`, `clients/godot-observer/scripts/presentation/theme_catalog.gd`, `clients/godot-observer/scripts/view/location_layer.gd`, `clients/godot-observer/scripts/ui/event_log.gd`, `clients/godot-observer/tests/test_session_cursor.gd`, `src/experiments/catalog.py`, `src/experiments/environmental_scenario.py`, `tests/unit/test_environmental_dynamics_scenario.py`, `tests/unit/test_godot_observer_fixtures.py`, `tests/architecture/test_godot_client_isolation.py`.
 
-- [ ] Task 10: v2- Document dynamics, perception limits, and replay.
+- [x] Task 10: v2- Document dynamics, perception limits, and replay.
   - Deliverable: update `docs/physical-simulation.md` and `docs/observer.md` with the seven phenomena, engine ownership, the spec-off path, replay-v7 and codec v4 only when a spec is set, current-only observation fields, causal successors learned from experience, and token replay at an arbitrary tick. State that Godot chooses appearance from those tokens after `state_tick` replaces the world. Update `docs/architecture.md` so the downstream contract mentions replay-v7 as accepted while the default write stays replay-v5, and Experiment U off the V1 gate. Do not invent a roadmap milestone.
   - Logging: no runtime logger. Docs name the logger channels from tasks 1–9 and 11 and the reason codes `yield_undefined`, `duplicate_shortage_window`, `environment_witness_mismatch`, `environment_spec_mismatch`, and `presentation_instruction_forbidden`.
   - Depends on tasks 7, 8, and 9.
