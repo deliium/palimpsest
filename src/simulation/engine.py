@@ -355,7 +355,19 @@ class WorldEngine:
             resources=snapshot.resources,
             bodies=snapshot.bodies,
             weather=snapshot.weather,
+            structures=snapshot.structures,
+            production_jobs=snapshot.production_jobs,
+            tool_marks=snapshot.tool_marks,
         )
+        resolved_catalog = _optional_production_catalog(production_catalog)
+        if snapshot.persistence_codec_version == "v3" and resolved_catalog is None:
+            from world.production import production_catalog_digest
+
+            _LOGGER.error(
+                "production_catalog_mismatch digest=%s",
+                production_catalog_digest(()),
+            )
+            raise ValueError("production_catalog_mismatch")
         try:
             normalized_events = normalize_events(events)
             projected = project_events(
@@ -363,6 +375,7 @@ class WorldEngine:
                 normalized_events,
                 expected_run_id=snapshot.run_id.value,
                 expected_world_id=snapshot.world_id,
+                production_catalog=resolved_catalog,  # type: ignore[arg-type]
             )
         except ProjectionError as exc:
             _LOGGER.error(

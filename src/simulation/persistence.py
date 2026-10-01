@@ -40,6 +40,7 @@ from world.events import (
     EVENT_SCHEMA_REPLAY_V3,
     EVENT_SCHEMA_REPLAY_V4,
     EVENT_SCHEMA_REPLAY_V5,
+    EVENT_SCHEMA_REPLAY_V6,
     WorldEvent,
     normalize_events,
 )
@@ -50,6 +51,7 @@ from world.identifiers import (
     require_stable_id,
 )
 from world.models import AgentBody, Item, Location, Resource, Weather
+from world.production import ProductionJob, Structure, ToolMark
 
 # New-write versions for physical replay-v5 runs (structured communication).
 # Taxonomy / accepted-set policy: see simulation.compatibility.COMPATIBILITY_MATRIX.
@@ -64,10 +66,13 @@ ACCEPTED_EVENT_SCHEMA_VERSIONS: Final[frozenset[int]] = frozenset(
         EVENT_SCHEMA_REPLAY_V3,
         EVENT_SCHEMA_REPLAY_V4,
         EVENT_SCHEMA_REPLAY_V5,
+        EVENT_SCHEMA_REPLAY_V6,
     }
 )
 ACCEPTED_PROJECTOR_VERSIONS: Final[frozenset[str]] = frozenset({"v1", "v2"})
-ACCEPTED_PERSISTENCE_CODEC_VERSIONS: Final[frozenset[str]] = frozenset({"v1", "v2"})
+ACCEPTED_PERSISTENCE_CODEC_VERSIONS: Final[frozenset[str]] = frozenset(
+    {"v1", "v2", "v3"}
+)
 
 _SHA256_HEX_RE: Final[re.Pattern[str]] = re.compile(r"^[0-9a-f]{64}$")
 _HASH_PREFIX_LEN: Final[int] = 8
@@ -207,6 +212,7 @@ def schema_projector_compatible(
         EVENT_SCHEMA_REPLAY_V3,
         EVENT_SCHEMA_REPLAY_V4,
         EVENT_SCHEMA_REPLAY_V5,
+        EVENT_SCHEMA_REPLAY_V6,
     }:
         return projector_version == "v2"
     return False
@@ -317,6 +323,17 @@ class RunManifest:
             )
 
 
+def _copy_production_rows[T](values: object, model_type: type[T]) -> tuple[T, ...]:
+    if isinstance(values, (str, bytes)) or not isinstance(values, Sequence):
+        raise TypeError(f"{model_type.__name__} collection must be a sequence")
+    copied: list[T] = []
+    for value in values:
+        if type(value) is not model_type:
+            raise TypeError(f"entries must be {model_type.__name__}")
+        copied.append(value)
+    return tuple(copied)
+
+
 @dataclass(frozen=True, slots=True)
 class WorldSnapshot:
     """Immutable objective checkpoint. Contains no live World or session token."""
@@ -340,6 +357,9 @@ class WorldSnapshot:
     derivation_version: str
     integrity_hash: PayloadHash
     predecessor_commit_hash: CommitHash | None
+    structures: Sequence[Structure] = ()
+    production_jobs: Sequence[ProductionJob] = ()
+    tool_marks: Sequence[ToolMark] = ()
 
     def __post_init__(self) -> None:
         if type(self.snapshot_id) is not SnapshotId:
@@ -420,6 +440,22 @@ class WorldSnapshot:
         object.__setattr__(self, "bodies", bootstrap.bodies)
         object.__setattr__(self, "weather", bootstrap.weather)
         object.__setattr__(self, "registrations", bootstrap.registrations)
+        object.__setattr__(
+            self, "structures", _copy_production_rows(self.structures, Structure)
+        )
+        object.__setattr__(
+            self,
+            "production_jobs",
+            _copy_production_rows(self.production_jobs, ProductionJob),
+        )
+        object.__setattr__(
+            self, "tool_marks", _copy_production_rows(self.tool_marks, ToolMark)
+        )
+        if self.persistence_codec_version == "v3":
+            if self.event_schema_version != EVENT_SCHEMA_REPLAY_V6:
+                raise ValueError("codec v3 requires event schema 6")
+        elif self.structures or self.production_jobs or self.tool_marks:
+            raise ValueError("production checkpoint fields require codec v3")
 
 
 @dataclass(frozen=True, slots=True)
@@ -717,6 +753,7 @@ class ReplayRequest:
     teaching_policy: object | None = None
     teaching_entity_ids: Sequence[object] | None = None
     teaching_offers: object | None = None
+    production_catalog: object | None = None
 
     def __post_init__(self) -> None:
         if type(self.run_id) is not RunId:

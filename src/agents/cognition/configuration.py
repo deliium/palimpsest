@@ -34,6 +34,7 @@ from agents.cognition.counterfactual import (
 )
 from agents.cognition.epistemic import EpistemicPolicy, default_epistemic_policy
 from agents.cognition.loop import CognitiveLoop
+from agents.cognition.production import ProductionKnowledgeMode
 from agents.cognition.prospective import ProspectivePolicy, default_prospective_policy
 from agents.cognition.reflection import ReflectionPolicy
 from agents.cognition.reputation import (
@@ -293,6 +294,9 @@ class CognitionLoopConfig:
         CognitionTeachingInteractionMode.DISABLED
     )
     teaching_claim_policy: object | None = None
+    production_knowledge_mode: ProductionKnowledgeMode = (
+        ProductionKnowledgeMode.DISABLED
+    )
     drive_overrides: tuple[CognitionDriveOverride, ...] = ()
     memory_policy_version: str = MEMORY_POLICY_VERSION
     imagination_policy_version: str = IMAGINATION_POLICY_VERSION
@@ -482,6 +486,13 @@ class CognitionLoopConfig:
                 raise TypeError(
                     "teaching_claim_policy must be TeachingClaimPolicy or None"
                 )
+        if type(self.production_knowledge_mode) is not ProductionKnowledgeMode:
+            _LOG.error(
+                "invalid_enum path=production_knowledge_mode reason_code=invalid_mode"
+            )
+            raise TypeError(
+                "production_knowledge_mode must be ProductionKnowledgeMode"
+            )
         if (
             self.reflection_policy is not None
             and type(self.reflection_policy) is not ReflectionPolicy
@@ -827,4 +838,5 @@ def build_cognitive_loop(
         competence_belief_policy=resolved.competence_belief_policy,
         teaching_interaction_mode=resolved.teaching_interaction_mode,
         teaching_claim_policy=resolved.teaching_claim_policy,
+        production_knowledge_mode=resolved.production_knowledge_mode,
     )

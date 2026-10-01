@@ -712,6 +712,7 @@ class SubjectiveSnapshot:
     reputation: object | None = None
     competence_model: object | None = None
     declarative_advice: object | None = None
+    recipe_beliefs: object | None = None
 
     def __post_init__(self) -> None:
         if type(self.owner_id) is not AgentId:
@@ -3649,6 +3650,7 @@ class CognitiveLoopProposal:
     reputation: object | None = None
     competence_model: object | None = None
     declarative_advice: object | None = None
+    recipe_beliefs: object | None = None
 
     def __post_init__(self) -> None:
         object.__setattr__(
@@ -3793,6 +3795,7 @@ class CognitiveLoopResult:
     reputation: object | None = None
     competence_model: object | None = None
     declarative_advice: object | None = None
+    recipe_beliefs: object | None = None
 
     def __post_init__(self) -> None:
         object.__setattr__(

@@ -434,6 +434,7 @@ class AgentRuntime:
         "_pending",
         "_processed_invocations",
         "_prospective_audits",
+        "_recipe_beliefs",
         "_reflection_audits",
         "_reflection_capture",
         "_reflection_cursor",
@@ -541,6 +542,7 @@ class AgentRuntime:
         self._theory_of_mind: object | None = None
         self._reputation: object | None = None
         self._competence: object | None = None
+        self._recipe_beliefs: object | None = None
         self._advice: object | None = None
         self._identity_cursor: object | None = None
         self._reflection_cursor: object | None = None
@@ -738,6 +740,37 @@ class AgentRuntime:
             "competence_model_carried owner_id=%s tick=%s",
             owner.value,
             tick,
+        )
+
+    def _commit_recipe_beliefs(self, beliefs: object | None, tick: int) -> None:
+        from agents.cognition.production import (
+            ProductionKnowledgeMode,
+            RecipeBeliefSet,
+        )
+
+        owner = self._agent.agent_id
+        mode = getattr(
+            self._loop,
+            "_production_knowledge_mode",
+            ProductionKnowledgeMode.DISABLED,
+        )
+        if mode is not ProductionKnowledgeMode.DETERMINISTIC or beliefs is None:
+            if mode is not ProductionKnowledgeMode.DETERMINISTIC:
+                self._recipe_beliefs = None
+            return
+        if type(beliefs) is not RecipeBeliefSet:
+            raise TypeError("recipe_beliefs must be RecipeBeliefSet")
+        if beliefs.owner_id != owner:
+            raise AgentRuntimeError(
+                AgentRuntimeErrorCode.OWNERSHIP,
+                agent_id=owner.value,
+            )
+        self._recipe_beliefs = beliefs
+        _LOG.debug(
+            "recipe_beliefs_carried owner_id=%s tick=%s recipe_count=%s",
+            owner.value,
+            tick,
+            len(beliefs.beliefs),
         )
 
     def _commit_advice(self, store: object | None, tick: int) -> None:
@@ -1215,6 +1248,7 @@ class AgentRuntime:
                 reputation=self._reputation,
                 competence_model=self._competence,
                 declarative_advice=self._advice,
+                recipe_beliefs=self._recipe_beliefs,
             )
         except TypeError:
             raise
@@ -1627,6 +1661,9 @@ class AgentRuntime:
         self._commit_competence(
             getattr(pending.loop_result, "competence_model", None), pending.tick
         )
+        self._commit_recipe_beliefs(
+            getattr(pending.loop_result, "recipe_beliefs", None), pending.tick
+        )
         self._commit_advice(
             getattr(pending.loop_result, "declarative_advice", None), pending.tick
         )
@@ -2024,6 +2061,7 @@ class AgentRuntime:
         self._theory_of_mind = checkpoint.theory_of_mind
         self._reputation = checkpoint.reputation
         self._competence = checkpoint.competence_model
+        self._recipe_beliefs = getattr(checkpoint, "recipe_beliefs", None)
         self._advice = checkpoint.declarative_advice
         self._reflection_cursor = checkpoint.reflection_cursor
         self._decision_journal = checkpoint.decision_journal
@@ -2082,6 +2120,7 @@ class AgentRuntime:
             reputation=self._reputation,
             competence_model=self._competence,
             declarative_advice=self._advice,
+            recipe_beliefs=self._recipe_beliefs,
             reflection_cursor=self._reflection_cursor,
             decision_journal=self._decision_journal,
             remembered_decisions=self._remembered_decisions,

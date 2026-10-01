@@ -192,6 +192,7 @@ class CognitiveLoop:
         "_motivation",
         "_perception",
         "_planner",
+        "_production_knowledge_mode",
         "_prospective_policy",
         "_reflection_mode",
         "_reflection_policy",
@@ -248,6 +249,7 @@ class CognitiveLoop:
         competence_belief_policy: object | None = None,
         teaching_interaction_mode: object | None = None,
         teaching_claim_policy: object | None = None,
+        production_knowledge_mode: object | None = None,
     ) -> None:
         self._perception = perception
         self._memory = memory
@@ -456,6 +458,18 @@ class CognitiveLoop:
             teaching_policy = teaching_claim_policy
         self._teaching_mode = teaching_mode
         self._teaching_policy = teaching_policy
+        from agents.cognition.production import ProductionKnowledgeMode
+
+        production_mode = (
+            ProductionKnowledgeMode.DISABLED
+            if production_knowledge_mode is None
+            else production_knowledge_mode
+        )
+        if type(production_mode) is not ProductionKnowledgeMode:
+            raise TypeError(
+                "production_knowledge_mode must be ProductionKnowledgeMode"
+            )
+        self._production_knowledge_mode = production_mode
         self._deferred_dissonance: tuple[object, ...] = ()
 
     def _prepare_reputation(self, loop_input: CognitiveLoopInput) -> object | None:
@@ -544,6 +558,26 @@ class CognitiveLoop:
             loop_input.observation,
             reconstructions,
             self._competence_policy,
+        )
+
+    def _prepare_recipe_beliefs(self, loop_input: CognitiveLoopInput) -> object | None:
+        from agents.cognition.production import (
+            ProductionKnowledgeMode,
+            update_recipe_beliefs,
+        )
+
+        if self._production_knowledge_mode is not ProductionKnowledgeMode.DETERMINISTIC:
+            return None
+        snapshot = loop_input.snapshot
+        carried = (
+            None
+            if snapshot is None
+            else getattr(snapshot, "recipe_beliefs", None)
+        )
+        return update_recipe_beliefs(
+            carried,
+            owner_id=loop_input.agent_id,
+            observation=loop_input.observation,
         )
 
     def _prepare_teaching(
@@ -885,6 +919,7 @@ class CognitiveLoop:
         reputation = self._prepare_reputation(loop_input)
         competence = self._prepare_competence(loop_input, memory)
         competence, advice = self._prepare_teaching(loop_input, competence)
+        recipe_beliefs = self._prepare_recipe_beliefs(loop_input)
         competence_policy = self._competence_policy
         if (
             competence is not None
@@ -1062,6 +1097,7 @@ class CognitiveLoop:
             reputation=reputation,
             competence_model=competence,
             declarative_advice=advice,
+            recipe_beliefs=recipe_beliefs,
             communication_intent=plan.communication_intent,
             communication_intent_audit=plan.communication_intent_audit,
         )
@@ -1210,6 +1246,7 @@ class CognitiveLoop:
             reputation=proposal.reputation,
             competence_model=proposal.competence_model,
             declarative_advice=proposal.declarative_advice,
+            recipe_beliefs=proposal.recipe_beliefs,
             communication_intent=proposal.communication_intent,
             communication_intent_audit=proposal.communication_intent_audit,
         )

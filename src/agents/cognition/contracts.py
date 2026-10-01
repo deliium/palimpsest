@@ -149,6 +149,7 @@ class Perspective:
     reputation: object | None = None
     competence_model: object | None = None
     declarative_advice: object | None = None
+    recipe_beliefs: object | None = None
 
     def __post_init__(self) -> None:
         if type(self.agent_id) is not AgentId:
@@ -298,6 +299,13 @@ class Perspective:
             self.agent_id,
             field_name="Perspective.declarative_advice",
         )
+        from agents.cognition.production import require_owner_recipe_beliefs
+
+        require_owner_recipe_beliefs(
+            self.recipe_beliefs,
+            self.agent_id,
+            field_name="Perspective.recipe_beliefs",
+        )
 
     def to_snapshot(self) -> SubjectiveSnapshot:
         """Freeze this perspective into a ``SubjectiveSnapshot``."""
@@ -323,6 +331,7 @@ class Perspective:
             reputation=self.reputation,
             competence_model=self.competence_model,
             declarative_advice=self.declarative_advice,
+            recipe_beliefs=self.recipe_beliefs,
         )
 
     def __repr__(self) -> str:

@@ -1,19 +1,22 @@
 """Pure objective-event projector for authoritative replay.
 
 Applies recorded effect facts onto immutable ``WorldState`` without invoking
-current command validation or behavioral rules. Log-free: callers map
-``ProjectionError.code`` into orchestration ERROR diagnostics.
+current command validation or behavioral rules. Production folds log on
+``simulation.replay`` with counts and catalog digests only.
 
 Compatibility:
 - Replay schema v2: legacy take/drop/give mutations only.
 - Replay schema v3/v4/v5: effect-complete physical projector for all mutating kinds.
   Schema v4/v5 additionally carry occurrence context (ignored by state projection).
   Schema v5 carries structured communication payloads (still projection no-ops).
+- Replay schema v6: the same physical fold plus production events. A non-empty
+  catalog supplies item and structure kinds the events do not repeat.
 Runs never mix replay schema versions.
 """
 
 from __future__ import annotations
 
+import logging
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from enum import StrEnum
@@ -25,8 +28,10 @@ from world.events import (
     EVENT_SCHEMA_REPLAY_V3,
     EVENT_SCHEMA_REPLAY_V4,
     EVENT_SCHEMA_REPLAY_V5,
+    EVENT_SCHEMA_REPLAY_V6,
     Asked,
     Attacked,
+    CraftStarted,
     Died,
     Dropped,
     Drunk,
@@ -35,11 +40,16 @@ from world.events import (
     Fled,
     Given,
     Helped,
+    ItemCrafted,
+    ItemStored,
     Moved,
     NeedsApplied,
+    ResourceHarvested,
     ResourceRegenerated,
     Searched,
     Slept,
+    StructureBuilt,
+    StructureRepaired,
     Taken,
     Talked,
     Told,
@@ -66,6 +76,15 @@ from world.models import (
     copy_resource,
     copy_weather,
 )
+from world.production import (
+    ItemProduct,
+    ProductionCatalog,
+    ProductionJob,
+    Structure,
+    StructureKind,
+    ToolMark,
+    production_catalog_digest,
+)
 from world.values import (
     Fatigue,
     Health,
@@ -76,6 +95,8 @@ from world.values import (
     TemperatureCelsius,
     Thirst,
 )
+
+_LOG: Final[logging.Logger] = logging.getLogger("simulation.replay")
 
 __all__: list[str] = [
     "ProjectionError",
@@ -107,6 +128,7 @@ class ProjectionErrorCode(StrEnum):
     INVALID_SEQUENCE = "invalid_sequence"
     MIXED_SCHEMA = "mixed_replay_schema_version"
     UNSUPPORTED_SCHEMA = "unsupported_event_schema_version"
+    CATALOG_MISMATCH = "production_catalog_mismatch"
 
 
 class ProjectionError(ValueError):
@@ -129,6 +151,7 @@ def project_events(
     *,
     expected_run_id: str,
     expected_world_id: WorldId,
+    production_catalog: ProductionCatalog | None = None,
 ) -> WorldState:
     """Fold ordered replay-capable events onto ``state``.
 
@@ -163,7 +186,15 @@ def project_events(
             seen_ids=seen_ids,
             schema_version=schema_version,
             assign_revision=True,
+            production_catalog=production_catalog,
         )
+        if schema_version == EVENT_SCHEMA_REPLAY_V6:
+            _LOG.debug(
+                "production_fold tick=%s structure_count=%s job_count=%s",
+                group.tick,
+                len(working.structures),
+                len(working.production_jobs),
+            )
     return working
 
 
@@ -174,6 +205,7 @@ def project_event_prefix(
     expected_run_id: str,
     expected_world_id: WorldId,
     includes_last_event: bool,
+    production_catalog: ProductionCatalog | None = None,
 ) -> WorldState:
     """Fold one tick prefix without treating a partial tick as complete.
 
@@ -202,9 +234,10 @@ def project_event_prefix(
         expected_world_id=expected_world_id,
         base_revision=state.revision,
         seen_ids=set(),
-        schema_version=schema_version,
-        assign_revision=includes_last_event,
-    )
+            schema_version=schema_version,
+            assign_revision=includes_last_event,
+            production_catalog=production_catalog,
+        )
     return projected
 
 
@@ -245,6 +278,7 @@ def _prepare_events(
             EVENT_SCHEMA_REPLAY_V3,
             EVENT_SCHEMA_REPLAY_V4,
             EVENT_SCHEMA_REPLAY_V5,
+            EVENT_SCHEMA_REPLAY_V6,
         }:
             raise ProjectionError(ProjectionErrorCode.UNSUPPORTED_SCHEMA)
     return normalized, schema_version, run_id
@@ -276,6 +310,7 @@ def _project_tick_group(
     seen_ids: set[EventId],
     schema_version: int,
     assign_revision: bool,
+    production_catalog: ProductionCatalog | None = None,
 ) -> tuple[WorldState, WorldRevision]:
     resulting_revision = group.events[0].resulting_revision
     for event in group.events:
@@ -294,7 +329,10 @@ def _project_tick_group(
     mutated = False
     for event in group.events:
         next_state, changed = _apply_event_effect(
-            working, event, schema_version=schema_version
+            working,
+            event,
+            schema_version=schema_version,
+            production_catalog=production_catalog,
         )
         working = next_state
         mutated = mutated or changed
@@ -355,11 +393,16 @@ def _entity_known(state: WorldState, entity_id: EntityId) -> bool:
         or entity_id in state.items
         or entity_id in state.locations
         or entity_id in state.resources
+        or entity_id in state.structures
     )
 
 
 def _apply_event_effect(
-    state: WorldState, event: WorldEvent, *, schema_version: int
+    state: WorldState,
+    event: WorldEvent,
+    *,
+    schema_version: int,
+    production_catalog: ProductionCatalog | None = None,
 ) -> tuple[WorldState, bool]:
     if schema_version == EVENT_SCHEMA_REPLAY_V2:
         match event.details:
@@ -404,6 +447,29 @@ def _apply_event_effect(
             return _project_exposure(state, exposure), True
         case Died() as died:
             return _project_died(state, died), True
+        case ResourceHarvested() as harvested:
+            return _project_harvest(state, event, harvested, production_catalog), True
+        case CraftStarted() as started:
+            return _project_craft_started(
+                state, event, started, production_catalog
+            )
+        case ItemCrafted() as crafted:
+            return (
+                _project_item_crafted(state, event, crafted, production_catalog),
+                True,
+            )
+        case StructureBuilt() as built:
+            return (
+                _project_structure_built(state, event, built, production_catalog),
+                True,
+            )
+        case StructureRepaired() as repaired:
+            return (
+                _project_structure_repaired(state, event, repaired, production_catalog),
+                True,
+            )
+        case ItemStored() as stored:
+            return _project_item_stored(state, event, stored, production_catalog), True
         case _:
             raise ProjectionError(ProjectionErrorCode.PRECONDITION_FAILED)
 
@@ -831,6 +897,260 @@ def _project_died(state: WorldState, details: Died) -> WorldState:
     )
     try:
         return rebuild_world_state(state, bodies=bodies)
+    except ValueError as exc:
+        raise ProjectionError(ProjectionErrorCode.INVARIANT_FAILED) from exc
+
+
+    jobs = dict(state.production_jobs)
+    jobs.pop(details.body_id, None)
+    try:
+        return rebuild_world_state(state, bodies=bodies, production_jobs=jobs)
+    except ValueError as exc:
+        raise ProjectionError(ProjectionErrorCode.INVARIANT_FAILED) from exc
+
+
+def _require_catalog(
+    catalog: ProductionCatalog | None, recipe_id: object
+) -> ProductionCatalog:
+    if catalog is None or type(recipe_id).__name__ != "RecipeId":
+        _reject_catalog(catalog)
+    recipe = catalog.recipe(recipe_id)  # type: ignore[union-attr, arg-type]
+    if recipe is None:
+        _reject_catalog(catalog)
+    return catalog  # type: ignore[return-value]
+
+
+def _reject_catalog(catalog: ProductionCatalog | None) -> None:
+    ids = (
+        ()
+        if catalog is None
+        else tuple(item.recipe_id.value for item in catalog.recipes)
+    )
+    _LOG.error("production_catalog_mismatch digest=%s", production_catalog_digest(ids))
+    raise ProjectionError(ProjectionErrorCode.CATALOG_MISMATCH)
+
+
+def _drop_items(
+    state: WorldState, actor_id: EntityId, item_ids: tuple[EntityId, ...]
+) -> tuple[dict[EntityId, Item], dict[EntityId, AgentBody]]:
+    items = dict(state.items)
+    bodies = dict(state.bodies)
+    dropping = set(item_ids)
+    for item_id in item_ids:
+        if item_id not in items:
+            raise ProjectionError(ProjectionErrorCode.PRECONDITION_FAILED)
+        del items[item_id]
+    actor = bodies[actor_id]
+    bodies[actor_id] = copy_body(
+        actor,
+        inventory=tuple(
+            item_id for item_id in actor.inventory if item_id not in dropping
+        ),
+    )
+    return items, bodies
+
+
+def _project_harvest(
+    state: WorldState,
+    event: WorldEvent,
+    details: ResourceHarvested,
+    catalog: ProductionCatalog | None,
+) -> WorldState:
+    _require_catalog(catalog, details.recipe_id)
+    assert catalog is not None
+    recipe = catalog.recipe(details.recipe_id)
+    assert recipe is not None
+    if details.resource_id not in state.resources:
+        raise ProjectionError(ProjectionErrorCode.TARGET_MISSING)
+    resource = state.resources[details.resource_id]
+    resources = dict(state.resources)
+    resources[details.resource_id] = copy_resource(
+        resource, quantity=details.resulting_resource_quantity
+    )
+    items = dict(state.items)
+    bodies = dict(state.bodies)
+    if details.success:
+        if event.actor_id is None or event.actor_id not in bodies:
+            raise ProjectionError(ProjectionErrorCode.ACTOR_MISSING)
+        if details.created_item_id is None or type(recipe.output) is not ItemProduct:
+            raise ProjectionError(ProjectionErrorCode.PRECONDITION_FAILED)
+        created = Item(
+            entity_id=details.created_item_id,
+            name=recipe.output.name,
+            kind=recipe.output.item_kind,
+            load=recipe.output.load,
+            holder_id=event.actor_id,
+        )
+        items[created.entity_id] = created
+        actor = bodies[event.actor_id]
+        bodies[event.actor_id] = copy_body(
+            actor, inventory=(*actor.inventory, created.entity_id)
+        )
+    try:
+        return rebuild_world_state(
+            state, items=items, resources=resources, bodies=bodies
+        )
+    except ValueError as exc:
+        raise ProjectionError(ProjectionErrorCode.INVARIANT_FAILED) from exc
+
+
+def _project_craft_started(
+    state: WorldState,
+    event: WorldEvent,
+    details: CraftStarted,
+    catalog: ProductionCatalog | None,
+) -> tuple[WorldState, bool]:
+    _require_catalog(catalog, details.recipe_id)
+    if not details.success:
+        return state, False
+    if event.actor_id is None or event.actor_id not in state.bodies:
+        raise ProjectionError(ProjectionErrorCode.ACTOR_MISSING)
+    items, bodies = _drop_items(state, event.actor_id, details.consumed_item_ids)
+    jobs = dict(state.production_jobs)
+    if details.duration_ticks > 1:
+            jobs[event.actor_id] = ProductionJob(
+                actor_id=event.actor_id,
+                recipe_id=details.recipe_id,
+                due_tick=event.tick + 1,
+                created_item_id=EntityId(event.request_id.value),
+                duration_ticks=details.duration_ticks,
+            )
+    try:
+        return (
+            rebuild_world_state(
+                state, items=items, bodies=bodies, production_jobs=jobs
+            ),
+            True,
+        )
+    except ValueError as exc:
+        raise ProjectionError(ProjectionErrorCode.INVARIANT_FAILED) from exc
+
+
+def _project_item_crafted(
+    state: WorldState,
+    event: WorldEvent,
+    details: ItemCrafted,
+    catalog: ProductionCatalog | None,
+) -> WorldState:
+    catalog = _require_catalog(catalog, details.recipe_id)
+    recipe = catalog.recipe(details.recipe_id)
+    assert recipe is not None
+    if type(recipe.output) is not ItemProduct:
+        _reject_catalog(catalog)
+    holder = details.resulting_holder_id
+    if holder not in state.bodies:
+        raise ProjectionError(ProjectionErrorCode.ACTOR_MISSING)
+    created = Item(
+        entity_id=details.created_item_id,
+        name=recipe.output.name,  # type: ignore[union-attr]
+        kind=recipe.output.item_kind,  # type: ignore[union-attr]
+        load=recipe.output.load,  # type: ignore[union-attr]
+        holder_id=holder,
+    )
+    items = dict(state.items)
+    items[created.entity_id] = created
+    bodies = dict(state.bodies)
+    actor = bodies[holder]
+    bodies[holder] = copy_body(actor, inventory=(*actor.inventory, created.entity_id))
+    jobs = dict(state.production_jobs)
+    jobs.pop(holder, None)
+    marks = dict(state.tool_marks)
+    role = recipe.output.tool_role  # type: ignore[union-attr]
+    if role is not None:
+        marks[created.entity_id] = ToolMark(created.entity_id, role)
+    try:
+        return rebuild_world_state(
+            state, items=items, bodies=bodies, production_jobs=jobs, tool_marks=marks
+        )
+    except ValueError as exc:
+        raise ProjectionError(ProjectionErrorCode.INVARIANT_FAILED) from exc
+
+
+def _project_structure_built(
+    state: WorldState,
+    event: WorldEvent,
+    details: StructureBuilt,
+    catalog: ProductionCatalog | None,
+) -> WorldState:
+    _require_catalog(catalog, details.recipe_id)
+    if event.actor_id is None or event.actor_id not in state.bodies:
+        raise ProjectionError(ProjectionErrorCode.ACTOR_MISSING)
+    items, bodies = _drop_items(state, event.actor_id, (details.consumed_item_id,))
+    structures = dict(state.structures)
+    structures[details.structure_id] = Structure(
+        entity_id=details.structure_id,
+        location_id=details.location_id,
+        kind=StructureKind.SHELTER,
+        integrity=details.resulting_integrity,
+        stored_quantity=0,
+    )
+    try:
+        return rebuild_world_state(
+            state, items=items, bodies=bodies, structures=structures
+        )
+    except ValueError as exc:
+        raise ProjectionError(ProjectionErrorCode.INVARIANT_FAILED) from exc
+
+
+def _project_structure_repaired(
+    state: WorldState,
+    event: WorldEvent,
+    details: StructureRepaired,
+    catalog: ProductionCatalog | None,
+) -> WorldState:
+    _require_catalog(catalog, details.recipe_id)
+    if event.actor_id is None or details.structure_id not in state.structures:
+        raise ProjectionError(ProjectionErrorCode.TARGET_MISSING)
+    items, bodies = _drop_items(state, event.actor_id, (details.consumed_item_id,))
+    prior = state.structures[details.structure_id]
+    structures = dict(state.structures)
+    structures[prior.entity_id] = Structure(
+        entity_id=prior.entity_id,
+        location_id=prior.location_id,
+        kind=prior.kind,
+        integrity=details.resulting_integrity,
+        stored_quantity=prior.stored_quantity,
+    )
+    try:
+        return rebuild_world_state(
+            state, items=items, bodies=bodies, structures=structures
+        )
+    except ValueError as exc:
+        raise ProjectionError(ProjectionErrorCode.INVARIANT_FAILED) from exc
+
+
+def _project_item_stored(
+    state: WorldState,
+    event: WorldEvent,
+    details: ItemStored,
+    catalog: ProductionCatalog | None,
+) -> WorldState:
+    _require_catalog(catalog, details.recipe_id)
+    if event.actor_id is None or event.actor_id not in state.bodies:
+        raise ProjectionError(ProjectionErrorCode.ACTOR_MISSING)
+    items, bodies = _drop_items(state, event.actor_id, (details.consumed_item_id,))
+    structures = dict(state.structures)
+    existing = structures.get(details.structure_id)
+    if existing is None:
+        structures[details.structure_id] = Structure(
+            entity_id=details.structure_id,
+            location_id=state.bodies[event.actor_id].location_id,
+            kind=StructureKind.STORE,
+            integrity=1.0,
+            stored_quantity=details.resulting_stored_quantity,
+        )
+    else:
+        structures[existing.entity_id] = Structure(
+            entity_id=existing.entity_id,
+            location_id=existing.location_id,
+            kind=existing.kind,
+            integrity=existing.integrity,
+            stored_quantity=details.resulting_stored_quantity,
+        )
+    try:
+        return rebuild_world_state(
+            state, items=items, bodies=bodies, structures=structures
+        )
     except ValueError as exc:
         raise ProjectionError(ProjectionErrorCode.INVARIANT_FAILED) from exc
 

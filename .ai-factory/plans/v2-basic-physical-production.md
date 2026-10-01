@@ -148,13 +148,13 @@ Each checkpoint is a git commit on `main` created when those tasks are done. Do 
 
 ### Phase 2: Replay, Beliefs, and Commands
 
-- [ ] Task 4: v2- Fold production state through replay without changing v2 checkpoints.
+- [x] Task 4: v2- Fold production state through replay without changing v2 checkpoints.
   - Deliverable: structures, tool marks, stored quantities, and pending jobs fold from v6 events plus the catalog. Codec `v3` adds exactly `structures`, `production_jobs`, and `tool_marks`. Resume of a v3 checkpoint restores those three collections and then folds later events. A v2 checkpoint still uses the current exact key set, rejects the three new keys, and restores empty production state. A catalog mismatch on resume fails with `production_catalog_mismatch`. Replaying a v5 stream with an empty catalog yields the same projected world as today.
   - Logging: logger `simulation.replay`. DEBUG `production_fold tick=%s structure_count=%s job_count=%s`. ERROR `production_catalog_mismatch` with the SHA-256 catalog digest only. No seeds.
   - Depends on task 3.
   - Files: `src/world/_replay.py`, `src/simulation/replay.py`, `src/simulation/persistence.py`, `src/simulation/journal.py`, `tests/unit/test_production_replay.py`.
 
-- [ ] Task 5: v2- Store recipe beliefs apart from the catalog.
+- [x] Task 5: v2- Store recipe beliefs apart from the catalog.
   - Deliverable: `ProductionKnowledgeMode` and `RecipeBeliefSet` in `agents/cognition/production.py`. The updater accepts the owner's observation and optional seed ids. It records a `recipe_id` from `ObservedOccurrence.public_facts` or from a single relation predicate `recipe`. It does not import `ProductionCatalog`. It raises `TypeError` when the argument's type name is `WorldState` or `ProductionCatalog`, and when the set owner does not match. `instruct` remains a skill predicate. This module does not import `llm`. Beliefs checkpoint on the in-memory runtime the same way competence does, without an Alembic revision and without a subjective schema bump. `DISABLED` builds no set.
   - Logging: logger `agents.cognition.production`. DEBUG `recipe_belief_updated owner_id=%s recipe_count=%s supported_count=%s`. WARNING `recipe_relation_ignored` with reason code. No utterance text.
   - Depends on tasks 2 and 11.

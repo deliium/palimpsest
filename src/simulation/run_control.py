@@ -599,6 +599,7 @@ class AgentRuntimeCheckpoint:
     reputation: object | None = None
     competence_model: object | None = None
     declarative_advice: object | None = None
+    recipe_beliefs: object | None = None
     reflection_cursor: object | None = None
     decision_journal: tuple[object, ...] | None = None
     remembered_decisions: tuple[object, ...] | None = None

@@ -58,8 +58,16 @@ from world.events import (
     require_event_details,
     require_replayable_event,
 )
-from world.identifiers import EntityId, EventId, RequestId, WorldId, WorldRevision
+from world.identifiers import (
+    EntityId,
+    EventId,
+    RecipeId,
+    RequestId,
+    WorldId,
+    WorldRevision,
+)
 from world.models import PhysicalRules, physical_rules_fingerprint
+from world.production import ProductionJob, Structure, StructureKind, ToolMark, ToolRole
 
 _TYPE_RUN_MANIFEST: Final[str] = "run_manifest"
 _TYPE_WORLD_SNAPSHOT: Final[str] = "world_snapshot"
@@ -396,6 +404,9 @@ def bind_snapshot_commit_hash(
         derivation_version=snapshot.derivation_version,
         integrity_hash=snapshot.integrity_hash,
         predecessor_commit_hash=commit_hash,
+        structures=snapshot.structures,
+        production_jobs=snapshot.production_jobs,
+        tool_marks=snapshot.tool_marks,
     )
     return WorldSnapshot(
         snapshot_id=draft.snapshot_id,
@@ -417,6 +428,9 @@ def bind_snapshot_commit_hash(
         derivation_version=draft.derivation_version,
         integrity_hash=hash_snapshot(draft),
         predecessor_commit_hash=commit_hash,
+        structures=draft.structures,
+        production_jobs=draft.production_jobs,
+        tool_marks=draft.tool_marks,
     )
 
 
@@ -498,6 +512,16 @@ def _nonneg_int_field(data: Mapping[str, Any], key: str, *, path: str) -> int:
     if value < 0:
         raise PersistenceSerializationError("invalid_int", f"{path}.{key}")
     return value
+
+
+def _float_field(data: Mapping[str, Any], key: str, *, path: str) -> float:
+    value = data[key]
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        raise PersistenceSerializationError("non_finite_float", f"{path}.{key}")
+    number = float(value)
+    if number != number or number in (float("inf"), float("-inf")):
+        raise PersistenceSerializationError("non_finite_float", f"{path}.{key}")
+    return number
 
 
 def _encode_seed(seed: int) -> int:
@@ -691,6 +715,16 @@ def _encode_world_snapshot(
             "weather": [_encode_weather(item) for item in value.weather],
             "world_id": value.world_id.value,
         }
+        if value.persistence_codec_version == "v3":
+            payload["structures"] = [
+                _encode_structure(item) for item in value.structures
+            ]
+            payload["production_jobs"] = [
+                _encode_production_job(item) for item in value.production_jobs
+            ]
+            payload["tool_marks"] = [
+                _encode_tool_mark(item) for item in value.tool_marks
+            ]
     except DomainSerializationError as exc:
         raise _map_domain_error(exc) from exc
     if include_integrity_hash:
@@ -699,31 +733,31 @@ def _encode_world_snapshot(
 
 
 def _decode_world_snapshot(data: dict[str, Any], *, path: str) -> WorldSnapshot:
-    _require_keys(
-        data,
-        {
-            "snapshot_id",
-            "run_id",
-            "world_id",
-            "seed",
-            "config",
-            "registrations",
-            "locations",
-            "bodies",
-            "items",
-            "resources",
-            "weather",
-            "next_tick",
-            "revision",
-            "event_schema_version",
-            "projector_version",
-            "persistence_codec_version",
-            "derivation_version",
-            "integrity_hash",
-            "predecessor_commit_hash",
-        },
-        path=path,
-    )
+    codec = data.get("persistence_codec_version")
+    keys = {
+        "snapshot_id",
+        "run_id",
+        "world_id",
+        "seed",
+        "config",
+        "registrations",
+        "locations",
+        "bodies",
+        "items",
+        "resources",
+        "weather",
+        "next_tick",
+        "revision",
+        "event_schema_version",
+        "projector_version",
+        "persistence_codec_version",
+        "derivation_version",
+        "integrity_hash",
+        "predecessor_commit_hash",
+    }
+    if codec == "v3":
+        keys |= {"structures", "production_jobs", "tool_marks"}
+    _require_keys(data, keys, path=path)
     config_raw = data["config"]
     if not isinstance(config_raw, dict):
         raise PersistenceSerializationError("invalid_object", f"{path}.config")
@@ -776,11 +810,105 @@ def _decode_world_snapshot(data: dict[str, Any], *, path: str) -> WorldSnapshot:
             derivation_version=_str_field(data, "derivation_version", path=path),
             integrity_hash=PayloadHash(_str_field(data, "integrity_hash", path=path)),
             predecessor_commit_hash=predecessor,
+            structures=_decode_object_list(
+                data["structures"], _decode_structure, path=f"{path}.structures"
+            )
+            if codec == "v3"
+            else (),
+            production_jobs=_decode_object_list(
+                data["production_jobs"],
+                _decode_production_job,
+                path=f"{path}.production_jobs",
+            )
+            if codec == "v3"
+            else (),
+            tool_marks=_decode_object_list(
+                data["tool_marks"], _decode_tool_mark, path=f"{path}.tool_marks"
+            )
+            if codec == "v3"
+            else (),
         )
     except PersistenceSerializationError:
         raise
     except (TypeError, ValueError) as exc:
         raise PersistenceSerializationError("malformed_id", path) from exc
+
+
+def _encode_structure(value: Structure) -> dict[str, Any]:
+    return {
+        "entity_id": value.entity_id.value,
+        "integrity": value.integrity,
+        "kind": value.kind.value,
+        "location_id": value.location_id.value,
+        "stored_quantity": value.stored_quantity,
+    }
+
+
+def _decode_structure(data: dict[str, Any], *, path: str) -> Structure:
+    _require_keys(
+        data,
+        {"entity_id", "location_id", "kind", "integrity", "stored_quantity"},
+        path=path,
+    )
+    try:
+        return Structure(
+            entity_id=EntityId(_str_field(data, "entity_id", path=path)),
+            location_id=EntityId(_str_field(data, "location_id", path=path)),
+            kind=StructureKind(_str_field(data, "kind", path=path)),
+            integrity=_float_field(data, "integrity", path=path),
+            stored_quantity=_nonneg_int_field(data, "stored_quantity", path=path),
+        )
+    except PersistenceSerializationError:
+        raise
+    except (TypeError, ValueError) as exc:
+        raise PersistenceSerializationError("invalid_model", path) from exc
+
+
+def _encode_production_job(value: ProductionJob) -> dict[str, Any]:
+    return {
+        "actor_id": value.actor_id.value,
+        "created_item_id": value.created_item_id.value,
+        "due_tick": value.due_tick,
+        "duration_ticks": value.duration_ticks,
+        "recipe_id": value.recipe_id.value,
+    }
+
+
+def _decode_production_job(data: dict[str, Any], *, path: str) -> ProductionJob:
+    _require_keys(
+        data,
+        {"actor_id", "recipe_id", "due_tick", "created_item_id", "duration_ticks"},
+        path=path,
+    )
+    try:
+        return ProductionJob(
+            actor_id=EntityId(_str_field(data, "actor_id", path=path)),
+            recipe_id=RecipeId(_str_field(data, "recipe_id", path=path)),
+            due_tick=_nonneg_int_field(data, "due_tick", path=path),
+            created_item_id=EntityId(_str_field(data, "created_item_id", path=path)),
+            duration_ticks=_nonneg_int_field(data, "duration_ticks", path=path),
+        )
+    except PersistenceSerializationError:
+        raise
+    except (TypeError, ValueError) as exc:
+        raise PersistenceSerializationError("invalid_model", path) from exc
+
+
+def _encode_tool_mark(value: ToolMark) -> dict[str, Any]:
+    return {"item_id": value.item_id.value, "role": value.role.value}
+
+
+def _decode_tool_mark(data: dict[str, Any], *, path: str) -> ToolMark:
+    _require_keys(data, {"item_id", "role"}, path=path)
+    try:
+        return ToolMark(
+            item_id=EntityId(_str_field(data, "item_id", path=path)),
+            role=ToolRole(_str_field(data, "role", path=path)),
+        )
+    except PersistenceSerializationError:
+        raise
+    except (TypeError, ValueError) as exc:
+        raise PersistenceSerializationError("invalid_model", path) from exc
 
 
 def _encode_tick_commit(value: TickCommit) -> dict[str, Any]:
