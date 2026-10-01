@@ -107,27 +107,48 @@ def apply_resolved(
     command: object,
     effect: ResolvedProductionEffect,
     tick: int,
-) -> tuple[WorldState, object | None, str | None]:
-    """Apply one resolved attempt. Returns state, details, and a reject code."""
+    witness_resource_nodes: bool = False,
+) -> tuple[WorldState, object | None, str | None, object | None]:
+    """Apply one resolved attempt. Returns state, details, reject code, witness."""
     recipe = effect.recipe
     if effect.reason_code is not None or recipe is None:
         code = effect.reason_code or "production_disabled"
         _warn(actor_id, effect.recipe_id, code)
-        return state, None, code
+        return state, None, code, None
     blocked = block_reason(state, actor_id, command, recipe)
     if blocked is not None:
         _warn(actor_id, recipe.recipe_id, blocked)
-        return state, None, blocked
+        return state, None, blocked, None
     duration = effective_duration(state, actor_id, recipe)
     if recipe.action is ProductionAction.HARVEST:
-        return _apply_harvest(state, actor_id, command, effect, recipe, duration)
+        return _apply_harvest(
+            state,
+            actor_id,
+            command,
+            effect,
+            recipe,
+            duration,
+            witness_resource_nodes=witness_resource_nodes,
+        )
     if recipe.action is ProductionAction.CRAFT:
-        return _apply_craft(state, actor_id, effect, recipe, duration, tick)
+        next_state, details, code = _apply_craft(
+            state, actor_id, effect, recipe, duration, tick
+        )
+        return next_state, details, code, None
     if recipe.action is ProductionAction.BUILD:
-        return _apply_build(state, actor_id, effect, recipe, duration)
+        next_state, details, code = _apply_build(
+            state, actor_id, effect, recipe, duration
+        )
+        return next_state, details, code, None
     if recipe.action is ProductionAction.REPAIR:
-        return _apply_repair(state, actor_id, command, effect, recipe, duration)
-    return _apply_store(state, actor_id, command, effect, recipe, duration)
+        next_state, details, code = _apply_repair(
+            state, actor_id, command, effect, recipe, duration
+        )
+        return next_state, details, code, None
+    next_state, details, code = _apply_store(
+        state, actor_id, command, effect, recipe, duration
+    )
+    return next_state, details, code, None
 
 
 def complete_due_jobs(
@@ -397,7 +418,9 @@ def _apply_harvest(
     effect: ResolvedProductionEffect,
     recipe: ProductionRecipe,
     duration: int,
-) -> tuple[WorldState, ResourceHarvested, None]:
+    *,
+    witness_resource_nodes: bool = False,
+) -> tuple[WorldState, ResourceHarvested, None, object | None]:
     assert type(command) is Harvest
     resource = state.resources[command.resource_id]
     if not effect.success:
@@ -411,6 +434,7 @@ def _apply_harvest(
                 duration,
                 resource.quantity,
             ),
+            None,
             None,
         )
     assert effect.created_entity_id is not None
@@ -431,6 +455,13 @@ def _apply_harvest(
     actor = bodies[actor_id]
     bodies[actor_id] = copy_body(actor, inventory=(*actor.inventory, created.entity_id))
     _log_resolved(recipe.recipe_id, True, duration, "harvested")
+    witness = None
+    if witness_resource_nodes:
+        from world.events import node_quantity_witness
+
+        witness = node_quantity_witness(
+            resource.entity_id, resource.quantity, resulting
+        )
     return (
         rebuild_world_state(state, items=items, resources=resources, bodies=bodies),
         ResourceHarvested(
@@ -442,6 +473,7 @@ def _apply_harvest(
             created_item_id=created.entity_id,
         ),
         None,
+        witness,
     )
 
 

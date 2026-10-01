@@ -134,10 +134,11 @@ class PersistentSimulationService:
         state = next_snap.world.state
         derivation = self._engine._config.derivation_version or DERIVATION_VERSION
         schema_version, codec_version = checkpoint_schema_for_production(
-            production_active=self._engine._production_catalog is not None
+            production_active=self._engine._production_catalog is not None,
+            dynamics_active=self._engine._environmental_dynamics is not None,
         )
         production_rows: dict[str, tuple[object, ...]] = {}
-        if codec_version == "v3":
+        if codec_version in {"v3", "v4"}:
             production_rows = {
                 "structures": tuple(state.structures.values()),
                 "production_jobs": tuple(state.production_jobs.values()),

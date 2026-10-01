@@ -11,7 +11,11 @@ Compatibility matrix:
 - ``EVENT_SCHEMA_REPLAY_V5`` (5): physical replay plus structured communication
   payloads (Talked/Asked/Told). Default physical writes stay on v5.
 - ``EVENT_SCHEMA_REPLAY_V6`` (6): production details. Written only by a run
-  whose catalog is non-empty. Illegal on every lower schema.
+  whose catalog is non-empty and whose dynamics spec is absent. Also legal
+  on replay-v7.
+- ``EVENT_SCHEMA_REPLAY_V7`` (7): environment details plus replay-v6
+  production details. Written only by a run whose dynamics spec is set.
+  Illegal on every lower schema. Default writes stay on v5.
 
 Runs never mix replay schema versions. ``WorldEvent.target_id`` retains detail
 counterparty semantics and is never treated as an occurrence location.
@@ -33,6 +37,7 @@ from world.effects import (
     SystemCause,
     require_event_cause,
 )
+from world.environment import HazardKind, Season, TemperatureBand
 from world.identifiers import (
     EntityId,
     EventId,
@@ -54,6 +59,7 @@ EVENT_SCHEMA_REPLAY_V3: Final[int] = 3
 EVENT_SCHEMA_REPLAY_V4: Final[int] = 4
 EVENT_SCHEMA_REPLAY_V5: Final[int] = 5
 EVENT_SCHEMA_REPLAY_V6: Final[int] = 6
+EVENT_SCHEMA_REPLAY_V7: Final[int] = 7
 SUPPORTED_EVENT_SCHEMA_VERSIONS: Final[frozenset[int]] = frozenset(
     {
         EVENT_SCHEMA_AUDIT_V1,
@@ -62,6 +68,7 @@ SUPPORTED_EVENT_SCHEMA_VERSIONS: Final[frozenset[int]] = frozenset(
         EVENT_SCHEMA_REPLAY_V4,
         EVENT_SCHEMA_REPLAY_V5,
         EVENT_SCHEMA_REPLAY_V6,
+        EVENT_SCHEMA_REPLAY_V7,
     }
 )
 REPLAYABLE_EVENT_SCHEMA_VERSIONS: Final[frozenset[int]] = frozenset(
@@ -71,6 +78,7 @@ REPLAYABLE_EVENT_SCHEMA_VERSIONS: Final[frozenset[int]] = frozenset(
         EVENT_SCHEMA_REPLAY_V4,
         EVENT_SCHEMA_REPLAY_V5,
         EVENT_SCHEMA_REPLAY_V6,
+        EVENT_SCHEMA_REPLAY_V7,
     }
 )
 PHYSICAL_REPLAY_EVENT_SCHEMA_VERSIONS: Final[frozenset[int]] = frozenset(
@@ -79,12 +87,25 @@ PHYSICAL_REPLAY_EVENT_SCHEMA_VERSIONS: Final[frozenset[int]] = frozenset(
         EVENT_SCHEMA_REPLAY_V4,
         EVENT_SCHEMA_REPLAY_V5,
         EVENT_SCHEMA_REPLAY_V6,
+        EVENT_SCHEMA_REPLAY_V7,
     }
+)
+_PRODUCTION_EVENT_SCHEMAS: Final[frozenset[int]] = frozenset(
+    {EVENT_SCHEMA_REPLAY_V6, EVENT_SCHEMA_REPLAY_V7}
 )
 CURRENT_PHYSICAL_EVENT_SCHEMA_VERSION: Final[int] = EVENT_SCHEMA_REPLAY_V5
 _LOG: Final[logging.Logger] = logging.getLogger("world.events")
 _FORBIDDEN_PRESENTATION_FIELDS: Final[frozenset[str]] = frozenset(
-    {"pixels", "sprite", "animation", "dx", "dy", "screen_x", "screen_y"}
+    {
+        "animation",
+        "color",
+        "dx",
+        "dy",
+        "pixels",
+        "screen_x",
+        "screen_y",
+        "sprite",
+    }
 )
 
 
@@ -782,6 +803,133 @@ class ItemStored:
         _reject_presentation_fields(self.kind, self.__slots__)
 
 
+@dataclass(frozen=True, slots=True)
+class SeasonChanged:
+    """One season transition. The new season only; not the calendar."""
+
+    season: Season
+    kind: Literal["season_changed"] = field(default="season_changed", init=False)
+
+    def __post_init__(self) -> None:
+        if type(self.season) is not Season:
+            raise TypeError("SeasonChanged.season must be Season")
+        _reject_presentation_fields(self.kind, self.__slots__)
+
+
+@dataclass(frozen=True, slots=True)
+class TemperatureBandChanged:
+    location_id: EntityId
+    band: TemperatureBand
+    kind: Literal["temperature_band_changed"] = field(
+        default="temperature_band_changed", init=False
+    )
+
+    def __post_init__(self) -> None:
+        if type(self.location_id) is not EntityId:
+            raise TypeError("TemperatureBandChanged.location_id must be EntityId")
+        if type(self.band) is not TemperatureBand:
+            raise TypeError("TemperatureBandChanged.band must be TemperatureBand")
+        _reject_presentation_fields(self.kind, self.__slots__)
+
+
+@dataclass(frozen=True, slots=True)
+class ResourceNodeDepleted:
+    resource_id: EntityId
+    resulting_quantity: float
+    kind: Literal["resource_node_depleted"] = field(
+        default="resource_node_depleted", init=False
+    )
+
+    def __post_init__(self) -> None:
+        if type(self.resource_id) is not EntityId:
+            raise TypeError("ResourceNodeDepleted.resource_id must be EntityId")
+        quantity = _require_finite_float(
+            "ResourceNodeDepleted.resulting_quantity",
+            self.resulting_quantity,
+        )
+        if quantity != 0.0:
+            raise ValueError("ResourceNodeDepleted.resulting_quantity must be 0")
+        object.__setattr__(self, "resulting_quantity", quantity)
+        _reject_presentation_fields(self.kind, self.__slots__)
+
+
+@dataclass(frozen=True, slots=True)
+class ResourceNodeRecovered:
+    resource_id: EntityId
+    resulting_quantity: float
+    kind: Literal["resource_node_recovered"] = field(
+        default="resource_node_recovered", init=False
+    )
+
+    def __post_init__(self) -> None:
+        if type(self.resource_id) is not EntityId:
+            raise TypeError("ResourceNodeRecovered.resource_id must be EntityId")
+        quantity = _require_finite_float(
+            "ResourceNodeRecovered.resulting_quantity",
+            self.resulting_quantity,
+        )
+        if quantity <= 0.0:
+            raise ValueError("ResourceNodeRecovered.resulting_quantity must be > 0")
+        object.__setattr__(self, "resulting_quantity", quantity)
+        _reject_presentation_fields(self.kind, self.__slots__)
+
+
+@dataclass(frozen=True, slots=True)
+class EnvironmentalHazardStarted:
+    location_id: EntityId
+    hazard_kind: HazardKind
+    duration_ticks: int
+    remaining_ticks: int
+    kind: Literal["environmental_hazard_started"] = field(
+        default="environmental_hazard_started", init=False
+    )
+
+    def __post_init__(self) -> None:
+        if type(self.location_id) is not EntityId:
+            raise TypeError("EnvironmentalHazardStarted.location_id must be EntityId")
+        if type(self.hazard_kind) is not HazardKind:
+            raise TypeError("EnvironmentalHazardStarted.hazard_kind must be HazardKind")
+        duration = _require_duration_ticks(
+            "EnvironmentalHazardStarted.duration_ticks",
+            self.duration_ticks,
+        )
+        remaining = require_exact_nonneg_int(
+            "EnvironmentalHazardStarted.remaining_ticks",
+            self.remaining_ticks,
+        )
+        if remaining != duration:
+            raise ValueError(
+                "EnvironmentalHazardStarted.remaining_ticks must equal duration_ticks"
+            )
+        object.__setattr__(self, "duration_ticks", duration)
+        object.__setattr__(self, "remaining_ticks", remaining)
+        _reject_presentation_fields(self.kind, self.__slots__)
+
+
+@dataclass(frozen=True, slots=True)
+class EnvironmentalHazardEnded:
+    location_id: EntityId
+    hazard_kind: HazardKind
+    remaining_ticks: int
+    kind: Literal["environmental_hazard_ended"] = field(
+        default="environmental_hazard_ended", init=False
+    )
+
+    def __post_init__(self) -> None:
+        if type(self.location_id) is not EntityId:
+            raise TypeError("EnvironmentalHazardEnded.location_id must be EntityId")
+        if type(self.hazard_kind) is not HazardKind:
+            raise TypeError("EnvironmentalHazardEnded.hazard_kind must be HazardKind")
+        remaining = require_exact_nonneg_int(
+            "EnvironmentalHazardEnded.remaining_ticks",
+            self.remaining_ticks,
+        )
+        if remaining != 0:
+            raise ValueError("EnvironmentalHazardEnded.remaining_ticks must be 0")
+        object.__setattr__(self, "remaining_ticks", remaining)
+        _reject_presentation_fields(self.kind, self.__slots__)
+
+
 EventDetails = (
     Moved
     | Searched
@@ -809,6 +957,12 @@ EventDetails = (
     | StructureBuilt
     | StructureRepaired
     | ItemStored
+    | SeasonChanged
+    | TemperatureBandChanged
+    | ResourceNodeDepleted
+    | ResourceNodeRecovered
+    | EnvironmentalHazardStarted
+    | EnvironmentalHazardEnded
 )
 
 _DETAIL_TYPES: Final[frozenset[type]] = frozenset(
@@ -839,6 +993,12 @@ _DETAIL_TYPES: Final[frozenset[type]] = frozenset(
         StructureBuilt,
         StructureRepaired,
         ItemStored,
+        SeasonChanged,
+        TemperatureBandChanged,
+        ResourceNodeDepleted,
+        ResourceNodeRecovered,
+        EnvironmentalHazardStarted,
+        EnvironmentalHazardEnded,
     }
 )
 
@@ -850,6 +1010,17 @@ _PRODUCTION_DETAIL_TYPES: Final[frozenset[type]] = frozenset(
         StructureBuilt,
         StructureRepaired,
         ItemStored,
+    }
+)
+
+_ENVIRONMENT_DETAIL_TYPES: Final[frozenset[type]] = frozenset(
+    {
+        SeasonChanged,
+        TemperatureBandChanged,
+        ResourceNodeDepleted,
+        ResourceNodeRecovered,
+        EnvironmentalHazardStarted,
+        EnvironmentalHazardEnded,
     }
 )
 
@@ -871,13 +1042,51 @@ def _require_finite_float(name: str, value: object) -> float:
     return number
 
 
+def node_quantity_witness(
+    resource_id: EntityId,
+    prior_quantity: float,
+    resulting_quantity: float,
+) -> ResourceNodeDepleted | ResourceNodeRecovered | None:
+    """Witness a zero crossing. Callers skip this when the spec is absent."""
+    if type(resource_id) is not EntityId:
+        raise TypeError("resource_id must be EntityId")
+    if prior_quantity > 0.0 and resulting_quantity == 0.0:
+        return ResourceNodeDepleted(resource_id, 0.0)
+    if prior_quantity == 0.0 and resulting_quantity > 0.0:
+        return ResourceNodeRecovered(resource_id, resulting_quantity)
+    return None
+
+
 def require_event_details(value: object) -> EventDetails:
     if type(value) not in _DETAIL_TYPES:
         raise TypeError(f"unsupported event details type {type(value).__name__}")
     return value  # type: ignore[return-value]
 
 
+def _environment_effect_complete(details: EventDetails) -> bool:
+    match details:
+        case ResourceNodeDepleted(resulting_quantity=quantity):
+            return quantity == 0.0
+        case ResourceNodeRecovered(resulting_quantity=quantity):
+            return quantity > 0.0
+        case EnvironmentalHazardStarted(
+            duration_ticks=duration,
+            remaining_ticks=remaining,
+        ):
+            return duration >= 1 and remaining == duration
+        case EnvironmentalHazardEnded(remaining_ticks=remaining):
+            return remaining == 0
+        case SeasonChanged() | TemperatureBandChanged():
+            return True
+        case _:
+            return False
+
+
 def _payload_effect_complete(details: EventDetails, *, schema_version: int) -> bool:
+    if type(details) in _ENVIRONMENT_DETAIL_TYPES:
+        if schema_version != EVENT_SCHEMA_REPLAY_V7:
+            return False
+        return _environment_effect_complete(details)
     match details:
         case Taken(resulting_holder_id=None):
             return False
@@ -963,19 +1172,19 @@ def _payload_effect_complete(details: EventDetails, *, schema_version: int) -> b
         ):
             return True
         case ResourceHarvested() as harvested:
-            if schema_version != EVENT_SCHEMA_REPLAY_V6:
+            if schema_version not in _PRODUCTION_EVENT_SCHEMAS:
                 return False
             if harvested.success:
                 return harvested.created_item_id is not None
             return harvested.created_item_id is None
         case CraftStarted() as started:
-            if schema_version != EVENT_SCHEMA_REPLAY_V6:
+            if schema_version not in _PRODUCTION_EVENT_SCHEMAS:
                 return False
             if started.success:
                 return len(started.consumed_item_ids) >= 1
             return len(started.consumed_item_ids) == 0
         case ItemCrafted() | StructureBuilt() | StructureRepaired() | ItemStored():
-            return schema_version == EVENT_SCHEMA_REPLAY_V6
+            return schema_version in _PRODUCTION_EVENT_SCHEMAS
         case _:
             return True
 
@@ -1043,6 +1252,19 @@ def target_id_for_details(details: EventDetails) -> EntityId | None:
             | ItemStored(structure_id=structure_id)
         ):
             return structure_id
+        case SeasonChanged():
+            return None
+        case (
+            TemperatureBandChanged(location_id=location_id)
+            | EnvironmentalHazardStarted(location_id=location_id)
+            | EnvironmentalHazardEnded(location_id=location_id)
+        ):
+            return location_id
+        case (
+            ResourceNodeDepleted(resource_id=resource_id)
+            | ResourceNodeRecovered(resource_id=resource_id)
+        ):
+            return resource_id
         case _:
             raise TypeError(
                 f"{EventValidationCode.UNKNOWN_EVENT_TYPE.value}: "
@@ -1122,7 +1344,15 @@ class WorldEvent:
             raise ValueError(EventValidationCode.INVALID_SCHEMA_VERSION.value)
         object.__setattr__(self, "details", require_event_details(self.details))
         if type(self.details) in _PRODUCTION_DETAIL_TYPES:
-            if self.schema_version != EVENT_SCHEMA_REPLAY_V6:
+            if self.schema_version not in _PRODUCTION_EVENT_SCHEMAS:
+                _LOG.error(
+                    "invalid_event_schema_version kind=%s schema_version=%s",
+                    self.details.kind,
+                    self.schema_version,
+                )
+                raise ValueError(EventValidationCode.INVALID_SCHEMA_VERSION.value)
+        if type(self.details) in _ENVIRONMENT_DETAIL_TYPES:
+            if self.schema_version != EVENT_SCHEMA_REPLAY_V7:
                 _LOG.error(
                     "invalid_event_schema_version kind=%s schema_version=%s",
                     self.details.kind,
@@ -1169,6 +1399,12 @@ class WorldEvent:
                 self.schema_version,
                 self.details.kind,
                 getattr(self.details, "success", None),
+            )
+        if type(self.details) in _ENVIRONMENT_DETAIL_TYPES:
+            _LOG.debug(
+                "environment_event_built schema_version=%s kind=%s",
+                self.schema_version,
+                self.details.kind,
             )
 
     @property
@@ -1226,7 +1462,8 @@ def make_physical_replayable_event(
     """Construct an authoritative physical replay event.
 
     The default schema remains replay-v5. Replay-v6 is selected only by a
-    caller whose production catalog is non-empty.
+    caller whose production catalog is non-empty and whose dynamics spec is
+    absent. Replay-v7 is selected only when the dynamics spec is set.
     """
     typed_cause = require_event_cause(cause)
     if type(occurrence) is not OccurrenceContext:
@@ -1324,6 +1561,36 @@ def build_occurrence_context(
                 private_recipient_ids=(),
             )
         case ResourceRegenerated(resource_id=resource_id):
+            return OccurrenceContext(
+                origin_location_id=origin_location_id,
+                destination_location_id=None,
+                affected_entity_ids=(resource_id,),
+                private_recipient_ids=(),
+            )
+        case SeasonChanged():
+            return OccurrenceContext(
+                origin_location_id=origin_location_id,
+                destination_location_id=None,
+                affected_entity_ids=(
+                    () if origin_location_id is None else (origin_location_id,)
+                ),
+                private_recipient_ids=(),
+            )
+        case (
+            TemperatureBandChanged(location_id=location_id)
+            | EnvironmentalHazardStarted(location_id=location_id)
+            | EnvironmentalHazardEnded(location_id=location_id)
+        ):
+            return OccurrenceContext(
+                origin_location_id=location_id,
+                destination_location_id=None,
+                affected_entity_ids=(location_id,),
+                private_recipient_ids=(),
+            )
+        case (
+            ResourceNodeDepleted(resource_id=resource_id)
+            | ResourceNodeRecovered(resource_id=resource_id)
+        ):
             return OccurrenceContext(
                 origin_location_id=origin_location_id,
                 destination_location_id=None,

@@ -1069,6 +1069,22 @@ def _evaluate_production(
     )
 
 
+def _drink_node_witness(
+    prior: WorldState,
+    resulting: WorldState,
+    source_id: EntityId,
+) -> EventDetails | None:
+    from world.events import node_quantity_witness
+
+    if source_id not in prior.resources or source_id not in resulting.resources:
+        return None
+    return node_quantity_witness(
+        source_id,
+        prior.resources[source_id].quantity,
+        resulting.resources[source_id].quantity,
+    )
+
+
 def _apply_production(
     state: WorldState,
     operation: ValidatedWorldOperation,
@@ -1076,6 +1092,7 @@ def _apply_production(
     result: RuleResult,
     resolved: ResolvedActionEffects | None,
     tick: int,
+    witness_resource_nodes: bool = False,
 ) -> RuleApplication:
     from world._production import apply_resolved
 
@@ -1087,12 +1104,13 @@ def _apply_production(
         )
     effect = resolved.require(operation.request_id, ResolvedProductionEffect)
     assert type(effect) is ResolvedProductionEffect
-    next_state, details, reason = apply_resolved(
+    next_state, details, reason, witness = apply_resolved(
         state,
         actor_id=operation.actor_id,
         command=_command_for_production(operation),
         effect=effect,
         tick=tick,
+        witness_resource_nodes=witness_resource_nodes,
     )
     if reason is not None or details is None:
         mapped = _PRODUCTION_REASONS.get(
@@ -1105,10 +1123,14 @@ def _apply_production(
         )
     from world.events import require_event_details
 
+    extra: tuple[EventDetails, ...] = ()
+    if witness is not None:
+        extra = (require_event_details(witness),)
     return RuleApplication(
         result=result,
         next_state=next_state,
         event_details=require_event_details(details),
+        extra_event_details=extra,
     )
 
 
@@ -1168,6 +1190,7 @@ def apply_operation(
     resolved: ResolvedActionEffects | None = None,
     tick: int | None = None,
     skill_efficiency: object | None = None,
+    witness_resource_nodes: bool = False,
 ) -> RuleApplication:
     """Evaluate then apply immutable physical or event-only effects.
 
@@ -1196,7 +1219,12 @@ def apply_operation(
         return RuleApplication(result=result, next_state=state, event_details=None)
     if type(operation) is _SearchOp:
         return _apply_search(
-            state, operation, result=result, rules=physical_rules, resolved=resolved
+            state,
+            operation,
+            result=result,
+            rules=physical_rules,
+            resolved=resolved,
+            witness_resource_nodes=witness_resource_nodes,
         )
     if type(operation) is _AttackOp:
         return _apply_attack(
@@ -1209,6 +1237,7 @@ def apply_operation(
             result=result,
             resolved=resolved,
             tick=0 if tick is None else tick,
+            witness_resource_nodes=witness_resource_nodes,
         )
     if type(operation) is _FleeOp:
         return _apply_flee(
@@ -1230,7 +1259,17 @@ def apply_operation(
     details = _event_details_for(
         state, operation, rules=physical_rules, next_state=next_state
     )
-    return RuleApplication(result=result, next_state=next_state, event_details=details)
+    extra: tuple[EventDetails, ...] = ()
+    if witness_resource_nodes and type(operation) is _DrinkOp:
+        witness = _drink_node_witness(state, next_state, operation.source_id)
+        if witness is not None:
+            extra = (witness,)
+    return RuleApplication(
+        result=result,
+        next_state=next_state,
+        event_details=details,
+        extra_event_details=extra,
+    )
 
 
 def _apply_search(
@@ -1240,6 +1279,7 @@ def _apply_search(
     result: RuleResult,
     rules: PhysicalRules,
     resolved: ResolvedActionEffects | None,
+    witness_resource_nodes: bool = False,
 ) -> RuleApplication:
     if resolved is None:
         raise ValueError("search apply requires ResolvedActionEffects")
@@ -1270,6 +1310,15 @@ def _apply_search(
     items = dict(state.items)
     items[effect.created_item_id] = created
     next_state = rebuild_world_state(state, items=items, resources=resources)
+    extra: tuple[EventDetails, ...] = ()
+    if witness_resource_nodes:
+        from world.events import node_quantity_witness
+
+        witness = node_quantity_witness(
+            effect.resource_id, resource.quantity, resulting_quantity
+        )
+        if witness is not None:
+            extra = (witness,)
     return RuleApplication(
         result=result,
         next_state=next_state,
@@ -1280,6 +1329,7 @@ def _apply_search(
             extracted_quantity=extract,
             resulting_resource_quantity=resulting_quantity,
         ),
+        extra_event_details=extra,
     )
 
 

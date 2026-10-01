@@ -2537,11 +2537,12 @@ async def _cleanup_created(
 def _bootstrap_snapshot(engine: WorldEngine) -> WorldSnapshot:
     """Build the tick-0 durable bootstrap checkpoint from a live engine."""
     schema_version, codec_version = checkpoint_schema_for_production(
-        production_active=engine._production_catalog is not None
+        production_active=engine._production_catalog is not None,
+        dynamics_active=engine._environmental_dynamics is not None,
     )
     state = engine._snapshot.world.state
     production_rows: dict[str, tuple[object, ...]] = {}
-    if codec_version == "v3":
+    if codec_version in {"v3", "v4"}:
         production_rows = {
             "structures": tuple(state.structures.values()),
             "production_jobs": tuple(state.production_jobs.values()),

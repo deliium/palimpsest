@@ -117,6 +117,7 @@ from world.effects import (
     SystemCause,
     SystemEffectFamily,
 )
+from world.environment import HazardKind, Season, TemperatureBand
 from world.events import (
     EVENT_SCHEMA_AUDIT_V1,
     EVENT_SCHEMA_REPLAY_V2,
@@ -124,6 +125,7 @@ from world.events import (
     EVENT_SCHEMA_REPLAY_V4,
     EVENT_SCHEMA_REPLAY_V5,
     EVENT_SCHEMA_REPLAY_V6,
+    EVENT_SCHEMA_REPLAY_V7,
     Asked,
     Attacked,
     CraftStarted,
@@ -131,6 +133,8 @@ from world.events import (
     Dropped,
     Drunk,
     Eaten,
+    EnvironmentalHazardEnded,
+    EnvironmentalHazardStarted,
     ExposureApplied,
     Fled,
     Given,
@@ -141,13 +145,17 @@ from world.events import (
     NeedsApplied,
     OccurrenceContext,
     ResourceHarvested,
+    ResourceNodeDepleted,
+    ResourceNodeRecovered,
     ResourceRegenerated,
     Searched,
+    SeasonChanged,
     Slept,
     StructureBuilt,
     StructureRepaired,
     Taken,
     Talked,
+    TemperatureBandChanged,
     Told,
     Waited,
     WeatherChanged,
@@ -3644,6 +3652,56 @@ def _encode_event_details(value: object) -> dict[str, Any]:
                 "structure_id": structure_id.value,
                 "success": success,
             }
+        case SeasonChanged(season=season):
+            return {"kind": "season_changed", "season": season.value}
+        case TemperatureBandChanged(location_id=location_id, band=band):
+            return {
+                "band": band.value,
+                "kind": "temperature_band_changed",
+                "location_id": location_id.value,
+            }
+        case ResourceNodeDepleted(
+            resource_id=resource_id,
+            resulting_quantity=resulting_quantity,
+        ):
+            return {
+                "kind": "resource_node_depleted",
+                "resource_id": resource_id.value,
+                "resulting_quantity": resulting_quantity,
+            }
+        case ResourceNodeRecovered(
+            resource_id=resource_id,
+            resulting_quantity=resulting_quantity,
+        ):
+            return {
+                "kind": "resource_node_recovered",
+                "resource_id": resource_id.value,
+                "resulting_quantity": resulting_quantity,
+            }
+        case EnvironmentalHazardStarted(
+            location_id=location_id,
+            hazard_kind=hazard_kind,
+            duration_ticks=duration_ticks,
+            remaining_ticks=remaining_ticks,
+        ):
+            return {
+                "duration_ticks": duration_ticks,
+                "hazard_kind": hazard_kind.value,
+                "kind": "environmental_hazard_started",
+                "location_id": location_id.value,
+                "remaining_ticks": remaining_ticks,
+            }
+        case EnvironmentalHazardEnded(
+            location_id=location_id,
+            hazard_kind=hazard_kind,
+            remaining_ticks=remaining_ticks,
+        ):
+            return {
+                "hazard_kind": hazard_kind.value,
+                "kind": "environmental_hazard_ended",
+                "location_id": location_id.value,
+                "remaining_ticks": remaining_ticks,
+            }
         case _:
             raise DomainSerializationError("unsupported_type", "$")
 
@@ -3778,6 +3836,55 @@ def _decode_production_details(
         duration,
         EntityId(_str_field(fields, "consumed_item_id", path=path)),
         success,
+    )
+
+
+def _decode_environment_details(
+    kind: str, fields: dict[str, Any], *, path: str
+) -> object:
+    """Decode replay-v7 environment details. Exact keys only."""
+    if kind == "season_changed":
+        _require_keys(fields, {"season"}, path=path)
+        return SeasonChanged(Season(_str_field(fields, "season", path=path)))
+    if kind == "temperature_band_changed":
+        _require_keys(fields, {"band", "location_id"}, path=path)
+        return TemperatureBandChanged(
+            EntityId(_str_field(fields, "location_id", path=path)),
+            TemperatureBand(_str_field(fields, "band", path=path)),
+        )
+    if kind == "resource_node_depleted":
+        _require_keys(fields, {"resource_id", "resulting_quantity"}, path=path)
+        return ResourceNodeDepleted(
+            EntityId(_str_field(fields, "resource_id", path=path)),
+            _float_field(fields, "resulting_quantity", path=path),
+        )
+    if kind == "resource_node_recovered":
+        _require_keys(fields, {"resource_id", "resulting_quantity"}, path=path)
+        return ResourceNodeRecovered(
+            EntityId(_str_field(fields, "resource_id", path=path)),
+            _float_field(fields, "resulting_quantity", path=path),
+        )
+    if kind == "environmental_hazard_started":
+        _require_keys(
+            fields,
+            {"duration_ticks", "hazard_kind", "location_id", "remaining_ticks"},
+            path=path,
+        )
+        return EnvironmentalHazardStarted(
+            EntityId(_str_field(fields, "location_id", path=path)),
+            HazardKind(_str_field(fields, "hazard_kind", path=path)),
+            _int_field(fields, "duration_ticks", path=path),
+            _int_field(fields, "remaining_ticks", path=path),
+        )
+    _require_keys(
+        fields,
+        {"hazard_kind", "location_id", "remaining_ticks"},
+        path=path,
+    )
+    return EnvironmentalHazardEnded(
+        EntityId(_str_field(fields, "location_id", path=path)),
+        HazardKind(_str_field(fields, "hazard_kind", path=path)),
+        _int_field(fields, "remaining_ticks", path=path),
     )
 
 
@@ -4173,9 +4280,23 @@ def _decode_event_details(
             "structure_repaired",
             "item_stored",
         }:
-            if schema_version != EVENT_SCHEMA_REPLAY_V6:
+            if schema_version not in {
+                EVENT_SCHEMA_REPLAY_V6,
+                EVENT_SCHEMA_REPLAY_V7,
+            }:
                 raise DomainSerializationError("invalid_event_schema_version", path)
             return _decode_production_details(kind, fields, path=path)
+        if kind in {
+            "season_changed",
+            "temperature_band_changed",
+            "resource_node_depleted",
+            "resource_node_recovered",
+            "environmental_hazard_started",
+            "environmental_hazard_ended",
+        }:
+            if schema_version != EVENT_SCHEMA_REPLAY_V7:
+                raise DomainSerializationError("invalid_event_schema_version", path)
+            return _decode_environment_details(kind, fields, path=path)
     except DomainSerializationError:
         raise
     except (TypeError, ValueError) as exc:
@@ -4184,6 +4305,34 @@ def _decode_event_details(
 
 
 def _encode_world_event(value: WorldEvent) -> dict[str, Any]:
+    details_kind = value.details.kind
+    if details_kind in {
+        "season_changed",
+        "temperature_band_changed",
+        "resource_node_depleted",
+        "resource_node_recovered",
+        "environmental_hazard_started",
+        "environmental_hazard_ended",
+    } and value.schema_version != EVENT_SCHEMA_REPLAY_V7:
+        raise DomainSerializationError(
+            "invalid_event_schema_version",
+            "$.schema_version",
+        )
+    if details_kind in {
+        "resource_harvested",
+        "craft_started",
+        "item_crafted",
+        "structure_built",
+        "structure_repaired",
+        "item_stored",
+    } and value.schema_version not in {
+        EVENT_SCHEMA_REPLAY_V6,
+        EVENT_SCHEMA_REPLAY_V7,
+    }:
+        raise DomainSerializationError(
+            "invalid_event_schema_version",
+            "$.schema_version",
+        )
     payload: dict[str, Any] = {
         "actor_id": None if value.actor_id is None else value.actor_id.value,
         "details": _encode_event_details(value.details),
@@ -4342,6 +4491,7 @@ def _decode_world_event(data: dict[str, Any], *, path: str) -> WorldEvent:
             EVENT_SCHEMA_REPLAY_V4,
             EVENT_SCHEMA_REPLAY_V5,
             EVENT_SCHEMA_REPLAY_V6,
+            EVENT_SCHEMA_REPLAY_V7,
         }:
             raise DomainSerializationError("unsupported_schema_version", path)
         actor_raw = data["actor_id"]

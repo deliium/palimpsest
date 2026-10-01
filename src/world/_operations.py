@@ -729,6 +729,7 @@ def prepare_action_batch(
     rules: object | None = None,
     tick: int | None = None,
     skill_efficiency: object | None = None,
+    witness_resource_nodes: bool = False,
 ) -> PendingBatch:
     """Resolve ordered requests into pending effects against one evolving state.
 
@@ -865,6 +866,7 @@ def prepare_action_batch(
             resolved=resolved,
             tick=tick,
             skill_efficiency=actor_efficiency,
+            witness_resource_nodes=witness_resource_nodes,
         )
         if application.result.disposition is RuleDisposition.REJECT:
             outcomes.append(

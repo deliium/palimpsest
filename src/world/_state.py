@@ -3,13 +3,54 @@
 from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
+from dataclasses import dataclass
 from types import MappingProxyType
 
-from world.identifiers import EntityId, EventId, WorldId, WorldRevision
+from world.environment import HazardKind
+from world.identifiers import (
+    EntityId,
+    EventId,
+    WorldId,
+    WorldRevision,
+    require_exact_nonneg_int,
+)
 from world.models import AgentBody, Item, Location, Resource, Weather
 from world.production import ProductionJob, Structure, ToolMark
 
-__all__: list[str] = ["World", "WorldState", "rebuild_world_state"]
+__all__: list[str] = ["ActiveHazard", "World", "WorldState", "rebuild_world_state"]
+
+
+@dataclass(frozen=True, slots=True)
+class ActiveHazard:
+    """One active hazard. Remaining ticks are derived, not stored."""
+
+    location_id: EntityId
+    kind: HazardKind
+    start_tick: int
+    duration_ticks: int
+
+    def __post_init__(self) -> None:
+        if type(self.location_id) is not EntityId:
+            raise TypeError("ActiveHazard.location_id must be EntityId")
+        if type(self.kind) is not HazardKind:
+            raise TypeError("ActiveHazard.kind must be HazardKind")
+        object.__setattr__(
+            self,
+            "start_tick",
+            require_exact_nonneg_int("ActiveHazard.start_tick", self.start_tick),
+        )
+        if (
+            isinstance(self.duration_ticks, bool)
+            or type(self.duration_ticks) is not int
+            or self.duration_ticks < 1
+        ):
+            raise ValueError("ActiveHazard.duration_ticks must be an integer >= 1")
+
+    def contains(self, tick: int) -> bool:
+        return self.start_tick <= tick < self.start_tick + self.duration_ticks
+
+    def remaining_ticks(self, tick: int) -> int:
+        return self.duration_ticks - (tick - self.start_tick)
 
 
 def rebuild_world_state(
@@ -24,6 +65,7 @@ def rebuild_world_state(
     structures: Mapping[EntityId, Structure] | None = None,
     production_jobs: Mapping[EntityId, ProductionJob] | None = None,
     tool_marks: Mapping[EntityId, ToolMark] | None = None,
+    active_hazards: Sequence[ActiveHazard] | None = None,
 ) -> WorldState:
     """Build a new immutable snapshot with deterministic EntityId ordering."""
     if type(state) is not WorldState:
@@ -38,6 +80,7 @@ def rebuild_world_state(
     structure_src = state.structures if structures is None else structures
     job_src = state.production_jobs if production_jobs is None else production_jobs
     mark_src = state.tool_marks if tool_marks is None else tool_marks
+    hazard_src = state.active_hazards if active_hazards is None else active_hazards
     return WorldState(
         state.revision if revision is None else revision,
         locations=tuple(
@@ -61,6 +104,12 @@ def rebuild_world_state(
         ),
         tool_marks=tuple(
             sorted(mark_src.values(), key=lambda value: value.item_id.value)
+        ),
+        active_hazards=tuple(
+            sorted(
+                hazard_src,
+                key=lambda value: (value.location_id.value, value.kind.value),
+            )
         ),
     )
 
@@ -88,6 +137,7 @@ class WorldState:
     """Authoritative immutable world snapshot. Not visible to agents."""
 
     __slots__ = (
+        "_active_hazards",
         "_bodies",
         "_items",
         "_locations",
@@ -111,6 +161,7 @@ class WorldState:
         structures: Sequence[Structure] = (),
         production_jobs: Sequence[ProductionJob] = (),
         tool_marks: Sequence[ToolMark] = (),
+        active_hazards: Sequence[ActiveHazard] = (),
     ) -> None:
         if type(revision) is not WorldRevision:
             raise TypeError("WorldState.revision must be WorldRevision")
@@ -135,6 +186,7 @@ class WorldState:
                 )
         job_index = _index_jobs(production_jobs)
         mark_index = _index_tool_marks(tool_marks)
+        hazard_index = _index_hazards(active_hazards, location_index)
         weather_index = _index_weather(weather, location_index)
         _validate_topology(location_index)
         _validate_weather_coverage(location_index, weather_index)
@@ -158,6 +210,7 @@ class WorldState:
         self._structures = MappingProxyType(structure_index)
         self._production_jobs = MappingProxyType(job_index)
         self._tool_marks = MappingProxyType(mark_index)
+        self._active_hazards = hazard_index
 
     @property
     def revision(self) -> WorldRevision:
@@ -194,6 +247,10 @@ class WorldState:
     @property
     def tool_marks(self) -> Mapping[EntityId, ToolMark]:
         return self._tool_marks
+
+    @property
+    def active_hazards(self) -> tuple[ActiveHazard, ...]:
+        return self._active_hazards
 
 
 class World:
@@ -297,6 +354,23 @@ def _index_jobs(jobs: Sequence[ProductionJob]) -> dict[EntityId, ProductionJob]:
             raise ValueError(f"duplicate production job for {job.actor_id.value!r}")
         indexed[job.actor_id] = job
     return indexed
+
+
+def _index_hazards(
+    hazards: Sequence[ActiveHazard],
+    locations: Mapping[EntityId, Location],
+) -> tuple[ActiveHazard, ...]:
+    indexed: dict[tuple[str, str], ActiveHazard] = {}
+    for hazard in hazards:
+        if type(hazard) is not ActiveHazard:
+            raise TypeError("active_hazards entries must be ActiveHazard")
+        if hazard.location_id not in locations:
+            raise ValueError("ActiveHazard.location_id must reference a known location")
+        key = (hazard.location_id.value, hazard.kind.value)
+        if key in indexed:
+            raise ValueError(f"duplicate active hazard {key[0]!r} {key[1]!r}")
+        indexed[key] = hazard
+    return tuple(indexed[key] for key in sorted(indexed))
 
 
 def _index_tool_marks(marks: Sequence[ToolMark]) -> dict[EntityId, ToolMark]:

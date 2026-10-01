@@ -67,6 +67,7 @@ from world.events import (
     EVENT_SCHEMA_REPLAY_V4,
     EVENT_SCHEMA_REPLAY_V5,
     EVENT_SCHEMA_REPLAY_V6,
+    EVENT_SCHEMA_REPLAY_V7,
 )
 
 _LOG: Final[logging.Logger] = logging.getLogger("simulation.compatibility")
@@ -136,6 +137,7 @@ _MATRIX: dict[str, CompatibilityEntry] = {
             EVENT_SCHEMA_REPLAY_V4,
             EVENT_SCHEMA_REPLAY_V5,
             EVENT_SCHEMA_REPLAY_V6,
+            EVENT_SCHEMA_REPLAY_V7,
         ),
         bump_trigger=(
             "Wire shape change for WorldEvent / occurrence details; "

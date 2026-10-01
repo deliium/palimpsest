@@ -56,6 +56,10 @@ class SystemEffectFamily(StrEnum):
     COMBINED_NEEDS = "combined_needs"
     EXPOSURE = "exposure"
     PRODUCTION = "production"
+    SEASON = "season"
+    TEMPERATURE_BAND = "temperature_band"
+    HAZARD = "hazard"
+    RESOURCE_NODE = "resource_node"
 
 
 @dataclass(frozen=True, slots=True)

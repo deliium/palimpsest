@@ -41,6 +41,7 @@ from world.events import (
     EVENT_SCHEMA_REPLAY_V4,
     EVENT_SCHEMA_REPLAY_V5,
     EVENT_SCHEMA_REPLAY_V6,
+    EVENT_SCHEMA_REPLAY_V7,
     WorldEvent,
     normalize_events,
 )
@@ -67,11 +68,12 @@ ACCEPTED_EVENT_SCHEMA_VERSIONS: Final[frozenset[int]] = frozenset(
         EVENT_SCHEMA_REPLAY_V4,
         EVENT_SCHEMA_REPLAY_V5,
         EVENT_SCHEMA_REPLAY_V6,
+        EVENT_SCHEMA_REPLAY_V7,
     }
 )
 ACCEPTED_PROJECTOR_VERSIONS: Final[frozenset[str]] = frozenset({"v1", "v2"})
 ACCEPTED_PERSISTENCE_CODEC_VERSIONS: Final[frozenset[str]] = frozenset(
-    {"v1", "v2", "v3"}
+    {"v1", "v2", "v3", "v4"}
 )
 
 _SHA256_HEX_RE: Final[re.Pattern[str]] = re.compile(r"^[0-9a-f]{64}$")
@@ -157,12 +159,17 @@ def _require_accepted_schema_version(name: str, value: object) -> int:
     return version
 
 
-def checkpoint_schema_for_production(*, production_active: bool) -> tuple[int, str]:
+def checkpoint_schema_for_production(
+    *, production_active: bool, dynamics_active: bool = False
+) -> tuple[int, str]:
     """Choose the checkpoint schema for this run.
 
-    A non-empty production catalog writes replay-v6 and codec ``v3``. Every
-    other run keeps the default replay-v5 / codec ``v2`` pair.
+    A set environmental spec writes replay-v7 and codec ``v4``, including when
+    a production catalog is also set. Production without that spec writes
+    replay-v6 and codec ``v3``. Every other run keeps replay-v5 and codec ``v2``.
     """
+    if dynamics_active:
+        return EVENT_SCHEMA_REPLAY_V7, "v4"
     if production_active:
         return EVENT_SCHEMA_REPLAY_V6, "v3"
     return EVENT_SCHEMA_VERSION, PERSISTENCE_CODEC_VERSION
@@ -224,6 +231,7 @@ def schema_projector_compatible(
         EVENT_SCHEMA_REPLAY_V4,
         EVENT_SCHEMA_REPLAY_V5,
         EVENT_SCHEMA_REPLAY_V6,
+        EVENT_SCHEMA_REPLAY_V7,
     }:
         return projector_version == "v2"
     return False
@@ -465,6 +473,9 @@ class WorldSnapshot:
         if self.persistence_codec_version == "v3":
             if self.event_schema_version != EVENT_SCHEMA_REPLAY_V6:
                 raise ValueError("codec v3 requires event schema 6")
+        elif self.persistence_codec_version == "v4":
+            if self.event_schema_version != EVENT_SCHEMA_REPLAY_V7:
+                raise ValueError("codec v4 requires event schema 7")
         elif self.structures or self.production_jobs or self.tool_marks:
             raise ValueError("production checkpoint fields require codec v3")
 
@@ -562,11 +573,17 @@ class RunCreateRequest:
             self.event_schema_version == EVENT_SCHEMA_REPLAY_V6
             and self.persistence_codec_version == "v3"
         )
+        dynamics_checkpoint = (
+            self.event_schema_version == EVENT_SCHEMA_REPLAY_V7
+            and self.persistence_codec_version == "v4"
+        )
         object.__setattr__(
             self,
             "event_schema_version",
             (
-                EVENT_SCHEMA_REPLAY_V6
+                EVENT_SCHEMA_REPLAY_V7
+                if dynamics_checkpoint
+                else EVENT_SCHEMA_REPLAY_V6
                 if production_checkpoint
                 else _require_write_schema_version(
                     "RunCreateRequest.event_schema_version", self.event_schema_version
@@ -584,7 +601,9 @@ class RunCreateRequest:
             self,
             "persistence_codec_version",
             (
-                "v3"
+                "v4"
+                if dynamics_checkpoint
+                else "v3"
                 if production_checkpoint
                 else _require_write_persistence_codec_version(
                     "RunCreateRequest.persistence_codec_version",

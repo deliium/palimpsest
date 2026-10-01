@@ -9,26 +9,36 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from world._production import shelter_factor_for
-from world._state import WorldState, rebuild_world_state
+from world._state import ActiveHazard, WorldState, rebuild_world_state
 from world.effects import (
     DeathCause,
     ResolvedSystemEffects,
     SystemEffectFamily,
 )
+from world.environment import (
+    EnvironmentalDynamicsSpec,
+    temperature_band,
+)
 from world.events import (
     Died,
+    EnvironmentalHazardEnded,
+    EnvironmentalHazardStarted,
     EventDetails,
     ExposureApplied,
     NeedsApplied,
     OccurrenceContext,
     ResourceRegenerated,
+    SeasonChanged,
+    TemperatureBandChanged,
     WeatherChanged,
     build_occurrence_context,
+    node_quantity_witness,
     require_event_details,
 )
 from world.identifiers import EntityId, require_exact_nonneg_int
 from world.models import (
     LifeStatus,
+    Location,
     PhysicalRules,
     copy_body,
     copy_resource,
@@ -41,6 +51,7 @@ from world.values import (
     Hunger,
     TemperatureCelsius,
     Thirst,
+    WeatherCondition,
     clamp_need,
     round_physical,
 )
@@ -133,6 +144,7 @@ def apply_autonomous_physical_step(
     hour: int,
     day_phase: DayPhase,
     resolved: ResolvedSystemEffects | None = None,
+    environmental_dynamics: EnvironmentalDynamicsSpec | None = None,
 ) -> PendingSystemStep:
     """Apply weather, regeneration, metabolism, and exposure in canonical order.
 
@@ -157,6 +169,14 @@ def apply_autonomous_physical_step(
         system_effects = resolved
     else:
         raise TypeError("resolved must be ResolvedSystemEffects or None")
+    if environmental_dynamics is None:
+        spec = None
+    elif type(environmental_dynamics) is EnvironmentalDynamicsSpec:
+        spec = environmental_dynamics
+    else:
+        raise TypeError(
+            "environmental_dynamics must be EnvironmentalDynamicsSpec or None"
+        )
 
     working = state
     semantic_mutation = False
@@ -164,6 +184,29 @@ def apply_autonomous_physical_step(
     family_ordinals: dict[SystemEffectFamily, int] = {
         family: 0 for family in SystemEffectFamily
     }
+
+    prior_conditions = (
+        {
+            location_id: working.weather[location_id].condition
+            for location_id in working.locations
+        }
+        if spec is not None
+        else {}
+    )
+    if spec is not None and spec.transitions_at(tick_value) and working.locations:
+        lowest = min(working.locations, key=lambda value: value.value)
+        ordinal = family_ordinals[SystemEffectFamily.SEASON]
+        family_ordinals[SystemEffectFamily.SEASON] = ordinal + 1
+        pending.append(
+            _pending_system(
+                effect_family=SystemEffectFamily.SEASON,
+                entity_id=lowest,
+                family_ordinal=ordinal,
+                details=SeasonChanged(season=spec.season_at(tick_value)),
+                origin_location_id=lowest,
+            )
+        )
+        semantic_mutation = True
 
     weather_scheduled = (tick_value + 1) % rules.weather_period_ticks == 0
     if weather_scheduled:
@@ -200,13 +243,69 @@ def apply_autonomous_physical_step(
     elif system_effects.weather_by_location:
         raise ValueError("resolved weather must be empty on non-scheduled ticks")
 
+    if spec is not None:
+        current_season = spec.season_at(tick_value)
+        previous_season = (
+            spec.season_at(tick_value - 1) if tick_value > 0 else current_season
+        )
+        phase_offsets = rules.phase_temperature_offset
+        assert phase_offsets is not None
+        phase_offset = phase_offsets[day_phase]
+        for location_id in sorted(working.locations, key=lambda value: value.value):
+            location = working.locations[location_id]
+            before = _ambient(
+                location,
+                prior_conditions[location_id],
+                phase_offset,
+                spec.offset_for(previous_season),
+                rules,
+            )
+            after = _ambient(
+                location,
+                working.weather[location_id].condition,
+                phase_offset,
+                spec.offset_for(current_season),
+                rules,
+            )
+            before_band = temperature_band(before)
+            after_band = temperature_band(after)
+            if before_band is after_band:
+                continue
+            ordinal = family_ordinals[SystemEffectFamily.TEMPERATURE_BAND]
+            family_ordinals[SystemEffectFamily.TEMPERATURE_BAND] = ordinal + 1
+            pending.append(
+                _pending_system(
+                    effect_family=SystemEffectFamily.TEMPERATURE_BAND,
+                    entity_id=location_id,
+                    family_ordinal=ordinal,
+                    details=TemperatureBandChanged(
+                        location_id=location_id,
+                        band=after_band,
+                    ),
+                    origin_location_id=location_id,
+                )
+            )
+            semantic_mutation = True
+
     resources = dict(working.resources)
     resources_changed = False
     for resource_id in sorted(resources, key=lambda value: value.value):
         resource = resources[resource_id]
-        if resource.regeneration_per_tick == 0.0:
+        rate = resource.regeneration_per_tick
+        if spec is not None:
+            season = spec.season_at(tick_value)
+            try:
+                multiplier = spec.multiplier_for(resource.kind, season)
+            except ValueError as exc:
+                if "yield_undefined" in str(exc):
+                    raise ValueError("yield_undefined") from exc
+                raise
+            rate = round_physical(resource.regeneration_per_tick * multiplier)
+            if spec.shortage_suppresses(resource.kind, tick_value):
+                rate = 0.0
+        if rate == 0.0:
             continue
-        uncapped = round_physical(resource.quantity + resource.regeneration_per_tick)
+        uncapped = round_physical(resource.quantity + rate)
         resulting = min(uncapped, resource.maximum_quantity)
         resulting = round_physical(resulting)
         if resulting == resource.quantity:
@@ -229,8 +328,37 @@ def apply_autonomous_physical_step(
                 origin_location_id=resource.location_id,
             )
         )
+        if spec is not None:
+            witness = node_quantity_witness(
+                resource_id, resource.quantity, resulting
+            )
+            if witness is not None:
+                node_ordinal = family_ordinals[SystemEffectFamily.RESOURCE_NODE]
+                family_ordinals[SystemEffectFamily.RESOURCE_NODE] = node_ordinal + 1
+                pending.append(
+                    _pending_system(
+                        effect_family=SystemEffectFamily.RESOURCE_NODE,
+                        entity_id=resource_id,
+                        family_ordinal=node_ordinal,
+                        details=witness,
+                        origin_location_id=resource.location_id,
+                    )
+                )
     if resources_changed:
         working = rebuild_world_state(working, resources=resources)
+
+    if spec is not None:
+        working, started = _start_hazards(
+            working,
+            spec,
+            tick_value,
+            day_phase,
+            rules,
+            family_ordinals,
+        )
+        pending.extend(started)
+        if started:
+            semantic_mutation = True
 
     phase_offsets = rules.phase_temperature_offset
     assert phase_offsets is not None
@@ -319,11 +447,19 @@ def apply_autonomous_physical_step(
 
         weather_offsets = rules.weather_temperature_offset
         assert weather_offsets is not None
-        ambient = round_physical(
-            location.base_temperature.value
-            + weather_offsets[weather.condition]
-            + phase_offset
-        )
+        if spec is None:
+            ambient = round_physical(
+                location.base_temperature.value
+                + weather_offsets[weather.condition]
+                + phase_offset
+            )
+        else:
+            ambient = round_physical(
+                location.base_temperature.value
+                + weather_offsets[weather.condition]
+                + phase_offset
+                + spec.offset_for(spec.season_at(tick_value))
+            )
         shelter = shelter_factor_for(
             working, body.location_id, location.shelter_factor.value
         )
@@ -341,6 +477,8 @@ def apply_autonomous_physical_step(
             or temperature.value > rules.exposure_high_celsius
         ):
             exposure_damage = rules.exposure_damage
+        if spec is not None and rules.exposure_damage != 0.0:
+            exposure_damage += _hazard_extra(working, spec, body.location_id)
         exposed_health = clamp_need(
             round_physical(next_body.health.value - exposure_damage)
         )
@@ -396,8 +534,147 @@ def apply_autonomous_physical_step(
     if bodies_changed:
         working = rebuild_world_state(working, bodies=bodies)
 
+    if spec is not None:
+        working, ended = _end_hazards(working, tick_value, family_ordinals)
+        pending.extend(ended)
+        if ended:
+            semantic_mutation = True
+
     return PendingSystemStep(
         working_state=working,
         semantic_mutation=semantic_mutation,
         pending_details=tuple(pending),
     )
+
+
+def _ambient(
+    location: Location,
+    condition: WeatherCondition,
+    phase_offset: float,
+    season_offset: float,
+    rules: PhysicalRules,
+) -> float:
+    if type(location) is not Location:
+        raise TypeError("location must be Location")
+    if type(condition) is not WeatherCondition:
+        raise TypeError("condition must be WeatherCondition")
+    weather_offsets = rules.weather_temperature_offset
+    assert weather_offsets is not None
+    return round_physical(
+        location.base_temperature.value
+        + weather_offsets[condition]
+        + phase_offset
+        + season_offset
+    )
+
+
+def _hazard_extra(
+    state: WorldState,
+    spec: EnvironmentalDynamicsSpec,
+    location_id: EntityId,
+) -> float:
+    extras = {rule.kind: rule.exposure_extra for rule in spec.hazard_rules}
+    total = 0.0
+    for hazard in state.active_hazards:
+        if hazard.location_id == location_id and hazard.kind in extras:
+            total += extras[hazard.kind]
+    return total
+
+
+def _start_hazards(
+    state: WorldState,
+    spec: EnvironmentalDynamicsSpec,
+    tick: int,
+    day_phase: DayPhase,
+    rules: PhysicalRules,
+    family_ordinals: dict[SystemEffectFamily, int],
+) -> tuple[WorldState, list[PendingSystemDetail]]:
+    season = spec.season_at(tick)
+    phase_offsets = rules.phase_temperature_offset
+    assert phase_offsets is not None
+    phase_offset = phase_offsets[day_phase]
+    active = {
+        (hazard.location_id, hazard.kind): hazard for hazard in state.active_hazards
+    }
+    started: list[PendingSystemDetail] = []
+    for location_id in sorted(state.locations, key=lambda value: value.value):
+        location = state.locations[location_id]
+        condition = state.weather[location_id].condition
+        band = temperature_band(
+            _ambient(
+                location,
+                condition,
+                phase_offset,
+                spec.offset_for(season),
+                rules,
+            )
+        )
+        for rule in spec.matching_rules(season, condition, band):
+            key = (location_id, rule.kind)
+            if key in active:
+                continue
+            active[key] = ActiveHazard(
+                location_id,
+                rule.kind,
+                tick,
+                rule.duration_ticks,
+            )
+            ordinal = family_ordinals[SystemEffectFamily.HAZARD]
+            family_ordinals[SystemEffectFamily.HAZARD] = ordinal + 1
+            started.append(
+                _pending_system(
+                    effect_family=SystemEffectFamily.HAZARD,
+                    entity_id=location_id,
+                    family_ordinal=ordinal,
+                    details=EnvironmentalHazardStarted(
+                        location_id,
+                        rule.kind,
+                        rule.duration_ticks,
+                        rule.duration_ticks,
+                    ),
+                    origin_location_id=location_id,
+                )
+            )
+    if not started:
+        return state, []
+    return (
+        rebuild_world_state(state, active_hazards=tuple(active.values())),
+        started,
+    )
+
+
+def _end_hazards(
+    state: WorldState,
+    tick: int,
+    family_ordinals: dict[SystemEffectFamily, int],
+) -> tuple[WorldState, list[PendingSystemDetail]]:
+    staying: list[ActiveHazard] = []
+    ending: list[ActiveHazard] = []
+    for hazard in state.active_hazards:
+        closing = hazard.start_tick + hazard.duration_ticks - 1
+        if tick == closing:
+            ending.append(hazard)
+        else:
+            staying.append(hazard)
+    if not ending:
+        return state, []
+    ended: list[PendingSystemDetail] = []
+    for hazard in sorted(
+        ending, key=lambda item: (item.location_id.value, item.kind.value)
+    ):
+        ordinal = family_ordinals[SystemEffectFamily.HAZARD]
+        family_ordinals[SystemEffectFamily.HAZARD] = ordinal + 1
+        ended.append(
+            _pending_system(
+                effect_family=SystemEffectFamily.HAZARD,
+                entity_id=hazard.location_id,
+                family_ordinal=ordinal,
+                details=EnvironmentalHazardEnded(
+                    hazard.location_id,
+                    hazard.kind,
+                    0,
+                ),
+                origin_location_id=hazard.location_id,
+            )
+        )
+    return rebuild_world_state(state, active_hazards=tuple(staying)), ended

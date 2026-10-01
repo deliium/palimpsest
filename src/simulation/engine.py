@@ -200,6 +200,7 @@ class WorldEngine:
         "_bootstrap",
         "_config",
         "_engine_id",
+        "_environmental_dynamics",
         "_last_tick_result",
         "_perception",
         "_production_catalog",
@@ -229,6 +230,7 @@ class WorldEngine:
         teaching_policy: object | None = None,
         teaching_entity_ids: Sequence[object] | None = None,
         production_catalog: object | None = None,
+        environmental_dynamics: object | None = None,
     ) -> None:
         if type(config) is not SimulationRunConfig:
             raise TypeError("WorldEngine requires SimulationRunConfig")
@@ -276,6 +278,9 @@ class WorldEngine:
             teaching_entity_ids=teaching_entity_ids,
         )
         self._production_catalog = _optional_production_catalog(production_catalog)
+        self._environmental_dynamics = _optional_environmental_dynamics(
+            environmental_dynamics
+        )
         _LOGGER.debug(
             "%s world_id=%s revision=%s tick=%s registrations=%s",
             EngineDiagnosticCode.BOOTSTRAP_VALIDATED.value,
@@ -300,6 +305,7 @@ class WorldEngine:
         teaching_entity_ids: Sequence[object] | None = None,
         teaching_offers: object | None = None,
         production_catalog: object | None = None,
+        environmental_dynamics: object | None = None,
     ) -> WorldEngine:
         """Restore an engine at ``AWAITING_OBSERVATION`` from a checkpoint.
 
@@ -461,6 +467,9 @@ class WorldEngine:
             teaching_entity_ids=teaching_entity_ids,
         )
         engine._production_catalog = _optional_production_catalog(production_catalog)
+        engine._environmental_dynamics = _optional_environmental_dynamics(
+            environmental_dynamics
+        )
         engine._require_refolded_teaching_offers(
             teaching_offers=teaching_offers,
             initial_state=base_state,
@@ -1142,6 +1151,7 @@ class WorldEngine:
             rules=physical_rules,
             tick=snap.tick.value,
             skill_efficiency=self._skill_efficiency_map(rules=physical_rules),
+            witness_resource_nodes=self._environmental_dynamics is not None,
         )
         start_ledger = self._skill_ledger
         folded_ledger, skill_facts = self._fold_skill_ledger(
@@ -1193,14 +1203,25 @@ class WorldEngine:
             working_state=completion_state,
             rules=physical_rules,
         )
-        physical = apply_autonomous_physical_step(
-            state=completion_state,
-            rules=physical_rules,
-            tick=snap.tick.value,
-            hour=physical_rules.hour_for_tick(snap.tick.value),
-            day_phase=physical_rules.day_phase_for_tick(snap.tick.value),
-            resolved=system_effects,
-        )
+        try:
+            physical = apply_autonomous_physical_step(
+                state=completion_state,
+                rules=physical_rules,
+                tick=snap.tick.value,
+                hour=physical_rules.hour_for_tick(snap.tick.value),
+                day_phase=physical_rules.day_phase_for_tick(snap.tick.value),
+                resolved=system_effects,
+                environmental_dynamics=self._environmental_dynamics,
+            )
+        except ValueError as exc:
+            message = str(exc)
+            if "yield_undefined" in message:
+                _LOGGER.warning("yield_undefined reason_code=yield_undefined")
+            if "duplicate_shortage_window" in message:
+                _LOGGER.warning(
+                    "duplicate_shortage_window reason_code=duplicate_shortage_window"
+                )
+            raise
         family_counts = {family.value: 0 for family in SystemEffectFamily}
         system_pending: list[PendingEvent] = []
         for detail in physical.pending_details:
@@ -1229,6 +1250,8 @@ class WorldEngine:
         _LOGGER.debug(
             "%s tick=%s family_weather=%s family_regeneration=%s "
             "family_combined_needs=%s family_exposure=%s "
+            "family_season=%s family_temperature_band=%s family_hazard=%s "
+            "family_resource_node=%s "
             "system_events=%s system_mutation=%s",
             EngineDiagnosticCode.RESOLUTION_APPLIED.value,
             snap.tick.value,
@@ -1236,6 +1259,10 @@ class WorldEngine:
             family_counts[SystemEffectFamily.REGENERATION.value],
             family_counts[SystemEffectFamily.COMBINED_NEEDS.value],
             family_counts[SystemEffectFamily.EXPOSURE.value],
+            family_counts[SystemEffectFamily.SEASON.value],
+            family_counts[SystemEffectFamily.TEMPERATURE_BAND.value],
+            family_counts[SystemEffectFamily.HAZARD.value],
+            family_counts[SystemEffectFamily.RESOURCE_NODE.value],
             len(system_pending),
             physical.semantic_mutation,
         )
@@ -1352,15 +1379,9 @@ class WorldEngine:
                 )
                 raise TypeError("pending event cause must be EventCause")
 
-        from world.events import (
-            CURRENT_PHYSICAL_EVENT_SCHEMA_VERSION,
-            EVENT_SCHEMA_REPLAY_V6,
-        )
-
-        event_schema = (
-            EVENT_SCHEMA_REPLAY_V6
-            if self._production_catalog is not None
-            else CURRENT_PHYSICAL_EVENT_SCHEMA_VERSION
+        event_schema, _codec = select_checkpoint_schema(
+            production_active=self._production_catalog is not None,
+            dynamics_active=self._environmental_dynamics is not None,
         )
         prepared = finalize_pending_batch(
             merged,
@@ -1390,6 +1411,20 @@ class WorldEngine:
             }:
                 _LOGGER.info(
                     "production_event_committed event_id=%s tick=%s kind=%s",
+                    event.event_id.value,
+                    event.tick,
+                    event.details.kind,
+                )
+            if event.details.kind in {
+                "season_changed",
+                "temperature_band_changed",
+                "resource_node_depleted",
+                "resource_node_recovered",
+                "environmental_hazard_started",
+                "environmental_hazard_ended",
+            }:
+                _LOGGER.info(
+                    "environment_event_committed event_id=%s tick=%s kind=%s",
                     event.event_id.value,
                     event.tick,
                     event.details.kind,
@@ -2356,6 +2391,63 @@ def _production_creates_entity(
         and structure.kind is StructureKind.STORE
         for structure in state.structures.values()
     )
+
+
+def select_checkpoint_schema(
+    *, production_active: bool, dynamics_active: bool
+) -> tuple[int, str]:
+    """Return the legal event-schema and codec pair for this run."""
+    from simulation.persistence import (
+        EVENT_SCHEMA_VERSION,
+        PERSISTENCE_CODEC_VERSION,
+        checkpoint_schema_for_production,
+    )
+    from world.events import EVENT_SCHEMA_REPLAY_V6, EVENT_SCHEMA_REPLAY_V7
+
+    schema_version, codec = checkpoint_schema_for_production(
+        production_active=production_active,
+        dynamics_active=dynamics_active,
+    )
+    agreed = (
+        dynamics_active
+        and schema_version == EVENT_SCHEMA_REPLAY_V7
+        and codec == "v4"
+    ) or (
+        not dynamics_active
+        and production_active
+        and schema_version == EVENT_SCHEMA_REPLAY_V6
+        and codec == "v3"
+    ) or (
+        not dynamics_active
+        and not production_active
+        and schema_version == EVENT_SCHEMA_VERSION
+        and codec == PERSISTENCE_CODEC_VERSION
+    )
+    if not agreed:
+        _LOGGER.error(
+            "unsupported_schema_version schema_version=%s codec=%s",
+            schema_version,
+            codec,
+        )
+        raise ValueError("unsupported_schema_version")
+    _LOGGER.debug(
+        "environment_schema_selected schema_version=%s codec=%s",
+        schema_version,
+        codec,
+    )
+    return schema_version, codec
+
+
+def _optional_environmental_dynamics(value: object | None) -> object | None:
+    if value is None:
+        return None
+    from world.environment import EnvironmentalDynamicsSpec
+
+    if type(value) is not EnvironmentalDynamicsSpec:
+        raise TypeError(
+            "environmental_dynamics must be EnvironmentalDynamicsSpec or None"
+        )
+    return value
 
 
 def _optional_production_catalog(value: object | None) -> object | None:
