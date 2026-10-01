@@ -19,6 +19,13 @@ from collections.abc import Sequence
 from typing import Final
 
 from world._state import WorldState
+from world.environment import (
+    EnvironmentalDynamicsSpec,
+    HazardKind,
+    Season,
+    TemperatureBand,
+    temperature_band,
+)
 from world.events import (
     Asked,
     CraftStarted,
@@ -53,7 +60,7 @@ from world.observations import (
     coarse_health_for,
     observed_self_from_body,
 )
-from world.values import WeatherCondition
+from world.values import WeatherCondition, round_physical
 
 _LOG: Final[logging.Logger] = logging.getLogger("world._perception")
 _PRODUCTION_DETAIL_TYPES: Final[frozenset[type]] = frozenset(
@@ -86,6 +93,7 @@ class PerceptionService:
         observer_ids: Sequence[EntityId],
         context: ObservationContext,
         prior_events: Sequence[WorldEvent] = (),
+        environmental_dynamics: object | None = None,
     ) -> tuple[Observation, ...]:
         """Project exactly one detached observation per ordered observer id."""
         if type(world_id) is not WorldId:
@@ -94,6 +102,14 @@ class PerceptionService:
             raise TypeError("PerceptionService.project requires WorldState")
         if type(context) is not ObservationContext:
             raise TypeError("PerceptionService.project requires ObservationContext")
+        if (
+            environmental_dynamics is not None
+            and type(environmental_dynamics) is not EnvironmentalDynamicsSpec
+        ):
+            raise TypeError(
+                "PerceptionService.project environmental_dynamics must be "
+                "EnvironmentalDynamicsSpec or None"
+            )
         observers = _copy_observer_ids(observer_ids)
         events = _copy_prior_events(prior_events, observation_tick=context.tick)
         for observer_id in observers:
@@ -108,6 +124,7 @@ class PerceptionService:
                 observer_id=observer_id,
                 context=context,
                 prior_events=events,
+                environmental_dynamics=environmental_dynamics,
             )
             for observer_id in observers
         )
@@ -120,6 +137,7 @@ def project_observations(
     observer_ids: Sequence[EntityId],
     context: ObservationContext | None = None,
     prior_events: Sequence[WorldEvent] = (),
+    environmental_dynamics: object | None = None,
 ) -> tuple[Observation, ...]:
     """Compatibility wrapper around :class:`PerceptionService`."""
     resolved = context if context is not None else ObservationContext(tick=0)
@@ -129,6 +147,7 @@ def project_observations(
         observer_ids=observer_ids,
         context=resolved,
         prior_events=prior_events,
+        environmental_dynamics=environmental_dynamics,
     )
 
 
@@ -139,6 +158,7 @@ def _project_one(
     observer_id: EntityId,
     context: ObservationContext,
     prior_events: tuple[WorldEvent, ...],
+    environmental_dynamics: object | None,
 ) -> Observation:
     body = state.bodies[observer_id]
     location_id = body.location_id
@@ -171,6 +191,13 @@ def _project_one(
             recipes[0] if recipes else "-",
             len(structures),
         )
+    season, band, kinds = _present_environment(
+        state=state,
+        location_id=location_id,
+        context=context,
+        condition=condition,
+        spec=environmental_dynamics,
+    )
     return Observation(
         world_id=world_id,
         observer_id=observer_id,
@@ -198,7 +225,55 @@ def _project_one(
         day_phase=context.day_phase,
         visibility=visibility,
         weather_condition=condition,
+        season=season,
+        temperature_band=band,
+        hazard_kinds=kinds,
     )
+
+
+def _present_environment(
+    *,
+    state: WorldState,
+    location_id: EntityId,
+    context: ObservationContext,
+    condition: WeatherCondition,
+    spec: object | None,
+) -> tuple[
+    Season | None, TemperatureBand | None, tuple[HazardKind, ...] | None
+]:
+    if spec is None:
+        return None, None, None
+    if type(spec) is not EnvironmentalDynamicsSpec:
+        raise TypeError(
+            "environmental dynamics must be EnvironmentalDynamicsSpec or None"
+        )
+    location = state.locations.get(location_id)
+    season = spec.season_at(context.tick)
+    band = None
+    if location is not None:
+        rules = context.physical_rules
+        phase_offsets = rules.phase_temperature_offset
+        weather_offsets = rules.weather_temperature_offset
+        assert phase_offsets is not None and weather_offsets is not None
+        ambient = round_physical(
+            location.base_temperature.value
+            + weather_offsets[condition]
+            + phase_offsets[context.day_phase]
+            + spec.offset_for(season)
+        )
+        band = temperature_band(ambient)
+    kinds = tuple(
+        hazard.kind
+        for hazard in state.active_hazards
+        if hazard.location_id == location_id and hazard.contains(context.tick)
+    )
+    _LOG.debug(
+        "environment_observed season=%s band=%s hazard_count=%s",
+        season.value,
+        band.value if band is not None else "-",
+        len(kinds),
+    )
+    return season, band, kinds
 
 
 def _copy_observer_ids(values: Sequence[EntityId]) -> tuple[EntityId, ...]:

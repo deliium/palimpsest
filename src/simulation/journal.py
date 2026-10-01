@@ -47,6 +47,7 @@ from simulation.serialization import (
     _encode_resource,
     _encode_weather,
 )
+from world.environment import ActiveHazard, HazardKind
 from world.events import (
     EVENT_SCHEMA_REPLAY_V2,
     EVENT_SCHEMA_REPLAY_V3,
@@ -407,6 +408,7 @@ def bind_snapshot_commit_hash(
         structures=snapshot.structures,
         production_jobs=snapshot.production_jobs,
         tool_marks=snapshot.tool_marks,
+        active_hazards=snapshot.active_hazards,
     )
     return WorldSnapshot(
         snapshot_id=draft.snapshot_id,
@@ -431,6 +433,7 @@ def bind_snapshot_commit_hash(
         structures=draft.structures,
         production_jobs=draft.production_jobs,
         tool_marks=draft.tool_marks,
+        active_hazards=draft.active_hazards,
     )
 
 
@@ -715,7 +718,7 @@ def _encode_world_snapshot(
             "weather": [_encode_weather(item) for item in value.weather],
             "world_id": value.world_id.value,
         }
-        if value.persistence_codec_version == "v3":
+        if value.persistence_codec_version in {"v3", "v4"}:
             payload["structures"] = [
                 _encode_structure(item) for item in value.structures
             ]
@@ -724,6 +727,10 @@ def _encode_world_snapshot(
             ]
             payload["tool_marks"] = [
                 _encode_tool_mark(item) for item in value.tool_marks
+            ]
+        if value.persistence_codec_version == "v4":
+            payload["active_hazards"] = [
+                _encode_active_hazard(item) for item in value.active_hazards
             ]
     except DomainSerializationError as exc:
         raise _map_domain_error(exc) from exc
@@ -755,8 +762,10 @@ def _decode_world_snapshot(data: dict[str, Any], *, path: str) -> WorldSnapshot:
         "integrity_hash",
         "predecessor_commit_hash",
     }
-    if codec == "v3":
+    if codec in {"v3", "v4"}:
         keys |= {"structures", "production_jobs", "tool_marks"}
+    if codec == "v4":
+        keys.add("active_hazards")
     _require_keys(data, keys, path=path)
     config_raw = data["config"]
     if not isinstance(config_raw, dict):
@@ -813,25 +822,55 @@ def _decode_world_snapshot(data: dict[str, Any], *, path: str) -> WorldSnapshot:
             structures=_decode_object_list(
                 data["structures"], _decode_structure, path=f"{path}.structures"
             )
-            if codec == "v3"
+            if codec in {"v3", "v4"}
             else (),
             production_jobs=_decode_object_list(
                 data["production_jobs"],
                 _decode_production_job,
                 path=f"{path}.production_jobs",
             )
-            if codec == "v3"
+            if codec in {"v3", "v4"}
             else (),
             tool_marks=_decode_object_list(
                 data["tool_marks"], _decode_tool_mark, path=f"{path}.tool_marks"
             )
-            if codec == "v3"
+            if codec in {"v3", "v4"}
+            else (),
+            active_hazards=_decode_object_list(
+                data["active_hazards"],
+                _decode_active_hazard,
+                path=f"{path}.active_hazards",
+            )
+            if codec == "v4"
             else (),
         )
     except PersistenceSerializationError:
         raise
     except (TypeError, ValueError) as exc:
         raise PersistenceSerializationError("malformed_id", path) from exc
+
+
+def _encode_active_hazard(value: ActiveHazard) -> dict[str, Any]:
+    return {
+        "duration_ticks": value.duration_ticks,
+        "kind": value.kind.value,
+        "location_id": value.location_id.value,
+        "start_tick": value.start_tick,
+    }
+
+
+def _decode_active_hazard(data: dict[str, Any], *, path: str) -> ActiveHazard:
+    _require_keys(
+        data,
+        {"location_id", "kind", "start_tick", "duration_ticks"},
+        path=path,
+    )
+    return ActiveHazard(
+        EntityId(_str_field(data, "location_id", path=path)),
+        HazardKind(_str_field(data, "kind", path=path)),
+        _nonneg_int_field(data, "start_tick", path=path),
+        _nonneg_int_field(data, "duration_ticks", path=path),
+    )
 
 
 def _encode_structure(value: Structure) -> dict[str, Any]:

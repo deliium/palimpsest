@@ -3,54 +3,19 @@
 from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
-from dataclasses import dataclass
 from types import MappingProxyType
 
-from world.environment import HazardKind
+from world.environment import ActiveHazard
 from world.identifiers import (
     EntityId,
     EventId,
     WorldId,
     WorldRevision,
-    require_exact_nonneg_int,
 )
 from world.models import AgentBody, Item, Location, Resource, Weather
 from world.production import ProductionJob, Structure, ToolMark
 
 __all__: list[str] = ["ActiveHazard", "World", "WorldState", "rebuild_world_state"]
-
-
-@dataclass(frozen=True, slots=True)
-class ActiveHazard:
-    """One active hazard. Remaining ticks are derived, not stored."""
-
-    location_id: EntityId
-    kind: HazardKind
-    start_tick: int
-    duration_ticks: int
-
-    def __post_init__(self) -> None:
-        if type(self.location_id) is not EntityId:
-            raise TypeError("ActiveHazard.location_id must be EntityId")
-        if type(self.kind) is not HazardKind:
-            raise TypeError("ActiveHazard.kind must be HazardKind")
-        object.__setattr__(
-            self,
-            "start_tick",
-            require_exact_nonneg_int("ActiveHazard.start_tick", self.start_tick),
-        )
-        if (
-            isinstance(self.duration_ticks, bool)
-            or type(self.duration_ticks) is not int
-            or self.duration_ticks < 1
-        ):
-            raise ValueError("ActiveHazard.duration_ticks must be an integer >= 1")
-
-    def contains(self, tick: int) -> bool:
-        return self.start_tick <= tick < self.start_tick + self.duration_ticks
-
-    def remaining_ticks(self, tick: int) -> int:
-        return self.duration_ticks - (tick - self.start_tick)
 
 
 def rebuild_world_state(

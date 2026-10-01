@@ -35,6 +35,7 @@ from simulation.run_control import (
     StreamRecord,
     StreamRecordDraft,
 )
+from world.environment import ActiveHazard
 from world.events import (
     EVENT_SCHEMA_REPLAY_V2,
     EVENT_SCHEMA_REPLAY_V3,
@@ -353,6 +354,17 @@ def _copy_production_rows[T](values: object, model_type: type[T]) -> tuple[T, ..
     return tuple(copied)
 
 
+def _copy_hazard_rows(values: object) -> tuple[ActiveHazard, ...]:
+    if isinstance(values, (str, bytes)) or not isinstance(values, Sequence):
+        raise TypeError("active_hazards collection must be a sequence")
+    copied: list[ActiveHazard] = []
+    for value in values:
+        if type(value) is not ActiveHazard:
+            raise TypeError("entries must be ActiveHazard")
+        copied.append(value)
+    return tuple(copied)
+
+
 @dataclass(frozen=True, slots=True)
 class WorldSnapshot:
     """Immutable objective checkpoint. Contains no live World or session token."""
@@ -379,6 +391,7 @@ class WorldSnapshot:
     structures: Sequence[Structure] = ()
     production_jobs: Sequence[ProductionJob] = ()
     tool_marks: Sequence[ToolMark] = ()
+    active_hazards: Sequence[ActiveHazard] = ()
 
     def __post_init__(self) -> None:
         if type(self.snapshot_id) is not SnapshotId:
@@ -470,6 +483,9 @@ class WorldSnapshot:
         object.__setattr__(
             self, "tool_marks", _copy_production_rows(self.tool_marks, ToolMark)
         )
+        object.__setattr__(
+            self, "active_hazards", _copy_hazard_rows(self.active_hazards)
+        )
         if self.persistence_codec_version == "v3":
             if self.event_schema_version != EVENT_SCHEMA_REPLAY_V6:
                 raise ValueError("codec v3 requires event schema 6")
@@ -478,6 +494,8 @@ class WorldSnapshot:
                 raise ValueError("codec v4 requires event schema 7")
         elif self.structures or self.production_jobs or self.tool_marks:
             raise ValueError("production checkpoint fields require codec v3")
+        if self.persistence_codec_version != "v4" and self.active_hazards:
+            raise ValueError("active_hazards require codec v4")
 
 
 @dataclass(frozen=True, slots=True)
@@ -796,6 +814,7 @@ class ReplayRequest:
     teaching_entity_ids: Sequence[object] | None = None
     teaching_offers: object | None = None
     production_catalog: object | None = None
+    environmental_dynamics: object | None = None
 
     def __post_init__(self) -> None:
         if type(self.run_id) is not RunId:

@@ -8,6 +8,7 @@ Field / projection           Access
 self physiology / inventory  ALWAYS_SELF
 hour, day_phase, visibility  ALWAYS_SELF
 weather_condition            ALWAYS_SELF
+season / band / hazards      ALWAYS_SELF (present only when dynamics are on)
 current location (id/name)   ALWAYS_SELF
 adjacent exits               ALWAYS_SELF
 held inventory item details  ALWAYS_SELF
@@ -38,6 +39,7 @@ from typing import Literal
 
 from world._freeze import freeze_mapping, require_non_empty
 from world.communications import StructuredUtterance
+from world.environment import HazardKind, Season, TemperatureBand
 from world.identifiers import (
     EntityId,
     EventId,
@@ -110,6 +112,9 @@ PERCEPTION_FIELD_ACCESS: Mapping[str, ObservationFieldAccess] = {
     "day_phase": ObservationFieldAccess.ALWAYS_SELF,
     "visibility": ObservationFieldAccess.ALWAYS_SELF,
     "weather_condition": ObservationFieldAccess.ALWAYS_SELF,
+    "season": ObservationFieldAccess.ALWAYS_SELF,
+    "temperature_band": ObservationFieldAccess.ALWAYS_SELF,
+    "hazard_kinds": ObservationFieldAccess.ALWAYS_SELF,
     "location": ObservationFieldAccess.ALWAYS_SELF,
     "exits": ObservationFieldAccess.ALWAYS_SELF,
     "held_items": ObservationFieldAccess.ALWAYS_SELF,
@@ -601,6 +606,9 @@ class Observation:
     day_phase: DayPhase | None = None
     visibility: float | None = None
     weather_condition: WeatherCondition | None = None
+    season: Season | None = None
+    temperature_band: TemperatureBand | None = None
+    hazard_kinds: Sequence[HazardKind] | None = None
 
     def __post_init__(self) -> None:
         if type(self.world_id) is not WorldId:
@@ -699,6 +707,20 @@ class Observation:
             raise TypeError(
                 "Observation.weather_condition must be WeatherCondition or None"
             )
+        if self.season is not None and type(self.season) is not Season:
+            raise TypeError("Observation.season must be Season or None")
+        if (
+            self.temperature_band is not None
+            and type(self.temperature_band) is not TemperatureBand
+        ):
+            raise TypeError(
+                "Observation.temperature_band must be TemperatureBand or None"
+            )
+        object.__setattr__(
+            self,
+            "hazard_kinds",
+            _copy_hazard_kinds(self.hazard_kinds),
+        )
         if self.self_body is not None and self.self_body.entity_id != self.observer_id:
             raise ValueError("Observation.self_body must match observer_id")
         _validate_ordered_ids(
@@ -732,6 +754,23 @@ class Observation:
                     raise ValueError(
                         "Observation held item must appear in ObservedSelf.inventory"
                     )
+
+
+def _copy_hazard_kinds(
+    values: Sequence[HazardKind] | None,
+) -> tuple[HazardKind, ...] | None:
+    if values is None:
+        return None
+    if isinstance(values, (str, bytes, bytearray)) or not isinstance(values, Sequence):
+        raise TypeError("Observation.hazard_kinds must be an ordered sequence or None")
+    copied = tuple(values)
+    for kind in copied:
+        if type(kind) is not HazardKind:
+            raise TypeError("Observation.hazard_kinds entries must be HazardKind")
+    ordered = tuple(sorted(copied, key=lambda kind: kind.value))
+    if len(ordered) != len(set(ordered)):
+        raise ValueError("Observation.hazard_kinds must not contain duplicates")
+    return ordered
 
 
 def _validate_ordered_ids(name: str, values: tuple[EntityId, ...]) -> None:

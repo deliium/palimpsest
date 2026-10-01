@@ -2473,8 +2473,39 @@ def _decode_proposal(data: dict[str, Any], *, path: str) -> ActionProposal:
         raise DomainSerializationError("invalid_model", path) from exc
 
 
+def _optional_season(data: Mapping[str, Any], *, path: str) -> Season | None:
+    if "season" not in data:
+        return None
+    raw = data["season"]
+    if not isinstance(raw, str):
+        raise DomainSerializationError("invalid_enum", f"{path}.season")
+    return Season(raw)
+
+
+def _optional_temperature_band(
+    data: Mapping[str, Any], *, path: str
+) -> TemperatureBand | None:
+    if "temperature_band" not in data:
+        return None
+    raw = data["temperature_band"]
+    if not isinstance(raw, str):
+        raise DomainSerializationError("invalid_enum", f"{path}.temperature_band")
+    return TemperatureBand(raw)
+
+
+def _optional_hazard_kinds(
+    data: Mapping[str, Any], *, path: str
+) -> tuple[HazardKind, ...] | None:
+    if "hazard_kinds" not in data:
+        return None
+    raw = data["hazard_kinds"]
+    if not isinstance(raw, list) or not all(isinstance(item, str) for item in raw):
+        raise DomainSerializationError("invalid_enum", f"{path}.hazard_kinds")
+    return tuple(HazardKind(item) for item in raw)
+
+
 def _encode_observation(value: Observation) -> dict[str, Any]:
-    return {
+    encoded = {
         "communications": [
             _encode_observed_communication(item) for item in value.communications
         ],
@@ -2503,6 +2534,13 @@ def _encode_observation(value: Observation) -> dict[str, Any]:
         ),
         "world_id": value.world_id.value,
     }
+    if value.season is not None:
+        encoded["season"] = value.season.value
+    if value.temperature_band is not None:
+        encoded["temperature_band"] = value.temperature_band.value
+    if value.hazard_kinds is not None:
+        encoded["hazard_kinds"] = [kind.value for kind in value.hazard_kinds]
+    return encoded
 
 
 def _decode_observation(data: dict[str, Any], *, path: str) -> Observation:
@@ -2527,7 +2565,7 @@ def _decode_observation(data: dict[str, Any], *, path: str) -> Observation:
             "weather_condition",
         },
         path=path,
-        optional={"structures"},
+        optional={"structures", "season", "temperature_band", "hazard_kinds"},
     )
     self_body_raw = data["self_body"]
     try:
@@ -2550,6 +2588,9 @@ def _decode_observation(data: dict[str, Any], *, path: str) -> Observation:
                     "invalid_enum", f"{path}.weather_condition"
                 )
             weather_condition = WeatherCondition(weather_raw)
+        season = _optional_season(data, path=path)
+        band = _optional_temperature_band(data, path=path)
+        hazard_kinds = _optional_hazard_kinds(data, path=path)
         return Observation(
             world_id=WorldId(_str_field(data, "world_id", path=path)),
             observer_id=EntityId(_str_field(data, "observer_id", path=path)),
@@ -2600,6 +2641,9 @@ def _decode_observation(data: dict[str, Any], *, path: str) -> Observation:
                 else _float_field(data, "visibility", path=path)
             ),
             weather_condition=weather_condition,
+            season=season,
+            temperature_band=band,
+            hazard_kinds=hazard_kinds,
         )
     except DomainSerializationError:
         raise

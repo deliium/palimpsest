@@ -17,6 +17,7 @@ from enum import StrEnum
 from types import MappingProxyType
 from typing import Final
 
+from world.identifiers import EntityId, require_exact_nonneg_int
 from world.values import ResourceKind, WeatherCondition
 
 _LOG: Final[logging.Logger] = logging.getLogger("world.environment")
@@ -37,6 +38,7 @@ __all__ = [
     "HOT_AMBIENT_AT",
     "SCARCITY_SEASON_LENGTH_TICKS",
     "SEASON_COUNT",
+    "ActiveHazard",
     "EnvironmentalDynamicsSpec",
     "HazardKind",
     "HazardRule",
@@ -66,6 +68,39 @@ class TemperatureBand(StrEnum):
     COLD = "cold"
     MILD = "mild"
     HOT = "hot"
+
+
+@dataclass(frozen=True, slots=True)
+class ActiveHazard:
+    """One active hazard. Remaining ticks are derived, not stored."""
+
+    location_id: EntityId
+    kind: HazardKind
+    start_tick: int
+    duration_ticks: int
+
+    def __post_init__(self) -> None:
+        if type(self.location_id) is not EntityId:
+            raise TypeError("ActiveHazard.location_id must be EntityId")
+        if type(self.kind) is not HazardKind:
+            raise TypeError("ActiveHazard.kind must be HazardKind")
+        object.__setattr__(
+            self,
+            "start_tick",
+            require_exact_nonneg_int("ActiveHazard.start_tick", self.start_tick),
+        )
+        if (
+            isinstance(self.duration_ticks, bool)
+            or type(self.duration_ticks) is not int
+            or self.duration_ticks < 1
+        ):
+            raise ValueError("ActiveHazard.duration_ticks must be an integer >= 1")
+
+    def contains(self, tick: int) -> bool:
+        return self.start_tick <= tick < self.start_tick + self.duration_ticks
+
+    def remaining_ticks(self, tick: int) -> int:
+        return self.duration_ticks - (tick - self.start_tick)
 
 
 class HazardKind(StrEnum):

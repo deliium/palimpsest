@@ -144,6 +144,8 @@ class PersistentSimulationService:
                 "production_jobs": tuple(state.production_jobs.values()),
                 "tool_marks": tuple(state.tool_marks.values()),
             }
+        if codec_version == "v4":
+            production_rows["active_hazards"] = tuple(state.active_hazards)
         draft = WorldSnapshot(
             snapshot_id=snapshot_id,
             run_id=self._engine.run_id,
@@ -189,6 +191,7 @@ class PersistentSimulationService:
             structures=draft.structures,
             production_jobs=draft.production_jobs,
             tool_marks=draft.tool_marks,
+            active_hazards=draft.active_hazards,
         )
 
     async def resolve_tick(

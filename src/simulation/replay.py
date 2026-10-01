@@ -577,6 +577,7 @@ class ReplayService:
                 teaching_entity_ids=request.teaching_entity_ids,
                 teaching_offers=request.teaching_offers,
                 production_catalog=request.production_catalog,
+                environmental_dynamics=request.environmental_dynamics,
             )
         except Exception as exc:
             _LOGGER.error(

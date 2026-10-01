@@ -2548,6 +2548,8 @@ def _bootstrap_snapshot(engine: WorldEngine) -> WorldSnapshot:
             "production_jobs": tuple(state.production_jobs.values()),
             "tool_marks": tuple(state.tool_marks.values()),
         }
+    if codec_version == "v4":
+        production_rows["active_hazards"] = tuple(state.active_hazards)
     draft = WorldSnapshot(
         snapshot_id=SnapshotId(f"bootstrap-{engine.run_id.value}"),
         run_id=engine.run_id,
@@ -2593,6 +2595,7 @@ def _bootstrap_snapshot(engine: WorldEngine) -> WorldSnapshot:
         structures=draft.structures,
         production_jobs=draft.production_jobs,
         tool_marks=draft.tool_marks,
+        active_hazards=draft.active_hazards,
     )
 
 

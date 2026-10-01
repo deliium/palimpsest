@@ -11,6 +11,8 @@ Compatibility:
   Schema v5 carries structured communication payloads (still projection no-ops).
 - Replay schema v6: the same physical fold plus production events. A non-empty
   catalog supplies item and structure kinds the events do not repeat.
+- Replay schema v7: the v6 fold plus season, band, node, and hazard witnesses.
+  Hazards are stored as start tick and duration. Remaining ticks are derived.
 Runs never mix replay schema versions.
 """
 
@@ -23,12 +25,18 @@ from enum import StrEnum
 from typing import Final
 
 from world._state import WorldState, rebuild_world_state
+from world.environment import (
+    ActiveHazard,
+    EnvironmentalDynamicsSpec,
+    temperature_band,
+)
 from world.events import (
     EVENT_SCHEMA_REPLAY_V2,
     EVENT_SCHEMA_REPLAY_V3,
     EVENT_SCHEMA_REPLAY_V4,
     EVENT_SCHEMA_REPLAY_V5,
     EVENT_SCHEMA_REPLAY_V6,
+    EVENT_SCHEMA_REPLAY_V7,
     Asked,
     Attacked,
     CraftStarted,
@@ -36,6 +44,8 @@ from world.events import (
     Dropped,
     Drunk,
     Eaten,
+    EnvironmentalHazardEnded,
+    EnvironmentalHazardStarted,
     ExposureApplied,
     Fled,
     Given,
@@ -45,13 +55,17 @@ from world.events import (
     Moved,
     NeedsApplied,
     ResourceHarvested,
+    ResourceNodeDepleted,
+    ResourceNodeRecovered,
     ResourceRegenerated,
     Searched,
+    SeasonChanged,
     Slept,
     StructureBuilt,
     StructureRepaired,
     Taken,
     Talked,
+    TemperatureBandChanged,
     Told,
     Waited,
     WeatherChanged,
@@ -71,10 +85,12 @@ from world.models import (
     AgentBody,
     Item,
     LifeStatus,
+    PhysicalRules,
     copy_body,
     copy_item,
     copy_resource,
     copy_weather,
+    default_physical_rules,
 )
 from world.production import (
     ItemProduct,
@@ -94,6 +110,7 @@ from world.values import (
     ResourceKind,
     TemperatureCelsius,
     Thirst,
+    round_physical,
 )
 
 _LOG: Final[logging.Logger] = logging.getLogger("simulation.replay")
@@ -129,6 +146,7 @@ class ProjectionErrorCode(StrEnum):
     MIXED_SCHEMA = "mixed_replay_schema_version"
     UNSUPPORTED_SCHEMA = "unsupported_event_schema_version"
     CATALOG_MISMATCH = "production_catalog_mismatch"
+    ENVIRONMENT_WITNESS_MISMATCH = "environment_witness_mismatch"
 
 
 class ProjectionError(ValueError):
@@ -152,6 +170,7 @@ def project_events(
     expected_run_id: str,
     expected_world_id: WorldId,
     production_catalog: ProductionCatalog | None = None,
+    environmental_dynamics: object | None = None,
 ) -> WorldState:
     """Fold ordered replay-capable events onto ``state``.
 
@@ -187,6 +206,7 @@ def project_events(
             schema_version=schema_version,
             assign_revision=True,
             production_catalog=production_catalog,
+            environmental_dynamics=environmental_dynamics,
         )
         if schema_version == EVENT_SCHEMA_REPLAY_V6:
             _LOG.debug(
@@ -206,6 +226,7 @@ def project_event_prefix(
     expected_world_id: WorldId,
     includes_last_event: bool,
     production_catalog: ProductionCatalog | None = None,
+    environmental_dynamics: object | None = None,
 ) -> WorldState:
     """Fold one tick prefix without treating a partial tick as complete.
 
@@ -237,6 +258,7 @@ def project_event_prefix(
             schema_version=schema_version,
             assign_revision=includes_last_event,
             production_catalog=production_catalog,
+            environmental_dynamics=environmental_dynamics,
         )
     return projected
 
@@ -279,6 +301,7 @@ def _prepare_events(
             EVENT_SCHEMA_REPLAY_V4,
             EVENT_SCHEMA_REPLAY_V5,
             EVENT_SCHEMA_REPLAY_V6,
+            EVENT_SCHEMA_REPLAY_V7,
         }:
             raise ProjectionError(ProjectionErrorCode.UNSUPPORTED_SCHEMA)
     return normalized, schema_version, run_id
@@ -311,6 +334,7 @@ def _project_tick_group(
     schema_version: int,
     assign_revision: bool,
     production_catalog: ProductionCatalog | None = None,
+    environmental_dynamics: object | None = None,
 ) -> tuple[WorldState, WorldRevision]:
     resulting_revision = group.events[0].resulting_revision
     for event in group.events:
@@ -333,6 +357,7 @@ def _project_tick_group(
             event,
             schema_version=schema_version,
             production_catalog=production_catalog,
+            environmental_dynamics=environmental_dynamics,
         )
         working = next_state
         mutated = mutated or changed
@@ -355,6 +380,19 @@ def _project_tick_group(
 
     if working.revision != resulting_revision:
         raise ProjectionError(ProjectionErrorCode.REVISION_MISMATCH)
+    if schema_version == EVENT_SCHEMA_REPLAY_V7:
+        season = (
+            environmental_dynamics.season_at(group.tick).value
+            if type(environmental_dynamics) is EnvironmentalDynamicsSpec
+            else "-"
+        )
+        _LOG.debug(
+            "environment_fold tick=%s season=%s hazard_count=%s resource_count=%s",
+            group.tick,
+            season,
+            len(working.active_hazards),
+            len(working.resources),
+        )
     return working, resulting_revision
 
 
@@ -403,6 +441,7 @@ def _apply_event_effect(
     *,
     schema_version: int,
     production_catalog: ProductionCatalog | None = None,
+    environmental_dynamics: object | None = None,
 ) -> tuple[WorldState, bool]:
     if schema_version == EVENT_SCHEMA_REPLAY_V2:
         match event.details:
@@ -470,8 +509,146 @@ def _apply_event_effect(
             )
         case ItemStored() as stored:
             return _project_item_stored(state, event, stored, production_catalog), True
+        case SeasonChanged() as season:
+            return _project_season(state, event, season, environmental_dynamics)
+        case TemperatureBandChanged() as band:
+            return _project_temperature_band(
+                state, event, band, environmental_dynamics
+            )
+        case ResourceNodeDepleted() | ResourceNodeRecovered() as witness:
+            return _project_node_witness(state, event, witness)
+        case EnvironmentalHazardStarted() as started:
+            return _project_hazard_started(state, event, started)
+        case EnvironmentalHazardEnded() as ended:
+            return _project_hazard_ended(state, event, ended)
         case _:
             raise ProjectionError(ProjectionErrorCode.PRECONDITION_FAILED)
+
+
+def _environment_mismatch(tick: int, kind: str) -> None:
+    _LOG.error("environment_witness_mismatch tick=%s kind=%s", tick, kind)
+    raise ProjectionError(ProjectionErrorCode.ENVIRONMENT_WITNESS_MISMATCH)
+
+
+def _require_dynamics(
+    event: WorldEvent, spec: object | None
+) -> EnvironmentalDynamicsSpec:
+    if type(spec) is not EnvironmentalDynamicsSpec:
+        _environment_mismatch(event.tick, event.details.kind)
+    assert spec is not None
+    return spec
+
+
+def _band_at(
+    state: WorldState,
+    location_id: EntityId,
+    tick: int,
+    spec: EnvironmentalDynamicsSpec,
+) -> object:
+    location = state.locations.get(location_id)
+    weather = state.weather.get(location_id)
+    if location is None or weather is None:
+        return None
+    rules: PhysicalRules = default_physical_rules()
+    phase_offsets = rules.phase_temperature_offset
+    weather_offsets = rules.weather_temperature_offset
+    assert phase_offsets is not None and weather_offsets is not None
+    season = spec.season_at(tick)
+    ambient = round_physical(
+        location.base_temperature.value
+        + weather_offsets[weather.condition]
+        + phase_offsets[rules.day_phase_for_tick(tick)]
+        + spec.offset_for(season)
+    )
+    return temperature_band(ambient)
+
+
+def _project_season(
+    state: WorldState,
+    event: WorldEvent,
+    season: SeasonChanged,
+    spec: object | None,
+) -> tuple[WorldState, bool]:
+    dynamics = _require_dynamics(event, spec)
+    if (
+        not dynamics.transitions_at(event.tick)
+        or dynamics.season_at(event.tick) is not season.season
+    ):
+        _environment_mismatch(event.tick, season.kind)
+    return state, True
+
+
+def _project_temperature_band(
+    state: WorldState,
+    event: WorldEvent,
+    band: TemperatureBandChanged,
+    spec: object | None,
+) -> tuple[WorldState, bool]:
+    dynamics = _require_dynamics(event, spec)
+    expected = _band_at(state, band.location_id, event.tick, dynamics)
+    if expected is not band.band:
+        _environment_mismatch(event.tick, band.kind)
+    return state, True
+
+
+def _project_node_witness(
+    state: WorldState,
+    event: WorldEvent,
+    witness: ResourceNodeDepleted | ResourceNodeRecovered,
+) -> tuple[WorldState, bool]:
+    resource = state.resources.get(witness.resource_id)
+    if resource is None or resource.quantity != witness.resulting_quantity:
+        _environment_mismatch(event.tick, witness.kind)
+    return state, False
+
+
+def _project_hazard_started(
+    state: WorldState,
+    event: WorldEvent,
+    started: EnvironmentalHazardStarted,
+) -> tuple[WorldState, bool]:
+    if started.location_id not in state.locations:
+        _environment_mismatch(event.tick, started.kind)
+    if any(
+        hazard.location_id == started.location_id and hazard.kind is started.hazard_kind
+        for hazard in state.active_hazards
+    ):
+        _environment_mismatch(event.tick, started.kind)
+    record = ActiveHazard(
+        started.location_id,
+        started.hazard_kind,
+        event.tick,
+        started.duration_ticks,
+    )
+    if record.remaining_ticks(event.tick) != started.remaining_ticks:
+        _environment_mismatch(event.tick, started.kind)
+    return (
+        rebuild_world_state(
+            state, active_hazards=(*state.active_hazards, record)
+        ),
+        True,
+    )
+
+
+def _project_hazard_ended(
+    state: WorldState,
+    event: WorldEvent,
+    ended: EnvironmentalHazardEnded,
+) -> tuple[WorldState, bool]:
+    found: ActiveHazard | None = None
+    kept: list[ActiveHazard] = []
+    for hazard in state.active_hazards:
+        if hazard.location_id == ended.location_id and hazard.kind is ended.hazard_kind:
+            found = hazard
+        else:
+            kept.append(hazard)
+    if (
+        found is None
+        or ended.remaining_ticks != 0
+        or event.tick != found.start_tick + found.duration_ticks - 1
+    ):
+        _environment_mismatch(event.tick, ended.kind)
+    return rebuild_world_state(state, active_hazards=tuple(kept)), True
 
 
 def _apply_legacy_transfer(state: WorldState, event: WorldEvent) -> WorldState:

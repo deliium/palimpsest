@@ -182,6 +182,7 @@ def _project_skill_prefix(
     events: object,
     expected_run_id: str,
     expected_world_id: object,
+    environmental_dynamics: object | None = None,
 ) -> object:
     from world._replay import project_events
 
@@ -190,6 +191,7 @@ def _project_skill_prefix(
         events,
         expected_run_id=expected_run_id,
         expected_world_id=expected_world_id,
+        environmental_dynamics=environmental_dynamics,
     )
 
 
@@ -364,6 +366,7 @@ class WorldEngine:
             structures=snapshot.structures,
             production_jobs=snapshot.production_jobs,
             tool_marks=snapshot.tool_marks,
+            active_hazards=snapshot.active_hazards,
         )
         resolved_catalog = _optional_production_catalog(production_catalog)
         if snapshot.persistence_codec_version == "v3" and resolved_catalog is None:
@@ -382,6 +385,7 @@ class WorldEngine:
                 expected_run_id=snapshot.run_id.value,
                 expected_world_id=snapshot.world_id,
                 production_catalog=resolved_catalog,  # type: ignore[arg-type]
+                environmental_dynamics=environmental_dynamics,
             )
         except ProjectionError as exc:
             _LOGGER.error(
@@ -550,6 +554,21 @@ class WorldEngine:
             raise RuntimeError("detached_objective_facts mutated engine state")
         return facts
 
+    def _project_dynamics_prefix(
+        self,
+        initial_state: object,
+        events: object,
+        expected_run_id: str,
+        expected_world_id: object,
+    ) -> object:
+        return _project_skill_prefix(
+            initial_state,
+            events,
+            expected_run_id,
+            expected_world_id,
+            self._environmental_dynamics,
+        )
+
     def _apply_event_prefix(
         self,
         events: Sequence[WorldEvent],
@@ -577,6 +596,7 @@ class WorldEngine:
                 expected_run_id=self._run_id.value,
                 expected_world_id=self.world_id,
                 includes_last_event=includes_last_event,
+                environmental_dynamics=self._environmental_dynamics,
             )
         except ProjectionError as exc:
             _LOGGER.error(
@@ -677,6 +697,7 @@ class WorldEngine:
                 observer_ids=observer_ids,
                 context=context,
                 prior_events=prior_events,
+                environmental_dynamics=self._environmental_dynamics,
             )
         except (TypeError, ValueError) as exc:
             _LOGGER.error(
@@ -785,6 +806,7 @@ class WorldEngine:
                 observer_ids=observer_ids,
                 context=context,
                 prior_events=prior_events,
+                environmental_dynamics=self._environmental_dynamics,
             )
         except (TypeError, ValueError) as exc:
             _LOGGER.error(
@@ -1809,7 +1831,7 @@ class WorldEngine:
             self._teaching_entity_ids,
             tick=tick,
             untargeted_request_ids=self._skill_untargeted_requests,
-            project_prefix=_project_skill_prefix,
+            project_prefix=self._project_dynamics_prefix,
             initial_state=initial_state,
             expected_run_id=expected_run_id,
             expected_world_id=expected_world_id,
@@ -1859,7 +1881,7 @@ class WorldEngine:
             rules=physical_rules,
             expected_run_id=expected_run_id,
             expected_world_id=expected_world_id,
-            project_prefix=_project_skill_prefix,
+            project_prefix=self._project_dynamics_prefix,
             untargeted_request_ids=untargeted_request_ids,
         )
         if skill_ledger is None:
