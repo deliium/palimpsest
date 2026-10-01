@@ -8,6 +8,7 @@ from collections.abc import Sequence
 from observer.contracts import ObserverEvent
 from observer.version import OBSERVER_PROTOCOL_VERSION, SEMANTIC_TYPE_BY_KIND
 from world.events import (
+    CraftStarted,
     Died,
     Dropped,
     Drunk,
@@ -15,10 +16,15 @@ from world.events import (
     ExposureApplied,
     Fled,
     Given,
+    ItemCrafted,
+    ItemStored,
     Moved,
     NeedsApplied,
+    ResourceHarvested,
     ResourceRegenerated,
     Searched,
+    StructureBuilt,
+    StructureRepaired,
     Taken,
     WeatherChanged,
     WorldEvent,
@@ -60,6 +66,8 @@ def adapt_event(event: WorldEvent) -> ObserverEvent:
     target_id = _text(event.target_id)
     item_id: str | None = None
     resource_id: str | None = None
+    recipe_id: str | None = None
+    structure_id: str | None = None
     details = event.details
     if isinstance(details, Moved):
         destination = _text(details.destination_id)
@@ -86,6 +94,18 @@ def adapt_event(event: WorldEvent) -> ObserverEvent:
         resource_id = _text(details.resource_id)
     elif isinstance(details, (NeedsApplied, ExposureApplied, Died)):
         target_id = _text(details.body_id)
+    elif isinstance(details, ResourceHarvested):
+        recipe_id = details.recipe_id.value
+        resource_id = _text(details.resource_id)
+        item_id = _text(details.created_item_id)
+    elif isinstance(details, CraftStarted):
+        recipe_id = details.recipe_id.value
+    elif isinstance(details, ItemCrafted):
+        recipe_id = details.recipe_id.value
+        item_id = _text(details.created_item_id)
+    elif isinstance(details, (StructureBuilt, StructureRepaired, ItemStored)):
+        recipe_id = details.recipe_id.value
+        structure_id = _text(details.structure_id)
     adapted = ObserverEvent(
         protocol_version=OBSERVER_PROTOCOL_VERSION,
         type=semantic,
@@ -99,7 +119,15 @@ def adapt_event(event: WorldEvent) -> ObserverEvent:
         resource_id=resource_id,
         origin_location_id=origin,
         destination_location_id=destination,
+        recipe_id=recipe_id,
+        structure_id=structure_id,
     )
+    if recipe_id is not None:
+        _LOGGER.debug(
+            "production_projected structure_count=%s event_kind=%s",
+            0 if structure_id is None else 1,
+            kind,
+        )
     _LOGGER.debug(
         "observer_event_adapted event_id=%s tick=%s sequence=%s "
         "domain_kind=%s semantic_type=%s",

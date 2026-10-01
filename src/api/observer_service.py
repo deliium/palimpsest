@@ -377,6 +377,18 @@ def _presentation(block: ObserverPresentation | None) -> dict[str, object] | Non
     }
 
 
+def _presentation_mapping(presentation: object | None) -> dict[str, str] | None:
+    from observer.presentation import EntityPresentation
+
+    if type(presentation) is not EntityPresentation:
+        return None
+    return {
+        "visual_category": presentation.visual_category,
+        "icon_key": presentation.icon_key,
+        "size_category": presentation.size_category,
+    }
+
+
 def _event_out(event: ObserverEvent) -> ObserverEventOut:
     return ObserverEventOut.model_validate(event.public_mapping())
 
@@ -440,6 +452,7 @@ def _frame_out(frame: ObserverFrame) -> ObserverFrameOut:
                     "kind": item.kind,
                     "location_id": item.location_id,
                     "holder_id": item.holder_id,
+                    "presentation": _presentation_mapping(item.presentation),
                 }
                 for item in world.items
             ],
@@ -451,8 +464,20 @@ def _frame_out(frame: ObserverFrame) -> ObserverFrameOut:
                     "location_id": item.location_id,
                     "quantity": item.quantity,
                     "unit": item.unit,
+                    "presentation": _presentation_mapping(item.presentation),
                 }
                 for item in world.resources
+            ],
+            "structures": [
+                {
+                    "structure_id": item.structure_id,
+                    "location_id": item.location_id,
+                    "kind": item.kind,
+                    "integrity": item.integrity,
+                    "stored_quantity": item.stored_quantity,
+                    "presentation": _presentation_mapping(item.presentation),
+                }
+                for item in world.structures
             ],
             "weather": [
                 {"location_id": item.location_id, "condition": item.condition}

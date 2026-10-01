@@ -56,6 +56,18 @@ def _imports(path: Path) -> set[str]:
     return names
 
 
+def test_observer_does_not_import_the_engine_or_name_the_godot_client() -> None:
+    for path in sorted(OBSERVER.rglob("*.py")):
+        text = path.read_text(encoding="utf-8")
+        assert "simulation.engine" not in text
+        assert "clients.godot-observer" not in text
+        assert "clients/godot-observer" not in text
+    for path in sorted(SRC.rglob("*.py")):
+        text = path.read_text(encoding="utf-8")
+        assert "clients.godot-observer" not in text
+        assert "clients/godot-observer" not in text
+
+
 def test_observer_sources_avoid_forbidden_modules() -> None:
     offenders: list[str] = []
     for path in sorted(OBSERVER.rglob("*.py")):

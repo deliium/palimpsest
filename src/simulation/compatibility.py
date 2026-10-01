@@ -56,6 +56,7 @@ from simulation.runner_models import (
     RUNNER_SCHEMA_VERSION_V10,
     RUNNER_SCHEMA_VERSION_V11,
     RUNNER_SCHEMA_VERSION_V12,
+    RUNNER_SCHEMA_VERSION_V13,
     SUPPORTED_RESULT_SCHEMA_VERSIONS,
     SUPPORTED_RUNNER_SCHEMA_VERSIONS,
 )
@@ -65,6 +66,7 @@ from world.events import (
     EVENT_SCHEMA_REPLAY_V3,
     EVENT_SCHEMA_REPLAY_V4,
     EVENT_SCHEMA_REPLAY_V5,
+    EVENT_SCHEMA_REPLAY_V6,
 )
 
 _LOG: Final[logging.Logger] = logging.getLogger("simulation.compatibility")
@@ -99,6 +101,7 @@ __all__ = [
     "RUNNER_SCHEMA_VERSION_V10",
     "RUNNER_SCHEMA_VERSION_V11",
     "RUNNER_SCHEMA_VERSION_V12",
+    "RUNNER_SCHEMA_VERSION_V13",
     "STREAM_ENVELOPE_VERSION",
     "WS_PROTOCOL_VERSION",
     "CompatibilityEntry",
@@ -132,6 +135,7 @@ _MATRIX: dict[str, CompatibilityEntry] = {
             EVENT_SCHEMA_REPLAY_V3,
             EVENT_SCHEMA_REPLAY_V4,
             EVENT_SCHEMA_REPLAY_V5,
+            EVENT_SCHEMA_REPLAY_V6,
         ),
         bump_trigger=(
             "Wire shape change for WorldEvent / occurrence details; "
@@ -153,7 +157,11 @@ _MATRIX: dict[str, CompatibilityEntry] = {
         entry_id="persistence_codec",
         write_version=PERSISTENCE_CODEC_VERSION,
         accepted_restore=_versions(*sorted(ACCEPTED_PERSISTENCE_CODEC_VERSIONS)),
-        bump_trigger="Canonical JSON codec for manifests/snapshots/commits changes",
+        bump_trigger=(
+            "Canonical JSON codec for manifests/snapshots/commits changes. "
+            "Write stays v2. Codec v3 is an accepted restore written only when "
+            "the production catalog is non-empty."
+        ),
         owner_package="simulation.persistence / simulation.journal",
         v1_fixture_impact="Codec v1 and v2 restores remain accepted",
     ),
@@ -201,7 +209,14 @@ _MATRIX: dict[str, CompatibilityEntry] = {
             f"{RUNNER_SCHEMA_VERSION_V12} is emitted only when some agent's "
             "teaching interaction mode is deterministic and carries every v11 "
             "cognition key plus teaching_interaction_mode and the locked "
-            "teaching weight keys; "
+            "teaching weight keys; teaching-only runs stay on "
+            f"{RUNNER_SCHEMA_VERSION_V12}; "
+            f"{RUNNER_SCHEMA_VERSION_V13} is emitted only when the production "
+            "catalog is non-empty or some agent's production knowledge mode is "
+            "deterministic and carries every v12 cognition key plus "
+            "production_knowledge_mode and production_catalog; skill learning "
+            f"stays legal on {RUNNER_SCHEMA_VERSION_V13} and teaching stays "
+            f"legal on {RUNNER_SCHEMA_VERSION_V13}; "
             f"{RUNNER_SCHEMA_VERSION_V3} retained for capability flags; "
             "v1-v4 omit consolidation_mode, reflection_mode, prospective_mode, "
             "counterfactual_mode, communication_strategy_mode, and "
@@ -391,6 +406,7 @@ _LOG.debug(
         "runner_v10": RUNNER_SCHEMA_VERSION_V10,
         "runner_v11": RUNNER_SCHEMA_VERSION_V11,
         "runner_v12": RUNNER_SCHEMA_VERSION_V12,
+        "runner_v13": RUNNER_SCHEMA_VERSION_V13,
         "alembic_head": ALEMBIC_HEAD_REVISION,
         "accepted_event_count": len(ACCEPTED_EVENT_SCHEMA_VERSIONS),
     },

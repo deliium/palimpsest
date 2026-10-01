@@ -64,12 +64,19 @@ class ObserverAgentOut(StrictModel):
     presentation_slot: PresentationSlotOut | None = None
 
 
+class EntityPresentationOut(StrictModel):
+    visual_category: str
+    icon_key: str
+    size_category: str
+
+
 class ObserverItemOut(StrictModel):
     item_id: str
     name: str
     kind: str
     location_id: str | None = None
     holder_id: str | None = None
+    presentation: EntityPresentationOut | None = None
 
 
 class ObserverResourceOut(StrictModel):
@@ -79,6 +86,16 @@ class ObserverResourceOut(StrictModel):
     location_id: str
     quantity: float
     unit: str
+    presentation: EntityPresentationOut | None = None
+
+
+class ObserverStructureOut(StrictModel):
+    structure_id: str
+    location_id: str
+    kind: str
+    integrity: float
+    stored_quantity: int
+    presentation: EntityPresentationOut | None = None
 
 
 class ObserverWeatherOut(StrictModel):
@@ -94,6 +111,7 @@ class ObserverWorldStateOut(StrictModel):
     items: tuple[ObserverItemOut, ...] = ()
     resources: tuple[ObserverResourceOut, ...] = ()
     weather: tuple[ObserverWeatherOut, ...] = ()
+    structures: tuple[ObserverStructureOut, ...] = ()
 
 
 class ObserverEventOut(StrictModel):
@@ -109,6 +127,8 @@ class ObserverEventOut(StrictModel):
     resource_id: str | None = None
     origin_location_id: str | None = None
     destination_location_id: str | None = None
+    recipe_id: str | None = None
+    structure_id: str | None = None
 
 
 class ObserverPlaybackCursorOut(StrictModel):

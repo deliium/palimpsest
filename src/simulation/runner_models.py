@@ -12,7 +12,7 @@ import json
 import logging
 import math
 from collections.abc import Mapping, Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from enum import StrEnum
 from typing import Any, Final
 
@@ -44,6 +44,7 @@ from simulation.models import (
     require_stochastic_identity,
     stochastic_identity_fingerprint,
 )
+from world import ProductionCatalog
 from world.identifiers import (
     EntityId,
     WorldId,
@@ -77,6 +78,7 @@ RUNNER_SCHEMA_VERSION_V9: Final[str] = "runner-config-v9"
 RUNNER_SCHEMA_VERSION_V10: Final[str] = "runner-config-v10"
 RUNNER_SCHEMA_VERSION_V11: Final[str] = "runner-config-v11"
 RUNNER_SCHEMA_VERSION_V12: Final[str] = "runner-config-v12"
+RUNNER_SCHEMA_VERSION_V13: Final[str] = "runner-config-v13"
 RUNNER_SCHEMA_VERSION: Final[str] = RUNNER_SCHEMA_VERSION_V4
 SUPPORTED_RUNNER_SCHEMA_VERSIONS: Final[frozenset[str]] = frozenset(
     {
@@ -92,6 +94,7 @@ SUPPORTED_RUNNER_SCHEMA_VERSIONS: Final[frozenset[str]] = frozenset(
         RUNNER_SCHEMA_VERSION_V10,
         RUNNER_SCHEMA_VERSION_V11,
         RUNNER_SCHEMA_VERSION_V12,
+        RUNNER_SCHEMA_VERSION_V13,
     }
 )
 RESULT_SCHEMA_VERSION_V1: Final[str] = "runner-result-v1"
@@ -268,6 +271,19 @@ class TeachingInteractionMode(StrEnum):
     DETERMINISTIC = "deterministic"
 
 
+class ProductionKnowledgeMode(StrEnum):
+    """Closed production-belief treatments.
+
+    Default is ``DISABLED``. An empty catalog plus this mode does not change
+    commands, probabilities, fatigue, events, memories, beliefs, or audits.
+    This is not a ``V2CapabilityFlags`` slot. Lockstep with
+    ``agents.cognition.ProductionKnowledgeMode``.
+    """
+
+    DISABLED = "disabled"
+    DETERMINISTIC = "deterministic"
+
+
 class SkillAuditSide(StrEnum):
     """Which store a harvested skill row came from."""
 
@@ -387,7 +403,11 @@ _TEACHING_WEIGHT_NAMES: Final[tuple[str, ...]] = (
     "teaching_response_weight",
 )
 _SKILL_SCHEMAS: Final[frozenset[str]] = frozenset(
-    {RUNNER_SCHEMA_VERSION_V11, RUNNER_SCHEMA_VERSION_V12}
+    {
+        RUNNER_SCHEMA_VERSION_V11,
+        RUNNER_SCHEMA_VERSION_V12,
+        RUNNER_SCHEMA_VERSION_V13,
+    }
 )
 
 
@@ -1232,6 +1252,10 @@ class AgentCognitionSpec:
     explain_low_below: float = 0.34
     explain_high_at: float = 0.67
     teaching_response_weight: float = 0.25
+    production_knowledge_mode: ProductionKnowledgeMode = (
+        ProductionKnowledgeMode.DISABLED
+    )
+    production_catalog: ProductionCatalog = field(default_factory=ProductionCatalog)
 
     def __post_init__(self) -> None:
         if type(self.agent_id) is not AgentId:
@@ -1299,6 +1323,19 @@ class AgentCognitionSpec:
             raise TypeError(
                 "AgentCognitionSpec.teaching_interaction_mode must be "
                 "TeachingInteractionMode"
+            )
+        if type(self.production_knowledge_mode) is not ProductionKnowledgeMode:
+            _LOGGER.error(
+                "invalid_enum path=AgentCognitionSpec.production_knowledge_mode "
+                "reason_code=invalid_mode"
+            )
+            raise TypeError(
+                "AgentCognitionSpec.production_knowledge_mode must be "
+                "ProductionKnowledgeMode"
+            )
+        if type(self.production_catalog) is not ProductionCatalog:
+            raise TypeError(
+                "AgentCognitionSpec.production_catalog must be ProductionCatalog"
             )
         if self.policy_version != COGNITION_POLICY_VERSION:
             raise ValueError("unsupported cognition policy_version")
@@ -1724,6 +1761,11 @@ class SimulationRunnerConfig:
         if type(self.cognition_trace) is not CognitionTraceSpec:
             raise TypeError("cognition_trace must be CognitionTraceSpec")
         if self.schema_version not in SUPPORTED_RUNNER_SCHEMA_VERSIONS:
+            logging.getLogger("simulation.runner").error(
+                "unsupported_schema_version schema_version=%s "
+                "reason_code=unsupported_schema_version",
+                self.schema_version,
+            )
             raise ValueError("unsupported runner schema_version")
         if require_derivation_version(self.derivation_version) != DERIVATION_VERSION_V3:
             raise ValueError("runner config requires derivation-v3")
@@ -1786,6 +1828,7 @@ class SimulationRunnerConfig:
             RUNNER_SCHEMA_VERSION_V10,
             RUNNER_SCHEMA_VERSION_V11,
             RUNNER_SCHEMA_VERSION_V12,
+        RUNNER_SCHEMA_VERSION_V13,
         }
         if non_disabled and self.schema_version not in consolidation_schemas:
             _LOGGER.error(
@@ -1824,6 +1867,7 @@ class SimulationRunnerConfig:
             RUNNER_SCHEMA_VERSION_V10,
             RUNNER_SCHEMA_VERSION_V11,
             RUNNER_SCHEMA_VERSION_V12,
+        RUNNER_SCHEMA_VERSION_V13,
         }
         if reflecting and self.schema_version not in reflection_schemas:
             _LOGGER.error(
@@ -1862,6 +1906,7 @@ class SimulationRunnerConfig:
             RUNNER_SCHEMA_VERSION_V10,
             RUNNER_SCHEMA_VERSION_V11,
             RUNNER_SCHEMA_VERSION_V12,
+        RUNNER_SCHEMA_VERSION_V13,
         }
         if planning and self.schema_version not in prospective_schemas:
             _LOGGER.error(
@@ -1899,6 +1944,7 @@ class SimulationRunnerConfig:
             RUNNER_SCHEMA_VERSION_V10,
             RUNNER_SCHEMA_VERSION_V11,
             RUNNER_SCHEMA_VERSION_V12,
+        RUNNER_SCHEMA_VERSION_V13,
         }
         if considering and self.schema_version not in counterfactual_schemas:
             _LOGGER.error(
@@ -1935,6 +1981,7 @@ class SimulationRunnerConfig:
             RUNNER_SCHEMA_VERSION_V10,
             RUNNER_SCHEMA_VERSION_V11,
             RUNNER_SCHEMA_VERSION_V12,
+        RUNNER_SCHEMA_VERSION_V13,
         }:
             _LOGGER.error(
                 "invalid_fields path=agents.cognition.communication_strategy_mode "
@@ -1969,6 +2016,7 @@ class SimulationRunnerConfig:
             RUNNER_SCHEMA_VERSION_V10,
             RUNNER_SCHEMA_VERSION_V11,
             RUNNER_SCHEMA_VERSION_V12,
+        RUNNER_SCHEMA_VERSION_V13,
         }:
             _LOGGER.error(
                 "invalid_fields path=agents.cognition.reputation_mode "
@@ -2003,8 +2051,8 @@ class SimulationRunnerConfig:
                 self.schema_version,
             )
             raise ValueError(
-                "non-disabled skill_learning_mode requires runner-config-v11 "
-                "or runner-config-v12 "
+                "non-disabled skill_learning_mode requires runner-config-v11, "
+                "runner-config-v12, or runner-config-v13 "
                 "(code=skill_learning_mode_requires_v11)"
             )
         if self.schema_version == RUNNER_SCHEMA_VERSION_V11 and not learning:
@@ -2043,7 +2091,10 @@ class SimulationRunnerConfig:
                 "deterministic teaching requires deterministic skill learning "
                 "(code=teaching_requires_skill_learning)"
             )
-        if teaching and self.schema_version != RUNNER_SCHEMA_VERSION_V12:
+        if teaching and self.schema_version not in {
+            RUNNER_SCHEMA_VERSION_V12,
+            RUNNER_SCHEMA_VERSION_V13,
+        }:
             _LOGGER.error(
                 "invalid_fields path=agents.cognition.teaching_interaction_mode "
                 "reason_code=teaching_interaction_mode_requires_v12 "
@@ -2052,8 +2103,65 @@ class SimulationRunnerConfig:
             )
             raise ValueError(
                 "non-disabled teaching_interaction_mode requires "
-                "runner-config-v12 "
+                "runner-config-v12 or runner-config-v13 "
                 "(code=teaching_interaction_mode_requires_v12)"
+            )
+        production_modes = tuple(
+            agent.cognition.production_knowledge_mode for agent in self.agents
+        )
+        production_on = any(
+            mode is ProductionKnowledgeMode.DETERMINISTIC for mode in production_modes
+        ) or any(
+            agent.cognition.production_catalog.recipe_count > 0 for agent in self.agents
+        )
+        if self.schema_version == RUNNER_SCHEMA_VERSION_V13 and not production_on:
+            _LOGGER.error(
+                "invalid_fields path=schema_version "
+                "reason_code=v13_requires_production schema_version=%s",
+                self.schema_version,
+            )
+            raise ValueError(
+                "runner-config-v13 requires a non-empty production catalog "
+                "or a deterministic production_knowledge_mode "
+                "(code=v13_requires_production)"
+            )
+        if production_on and self.schema_version != RUNNER_SCHEMA_VERSION_V13:
+            _LOGGER.error(
+                "invalid_fields path=agents.cognition.production_knowledge_mode "
+                "reason_code=production_requires_v13 schema_version=%s",
+                self.schema_version,
+            )
+            raise ValueError(
+                "production requires runner-config-v13 (code=production_requires_v13)"
+            )
+        if self.schema_version == RUNNER_SCHEMA_VERSION_V13:
+            from world.production import production_catalog_digest
+
+            catalogs = tuple(
+                agent.cognition.production_catalog for agent in self.agents
+            )
+            if any(catalog != catalogs[0] for catalog in catalogs):
+                digest = production_catalog_digest(
+                    tuple(
+                        recipe.recipe_id.value for recipe in catalogs[0].recipes
+                    )
+                )
+                logging.getLogger("simulation.runner").error(
+                    "production_catalog_mismatch digest=%s", digest
+                )
+                raise ValueError(
+                    "agents must share one production catalog "
+                    "(code=production_catalog_mismatch)"
+                )
+            mode_count = sum(
+                mode is ProductionKnowledgeMode.DETERMINISTIC
+                for mode in production_modes
+            )
+            logging.getLogger("simulation.runner").info(
+                "production_config schema_version=%s recipe_count=%s mode_count=%s",
+                self.schema_version,
+                catalogs[0].recipe_count,
+                mode_count,
             )
         if self.schema_version == RUNNER_SCHEMA_VERSION_V12 and not teaching:
             _LOGGER.error(
@@ -2079,7 +2187,10 @@ class SimulationRunnerConfig:
                     "skill agents must share skill rates (code=skill_rate_mismatch)"
                 )
             _validate_shared_skill_rates(self.agents[0].cognition)
-        if self.schema_version == RUNNER_SCHEMA_VERSION_V12:
+        if self.schema_version in {
+            RUNNER_SCHEMA_VERSION_V12,
+            RUNNER_SCHEMA_VERSION_V13,
+        }:
             shared_teaching = teaching_weight_tuple(self.agents[0].cognition)
             if any(
                 teaching_weight_tuple(agent.cognition) != shared_teaching

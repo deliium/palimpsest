@@ -10,6 +10,7 @@ from simulation.bootstrap import AgentRegistration
 from simulation.persistence import WorldSnapshot
 from world.events import WorldEvent
 from world.models import AgentBody, Item, Location, Resource, Weather
+from world.production import Structure
 
 _LOGGER = logging.getLogger("simulation.observer_facts")
 
@@ -41,6 +42,7 @@ class ObjectiveFacts:
     resources: tuple[Resource, ...]
     weather: tuple[Weather, ...]
     registrations: tuple[AgentRegistration, ...]
+    structures: tuple[Structure, ...] = ()
 
 
 @dataclass(frozen=True, slots=True)
@@ -57,6 +59,7 @@ class ObjectiveScene:
     resources: tuple[Resource, ...]
     weather: tuple[Weather, ...]
     registrations: tuple[AgentRegistration, ...]
+    structures: tuple[Structure, ...] = ()
 
 
 def _freeze_facts(facts: ObjectiveFacts) -> ObjectiveScene:
@@ -85,6 +88,7 @@ def _freeze_facts(facts: ObjectiveFacts) -> ObjectiveScene:
         resources=tuple(facts.resources),
         weather=weather,
         registrations=tuple(facts.registrations),
+        structures=tuple(facts.structures),
     )
     _LOGGER.debug(
         "objective_scene_built run_id=%s tick=%s location_count=%s "
@@ -129,6 +133,7 @@ def scene_from_snapshot(
         resources=tuple(snapshot.resources),
         weather=tuple(snapshot.weather),
         registrations=tuple(snapshot.registrations),
+        structures=tuple(snapshot.structures),
     )
     return scene_from_facts(facts)
 

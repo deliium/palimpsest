@@ -30,8 +30,6 @@ from simulation.lifecycle import (
 )
 from simulation.models import DERIVATION_VERSION
 from simulation.persistence import (
-    EVENT_SCHEMA_VERSION,
-    PERSISTENCE_CODEC_VERSION,
     PROJECTOR_VERSION,
     CommitHash,
     PayloadHash,
@@ -40,6 +38,7 @@ from simulation.persistence import (
     TickCommit,
     TickJournalRepository,
     WorldSnapshot,
+    checkpoint_schema_for_production,
 )
 from simulation.randomness import StreamScope
 from world.identifiers import require_stable_id
@@ -134,6 +133,16 @@ class PersistentSimulationService:
         next_snap = candidate.next_snapshot
         state = next_snap.world.state
         derivation = self._engine._config.derivation_version or DERIVATION_VERSION
+        schema_version, codec_version = checkpoint_schema_for_production(
+            production_active=self._engine._production_catalog is not None
+        )
+        production_rows: dict[str, tuple[object, ...]] = {}
+        if codec_version == "v3":
+            production_rows = {
+                "structures": tuple(state.structures.values()),
+                "production_jobs": tuple(state.production_jobs.values()),
+                "tool_marks": tuple(state.tool_marks.values()),
+            }
         draft = WorldSnapshot(
             snapshot_id=snapshot_id,
             run_id=self._engine.run_id,
@@ -148,12 +157,13 @@ class PersistentSimulationService:
             weather=tuple(state.weather.values()),
             next_tick=next_snap.tick,
             revision=candidate.resulting_revision,
-            event_schema_version=EVENT_SCHEMA_VERSION,
+            event_schema_version=schema_version,
             projector_version=PROJECTOR_VERSION,
-            persistence_codec_version=PERSISTENCE_CODEC_VERSION,
+            persistence_codec_version=codec_version,
             derivation_version=derivation,
             integrity_hash=PayloadHash("a" * 64),
             predecessor_commit_hash=None,
+            **production_rows,
         )
         return WorldSnapshot(
             snapshot_id=draft.snapshot_id,
@@ -175,6 +185,9 @@ class PersistentSimulationService:
             derivation_version=draft.derivation_version,
             integrity_hash=hash_snapshot(draft),
             predecessor_commit_hash=None,
+            structures=draft.structures,
+            production_jobs=draft.production_jobs,
+            tool_marks=draft.tool_marks,
         )
 
     async def resolve_tick(

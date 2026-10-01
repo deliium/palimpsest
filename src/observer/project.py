@@ -14,6 +14,7 @@ from observer.contracts import (
     ObserverLocation,
     ObserverPlaybackCursor,
     ObserverResource,
+    ObserverStructure,
     ObserverWeather,
     ObserverWorldState,
     PresentationSlot,
@@ -25,6 +26,7 @@ from observer.layout import (
     validate_layout,
     warn_missing_specs,
 )
+from observer.presentation import entity_presentation
 from observer.version import OBSERVER_PROTOCOL_VERSION
 from simulation.bootstrap import AgentRegistration
 from simulation.observer_facts import ObjectiveScene
@@ -113,6 +115,7 @@ def project_frame(
             kind=item.kind.value,
             location_id=None if item.location_id is None else item.location_id.value,
             holder_id=None if item.holder_id is None else item.holder_id.value,
+            presentation=entity_presentation(item.kind.value, item.name),
         )
         for item in scene.items
     )
@@ -124,8 +127,23 @@ def project_frame(
             location_id=item.location_id.value,
             quantity=item.quantity,
             unit=item.unit,
+            presentation=entity_presentation(item.kind.value, item.name),
         )
         for item in scene.resources
+    )
+    structures = tuple(
+        ObserverStructure(
+            structure_id=item.entity_id.value,
+            location_id=item.location_id.value,
+            kind=item.kind.value,
+            integrity=item.integrity,
+            stored_quantity=item.stored_quantity,
+            presentation=entity_presentation(item.kind.value, item.kind.value),
+        )
+        for item in sorted(
+            scene.structures,
+            key=lambda item: (item.location_id.value, item.entity_id.value),
+        )
     )
     weather = tuple(
         ObserverWeather(
@@ -142,6 +160,7 @@ def project_frame(
         items=items,
         resources=resources,
         weather=weather,
+        structures=structures,
     )
     last = None if not events else events[-1]
     cursor = ObserverPlaybackCursor(
@@ -168,6 +187,12 @@ def project_frame(
         len(agents),
         len(locations),
     )
+    if structures:
+        _LOGGER.debug(
+            "production_projected structure_count=%s event_kind=%s",
+            len(structures),
+            "-" if not events else events[-1].domain_kind,
+        )
     return frame
 
 

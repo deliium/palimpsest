@@ -29,6 +29,12 @@ SEMANTIC_EVENT_TYPES: Final[tuple[str, ...]] = (
     "NEEDS_APPLIED",
     "EXPOSURE_APPLIED",
     "AGENT_DIED",
+    "RESOURCE_HARVESTED",
+    "CRAFT_STARTED",
+    "ITEM_CRAFTED",
+    "STRUCTURE_BUILT",
+    "STRUCTURE_REPAIRED",
+    "ITEM_STORED",
 )
 
 SEMANTIC_TYPE_BY_KIND: Final[dict[str, str]] = {
@@ -52,6 +58,12 @@ SEMANTIC_TYPE_BY_KIND: Final[dict[str, str]] = {
     "needs_applied": "NEEDS_APPLIED",
     "exposure_applied": "EXPOSURE_APPLIED",
     "died": "AGENT_DIED",
+    "resource_harvested": "RESOURCE_HARVESTED",
+    "craft_started": "CRAFT_STARTED",
+    "item_crafted": "ITEM_CRAFTED",
+    "structure_built": "STRUCTURE_BUILT",
+    "structure_repaired": "STRUCTURE_REPAIRED",
+    "item_stored": "ITEM_STORED",
 }
 
 RELATIONSHIP_DIMENSION_CODES: Final[tuple[str, ...]] = (

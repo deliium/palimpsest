@@ -157,6 +157,17 @@ def _require_accepted_schema_version(name: str, value: object) -> int:
     return version
 
 
+def checkpoint_schema_for_production(*, production_active: bool) -> tuple[int, str]:
+    """Choose the checkpoint schema for this run.
+
+    A non-empty production catalog writes replay-v6 and codec ``v3``. Every
+    other run keeps the default replay-v5 / codec ``v2`` pair.
+    """
+    if production_active:
+        return EVENT_SCHEMA_REPLAY_V6, "v3"
+    return EVENT_SCHEMA_VERSION, PERSISTENCE_CODEC_VERSION
+
+
 def _require_write_schema_version(name: str, value: object) -> int:
     version = require_exact_nonneg_int(name, value)
     if version != EVENT_SCHEMA_VERSION:
@@ -547,11 +558,19 @@ class RunCreateRequest:
                 "RunCreateRequest.derivation_version", self.derivation_version
             ),
         )
+        production_checkpoint = (
+            self.event_schema_version == EVENT_SCHEMA_REPLAY_V6
+            and self.persistence_codec_version == "v3"
+        )
         object.__setattr__(
             self,
             "event_schema_version",
-            _require_write_schema_version(
-                "RunCreateRequest.event_schema_version", self.event_schema_version
+            (
+                EVENT_SCHEMA_REPLAY_V6
+                if production_checkpoint
+                else _require_write_schema_version(
+                    "RunCreateRequest.event_schema_version", self.event_schema_version
+                )
             ),
         )
         object.__setattr__(
@@ -564,9 +583,13 @@ class RunCreateRequest:
         object.__setattr__(
             self,
             "persistence_codec_version",
-            _require_write_persistence_codec_version(
-                "RunCreateRequest.persistence_codec_version",
-                self.persistence_codec_version,
+            (
+                "v3"
+                if production_checkpoint
+                else _require_write_persistence_codec_version(
+                    "RunCreateRequest.persistence_codec_version",
+                    self.persistence_codec_version,
+                )
             ),
         )
         if self.bootstrap.derivation_version != self.derivation_version:

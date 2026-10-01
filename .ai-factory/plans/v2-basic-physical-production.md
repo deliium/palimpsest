@@ -168,19 +168,19 @@ Each checkpoint is a git commit on `main` created when those tasks are done. Do 
 
 ### Phase 3: Runner, Observer, and Docs
 
-- [ ] Task 7: v2- Accept production only on runner-config-v13.
+- [x] Task 7: v2- Accept production only on runner-config-v13.
   - Deliverable: `runner-config-v13` carries every v12 cognition key plus `production_knowledge_mode` and `production_catalog`. It is emitted only for a non-empty catalog or a `DETERMINISTIC` production mode. v4 through v12 reject those keys. Skill learning is accepted on `{v11, v12, v13}`. Teaching is accepted on `{v12, v13}`. `v12_requires_teaching` stays an equality check, so a teaching-only config still writes v12. The runner passes the catalog into `WorldEngine` and the mode into cognition. Empty catalog leaves the engine argument `None` and the event schema at replay-v5. Codec `v3` is written only for a non-empty catalog. `simulation.compatibility` lists v13 and codec `v3` as accepted restores without making them the default write. `tests/unit/test_v1_regression_gate.py` is not extended.
   - Logging: logger `simulation.runner`. INFO `production_config schema_version=%s recipe_count=%s mode_count=%s`. ERROR `production_catalog_mismatch` and `unsupported_schema_version` with schema and reason code. DEBUG is ids and counts. No seeds.
   - Depends on tasks 4, 5, and 6.
   - Files: `src/simulation/runner_models.py`, `src/simulation/runner_serialization.py`, `src/simulation/runner.py`, `src/simulation/compatibility.py`, `src/simulation/__init__.py`, `tests/unit/test_production_runner.py`, `tests/unit/test_compatibility_matrix.py`.
 
-- [ ] Task 8: v2- Project production entities and semantic events.
+- [x] Task 8: v2- Project production entities and semantic events.
   - Deliverable: `ObjectiveFacts` and `ObjectiveScene` gain `structures`, default empty, so existing constructors keep working. `observer.project_frame` adds ordered `ObserverStructure` records at `location_id` and optional `EntityPresentation` from `src/observer/presentation.py`. `adapt_event` maps the six domain kinds to `RESOURCE_HARVESTED`, `CRAFT_STARTED`, `ITEM_CRAFTED`, `STRUCTURE_BUILT`, `STRUCTURE_REPAIRED`, and `ITEM_STORED`. `ObserverEvent` gains optional `recipe_id` and `structure_id`. `public_mapping` includes those two keys only when they are set. Do not switch observer `model_dump` calls to `exclude_none`. Protocol version stays `observer-protocol-v1`. API schemas mirror the optional ids. Update `tests/unit/test_observer_contracts.py` so `len(SEMANTIC_EVENT_TYPES)` is `26`. Location layout slots are unchanged. No screen coordinates are read from world models.
   - Logging: logger `observer.project` and `observer.adapt`. DEBUG `production_projected structure_count=%s event_kind=%s`. ERROR `unknown_event_kind` and `presentation_instruction_forbidden`. Do not log icon keys at INFO.
   - Depends on tasks 2 and 4.
   - Files: `src/simulation/observer_facts.py`, `src/observer/version.py`, `src/observer/contracts.py`, `src/observer/adapt.py`, `src/observer/project.py`, `src/observer/presentation.py`, `src/api/observer_schemas.py`, `src/api/observer_service.py`, `tests/unit/test_production_observer.py`, `tests/unit/test_observer_contracts.py`.
 
-- [ ] Task 9: v2- Prove observer compatibility without a Godot dependency.
+- [x] Task 9: v2- Prove observer compatibility without a Godot dependency.
   - Deliverable: a unit test builds a world, runs the example catalog through harvest, craft, build, repair, and store, projects the frame, and asserts the six semantic types, structure `location_id`s, and presentation tokens. The same test asserts domain events and `WorldState` contain no `screen_x`, `screen_y`, `pixels`, `sprite`, `animation`, `dx`, or `dy`. An architecture test asserts `src/` does not import `clients.godot-observer` or contain that string, and that `observer` does not import `simulation.engine`. Change `tests/unit/test_godot_observer_fixtures.py` so golden event names are a subset of `SEMANTIC_EVENT_TYPES` and still equal the previous twenty names. Do not add files under `clients/godot-observer/fixtures/`. A frame with empty `structures` still validates as protocol v1. An old event's `public_mapping` has no `recipe_id` or `structure_id` key.
   - Logging: no production logger. The test asserts the architecture contract ids already covering `observer`.
   - Depends on task 8.

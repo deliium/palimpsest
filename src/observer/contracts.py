@@ -7,6 +7,7 @@ from collections.abc import Sequence
 from dataclasses import dataclass
 from typing import Literal, NoReturn
 
+from observer.presentation import EntityPresentation
 from observer.version import (
     OBSERVER_LAYOUT_SCHEMA_VERSION,
     OBSERVER_PROTOCOL_VERSION,
@@ -278,6 +279,7 @@ class ObserverItem:
     kind: str
     location_id: str | None = None
     holder_id: str | None = None
+    presentation: EntityPresentation | None = None
 
     def __post_init__(self) -> None:
         object.__setattr__(self, "item_id", _require_text("item_id", self.item_id))
@@ -289,6 +291,10 @@ class ObserverItem:
             _reject("location_id", "invalid_placement")
         object.__setattr__(self, "location_id", location_id)
         object.__setattr__(self, "holder_id", holder_id)
+        if self.presentation is not None and type(self.presentation) is not (
+            EntityPresentation
+        ):
+            _reject("presentation", "invalid_type")
 
 
 @dataclass(frozen=True, slots=True)
@@ -299,6 +305,7 @@ class ObserverResource:
     location_id: str
     quantity: float
     unit: str
+    presentation: EntityPresentation | None = None
 
     def __post_init__(self) -> None:
         object.__setattr__(
@@ -311,6 +318,39 @@ class ObserverResource:
         )
         object.__setattr__(self, "quantity", _finite("quantity", self.quantity))
         object.__setattr__(self, "unit", _require_text("unit", self.unit))
+        if self.presentation is not None and type(self.presentation) is not (
+            EntityPresentation
+        ):
+            _reject("presentation", "invalid_type")
+
+
+@dataclass(frozen=True, slots=True)
+class ObserverStructure:
+    structure_id: str
+    location_id: str
+    kind: str
+    integrity: float
+    stored_quantity: int
+    presentation: EntityPresentation | None = None
+
+    def __post_init__(self) -> None:
+        object.__setattr__(
+            self, "structure_id", _require_text("structure_id", self.structure_id)
+        )
+        object.__setattr__(
+            self, "location_id", _require_text("location_id", self.location_id)
+        )
+        object.__setattr__(self, "kind", _require_text("kind", self.kind))
+        object.__setattr__(self, "integrity", _finite("integrity", self.integrity))
+        quantity = self.stored_quantity
+        if isinstance(quantity, bool) or type(quantity) is not int:
+            _reject("stored_quantity", "invalid_type")
+        if self.stored_quantity < 0:
+            _reject("stored_quantity", "invalid_quantity")
+        if self.presentation is not None and type(self.presentation) is not (
+            EntityPresentation
+        ):
+            _reject("presentation", "invalid_type")
 
 
 @dataclass(frozen=True, slots=True)
@@ -336,6 +376,7 @@ class ObserverWorldState:
     items: tuple[ObserverItem, ...] = ()
     resources: tuple[ObserverResource, ...] = ()
     weather: tuple[ObserverWeather, ...] = ()
+    structures: tuple[ObserverStructure, ...] = ()
 
     def __post_init__(self) -> None:
         object.__setattr__(self, "tick", _require_tick("tick", self.tick))
@@ -345,16 +386,19 @@ class ObserverWorldState:
         items = _typed_tuple("items", self.items, ObserverItem)
         resources = _typed_tuple("resources", self.resources, ObserverResource)
         weather = _typed_tuple("weather", self.weather, ObserverWeather)
+        structures = _typed_tuple("structures", self.structures, ObserverStructure)
         _unique("locations", tuple(item.location_id for item in locations))
         _unique("agents", tuple(item.entity_id for item in agents))
         _unique("items", tuple(item.item_id for item in items))
         _unique("resources", tuple(item.resource_id for item in resources))
         _unique("weather", tuple(item.location_id for item in weather))
+        _unique("structures", tuple(item.structure_id for item in structures))
         object.__setattr__(self, "locations", locations)
         object.__setattr__(self, "agents", agents)
         object.__setattr__(self, "items", items)
         object.__setattr__(self, "resources", resources)
         object.__setattr__(self, "weather", weather)
+        object.__setattr__(self, "structures", structures)
         if hasattr(self, "relationship") or hasattr(self, "relationships"):
             _reject("relationship", "objective_leak")
         _log_built(
@@ -396,6 +440,8 @@ class ObserverEvent:
     resource_id: str | None = None
     origin_location_id: str | None = None
     destination_location_id: str | None = None
+    recipe_id: str | None = None
+    structure_id: str | None = None
 
     def __init__(
         self,
@@ -411,6 +457,8 @@ class ObserverEvent:
         resource_id: str | None = None,
         origin_location_id: str | None = None,
         destination_location_id: str | None = None,
+        recipe_id: str | None = None,
+        structure_id: str | None = None,
         **extra: object,
     ) -> None:
         _reject_extra(extra)
@@ -445,10 +493,14 @@ class ObserverEvent:
             "destination_location_id",
             _optional_text("destination_location_id", destination_location_id),
         )
+        object.__setattr__(self, "recipe_id", _optional_text("recipe_id", recipe_id))
+        object.__setattr__(
+            self, "structure_id", _optional_text("structure_id", structure_id)
+        )
         _log_built("ObserverEvent", id_count=1, protocol_version=protocol)
 
     def public_mapping(self) -> dict[str, object]:
-        return {
+        payload: dict[str, object] = {
             "protocol_version": self.protocol_version,
             "type": self.type,
             "domain_kind": self.domain_kind,
@@ -462,6 +514,11 @@ class ObserverEvent:
             "origin_location_id": self.origin_location_id,
             "destination_location_id": self.destination_location_id,
         }
+        if self.recipe_id is not None:
+            payload["recipe_id"] = self.recipe_id
+        if self.structure_id is not None:
+            payload["structure_id"] = self.structure_id
+        return payload
 
 
 @dataclass(frozen=True, slots=True)

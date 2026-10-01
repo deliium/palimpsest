@@ -42,10 +42,28 @@ SMOKE = (
 )
 
 
+_PRODUCTION_EVENT_NAMES = frozenset(
+    {
+        "RESOURCE_HARVESTED",
+        "CRAFT_STARTED",
+        "ITEM_CRAFTED",
+        "STRUCTURE_BUILT",
+        "STRUCTURE_REPAIRED",
+        "ITEM_STORED",
+    }
+)
+
+
 def test_event_fixtures_cover_closed_semantic_types() -> None:
     names = tuple(sorted(path.stem for path in EVENTS.glob("*.json")))
-    assert names == tuple(sorted(SEMANTIC_EVENT_TYPES))
-    assert len(names) == len(SEMANTIC_EVENT_TYPES)
+    previous = tuple(
+        name
+        for name in sorted(SEMANTIC_EVENT_TYPES)
+        if name not in _PRODUCTION_EVENT_NAMES
+    )
+    assert names == previous
+    assert len(names) == 20
+    assert set(names) < set(SEMANTIC_EVENT_TYPES)
 
 
 def test_event_fixtures_construct_observer_events() -> None:

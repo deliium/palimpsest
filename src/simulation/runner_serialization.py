@@ -34,6 +34,7 @@ from simulation.runner_models import (
     RUNNER_SCHEMA_VERSION_V10,
     RUNNER_SCHEMA_VERSION_V11,
     RUNNER_SCHEMA_VERSION_V12,
+    RUNNER_SCHEMA_VERSION_V13,
     SUPPORTED_RUNNER_SCHEMA_VERSIONS,
     AgentCognitionSpec,
     AgentRunnerSpec,
@@ -51,6 +52,7 @@ from simulation.runner_models import (
     ImaginationMode,
     MemoryMode,
     MortalityMode,
+    ProductionKnowledgeMode,
     ProspectiveImaginationMode,
     RecordingPolicy,
     ReflectionMode,
@@ -300,8 +302,17 @@ _COGNITION_KEYS_V12: Final[set[str]] = {
     "teaching_interaction_mode",
     *_TEACHING_WEIGHT_KEYS,
 }
+_COGNITION_KEYS_V13: Final[set[str]] = {
+    *_COGNITION_KEYS_V12,
+    "production_catalog",
+    "production_knowledge_mode",
+}
 _SKILL_SCHEMA_VERSIONS: Final[frozenset[str]] = frozenset(
-    {RUNNER_SCHEMA_VERSION_V11, RUNNER_SCHEMA_VERSION_V12}
+    {
+        RUNNER_SCHEMA_VERSION_V11,
+        RUNNER_SCHEMA_VERSION_V12,
+        RUNNER_SCHEMA_VERSION_V13,
+    }
 )
 _COGNITION_SCHEMA_CONSOLIDATION: Final[frozenset[str]] = frozenset(
     {
@@ -313,6 +324,7 @@ _COGNITION_SCHEMA_CONSOLIDATION: Final[frozenset[str]] = frozenset(
         RUNNER_SCHEMA_VERSION_V10,
         RUNNER_SCHEMA_VERSION_V11,
         RUNNER_SCHEMA_VERSION_V12,
+        RUNNER_SCHEMA_VERSION_V13,
     }
 )
 _COGNITION_SCHEMA_REFLECTION: Final[frozenset[str]] = frozenset(
@@ -324,6 +336,7 @@ _COGNITION_SCHEMA_REFLECTION: Final[frozenset[str]] = frozenset(
         RUNNER_SCHEMA_VERSION_V10,
         RUNNER_SCHEMA_VERSION_V11,
         RUNNER_SCHEMA_VERSION_V12,
+        RUNNER_SCHEMA_VERSION_V13,
     }
 )
 _COGNITION_SCHEMA_PROSPECTIVE: Final[frozenset[str]] = frozenset(
@@ -334,6 +347,7 @@ _COGNITION_SCHEMA_PROSPECTIVE: Final[frozenset[str]] = frozenset(
         RUNNER_SCHEMA_VERSION_V10,
         RUNNER_SCHEMA_VERSION_V11,
         RUNNER_SCHEMA_VERSION_V12,
+        RUNNER_SCHEMA_VERSION_V13,
     }
 )
 _COGNITION_SCHEMA_COUNTERFACTUAL: Final[frozenset[str]] = frozenset(
@@ -343,6 +357,7 @@ _COGNITION_SCHEMA_COUNTERFACTUAL: Final[frozenset[str]] = frozenset(
         RUNNER_SCHEMA_VERSION_V10,
         RUNNER_SCHEMA_VERSION_V11,
         RUNNER_SCHEMA_VERSION_V12,
+        RUNNER_SCHEMA_VERSION_V13,
     }
 )
 _COGNITION_SCHEMA_STRATEGY: Final[frozenset[str]] = frozenset(
@@ -351,11 +366,261 @@ _COGNITION_SCHEMA_STRATEGY: Final[frozenset[str]] = frozenset(
         RUNNER_SCHEMA_VERSION_V10,
         RUNNER_SCHEMA_VERSION_V11,
         RUNNER_SCHEMA_VERSION_V12,
+        RUNNER_SCHEMA_VERSION_V13,
     }
 )
 _COGNITION_SCHEMA_REPUTATION: Final[frozenset[str]] = frozenset(
-    {RUNNER_SCHEMA_VERSION_V10, RUNNER_SCHEMA_VERSION_V11, RUNNER_SCHEMA_VERSION_V12}
+    {
+        RUNNER_SCHEMA_VERSION_V10,
+        RUNNER_SCHEMA_VERSION_V11,
+        RUNNER_SCHEMA_VERSION_V12,
+        RUNNER_SCHEMA_VERSION_V13,
+    }
 )
+
+
+def _encode_production_catalog(catalog: object) -> list[dict[str, Any]]:
+    from world.production import ProductionCatalog
+
+    if type(catalog) is not ProductionCatalog:
+        raise RunnerSerializationError("invalid_model", "production_catalog")
+    return [_encode_production_recipe(recipe) for recipe in catalog.recipes]
+
+
+def _encode_production_recipe(recipe: object) -> dict[str, Any]:
+    from world.production import ProductionRecipe
+
+    if type(recipe) is not ProductionRecipe:
+        raise RunnerSerializationError("invalid_model", "production_catalog")
+    return {
+        "action": recipe.action.value,
+        "duration_ticks": recipe.duration_ticks,
+        "inputs": [_encode_production_input(item) for item in recipe.inputs],
+        "output": _encode_production_output(recipe.output),
+        "recipe_id": recipe.recipe_id.value,
+        "success_probability": recipe.success_probability,
+        "tool_role": None if recipe.tool_role is None else recipe.tool_role.value,
+    }
+
+
+def _encode_production_input(item: object) -> dict[str, Any]:
+    from world.production import HeldItemKindInput, HeldItemNameInput, ResourceNameInput
+
+    if type(item) is ResourceNameInput:
+        return {"kind": "resource_name", "name": item.name}
+    if type(item) is HeldItemNameInput:
+        return {"kind": "held_name", "name": item.name}
+    if type(item) is HeldItemKindInput:
+        return {"item_kind": item.item_kind.value, "kind": "held_kind"}
+    raise RunnerSerializationError("invalid_model", "production_catalog")
+
+
+def _encode_production_output(item: object) -> dict[str, Any]:
+    from world.production import (
+        ItemProduct,
+        RepairProduct,
+        ShelterProduct,
+        StoreProduct,
+    )
+
+    if type(item) is ItemProduct:
+        return {
+            "item_kind": item.item_kind.value,
+            "kind": "item",
+            "load": item.load.value,
+            "name": item.name,
+            "tool_role": None if item.tool_role is None else item.tool_role.value,
+        }
+    if type(item) is ShelterProduct:
+        return {
+            "initial_integrity": item.initial_integrity,
+            "kind": "shelter",
+            "structure_kind": item.structure_kind.value,
+        }
+    if type(item) is RepairProduct:
+        return {"integrity_delta": item.integrity_delta, "kind": "repair"}
+    if type(item) is StoreProduct:
+        return {
+            "initial_integrity": item.initial_integrity,
+            "initial_stored_quantity": item.initial_stored_quantity,
+            "kind": "store",
+            "quantity_delta": item.quantity_delta,
+        }
+    raise RunnerSerializationError("invalid_model", "production_catalog")
+
+
+def _decode_production_catalog(data: list[object], *, path: str) -> object:
+    from world.production import ProductionCatalog, ProductionRecipe
+
+    recipes: list[ProductionRecipe] = []
+    for index, item in enumerate(data):
+        if not isinstance(item, dict):
+            raise RunnerSerializationError("invalid_object", f"{path}[{index}]")
+        recipes.append(_decode_production_recipe(item, path=f"{path}[{index}]"))
+    try:
+        return ProductionCatalog(tuple(recipes))
+    except (TypeError, ValueError) as exc:
+        raise RunnerSerializationError("invalid_model", path) from exc
+
+
+def _decode_production_recipe(data: Mapping[str, Any], *, path: str) -> object:
+    from world.identifiers import RecipeId
+    from world.production import ProductionAction, ProductionRecipe, ToolRole
+
+    _require_keys(
+        data,
+        {
+            "action",
+            "duration_ticks",
+            "inputs",
+            "output",
+            "recipe_id",
+            "success_probability",
+            "tool_role",
+        },
+        path=path,
+    )
+    inputs_raw = data["inputs"]
+    output_raw = data["output"]
+    if not isinstance(inputs_raw, list) or not inputs_raw:
+        raise RunnerSerializationError("invalid_array", f"{path}.inputs")
+    if not isinstance(output_raw, dict):
+        raise RunnerSerializationError("invalid_object", f"{path}.output")
+    tool_role_raw = data["tool_role"]
+    tool_role = None
+    if tool_role_raw is not None:
+        if type(tool_role_raw) is not str:
+            raise RunnerSerializationError("invalid_enum", f"{path}.tool_role")
+        try:
+            tool_role = ToolRole(tool_role_raw)
+        except ValueError as exc:
+            raise RunnerSerializationError("invalid_enum", f"{path}.tool_role") from exc
+    try:
+        return ProductionRecipe(
+            recipe_id=RecipeId(_str_field(data, "recipe_id", path=path)),
+            action=ProductionAction(_str_field(data, "action", path=path)),
+            duration_ticks=_nonneg_int_field(data, "duration_ticks", path=path),
+            success_probability=_required_float(data, "success_probability", path=path),
+            inputs=tuple(
+                _decode_production_input(item, path=f"{path}.inputs[{index}]")
+                for index, item in enumerate(inputs_raw)
+            ),
+            output=_decode_production_output(output_raw, path=f"{path}.output"),
+            tool_role=tool_role,
+        )
+    except RunnerSerializationError:
+        raise
+    except (TypeError, ValueError) as exc:
+        raise RunnerSerializationError("invalid_model", path) from exc
+
+
+def _decode_production_input(data: object, *, path: str) -> object:
+    from world.production import HeldItemKindInput, HeldItemNameInput, ResourceNameInput
+    from world.values import ItemKind
+
+    if not isinstance(data, dict):
+        raise RunnerSerializationError("invalid_object", path)
+    kind = _str_field(data, "kind", path=path)
+    if kind == "resource_name":
+        _require_keys(data, {"kind", "name"}, path=path)
+        return ResourceNameInput(name=_str_field(data, "name", path=path))
+    if kind == "held_name":
+        _require_keys(data, {"kind", "name"}, path=path)
+        return HeldItemNameInput(name=_str_field(data, "name", path=path))
+    if kind == "held_kind":
+        _require_keys(data, {"item_kind", "kind"}, path=path)
+        try:
+            return HeldItemKindInput(
+                item_kind=ItemKind(_str_field(data, "item_kind", path=path))
+            )
+        except ValueError as exc:
+            raise RunnerSerializationError("invalid_enum", f"{path}.item_kind") from exc
+    raise RunnerSerializationError("invalid_enum", f"{path}.kind")
+
+
+def _decode_production_output(data: Mapping[str, Any], *, path: str) -> object:
+    from world.production import (
+        ItemProduct,
+        RepairProduct,
+        ShelterProduct,
+        StoreProduct,
+        StructureKind,
+        ToolRole,
+    )
+    from world.values import ItemKind, ItemLoad
+
+    kind = _str_field(data, "kind", path=path)
+    if kind == "item":
+        _require_keys(
+            data,
+            {"item_kind", "kind", "load", "name", "tool_role"},
+            path=path,
+        )
+        tool_role_raw = data["tool_role"]
+        tool_role = None
+        if tool_role_raw is not None:
+            try:
+                tool_role = ToolRole(tool_role_raw)
+            except ValueError as exc:
+                raise RunnerSerializationError(
+                    "invalid_enum", f"{path}.tool_role"
+                ) from exc
+        try:
+            return ItemProduct(
+                item_kind=ItemKind(_str_field(data, "item_kind", path=path)),
+                name=_str_field(data, "name", path=path),
+                load=ItemLoad(_nonneg_int_field(data, "load", path=path)),
+                tool_role=tool_role,
+            )
+        except (TypeError, ValueError) as exc:
+            raise RunnerSerializationError("invalid_model", path) from exc
+    if kind == "shelter":
+        _require_keys(
+            data, {"initial_integrity", "kind", "structure_kind"}, path=path
+        )
+        try:
+            return ShelterProduct(
+                structure_kind=StructureKind(
+                    _str_field(data, "structure_kind", path=path)
+                ),
+                initial_integrity=_required_float(
+                    data, "initial_integrity", path=path
+                ),
+            )
+        except (TypeError, ValueError) as exc:
+            raise RunnerSerializationError("invalid_model", path) from exc
+    if kind == "repair":
+        _require_keys(data, {"integrity_delta", "kind"}, path=path)
+        try:
+            return RepairProduct(
+                integrity_delta=_required_float(data, "integrity_delta", path=path)
+            )
+        except (TypeError, ValueError) as exc:
+            raise RunnerSerializationError("invalid_model", path) from exc
+    if kind == "store":
+        _require_keys(
+            data,
+            {
+                "initial_integrity",
+                "initial_stored_quantity",
+                "kind",
+                "quantity_delta",
+            },
+            path=path,
+        )
+        try:
+            return StoreProduct(
+                quantity_delta=_nonneg_int_field(data, "quantity_delta", path=path),
+                initial_integrity=_required_float(
+                    data, "initial_integrity", path=path
+                ),
+                initial_stored_quantity=_nonneg_int_field(
+                    data, "initial_stored_quantity", path=path
+                ),
+            )
+        except (TypeError, ValueError) as exc:
+            raise RunnerSerializationError("invalid_model", path) from exc
+    raise RunnerSerializationError("invalid_enum", f"{path}.kind")
 
 
 def _encode_cognition(
@@ -388,17 +653,24 @@ def _encode_cognition(
         payload["skill_learning_mode"] = value.skill_learning_mode.value
         for name in _SKILL_RATE_KEYS:
             payload[name] = getattr(value, name)
-    if schema_version == RUNNER_SCHEMA_VERSION_V12:
+    if schema_version in {RUNNER_SCHEMA_VERSION_V12, RUNNER_SCHEMA_VERSION_V13}:
         payload["teaching_interaction_mode"] = value.teaching_interaction_mode.value
         for name in _TEACHING_WEIGHT_KEYS:
             payload[name] = getattr(value, name)
+    if schema_version == RUNNER_SCHEMA_VERSION_V13:
+        payload["production_knowledge_mode"] = value.production_knowledge_mode.value
+        payload["production_catalog"] = _encode_production_catalog(
+            value.production_catalog
+        )
     return payload
 
 
 def _decode_cognition(
     data: dict[str, Any], *, path: str, schema_version: str
 ) -> AgentCognitionSpec:
-    if schema_version == RUNNER_SCHEMA_VERSION_V12:
+    if schema_version == RUNNER_SCHEMA_VERSION_V13:
+        _require_keys(data, _COGNITION_KEYS_V13, path=path)
+    elif schema_version == RUNNER_SCHEMA_VERSION_V12:
         _require_keys(data, _COGNITION_KEYS_V12, path=path)
     elif schema_version == RUNNER_SCHEMA_VERSION_V11:
         _require_keys(data, _COGNITION_KEYS_V11, path=path)
@@ -505,7 +777,9 @@ def _decode_cognition(
             ) from exc
         for name in _SKILL_RATE_KEYS:
             skill_rates[name] = _required_float(data, name, path=path)
-    if schema_version == RUNNER_SCHEMA_VERSION_V12:
+    production_knowledge_mode = ProductionKnowledgeMode.DISABLED
+    production_catalog = None
+    if schema_version in {RUNNER_SCHEMA_VERSION_V12, RUNNER_SCHEMA_VERSION_V13}:
         try:
             teaching_interaction_mode = TeachingInteractionMode(
                 _str_field(data, "teaching_interaction_mode", path=path)
@@ -521,6 +795,25 @@ def _decode_cognition(
                 teaching_weights[name] = _nonneg_int_field(data, name, path=path)
             else:
                 teaching_weights[name] = _required_float(data, name, path=path)
+    if schema_version == RUNNER_SCHEMA_VERSION_V13:
+        try:
+            production_knowledge_mode = ProductionKnowledgeMode(
+                _str_field(data, "production_knowledge_mode", path=path)
+            )
+        except RunnerSerializationError:
+            raise
+        except ValueError as exc:
+            raise RunnerSerializationError(
+                "invalid_enum", f"{path}.production_knowledge_mode"
+            ) from exc
+        catalog_raw = data.get("production_catalog")
+        if not isinstance(catalog_raw, list):
+            raise RunnerSerializationError(
+                "invalid_array", f"{path}.production_catalog"
+            )
+        production_catalog = _decode_production_catalog(
+            catalog_raw, path=f"{path}.production_catalog"
+        )
     overrides_raw = data["drive_overrides"]
     if not isinstance(overrides_raw, list):
         raise RunnerSerializationError("invalid_array", f"{path}.drive_overrides")
@@ -577,6 +870,12 @@ def _decode_cognition(
             teaching_response_weight=float(
                 teaching_weights.get("teaching_response_weight", 0.25)
             ),
+            production_knowledge_mode=production_knowledge_mode,
+            **(
+                {}
+                if production_catalog is None
+                else {"production_catalog": production_catalog}
+            ),
         )
     except RunnerSerializationError:
         raise
@@ -602,6 +901,7 @@ def _encode_agent(value: AgentRunnerSpec, *, schema_version: str) -> dict[str, A
         RUNNER_SCHEMA_VERSION_V10,
         RUNNER_SCHEMA_VERSION_V11,
         RUNNER_SCHEMA_VERSION_V12,
+        RUNNER_SCHEMA_VERSION_V13,
     }:
         assert value.name is not None
         payload["name"] = value.name
@@ -1038,6 +1338,7 @@ def _encode_runner_document(config: SimulationRunnerConfig) -> dict[str, Any]:
         RUNNER_SCHEMA_VERSION_V10,
         RUNNER_SCHEMA_VERSION_V11,
         RUNNER_SCHEMA_VERSION_V12,
+        RUNNER_SCHEMA_VERSION_V13,
     }:
         document["capability_flags"] = _encode_capability_flags(config.capability_flags)
     if config.schema_version in {
@@ -1050,6 +1351,7 @@ def _encode_runner_document(config: SimulationRunnerConfig) -> dict[str, Any]:
         RUNNER_SCHEMA_VERSION_V10,
         RUNNER_SCHEMA_VERSION_V11,
         RUNNER_SCHEMA_VERSION_V12,
+        RUNNER_SCHEMA_VERSION_V13,
     }:
         document["cognition_trace"] = _encode_cognition_trace(config.cognition_trace)
     if config.experiment is not None:
@@ -1099,6 +1401,7 @@ def decode_runner_config(payload: bytes) -> SimulationRunnerConfig:
         RUNNER_SCHEMA_VERSION_V10,
         RUNNER_SCHEMA_VERSION_V11,
         RUNNER_SCHEMA_VERSION_V12,
+        RUNNER_SCHEMA_VERSION_V13,
     }:
         root_keys = _RUNNER_ROOT_KEYS_V4
     elif schema_version == RUNNER_SCHEMA_VERSION_V3:
@@ -1181,6 +1484,7 @@ def decode_runner_config(payload: bytes) -> SimulationRunnerConfig:
         RUNNER_SCHEMA_VERSION_V10,
         RUNNER_SCHEMA_VERSION_V11,
         RUNNER_SCHEMA_VERSION_V12,
+        RUNNER_SCHEMA_VERSION_V13,
     }:
         capability_flags = _decode_capability_flags(
             data["capability_flags"], path="$.capability_flags"
@@ -1198,6 +1502,7 @@ def decode_runner_config(payload: bytes) -> SimulationRunnerConfig:
         RUNNER_SCHEMA_VERSION_V10,
         RUNNER_SCHEMA_VERSION_V11,
         RUNNER_SCHEMA_VERSION_V12,
+        RUNNER_SCHEMA_VERSION_V13,
     }:
         cognition_trace = _decode_cognition_trace(
             data["cognition_trace"], path="$.cognition_trace"

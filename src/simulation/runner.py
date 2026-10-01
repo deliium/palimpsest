@@ -95,10 +95,8 @@ from simulation.lifecycle import (
 )
 from simulation.models import DERIVATION_VERSION_V3, RunId, SimulationRunConfig
 from simulation.persistence import (
-    EVENT_SCHEMA_VERSION,
     LEGACY_PENDING_FINALIZATION_CODEC_VERSION,
     PENDING_FINALIZATION_CODEC_VERSION,
-    PERSISTENCE_CODEC_VERSION,
     PROJECTOR_VERSION,
     PayloadHash,
     PendingFinalizationRecord,
@@ -110,6 +108,7 @@ from simulation.persistence import (
     SnapshotId,
     TickJournalRepository,
     WorldSnapshot,
+    checkpoint_schema_for_production,
 )
 from simulation.run_control import (
     FinalizationCommand,
@@ -576,6 +575,9 @@ def _cognition_config_for(
         skill_mode.value,
         None if belief_policy is None else belief_policy.version,
     )
+    from agents.cognition.production import (
+        ProductionKnowledgeMode as CognitionProductionKnowledgeMode,
+    )
     from agents.cognition.teaching import TeachingClaimPolicy
 
     teaching_mode = CognitionTeachingInteractionMode(
@@ -626,6 +628,9 @@ def _cognition_config_for(
         competence_belief_policy=belief_policy,
         teaching_interaction_mode=teaching_mode,
         teaching_claim_policy=teaching_policy,
+        production_knowledge_mode=CognitionProductionKnowledgeMode(
+            spec.production_knowledge_mode.value
+        ),
         drive_overrides=tuple(
             CognitionDriveOverride(
                 kind=item.kind,
@@ -1019,10 +1024,13 @@ class SimulationRunner:
                     ),
                     "teaching_entity_ids": teaching_ids,
                 }
+            catalog = config.agents[0].cognition.production_catalog
+            production_catalog = catalog if catalog.recipe_count > 0 else None
             engine = WorldEngine(
                 config=run_config,
                 bootstrap=bootstrap,
                 run_id=resolved_run_id,
+                production_catalog=production_catalog,
                 **skill_kwargs,
                 **teaching_kwargs,
             )
@@ -1183,9 +1191,11 @@ class SimulationRunner:
                         derivation_version=(
                             run_config.derivation_version or DERIVATION_VERSION_V3
                         ),
-                        event_schema_version=EVENT_SCHEMA_VERSION,
+                        event_schema_version=bootstrap_snapshot.event_schema_version,
                         projector_version=PROJECTOR_VERSION,
-                        persistence_codec_version=PERSISTENCE_CODEC_VERSION,
+                        persistence_codec_version=(
+                            bootstrap_snapshot.persistence_codec_version
+                        ),
                         bootstrap=bootstrap_snapshot,
                     )
                 )
@@ -2526,6 +2536,17 @@ async def _cleanup_created(
 
 def _bootstrap_snapshot(engine: WorldEngine) -> WorldSnapshot:
     """Build the tick-0 durable bootstrap checkpoint from a live engine."""
+    schema_version, codec_version = checkpoint_schema_for_production(
+        production_active=engine._production_catalog is not None
+    )
+    state = engine._snapshot.world.state
+    production_rows: dict[str, tuple[object, ...]] = {}
+    if codec_version == "v3":
+        production_rows = {
+            "structures": tuple(state.structures.values()),
+            "production_jobs": tuple(state.production_jobs.values()),
+            "tool_marks": tuple(state.tool_marks.values()),
+        }
     draft = WorldSnapshot(
         snapshot_id=SnapshotId(f"bootstrap-{engine.run_id.value}"),
         run_id=engine.run_id,
@@ -2540,12 +2561,13 @@ def _bootstrap_snapshot(engine: WorldEngine) -> WorldSnapshot:
         weather=tuple(engine._snapshot.world.state.weather.values()),
         next_tick=Tick(0),
         revision=engine.revision,
-        event_schema_version=EVENT_SCHEMA_VERSION,
+        event_schema_version=schema_version,
         projector_version=PROJECTOR_VERSION,
-        persistence_codec_version=PERSISTENCE_CODEC_VERSION,
+        persistence_codec_version=codec_version,
         derivation_version=engine._config.derivation_version or DERIVATION_VERSION_V3,
         integrity_hash=PayloadHash("a" * 64),
         predecessor_commit_hash=None,
+        **production_rows,
     )
     return WorldSnapshot(
         snapshot_id=draft.snapshot_id,
@@ -2567,6 +2589,9 @@ def _bootstrap_snapshot(engine: WorldEngine) -> WorldSnapshot:
         derivation_version=draft.derivation_version,
         integrity_hash=hash_snapshot(draft),
         predecessor_commit_hash=None,
+        structures=draft.structures,
+        production_jobs=draft.production_jobs,
+        tool_marks=draft.tool_marks,
     )
 
 
