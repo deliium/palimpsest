@@ -211,3 +211,21 @@ def test_structure_has_no_coordinates_and_tool_kind_exists() -> None:
             integrity=1.1,
             stored_quantity=0,
         )
+
+
+def _isort_export_key(name: str) -> tuple[int, str]:
+    """Match Ruff RUF022: constants, then classes, then functions."""
+    if name.isupper():
+        rank = 0
+    elif name[:1].isupper():
+        rank = 1
+    else:
+        rank = 2
+    return (rank, name)
+
+
+def test_public_export_list_stays_sorted() -> None:
+    import world.production as production
+
+    names = list(production.__all__)
+    assert names == sorted(names, key=_isort_export_key)
