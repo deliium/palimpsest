@@ -205,6 +205,8 @@ class CognitiveLoop:
         "_skill_learning_mode",
         "_teaching_mode",
         "_teaching_policy",
+        "_territorial_claim_mode",
+        "_territorial_claim_policy",
         "_theory_of_mind_mode",
         "_theory_of_mind_policy",
         "_world_model_mode",
@@ -250,6 +252,8 @@ class CognitiveLoop:
         competence_belief_policy: object | None = None,
         teaching_interaction_mode: object | None = None,
         teaching_claim_policy: object | None = None,
+        territorial_claim_mode: object | None = None,
+        territorial_claim_policy: object | None = None,
         production_knowledge_mode: object | None = None,
         production_allow_provider: bool = False,
     ) -> None:
@@ -418,6 +422,30 @@ class CognitiveLoop:
             raise TypeError("reputation_policy must be ReputationFormationPolicy")
         self._reputation_mode = reputation
         self._reputation_policy = reputation_policy
+        from agents.cognition.configuration import CognitionTerritorialClaimMode
+        from agents.cognition.territorial import TerritorialClaimPolicy
+
+        territorial = (
+            CognitionTerritorialClaimMode.DISABLED
+            if territorial_claim_mode is None
+            else territorial_claim_mode
+        )
+        if type(territorial) is not CognitionTerritorialClaimMode:
+            raise TypeError(
+                "territorial_claim_mode must be CognitionTerritorialClaimMode"
+            )
+        if territorial is CognitionTerritorialClaimMode.DISABLED:
+            territorial_policy = None
+        elif territorial_claim_policy is None:
+            from agents.cognition.territorial import default_territorial_claim_policy
+
+            territorial_policy = default_territorial_claim_policy()
+        elif type(territorial_claim_policy) is not TerritorialClaimPolicy:
+            raise TypeError("territorial_claim_policy must be TerritorialClaimPolicy")
+        else:
+            territorial_policy = territorial_claim_policy
+        self._territorial_claim_mode = territorial
+        self._territorial_claim_policy = territorial_policy
         from agents.cognition.competence import CompetenceBeliefPolicy
         from agents.cognition.configuration import CognitionSkillLearningMode
 
@@ -468,9 +496,7 @@ class CognitiveLoop:
             else production_knowledge_mode
         )
         if type(production_mode) is not ProductionKnowledgeMode:
-            raise TypeError(
-                "production_knowledge_mode must be ProductionKnowledgeMode"
-            )
+            raise TypeError("production_knowledge_mode must be ProductionKnowledgeMode")
         self._production_knowledge_mode = production_mode
         if type(production_allow_provider) is not bool:
             raise TypeError("production_allow_provider must be bool")
@@ -543,6 +569,129 @@ class CognitiveLoop:
             inbox=snapshot.inbox,
         )
 
+    def _prepare_territorial_claims(
+        self, loop_input: CognitiveLoopInput
+    ) -> object | None:
+        from agents.cognition.configuration import CognitionTerritorialClaimMode
+        from agents.cognition.territorial import (
+            TerritorialClaimLedger,
+            apply_territorial_update,
+            relationship_projection,
+        )
+
+        if (
+            self._territorial_claim_mode
+            is not CognitionTerritorialClaimMode.DETERMINISTIC
+        ):
+            return None
+        snapshot = loop_input.snapshot
+        carried = None if snapshot is None else snapshot.territorial_claims
+        ledger = carried if type(carried) is TerritorialClaimLedger else None
+        identity = None if snapshot is None else snapshot.social_identity
+        trust_by_speaker: dict[str, float] = {}
+        if snapshot is not None and identity is not None:
+            speakers: list[object] = []
+            for communication in loop_input.observation.communications:
+                resolved = _reputation_agent(identity, communication.speaker_id)
+                if resolved is not None:
+                    speakers.append(resolved)
+            for envelope in snapshot.inbox:
+                speakers.append(envelope.sender_id)
+            for speaker in speakers:
+                key = getattr(speaker, "value", None)
+                if not isinstance(key, str) or key in trust_by_speaker:
+                    continue
+                profile = next(
+                    (
+                        item
+                        for item in snapshot.relationships
+                        if getattr(item, "target_id", None) == speaker
+                    ),
+                    None,
+                )
+                trust, _resentment, _fear = relationship_projection(profile)
+                trust_by_speaker[key] = trust
+        return apply_territorial_update(
+            owner_id=loop_input.agent_id,
+            tick=loop_input.observation.tick,
+            observation=loop_input.observation,
+            social_identity=identity,
+            ledger=ledger,
+            policy=self._territorial_claim_policy,
+            memories=() if snapshot is None else snapshot.memories,
+            source_trust_by_speaker=trust_by_speaker,
+            inbox=() if snapshot is None else snapshot.inbox,
+        )
+
+    def _annotate_claim_violations(
+        self,
+        proposal: CognitiveLoopProposal,
+        updates: tuple[object, ...],
+    ) -> tuple[object, ...]:
+        """Attach ``violated`` only when this tick recorded breach evidence."""
+        from agents.cognition.configuration import CognitionTerritorialClaimMode
+        from agents.cognition.memory import with_violation_relation
+        from agents.cognition.models import MemoryUpdateIntent, MemoryUpdateKind
+        from agents.cognition.territorial import ClaimChannel, TerritorialClaimLedger
+
+        if self._territorial_claim_mode is not (
+            CognitionTerritorialClaimMode.DETERMINISTIC
+        ):
+            return updates
+        ledger = proposal.territorial_claims
+        if type(ledger) is not TerritorialClaimLedger:
+            return updates
+        observation = proposal.loop_input.observation
+        by_event: dict[str, list[object]] = {}
+        for claim in ledger.claims:
+            for item in claim.evidence:
+                if (
+                    item.channel is not ClaimChannel.VIOLATION
+                    or item.tick != observation.tick
+                ):
+                    continue
+                by_event.setdefault(item.lineage_ref, []).append(claim.target_entity_id)
+        if not by_event:
+            return updates
+        occurrences = {
+            occurrence.provenance.source_event_id.value: occurrence.actor_id
+            for occurrence in observation.occurrences
+            if occurrence.provenance.source_event_id is not None
+            and occurrence.actor_id is not None
+        }
+        annotated: list[object] = []
+        for update in updates:
+            if (
+                type(update) is not MemoryUpdateIntent
+                or update.kind is not MemoryUpdateKind.WRITE_MEMORY
+                or update.memory is None
+            ):
+                annotated.append(update)
+                continue
+            source = update.memory.provenance.observed_source_id
+            if source is None or source.value not in by_event:
+                annotated.append(update)
+                continue
+            actor = occurrences.get(source.value)
+            if actor is None:
+                annotated.append(update)
+                continue
+            trace = update.memory
+            for target in by_event[source.value]:
+                trace = with_violation_relation(
+                    trace,
+                    subject_entity_id=actor,
+                    object_entity_id=target,
+                )
+            annotated.append(
+                MemoryUpdateIntent(
+                    owner_id=update.owner_id,
+                    kind=update.kind,
+                    memory=trace,
+                )
+            )
+        return tuple(annotated)
+
     def _prepare_competence(
         self, loop_input: CognitiveLoopInput, memory: object
     ) -> object | None:
@@ -579,9 +728,7 @@ class CognitiveLoop:
             return None
         snapshot = loop_input.snapshot
         carried = (
-            None
-            if snapshot is None
-            else getattr(snapshot, "recipe_beliefs", None)
+            None if snapshot is None else getattr(snapshot, "recipe_beliefs", None)
         )
         return update_recipe_beliefs(
             carried,
@@ -624,11 +771,7 @@ class CognitiveLoop:
         delta = tuple(
             row for row in updated_advice.rows if row.occurrence_id not in prior_ids
         )
-        model = (
-            competence
-            if competence is not None
-            else empty_competence_model(owner)
-        )
+        model = competence if competence is not None else empty_competence_model(owner)
         updated_model = apply_teaching_belief(
             model,
             delta,
@@ -926,6 +1069,7 @@ class CognitiveLoop:
         )
         mind = self._prepare_theory_of_mind(loop_input, emotional_evaluation, memory)
         reputation = self._prepare_reputation(loop_input)
+        territorial_claims = self._prepare_territorial_claims(loop_input)
         competence = self._prepare_competence(loop_input, memory)
         competence, advice = self._prepare_teaching(loop_input, competence)
         recipe_beliefs = self._prepare_recipe_beliefs(loop_input)
@@ -1046,12 +1190,12 @@ class CognitiveLoop:
                 theory_of_mind=mind,
                 **_planner_options(
                     self._intention.select,
-                    counterfactual_bias=self._counterfactual_bias(
-                        loop_input, futures
-                    ),
+                    counterfactual_bias=self._counterfactual_bias(loop_input, futures),
                     competence_policy=self._competence_policy,
                     competence_model=competence,
                     teaching_policy=self._teaching_policy,
+                    territorial_claims=territorial_claims,
+                    territorial_claim_mode=self._territorial_claim_mode,
                 ),
             ),
             expected_type=SelectedIntention,
@@ -1083,6 +1227,8 @@ class CognitiveLoop:
                     teaching_selection=teaching_selection,
                     recipe_beliefs=recipe_beliefs,
                     selected_recipe_id=production_recipe_id,
+                    territorial_claims=territorial_claims,
+                    territorial_claim_mode=self._territorial_claim_mode,
                 ),
             ),
             expected_type=ActionPlan,
@@ -1118,6 +1264,7 @@ class CognitiveLoop:
             causal_world_model=world_model,
             theory_of_mind=mind,
             reputation=reputation,
+            territorial_claims=territorial_claims,
             competence_model=competence,
             declarative_advice=advice,
             recipe_beliefs=recipe_beliefs,
@@ -1195,6 +1342,7 @@ class CognitiveLoop:
             expected_type=tuple,
         )
         assert type(updates) is tuple
+        updates = self._annotate_claim_violations(proposal, updates)
         consolidation = await self._plan_sleep_consolidation(
             proposal=proposal,
             command=command,
@@ -1267,9 +1415,11 @@ class CognitiveLoop:
             causal_world_model=proposal.causal_world_model,
             theory_of_mind=proposal.theory_of_mind,
             reputation=proposal.reputation,
+            territorial_claims=proposal.territorial_claims,
             competence_model=proposal.competence_model,
             declarative_advice=proposal.declarative_advice,
             recipe_beliefs=proposal.recipe_beliefs,
+            territorial_audits=getattr(proposal.plan, "territorial_audits", None),
             communication_intent=proposal.communication_intent,
             communication_intent_audit=proposal.communication_intent_audit,
         )

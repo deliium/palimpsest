@@ -127,6 +127,7 @@ def build_perspective(
     causal_world_model: object | None = None,
     theory_of_mind: object | None = None,
     reputation: object | None = None,
+    territorial_claims: object | None = None,
     competence_model: object | None = None,
     declarative_advice: object | None = None,
     recipe_beliefs: object | None = None,
@@ -224,9 +225,7 @@ def build_perspective(
                 "goal owner_id must match perspective agent",
             )
 
-    drive_profile = (
-        default_drive_profile(agent_id) if drives is None else drives
-    )
+    drive_profile = default_drive_profile(agent_id) if drives is None else drives
     if type(drive_profile) is not DriveProfile:
         _LOGGER.error(
             "%s reason=drive_type agent=%s",
@@ -312,6 +311,7 @@ def build_perspective(
         causal_world_model=causal_world_model,
         theory_of_mind=theory_of_mind,
         reputation=reputation,
+        territorial_claims=territorial_claims,
         competence_model=competence_model,
         declarative_advice=declarative_advice,
         recipe_beliefs=recipe_beliefs,

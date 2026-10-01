@@ -575,10 +575,12 @@ def _cognition_config_for(
         skill_mode.value,
         None if belief_policy is None else belief_policy.version,
     )
+    from agents.cognition.configuration import CognitionTerritorialClaimMode
     from agents.cognition.production import (
         ProductionKnowledgeMode as CognitionProductionKnowledgeMode,
     )
     from agents.cognition.teaching import TeachingClaimPolicy
+    from agents.cognition.territorial import default_territorial_claim_policy
 
     teaching_mode = CognitionTeachingInteractionMode(
         spec.teaching_interaction_mode.value
@@ -598,6 +600,15 @@ def _cognition_config_for(
         "cognition_config_teaching_mode mode=%s policy_version=%s",
         teaching_mode.value,
         teaching_policy_version,
+    )
+    territorial_mode = CognitionTerritorialClaimMode(spec.territorial_claim_mode.value)
+    territorial_policy = None
+    if territorial_mode is CognitionTerritorialClaimMode.DETERMINISTIC:
+        territorial_policy = default_territorial_claim_policy()
+    _LOG.debug(
+        "cognition_config_territorial_claim_mode mode=%s policy_version=%s",
+        territorial_mode.value,
+        None if territorial_policy is None else territorial_policy.version,
     )
     return CognitionLoopConfig(
         memory_mode=CognitionMemoryMode(spec.memory_mode.value),
@@ -628,6 +639,8 @@ def _cognition_config_for(
         competence_belief_policy=belief_policy,
         teaching_interaction_mode=teaching_mode,
         teaching_claim_policy=teaching_policy,
+        territorial_claim_mode=territorial_mode,
+        territorial_claim_policy=territorial_policy,
         production_knowledge_mode=CognitionProductionKnowledgeMode(
             spec.production_knowledge_mode.value
         ),

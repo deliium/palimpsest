@@ -41,6 +41,10 @@ from agents.cognition.reputation import (
     ReputationFormationPolicy,
     default_reputation_policy,
 )
+from agents.cognition.territorial import (
+    TerritorialClaimPolicy,
+    default_territorial_claim_policy,
+)
 from agents.cognition.theory_of_mind import (
     TheoryOfMindPolicy,
     default_theory_of_mind_policy,
@@ -214,6 +218,17 @@ class CognitionTeachingInteractionMode(StrEnum):
     DETERMINISTIC = "deterministic"
 
 
+class CognitionTerritorialClaimMode(StrEnum):
+    """Owner-scoped claim ledger. Disabled leaves the snapshot field unset.
+
+    Lockstep with ``simulation.TerritorialClaimMode``. This is not a
+    ``V2CapabilityFlags`` slot. ``DISABLED`` does not allocate a ledger.
+    """
+
+    DISABLED = "disabled"
+    DETERMINISTIC = "deterministic"
+
+
 def _unit_interval(name: str, value: object) -> float:
     if isinstance(value, bool) or not isinstance(value, (int, float)):
         raise ValueError(f"{name}: not_unit_interval")
@@ -294,6 +309,10 @@ class CognitionLoopConfig:
         CognitionTeachingInteractionMode.DISABLED
     )
     teaching_claim_policy: object | None = None
+    territorial_claim_mode: CognitionTerritorialClaimMode = (
+        CognitionTerritorialClaimMode.DISABLED
+    )
+    territorial_claim_policy: TerritorialClaimPolicy | None = None
     production_knowledge_mode: ProductionKnowledgeMode = (
         ProductionKnowledgeMode.DISABLED
     )
@@ -486,13 +505,33 @@ class CognitionLoopConfig:
                 raise TypeError(
                     "teaching_claim_policy must be TeachingClaimPolicy or None"
                 )
+        if type(self.territorial_claim_mode) is not CognitionTerritorialClaimMode:
+            _LOG.error(
+                "invalid_enum path=territorial_claim_mode reason_code=invalid_mode"
+            )
+            raise TypeError(
+                "territorial_claim_mode must be CognitionTerritorialClaimMode"
+            )
+        if self.territorial_claim_mode is CognitionTerritorialClaimMode.DISABLED:
+            object.__setattr__(self, "territorial_claim_policy", None)
+        elif self.territorial_claim_policy is None:
+            object.__setattr__(
+                self,
+                "territorial_claim_policy",
+                default_territorial_claim_policy(),
+            )
+        elif type(self.territorial_claim_policy) is not TerritorialClaimPolicy:
+            _LOG.error(
+                "invalid_enum path=territorial_claim_policy reason_code=invalid_type"
+            )
+            raise TypeError(
+                "territorial_claim_policy must be TerritorialClaimPolicy or None"
+            )
         if type(self.production_knowledge_mode) is not ProductionKnowledgeMode:
             _LOG.error(
                 "invalid_enum path=production_knowledge_mode reason_code=invalid_mode"
             )
-            raise TypeError(
-                "production_knowledge_mode must be ProductionKnowledgeMode"
-            )
+            raise TypeError("production_knowledge_mode must be ProductionKnowledgeMode")
         if (
             self.reflection_policy is not None
             and type(self.reflection_policy) is not ReflectionPolicy
@@ -640,6 +679,12 @@ class CognitionLoopConfig:
                 None
                 if self.reputation_policy is None
                 else self.reputation_policy.version
+            ),
+            "territorial_claim_mode": self.territorial_claim_mode.value,
+            "territorial_claim_policy_version": (
+                None
+                if self.territorial_claim_policy is None
+                else self.territorial_claim_policy.version
             ),
             "skill_learning_mode": self.skill_learning_mode.value,
             "teaching_interaction_mode": self.teaching_interaction_mode.value,
@@ -838,5 +883,7 @@ def build_cognitive_loop(
         competence_belief_policy=resolved.competence_belief_policy,
         teaching_interaction_mode=resolved.teaching_interaction_mode,
         teaching_claim_policy=resolved.teaching_claim_policy,
+        territorial_claim_mode=resolved.territorial_claim_mode,
+        territorial_claim_policy=resolved.territorial_claim_policy,
         production_knowledge_mode=resolved.production_knowledge_mode,
     )

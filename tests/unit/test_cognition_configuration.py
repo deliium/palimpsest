@@ -61,13 +61,9 @@ def test_production_defaults_match_legacy_default_loop() -> None:
     config = production_cognition_config()
     assert config.memory_mode is CognitionMemoryMode.RECONSTRUCTIVE
     assert config.imagination_mode is CognitionImaginationMode.ENABLED
-    assert (
-        config.mortality_appraisal_mode is CognitionMortalityAppraisalMode.ENABLED
-    )
+    assert config.mortality_appraisal_mode is CognitionMortalityAppraisalMode.ENABLED
     assert config.goal_management_mode is CognitionGoalManagementMode.ENABLED
-    assert (
-        config.emotional_state_mode is CognitionEmotionalStateMode.PASSTHROUGH
-    )
+    assert config.emotional_state_mode is CognitionEmotionalStateMode.PASSTHROUGH
     loop = default_cognitive_loop()
     assert type(loop._futures) is ImaginationEngine
     assert type(loop._motivation) is MotivationAppraisal
@@ -117,9 +113,7 @@ def test_build_loop_threads_identity_mode() -> None:
 
     passthrough = build_cognitive_loop(CognitionLoopConfig())
     assert type(passthrough._self_state) is DirectSelfStateProjector
-    assert (
-        passthrough._self_state._identity_mode is CognitionIdentityMode.PASSTHROUGH
-    )
+    assert passthrough._self_state._identity_mode is CognitionIdentityMode.PASSTHROUGH
     enabled = build_cognitive_loop(
         CognitionLoopConfig(identity_mode=CognitionIdentityMode.ENABLED)
     )
@@ -285,6 +279,20 @@ def test_communication_strategy_mode_defaults_off() -> None:
     )
     assert on.communication_strategy_policy is not None
     assert on.communication_strategy_policy.version == "communication-strategy.v1"
+
+
+def test_territorial_claim_mode_defaults_off() -> None:
+    from agents.cognition.configuration import CognitionTerritorialClaimMode
+
+    off = CognitionLoopConfig()
+    assert off.territorial_claim_mode is CognitionTerritorialClaimMode.DISABLED
+    assert off.territorial_claim_policy is None
+    assert off.condition_fingerprint_material()["territorial_claim_mode"] == "disabled"
+    on = CognitionLoopConfig(
+        territorial_claim_mode=CognitionTerritorialClaimMode.DETERMINISTIC
+    )
+    assert on.territorial_claim_policy is not None
+    assert on.territorial_claim_policy.version == "territorial-claims.v1"
 
 
 def test_reputation_mode_defaults_off() -> None:

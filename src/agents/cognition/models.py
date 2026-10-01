@@ -710,6 +710,7 @@ class SubjectiveSnapshot:
     causal_world_model: object | None = None
     theory_of_mind: object | None = None
     reputation: object | None = None
+    territorial_claims: object | None = None
     competence_model: object | None = None
     declarative_advice: object | None = None
     recipe_beliefs: object | None = None
@@ -857,6 +858,13 @@ class SubjectiveSnapshot:
             self.owner_id,
             field_name="SubjectiveSnapshot.reputation",
         )
+        from agents.cognition.territorial import require_owner_territorial_claims
+
+        require_owner_territorial_claims(
+            self.territorial_claims,
+            self.owner_id,
+            field_name="SubjectiveSnapshot.territorial_claims",
+        )
         from agents.cognition.competence import require_owner_competence
 
         require_owner_competence(
@@ -880,9 +888,7 @@ class SubjectiveSnapshot:
             else len(self.social_identity.counterparts)
         )
         emotion_kinds = (
-            0
-            if self.emotional_state is None
-            else len(self.emotional_state.intensities)
+            0 if self.emotional_state is None else len(self.emotional_state.intensities)
         )
         return (
             f"SubjectiveSnapshot(owner_id={self.owner_id.value!r}, "
@@ -1760,9 +1766,7 @@ class GoalTransitionIntent:
                     "GoalTransitionIntent.resulting_goal: goal_id_mismatch"
                 )
             if self.resulting_goal.status is not self.to_status:
-                raise ValueError(
-                    "GoalTransitionIntent.resulting_goal: status_mismatch"
-                )
+                raise ValueError("GoalTransitionIntent.resulting_goal: status_mismatch")
 
     def __repr__(self) -> str:
         return (
@@ -1954,9 +1958,7 @@ class EmotionRegulationPolicy:
                     "EmotionRegulationPolicy.enabled_kinds: invalid_entry_type"
                 )
             if kind not in DEFAULT_EMOTION_KINDS:
-                raise ValueError(
-                    "EmotionRegulationPolicy.enabled_kinds: unknown_kind"
-                )
+                raise ValueError("EmotionRegulationPolicy.enabled_kinds: unknown_kind")
             if kind in seen:
                 raise ValueError(
                     "EmotionRegulationPolicy.enabled_kinds: duplicate_kind"
@@ -2022,9 +2024,7 @@ def default_emotion_regulation_policy(
 ) -> EmotionRegulationPolicy:
     """Return the default ``emotion.v1`` regulation policy."""
     kinds = (
-        tuple(DEFAULT_EMOTION_KINDS)
-        if enabled_kinds is None
-        else tuple(enabled_kinds)
+        tuple(DEFAULT_EMOTION_KINDS) if enabled_kinds is None else tuple(enabled_kinds)
     )
     decay = {kind: 0.15 for kind in kinds}
     gains = {kind: 0.85 for kind in kinds}
@@ -2148,14 +2148,10 @@ def empty_emotional_state(
     if type(owner_id) is not AgentId:
         raise TypeError("empty_emotional_state: invalid_owner_type")
     kinds = (
-        tuple(DEFAULT_EMOTION_KINDS)
-        if enabled_kinds is None
-        else tuple(enabled_kinds)
+        tuple(DEFAULT_EMOTION_KINDS) if enabled_kinds is None else tuple(enabled_kinds)
     )
     ordered = tuple(kind for kind in DEFAULT_EMOTION_KINDS if kind in set(kinds))
-    intensities = tuple(
-        EmotionIntensity(kind=kind, intensity=0.0) for kind in ordered
-    )
+    intensities = tuple(EmotionIntensity(kind=kind, intensity=0.0) for kind in ordered)
     return AgentEmotionalState(
         owner_id=owner_id,
         tick=tick,
@@ -2215,9 +2211,7 @@ class EmotionalStateEvaluation:
         object.__setattr__(
             self,
             "confidence",
-            require_confidence(
-                "EmotionalStateEvaluation.confidence", self.confidence
-            ),
+            require_confidence("EmotionalStateEvaluation.confidence", self.confidence),
         )
         object.__setattr__(
             self,
@@ -2229,9 +2223,7 @@ class EmotionalStateEvaluation:
             ),
         )
         if type(self.decision_metadata) is not DecisionMetadata:
-            raise TypeError(
-                "EmotionalStateEvaluation.decision_metadata: invalid_type"
-            )
+            raise TypeError("EmotionalStateEvaluation.decision_metadata: invalid_type")
 
     def __repr__(self) -> str:
         return (
@@ -3330,6 +3322,7 @@ class ActionPlan:
     decision_metadata: DecisionMetadata = DecisionMetadata()
     communication_intent: object | None = None
     communication_intent_audit: object | None = None
+    territorial_audits: tuple[object, ...] | None = None
 
     def __post_init__(self) -> None:
         if type(self.owner_id) is not AgentId:
@@ -3363,6 +3356,16 @@ class ActionPlan:
             intent = self.communication_intent
             if intent is not None and intent.owner_id != self.owner_id:
                 raise ValueError("owner_mismatch")
+        if self.territorial_audits is not None:
+            from agents.cognition.territorial import TerritorialClaimAudit
+
+            audits = tuple(self.territorial_audits)
+            for item in audits:
+                if type(item) is not TerritorialClaimAudit:
+                    raise TypeError("territorial_audits entries must be audits")
+                if item.owner_id != self.owner_id:
+                    raise ValueError("territorial_audits owner_id mismatch")
+            object.__setattr__(self, "territorial_audits", audits)
 
     def __repr__(self) -> str:
         return (
@@ -3648,6 +3651,7 @@ class CognitiveLoopProposal:
     communication_intent: object | None = None
     communication_intent_audit: object | None = None
     reputation: object | None = None
+    territorial_claims: object | None = None
     competence_model: object | None = None
     declarative_advice: object | None = None
     recipe_beliefs: object | None = None
@@ -3704,6 +3708,13 @@ class CognitiveLoopProposal:
             self.reputation,
             self.agent_id,
             field_name="CognitiveLoopProposal.reputation",
+        )
+        from agents.cognition.territorial import require_owner_territorial_claims
+
+        require_owner_territorial_claims(
+            self.territorial_claims,
+            self.agent_id,
+            field_name="CognitiveLoopProposal.territorial_claims",
         )
         from agents.cognition.competence import require_owner_competence
 
@@ -3793,9 +3804,11 @@ class CognitiveLoopResult:
     communication_intent: object | None = None
     communication_intent_audit: object | None = None
     reputation: object | None = None
+    territorial_claims: object | None = None
     competence_model: object | None = None
     declarative_advice: object | None = None
     recipe_beliefs: object | None = None
+    territorial_audits: tuple[object, ...] | None = None
 
     def __post_init__(self) -> None:
         object.__setattr__(
@@ -3826,6 +3839,23 @@ class CognitiveLoopResult:
             self.agent_id,
             field_name="CognitiveLoopResult.reputation",
         )
+        from agents.cognition.territorial import require_owner_territorial_claims
+
+        require_owner_territorial_claims(
+            self.territorial_claims,
+            self.agent_id,
+            field_name="CognitiveLoopResult.territorial_claims",
+        )
+        if self.territorial_audits is not None:
+            from agents.cognition.territorial import TerritorialClaimAudit
+
+            audits = tuple(self.territorial_audits)
+            for item in audits:
+                if type(item) is not TerritorialClaimAudit:
+                    raise TypeError("territorial_audits entries must be audits")
+                if item.owner_id != self.agent_id:
+                    raise ValueError("territorial_audits owner_id mismatch")
+            object.__setattr__(self, "territorial_audits", audits)
         from agents.cognition.competence import require_owner_competence
 
         require_owner_competence(

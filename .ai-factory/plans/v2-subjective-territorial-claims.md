@@ -1,0 +1,217 @@
+# Implementation Plan: Subjective Territorial Claims
+
+Branch: main
+Created: 2026-10-01
+Improved: 2026-10-01 (`/aif-improve`)
+
+## Settings
+- Testing: yes
+- Logging: verbose
+- Docs: yes
+
+## Roadmap Linkage
+Milestone: "M6 — Remaining V2 Capability Flags"
+Rationale: First incomplete roadmap milestone; this plan adds an opt-in subjective claim mode and leaves `multi_hop_testimony_tracking` unowned.
+
+## Compatibility contract
+
+Claims are owner-scoped beliefs about locations, shelters, stored resources, and frequently used areas. They are social constructs. `WorldEngine` keeps admitting movement, possession, and production from physical rules alone. The plan must satisfy the Downstream V2 plan contract in `docs/architecture.md`.
+
+1. V1 invariants intact. `WorldEngine` remains the only mutation authority. Claim updates read the owner's `Observation`, the owner's `MemoryTrace` values, the owner's `OwnerSafeSocialIdentity`, relationship floats the caller already projected, and the owner's existing claim ledger. They never receive `WorldState`, `PhysicalRules`, `AgentBody`, `WorldEvent`, an event repository, replay, analysis output, or another agent's runtime, goals, drives, beliefs, emotion, relationships, memories, mind model, reputation ledger, or claim ledger.
+2. Do not own a capability flag. Do not add a `V2CapabilityFlags` field. Do not add `territorial_behavior` or any new flag name. `multi_hop_testimony_tracking` stays unimplemented and still fails closed with `capability_unimplemented`. Off for this feature is `TerritorialClaimMode.DISABLED`, which does not change commands, memories, relationships, beliefs, reputation, or audits.
+3. V1 regression gate stays green under flags-off, claim-mode disabled, and tracing-off. Catalog A–E and the reference scenario keep their current `exact_trajectory_hash` values. Experiment V is additive and must not be appended to `tests/unit/test_v1_regression_gate.py`.
+4. Schema bump only for the enabled mode. Default write stays `runner-config-v4`. Add `runner-config-v15` to the accepted set. v15 carries every `runner-config-v14` key plus `territorial_claim_mode` on each agent. Emit v15 only when some agent's `TerritorialClaimMode` is `DETERMINISTIC`. A dynamics-only config still writes v14. Reject v15 when every territorial mode is `DISABLED` (`v15_requires_territorial_claims`). Reject `DETERMINISTIC` territorial mode on v1–v14 (`territorial_claim_mode_requires_v15`). Add v15 beside v14 on every existing mode and spec allowlist (communication strategy, reputation, skill learning, teaching, production knowledge, reflection, consolidation, prospective imagination, counterfactual reasoning, and environmental dynamics). `RUNNER_SCHEMA_VERSION` stays `runner-config-v4`. No policy weights in runner JSON. Leave `v1_regression_profile` unchanged.
+5. No scripted emergence. No friend, enemy, leader, culture, owner, property, or territory label in domain types, commands, events, or logs at INFO. No new `AgentCommand`, `ActionDirection`, `CommunicationSourceBasis`, `RelationshipDimension`, or `WorldEvent` kind. No grid, tile, chunk, or coordinate ownership.
+6. No LLM path. There is no provider schema and no prompt package. `DETERMINISTIC` never calls `LLMProvider`.
+7. Experiments stay reproducible. Paired arms share seed, topology, and stochastic identity. No RNG and no wall clock in claim updates. Experiment V and `spatial_control@1` stay analysis-only and off the V1 regression gate. The metric is not an input to cognition.
+8. Optional cognition tracing stays outside the objective fold. Do not insert a `ComponentKind` or an ordinal in `_STAGE_ORDER`. Do not bump `COGNITION_TRACE_SUMMARY_SCHEMA`, add trace enum members, or add an Alembic revision. Do not copy claim strengths, predicates, or analysis readings onto the trace summary. `subjective-v1` stays unchanged. `OBSERVER_PROTOCOL_VERSION` stays `observer-protocol-v1`. `SEMANTIC_EVENT_TYPES` stays at its current length. Tracing on versus off must not change `exact_trajectory_hash` when the mode is `DISABLED`.
+
+## Goal
+
+Agents can develop private claims, tell others about them, respect them, ignore them, challenge them, defend a place or stock, and remember a breach. None of that writes an owner onto the world.
+
+Three views stay distinct:
+
+| Layer | What it contains | Who may read it during a tick |
+| --- | --- | --- |
+| Objective world | Bodies at a location, items held or on the ground, resource quantities, shelter and store structures | `WorldEngine`, then the existing observer frame after commit |
+| Selected-agent subjective claims | That owner's ledger only | That owner's cognition; a researcher query after the fact |
+| Research analytics | Repeated spatial-control patterns, and contest readings computed afterward | Analysis and an optional Godot overlay |
+
+Physical control is who is present and who holds an item. A subjective claim is a belief that an agent asserts use of a logical `Location`, a shelter structure, a stored resource, or a place they have used often. An analytical repeated-control reading is a pattern in the committed log. Godot may show each view under its own overlay type. An overlay paints nothing until the researcher enables it, and enabling it does not change the run.
+
+## Design Decisions (locked)
+
+- **A ledger, not a world field and not a semantic belief.** `TerritorialClaimLedger` is owner-scoped state on `SubjectiveSnapshot.territorial_claims`, default `None`. A head is one `(owner, target_kind, target_entity_id)`. It is not a `SemanticBelief`, not a `ReputationProfile`, and not a `MindHypothesis`. Updates do not call `revise_semantic_belief` or `apply_reputation_update`. `Location`, `Structure`, `Resource`, `Item`, `AgentBody`, `WorldState`, and `Observation` gain no `owner`, `territory_owner`, `claimant`, or `controller` field.
+- **Disabled mode is a passthrough.** `TerritorialClaimMode.DISABLED` leaves `snapshot.territorial_claims` as `None`, appends no evidence, emits no claim `Tell`, writes no violation relation, applies no intention bias, and writes no runner field. Commands match the pre-claim planner.
+- **Targets are logical entities.** Closed `ClaimTargetKind`: `location`, `shelter`, `stored_resource`, `frequent_area`. `frequent_area` still names a `Location` entity id. Shelter names a structure id. Stored resource names a store structure id or a resource id. There is no cell index.
+- **The world does not consult the ledger.** `evaluate_operation` and `apply_operation` stay on placement, capacity, colocation, and production rules. A `Take`, `Move`, `Harvest`, `Eat`, `Drink`, or `Store` that is physically legal succeeds while another agent holds a claim on that place. A test builds a ledger, runs the command through `WorldEngine`, and asserts the physical result and that the folded state has no claim key.
+- **Formation uses the owner's evidence only.** `apply_territorial_update(...)` runs from a new `CognitiveLoop._prepare_territorial_claims`, beside `_prepare_reputation`, before intention selection. `DISABLED` returns `None` and does not call it. Self evidence, this tick, `success is not False`, actor resolved through `OwnerSafeSocialIdentity`. `ObservedOccurrence.kind` is `details.kind`:
+  - `sleep` sets a `location` claim on `observation.self_body.location_id` to at least `0.50`. That occurrence has no target id.
+  - `structure_built` or `structure_repaired` sets a `shelter` claim to at least `0.50` when `other_entity_id` matches a visible shelter `ObservedStructure` at that location. No matching visible shelter yields `shelter_unseen` and no head.
+  - `item_stored` sets a `stored_resource` claim to at least `0.50` when `other_entity_id` matches a visible store `ObservedStructure` at that location. No matching visible store yields `store_unseen` and no head.
+  - `resource_harvested` sets a `stored_resource` claim on `other_entity_id` (the resource id) to at least `0.50`.
+  - `take` names an item id on `other_entity_id`. It does not create a stored-resource head.
+- **Frequent areas come from the owner's memory.** Count distinct `provenance.source_tick` values on the owner's direct-observation traces whose `context.location_id` equals that location. Each new tick adds `0.15`, quantized, capped at `1`. A `frequent_area` head is created or raised when the total reaches `0.40` (three distinct ticks). Traces without a location contribute nothing. The count is not read from the event log.
+- **Heard claims update the listener's ledger only.** Testimony is read from `observation.communications` and `snapshot.inbox`, the same surfaces `_prepare_reputation` walks. A relation with predicate `claims` or `disputes`, subject a target entity id, and object one target-kind token becomes testimony. `hop_count` is `declared.hop_count`. Speech moves the listener toward `0.70 * source_trust` at rate `0.5`: `delta = (0.70 * source_trust - current) * 0.5`. `hop_count > 1` is dropped. The listener does not read the speaker's ledger. `source_basis` on the utterance is `unreferenced`. `CommunicationContent.text` is the predicate name. Do not write `owner`, `territory`, `mine`, or `property` into text, concepts, or predicates. `extract_evidence_candidates` may still copy the relation into an ordinary semantic claim. The territorial module does not special-case that extractor and does not copy the semantic belief back. `_prepare_territorial_claims` projects trust with `project_trust_inputs` and reads `RelationshipDimension.FEAR` and `RESENTMENT` on that profile. A missing profile stays `(trust 0.50, resentment 0, fear 0)`.
+- **Same-tick defense reads the occurrence.** Planning runs before `MEMORY_UPDATE`. A breach observed this tick can challenge or defend immediately. The memory relation is written later in the update stage so later ticks can recall it. Cognition must not wait for a trace that this tick has not stored yet.
+- **Violations are memories.** When the mode is `DETERMINISTIC` and the owner already has a head, another agent's successful occurrence matches that head when `other_entity_id` equals a `shelter` or `stored_resource` target, or when the owner's current location equals a `location` or `frequent_area` target. Matching kinds are `take`, `resource_harvested`, `eat`, `drink`, `item_stored`, and `sleep`. The update appends channel `violation`. During memory update, `with_violation_relation(trace)` returns a new trace with predicate `violated`, subject the other entity id, object the target entity id. `build_direct_observation_memory_trace` keeps its current signature and output. Contradiction mass increases by `0.25`. The head is kept. `DISABLED` does not call `with_violation_relation`.
+- **Respect and ignore are biases, not vetoes in the engine.** Before selection, when a believed other-claim on the relevant target has strength `>= 0.40` and the caller-projected trust toward that claimant is `>= 0.60`, subtract `0.35` from the matching direction score. `ActionDirection` has no `TAKE`. Penalize `MOVE` when the destination is a claimed `location` or `frequent_area`. Penalize `SEARCH`, `EAT`, and `DRINK` when the target is a claimed resource or store. Hunger or thirst at `value / 100 >= 0.75` (`_CRITICAL_NEED`) skips that penalty, reason `ignore_need`. Trust `< 0.40` skips it, reason `ignore_relationship`. Trust in `[0.40, 0.60)` records `relationship_neutral` and does not subtract. Missing profile keeps trust `0.50`, resentment `0`, fear `0`, reason `source_relationship_missing`, which is the neutral band. Do not treat a missing profile as hostility.
+- **Challenge, defense, and announcement replace `Wait` only, after production.** `_with_production_command` replaces every command except `Drink`, `Eat`, `Sleep`, and `Flee`. The territorial replacement runs immediately after that call, and only when the command is still `Wait`. Reputation replacement stays before production. `ActionPlan` still holds one `AgentCommand`. Any command other than `Wait` stays, reason `command_already_selected`. When the command is `Wait` and the mode is `DETERMINISTIC`, apply the first matching rule:
+  1. A breach was observed this tick, resentment toward the actor is `>= 0.40`, and fear is `< 0.60`: replace `Wait` with `Attack` (defend).
+  2. A breach was observed and rule 1 did not match: replace `Wait` with `Tell`, predicate `disputes` (challenge).
+  3. The owner has a head with strength `>= 0.40` and a colocated recipient who is not the target: replace `Wait` with `Tell`, predicate `claims` (communicate).
+  4. Otherwise leave `Wait`.
+  `Eat`, `Drink`, `Flee`, `Move`, and `Search`, and any production command that already replaced `Wait`, stay in place. `DISABLED` does not replace `Wait`.
+- **Carry follows reputation.** `AgentRuntime` in `src/simulation/agent_runtime.py` holds the ledger between ticks the way it holds `reputation`, including the `_commit_reputation` pattern, `CognitiveLoopProposal`, `CognitiveLoopResult`, and `AgentRuntimeCheckpoint` in `src/simulation/run_control.py`, default `None`. Export and restore copy it. `SubjectiveMutationBatch` does not grow a territorial field. `subjective-v1` does not gain a version or a required key. A disabled checkpoint stores `None` and omits the key. No Alembic revision. There is no `src/agents/runtime.py`.
+- **Quantization and caps.** Strengths and masses are quantized to `1e-6` and clamped to `[0, 1]`. At most 32 heads per owner and 64 evidence items per head. Further items drop with `cap_exceeded`. Head id is sha256 of owner id, target kind, and target entity id. Evidence id is sha256 of head id, ordinal, channel, and lineage ref. No RNG, wall clock, or Python `hash()`.
+- **Fail closed.** Unknown target kind, unknown channel, owner mismatch, non-finite numbers, unresolved entities, hop count above 1 presented as testimony, and a testimony object that is not a target-kind token abort with stable reason codes. A bad utterance is ignored.
+- **Analytics is a later reading.** `compute_spatial_control` lives in `src/analysis/spatial_control_metrics.py`. It reads caller-supplied action rows, including production kinds the V1 vocabulary filter drops, plus optional detached claim rows. It returns, per location id, repeated-control intervals and two contest readings. `control_contest` is two or more agents each with at least two exclusive windows on that location. `claim_contest` is two or more owners with a head of strength `>= 0.40` on that same location, and it is `MetricAvailability.ABSENT` when claim rows were not supplied. Reading labels exist only in the metric document. Empty input returns `MetricAvailability.ABSENT`. The stored result is the existing `MetricDocument` for family `spatial_control` (`spatial_control@1`). It is not a second schema. The function must not import `agents` or `observer`. Cognition must not import `analysis`. The metric result is not a snapshot field and is not a frame field.
+- **Exclusive window.** From rows sorted by `(tick, ordinal)`, built inside `spatial_control_metrics.py`, an agent's window at a location is a maximal run of that agent's successful `move`, `sleep`, `take`, `search`, `resource_harvested`, `structure_built`, `structure_repaired`, or `item_stored` rows at that `location_id` with no other agent's successful `take`, `resource_harvested`, `item_stored`, `eat`, or `drink` at that location inside the run. A window of at least 2 actions counts. Repeated control is two or more such windows for the same agent and location. Initial positions are rows the caller passes. Do not add these production kinds to `ACTION_VOCABULARY_V1`. `applied_actions_from_world_events` keeps today's vocabulary filter. The metric does not import `WorldEngine`.
+- **Observer protocol stays objective.** `project_frame` keeps copying the detached objective scene. `ObserverWorldState` rejects attributes or parsed mapping keys `relationship`, `relationships`, `territorial_claims`, `spatial_control`, `territory_owner`, and `controller` with `objective_leak`. No new semantic event type. Frames do not gain a claim, contest, or control field.
+- **Three query documents.** `physical-control-v1` is a pure grouping of the objective frame: per `location_id`, colocated agent ids and item ids whose holder or site is that location, `authority = physical_possession`. `project_physical_control` lives in `observer` and reads only `ObserverWorldState`. `subjective-claims-v1` is one selected owner's heads: owner id, target kind, target entity id, quantized strength, `layer = subjective_claims`. `DetachedInspectionProjector` builds it in `simulation.inspection` from the checkpoint ledger. `simulation` must not import `observer`. It is served by `GET /v1/simulations/{run_id}/owners/{owner_id}/territorial-claims` through the same `_debug` dependency as owner beliefs (`subjective_debug`). An absent ledger is an empty head list, not a world owner. Family `spatial_control` is the existing `MetricDocument` (`spatial_control@1`), served by the existing metrics route with capability `objective_inspection`. Claim rows are included only when the collector supplied them; values are marked `layer = research_analytics` and `contest_source = subjective_claims` or `objective_control`. None of these builders accepts the others' documents as an input that rewrites the scene.
+- **Godot overlays are client toggles.** Default off. `LocationLayer` keeps painting season, weather, band, hazard, and depletion from the objective snapshot. New sibling nodes read only a payload whose `layer` is `subjective_claims` or `research_analytics`. A `world` object that contains claim or analytics keys does not add markers and does not change occupant slots or zone color. Overlay copy is one of: selected agent claims this location, several agents contest this location, analytics detects repeated control here. The client still only GETs. `src/` must not import `clients.godot-observer`.
+
+### Locked numbers
+
+- Direct self action floor `0.50`.
+- Frequent-area step `0.15`, activation `0.40`, cap `1`.
+- Testimony target `0.70 * source_trust`, rate `0.50`. Hop above 1 dropped.
+- Violation contradiction mass `0.25`.
+- Respect threshold: other-claim strength `0.40`, trust `0.60`, score penalty `0.35` on `MOVE`, `SEARCH`, `EAT`, and `DRINK`.
+- Ignore trust below `0.40`. Neutral trust band `[0.40, 0.60)`. Missing profile `(trust 0.50, resentment 0, fear 0)`. Critical need is hunger or thirst `value / 100 >= 0.75`.
+- Defend when resentment `>= 0.40` and fear `< 0.60`. Otherwise a breach challenges.
+- Announce when own strength `>= 0.40`.
+- Caps 32 heads and 64 evidence items.
+- Repeated-control window length `2` actions. Contest when two agents each have two windows, or two subjective heads are at or above `0.40`.
+- Policy version `territorial-claims.v1`. Metric version `spatial_control@1`.
+
+## Non-Goals
+
+- An objective owner, deed, territory polygon, or engine rejection of physically legal actions
+- Grid, tile, or coordinate territory
+- A new `AgentCommand`, world event, semantic observer event, capability flag, cognition-trace stage, Alembic revision, or `subjective-v1` version
+- Letting an agent read another agent's ledger or any analytics document during cognition
+- Copying analysis or overlay state back into the run
+- An LLM claim assessor or free-form claim text
+- Putting Experiment V on the V1 regression gate
+- Rewriting `Eat`, `Drink`, `Flee`, `Move`, or `Search` after intention selection, or replacing a production command that already took the `Wait` slot
+- Adding production kinds to `ACTION_VOCABULARY_V1`
+
+## Commit Plan
+- **Commit 1** (after tasks 1–3): `feat(cognition): add owner-scoped territorial claim ledgers`
+- **Commit 2** (after tasks 4–7): `feat(cognition): let claims bias respect, challenge, and defense`
+- **Commit 3** (after tasks 8–10): `feat(observer): keep territorial overlays off the world frame`
+- **Commit 4** (after tasks 11–12): `test(experiments): show territorial claims varying with scarcity and relationships`
+
+## Tasks
+
+### Phase 1: Contracts and Mode
+
+- [x] Task 1: Add territorial claim contracts and `TerritorialClaimPolicy`.
+  - Deliverable: frozen types in `src/agents/cognition/territorial.py`, exported from `src/agents/cognition/__init__.py`. `DISABLED` leaves the snapshot field `None`.
+  - Types: `ClaimTargetKind` (`location`, `shelter`, `stored_resource`, `frequent_area`), `ClaimChannel` (`direct_action`, `repeated_presence`, `testimony`, `violation`), `TerritorialEvidenceItem` (evidence id, owner `AgentId`, target kind, target `EntityId`, channel, lineage ref, source `AgentId`, quantized pre-scale delta, tick, policy version), `TerritorialClaim` (claim id, owner, target kind, target entity id, quantized strength, support mass, contradiction mass, evidence tuple), `TerritorialClaimLedger` (owner, claims), `TerritorialClaimPolicy` (`territorial-claims.v1` and the locked numbers), `CognitionTerritorialClaimMode` (`DISABLED`, `DETERMINISTIC`) in `src/agents/cognition/configuration.py` and matching `TerritorialClaimMode` in `src/simulation/runner_models.py`.
+  - No field on these types is named `territory_owner`, `owner`, `controller`, `grid`, `cell`, `property`, or `mine`.
+  - Constructors reject unknown enums, non-finite numbers, values outside `[0, 1]`, duplicate heads, evidence over the cap, and owner mismatches, with stable reason codes.
+  - Logging: logger `agents.cognition.territorial`. DEBUG on construction with owner id, policy version, and head count. ERROR with field name and reason code on validation failure. No utterance text and no strength magnitudes.
+  - Control: levels follow `PALIMPSEST_LOG_LEVEL`.
+  - Files: `src/agents/cognition/territorial.py`, `src/agents/cognition/configuration.py`, `src/agents/cognition/__init__.py`, `src/simulation/runner_models.py`, `tests/unit/test_territorial_claims.py`.
+
+- [x] Task 2: Wire `DETERMINISTIC` through `runner-config-v15` without owning a new flag.
+  - Deliverable: mode off keeps `runner-config-v4` and today's commands. Mode on is accepted only as `runner-config-v15`. `multi_hop_testimony_tracking` still fails closed. A v15 document can still carry communication strategy, reputation, skill learning, teaching, production, reflection, consolidation, prospective imagination, counterfactual reasoning, and environmental dynamics.
+  - Add `territorial_claim_mode` to `AgentCognitionSpec` and to `CognitionLoopConfig`. Default both to `DISABLED`. Accept v15 in the version set. In the existing schema checks, add `territorial_claim_mode_requires_v15` and `v15_requires_territorial_claims`. Add v15 beside v14 on each allowlist named in the compatibility contract. Encode and decode the key only on v15 in `src/simulation/runner_serialization.py`. `RUNNER_SCHEMA_VERSION` stays `runner-config-v4`. Do not add a `V2CapabilityFlags` field. `simulation.runner._cognition_config_for` sets `CognitionTerritorialClaimMode.DETERMINISTIC` only from that field and builds `default_territorial_claim_policy()`. Update `src/simulation/compatibility.py` with the same accepted-set note.
+  - Tests: an enabled `multi_hop_testimony_tracking` still returns `capability_unimplemented`; a disabled territorial mode does not bump the written schema; dynamics-only still writes v14; territorial deterministic writes v15 and round-trips; v15 with the mode disabled is rejected. A `Location(...)` call that passes `territory_owner` raises `TypeError`. Run `uv run ruff check` on each touched file.
+  - Logging: DEBUG `cognition_config_territorial_claim_mode mode=%s policy_version=%s` on logger `simulation.runner`. Do not log policy thresholds. ERROR on schema rejection uses the stable runner codes above.
+  - Control: levels follow `PALIMPSEST_LOG_LEVEL`.
+  - Depends on task 1.
+  - Files: `src/simulation/runner_models.py`, `src/simulation/runner_serialization.py`, `src/simulation/compatibility.py`, `src/simulation/runner.py`, `src/simulation/__init__.py`, `src/agents/cognition/configuration.py`, `tests/unit/test_runner_models.py`, `tests/unit/test_runner_serialization.py`, `tests/unit/test_simulation_runner_construction.py`, `tests/unit/test_v2_flag_defaults.py`, `tests/unit/test_cognition_configuration.py`, `tests/unit/test_territorial_claims.py`.
+
+### Phase 2: Private Evidence
+
+- [x] Task 3: Apply observation, memory, and testimony into the owner's ledger.
+  - Deliverable: `apply_territorial_update(...)` returns a new `TerritorialClaimLedger` for one owner. It applies the locked formation rules for `sleep`, `structure_built`, `structure_repaired`, `item_stored`, `resource_harvested`, frequent-area memory ticks on `context.location_id`, and hop-0 or hop-1 testimony from `observation.communications` and `snapshot.inbox`. A successful `take` does not create a stored-resource head. Passing `WorldState` or `WorldEvent` raises `TypeError`. The module must not import `analysis`, `simulation`, `observer`, `world.events`, `world.models`, or `world._state`. It may import `world.observations`. `CognitiveLoop._prepare_territorial_claims` mirrors `_prepare_reputation`: project trust with `project_trust_inputs`, and read `RelationshipDimension.FEAR` and `RESENTMENT` on that profile. A missing profile stays `(0.50, 0, 0)`. Store the result on the proposal the way reputation is stored. `DISABLED` skips the call.
+  - Carry the ledger on `SubjectiveSnapshot`, `CognitiveLoopProposal`, `CognitiveLoopResult`, `AgentRuntime` in `src/simulation/agent_runtime.py` (same commit pattern as `_commit_reputation`), and `AgentRuntimeCheckpoint` in `src/simulation/run_control.py`, default `None`. Export and restore copy it. Omit the key when it is `None`. Do not bump `subjective-v1` and do not add an Alembic revision.
+  - Tests: two owners can hold contradictory strengths for one location id; a third fixture with mode disabled keeps the ledger `None` and the same selected command as today; frequent area stays at zero after two memory ticks and appears at the third; a shelter the owner did not see is not claimed; a `take` of an item creates no stored-resource head.
+  - Logging: DEBUG `territorial_update owner_id=%s tick=%s heads=%s channels=%s` with channel counts. WARNING on `cap_exceeded` and `shelter_unseen` / `store_unseen` with reason code and entity id. ERROR on invalid input with reason code. No utterance text and no strengths.
+  - Control: levels follow `PALIMPSEST_LOG_LEVEL`.
+  - Depends on task 1.
+  - Files: `src/agents/cognition/territorial.py`, `src/agents/cognition/loop.py`, `src/agents/cognition/contracts.py`, `src/agents/cognition/models.py`, `src/simulation/agent_runtime.py`, `src/simulation/run_control.py`, `tests/unit/test_territorial_claims.py`.
+
+- [x] Task 4: Remember a breach on the owner's trace.
+  - Deliverable: when the mode is `DETERMINISTIC` and the ledger already has a head, a matching other-agent success appends a `violation` evidence item in the same update. Matching kinds are `take`, `resource_harvested`, `eat`, `drink`, `item_stored`, and `sleep`. `other_entity_id` must equal a shelter or stored-resource target, or the owner's current location must equal a location or frequent-area target. In the memory-update stage, `with_violation_relation(trace)` returns a new trace with predicate `violated`. Contradiction mass increases by `0.25`. The head remains. `build_direct_observation_memory_trace` keeps its current signature. `DISABLED` does not call the helper.
+  - Tests: a physically successful `Take` by the other agent at a claimed location is admitted by `WorldEngine` and also appends owner-only violation evidence; the folded world mapping has no claim or owner key; a disabled run of the same take writes the occurrence trace without `violated`.
+  - Logging: DEBUG `territorial_violation owner_id=%s target_kind=%s tick=%s` with ids and reason `violated`. No inventory contents and no utterance text.
+  - Control: levels follow `PALIMPSEST_LOG_LEVEL`.
+  - Depends on task 3.
+  - Files: `src/agents/cognition/territorial.py`, `src/agents/cognition/memory.py`, `src/agents/cognition/loop.py`, `tests/unit/test_territorial_claims.py`.
+
+- [ ] Task 5: Announce a claim on an existing `Tell`.
+  - Deliverable: `CommandPlanner` may replace a still-`Wait` command with one `Tell` built with `origin_utterance` and one relation, predicate `claims`, subject the target entity id, object the target-kind token, `source_basis = unreferenced`, text the predicate name. That announce rule is the third rule of the replacement function Task 7 calls after `_with_production_command`. It does not run inside `choose_communication_strategy` and it does not run in the reputation slot before production. Any command that is no longer `Wait` stays. `DISABLED` does not emit that `Tell`.
+  - Tests: a head at `0.40` and a colocated recipient replace `Wait`; strength `0.39` does not; a selected `Eat` stays `Eat`; the world still does not record a claimant.
+  - Logging: DEBUG `territorial_tell owner_id=%s predicate=%s target_kind=%s` without the utterance body. INFO is not used for this replacement.
+  - Control: levels follow `PALIMPSEST_LOG_LEVEL`.
+  - Depends on task 3.
+  - Files: `src/agents/cognition/deliberation.py`, `src/agents/cognition/territorial.py`, `tests/unit/test_territorial_claims.py`.
+
+### Phase 3: Respect, Challenge, and Defense
+
+- [ ] Task 6: Bias `MOVE`, `SEARCH`, `EAT`, and `DRINK` from the owner's beliefs and projected relationship.
+  - Deliverable: `MultiCriteriaIntentionSelector` applies the locked respect penalty only when the mode is `DETERMINISTIC`. There is no `ActionDirection.TAKE`. Penalize `MOVE` toward a claimed location or frequent area, and `SEARCH`, `EAT`, and `DRINK` aimed at a claimed resource or store. Hunger or thirst at `value / 100 >= 0.75` records `ignore_need` and does not subtract. Low trust records `ignore_relationship`. The neutral band records `relationship_neutral` and does not subtract. `DISABLED` leaves scores unchanged. The module reads the prepared ledger and caller-projected floats. It does not read `WorldState` or analysis.
+  - Tests: high trust and strength `0.40` lowers the matching `MOVE` or `SEARCH` score by `0.35` and a low-need selector can rank another direction first; hunger at `75` records `ignore_need` and does not subtract; trust `0.39` records `ignore_relationship`; trust `0.50` records `relationship_neutral`; disabled scores match the pre-claim selector.
+  - Logging: DEBUG `territorial_bias owner_id=%s reason=%s direction=%s` with the reason code and direction name. Do not log the score value or relationship magnitudes.
+  - Control: levels follow `PALIMPSEST_LOG_LEVEL`.
+  - Depends on task 3.
+  - Files: `src/agents/cognition/deliberation.py`, `src/agents/cognition/territorial.py`, `tests/unit/test_territorial_claims.py`.
+
+- [ ] Task 7: Challenge and defend from `Wait` using this tick's occurrence.
+  - Deliverable: call the territorial replacement immediately after `_with_production_command`, and only when the command is still `Wait`. Reputation stays before production. The order inside that function is defend (`Attack`), then challenge (`Tell` predicate `disputes`), then the announce rule from Task 5. Record a `TerritorialClaimAudit` (owner id, tick, reason code, target kind, target entity id, policy version) on the cognition result. Audits are absent when the mode is `DISABLED`. Do not add them to the `runner-result-v2` document. Do not change `Help`, `Give`, `Eat`, `Drink`, `Flee`, `Move`, `Search`, or a production command that already replaced `Wait`.
+  - Tests: one breach fixture with resentment `0.40` and fear `0.59` replaces a remaining `Wait` with `Attack`; resentment `0.40` and fear `0.60` replaces `Wait` with `disputes`; a selected `Flee` stays `Flee`; a production command already substituted for `Wait` stays that command; disabled emits no audit.
+  - Logging: DEBUG `territorial_response owner_id=%s reason=%s command=%s` with reason `defend` or `challenge` and the command kind. WARNING when a breach is seen and the command was already selected (`command_already_selected`). No utterance text.
+  - Control: levels follow `PALIMPSEST_LOG_LEVEL`.
+  - Depends on tasks 5 and 6.
+  - Files: `src/agents/cognition/deliberation.py`, `src/agents/cognition/territorial.py`, `src/agents/cognition/loop.py`, `tests/unit/test_territorial_claims.py`.
+
+### Phase 4: Analytics and Observer Layers
+
+- [ ] Task 8: Add `spatial_control@1` over committed actions and optional claim rows.
+  - Deliverable: bump `METRIC_FAMILY_COUNT` from `27` to `28`, add `MetricFamilyId.SPATIAL_CONTROL`, update `_BUILDERS`, `src/analysis/__init__.py`, and the equality assertion in `tests/unit/test_metric_specifications.py`. `src/analysis/spatial_control_metrics.py` builds its own rows and implements the locked window kinds (`move`, `sleep`, `take`, `search`, `resource_harvested`, `structure_built`, `structure_repaired`, `item_stored`) and interruption kinds (`take`, `resource_harvested`, `item_stored`, `eat`, `drink`). Do not add those production kinds to `ACTION_VOCABULARY_V1`, and do not change `applied_actions_from_world_events`. The result is a `MetricDocument` for family `spatial_control` (`spatial_control@1`), not a second schema. Optional claim rows arrive on `MetricComputationInputs` the way other audit reports do. Collectors in `src/experiments/collectors.py` and `src/experiments/metric_collection.py` pass those rows, and claim rows only when a detached ledger snapshot was harvested. A disabled run harvests no claim rows, so `claim_contest` is `ABSENT` while objective windows can still be computed. Wire harvest beside reputation audits and keep the rows out of `runner-result-v2`.
+  - Tests: two exclusive windows yield `repeated_control`; one window does not; two agents with two windows each yield `control_contest`; two supplied heads at `0.40` yield `claim_contest` with `contest_source = subjective_claims`; omitted claim rows leave that reading `ABSENT` even when objective contest exists. `ACTION_VOCABULARY_V1` is unchanged. The metric module imports neither `agents` nor `WorldEngine`.
+  - Logging: logger `analysis.spatial_control`. DEBUG `spatial_control locations=%s windows=%s claim_rows=%s`. ERROR with reason code on non-finite or unknown target kind. No agent private text.
+  - Control: levels follow `PALIMPSEST_LOG_LEVEL`.
+  - Depends on task 3.
+  - Files: `src/analysis/spatial_control_metrics.py`, `src/analysis/specifications.py`, `src/analysis/metric_service.py`, `src/analysis/__init__.py`, `src/experiments/collectors.py`, `src/experiments/metric_collection.py`, `src/experiments/composition.py`, `tests/unit/test_spatial_control_metrics.py`, `tests/unit/test_metric_specifications.py`.
+
+- [ ] Task 9: Serve three projections and reject them on the objective frame.
+  - Deliverable: `project_physical_control(frame)` in `src/observer/project.py` returns `physical-control-v1` from occupants and item placement only, `authority = physical_possession`. `DetachedInspectionProjector` in `src/simulation/inspection.py` builds `subjective-claims-v1` (`layer = subjective_claims`) from the owner's checkpoint ledger and does not import `observer`. Add `GET /v1/simulations/{run_id}/owners/{owner_id}/territorial-claims` in `src/api/routes/inspection.py`, using the same `_debug` dependency as owner beliefs. Metrics stay on the existing metrics route as the `spatial_control` `MetricDocument`. Extend the `objective_leak` guard so `territorial_claims`, `spatial_control`, `territory_owner`, and `controller` cannot sit on `ObserverWorldState`. `project_frame` stays free of those keys. The WebSocket tick payload stays free of them. `api` must not import `analysis`. `observer` must not import `agents`. `simulation` must not import `observer`.
+  - Tests: a frame constructed with any leak key raises `objective_leak`; physical control lists the agents whose `location_id` matches and the items held there, and includes no claim id; a second owner is absent from the selected owner's claim document; the observer stream fixture for a tick contains none of the leak keys; an import-linter or architecture check still rejects `simulation` importing `observer`.
+  - Logging: DEBUG `subjective_claims_projected owner_id=%s heads=%s` on logger `simulation.inspection`. DEBUG `physical_control_projected locations=%s` on logger `observer.project`. ERROR `objective_leak field=%s` when a leak key is present. No claim strengths at INFO.
+  - Control: levels follow `PALIMPSEST_LOG_LEVEL`.
+  - Depends on tasks 3 and 8.
+  - Files: `src/observer/contracts.py`, `src/observer/project.py`, `src/simulation/inspection.py`, `src/api/routes/inspection.py`, `src/api/observer_schemas.py`, `tests/unit/test_observer_contracts.py`, `tests/unit/test_territorial_projections.py`.
+
+- [ ] Task 10: Draw optional Godot overlays from the separate queries.
+  - Deliverable: `clients/godot-observer/scripts/view/claim_overlay.gd` and `analytics_overlay.gd` are sibling `Node2D` nodes under `world_view.gd`. Toggles default off. When on, the session GETs `GET /v1/simulations/{run_id}/owners/{owner_id}/territorial-claims` for the selected owner and the existing metrics route for family `spatial_control`. Markers use the layout catalog position of the same `location_id` string. The subjective overlay draws only `layer = subjective_claims`. The analytics overlay draws only `layer = research_analytics`, with separate marker styles for `repeated_control`, `control_contest` (`contest_source = objective_control`), and `claim_contest` (`contest_source = subjective_claims`). `location_layer.gd` does not read those payloads. `WorldModel` in `scripts/protocol/models.gd` ignores claim and analytics keys on `world` and does not change occupants or zone color. A payload with the wrong `layer` is dropped. Failed fetches leave the overlay empty and leave the world view as it was. Protocol version stays `observer-protocol-v1`. Golden semantic event names in `tests/unit/test_godot_observer_fixtures.py` stay unchanged. Do not add a server color, sprite, or grid.
+  - Tests: `clients/godot-observer/tests/test_session_cursor.gd` applies an objective frame and asserts occupant slots unchanged when the frame also carries a nested claim list; a separate claims payload with `layer = subjective_claims` adds markers only after the toggle; an analytics payload does not add markers on the location layer. A parser-only check is not enough: drive the toggle and assert which canvas children exist.
+  - Logging: Godot pushes a debug string `territorial_overlay layer=%s markers=%s` when the toggle changes. Do not print utterance text. Python loggers are unchanged in this task.
+  - Control: overlay visibility is a client toggle, default off, and is not a runner field.
+  - Depends on task 9.
+  - Files: `clients/godot-observer/scripts/view/world_view.gd`, `clients/godot-observer/scripts/view/claim_overlay.gd`, `clients/godot-observer/scripts/view/analytics_overlay.gd`, `clients/godot-observer/scripts/view/location_layer.gd`, `clients/godot-observer/scripts/protocol/models.gd`, `clients/godot-observer/scripts/net/session.gd`, `clients/godot-observer/tests/test_session_cursor.gd`, `tests/unit/test_godot_observer_fixtures.py`.
+
+### Phase 5: Scenarios and Docs
+
+- [ ] Task 11: Add Experiment V where claims can appear or stay quiet.
+  - Deliverable: `src/experiments/territorial_scenario.py` builds two worlds that share seed, topology, bodies, and stochastic identity. `scarce` has one location, one food resource with maximum `1` and regeneration `0`. `abundant` has the same location and a food resource with maximum `8` and regeneration `1`. Neither world has a claim or owner field. `experiment_v_territorial_claims` in `src/experiments/catalog.py` has arms `v-disabled` (`DISABLED`, `runner-config-v4`), `v-scarce` (`DETERMINISTIC`, `runner-config-v15`), and `v-abundant` (`DETERMINISTIC`, `runner-config-v15`). Export the builder from `src/experiments/__init__.py`. Do not add it to the V1 regression catalog tuple.
+  - The behavioral fork is a condition matrix in the same module, evaluated by the policy on observations from those worlds plus caller-built relationship snapshots. Required rows: scarce, trust `0.80`, hunger at or above `75`, records `ignore_need`; scarce, resentment `0.40`, fear `0.20`, with a breach occurrence, replaces a remaining `Wait` with `Attack`; abundant, trust `0.80`, hunger below `75`, other-claim strength `0.40`, applies the respect penalty and does not attack; abundant, two memory ticks only, forms no `frequent_area` head. A short engine run of `v-disabled` writes no ledger and no audit. The same run of either enabled arm exports a world mapping without `territory_owner`. Do not assert that the live ticks themselves must produce an `Attack`.
+  - A joined analytic fixture shows the layers can disagree: objective rows with two exclusive windows and no claim rows yield `repeated_control` with `claim_contest` `ABSENT`.
+  - Logging: DEBUG `territorial_scenario arm_id=%s schema_version=%s resource_max=%s` on logger `experiments.catalog`. Do not log seeds.
+  - Control: levels follow `PALIMPSEST_LOG_LEVEL`.
+  - Depends on tasks 2, 6, 7, and 8.
+  - Files: `src/experiments/territorial_scenario.py`, `src/experiments/catalog.py`, `src/experiments/__init__.py`, `tests/unit/test_territorial_scenario.py`, `tests/unit/test_v1_regression_gate.py`.
+
+- [ ] Task 12: Document the three layers and the v15 contract.
+  - Deliverable: this is the mandatory docs checkpoint. Route the prose through `/aif-docs`. Update `docs/architecture.md` item 7 with the `runner-config-v15` sentence, Experiment V, and `spatial_control@1` staying off the V1 gate and out of cognition. Add a section to `docs/social-communication.md` that states claims are owner-scoped, the world admits physically legal actions anyway, and the observer frame, the subjective-claims query, and the spatial-control metric are separate. Add one sentence to `.ai-factory/DESCRIPTION.md` for `runner-config-v15` and `TerritorialClaimMode`, matching the existing runner-version sentences. Do not invent a roadmap milestone.
+  - Tests: doc mentions stay consistent with the constants `territorial-claims.v1`, `spatial_control@1`, `runner-config-v15`, and `observer-protocol-v1`. No new test module is required beyond a link check if `/aif-docs` adds one.
+  - Logging: no new runtime logger. Keep the doc statement that claim strengths and utterance bodies are not INFO logs.
+  - Control: documentation only.
+  - Depends on tasks 9 and 11.
+  - Files: `docs/architecture.md`, `docs/social-communication.md`, `.ai-factory/DESCRIPTION.md`.

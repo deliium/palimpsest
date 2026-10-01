@@ -61,6 +61,7 @@ __all__ = [
     "ReferenceMemoryRetriever",
     "ScopedMemoryRetriever",
     "build_direct_observation_memory_trace",
+    "with_violation_relation",
 ]
 
 _LOG: Final[logging.Logger] = logging.getLogger("agents.cognition.memory")
@@ -253,9 +254,7 @@ class ScopedMemoryRetriever:
                 raise ValueError("foreign-owner reconstruction rejected")
 
         prior = (
-            None
-            if loop_input.snapshot is None
-            else loop_input.snapshot.emotional_state
+            None if loop_input.snapshot is None else loop_input.snapshot.emotional_state
         )
         from agents.cognition.emotion_bias import (
             EMOTION_BIAS_POLICY_VERSION,
@@ -276,9 +275,7 @@ class ScopedMemoryRetriever:
         # Audits stay on MemoryRecallResult only — never on agent context.
         emotion_bias_applied = retrieval_bias or reconstruction_bias
         dynamics_version = (
-            None
-            if self._dynamics_policy is None
-            else self._dynamics_policy.version
+            None if self._dynamics_policy is None else self._dynamics_policy.version
         )
         memory_ids = tuple(hit.trace.memory_id for hit in ranked_hits_tuple)
         generation = reconstructions[0].generation if reconstructions else 0
@@ -319,14 +316,11 @@ class ScopedMemoryRetriever:
             owner_id=loop_input.agent_id,
             memory_ids=memory_ids,
             belief_ids=belief_ids,
-            confidence=(
-                reconstructions[0].confidence if reconstructions else 1.0
-            ),
+            confidence=(reconstructions[0].confidence if reconstructions else 1.0),
             decision_metadata=DecisionMetadata(
                 candidate_count=len(result.evidence.sources),
                 selection_codes=tuple(
-                    f"recon:{item.reconstruction_id.value}"
-                    for item in reconstructions
+                    f"recon:{item.reconstruction_id.value}" for item in reconstructions
                 )
                 or tuple(f"rank:{hit.rank}" for hit in ranked_hits_tuple),
             ),
@@ -436,9 +430,7 @@ class ReferenceMemoryRetriever:
         )
         result = await self._service.retrieve(retrieve)
         prior = (
-            None
-            if loop_input.snapshot is None
-            else loop_input.snapshot.emotional_state
+            None if loop_input.snapshot is None else loop_input.snapshot.emotional_state
         )
         from agents.cognition.emotion_bias import (
             EMOTION_BIAS_POLICY_VERSION,
@@ -472,9 +464,7 @@ class ReferenceMemoryRetriever:
                 )
             )
         memory_ids = tuple(hit.trace.memory_id for hit in biased_hits)
-        confidence = (
-            reference_episodes[0].confidence if reference_episodes else 1.0
-        )
+        confidence = reference_episodes[0].confidence if reference_episodes else 1.0
         _LOG.debug(
             "memory_reference_mapped",
             extra={
@@ -597,8 +587,10 @@ def build_direct_observation_memory_trace(
             )
         )
     tags = ("direct", "occurrence", occurrence.kind, occurrence.audience_role.value)
-    confidence = 0.9 if occurrence.success is True else (
-        0.7 if occurrence.success is False else 0.8
+    confidence = (
+        0.9
+        if occurrence.success is True
+        else (0.7 if occurrence.success is False else 0.8)
     )
     return MemoryTrace(
         memory_id=_memory_id_for_occurrence(
@@ -625,6 +617,88 @@ def build_direct_observation_memory_trace(
         last_access_tick=observation_tick,
         access_count=0,
         lineage=MemoryLineage(),
+    )
+
+
+def with_violation_relation(
+    trace: MemoryTrace,
+    *,
+    subject_entity_id: EntityId,
+    object_entity_id: EntityId,
+) -> MemoryTrace:
+    """Return a copy whose relations include predicate ``violated``.
+
+    ``build_direct_observation_memory_trace`` is unchanged. Disabled claim
+    mode does not call this helper.
+    """
+    if type(trace) is not MemoryTrace:
+        raise TypeError("trace must be MemoryTrace")
+    if type(subject_entity_id) is not EntityId or type(object_entity_id) is not (
+        EntityId
+    ):
+        raise TypeError("violation endpoints must be EntityId")
+    entities = list(trace.entities)
+
+    def mention_for(entity_id: EntityId, preferred: str, label: str) -> MentionId:
+        for item in entities:
+            if item.entity_id == entity_id:
+                return item.mention_id
+        mention_id = MentionId(preferred)
+        entities.append(
+            EntityMention(
+                mention_id=mention_id,
+                label=label,
+                entity_id=entity_id,
+            )
+        )
+        return mention_id
+
+    subject = mention_for(subject_entity_id, "e-subject", "actor")
+    obj = mention_for(object_entity_id, "e-claim", "other")
+    for relation in trace.relations:
+        if (
+            relation.predicate == "violated"
+            and relation.subject.mention_id == subject
+            and relation.object.mention_id == obj
+        ):
+            return trace
+    relation_id = MentionId("r-violated")
+    taken = {item.relation_id.value for item in trace.relations}
+    suffix = 2
+    while relation_id.value in taken:
+        relation_id = MentionId(f"r-violated-{suffix}")
+        suffix += 1
+    relation = MemoryRelation(
+        relation_id=relation_id,
+        predicate="violated",
+        subject=RelationEndpoint(
+            kind=RelationEndpointKind.ENTITY,
+            mention_id=subject,
+        ),
+        object=RelationEndpoint(
+            kind=RelationEndpointKind.ENTITY,
+            mention_id=obj,
+        ),
+    )
+    return MemoryTrace(
+        memory_id=trace.memory_id,
+        owner_id=trace.owner_id,
+        world_revision=trace.world_revision,
+        concepts=trace.concepts,
+        entities=tuple(entities),
+        relations=(*trace.relations, relation),
+        context=trace.context,
+        emotional_salience=trace.emotional_salience,
+        confidence=trace.confidence,
+        provenance=trace.provenance,
+        created_tick=trace.created_tick,
+        source_tick=trace.source_tick,
+        last_access_tick=trace.last_access_tick,
+        access_count=trace.access_count,
+        expires_at_tick=trace.expires_at_tick,
+        forgotten_at_tick=trace.forgotten_at_tick,
+        lineage=trace.lineage,
+        embedding=trace.embedding,
     )
 
 
@@ -949,9 +1023,7 @@ def _belief_revision_from_semanticization(
     belief_id = belief_id_for_claim(owner_id=owner_id, claim=claim)
     revision = BeliefRevisionRequest(
         owner_id=owner_id,
-        operation_id=(
-            f"sem:{owner_id.value}:t{pending.tick}:{belief_id.value}"
-        ),
+        operation_id=(f"sem:{owner_id.value}:t{pending.tick}:{belief_id.value}"),
         logical_tick=pending.tick,
         claim=claim,
         evidence=evidence,
@@ -972,4 +1044,3 @@ def _belief_revision_from_semanticization(
         },
     )
     return revision
-

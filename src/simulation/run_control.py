@@ -311,9 +311,7 @@ class ExecutionLease:
         object.__setattr__(
             self,
             "heartbeat_at_unix_ms",
-            require_exact_nonneg_int(
-                "heartbeat_at_unix_ms", self.heartbeat_at_unix_ms
-            ),
+            require_exact_nonneg_int("heartbeat_at_unix_ms", self.heartbeat_at_unix_ms),
         )
         object.__setattr__(
             self,
@@ -455,10 +453,7 @@ def classify_process_restart(
         return ProcessRestartClass.FENCED
     if is_terminal_lifecycle_state(record.lifecycle_state):
         return ProcessRestartClass.TERMINAL
-    if (
-        record.lifecycle_state is RunLifecycleState.RECOVERY_REQUIRED
-        or pending > 0
-    ):
+    if record.lifecycle_state is RunLifecycleState.RECOVERY_REQUIRED or pending > 0:
         return ProcessRestartClass.RECOVERY_REQUIRED
     if record.lifecycle_state is RunLifecycleState.INTERRUPTED:
         return ProcessRestartClass.INTERRUPTED_IN_FLIGHT
@@ -597,6 +592,7 @@ class AgentRuntimeCheckpoint:
     causal_world_model: object | None = None
     theory_of_mind: object | None = None
     reputation: object | None = None
+    territorial_claims: object | None = None
     competence_model: object | None = None
     declarative_advice: object | None = None
     recipe_beliefs: object | None = None
@@ -654,6 +650,13 @@ class AgentRuntimeCheckpoint:
             self.reputation,
             self.agent_id,
             field_name="reputation",
+        )
+        from agents.cognition.territorial import require_owner_territorial_claims
+
+        require_owner_territorial_claims(
+            self.territorial_claims,
+            self.agent_id,
+            field_name="territorial_claims",
         )
         from agents.cognition.competence import require_owner_competence
 

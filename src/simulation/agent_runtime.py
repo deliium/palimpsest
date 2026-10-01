@@ -446,6 +446,7 @@ class AgentRuntime:
         "_semantic_belief_reader",
         "_status",
         "_subjective_state",
+        "_territorial_claims",
         "_theory_of_mind",
         "_translator",
         "_world_model_audits",
@@ -541,6 +542,7 @@ class AgentRuntime:
         self._causal_world_model: object | None = None
         self._theory_of_mind: object | None = None
         self._reputation: object | None = None
+        self._territorial_claims: object | None = None
         self._competence: object | None = None
         self._recipe_beliefs: object | None = None
         self._advice: object | None = None
@@ -580,9 +582,7 @@ class AgentRuntime:
         """Prior-tick owner-scoped emotional carry (None when unset)."""
         return self._emotional_state
 
-    def _commit_emotional_state(
-        self, state: AgentEmotionalState | None
-    ) -> None:
+    def _commit_emotional_state(self, state: AgentEmotionalState | None) -> None:
         """Store post-stage emotional state for the next snapshot (N+1)."""
         if state is None:
             _LOG.debug(
@@ -714,6 +714,45 @@ class AgentRuntime:
             tick,
             mode_name,
             len(ledger.profiles),
+        )
+
+    def _commit_territorial_claims(self, ledger: object | None, tick: int) -> None:
+        """Store the owner's claim ledger after a successful enabled tick."""
+        from agents.cognition.configuration import CognitionTerritorialClaimMode
+        from agents.cognition.territorial import TerritorialClaimLedger
+
+        owner = self._agent.agent_id
+        mode = getattr(
+            self._loop,
+            "_territorial_claim_mode",
+            CognitionTerritorialClaimMode.DISABLED,
+        )
+        mode_name = getattr(mode, "value", "disabled")
+        if mode is not CognitionTerritorialClaimMode.DETERMINISTIC or ledger is None:
+            if mode is not CognitionTerritorialClaimMode.DETERMINISTIC:
+                self._territorial_claims = None
+            _LOG.debug(
+                "territorial_ledger_skipped owner_id=%s tick=%s mode=%s head_count=%s",
+                owner.value,
+                tick,
+                mode_name,
+                0,
+            )
+            return
+        if type(ledger) is not TerritorialClaimLedger:
+            raise TypeError("territorial_claims must be TerritorialClaimLedger")
+        if ledger.owner_id != owner:
+            raise AgentRuntimeError(
+                AgentRuntimeErrorCode.OWNERSHIP,
+                agent_id=owner.value,
+            )
+        self._territorial_claims = ledger
+        _LOG.debug(
+            "territorial_ledger_carried owner_id=%s tick=%s mode=%s head_count=%s",
+            owner.value,
+            tick,
+            mode_name,
+            len(ledger.claims),
         )
 
     def _commit_competence(self, model: object | None, tick: int) -> None:
@@ -1246,6 +1285,7 @@ class AgentRuntime:
                 causal_world_model=self._causal_world_model,
                 theory_of_mind=self._theory_of_mind,
                 reputation=self._reputation,
+                territorial_claims=self._territorial_claims,
                 competence_model=self._competence,
                 declarative_advice=self._advice,
                 recipe_beliefs=self._recipe_beliefs,
@@ -1652,12 +1692,13 @@ class AgentRuntime:
             + reflection_goals
         )
         await self.publish_goal_revisions(intent_receipts)
-        self._commit_emotional_state(
-            _emotional_state_from_result(pending.loop_result)
-        )
+        self._commit_emotional_state(_emotional_state_from_result(pending.loop_result))
         self._commit_world_model(pending.loop_result.causal_world_model, pending.tick)
         self._commit_theory_of_mind(pending.loop_result.theory_of_mind, pending.tick)
         self._commit_reputation(pending.loop_result.reputation, pending.tick)
+        self._commit_territorial_claims(
+            getattr(pending.loop_result, "territorial_claims", None), pending.tick
+        )
         self._commit_competence(
             getattr(pending.loop_result, "competence_model", None), pending.tick
         )
@@ -2060,6 +2101,7 @@ class AgentRuntime:
         self._causal_world_model = checkpoint.causal_world_model
         self._theory_of_mind = checkpoint.theory_of_mind
         self._reputation = checkpoint.reputation
+        self._territorial_claims = getattr(checkpoint, "territorial_claims", None)
         self._competence = checkpoint.competence_model
         self._recipe_beliefs = getattr(checkpoint, "recipe_beliefs", None)
         self._advice = checkpoint.declarative_advice
@@ -2118,6 +2160,7 @@ class AgentRuntime:
             causal_world_model=self._causal_world_model,
             theory_of_mind=self._theory_of_mind,
             reputation=self._reputation,
+            territorial_claims=self._territorial_claims,
             competence_model=self._competence,
             declarative_advice=self._advice,
             recipe_beliefs=self._recipe_beliefs,

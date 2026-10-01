@@ -125,6 +125,8 @@ class MultiCriteriaIntentionSelector:
         competence_policy: object | None = None,
         competence_model: object | None = None,
         teaching_policy: object | None = None,
+        territorial_claims: object | None = None,
+        territorial_claim_mode: object | None = None,
     ) -> SelectedIntention:
         owner = loop_input.agent_id
         tick = loop_input.observation.tick
@@ -277,6 +279,26 @@ class MultiCriteriaIntentionSelector:
         active_model = competence_model
         if active_model is None and loop_input.snapshot is not None:
             active_model = loop_input.snapshot.competence_model
+        from agents.cognition.territorial import territorial_respect_penalties
+
+        snapshot = loop_input.snapshot
+        body = loop_input.observation.self_body
+        prepared = territorial_claims
+        if prepared is None and snapshot is not None:
+            prepared = snapshot.territorial_claims
+        respect = territorial_respect_penalties(
+            owner_id=owner,
+            futures=tuple(
+                futures_by_id[item.future_id]
+                for item in undominated
+                if item.future_id in futures_by_id
+            ),
+            ledger=prepared,
+            relationships=() if snapshot is None else snapshot.relationships,
+            hunger=0.0 if body is None else body.hunger.value,
+            thirst=0.0 if body is None else body.thirst.value,
+            mode=territorial_claim_mode,
+        )
         winner, tie_break = _pairwise_select(
             undominated,
             futures_by_id,
@@ -289,6 +311,7 @@ class MultiCriteriaIntentionSelector:
             owner,
             teaching_policy,
             loop_input.observation,
+            respect,
         )
         future = futures_by_id.get(winner.future_id)
         direction = ActionDirection.WAIT if future is None else future.direction
@@ -542,6 +565,8 @@ class CommandPlanner:
         teaching_selection: tuple[object, object] | None = None,
         recipe_beliefs: object | None = None,
         selected_recipe_id: object | None = None,
+        territorial_claims: object | None = None,
+        territorial_claim_mode: object | None = None,
     ) -> ActionPlan:
         owner = loop_input.agent_id
         tick = loop_input.observation.tick
@@ -654,6 +679,22 @@ class CommandPlanner:
             observation=loop_input.observation,
             selected_recipe_id=selected_recipe_id,
         )
+        from agents.cognition.territorial import territorial_wait_replacement
+
+        snapshot = loop_input.snapshot
+        prepared_claims = territorial_claims
+        if prepared_claims is None and snapshot is not None:
+            prepared_claims = snapshot.territorial_claims
+        command, territorial_audits = territorial_wait_replacement(
+            command,
+            owner_id=owner,
+            tick=tick,
+            observation=loop_input.observation,
+            identity=None if snapshot is None else snapshot.social_identity,
+            ledger=prepared_claims,
+            relationships=() if snapshot is None else snapshot.relationships,
+            mode=territorial_claim_mode,
+        )
         command_type = type(command).__name__
 
         confidence = intention.confidence if not used_fallback else 1.0
@@ -667,6 +708,7 @@ class CommandPlanner:
             ),
             communication_intent=communication_intent,
             communication_intent_audit=communication_intent_audit,
+            territorial_audits=territorial_audits,
         )
         band = (
             "high" if confidence >= 0.75 else "medium" if confidence >= 0.4 else "low"
@@ -1169,6 +1211,7 @@ def _pairwise_select(
     owner_id: AgentId | None = None,
     teaching_policy: object | None = None,
     observation: object | None = None,
+    territorial_bias: Mapping[str, float] | None = None,
 ) -> tuple[FutureAppraisal, str]:
     if len(appraisals) == 1:
         return appraisals[0], _TIE_BREAK_NONE
@@ -1189,6 +1232,7 @@ def _pairwise_select(
                 owner_id,
                 teaching_policy,
                 observation,
+                territorial_bias,
             )
             if cmp > 0:
                 scores[left.future_id] += 1
@@ -1229,6 +1273,7 @@ def _pairwise_compare(
     owner_id: AgentId | None = None,
     teaching_policy: object | None = None,
     observation: object | None = None,
+    territorial_bias: Mapping[str, float] | None = None,
 ) -> int:
     """Return positive if left preferred, negative if right preferred, else 0."""
     active_drives = set(motivation.active_drive_kinds)
@@ -1374,6 +1419,9 @@ def _pairwise_compare(
         None if right_future is None else right_future.direction,
         owner_id,
     )
+    if territorial_bias is not None:
+        total += territorial_bias.get(left.future_id, 0.0)
+        total -= territorial_bias.get(right.future_id, 0.0)
     if total > 0:
         return 1
     if total < 0:
