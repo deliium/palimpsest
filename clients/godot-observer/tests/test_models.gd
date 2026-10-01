@@ -3,6 +3,15 @@ extends RefCounted
 const Protocol := preload("res://scripts/protocol/models.gd")
 const StatusBar := preload("res://scripts/ui/status_bar.gd")
 
+const _ENVIRONMENT_TYPES: Array[String] = [
+	"SEASON_CHANGED",
+	"TEMPERATURE_BAND_CHANGED",
+	"RESOURCE_NODE_DEPLETED",
+	"RESOURCE_NODE_RECOVERED",
+	"ENVIRONMENTAL_HAZARD_STARTED",
+	"ENVIRONMENTAL_HAZARD_ENDED",
+]
+
 
 func run() -> Array:
 	var failures: Array = []
@@ -17,6 +26,8 @@ func run() -> Array:
 
 func _every_semantic_fixture() -> String:
 	for type_name in Protocol.KNOWN_TYPES:
+		if type_name in _ENVIRONMENT_TYPES:
+			continue
 		var path := "res://fixtures/protocol/events/%s.json" % type_name
 		var parsed = Protocol.parse_text("event", FileAccess.get_file_as_string(path))
 		if parsed == null or not parsed.ok:

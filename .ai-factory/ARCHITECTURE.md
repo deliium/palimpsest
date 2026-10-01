@@ -32,7 +32,7 @@ src/
   simulation/            # WorldEngine, AgentRuntime, SimulationRunner, codecs, replay
                          # run_control.py (resume modes + finalization-command contracts)
                          # inspection.py (detached objective/agent-visible projection; no live observe)
-  experiments/           # trusted experiment catalog/coordinator (A–P; F–P off the V1 gate); never imported by domain
+  experiments/           # trusted experiment catalog/coordinator (A–U; F–U off the V1 gate); never imported by domain
                          # composition.py maps neutral persistence snapshots → analysis sources
                          # reference_scenario.py: canonical five-agent / 48-tick fixture + milestone arbiter
   persistence/           # SQLAlchemy adapters (simulation, memory, subjective, analysis loaders)

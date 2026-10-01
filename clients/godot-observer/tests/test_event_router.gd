@@ -5,6 +5,15 @@ const ReducerScript := preload("res://scripts/protocol/reducer.gd")
 const Router := preload("res://scripts/protocol/event_router.gd")
 const Playback := preload("res://scripts/protocol/playback.gd")
 
+const _ENVIRONMENT_TYPES: Array[String] = [
+	"SEASON_CHANGED",
+	"TEMPERATURE_BAND_CHANGED",
+	"RESOURCE_NODE_DEPLETED",
+	"RESOURCE_NODE_RECOVERED",
+	"ENVIRONMENTAL_HAZARD_STARTED",
+	"ENVIRONMENTAL_HAZARD_ENDED",
+]
+
 
 func run() -> Array:
 	var failures: Array = []
@@ -16,6 +25,8 @@ func run() -> Array:
 	var play: Dictionary = Playback.policy(1.0, 0)
 	var last_location := str(world.agents[0].location_id)
 	for type_name in Protocol.KNOWN_TYPES:
+		if type_name in _ENVIRONMENT_TYPES:
+			continue
 		var text := FileAccess.get_file_as_string("res://fixtures/protocol/events/%s.json" % type_name)
 		var parsed = Protocol.parse_text("event", text)
 		if not parsed.ok or not parsed.value.known:
@@ -27,6 +38,21 @@ func run() -> Array:
 			failures.append("closed type treated as unknown %s" % type_name)
 		if logical["moved"]:
 			last_location = str(world.agents[0].location_id)
+	for type_name in _ENVIRONMENT_TYPES:
+		var parsed_environment = Protocol.parse_event({
+			"protocol_version": Protocol.PROTOCOL_VERSION,
+			"type": type_name,
+			"event_id": "evt-%s" % type_name,
+			"tick": 9,
+			"sequence": 0,
+		})
+		if not parsed_environment.ok or not parsed_environment.value.known:
+			failures.append("environment type should be known %s" % type_name)
+			continue
+		var environment_logical: Dictionary = reducer.apply_event(world, parsed_environment.value)
+		var environment_command: Dictionary = Router.route(parsed_environment.value, play, environment_logical)
+		if environment_command["action"] == "unknown":
+			failures.append("environment type treated as unknown %s" % type_name)
 	var unknown = Protocol.parse_event({"type": "RESOURCE_FOUND", "event_id": "evt-unknown", "tick": 9, "sequence": 0})
 	var before := str(world.agents[0].location_id)
 	var unknown_logical: Dictionary = reducer.apply_event(world, unknown.value)

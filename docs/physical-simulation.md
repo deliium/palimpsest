@@ -95,7 +95,7 @@ A hazard starts when its season, weather, and band match and that kind is not al
 
 `runner-config-v14` is written only when the spec is set. Replay-v7 and persistence codec `v4` are written only for that run. Replay-v7 also accepts production details. A production-only run still writes replay-v6 and codec `v3`. The default event write stays replay-v5 and the default codec stays `v2`. A dynamics-off checkpoint rejects `active_hazards`.
 
-Loggers: `world.environment`, `world.events`, `simulation.engine`, `world._perception`, `simulation.replay`, `simulation.runner`, `observer.project`, `observer.adapt`, and `experiments.catalog`. Reason codes include `yield_undefined`, `duplicate_shortage_window`, `environment_witness_mismatch`, `environment_spec_mismatch`, and `presentation_instruction_forbidden`. Do not log seeds.
+Loggers: `world.environment`, `world.events`, `simulation.engine`, `world._perception`, `simulation.replay`, `simulation.runner`, `agents.cognition.world_model`, `observer.project`, `observer.adapt`, and `experiments.catalog`. Reason codes include `yield_undefined`, `duplicate_shortage_window`, `environment_witness_mismatch`, `environment_spec_mismatch`, and `presentation_instruction_forbidden`. Do not log seeds.
 
 ## Seeds and schemas
 

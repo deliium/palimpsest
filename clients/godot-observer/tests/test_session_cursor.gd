@@ -5,6 +5,7 @@ const SessionScript := preload("res://scripts/net/session.gd")
 const AgentLayer := preload("res://scripts/view/agent_layer.gd")
 const Identity := preload("res://scripts/presentation/identity.gd")
 const Protocol := preload("res://scripts/protocol/models.gd")
+const LocationLayer := preload("res://scripts/view/location_layer.gd")
 const Log := preload("res://scripts/log.gd")
 
 const ORIGIN := "https://observer.example"
@@ -199,16 +200,19 @@ func _assert_environment_frame(session: SessionScript, failures: Array) -> void:
 		failures.append("environment frame should parse")
 		return
 	var replaced: Array = []
-	session.world_replaced.connect(func(world: Variant) -> void:
-		replaced.append(world)
+	session.frame_sought.connect(func(frame: Variant, _event: Variant, _forward: bool) -> void:
+		replaced.append(frame.world)
 	)
 	session._apply_sought_frame(parsed.value, session._seek_serial)
 	if session.world != parsed.value.world or replaced.is_empty() or replaced[-1] != parsed.value.world:
-		failures.append("sought environment frame should be the world world_replaced emits")
+		failures.append("sought environment frame should be the world the session installs")
 	if str(session.world.season) != "winter" or session.world.hazards.size() != 1:
 		failures.append("sought frame should keep the season and hazard tokens")
 	if str(session.world.temperature_bands[0].band) != "cold":
 		failures.append("sought frame should keep the temperature band token")
+	var layer := LocationLayer.new()
+	layer.show_world(session.world)
+	layer.free()
 
 
 func _state_query(session: SessionScript) -> Dictionary:
