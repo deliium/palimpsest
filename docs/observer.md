@@ -17,6 +17,14 @@ Protocol version: `observer-protocol-v1`. Layout documents use `observer-layout-
 
 `simulation`, `world`, `agents`, `memory`, `social`, `llm`, `persistence`, and `experiments` do not import `observer`.
 
+## Production facts
+
+A frame may include `structures`. Each record has `structure_id`, `location_id`, `kind`, `integrity`, `stored_quantity`, and an optional presentation (`visual_category`, `icon_key`, `size_category`) from `observer.presentation`. Missing catalog rows leave presentation empty. Presentation is not stored on `Item`, `Resource`, `Structure`, `Location`, or `WorldEvent`.
+
+The six production semantic types are `RESOURCE_HARVESTED`, `CRAFT_STARTED`, `ITEM_CRAFTED`, `STRUCTURE_BUILT`, `STRUCTURE_REPAIRED`, and `ITEM_STORED`. `ObserverEvent` adds `recipe_id` and `structure_id` only when they are set. Protocol version stays `observer-protocol-v1`. Godot is not required to read the projection. The current client ignores unknown event types and unknown world keys, so a frame that adds `structures` still parses as protocol v1.
+
+Visible structures use the same content visibility threshold as local resources (`0.5`). The actor always sees their own production occurrence. `recipe_id` is a public fact for that actor and for a bystander who passes the visibility check.
+
 ## Routes
 
 All HTTP methods are GET. The capability is `objective_inspection` except the relationship route, which requires `subjective_debug`.

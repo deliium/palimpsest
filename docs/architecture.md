@@ -61,8 +61,8 @@ observe() → ObservationBatch + TickToken
 - Actions resolve in input order against an evolving state; autonomous effects follow (weather → regen → metabolism/exposure/death).
 - Ordered input position is resolution priority. Conflicts arise only when an initially valid action is invalidated by an earlier effect.
 - At most one action per registered agent per tick; omitted agents produce nothing; empty submissions still run autonomous physiology.
-- All fifteen commands have explicit applied / rejected / conflicted behavior (no deferred physical policy). Details: [Physical simulation](physical-simulation.md).
-- New physical runs emit schema-v5 replay events (structured communication + occurrence context). Schemas v2–v4 remain readable; schema-1 export remains an audit artifact where applicable. Version taxonomy: `simulation.compatibility` / [Persistence](persistence.md).
+- All twenty commands have explicit applied / rejected / conflicted behavior (no deferred physical policy). Details: [Physical simulation](physical-simulation.md).
+- New physical runs emit schema-v5 replay events (structured communication + occurrence context). Schemas v2–v4 remain readable; schema-1 export remains an audit artifact where applicable. Replay-v6 is an accepted schema written only by a run whose production catalog is non-empty. The default write remains replay-v5. Version taxonomy: `simulation.compatibility` / [Persistence](persistence.md).
 
 ## Perception boundary
 
@@ -80,7 +80,7 @@ Objective `WorldState` stays private. Agent-facing cognition sees only immutable
 Later V2 feature plans may evolve agent-facing contracts only under this accepted-set discipline (this scaffolding plan adds **no** new fields, commands, or communication variants):
 
 1. **Observation and related codecs** — new write versions only when the wire shape changes; legacy decode remains in an `ACCEPTED_*` set. Cognition inputs must not silently widen to authority types (`WorldState`, private `world._*`, `WorldEvent` stores).
-2. **Closed `AgentCommand` set** — remains closed at fifteen variants unless a versioned bump lands together with admission rules, world-operation evaluation, event details, and replay codecs in the same change.
+2. **Closed `AgentCommand` set** — remains closed at twenty variants, including harvest, craft, build, repair, and store. A later bump still lands together with admission rules, world-operation evaluation, event details, and replay codecs in the same change. The production catalog is not an observation field and is not a cognition input to the engine.
 3. **Communications** — stay event-only (`Talk`/`Ask`/`Tell` → `Talked`/`Asked`/`Told`). Delivery proves delivery, not truth; declared lineage on `StructuredUtterance` is distrustable testimony. Content never becomes world-owned fact.
 4. **Hard gate for any domain bump** — live and restored engines at the same tick must emit equal observations (including canonical serialization). Required regression: `tests/unit/test_checkpoint_restoration.py::test_live_and_restored_observations_match_with_prior_events` (and siblings). Do not ship a domain wire change that breaks live/restored parity.
 
@@ -91,7 +91,7 @@ See also `simulation.compatibility` (version taxonomy) and [.ai-factory/ARCHITEC
 | Access | Examples |
 | --- | --- |
 | Always self-known | Self physiology/inventory, hour, day phase, visibility, local weather condition, current location id/name, adjacent exits |
-| Visibility-gated (≥ 0.5) | Local ground items, resources (quantity only), coarse nearby bodies, public occurrence facts for local bystanders |
+| Visibility-gated (≥ 0.5) | Local ground items, resources (quantity only), structures at the location, coarse nearby bodies, public occurrence facts for local bystanders |
 | Participant-only | Extra occurrence fields for actors/targets (still redacted; no cause IDs or replay payloads) |
 | Recipient-only | Communication text to sender + intended recipient |
 | Omitted | Location capacities/shelter, resource max/regen, other-agent inventory/exact needs, remote weather/topology, request/system cause IDs |

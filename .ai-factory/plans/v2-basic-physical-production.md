@@ -186,7 +186,7 @@ Each checkpoint is a git commit on `main` created when those tasks are done. Do 
   - Depends on task 8.
   - Files: `tests/unit/test_production_observer.py`, `tests/unit/test_godot_observer_fixtures.py`, `tests/architecture/test_observer_isolation.py`, `tests/architecture/test_godot_client_isolation.py`.
 
-- [ ] Task 10: v2- Document production and the observer boundary.
+- [x] Task 10: v2- Document production and the observer boundary.
   - Deliverable: update `docs/physical-simulation.md` and `docs/observer.md` with the five actions, the six recipes, engine authority, belief versus catalog, replay-v6 and codec v3 (`structures`, `production_jobs`, `tool_marks`) only when the catalog is non-empty, location-based structures, visible `ObservedStructure` records, and presentation-only metadata. State that Godot is not required to read the projection. Update the downstream-contract counts in `docs/architecture.md` from fifteen commands to twenty, and note replay-v6 as an accepted schema whose default write remains replay-v5. Do not invent a roadmap milestone.
   - Logging: no runtime logger. Docs name the logger channels from tasks 1–8 and 11 and the reason codes `unknown_recipe`, `materials_unavailable`, `actor_busy`, `structure_intact`, and `production_disabled`.
   - Depends on tasks 7, 8, and 9.

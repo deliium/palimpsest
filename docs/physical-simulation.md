@@ -69,6 +69,20 @@ Close-of-tick order for living bodies: needs (+2 hunger, +3 thirst, +1 fatigue) 
 
 Action resolution then autonomous effects accumulate pending details/causes/occurrence context against one evolving state. One finalizer decides mutation, advances revision at most once, assigns contiguous sequences and deterministic event IDs, and freezes schema-v4 `WorldEvent` values with action or system causes plus event-time audience context (origin, destination, affected entity, private recipient as applicable).
 
+## Basic production
+
+Production is off unless a run carries a non-empty `ProductionCatalog` or an agent sets `ProductionKnowledgeMode` to `DETERMINISTIC`. An empty catalog plus `DISABLED` does not change commands, probabilities, fatigue, events, memories, beliefs, or audits. It is not a capability flag.
+
+The closed commands are `Harvest`, `Craft`, `Build`, `Repair`, and `Store`. The example catalog is six recipes and nothing else: `harvest_wood`, `harvest_stone`, `craft_tool`, `build_shelter`, `repair_shelter`, and `store_food`. Recipes are configuration. There is no profession, role, culture, or technology tier, and agents do not receive the catalog on `Observation`.
+
+`WorldEngine` alone decides available materials, duration, success, inventory changes, and produced objects. Recipe beliefs store a recipe id and a supported flag on the owner. They do not store inputs, durations, or probabilities, and they are not an engine input. A provider may select only a recipe id already supported on that owner.
+
+Rejections commit nothing: `unknown_recipe`, `materials_unavailable`, `actor_busy`, `structure_intact`, and `production_disabled`. A pending job makes the actor busy for every command, including move and eat. Harvest success is `0.80` and craft success is `0.70`; both draw `production_success` only when the adjusted probability is below `1`. Build, repair, and store stay at `1.00` and do not draw. Structures attach to a location id. They have no coordinates. A shelter changes exposure for that location without writing `Location.shelter_factor`.
+
+Replay schema v6 and persistence codec `v3` (`structures`, `production_jobs`, `tool_marks`) are written only when the catalog is non-empty. The default event write stays replay-v5 and the default codec stays `v2`. `runner-config-v13` is accepted only when the catalog is non-empty or some mode is `DETERMINISTIC`. The default runner write stays `runner-config-v4`. A teaching-only run still writes `runner-config-v12`.
+
+Loggers: `world.production`, `world.events`, `world._production`, `simulation.engine`, `simulation.replay`, `world._perception`, `agents.cognition.production`, `simulation.agent_runtime`, `simulation.runner`, `observer.project`, and `observer.adapt`. Catalog mismatch logs the SHA-256 digest only.
+
 ## Seeds and schemas
 
 - Named streams: run, world, tick, ordinal or system entity, purpose, derivation-v2 (rules fingerprint). Never module-global RNG or Python `hash()`.
