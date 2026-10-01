@@ -367,6 +367,33 @@ def _reputation_skip(owner_id: AgentId, reason: str) -> None:
     )
 
 
+def _with_production_command(
+    command: AgentCommand,
+    *,
+    beliefs: object | None,
+    observation: Observation,
+    selected_recipe_id: object | None,
+) -> AgentCommand:
+    """Replace a non-veto command when the owner supports a visible recipe."""
+    if beliefs is None:
+        return command
+    from agents.cognition.production import compile_production_command
+    from world.identifiers import RecipeId
+
+    recipe_id = selected_recipe_id
+    if recipe_id is not None and type(recipe_id) is not RecipeId:
+        raise TypeError("selected_recipe_id must be RecipeId or None")
+    produced = compile_production_command(
+        beliefs,
+        observation,
+        vetoed=type(command) in {Drink, Eat, Sleep, Flee},
+        selected_recipe_id=recipe_id,
+    )
+    if produced is None:
+        return command
+    return produced
+
+
 def _reputation_testimony_command(
     command: AgentCommand,
     *,
@@ -513,6 +540,8 @@ class CommandPlanner:
         teaching_mode: object | None = None,
         teaching_policy: object | None = None,
         teaching_selection: tuple[object, object] | None = None,
+        recipe_beliefs: object | None = None,
+        selected_recipe_id: object | None = None,
     ) -> ActionPlan:
         owner = loop_input.agent_id
         tick = loop_input.observation.tick
@@ -618,6 +647,12 @@ class CommandPlanner:
             ledger=reputation,
             mode=reputation_mode,
             policy=reputation_policy,
+        )
+        command = _with_production_command(
+            command,
+            beliefs=recipe_beliefs,
+            observation=loop_input.observation,
+            selected_recipe_id=selected_recipe_id,
         )
         command_type = type(command).__name__
 

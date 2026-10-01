@@ -15,7 +15,17 @@ from enum import StrEnum
 from typing import Final
 
 from agents.models import AgentId
-from world.identifiers import RecipeId
+from world.actions import (
+    AgentCommand,
+    Build,
+    Craft,
+    Harvest,
+    Repair,
+    Store,
+    Wait,
+)
+from world.identifiers import EntityId, RecipeId
+from world.values import ItemKind
 
 _LOG: Final[logging.Logger] = logging.getLogger("agents.cognition.production")
 _RECIPE_ID = re.compile(r"^[a-z][a-z0-9_]{0,31}$")
@@ -212,3 +222,143 @@ def _absorb_relation(communication: object, supported: dict[str, bool]) -> None:
         _LOG.warning("recipe_relation_ignored reason_code=%s", "foreign_recipe_id")
         return
     supported[token] = True
+
+
+def compile_production_command(
+    beliefs: object | None,
+    observation: object,
+    *,
+    vetoed: bool = False,
+    selected_recipe_id: RecipeId | None = None,
+) -> AgentCommand | None:
+    """Compile one production command, or leave the existing command alone.
+
+    ``None`` means the caller keeps the command it already chose. ``Wait`` means
+    a production attempt was withheld.
+    """
+    if beliefs is None:
+        return None
+    _reject_forbidden(beliefs)
+    _reject_forbidden(observation)
+    if type(beliefs) is not RecipeBeliefSet:
+        raise TypeError("beliefs must be RecipeBeliefSet or None")
+    if vetoed:
+        _LOG.info("production_command_withheld reason_code=%s", "veto")
+        return None
+    if selected_recipe_id is not None:
+        if type(selected_recipe_id) is not RecipeId:
+            raise TypeError("selected_recipe_id must be RecipeId")
+        belief = beliefs.belief(selected_recipe_id)
+        if belief is None or not belief.supported:
+            _LOG.info("production_command_withheld reason_code=%s", "unsupported")
+            return Wait()
+        command = _command_for_recipe(belief.recipe_id, observation)
+        if command is None:
+            _LOG.info("production_command_withheld reason_code=%s", "no_target")
+            return Wait()
+        _log_selected(command)
+        return command
+    supported = tuple(belief for belief in beliefs.beliefs if belief.supported)
+    for belief in supported:
+        command = _command_for_recipe(belief.recipe_id, observation)
+        if command is None:
+            continue
+        _log_selected(command)
+        return command
+    if supported:
+        _LOG.info("production_command_withheld reason_code=%s", "no_target")
+        return Wait()
+    if beliefs.beliefs:
+        _LOG.info("production_command_withheld reason_code=%s", "unsupported")
+        return Wait()
+    return None
+
+
+def _log_selected(command: AgentCommand) -> None:
+    recipe_id = getattr(command, "recipe_id", None)
+    _LOG.debug(
+        "production_command_selected recipe_id=%s command_kind=%s",
+        "-" if recipe_id is None else recipe_id.value,
+        command.kind,
+    )
+
+
+def _command_for_recipe(
+    recipe_id: RecipeId, observation: object
+) -> AgentCommand | None:
+    token = recipe_id.value
+    if token.startswith("harvest_"):
+        resource = _named_resource(observation, token.removeprefix("harvest_"))
+        if resource is None:
+            return None
+        return Harvest(recipe_id, resource)
+    if token.startswith("craft_"):
+        return Craft(recipe_id)
+    if token.startswith("build_"):
+        if _held_item(observation, ItemKind.MATERIAL) is None:
+            return None
+        return Build(recipe_id)
+    if token.startswith("repair_"):
+        material = _held_item(observation, ItemKind.MATERIAL)
+        shelter = _structure(observation, "shelter")
+        if material is None or shelter is None:
+            return None
+        integrity = getattr(shelter, "integrity", 1.0)
+        if isinstance(integrity, bool) or not isinstance(integrity, (int, float)):
+            return None
+        if integrity >= 1.0:
+            return None
+        return Repair(recipe_id, shelter.entity_id)
+    if token.startswith("store_"):
+        food = _held_item(observation, ItemKind.FOOD)
+        if food is None:
+            return None
+        return Store(recipe_id, food)
+    return None
+
+
+def _named_resource(observation: object, name: str) -> EntityId | None:
+    matches: list[EntityId] = []
+    for resource in getattr(observation, "resources", ()):
+        if getattr(resource, "name", None) != name:
+            continue
+        quantity = getattr(resource, "quantity", 0.0)
+        if isinstance(quantity, bool) or not isinstance(quantity, (int, float)):
+            continue
+        if quantity < 1.0:
+            continue
+        entity_id = getattr(resource, "entity_id", None)
+        if type(entity_id) is EntityId:
+            matches.append(entity_id)
+    if not matches:
+        return None
+    return sorted(matches, key=lambda item: item.value)[0]
+
+
+def _held_item(observation: object, kind: ItemKind) -> EntityId | None:
+    matches: list[EntityId] = []
+    for item in getattr(observation, "items", ()):
+        if getattr(item, "kind", None) is not kind:
+            continue
+        placement = getattr(getattr(item, "placement", None), "value", None)
+        if placement != "held_by_self":
+            continue
+        entity_id = getattr(item, "entity_id", None)
+        if type(entity_id) is EntityId:
+            matches.append(entity_id)
+    if not matches:
+        return None
+    return sorted(matches, key=lambda item: item.value)[0]
+
+
+def _structure(observation: object, kind: str) -> object | None:
+    matches = []
+    for structure in getattr(observation, "structures", ()):
+        structure_kind = getattr(structure, "kind", None)
+        value = getattr(structure_kind, "value", structure_kind)
+        if value != kind:
+            continue
+        matches.append(structure)
+    if not matches:
+        return None
+    return sorted(matches, key=lambda item: item.entity_id.value)[0]

@@ -192,6 +192,7 @@ class CognitiveLoop:
         "_motivation",
         "_perception",
         "_planner",
+        "_production_allow_provider",
         "_production_knowledge_mode",
         "_prospective_policy",
         "_reflection_mode",
@@ -250,6 +251,7 @@ class CognitiveLoop:
         teaching_interaction_mode: object | None = None,
         teaching_claim_policy: object | None = None,
         production_knowledge_mode: object | None = None,
+        production_allow_provider: bool = False,
     ) -> None:
         self._perception = perception
         self._memory = memory
@@ -470,6 +472,13 @@ class CognitiveLoop:
                 "production_knowledge_mode must be ProductionKnowledgeMode"
             )
         self._production_knowledge_mode = production_mode
+        if type(production_allow_provider) is not bool:
+            raise TypeError("production_allow_provider must be bool")
+        self._production_allow_provider = (
+            production_allow_provider
+            if production_mode is ProductionKnowledgeMode.DETERMINISTIC
+            else False
+        )
         self._deferred_dissonance: tuple[object, ...] = ()
 
     def _prepare_reputation(self, loop_input: CognitiveLoopInput) -> object | None:
@@ -920,6 +929,18 @@ class CognitiveLoop:
         competence = self._prepare_competence(loop_input, memory)
         competence, advice = self._prepare_teaching(loop_input, competence)
         recipe_beliefs = self._prepare_recipe_beliefs(loop_input)
+        production_recipe_id = None
+        if recipe_beliefs is not None and self._production_allow_provider:
+            from agents.cognition.production_selection import select_production_recipe
+
+            selection = await select_production_recipe(
+                recipe_beliefs,
+                allow_provider=True,
+                provider=self._world_model_provider,
+                tick=loop_input.observation.tick,
+            )
+            if selection.recipe_id is not None and not selection.fallback_used:
+                production_recipe_id = selection.recipe_id
         competence_policy = self._competence_policy
         if (
             competence is not None
@@ -1060,6 +1081,8 @@ class CognitiveLoop:
                     teaching_mode=self._teaching_mode,
                     teaching_policy=self._teaching_policy,
                     teaching_selection=teaching_selection,
+                    recipe_beliefs=recipe_beliefs,
+                    selected_recipe_id=production_recipe_id,
                 ),
             ),
             expected_type=ActionPlan,

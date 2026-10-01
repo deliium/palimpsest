@@ -1,0 +1,4 @@
+Select one recipe id from the candidate set only.
+Return exactly one JSON object matching the provided schema.
+Copy the recipe id from the candidate list. Do not add inputs, durations, probabilities, or commands.
+Do not include markdown fences, commentary, or trailing text.

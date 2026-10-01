@@ -1,0 +1,21 @@
+{
+  "name": "production",
+  "version": "v1",
+  "messages": [
+    {
+      "role": "system",
+      "template": "system.txt",
+      "sha256": "ebe367910082e4cccdd305e79807c65e3c2500234f2607e35cbdbc7ecdbfe5d1"
+    },
+    {
+      "role": "user",
+      "template": "user.txt",
+      "sha256": "dac0e73908419dc63e2e0d3fa7f0718475543d8e870787dda4ecb1aacfff6e29"
+    }
+  ],
+  "variables": [
+    "schema_name",
+    "schema_json",
+    "candidate_json"
+  ]
+}

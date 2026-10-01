@@ -160,7 +160,7 @@ Each checkpoint is a git commit on `main` created when those tasks are done. Do 
   - Depends on tasks 2 and 11.
   - Files: `src/agents/cognition/production.py`, `src/agents/cognition/configuration.py`, `src/simulation/agent_runtime.py`, `tests/unit/test_recipe_beliefs.py`.
 
-- [ ] Task 6: v2- Attempt production only from believed recipe ids.
+- [x] Task 6: v2- Attempt production only from believed recipe ids.
   - Deliverable: when mode is `DETERMINISTIC`, deliberation may compile one of the five commands for a supported recipe id with a visible target from the observation. Unsupported and unknown believed ids compile to `Wait`. `DISABLED` does not add directions to the futures that exist today and does not change tie ranks among the current directions. The engine test from the design still succeeds for a scripted true recipe with an empty belief set, and fails `unknown_recipe` for `craft_gold`. `allow_provider` defaults false. When true, schema `production.selection.v1` may return only a recipe id already supported. Unknown tokens set `fallback_used` and keep the deterministic choice. Prompt package `llm/prompts/production/v1/`. Provider selection lives in `agents/cognition/production_selection.py` and imports the `llm` facade. `CognitiveLoop` loads that module only when `allow_provider` is true. Add `agents.cognition.production_selection -> llm` to `ignore_imports` in `pyproject.toml`. Do not import `llm.models`.
   - Logging: logger `agents.cognition.production`. DEBUG `production_command_selected recipe_id=%s command_kind=%s`. INFO `production_command_withheld reason_code=%s`. LLM path logs `production_llm_start`, `production_llm_complete`, and `production_llm_rejected` with counts and reason codes only.
   - Depends on tasks 3, 5, and 11.
