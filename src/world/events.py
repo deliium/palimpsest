@@ -9,9 +9,9 @@ Compatibility matrix:
 - ``EVENT_SCHEMA_REPLAY_V4`` (4): physical replay plus explicit occurrence
   context for perception audience decisions.
 - ``EVENT_SCHEMA_REPLAY_V5`` (5): physical replay plus structured communication
-  payloads (Talked/Asked/Told). New physical runs emit v5. Replay-v2/v3/v4
-  text-only communication records decode into unreferenced structured
-  utterances; new writes use only this schema.
+  payloads (Talked/Asked/Told). Default physical writes stay on v5.
+- ``EVENT_SCHEMA_REPLAY_V6`` (6): production details. Written only by a run
+  whose catalog is non-empty. Illegal on every lower schema.
 
 Runs never mix replay schema versions. ``WorldEvent.target_id`` retains detail
 counterparty semantics and is never treated as an occurrence location.
@@ -19,6 +19,7 @@ counterparty semantics and is never treated as an occurrence location.
 
 from __future__ import annotations
 
+import logging
 from collections.abc import Sequence
 from dataclasses import dataclass, field
 from enum import StrEnum
@@ -35,6 +36,7 @@ from world.effects import (
 from world.identifiers import (
     EntityId,
     EventId,
+    RecipeId,
     RequestId,
     WorldId,
     WorldRevision,
@@ -51,6 +53,7 @@ EVENT_SCHEMA_REPLAY_V1: Final[int] = EVENT_SCHEMA_REPLAY_V2
 EVENT_SCHEMA_REPLAY_V3: Final[int] = 3
 EVENT_SCHEMA_REPLAY_V4: Final[int] = 4
 EVENT_SCHEMA_REPLAY_V5: Final[int] = 5
+EVENT_SCHEMA_REPLAY_V6: Final[int] = 6
 SUPPORTED_EVENT_SCHEMA_VERSIONS: Final[frozenset[int]] = frozenset(
     {
         EVENT_SCHEMA_AUDIT_V1,
@@ -58,6 +61,7 @@ SUPPORTED_EVENT_SCHEMA_VERSIONS: Final[frozenset[int]] = frozenset(
         EVENT_SCHEMA_REPLAY_V3,
         EVENT_SCHEMA_REPLAY_V4,
         EVENT_SCHEMA_REPLAY_V5,
+        EVENT_SCHEMA_REPLAY_V6,
     }
 )
 REPLAYABLE_EVENT_SCHEMA_VERSIONS: Final[frozenset[int]] = frozenset(
@@ -66,6 +70,7 @@ REPLAYABLE_EVENT_SCHEMA_VERSIONS: Final[frozenset[int]] = frozenset(
         EVENT_SCHEMA_REPLAY_V3,
         EVENT_SCHEMA_REPLAY_V4,
         EVENT_SCHEMA_REPLAY_V5,
+        EVENT_SCHEMA_REPLAY_V6,
     }
 )
 PHYSICAL_REPLAY_EVENT_SCHEMA_VERSIONS: Final[frozenset[int]] = frozenset(
@@ -73,9 +78,14 @@ PHYSICAL_REPLAY_EVENT_SCHEMA_VERSIONS: Final[frozenset[int]] = frozenset(
         EVENT_SCHEMA_REPLAY_V3,
         EVENT_SCHEMA_REPLAY_V4,
         EVENT_SCHEMA_REPLAY_V5,
+        EVENT_SCHEMA_REPLAY_V6,
     }
 )
 CURRENT_PHYSICAL_EVENT_SCHEMA_VERSION: Final[int] = EVENT_SCHEMA_REPLAY_V5
+_LOG: Final[logging.Logger] = logging.getLogger("world.events")
+_FORBIDDEN_PRESENTATION_FIELDS: Final[frozenset[str]] = frozenset(
+    {"pixels", "sprite", "animation", "dx", "dy", "screen_x", "screen_y"}
+)
 
 
 class EventValidationCode(StrEnum):
@@ -540,6 +550,238 @@ class Died:
             raise ValueError("Died.resulting_life_status must be DEAD")
 
 
+def _require_success(name: str, value: object) -> bool:
+    if type(value) is not bool:
+        raise TypeError(f"{name} must be bool")
+    return value
+
+
+def _require_duration_ticks(name: str, value: object) -> int:
+    if isinstance(value, bool) or type(value) is not int or value < 1:
+        raise ValueError(f"{name} must be an integer >= 1")
+    return value
+
+
+def _require_recipe(name: str, value: object) -> None:
+    if type(value) is not RecipeId:
+        raise TypeError(f"{name} must be RecipeId")
+
+
+def _reject_presentation_fields(kind: str, slots: tuple[str, ...]) -> None:
+    forbidden = _FORBIDDEN_PRESENTATION_FIELDS.intersection(slots)
+    if forbidden:
+        raise ValueError(f"{kind} forbids presentation fields {sorted(forbidden)}")
+
+
+@dataclass(frozen=True, slots=True)
+class ResourceHarvested:
+    recipe_id: RecipeId
+    resource_id: EntityId
+    success: bool
+    duration_ticks: int
+    resulting_resource_quantity: float
+    created_item_id: EntityId | None = None
+    kind: Literal["resource_harvested"] = field(
+        default="resource_harvested", init=False
+    )
+
+    def __post_init__(self) -> None:
+        _require_recipe("ResourceHarvested.recipe_id", self.recipe_id)
+        if type(self.resource_id) is not EntityId:
+            raise TypeError("ResourceHarvested.resource_id must be EntityId")
+        _require_success("ResourceHarvested.success", self.success)
+        object.__setattr__(
+            self,
+            "duration_ticks",
+            _require_duration_ticks(
+                "ResourceHarvested.duration_ticks", self.duration_ticks
+            ),
+        )
+        object.__setattr__(
+            self,
+            "resulting_resource_quantity",
+            _require_finite_float(
+                "ResourceHarvested.resulting_resource_quantity",
+                self.resulting_resource_quantity,
+            ),
+        )
+        if (
+            self.created_item_id is not None
+            and type(self.created_item_id) is not EntityId
+        ):
+            raise TypeError("ResourceHarvested.created_item_id must be EntityId")
+        if self.success is False and self.created_item_id is not None:
+            raise ValueError("failed ResourceHarvested must not carry created_item_id")
+        if self.success is True and self.created_item_id is None:
+            raise ValueError("successful ResourceHarvested requires created_item_id")
+        _reject_presentation_fields(self.kind, self.__slots__)
+
+
+@dataclass(frozen=True, slots=True)
+class CraftStarted:
+    recipe_id: RecipeId
+    success: bool
+    duration_ticks: int
+    consumed_item_ids: tuple[EntityId, ...] = ()
+    kind: Literal["craft_started"] = field(default="craft_started", init=False)
+
+    def __post_init__(self) -> None:
+        _require_recipe("CraftStarted.recipe_id", self.recipe_id)
+        _require_success("CraftStarted.success", self.success)
+        object.__setattr__(
+            self,
+            "duration_ticks",
+            _require_duration_ticks("CraftStarted.duration_ticks", self.duration_ticks),
+        )
+        consumed = require_ordered_unique(
+            "CraftStarted.consumed_item_ids",
+            self.consumed_item_ids,
+            item_type=EntityId,
+        )
+        object.__setattr__(self, "consumed_item_ids", consumed)
+        if self.success and not consumed:
+            raise ValueError("successful CraftStarted requires consumed_item_ids")
+        if not self.success and consumed:
+            raise ValueError("failed CraftStarted must not consume inputs")
+        _reject_presentation_fields(self.kind, self.__slots__)
+
+
+@dataclass(frozen=True, slots=True)
+class ItemCrafted:
+    recipe_id: RecipeId
+    created_item_id: EntityId
+    resulting_holder_id: EntityId
+    duration_ticks: int
+    success: bool = True
+    kind: Literal["item_crafted"] = field(default="item_crafted", init=False)
+
+    def __post_init__(self) -> None:
+        _require_recipe("ItemCrafted.recipe_id", self.recipe_id)
+        if type(self.created_item_id) is not EntityId:
+            raise TypeError("ItemCrafted.created_item_id must be EntityId")
+        if type(self.resulting_holder_id) is not EntityId:
+            raise TypeError("ItemCrafted.resulting_holder_id must be EntityId")
+        object.__setattr__(
+            self,
+            "duration_ticks",
+            _require_duration_ticks("ItemCrafted.duration_ticks", self.duration_ticks),
+        )
+        if _require_success("ItemCrafted.success", self.success) is not True:
+            raise ValueError("ItemCrafted does not emit a failure detail")
+        _reject_presentation_fields(self.kind, self.__slots__)
+
+
+@dataclass(frozen=True, slots=True)
+class StructureBuilt:
+    recipe_id: RecipeId
+    structure_id: EntityId
+    location_id: EntityId
+    resulting_integrity: float
+    duration_ticks: int
+    consumed_item_id: EntityId
+    success: bool = True
+    kind: Literal["structure_built"] = field(default="structure_built", init=False)
+
+    def __post_init__(self) -> None:
+        _require_recipe("StructureBuilt.recipe_id", self.recipe_id)
+        if type(self.structure_id) is not EntityId:
+            raise TypeError("StructureBuilt.structure_id must be EntityId")
+        if type(self.location_id) is not EntityId:
+            raise TypeError("StructureBuilt.location_id must be EntityId")
+        if type(self.consumed_item_id) is not EntityId:
+            raise TypeError("StructureBuilt.consumed_item_id must be EntityId")
+        object.__setattr__(
+            self,
+            "resulting_integrity",
+            _require_finite_float(
+                "StructureBuilt.resulting_integrity", self.resulting_integrity
+            ),
+        )
+        object.__setattr__(
+            self,
+            "duration_ticks",
+            _require_duration_ticks(
+                "StructureBuilt.duration_ticks", self.duration_ticks
+            ),
+        )
+        if _require_success("StructureBuilt.success", self.success) is not True:
+            raise ValueError("StructureBuilt does not emit a failure detail")
+        _reject_presentation_fields(self.kind, self.__slots__)
+
+
+@dataclass(frozen=True, slots=True)
+class StructureRepaired:
+    recipe_id: RecipeId
+    structure_id: EntityId
+    resulting_integrity: float
+    duration_ticks: int
+    consumed_item_id: EntityId
+    success: bool = True
+    kind: Literal["structure_repaired"] = field(
+        default="structure_repaired", init=False
+    )
+
+    def __post_init__(self) -> None:
+        _require_recipe("StructureRepaired.recipe_id", self.recipe_id)
+        if type(self.structure_id) is not EntityId:
+            raise TypeError("StructureRepaired.structure_id must be EntityId")
+        if type(self.consumed_item_id) is not EntityId:
+            raise TypeError("StructureRepaired.consumed_item_id must be EntityId")
+        object.__setattr__(
+            self,
+            "resulting_integrity",
+            _require_finite_float(
+                "StructureRepaired.resulting_integrity", self.resulting_integrity
+            ),
+        )
+        object.__setattr__(
+            self,
+            "duration_ticks",
+            _require_duration_ticks(
+                "StructureRepaired.duration_ticks", self.duration_ticks
+            ),
+        )
+        if _require_success("StructureRepaired.success", self.success) is not True:
+            raise ValueError("StructureRepaired does not emit a failure detail")
+        _reject_presentation_fields(self.kind, self.__slots__)
+
+
+@dataclass(frozen=True, slots=True)
+class ItemStored:
+    recipe_id: RecipeId
+    structure_id: EntityId
+    resulting_stored_quantity: int
+    duration_ticks: int
+    consumed_item_id: EntityId
+    success: bool = True
+    kind: Literal["item_stored"] = field(default="item_stored", init=False)
+
+    def __post_init__(self) -> None:
+        _require_recipe("ItemStored.recipe_id", self.recipe_id)
+        if type(self.structure_id) is not EntityId:
+            raise TypeError("ItemStored.structure_id must be EntityId")
+        if type(self.consumed_item_id) is not EntityId:
+            raise TypeError("ItemStored.consumed_item_id must be EntityId")
+        object.__setattr__(
+            self,
+            "resulting_stored_quantity",
+            require_exact_nonneg_int(
+                "ItemStored.resulting_stored_quantity",
+                self.resulting_stored_quantity,
+            ),
+        )
+        if self.resulting_stored_quantity < 1:
+            raise ValueError("ItemStored.resulting_stored_quantity must be >= 1")
+        object.__setattr__(
+            self,
+            "duration_ticks",
+            _require_duration_ticks("ItemStored.duration_ticks", self.duration_ticks),
+        )
+        if _require_success("ItemStored.success", self.success) is not True:
+            raise ValueError("ItemStored does not emit a failure detail")
+        _reject_presentation_fields(self.kind, self.__slots__)
+
+
 EventDetails = (
     Moved
     | Searched
@@ -561,6 +803,12 @@ EventDetails = (
     | NeedsApplied
     | ExposureApplied
     | Died
+    | ResourceHarvested
+    | CraftStarted
+    | ItemCrafted
+    | StructureBuilt
+    | StructureRepaired
+    | ItemStored
 )
 
 _DETAIL_TYPES: Final[frozenset[type]] = frozenset(
@@ -585,6 +833,23 @@ _DETAIL_TYPES: Final[frozenset[type]] = frozenset(
         NeedsApplied,
         ExposureApplied,
         Died,
+        ResourceHarvested,
+        CraftStarted,
+        ItemCrafted,
+        StructureBuilt,
+        StructureRepaired,
+        ItemStored,
+    }
+)
+
+_PRODUCTION_DETAIL_TYPES: Final[frozenset[type]] = frozenset(
+    {
+        ResourceHarvested,
+        CraftStarted,
+        ItemCrafted,
+        StructureBuilt,
+        StructureRepaired,
+        ItemStored,
     }
 )
 
@@ -697,6 +962,20 @@ def _payload_effect_complete(details: EventDetails, *, schema_version: int) -> b
             | Given()
         ):
             return True
+        case ResourceHarvested() as harvested:
+            if schema_version != EVENT_SCHEMA_REPLAY_V6:
+                return False
+            if harvested.success:
+                return harvested.created_item_id is not None
+            return harvested.created_item_id is None
+        case CraftStarted() as started:
+            if schema_version != EVENT_SCHEMA_REPLAY_V6:
+                return False
+            if started.success:
+                return len(started.consumed_item_ids) >= 1
+            return len(started.consumed_item_ids) == 0
+        case ItemCrafted() | StructureBuilt() | StructureRepaired() | ItemStored():
+            return schema_version == EVENT_SCHEMA_REPLAY_V6
         case _:
             return True
 
@@ -752,8 +1031,18 @@ def target_id_for_details(details: EventDetails) -> EntityId | None:
             | Died(body_id=body_id)
         ):
             return body_id
-        case Slept() | Waited():
+        case Slept() | Waited() | CraftStarted():
             return None
+        case ResourceHarvested(resource_id=resource_id):
+            return resource_id
+        case ItemCrafted(created_item_id=created_item_id):
+            return created_item_id
+        case (
+            StructureBuilt(structure_id=structure_id)
+            | StructureRepaired(structure_id=structure_id)
+            | ItemStored(structure_id=structure_id)
+        ):
+            return structure_id
         case _:
             raise TypeError(
                 f"{EventValidationCode.UNKNOWN_EVENT_TYPE.value}: "
@@ -832,6 +1121,14 @@ class WorldEvent:
         if self.schema_version not in SUPPORTED_EVENT_SCHEMA_VERSIONS:
             raise ValueError(EventValidationCode.INVALID_SCHEMA_VERSION.value)
         object.__setattr__(self, "details", require_event_details(self.details))
+        if type(self.details) in _PRODUCTION_DETAIL_TYPES:
+            if self.schema_version != EVENT_SCHEMA_REPLAY_V6:
+                _LOG.error(
+                    "invalid_event_schema_version kind=%s schema_version=%s",
+                    self.details.kind,
+                    self.schema_version,
+                )
+                raise ValueError(EventValidationCode.INVALID_SCHEMA_VERSION.value)
         if self.actor_id is not None and type(self.actor_id) is not EntityId:
             raise TypeError("WorldEvent.actor_id must be EntityId or None")
         if self.target_id is not None and type(self.target_id) is not EntityId:
@@ -866,6 +1163,13 @@ class WorldEvent:
             )
         ):
             raise ValueError(EventValidationCode.MISSING_EFFECT_FACTS.value)
+        if type(self.details) in _PRODUCTION_DETAIL_TYPES:
+            _LOG.debug(
+                "production_event_built schema_version=%s kind=%s success=%s",
+                self.schema_version,
+                self.details.kind,
+                getattr(self.details, "success", None),
+            )
 
     @property
     def event_type(self) -> str:
@@ -917,8 +1221,13 @@ def make_physical_replayable_event(
     resulting_revision: WorldRevision,
     details: EventDetails,
     occurrence: OccurrenceContext,
+    schema_version: int = CURRENT_PHYSICAL_EVENT_SCHEMA_VERSION,
 ) -> WorldEvent:
-    """Construct an authoritative physical replay-v5 objective event."""
+    """Construct an authoritative physical replay event.
+
+    The default schema remains replay-v5. Replay-v6 is selected only by a
+    caller whose production catalog is non-empty.
+    """
     typed_cause = require_event_cause(cause)
     if type(occurrence) is not OccurrenceContext:
         raise TypeError("occurrence must be OccurrenceContext")
@@ -930,7 +1239,7 @@ def make_physical_replayable_event(
         sequence=sequence,
         request_id=request_id_for_cause(typed_cause),
         resulting_revision=resulting_revision,
-        schema_version=CURRENT_PHYSICAL_EVENT_SCHEMA_VERSION,
+        schema_version=schema_version,
         details=details,
         actor_id=actor_id_for_cause(typed_cause),
         target_id=target_id_for_details(require_event_details(details)),
@@ -1054,11 +1363,46 @@ def build_occurrence_context(
                 affected_entity_ids=(source_id,),
                 private_recipient_ids=(),
             )
-        case Slept() | Waited():
+        case Slept() | Waited() | CraftStarted():
+            consumed: tuple[EntityId, ...] = ()
+            if type(typed) is CraftStarted:
+                consumed = typed.consumed_item_ids
             return OccurrenceContext(
                 origin_location_id=origin_location_id,
                 destination_location_id=None,
-                affected_entity_ids=(),
+                affected_entity_ids=consumed,
+                private_recipient_ids=(),
+            )
+        case ResourceHarvested(
+            resource_id=resource_id, created_item_id=created_item_id
+        ):
+            harvested_affected = [resource_id]
+            if created_item_id is not None:
+                harvested_affected.append(created_item_id)
+            return OccurrenceContext(
+                origin_location_id=origin_location_id,
+                destination_location_id=None,
+                affected_entity_ids=tuple(harvested_affected),
+                private_recipient_ids=(),
+            )
+        case ItemCrafted(created_item_id=created_item_id):
+            return OccurrenceContext(
+                origin_location_id=origin_location_id,
+                destination_location_id=None,
+                affected_entity_ids=(created_item_id,),
+                private_recipient_ids=(),
+            )
+        case (
+            StructureBuilt(structure_id=structure_id, consumed_item_id=consumed_item_id)
+            | StructureRepaired(
+                structure_id=structure_id, consumed_item_id=consumed_item_id
+            )
+            | ItemStored(structure_id=structure_id, consumed_item_id=consumed_item_id)
+        ):
+            return OccurrenceContext(
+                origin_location_id=origin_location_id,
+                destination_location_id=None,
+                affected_entity_ids=(structure_id, consumed_item_id),
                 private_recipient_ids=(),
             )
         case _:

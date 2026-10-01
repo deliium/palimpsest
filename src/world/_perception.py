@@ -3,8 +3,8 @@
 Visibility policy:
 - Always expose self, hour/day-phase, visibility modifier, current weather,
   current location, and adjacent exits.
-- Ground items, resource nodes, and other bodies appear only when effective
-  visibility is at least ``CONTENT_VISIBILITY_THRESHOLD``.
+- Ground items, resource nodes, structures, and other bodies appear only when
+  effective visibility is at least ``CONTENT_VISIBILITY_THRESHOLD``.
 - Held inventory remains visible below the content threshold.
 - Dead registered observers still receive self/time/environment observations.
 - Physical target validation is not visibility-gated (handled elsewhere).
@@ -14,11 +14,19 @@ Visibility policy:
 
 from __future__ import annotations
 
+import logging
 from collections.abc import Sequence
+from typing import Final
 
 from world._state import WorldState
 from world.events import (
     Asked,
+    CraftStarted,
+    ItemCrafted,
+    ItemStored,
+    ResourceHarvested,
+    StructureBuilt,
+    StructureRepaired,
     Talked,
     Told,
     WorldEvent,
@@ -39,6 +47,7 @@ from world.observations import (
     ObservedLocation,
     ObservedOccurrence,
     ObservedResource,
+    ObservedStructure,
     VisibleBody,
     VisibleExit,
     coarse_health_for,
@@ -46,14 +55,27 @@ from world.observations import (
 )
 from world.values import WeatherCondition
 
+_LOG: Final[logging.Logger] = logging.getLogger("world._perception")
+_PRODUCTION_DETAIL_TYPES: Final[frozenset[type]] = frozenset(
+    {
+        ResourceHarvested,
+        CraftStarted,
+        ItemCrafted,
+        StructureBuilt,
+        StructureRepaired,
+        ItemStored,
+    }
+)
+
 __all__: list[str] = ["PerceptionService", "project_observations"]
 
 
 class PerceptionService:
     """Sole objective-to-subjective projector for agent observations.
 
-    Log-free and deterministic. Accepts world authority inputs only from
-    approved simulation/private-world callers.
+    Deterministic. Accepts world authority inputs only from approved
+    simulation and private-world callers. Production debug lines record recipe
+    ids and structure counts, never item names.
     """
 
     def project(
@@ -137,6 +159,18 @@ def _project_one(
         content_visible=content_visible,
         prior_events=prior_events,
     )
+    structures = _sorted_structures(state, location_id) if content_visible else ()
+    recipes = [
+        occurrence.public_facts["recipe_id"]
+        for occurrence in occurrences
+        if "recipe_id" in occurrence.public_facts
+    ]
+    if structures or recipes:
+        _LOG.debug(
+            "production_observed recipe_id=%s structure_count=%s",
+            recipes[0] if recipes else "-",
+            len(structures),
+        )
     return Observation(
         world_id=world_id,
         observer_id=observer_id,
@@ -151,6 +185,7 @@ def _project_one(
             include_ground=content_visible,
         ),
         resources=(_sorted_resources(state, location_id) if content_visible else ()),
+        structures=structures,
         exits=_sorted_exits(state, location_id),
         visible_bodies=(
             _sorted_visible_bodies(state, location_id, observer_id)
@@ -293,6 +328,26 @@ def _sorted_resources(
     return tuple(selected)
 
 
+def _sorted_structures(
+    state: WorldState, location_id: EntityId
+) -> tuple[ObservedStructure, ...]:
+    selected: list[ObservedStructure] = []
+    for structure_id in sorted(state.structures, key=lambda entity: entity.value):
+        structure = state.structures[structure_id]
+        if structure.location_id != location_id:
+            continue
+        selected.append(
+            ObservedStructure(
+                entity_id=structure.entity_id,
+                location_id=structure.location_id,
+                kind=structure.kind,
+                integrity=structure.integrity,
+                stored_quantity=structure.stored_quantity,
+            )
+        )
+    return tuple(selected)
+
+
 def _sorted_visible_bodies(
     state: WorldState,
     location_id: EntityId,
@@ -402,6 +457,9 @@ def _audience_role(
     assert occurrence is not None
     if event.actor_id == observer_id:
         return ObservationAudienceRole.ACTOR
+    producer = _production_actor(event)
+    if producer is not None and producer == observer_id:
+        return ObservationAudienceRole.ACTOR
     if event.target_id == observer_id or observer_id in set(
         occurrence.affected_entity_ids
     ):
@@ -446,10 +504,31 @@ def _public_facts_for_role(
     event: WorldEvent, role: ObservationAudienceRole
 ) -> dict[str, object]:
     facts: dict[str, object] = {"kind": event.event_type}
+    recipe_id = _production_recipe_id(event)
     if role is ObservationAudienceRole.BYSTANDER:
+        if recipe_id is not None:
+            facts["recipe_id"] = recipe_id
         return facts
     if event.actor_id is not None:
         facts["actor_id"] = event.actor_id.value
     if event.target_id is not None:
         facts["target_id"] = event.target_id.value
+    if recipe_id is not None and role is ObservationAudienceRole.ACTOR:
+        facts["recipe_id"] = recipe_id
     return facts
+
+
+def _production_recipe_id(event: WorldEvent) -> str | None:
+    details = event.details
+    if type(details) not in _PRODUCTION_DETAIL_TYPES:
+        return None
+    return details.recipe_id.value  # type: ignore[union-attr]
+
+
+def _production_actor(event: WorldEvent) -> EntityId | None:
+    details = event.details
+    if type(details) is ItemCrafted:
+        return details.resulting_holder_id
+    if type(details) in _PRODUCTION_DETAIL_TYPES:
+        return event.actor_id
+    return None

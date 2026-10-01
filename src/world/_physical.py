@@ -8,6 +8,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+from world._production import shelter_factor_for
 from world._state import WorldState, rebuild_world_state
 from world.effects import (
     DeathCause,
@@ -323,12 +324,15 @@ def apply_autonomous_physical_step(
             + weather_offsets[weather.condition]
             + phase_offset
         )
+        shelter = shelter_factor_for(
+            working, body.location_id, location.shelter_factor.value
+        )
         temperature = TemperatureCelsius(
             round_physical(
                 next_body.temperature.value
                 + rules.temperature_lerp_factor
                 * (ambient - next_body.temperature.value)
-                * (1.0 - location.shelter_factor.value)
+                * (1.0 - shelter)
             )
         )
         exposure_damage = 0.0

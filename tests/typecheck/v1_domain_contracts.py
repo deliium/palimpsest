@@ -10,15 +10,20 @@ from world.actions import (
     AgentCommand,
     Ask,
     Attack,
+    Build,
+    Craft,
     Drink,
     Drop,
     Eat,
     Flee,
     Give,
+    Harvest,
     Help,
     Move,
+    Repair,
     Search,
     Sleep,
+    Store,
     Take,
     Talk,
     Tell,
@@ -109,6 +114,16 @@ def _exhaust_agent_command(command: AgentCommand) -> str:
             return "flee"
         case Wait():
             return "wait"
+        case Harvest():
+            return "harvest"
+        case Craft():
+            return "craft"
+        case Build():
+            return "build"
+        case Repair():
+            return "repair"
+        case Store():
+            return "store"
         case _:
             assert_never(command)
 

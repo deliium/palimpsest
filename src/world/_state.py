@@ -7,6 +7,7 @@ from types import MappingProxyType
 
 from world.identifiers import EntityId, EventId, WorldId, WorldRevision
 from world.models import AgentBody, Item, Location, Resource, Weather
+from world.production import ProductionJob, Structure, ToolMark
 
 __all__: list[str] = ["World", "WorldState", "rebuild_world_state"]
 
@@ -20,6 +21,9 @@ def rebuild_world_state(
     resources: Mapping[EntityId, Resource] | None = None,
     bodies: Mapping[EntityId, AgentBody] | None = None,
     weather: Mapping[EntityId, Weather] | None = None,
+    structures: Mapping[EntityId, Structure] | None = None,
+    production_jobs: Mapping[EntityId, ProductionJob] | None = None,
+    tool_marks: Mapping[EntityId, ToolMark] | None = None,
 ) -> WorldState:
     """Build a new immutable snapshot with deterministic EntityId ordering."""
     if type(state) is not WorldState:
@@ -31,6 +35,9 @@ def rebuild_world_state(
     resource_src = state.resources if resources is None else resources
     body_src = state.bodies if bodies is None else bodies
     weather_src = state.weather if weather is None else weather
+    structure_src = state.structures if structures is None else structures
+    job_src = state.production_jobs if production_jobs is None else production_jobs
+    mark_src = state.tool_marks if tool_marks is None else tool_marks
     return WorldState(
         state.revision if revision is None else revision,
         locations=tuple(
@@ -45,6 +52,15 @@ def rebuild_world_state(
         ),
         weather=tuple(
             sorted(weather_src.values(), key=lambda value: value.location_id.value)
+        ),
+        structures=tuple(
+            sorted(structure_src.values(), key=lambda value: value.entity_id.value)
+        ),
+        production_jobs=tuple(
+            sorted(job_src.values(), key=lambda value: value.actor_id.value)
+        ),
+        tool_marks=tuple(
+            sorted(mark_src.values(), key=lambda value: value.item_id.value)
         ),
     )
 
@@ -75,8 +91,11 @@ class WorldState:
         "_bodies",
         "_items",
         "_locations",
+        "_production_jobs",
         "_resources",
         "_revision",
+        "_structures",
+        "_tool_marks",
         "_weather",
     )
 
@@ -89,6 +108,9 @@ class WorldState:
         resources: Sequence[Resource] = (),
         bodies: Sequence[AgentBody] = (),
         weather: Sequence[Weather] = (),
+        structures: Sequence[Structure] = (),
+        production_jobs: Sequence[ProductionJob] = (),
+        tool_marks: Sequence[ToolMark] = (),
     ) -> None:
         if type(revision) is not WorldRevision:
             raise TypeError("WorldState.revision must be WorldRevision")
@@ -100,9 +122,19 @@ class WorldState:
             "resources", resources, model_type=Resource
         )
         body_index = _index_by_entity_id("bodies", bodies, model_type=AgentBody)
-        _reject_global_id_collisions(
-            location_index, item_index, resource_index, body_index
+        structure_index = _index_by_entity_id(
+            "structures", structures, model_type=Structure
         )
+        _reject_global_id_collisions(
+            location_index, item_index, resource_index, body_index, structure_index
+        )
+        for structure in structure_index.values():
+            if structure.location_id not in location_index:
+                raise ValueError(
+                    "Structure.location_id must reference a known location"
+                )
+        job_index = _index_jobs(production_jobs)
+        mark_index = _index_tool_marks(tool_marks)
         weather_index = _index_weather(weather, location_index)
         _validate_topology(location_index)
         _validate_weather_coverage(location_index, weather_index)
@@ -123,6 +155,9 @@ class WorldState:
         self._resources = MappingProxyType(resource_index)
         self._bodies = MappingProxyType(body_index)
         self._weather = MappingProxyType(weather_index)
+        self._structures = MappingProxyType(structure_index)
+        self._production_jobs = MappingProxyType(job_index)
+        self._tool_marks = MappingProxyType(mark_index)
 
     @property
     def revision(self) -> WorldRevision:
@@ -147,6 +182,18 @@ class WorldState:
     @property
     def weather(self) -> Mapping[EntityId, Weather]:
         return self._weather
+
+    @property
+    def structures(self) -> Mapping[EntityId, Structure]:
+        return self._structures
+
+    @property
+    def production_jobs(self) -> Mapping[EntityId, ProductionJob]:
+        return self._production_jobs
+
+    @property
+    def tool_marks(self) -> Mapping[EntityId, ToolMark]:
+        return self._tool_marks
 
 
 class World:
@@ -241,11 +288,34 @@ class World:
         return result
 
 
+def _index_jobs(jobs: Sequence[ProductionJob]) -> dict[EntityId, ProductionJob]:
+    indexed: dict[EntityId, ProductionJob] = {}
+    for job in jobs:
+        if type(job) is not ProductionJob:
+            raise TypeError("production_jobs entries must be ProductionJob")
+        if job.actor_id in indexed:
+            raise ValueError(f"duplicate production job for {job.actor_id.value!r}")
+        indexed[job.actor_id] = job
+    return indexed
+
+
+def _index_tool_marks(marks: Sequence[ToolMark]) -> dict[EntityId, ToolMark]:
+    indexed: dict[EntityId, ToolMark] = {}
+    for mark in marks:
+        if type(mark) is not ToolMark:
+            raise TypeError("tool_marks entries must be ToolMark")
+        if mark.item_id in indexed:
+            raise ValueError(f"duplicate tool mark for {mark.item_id.value!r}")
+        indexed[mark.item_id] = mark
+    return indexed
+
+
 def _reject_global_id_collisions(
     locations: Mapping[EntityId, Location],
     items: Mapping[EntityId, Item],
     resources: Mapping[EntityId, Resource],
     bodies: Mapping[EntityId, AgentBody],
+    structures: Mapping[EntityId, Structure],
 ) -> None:
     seen: dict[EntityId, str] = {}
     for label, mapping in (
@@ -253,6 +323,7 @@ def _reject_global_id_collisions(
         ("item", items),
         ("resource", resources),
         ("body", bodies),
+        ("structure", structures),
     ):
         for entity_id in mapping:
             prior = seen.get(entity_id)

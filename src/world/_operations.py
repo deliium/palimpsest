@@ -17,15 +17,20 @@ from world.actions import (
     ActionRequest,
     Ask,
     Attack,
+    Build,
+    Craft,
     Drink,
     Drop,
     Eat,
     Flee,
     Give,
+    Harvest,
     Help,
     Move,
+    Repair,
     Search,
     Sleep,
+    Store,
     Take,
     Talk,
     Tell,
@@ -35,6 +40,7 @@ from world.actions import (
 from world.communications import StructuredUtterance
 from world.effects import ActionCause, EventCause, require_event_cause
 from world.events import (
+    CURRENT_PHYSICAL_EVENT_SCHEMA_VERSION,
     EventDetails,
     OccurrenceContext,
     WorldEvent,
@@ -45,6 +51,7 @@ from world.events import (
 from world.identifiers import (
     EntityId,
     EventId,
+    RecipeId,
     RequestId,
     WorldId,
     WorldRevision,
@@ -219,6 +226,54 @@ class _WaitOp:
     base_revision: WorldRevision
 
 
+@dataclass(frozen=True, slots=True)
+class _HarvestOp:
+    request_id: RequestId
+    actor_id: EntityId
+    world_id: WorldId
+    base_revision: WorldRevision
+    recipe_id: RecipeId
+    resource_id: EntityId
+
+
+@dataclass(frozen=True, slots=True)
+class _CraftOp:
+    request_id: RequestId
+    actor_id: EntityId
+    world_id: WorldId
+    base_revision: WorldRevision
+    recipe_id: RecipeId
+
+
+@dataclass(frozen=True, slots=True)
+class _BuildOp:
+    request_id: RequestId
+    actor_id: EntityId
+    world_id: WorldId
+    base_revision: WorldRevision
+    recipe_id: RecipeId
+
+
+@dataclass(frozen=True, slots=True)
+class _RepairOp:
+    request_id: RequestId
+    actor_id: EntityId
+    world_id: WorldId
+    base_revision: WorldRevision
+    recipe_id: RecipeId
+    structure_id: EntityId
+
+
+@dataclass(frozen=True, slots=True)
+class _StoreOp:
+    request_id: RequestId
+    actor_id: EntityId
+    world_id: WorldId
+    base_revision: WorldRevision
+    recipe_id: RecipeId
+    item_id: EntityId
+
+
 ValidatedWorldOperation = (
     _MoveOp
     | _SearchOp
@@ -235,6 +290,11 @@ ValidatedWorldOperation = (
     | _AttackOp
     | _FleeOp
     | _WaitOp
+    | _HarvestOp
+    | _CraftOp
+    | _BuildOp
+    | _RepairOp
+    | _StoreOp
 )
 
 _OPERATION_TYPES: Final[frozenset[type]] = frozenset(
@@ -254,6 +314,11 @@ _OPERATION_TYPES: Final[frozenset[type]] = frozenset(
         _AttackOp,
         _FleeOp,
         _WaitOp,
+        _HarvestOp,
+        _CraftOp,
+        _BuildOp,
+        _RepairOp,
+        _StoreOp,
     }
 )
 
@@ -440,6 +505,31 @@ def validate_action_request(
             return OperationAccepted(_FleeOp(*base, threat_id=threat_id))
         case Wait():
             return OperationAccepted(_WaitOp(*base))
+        case Harvest(recipe_id=recipe_id, resource_id=resource_id):
+            rejected = _require_resource(state, resource_id, request_id)
+            if rejected is not None:
+                return rejected
+            return OperationAccepted(
+                _HarvestOp(*base, recipe_id=recipe_id, resource_id=resource_id)
+            )
+        case Craft(recipe_id=recipe_id):
+            return OperationAccepted(_CraftOp(*base, recipe_id=recipe_id))
+        case Build(recipe_id=recipe_id):
+            return OperationAccepted(_BuildOp(*base, recipe_id=recipe_id))
+        case Repair(recipe_id=recipe_id, structure_id=structure_id):
+            rejected = _require_structure(state, structure_id, request_id)
+            if rejected is not None:
+                return rejected
+            return OperationAccepted(
+                _RepairOp(*base, recipe_id=recipe_id, structure_id=structure_id)
+            )
+        case Store(recipe_id=recipe_id, item_id=item_id):
+            rejected = _require_item(state, item_id, request_id)
+            if rejected is not None:
+                return rejected
+            return OperationAccepted(
+                _StoreOp(*base, recipe_id=recipe_id, item_id=item_id)
+            )
         case _:
             return OperationRejected(
                 code=RejectionCode.MALFORMED_ENVELOPE, request_id=request_id
@@ -521,7 +611,8 @@ def _exists_elsewhere(state: WorldState, entity_id: EntityId) -> bool:
         entity_id in state.locations
         or entity_id in state.items
         or entity_id in state.resources
-        or entity_id in state.bodies
+        or         entity_id in state.bodies
+        or entity_id in state.structures
     )
 
 
@@ -834,6 +925,20 @@ def prepare_action_batch(
     )
 
 
+def _require_structure(
+    state: WorldState, entity_id: EntityId, request_id: RequestId
+) -> OperationRejected | None:
+    from world.production import Structure
+
+    if entity_id in state.structures and type(state.structures[entity_id]) is Structure:
+        return None
+    if _exists_elsewhere(state, entity_id):
+        return OperationRejected(
+            code=RejectionCode.WRONG_TARGET_CATEGORY, request_id=request_id
+        )
+    return OperationRejected(code=RejectionCode.MISSING_TARGET, request_id=request_id)
+
+
 def finalize_pending_batch(
     pending: PendingBatch,
     *,
@@ -842,6 +947,7 @@ def finalize_pending_batch(
     event_ids: Sequence[EventId],
     run_id: str,
     tick: int,
+    schema_version: int = CURRENT_PHYSICAL_EVENT_SCHEMA_VERSION,
 ) -> PreparedBatch:
     """Advance revision at most once and freeze pending events with final facts."""
     if type(pending) is not PendingBatch:
@@ -891,6 +997,7 @@ def finalize_pending_batch(
                 resulting_revision=resulting_revision,
                 details=pending_event.details,
                 occurrence=pending_event.occurrence,
+                schema_version=schema_version,
             )
         )
     normalized = normalize_ordered_events(events)

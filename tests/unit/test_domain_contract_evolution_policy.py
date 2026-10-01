@@ -15,15 +15,20 @@ import pytest
 from world.actions import (
     Ask,
     Attack,
+    Build,
+    Craft,
     Drink,
     Drop,
     Eat,
     Flee,
     Give,
+    Harvest,
     Help,
     Move,
+    Repair,
     Search,
     Sleep,
+    Store,
     Take,
     Talk,
     Tell,
@@ -36,7 +41,7 @@ from world.observations import Observation
 ROOT = Path(__file__).resolve().parents[2]
 SRC = ROOT / "src"
 
-# Frozen V1 command surface for this scaffolding plan (no new variants).
+# Closed command surface. Production adds five variants on the same change.
 _CLOSED_COMMAND_TYPES: frozenset[type] = frozenset(
     {
         Move,
@@ -54,6 +59,11 @@ _CLOSED_COMMAND_TYPES: frozenset[type] = frozenset(
         Attack,
         Flee,
         Wait,
+        Harvest,
+        Craft,
+        Build,
+        Repair,
+        Store,
     }
 )
 
@@ -70,6 +80,7 @@ _FROZEN_OBSERVATION_FIELDS: frozenset[str] = frozenset(
         "resources",
         "exits",
         "visible_bodies",
+        "structures",
         "occurrences",
         "communications",
         "hour",
@@ -87,8 +98,8 @@ _PARITY_GATE = (
 )
 
 
-def test_agent_command_set_remains_closed_at_fifteen() -> None:
-    assert len(_CLOSED_COMMAND_TYPES) == 15
+def test_agent_command_set_remains_closed_at_twenty() -> None:
+    assert len(_CLOSED_COMMAND_TYPES) == 20
     from world import actions as actions_mod
 
     # Mirror the public union membership without constructing parameterized commands.
@@ -108,6 +119,11 @@ def test_agent_command_set_remains_closed_at_fifteen() -> None:
         Attack,
         Flee,
         Wait,
+        Harvest,
+        Craft,
+        Build,
+        Repair,
+        Store,
     }
     assert asserted == _CLOSED_COMMAND_TYPES
     assert hasattr(actions_mod, "AgentCommand")

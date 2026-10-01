@@ -7,7 +7,7 @@ world validation step promotes a request to an authority-bearing operation.
 from __future__ import annotations
 
 from collections.abc import Mapping
-from dataclasses import dataclass, field
+from dataclasses import InitVar, dataclass, field
 from enum import StrEnum
 from typing import Final, Literal, Protocol, runtime_checkable
 
@@ -15,10 +15,12 @@ from world.communications import StructuredUtterance, confidence_band
 from world.identifiers import (
     EntityId,
     ProposalId,
+    RecipeId,
     RequestId,
     WorldId,
     WorldRevision,
 )
+from world.production import require_production_command_fields
 
 
 @dataclass(frozen=True, slots=True)
@@ -193,6 +195,90 @@ class Wait:
     kind: Literal["wait"] = field(default="wait", init=False)
 
 
+@dataclass(frozen=True, slots=True)
+class Harvest:
+    recipe_id: RecipeId
+    resource_id: EntityId
+    action: InitVar[str] = "harvest"
+    kind: Literal["harvest"] = field(default="harvest", init=False)
+
+    def __post_init__(self, action: str) -> None:
+        require_production_command_fields(
+            class_name="Harvest",
+            class_action="harvest",
+            action=action,
+            recipe_id=self.recipe_id,
+        )
+        if type(self.resource_id) is not EntityId:
+            raise TypeError("Harvest.resource_id must be EntityId")
+
+
+@dataclass(frozen=True, slots=True)
+class Craft:
+    recipe_id: RecipeId
+    action: InitVar[str] = "craft"
+    kind: Literal["craft"] = field(default="craft", init=False)
+
+    def __post_init__(self, action: str) -> None:
+        require_production_command_fields(
+            class_name="Craft",
+            class_action="craft",
+            action=action,
+            recipe_id=self.recipe_id,
+        )
+
+
+@dataclass(frozen=True, slots=True)
+class Build:
+    recipe_id: RecipeId
+    action: InitVar[str] = "build"
+    kind: Literal["build"] = field(default="build", init=False)
+
+    def __post_init__(self, action: str) -> None:
+        require_production_command_fields(
+            class_name="Build",
+            class_action="build",
+            action=action,
+            recipe_id=self.recipe_id,
+        )
+
+
+@dataclass(frozen=True, slots=True)
+class Repair:
+    recipe_id: RecipeId
+    structure_id: EntityId
+    action: InitVar[str] = "repair"
+    kind: Literal["repair"] = field(default="repair", init=False)
+
+    def __post_init__(self, action: str) -> None:
+        require_production_command_fields(
+            class_name="Repair",
+            class_action="repair",
+            action=action,
+            recipe_id=self.recipe_id,
+        )
+        if type(self.structure_id) is not EntityId:
+            raise TypeError("Repair.structure_id must be EntityId")
+
+
+@dataclass(frozen=True, slots=True)
+class Store:
+    recipe_id: RecipeId
+    item_id: EntityId
+    action: InitVar[str] = "store"
+    kind: Literal["store"] = field(default="store", init=False)
+
+    def __post_init__(self, action: str) -> None:
+        require_production_command_fields(
+            class_name="Store",
+            class_action="store",
+            action=action,
+            recipe_id=self.recipe_id,
+        )
+        if type(self.item_id) is not EntityId:
+            raise TypeError("Store.item_id must be EntityId")
+
+
 AgentCommand = (
     Move
     | Search
@@ -209,6 +295,11 @@ AgentCommand = (
     | Attack
     | Flee
     | Wait
+    | Harvest
+    | Craft
+    | Build
+    | Repair
+    | Store
 )
 
 _COMMAND_TYPES: Final[frozenset[type]] = frozenset(
@@ -228,6 +319,11 @@ _COMMAND_TYPES: Final[frozenset[type]] = frozenset(
         Attack,
         Flee,
         Wait,
+        Harvest,
+        Craft,
+        Build,
+        Repair,
+        Store,
     }
 )
 

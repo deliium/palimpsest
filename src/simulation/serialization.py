@@ -82,15 +82,20 @@ from world.actions import (
     ActionRequest,
     Ask,
     Attack,
+    Build,
+    Craft,
     Drink,
     Drop,
     Eat,
     Flee,
     Give,
+    Harvest,
     Help,
     Move,
+    Repair,
     Search,
     Sleep,
+    Store,
     Take,
     Talk,
     Tell,
@@ -118,8 +123,10 @@ from world.events import (
     EVENT_SCHEMA_REPLAY_V3,
     EVENT_SCHEMA_REPLAY_V4,
     EVENT_SCHEMA_REPLAY_V5,
+    EVENT_SCHEMA_REPLAY_V6,
     Asked,
     Attacked,
+    CraftStarted,
     Died,
     Dropped,
     Drunk,
@@ -128,12 +135,17 @@ from world.events import (
     Fled,
     Given,
     Helped,
+    ItemCrafted,
+    ItemStored,
     Moved,
     NeedsApplied,
     OccurrenceContext,
+    ResourceHarvested,
     ResourceRegenerated,
     Searched,
     Slept,
+    StructureBuilt,
+    StructureRepaired,
     Taken,
     Talked,
     Told,
@@ -147,6 +159,7 @@ from world.identifiers import (
     EntityId,
     EventId,
     ProposalId,
+    RecipeId,
     RequestId,
     WorldId,
     WorldRevision,
@@ -174,6 +187,7 @@ from world.observations import (
     ObservedOccurrence,
     ObservedResource,
     ObservedSelf,
+    ObservedStructure,
     VisibleBody,
     VisibleExit,
 )
@@ -446,6 +460,11 @@ _COMMAND_TAGS: Final[frozenset[str]] = frozenset(
         "attack",
         "flee",
         "wait",
+        "harvest",
+        "craft",
+        "build",
+        "repair",
+        "store",
     }
 )
 
@@ -1312,9 +1331,7 @@ def _decode_goal_relation_list(
     return tuple(out)
 
 
-def _decode_goal_condition_list(
-    raw: object, *, path: str
-) -> tuple[GoalCondition, ...]:
+def _decode_goal_condition_list(raw: object, *, path: str) -> tuple[GoalCondition, ...]:
     if not isinstance(raw, list):
         raise DomainSerializationError("invalid_array", path)
     out: list[GoalCondition] = []
@@ -2312,6 +2329,20 @@ def _encode_command(value: object) -> dict[str, Any]:
             return {"target_id": target_id.value}
         case Flee(threat_id=threat_id):
             return {"threat_id": None if threat_id is None else threat_id.value}
+        case Harvest(recipe_id=recipe_id, resource_id=resource_id):
+            return {
+                "recipe_id": recipe_id.value,
+                "resource_id": resource_id.value,
+            }
+        case Craft(recipe_id=recipe_id) | Build(recipe_id=recipe_id):
+            return {"recipe_id": recipe_id.value}
+        case Repair(recipe_id=recipe_id, structure_id=structure_id):
+            return {
+                "recipe_id": recipe_id.value,
+                "structure_id": structure_id.value,
+            }
+        case Store(recipe_id=recipe_id, item_id=item_id):
+            return {"item_id": item_id.value, "recipe_id": recipe_id.value}
         case _:
             raise DomainSerializationError("unsupported_type", "$")
 
@@ -2374,6 +2405,30 @@ def _decode_command(tag: str, data: dict[str, Any], *, path: str) -> object:
         if tag == "wait":
             _require_keys(data, set(), path=path)
             return Wait()
+        if tag == "harvest":
+            _require_keys(data, {"recipe_id", "resource_id"}, path=path)
+            return Harvest(
+                RecipeId(_str_field(data, "recipe_id", path=path)),
+                EntityId(_str_field(data, "resource_id", path=path)),
+            )
+        if tag == "craft":
+            _require_keys(data, {"recipe_id"}, path=path)
+            return Craft(RecipeId(_str_field(data, "recipe_id", path=path)))
+        if tag == "build":
+            _require_keys(data, {"recipe_id"}, path=path)
+            return Build(RecipeId(_str_field(data, "recipe_id", path=path)))
+        if tag == "repair":
+            _require_keys(data, {"recipe_id", "structure_id"}, path=path)
+            return Repair(
+                RecipeId(_str_field(data, "recipe_id", path=path)),
+                EntityId(_str_field(data, "structure_id", path=path)),
+            )
+        if tag == "store":
+            _require_keys(data, {"recipe_id", "item_id"}, path=path)
+            return Store(
+                RecipeId(_str_field(data, "recipe_id", path=path)),
+                EntityId(_str_field(data, "item_id", path=path)),
+            )
     except DomainSerializationError:
         raise
     except (TypeError, ValueError) as exc:
@@ -2425,6 +2480,9 @@ def _encode_observation(value: Observation) -> dict[str, Any]:
             _encode_observed_occurrence(item) for item in value.occurrences
         ],
         "resources": [_encode_observed_resource(item) for item in value.resources],
+        "structures": [
+            _encode_observed_structure(item) for item in value.structures
+        ],
         "revision": value.revision.value,
         "self_body": None
         if value.self_body is None
@@ -2461,6 +2519,7 @@ def _decode_observation(data: dict[str, Any], *, path: str) -> Observation:
             "weather_condition",
         },
         path=path,
+        optional={"structures"},
     )
     self_body_raw = data["self_body"]
     try:
@@ -2502,6 +2561,11 @@ def _decode_observation(data: dict[str, Any], *, path: str) -> Observation:
                 _decode_observed_resource,
                 path=f"{path}.resources",
             ),
+            structures=_decode_object_list(
+                data.get("structures", []),
+                _decode_observed_structure,
+                path=f"{path}.structures",
+            ),
             exits=_decode_object_list(
                 data["exits"], _decode_visible_exit, path=f"{path}.exits"
             ),
@@ -2528,6 +2592,38 @@ def _decode_observation(data: dict[str, Any], *, path: str) -> Observation:
                 else _float_field(data, "visibility", path=path)
             ),
             weather_condition=weather_condition,
+        )
+    except DomainSerializationError:
+        raise
+    except (TypeError, ValueError) as exc:
+        raise DomainSerializationError("invalid_model", path) from exc
+
+
+def _encode_observed_structure(value: ObservedStructure) -> dict[str, Any]:
+    return {
+        "entity_id": value.entity_id.value,
+        "integrity": value.integrity,
+        "kind": value.kind.value,
+        "location_id": value.location_id.value,
+        "stored_quantity": value.stored_quantity,
+    }
+
+
+def _decode_observed_structure(data: dict[str, Any], *, path: str) -> ObservedStructure:
+    from world.production import StructureKind
+
+    _require_keys(
+        data,
+        {"entity_id", "location_id", "kind", "integrity", "stored_quantity"},
+        path=path,
+    )
+    try:
+        return ObservedStructure(
+            entity_id=EntityId(_str_field(data, "entity_id", path=path)),
+            location_id=EntityId(_str_field(data, "location_id", path=path)),
+            kind=StructureKind(_str_field(data, "kind", path=path)),
+            integrity=_float_field(data, "integrity", path=path),
+            stored_quantity=_int_field(data, "stored_quantity", path=path),
         )
     except DomainSerializationError:
         raise
@@ -3448,8 +3544,241 @@ def _encode_event_details(value: object) -> dict[str, Any]:
                 "kind": "died",
                 "resulting_life_status": resulting_life_status.value,
             }
+        case ResourceHarvested(
+            recipe_id=recipe_id,
+            resource_id=resource_id,
+            success=success,
+            duration_ticks=duration_ticks,
+            resulting_resource_quantity=resulting_resource_quantity,
+            created_item_id=created_item_id,
+        ):
+            payload = {
+                "duration_ticks": duration_ticks,
+                "kind": "resource_harvested",
+                "recipe_id": recipe_id.value,
+                "resource_id": resource_id.value,
+                "resulting_resource_quantity": resulting_resource_quantity,
+                "success": success,
+            }
+            if created_item_id is not None:
+                payload["created_item_id"] = created_item_id.value
+            return payload
+        case CraftStarted(
+            recipe_id=recipe_id,
+            success=success,
+            duration_ticks=duration_ticks,
+            consumed_item_ids=consumed_item_ids,
+        ):
+            return {
+                "consumed_item_ids": [item_id.value for item_id in consumed_item_ids],
+                "duration_ticks": duration_ticks,
+                "kind": "craft_started",
+                "recipe_id": recipe_id.value,
+                "success": success,
+            }
+        case ItemCrafted(
+            recipe_id=recipe_id,
+            created_item_id=created_item_id,
+            resulting_holder_id=resulting_holder_id,
+            duration_ticks=duration_ticks,
+            success=success,
+        ):
+            return {
+                "created_item_id": created_item_id.value,
+                "duration_ticks": duration_ticks,
+                "kind": "item_crafted",
+                "recipe_id": recipe_id.value,
+                "resulting_holder_id": resulting_holder_id.value,
+                "success": success,
+            }
+        case StructureBuilt(
+            recipe_id=recipe_id,
+            structure_id=structure_id,
+            location_id=location_id,
+            resulting_integrity=resulting_integrity,
+            duration_ticks=duration_ticks,
+            consumed_item_id=consumed_item_id,
+            success=success,
+        ):
+            return {
+                "consumed_item_id": consumed_item_id.value,
+                "duration_ticks": duration_ticks,
+                "kind": "structure_built",
+                "location_id": location_id.value,
+                "recipe_id": recipe_id.value,
+                "resulting_integrity": resulting_integrity,
+                "structure_id": structure_id.value,
+                "success": success,
+            }
+        case StructureRepaired(
+            recipe_id=recipe_id,
+            structure_id=structure_id,
+            resulting_integrity=resulting_integrity,
+            duration_ticks=duration_ticks,
+            consumed_item_id=consumed_item_id,
+            success=success,
+        ):
+            return {
+                "consumed_item_id": consumed_item_id.value,
+                "duration_ticks": duration_ticks,
+                "kind": "structure_repaired",
+                "recipe_id": recipe_id.value,
+                "resulting_integrity": resulting_integrity,
+                "structure_id": structure_id.value,
+                "success": success,
+            }
+        case ItemStored(
+            recipe_id=recipe_id,
+            structure_id=structure_id,
+            resulting_stored_quantity=resulting_stored_quantity,
+            duration_ticks=duration_ticks,
+            consumed_item_id=consumed_item_id,
+            success=success,
+        ):
+            return {
+                "consumed_item_id": consumed_item_id.value,
+                "duration_ticks": duration_ticks,
+                "kind": "item_stored",
+                "recipe_id": recipe_id.value,
+                "resulting_stored_quantity": resulting_stored_quantity,
+                "structure_id": structure_id.value,
+                "success": success,
+            }
         case _:
             raise DomainSerializationError("unsupported_type", "$")
+
+
+def _decode_production_details(
+    kind: str, fields: dict[str, Any], *, path: str
+) -> object:
+    """Decode replay-v6 production details. Exact keys only."""
+    recipe_id = RecipeId(_str_field(fields, "recipe_id", path=path))
+    duration = _int_field(fields, "duration_ticks", path=path)
+    success = fields.get("success")
+    if type(success) is not bool:
+        raise DomainSerializationError("invalid_bool", f"{path}.success")
+    if kind == "resource_harvested":
+        allowed = {
+            "duration_ticks",
+            "recipe_id",
+            "resource_id",
+            "resulting_resource_quantity",
+            "success",
+        }
+        if success:
+            allowed = allowed | {"created_item_id"}
+        if set(fields) != allowed:
+            raise DomainSerializationError("invalid_fields", path)
+        created = (
+            EntityId(_str_field(fields, "created_item_id", path=path))
+            if success
+            else None
+        )
+        return ResourceHarvested(
+            recipe_id,
+            EntityId(_str_field(fields, "resource_id", path=path)),
+            success,
+            duration,
+            _float_field(fields, "resulting_resource_quantity", path=path),
+            created_item_id=created,
+        )
+    if kind == "craft_started":
+        _require_keys(
+            fields,
+            {"consumed_item_ids", "duration_ticks", "recipe_id", "success"},
+            path=path,
+        )
+        raw_ids = fields["consumed_item_ids"]
+        if not isinstance(raw_ids, list):
+            raise DomainSerializationError("invalid_array", f"{path}.consumed_item_ids")
+        consumed = tuple(
+            EntityId(_require_str_item(item, path=f"{path}.consumed_item_ids[{index}]"))
+            for index, item in enumerate(raw_ids)
+        )
+        return CraftStarted(recipe_id, success, duration, consumed)
+    if kind == "item_crafted":
+        _require_keys(
+            fields,
+            {
+                "created_item_id",
+                "duration_ticks",
+                "recipe_id",
+                "resulting_holder_id",
+                "success",
+            },
+            path=path,
+        )
+        return ItemCrafted(
+            recipe_id,
+            EntityId(_str_field(fields, "created_item_id", path=path)),
+            EntityId(_str_field(fields, "resulting_holder_id", path=path)),
+            duration,
+            success,
+        )
+    if kind == "structure_built":
+        _require_keys(
+            fields,
+            {
+                "consumed_item_id",
+                "duration_ticks",
+                "location_id",
+                "recipe_id",
+                "resulting_integrity",
+                "structure_id",
+                "success",
+            },
+            path=path,
+        )
+        return StructureBuilt(
+            recipe_id,
+            EntityId(_str_field(fields, "structure_id", path=path)),
+            EntityId(_str_field(fields, "location_id", path=path)),
+            _float_field(fields, "resulting_integrity", path=path),
+            duration,
+            EntityId(_str_field(fields, "consumed_item_id", path=path)),
+            success,
+        )
+    if kind == "structure_repaired":
+        _require_keys(
+            fields,
+            {
+                "consumed_item_id",
+                "duration_ticks",
+                "recipe_id",
+                "resulting_integrity",
+                "structure_id",
+                "success",
+            },
+            path=path,
+        )
+        return StructureRepaired(
+            recipe_id,
+            EntityId(_str_field(fields, "structure_id", path=path)),
+            _float_field(fields, "resulting_integrity", path=path),
+            duration,
+            EntityId(_str_field(fields, "consumed_item_id", path=path)),
+            success,
+        )
+    _require_keys(
+        fields,
+        {
+            "consumed_item_id",
+            "duration_ticks",
+            "recipe_id",
+            "resulting_stored_quantity",
+            "structure_id",
+            "success",
+        },
+        path=path,
+    )
+    return ItemStored(
+        recipe_id,
+        EntityId(_str_field(fields, "structure_id", path=path)),
+        _int_field(fields, "resulting_stored_quantity", path=path),
+        duration,
+        EntityId(_str_field(fields, "consumed_item_id", path=path)),
+        success,
+    )
 
 
 def _decode_event_details(
@@ -3836,6 +4165,17 @@ def _decode_event_details(
                 DeathCause(_str_field(fields, "death_cause", path=path)),
                 LifeStatus(_str_field(fields, "resulting_life_status", path=path)),
             )
+        if kind in {
+            "resource_harvested",
+            "craft_started",
+            "item_crafted",
+            "structure_built",
+            "structure_repaired",
+            "item_stored",
+        }:
+            if schema_version != EVENT_SCHEMA_REPLAY_V6:
+                raise DomainSerializationError("invalid_event_schema_version", path)
+            return _decode_production_details(kind, fields, path=path)
     except DomainSerializationError:
         raise
     except (TypeError, ValueError) as exc:
@@ -4001,6 +4341,7 @@ def _decode_world_event(data: dict[str, Any], *, path: str) -> WorldEvent:
             EVENT_SCHEMA_REPLAY_V3,
             EVENT_SCHEMA_REPLAY_V4,
             EVENT_SCHEMA_REPLAY_V5,
+            EVENT_SCHEMA_REPLAY_V6,
         }:
             raise DomainSerializationError("unsupported_schema_version", path)
         actor_raw = data["actor_id"]

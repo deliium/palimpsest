@@ -13,6 +13,7 @@ adjacent exits               ALWAYS_SELF
 held inventory item details  ALWAYS_SELF
 ground items (local)         VISIBILITY_GATED (≥0.5)
 resources (local quantity)   VISIBILITY_GATED (≥0.5)
+structures (local)           VISIBILITY_GATED (≥0.5)
 other bodies (coarse)        VISIBILITY_GATED (≥0.5)
 public occurrence facts      VISIBILITY_GATED or PARTICIPANT_ONLY
 participant occurrence detail PARTICIPANT_ONLY
@@ -50,6 +51,7 @@ from world.models import (
     PhysicalRules,
     default_physical_rules,
 )
+from world.production import StructureKind
 from world.values import (
     CarryCapacity,
     DayPhase,
@@ -81,6 +83,7 @@ __all__ = [
     "ObservedOccurrence",
     "ObservedResource",
     "ObservedSelf",
+    "ObservedStructure",
     "VisibleBody",
     "VisibleExit",
     "coarse_health_for",
@@ -350,6 +353,38 @@ class ObservedResource:
 
 
 @dataclass(frozen=True, slots=True)
+class ObservedStructure:
+    """Location-attached structure visible under the content threshold."""
+
+    entity_id: EntityId
+    location_id: EntityId
+    kind: StructureKind
+    integrity: float
+    stored_quantity: int
+
+    def __post_init__(self) -> None:
+        if type(self.entity_id) is not EntityId:
+            raise TypeError("ObservedStructure.entity_id must be EntityId")
+        if type(self.location_id) is not EntityId:
+            raise TypeError("ObservedStructure.location_id must be EntityId")
+        if type(self.kind) is not StructureKind:
+            raise TypeError("ObservedStructure.kind must be StructureKind")
+        if isinstance(self.integrity, bool) or not isinstance(
+            self.integrity, (int, float)
+        ):
+            raise TypeError("ObservedStructure.integrity must be a finite float")
+        number = float(self.integrity)
+        if number != number or number < 0.0 or number > 1.0:
+            raise ValueError("ObservedStructure.integrity must be in [0, 1]")
+        object.__setattr__(self, "integrity", 0.0 if number == 0.0 else number)
+        quantity = self.stored_quantity
+        if isinstance(quantity, bool) or type(quantity) is not int:
+            raise TypeError("ObservedStructure.stored_quantity must be int")
+        if self.stored_quantity < 0:
+            raise ValueError("ObservedStructure.stored_quantity must be non-negative")
+
+
+@dataclass(frozen=True, slots=True)
 class ObservedSelf:
     """Exact self physiology available to the owning observer only."""
 
@@ -557,6 +592,7 @@ class Observation:
     locations: Sequence[ObservedLocation] = field(default_factory=tuple)
     items: Sequence[ObservedItem] = field(default_factory=tuple)
     resources: Sequence[ObservedResource] = field(default_factory=tuple)
+    structures: Sequence[ObservedStructure] = field(default_factory=tuple)
     exits: Sequence[VisibleExit] = field(default_factory=tuple)
     visible_bodies: Sequence[VisibleBody] = field(default_factory=tuple)
     occurrences: Sequence[ObservedOccurrence] = field(default_factory=tuple)
@@ -597,6 +633,15 @@ class Observation:
             "resources",
             _copy_models(
                 "Observation.resources", self.resources, model_type=ObservedResource
+            ),
+        )
+        object.__setattr__(
+            self,
+            "structures",
+            _copy_models(
+                "Observation.structures",
+                self.structures,
+                model_type=ObservedStructure,
             ),
         )
         object.__setattr__(
@@ -667,6 +712,10 @@ class Observation:
         _validate_ordered_ids(
             "Observation.resources",
             tuple(resource.entity_id for resource in self.resources),
+        )
+        _validate_ordered_ids(
+            "Observation.structures",
+            tuple(structure.entity_id for structure in self.structures),
         )
         _validate_ordered_ids(
             "Observation.visible_bodies",

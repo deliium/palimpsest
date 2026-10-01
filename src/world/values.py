@@ -84,6 +84,7 @@ class ItemKind(StrEnum):
     MATERIAL = "material"
     MEDICAL = "medical"
     GENERIC = "generic"
+    TOOL = "tool"
 
 
 class ResourceKind(StrEnum):

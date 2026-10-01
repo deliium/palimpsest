@@ -19,6 +19,7 @@ from simulation.actions import (
     PHYSICAL_PURPOSE_ATTACK_HIT,
     PHYSICAL_PURPOSE_FLEE_DESTINATION,
     PHYSICAL_PURPOSE_FLEE_SUCCESS,
+    PHYSICAL_PURPOSE_PRODUCTION_SUCCESS,
     PHYSICAL_PURPOSE_SEARCH_SUCCESS,
     PHYSICAL_PURPOSE_WEATHER,
     admit_agent_command,
@@ -84,13 +85,26 @@ from world._rules import (
     find_eligible_search_resource,
 )
 from world._state import World
-from world.actions import ActionRequest, Attack, Flee, Help, Move, Search
+from world.actions import (
+    ActionRequest,
+    Attack,
+    Build,
+    Craft,
+    Flee,
+    Harvest,
+    Help,
+    Move,
+    Repair,
+    Search,
+    Store,
+)
 from world.effects import (
     ActionCause,
     ResolvedActionEffect,
     ResolvedActionEffects,
     ResolvedAttackEffect,
     ResolvedFleeEffect,
+    ResolvedProductionEffect,
     ResolvedSearchEffect,
     ResolvedSystemEffects,
     ResolvedWeatherEffect,
@@ -188,6 +202,7 @@ class WorldEngine:
         "_engine_id",
         "_last_tick_result",
         "_perception",
+        "_production_catalog",
         "_registrations",
         "_run_id",
         "_skill_entity_ids",
@@ -213,6 +228,7 @@ class WorldEngine:
         skill_untargeted_request_ids: object | None = None,
         teaching_policy: object | None = None,
         teaching_entity_ids: Sequence[object] | None = None,
+        production_catalog: object | None = None,
     ) -> None:
         if type(config) is not SimulationRunConfig:
             raise TypeError("WorldEngine requires SimulationRunConfig")
@@ -259,6 +275,7 @@ class WorldEngine:
             teaching_policy=teaching_policy,
             teaching_entity_ids=teaching_entity_ids,
         )
+        self._production_catalog = _optional_production_catalog(production_catalog)
         _LOGGER.debug(
             "%s world_id=%s revision=%s tick=%s registrations=%s",
             EngineDiagnosticCode.BOOTSTRAP_VALIDATED.value,
@@ -282,6 +299,7 @@ class WorldEngine:
         teaching_policy: object | None = None,
         teaching_entity_ids: Sequence[object] | None = None,
         teaching_offers: object | None = None,
+        production_catalog: object | None = None,
     ) -> WorldEngine:
         """Restore an engine at ``AWAITING_OBSERVATION`` from a checkpoint.
 
@@ -429,6 +447,7 @@ class WorldEngine:
             teaching_policy=teaching_policy,
             teaching_entity_ids=teaching_entity_ids,
         )
+        engine._production_catalog = _optional_production_catalog(production_catalog)
         engine._require_refolded_teaching_offers(
             teaching_offers=teaching_offers,
             initial_state=base_state,
@@ -498,9 +517,7 @@ class WorldEngine:
                 sorted(state.items.values(), key=lambda item: item.entity_id.value)
             ),
             resources=tuple(
-                sorted(
-                    state.resources.values(), key=lambda item: item.entity_id.value
-                )
+                sorted(state.resources.values(), key=lambda item: item.entity_id.value)
             ),
             weather=tuple(
                 sorted(state.weather.values(), key=lambda item: item.location_id.value)
@@ -604,8 +621,7 @@ class WorldEngine:
             and snap.observation_batch is not None
         ):
             _LOGGER.debug(
-                "%s tick=%s observers=%s revision=%s prior_events=%s "
-                "detached_replay=1",
+                "%s tick=%s observers=%s revision=%s prior_events=%s detached_replay=1",
                 EngineDiagnosticCode.OBSERVATIONS_ISSUED.value,
                 snap.tick.value,
                 len(snap.observation_batch.observations),
@@ -1146,13 +1162,26 @@ class WorldEngine:
                 outcome.reason,
             )
 
+        action_pending = pending
+        completion_state = action_pending.working_state
+        completion_details: tuple[object, ...] = ()
+        catalog = self._production_catalog
+        if catalog is not None and completion_state.production_jobs:
+            from world._production import complete_due_jobs
+
+            completion_state, completion_details = complete_due_jobs(
+                completion_state,
+                tick=snap.tick.value,
+                catalog=catalog,
+            )
+
         system_effects = self._resolve_system_effects(
             snap=snap,
-            working_state=pending.working_state,
+            working_state=completion_state,
             rules=physical_rules,
         )
         physical = apply_autonomous_physical_step(
-            state=pending.working_state,
+            state=completion_state,
             rules=physical_rules,
             tick=snap.tick.value,
             hour=physical_rules.hour_for_tick(snap.tick.value),
@@ -1197,11 +1226,58 @@ class WorldEngine:
             len(system_pending),
             physical.semantic_mutation,
         )
+        from world.events import (
+            CraftStarted,
+            ItemCrafted,
+            ItemStored,
+            ResourceHarvested,
+            StructureBuilt,
+            StructureRepaired,
+            build_occurrence_context,
+        )
+
+        production_pending: list[PendingEvent] = []
+        for family_ordinal, detail in enumerate(completion_details):
+            if type(detail) is not ItemCrafted:
+                continue
+            holder = detail.resulting_holder_id
+            cause_id = derive_system_cause_id(
+                self._config,
+                run_id=self._run_id,
+                world_id=self.world_id,
+                tick=snap.tick.value,
+                effect_family=SystemEffectFamily.PRODUCTION.value,
+                entity_id=holder,
+                family_ordinal=family_ordinal,
+            )
+            production_pending.append(
+                PendingEvent(
+                    cause=SystemCause(
+                        cause_id=cause_id,
+                        effect_family=SystemEffectFamily.PRODUCTION,
+                        entity_id=holder,
+                        family_ordinal=family_ordinal,
+                    ),
+                    details=detail,
+                    occurrence=build_occurrence_context(
+                        detail,
+                        origin_location_id=completion_state.bodies[holder].location_id,
+                    ),
+                )
+            )
         merged = PendingBatch(
             working_state=physical.working_state,
-            semantic_mutation=(pending.semantic_mutation or physical.semantic_mutation),
-            outcomes=pending.outcomes,
-            pending_events=pending.pending_events + tuple(system_pending),
+            semantic_mutation=(
+                action_pending.semantic_mutation
+                or physical.semantic_mutation
+                or completion_state is not action_pending.working_state
+            ),
+            outcomes=action_pending.outcomes,
+            pending_events=(
+                action_pending.pending_events
+                + tuple(production_pending)
+                + tuple(system_pending)
+            ),
         )
 
         # Allocate one deterministic ID per pending event. Action events are
@@ -1263,6 +1339,16 @@ class WorldEngine:
                 )
                 raise TypeError("pending event cause must be EventCause")
 
+        from world.events import (
+            CURRENT_PHYSICAL_EVENT_SCHEMA_VERSION,
+            EVENT_SCHEMA_REPLAY_V6,
+        )
+
+        event_schema = (
+            EVENT_SCHEMA_REPLAY_V6
+            if self._production_catalog is not None
+            else CURRENT_PHYSICAL_EVENT_SCHEMA_VERSION
+        )
         prepared = finalize_pending_batch(
             merged,
             world_id=self.world_id,
@@ -1270,6 +1356,7 @@ class WorldEngine:
             event_ids=tuple(allocated_ids),
             run_id=run_id_for_event(self._run_id),
             tick=tick_for_event(snap.tick),
+            schema_version=event_schema,
         )
         _LOGGER.debug(
             "%s tick=%s finalized_events=%s mutation=%s revision=%s",
@@ -1279,6 +1366,21 @@ class WorldEngine:
             prepared.semantic_mutation,
             prepared.candidate_state.revision.value,
         )
+        for event in prepared.events:
+            if type(event.details) in {
+                ResourceHarvested,
+                CraftStarted,
+                ItemCrafted,
+                StructureBuilt,
+                StructureRepaired,
+                ItemStored,
+            }:
+                _LOGGER.info(
+                    "production_event_committed event_id=%s tick=%s kind=%s",
+                    event.event_id.value,
+                    event.tick,
+                    event.details.kind,
+                )
 
         # Map batch outcomes back onto full ordinal list.
         batch_by_request: dict[RequestId, object] = {
@@ -1524,6 +1626,15 @@ class WorldEngine:
                 )
                 if flee_effect is not None:
                     by_request[request.request_id] = flee_effect
+            elif type(command) in {Harvest, Craft, Build, Repair, Store}:
+                production_effect = self._resolve_production_effect(
+                    snap=snap,
+                    request=request,
+                    request_ordinals=request_ordinals,
+                    starting_state=starting_state,
+                )
+                if production_effect is not None:
+                    by_request[request.request_id] = production_effect
         return ResolvedActionEffects(by_request=by_request)
 
     def _bind_skill_state(
@@ -1605,9 +1716,7 @@ class WorldEngine:
 
         if teaching_policy is None:
             if teaching_entity_ids not in (None, (), frozenset()):
-                raise TypeError(
-                    "teaching_policy is required with teaching entity ids"
-                )
+                raise TypeError("teaching_policy is required with teaching entity ids")
             self._teaching_policy = None
             self._teaching_entity_ids = frozenset()
             return
@@ -2087,6 +2196,166 @@ class WorldEngine:
             destination_index=destination_index,
         )
 
+    def _resolve_production_effect(
+        self,
+        *,
+        snap: _EngineSnapshot,
+        request: ActionRequest,
+        request_ordinals: dict[RequestId, tuple[int, AgentId]],
+        starting_state: object,
+    ) -> ResolvedProductionEffect | None:
+        """Draw ``production_success`` only when the adjusted chance is below 1."""
+        from world._production import (
+            adjusted_production_probability,
+            block_reason,
+            effective_duration,
+            skill_domain_for_recipe,
+        )
+        from world._state import WorldState
+        from world.identifiers import RecipeId
+        from world.production import ItemProduct
+
+        catalog = self._production_catalog
+        if catalog is None:
+            return None
+        assert type(starting_state) is WorldState
+        command = request.command
+        recipe_id = getattr(command, "recipe_id", None)
+        if type(recipe_id) is not RecipeId:
+            raise TypeError("production command requires RecipeId")
+        recipe = catalog.recipe(recipe_id)
+        if recipe is None:
+            return ResolvedProductionEffect(
+                request_id=request.request_id,
+                recipe_id=recipe_id,
+                success=False,
+                duration_ticks=1,
+                reason_code="unknown_recipe",
+            )
+        blocked = block_reason(starting_state, request.actor_id, command, recipe)
+        duration = effective_duration(starting_state, request.actor_id, recipe)
+        if blocked is not None:
+            return ResolvedProductionEffect(
+                request_id=request.request_id,
+                recipe_id=recipe.recipe_id,
+                success=False,
+                duration_ticks=duration,
+                reason_code=blocked,
+                recipe=recipe,
+            )
+        probability = recipe.success_probability
+        domain_name = skill_domain_for_recipe(recipe.recipe_id)
+        if (
+            domain_name is not None
+            and self._skill_policy is not None
+            and self._skill_ledger is not None
+            and request.actor_id in self._skill_entity_ids
+        ):
+            from world._skills import SkillDomain
+
+            level = self._skill_level(
+                request.actor_id,
+                SkillDomain(domain_name),
+                ledger=self._skill_ledger,
+                tick=snap.tick,
+            )
+            probability = adjusted_production_probability(
+                probability,
+                level=level,
+                probability_gain=self._skill_policy.probability_gain,
+            )
+            _LOGGER.debug(
+                "skill_modifier tick=%s entity_id=%s domain=%s level=%s outcome=%s",
+                snap.tick.value,
+                request.actor_id.value,
+                domain_name,
+                level,
+                "production",
+            )
+        success = True
+        if probability < 1.0:
+            ordinal, agent_id = request_ordinals[request.request_id]
+            scope = physical_action_effect_scope(
+                config=self._config,
+                run_id=self._run_id,
+                world_id=self.world_id,
+                tick=snap.tick,
+                ordinal=ordinal,
+                agent_id=agent_id,
+                purpose=PHYSICAL_PURPOSE_PRODUCTION_SUCCESS,
+            )
+            success = sample_bernoulli(
+                create_named_stream(self._config, scope), probability
+            )
+            _LOGGER.debug(
+                "production_success_draw tick=%s ordinal=%s request_id=%s success=%s",
+                snap.tick.value,
+                ordinal,
+                request.request_id.value,
+                success,
+            )
+        created_entity_id = None
+        if success and _production_creates_entity(
+            starting_state, request.actor_id, recipe.output
+        ):
+            key = (
+                "produced-item"
+                if type(recipe.output) is ItemProduct
+                else "produced-structure"
+            )
+            created_entity_id = derive_entity_id(
+                self._config,
+                key,
+                self._run_id.value,
+                self.world_id.value,
+                f"tick:{snap.tick.value}",
+                request.request_id.value,
+            )
+        return ResolvedProductionEffect(
+            request_id=request.request_id,
+            recipe_id=recipe.recipe_id,
+            success=success,
+            duration_ticks=duration,
+            created_entity_id=created_entity_id,
+            recipe=recipe,
+        )
+
+
+def _production_creates_entity(
+    state: object, actor_id: EntityId, output: object
+) -> bool:
+    from world._state import WorldState
+    from world.production import (
+        ItemProduct,
+        ShelterProduct,
+        StoreProduct,
+        StructureKind,
+    )
+
+    assert type(state) is WorldState
+    if type(output) is ItemProduct or type(output) is ShelterProduct:
+        return True
+    if type(output) is not StoreProduct:
+        return False
+    actor = state.bodies[actor_id]
+    return not any(
+        structure.location_id == actor.location_id
+        and structure.kind is StructureKind.STORE
+        for structure in state.structures.values()
+    )
+
+
+def _optional_production_catalog(value: object | None) -> object | None:
+    if value is None:
+        return None
+    from world.production import ProductionCatalog
+
+    if type(value) is not ProductionCatalog:
+        raise TypeError("production_catalog must be ProductionCatalog or None")
+    if value.recipe_count == 0:
+        return None
+    return value
+
 
 def _map_batch_outcome(
     outcome: object,
@@ -2128,6 +2397,14 @@ def _map_batch_outcome(
         "distinct_id_violation": ActionResolutionReason.STRUCTURAL_REJECTION,
         "communication_invisible": ActionResolutionReason.STRUCTURAL_REJECTION,
         "communication_source_mismatch": ActionResolutionReason.STRUCTURAL_REJECTION,
+        "production_disabled": ActionResolutionReason.STRUCTURAL_REJECTION,
+        "unknown_recipe": ActionResolutionReason.STRUCTURAL_REJECTION,
+        "recipe_action_mismatch": ActionResolutionReason.STRUCTURAL_REJECTION,
+        "actor_busy": ActionResolutionReason.STRUCTURAL_REJECTION,
+        "materials_unavailable": ActionResolutionReason.STRUCTURAL_REJECTION,
+        "structure_intact": ActionResolutionReason.STRUCTURAL_REJECTION,
+        "shelter_already_present": ActionResolutionReason.STRUCTURAL_REJECTION,
+        "store_already_present": ActionResolutionReason.STRUCTURAL_REJECTION,
         "malformed_envelope": ActionResolutionReason.MALFORMED_SUBMISSION,
         "wrong_trust_stage": ActionResolutionReason.MALFORMED_SUBMISSION,
         "wrong_world": ActionResolutionReason.STRUCTURAL_REJECTION,

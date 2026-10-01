@@ -14,9 +14,11 @@ from typing import Final, Literal
 
 from world.identifiers import (
     EntityId,
+    RecipeId,
     RequestId,
     require_exact_nonneg_int,
 )
+from world.production import ProductionRecipe
 from world.values import WeatherCondition
 
 __all__ = [
@@ -27,6 +29,7 @@ __all__ = [
     "ResolvedActionEffects",
     "ResolvedAttackEffect",
     "ResolvedFleeEffect",
+    "ResolvedProductionEffect",
     "ResolvedSearchEffect",
     "ResolvedSystemEffects",
     "ResolvedWeatherEffect",
@@ -52,6 +55,7 @@ class SystemEffectFamily(StrEnum):
     REGENERATION = "regeneration"
     COMBINED_NEEDS = "combined_needs"
     EXPOSURE = "exposure"
+    PRODUCTION = "production"
 
 
 @dataclass(frozen=True, slots=True)
@@ -209,10 +213,59 @@ class ResolvedWeatherEffect:
             raise TypeError("ResolvedWeatherEffect.condition must be WeatherCondition")
 
 
-ResolvedActionEffect = ResolvedSearchEffect | ResolvedAttackEffect | ResolvedFleeEffect
+@dataclass(frozen=True, slots=True)
+class ResolvedProductionEffect:
+    """Pre-resolved production draw. A reason code rejects with no event."""
+
+    request_id: RequestId
+    recipe_id: RecipeId
+    success: bool
+    duration_ticks: int
+    created_entity_id: EntityId | None = None
+    reason_code: str | None = None
+    recipe: ProductionRecipe | None = None
+    kind: Literal["production"] = field(default="production", init=False)
+
+    def __post_init__(self) -> None:
+        if type(self.request_id) is not RequestId:
+            raise TypeError("ResolvedProductionEffect.request_id must be RequestId")
+        if type(self.recipe_id) is not RecipeId:
+            raise TypeError("ResolvedProductionEffect.recipe_id must be RecipeId")
+        if type(self.success) is not bool:
+            raise TypeError("ResolvedProductionEffect.success must be bool")
+        if (
+            isinstance(self.duration_ticks, bool)
+            or type(self.duration_ticks) is not int
+            or self.duration_ticks < 1
+        ):
+            raise ValueError("ResolvedProductionEffect.duration_ticks must be >= 1")
+        if self.reason_code is not None and type(self.reason_code) is not str:
+            raise TypeError("ResolvedProductionEffect.reason_code must be str or None")
+        if self.recipe is not None and type(self.recipe) is not ProductionRecipe:
+            raise TypeError("ResolvedProductionEffect.recipe must be ProductionRecipe")
+        if (
+            self.created_entity_id is not None
+            and type(self.created_entity_id) is not EntityId
+        ):
+            raise TypeError(
+                "ResolvedProductionEffect.created_entity_id must be EntityId or None"
+            )
+
+
+ResolvedActionEffect = (
+    ResolvedSearchEffect
+    | ResolvedAttackEffect
+    | ResolvedFleeEffect
+    | ResolvedProductionEffect
+)
 
 _ACTION_EFFECT_TYPES: Final[frozenset[type]] = frozenset(
-    {ResolvedSearchEffect, ResolvedAttackEffect, ResolvedFleeEffect}
+    {
+        ResolvedSearchEffect,
+        ResolvedAttackEffect,
+        ResolvedFleeEffect,
+        ResolvedProductionEffect,
+    }
 )
 
 

@@ -16,15 +16,20 @@ from world._operations import (
     ValidatedWorldOperation,
     _AskOp,
     _AttackOp,
+    _BuildOp,
+    _CraftOp,
     _DrinkOp,
     _DropOp,
     _EatOp,
     _FleeOp,
     _GiveOp,
+    _HarvestOp,
     _HelpOp,
     _MoveOp,
+    _RepairOp,
     _SearchOp,
     _SleepOp,
+    _StoreOp,
     _TakeOp,
     _TalkOp,
     _TellOp,
@@ -37,6 +42,7 @@ from world.effects import (
     ResolvedActionEffects,
     ResolvedAttackEffect,
     ResolvedFleeEffect,
+    ResolvedProductionEffect,
     ResolvedSearchEffect,
 )
 from world.events import (
@@ -128,6 +134,14 @@ class RuleReason(StrEnum):
     STRUCTURAL_OK = "structural_ok"
     COMMUNICATION_INVISIBLE = "communication_invisible"
     COMMUNICATION_SOURCE_MISMATCH = "communication_source_mismatch"
+    PRODUCTION_DISABLED = "production_disabled"
+    UNKNOWN_RECIPE = "unknown_recipe"
+    RECIPE_ACTION_MISMATCH = "recipe_action_mismatch"
+    ACTOR_BUSY = "actor_busy"
+    MATERIALS_UNAVAILABLE = "materials_unavailable"
+    STRUCTURE_INTACT = "structure_intact"
+    SHELTER_ALREADY_PRESENT = "shelter_already_present"
+    STORE_ALREADY_PRESENT = "store_already_present"
 
 
 @dataclass(frozen=True, slots=True)
@@ -288,6 +302,41 @@ COMMAND_RULE_MATRIX: Final[dict[type, CommandRulePolicy]] = {
             "lethal hit emits Attacked then Died"
         ),
     ),
+    _HarvestOp: CommandRulePolicy(
+        disposition=RuleDisposition.MUTATE,
+        emits_event_when_applied=True,
+        mutates_state_when_applied=True,
+        requires_living_actor=True,
+        notes="catalog recipe; harvest resource at the actor location",
+    ),
+    _CraftOp: CommandRulePolicy(
+        disposition=RuleDisposition.MUTATE,
+        emits_event_when_applied=True,
+        mutates_state_when_applied=True,
+        requires_living_actor=True,
+        notes="catalog recipe; consume held inputs; duration may defer the item",
+    ),
+    _BuildOp: CommandRulePolicy(
+        disposition=RuleDisposition.MUTATE,
+        emits_event_when_applied=True,
+        mutates_state_when_applied=True,
+        requires_living_actor=True,
+        notes="catalog recipe; one shelter per location",
+    ),
+    _RepairOp: CommandRulePolicy(
+        disposition=RuleDisposition.MUTATE,
+        emits_event_when_applied=True,
+        mutates_state_when_applied=True,
+        requires_living_actor=True,
+        notes="catalog recipe; repair a colocated shelter below full integrity",
+    ),
+    _StoreOp: CommandRulePolicy(
+        disposition=RuleDisposition.MUTATE,
+        emits_event_when_applied=True,
+        mutates_state_when_applied=True,
+        requires_living_actor=True,
+        notes="catalog recipe; store food; first success creates the store",
+    ),
     _FleeOp: CommandRulePolicy(
         disposition=RuleDisposition.MUTATE,
         emits_event_when_applied=True,
@@ -316,6 +365,11 @@ _OPERATION_KIND: Final[dict[type, str]] = {
     _AttackOp: "attack",
     _FleeOp: "flee",
     _WaitOp: "wait",
+    _HarvestOp: "harvest",
+    _CraftOp: "craft",
+    _BuildOp: "build",
+    _RepairOp: "repair",
+    _StoreOp: "store",
 }
 
 _SEARCH_RESOURCE_KINDS: Final[frozenset[ResourceKind]] = frozenset(
@@ -376,6 +430,12 @@ def evaluate_operation(
             mutates_state=False,
             action_kind=kind,
         )
+    if operation.actor_id in state.production_jobs:
+        from world._production import _warn
+
+        recipe_id = getattr(operation, "recipe_id", None)
+        _warn(operation.actor_id, recipe_id, "actor_busy")
+        return _reject(kind, RuleReason.ACTOR_BUSY)
     if policy.disposition is RuleDisposition.DEFERRED:
         return RuleResult(
             disposition=RuleDisposition.DEFERRED,
@@ -438,9 +498,7 @@ def evaluate_operation(
                 request_id=operation.request_id,
                 resolved=resolved,
             )
-        case _TalkOp(
-            actor_id=actor_id, recipient_id=recipient_id, utterance=utterance
-        ):
+        case _TalkOp(actor_id=actor_id, recipient_id=recipient_id, utterance=utterance):
             return _evaluate_communication(
                 state,
                 actor_id,
@@ -450,9 +508,7 @@ def evaluate_operation(
                 rules=_require_rules(rules),
                 tick=tick,
             )
-        case _AskOp(
-            actor_id=actor_id, recipient_id=recipient_id, utterance=utterance
-        ):
+        case _AskOp(actor_id=actor_id, recipient_id=recipient_id, utterance=utterance):
             return _evaluate_communication(
                 state,
                 actor_id,
@@ -462,9 +518,7 @@ def evaluate_operation(
                 rules=_require_rules(rules),
                 tick=tick,
             )
-        case _TellOp(
-            actor_id=actor_id, recipient_id=recipient_id, utterance=utterance
-        ):
+        case _TellOp(actor_id=actor_id, recipient_id=recipient_id, utterance=utterance):
             return _evaluate_communication(
                 state,
                 actor_id,
@@ -474,6 +528,8 @@ def evaluate_operation(
                 rules=_require_rules(rules),
                 tick=tick,
             )
+        case _HarvestOp() | _CraftOp() | _BuildOp() | _RepairOp() | _StoreOp():
+            return _evaluate_production(state, operation, kind, resolved=resolved)
         case _WaitOp():
             return RuleResult(
                 disposition=RuleDisposition.EVENT_ONLY,
@@ -925,9 +981,7 @@ def _evaluate_communication(
         return _reject(kind, RuleReason.NOT_COLOCATED)
     location = state.locations[actor.location_id]
     weather = state.weather.get(actor.location_id)
-    condition = (
-        weather.condition if weather is not None else WeatherCondition.CLEAR
-    )
+    condition = weather.condition if weather is not None else WeatherCondition.CLEAR
     tick_value = 0 if tick is None else tick
     visibility = rules.effective_visibility(
         location_visibility=location.visibility_factor.value,
@@ -942,6 +996,119 @@ def _evaluate_communication(
         emits_event=True,
         mutates_state=False,
         action_kind=kind,
+    )
+
+
+_PRODUCTION_REASONS: Final[dict[str, RuleReason]] = {
+    "production_disabled": RuleReason.PRODUCTION_DISABLED,
+    "unknown_recipe": RuleReason.UNKNOWN_RECIPE,
+    "recipe_action_mismatch": RuleReason.RECIPE_ACTION_MISMATCH,
+    "actor_busy": RuleReason.ACTOR_BUSY,
+    "materials_unavailable": RuleReason.MATERIALS_UNAVAILABLE,
+    "structure_intact": RuleReason.STRUCTURE_INTACT,
+    "shelter_already_present": RuleReason.SHELTER_ALREADY_PRESENT,
+    "store_already_present": RuleReason.STORE_ALREADY_PRESENT,
+}
+
+
+def _command_for_production(operation: ValidatedWorldOperation) -> object:
+    from world.actions import Build, Craft, Harvest, Repair, Store
+
+    if type(operation) is _HarvestOp:
+        return Harvest(operation.recipe_id, operation.resource_id)
+    if type(operation) is _CraftOp:
+        return Craft(operation.recipe_id)
+    if type(operation) is _BuildOp:
+        return Build(operation.recipe_id)
+    if type(operation) is _RepairOp:
+        return Repair(operation.recipe_id, operation.structure_id)
+    assert type(operation) is _StoreOp
+    return Store(operation.recipe_id, operation.item_id)
+
+
+def _evaluate_production(
+    state: WorldState,
+    operation: ValidatedWorldOperation,
+    kind: str,
+    *,
+    resolved: ResolvedActionEffects | None,
+) -> RuleResult:
+    from world._production import _warn, block_reason
+
+    recipe_id = getattr(operation, "recipe_id", None)
+    if resolved is None:
+        _warn(operation.actor_id, recipe_id, "production_disabled")
+        return _reject(kind, RuleReason.PRODUCTION_DISABLED)
+    try:
+        effect = resolved.require(operation.request_id, ResolvedProductionEffect)
+    except (TypeError, ValueError):
+        _warn(operation.actor_id, recipe_id, "production_disabled")
+        return _reject(kind, RuleReason.PRODUCTION_DISABLED)
+    if type(effect) is not ResolvedProductionEffect:
+        return _reject(kind, RuleReason.PRODUCTION_DISABLED)
+    if effect.reason_code is not None:
+        _warn(operation.actor_id, effect.recipe_id, effect.reason_code)
+        reason = _PRODUCTION_REASONS.get(
+            effect.reason_code, RuleReason.PRODUCTION_DISABLED
+        )
+        return _reject(kind, reason)
+    blocked = block_reason(
+        state, operation.actor_id, _command_for_production(operation), effect.recipe
+    )
+    if blocked is not None:
+        _warn(operation.actor_id, effect.recipe_id, blocked)
+        return _reject(
+            kind, _PRODUCTION_REASONS.get(blocked, RuleReason.MATERIALS_UNAVAILABLE)
+        )
+    return RuleResult(
+        disposition=RuleDisposition.MUTATE,
+        reason=RuleReason.OCCURRENCE,
+        emits_event=True,
+        mutates_state=True,
+        action_kind=kind,
+    )
+
+
+def _apply_production(
+    state: WorldState,
+    operation: ValidatedWorldOperation,
+    *,
+    result: RuleResult,
+    resolved: ResolvedActionEffects | None,
+    tick: int,
+) -> RuleApplication:
+    from world._production import apply_resolved
+
+    if resolved is None:
+        return RuleApplication(
+            result=_reject(result.action_kind, RuleReason.PRODUCTION_DISABLED),
+            next_state=state,
+            event_details=None,
+        )
+    effect = resolved.require(operation.request_id, ResolvedProductionEffect)
+    assert type(effect) is ResolvedProductionEffect
+    next_state, details, reason = apply_resolved(
+        state,
+        actor_id=operation.actor_id,
+        command=_command_for_production(operation),
+        effect=effect,
+        tick=tick,
+    )
+    if reason is not None or details is None:
+        mapped = _PRODUCTION_REASONS.get(
+            reason or "production_disabled", RuleReason.PRODUCTION_DISABLED
+        )
+        return RuleApplication(
+            result=_reject(result.action_kind, mapped),
+            next_state=state,
+            event_details=None,
+        )
+    from world.events import require_event_details
+
+    return RuleApplication(
+        result=result,
+        next_state=next_state,
+        event_details=require_event_details(details),
     )
 
 
@@ -1034,6 +1201,14 @@ def apply_operation(
     if type(operation) is _AttackOp:
         return _apply_attack(
             state, operation, result=result, rules=physical_rules, resolved=resolved
+        )
+    if type(operation) in {_HarvestOp, _CraftOp, _BuildOp, _RepairOp, _StoreOp}:
+        return _apply_production(
+            state,
+            operation,
+            result=result,
+            resolved=resolved,
+            tick=0 if tick is None else tick,
         )
     if type(operation) is _FleeOp:
         return _apply_flee(

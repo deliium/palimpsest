@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import logging
+import re
 from dataclasses import dataclass
 from unicodedata import category
 
@@ -9,11 +11,14 @@ from world._freeze import require_bounded_text, require_ordered_unique
 
 _STABLE_ID_MIN_LEN = 1
 _STABLE_ID_MAX_LEN = 128
+_RECIPE_ID_PATTERN = re.compile(r"^[a-z][a-z0-9_]{0,31}$")
+_PRODUCTION_LOG = logging.getLogger("world.production")
 
 __all__ = [
     "EntityId",
     "EventId",
     "ProposalId",
+    "RecipeId",
     "RequestId",
     "WorldId",
     "WorldRevision",
@@ -103,6 +108,29 @@ class EventId:
 
     def __post_init__(self) -> None:
         require_stable_id("EventId.value", self.value)
+
+
+def _reject_recipe_id(field_name: str, code: str) -> ValueError:
+    _PRODUCTION_LOG.error(
+        "production_validation_failed field=%s reason_code=%s",
+        field_name,
+        code,
+    )
+    return ValueError(f"{field_name}: {code}")
+
+
+@dataclass(frozen=True, slots=True)
+class RecipeId:
+    """Recipe belief token. Not an ``EntityId`` and not a physical object."""
+
+    value: str
+
+    def __post_init__(self) -> None:
+        if (
+            type(self.value) is not str
+            or _RECIPE_ID_PATTERN.fullmatch(self.value) is None
+        ):
+            raise _reject_recipe_id("RecipeId.value", "foreign_recipe_id")
 
 
 @dataclass(frozen=True, slots=True)
