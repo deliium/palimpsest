@@ -72,6 +72,9 @@ class CausalSlot(StrEnum):
     HELD_ITEM_KIND = "held_item_kind"
     ACTION = "action"
     CONCEPT = "concept"
+    SEASON = "season"
+    TEMPERATURE_BAND = "temperature_band"
+    HAZARD = "hazard"
 
 
 class CausalOutcome(StrEnum):
@@ -334,6 +337,76 @@ class CausalHypothesis:
 
 
 @dataclass(frozen=True, slots=True)
+class SeasonSuccessorTable:
+    """Owner-scoped counts of observed season changes. Not the calendar."""
+
+    previous_season: str | None = None
+    transitions: tuple[tuple[str, str, int], ...] = ()
+
+    def observe(self, owner_id: AgentId, season: str) -> SeasonSuccessorTable:
+        token = require_stable_id("season", season)
+        if self.previous_season is None:
+            return SeasonSuccessorTable(
+                previous_season=token, transitions=self.transitions
+            )
+        if self.previous_season == token:
+            return self
+        transitions = _increment_transition(
+            self.transitions, self.previous_season, token
+        )
+        count = next(
+            item[2]
+            for item in transitions
+            if item[0] == self.previous_season and item[1] == token
+        )
+        _LOG.debug(
+            "season_successor_updated owner_id=%s season=%s successor_count=%s",
+            owner_id.value,
+            token,
+            count,
+        )
+        return SeasonSuccessorTable(previous_season=token, transitions=transitions)
+
+    def unique_successor(self, season: str) -> str | None:
+        recorded = [
+            item for item in self.transitions if item[0] == season and item[2] >= 1
+        ]
+        if not recorded:
+            _LOG.info(
+                "season_successor_unused reason_code=%s",
+                "successor_count_zero",
+            )
+            return None
+        names = {item[1] for item in recorded}
+        if len(names) != 1:
+            _LOG.info(
+                "season_successor_unused reason_code=%s",
+                "successor_ambiguous",
+            )
+            return None
+        return next(iter(names))
+
+
+def _increment_transition(
+    transitions: tuple[tuple[str, str, int], ...],
+    previous: str,
+    successor: str,
+) -> tuple[tuple[str, str, int], ...]:
+    updated: list[tuple[str, str, int]] = []
+    found = False
+    for item in transitions:
+        if item[0] == previous and item[1] == successor:
+            updated.append((previous, successor, item[2] + 1))
+            found = True
+        else:
+            updated.append(item)
+    if not found:
+        updated.append((previous, successor, 1))
+    updated.sort(key=lambda item: (item[0], item[1]))
+    return tuple(updated)
+
+
+@dataclass(frozen=True, slots=True)
 class CausalWorldModel:
     """Private hypothesis store for one owner. Flag-off leaves this ``None``."""
 
@@ -343,6 +416,9 @@ class CausalWorldModel:
     last_tick: int | None = None
     preferred_ids: tuple[str, ...] = ()
     selection_fallback_used: bool = False
+    season_successors: SeasonSuccessorTable = field(
+        default_factory=SeasonSuccessorTable
+    )
 
     def __post_init__(self) -> None:
         if type(self.owner_id) is not AgentId:
@@ -370,6 +446,8 @@ class CausalWorldModel:
         object.__setattr__(self, "preferred_ids", preferred)
         if type(self.selection_fallback_used) is not bool:
             raise _fail("selection_fallback_used", "invalid_type")
+        if type(self.season_successors) is not SeasonSuccessorTable:
+            raise _fail("season_successors", "invalid_type")
         _LOG.debug(
             "causal_world_model_constructed owner_id=%s policy_version=%s "
             "hypothesis_count=%s",
@@ -624,6 +702,7 @@ def update_world_model(
     if observed_health is not None:
         health = _health_value("observed_health", observed_health)
     hypotheses = _trim_and_freeze(store, policy)
+    successors = _advance_season_successors(model, episode_list)
     _LOG.info(
         "world_model_updated episode_count=%s created_count=%s "
         "updated_count=%s dropped_count=%s",
@@ -637,6 +716,7 @@ def update_world_model(
         hypotheses=hypotheses,
         last_observed_health=health,
         last_tick=resolved_tick,
+        season_successors=successors,
     )
 
 
@@ -878,6 +958,7 @@ def contemplated_situation_atoms(
         atoms.append(_atom(CausalSlot.DAY_PHASE, observation.day_phase.value))
     if observation.weather_condition is not None:
         atoms.append(_atom(CausalSlot.WEATHER, observation.weather_condition.value))
+    _append_present_environment(atoms, observation)
     if direction is ActionDirection.COMMUNICATE and target_entity_id is not None:
         atoms.append(_atom(CausalSlot.COUNTERPART, target_entity_id))
         atoms.append(_atom(CausalSlot.ACTION, "ask"))
@@ -1243,6 +1324,62 @@ def _atom(slot: CausalSlot, value: str) -> CausalAtom:
     return CausalAtom(slot=slot, value=value)
 
 
+def _append_present_environment(
+    atoms: list[CausalAtom], observation: Observation
+) -> None:
+    season = observation.season
+    if season is None:
+        return
+    atoms.append(_atom(CausalSlot.SEASON, season.value))
+    if observation.temperature_band is not None:
+        atoms.append(
+            _atom(CausalSlot.TEMPERATURE_BAND, observation.temperature_band.value)
+        )
+    if observation.hazard_kinds is None:
+        return
+    token = ",".join(kind.value for kind in observation.hazard_kinds) or "none"
+    atoms.append(_atom(CausalSlot.HAZARD, token))
+
+
+def _advance_season_successors(
+    model: CausalWorldModel, episodes: tuple[CausalEpisode, ...]
+) -> SeasonSuccessorTable:
+    seasons = {
+        atom.value
+        for episode in episodes
+        for atom in episode.atoms
+        if atom.slot is CausalSlot.SEASON
+    }
+    if len(seasons) != 1:
+        if len(seasons) > 1:
+            _LOG.info(
+                "season_successor_unused reason_code=%s",
+                "successor_ambiguous",
+            )
+        return model.season_successors
+    return model.season_successors.observe(model.owner_id, next(iter(seasons)))
+
+
+def apply_recorded_season_successor(
+    atoms: Sequence[CausalAtom],
+    table: SeasonSuccessorTable,
+    *,
+    owner_id: AgentId,
+) -> tuple[CausalAtom, ...]:
+    """Replace a current season token with its unique recorded successor."""
+    del owner_id
+    current = [atom for atom in atoms if atom.slot is CausalSlot.SEASON]
+    if len(current) != 1:
+        return tuple(atoms)
+    successor = table.unique_successor(current[0].value)
+    if successor is None:
+        return tuple(atoms)
+    return tuple(
+        _atom(CausalSlot.SEASON, successor) if atom.slot is CausalSlot.SEASON else atom
+        for atom in atoms
+    )
+
+
 def _ambient_atoms(observation: Observation) -> tuple[CausalAtom, ...]:
     atoms: list[CausalAtom] = []
     if observation.self_body is not None:
@@ -1253,6 +1390,7 @@ def _ambient_atoms(observation: Observation) -> tuple[CausalAtom, ...]:
         atoms.append(_atom(CausalSlot.DAY_PHASE, observation.day_phase.value))
     if observation.weather_condition is not None:
         atoms.append(_atom(CausalSlot.WEATHER, observation.weather_condition.value))
+    _append_present_environment(atoms, observation)
     return tuple(atoms)
 
 

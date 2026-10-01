@@ -140,7 +140,7 @@ Each checkpoint is a git commit on `main` created when those tasks are done. Do 
   - Depends on tasks 3 and 11.
   - Files: `src/world/_replay.py`, `src/simulation/replay.py`, `src/simulation/persistence.py`, `src/simulation/journal.py`, `tests/unit/test_environmental_dynamics_replay.py`.
 
-- [ ] Task 6: v2- Let causal models learn season successors from experience.
+- [x] Task 6: v2- Let causal models learn season successors from experience.
   - Deliverable: append `CausalSlot.SEASON`, `CausalSlot.TEMPERATURE_BAND`, and `CausalSlot.HAZARD` after `CONCEPT`. Do not insert them earlier. `_SLOT_ORDER` indexes of the existing slots stay the same. The updater copies the new slots only from the owner's current observation, and only when `predictive_world_model` is enabled and `observation.season` is not `None`. Otherwise it adds no atoms and no bias. `SeasonSuccessorTable` increments only on a change from the owner's previous season token. Prospective search scoring may use the unique recorded successor when its count is `>= 1`. The updater's signature does not accept `EnvironmentalDynamicsSpec` or `WorldState`; a type name of either raises `TypeError`. Do not import `llm.models` from `agents.cognition.world_model`. The scarcity proof feeds a winter search failure and a later autumn observation and asserts the learned search bias is below the naive model. Experiment I fixtures do not set a spec, so their hypothesis counts stay unchanged.
   - Logging: logger `agents.cognition.world_model`. DEBUG `season_successor_updated owner_id=%s season=%s successor_count=%s`. INFO `season_successor_unused reason_code=%s` when the count is `0` or the successor is ambiguous. No spec digest and no window list.
   - Depends on task 4.

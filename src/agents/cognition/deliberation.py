@@ -1047,6 +1047,7 @@ def _world_model_direction_bias(
         CausalSlot,
         CausalWorldModel,
         WorldModelPolicy,
+        apply_recorded_season_successor,
         contemplated_situation_atoms,
         default_world_model_policy,
         match_hypothesis,
@@ -1068,6 +1069,12 @@ def _world_model_direction_bias(
             direction=future.direction,
             target_entity_id=future.target_entity_id,
         )
+        if future.direction is ActionDirection.SEARCH:
+            atoms = apply_recorded_season_successor(
+                atoms,
+                model.season_successors,
+                owner_id=owner_id,
+            )
         net = 0.0
         danger = match_hypothesis(
             model,

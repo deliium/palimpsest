@@ -584,6 +584,20 @@ def _situation_atoms(
                 value=observation.weather_condition.value,
             )
         )
+    if observation.season is not None:
+        atoms.append(CausalAtom(slot=CausalSlot.SEASON, value=observation.season.value))
+        if observation.temperature_band is not None:
+            atoms.append(
+                CausalAtom(
+                    slot=CausalSlot.TEMPERATURE_BAND,
+                    value=observation.temperature_band.value,
+                )
+            )
+        if observation.hazard_kinds is not None:
+            hazards = ",".join(
+                kind.value for kind in observation.hazard_kinds
+            ) or "none"
+            atoms.append(CausalAtom(slot=CausalSlot.HAZARD, value=hazards))
     if direction is ActionDirection.COMMUNICATE and target_id is not None:
         atoms.append(CausalAtom(slot=CausalSlot.COUNTERPART, value=target_id))
         atoms.append(CausalAtom(slot=CausalSlot.ACTION, value="ask"))
@@ -653,6 +667,14 @@ def _score_seed(
         target_id=seed.target_entity_id,
         predicted_location=predicted_location,
     )
+    if seed.direction is ActionDirection.SEARCH and model is not None:
+        from agents.cognition.world_model import apply_recorded_season_successor
+
+        atoms = apply_recorded_season_successor(
+            atoms,
+            model.season_successors,
+            owner_id=loop_input.agent_id,
+        )
     matched = _hypothesis_matches(model, atoms)
     if matched is CausalOutcome.DANGER and seed.direction in {
         ActionDirection.MOVE,
