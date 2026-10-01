@@ -32,6 +32,46 @@ static func zone_color(theme: Variant) -> Color:
 	return FALLBACK
 
 
+const _SEASONS := {
+	"spring": Color(0.55, 0.78, 0.45, 0.22),
+	"summer": Color(0.93, 0.78, 0.35, 0.22),
+	"autumn": Color(0.78, 0.48, 0.24, 0.22),
+	"winter": Color(0.70, 0.82, 0.92, 0.28),
+}
+
+const _BANDS := {
+	"cold": Color(0.55, 0.75, 0.95, 0.30),
+	"mild": Color(0.85, 0.85, 0.78, 0.12),
+	"hot": Color(0.95, 0.45, 0.28, 0.30),
+}
+
+const _HAZARDS := {
+	"cold_snap": Color(0.75, 0.90, 1.0, 0.35),
+	"heat": Color(0.95, 0.35, 0.15, 0.35),
+}
+
+const DEPLETED := Color(0.35, 0.32, 0.30, 0.55)
+
+
+static func season_color(token: Variant) -> Color:
+	return _token_color(_SEASONS, token)
+
+
+static func band_color(token: Variant) -> Color:
+	return _token_color(_BANDS, token)
+
+
+static func hazard_color(token: Variant) -> Color:
+	return _token_color(_HAZARDS, token)
+
+
+static func _token_color(table: Dictionary, token: Variant) -> Color:
+	var key := "" if token == null else str(token)
+	if table.has(key):
+		return table[key]
+	return Color(1, 1, 1, 0)
+
+
 static func weather_tint(condition: Variant) -> Color:
 	var key := "" if condition == null else str(condition)
 	if _WEATHER.has(key):

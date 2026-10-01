@@ -26,6 +26,12 @@ const KNOWN_TYPES: Array[String] = [
 	"NEEDS_APPLIED",
 	"EXPOSURE_APPLIED",
 	"AGENT_DIED",
+	"SEASON_CHANGED",
+	"TEMPERATURE_BAND_CHANGED",
+	"RESOURCE_NODE_DEPLETED",
+	"RESOURCE_NODE_RECOVERED",
+	"ENVIRONMENTAL_HAZARD_STARTED",
+	"ENVIRONMENTAL_HAZARD_ENDED",
 ]
 
 const BODY_FROM_TARGET: Array[String] = [
@@ -145,6 +151,19 @@ class WeatherModel:
 	var condition: String = ""
 
 
+class TemperatureBandModel:
+	extends RefCounted
+	var location_id: String = ""
+	var band: String = ""
+
+
+class HazardModel:
+	extends RefCounted
+	var location_id: String = ""
+	var hazard_kind: String = ""
+	var remaining_ticks: int = 0
+
+
 class WorldModel:
 	extends RefCounted
 	var tick: int = 0
@@ -154,6 +173,9 @@ class WorldModel:
 	var items: Array = []
 	var resources: Array = []
 	var weather: Array = []
+	var season: Variant = null
+	var temperature_bands: Array = []
+	var hazards: Array = []
 
 	func id_count() -> int:
 		return locations.size() + agents.size() + items.size() + resources.size()
@@ -386,6 +408,23 @@ static func _world(data: Variant) -> Variant:
 		world.resources.append(_resource(item))
 	for item in _array(data, "weather"):
 		world.weather.append(_weather(item))
+	if data.has("season") and data["season"] != null:
+		world.season = str(data["season"])
+	for item in _array(data, "temperature_bands"):
+		if typeof(item) != TYPE_DICTIONARY:
+			return "invalid_temperature_band"
+		var band := TemperatureBandModel.new()
+		band.location_id = str(item.get("location_id", ""))
+		band.band = str(item.get("band", ""))
+		world.temperature_bands.append(band)
+	for item in _array(data, "hazards"):
+		if typeof(item) != TYPE_DICTIONARY:
+			return "invalid_hazard"
+		var hazard := HazardModel.new()
+		hazard.location_id = str(item.get("location_id", ""))
+		hazard.hazard_kind = str(item.get("hazard_kind", ""))
+		hazard.remaining_ticks = int(item.get("remaining_ticks", 0))
+		world.hazards.append(hazard)
 	return world
 
 

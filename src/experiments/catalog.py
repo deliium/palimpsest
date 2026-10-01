@@ -1,4 +1,4 @@
-"""Named builders for Experiments A-T."""
+"""Named builders for Experiments A-U."""
 
 from __future__ import annotations
 
@@ -1036,6 +1036,22 @@ def base_runner_config_from_scenario(
         agents=agents,
         stop_policy=RunnerStopPolicy(max_ticks=max_ticks),
     )
+
+
+def experiment_u_seasonal_scarcity(
+    *,
+    seed: int = 11,
+    max_ticks: int = 16,
+) -> ExperimentDefinition:
+    """Paired learned and naive arms over one scarce food node.
+
+    Both arms share the seed and ``runner-config-v14``. The learned arm
+    enables ``predictive_world_model``. This experiment is absent from the
+    V1 regression gate.
+    """
+    from experiments.environmental_scenario import seasonal_scarcity_scenario
+
+    return seasonal_scarcity_scenario(seed=seed, max_ticks=max_ticks)
 
 
 def v1_regression_profile(config: SimulationRunnerConfig) -> SimulationRunnerConfig:

@@ -81,6 +81,7 @@ func run() -> Array:
 	if int(gap_query.get("after_tick", -1)) != 1 or int(gap_query.get("after_sequence", -1)) != 0:
 		failures.append("the live gap should resume from the last applied cursor")
 	_assert_steps(session, failures)
+	_assert_environment_frame(session, failures)
 	var kept_agent := _agent("body-bob", "dead")
 	var kept: Dictionary = AgentLayer.selection_for("body-bob", [kept_agent])
 	if not kept["keep"] or not kept["dead"] or not Identity.is_dead(kept_agent):
@@ -163,6 +164,51 @@ func _assert_steps(session: SessionScript, failures: Array) -> void:
 		failures.append("a backward step should replace state from the frame")
 	if session.transport.tick != 4 or int(session.transport.sequence) != 0:
 		failures.append("the replaced frame should view the sought event")
+
+
+func _assert_environment_frame(session: SessionScript, failures: Array) -> void:
+	var parsed: Protocol.ParseResult = Protocol.parse_frame({
+		"protocol_version": "observer-protocol-v1",
+		"cursor": {
+			"run_id": "run-1",
+			"mode": "replay",
+			"tick": 12,
+			"protocol_version": "observer-protocol-v1",
+			"after_tick": 12,
+			"after_sequence": 0,
+		},
+		"world": {
+			"tick": 12,
+			"revision": 1,
+			"season": "winter",
+			"temperature_bands": [{"location_id": "loc-1", "band": "cold"}],
+			"hazards": [{
+				"location_id": "loc-1",
+				"hazard_kind": "cold_snap",
+				"remaining_ticks": 4,
+			}],
+			"locations": [],
+			"agents": [],
+			"items": [],
+			"resources": [],
+			"weather": [],
+		},
+		"events": [],
+	})
+	if not parsed.ok:
+		failures.append("environment frame should parse")
+		return
+	var replaced: Array = []
+	session.world_replaced.connect(func(world: Variant) -> void:
+		replaced.append(world)
+	)
+	session._apply_sought_frame(parsed.value, session._seek_serial)
+	if session.world != parsed.value.world or replaced.is_empty() or replaced[-1] != parsed.value.world:
+		failures.append("sought environment frame should be the world world_replaced emits")
+	if str(session.world.season) != "winter" or session.world.hazards.size() != 1:
+		failures.append("sought frame should keep the season and hazard tokens")
+	if str(session.world.temperature_bands[0].band) != "cold":
+		failures.append("sought frame should keep the temperature band token")
 
 
 func _state_query(session: SessionScript) -> Dictionary:

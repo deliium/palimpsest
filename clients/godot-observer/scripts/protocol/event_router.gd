@@ -36,6 +36,14 @@ static func route(event: Variant, policy: Dictionary, logical: Dictionary) -> Di
 				action = "speech"
 			"WEATHER_CHANGED":
 				action = "weather"
+			"SEASON_CHANGED":
+				action = "season"
+			"TEMPERATURE_BAND_CHANGED":
+				action = "temperature"
+			"RESOURCE_NODE_DEPLETED", "RESOURCE_NODE_RECOVERED":
+				action = "resource"
+			"ENVIRONMENTAL_HAZARD_STARTED", "ENVIRONMENTAL_HAZARD_ENDED":
+				action = "hazard"
 			_:
 				action = "activity"
 	var other := ""

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Literal
 
-from pydantic import Field
+from pydantic import Field, model_serializer
 
 from api.schemas import StrictModel
 from observer.version import OBSERVER_PROTOCOL_VERSION
@@ -127,6 +127,17 @@ class ObserverWorldStateOut(StrictModel):
     temperature_bands: tuple[ObserverTemperatureBandOut, ...] = ()
     hazards: tuple[ObserverHazardOut, ...] = ()
 
+    @model_serializer(mode="wrap")
+    def _omit_absent_environment(self, handler: object) -> dict[str, object]:
+        payload = handler(self)
+        if not isinstance(payload, dict):
+            raise TypeError("observer world serializer requires a mapping")
+        if payload.get("season") is None:
+            payload.pop("season", None)
+            payload.pop("temperature_bands", None)
+            payload.pop("hazards", None)
+        return payload
+
 
 class ObserverEventOut(StrictModel):
     protocol_version: str
@@ -146,6 +157,16 @@ class ObserverEventOut(StrictModel):
     season: str | None = None
     temperature_band: str | None = None
     hazard_kind: str | None = None
+
+    @model_serializer(mode="wrap")
+    def _omit_absent_environment(self, handler: object) -> dict[str, object]:
+        payload = handler(self)
+        if not isinstance(payload, dict):
+            raise TypeError("observer event serializer requires a mapping")
+        for key in ("season", "temperature_band", "hazard_kind"):
+            if payload.get(key) is None:
+                payload.pop(key, None)
+        return payload
 
 
 class ObserverPlaybackCursorOut(StrictModel):

@@ -6,6 +6,10 @@ const Themes := preload("res://scripts/presentation/theme_catalog.gd")
 
 var _locations: Array = []
 var _weather := {}
+var _bands := {}
+var _hazards := {}
+var _depleted := {}
+var _season: Variant = null
 var _rings := {}
 
 
@@ -16,8 +20,38 @@ func _ready() -> void:
 func show_world(world: Variant) -> void:
 	_locations = world.locations
 	_weather = {}
+	_bands = {}
+	_hazards = {}
+	_depleted = {}
+	_season = world.get("season")
 	for item in world.weather:
 		_weather[item.location_id] = item.condition
+	var bands: Variant = world.get("temperature_bands")
+	if bands is Array:
+		for item in bands:
+			_bands[str(item.location_id)] = str(item.band)
+	var hazards: Variant = world.get("hazards")
+	if hazards is Array:
+		for item in hazards:
+			var location_id := str(item.location_id)
+			if not _hazards.has(location_id):
+				_hazards[location_id] = []
+			_hazards[location_id].append(str(item.hazard_kind))
+	var resources: Variant = world.get("resources")
+	if resources is Array:
+		for item in resources:
+			if float(item.quantity) == 0.0:
+				_depleted[str(item.location_id)] = true
+	var hazard_count := 0
+	for kinds in _hazards.values():
+		hazard_count += kinds.size()
+	var season_token := "-" if _season == null else str(_season)
+	ObserverLog.debug(
+		"locations",
+		"environment_painted tick=%s season=%s hazard_count=%s" % [
+			world.tick, season_token, hazard_count
+		],
+	)
 	_rings = _ring_positions()
 	var connections := 0
 	for location in _locations:
@@ -49,9 +83,19 @@ func _draw() -> void:
 		var theme = null if location.presentation == null else location.presentation.theme
 		var color: Color = Themes.zone_color(theme)
 		draw_rect(rect, Color(color.r, color.g, color.b, 0.35), true)
+		if _season != null:
+			draw_rect(rect, Themes.season_color(_season), true)
 		var condition: Variant = _weather.get(location.location_id, null)
 		if condition != null:
 			draw_rect(rect, Themes.weather_tint(condition), true)
+		var band: Variant = _bands.get(location.location_id, null)
+		if band != null:
+			draw_rect(rect, Themes.band_color(band), true)
+		var kinds: Variant = _hazards.get(location.location_id, [])
+		for kind in kinds:
+			draw_rect(rect, Themes.hazard_color(kind), true)
+		if _depleted.has(location.location_id):
+			draw_rect(rect, Themes.DEPLETED, false, 3.0)
 		draw_rect(rect, color, false, 2.0)
 		var label := str(location.display_name) if str(location.display_name) != "" else str(location.name)
 		var text_size := font.get_string_size(label, HORIZONTAL_ALIGNMENT_LEFT, -1, font_size)

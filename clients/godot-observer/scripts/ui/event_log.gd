@@ -203,6 +203,18 @@ func _describe(
 			return "%s waited" % subject
 		"WEATHER_CHANGED":
 			return "weather"
+		"SEASON_CHANGED":
+			return "season"
+		"TEMPERATURE_BAND_CHANGED":
+			return "temperature"
+		"RESOURCE_NODE_DEPLETED":
+			return "resource depleted"
+		"RESOURCE_NODE_RECOVERED":
+			return "resource recovered"
+		"ENVIRONMENTAL_HAZARD_STARTED":
+			return "hazard started"
+		"ENVIRONMENTAL_HAZARD_ENDED":
+			return "hazard ended"
 		"RESOURCE_REGENERATED":
 			return "resource regenerated"
 		"NEEDS_APPLIED":

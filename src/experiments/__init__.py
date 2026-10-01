@@ -28,6 +28,7 @@ from experiments.catalog import (
     experiment_r_skill_learning,
     experiment_s_cultural_transmission,
     experiment_t_skill_specialization,
+    experiment_u_seasonal_scarcity,
     v1_regression_profile,
 )
 from experiments.collectors import (
@@ -56,6 +57,11 @@ from experiments.coordinator import (
     ExperimentAssignment,
     ExperimentCoordinator,
     materialize_assignments,
+)
+from experiments.environmental_scenario import (
+    ENVIRONMENTAL_DYNAMICS_METRIC_VERSION,
+    count_environmental_dynamics,
+    seasonal_scarcity_scenario,
 )
 from experiments.interventions import (
     DEFAULT_OVERRIDE_BUDGET,
@@ -120,6 +126,7 @@ from experiments.reputation_scenario import distributed_reputation_scenario
 
 __all__ = [
     "DEFAULT_OVERRIDE_BUDGET",
+    "ENVIRONMENTAL_DYNAMICS_METRIC_VERSION",
     "EXPERIMENT_A_V1_CONDITION_IDS",
     "EXPERIMENT_RECORD_SCHEMA_VERSION",
     "MILESTONE_ARBITER_POLICY_VERSION",
@@ -181,6 +188,7 @@ __all__ = [
     "collect_trajectory_stats",
     "compare_compatible_bundles",
     "condition_fingerprint",
+    "count_environmental_dynamics",
     "definition_fingerprint",
     "distributed_reputation_scenario",
     "experiment_a_memory",
@@ -204,6 +212,7 @@ __all__ = [
     "experiment_r_skill_learning",
     "experiment_s_cultural_transmission",
     "experiment_t_skill_specialization",
+    "experiment_u_seasonal_scarcity",
     "make_false_story_intervention",
     "map_consolidation_audits_to_report",
     "map_recall_audits_to_dynamics_report",
@@ -211,6 +220,7 @@ __all__ = [
     "map_snapshot_to_analysis_sources",
     "materialize_assignments",
     "persist_metric_bundle",
+    "seasonal_scarcity_scenario",
     "unwrap_arbiter_command",
     "v1_regression_profile",
 ]
