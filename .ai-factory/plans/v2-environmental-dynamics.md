@@ -148,7 +148,7 @@ Each checkpoint is a git commit on `main` created when those tasks are done. Do 
 
 ### Phase 3: Runner, Observer, Scenario, and Docs
 
-- [ ] Task 7: v2- Accept dynamics only on runner-config-v14.
+- [x] Task 7: v2- Accept dynamics only on runner-config-v14.
   - Deliverable: `runner-config-v14` carries every v13 cognition key plus `environmental_dynamics`. It is emitted only when the spec is not `None`. v4 through v13 reject that key. Production is legal on v13 or v14. A catalog without dynamics still writes v13 and replay-v6. A spec writes v14 and replay-v7, and codec `v4` for the checkpoint. Skill learning stays legal on v11 through v14. Teaching stays legal on v12 through v14. The runner passes the spec into `WorldEngine`. `simulation.compatibility` lists v14, replay-v7, and codec `v4` as accepted restores without making them the default write. `tests/unit/test_v1_regression_gate.py` is not extended.
   - Logging: logger `simulation.runner`. INFO `environment_config schema_version=%s season_length=%s hazard_rule_count=%s`. ERROR `unsupported_schema_version` and `environment_spec_mismatch` with schema and reason code. DEBUG is counts and the spec digest. No seeds.
   - Depends on tasks 5 and 11.

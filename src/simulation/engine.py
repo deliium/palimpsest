@@ -530,14 +530,31 @@ class WorldEngine:
         state = self._snapshot.world.state
         tick_before = self._snapshot.tick
         revision_before = state.revision
+        rules = self._config.physical_rules
+        if rules is None:
+            rules = default_physical_rules()
+        locations = tuple(
+            sorted(state.locations.values(), key=lambda item: item.entity_id.value)
+        )
+        weather = tuple(
+            sorted(state.weather.values(), key=lambda item: item.location_id.value)
+        )
+        from simulation.observer_facts import environment_view
+
+        season, bands, hazards = environment_view(
+            spec=self._environmental_dynamics,
+            tick=self.tick.value,
+            locations=locations,
+            weather=weather,
+            active_hazards=state.active_hazards,
+            rules=rules,
+        )
         facts = ObjectiveFacts(
             run_id=self._run_id.value,
             world_id=self.world_id.value,
             tick=self.tick.value,
             revision=self.revision.value,
-            locations=tuple(
-                sorted(state.locations.values(), key=lambda item: item.entity_id.value)
-            ),
+            locations=locations,
             bodies=self.detached_bodies(),
             items=tuple(
                 sorted(state.items.values(), key=lambda item: item.entity_id.value)
@@ -545,10 +562,11 @@ class WorldEngine:
             resources=tuple(
                 sorted(state.resources.values(), key=lambda item: item.entity_id.value)
             ),
-            weather=tuple(
-                sorted(state.weather.values(), key=lambda item: item.location_id.value)
-            ),
+            weather=weather,
             registrations=tuple(self._registrations),
+            season=season,
+            temperature_bands=bands,
+            hazards=hazards,
         )
         if self._snapshot.tick != tick_before or state.revision != revision_before:
             raise RuntimeError("detached_objective_facts mutated engine state")

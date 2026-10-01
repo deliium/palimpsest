@@ -1031,6 +1031,7 @@ class SimulationRunner:
                 bootstrap=bootstrap,
                 run_id=resolved_run_id,
                 production_catalog=production_catalog,
+                environmental_dynamics=config.environmental_dynamics,
                 **skill_kwargs,
                 **teaching_kwargs,
             )

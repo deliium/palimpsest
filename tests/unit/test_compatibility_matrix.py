@@ -107,6 +107,8 @@ def test_runner_config_write_is_v4_with_legacy_accepted() -> None:
     assert "runner-config-v12" in entry.accepted_restore
     assert "teaching interaction mode is deterministic" in entry.bump_trigger
     assert "consolidation-only" in entry.bump_trigger
+    assert "runner-config-v14" in entry.accepted_restore
+    assert "environmental dynamics spec is set" in entry.bump_trigger
     assert "A-E" in entry.v1_fixture_impact
     assert "extended_self_model" in entry.v1_fixture_impact
     assert "V1 gate" in entry.v1_fixture_impact

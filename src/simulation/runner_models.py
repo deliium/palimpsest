@@ -45,6 +45,7 @@ from simulation.models import (
     stochastic_identity_fingerprint,
 )
 from world import ProductionCatalog
+from world.environment import EnvironmentalDynamicsSpec
 from world.identifiers import (
     EntityId,
     WorldId,
@@ -79,6 +80,7 @@ RUNNER_SCHEMA_VERSION_V10: Final[str] = "runner-config-v10"
 RUNNER_SCHEMA_VERSION_V11: Final[str] = "runner-config-v11"
 RUNNER_SCHEMA_VERSION_V12: Final[str] = "runner-config-v12"
 RUNNER_SCHEMA_VERSION_V13: Final[str] = "runner-config-v13"
+RUNNER_SCHEMA_VERSION_V14: Final[str] = "runner-config-v14"
 RUNNER_SCHEMA_VERSION: Final[str] = RUNNER_SCHEMA_VERSION_V4
 SUPPORTED_RUNNER_SCHEMA_VERSIONS: Final[frozenset[str]] = frozenset(
     {
@@ -95,6 +97,7 @@ SUPPORTED_RUNNER_SCHEMA_VERSIONS: Final[frozenset[str]] = frozenset(
         RUNNER_SCHEMA_VERSION_V11,
         RUNNER_SCHEMA_VERSION_V12,
         RUNNER_SCHEMA_VERSION_V13,
+        RUNNER_SCHEMA_VERSION_V14,
     }
 )
 RESULT_SCHEMA_VERSION_V1: Final[str] = "runner-result-v1"
@@ -407,6 +410,7 @@ _SKILL_SCHEMAS: Final[frozenset[str]] = frozenset(
         RUNNER_SCHEMA_VERSION_V11,
         RUNNER_SCHEMA_VERSION_V12,
         RUNNER_SCHEMA_VERSION_V13,
+        RUNNER_SCHEMA_VERSION_V14,
     }
 )
 
@@ -1713,6 +1717,7 @@ class SimulationRunnerConfig:
     schema_version: str = RUNNER_SCHEMA_VERSION
     derivation_version: str = DERIVATION_VERSION_V3
     mortality_policy_version: str = MORTALITY_POLICY_VERSION
+    environmental_dynamics: EnvironmentalDynamicsSpec | None = None
 
     def __post_init__(self) -> None:
         object.__setattr__(self, "seed", require_seed(self.seed))
@@ -1829,6 +1834,7 @@ class SimulationRunnerConfig:
             RUNNER_SCHEMA_VERSION_V11,
             RUNNER_SCHEMA_VERSION_V12,
         RUNNER_SCHEMA_VERSION_V13,
+        RUNNER_SCHEMA_VERSION_V14,
         }
         if non_disabled and self.schema_version not in consolidation_schemas:
             _LOGGER.error(
@@ -1868,6 +1874,7 @@ class SimulationRunnerConfig:
             RUNNER_SCHEMA_VERSION_V11,
             RUNNER_SCHEMA_VERSION_V12,
         RUNNER_SCHEMA_VERSION_V13,
+        RUNNER_SCHEMA_VERSION_V14,
         }
         if reflecting and self.schema_version not in reflection_schemas:
             _LOGGER.error(
@@ -1907,6 +1914,7 @@ class SimulationRunnerConfig:
             RUNNER_SCHEMA_VERSION_V11,
             RUNNER_SCHEMA_VERSION_V12,
         RUNNER_SCHEMA_VERSION_V13,
+        RUNNER_SCHEMA_VERSION_V14,
         }
         if planning and self.schema_version not in prospective_schemas:
             _LOGGER.error(
@@ -1945,6 +1953,7 @@ class SimulationRunnerConfig:
             RUNNER_SCHEMA_VERSION_V11,
             RUNNER_SCHEMA_VERSION_V12,
         RUNNER_SCHEMA_VERSION_V13,
+        RUNNER_SCHEMA_VERSION_V14,
         }
         if considering and self.schema_version not in counterfactual_schemas:
             _LOGGER.error(
@@ -1982,6 +1991,7 @@ class SimulationRunnerConfig:
             RUNNER_SCHEMA_VERSION_V11,
             RUNNER_SCHEMA_VERSION_V12,
         RUNNER_SCHEMA_VERSION_V13,
+        RUNNER_SCHEMA_VERSION_V14,
         }:
             _LOGGER.error(
                 "invalid_fields path=agents.cognition.communication_strategy_mode "
@@ -2017,6 +2027,7 @@ class SimulationRunnerConfig:
             RUNNER_SCHEMA_VERSION_V11,
             RUNNER_SCHEMA_VERSION_V12,
         RUNNER_SCHEMA_VERSION_V13,
+        RUNNER_SCHEMA_VERSION_V14,
         }:
             _LOGGER.error(
                 "invalid_fields path=agents.cognition.reputation_mode "
@@ -2094,6 +2105,7 @@ class SimulationRunnerConfig:
         if teaching and self.schema_version not in {
             RUNNER_SCHEMA_VERSION_V12,
             RUNNER_SCHEMA_VERSION_V13,
+        RUNNER_SCHEMA_VERSION_V14,
         }:
             _LOGGER.error(
                 "invalid_fields path=agents.cognition.teaching_interaction_mode "
@@ -2114,6 +2126,40 @@ class SimulationRunnerConfig:
         ) or any(
             agent.cognition.production_catalog.recipe_count > 0 for agent in self.agents
         )
+        dynamics = self.environmental_dynamics
+        if dynamics is not None and type(dynamics) is not EnvironmentalDynamicsSpec:
+            raise TypeError(
+                "environmental_dynamics must be EnvironmentalDynamicsSpec or None"
+            )
+        if (
+            dynamics is not None
+            and self.schema_version != RUNNER_SCHEMA_VERSION_V14
+        ) or (self.schema_version == RUNNER_SCHEMA_VERSION_V14 and dynamics is None):
+            logging.getLogger("simulation.runner").error(
+                "environment_spec_mismatch schema_version=%s reason_code=%s",
+                self.schema_version,
+                "environment_spec_mismatch",
+            )
+            raise ValueError(
+                "environmental dynamics require runner-config-v14 "
+                "(code=environment_spec_mismatch)"
+            )
+        if dynamics is not None:
+            logging.getLogger("simulation.runner").info(
+                "environment_config schema_version=%s season_length=%s "
+                "hazard_rule_count=%s",
+                self.schema_version,
+                dynamics.season_length_ticks,
+                len(dynamics.hazard_rules),
+            )
+            logging.getLogger("simulation.runner").debug(
+                "environment_config_detail season_count=%s window_count=%s "
+                "hazard_rule_count=%s digest=%s",
+                4,
+                len(dynamics.shortage_windows),
+                len(dynamics.hazard_rules),
+                dynamics.digest,
+            )
         if self.schema_version == RUNNER_SCHEMA_VERSION_V13 and not production_on:
             _LOGGER.error(
                 "invalid_fields path=schema_version "
@@ -2125,16 +2171,23 @@ class SimulationRunnerConfig:
                 "or a deterministic production_knowledge_mode "
                 "(code=v13_requires_production)"
             )
-        if production_on and self.schema_version != RUNNER_SCHEMA_VERSION_V13:
+        if production_on and self.schema_version not in {
+            RUNNER_SCHEMA_VERSION_V13,
+            RUNNER_SCHEMA_VERSION_V14,
+        }:
             _LOGGER.error(
                 "invalid_fields path=agents.cognition.production_knowledge_mode "
                 "reason_code=production_requires_v13 schema_version=%s",
                 self.schema_version,
             )
             raise ValueError(
-                "production requires runner-config-v13 (code=production_requires_v13)"
+                "production requires runner-config-v13 or runner-config-v14 "
+                "(code=production_requires_v13)"
             )
-        if self.schema_version == RUNNER_SCHEMA_VERSION_V13:
+        if self.schema_version in {
+            RUNNER_SCHEMA_VERSION_V13,
+            RUNNER_SCHEMA_VERSION_V14,
+        }:
             from world.production import production_catalog_digest
 
             catalogs = tuple(
@@ -2190,6 +2243,7 @@ class SimulationRunnerConfig:
         if self.schema_version in {
             RUNNER_SCHEMA_VERSION_V12,
             RUNNER_SCHEMA_VERSION_V13,
+        RUNNER_SCHEMA_VERSION_V14,
         }:
             shared_teaching = teaching_weight_tuple(self.agents[0].cognition)
             if any(

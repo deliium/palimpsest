@@ -103,6 +103,17 @@ class ObserverWeatherOut(StrictModel):
     condition: str
 
 
+class ObserverTemperatureBandOut(StrictModel):
+    location_id: str
+    band: str
+
+
+class ObserverHazardOut(StrictModel):
+    location_id: str
+    hazard_kind: str
+    remaining_ticks: int
+
+
 class ObserverWorldStateOut(StrictModel):
     tick: int
     revision: int
@@ -112,6 +123,9 @@ class ObserverWorldStateOut(StrictModel):
     resources: tuple[ObserverResourceOut, ...] = ()
     weather: tuple[ObserverWeatherOut, ...] = ()
     structures: tuple[ObserverStructureOut, ...] = ()
+    season: str | None = None
+    temperature_bands: tuple[ObserverTemperatureBandOut, ...] = ()
+    hazards: tuple[ObserverHazardOut, ...] = ()
 
 
 class ObserverEventOut(StrictModel):
@@ -129,6 +143,9 @@ class ObserverEventOut(StrictModel):
     destination_location_id: str | None = None
     recipe_id: str | None = None
     structure_id: str | None = None
+    season: str | None = None
+    temperature_band: str | None = None
+    hazard_kind: str | None = None
 
 
 class ObserverPlaybackCursorOut(StrictModel):

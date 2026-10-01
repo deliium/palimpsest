@@ -13,6 +13,8 @@ from world.events import (
     Dropped,
     Drunk,
     Eaten,
+    EnvironmentalHazardEnded,
+    EnvironmentalHazardStarted,
     ExposureApplied,
     Fled,
     Given,
@@ -21,11 +23,15 @@ from world.events import (
     Moved,
     NeedsApplied,
     ResourceHarvested,
+    ResourceNodeDepleted,
+    ResourceNodeRecovered,
     ResourceRegenerated,
     Searched,
+    SeasonChanged,
     StructureBuilt,
     StructureRepaired,
     Taken,
+    TemperatureBandChanged,
     WeatherChanged,
     WorldEvent,
 )
@@ -68,6 +74,9 @@ def adapt_event(event: WorldEvent) -> ObserverEvent:
     resource_id: str | None = None
     recipe_id: str | None = None
     structure_id: str | None = None
+    season: str | None = None
+    temperature_band: str | None = None
+    hazard_kind: str | None = None
     details = event.details
     if isinstance(details, Moved):
         destination = _text(details.destination_id)
@@ -106,6 +115,16 @@ def adapt_event(event: WorldEvent) -> ObserverEvent:
     elif isinstance(details, (StructureBuilt, StructureRepaired, ItemStored)):
         recipe_id = details.recipe_id.value
         structure_id = _text(details.structure_id)
+    elif isinstance(details, SeasonChanged):
+        season = details.season.value
+    elif isinstance(details, TemperatureBandChanged):
+        origin = _text(details.location_id)
+        temperature_band = details.band.value
+    elif isinstance(details, (ResourceNodeDepleted, ResourceNodeRecovered)):
+        resource_id = _text(details.resource_id)
+    elif isinstance(details, (EnvironmentalHazardStarted, EnvironmentalHazardEnded)):
+        origin = _text(details.location_id)
+        hazard_kind = details.hazard_kind.value
     adapted = ObserverEvent(
         protocol_version=OBSERVER_PROTOCOL_VERSION,
         type=semantic,
@@ -121,7 +140,19 @@ def adapt_event(event: WorldEvent) -> ObserverEvent:
         destination_location_id=destination,
         recipe_id=recipe_id,
         structure_id=structure_id,
+        season=season,
+        temperature_band=temperature_band,
+        hazard_kind=hazard_kind,
     )
+    if season is not None or temperature_band is not None or hazard_kind is not None:
+        _LOGGER.debug(
+            "environment_projected season=%s band_count=%s hazard_count=%s "
+            "event_kind=%s",
+            season if season is not None else "-",
+            0 if temperature_band is None else 1,
+            0 if hazard_kind is None else 1,
+            kind,
+        )
     if recipe_id is not None:
         _LOGGER.debug(
             "production_projected structure_count=%s event_kind=%s",

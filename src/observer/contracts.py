@@ -368,6 +368,38 @@ class ObserverWeather:
 
 
 @dataclass(frozen=True, slots=True)
+class ObserverTemperatureBand:
+    location_id: str
+    band: str
+
+    def __post_init__(self) -> None:
+        object.__setattr__(
+            self, "location_id", _require_text("location_id", self.location_id)
+        )
+        object.__setattr__(self, "band", _require_text("band", self.band))
+
+
+@dataclass(frozen=True, slots=True)
+class ObserverHazard:
+    location_id: str
+    hazard_kind: str
+    remaining_ticks: int
+
+    def __post_init__(self) -> None:
+        object.__setattr__(
+            self, "location_id", _require_text("location_id", self.location_id)
+        )
+        object.__setattr__(
+            self, "hazard_kind", _require_text("hazard_kind", self.hazard_kind)
+        )
+        object.__setattr__(
+            self,
+            "remaining_ticks",
+            _require_tick("remaining_ticks", self.remaining_ticks),
+        )
+
+
+@dataclass(frozen=True, slots=True)
 class ObserverWorldState:
     tick: int
     revision: int
@@ -377,6 +409,9 @@ class ObserverWorldState:
     resources: tuple[ObserverResource, ...] = ()
     weather: tuple[ObserverWeather, ...] = ()
     structures: tuple[ObserverStructure, ...] = ()
+    season: str | None = None
+    temperature_bands: tuple[ObserverTemperatureBand, ...] = ()
+    hazards: tuple[ObserverHazard, ...] = ()
 
     def __post_init__(self) -> None:
         object.__setattr__(self, "tick", _require_tick("tick", self.tick))
@@ -387,18 +422,31 @@ class ObserverWorldState:
         resources = _typed_tuple("resources", self.resources, ObserverResource)
         weather = _typed_tuple("weather", self.weather, ObserverWeather)
         structures = _typed_tuple("structures", self.structures, ObserverStructure)
+        bands = _typed_tuple(
+            "temperature_bands", self.temperature_bands, ObserverTemperatureBand
+        )
+        hazards = _typed_tuple("hazards", self.hazards, ObserverHazard)
+        season = _optional_text("season", self.season)
         _unique("locations", tuple(item.location_id for item in locations))
         _unique("agents", tuple(item.entity_id for item in agents))
         _unique("items", tuple(item.item_id for item in items))
         _unique("resources", tuple(item.resource_id for item in resources))
         _unique("weather", tuple(item.location_id for item in weather))
         _unique("structures", tuple(item.structure_id for item in structures))
+        _unique("temperature_bands", tuple(item.location_id for item in bands))
+        _unique(
+            "hazards",
+            tuple(f"{item.location_id}:{item.hazard_kind}" for item in hazards),
+        )
         object.__setattr__(self, "locations", locations)
         object.__setattr__(self, "agents", agents)
         object.__setattr__(self, "items", items)
         object.__setattr__(self, "resources", resources)
         object.__setattr__(self, "weather", weather)
         object.__setattr__(self, "structures", structures)
+        object.__setattr__(self, "season", season)
+        object.__setattr__(self, "temperature_bands", bands)
+        object.__setattr__(self, "hazards", hazards)
         if hasattr(self, "relationship") or hasattr(self, "relationships"):
             _reject("relationship", "objective_leak")
         _log_built(
@@ -442,6 +490,9 @@ class ObserverEvent:
     destination_location_id: str | None = None
     recipe_id: str | None = None
     structure_id: str | None = None
+    season: str | None = None
+    temperature_band: str | None = None
+    hazard_kind: str | None = None
 
     def __init__(
         self,
@@ -459,6 +510,9 @@ class ObserverEvent:
         destination_location_id: str | None = None,
         recipe_id: str | None = None,
         structure_id: str | None = None,
+        season: str | None = None,
+        temperature_band: str | None = None,
+        hazard_kind: str | None = None,
         **extra: object,
     ) -> None:
         _reject_extra(extra)
@@ -497,6 +551,15 @@ class ObserverEvent:
         object.__setattr__(
             self, "structure_id", _optional_text("structure_id", structure_id)
         )
+        object.__setattr__(self, "season", _optional_text("season", season))
+        object.__setattr__(
+            self,
+            "temperature_band",
+            _optional_text("temperature_band", temperature_band),
+        )
+        object.__setattr__(
+            self, "hazard_kind", _optional_text("hazard_kind", hazard_kind)
+        )
         _log_built("ObserverEvent", id_count=1, protocol_version=protocol)
 
     def public_mapping(self) -> dict[str, object]:
@@ -518,6 +581,12 @@ class ObserverEvent:
             payload["recipe_id"] = self.recipe_id
         if self.structure_id is not None:
             payload["structure_id"] = self.structure_id
+        if self.season is not None:
+            payload["season"] = self.season
+        if self.temperature_band is not None:
+            payload["temperature_band"] = self.temperature_band
+        if self.hazard_kind is not None:
+            payload["hazard_kind"] = self.hazard_kind
         return payload
 
 

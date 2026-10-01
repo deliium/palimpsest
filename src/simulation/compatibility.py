@@ -57,6 +57,7 @@ from simulation.runner_models import (
     RUNNER_SCHEMA_VERSION_V11,
     RUNNER_SCHEMA_VERSION_V12,
     RUNNER_SCHEMA_VERSION_V13,
+    RUNNER_SCHEMA_VERSION_V14,
     SUPPORTED_RESULT_SCHEMA_VERSIONS,
     SUPPORTED_RUNNER_SCHEMA_VERSIONS,
 )
@@ -103,6 +104,7 @@ __all__ = [
     "RUNNER_SCHEMA_VERSION_V11",
     "RUNNER_SCHEMA_VERSION_V12",
     "RUNNER_SCHEMA_VERSION_V13",
+    "RUNNER_SCHEMA_VERSION_V14",
     "STREAM_ENVELOPE_VERSION",
     "WS_PROTOCOL_VERSION",
     "CompatibilityEntry",
@@ -217,8 +219,13 @@ _MATRIX: dict[str, CompatibilityEntry] = {
             "catalog is non-empty or some agent's production knowledge mode is "
             "deterministic and carries every v12 cognition key plus "
             "production_knowledge_mode and production_catalog; skill learning "
-            f"stays legal on {RUNNER_SCHEMA_VERSION_V13} and teaching stays "
-            f"legal on {RUNNER_SCHEMA_VERSION_V13}; "
+            f"stays legal on {RUNNER_SCHEMA_VERSION_V13} and "
+            f"{RUNNER_SCHEMA_VERSION_V14} and teaching stays legal on "
+            f"{RUNNER_SCHEMA_VERSION_V13} and {RUNNER_SCHEMA_VERSION_V14}; "
+            f"{RUNNER_SCHEMA_VERSION_V14} is emitted only when the "
+            "environmental dynamics spec is set and carries every v13 "
+            "cognition key plus environmental_dynamics; production stays "
+            f"legal on {RUNNER_SCHEMA_VERSION_V14}; "
             f"{RUNNER_SCHEMA_VERSION_V3} retained for capability flags; "
             "v1-v4 omit consolidation_mode, reflection_mode, prospective_mode, "
             "counterfactual_mode, communication_strategy_mode, and "
@@ -409,6 +416,7 @@ _LOG.debug(
         "runner_v11": RUNNER_SCHEMA_VERSION_V11,
         "runner_v12": RUNNER_SCHEMA_VERSION_V12,
         "runner_v13": RUNNER_SCHEMA_VERSION_V13,
+        "runner_v14": RUNNER_SCHEMA_VERSION_V14,
         "alembic_head": ALEMBIC_HEAD_REVISION,
         "accepted_event_count": len(ACCEPTED_EVENT_SCHEMA_VERSIONS),
     },

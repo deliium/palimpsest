@@ -488,6 +488,20 @@ def _frame_out(frame: ObserverFrame) -> ObserverFrameOut:
         if frame.events is None
         else [item.public_mapping() for item in frame.events],
     }
+    if world.season is not None:
+        payload["world"]["season"] = world.season
+        payload["world"]["temperature_bands"] = [
+            {"location_id": item.location_id, "band": item.band}
+            for item in world.temperature_bands
+        ]
+        payload["world"]["hazards"] = [
+            {
+                "location_id": item.location_id,
+                "hazard_kind": item.hazard_kind,
+                "remaining_ticks": item.remaining_ticks,
+            }
+            for item in world.hazards
+        ]
     return ObserverFrameOut.model_validate(payload)
 
 

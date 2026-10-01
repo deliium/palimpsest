@@ -42,6 +42,16 @@ SMOKE = (
 )
 
 
+_ENVIRONMENT_EVENT_NAMES = frozenset(
+    {
+        "SEASON_CHANGED",
+        "TEMPERATURE_BAND_CHANGED",
+        "RESOURCE_NODE_DEPLETED",
+        "RESOURCE_NODE_RECOVERED",
+        "ENVIRONMENTAL_HAZARD_STARTED",
+        "ENVIRONMENTAL_HAZARD_ENDED",
+    }
+)
 _PRODUCTION_EVENT_NAMES = frozenset(
     {
         "RESOURCE_HARVESTED",
@@ -59,7 +69,7 @@ def test_event_fixtures_cover_closed_semantic_types() -> None:
     previous = tuple(
         name
         for name in sorted(SEMANTIC_EVENT_TYPES)
-        if name not in _PRODUCTION_EVENT_NAMES
+        if name not in _PRODUCTION_EVENT_NAMES | _ENVIRONMENT_EVENT_NAMES
     )
     assert names == previous
     assert len(names) == 20

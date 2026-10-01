@@ -35,6 +35,7 @@ from simulation.runner_models import (
     RUNNER_SCHEMA_VERSION_V11,
     RUNNER_SCHEMA_VERSION_V12,
     RUNNER_SCHEMA_VERSION_V13,
+    RUNNER_SCHEMA_VERSION_V14,
     SUPPORTED_RUNNER_SCHEMA_VERSIONS,
     AgentCognitionSpec,
     AgentRunnerSpec,
@@ -88,8 +89,18 @@ from simulation.serialization import (
     _encode_resource,
     _encode_weather,
 )
+from world.environment import (
+    EnvironmentalDynamicsSpec,
+    HazardKind,
+    HazardRule,
+    Season,
+    SeasonalYield,
+    ShortageWindow,
+    TemperatureBand,
+)
 from world.identifiers import EntityId, WorldId, WorldRevision
 from world.models import physical_rules_fingerprint
+from world.values import ResourceKind, WeatherCondition
 
 __all__ = [
     "RunnerSerializationError",
@@ -312,6 +323,7 @@ _SKILL_SCHEMA_VERSIONS: Final[frozenset[str]] = frozenset(
         RUNNER_SCHEMA_VERSION_V11,
         RUNNER_SCHEMA_VERSION_V12,
         RUNNER_SCHEMA_VERSION_V13,
+    RUNNER_SCHEMA_VERSION_V14,
     }
 )
 _COGNITION_SCHEMA_CONSOLIDATION: Final[frozenset[str]] = frozenset(
@@ -325,6 +337,7 @@ _COGNITION_SCHEMA_CONSOLIDATION: Final[frozenset[str]] = frozenset(
         RUNNER_SCHEMA_VERSION_V11,
         RUNNER_SCHEMA_VERSION_V12,
         RUNNER_SCHEMA_VERSION_V13,
+    RUNNER_SCHEMA_VERSION_V14,
     }
 )
 _COGNITION_SCHEMA_REFLECTION: Final[frozenset[str]] = frozenset(
@@ -337,6 +350,7 @@ _COGNITION_SCHEMA_REFLECTION: Final[frozenset[str]] = frozenset(
         RUNNER_SCHEMA_VERSION_V11,
         RUNNER_SCHEMA_VERSION_V12,
         RUNNER_SCHEMA_VERSION_V13,
+    RUNNER_SCHEMA_VERSION_V14,
     }
 )
 _COGNITION_SCHEMA_PROSPECTIVE: Final[frozenset[str]] = frozenset(
@@ -348,6 +362,7 @@ _COGNITION_SCHEMA_PROSPECTIVE: Final[frozenset[str]] = frozenset(
         RUNNER_SCHEMA_VERSION_V11,
         RUNNER_SCHEMA_VERSION_V12,
         RUNNER_SCHEMA_VERSION_V13,
+    RUNNER_SCHEMA_VERSION_V14,
     }
 )
 _COGNITION_SCHEMA_COUNTERFACTUAL: Final[frozenset[str]] = frozenset(
@@ -358,6 +373,7 @@ _COGNITION_SCHEMA_COUNTERFACTUAL: Final[frozenset[str]] = frozenset(
         RUNNER_SCHEMA_VERSION_V11,
         RUNNER_SCHEMA_VERSION_V12,
         RUNNER_SCHEMA_VERSION_V13,
+    RUNNER_SCHEMA_VERSION_V14,
     }
 )
 _COGNITION_SCHEMA_STRATEGY: Final[frozenset[str]] = frozenset(
@@ -367,6 +383,7 @@ _COGNITION_SCHEMA_STRATEGY: Final[frozenset[str]] = frozenset(
         RUNNER_SCHEMA_VERSION_V11,
         RUNNER_SCHEMA_VERSION_V12,
         RUNNER_SCHEMA_VERSION_V13,
+    RUNNER_SCHEMA_VERSION_V14,
     }
 )
 _COGNITION_SCHEMA_REPUTATION: Final[frozenset[str]] = frozenset(
@@ -375,6 +392,7 @@ _COGNITION_SCHEMA_REPUTATION: Final[frozenset[str]] = frozenset(
         RUNNER_SCHEMA_VERSION_V11,
         RUNNER_SCHEMA_VERSION_V12,
         RUNNER_SCHEMA_VERSION_V13,
+    RUNNER_SCHEMA_VERSION_V14,
     }
 )
 
@@ -653,11 +671,15 @@ def _encode_cognition(
         payload["skill_learning_mode"] = value.skill_learning_mode.value
         for name in _SKILL_RATE_KEYS:
             payload[name] = getattr(value, name)
-    if schema_version in {RUNNER_SCHEMA_VERSION_V12, RUNNER_SCHEMA_VERSION_V13}:
+    if schema_version in {
+        RUNNER_SCHEMA_VERSION_V12,
+        RUNNER_SCHEMA_VERSION_V13,
+        RUNNER_SCHEMA_VERSION_V14,
+    }:
         payload["teaching_interaction_mode"] = value.teaching_interaction_mode.value
         for name in _TEACHING_WEIGHT_KEYS:
             payload[name] = getattr(value, name)
-    if schema_version == RUNNER_SCHEMA_VERSION_V13:
+    if schema_version in {RUNNER_SCHEMA_VERSION_V13, RUNNER_SCHEMA_VERSION_V14}:
         payload["production_knowledge_mode"] = value.production_knowledge_mode.value
         payload["production_catalog"] = _encode_production_catalog(
             value.production_catalog
@@ -668,7 +690,7 @@ def _encode_cognition(
 def _decode_cognition(
     data: dict[str, Any], *, path: str, schema_version: str
 ) -> AgentCognitionSpec:
-    if schema_version == RUNNER_SCHEMA_VERSION_V13:
+    if schema_version in {RUNNER_SCHEMA_VERSION_V13, RUNNER_SCHEMA_VERSION_V14}:
         _require_keys(data, _COGNITION_KEYS_V13, path=path)
     elif schema_version == RUNNER_SCHEMA_VERSION_V12:
         _require_keys(data, _COGNITION_KEYS_V12, path=path)
@@ -779,7 +801,11 @@ def _decode_cognition(
             skill_rates[name] = _required_float(data, name, path=path)
     production_knowledge_mode = ProductionKnowledgeMode.DISABLED
     production_catalog = None
-    if schema_version in {RUNNER_SCHEMA_VERSION_V12, RUNNER_SCHEMA_VERSION_V13}:
+    if schema_version in {
+        RUNNER_SCHEMA_VERSION_V12,
+        RUNNER_SCHEMA_VERSION_V13,
+        RUNNER_SCHEMA_VERSION_V14,
+    }:
         try:
             teaching_interaction_mode = TeachingInteractionMode(
                 _str_field(data, "teaching_interaction_mode", path=path)
@@ -795,7 +821,7 @@ def _decode_cognition(
                 teaching_weights[name] = _nonneg_int_field(data, name, path=path)
             else:
                 teaching_weights[name] = _required_float(data, name, path=path)
-    if schema_version == RUNNER_SCHEMA_VERSION_V13:
+    if schema_version in {RUNNER_SCHEMA_VERSION_V13, RUNNER_SCHEMA_VERSION_V14}:
         try:
             production_knowledge_mode = ProductionKnowledgeMode(
                 _str_field(data, "production_knowledge_mode", path=path)
@@ -902,6 +928,7 @@ def _encode_agent(value: AgentRunnerSpec, *, schema_version: str) -> dict[str, A
         RUNNER_SCHEMA_VERSION_V11,
         RUNNER_SCHEMA_VERSION_V12,
         RUNNER_SCHEMA_VERSION_V13,
+    RUNNER_SCHEMA_VERSION_V14,
     }:
         assert value.name is not None
         payload["name"] = value.name
@@ -1198,6 +1225,10 @@ _RUNNER_ROOT_KEYS_V4: Final[set[str]] = {
     *_RUNNER_ROOT_KEYS_V3,
     "cognition_trace",
 }
+_RUNNER_ROOT_KEYS_V14: Final[set[str]] = {
+    *_RUNNER_ROOT_KEYS_V4,
+    "environmental_dynamics",
+}
 _CAPABILITY_FLAG_KEYS: Final[set[str]] = {
     "advanced_social_inference",
     "multi_hop_testimony_tracking",
@@ -1339,6 +1370,7 @@ def _encode_runner_document(config: SimulationRunnerConfig) -> dict[str, Any]:
         RUNNER_SCHEMA_VERSION_V11,
         RUNNER_SCHEMA_VERSION_V12,
         RUNNER_SCHEMA_VERSION_V13,
+    RUNNER_SCHEMA_VERSION_V14,
     }:
         document["capability_flags"] = _encode_capability_flags(config.capability_flags)
     if config.schema_version in {
@@ -1352,8 +1384,16 @@ def _encode_runner_document(config: SimulationRunnerConfig) -> dict[str, Any]:
         RUNNER_SCHEMA_VERSION_V11,
         RUNNER_SCHEMA_VERSION_V12,
         RUNNER_SCHEMA_VERSION_V13,
+    RUNNER_SCHEMA_VERSION_V14,
     }:
         document["cognition_trace"] = _encode_cognition_trace(config.cognition_trace)
+    if config.schema_version == RUNNER_SCHEMA_VERSION_V14:
+        dynamics = config.environmental_dynamics
+        if type(dynamics) is not EnvironmentalDynamicsSpec:
+            raise TypeError(
+                "environmental_dynamics must be EnvironmentalDynamicsSpec or None"
+            )
+        document["environmental_dynamics"] = dynamics.canonical_payload
     if config.experiment is not None:
         document["experiment"] = {
             "condition_id": config.experiment.condition_id,
@@ -1371,6 +1411,79 @@ def encode_runner_config(config: SimulationRunnerConfig) -> bytes:
     if type(config) is not SimulationRunnerConfig:
         raise TypeError("encode_runner_config requires SimulationRunnerConfig")
     return _canonical_dumps(_encode_runner_document(config))
+
+
+def _decode_environmental_dynamics(data: object) -> EnvironmentalDynamicsSpec:
+    path = "$.environmental_dynamics"
+    if not isinstance(data, dict):
+        raise RunnerSerializationError("invalid_object", path)
+    _require_keys(
+        data,
+        {
+            "hazard_rules",
+            "season_length_ticks",
+            "season_offsets",
+            "shortage_windows",
+            "yields",
+        },
+        path=path,
+    )
+    offsets_raw = data["season_offsets"]
+    if not isinstance(offsets_raw, dict):
+        raise RunnerSerializationError("invalid_object", f"{path}.season_offsets")
+    offsets = {
+        Season(name): _required_float(
+            offsets_raw, name, path=f"{path}.season_offsets"
+        )
+        for name in ("spring", "summer", "autumn", "winter")
+    }
+    yields = tuple(
+        SeasonalYield(
+            resource_kind=ResourceKind(item["resource_kind"]),
+            season=Season(item["season"]),
+            multiplier=item["multiplier"],
+        )
+        for item in _object_list(data["yields"], path=f"{path}.yields")
+    )
+    windows = tuple(
+        ShortageWindow(
+            resource_kind=ResourceKind(item["resource_kind"]),
+            start_tick=item["start_tick"],
+            duration_ticks=item["duration_ticks"],
+        )
+        for item in _object_list(
+            data["shortage_windows"], path=f"{path}.shortage_windows"
+        )
+    )
+    rules = tuple(
+        HazardRule(
+            kind=HazardKind(item["kind"]),
+            season=Season(item["season"]),
+            weather=WeatherCondition(item["weather"]),
+            band=TemperatureBand(item["band"]),
+            duration_ticks=item["duration_ticks"],
+            exposure_extra=item["exposure_extra"],
+        )
+        for item in _object_list(data["hazard_rules"], path=f"{path}.hazard_rules")
+    )
+    return EnvironmentalDynamicsSpec(
+        season_length_ticks=data["season_length_ticks"],
+        season_offsets=offsets,
+        yields=yields,
+        shortage_windows=windows,
+        hazard_rules=rules,
+    )
+
+
+def _object_list(value: object, *, path: str) -> list[dict[str, Any]]:
+    if not isinstance(value, list):
+        raise RunnerSerializationError("invalid_array", path)
+    rows: list[dict[str, Any]] = []
+    for index, item in enumerate(value):
+        if not isinstance(item, dict):
+            raise RunnerSerializationError("invalid_object", f"{path}[{index}]")
+        rows.append(item)
+    return rows
 
 
 def decode_runner_config(payload: bytes) -> SimulationRunnerConfig:
@@ -1391,7 +1504,9 @@ def decode_runner_config(payload: bytes) -> SimulationRunnerConfig:
         raise RunnerSerializationError("invalid_string", "$.schema_version")
     if schema_version not in SUPPORTED_RUNNER_SCHEMA_VERSIONS:
         raise RunnerSerializationError("unsupported_version", "$.schema_version")
-    if schema_version in {
+    if schema_version == RUNNER_SCHEMA_VERSION_V14:
+        root_keys = _RUNNER_ROOT_KEYS_V14
+    elif schema_version in {
         RUNNER_SCHEMA_VERSION_V4,
         RUNNER_SCHEMA_VERSION_V5,
         RUNNER_SCHEMA_VERSION_V6,
@@ -1402,6 +1517,7 @@ def decode_runner_config(payload: bytes) -> SimulationRunnerConfig:
         RUNNER_SCHEMA_VERSION_V11,
         RUNNER_SCHEMA_VERSION_V12,
         RUNNER_SCHEMA_VERSION_V13,
+    RUNNER_SCHEMA_VERSION_V14,
     }:
         root_keys = _RUNNER_ROOT_KEYS_V4
     elif schema_version == RUNNER_SCHEMA_VERSION_V3:
@@ -1485,6 +1601,7 @@ def decode_runner_config(payload: bytes) -> SimulationRunnerConfig:
         RUNNER_SCHEMA_VERSION_V11,
         RUNNER_SCHEMA_VERSION_V12,
         RUNNER_SCHEMA_VERSION_V13,
+    RUNNER_SCHEMA_VERSION_V14,
     }:
         capability_flags = _decode_capability_flags(
             data["capability_flags"], path="$.capability_flags"
@@ -1503,6 +1620,7 @@ def decode_runner_config(payload: bytes) -> SimulationRunnerConfig:
         RUNNER_SCHEMA_VERSION_V11,
         RUNNER_SCHEMA_VERSION_V12,
         RUNNER_SCHEMA_VERSION_V13,
+    RUNNER_SCHEMA_VERSION_V14,
     }:
         cognition_trace = _decode_cognition_trace(
             data["cognition_trace"], path="$.cognition_trace"
@@ -1569,6 +1687,11 @@ def decode_runner_config(payload: bytes) -> SimulationRunnerConfig:
             derivation_version=_str_field(data, "derivation_version", path="$"),
             mortality_policy_version=_str_field(
                 data, "mortality_policy_version", path="$"
+            ),
+            environmental_dynamics=(
+                _decode_environmental_dynamics(data["environmental_dynamics"])
+                if schema_version == RUNNER_SCHEMA_VERSION_V14
+                else None
             ),
         )
     except RunnerSerializationError:

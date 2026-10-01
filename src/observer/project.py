@@ -10,11 +10,13 @@ from observer.contracts import (
     ObserverBodyMeasures,
     ObserverEvent,
     ObserverFrame,
+    ObserverHazard,
     ObserverItem,
     ObserverLocation,
     ObserverPlaybackCursor,
     ObserverResource,
     ObserverStructure,
+    ObserverTemperatureBand,
     ObserverWeather,
     ObserverWorldState,
     PresentationSlot,
@@ -161,7 +163,30 @@ def project_frame(
         resources=resources,
         weather=weather,
         structures=structures,
+        season=scene.season,
+        temperature_bands=tuple(
+            ObserverTemperatureBand(location_id=location_id, band=band)
+            for location_id, band in scene.temperature_bands
+        ),
+        hazards=tuple(
+            ObserverHazard(
+                location_id=location_id,
+                hazard_kind=kind,
+                remaining_ticks=remaining,
+            )
+            for location_id, kind, remaining in scene.hazards
+        ),
     )
+    if scene.season is not None:
+        last_kind = "-" if not events else events[-1].domain_kind
+        _LOGGER.debug(
+            "environment_projected season=%s band_count=%s hazard_count=%s "
+            "event_kind=%s",
+            scene.season,
+            len(scene.temperature_bands),
+            len(scene.hazards),
+            last_kind,
+        )
     last = None if not events else events[-1]
     cursor = ObserverPlaybackCursor(
         run_id=scene.run_id,

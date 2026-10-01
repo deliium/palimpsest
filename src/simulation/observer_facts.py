@@ -8,9 +8,15 @@ from dataclasses import dataclass
 
 from simulation.bootstrap import AgentRegistration
 from simulation.persistence import WorldSnapshot
+from world.environment import (
+    ActiveHazard,
+    EnvironmentalDynamicsSpec,
+    temperature_band,
+)
 from world.events import WorldEvent
-from world.models import AgentBody, Item, Location, Resource, Weather
+from world.models import AgentBody, Item, Location, PhysicalRules, Resource, Weather
 from world.production import Structure
+from world.values import round_physical
 
 _LOGGER = logging.getLogger("simulation.observer_facts")
 
@@ -43,6 +49,9 @@ class ObjectiveFacts:
     weather: tuple[Weather, ...]
     registrations: tuple[AgentRegistration, ...]
     structures: tuple[Structure, ...] = ()
+    season: str | None = None
+    temperature_bands: tuple[tuple[str, str], ...] = ()
+    hazards: tuple[tuple[str, str, int], ...] = ()
 
 
 @dataclass(frozen=True, slots=True)
@@ -60,6 +69,9 @@ class ObjectiveScene:
     weather: tuple[Weather, ...]
     registrations: tuple[AgentRegistration, ...]
     structures: tuple[Structure, ...] = ()
+    season: str | None = None
+    temperature_bands: tuple[tuple[str, str], ...] = ()
+    hazards: tuple[tuple[str, str, int], ...] = ()
 
 
 def _freeze_facts(facts: ObjectiveFacts) -> ObjectiveScene:
@@ -89,6 +101,9 @@ def _freeze_facts(facts: ObjectiveFacts) -> ObjectiveScene:
         weather=weather,
         registrations=tuple(facts.registrations),
         structures=tuple(facts.structures),
+        season=facts.season,
+        temperature_bands=tuple(facts.temperature_bands),
+        hazards=tuple(facts.hazards),
     )
     _LOGGER.debug(
         "objective_scene_built run_id=%s tick=%s location_count=%s "
@@ -100,6 +115,55 @@ def _freeze_facts(facts: ObjectiveFacts) -> ObjectiveScene:
         len(scene.items),
     )
     return scene
+
+
+def environment_view(
+    *,
+    spec: object | None,
+    tick: int,
+    locations: Sequence[Location],
+    weather: Sequence[Weather],
+    active_hazards: Sequence[object],
+    rules: PhysicalRules,
+) -> tuple[str | None, tuple[tuple[str, str], ...], tuple[tuple[str, str, int], ...]]:
+    """Current season, local bands, and hazard tokens. Absent spec omits them."""
+    if spec is None:
+        return None, (), ()
+    if type(spec) is not EnvironmentalDynamicsSpec:
+        raise TypeError(
+            "environmental_dynamics must be EnvironmentalDynamicsSpec or None"
+        )
+    if type(rules) is not PhysicalRules:
+        raise TypeError("rules must be PhysicalRules")
+    by_location = {item.location_id: item for item in weather}
+    phase = rules.day_phase_for_tick(tick)
+    phase_offsets = rules.phase_temperature_offset
+    weather_offsets = rules.weather_temperature_offset
+    assert phase_offsets is not None and weather_offsets is not None
+    season_offset = spec.offset_for(spec.season_at(tick))
+    bands: list[tuple[str, str]] = []
+    for location in sorted(locations, key=lambda item: item.entity_id.value):
+        local = by_location[location.entity_id]
+        ambient = round_physical(
+            location.base_temperature.value
+            + weather_offsets[local.condition]
+            + phase_offsets[phase]
+            + season_offset
+        )
+        bands.append((location.entity_id.value, temperature_band(ambient).value))
+    hazards: list[tuple[str, str, int]] = []
+    for hazard in active_hazards:
+        if type(hazard) is not ActiveHazard or not hazard.contains(tick):
+            continue
+        hazards.append(
+            (
+                hazard.location_id.value,
+                hazard.kind.value,
+                hazard.remaining_ticks(tick),
+            )
+        )
+    hazards.sort(key=lambda item: (item[0], item[1]))
+    return spec.season_at(tick).value, tuple(bands), tuple(hazards)
 
 
 def scene_from_facts(facts: ObjectiveFacts) -> ObjectiveScene:
