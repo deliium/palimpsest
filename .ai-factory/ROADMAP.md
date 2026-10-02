@@ -50,9 +50,11 @@ Establish the modular-monolith foundation: packaging, bounded packages, typed co
 
 **Still unimplemented:** `multi_hop_testimony_tracking`. Enabling it still fails closed with `capability_unimplemented`.
 
+**Next plan:** `.ai-factory/plans/v2-emergent-group-formation.md` (also `.ai-factory/plans/main.md`). Opt-in owner-scoped group formation on `runner-config-v16`. It does not own a capability flag. Territorial claims already landed as `runner-config-v15`, Experiment V, and `spatial_control@1`.
+
 **Out of scope until planned:** free-form affect narration, personality trait systems, HTTP debug UI for emotion, collapsing emotion+drives+goals into one reward scalar.
 
-**Plans:** `.ai-factory/plans/v2-emergent-dynamic-identity.md` (owns `extended_self_model` only). `.ai-factory/plans/v2-learned-causal-worldmodel.md` (owns `predictive_world_model` only). `.ai-factory/plans/v2-first-order-theory-of-mind.md` (owns `advanced_social_inference` only). Opt-in work that did not claim a flag already shipped as M5.4 and M5.5.
+**Plans:** `.ai-factory/plans/v2-emergent-dynamic-identity.md` (owns `extended_self_model` only). `.ai-factory/plans/v2-learned-causal-worldmodel.md` (owns `predictive_world_model` only). `.ai-factory/plans/v2-first-order-theory-of-mind.md` (owns `advanced_social_inference` only). Opt-in work that did not claim a flag already shipped as M5.4 and M5.5. `.ai-factory/plans/v2-subjective-territorial-claims.md` (no flag; `runner-config-v15`). `.ai-factory/plans/v2-emergent-group-formation.md` (next; no flag; `runner-config-v16`).
 
 ## V1 status
 
