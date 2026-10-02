@@ -50,7 +50,7 @@ __all__ = [
 ]
 
 METRIC_CATALOG_VERSION: Final[str] = "metric-catalog-v1"
-METRIC_FAMILY_COUNT: Final[int] = 28
+METRIC_FAMILY_COUNT: Final[int] = 29
 
 # Align with existing memory-drift / transmission document versions.
 _ALGO_V1: Final[str] = "1"
@@ -105,6 +105,7 @@ class MetricFamilyId(StrEnum):
     SKILL_LEARNING = "skill_learning"
     CULTURAL_TRANSMISSION = "cultural_transmission"
     SPATIAL_CONTROL = "spatial_control"
+    EMERGENT_GROUP_FORMATION = "emergent_group_formation"
 
 
 class DenominatorKind(StrEnum):
@@ -1084,6 +1085,41 @@ def _spec_spatial_control() -> MetricSpecification:
     )
 
 
+def _spec_emergent_group_formation() -> MetricSpecification:
+    return _base(
+        family_id=MetricFamilyId.EMERGENT_GROUP_FORMATION,
+        evidence_inputs=frozenset({EvidenceStage.OBJECTIVE_EVENT_STATE}),
+        population="caller_supplied_interaction_rows",
+        denominator="maximal_cliques",
+        denominator_kind=DenominatorKind.OCCURRENCE,
+        cohort_window="caller-supplied rows after the run",
+        deceased_policy="not_applicable",
+        zero_holding_policy="omitted rows -> availability=absent for that signal",
+        opportunity_vs_occurrence=(
+            "an edge requires the signal threshold; "
+            "absent rows are not a zero cluster"
+        ),
+        self_edge_policy="self pairs are dropped",
+        censoring_policy=(
+            "omitted belief triples leave shared_beliefs absent; "
+            "shared_enemies is a shared_harm reading only"
+        ),
+        formulas={
+            "signal_count": "signals whose input rows were supplied",
+            "cluster_count": "maximal cliques of size at least 2",
+            "agent_count": "agents that belong to at least one cluster",
+            "shared_enemies": "shared_harm cluster count stored as a reading",
+        },
+        value_keys=(
+            "agent_count",
+            "cluster_count",
+            "shared_enemies",
+            "signal_count",
+        ),
+        empty_case="availability=absent when every signal lacks rows",
+    )
+
+
 def _spec_cultural_transmission() -> MetricSpecification:
     return _base(
         family_id=MetricFamilyId.CULTURAL_TRANSMISSION,
@@ -1759,6 +1795,7 @@ _BUILDERS: Final[tuple[Callable[[], MetricSpecification], ...]] = (
     _spec_skill_learning,
     _spec_cultural_transmission,
     _spec_spatial_control,
+    _spec_emergent_group_formation,
 )
 
 

@@ -43,6 +43,11 @@ from analysis.evidence import (
     closed_evidence_stages,
     require_evidence_stage,
 )
+from analysis.group_formation_metrics import (
+    EMERGENT_GROUP_FORMATION_METRIC_VERSION,
+    compute_emergent_group_candidates,
+    compute_group_persistence,
+)
 from analysis.identity_dynamics_metrics import (
     IDENTITY_DYNAMICS_METRIC_VERSION,
     build_identity_audit,
@@ -239,6 +244,7 @@ __all__ = [
     "CULTURAL_TRANSMISSION_METRIC_VERSION",
     "DISTRIBUTED_REPUTATION_METRIC_VERSION",
     "DRIFT_METRIC_VERSION",
+    "EMERGENT_GROUP_FORMATION_METRIC_VERSION",
     "EVENT_FACT_PROJECTOR_VERSION",
     "EVIDENCE_STAGE_SCHEMA_VERSION",
     "GRAPH_NODE_ORDER_POLICY",
@@ -341,9 +347,11 @@ __all__ = [
     "compute_counterfactual_reasoning_metrics",
     "compute_cultural_transmission",
     "compute_distributed_reputation",
+    "compute_emergent_group_candidates",
     "compute_false_belief_persistence",
     "compute_goal_completion",
     "compute_group_community_structure",
+    "compute_group_persistence",
     "compute_identity_dynamics",
     "compute_knowledge_diffusion",
     "compute_memory_drift",

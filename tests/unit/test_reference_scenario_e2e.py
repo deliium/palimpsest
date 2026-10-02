@@ -259,6 +259,7 @@ def test_all_metric_families_assemble(reference_outcome) -> None:
             MetricFamilyId.MEMORY_DYNAMICS,
             MetricFamilyId.OFFLINE_CONSOLIDATION,
             MetricFamilyId.PROSPECTIVE_IMAGINATION,
+            MetricFamilyId.EMERGENT_GROUP_FORMATION,
         }
     }
     assert required.issubset(produced)
@@ -295,5 +296,7 @@ async def test_reference_run_logs_are_privacy_safe(
     caplog: pytest.LogCaptureFixture,
 ) -> None:
     with caplog.at_level(logging.DEBUG):
-        await run_reference_scenario(run_id="run-ref-privacy", max_ticks=4, death_tick=2)
+        await run_reference_scenario(
+            run_id="run-ref-privacy", max_ticks=4, death_tick=2
+        )
     assert_owned_logs_privacy_safe(caplog.records)
