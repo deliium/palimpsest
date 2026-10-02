@@ -33,6 +33,10 @@ from agents.cognition.counterfactual import (
     default_counterfactual_policy,
 )
 from agents.cognition.epistemic import EpistemicPolicy, default_epistemic_policy
+from agents.cognition.group_formation import (
+    GroupFormationPolicy,
+    default_group_formation_policy,
+)
 from agents.cognition.loop import CognitiveLoop
 from agents.cognition.production import ProductionKnowledgeMode
 from agents.cognition.prospective import ProspectivePolicy, default_prospective_policy
@@ -229,6 +233,17 @@ class CognitionTerritorialClaimMode(StrEnum):
     DETERMINISTIC = "deterministic"
 
 
+class CognitionGroupFormationMode(StrEnum):
+    """Owner-scoped membership ledger. Disabled leaves the snapshot field unset.
+
+    Lockstep with ``simulation.GroupFormationMode``. This is not a
+    ``V2CapabilityFlags`` slot. ``DISABLED`` does not allocate a ledger.
+    """
+
+    DISABLED = "disabled"
+    DETERMINISTIC = "deterministic"
+
+
 def _unit_interval(name: str, value: object) -> float:
     if isinstance(value, bool) or not isinstance(value, (int, float)):
         raise ValueError(f"{name}: not_unit_interval")
@@ -313,6 +328,10 @@ class CognitionLoopConfig:
         CognitionTerritorialClaimMode.DISABLED
     )
     territorial_claim_policy: TerritorialClaimPolicy | None = None
+    group_formation_mode: CognitionGroupFormationMode = (
+        CognitionGroupFormationMode.DISABLED
+    )
+    group_formation_policy: GroupFormationPolicy | None = None
     production_knowledge_mode: ProductionKnowledgeMode = (
         ProductionKnowledgeMode.DISABLED
     )
@@ -527,6 +546,26 @@ class CognitionLoopConfig:
             raise TypeError(
                 "territorial_claim_policy must be TerritorialClaimPolicy or None"
             )
+        if type(self.group_formation_mode) is not CognitionGroupFormationMode:
+            _LOG.error(
+                "invalid_enum path=group_formation_mode reason_code=invalid_mode"
+            )
+            raise TypeError("group_formation_mode must be CognitionGroupFormationMode")
+        if self.group_formation_mode is CognitionGroupFormationMode.DISABLED:
+            object.__setattr__(self, "group_formation_policy", None)
+        elif self.group_formation_policy is None:
+            object.__setattr__(
+                self,
+                "group_formation_policy",
+                default_group_formation_policy(),
+            )
+        elif type(self.group_formation_policy) is not GroupFormationPolicy:
+            _LOG.error(
+                "invalid_enum path=group_formation_policy reason_code=invalid_type"
+            )
+            raise TypeError(
+                "group_formation_policy must be GroupFormationPolicy or None"
+            )
         if type(self.production_knowledge_mode) is not ProductionKnowledgeMode:
             _LOG.error(
                 "invalid_enum path=production_knowledge_mode reason_code=invalid_mode"
@@ -680,7 +719,8 @@ class CognitionLoopConfig:
                 if self.reputation_policy is None
                 else self.reputation_policy.version
             ),
-            "territorial_claim_mode": self.territorial_claim_mode.value,
+                    "territorial_claim_mode": self.territorial_claim_mode.value,
+                    "group_formation_mode": self.group_formation_mode.value,
             "territorial_claim_policy_version": (
                 None
                 if self.territorial_claim_policy is None

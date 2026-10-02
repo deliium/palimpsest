@@ -575,7 +575,11 @@ def _cognition_config_for(
         skill_mode.value,
         None if belief_policy is None else belief_policy.version,
     )
-    from agents.cognition.configuration import CognitionTerritorialClaimMode
+    from agents.cognition.configuration import (
+        CognitionGroupFormationMode,
+        CognitionTerritorialClaimMode,
+    )
+    from agents.cognition.group_formation import default_group_formation_policy
     from agents.cognition.production import (
         ProductionKnowledgeMode as CognitionProductionKnowledgeMode,
     )
@@ -610,6 +614,15 @@ def _cognition_config_for(
         territorial_mode.value,
         None if territorial_policy is None else territorial_policy.version,
     )
+    group_mode = CognitionGroupFormationMode(spec.group_formation_mode.value)
+    group_policy = None
+    if group_mode is CognitionGroupFormationMode.DETERMINISTIC:
+        group_policy = default_group_formation_policy()
+    _LOG.debug(
+        "cognition_config_group_formation_mode mode=%s policy_version=%s",
+        group_mode.value,
+        None if group_policy is None else group_policy.version,
+    )
     return CognitionLoopConfig(
         memory_mode=CognitionMemoryMode(spec.memory_mode.value),
         imagination_mode=CognitionImaginationMode(spec.imagination_mode.value),
@@ -641,6 +654,8 @@ def _cognition_config_for(
         teaching_claim_policy=teaching_policy,
         territorial_claim_mode=territorial_mode,
         territorial_claim_policy=territorial_policy,
+        group_formation_mode=group_mode,
+        group_formation_policy=group_policy,
         production_knowledge_mode=CognitionProductionKnowledgeMode(
             spec.production_knowledge_mode.value
         ),

@@ -59,6 +59,7 @@ from simulation.runner_models import (
     RUNNER_SCHEMA_VERSION_V13,
     RUNNER_SCHEMA_VERSION_V14,
     RUNNER_SCHEMA_VERSION_V15,
+    RUNNER_SCHEMA_VERSION_V16,
     SUPPORTED_RESULT_SCHEMA_VERSIONS,
     SUPPORTED_RUNNER_SCHEMA_VERSIONS,
 )
@@ -107,6 +108,7 @@ __all__ = [
     "RUNNER_SCHEMA_VERSION_V13",
     "RUNNER_SCHEMA_VERSION_V14",
     "RUNNER_SCHEMA_VERSION_V15",
+    "RUNNER_SCHEMA_VERSION_V16",
     "STREAM_ENVELOPE_VERSION",
     "WS_PROTOCOL_VERSION",
     "CompatibilityEntry",
@@ -236,6 +238,15 @@ _MATRIX: dict[str, CompatibilityEntry] = {
             "skill learning, teaching, production knowledge, reflection, "
             "consolidation, prospective imagination, counterfactual reasoning, "
             f"and environmental dynamics stay legal on {RUNNER_SCHEMA_VERSION_V15}; "
+            f"{RUNNER_SCHEMA_VERSION_V16} is emitted only when some agent's "
+            "group formation mode is deterministic and carries every v15 "
+            "cognition key plus group_formation_mode; a territorial-only "
+            "config stays on "
+            f"{RUNNER_SCHEMA_VERSION_V15}; communication strategy, reputation, "
+            "skill learning, teaching, production knowledge, reflection, "
+            "consolidation, prospective imagination, counterfactual reasoning, "
+            "environmental dynamics, and territorial claims stay legal on "
+            f"{RUNNER_SCHEMA_VERSION_V16}; "
             f"{RUNNER_SCHEMA_VERSION_V3} retained for capability flags; "
             "v1-v4 omit consolidation_mode, reflection_mode, prospective_mode, "
             "counterfactual_mode, communication_strategy_mode, and "
@@ -428,6 +439,7 @@ _LOG.debug(
         "runner_v13": RUNNER_SCHEMA_VERSION_V13,
         "runner_v14": RUNNER_SCHEMA_VERSION_V14,
         "runner_v15": RUNNER_SCHEMA_VERSION_V15,
+        "runner_v16": RUNNER_SCHEMA_VERSION_V16,
         "alembic_head": ALEMBIC_HEAD_REVISION,
         "accepted_event_count": len(ACCEPTED_EVENT_SCHEMA_VERSIONS),
     },

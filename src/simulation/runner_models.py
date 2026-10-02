@@ -82,6 +82,7 @@ RUNNER_SCHEMA_VERSION_V12: Final[str] = "runner-config-v12"
 RUNNER_SCHEMA_VERSION_V13: Final[str] = "runner-config-v13"
 RUNNER_SCHEMA_VERSION_V14: Final[str] = "runner-config-v14"
 RUNNER_SCHEMA_VERSION_V15: Final[str] = "runner-config-v15"
+RUNNER_SCHEMA_VERSION_V16: Final[str] = "runner-config-v16"
 RUNNER_SCHEMA_VERSION: Final[str] = RUNNER_SCHEMA_VERSION_V4
 SUPPORTED_RUNNER_SCHEMA_VERSIONS: Final[frozenset[str]] = frozenset(
     {
@@ -100,6 +101,7 @@ SUPPORTED_RUNNER_SCHEMA_VERSIONS: Final[frozenset[str]] = frozenset(
         RUNNER_SCHEMA_VERSION_V13,
         RUNNER_SCHEMA_VERSION_V14,
         RUNNER_SCHEMA_VERSION_V15,
+        RUNNER_SCHEMA_VERSION_V16,
     }
 )
 RESULT_SCHEMA_VERSION_V1: Final[str] = "runner-result-v1"
@@ -289,6 +291,19 @@ class TerritorialClaimMode(StrEnum):
     DETERMINISTIC = "deterministic"
 
 
+class GroupFormationMode(StrEnum):
+    """Closed owner-scoped group-formation treatments.
+
+    Default is ``DISABLED``, which leaves the snapshot field unset and does
+    not change commands, memories, relationships, beliefs, reputation,
+    territorial claims, or audits. This is not a ``V2CapabilityFlags`` slot.
+    Lockstep with ``agents.cognition.CognitionGroupFormationMode``.
+    """
+
+    DISABLED = "disabled"
+    DETERMINISTIC = "deterministic"
+
+
 class ProductionKnowledgeMode(StrEnum):
     """Closed production-belief treatments.
 
@@ -427,6 +442,7 @@ _SKILL_SCHEMAS: Final[frozenset[str]] = frozenset(
         RUNNER_SCHEMA_VERSION_V13,
         RUNNER_SCHEMA_VERSION_V14,
         RUNNER_SCHEMA_VERSION_V15,
+        RUNNER_SCHEMA_VERSION_V16,
     }
 )
 
@@ -1277,6 +1293,7 @@ class AgentCognitionSpec:
     )
     production_catalog: ProductionCatalog = field(default_factory=ProductionCatalog)
     territorial_claim_mode: TerritorialClaimMode = TerritorialClaimMode.DISABLED
+    group_formation_mode: GroupFormationMode = GroupFormationMode.DISABLED
 
     def __post_init__(self) -> None:
         if type(self.agent_id) is not AgentId:
@@ -1365,6 +1382,14 @@ class AgentCognitionSpec:
             )
             raise TypeError(
                 "AgentCognitionSpec.territorial_claim_mode must be TerritorialClaimMode"
+            )
+        if type(self.group_formation_mode) is not GroupFormationMode:
+            _LOGGER.error(
+                "invalid_enum path=AgentCognitionSpec.group_formation_mode "
+                "reason_code=invalid_mode"
+            )
+            raise TypeError(
+                "AgentCognitionSpec.group_formation_mode must be GroupFormationMode"
             )
         if self.policy_version != COGNITION_POLICY_VERSION:
             raise ValueError("unsupported cognition policy_version")
@@ -1861,6 +1886,7 @@ class SimulationRunnerConfig:
             RUNNER_SCHEMA_VERSION_V13,
             RUNNER_SCHEMA_VERSION_V14,
             RUNNER_SCHEMA_VERSION_V15,
+            RUNNER_SCHEMA_VERSION_V16,
         }
         if non_disabled and self.schema_version not in consolidation_schemas:
             _LOGGER.error(
@@ -1902,6 +1928,7 @@ class SimulationRunnerConfig:
             RUNNER_SCHEMA_VERSION_V13,
             RUNNER_SCHEMA_VERSION_V14,
             RUNNER_SCHEMA_VERSION_V15,
+            RUNNER_SCHEMA_VERSION_V16,
         }
         if reflecting and self.schema_version not in reflection_schemas:
             _LOGGER.error(
@@ -1943,6 +1970,7 @@ class SimulationRunnerConfig:
             RUNNER_SCHEMA_VERSION_V13,
             RUNNER_SCHEMA_VERSION_V14,
             RUNNER_SCHEMA_VERSION_V15,
+            RUNNER_SCHEMA_VERSION_V16,
         }
         if planning and self.schema_version not in prospective_schemas:
             _LOGGER.error(
@@ -1983,6 +2011,7 @@ class SimulationRunnerConfig:
             RUNNER_SCHEMA_VERSION_V13,
             RUNNER_SCHEMA_VERSION_V14,
             RUNNER_SCHEMA_VERSION_V15,
+            RUNNER_SCHEMA_VERSION_V16,
         }
         if considering and self.schema_version not in counterfactual_schemas:
             _LOGGER.error(
@@ -2022,6 +2051,7 @@ class SimulationRunnerConfig:
             RUNNER_SCHEMA_VERSION_V13,
             RUNNER_SCHEMA_VERSION_V14,
             RUNNER_SCHEMA_VERSION_V15,
+            RUNNER_SCHEMA_VERSION_V16,
         }:
             _LOGGER.error(
                 "invalid_fields path=agents.cognition.communication_strategy_mode "
@@ -2059,6 +2089,7 @@ class SimulationRunnerConfig:
             RUNNER_SCHEMA_VERSION_V13,
             RUNNER_SCHEMA_VERSION_V14,
             RUNNER_SCHEMA_VERSION_V15,
+            RUNNER_SCHEMA_VERSION_V16,
         }:
             _LOGGER.error(
                 "invalid_fields path=agents.cognition.reputation_mode "
@@ -2138,6 +2169,7 @@ class SimulationRunnerConfig:
             RUNNER_SCHEMA_VERSION_V13,
             RUNNER_SCHEMA_VERSION_V14,
             RUNNER_SCHEMA_VERSION_V15,
+            RUNNER_SCHEMA_VERSION_V16,
         }:
             _LOGGER.error(
                 "invalid_fields path=agents.cognition.teaching_interaction_mode "
@@ -2166,6 +2198,7 @@ class SimulationRunnerConfig:
         dynamics_schemas = {
             RUNNER_SCHEMA_VERSION_V14,
             RUNNER_SCHEMA_VERSION_V15,
+            RUNNER_SCHEMA_VERSION_V16,
         }
         if (dynamics is not None and self.schema_version not in dynamics_schemas) or (
             self.schema_version == RUNNER_SCHEMA_VERSION_V14 and dynamics is None
@@ -2176,8 +2209,9 @@ class SimulationRunnerConfig:
                 "environment_spec_mismatch",
             )
             raise ValueError(
-                "environmental dynamics require runner-config-v14 "
-                "or runner-config-v15 (code=environment_spec_mismatch)"
+                "environmental dynamics require runner-config-v14, "
+                "runner-config-v15, or runner-config-v16 "
+                "(code=environment_spec_mismatch)"
             )
         claim_modes = tuple(
             agent.cognition.territorial_claim_mode for agent in self.agents
@@ -2185,7 +2219,10 @@ class SimulationRunnerConfig:
         claiming = tuple(
             mode for mode in claim_modes if mode is not TerritorialClaimMode.DISABLED
         )
-        if claiming and self.schema_version != RUNNER_SCHEMA_VERSION_V15:
+        if claiming and self.schema_version not in {
+            RUNNER_SCHEMA_VERSION_V15,
+            RUNNER_SCHEMA_VERSION_V16,
+        }:
             _LOGGER.error(
                 "invalid_fields path=agents.cognition.territorial_claim_mode "
                 "reason_code=territorial_claim_mode_requires_v15 schema_version=%s",
@@ -2193,7 +2230,7 @@ class SimulationRunnerConfig:
             )
             raise ValueError(
                 "deterministic territorial_claim_mode requires runner-config-v15 "
-                "(code=territorial_claim_mode_requires_v15)"
+                "or runner-config-v16 (code=territorial_claim_mode_requires_v15)"
             )
         if self.schema_version == RUNNER_SCHEMA_VERSION_V15 and not claiming:
             _LOGGER.error(
@@ -2204,6 +2241,32 @@ class SimulationRunnerConfig:
             raise ValueError(
                 "runner-config-v15 requires a deterministic territorial_claim_mode "
                 "(code=v15_requires_territorial_claims)"
+            )
+        group_modes = tuple(
+            agent.cognition.group_formation_mode for agent in self.agents
+        )
+        grouping = any(
+            mode is GroupFormationMode.DETERMINISTIC for mode in group_modes
+        )
+        if grouping and self.schema_version != RUNNER_SCHEMA_VERSION_V16:
+            _LOGGER.error(
+                "invalid_fields path=agents.cognition.group_formation_mode "
+                "reason_code=group_formation_mode_requires_v16 schema_version=%s",
+                self.schema_version,
+            )
+            raise ValueError(
+                "deterministic group_formation_mode requires runner-config-v16 "
+                "(code=group_formation_mode_requires_v16)"
+            )
+        if self.schema_version == RUNNER_SCHEMA_VERSION_V16 and not grouping:
+            _LOGGER.error(
+                "invalid_fields path=schema_version "
+                "reason_code=v16_requires_group_formation schema_version=%s",
+                self.schema_version,
+            )
+            raise ValueError(
+                "runner-config-v16 requires a deterministic group_formation_mode "
+                "(code=v16_requires_group_formation)"
             )
         if dynamics is not None:
             logging.getLogger("simulation.runner").info(
@@ -2236,6 +2299,7 @@ class SimulationRunnerConfig:
             RUNNER_SCHEMA_VERSION_V13,
             RUNNER_SCHEMA_VERSION_V14,
             RUNNER_SCHEMA_VERSION_V15,
+            RUNNER_SCHEMA_VERSION_V16,
         }:
             _LOGGER.error(
                 "invalid_fields path=agents.cognition.production_knowledge_mode "
@@ -2250,6 +2314,7 @@ class SimulationRunnerConfig:
             RUNNER_SCHEMA_VERSION_V13,
             RUNNER_SCHEMA_VERSION_V14,
             RUNNER_SCHEMA_VERSION_V15,
+            RUNNER_SCHEMA_VERSION_V16,
         }:
             from world.production import production_catalog_digest
 
@@ -2306,6 +2371,7 @@ class SimulationRunnerConfig:
             RUNNER_SCHEMA_VERSION_V13,
             RUNNER_SCHEMA_VERSION_V14,
             RUNNER_SCHEMA_VERSION_V15,
+            RUNNER_SCHEMA_VERSION_V16,
         }:
             shared_teaching = teaching_weight_tuple(self.agents[0].cognition)
             if any(
