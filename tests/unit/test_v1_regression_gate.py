@@ -212,3 +212,13 @@ async def test_flags_off_runner_uses_emotional_passthrough() -> None:
         assert type(loop._emotional_state) is PassthroughEmotionalStateAppraiser
         result = await runner.run()
     assert result.ticks_committed == 2
+
+
+def test_v1_catalog_stays_experiments_a_through_e() -> None:
+    assert [item[0] for item in _CATALOG_BUILDERS] == [
+        "experiment-a-memory",
+        "experiment-b-imagination",
+        "experiment-c-mortality",
+        "experiment-d-drives",
+        "experiment-e-false-story",
+    ]

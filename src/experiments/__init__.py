@@ -29,6 +29,7 @@ from experiments.catalog import (
     experiment_s_cultural_transmission,
     experiment_t_skill_specialization,
     experiment_u_seasonal_scarcity,
+    experiment_v_territorial_claims,
     v1_regression_profile,
 )
 from experiments.collectors import (
@@ -213,6 +214,7 @@ __all__ = [
     "experiment_s_cultural_transmission",
     "experiment_t_skill_specialization",
     "experiment_u_seasonal_scarcity",
+    "experiment_v_territorial_claims",
     "make_false_story_intervention",
     "map_consolidation_audits_to_report",
     "map_recall_audits_to_dynamics_report",

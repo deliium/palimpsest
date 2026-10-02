@@ -5,7 +5,7 @@ from __future__ import annotations
 import hashlib
 import json
 from collections.abc import Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import Final
 
 from simulation.models import StochasticIdentity
@@ -41,6 +41,15 @@ class ExperimentSeedMatrix:
         object.__setattr__(self, "seeds", seeds)
         if type(self.replicates_per_seed) is not int or self.replicates_per_seed < 1:
             raise ValueError("replicates_per_seed must be a positive int")
+
+
+def _scenario_layout(config: SimulationRunnerConfig) -> object:
+    """Scenario identity with resource quantities removed.
+
+    Paired arms share locations and bodies. A resource maximum may differ,
+    as in the scarce and abundant territorial worlds.
+    """
+    return replace(config.scenario, resources=())
 
 
 @dataclass(frozen=True, slots=True)
@@ -86,6 +95,7 @@ class ExperimentDefinition:
             raise ValueError("conditions must include at least two arms")
         seen: set[str] = set()
         base_scenario = None
+        base_layout = None
         base_seed = None
         base_stochastic = None
         for condition in conditions:
@@ -97,10 +107,13 @@ class ExperimentDefinition:
             cfg = condition.runner_config
             if base_scenario is None:
                 base_scenario = scenario_fingerprint(cfg)
+                base_layout = _scenario_layout(cfg)
                 base_seed = cfg.seed
                 base_stochastic = cfg.stochastic_identity
             else:
-                if scenario_fingerprint(cfg) != base_scenario:
+                if scenario_fingerprint(cfg) != base_scenario and _scenario_layout(
+                    cfg
+                ) != base_layout:
                     raise ValueError("paired conditions require identical scenario")
                 if cfg.seed != base_seed:
                     raise ValueError("paired conditions require identical seed")

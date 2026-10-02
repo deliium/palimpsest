@@ -39,6 +39,10 @@ The choice is a `CommunicationIntent`. The world receives only the `Talk`, `Ask`
 
 `communication_strategy@1` assigns the labels after the run. `memory_error` is only an `assert_match` whose `cited_event_id` names a committed occurrence that does not cover the source tokens. `uncertain_inference` and `deliberate_deception` are the other two failure labels. Refusal and omission are `not_asserted`. The listener's observation, memory trace, and trust update do not receive those labels. An uncontradicted false statement does not itself change trust; a later contradiction still uses the existing testimony path.
 
+## Subjective territorial claims
+
+A claim is an owner-scoped belief about a location, a shelter, a stored resource, or a place that owner has used often. It is not a field on the world. `WorldEngine` still admits a `Take`, `Move`, `Harvest`, `Eat`, `Drink`, or `Store` that the physical rules allow. The observer frame stays the objective scene (`observer-protocol-v1`) and rejects a claim, contest, or controller key. One selected owner's heads are a separate subjective-claims query. `spatial_control@1` is a later reading of the committed log, marked research analytics, and is not an input to cognition. `TerritorialClaimMode` defaults to `DISABLED`. `runner-config-v15` is emitted only when that mode is `DETERMINISTIC`. The policy version is `territorial-claims.v1`. Claim strengths and utterance bodies are not written at INFO.
+
 ## Owner-scoped derivation (cognition / memory)
 
 Each listener builds a **fresh** `MemoryTrace` with `CommunicatedTransmissionMeta`. Cognition never copies the sender's episodic state. Semantic belief updates treat communicated evidence as testimony: trust, confidence, hop attenuation, and context relevance may yield accept / discount / contradict / defer. Memory traces are retained even when belief revision is deferred. Generic communication may raise familiarity; trust changes only from explicit corroboration/contradiction signals.

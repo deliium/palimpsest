@@ -1054,6 +1054,21 @@ def experiment_u_seasonal_scarcity(
     return seasonal_scarcity_scenario(seed=seed, max_ticks=max_ticks)
 
 
+def experiment_v_territorial_claims(
+    *,
+    seed: int = 11,
+    max_ticks: int = 4,
+) -> ExperimentDefinition:
+    """Scarce and abundant claim arms, plus a disabled arm on the scarce world.
+
+    All three share the seed, topology, bodies, and stochastic identity.
+    This experiment is absent from the V1 regression gate.
+    """
+    from experiments.territorial_scenario import territorial_claims_scenario
+
+    return territorial_claims_scenario(seed=seed, max_ticks=max_ticks)
+
+
 def v1_regression_profile(config: SimulationRunnerConfig) -> SimulationRunnerConfig:
     """Require all V2 capability flags off and cognition tracing off.
 
