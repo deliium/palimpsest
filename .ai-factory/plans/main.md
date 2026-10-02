@@ -1,1 +1,0 @@
-v2-emergent-group-formation.md
