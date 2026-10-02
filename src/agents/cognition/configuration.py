@@ -45,6 +45,10 @@ from agents.cognition.reputation import (
     ReputationFormationPolicy,
     default_reputation_policy,
 )
+from agents.cognition.social_norms import (
+    SocialNormPolicy,
+    default_social_norm_policy,
+)
 from agents.cognition.territorial import (
     TerritorialClaimPolicy,
     default_territorial_claim_policy,
@@ -244,6 +248,17 @@ class CognitionGroupFormationMode(StrEnum):
     DETERMINISTIC = "deterministic"
 
 
+class CognitionSocialNormMode(StrEnum):
+    """Owner-scoped norm ledger. Disabled leaves the snapshot field unset.
+
+    Lockstep with ``simulation.SocialNormMode``. This is not a
+    ``V2CapabilityFlags`` slot. ``DISABLED`` does not allocate a ledger.
+    """
+
+    DISABLED = "disabled"
+    DETERMINISTIC = "deterministic"
+
+
 def _unit_interval(name: str, value: object) -> float:
     if isinstance(value, bool) or not isinstance(value, (int, float)):
         raise ValueError(f"{name}: not_unit_interval")
@@ -332,6 +347,8 @@ class CognitionLoopConfig:
         CognitionGroupFormationMode.DISABLED
     )
     group_formation_policy: GroupFormationPolicy | None = None
+    social_norm_mode: CognitionSocialNormMode = CognitionSocialNormMode.DISABLED
+    social_norm_policy: SocialNormPolicy | None = None
     production_knowledge_mode: ProductionKnowledgeMode = (
         ProductionKnowledgeMode.DISABLED
     )
@@ -566,6 +583,16 @@ class CognitionLoopConfig:
             raise TypeError(
                 "group_formation_policy must be GroupFormationPolicy or None"
             )
+        if type(self.social_norm_mode) is not CognitionSocialNormMode:
+            _LOG.error("invalid_enum path=social_norm_mode reason_code=invalid_mode")
+            raise TypeError("social_norm_mode must be CognitionSocialNormMode")
+        if self.social_norm_mode is CognitionSocialNormMode.DISABLED:
+            object.__setattr__(self, "social_norm_policy", None)
+        elif self.social_norm_policy is None:
+            object.__setattr__(self, "social_norm_policy", default_social_norm_policy())
+        elif type(self.social_norm_policy) is not SocialNormPolicy:
+            _LOG.error("invalid_enum path=social_norm_policy reason_code=invalid_type")
+            raise TypeError("social_norm_policy must be SocialNormPolicy or None")
         if type(self.production_knowledge_mode) is not ProductionKnowledgeMode:
             _LOG.error(
                 "invalid_enum path=production_knowledge_mode reason_code=invalid_mode"
@@ -719,8 +746,9 @@ class CognitionLoopConfig:
                 if self.reputation_policy is None
                 else self.reputation_policy.version
             ),
-                    "territorial_claim_mode": self.territorial_claim_mode.value,
-                    "group_formation_mode": self.group_formation_mode.value,
+            "territorial_claim_mode": self.territorial_claim_mode.value,
+            "group_formation_mode": self.group_formation_mode.value,
+            "social_norm_mode": self.social_norm_mode.value,
             "territorial_claim_policy_version": (
                 None
                 if self.territorial_claim_policy is None
@@ -927,5 +955,7 @@ def build_cognitive_loop(
         territorial_claim_policy=resolved.territorial_claim_policy,
         group_formation_mode=resolved.group_formation_mode,
         group_formation_policy=resolved.group_formation_policy,
+        social_norm_mode=resolved.social_norm_mode,
+        social_norm_policy=resolved.social_norm_policy,
         production_knowledge_mode=resolved.production_knowledge_mode,
     )

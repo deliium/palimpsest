@@ -623,6 +623,18 @@ def _cognition_config_for(
         group_mode.value,
         None if group_policy is None else group_policy.version,
     )
+    from agents.cognition.configuration import CognitionSocialNormMode
+    from agents.cognition.social_norms import default_social_norm_policy
+
+    norm_mode = CognitionSocialNormMode(spec.social_norm_mode.value)
+    norm_policy = None
+    if norm_mode is CognitionSocialNormMode.DETERMINISTIC:
+        norm_policy = default_social_norm_policy()
+    _LOG.debug(
+        "cognition_config_social_norm_mode mode=%s policy_version=%s",
+        norm_mode.value,
+        None if norm_policy is None else norm_policy.version,
+    )
     return CognitionLoopConfig(
         memory_mode=CognitionMemoryMode(spec.memory_mode.value),
         imagination_mode=CognitionImaginationMode(spec.imagination_mode.value),
@@ -656,6 +668,8 @@ def _cognition_config_for(
         territorial_claim_policy=territorial_policy,
         group_formation_mode=group_mode,
         group_formation_policy=group_policy,
+        social_norm_mode=norm_mode,
+        social_norm_policy=norm_policy,
         production_knowledge_mode=CognitionProductionKnowledgeMode(
             spec.production_knowledge_mode.value
         ),

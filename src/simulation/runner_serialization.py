@@ -38,6 +38,7 @@ from simulation.runner_models import (
     RUNNER_SCHEMA_VERSION_V14,
     RUNNER_SCHEMA_VERSION_V15,
     RUNNER_SCHEMA_VERSION_V16,
+    RUNNER_SCHEMA_VERSION_V17,
     SUPPORTED_RUNNER_SCHEMA_VERSIONS,
     AgentCognitionSpec,
     AgentRunnerSpec,
@@ -70,6 +71,7 @@ from simulation.runner_models import (
     SimulationRunnerResult,
     SimulationRunnerResultDocument,
     SkillLearningMode,
+    SocialNormMode,
     TeachingInteractionMode,
     TerritorialClaimMode,
     V2CapabilityFlags,
@@ -330,6 +332,10 @@ _COGNITION_KEYS_V16: Final[set[str]] = {
     *_COGNITION_KEYS_V15,
     "group_formation_mode",
 }
+_COGNITION_KEYS_V17: Final[set[str]] = {
+    *_COGNITION_KEYS_V16,
+    "social_norm_mode",
+}
 _SKILL_SCHEMA_VERSIONS: Final[frozenset[str]] = frozenset(
     {
         RUNNER_SCHEMA_VERSION_V11,
@@ -338,6 +344,7 @@ _SKILL_SCHEMA_VERSIONS: Final[frozenset[str]] = frozenset(
         RUNNER_SCHEMA_VERSION_V14,
         RUNNER_SCHEMA_VERSION_V15,
         RUNNER_SCHEMA_VERSION_V16,
+        RUNNER_SCHEMA_VERSION_V17,
     }
 )
 _COGNITION_SCHEMA_CONSOLIDATION: Final[frozenset[str]] = frozenset(
@@ -354,6 +361,7 @@ _COGNITION_SCHEMA_CONSOLIDATION: Final[frozenset[str]] = frozenset(
         RUNNER_SCHEMA_VERSION_V14,
         RUNNER_SCHEMA_VERSION_V15,
         RUNNER_SCHEMA_VERSION_V16,
+        RUNNER_SCHEMA_VERSION_V17,
     }
 )
 _COGNITION_SCHEMA_REFLECTION: Final[frozenset[str]] = frozenset(
@@ -369,6 +377,7 @@ _COGNITION_SCHEMA_REFLECTION: Final[frozenset[str]] = frozenset(
         RUNNER_SCHEMA_VERSION_V14,
         RUNNER_SCHEMA_VERSION_V15,
         RUNNER_SCHEMA_VERSION_V16,
+        RUNNER_SCHEMA_VERSION_V17,
     }
 )
 _COGNITION_SCHEMA_PROSPECTIVE: Final[frozenset[str]] = frozenset(
@@ -383,6 +392,7 @@ _COGNITION_SCHEMA_PROSPECTIVE: Final[frozenset[str]] = frozenset(
         RUNNER_SCHEMA_VERSION_V14,
         RUNNER_SCHEMA_VERSION_V15,
         RUNNER_SCHEMA_VERSION_V16,
+        RUNNER_SCHEMA_VERSION_V17,
     }
 )
 _COGNITION_SCHEMA_COUNTERFACTUAL: Final[frozenset[str]] = frozenset(
@@ -396,6 +406,7 @@ _COGNITION_SCHEMA_COUNTERFACTUAL: Final[frozenset[str]] = frozenset(
         RUNNER_SCHEMA_VERSION_V14,
         RUNNER_SCHEMA_VERSION_V15,
         RUNNER_SCHEMA_VERSION_V16,
+        RUNNER_SCHEMA_VERSION_V17,
     }
 )
 _COGNITION_SCHEMA_STRATEGY: Final[frozenset[str]] = frozenset(
@@ -408,6 +419,7 @@ _COGNITION_SCHEMA_STRATEGY: Final[frozenset[str]] = frozenset(
         RUNNER_SCHEMA_VERSION_V14,
         RUNNER_SCHEMA_VERSION_V15,
         RUNNER_SCHEMA_VERSION_V16,
+        RUNNER_SCHEMA_VERSION_V17,
     }
 )
 _COGNITION_SCHEMA_REPUTATION: Final[frozenset[str]] = frozenset(
@@ -419,6 +431,7 @@ _COGNITION_SCHEMA_REPUTATION: Final[frozenset[str]] = frozenset(
         RUNNER_SCHEMA_VERSION_V14,
         RUNNER_SCHEMA_VERSION_V15,
         RUNNER_SCHEMA_VERSION_V16,
+        RUNNER_SCHEMA_VERSION_V17,
     }
 )
 
@@ -695,6 +708,7 @@ def _encode_cognition(
         RUNNER_SCHEMA_VERSION_V14,
         RUNNER_SCHEMA_VERSION_V15,
         RUNNER_SCHEMA_VERSION_V16,
+        RUNNER_SCHEMA_VERSION_V17,
     }:
         payload["teaching_interaction_mode"] = value.teaching_interaction_mode.value
         for name in _TEACHING_WEIGHT_KEYS:
@@ -704,6 +718,7 @@ def _encode_cognition(
         RUNNER_SCHEMA_VERSION_V14,
         RUNNER_SCHEMA_VERSION_V15,
         RUNNER_SCHEMA_VERSION_V16,
+        RUNNER_SCHEMA_VERSION_V17,
     }:
         payload["production_knowledge_mode"] = value.production_knowledge_mode.value
         payload["production_catalog"] = _encode_production_catalog(
@@ -712,17 +727,25 @@ def _encode_cognition(
     if schema_version in {
         RUNNER_SCHEMA_VERSION_V15,
         RUNNER_SCHEMA_VERSION_V16,
+        RUNNER_SCHEMA_VERSION_V17,
     }:
         payload["territorial_claim_mode"] = value.territorial_claim_mode.value
-    if schema_version == RUNNER_SCHEMA_VERSION_V16:
+    if schema_version in {
+        RUNNER_SCHEMA_VERSION_V16,
+        RUNNER_SCHEMA_VERSION_V17,
+    }:
         payload["group_formation_mode"] = value.group_formation_mode.value
+    if schema_version == RUNNER_SCHEMA_VERSION_V17:
+        payload["social_norm_mode"] = value.social_norm_mode.value
     return payload
 
 
 def _decode_cognition(
     data: dict[str, Any], *, path: str, schema_version: str
 ) -> AgentCognitionSpec:
-    if schema_version == RUNNER_SCHEMA_VERSION_V16:
+    if schema_version == RUNNER_SCHEMA_VERSION_V17:
+        _require_keys(data, _COGNITION_KEYS_V17, path=path)
+    elif schema_version == RUNNER_SCHEMA_VERSION_V16:
         _require_keys(data, _COGNITION_KEYS_V16, path=path)
     elif schema_version == RUNNER_SCHEMA_VERSION_V15:
         _require_keys(data, _COGNITION_KEYS_V15, path=path)
@@ -756,6 +779,7 @@ def _decode_cognition(
     teaching_interaction_mode = TeachingInteractionMode.DISABLED
     territorial_claim_mode = TerritorialClaimMode.DISABLED
     group_formation_mode = GroupFormationMode.DISABLED
+    social_norm_mode = SocialNormMode.DISABLED
     skill_rates: dict[str, float] = {}
     teaching_weights: dict[str, float | int] = {}
     if schema_version in _COGNITION_SCHEMA_CONSOLIDATION:
@@ -845,6 +869,7 @@ def _decode_cognition(
         RUNNER_SCHEMA_VERSION_V14,
         RUNNER_SCHEMA_VERSION_V15,
         RUNNER_SCHEMA_VERSION_V16,
+        RUNNER_SCHEMA_VERSION_V17,
     }:
         try:
             teaching_interaction_mode = TeachingInteractionMode(
@@ -866,6 +891,7 @@ def _decode_cognition(
         RUNNER_SCHEMA_VERSION_V14,
         RUNNER_SCHEMA_VERSION_V15,
         RUNNER_SCHEMA_VERSION_V16,
+        RUNNER_SCHEMA_VERSION_V17,
     }:
         try:
             production_knowledge_mode = ProductionKnowledgeMode(
@@ -888,6 +914,7 @@ def _decode_cognition(
     if schema_version in {
         RUNNER_SCHEMA_VERSION_V15,
         RUNNER_SCHEMA_VERSION_V16,
+        RUNNER_SCHEMA_VERSION_V17,
     }:
         try:
             territorial_claim_mode = TerritorialClaimMode(
@@ -899,7 +926,10 @@ def _decode_cognition(
             raise RunnerSerializationError(
                 "invalid_enum", f"{path}.territorial_claim_mode"
             ) from exc
-    if schema_version == RUNNER_SCHEMA_VERSION_V16:
+    if schema_version in {
+        RUNNER_SCHEMA_VERSION_V16,
+        RUNNER_SCHEMA_VERSION_V17,
+    }:
         try:
             group_formation_mode = GroupFormationMode(
                 _str_field(data, "group_formation_mode", path=path)
@@ -909,6 +939,17 @@ def _decode_cognition(
         except ValueError as exc:
             raise RunnerSerializationError(
                 "invalid_enum", f"{path}.group_formation_mode"
+            ) from exc
+    if schema_version == RUNNER_SCHEMA_VERSION_V17:
+        try:
+            social_norm_mode = SocialNormMode(
+                _str_field(data, "social_norm_mode", path=path)
+            )
+        except RunnerSerializationError:
+            raise
+        except ValueError as exc:
+            raise RunnerSerializationError(
+                "invalid_enum", f"{path}.social_norm_mode"
             ) from exc
     overrides_raw = data["drive_overrides"]
     if not isinstance(overrides_raw, list):
@@ -969,6 +1010,7 @@ def _decode_cognition(
             production_knowledge_mode=production_knowledge_mode,
             territorial_claim_mode=territorial_claim_mode,
             group_formation_mode=group_formation_mode,
+            social_norm_mode=social_norm_mode,
             **(
                 {}
                 if production_catalog is None
@@ -1003,6 +1045,7 @@ def _encode_agent(value: AgentRunnerSpec, *, schema_version: str) -> dict[str, A
         RUNNER_SCHEMA_VERSION_V14,
         RUNNER_SCHEMA_VERSION_V15,
         RUNNER_SCHEMA_VERSION_V16,
+        RUNNER_SCHEMA_VERSION_V17,
     }:
         assert value.name is not None
         payload["name"] = value.name
@@ -1447,6 +1490,7 @@ def _encode_runner_document(config: SimulationRunnerConfig) -> dict[str, Any]:
         RUNNER_SCHEMA_VERSION_V14,
         RUNNER_SCHEMA_VERSION_V15,
         RUNNER_SCHEMA_VERSION_V16,
+        RUNNER_SCHEMA_VERSION_V17,
     }:
         document["capability_flags"] = _encode_capability_flags(config.capability_flags)
     if config.schema_version in {
@@ -1463,11 +1507,16 @@ def _encode_runner_document(config: SimulationRunnerConfig) -> dict[str, Any]:
         RUNNER_SCHEMA_VERSION_V14,
         RUNNER_SCHEMA_VERSION_V15,
         RUNNER_SCHEMA_VERSION_V16,
+        RUNNER_SCHEMA_VERSION_V17,
     }:
         document["cognition_trace"] = _encode_cognition_trace(config.cognition_trace)
     if config.schema_version == RUNNER_SCHEMA_VERSION_V14 or (
         config.schema_version
-        in {RUNNER_SCHEMA_VERSION_V15, RUNNER_SCHEMA_VERSION_V16}
+        in {
+            RUNNER_SCHEMA_VERSION_V15,
+            RUNNER_SCHEMA_VERSION_V16,
+            RUNNER_SCHEMA_VERSION_V17,
+        }
         and config.environmental_dynamics is not None
     ):
         dynamics = config.environmental_dynamics
@@ -1589,6 +1638,7 @@ def decode_runner_config(payload: bytes) -> SimulationRunnerConfig:
     elif schema_version in {
         RUNNER_SCHEMA_VERSION_V15,
         RUNNER_SCHEMA_VERSION_V16,
+        RUNNER_SCHEMA_VERSION_V17,
     }:
         root_keys = (
             _RUNNER_ROOT_KEYS_V14
@@ -1609,6 +1659,7 @@ def decode_runner_config(payload: bytes) -> SimulationRunnerConfig:
         RUNNER_SCHEMA_VERSION_V14,
         RUNNER_SCHEMA_VERSION_V15,
         RUNNER_SCHEMA_VERSION_V16,
+        RUNNER_SCHEMA_VERSION_V17,
     }:
         root_keys = _RUNNER_ROOT_KEYS_V4
     elif schema_version == RUNNER_SCHEMA_VERSION_V3:
@@ -1695,6 +1746,7 @@ def decode_runner_config(payload: bytes) -> SimulationRunnerConfig:
         RUNNER_SCHEMA_VERSION_V14,
         RUNNER_SCHEMA_VERSION_V15,
         RUNNER_SCHEMA_VERSION_V16,
+        RUNNER_SCHEMA_VERSION_V17,
     }:
         capability_flags = _decode_capability_flags(
             data["capability_flags"], path="$.capability_flags"
@@ -1716,6 +1768,7 @@ def decode_runner_config(payload: bytes) -> SimulationRunnerConfig:
         RUNNER_SCHEMA_VERSION_V14,
         RUNNER_SCHEMA_VERSION_V15,
         RUNNER_SCHEMA_VERSION_V16,
+        RUNNER_SCHEMA_VERSION_V17,
     }:
         cognition_trace = _decode_cognition_trace(
             data["cognition_trace"], path="$.cognition_trace"
@@ -1788,7 +1841,11 @@ def decode_runner_config(payload: bytes) -> SimulationRunnerConfig:
                 if schema_version == RUNNER_SCHEMA_VERSION_V14
                 or (
                     schema_version
-                    in {RUNNER_SCHEMA_VERSION_V15, RUNNER_SCHEMA_VERSION_V16}
+                    in {
+                        RUNNER_SCHEMA_VERSION_V15,
+                        RUNNER_SCHEMA_VERSION_V16,
+                        RUNNER_SCHEMA_VERSION_V17,
+                    }
                     and "environmental_dynamics" in data
                 )
                 else None
