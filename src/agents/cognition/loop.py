@@ -6,6 +6,7 @@ Components are constructor-injected and invoked sequentially.
 
 from __future__ import annotations
 
+import hashlib
 import logging
 from asyncio import CancelledError
 from collections.abc import Awaitable, Callable
@@ -205,6 +206,8 @@ class CognitiveLoop:
         "_self_state",
         "_situation",
         "_skill_learning_mode",
+        "_social_norm_mode",
+        "_social_norm_policy",
         "_teaching_mode",
         "_teaching_policy",
         "_territorial_claim_mode",
@@ -258,6 +261,8 @@ class CognitiveLoop:
         territorial_claim_policy: object | None = None,
         group_formation_mode: object | None = None,
         group_formation_policy: object | None = None,
+        social_norm_mode: object | None = None,
+        social_norm_policy: object | None = None,
         production_knowledge_mode: object | None = None,
         production_allow_provider: bool = False,
     ) -> None:
@@ -472,6 +477,28 @@ class CognitiveLoop:
             group_policy = group_formation_policy
         self._group_formation_mode = grouped
         self._group_formation_policy = group_policy
+        from agents.cognition.configuration import CognitionSocialNormMode
+        from agents.cognition.social_norms import SocialNormPolicy
+
+        normed = (
+            CognitionSocialNormMode.DISABLED
+            if social_norm_mode is None
+            else social_norm_mode
+        )
+        if type(normed) is not CognitionSocialNormMode:
+            raise TypeError("social_norm_mode must be CognitionSocialNormMode")
+        if normed is CognitionSocialNormMode.DISABLED:
+            norm_policy = None
+        elif social_norm_policy is None:
+            from agents.cognition.social_norms import default_social_norm_policy
+
+            norm_policy = default_social_norm_policy()
+        elif type(social_norm_policy) is not SocialNormPolicy:
+            raise TypeError("social_norm_policy must be SocialNormPolicy")
+        else:
+            norm_policy = social_norm_policy
+        self._social_norm_mode = normed
+        self._social_norm_policy = norm_policy
         from agents.cognition.competence import CompetenceBeliefPolicy
         from agents.cognition.configuration import CognitionSkillLearningMode
 
@@ -688,6 +715,121 @@ class CognitiveLoop:
             ledger,
             self._group_formation_policy,
         )
+
+    def _prepare_social_norms(self, loop_input: CognitiveLoopInput) -> object | None:
+        """Refresh one owner's norm ledger. Disabled mode leaves it absent."""
+        from agents.cognition.configuration import CognitionSocialNormMode
+        from agents.cognition.social_norms import NormLedger, apply_norm_update
+
+        owner_id = loop_input.agent_id.value
+        tick = loop_input.observation.tick
+        if self._social_norm_mode is not CognitionSocialNormMode.DETERMINISTIC:
+            return None
+        snapshot = loop_input.snapshot
+        carried = None if snapshot is None else snapshot.social_norms
+        ledger = carried if type(carried) is NormLedger else None
+        identity = None if snapshot is None else snapshot.social_identity
+        if snapshot is None or identity is None:
+            _LOG.warning(
+                "norm_carry_rejected reason=%s",
+                "invalid_type" if snapshot is None else "owner_mismatch",
+            )
+            return None
+        updated = apply_norm_update(
+            loop_input.observation,
+            identity,
+            ledger,
+            self._social_norm_policy,
+        )
+        _LOG.debug(
+            "social_norms_carried owner_id=%s belief_count=%s tick=%s",
+            owner_id,
+            0 if updated is None else len(updated.beliefs),
+            tick,
+        )
+        return updated
+
+    def _social_norm_penalties(
+        self,
+        loop_input: CognitiveLoopInput,
+        ledger: object | None,
+        futures: object,
+    ) -> tuple[object, dict[str, float]] | None:
+        """Select responses once futures exist. Disabled callers pass ``None``."""
+        from agents.cognition.configuration import CognitionSocialNormMode
+        from agents.cognition.social_norms import norm_response_penalties
+
+        if (
+            self._social_norm_mode is not CognitionSocialNormMode.DETERMINISTIC
+            or ledger is None
+        ):
+            return None
+        snapshot = loop_input.snapshot
+        body = loop_input.observation.self_body
+        result = norm_response_penalties(
+            ledger,
+            loop_input.observation,
+            getattr(futures, "futures", ()),
+            0.0 if body is None else body.hunger.value,
+            0.0 if body is None else body.thirst.value,
+            identity=None if snapshot is None else snapshot.social_identity,
+            relationships=() if snapshot is None else snapshot.relationships,
+            mode=self._social_norm_mode,
+        )
+        updated = ledger if result.ledger is None else result.ledger
+        return updated, result.as_dict()
+
+    def _append_norm_trust(
+        self,
+        proposal: CognitiveLoopProposal,
+        updates: tuple[object, ...],
+    ) -> tuple[object, ...]:
+        """Queue one trust revision when reduced_trust was applied."""
+        from agents.cognition.configuration import CognitionSocialNormMode
+        from agents.cognition.models import MemoryUpdateIntent, MemoryUpdateKind
+        from social.relationships import (
+            DEFAULT_RELATIONSHIP_POLICY,
+            RelationshipInteractionSignal,
+            RelationshipRevisionRequest,
+            RelationshipSignalKind,
+        )
+
+        if self._social_norm_mode is not CognitionSocialNormMode.DETERMINISTIC:
+            return updates
+        ledger = proposal.social_norms
+        requests = () if ledger is None else getattr(ledger, "trust_requests", ())
+        if not requests:
+            return updates
+        owner = proposal.agent_id
+        tick = proposal.loop_input.observation.tick
+        extra: list[MemoryUpdateIntent] = []
+        for request in requests:
+            target = request.target_id
+            material = f"{owner.value}|{target.value}|{tick}".encode()
+            digest = hashlib.sha256(material).hexdigest()
+            signal = RelationshipInteractionSignal(
+                counterpart_id=target,
+                kind=RelationshipSignalKind.CONTRADICTION_RECEIVED,
+                strength=1.0,
+                memory_ref=digest,
+                lineage_root_ref=digest,
+                source_tick=tick,
+            )
+            extra.append(
+                MemoryUpdateIntent(
+                    owner_id=owner,
+                    kind=MemoryUpdateKind.REVISE_RELATIONSHIP,
+                    relationship_revision=RelationshipRevisionRequest(
+                        source_id=owner,
+                        target_id=target,
+                        operation_id=digest,
+                        logical_tick=tick,
+                        signals=(signal,),
+                        policy=DEFAULT_RELATIONSHIP_POLICY.as_ref(),
+                    ),
+                )
+            )
+        return updates + tuple(extra)
 
     def _annotate_claim_violations(
         self,
@@ -1137,6 +1279,7 @@ class CognitiveLoop:
         reputation = self._prepare_reputation(loop_input)
         territorial_claims = self._prepare_territorial_claims(loop_input)
         group_formation = self._prepare_group_formation(loop_input)
+        social_norms = self._prepare_social_norms(loop_input)
         competence = self._prepare_competence(loop_input, memory)
         competence, advice = self._prepare_teaching(loop_input, competence)
         recipe_beliefs = self._prepare_recipe_beliefs(loop_input)
@@ -1242,6 +1385,12 @@ class CognitiveLoop:
             ),
             expected_type=MotivationEvaluation,
         )
+        norm_penalties = self._social_norm_penalties(loop_input, social_norms, futures)
+        if norm_penalties is not None:
+            social_norms = norm_penalties[0]
+            norm_penalty_map = norm_penalties[1]
+        else:
+            norm_penalty_map = None
         intention = await run_stage(
             kind=ComponentKind.INTENTION,
             ordinal=8,
@@ -1263,6 +1412,9 @@ class CognitiveLoop:
                     teaching_policy=self._teaching_policy,
                     territorial_claims=territorial_claims,
                     territorial_claim_mode=self._territorial_claim_mode,
+                    social_norms=social_norms,
+                    social_norm_mode=self._social_norm_mode,
+                    norm_penalties=norm_penalty_map,
                 ),
             ),
             expected_type=SelectedIntention,
@@ -1296,6 +1448,8 @@ class CognitiveLoop:
                     selected_recipe_id=production_recipe_id,
                     territorial_claims=territorial_claims,
                     territorial_claim_mode=self._territorial_claim_mode,
+                    social_norms=social_norms,
+                    social_norm_mode=self._social_norm_mode,
                 ),
             ),
             expected_type=ActionPlan,
@@ -1333,6 +1487,7 @@ class CognitiveLoop:
             reputation=reputation,
             territorial_claims=territorial_claims,
             group_formation=group_formation,
+            social_norms=social_norms,
             competence_model=competence,
             declarative_advice=advice,
             recipe_beliefs=recipe_beliefs,
@@ -1411,6 +1566,7 @@ class CognitiveLoop:
         )
         assert type(updates) is tuple
         updates = self._annotate_claim_violations(proposal, updates)
+        updates = self._append_norm_trust(proposal, updates)
         consolidation = await self._plan_sleep_consolidation(
             proposal=proposal,
             command=command,
@@ -1485,6 +1641,7 @@ class CognitiveLoop:
             reputation=proposal.reputation,
             territorial_claims=proposal.territorial_claims,
             group_formation=proposal.group_formation,
+            social_norms=proposal.social_norms,
             competence_model=proposal.competence_model,
             declarative_advice=proposal.declarative_advice,
             recipe_beliefs=proposal.recipe_beliefs,

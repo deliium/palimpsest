@@ -127,6 +127,9 @@ class MultiCriteriaIntentionSelector:
         teaching_policy: object | None = None,
         territorial_claims: object | None = None,
         territorial_claim_mode: object | None = None,
+        social_norms: object | None = None,
+        social_norm_mode: object | None = None,
+        norm_penalties: Mapping[str, float] | None = None,
     ) -> SelectedIntention:
         owner = loop_input.agent_id
         tick = loop_input.observation.tick
@@ -299,6 +302,29 @@ class MultiCriteriaIntentionSelector:
             thirst=0.0 if body is None else body.thirst.value,
             mode=territorial_claim_mode,
         )
+        if norm_penalties is None and social_norms is not None:
+            from agents.cognition.social_norms import norm_response_penalties
+
+            computed = norm_response_penalties(
+                social_norms,
+                loop_input.observation,
+                tuple(
+                    futures_by_id[item.future_id]
+                    for item in undominated
+                    if item.future_id in futures_by_id
+                ),
+                0.0 if body is None else body.hunger.value,
+                0.0 if body is None else body.thirst.value,
+                identity=None if snapshot is None else snapshot.social_identity,
+                relationships=() if snapshot is None else snapshot.relationships,
+                mode=social_norm_mode,
+            )
+            norm_penalties = computed.as_dict()
+        if norm_penalties:
+            _LOG.debug(
+                "norm_penalty_applied future_count=%s",
+                len(norm_penalties),
+            )
         winner, tie_break = _pairwise_select(
             undominated,
             futures_by_id,
@@ -312,6 +338,7 @@ class MultiCriteriaIntentionSelector:
             teaching_policy,
             loop_input.observation,
             respect,
+            norm_penalties,
         )
         future = futures_by_id.get(winner.future_id)
         direction = ActionDirection.WAIT if future is None else future.direction
@@ -567,6 +594,8 @@ class CommandPlanner:
         selected_recipe_id: object | None = None,
         territorial_claims: object | None = None,
         territorial_claim_mode: object | None = None,
+        social_norms: object | None = None,
+        social_norm_mode: object | None = None,
     ) -> ActionPlan:
         owner = loop_input.agent_id
         tick = loop_input.observation.tick
@@ -694,6 +723,20 @@ class CommandPlanner:
             ledger=prepared_claims,
             relationships=() if snapshot is None else snapshot.relationships,
             mode=territorial_claim_mode,
+        )
+        from agents.cognition.social_norms import norm_communicate_utterance
+
+        prepared_norms = social_norms
+        if prepared_norms is None and snapshot is not None:
+            prepared_norms = snapshot.social_norms
+        command = norm_communicate_utterance(
+            command,
+            owner_id=owner,
+            tick=tick,
+            observation=loop_input.observation,
+            identity=None if snapshot is None else snapshot.social_identity,
+            ledger=prepared_norms,
+            mode=social_norm_mode,
         )
         command_type = type(command).__name__
 
@@ -1212,6 +1255,7 @@ def _pairwise_select(
     teaching_policy: object | None = None,
     observation: object | None = None,
     territorial_bias: Mapping[str, float] | None = None,
+    norm_penalties: Mapping[str, float] | None = None,
 ) -> tuple[FutureAppraisal, str]:
     if len(appraisals) == 1:
         return appraisals[0], _TIE_BREAK_NONE
@@ -1233,6 +1277,7 @@ def _pairwise_select(
                 teaching_policy,
                 observation,
                 territorial_bias,
+                norm_penalties,
             )
             if cmp > 0:
                 scores[left.future_id] += 1
@@ -1274,6 +1319,7 @@ def _pairwise_compare(
     teaching_policy: object | None = None,
     observation: object | None = None,
     territorial_bias: Mapping[str, float] | None = None,
+    norm_penalties: Mapping[str, float] | None = None,
 ) -> int:
     """Return positive if left preferred, negative if right preferred, else 0."""
     active_drives = set(motivation.active_drive_kinds)
@@ -1422,6 +1468,9 @@ def _pairwise_compare(
     if territorial_bias is not None:
         total += territorial_bias.get(left.future_id, 0.0)
         total -= territorial_bias.get(right.future_id, 0.0)
+    if norm_penalties is not None:
+        total -= norm_penalties.get(left.future_id, 0.0)
+        total += norm_penalties.get(right.future_id, 0.0)
     if total > 0:
         return 1
     if total < 0:

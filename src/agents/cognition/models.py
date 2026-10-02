@@ -712,6 +712,7 @@ class SubjectiveSnapshot:
     reputation: object | None = None
     territorial_claims: object | None = None
     group_formation: object | None = None
+    social_norms: object | None = None
     competence_model: object | None = None
     declarative_advice: object | None = None
     recipe_beliefs: object | None = None
@@ -872,6 +873,13 @@ class SubjectiveSnapshot:
             self.group_formation,
             self.owner_id,
             field_name="SubjectiveSnapshot.group_formation",
+        )
+        from agents.cognition.social_norms import require_owner_social_norms
+
+        require_owner_social_norms(
+            self.social_norms,
+            self.owner_id,
+            field_name="SubjectiveSnapshot.social_norms",
         )
         from agents.cognition.competence import require_owner_competence
 
@@ -3661,6 +3669,7 @@ class CognitiveLoopProposal:
     reputation: object | None = None
     territorial_claims: object | None = None
     group_formation: object | None = None
+    social_norms: object | None = None
     competence_model: object | None = None
     declarative_advice: object | None = None
     recipe_beliefs: object | None = None
@@ -3731,6 +3740,13 @@ class CognitiveLoopProposal:
             self.group_formation,
             self.agent_id,
             field_name="CognitiveLoopProposal.group_formation",
+        )
+        from agents.cognition.social_norms import require_owner_social_norms
+
+        require_owner_social_norms(
+            self.social_norms,
+            self.agent_id,
+            field_name="CognitiveLoopProposal.social_norms",
         )
         from agents.cognition.competence import require_owner_competence
 
@@ -3822,6 +3838,7 @@ class CognitiveLoopResult:
     reputation: object | None = None
     territorial_claims: object | None = None
     group_formation: object | None = None
+    social_norms: object | None = None
     competence_model: object | None = None
     declarative_advice: object | None = None
     recipe_beliefs: object | None = None
@@ -3869,6 +3886,13 @@ class CognitiveLoopResult:
             self.group_formation,
             self.agent_id,
             field_name="CognitiveLoopResult.group_formation",
+        )
+        from agents.cognition.social_norms import require_owner_social_norms
+
+        require_owner_social_norms(
+            self.social_norms,
+            self.agent_id,
+            field_name="CognitiveLoopResult.social_norms",
         )
         if self.territorial_audits is not None:
             from agents.cognition.territorial import TerritorialClaimAudit

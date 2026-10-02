@@ -13,13 +13,16 @@ import itertools
 import logging
 import math
 from collections.abc import Mapping, Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from decimal import ROUND_HALF_UP, Decimal
 from enum import StrEnum
 from typing import Final
 
+from agents.cognition.models import ActionDirection, OwnerSafeSocialIdentity
 from agents.models import AgentId
 from world.identifiers import EntityId, require_exact_nonneg_int
+from world.observations import Observation, ObservedCommunication, ObservedOccurrence
+from world.values import ResourceKind
 
 _LOG: Final[logging.Logger] = logging.getLogger("agents.cognition.social_norms")
 
@@ -761,3 +764,1612 @@ def require_owner_social_norms(
             "owner_mismatch",
         )
         raise ValueError(f"{field_name} owner_id mismatch")
+
+
+@dataclass
+class _BeliefDraft:
+    pattern: NormPattern
+    counterparts: tuple[AgentId, ...]
+    confidence: float
+    status: NormStatus
+    evidence: list[NormEvidenceItem]
+    supporters: list[AgentId]
+    consequences: list[NormConsequence]
+    location_id: EntityId | None
+    window_until: int | None
+    response: NormResponse = NormResponse.IGNORE
+    chosen_sanction: NormSanction | None = None
+    response_reason: str | None = None
+    withhold_until_tick: int | None = None
+    withhold_agent_id: AgentId | None = None
+    last_utterance_tick: int | None = None
+    prior_refusal: bool = False
+    touched: bool = False
+
+
+@dataclass
+class _WindowDraft:
+    pattern: NormPattern
+    until_tick: int
+    giver_id: AgentId | None = None
+    receiver_id: AgentId | None = None
+    sleeper_id: AgentId | None = None
+
+
+@dataclass
+class _ExchangeDraft:
+    left_id: AgentId
+    right_id: AgentId
+    directions: set[str] = field(default_factory=set)
+    established: bool = False
+    idle_until: int | None = None
+    gave_this_tick: bool = False
+
+
+@dataclass(frozen=True, slots=True)
+class NormResponseResult:
+    """Penalties plus the ledger after response selection."""
+
+    ledger: NormLedger | None
+    penalties: tuple[tuple[str, float], ...] = ()
+
+    def as_dict(self) -> dict[str, float]:
+        mapped = dict(self.penalties)
+        for value in mapped.values():
+            if value < 0.0:
+                raise _fail("penalty", "negative_penalty")
+        return mapped
+
+
+def norm_communicate_utterance(
+    command: object,
+    *,
+    owner_id: AgentId,
+    tick: int,
+    observation: Observation,
+    identity: OwnerSafeSocialIdentity | None,
+    ledger: object | None,
+    mode: object | None,
+) -> object:
+    """Stamp an existing Talk command with one norm relation recipe."""
+    from agents.cognition.configuration import CognitionSocialNormMode
+    from world.actions import Talk
+    from world.communications import (
+        CommunicationRelation,
+        CommunicationSourceBasis,
+        origin_utterance,
+    )
+
+    if mode is not CognitionSocialNormMode.DETERMINISTIC:
+        return command
+    if type(observation) is not Observation:
+        return command
+    if type(command) is not Talk:
+        return command
+    if type(ledger) is not NormLedger or not ledger.utterance_plans:
+        return command
+    if identity is None:
+        return command
+    if observation.tick != tick:
+        _LOG.warning("norm_communicate_utterance reason=%s", "tick_mismatch")
+        return command
+    plan = ledger.utterance_plans[0]
+    utterance = origin_utterance(
+        text=plan.predicate,
+        speaker_id=identity.owner_entity_id,
+        communication_id=(
+            f"social-norms-{owner_id.value}-{tick}-{plan.pattern.value}"
+        ),
+        relations=(
+            CommunicationRelation(
+                subject=plan.subject,
+                predicate=plan.predicate,
+                object=plan.object,
+            ),
+        ),
+        source_basis=CommunicationSourceBasis.UNREFERENCED,
+    )
+    _LOG.debug(
+        "norm_communicate_utterance owner_id=%s predicate=%s pattern=%s",
+        owner_id.value,
+        plan.predicate,
+        plan.pattern.value,
+    )
+    return Talk(recipient_id=command.recipient_id, utterance=utterance)
+
+
+def _lineage(tick: int, ordinal: int, occurrence: ObservedOccurrence) -> str:
+    event_id = occurrence.provenance.source_event_id
+    if event_id is None:
+        return f"tick-{tick}-{ordinal}"
+    return event_id.value
+
+
+def _resolve_agent(
+    identity: OwnerSafeSocialIdentity, entity_id: EntityId | None
+) -> AgentId | None:
+    if type(entity_id) is not EntityId:
+        return None
+    if entity_id == identity.owner_entity_id:
+        return identity.owner_id
+    for binding in identity.counterparts:
+        if binding.entity_id == entity_id:
+            return binding.agent_id
+    return None
+
+
+def _pair_key(left: AgentId, right: AgentId) -> tuple[AgentId, AgentId]:
+    if left.value <= right.value:
+        return (left, right)
+    return (right, left)
+
+
+def _direction_token(giver: AgentId, receiver: AgentId) -> str:
+    return f"{giver.value}>{receiver.value}"
+
+
+def _notice(notices: list[str], reason: str) -> None:
+    if reason not in notices:
+        notices.append(reason)
+
+
+def _log_drop(reason: str) -> None:
+    _LOG.warning("norm_evidence_dropped reason=%s", reason)
+
+
+def _drafts_from(
+    previous: NormLedger | None, owner_id: AgentId
+) -> tuple[
+    list[_BeliefDraft],
+    list[_WindowDraft],
+    list[_ExchangeDraft],
+]:
+    beliefs: list[_BeliefDraft] = []
+    windows: list[_WindowDraft] = []
+    exchanges: list[_ExchangeDraft] = []
+    if previous is None:
+        return beliefs, windows, exchanges
+    if previous.owner_id != owner_id:
+        _LOG.error(
+            "norm_validation_failed field=%s reason_code=%s",
+            "owner_id",
+            "owner_mismatch",
+        )
+        raise ValueError("owner_id: owner_mismatch")
+    for belief in previous.beliefs:
+        beliefs.append(
+            _BeliefDraft(
+                pattern=belief.pattern,
+                counterparts=belief.counterpart_ids,
+                confidence=belief.confidence,
+                status=belief.status,
+                evidence=list(belief.evidence),
+                supporters=list(belief.supporters),
+                consequences=list(belief.consequences),
+                location_id=belief.context.location_id,
+                window_until=belief.context.window_until_tick,
+                response=belief.response,
+                chosen_sanction=belief.chosen_sanction,
+                response_reason=belief.response_reason,
+                withhold_until_tick=belief.withhold_until_tick,
+                withhold_agent_id=belief.withhold_agent_id,
+                last_utterance_tick=belief.last_utterance_tick,
+                prior_refusal=belief.prior_refusal,
+            )
+        )
+    for window in previous.windows:
+        windows.append(
+            _WindowDraft(
+                pattern=window.pattern,
+                until_tick=window.until_tick,
+                giver_id=window.giver_id,
+                receiver_id=window.receiver_id,
+                sleeper_id=window.sleeper_id,
+            )
+        )
+    for exchange in previous.exchanges:
+        exchanges.append(
+            _ExchangeDraft(
+                left_id=exchange.left_id,
+                right_id=exchange.right_id,
+                directions=set(exchange.directions),
+                established=exchange.established,
+                idle_until=exchange.idle_until,
+            )
+        )
+    return beliefs, windows, exchanges
+
+
+def _find_belief(
+    beliefs: list[_BeliefDraft],
+    pattern: NormPattern,
+    counterparts: tuple[AgentId, ...],
+) -> _BeliefDraft | None:
+    key = tuple(sorted(agent.value for agent in counterparts))
+    for belief in beliefs:
+        if belief.pattern is not pattern:
+            continue
+        if tuple(sorted(agent.value for agent in belief.counterparts)) == key:
+            return belief
+    return None
+
+
+def _record_evidence(
+    *,
+    beliefs: list[_BeliefDraft],
+    notices: list[str],
+    owner_id: AgentId,
+    pattern: NormPattern,
+    counterparts: tuple[AgentId, ...],
+    delta: float,
+    channel: NormEvidenceChannel,
+    lineage_ref: str,
+    tick: int,
+    actor_id: AgentId | None,
+    location_id: EntityId | None,
+    window_until: int | None,
+    policy: SocialNormPolicy,
+    seen: set[tuple[str, str]],
+) -> None:
+    dedup = (pattern.value, lineage_ref)
+    if dedup in seen:
+        return
+    seen.add(dedup)
+    belief = _find_belief(beliefs, pattern, counterparts)
+    if belief is None:
+        if len(beliefs) >= policy.max_beliefs:
+            _notice(notices, "cap_exceeded")
+            _log_drop("cap_exceeded")
+            return
+        belief = _BeliefDraft(
+            pattern=pattern,
+            counterparts=tuple(sorted(counterparts, key=lambda item: item.value)),
+            confidence=0.0,
+            status=NormStatus.CANDIDATE,
+            evidence=[],
+            supporters=[],
+            consequences=[],
+            location_id=location_id,
+            window_until=window_until,
+        )
+        beliefs.append(belief)
+    if len(belief.evidence) >= policy.max_evidence:
+        _notice(notices, "cap_exceeded")
+        _log_drop("cap_exceeded")
+        return
+    before = belief.confidence
+    belief.confidence = _apply_delta(before, delta)
+    belief_id = norm_belief_id(owner_id, pattern, belief.counterparts)
+    ordinal = len(belief.evidence)
+    belief.evidence.append(
+        NormEvidenceItem(
+            evidence_id=norm_evidence_id(belief_id, ordinal, channel, lineage_ref),
+            ordinal=ordinal,
+            channel=channel,
+            lineage_ref=lineage_ref,
+            tick=tick,
+            actor_id=actor_id,
+        )
+    )
+    belief.touched = True
+    if location_id is not None:
+        belief.location_id = location_id
+    if window_until is not None:
+        belief.window_until = window_until
+    if (
+        channel is NormEvidenceChannel.CONFORMING
+        and actor_id is not None
+        and all(agent != actor_id for agent in belief.supporters)
+    ):
+        if len(belief.supporters) >= policy.max_supporters:
+            _notice(notices, "cap_exceeded")
+            _log_drop("cap_exceeded")
+        else:
+            belief.supporters.append(actor_id)
+    if (
+        belief.status is NormStatus.RETIRED
+        and channel is NormEvidenceChannel.CONFORMING
+    ):
+        belief.status = NormStatus.CANDIDATE
+    _LOG.debug(
+        "norm_belief_applied owner_id=%s tick=%s sign=%s",
+        owner_id.value,
+        tick,
+        _sign(before, belief.confidence),
+    )
+
+
+def _scarce(observation: Observation, policy: SocialNormPolicy) -> EntityId | None:
+    body = observation.self_body
+    if body is None:
+        return None
+    for resource in observation.resources:
+        if (
+            resource.kind is ResourceKind.FOOD
+            and resource.quantity <= policy.scarcity_quantity
+        ):
+            return body.location_id
+    return None
+
+
+def _attacks_targeting(
+    occurrences: Sequence[ObservedOccurrence], entity_id: EntityId
+) -> bool:
+    return any(
+        occurrence.kind == "attack" and occurrence.other_entity_id == entity_id
+        for occurrence in occurrences
+    )
+
+
+def _ensure_candidate(
+    beliefs: list[_BeliefDraft],
+    pattern: NormPattern,
+    counterparts: tuple[AgentId, ...],
+    notices: list[str],
+    policy: SocialNormPolicy,
+) -> _BeliefDraft | None:
+    found = _find_belief(beliefs, pattern, counterparts)
+    if found is not None:
+        return found
+    if len(beliefs) >= policy.max_beliefs:
+        _notice(notices, "cap_exceeded")
+        _log_drop("cap_exceeded")
+        return None
+    draft = _BeliefDraft(
+        pattern=pattern,
+        counterparts=tuple(sorted(counterparts, key=lambda item: item.value)),
+        confidence=0.0,
+        status=NormStatus.CANDIDATE,
+        evidence=[],
+        supporters=[],
+        consequences=[],
+        location_id=None,
+        window_until=None,
+        touched=True,
+    )
+    beliefs.append(draft)
+    return draft
+
+
+def _append_consequence(
+    belief: _BeliefDraft,
+    sanction: NormSanction,
+    channel: NormConsequenceChannel,
+    tick: int,
+    actor_id: AgentId | None,
+) -> None:
+    for item in belief.consequences:
+        if (
+            item.sanction is sanction
+            and item.channel is channel
+            and item.tick == tick
+            and item.actor_id == actor_id
+        ):
+            return
+    belief.consequences.append(
+        NormConsequence(
+            sanction=sanction,
+            channel=channel,
+            tick=tick,
+            actor_id=actor_id,
+        )
+    )
+    belief.touched = True
+
+
+def _promote(
+    beliefs: Sequence[_BeliefDraft],
+    owner_id: AgentId,
+    tick: int,
+    policy: SocialNormPolicy,
+) -> None:
+    for belief in beliefs:
+        if belief.status is not NormStatus.CANDIDATE or not belief.touched:
+            continue
+        count = sum(
+            1
+            for item in belief.evidence
+            if item.channel is NormEvidenceChannel.CONFORMING
+        )
+        if (
+            count >= policy.conforming_count
+            and belief.confidence >= policy.active_confidence
+        ):
+            belief.status = NormStatus.ACTIVE
+            _LOG.debug(
+                "norm_belief_promoted owner_id=%s tick=%s status=%s",
+                owner_id.value,
+                tick,
+                belief.status.value,
+            )
+            continue
+        if count < policy.conforming_count:
+            reason = "below_count"
+        elif belief.confidence < policy.active_confidence:
+            reason = "below_confidence"
+        else:
+            reason = "candidate"
+        belief.response_reason = reason
+        _LOG.warning("norm_belief_withheld reason=%s", reason)
+
+
+def _decay(
+    beliefs: Sequence[_BeliefDraft],
+    owner_id: AgentId,
+    tick: int,
+    policy: SocialNormPolicy,
+) -> None:
+    for belief in beliefs:
+        if belief.touched or belief.status is NormStatus.RETIRED:
+            continue
+        before = belief.confidence
+        after = _apply_delta(before, -policy.decay)
+        belief.confidence = after
+        if (
+            before + 1e-9 >= policy.retire_confidence
+            and after < policy.retire_confidence
+        ):
+            belief.status = NormStatus.RETIRED
+            _LOG.debug(
+                "norm_belief_retired owner_id=%s tick=%s status=%s",
+                owner_id.value,
+                tick,
+                belief.status.value,
+            )
+
+
+def _freeze(
+    owner_id: AgentId,
+    beliefs: Sequence[_BeliefDraft],
+    windows: Sequence[_WindowDraft],
+    exchanges: Sequence[_ExchangeDraft],
+    notices: Sequence[str],
+    plans: Sequence[NormUtterancePlan] = (),
+    requests: Sequence[NormTrustRequest] = (),
+) -> NormLedger:
+    frozen_beliefs: list[NormBelief] = []
+    for draft in beliefs:
+        counterparts = tuple(sorted(draft.counterparts, key=lambda item: item.value))
+        context = NormContext(
+            pattern=draft.pattern,
+            location_id=draft.location_id,
+            counterpart_id=counterparts[0] if counterparts else None,
+            window_until_tick=draft.window_until,
+        )
+        frozen_beliefs.append(
+            NormBelief(
+                belief_id=norm_belief_id(owner_id, draft.pattern, counterparts),
+                owner_id=owner_id,
+                pattern=draft.pattern,
+                expectation=_EXPECTATION_FOR[draft.pattern],
+                context=context,
+                status=draft.status,
+                confidence=draft.confidence,
+                evidence=tuple(draft.evidence),
+                supporters=tuple(draft.supporters),
+                consequences=tuple(draft.consequences),
+                counterpart_ids=counterparts,
+                response=draft.response,
+                chosen_sanction=draft.chosen_sanction,
+                response_reason=draft.response_reason,
+                withhold_until_tick=draft.withhold_until_tick,
+                withhold_agent_id=draft.withhold_agent_id,
+                last_utterance_tick=draft.last_utterance_tick,
+                prior_refusal=draft.prior_refusal,
+            )
+        )
+    frozen_beliefs.sort(key=lambda item: item.belief_id)
+    frozen_windows = tuple(
+        NormWindow(
+            pattern=item.pattern,
+            until_tick=item.until_tick,
+            giver_id=item.giver_id,
+            receiver_id=item.receiver_id,
+            sleeper_id=item.sleeper_id,
+        )
+        for item in windows
+    )
+    frozen_exchanges = tuple(
+        NormExchange(
+            left_id=item.left_id,
+            right_id=item.right_id,
+            directions=tuple(sorted(item.directions)),
+            established=item.established,
+            idle_until=item.idle_until,
+        )
+        for item in exchanges
+    )
+    return NormLedger(
+        owner_id=owner_id,
+        beliefs=tuple(frozen_beliefs),
+        windows=frozen_windows,
+        exchanges=frozen_exchanges,
+        notices=tuple(notices),
+        utterance_plans=tuple(plans),
+        trust_requests=tuple(requests),
+    )
+
+
+def apply_norm_update(
+    observation: object,
+    identity: object,
+    previous: object = None,
+    policy: SocialNormPolicy | None = None,
+) -> NormLedger:
+    """Apply one tick of witnessed evidence for a single owner.
+
+    Disabled callers do not call this function. Passing world authority or a
+    metric document raises ``TypeError``.
+    """
+    _LOG.debug(
+        "apply_norm_update owner_id=%s tick=%s",
+        getattr(getattr(identity, "owner_id", None), "value", None),
+        getattr(observation, "tick", None),
+    )
+    for value in (observation, identity, previous, policy):
+        _reject_forbidden(value)
+    if type(observation) is not Observation:
+        raise TypeError("observation must be Observation")
+    if type(identity) is not OwnerSafeSocialIdentity:
+        raise TypeError("identity must be OwnerSafeSocialIdentity")
+    if previous is not None and type(previous) is not NormLedger:
+        raise TypeError("previous must be NormLedger or None")
+    active_policy = default_social_norm_policy() if policy is None else policy
+    if type(active_policy) is not SocialNormPolicy:
+        raise TypeError("policy must be SocialNormPolicy")
+    owner_id = identity.owner_id
+    tick = observation.tick
+    beliefs, windows, exchanges = _drafts_from(previous, owner_id)
+    notices: list[str] = []
+    seen: set[tuple[str, str]] = set()
+    occurrences = tuple(observation.occurrences)
+    scarcity_location = _scarce(observation, active_policy)
+
+    for ordinal, occurrence in enumerate(occurrences):
+        if not isinstance(occurrence.kind, str) or occurrence.kind not in _KNOWN_KINDS:
+            if "ignored_kind" not in notices:
+                _notice(notices, "ignored_kind")
+                _log_drop("ignored_kind")
+            continue
+        if occurrence.kind == "give":
+            _apply_give(
+                occurrence=occurrence,
+                ordinal=ordinal,
+                tick=tick,
+                identity=identity,
+                beliefs=beliefs,
+                windows=windows,
+                exchanges=exchanges,
+                notices=notices,
+                seen=seen,
+                policy=active_policy,
+                scarcity_location=scarcity_location,
+            )
+        elif occurrence.kind == "sleep":
+            _apply_sleep(
+                occurrence=occurrence,
+                ordinal=ordinal,
+                tick=tick,
+                identity=identity,
+                occurrences=occurrences,
+                beliefs=beliefs,
+                windows=windows,
+                notices=notices,
+                seen=seen,
+                policy=active_policy,
+            )
+        elif occurrence.kind == "attack":
+            _apply_attack(
+                occurrence=occurrence,
+                ordinal=ordinal,
+                tick=tick,
+                identity=identity,
+                beliefs=beliefs,
+                windows=windows,
+                notices=notices,
+                seen=seen,
+                policy=active_policy,
+            )
+
+    _expire_windows(
+        tick=tick,
+        owner_id=owner_id,
+        beliefs=beliefs,
+        windows=windows,
+        notices=notices,
+        seen=seen,
+        policy=active_policy,
+    )
+    _expire_exchanges(
+        tick=tick,
+        owner_id=owner_id,
+        beliefs=beliefs,
+        exchanges=exchanges,
+        notices=notices,
+        seen=seen,
+        policy=active_policy,
+    )
+    _witness_consequences(
+        observation=observation,
+        identity=identity,
+        beliefs=beliefs,
+        tick=tick,
+    )
+    _promote(beliefs, owner_id, tick, active_policy)
+    ledger = _freeze(owner_id, beliefs, windows, exchanges, notices)
+    _LOG.info(
+        "norm_belief_updated owner_id=%s belief_count=%s",
+        owner_id.value,
+        len(ledger.beliefs),
+    )
+    return ledger
+
+
+def _apply_give(
+    *,
+    occurrence: ObservedOccurrence,
+    ordinal: int,
+    tick: int,
+    identity: OwnerSafeSocialIdentity,
+    beliefs: list[_BeliefDraft],
+    windows: list[_WindowDraft],
+    exchanges: list[_ExchangeDraft],
+    notices: list[str],
+    seen: set[tuple[str, str]],
+    policy: SocialNormPolicy,
+    scarcity_location: EntityId | None,
+) -> None:
+    if occurrence.success is False:
+        return
+    actor = _resolve_agent(identity, occurrence.actor_id)
+    other = _resolve_agent(identity, occurrence.other_entity_id)
+    lineage = _lineage(tick, ordinal, occurrence)
+    if actor is None or other is None or actor == other:
+        _notice(notices, "unresolved_entity")
+        _log_drop("unresolved_entity")
+        return
+    closed = False
+    remaining: list[_WindowDraft] = []
+    for window in windows:
+        opposite = (
+            window.pattern is NormPattern.RETURN_TRANSFER
+            and window.giver_id == other
+            and window.receiver_id == actor
+            and tick <= window.until_tick
+        )
+        if opposite and not closed:
+            closed = True
+            _record_evidence(
+                beliefs=beliefs,
+                notices=notices,
+                owner_id=identity.owner_id,
+                pattern=NormPattern.RETURN_TRANSFER,
+                counterparts=(actor, other),
+                delta=policy.conforming_delta,
+                channel=NormEvidenceChannel.CONFORMING,
+                lineage_ref=lineage,
+                tick=tick,
+                actor_id=actor,
+                location_id=None,
+                window_until=None,
+                policy=policy,
+                seen=seen,
+            )
+            continue
+        remaining.append(window)
+    windows[:] = remaining
+    if not closed:
+        already = any(
+            window.pattern is NormPattern.RETURN_TRANSFER
+            and window.giver_id == actor
+            and window.receiver_id == other
+            for window in windows
+        )
+        if not already:
+            windows.append(
+                _WindowDraft(
+                    pattern=NormPattern.RETURN_TRANSFER,
+                    until_tick=tick + policy.return_window_ticks,
+                    giver_id=actor,
+                    receiver_id=other,
+                )
+            )
+    if scarcity_location is not None:
+        _record_evidence(
+            beliefs=beliefs,
+            notices=notices,
+            owner_id=identity.owner_id,
+            pattern=NormPattern.SHARE_UNDER_SCARCITY,
+            counterparts=(),
+            delta=policy.conforming_delta,
+            channel=NormEvidenceChannel.CONFORMING,
+            lineage_ref=lineage,
+            tick=tick,
+            actor_id=actor,
+            location_id=scarcity_location,
+            window_until=None,
+            policy=policy,
+            seen=seen,
+        )
+    _apply_exchange(
+        actor=actor,
+        other=other,
+        lineage=lineage,
+        tick=tick,
+        identity=identity,
+        beliefs=beliefs,
+        exchanges=exchanges,
+        notices=notices,
+        seen=seen,
+        policy=policy,
+    )
+
+
+def _exchange_for(
+    exchanges: list[_ExchangeDraft], left: AgentId, right: AgentId
+) -> _ExchangeDraft:
+    for item in exchanges:
+        if item.left_id == left and item.right_id == right:
+            return item
+    created = _ExchangeDraft(left_id=left, right_id=right)
+    exchanges.append(created)
+    return created
+
+
+def _apply_exchange(
+    *,
+    actor: AgentId,
+    other: AgentId,
+    lineage: str,
+    tick: int,
+    identity: OwnerSafeSocialIdentity,
+    beliefs: list[_BeliefDraft],
+    exchanges: list[_ExchangeDraft],
+    notices: list[str],
+    seen: set[tuple[str, str]],
+    policy: SocialNormPolicy,
+) -> None:
+    left, right = _pair_key(actor, other)
+    state = _exchange_for(exchanges, left, right)
+    token = _direction_token(actor, other)
+    state.gave_this_tick = True
+    if not state.established:
+        state.directions.add(token)
+        forward = _direction_token(left, right)
+        backward = _direction_token(right, left)
+        if forward in state.directions and backward in state.directions:
+            state.established = True
+            state.idle_until = tick + policy.return_window_ticks
+            _ensure_candidate(
+                beliefs,
+                NormPattern.RECIPROCAL_EXCHANGE,
+                (left, right),
+                notices,
+                policy,
+            )
+        return
+    state.idle_until = tick + policy.return_window_ticks
+    _record_evidence(
+        beliefs=beliefs,
+        notices=notices,
+        owner_id=identity.owner_id,
+        pattern=NormPattern.RECIPROCAL_EXCHANGE,
+        counterparts=(left, right),
+        delta=policy.conforming_delta,
+        channel=NormEvidenceChannel.CONFORMING,
+        lineage_ref=lineage,
+        tick=tick,
+        actor_id=actor,
+        location_id=None,
+        window_until=state.idle_until,
+        policy=policy,
+        seen=seen,
+    )
+
+
+def _apply_sleep(
+    *,
+    occurrence: ObservedOccurrence,
+    ordinal: int,
+    tick: int,
+    identity: OwnerSafeSocialIdentity,
+    occurrences: Sequence[ObservedOccurrence],
+    beliefs: list[_BeliefDraft],
+    windows: list[_WindowDraft],
+    notices: list[str],
+    seen: set[tuple[str, str]],
+    policy: SocialNormPolicy,
+) -> None:
+    sleeper_entity = occurrence.actor_id
+    sleeper = _resolve_agent(identity, sleeper_entity)
+    if sleeper is None or type(sleeper_entity) is not EntityId:
+        _notice(notices, "unresolved_entity")
+        _log_drop("unresolved_entity")
+        return
+    if _attacks_targeting(occurrences, sleeper_entity):
+        return
+    lineage = _lineage(tick, ordinal, occurrence)
+    until = tick + policy.spare_window_ticks
+    _record_evidence(
+        beliefs=beliefs,
+        notices=notices,
+        owner_id=identity.owner_id,
+        pattern=NormPattern.SPARE_AFTER_SLEEP,
+        counterparts=(sleeper,),
+        delta=policy.conforming_delta,
+        channel=NormEvidenceChannel.CONFORMING,
+        lineage_ref=lineage,
+        tick=tick,
+        actor_id=sleeper,
+        location_id=None,
+        window_until=until,
+        policy=policy,
+        seen=seen,
+    )
+    windows.append(
+        _WindowDraft(
+            pattern=NormPattern.SPARE_AFTER_SLEEP,
+            until_tick=until,
+            sleeper_id=sleeper,
+        )
+    )
+
+
+def _apply_attack(
+    *,
+    occurrence: ObservedOccurrence,
+    ordinal: int,
+    tick: int,
+    identity: OwnerSafeSocialIdentity,
+    beliefs: list[_BeliefDraft],
+    windows: list[_WindowDraft],
+    notices: list[str],
+    seen: set[tuple[str, str]],
+    policy: SocialNormPolicy,
+) -> None:
+    target = _resolve_agent(identity, occurrence.other_entity_id)
+    attacker = _resolve_agent(identity, occurrence.actor_id)
+    if target is None:
+        _notice(notices, "unresolved_entity")
+        _log_drop("unresolved_entity")
+        return
+    lineage = _lineage(tick, ordinal, occurrence)
+    remaining: list[_WindowDraft] = []
+    violated = False
+    for window in windows:
+        inside = (
+            window.pattern is NormPattern.SPARE_AFTER_SLEEP
+            and window.sleeper_id == target
+            and tick <= window.until_tick
+        )
+        if inside and not violated:
+            violated = True
+            _record_evidence(
+                beliefs=beliefs,
+                notices=notices,
+                owner_id=identity.owner_id,
+                pattern=NormPattern.SPARE_AFTER_SLEEP,
+                counterparts=(target,),
+                delta=policy.violation_delta,
+                channel=NormEvidenceChannel.VIOLATION,
+                lineage_ref=lineage,
+                tick=tick,
+                actor_id=attacker,
+                location_id=None,
+                window_until=None,
+                policy=policy,
+                seen=seen,
+            )
+            continue
+        remaining.append(window)
+    windows[:] = remaining
+
+
+def _expire_windows(
+    *,
+    tick: int,
+    owner_id: AgentId,
+    beliefs: list[_BeliefDraft],
+    windows: list[_WindowDraft],
+    notices: list[str],
+    seen: set[tuple[str, str]],
+    policy: SocialNormPolicy,
+) -> None:
+    remaining: list[_WindowDraft] = []
+    for window in windows:
+        if tick < window.until_tick:
+            remaining.append(window)
+            continue
+        if (
+            window.pattern is NormPattern.RETURN_TRANSFER
+            and window.receiver_id is not None
+        ):
+            counterparts: tuple[AgentId, ...] = ()
+            if window.giver_id is not None and window.receiver_id is not None:
+                counterparts = (window.giver_id, window.receiver_id)
+            giver = "-" if window.giver_id is None else window.giver_id.value
+            receiver = window.receiver_id.value
+            _record_evidence(
+                beliefs=beliefs,
+                notices=notices,
+                owner_id=owner_id,
+                pattern=NormPattern.RETURN_TRANSFER,
+                counterparts=counterparts,
+                delta=policy.violation_delta,
+                channel=NormEvidenceChannel.VIOLATION,
+                lineage_ref=f"tick-{tick}-return-{giver}-{receiver}",
+                tick=tick,
+                actor_id=window.receiver_id,
+                location_id=None,
+                window_until=None,
+                policy=policy,
+                seen=seen,
+            )
+            continue
+        if (
+            window.pattern is NormPattern.SPARE_AFTER_SLEEP
+            and tick >= window.until_tick
+        ):
+            continue
+        remaining.append(window)
+    windows[:] = remaining
+
+
+def _expire_exchanges(
+    *,
+    tick: int,
+    owner_id: AgentId,
+    beliefs: list[_BeliefDraft],
+    exchanges: list[_ExchangeDraft],
+    notices: list[str],
+    seen: set[tuple[str, str]],
+    policy: SocialNormPolicy,
+) -> None:
+    for state in exchanges:
+        if not state.established or state.gave_this_tick:
+            continue
+        if state.idle_until is None or tick < state.idle_until:
+            continue
+        _record_evidence(
+            beliefs=beliefs,
+            notices=notices,
+            owner_id=owner_id,
+            pattern=NormPattern.RECIPROCAL_EXCHANGE,
+            counterparts=(state.left_id, state.right_id),
+            delta=policy.violation_delta,
+            channel=NormEvidenceChannel.VIOLATION,
+            lineage_ref=f"tick-{tick}-idle-{state.left_id.value}-{state.right_id.value}",
+            tick=tick,
+            actor_id=None,
+            location_id=None,
+            window_until=tick + policy.return_window_ticks,
+            policy=policy,
+            seen=seen,
+        )
+        state.idle_until = tick + policy.return_window_ticks
+
+
+def _witness_consequences(
+    *,
+    observation: Observation,
+    identity: OwnerSafeSocialIdentity,
+    beliefs: list[_BeliefDraft],
+    tick: int,
+) -> None:
+    for communication in observation.communications:
+        if type(communication) is not ObservedCommunication:
+            continue
+        if communication.action_kind not in {"talk", "ask", "tell"}:
+            continue
+        relations = getattr(getattr(communication, "utterance", None), "content", None)
+        relation_items = (
+            () if relations is None else getattr(relations, "relations", ())
+        )
+        speaker = _resolve_agent(identity, communication.speaker_id)
+        for relation in relation_items:
+            predicate = getattr(relation, "predicate", None)
+            obj = getattr(relation, "object", None)
+            if predicate != "criticize" or obj not in _PATTERN_TOKENS:
+                continue
+            pattern = NormPattern(obj)
+            for belief in beliefs:
+                if belief.pattern is pattern:
+                    _append_consequence(
+                        belief,
+                        NormSanction.CRITICISM,
+                        NormConsequenceChannel.WITNESSED,
+                        tick,
+                        speaker,
+                    )
+    recent_violators: set[str] = set()
+    for belief in beliefs:
+        for item in belief.evidence:
+            if item.channel is not NormEvidenceChannel.VIOLATION:
+                continue
+            if item.actor_id is None:
+                continue
+            if tick - item.tick <= _RETALIATION_LOOKBACK:
+                recent_violators.add(item.actor_id.value)
+    for occurrence in observation.occurrences:
+        if occurrence.kind != "attack":
+            continue
+        target = _resolve_agent(identity, occurrence.other_entity_id)
+        attacker = _resolve_agent(identity, occurrence.actor_id)
+        if target is None or target.value not in recent_violators:
+            continue
+        for belief in beliefs:
+            if any(
+                item.channel is NormEvidenceChannel.VIOLATION
+                and item.actor_id == target
+                and tick - item.tick <= _RETALIATION_LOOKBACK
+                for item in belief.evidence
+            ):
+                _append_consequence(
+                    belief,
+                    NormSanction.RETALIATION,
+                    NormConsequenceChannel.WITNESSED,
+                    tick,
+                    attacker,
+                )
+
+
+def _direction_value(future: object) -> str | None:
+    direction = getattr(future, "direction", None)
+    if type(direction) is ActionDirection:
+        return direction.value
+    value = getattr(direction, "value", None)
+    if isinstance(value, str):
+        return value
+    return None
+
+
+def _future_id(future: object) -> str | None:
+    value = getattr(future, "future_id", None)
+    if isinstance(value, str) and value:
+        return value
+    return None
+
+
+def _targets(
+    future: object, agent_id: AgentId, identity: OwnerSafeSocialIdentity | None
+) -> bool:
+    target_agent = getattr(future, "target_agent_id", None)
+    if target_agent == agent_id:
+        return True
+    target = getattr(future, "target_entity_id", None)
+    if identity is None or not isinstance(target, str):
+        return False
+    entity = None
+    try:
+        entity = EntityId(target)
+    except (TypeError, ValueError):
+        return False
+    return _resolve_agent(identity, entity) == agent_id
+
+
+def _has_profile(
+    relationships: Sequence[object] | None, owner_id: AgentId, target_id: AgentId
+) -> bool:
+    if relationships is None:
+        return False
+    for profile in relationships:
+        if (
+            getattr(profile, "source_id", None) == owner_id
+            and getattr(profile, "target_id", None) == target_id
+        ):
+            return True
+    return False
+
+
+def _utterance_object(belief: _BeliefDraft, owner_id: AgentId) -> str:
+    others = [agent for agent in belief.counterparts if agent != owner_id]
+    if others:
+        return min(others, key=lambda item: item.value).value
+    if belief.counterparts:
+        return min(belief.counterparts, key=lambda item: item.value).value
+    return _LOCATION_OBJECT
+
+
+def _add_penalty(penalties: dict[str, float], future_id: str, amount: float) -> None:
+    if amount < 0.0 or not math.isfinite(amount):
+        raise _fail("penalty", "negative_penalty")
+    total = _quantize(penalties.get(future_id, 0.0) + amount)
+    if total < 0.0:
+        raise _fail("penalty", "negative_penalty")
+    penalties[future_id] = total
+
+
+def _critical(hunger: float, thirst: float, policy: SocialNormPolicy) -> bool:
+    return (
+        hunger / 100.0 >= policy.critical_need_ratio
+        or thirst / 100.0 >= policy.critical_need_ratio
+    )
+
+
+def _select_responses(
+    *,
+    beliefs: list[_BeliefDraft],
+    observation: Observation,
+    futures: Sequence[object],
+    hunger: float,
+    thirst: float,
+    identity: OwnerSafeSocialIdentity | None,
+    relationships: Sequence[object] | None,
+    policy: SocialNormPolicy,
+    notices: list[str],
+    owner_id: AgentId,
+) -> tuple[dict[str, float], list[NormUtterancePlan], list[NormTrustRequest]]:
+    penalties: dict[str, float] = {}
+    plans: list[NormUtterancePlan] = []
+    requests: list[NormTrustRequest] = []
+    tick = observation.tick
+    scarcity = _scarce(observation, policy) is not None
+    for belief in beliefs:
+        if belief.status is NormStatus.CANDIDATE:
+            belief.response = NormResponse.IGNORE
+            belief.response_reason = "candidate_only"
+            _LOG.warning("norm_response_withheld reason=%s", "candidate_only")
+            continue
+        if belief.status is not NormStatus.ACTIVE:
+            belief.response = NormResponse.IGNORE
+            continue
+        violator = _violator(belief, tick, owner_id)
+        response, reason = _choose_response(
+            belief=belief,
+            tick=tick,
+            futures=futures,
+            hunger=hunger,
+            thirst=thirst,
+            violator=violator,
+            policy=policy,
+            scarcity=scarcity,
+        )
+        belief.response = response
+        belief.response_reason = reason
+        _LOG.debug(
+            "norm_response_selected owner_id=%s tick=%s response=%s",
+            owner_id.value,
+            tick,
+            response.value,
+        )
+        if reason is not None and response is NormResponse.IGNORE:
+            _LOG.warning("norm_response_withheld reason=%s", reason)
+        _apply_response_effect(
+            belief=belief,
+            response=response,
+            reason=reason,
+            tick=tick,
+            futures=futures,
+            identity=identity,
+            relationships=relationships,
+            policy=policy,
+            penalties=penalties,
+            plans=plans,
+            requests=requests,
+            notices=notices,
+            owner_id=owner_id,
+            violator=violator,
+            scarcity=scarcity,
+            hunger=hunger,
+        )
+        _apply_withhold(
+            belief=belief,
+            tick=tick,
+            futures=futures,
+            identity=identity,
+            policy=policy,
+            penalties=penalties,
+        )
+    return penalties, plans, requests
+
+
+def _violator(belief: _BeliefDraft, tick: int, owner_id: AgentId) -> AgentId | None:
+    for item in belief.evidence:
+        if (
+            item.channel is NormEvidenceChannel.VIOLATION
+            and item.tick == tick
+            and item.actor_id is not None
+            and item.actor_id != owner_id
+        ):
+            return item.actor_id
+    return None
+
+
+def _has_direction(futures: Sequence[object], value: str) -> bool:
+    return any(_direction_value(future) == value for future in futures)
+
+
+def _choose_response(
+    *,
+    belief: _BeliefDraft,
+    tick: int,
+    futures: Sequence[object],
+    hunger: float,
+    thirst: float,
+    violator: AgentId | None,
+    policy: SocialNormPolicy,
+    scarcity: bool,
+) -> tuple[NormResponse, str | None]:
+    if violator is not None and belief.confidence + 1e-9 >= policy.enforce_confidence:
+        return NormResponse.ENFORCE, None
+    uttered = (
+        belief.last_utterance_tick is not None
+        and tick - belief.last_utterance_tick < policy.utterance_interval
+    )
+    if belief.confidence + 1e-9 >= policy.active_confidence and _has_direction(
+        futures, ActionDirection.COMMUNICATE.value
+    ):
+        if uttered:
+            _LOG.warning("norm_response_withheld reason=%s", "utterance_interval")
+        else:
+            return NormResponse.COMMUNICATE, None
+    if (
+        belief.pattern is NormPattern.SHARE_UNDER_SCARCITY
+        and scarcity
+        and _critical(hunger, thirst, policy)
+        and _has_direction(futures, ActionDirection.EAT.value)
+    ):
+        return NormResponse.VIOLATE, None
+    if belief.confidence + 1e-9 >= policy.active_confidence and _matches_expectation(
+        belief, futures
+    ):
+        return NormResponse.FOLLOW, None
+    if belief.confidence + 1e-9 >= policy.active_confidence:
+        return NormResponse.IGNORE, "no_candidate"
+    return NormResponse.IGNORE, None
+
+
+def _matches_expectation(belief: _BeliefDraft, futures: Sequence[object]) -> bool:
+    expectation = _EXPECTATION_FOR[belief.pattern]
+    if expectation is NormExpectation.WITHHOLD_ATTACK:
+        return any(_direction_value(future) != "attack" for future in futures)
+    if expectation in {
+        NormExpectation.GIVE,
+        NormExpectation.GIVE_BACK,
+        NormExpectation.GIVE_AGAIN,
+    }:
+        return any(_direction_value(future) == "give" for future in futures)
+    return False
+
+
+def _apply_response_effect(
+    *,
+    belief: _BeliefDraft,
+    response: NormResponse,
+    reason: str | None,
+    tick: int,
+    futures: Sequence[object],
+    identity: OwnerSafeSocialIdentity | None,
+    relationships: Sequence[object] | None,
+    policy: SocialNormPolicy,
+    penalties: dict[str, float],
+    plans: list[NormUtterancePlan],
+    requests: list[NormTrustRequest],
+    notices: list[str],
+    owner_id: AgentId,
+    violator: AgentId | None,
+    scarcity: bool,
+    hunger: float,
+) -> None:
+    if response is NormResponse.FOLLOW:
+        _penalize_contradictions(
+            belief=belief,
+            futures=futures,
+            identity=identity,
+            policy=policy,
+            penalties=penalties,
+            scarcity=scarcity,
+            hunger=hunger,
+            tick=tick,
+        )
+        return
+    if response is NormResponse.COMMUNICATE:
+        _prefer_direction(futures, ActionDirection.COMMUNICATE.value, policy, penalties)
+        plans.append(
+            NormUtterancePlan(
+                pattern=belief.pattern,
+                predicate="expect",
+                subject=belief.pattern.value,
+                object=_utterance_object(belief, owner_id),
+            )
+        )
+        belief.last_utterance_tick = tick
+        return
+    if response is NormResponse.VIOLATE:
+        _prefer_direction(futures, ActionDirection.EAT.value, policy, penalties)
+        return
+    if response is NormResponse.ENFORCE and violator is not None:
+        _enforce(
+            belief=belief,
+            tick=tick,
+            futures=futures,
+            identity=identity,
+            relationships=relationships,
+            policy=policy,
+            penalties=penalties,
+            plans=plans,
+            requests=requests,
+            notices=notices,
+            owner_id=owner_id,
+            violator=violator,
+        )
+        return
+    if reason == "no_candidate":
+        _notice(notices, "no_candidate")
+
+
+def _prefer_direction(
+    futures: Sequence[object],
+    preferred: str,
+    policy: SocialNormPolicy,
+    penalties: dict[str, float],
+) -> None:
+    for future in futures:
+        future_id = _future_id(future)
+        if future_id is None or _direction_value(future) == preferred:
+            continue
+        _add_penalty(penalties, future_id, policy.penalty)
+
+
+def _penalize_contradictions(
+    *,
+    belief: _BeliefDraft,
+    futures: Sequence[object],
+    identity: OwnerSafeSocialIdentity | None,
+    policy: SocialNormPolicy,
+    penalties: dict[str, float],
+    scarcity: bool,
+    hunger: float,
+    tick: int,
+) -> None:
+    spare_open = belief.pattern is NormPattern.SPARE_AFTER_SLEEP and (
+        belief.window_until is not None and tick <= belief.window_until
+    )
+    for future in futures:
+        future_id = _future_id(future)
+        if future_id is None:
+            continue
+        direction = _direction_value(future)
+        if (
+            spare_open
+            and direction == ActionDirection.ATTACK.value
+            and belief.counterparts
+            and _targets(future, belief.counterparts[0], identity)
+        ):
+            _add_penalty(penalties, future_id, policy.penalty)
+        if (
+            belief.pattern is NormPattern.SHARE_UNDER_SCARCITY
+            and scarcity
+            and hunger / 100.0 < policy.critical_need_ratio
+            and direction == ActionDirection.EAT.value
+        ):
+            _add_penalty(penalties, future_id, policy.penalty)
+
+
+def _record_sanction(
+    belief: _BeliefDraft,
+    sanction: NormSanction,
+    tick: int,
+    owner_id: AgentId,
+) -> None:
+    belief.chosen_sanction = sanction
+    belief.response_reason = None
+    _append_consequence(
+        belief,
+        sanction,
+        NormConsequenceChannel.OWN_ACT,
+        tick,
+        owner_id,
+    )
+    _LOG.debug(
+        "norm_sanction_applied owner_id=%s tick=%s sanction=%s",
+        owner_id.value,
+        tick,
+        sanction.value,
+    )
+
+
+def _enforce(
+    *,
+    belief: _BeliefDraft,
+    tick: int,
+    futures: Sequence[object],
+    identity: OwnerSafeSocialIdentity | None,
+    relationships: Sequence[object] | None,
+    policy: SocialNormPolicy,
+    penalties: dict[str, float],
+    plans: list[NormUtterancePlan],
+    requests: list[NormTrustRequest],
+    notices: list[str],
+    owner_id: AgentId,
+    violator: AgentId,
+) -> None:
+    if _has_direction(futures, ActionDirection.COMMUNICATE.value):
+        _prefer_direction(futures, ActionDirection.COMMUNICATE.value, policy, penalties)
+        plans.append(
+            NormUtterancePlan(
+                pattern=belief.pattern,
+                predicate="criticize",
+                subject=belief.pattern.value,
+                object=_utterance_object(belief, owner_id),
+            )
+        )
+        belief.chosen_sanction = NormSanction.CRITICISM
+        belief.last_utterance_tick = tick
+        _append_consequence(
+            belief,
+            NormSanction.CRITICISM,
+            NormConsequenceChannel.OWN_ACT,
+            tick,
+            owner_id,
+        )
+        _LOG.debug(
+            "norm_sanction_applied owner_id=%s tick=%s sanction=%s",
+            owner_id.value,
+            tick,
+            NormSanction.CRITICISM.value,
+        )
+        return
+    help_or_give = [
+        future
+        for future in futures
+        if _direction_value(future) in {ActionDirection.HELP.value, "give"}
+        and _targets(future, violator, identity)
+    ]
+    if help_or_give:
+        for future in help_or_give:
+            future_id = _future_id(future)
+            if future_id is not None:
+                _add_penalty(penalties, future_id, policy.penalty)
+        _record_sanction(
+            belief,
+            NormSanction.REFUSAL,
+            tick,
+            owner_id,
+        )
+        belief.prior_refusal = True
+        return
+    if _has_profile(relationships, owner_id, violator):
+        requests.append(NormTrustRequest(target_id=violator))
+        _record_sanction(
+            belief,
+            NormSanction.REDUCED_TRUST,
+            tick,
+            owner_id,
+        )
+        return
+    witnessed_retaliation = any(
+        item.sanction is NormSanction.RETALIATION
+        and item.channel is NormConsequenceChannel.WITNESSED
+        for item in belief.consequences
+    )
+    attack = [
+        future
+        for future in futures
+        if _direction_value(future) == ActionDirection.ATTACK.value
+        and _targets(future, violator, identity)
+    ]
+    if witnessed_retaliation and attack:
+        for future in futures:
+            future_id = _future_id(future)
+            if future_id is None or future in attack:
+                continue
+            _add_penalty(penalties, future_id, policy.penalty)
+        _record_sanction(
+            belief,
+            NormSanction.RETALIATION,
+            tick,
+            owner_id,
+        )
+        return
+    own_exclusion = any(
+        item.sanction is NormSanction.EXCLUSION
+        and item.channel is NormConsequenceChannel.OWN_ACT
+        for item in belief.consequences
+    )
+    if own_exclusion or belief.prior_refusal:
+        belief.withhold_until_tick = tick + policy.exclusion_window_ticks
+        belief.withhold_agent_id = violator
+        _record_sanction(
+            belief,
+            NormSanction.EXCLUSION,
+            tick,
+            owner_id,
+        )
+        return
+    if not _has_profile(relationships, owner_id, violator):
+        _LOG.warning("trust_revision_skipped reason=%s", "no_profile")
+        _notice(notices, "no_profile")
+    if witnessed_retaliation or not attack:
+        belief.response_reason = "sanction_unavailable"
+        _notice(notices, "sanction_unavailable")
+        _LOG.warning("norm_sanction_skipped reason=%s", "sanction_unavailable")
+        return
+    belief.response_reason = "sanction_latent"
+    _notice(notices, "sanction_latent")
+    _LOG.warning("norm_sanction_skipped reason=%s", "sanction_latent")
+
+
+def _apply_withhold(
+    *,
+    belief: _BeliefDraft,
+    tick: int,
+    futures: Sequence[object],
+    identity: OwnerSafeSocialIdentity | None,
+    policy: SocialNormPolicy,
+    penalties: dict[str, float],
+) -> None:
+    agent = belief.withhold_agent_id
+    until = belief.withhold_until_tick
+    if agent is None or until is None or tick > until:
+        return
+    for future in futures:
+        direction = _direction_value(future)
+        if direction not in {
+            ActionDirection.HELP.value,
+            "give",
+            ActionDirection.COMMUNICATE.value,
+        }:
+            continue
+        if not _targets(future, agent, identity):
+            continue
+        future_id = _future_id(future)
+        if future_id is not None:
+            _add_penalty(penalties, future_id, policy.penalty)
+
+
+def norm_response_penalties(
+    ledger: object,
+    observation: object,
+    futures: Sequence[object],
+    hunger: float,
+    thirst: float,
+    *,
+    identity: OwnerSafeSocialIdentity | None = None,
+    relationships: Sequence[object] | None = None,
+    mode: object | None = None,
+    policy: SocialNormPolicy | None = None,
+) -> NormResponseResult:
+    """Penalize futures the planner already has. Does not construct commands."""
+    _reject_forbidden(observation)
+    _reject_forbidden(ledger)
+    if mode is not None:
+        from agents.cognition.configuration import CognitionSocialNormMode
+
+        if mode is not CognitionSocialNormMode.DETERMINISTIC:
+            return NormResponseResult(ledger=None, penalties=())
+    if type(ledger) is not NormLedger:
+        return NormResponseResult(ledger=None, penalties=())
+    if type(observation) is not Observation:
+        raise TypeError("observation must be Observation")
+    number_hunger = _finite("hunger", hunger)
+    number_thirst = _finite("thirst", thirst)
+    active_policy = default_social_norm_policy() if policy is None else policy
+    if type(active_policy) is not SocialNormPolicy:
+        raise TypeError("policy must be SocialNormPolicy")
+    beliefs, windows, exchanges = _drafts_from(ledger, ledger.owner_id)
+    notices: list[str] = []
+    penalties, plans, requests = _select_responses(
+        beliefs=beliefs,
+        observation=observation,
+        futures=futures,
+        hunger=number_hunger,
+        thirst=number_thirst,
+        identity=identity,
+        relationships=relationships,
+        policy=active_policy,
+        notices=notices,
+        owner_id=ledger.owner_id,
+    )
+    _decay(beliefs, ledger.owner_id, observation.tick, active_policy)
+    updated = _freeze(
+        ledger.owner_id,
+        beliefs,
+        windows,
+        exchanges,
+        notices,
+        plans,
+        requests,
+    )
+    ordered = tuple(sorted(penalties.items()))
+    return NormResponseResult(ledger=updated, penalties=ordered)

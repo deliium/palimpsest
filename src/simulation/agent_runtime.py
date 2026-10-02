@@ -445,6 +445,7 @@ class AgentRuntime:
         "_run_id",
         "_scientific_evidence",
         "_semantic_belief_reader",
+        "_social_norms",
         "_status",
         "_subjective_state",
         "_territorial_claims",
@@ -545,6 +546,7 @@ class AgentRuntime:
         self._reputation: object | None = None
         self._territorial_claims: object | None = None
         self._group_formation: object | None = None
+        self._social_norms: object | None = None
         self._competence: object | None = None
         self._recipe_beliefs: object | None = None
         self._advice: object | None = None
@@ -800,6 +802,33 @@ class AgentRuntime:
             mode_name,
             len(ledger.beliefs),
             len(ledger.concepts),
+        )
+
+    def _commit_social_norms(self, ledger: object | None, tick: int) -> None:
+        from agents.cognition.configuration import CognitionSocialNormMode
+        from agents.cognition.social_norms import NormLedger
+
+        owner = self._agent.agent_id
+        mode = getattr(
+            self._loop, "_social_norm_mode", CognitionSocialNormMode.DISABLED
+        )
+        if mode is not CognitionSocialNormMode.DETERMINISTIC or ledger is None:
+            if mode is not CognitionSocialNormMode.DETERMINISTIC:
+                self._social_norms = None
+            return
+        if type(ledger) is not NormLedger:
+            raise TypeError("social_norms must be NormLedger")
+        if ledger.owner_id != owner:
+            raise AgentRuntimeError(
+                AgentRuntimeErrorCode.OWNERSHIP,
+                agent_id=owner.value,
+            )
+        self._social_norms = ledger
+        _LOG.debug(
+            "social_norms_carried owner_id=%s belief_count=%s tick=%s",
+            owner.value,
+            len(ledger.beliefs),
+            tick,
         )
 
     def _commit_competence(self, model: object | None, tick: int) -> None:
@@ -1334,6 +1363,7 @@ class AgentRuntime:
                 reputation=self._reputation,
                 territorial_claims=self._territorial_claims,
                 group_formation=self._group_formation,
+                social_norms=self._social_norms,
                 competence_model=self._competence,
                 declarative_advice=self._advice,
                 recipe_beliefs=self._recipe_beliefs,
@@ -1750,6 +1780,9 @@ class AgentRuntime:
         self._commit_group_formation(
             getattr(pending.loop_result, "group_formation", None), pending.tick
         )
+        self._commit_social_norms(
+            getattr(pending.loop_result, "social_norms", None), pending.tick
+        )
         self._commit_competence(
             getattr(pending.loop_result, "competence_model", None), pending.tick
         )
@@ -2154,6 +2187,7 @@ class AgentRuntime:
         self._reputation = checkpoint.reputation
         self._territorial_claims = getattr(checkpoint, "territorial_claims", None)
         self._group_formation = getattr(checkpoint, "group_formation", None)
+        self._social_norms = getattr(checkpoint, "social_norms", None)
         self._competence = checkpoint.competence_model
         self._recipe_beliefs = getattr(checkpoint, "recipe_beliefs", None)
         self._advice = checkpoint.declarative_advice
@@ -2214,6 +2248,7 @@ class AgentRuntime:
             reputation=self._reputation,
             territorial_claims=self._territorial_claims,
             group_formation=self._group_formation,
+            social_norms=self._social_norms,
             competence_model=self._competence,
             declarative_advice=self._advice,
             recipe_beliefs=self._recipe_beliefs,

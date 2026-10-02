@@ -149,6 +149,7 @@ class Perspective:
     reputation: object | None = None
     territorial_claims: object | None = None
     group_formation: object | None = None
+    social_norms: object | None = None
     competence_model: object | None = None
     declarative_advice: object | None = None
     recipe_beliefs: object | None = None
@@ -301,6 +302,13 @@ class Perspective:
             self.agent_id,
             field_name="Perspective.group_formation",
         )
+        from agents.cognition.social_norms import require_owner_social_norms
+
+        require_owner_social_norms(
+            self.social_norms,
+            self.agent_id,
+            field_name="Perspective.social_norms",
+        )
         from agents.cognition.competence import require_owner_competence
 
         require_owner_competence(
@@ -347,6 +355,7 @@ class Perspective:
             reputation=self.reputation,
             territorial_claims=self.territorial_claims,
             group_formation=self.group_formation,
+            social_norms=self.social_norms,
             competence_model=self.competence_model,
             declarative_advice=self.declarative_advice,
             recipe_beliefs=self.recipe_beliefs,
