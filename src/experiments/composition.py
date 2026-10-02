@@ -32,6 +32,7 @@ from simulation.evidence import (
     manifest_hash_prefix,
 )
 from world.events import WorldEvent
+from world.identifiers import require_exact_nonneg_int
 
 __all__ = [
     "EvidenceCompositionError",
@@ -41,6 +42,7 @@ __all__ = [
     "map_consolidation_audits_to_report",
     "map_recall_audits_to_dynamics_report",
     "map_snapshot_to_analysis_sources",
+    "norm_belief_rows_from_ledgers",
     "spatial_action_rows_from_events",
 ]
 
@@ -478,6 +480,50 @@ def spatial_action_rows_from_events(
         "spatial_action_rows_built events=%s rows=%s",
         len(events),
         len(rows),
+    )
+    return tuple(rows)
+
+
+def norm_belief_rows_from_ledgers(
+    ledgers: Sequence[object],
+    *,
+    tick: int = 0,
+) -> tuple[dict[str, object], ...]:
+    """Copy detached norm beliefs for analysis. Empty ledgers stay empty."""
+    if isinstance(ledgers, (str, bytes)) or not isinstance(ledgers, Sequence):
+        raise TypeError("norm_belief_rows_from_ledgers: invalid_ledgers")
+    tick = require_exact_nonneg_int("tick", tick)
+    rows: list[dict[str, object]] = []
+    for ledger in ledgers:
+        owner = _id_text(getattr(ledger, "owner_id", None))
+        beliefs = getattr(ledger, "beliefs", ())
+        if not isinstance(beliefs, tuple):
+            raise TypeError("norm_belief_rows_from_ledgers: invalid_ledger")
+        for belief in beliefs:
+            pattern = _id_text(getattr(belief, "pattern", None))
+            status = _id_text(getattr(belief, "status", None))
+            response = getattr(belief, "response", None)
+            response_text = _id_text(response)
+            consequences = getattr(belief, "consequences", ())
+            consequence_names = tuple(
+                _id_text(getattr(item, "sanction", item))
+                for item in consequences
+                if _id_text(getattr(item, "sanction", item)) is not None
+            )
+            rows.append(
+                {
+                    "tick": tick,
+                    "owner_id": owner,
+                    "pattern": pattern,
+                    "status": status,
+                    "confidence": float(getattr(belief, "confidence", 0.0)),
+                    "supporter_count": len(getattr(belief, "supporters", ())),
+                    "consequences": consequence_names,
+                    "response": response_text,
+                }
+            )
+    _LOG.debug(
+        "norm_belief_rows_built ledgers=%s rows=%s", len(ledgers), len(rows)
     )
     return tuple(rows)
 

@@ -179,6 +179,11 @@ from analysis.skill_learning_metrics import (
     SKILL_LEARNING_METRIC_VERSION,
     compute_skill_learning,
 )
+from analysis.social_norm_metrics import (
+    EMERGENT_SOCIAL_NORMS_METRIC_VERSION,
+    compute_emergent_social_norms,
+    compute_norm_persistence,
+)
 from analysis.social_transmission import (
     SocialTransmissionAnalysisService,
     build_lineage_edges,
@@ -245,6 +250,7 @@ __all__ = [
     "DISTRIBUTED_REPUTATION_METRIC_VERSION",
     "DRIFT_METRIC_VERSION",
     "EMERGENT_GROUP_FORMATION_METRIC_VERSION",
+    "EMERGENT_SOCIAL_NORMS_METRIC_VERSION",
     "EVENT_FACT_PROJECTOR_VERSION",
     "EVIDENCE_STAGE_SCHEMA_VERSION",
     "GRAPH_NODE_ORDER_POLICY",
@@ -348,6 +354,7 @@ __all__ = [
     "compute_cultural_transmission",
     "compute_distributed_reputation",
     "compute_emergent_group_candidates",
+    "compute_emergent_social_norms",
     "compute_false_belief_persistence",
     "compute_goal_completion",
     "compute_group_community_structure",
@@ -356,6 +363,7 @@ __all__ = [
     "compute_knowledge_diffusion",
     "compute_memory_drift",
     "compute_memory_dynamics",
+    "compute_norm_persistence",
     "compute_offline_consolidation",
     "compute_prospective_imagination_metrics",
     "compute_reflection",

@@ -50,7 +50,7 @@ __all__ = [
 ]
 
 METRIC_CATALOG_VERSION: Final[str] = "metric-catalog-v1"
-METRIC_FAMILY_COUNT: Final[int] = 29
+METRIC_FAMILY_COUNT: Final[int] = 30
 
 # Align with existing memory-drift / transmission document versions.
 _ALGO_V1: Final[str] = "1"
@@ -106,6 +106,7 @@ class MetricFamilyId(StrEnum):
     CULTURAL_TRANSMISSION = "cultural_transmission"
     SPATIAL_CONTROL = "spatial_control"
     EMERGENT_GROUP_FORMATION = "emergent_group_formation"
+    EMERGENT_SOCIAL_NORMS = "emergent_social_norms"
 
 
 class DenominatorKind(StrEnum):
@@ -1120,6 +1121,53 @@ def _spec_emergent_group_formation() -> MetricSpecification:
     )
 
 
+def _spec_emergent_social_norms() -> MetricSpecification:
+    return _base(
+        family_id=MetricFamilyId.EMERGENT_SOCIAL_NORMS,
+        evidence_inputs=frozenset({EvidenceStage.OBJECTIVE_EVENT_STATE}),
+        population="caller_supplied_behavior_and_belief_rows",
+        denominator="opened_windows_or_active_beliefs",
+        denominator_kind=DenominatorKind.OCCURRENCE,
+        cohort_window="caller-supplied rows after the run",
+        deceased_policy="not_applicable",
+        zero_holding_policy="empty windows -> availability=absent for that key",
+        opportunity_vs_occurrence=(
+            "a return counts only after an opposite give; "
+            "absent windows are not a zero rate"
+        ),
+        self_edge_policy="self pairs are dropped",
+        censoring_policy=(
+            "a missing belief row is not an active belief; "
+            "the metric is not fed back into a ledger"
+        ),
+        formulas={
+            "return_transfer_rate": "opposite gives within 8 ticks / opened windows",
+            "share_under_scarcity_rate": "gives while food <= 1 / scarce ticks",
+            "spare_after_sleep_rate": "unattacked sleeps / sleep occurrences",
+            "reciprocal_exchange_rate": "later gives / established-pair opportunities",
+            "active_belief_count": "rows whose status is active",
+            "mean_confidence": "mean confidence of active rows",
+            "repetition_without_belief": "rates at least 0.50 with no active belief",
+            "belief_without_repetition": "active beliefs whose rate is below 0.50",
+            "behavior_persistence": "adjacent ticks whose rate stays at least 0.50",
+            "belief_persistence": "adjacent ticks that keep the same active belief",
+        },
+        value_keys=(
+            "active_belief_count",
+            "behavior_persistence",
+            "belief_persistence",
+            "belief_without_repetition",
+            "mean_confidence",
+            "reciprocal_exchange_rate",
+            "repetition_without_belief",
+            "return_transfer_rate",
+            "share_under_scarcity_rate",
+            "spare_after_sleep_rate",
+        ),
+        empty_case="availability=absent; empty rows are not zero belief",
+    )
+
+
 def _spec_cultural_transmission() -> MetricSpecification:
     return _base(
         family_id=MetricFamilyId.CULTURAL_TRANSMISSION,
@@ -1796,6 +1844,7 @@ _BUILDERS: Final[tuple[Callable[[], MetricSpecification], ...]] = (
     _spec_cultural_transmission,
     _spec_spatial_control,
     _spec_emergent_group_formation,
+    _spec_emergent_social_norms,
 )
 
 
