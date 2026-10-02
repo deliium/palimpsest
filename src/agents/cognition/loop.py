@@ -184,6 +184,8 @@ class CognitiveLoop:
         "_epistemic_policy",
         "_futures",
         "_goal_manager",
+        "_group_formation_mode",
+        "_group_formation_policy",
         "_identity_mode",
         "_intention",
         "_last_counterfactual_scenarios",
@@ -254,6 +256,8 @@ class CognitiveLoop:
         teaching_claim_policy: object | None = None,
         territorial_claim_mode: object | None = None,
         territorial_claim_policy: object | None = None,
+        group_formation_mode: object | None = None,
+        group_formation_policy: object | None = None,
         production_knowledge_mode: object | None = None,
         production_allow_provider: bool = False,
     ) -> None:
@@ -446,6 +450,28 @@ class CognitiveLoop:
             territorial_policy = territorial_claim_policy
         self._territorial_claim_mode = territorial
         self._territorial_claim_policy = territorial_policy
+        from agents.cognition.configuration import CognitionGroupFormationMode
+        from agents.cognition.group_formation import GroupFormationPolicy
+
+        grouped = (
+            CognitionGroupFormationMode.DISABLED
+            if group_formation_mode is None
+            else group_formation_mode
+        )
+        if type(grouped) is not CognitionGroupFormationMode:
+            raise TypeError("group_formation_mode must be CognitionGroupFormationMode")
+        if grouped is CognitionGroupFormationMode.DISABLED:
+            group_policy = None
+        elif group_formation_policy is None:
+            from agents.cognition.group_formation import default_group_formation_policy
+
+            group_policy = default_group_formation_policy()
+        elif type(group_formation_policy) is not GroupFormationPolicy:
+            raise TypeError("group_formation_policy must be GroupFormationPolicy")
+        else:
+            group_policy = group_formation_policy
+        self._group_formation_mode = grouped
+        self._group_formation_policy = group_policy
         from agents.cognition.competence import CompetenceBeliefPolicy
         from agents.cognition.configuration import CognitionSkillLearningMode
 
@@ -621,6 +647,46 @@ class CognitiveLoop:
             memories=() if snapshot is None else snapshot.memories,
             source_trust_by_speaker=trust_by_speaker,
             inbox=() if snapshot is None else snapshot.inbox,
+        )
+
+    def _prepare_group_formation(
+        self, loop_input: CognitiveLoopInput
+    ) -> object | None:
+        """Refresh one owner's ledger. Disabled mode does not call the updater."""
+        from agents.cognition.configuration import CognitionGroupFormationMode
+        from agents.cognition.group_formation import GroupLedger, apply_group_update
+
+        owner_id = loop_input.agent_id.value
+        tick = loop_input.observation.tick
+        _LOG.debug(
+            "group_command_unchanged owner_id=%s tick=%s",
+            owner_id,
+            tick,
+        )
+        if self._group_formation_mode is not CognitionGroupFormationMode.DETERMINISTIC:
+            return None
+        snapshot = loop_input.snapshot
+        carried = None if snapshot is None else snapshot.group_formation
+        ledger = carried if type(carried) is GroupLedger else None
+        identity = None if snapshot is None else snapshot.social_identity
+        if snapshot is None or identity is None:
+            return None
+        from agents.cognition.communication import project_trust_inputs
+
+        trust: dict[str, float] = {}
+        for profile in snapshot.relationships:
+            target = getattr(profile, "target_id", None)
+            key = getattr(target, "value", None)
+            if not isinstance(key, str) or key in trust:
+                continue
+            mapped, _confidence = project_trust_inputs(profile)
+            trust[key] = mapped
+        return apply_group_update(
+            loop_input.observation,
+            identity,
+            trust,
+            ledger,
+            self._group_formation_policy,
         )
 
     def _annotate_claim_violations(
@@ -1070,6 +1136,7 @@ class CognitiveLoop:
         mind = self._prepare_theory_of_mind(loop_input, emotional_evaluation, memory)
         reputation = self._prepare_reputation(loop_input)
         territorial_claims = self._prepare_territorial_claims(loop_input)
+        group_formation = self._prepare_group_formation(loop_input)
         competence = self._prepare_competence(loop_input, memory)
         competence, advice = self._prepare_teaching(loop_input, competence)
         recipe_beliefs = self._prepare_recipe_beliefs(loop_input)
@@ -1265,6 +1332,7 @@ class CognitiveLoop:
             theory_of_mind=mind,
             reputation=reputation,
             territorial_claims=territorial_claims,
+            group_formation=group_formation,
             competence_model=competence,
             declarative_advice=advice,
             recipe_beliefs=recipe_beliefs,
@@ -1416,6 +1484,7 @@ class CognitiveLoop:
             theory_of_mind=proposal.theory_of_mind,
             reputation=proposal.reputation,
             territorial_claims=proposal.territorial_claims,
+            group_formation=proposal.group_formation,
             competence_model=proposal.competence_model,
             declarative_advice=proposal.declarative_advice,
             recipe_beliefs=proposal.recipe_beliefs,

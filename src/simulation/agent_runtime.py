@@ -420,6 +420,7 @@ class AgentRuntime:
         "_emotional_state",
         "_finalized_hashes",
         "_goal_revision_counters",
+        "_group_formation",
         "_identity_cursor",
         "_inbox",
         "_internal_state",
@@ -543,6 +544,7 @@ class AgentRuntime:
         self._theory_of_mind: object | None = None
         self._reputation: object | None = None
         self._territorial_claims: object | None = None
+        self._group_formation: object | None = None
         self._competence: object | None = None
         self._recipe_beliefs: object | None = None
         self._advice: object | None = None
@@ -753,6 +755,51 @@ class AgentRuntime:
             tick,
             mode_name,
             len(ledger.claims),
+        )
+
+    def _commit_group_formation(self, ledger: object | None, tick: int) -> None:
+        """Store the owner's group ledger after a successful enabled tick."""
+        from agents.cognition.configuration import CognitionGroupFormationMode
+        from agents.cognition.group_formation import GroupLedger
+
+        owner = self._agent.agent_id
+        mode = getattr(
+            self._loop,
+            "_group_formation_mode",
+            CognitionGroupFormationMode.DISABLED,
+        )
+        mode_name = getattr(mode, "value", "disabled")
+        if mode is not CognitionGroupFormationMode.DETERMINISTIC or ledger is None:
+            if mode is not CognitionGroupFormationMode.DETERMINISTIC:
+                self._group_formation = None
+            belief_count = 0
+            concept_count = 0
+            _LOG.debug(
+                "group_ledger_skipped owner_id=%s tick=%s mode=%s "
+                "belief_count=%s concept_count=%s",
+                owner.value,
+                tick,
+                mode_name,
+                belief_count,
+                concept_count,
+            )
+            return
+        if type(ledger) is not GroupLedger:
+            raise TypeError("group_formation must be GroupLedger")
+        if ledger.owner_id != owner:
+            raise AgentRuntimeError(
+                AgentRuntimeErrorCode.OWNERSHIP,
+                agent_id=owner.value,
+            )
+        self._group_formation = ledger
+        _LOG.debug(
+            "group_ledger_carried owner_id=%s tick=%s mode=%s "
+            "belief_count=%s concept_count=%s",
+            owner.value,
+            tick,
+            mode_name,
+            len(ledger.beliefs),
+            len(ledger.concepts),
         )
 
     def _commit_competence(self, model: object | None, tick: int) -> None:
@@ -1286,6 +1333,7 @@ class AgentRuntime:
                 theory_of_mind=self._theory_of_mind,
                 reputation=self._reputation,
                 territorial_claims=self._territorial_claims,
+                group_formation=self._group_formation,
                 competence_model=self._competence,
                 declarative_advice=self._advice,
                 recipe_beliefs=self._recipe_beliefs,
@@ -1699,6 +1747,9 @@ class AgentRuntime:
         self._commit_territorial_claims(
             getattr(pending.loop_result, "territorial_claims", None), pending.tick
         )
+        self._commit_group_formation(
+            getattr(pending.loop_result, "group_formation", None), pending.tick
+        )
         self._commit_competence(
             getattr(pending.loop_result, "competence_model", None), pending.tick
         )
@@ -2102,6 +2153,7 @@ class AgentRuntime:
         self._theory_of_mind = checkpoint.theory_of_mind
         self._reputation = checkpoint.reputation
         self._territorial_claims = getattr(checkpoint, "territorial_claims", None)
+        self._group_formation = getattr(checkpoint, "group_formation", None)
         self._competence = checkpoint.competence_model
         self._recipe_beliefs = getattr(checkpoint, "recipe_beliefs", None)
         self._advice = checkpoint.declarative_advice
@@ -2161,6 +2213,7 @@ class AgentRuntime:
             theory_of_mind=self._theory_of_mind,
             reputation=self._reputation,
             territorial_claims=self._territorial_claims,
+            group_formation=self._group_formation,
             competence_model=self._competence,
             declarative_advice=self._advice,
             recipe_beliefs=self._recipe_beliefs,

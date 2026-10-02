@@ -925,5 +925,7 @@ def build_cognitive_loop(
         teaching_claim_policy=resolved.teaching_claim_policy,
         territorial_claim_mode=resolved.territorial_claim_mode,
         territorial_claim_policy=resolved.territorial_claim_policy,
+        group_formation_mode=resolved.group_formation_mode,
+        group_formation_policy=resolved.group_formation_policy,
         production_knowledge_mode=resolved.production_knowledge_mode,
     )

@@ -711,6 +711,7 @@ class SubjectiveSnapshot:
     theory_of_mind: object | None = None
     reputation: object | None = None
     territorial_claims: object | None = None
+    group_formation: object | None = None
     competence_model: object | None = None
     declarative_advice: object | None = None
     recipe_beliefs: object | None = None
@@ -864,6 +865,13 @@ class SubjectiveSnapshot:
             self.territorial_claims,
             self.owner_id,
             field_name="SubjectiveSnapshot.territorial_claims",
+        )
+        from agents.cognition.group_formation import require_owner_group_formation
+
+        require_owner_group_formation(
+            self.group_formation,
+            self.owner_id,
+            field_name="SubjectiveSnapshot.group_formation",
         )
         from agents.cognition.competence import require_owner_competence
 
@@ -3652,6 +3660,7 @@ class CognitiveLoopProposal:
     communication_intent_audit: object | None = None
     reputation: object | None = None
     territorial_claims: object | None = None
+    group_formation: object | None = None
     competence_model: object | None = None
     declarative_advice: object | None = None
     recipe_beliefs: object | None = None
@@ -3715,6 +3724,13 @@ class CognitiveLoopProposal:
             self.territorial_claims,
             self.agent_id,
             field_name="CognitiveLoopProposal.territorial_claims",
+        )
+        from agents.cognition.group_formation import require_owner_group_formation
+
+        require_owner_group_formation(
+            self.group_formation,
+            self.agent_id,
+            field_name="CognitiveLoopProposal.group_formation",
         )
         from agents.cognition.competence import require_owner_competence
 
@@ -3805,6 +3821,7 @@ class CognitiveLoopResult:
     communication_intent_audit: object | None = None
     reputation: object | None = None
     territorial_claims: object | None = None
+    group_formation: object | None = None
     competence_model: object | None = None
     declarative_advice: object | None = None
     recipe_beliefs: object | None = None
@@ -3845,6 +3862,13 @@ class CognitiveLoopResult:
             self.territorial_claims,
             self.agent_id,
             field_name="CognitiveLoopResult.territorial_claims",
+        )
+        from agents.cognition.group_formation import require_owner_group_formation
+
+        require_owner_group_formation(
+            self.group_formation,
+            self.agent_id,
+            field_name="CognitiveLoopResult.group_formation",
         )
         if self.territorial_audits is not None:
             from agents.cognition.territorial import TerritorialClaimAudit

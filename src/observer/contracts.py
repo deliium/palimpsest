@@ -25,6 +25,7 @@ _OBJECTIVE_LEAK_FIELDS: frozenset[str] = frozenset(
         "relationship",
         "relationships",
         "territorial_claims",
+        "group_formation",
         "spatial_control",
         "territory_owner",
         "controller",

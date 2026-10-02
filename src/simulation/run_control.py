@@ -593,6 +593,7 @@ class AgentRuntimeCheckpoint:
     theory_of_mind: object | None = None
     reputation: object | None = None
     territorial_claims: object | None = None
+    group_formation: object | None = None
     competence_model: object | None = None
     declarative_advice: object | None = None
     recipe_beliefs: object | None = None
@@ -657,6 +658,13 @@ class AgentRuntimeCheckpoint:
             self.territorial_claims,
             self.agent_id,
             field_name="territorial_claims",
+        )
+        from agents.cognition.group_formation import require_owner_group_formation
+
+        require_owner_group_formation(
+            self.group_formation,
+            self.agent_id,
+            field_name="group_formation",
         )
         from agents.cognition.competence import require_owner_competence
 
