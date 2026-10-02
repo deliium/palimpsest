@@ -50,7 +50,7 @@ __all__ = [
 ]
 
 METRIC_CATALOG_VERSION: Final[str] = "metric-catalog-v1"
-METRIC_FAMILY_COUNT: Final[int] = 27
+METRIC_FAMILY_COUNT: Final[int] = 28
 
 # Align with existing memory-drift / transmission document versions.
 _ALGO_V1: Final[str] = "1"
@@ -104,6 +104,7 @@ class MetricFamilyId(StrEnum):
     DISTRIBUTED_REPUTATION = "distributed_reputation"
     SKILL_LEARNING = "skill_learning"
     CULTURAL_TRANSMISSION = "cultural_transmission"
+    SPATIAL_CONTROL = "spatial_control"
 
 
 class DenominatorKind(StrEnum):
@@ -1042,6 +1043,47 @@ def _spec_skill_learning() -> MetricSpecification:
     )
 
 
+def _spec_spatial_control() -> MetricSpecification:
+    return _base(
+        family_id=MetricFamilyId.SPATIAL_CONTROL,
+        evidence_inputs=frozenset({EvidenceStage.OBJECTIVE_EVENT_STATE}),
+        population="committed_spatial_action_rows",
+        denominator="exclusive_windows",
+        denominator_kind=DenominatorKind.OCCURRENCE,
+        cohort_window="caller-supplied committed rows after the run",
+        deceased_policy="not_applicable",
+        zero_holding_policy="empty action rows -> availability=absent",
+        opportunity_vs_occurrence=(
+            "exclusive windows of length at least 2; contests are readings"
+        ),
+        self_edge_policy="not_applicable",
+        censoring_policy=(
+            "omitted claim rows leave claim_contest absent; "
+            "never invent a head"
+        ),
+        formulas={
+            "repeated_control": (
+                "an agent has two or more exclusive windows at one location"
+            ),
+            "control_contest": (
+                "two agents each have two exclusive windows at one location"
+            ),
+            "claim_contest": (
+                "two owners hold strength at least 0.40 on one location; "
+                "absent when claim rows were omitted"
+            ),
+            "intervals": "canonical exclusive-window spans per location",
+        },
+        value_keys=(
+            "claim_contest",
+            "control_contest",
+            "intervals",
+            "repeated_control",
+        ),
+        empty_case="availability=absent; empty action rows are not zero control",
+    )
+
+
 def _spec_cultural_transmission() -> MetricSpecification:
     return _base(
         family_id=MetricFamilyId.CULTURAL_TRANSMISSION,
@@ -1716,6 +1758,7 @@ _BUILDERS: Final[tuple[Callable[[], MetricSpecification], ...]] = (
     _spec_distributed_reputation,
     _spec_skill_learning,
     _spec_cultural_transmission,
+    _spec_spatial_control,
 )
 
 

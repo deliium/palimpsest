@@ -25,6 +25,7 @@ signal run_id_applied(value: String)
 signal world_replaced(world: Variant)
 signal live_event(event: Variant)
 signal frame_sought(frame: Variant, event: Variant, forward: bool)
+signal overlay_payload(kind: String, payload: Variant)
 signal events_loaded(events: Array, focus_tick: int, focus_sequence: int)
 signal ticks_loaded(ticks: Array)
 signal run_loaded(record: Dictionary)
@@ -214,6 +215,31 @@ func _is_forward(event_tick: int, event_sequence: int) -> bool:
 	return false
 
 
+func request_claim_overlay(owner_id: String) -> void:
+	var path := "/v1/simulations/%s/owners/%s/territorial-claims" % [run_id, owner_id]
+	_request_path("territorial_claims", path)
+
+
+func request_analytics_overlay(metric_set_id: String) -> void:
+	var path := "/v1/simulations/%s/metrics/%s/spatial_control" % [run_id, metric_set_id]
+	_request_path("spatial_control", path)
+
+
+func _request_path(kind: String, path: String) -> void:
+	last_request = {"kind": kind, "path": path, "query": {}}
+	request_log.append(last_request)
+	if _http == null:
+		return
+	var built: Dictionary = Urls.build_get(origin, path, {})
+	if not bool(built.get("ok", false)):
+		overlay_payload.emit(kind, null)
+		return
+	_request_serial += 1
+	var request_id := str(_request_serial)
+	_pending[request_id] = {"kind": kind, "seek_id": -1}
+	_http.get_json(str(built["url"]), request_id, _token)
+
+
 func _request(kind: String, query: Dictionary = {}, seek_id: int = -1) -> void:
 	var route_name := kind
 	if kind == "gap" or kind == "events_window" or kind == "catch_up":
@@ -257,6 +283,12 @@ func _on_http(route: String, _status: int, body: Variant, reason_code: String) -
 	var seek_id := int(meta.get("seek_id", -1))
 	if seek_id >= 0 and seek_id < _seek_serial:
 		ObserverLog.debug("session", "seek_ignored reason_code=stale_response")
+		return
+	if kind == "territorial_claims" or kind == "spatial_control":
+		var overlay: Variant = null
+		if reason_code == "" and typeof(body) == TYPE_DICTIONARY:
+			overlay = body
+		overlay_payload.emit(kind, overlay)
 		return
 	if reason_code != "":
 		if seek_id >= 0:

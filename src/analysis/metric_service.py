@@ -58,6 +58,7 @@ from analysis.serialization import (
     encode_metric_document,
     metric_document_fingerprint,
 )
+from analysis.spatial_control_metrics import compute_spatial_control
 from analysis.specifications import MetricFamilyId, metric_specification
 from analysis.transmission_metrics import (
     compute_knowledge_diffusion,
@@ -101,6 +102,8 @@ class MetricComputationInputs:
     transmission_hops: Sequence[TransmissionHopRecord] = ()
     transmission_report: SocialTransmissionReport | None = None
     eligible_agent_ids: Sequence[str] = ()
+    spatial_action_rows: Sequence[object] | None = None
+    spatial_claim_rows: Sequence[object] | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -371,6 +374,18 @@ def assemble_metric_documents(inputs: MetricComputationInputs) -> MetricBundle:
             ),
         ),
     )
+    if inputs.spatial_action_rows is not None:
+        actions = inputs.spatial_action_rows
+        claims = inputs.spatial_claim_rows
+        _safe(
+            "spatial_control",
+            lambda: compute_spatial_control(
+                actions,
+                claims,
+                run_id=run_id,
+                input_revision=revision,
+            ),
+        )
     _safe(
         "rumor_distortion",
         lambda: compute_rumor_distortion(

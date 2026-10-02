@@ -425,6 +425,7 @@ static func _world(data: Variant) -> Variant:
 		hazard.hazard_kind = str(item.get("hazard_kind", ""))
 		hazard.remaining_ticks = int(item.get("remaining_ticks", 0))
 		world.hazards.append(hazard)
+	# Claim and analytics keys on world are ignored and do not change occupants.
 	return world
 
 

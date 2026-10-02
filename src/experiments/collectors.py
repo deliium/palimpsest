@@ -7,7 +7,10 @@ from typing import Any, Final
 
 from analysis.metric_service import MetricComputationInputs, assemble_metric_documents
 from analysis.models import MetricAvailability
-from experiments.metric_collection import collector_fields_from_documents
+from experiments.metric_collection import (
+    collector_fields_from_documents,
+    inputs_with_spatial_rows,
+)
 from simulation.runner_models import SimulationRunnerResultDocument
 from simulation.runner_serialization import (
     build_runner_result_document,
@@ -99,6 +102,16 @@ def _run_level_bundle(
         ),
         reflection_report=_optional_reflection_report(reflection_report),
     )
+    events = getattr(arm, "committed_events", None)
+    if events is None:
+        events = getattr(arm.runner_result, "committed_events", None)
+    ledgers = getattr(arm, "territorial_ledgers", None)
+    if ledgers is None:
+        ledgers = getattr(arm.runner_result, "territorial_ledgers", None)
+    if events is not None:
+        inputs = inputs_with_spatial_rows(
+            inputs, events, claim_ledgers=ledgers
+        )
     return assemble_metric_documents(inputs)
 
 

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+from dataclasses import dataclass
 from typing import Literal
 
 from observer.contracts import (
@@ -221,4 +222,70 @@ def project_frame(
     return frame
 
 
-__all__ = ["project_frame"]
+PHYSICAL_CONTROL_SCHEMA: Literal["physical-control-v1"] = "physical-control-v1"
+
+
+@dataclass(frozen=True, slots=True)
+class PhysicalControlLocation:
+    """Occupants and items at one location. Possession is not a claim."""
+
+    location_id: str
+    agent_ids: tuple[str, ...]
+    item_ids: tuple[str, ...]
+
+
+@dataclass(frozen=True, slots=True)
+class PhysicalControlDocument:
+    """Objective grouping of who is present and what is held."""
+
+    schema_version: str
+    authority: str
+    locations: tuple[PhysicalControlLocation, ...]
+
+
+def project_physical_control(frame: ObserverFrame) -> PhysicalControlDocument:
+    """Group the objective frame by location. No claim or contest field is read."""
+    if type(frame) is not ObserverFrame:
+        raise TypeError("project_physical_control requires an observer frame")
+    world = frame.world
+    agents_at: dict[str, list[str]] = {}
+    entity_at: dict[str, str] = {}
+    for agent in world.agents:
+        agents_at.setdefault(agent.location_id, []).append(agent.entity_id)
+        entity_at[agent.entity_id] = agent.location_id
+    items_at: dict[str, list[str]] = {}
+    for item in world.items:
+        site = item.location_id
+        if site is None and item.holder_id is not None:
+            site = entity_at.get(item.holder_id)
+        if site is None:
+            continue
+        items_at.setdefault(site, []).append(item.item_id)
+    location_ids = sorted(
+        set(agents_at)
+        | set(items_at)
+        | {item.location_id for item in world.locations}
+    )
+    locations = tuple(
+        PhysicalControlLocation(
+            location_id=location_id,
+            agent_ids=tuple(sorted(agents_at.get(location_id, ()))),
+            item_ids=tuple(sorted(set(items_at.get(location_id, ())))),
+        )
+        for location_id in location_ids
+    )
+    _LOGGER.debug("physical_control_projected locations=%s", len(locations))
+    return PhysicalControlDocument(
+        schema_version=PHYSICAL_CONTROL_SCHEMA,
+        authority="physical_possession",
+        locations=locations,
+    )
+
+
+__all__ = [
+    "PHYSICAL_CONTROL_SCHEMA",
+    "PhysicalControlDocument",
+    "PhysicalControlLocation",
+    "project_frame",
+    "project_physical_control",
+]

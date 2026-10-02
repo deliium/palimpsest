@@ -108,6 +108,21 @@ class SimulationManager:
         self._draining = False
         self._idempotency: dict[str, RunControlStatusOut] = {}
 
+    def owner_runtime_checkpoint(self, run_id: str, owner_id: str) -> object | None:
+        """Return one in-process runtime checkpoint, or None when the cache is empty."""
+        handle = self._handles.get(run_id)
+        runner = None if handle is None else handle.runner
+        if runner is None or not hasattr(runner, "export_runtime_checkpoint"):
+            return None
+        checkpoint = runner.export_runtime_checkpoint()
+        states = getattr(checkpoint, "runtime_states", ())
+        for state in states:
+            agent = getattr(state, "agent_id", None)
+            value = getattr(agent, "value", None)
+            if value == owner_id:
+                return state
+        return None
+
     @property
     def draining(self) -> bool:
         return self._draining

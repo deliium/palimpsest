@@ -12,6 +12,8 @@ var _centers := {}
 var _reducer = ReducerScript.new()
 
 @onready var _locations: Node2D = $LocationLayer
+@onready var _claims: Node2D = $ClaimOverlay
+@onready var _analytics: Node2D = $AnalyticsOverlay
 @onready var _connections: Node2D = $ConnectionLayer
 @onready var _objects: Node2D = $ObjectLayer
 @onready var _agents: Node2D = $AgentLayer
@@ -55,6 +57,30 @@ func show_world(world: Variant) -> void:
 	_connections.show_world(world, _centers)
 	_objects.show_world(world, _centers)
 	_agents.show_world(world, _centers, _reducer.activity)
+	if _claims != null:
+		_claims.set_centers(_centers)
+	if _analytics != null:
+		_analytics.set_centers(_centers)
+
+
+func set_claim_overlay_enabled(enabled: bool) -> void:
+	if _claims != null:
+		_claims.set_enabled(enabled)
+
+
+func apply_subjective_claims(payload: Variant) -> void:
+	if _claims != null:
+		_claims.apply_payload(payload)
+
+
+func set_analytics_overlay_enabled(enabled: bool) -> void:
+	if _analytics != null:
+		_analytics.set_enabled(enabled)
+
+
+func apply_research_analytics(payload: Variant) -> void:
+	if _analytics != null:
+		_analytics.apply_payload(payload)
 
 
 func play_event(event: Variant) -> void:

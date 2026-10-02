@@ -185,6 +185,10 @@ from analysis.sources import (
     InMemoryObjectiveEventSource,
     reconstruction_evidence_from_durable,
 )
+from analysis.spatial_control_metrics import (
+    SPATIAL_CONTROL_METRIC_VERSION,
+    compute_spatial_control,
+)
 from analysis.specifications import (
     ACTION_VOCABULARY_V1,
     ADOPTION_STAGES_V1,
@@ -252,6 +256,7 @@ __all__ = [
     "SCIPY_DEGENERATE_POLICY",
     "SKILL_LEARNING_METRIC_VERSION",
     "SOCIAL_TRANSMISSION_METRIC_VERSION",
+    "SPATIAL_CONTROL_METRIC_VERSION",
     "SUPPORTED_COMMUNITY_ALGORITHM",
     "THEORY_OF_MIND_METRIC_VERSION",
     "ActionResolutionRow",
@@ -351,6 +356,7 @@ __all__ = [
     "compute_resource_inequality",
     "compute_rumor_distortion",
     "compute_skill_learning",
+    "compute_spatial_control",
     "compute_survival",
     "compute_theory_of_mind_metrics",
     "compute_trust_network_structure",

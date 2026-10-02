@@ -6,6 +6,8 @@ const AgentLayer := preload("res://scripts/view/agent_layer.gd")
 const Identity := preload("res://scripts/presentation/identity.gd")
 const Protocol := preload("res://scripts/protocol/models.gd")
 const LocationLayer := preload("res://scripts/view/location_layer.gd")
+const ClaimOverlay := preload("res://scripts/view/claim_overlay.gd")
+const AnalyticsOverlay := preload("res://scripts/view/analytics_overlay.gd")
 const Log := preload("res://scripts/log.gd")
 
 const ORIGIN := "https://observer.example"
@@ -83,6 +85,7 @@ func run() -> Array:
 		failures.append("the live gap should resume from the last applied cursor")
 	_assert_steps(session, failures)
 	_assert_environment_frame(session, failures)
+	_assert_territorial_overlays(failures)
 	var kept_agent := _agent("body-bob", "dead")
 	var kept: Dictionary = AgentLayer.selection_for("body-bob", [kept_agent])
 	if not kept["keep"] or not kept["dead"] or not Identity.is_dead(kept_agent):
@@ -213,6 +216,137 @@ func _assert_environment_frame(session: SessionScript, failures: Array) -> void:
 	var layer := LocationLayer.new()
 	layer.show_world(session.world)
 	layer.free()
+
+
+func _assert_territorial_overlays(failures: Array) -> void:
+	var parsed: Protocol.ParseResult = Protocol.parse_frame({
+		"protocol_version": "observer-protocol-v1",
+		"cursor": {
+			"run_id": "run-1",
+			"mode": "live",
+			"tick": 2,
+			"protocol_version": "observer-protocol-v1",
+		},
+		"world": {
+			"tick": 2,
+			"revision": 1,
+			"locations": [{
+				"location_id": "loc-1",
+				"name": "camp",
+				"display_name": "camp",
+				"neighbor_ids": [],
+			}],
+			"agents": [{
+				"entity_id": "body-1",
+				"location_id": "loc-1",
+				"life_status": "alive",
+				"inventory_ids": [],
+				"measures": {
+					"health": 1,
+					"hunger": 0,
+					"thirst": 0,
+					"fatigue": 0,
+					"temperature": 0,
+				},
+			}],
+			"items": [],
+			"resources": [],
+			"weather": [],
+			"territorial_claims": [{"owner_id": "owner-a", "target_entity_id": "loc-1"}],
+			"spatial_control": {"repeated_control": true},
+		},
+		"events": [],
+	})
+	if not parsed.ok:
+		failures.append("objective frame with nested claims should still parse")
+		return
+	if parsed.value.world.agents.size() != 1 or parsed.value.world.locations.size() != 1:
+		failures.append("nested claim keys should not change occupants")
+	var locations := LocationLayer.new()
+	locations.show_world(parsed.value.world)
+	var location_children := locations.get_child_count()
+	var agents := AgentLayer.new()
+	agents.show_world(parsed.value.world, {"loc-1": Vector2(12, 8)})
+	var slot_count := agents.get_child_count()
+	if slot_count != 1:
+		failures.append("objective frame should keep one occupant slot")
+	var claims := ClaimOverlay.new()
+	claims.set_centers({"loc-1": Vector2(12, 8)})
+	claims.apply_payload({
+		"layer": "subjective_claims",
+		"heads": [{
+			"target_kind": "location",
+			"target_entity_id": "loc-1",
+			"strength": 0.5,
+		}],
+	})
+	if claims.get_child_count() != 0:
+		failures.append("claim markers should stay hidden until the toggle")
+	claims.set_enabled(true)
+	if claims.get_child_count() != 1:
+		failures.append("enabled subjective claims should add a marker")
+	if str(claims.get_child(0).get_meta("copy")) != "selected agent claims this location":
+		failures.append("claim marker copy should name the selected agent claim")
+	claims.apply_payload({"layer": "research_analytics", "heads": []})
+	if claims.get_child_count() != 0:
+		failures.append("a payload with the wrong layer should drop claim markers")
+	claims.apply_payload({
+		"layer": "subjective_claims",
+		"heads": [{
+			"target_kind": "location",
+			"target_entity_id": "loc-1",
+		}],
+	})
+	var analytics := AnalyticsOverlay.new()
+	analytics.set_centers({"loc-1": Vector2(12, 8)})
+	analytics.apply_payload({
+		"layer": "research_analytics",
+		"readings": [
+			{
+				"location_id": "loc-1",
+				"kind": "repeated_control",
+				"contest_source": "objective_control",
+			},
+			{
+				"location_id": "loc-1",
+				"kind": "control_contest",
+				"contest_source": "objective_control",
+			},
+			{
+				"location_id": "loc-1",
+				"kind": "claim_contest",
+				"contest_source": "subjective_claims",
+			},
+		],
+	})
+	analytics.set_enabled(true)
+	if analytics.get_child_count() != 3:
+		failures.append("enabled analytics should add one marker per reading")
+	if locations.get_child_count() != location_children:
+		failures.append("analytics must not add markers on the location layer")
+	if agents.get_child_count() != slot_count:
+		failures.append("overlays must not change occupant slots")
+	var session := SessionScript.new()
+	session.run_id = "run-1"
+	session.origin = ORIGIN
+	var received: Array = []
+	session.overlay_payload.connect(func(kind: String, payload: Variant) -> void:
+		received.append({"kind": kind, "payload": payload})
+	)
+	session.request_claim_overlay("owner-a")
+	var logged_path := str(session.last_request.get("path", ""))
+	if "territorial-claims" not in logged_path:
+		failures.append("claim overlay should request the owner claims route")
+	session._pending["overlay-1"] = {"kind": "territorial_claims", "seek_id": -1}
+	var world_before = session.world
+	session._on_http("overlay-1", 403, {"layer": "subjective_claims"}, "unauthorized")
+	if received.is_empty() or received[-1]["payload"] != null or session.world != world_before:
+		failures.append("unauthorized claims should leave the overlay empty")
+	claims.free()
+	analytics.free()
+	agents.free()
+	locations.free()
+	session.free()
 
 
 func _state_query(session: SessionScript) -> Dictionary:

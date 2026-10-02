@@ -4,10 +4,21 @@ from __future__ import annotations
 
 from typing import Literal
 
-from pydantic import Field, model_serializer
+from pydantic import Field, model_serializer, model_validator
 
 from api.schemas import StrictModel
 from observer.version import OBSERVER_PROTOCOL_VERSION
+
+_OBJECTIVE_LEAK_KEYS = frozenset(
+    {
+        "relationship",
+        "relationships",
+        "territorial_claims",
+        "spatial_control",
+        "territory_owner",
+        "controller",
+    }
+)
 
 
 class ScreenPointOut(StrictModel):
@@ -126,6 +137,16 @@ class ObserverWorldStateOut(StrictModel):
     season: str | None = None
     temperature_bands: tuple[ObserverTemperatureBandOut, ...] = ()
     hazards: tuple[ObserverHazardOut, ...] = ()
+
+    @model_validator(mode="before")
+    @classmethod
+    def _reject_non_objective_keys(cls, data: object) -> object:
+        if isinstance(data, dict):
+            leaked = _OBJECTIVE_LEAK_KEYS.intersection(data)
+            if leaked:
+                name = sorted(leaked)[0]
+                raise ValueError(f"objective_leak:{name}")
+        return data
 
     @model_serializer(mode="wrap")
     def _omit_absent_environment(self, handler: object) -> dict[str, object]:

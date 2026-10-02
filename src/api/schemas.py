@@ -163,6 +163,20 @@ class SubjectivePageOut(StrictModel):
     kind: Literal["memories", "beliefs", "relationships"]
 
 
+class TerritorialClaimHeadOut(StrictModel):
+    owner_id: str
+    target_kind: str
+    target_entity_id: str
+    strength: float
+
+
+class SubjectiveClaimsOut(StrictModel):
+    schema_version: Literal["subjective-claims-v1"] = "subjective-claims-v1"
+    owner_id: str
+    layer: Literal["subjective_claims"] = "subjective_claims"
+    heads: tuple[TerritorialClaimHeadOut, ...] = ()
+
+
 class MetricCatalogItemOut(StrictModel):
     metric_set_id: str
     metric_family: str

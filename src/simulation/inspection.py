@@ -28,6 +28,7 @@ from simulation.lifecycle import ObservationBatch
 from simulation.models import RunId
 from simulation.persistence import ReplayResult, ReplayStatus
 from simulation.replay import ReplayOutcome
+from simulation.run_control import AgentRuntimeCheckpoint
 from simulation.runner_models import DetachedObjectiveProjection
 from world.events import WorldEvent
 from world.identifiers import EntityId, require_stable_id
@@ -46,12 +47,15 @@ __all__ = [
     "InspectionSurface",
     "MemoryKeysetCursor",
     "ObjectiveEvidenceLoader",
+    "SubjectiveClaimHead",
+    "SubjectiveClaimsDocument",
     "SubjectiveEvidenceLoader",
     "SubjectiveInspectionPage",
     "clamp_inspection_page_limit",
     "constrain_events_to_manifest",
     "constrain_ordered_rows_to_high_water",
     "project_replay_for_inspection",
+    "subjective_claims_document",
 ]
 
 _LOG: Final[logging.Logger] = logging.getLogger("simulation.inspection")
@@ -385,6 +389,29 @@ def clamp_inspection_page_limit(
     return limit
 
 
+SUBJECTIVE_CLAIMS_SCHEMA: Final[str] = "subjective-claims-v1"
+
+
+@dataclass(frozen=True, slots=True)
+class SubjectiveClaimHead:
+    """One owner's head. Strength is quantized; it is not a world owner."""
+
+    owner_id: str
+    target_kind: str
+    target_entity_id: str
+    strength: float
+
+
+@dataclass(frozen=True, slots=True)
+class SubjectiveClaimsDocument:
+    """Selected-owner claim projection. Not an objective frame."""
+
+    schema_version: str
+    owner_id: str
+    layer: str
+    heads: tuple[SubjectiveClaimHead, ...]
+
+
 class DetachedInspectionProjector:
     """Project objective and agent-visible views without mutating engine phase."""
 
@@ -478,6 +505,79 @@ class DetachedInspectionProjector:
         if type(engine) is not WorldEngine:
             raise TypeError("project_observation_batch requires WorldEngine")
         return engine.project_detached_observations()
+
+    def project_subjective_claims(
+        self, checkpoint: AgentRuntimeCheckpoint
+    ) -> SubjectiveClaimsDocument:
+        """Read one owner's ledger. Does not call ``project_objective``."""
+        if type(checkpoint) is not AgentRuntimeCheckpoint:
+            raise TypeError("project_subjective_claims requires AgentRuntimeCheckpoint")
+        owner_id = checkpoint.agent_id.value
+        ledger = checkpoint.territorial_claims
+        heads: list[SubjectiveClaimHead] = []
+        claims = () if ledger is None else ledger.claims
+        if not isinstance(claims, tuple):
+            raise TypeError("territorial_claims.claims must be a tuple")
+        for head in claims:
+            heads.append(
+                SubjectiveClaimHead(
+                    owner_id=_text_id(head.owner_id),
+                    target_kind=_text_id(head.target_kind),
+                    target_entity_id=_text_id(head.target_entity_id),
+                    strength=_quantized_strength(head.strength),
+                )
+            )
+        _LOG.debug(
+            "subjective_claims_projected owner_id=%s heads=%s",
+            owner_id,
+            len(heads),
+        )
+        return SubjectiveClaimsDocument(
+            schema_version=SUBJECTIVE_CLAIMS_SCHEMA,
+            owner_id=owner_id,
+            layer="subjective_claims",
+            heads=tuple(heads),
+        )
+
+
+def subjective_claims_document(
+    owner_id: str, checkpoint: AgentRuntimeCheckpoint | None
+) -> SubjectiveClaimsDocument:
+    """Empty heads when the in-process runtime or ledger is absent."""
+    require_stable_id("owner_id", owner_id)
+    if checkpoint is None or checkpoint.agent_id.value != owner_id:
+        _LOG.debug(
+            "subjective_claims_projected owner_id=%s heads=%s",
+            owner_id,
+            0,
+        )
+        return SubjectiveClaimsDocument(
+            schema_version=SUBJECTIVE_CLAIMS_SCHEMA,
+            owner_id=owner_id,
+            layer="subjective_claims",
+            heads=(),
+        )
+    return DetachedInspectionProjector().project_subjective_claims(checkpoint)
+
+
+def _text_id(value: object) -> str:
+    raw = getattr(value, "value", value)
+    if not isinstance(raw, str) or not raw:
+        raise TypeError("subjective claim id must be a str")
+    return raw
+
+
+def _quantized_strength(value: object) -> float:
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        raise TypeError("subjective claim strength must be finite")
+    number = float(value)
+    if number != number or number in (float("inf"), float("-inf")):
+        raise TypeError("subjective claim strength must be finite")
+    steps = round(number / 1e-6)
+    quantized = steps / 1_000_000
+    if quantized == 0.0:
+        return 0.0
+    return quantized
 
 
 def project_replay_for_inspection(

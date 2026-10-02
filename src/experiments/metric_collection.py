@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import logging
 from collections.abc import Mapping, Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import Final
 
 from analysis.metric_service import (
@@ -34,6 +34,7 @@ __all__ = [
     "MetricCollectionResult",
     "MetricCollectionService",
     "compare_compatible_bundles",
+    "inputs_with_spatial_rows",
     "persist_metric_bundle",
 ]
 
@@ -180,6 +181,40 @@ async def persist_metric_bundle(
         lifecycle_state=record.lifecycle_state,
         bundle=bundle,
         persisted_families=tuple(persisted),
+    )
+
+
+def inputs_with_spatial_rows(
+    inputs: MetricComputationInputs,
+    events: Sequence[object] | None,
+    *,
+    claim_ledgers: Sequence[object] | None = None,
+) -> MetricComputationInputs:
+    """Attach event-log action rows. Absent events leave the family out.
+
+    Claim rows are attached only when detached ledgers were harvested. A
+    disabled run that still has an event log passes action rows and an empty
+    claim sequence, so ``claim_contest`` stays absent. Neither sequence is
+    written onto ``runner-result-v2``.
+    """
+    if events is None:
+        return inputs
+    from experiments.composition import (
+        claim_rows_from_ledgers,
+        spatial_action_rows_from_events,
+    )
+
+    action_rows = spatial_action_rows_from_events(events)
+    claim_rows = () if claim_ledgers is None else claim_rows_from_ledgers(claim_ledgers)
+    _LOG.debug(
+        "spatial_rows_attached action_rows=%s claim_rows=%s",
+        len(action_rows),
+        len(claim_rows),
+    )
+    return replace(
+        inputs,
+        spatial_action_rows=action_rows,
+        spatial_claim_rows=claim_rows,
     )
 
 

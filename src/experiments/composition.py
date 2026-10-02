@@ -7,6 +7,7 @@ SQLAlchemy. Composition roots inject protocol-typed readers.
 from __future__ import annotations
 
 import logging
+from collections.abc import Sequence
 from typing import Final
 
 from analysis.models import (
@@ -20,6 +21,7 @@ from analysis.sources import (
     InMemoryObjectiveEventSource,
     reconstruction_evidence_from_durable,
 )
+from analysis.spatial_control_metrics import SpatialActionRow, SpatialClaimRow
 from experiments.persistence import (
     AnalysisEvidenceSnapshotReader,
     PersistedAnalysisSnapshot,
@@ -34,10 +36,12 @@ from world.events import WorldEvent
 __all__ = [
     "EvidenceCompositionError",
     "EvidenceCompositionService",
+    "claim_rows_from_ledgers",
     "constrain_snapshot_to_manifest",
     "map_consolidation_audits_to_report",
     "map_recall_audits_to_dynamics_report",
     "map_snapshot_to_analysis_sources",
+    "spatial_action_rows_from_events",
 ]
 
 _LOG: Final[logging.Logger] = logging.getLogger("experiments.composition")
@@ -433,3 +437,138 @@ def map_reflection_audits_to_report(
         invocations,
     )
     return report
+
+
+_SPATIAL_KINDS: Final[frozenset[str]] = frozenset(
+    {
+        "move",
+        "sleep",
+        "take",
+        "search",
+        "resource_harvested",
+        "structure_built",
+        "structure_repaired",
+        "item_stored",
+        "eat",
+        "drink",
+    }
+)
+
+
+def spatial_action_rows_from_events(
+    events: Sequence[object],
+) -> tuple[SpatialActionRow, ...]:
+    """Project committed events into spatial action rows, including production.
+
+    This walks the event log directly. It does not call
+    ``applied_actions_from_world_events`` and does not apply the V1
+    vocabulary filter, so production kinds survive.
+    """
+    if isinstance(events, (str, bytes)) or not isinstance(events, Sequence):
+        raise TypeError("spatial_action_rows_from_events: invalid_events")
+    rows: list[SpatialActionRow] = []
+    for event in events:
+        row = _spatial_row_from_event(event)
+        if row is not None:
+            rows.append(row)
+    rows.sort(
+        key=lambda item: (item.tick, item.ordinal, item.agent_id, item.action_kind)
+    )
+    _LOG.debug(
+        "spatial_action_rows_built events=%s rows=%s",
+        len(events),
+        len(rows),
+    )
+    return tuple(rows)
+
+
+def claim_rows_from_ledgers(
+    ledgers: Sequence[object],
+) -> tuple[SpatialClaimRow, ...]:
+    """Copy detached heads. An empty ledger sequence stays empty."""
+    if isinstance(ledgers, (str, bytes)) or not isinstance(ledgers, Sequence):
+        raise TypeError("claim_rows_from_ledgers: invalid_ledgers")
+    rows: list[SpatialClaimRow] = []
+    for ledger in ledgers:
+        claims = getattr(ledger, "claims", ())
+        if not isinstance(claims, tuple):
+            raise TypeError("claim_rows_from_ledgers: invalid_ledger")
+        for head in claims:
+            rows.append(
+                SpatialClaimRow(
+                    owner_id=_id_text(getattr(head, "owner_id", None)),
+                    target_kind=_id_text(getattr(head, "target_kind", None)),
+                    target_entity_id=_id_text(getattr(head, "target_entity_id", None)),
+                    strength=float(head.strength),
+                )
+            )
+    _LOG.debug(
+        "spatial_claim_rows_built ledgers=%s rows=%s", len(ledgers), len(rows)
+    )
+    return tuple(rows)
+
+
+def _spatial_row_from_event(event: object) -> SpatialActionRow | None:
+    details = getattr(event, "details", None)
+    kind = getattr(details, "kind", None)
+    if not isinstance(kind, str) or kind not in _SPATIAL_KINDS:
+        return None
+    success = getattr(details, "success", True)
+    if success is False:
+        return None
+    actor = getattr(event, "actor_id", None)
+    agent_id = getattr(actor, "value", actor)
+    if not isinstance(agent_id, str) or not agent_id:
+        return None
+    location_id = _event_location_id(event, details, kind)
+    if location_id is None:
+        return None
+    tick = getattr(event, "tick", None)
+    ordinal = getattr(event, "sequence", getattr(event, "ordinal", None))
+    if isinstance(tick, bool) or not isinstance(tick, int):
+        return None
+    if isinstance(ordinal, bool) or not isinstance(ordinal, int):
+        return None
+    return SpatialActionRow(
+        tick=tick,
+        ordinal=ordinal,
+        agent_id=agent_id,
+        action_kind=kind,
+        location_id=location_id,
+        success=True,
+    )
+
+
+def _event_location_id(event: object, details: object, kind: str) -> str | None:
+    for name in ("location_id", "resulting_location_id"):
+        found = _id_text_or_none(getattr(details, name, None))
+        if found is not None:
+            return found
+    if kind == "move":
+        found = _id_text_or_none(getattr(details, "destination_id", None))
+        if found is not None:
+            return found
+    occurrence = getattr(event, "occurrence", None)
+    if occurrence is None:
+        return None
+    if kind == "move":
+        found = _id_text_or_none(
+            getattr(occurrence, "destination_location_id", None)
+        )
+        if found is not None:
+            return found
+    return _id_text_or_none(getattr(occurrence, "origin_location_id", None))
+
+
+def _id_text(value: object) -> str:
+    raw = getattr(value, "value", value)
+    if not isinstance(raw, str) or not raw:
+        raise TypeError("claim_rows_from_ledgers: invalid_id")
+    return raw
+
+
+def _id_text_or_none(value: object) -> str | None:
+    raw = getattr(value, "value", value)
+    if not isinstance(raw, str) or not raw:
+        return None
+    return raw

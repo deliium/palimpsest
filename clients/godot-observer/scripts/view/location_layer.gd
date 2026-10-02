@@ -63,6 +63,9 @@ func show_world(world: Variant) -> void:
 	queue_redraw()
 
 
+# Sibling overlays paint claims and analytics. This layer stays on the objective snapshot.
+
+
 func zone_rect(location_id: String) -> Rect2:
 	for location in _locations:
 		if location.location_id == location_id:

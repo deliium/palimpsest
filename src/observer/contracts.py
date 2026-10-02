@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import logging
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from typing import Literal, NoReturn
 
@@ -20,6 +20,25 @@ _LOGGER = logging.getLogger("observer.contracts")
 _FORBIDDEN_INSTRUCTION_FIELDS = frozenset({"pixels", "sprite", "animation", "dx", "dy"})
 _INVERSE_TYPE_PREFIX = "AGENT_" + "UN"
 _ORDERING: Literal["tick_sequence"] = "tick_sequence"
+_OBJECTIVE_LEAK_FIELDS: frozenset[str] = frozenset(
+    {
+        "relationship",
+        "relationships",
+        "territorial_claims",
+        "spatial_control",
+        "territory_owner",
+        "controller",
+    }
+)
+
+
+def _reject_objective_leak(names: set[str]) -> None:
+    leaked = _OBJECTIVE_LEAK_FIELDS.intersection(names)
+    if not leaked:
+        return
+    name = sorted(leaked)[0]
+    _LOGGER.error("objective_leak field=%s", name)
+    _reject(name, "objective_leak")
 
 
 class ObserverContractError(ValueError):
@@ -447,13 +466,42 @@ class ObserverWorldState:
         object.__setattr__(self, "season", season)
         object.__setattr__(self, "temperature_bands", bands)
         object.__setattr__(self, "hazards", hazards)
-        if hasattr(self, "relationship") or hasattr(self, "relationships"):
-            _reject("relationship", "objective_leak")
+        _reject_objective_leak(
+            set(_OBJECTIVE_LEAK_FIELDS.intersection(self.__dataclass_fields__))
+        )
         _log_built(
             "ObserverWorldState",
             id_count=len(locations) + len(agents) + len(items) + len(resources),
             protocol_version=OBSERVER_PROTOCOL_VERSION,
         )
+
+
+_WORLD_FIELDS: frozenset[str] = frozenset(ObserverWorldState.__dataclass_fields__)
+_generated_world_init = ObserverWorldState.__init__
+
+
+def _guarded_world_init(
+    self: ObserverWorldState, *args: object, **kwargs: object
+) -> None:
+    _reject_objective_leak(set(kwargs))
+    _generated_world_init(self, *args, **kwargs)
+
+
+ObserverWorldState.__init__ = _guarded_world_init  # type: ignore[method-assign]
+
+
+def observer_world_state_from_mapping(
+    payload: Mapping[str, object],
+) -> ObserverWorldState:
+    """Parse a detached world mapping and reject subjective or analytic keys."""
+    if not isinstance(payload, Mapping):
+        _reject("world", "invalid_type")
+    names = {key for key in payload if isinstance(key, str)}
+    _reject_objective_leak(names)
+    extra = {key: payload[key] for key in names if key not in _WORLD_FIELDS}
+    _reject_extra(extra)
+    known = {key: payload[key] for key in names if key in _WORLD_FIELDS}
+    return ObserverWorldState(**known)
 
 
 def _typed_tuple[T](field: str, values: object, model: type[T]) -> tuple[T, ...]:

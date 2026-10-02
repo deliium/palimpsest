@@ -24,12 +24,16 @@ from api.schemas import (
     MetricCatalogOut,
     MetricDocumentOut,
     ObjectiveWorldOut,
+    SubjectiveClaimsOut,
     SubjectivePageOut,
+    TerritorialClaimHeadOut,
 )
 from api.security import ApiCapability, require_http_capability
 from api.services import InspectionService, MetricReadService
 from infrastructure.logging import get_logger
 from infrastructure.settings import Settings
+from simulation.inspection import subjective_claims_document
+from simulation.run_control import AgentRuntimeCheckpoint
 
 router = APIRouter(prefix="/v1/simulations", tags=["inspection"])
 _LOGGER = get_logger("api.routes.inspection")
@@ -225,6 +229,45 @@ async def list_owner_relationships(
         count=result.item_count,
     )
     return result
+
+
+@router.get(
+    "/{run_id}/owners/{owner_id}/territorial-claims",
+    response_model=SubjectiveClaimsOut,
+)
+async def list_territorial_claims(
+    run_id: str,
+    owner_id: str,
+    request: Request,
+    _: None = Depends(_debug),
+) -> SubjectiveClaimsOut:
+    manager = getattr(request.app.state, "simulation_manager", None)
+    checkpoint = None
+    if manager is not None and hasattr(manager, "owner_runtime_checkpoint"):
+        checkpoint = manager.owner_runtime_checkpoint(run_id, owner_id)
+    typed = checkpoint if type(checkpoint) is AgentRuntimeCheckpoint else None
+    document = subjective_claims_document(owner_id, typed)
+    _LOGGER.info(
+        "route_territorial_claims",
+        route_template=(
+            "GET /v1/simulations/{run_id}/owners/{owner_id}/territorial-claims"
+        ),
+        status=200,
+        run_id=run_id,
+        heads=len(document.heads),
+    )
+    return SubjectiveClaimsOut(
+        owner_id=document.owner_id,
+        heads=tuple(
+            TerritorialClaimHeadOut(
+                owner_id=head.owner_id,
+                target_kind=head.target_kind,
+                target_entity_id=head.target_entity_id,
+                strength=head.strength,
+            )
+            for head in document.heads
+        ),
+    )
 
 
 @router.get("/{run_id}/metrics", response_model=MetricCatalogOut)
