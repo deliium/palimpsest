@@ -301,6 +301,23 @@ class MatrixBatchRunner:
                             version_identity=identity,
                         )
                     )
+                    try:
+                        from experiments.collectors import assemble_arm_metric_bundle
+
+                        bundle = assemble_arm_metric_bundle(arm)
+                        write_metrics = getattr(store, "write_metric_documents", None)
+                        if write_metrics is not None:
+                            write_metrics(cell_id, bundle.documents)
+                    except Exception:
+                        _LOG.warning(
+                            "matrix_metric_sidecar_skip",
+                            extra={
+                                "experiment": {
+                                    "cell_id": cell_id,
+                                    "reason_code": "metric_sidecar_failed",
+                                }
+                            },
+                        )
                     arm_results.append(arm)
                     completed += 1
                     return

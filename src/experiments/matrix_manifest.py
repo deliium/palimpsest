@@ -130,6 +130,12 @@ class MatrixManifestStore(Protocol):
 
     def write_completion(self, completion: MatrixCompletionRecord) -> None: ...
 
+    def write_metric_documents(
+        self, cell_id: str, documents: tuple[object, ...]
+    ) -> None: ...
+
+    def read_metric_documents(self, cell_id: str) -> tuple[object, ...] | None: ...
+
     def has_valid_completion(
         self,
         cell: MatrixCell,
@@ -255,6 +261,9 @@ class FilesystemMatrixManifestStore:
 
     def _completion_path(self, cell_id: str) -> Path:
         return self._root / "cells" / f"{cell_id}.completion.json"
+
+    def _metrics_path(self, cell_id: str) -> Path:
+        return self._root / "cells" / f"{cell_id}.metrics.json"
 
     def create(
         self,
@@ -466,6 +475,67 @@ class FilesystemMatrixManifestStore:
             stop_reason=completion.stop_reason.value,
             version_identity=completion.version_identity,
         )
+
+    def write_metric_documents(
+        self, cell_id: str, documents: tuple[object, ...]
+    ) -> None:
+        """Persist optional encoded MetricDocument sidecars for matrix summaries."""
+        from analysis.models import MetricAvailability, MetricDocument
+        from analysis.serialization import encode_metric_document
+
+        cell_id = str(cell_id)
+        if not isinstance(documents, tuple):
+            raise TypeError("documents: not_tuple")
+        presentable = [
+            doc
+            for doc in documents
+            if type(doc) is MetricDocument
+            and doc.availability
+            in (MetricAvailability.PRESENT, MetricAvailability.PARTIAL)
+        ]
+        if not presentable:
+            return
+        ordered = sorted(presentable, key=lambda doc: doc.metric_family)
+        payload = [
+            json.loads(encode_metric_document(doc).decode("utf-8")) for doc in ordered
+        ]
+        _atomic_write(self._metrics_path(cell_id), _canonical_dumps(payload))
+        _LOG.info(
+            "matrix_metric_sidecar_written",
+            extra={
+                "experiment": {
+                    "cell_id_prefix": cell_id[:12],
+                    "document_count": len(ordered),
+                }
+            },
+        )
+        _LOG.debug(
+            "matrix_metric_sidecar_families",
+            extra={
+                "experiment": {
+                    "cell_id_prefix": cell_id[:12],
+                    "families": [doc.metric_family for doc in ordered],
+                }
+            },
+        )
+
+    def read_metric_documents(self, cell_id: str) -> tuple[object, ...] | None:
+        """Load metric sidecars; missing file yields ``None`` (not zeros)."""
+        from analysis.serialization import decode_metric_document
+
+        path = self._metrics_path(str(cell_id))
+        if not path.exists():
+            return None
+        try:
+            raw = json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            return None
+        if not isinstance(raw, list):
+            return None
+        documents = []
+        for item in raw:
+            documents.append(decode_metric_document(_canonical_dumps(item)))
+        return tuple(documents)
 
     def has_valid_completion(
         self,

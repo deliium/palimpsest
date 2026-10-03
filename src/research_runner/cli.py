@@ -15,6 +15,10 @@ from experiments.matrix_aggregate import (
     encode_matrix_aggregate,
 )
 from experiments.matrix_expand import expand_matrix
+from experiments.matrix_metric_summary import (
+    encode_matrix_metric_summary,
+    load_matrix_metric_summary_from_store,
+)
 from experiments.matrix_models import matrix_spec_fingerprint
 from experiments.matrix_runner import MatrixBatchRunner
 from experiments.matrix_serialization import decode_matrix_spec
@@ -131,6 +135,20 @@ def _cmd_aggregate(args: argparse.Namespace) -> int:
     )
     out = Path(args.aggregate_out or (Path(args.manifest_root) / "aggregate.json"))
     out.write_bytes(encode_matrix_aggregate(aggregate))
+    if args.metric_summary:
+        summary = load_matrix_metric_summary_from_store(store, cells)
+        summary_out = Path(args.manifest_root) / "metric-summary.json"
+        summary_out.write_bytes(encode_matrix_metric_summary(summary))
+        _LOG.info(
+            "cli_matrix_metric_summary",
+            extra={
+                "experiment": {
+                    "command": "aggregate",
+                    "output_path": str(summary_out),
+                    "key_summary_count": len(summary.key_summaries),
+                }
+            },
+        )
     _LOG.info(
         "cli_matrix_aggregate",
         extra={
@@ -204,6 +222,11 @@ def build_parser() -> argparse.ArgumentParser:
         "--aggregate-out",
         default=None,
         help="Optional aggregate output path",
+    )
+    agg_p.add_argument(
+        "--metric-summary",
+        action="store_true",
+        help="Also write matrix-metric-summary-v1 from cell metric sidecars",
     )
     agg_p.set_defaults(func=_cmd_aggregate)
     return parser

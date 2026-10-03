@@ -46,6 +46,18 @@ from analysis.cultural_similarity_metrics import (
     CULTURAL_SIMILARITY_METRIC_VERSION,
     compute_cultural_similarity,
 )
+from analysis.distribution_summary import (
+    DistributionSummary,
+    proportion_confidence_interval,
+    summarize_distribution,
+)
+from analysis.matrix_metric_summary import (
+    MATRIX_METRIC_SUMMARY_SCHEMA_VERSION,
+    MatrixMetricCellRef,
+    MatrixMetricKeySummary,
+    MatrixMetricSummary,
+    build_matrix_metric_summary,
+)
 from analysis.cultural_transmission_metrics import (
     CULTURAL_TRANSMISSION_METRIC_VERSION,
     compute_cultural_transmission,
@@ -305,6 +317,7 @@ __all__ = [
     "CANONICAL_FLOAT_DECIMAL_PLACES",
     "CANONICAL_OUTPUT_CLAIM",
     "CAUSAL_WORLD_MODEL_METRIC_VERSION",
+    "MATRIX_METRIC_SUMMARY_SCHEMA_VERSION",
     "PHENOMENON_INDICATORS_SCHEMA_VERSION",
     "SUPPORT_BAND_RULES",
     "CLAIM_TRUTH_SCHEMA_VERSION",
@@ -356,6 +369,7 @@ __all__ = [
     "ClaimValueKind",
     "ComparisonStatus",
     "DenominatorKind",
+    "DistributionSummary",
     "DriftDelta",
     "DriftStep",
     "EventSource",
@@ -365,6 +379,9 @@ __all__ = [
     "GoalTransitionRow",
     "InMemoryMemoryEvidenceSource",
     "InMemoryObjectiveEventSource",
+    "MatrixMetricCellRef",
+    "MatrixMetricKeySummary",
+    "MatrixMetricSummary",
     "MemoryDriftAnalysisService",
     "MemoryDriftReport",
     "MemoryDynamicsAuditRow",
@@ -416,6 +433,7 @@ __all__ = [
     "assemble_metric_documents",
     "build_identity_audit",
     "build_lineage_edges",
+    "build_matrix_metric_summary",
     "build_phenomenon_indicator_panel",
     "build_reconstruction_chains",
     "build_signed_trust_digraph",
@@ -472,7 +490,9 @@ __all__ = [
     "compute_theory_of_mind_metrics",
     "compute_trust_network_structure",
     "phenomenon_indicator_refs",
+    "proportion_confidence_interval",
     "resolve_support_band",
+    "summarize_distribution",
     "validate_phenomenon_mappings",
     "concept_jaccard_loss",
     "cumulative_drift",
