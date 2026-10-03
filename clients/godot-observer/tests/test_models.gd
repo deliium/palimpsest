@@ -29,7 +29,55 @@ func run() -> Array:
 	_expect(failures, _rejects_foreign_protocol(), "foreign protocol is rejected")
 	_expect(failures, _rejects_catalog_anchor_dict(), "catalog anchor dict is rejected")
 	_expect(failures, _status_shows_versions_and_protocol_failure(), "status shows protocol failure")
+	_expect(failures, _manifest_branch_lineage_optional(), "manifest branch lineage optional")
 	return failures
+
+
+func _manifest_branch_lineage_optional() -> String:
+	var root = Protocol.parse_manifest({
+		"protocol_version": Protocol.PROTOCOL_VERSION,
+		"layout_schema_version": "observer-layout-v1",
+		"layout_id": "reference-v1",
+		"layout_hash": "abc",
+		"ordering": "tick_sequence",
+		"read_only": true,
+		"event_types": [],
+		"event_schema_version": 5,
+		"projector_version": "projector-v1",
+		"run_id": "run-root",
+		"unknown_future_key": "ignored",
+	})
+	if not root.ok:
+		return "root manifest failed"
+	if str(root.value.run_id) != "run-root":
+		return "root run_id missing"
+	if not str(root.value.parent_run_id).is_empty():
+		return "root should omit parent"
+	var fork = Protocol.parse_manifest({
+		"protocol_version": Protocol.PROTOCOL_VERSION,
+		"layout_schema_version": "observer-layout-v1",
+		"layout_id": "reference-v1",
+		"layout_hash": "abc",
+		"ordering": "tick_sequence",
+		"read_only": true,
+		"event_types": [],
+		"event_schema_version": 5,
+		"projector_version": "projector-v1",
+		"run_id": "run-child",
+		"parent_run_id": "run-root",
+		"fork_tick": 3,
+		"intervention_summary": "mortality_disabled:aaaaaaaaaaaa",
+		"branch_id": "branch-1",
+	})
+	if not fork.ok:
+		return "fork manifest failed"
+	if str(fork.value.parent_run_id) != "run-root":
+		return "fork parent missing"
+	if int(fork.value.fork_tick) != 3:
+		return "fork tick missing"
+	if str(fork.value.branch_id) != "branch-1":
+		return "branch_id missing"
+	return ""
 
 
 func _every_semantic_fixture() -> String:

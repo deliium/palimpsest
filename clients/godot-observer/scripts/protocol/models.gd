@@ -293,6 +293,11 @@ class ManifestModel:
 	var event_types: Array[String] = []
 	var event_schema_version: int = 0
 	var projector_version: String = ""
+	var run_id: String = ""
+	var parent_run_id: String = ""
+	var fork_tick: int = -1
+	var intervention_summary: String = ""
+	var branch_id: String = ""
 
 
 class EventPageModel:
@@ -316,6 +321,12 @@ static func parse_manifest(data: Variant) -> ParseResult:
 	manifest.read_only = bool(data.get("read_only", false))
 	manifest.event_schema_version = int(data.get("event_schema_version", 0))
 	manifest.projector_version = str(data.get("projector_version", ""))
+	manifest.run_id = str(data.get("run_id", "")).strip_edges()
+	manifest.parent_run_id = str(data.get("parent_run_id", "")).strip_edges()
+	if data.has("fork_tick") and data.get("fork_tick") != null:
+		manifest.fork_tick = int(data.get("fork_tick"))
+	manifest.intervention_summary = str(data.get("intervention_summary", "")).strip_edges()
+	manifest.branch_id = str(data.get("branch_id", "")).strip_edges()
 	var raw_types: Variant = data.get("event_types", [])
 	if raw_types is Array:
 		for item in raw_types:

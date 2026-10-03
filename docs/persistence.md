@@ -71,7 +71,7 @@ Contributor summary:
 | Derivation v1 / v2 / v3 | Deterministic ID/stream derivation (v2 includes rules fingerprint) |
 | Subjective codec v1 | Semantic beliefs, relationship profiles, mutation receipts (non-authoritative) |
 | Runner config | Write `runner-config-v4` (`cognition_trace` + V2 capability flags); accept `v1`/`v2`/`v3` decode with default-off flags and disabled tracing |
-| Alembic head | Pin **`0013`** — `cognition_trace_invocations` (non-authoritative inspection indexes); capability flags remain runner JSON only (no flag SQL columns) |
+| Alembic head | Pin **`0015`** — `simulation_branches` control-plane lineage (non-authoritative); prior `0013` cognition-trace indexes remain; capability flags stay runner JSON only |
 
 Runs never mix replay schema versions. Legacy schema-v1 audit events remain decodable for export but must not enter the authoritative log. Alembic revision `0004` persists SQL cause/occurrence columns so restored engines reproduce the same next observation as live engines (eventful and eventless prior windows). Revision `0005` adds owner-scoped episodic memory tables. Revision `0006` adds reconstruction/derivation provenance with selective immutability. Revision `0007` adds semantic belief and directed relationship tables. Revision `0008` adds communicated transmission metadata and testimony-factor columns. Observation codecs round-trip every field and provenance type with exact keys.
 
@@ -106,7 +106,12 @@ Append-only `experiment_definitions`, `experiment_assignments`, and `experiment_
 - Factory: `persistence.create_cognition_trace_repository(...)`. Composition injects SQLAlchemy only when tracing is enabled + durable; otherwise Null / in-memory.
 - Not folded into objective replay; stream-outbox / manifest integration is deferred. HTTP read routes are deferred — use `CognitionTraceRepository` ports.
 
-Migration head is `0013`. V2 capability flags are **not** Alembic columns — they are carried only inside canonical runner-config JSON stored in existing `run_control.config_payload` (`0011`). Tests may target only databases whose name contains `palimpsest_test`; Alembic receives the validated URL directly and fails closed on conflicting ambient URLs.
+## Research branch lineage (`0015`)
+
+- **`0015_simulation_branches`:** control-plane genealogy (`parent_run_id`, `child_run_id`, `fork_tick`, intervention fingerprint/canonical, `branch_id`) **outside** `AUTHORITATIVE_TABLES`. Forking rematerializes a child journal under a new `run_id` and never rewrites parent history. Default seed stream **inherits** parent `stochastic_identity` unless intervention kind `alternate_seed_stream` is selected.
+- Factory: `persistence.create_branch_lineage_repository(...)`. Observer manifests stay on `observer-protocol-v1` with required `run_id` plus optional fork fields.
+
+Migration head is `0015`. V2 capability flags are **not** Alembic columns — they are carried only inside canonical runner-config JSON stored in existing `run_control.config_payload` (`0011`). Tests may target only databases whose name contains `palimpsest_test`; Alembic receives the validated URL directly and fails closed on conflicting ambient URLs.
 
 ## Logging
 

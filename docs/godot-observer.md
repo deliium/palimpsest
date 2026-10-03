@@ -29,6 +29,8 @@ HTTP GET only:
 
 It also opens `/v1/simulations/{run_id}/observer/stream` and never sends a text or binary WebSocket payload. Protocol `observer-protocol-v1` is required. A different `protocol_version` is shown as `unsupported_observer_protocol` and is not applied.
 
+Manifest and run envelopes always carry `run_id`. Optional fork fields (`parent_run_id`, `fork_tick`, `intervention_summary`, `branch_id`) appear on research branch children only — unknown keys are ignored. Switching branches means reconnecting with another `run_id` on the same observer routes. There is **no** dual-world viewport or simultaneous fold of two runs in the client.
+
 ## Evidence classes
 
 Every researcher overlay marker carries exactly one class: **OBJECTIVE**, **SUBJECTIVE**, or **ANALYTICAL**. The overlay legend (default off) toggles researcher layers and shows those badges. Inferred groups, norms, conventions, reputation aggregates, and strategy categories never paint as objective zone ownership.

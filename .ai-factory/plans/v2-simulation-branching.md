@@ -257,19 +257,19 @@ Each checkpoint is a git commit on `main` created when those tasks are done. Do 
 
 ### Phase 3: API, observer metadata, compare
 
-- [ ] Task 7: Wire branch HTTP APIs.
+- [x] Task 7: Wire branch HTTP APIs.
   - Deliverable: Implement the five routes in Design Decisions under `src/api/routes/` (new `branches.py` or extend simulations router), schemas in `src/api/schemas.py` / observer schemas as needed, and composition in `SimulationManager` / persistence services. Authz: create = `simulation_control`; list/get/fork-point/state = `objective_inspection`. Create path must surface Task 3b idempotent hits and Task 6b control-plane visibility. Tests cover happy path, idempotent retry, identity conflict, root-without-lineage, unknown parent, fork_tick ahead of head, and capability failures.
   - Logging: route INFO/DEBUG with run ids, fork tick, kind, counts; no payloads.
   - Depends on tasks 6, 6b.
   - Files: `src/api/routes/branches.py` (or equivalent), `src/api/app.py`, `src/api/simulation_manager.py`, `src/api/schemas.py`, `tests/unit/test_branch_api.py`.
 
-- [ ] Task 8: Add branch timeline compare (simulation inspection, single-fold reads).
+- [x] Task 8: Add branch timeline compare (simulation inspection, single-fold reads).
   - Deliverable: Implement `compare_branch_timelines` in `src/simulation/branch_compare.py` using detached journal reads — shared prefix check through `fork_tick` (payload equivalence; commit hashes may differ by `run_id`), first divergence, trajectory hash windows. Expose `POST /v1/simulations/branches/compare` (or under a run-scoped path) with `objective_inspection`. Forbid holding two live engines for render. Do not place this helper under `analysis` (API cannot import analysis). Unit tests: identical forks → no divergence after equal continuation; intentional belief patch → divergence after fork.
   - Logging: INFO `branch_timeline_compare parent=%s child=%s diverge_tick=%s diverge_sequence=%s`.
   - Depends on task 6.
   - Files: `src/simulation/branch_compare.py`, API route/schema, `tests/unit/test_branch_timeline_compare.py`.
 
-- [ ] Task 9: Thread branch metadata into ObserverManifest and ObserverRunOut.
+- [x] Task 9: Thread branch metadata into ObserverManifest and ObserverRunOut.
   - Deliverable: `run_id` is **always required** on `ObserverManifest` / `ObserverManifestOut` / sources. Fork-only optionals (`parent_run_id`, `fork_tick`, `intervention_summary`, `branch_id`) per Design Decisions. `ObserverRunOut` mirrors the same. Sources and `ObserverReadService` load lineage when present. Root runs omit/null fork-only fields consistently. Stay on `observer-protocol-v1`. Tests prove every manifest carries `run_id`, roots lack fork fields, forks expose lineage.
   - Logging: DEBUG `observer_manifest_branch run_id=%s branch_id=%s parent_run_id=%s fork_tick=%s`.
   - Depends on tasks 3, 7.
@@ -279,19 +279,19 @@ Each checkpoint is a git commit on `main` created when those tasks are done. Do 
 
 ### Phase 4: Godot compatibility, reproducibility, docs
 
-- [ ] Task 10: Godot observer lineage surfacing without dual render.
+- [x] Task 10: Godot observer lineage surfacing without dual render.
   - Deliverable: Parse `run_id` plus optional branch fields from manifest/run JSON in `clients/godot-observer/`. Show parent/child/fork tick/intervention summary in status or inspector. Switching branches uses existing `start_with_run_id` / query `run_id` path — no second world renderer, no simultaneous folds, no compare viewport. Protocol tests/scripts updated. Unknown keys remain ignored safely.
   - Logging: `[observer.session] branch_lineage run_id=%s parent_run_id=%s fork_tick=%s` at DEBUG.
   - Depends on task 9.
   - Files: `clients/godot-observer/scripts/net/session.gd`, status/inspector scripts as needed, Godot protocol tests under `clients/godot-observer/tests/`.
 
-- [ ] Task 11: Reproducibility proofs for identical fork configurations.
+- [x] Task 11: Reproducibility proofs for identical fork configurations.
   - Deliverable: Hard proofs (not smoke-only): (a) same parent + fork_tick + intervention fingerprint + seed-stream choice ⇒ same `child_run_id` / `branch_id`; (b) two independently created identical forks with deterministic fakes produce equal child `exact_trajectory_hash` (prefer equal child ids so exact hash matches); (c) parent `exact_trajectory_hash` unchanged after fork; (d) instantiate real `ResearchIntervention`, `CounterfactualScenario`, `ImaginedFuture`, and an ordinary `SemanticBelief` (non-matching predicate) and assert mutual exclusion by type/predicate — not class-object markers; (e) architecture test that `simulation.branching` / `simulation.branch_service` / `simulation.branch_compare` do not import `experiments`. Assert log tokens `research_fork_created` / idempotent hit and fingerprint equality.
   - Logging: tests assert presence of key log tokens and reason codes; failure messages use stable codes.
   - Depends on tasks 6, 6b, 8.
   - Files: `tests/unit/test_simulation_branch_reproducibility.py`, `tests/architecture/test_simulation_branch_boundaries.py`.
 
-- [ ] Task 12: Documentation checkpoint via `/aif-docs` ownership.
+- [x] Task 12: Documentation checkpoint via `/aif-docs` ownership.
   - Deliverable: Update contributor docs for branching APIs, lineage, rematerialization/rehash, stochastic-identity inherit vs alternate, observer `run_id` + optional fork fields, idempotency, and the research-fork vs agent-counterfactual boundary (`docs/research-api.md`, `docs/godot-observer.md`, and a short section in `docs/architecture.md` or `docs/simulation-runner.md`). Mention Alembic `0015` and that Godot treats a branch as another `run_id` (no dual viewport). No README bloat beyond a one-line pointer if the landing page already links docs.
   - Logging: n/a (docs only); implementation logs already specified.
   - Depends on tasks 9–11.

@@ -27,6 +27,13 @@ Secrets use strong `SecretStr` values. Query-string secrets are rejected. Prefer
 - Replay-to-tick endpoints (detached projection; never live `WorldEngine`)
 - Read-only observer manifest, state, events, ticks, run metadata, and live stream. See [Read-only observer](observer.md). Presentation coordinates are not simulation coordinates. Researcher relationship summaries stay on the debug capability.
 - Research causal debugger GET routes under `/v1/simulations/{run_id}/debugger/…` require `subjective_debug` (observational; tracing-off → `200` + `unavailable`). See [Research causal debugger](research-causal-debugger.md).
+- Research **simulation branches** (deterministic forks):
+  - `POST /v1/simulations/{parent_run_id}/branches` — create one child from `fork_tick` + exactly one closed `ResearchIntervention` (`simulation_control`; idempotent on identical fingerprint)
+  - `GET /v1/simulations/{run_id}/branches` — list children (keyset)
+  - `GET /v1/simulations/{run_id}/branch` — parent lineage or `404`/`branch_root`
+  - `GET /v1/simulations/{run_id}/branch/fork-point` / `…/branch/state` — fork cursor + thin run envelope
+  - `POST /v1/simulations/branches/compare` — detached journal timeline compare (`objective_inspection`)
+  - Research forks are **not** agent `CounterfactualScenario` / prospective rollouts; parent history is never rewritten.
 
 Stable problem-detail errors carry closed reason codes. Lifecycle conflicts return conflict responses without leaking configuration or evidence payloads.
 

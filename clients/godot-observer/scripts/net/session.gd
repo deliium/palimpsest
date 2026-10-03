@@ -597,6 +597,21 @@ func _on_http(route: String, _status: int, body: Variant, reason_code: String) -
 		if not manifest.ok:
 			_fail(manifest.reason_code)
 			return
+		var model = manifest.value
+		if model != null and not str(model.run_id).is_empty():
+			ObserverLog.debug(
+				"session",
+				"branch_lineage run_id=%s parent_run_id=%s fork_tick=%s" % [
+					str(model.run_id),
+					str(model.parent_run_id),
+					str(model.fork_tick),
+				],
+			)
+			if not str(model.parent_run_id).is_empty():
+				status_changed.emit(
+					"loading",
+					"branch of %s @%s" % [str(model.parent_run_id), str(model.fork_tick)],
+				)
 		_request("state")
 		return
 	if kind == "state" or kind == "state_refresh":
