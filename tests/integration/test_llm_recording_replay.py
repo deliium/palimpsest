@@ -5,6 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 
 import pytest
+from tests.fakes.llm import FakeClock, FakeLLMProvider, ScriptedSuccess
 
 from llm.errors import LLMError, LLMErrorCode
 from llm.models import (
@@ -19,7 +20,6 @@ from llm.models import (
 )
 from llm.recording.provider import RecordingLLMProvider, RecordingMode
 from llm.recording.store import FilesystemRecordingStore, LookupMode
-from tests.fakes.llm import FakeClock, FakeLLMProvider, ScriptedSuccess
 
 pytestmark = pytest.mark.integration
 

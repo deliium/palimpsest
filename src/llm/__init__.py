@@ -75,6 +75,7 @@ from llm.recording import (
 
 __all__ = [
     "CORRELATION_HEADER_NAME",
+    "LLM_EXCHANGE_SCHEMA_ID",
     "CorrelationKey",
     "DeterministicFakeLLMProvider",
     "DisabledLLMProvider",
@@ -89,7 +90,6 @@ __all__ = [
     "FinishReason",
     "LLMError",
     "LLMErrorCode",
-    "LLM_EXCHANGE_SCHEMA_ID",
     "LLMExchangeRecord",
     "LLMMessage",
     "LLMProvider",

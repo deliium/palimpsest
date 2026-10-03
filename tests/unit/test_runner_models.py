@@ -143,12 +143,13 @@ def test_exact_reproducibility_allows_replay() -> None:
 def test_recorded_alias_decodes_to_replay() -> None:
     from simulation.runner_serialization import (
         _decode_recording_policy,
-        encode_runner_config,
         decode_runner_config,
+        encode_runner_config,
     )
 
     assert (
-        _decode_recording_policy("recorded", path="$.provider") is RecordingPolicy.REPLAY
+        _decode_recording_policy("recorded", path="$.provider")
+        is RecordingPolicy.REPLAY
     )
     config = _config()
     from dataclasses import replace

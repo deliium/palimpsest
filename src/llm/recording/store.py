@@ -21,7 +21,7 @@ from llm.recording.models import LLMExchangeRecord
 _LOG: Final[logging.Logger] = logging.getLogger("llm.recording")
 
 _HEX64_RE: Final[re.Pattern[str]] = re.compile(r"^[a-f0-9]{64}$")
-# Matches the LLM safe-id / header-safe family (includes ':'); traversal rejected separately.
+# Matches LLM safe-id / header-safe family (includes ':'); reject traversal.
 _SAFE_SEGMENT_RE: Final[re.Pattern[str]] = re.compile(
     r"^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
 )

@@ -66,16 +66,16 @@ class RecordingLLMProvider:
     """
 
     __slots__ = (
-        "_inner",
-        "_mode",
-        "_store",
         "_cache_namespace",
-        "_lookup_mode",
-        "_structured_output_mode",
-        "_provider_name",
-        "_model_name",
         "_defaults",
+        "_inner",
+        "_lookup_mode",
+        "_mode",
+        "_model_name",
         "_monotonic",
+        "_provider_name",
+        "_store",
+        "_structured_output_mode",
     )
 
     def __init__(

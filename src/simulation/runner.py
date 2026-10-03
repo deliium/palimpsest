@@ -274,7 +274,9 @@ class RecordingStoreSettings:
     def __post_init__(self) -> None:
         if not isinstance(self.root_dir, (Path, str)):
             raise TypeError("root_dir must be Path or str")
-        if not isinstance(self.cache_namespace, str) or not self.cache_namespace.strip():
+        if not isinstance(self.cache_namespace, str) or not (
+            self.cache_namespace.strip()
+        ):
             raise ValueError("cache_namespace must be a non-blank string")
         if type(self.lookup_mode) is not LookupMode:
             raise TypeError("lookup_mode must be LookupMode")
