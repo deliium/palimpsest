@@ -286,7 +286,7 @@ Each checkpoint is a git commit on `main` created when those tasks are done. Do 
 
 ### Phase 4: Tests and docs
 
-- [ ] Task 9: Unit proofs for isolation, drift, and fingerprint hygiene
+- [x] Task 9: Unit proofs for isolation, drift, and fingerprint hygiene
   - Deliverable: Cross-namespace non-leak tests (identical prompts/agents, different namespaces ⇒ no hit), including distinct `run_id`-style namespaces (fork-child case). Schema field change and prompt digest change ⇒ replay fail-closed; cache miss. Metadata-only log assertions. Assert `RecordingStoreSettings` does not alter `provider_fingerprint` for otherwise-equal provider JSON.
   - Logging: assert allowlist; fail if message/content/schema dump appears.
   - Files: `tests/unit/test_llm_recording_isolation.py`, `tests/unit/test_llm_recording_drift.py`
