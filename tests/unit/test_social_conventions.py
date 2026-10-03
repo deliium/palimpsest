@@ -719,3 +719,115 @@ def test_transmission_usually_and_habit_penalties() -> None:
         mode=CognitionSocialConventionMode.DISABLED,
     )
     assert empty == {}
+    speaker = empty_convention_ledger(_agent("ben"))
+    assert adopted is not speaker
+    assert all(item.owner_id == _agent("ada") for item in adopted.beliefs)
+
+
+def test_habitual_exchange_promotes_and_links_competing_variant() -> None:
+    identity = _identity()
+    ledger = None
+    for tick in range(3):
+        ledger = apply_convention_update(
+            _observe(
+                _occur("give", "body-ada", "body-ben", f"g-{tick}", tick=tick),
+                tick=tick,
+            ),
+            identity,
+            ledger,
+        )
+    assert ledger is not None
+    habit = _belief(ledger, ConventionSituation.HABITUAL_EXCHANGE, "give")
+    assert habit.status is ConventionStatus.ACTIVE
+    assert habit.repetition_count == 3
+    # Competing variants share situation/location/phase and differ in usual_action.
+    wait_ledger = None
+    for tick in range(4):
+        wait_ledger = apply_convention_update(
+            _observe(
+                _occur("wait", "body-ada", None, f"cv-w-{tick}", tick=tick),
+                tick=tick,
+            ),
+            identity,
+            wait_ledger,
+        )
+    talk_ledger = wait_ledger
+    for tick in range(4, 8):
+        talk_ledger = apply_convention_update(
+            _observe(
+                _occur("talk", "body-ada", "body-ben", f"cv-t-{tick}", tick=tick),
+                tick=tick,
+            ),
+            identity,
+            talk_ledger,
+        )
+    wait_belief = _belief(
+        talk_ledger, ConventionSituation.COLOCATED_MEETING, "wait"
+    )
+    talk_belief = _belief(
+        talk_ledger, ConventionSituation.COLOCATED_MEETING, "talk"
+    )
+    assert talk_belief.belief_id in wait_belief.competing_variant_ids
+    assert wait_belief.belief_id in talk_belief.competing_variant_ids
+
+
+def test_bare_talk_is_not_greeting_exchange() -> None:
+    identity = _identity()
+    ledger = apply_convention_update(
+        _observe(
+            _occur("talk", "body-ben", "body-ada", "talk-bare", tick=0),
+            tick=0,
+        ),
+        identity,
+        None,
+    )
+    assert all(
+        item.content.situation is not ConventionSituation.GREETING_EXCHANGE
+        for item in ledger.beliefs
+    )
+
+
+def test_owners_keep_separate_ledgers_and_no_ritual_fields() -> None:
+    ada = _identity()
+    ben = OwnerSafeSocialIdentity(
+        owner_id=_agent("ben"),
+        owner_entity_id=EntityId("body-ben"),
+        counterparts=(
+            CounterpartBinding(agent_id=_agent("ada"), entity_id=EntityId("body-ada")),
+            CounterpartBinding(agent_id=_agent("cy"), entity_id=EntityId("body-cy")),
+        ),
+    )
+    shared = _observe(
+        _occur("wait", "body-ada", None, "sep-0", tick=0),
+        tick=0,
+    )
+    ada_ledger = apply_convention_update(shared, ada, None)
+    ben_observation = Observation(
+        world_id=WorldId("world-w"),
+        observer_id=EntityId("body-ben"),
+        revision=WorldRevision(1),
+        tick=1,
+        self_body=ObservedSelf(
+            entity_id=EntityId("body-ben"),
+            location_id=EntityId("clearing"),
+            health=Health(100),
+            hunger=Hunger(0),
+            thirst=Thirst(0),
+            fatigue=Fatigue(0),
+            temperature=TemperatureCelsius(36.5),
+            inventory=(),
+            life_status=LifeStatus.ALIVE,
+            carry_capacity=CarryCapacity(10),
+        ),
+        occurrences=(
+            _occur("wait", "body-ada", None, "sep-0", tick=0),
+        ),
+        visible_bodies=(_body("body-ada"),),
+    )
+    ben_ledger = apply_convention_update(ben_observation, ben, None)
+    assert ada_ledger.owner_id != ben_ledger.owner_id
+    assert ada_ledger.beliefs[0].belief_id != ben_ledger.beliefs[0].belief_id
+    field_names = set(ConventionBelief.__dataclass_fields__)
+    assert field_names.isdisjoint({"ritual", "tradition", "ceremony", "culture"})
+    content_names = set(ConventionContent.__dataclass_fields__)
+    assert content_names.isdisjoint({"ritual", "tradition", "ceremony", "culture"})

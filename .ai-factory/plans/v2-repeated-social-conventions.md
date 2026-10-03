@@ -223,7 +223,7 @@ Family id `persistent_social_conventions`. Tag `persistent_social_conventions@1`
 
 ### Phase 4: Proofs
 
-- [ ] Task 10: Prove habit learning, reason-loss persistence, transmission, memory reinforce-only, and label separation.
+- [x] Task 10: Prove habit learning, reason-loss persistence, transmission, memory reinforce-only, and label separation.
   - Deliverable: tests that fail if a scenario accepts a tradition/ritual field, if a metric document can be passed into `apply_convention_update`, if one conforming event promotes a belief, if one owner's ledger appears on another owner, if `repeated_conventions` value keys change, if `ritual`/`tradition` appear as cognition ledger fields, if bare talk without `greet` creates `greeting_exchange`, if memory alone mints a belief, or if disabled mode changes the command.
   - Required cases across `tests/unit/test_social_conventions.py`, `test_social_conventions_runtime.py`, `test_social_conventions_world.py`, `test_social_conventions_experiment.py`, and `test_social_convention_metrics.py`:
     - Three colocated meeting ticks promote `colocated_meeting`; one tick stays `candidate` with `below_count`.
@@ -242,7 +242,7 @@ Family id `persistent_social_conventions`. Tag `persistent_social_conventions@1`
 
 ### Phase 5: Documentation
 
-- [ ] Task 11: Document the habit/belief/analysis split and the v18 mode.
+- [x] Task 11: Document the habit/belief/analysis split and the v18 mode.
   - Deliverable: mandatory docs checkpoint via `/aif-docs`. Append to `docs/architecture.md` item 7 after the existing `SocialNormMode` / Experiment X sentence: `SocialConventionMode` defaults to `DISABLED`, `runner-config-v18` is emitted only when some agent's mode is `DETERMINISTIC`, Experiment Y and `persistent_social_conventions@1` stay off the V1 gate and out of cognition, and the policy is `social-conventions.v1`. Add a section to `docs/social-communication.md` stating objective repetition, owner habit beliefs ("we usually do X in Y"), observation + memory reinforce + communication, remembered explanations, competing variants, and that ritual/tradition labels are analysis-only until `named_custom`. Add one sentence to `.ai-factory/DESCRIPTION.md` after the existing social-norms / `runner-config-v17` sentence. Update `.ai-factory/ROADMAP.md` M6 to list this plan (already started in `/aif-plan`). Do not invent a roadmap milestone.
   - Tests: doc mentions stay consistent with `social-conventions.v1`, `persistent_social_conventions@1`, `runner-config-v18`, and `repeated_conventions`.
   - Logging: none beyond existing docs tooling.
