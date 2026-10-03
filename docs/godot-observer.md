@@ -19,11 +19,43 @@ HTTP GET only:
 - `/v1/simulations/{run_id}/observer/events`
 - `/v1/simulations/{run_id}/observer/run`
 - `/v1/simulations/{run_id}/observer/ticks`
-- `/v1/simulations/{run_id}/observer/agents/{agent_id}/labels` (optional researcher perspective; requires `subjective_debug`)
+- `/v1/simulations/{run_id}/observer/agents/{agent_id}/labels` (SUBJECTIVE perspective; `subjective_debug`)
+- `/v1/simulations/{run_id}/observer/agents/{agent_id}/relationships` (SUBJECTIVE; `subjective_debug`)
+- `/v1/simulations/{run_id}/observer/agents/{agent_id}/narrative-hops` (SUBJECTIVE ledger hops; `subjective_debug`)
+- `/v1/simulations/{run_id}/observer/communication-strategy-audit` (ANALYTICAL research/debug; `subjective_debug`)
+- `/v1/simulations/{run_id}/metrics` then `/metrics/{metric_set_id}/{family}` (ANALYTICAL catalog discovery; `objective_inspection`)
 
 It also opens `/v1/simulations/{run_id}/observer/stream` and never sends a text or binary WebSocket payload. Protocol `observer-protocol-v1` is required. A different `protocol_version` is shown as `unsupported_observer_protocol` and is not applied.
 
-The relationship route stays out of scope for ordinary playback. An optional perspective control can fetch layer `subjective_labels` for one agent; secondary captions are marked subjective while primary captions keep researcher identity (`ObserverIdentity` / layout `display_name`). Objective names are never silently replaced. The client does not request cognition traces, memories, beliefs, goals, emotions, or utterance text. Speech bubbles show the semantic type and the other agent id, not invented dialogue.
+## Evidence classes
+
+Every researcher overlay marker carries exactly one class: **OBJECTIVE**, **SUBJECTIVE**, or **ANALYTICAL**. The overlay legend (default off) toggles researcher layers and shows those badges. Inferred groups, norms, conventions, reputation aggregates, and strategy categories never paint as objective zone ownership.
+
+## V2 physical visuals
+
+The client parses `world.structures` and paints kind / integrity / stored-quantity cues at location anchors. Production semantic types (`RESOURCE_HARVESTED`, `CRAFT_STARTED`, `ITEM_CRAFTED`, `STRUCTURE_BUILT`, `STRUCTURE_REPAIRED`, `ITEM_STORED`) have dedicated effect actions and log phrases. Tool-like item kinds use local theme mapping. Season / weather / band / hazard / depleted paints come from frame refresh; scarcity outlines use objective quantity (`0` depleted; soft scarce cue for small positive quantities).
+
+## Perspective limits
+
+Selected-agent perspective loads only SUBJECTIVE projections: labels, relationships, territorial claims, and narrative-ledger hops when toggled. `GET .../agents/{id}/observation` returns counts-only (`AgentVisibleOut`) and is not used as a known-artifact payload. Clearing perspective removes SUBJECTIVE layers. ANALYTICAL overlays stay independent researcher toggles.
+
+## Communication ordinary vs research
+
+Ordinary speech bubbles show semantic type + other agent id, optionally `declared_confidence_band`, with distinct styles for talk / ask / tell. They never show deception or other audit categories even when the research payload is loaded. Opt-in `communication_strategy_audit` (ANALYTICAL) may show per-event research categories beside the event id; aggregate `communication_strategy@1` rates are summary-only via metric catalog discovery.
+
+## Narrative hops vs lineage metric
+
+Alice→Bob→Carol hops come from the SUBJECTIVE narrative-ledger projection (`carrier_agent_ids`, locations, parents, opaque event ids). A SUBJECTIVE narrative selector picks a variant id; the event log marks matching `source_event_id` / `last_communication_id` lines already in the loaded window. No content tokens or fingerprints as labels. `cultural_narrative_lineage@1` is ANALYTICAL aggregate detectors only and must not invent speaker order.
+
+## Metric catalog discovery
+
+Analytical overlays call `GET .../metrics`, pick the newest catalog entry that lists the family, then `GET .../metrics/{metric_set_id}/{family}`. Empty catalog or missing family → empty overlay + `overlay_unavailable`.
+
+## Performance
+
+At high speed (`>= 8x` or dense pending motions) the client snaps motion, coalesces trivial same-entity activity marks, caps concurrent speech bubbles, and skips nonessential pulses while keeping reducer state correct.
+
+An optional perspective control can fetch SUBJECTIVE layers for one agent; primary captions keep researcher identity. The client does not request cognition traces, memories, beliefs, goals, emotions, or utterance text.
 
 ## Same-origin setup
 
@@ -55,7 +87,7 @@ Do not commit that file. `project.godot` leaves `api_token` empty.
 
 The run id comes from the field at the top of the window or from `palimpsest/run_id`. Connect loads the manifest, then the current state, then the stream. Folded `frame.events` are history already in `world`. They are not tweened and they are not copied into the live event log.
 
-**Play fixture** applies `clients/godot-observer/fixtures/smoke/reference_session.json` through the same reducer and views. It does not open a socket.
+**Play fixture** applies `clients/godot-observer/fixtures/smoke/reference_session.json` through the same reducer and views. It does not open a socket. V2 coverage stubs live under `fixtures/smoke/v2_mechanics.json` (structures, production events, catalog-miss / narrative-hop / strategy-audit stubs).
 
 ## Timeline controls
 

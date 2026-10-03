@@ -21,7 +21,7 @@ Protocol version: `observer-protocol-v1`. Layout documents use `observer-layout-
 
 A frame may include `structures`. Each record has `structure_id`, `location_id`, `kind`, `integrity`, `stored_quantity`, and an optional presentation (`visual_category`, `icon_key`, `size_category`, optional `display_label`) from `observer.presentation`. Missing catalog rows leave presentation empty. Presentation is not stored on `Item`, `Resource`, `Structure`, `Location`, or `WorldEvent`.
 
-The six production semantic types are `RESOURCE_HARVESTED`, `CRAFT_STARTED`, `ITEM_CRAFTED`, `STRUCTURE_BUILT`, `STRUCTURE_REPAIRED`, and `ITEM_STORED`. `ObserverEvent` adds `recipe_id` and `structure_id` only when they are set. Protocol version stays `observer-protocol-v1`. Godot is not required to read the projection. The current client ignores unknown event types and unknown world keys, so a frame that adds `structures` still parses as protocol v1.
+The six production semantic types are `RESOURCE_HARVESTED`, `CRAFT_STARTED`, `ITEM_CRAFTED`, `STRUCTURE_BUILT`, `STRUCTURE_REPAIRED`, and `ITEM_STORED`. `ObserverEvent` adds `recipe_id` and `structure_id` only when they are set. Talk/Ask/Tell may add public-safe `declared_confidence_band` (speaker-declared band only; omitted when null). Protocol version stays `observer-protocol-v1`. The Godot client parses `structures`, production types, and optional confidence bands for presentation only.
 
 ## Artifact facts
 
@@ -47,7 +47,7 @@ Visible structures use the same content visibility threshold as local resources 
 
 ## Routes
 
-All HTTP methods are GET. The capability is `objective_inspection` except the relationship and labels routes, which require `subjective_debug`.
+All HTTP methods are GET. The capability is `objective_inspection` except researcher SUBJECTIVE/ANALYTICAL debug routes, which require `subjective_debug`.
 
 | Path | Response |
 | --- | --- |
@@ -59,9 +59,13 @@ All HTTP methods are GET. The capability is `objective_inspection` except the re
 | `GET /v1/simulations/{run_id}/observer/ticks` | Tick summaries |
 | `GET /v1/simulations/{run_id}/observer/events/{event_id}` | One adapted event |
 | `GET /v1/simulations/{run_id}/observer/run` | Run metadata without seed or credentials |
-| `GET /v1/simulations/{run_id}/observer/agents/{agent_id}/relationships` | Researcher summaries when debug is on |
-| `GET /v1/simulations/{run_id}/observer/agents/{agent_id}/labels` | Additive subjective label overlay from the live runtime checkpoint when debug is on |
+| `GET /v1/simulations/{run_id}/observer/agents/{agent_id}/relationships` | SUBJECTIVE dimension summaries when debug is on |
+| `GET /v1/simulations/{run_id}/observer/agents/{agent_id}/labels` | SUBJECTIVE label overlay from the live runtime checkpoint when debug is on |
+| `GET /v1/simulations/{run_id}/observer/agents/{agent_id}/narrative-hops` | SUBJECTIVE owner narrative-ledger hops (no content tokens) when debug is on |
+| `GET /v1/simulations/{run_id}/observer/communication-strategy-audit` | ANALYTICAL per-event strategy categories for research/debug when debug is on |
 | `WS /v1/simulations/{run_id}/observer/stream` | Live envelopes |
+
+Analytical metric overlays resolve a `metric_set_id` via `GET /v1/simulations/{run_id}/metrics` (`objective_inspection`) before fetching a family document. Aggregate `cultural_narrative_lineage@1` and `communication_strategy@1` rates are not enough for hop order or per-event deception labels.
 
 Optional `layout_id` defaults to `reference-v1`. Event cursors are `after_tick` and `after_sequence` together, or neither. An incomplete pair returns `incomplete_event_cursor`. A cursor at or past the high water returns `cursor_ahead_of_high_water`.
 
