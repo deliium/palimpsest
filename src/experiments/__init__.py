@@ -94,12 +94,28 @@ from experiments.interventions import (
     make_false_story_intervention,
     unwrap_arbiter_command,
 )
+from experiments.matrix_aggregate import (
+    MATRIX_AGGREGATE_SCHEMA_VERSION,
+    MatrixAggregateDocument,
+    MatrixCellAggregateRef,
+    build_matrix_aggregate,
+    encode_matrix_aggregate,
+    matrix_aggregate_fingerprint,
+)
 from experiments.matrix_expand import expand_matrix
 from experiments.matrix_factors import (
     apply_factor_level,
     apply_factor_levels,
     clone_runner_config,
     matrix_reference_fixture_base,
+)
+from experiments.matrix_manifest import (
+    MATRIX_MANIFEST_SCHEMA_VERSION,
+    FilesystemMatrixManifestStore,
+    MatrixCellRecord,
+    MatrixCompletionRecord,
+    MatrixManifestHeader,
+    MatrixManifestStore,
 )
 from experiments.matrix_models import (
     DEFAULT_SUCCESS_STOP_REASONS,
@@ -124,6 +140,12 @@ from experiments.matrix_models import (
     config_fingerprint_for_cell,
     matrix_identity_document,
     matrix_spec_fingerprint,
+)
+from experiments.matrix_runner import (
+    MatrixBatchDependencies,
+    MatrixBatchResult,
+    MatrixBatchRunner,
+    run_one_assignment,
 )
 from experiments.matrix_schema import finalize_matrix_cell_config
 from experiments.matrix_serialization import (
@@ -187,6 +209,8 @@ __all__ = [
     "EXPERIMENT_A_V1_CONDITION_IDS",
     "EXPERIMENT_MATRIX_SCHEMA_VERSION",
     "EXPERIMENT_RECORD_SCHEMA_VERSION",
+    "MATRIX_AGGREGATE_SCHEMA_VERSION",
+    "MATRIX_MANIFEST_SCHEMA_VERSION",
     "MILESTONE_ARBITER_POLICY_VERSION",
     "REFERENCE_DEATH_TICK",
     "REFERENCE_DEFAULT_OVERRIDE_BUDGET",
@@ -213,11 +237,19 @@ __all__ = [
     "ExperimentRecordRepository",
     "ExperimentResultRecord",
     "ExperimentSeedMatrix",
+    "FilesystemMatrixManifestStore",
     "GroupRole",
     "InMemoryExperimentRecordRepository",
+    "MatrixAggregateDocument",
+    "MatrixBatchDependencies",
+    "MatrixBatchResult",
+    "MatrixBatchRunner",
     "MatrixCatalogBase",
     "MatrixCell",
+    "MatrixCellAggregateRef",
+    "MatrixCellRecord",
     "MatrixCellState",
+    "MatrixCompletionRecord",
     "MatrixConstraints",
     "MatrixEmbeddedBase",
     "MatrixExcludeCombo",
@@ -226,6 +258,8 @@ __all__ = [
     "MatrixFactorId",
     "MatrixFactorLevel",
     "MatrixGroupOverlay",
+    "MatrixManifestHeader",
+    "MatrixManifestStore",
     "MatrixSerializationError",
     "MatrixValidationError",
     "MetricCollectionResult",
@@ -255,6 +289,7 @@ __all__ = [
     "artifact_interpretation_rows_from_ledgers",
     "artifact_memory_rows_from_traces",
     "artifact_objective_rows_from_artifacts",
+    "build_matrix_aggregate",
     "build_reference_scenario",
     "cell_factor_fingerprint",
     "clone_runner_config",
@@ -278,6 +313,7 @@ __all__ = [
     "definition_fingerprint",
     "distributed_reputation_scenario",
     "emergent_naming_scenario",
+    "encode_matrix_aggregate",
     "encode_matrix_spec",
     "encode_matrix_spec_document",
     "encode_run_version_identity",
@@ -322,11 +358,13 @@ __all__ = [
     "map_reflection_audits_to_report",
     "map_snapshot_to_analysis_sources",
     "materialize_assignments",
+    "matrix_aggregate_fingerprint",
     "matrix_identity_document",
     "matrix_reference_fixture_base",
     "matrix_spec_fingerprint",
     "persist_metric_bundle",
     "registered_architecture_ids",
+    "run_one_assignment",
     "seasonal_scarcity_scenario",
     "unwrap_arbiter_command",
     "v1_regression_profile",
