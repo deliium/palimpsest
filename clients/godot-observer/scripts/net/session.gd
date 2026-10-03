@@ -287,26 +287,12 @@ func request_causal_trace(
 		"observer.debugger",
 		"causal_trace_request tick=%s sequence=%s" % [int(tick), int(sequence)],
 	)
-	last_request = {
-		"kind": "causal_debugger",
-		"path": path,
-		"query": {"tick": int(tick), "sequence": int(sequence)},
-	}
-	request_log.append(last_request)
-	if _http == null:
-		return
-	var built: Dictionary = Urls.build_get(
-		origin,
+	_request_path(
+		"causal_debugger",
 		path,
+		{},
 		{"tick": int(tick), "sequence": int(sequence)},
 	)
-	if not bool(built.get("ok", false)):
-		_emit_overlay_unavailable("causal_debugger", "read_only")
-		return
-	_request_serial += 1
-	var request_id := str(_request_serial)
-	_pending[request_id] = {"kind": "causal_debugger", "seek_id": -1}
-	_http.get_json(str(built["url"]), request_id, _token)
 
 
 func request_analytics_overlay(_metric_set_id: String = "") -> void:
@@ -393,15 +379,34 @@ func _decode_metric_document(body: Dictionary) -> Variant:
 	return parsed
 
 
-func _request_path(kind: String, path: String, meta: Dictionary = {}) -> void:
-	last_request = {"kind": kind, "path": path, "query": {}}
+func _request_path(
+	kind: String,
+	path: String,
+	meta: Dictionary = {},
+	query: Dictionary = {},
+) -> void:
+	## Shared GET helper. Capability tokens stay in the HTTP header — never query.
+	var request_query := query.duplicate()
+	last_request = {"kind": kind, "path": path, "query": request_query.duplicate()}
 	request_log.append(last_request)
+	var query_keys: Array = request_query.keys()
+	ObserverLog.debug(
+		"session",
+		"get_built route=%s query_keys=%s" % [path, ",".join(query_keys)],
+	)
 	if _http == null:
 		return
-	var built: Dictionary = Urls.build_get(origin, path, {})
+	var built: Dictionary = Urls.build_get(origin, path, request_query)
 	if not bool(built.get("ok", false)):
+		var reason := str(built.get("reason_code", "read_only"))
+		ObserverLog.warn(
+			"session",
+			"read_only reason_code=%s kind=%s" % [reason, kind],
+		)
 		if kind == "metric_catalog" or kind == "metric_document":
-			_emit_overlay_unavailable(str(meta.get("overlay_kind", kind)), "read_only")
+			_emit_overlay_unavailable(str(meta.get("overlay_kind", kind)), reason)
+		elif kind == "causal_debugger":
+			_emit_overlay_unavailable(kind, reason)
 		else:
 			overlay_payload.emit(kind, null)
 		return

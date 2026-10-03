@@ -21,6 +21,8 @@ const SUITES: Array[String] = [
 	"res://tests/test_motion_path.gd",
 	"res://tests/test_web_run_id.gd",
 	"res://tests/test_debugger_panel.gd",
+	"res://tests/test_debugger_labels.gd",
+	"res://tests/test_session_debugger.gd",
 ]
 
 

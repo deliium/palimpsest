@@ -126,6 +126,36 @@ static func evidence_color(evidence_class: String) -> Color:
 	return EVIDENCE_ANALYTICAL
 
 
+## Debugger artifact-kind chrome (presentation only; not evidence-class wire).
+const DEBUGGER_OBJECTIVE_EVENT := Color(0.55, 0.72, 0.58, 1.0)
+const DEBUGGER_OBSERVATION := Color(0.58, 0.70, 0.66, 1.0)
+const DEBUGGER_MEMORY := Color(0.72, 0.62, 0.42, 1.0)
+const DEBUGGER_BELIEF := Color(0.70, 0.58, 0.48, 1.0)
+const DEBUGGER_IMAGINATION := Color(0.62, 0.55, 0.78, 1.0)
+const DEBUGGER_COUNTERFACTUAL := Color(0.78, 0.48, 0.62, 1.0)
+const DEBUGGER_ANALYTICAL := Color(0.55, 0.58, 0.78, 1.0)
+
+
+static func debugger_artifact_color(artifact_kind: String) -> Color:
+	match artifact_kind:
+		"objective_event":
+			return DEBUGGER_OBJECTIVE_EVENT
+		"observation":
+			return DEBUGGER_OBSERVATION
+		"memory":
+			return DEBUGGER_MEMORY
+		"belief":
+			return DEBUGGER_BELIEF
+		"imagination":
+			return DEBUGGER_IMAGINATION
+		"counterfactual":
+			return DEBUGGER_COUNTERFACTUAL
+		"analytical_inference":
+			return DEBUGGER_ANALYTICAL
+		_:
+			return DEBUGGER_ANALYTICAL
+
+
 const _STRUCTURE_COLORS := {
 	"shelter": Color(0.62, 0.52, 0.38, 1.0),
 	"storage": Color(0.58, 0.48, 0.42, 1.0),

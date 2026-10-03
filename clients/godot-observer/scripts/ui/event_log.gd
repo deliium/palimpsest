@@ -26,9 +26,11 @@ func _ready() -> void:
 	$Column/Filters/Agent.text_changed.connect(func(value: String) -> void: _set_filter("agent", value))
 	$Column/Filters/Type.text_changed.connect(func(value: String) -> void: _set_filter("type", value))
 	$Column/Filters/Location.text_changed.connect(func(value: String) -> void: _set_filter("location", value))
-	var explain := $Column/Filters.get_node_or_null("Explain")
-	if explain != null:
-		explain.pressed.connect(explain_selected)
+	var why := $Column/Filters.get_node_or_null("Why")
+	if why == null:
+		why = $Column/Filters.get_node_or_null("Explain")
+	if why != null:
+		why.pressed.connect(explain_selected)
 
 
 func set_world(world: Variant) -> void:
@@ -105,7 +107,7 @@ func explain_selected() -> void:
 	var event_id := str(line.get("event_id", ""))
 	ObserverLog.info(
 		"observer.debugger",
-		"explain_requested tick=%s sequence=%s event_id=%s" % [tick, sequence, event_id],
+		"why_requested tick=%s sequence=%s event_id=%s" % [tick, sequence, event_id],
 	)
 	explain_requested.emit(tick, sequence, event_id)
 
