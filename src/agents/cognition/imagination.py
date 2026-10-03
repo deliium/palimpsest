@@ -166,6 +166,7 @@ class ImaginationEngine:
         theory_of_mind: object | None = None,
         prospective_policy: object | None = None,
         llm_provider: object | None = None,
+        budget_ledger: object | None = None,
     ) -> PossibleFutures:
         owner = loop_input.agent_id
         tick = loop_input.observation.tick
@@ -243,6 +244,7 @@ class ImaginationEngine:
                     theory_of_mind=theory_of_mind,
                     prospective_policy=prospective_policy,
                     llm_provider=llm_provider,
+                    budget_ledger=budget_ledger,
                 )
             else:
                 evidence = _collect_evidence(
@@ -415,6 +417,7 @@ class ImaginationEngine:
         theory_of_mind: object | None,
         prospective_policy: object,
         llm_provider: object | None,
+        budget_ledger: object | None = None,
     ) -> tuple[ImaginedFuture, ...]:
         from dataclasses import replace
 
@@ -439,6 +442,7 @@ class ImaginationEngine:
             emotional_state=emotional_state,
             causal_world_model=causal_world_model,
             theory_of_mind=theory_of_mind,
+            budget_ledger=budget_ledger,
         )
         preferred: tuple[str, ...] = ()
         extra: list[ProspectivePruneReason] = []

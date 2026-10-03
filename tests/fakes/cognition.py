@@ -502,6 +502,7 @@ class FakeFutureImagination:
         theory_of_mind=None,
         prospective_policy=None,
         llm_provider=None,
+        budget_ledger=None,
     ) -> PossibleFutures:
         _ = (
             loop_input,
@@ -513,6 +514,7 @@ class FakeFutureImagination:
             causal_world_model,
             prospective_policy,
             llm_provider,
+            budget_ledger,
         )
         output = self._queue.consume(invocation_id=_active_invocation(), ordinal=6)
         assert type(output) is PossibleFutures

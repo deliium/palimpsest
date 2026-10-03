@@ -169,6 +169,8 @@ class CognitiveLoop:
 
     __slots__ = (
         "_artifact_interpretation_mode",
+        "_cognitive_budget_mode",
+        "_cognitive_budget_policy",
         "_communication_strategy_mode",
         "_communication_strategy_policy",
         "_competence_policy",
@@ -192,6 +194,7 @@ class CognitiveLoop:
         "_group_formation_policy",
         "_identity_mode",
         "_intention",
+        "_last_cognitive_budget_audit",
         "_last_counterfactual_scenarios",
         "_memory",
         "_memory_updates",
@@ -221,6 +224,7 @@ class CognitiveLoop:
         "_territorial_claim_policy",
         "_theory_of_mind_mode",
         "_theory_of_mind_policy",
+        "_tick_budget_ledger",
         "_world_model_mode",
         "_world_model_policy",
         "_world_model_provider",
@@ -277,6 +281,8 @@ class CognitiveLoop:
         semantic_naming_policy: object | None = None,
         cultural_narrative_mode: object | None = None,
         cultural_narrative_policy: object | None = None,
+        cognitive_budget_mode: object | None = None,
+        cognitive_budget_policy: object | None = None,
         production_knowledge_mode: object | None = None,
         production_allow_provider: bool = False,
     ) -> None:
@@ -605,6 +611,30 @@ class CognitiveLoop:
             narrative_policy = cultural_narrative_policy
         self._cultural_narrative_mode = narrative_mode
         self._cultural_narrative_policy = narrative_policy
+        from agents.cognition.budget import CognitiveBudgetPolicy
+        from agents.cognition.configuration import CognitionBudgetMode
+
+        budget_mode = (
+            CognitionBudgetMode.DISABLED
+            if cognitive_budget_mode is None
+            else cognitive_budget_mode
+        )
+        if type(budget_mode) is not CognitionBudgetMode:
+            raise TypeError("cognitive_budget_mode must be CognitionBudgetMode")
+        if budget_mode is CognitionBudgetMode.DISABLED:
+            budget_policy = None
+        elif cognitive_budget_policy is None:
+            from agents.cognition.budget import default_cognitive_budget_policy
+
+            budget_policy = default_cognitive_budget_policy()
+        elif type(cognitive_budget_policy) is not CognitiveBudgetPolicy:
+            raise TypeError("cognitive_budget_policy must be CognitiveBudgetPolicy")
+        else:
+            budget_policy = cognitive_budget_policy
+        self._cognitive_budget_mode = budget_mode
+        self._cognitive_budget_policy = budget_policy
+        self._tick_budget_ledger: object | None = None
+        self._last_cognitive_budget_audit: object | None = None
         from agents.cognition.competence import CompetenceBeliefPolicy
         from agents.cognition.configuration import CognitionSkillLearningMode
 
@@ -1457,11 +1487,64 @@ class CognitiveLoop:
         )
         return updated
 
+    def _effective_prospective_policy(
+        self, budget_ledger: object | None
+    ) -> object | None:
+        from dataclasses import replace
+
+        from agents.cognition.budget import BudgetDimension, TickBudgetLedger
+        from agents.cognition.prospective import ProspectivePolicy
+
+        policy = self._prospective_policy
+        if policy is None or type(policy) is not ProspectivePolicy:
+            return policy
+        if type(budget_ledger) is not TickBudgetLedger:
+            return policy
+        if budget_ledger.check_timeout():
+            return replace(
+                policy,
+                max_branches=1,
+                max_depth=1,
+                horizon=1,
+                max_llm_calls=0,
+                max_tokens=0,
+            )
+        branch_cap = budget_ledger.effective_cap(
+            BudgetDimension.BRANCHES, policy.max_branches
+        )
+        depth_cap = budget_ledger.effective_cap(
+            BudgetDimension.DEPTH, policy.max_depth
+        )
+        llm_cap = budget_ledger.effective_cap(
+            BudgetDimension.LLM, policy.max_llm_calls
+        )
+        token_cap = budget_ledger.effective_cap(
+            BudgetDimension.TOKENS, policy.max_tokens
+        )
+        depth = max(1, depth_cap) if depth_cap > 0 else 1
+        branches = max(1, branch_cap) if branch_cap > 0 else 1
+        effective = replace(
+            policy,
+            max_branches=branches,
+            max_depth=depth,
+            max_llm_calls=llm_cap,
+            max_tokens=token_cap,
+            horizon=min(policy.horizon, depth),
+        )
+        budget_ledger.note_planning_depth(effective.effective_depth)
+        return effective
+
+    def last_cognitive_budget_audit(self) -> object | None:
+        """Side-channel audit from the latest prepare. Disabled returns none."""
+        return self._last_cognitive_budget_audit
+
     def _prepare_theory_of_mind(
         self,
         loop_input: CognitiveLoopInput,
         emotional_evaluation: EmotionalStateEvaluation,
         memory: RetrievedMemoryContext,
+        *,
+        budget_ledger: object | None = None,
     ) -> object | None:
         from agents.cognition.configuration import CognitionTheoryOfMindMode
         from agents.cognition.theory_of_mind import (
@@ -1525,9 +1608,29 @@ class CognitiveLoop:
             used_provenance_ids=used,
             policy=policy,
         )
+        cues = observed + recalled
+        if budget_ledger is not None:
+            from agents.cognition.budget import TickBudgetLedger
+
+            if type(budget_ledger) is TickBudgetLedger:
+                allowed_subjects: set[object] = set()
+                filtered: list[object] = []
+                for cue in cues:
+                    subject = getattr(cue, "subject_id", None)
+                    if subject is None:
+                        filtered.append(cue)
+                        continue
+                    if subject in allowed_subjects:
+                        filtered.append(cue)
+                        continue
+                    if budget_ledger.try_tom_target():
+                        allowed_subjects.add(subject)
+                        filtered.append(cue)
+                    # else: refuse further distinct ToM targets
+                cues = tuple(filtered)  # type: ignore[assignment]
         updated = update_theory_of_mind(
             prior,
-            observed + recalled,
+            cues,  # type: ignore[arg-type]
             policy,
             owner_entity_id=loop_input.observation.observer_id,
         )
@@ -1599,6 +1702,31 @@ class CognitiveLoop:
             fail=fail,
         )
 
+        from dataclasses import replace as _dc_replace
+
+        from agents.cognition.budget import (
+            BudgetGuardedProvider,
+            TickBudgetLedger,
+        )
+        from agents.cognition.configuration import CognitionBudgetMode
+
+        self._tick_budget_ledger = None
+        self._last_cognitive_budget_audit = None
+        budget_ledger: TickBudgetLedger | None = None
+        provider = self._world_model_provider
+        if (
+            self._cognitive_budget_mode is CognitionBudgetMode.ENFORCED
+            and self._cognitive_budget_policy is not None
+        ):
+            budget_ledger = TickBudgetLedger(
+                owner_id=loop_input.agent_id,
+                tick=loop_input.observation.tick,
+                policy=self._cognitive_budget_policy,
+            )
+            self._tick_budget_ledger = budget_ledger
+            if provider is not None:
+                provider = BudgetGuardedProvider(inner=provider, ledger=budget_ledger)
+
         perception = await run_stage(
             kind=ComponentKind.PERCEPTION,
             ordinal=0,
@@ -1613,6 +1741,15 @@ class CognitiveLoop:
             awaitable=self._memory.retrieve(loop_input, perception),
             expected_type=RetrievedMemoryContext,
         )
+        if budget_ledger is not None and memory.ranked_hits:
+            keep = budget_ledger.truncate_memories(len(memory.ranked_hits))
+            if keep < len(memory.ranked_hits):
+                kept_hits = memory.ranked_hits[:keep]
+                memory = _dc_replace(
+                    memory,
+                    ranked_hits=kept_hits,
+                    memory_ids=tuple(hit.trace.memory_id for hit in kept_hits),
+                )
         situation = await run_stage(
             kind=ComponentKind.SITUATION,
             ordinal=2,
@@ -1642,10 +1779,14 @@ class CognitiveLoop:
             memory=memory,
             goal_board=goal_board,
             self_model=self_state,
+            budget_ledger=budget_ledger,
         )
         self._counterfactual_skipped = skipped
         self._last_counterfactual_scenarios = await self._rank_counterfactuals(
-            loop_input, considered
+            loop_input,
+            considered,
+            provider=provider,
+            budget_ledger=budget_ledger,
         )
         from agents.cognition.counterfactual import counterfactual_state_for
 
@@ -1674,7 +1815,12 @@ class CognitiveLoop:
         world_model = self._prepare_world_model(
             loop_input, emotional_evaluation, memory
         )
-        mind = self._prepare_theory_of_mind(loop_input, emotional_evaluation, memory)
+        mind = self._prepare_theory_of_mind(
+            loop_input,
+            emotional_evaluation,
+            memory,
+            budget_ledger=budget_ledger,
+        )
         reputation = self._prepare_reputation(loop_input)
         territorial_claims = self._prepare_territorial_claims(loop_input)
         group_formation = self._prepare_group_formation(loop_input)
@@ -1702,7 +1848,7 @@ class CognitiveLoop:
             selection = await select_production_recipe(
                 recipe_beliefs,
                 allow_provider=True,
-                provider=self._world_model_provider,
+                provider=provider,
                 tick=loop_input.observation.tick,
             )
             if selection.recipe_id is not None and not selection.fallback_used:
@@ -1718,7 +1864,7 @@ class CognitiveLoop:
             competence = await select_competence_domains(
                 competence,
                 competence_policy,
-                provider=self._world_model_provider,
+                provider=provider,
                 tick=loop_input.observation.tick,
             )
         teaching_selection = None
@@ -1733,7 +1879,7 @@ class CognitiveLoop:
             chosen_act = await select_teaching_act(
                 competence,
                 claim_policy,
-                provider=self._world_model_provider,
+                provider=provider,
                 tick=loop_input.observation.tick,
                 observation=loop_input.observation,
             )
@@ -1748,7 +1894,7 @@ class CognitiveLoop:
             world_model = await select_world_model_hypotheses(
                 world_model,
                 policy,
-                provider=self._world_model_provider,
+                provider=provider,
                 tick=loop_input.observation.tick,
             )
         mind_policy = self._theory_of_mind_policy
@@ -1760,9 +1906,10 @@ class CognitiveLoop:
             mind = await select_theory_of_mind_hypotheses(
                 mind,
                 mind_policy,
-                provider=self._world_model_provider,
+                provider=provider,
                 tick=loop_input.observation.tick,
             )
+        effective_prospective = self._effective_prospective_policy(budget_ledger)
         futures = await run_stage(
             kind=ComponentKind.FUTURES,
             ordinal=6,
@@ -1776,8 +1923,9 @@ class CognitiveLoop:
                 emotional_evaluation,
                 causal_world_model=world_model,
                 theory_of_mind=mind,
-                prospective_policy=self._prospective_policy,
-                llm_provider=self._world_model_provider,
+                prospective_policy=effective_prospective,
+                llm_provider=provider,
+                budget_ledger=budget_ledger,
             ),
             expected_type=PossibleFutures,
         )
@@ -1940,6 +2088,8 @@ class CognitiveLoop:
             communication_intent=plan.communication_intent,
             communication_intent_audit=plan.communication_intent_audit,
         )
+        if type(budget_ledger) is TickBudgetLedger:
+            self._last_cognitive_budget_audit = budget_ledger.snapshot()
         _LOG.debug(
             "cognitive_loop_prepared",
             extra={
@@ -2245,6 +2395,20 @@ class CognitiveLoop:
         owner = proposal.agent_id
         observation = proposal.loop_input.observation
         tick = observation.tick
+        from dataclasses import replace as _policy_replace
+
+        from agents.cognition.budget import BudgetDimension, TickBudgetLedger
+
+        ledger = self._tick_budget_ledger
+        if type(ledger) is TickBudgetLedger:
+            if ledger.check_timeout() or ledger.is_exhausted(
+                BudgetDimension.REFLECTION
+            ):
+                ledger.mark_reflection_skipped()
+                log_reflection_aborted(
+                    owner_id=owner.value, tick=tick, reason_code="budget_exhausted"
+                )
+                return None
         if type(proposal.self_state) is not SelfModel:
             log_reflection_aborted(
                 owner_id=owner.value, tick=tick, reason_code="invalid_type"
@@ -2260,6 +2424,18 @@ class CognitiveLoop:
         if policy is None:
             policy = default_reflection_policy(
                 allow_provider=mode is CognitionReflectionMode.LLM_ASSISTED
+            )
+        if type(ledger) is TickBudgetLedger:
+            floor = ledger.policy.reflection_interval_ticks
+            effective_interval = max(
+                policy.interval_ticks,
+                policy.min_gap_ticks or policy.interval_ticks,
+                floor,
+            )
+            policy = _policy_replace(
+                policy,
+                interval_ticks=effective_interval,
+                min_gap_ticks=effective_interval,
             )
         cursor = reflection_cursor
         if cursor is None:
@@ -2348,6 +2524,8 @@ class CognitiveLoop:
                 )
             )
             if not matched.matched:
+                if type(ledger) is TickBudgetLedger:
+                    ledger.mark_reflection_skipped()
                 return None
             from agents.cognition.configuration import CognitionIdentityMode
             from agents.cognition.identity import (
@@ -2403,7 +2581,7 @@ class CognitiveLoop:
                     owner_id=owner,
                     tick=tick,
                 )
-            return plan_reflection(
+            planned = plan_reflection(
                 context=context,
                 triggers=matched,
                 mode=mode.value,
@@ -2413,6 +2591,12 @@ class CognitiveLoop:
                 fallback_used=fallback_used,
                 causal_world_model=proposal.causal_world_model,
             )
+            if type(ledger) is TickBudgetLedger:
+                if planned is None or not matched:
+                    ledger.mark_reflection_skipped()
+                else:
+                    ledger.mark_reflection_ran()
+            return planned
         except (TypeError, ValueError):
             log_reflection_aborted(
                 owner_id=owner.value, tick=tick, reason_code="schema_invalid"
@@ -2642,7 +2826,9 @@ class CognitiveLoop:
         memory: object,
         goal_board: object,
         self_model: object,
+        budget_ledger: object | None = None,
     ) -> tuple[tuple[object, ...], int]:
+        from agents.cognition.budget import BudgetDimension, TickBudgetLedger
         from agents.cognition.configuration import CognitionCounterfactualMode
         from agents.cognition.counterfactual import consider_counterfactuals
 
@@ -2665,13 +2851,30 @@ class CognitiveLoop:
             relationships=relationships,
             skipped_out=skipped,
         )
+        if type(budget_ledger) is TickBudgetLedger and scenarios:
+            kept: list[object] = []
+            for scenario in scenarios:
+                if budget_ledger.check_timeout():
+                    break
+                if budget_ledger.try_consume(BudgetDimension.BRANCHES, 1):
+                    kept.append(scenario)
+                else:
+                    break
+            dropped = len(scenarios) - len(kept)
+            scenarios = tuple(kept)
+            if dropped:
+                skipped = [skipped[0] + dropped if skipped else dropped]
         return scenarios, skipped[0] if skipped else 0
 
     async def _rank_counterfactuals(
         self,
         loop_input: CognitiveLoopInput,
         scenarios: tuple[object, ...],
+        *,
+        provider: object | None = None,
+        budget_ledger: object | None = None,
     ) -> tuple[object, ...]:
+        _ = budget_ledger
         policy = self._counterfactual_policy
         self._counterfactual_fallback = False
         self._counterfactual_llm_calls = 0
@@ -2684,7 +2887,7 @@ class CognitiveLoop:
         result = await rank_counterfactual_scenarios(
             scenarios,  # type: ignore[arg-type]
             policy,
-            provider=self._world_model_provider,
+            provider=provider if provider is not None else self._world_model_provider,
             owner_id=loop_input.agent_id.value,
             tick=loop_input.observation.tick,
         )

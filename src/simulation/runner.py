@@ -2001,6 +2001,7 @@ class SimulationRunner:
             prospective_audits=self.export_prospective_audits(),
             counterfactual_audits=self.export_counterfactual_audits(),
             communication_intent_audits=self.export_communication_intent_audits(),
+            cognitive_budget_audits=self.export_cognitive_budget_audits(),
             skill_audits=self.export_skill_audits(),
             teaching_audits=self.export_teaching_audits(),
         )
@@ -2099,6 +2100,30 @@ class SimulationRunner:
             self._run_id.value,
             len(collected),
         )
+        return tuple(collected)
+
+    def export_cognitive_budget_audits(self) -> tuple[object, ...]:
+        """Harvest cognitive budget audits. Not part of result JSON."""
+        from agents.cognition.budget import CognitiveBudgetAudit
+
+        collected: list[CognitiveBudgetAudit] = []
+        for bundle in self._agents:
+            runtime = bundle.runtime
+            export = getattr(runtime, "export_cognitive_budget_audits", None)
+            if export is None:
+                continue
+            for audit in export():
+                if type(audit) is not CognitiveBudgetAudit:
+                    raise TypeError("cognitive_budget_audits: invalid_item")
+                collected.append(audit)
+                _LOG.debug(
+                    "cognitive_budget_audit_exported run_id=%s agent_id=%s "
+                    "tick=%s exhausted_count=%s",
+                    self._run_id.value,
+                    audit.owner_id.value,
+                    audit.tick,
+                    len(audit.exhausted_reasons),
+                )
         return tuple(collected)
 
     def export_communication_intent_audits(self) -> tuple[object, ...]:

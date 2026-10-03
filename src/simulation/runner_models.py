@@ -1217,6 +1217,7 @@ class SimulationRunnerResult:
     prospective_audits: tuple[object, ...] = ()
     counterfactual_audits: tuple[object, ...] = ()
     communication_intent_audits: tuple[object, ...] = ()
+    cognitive_budget_audits: tuple[object, ...] = ()
     skill_audits: tuple[object, ...] = ()
     teaching_audits: tuple[object, ...] = ()
 
@@ -1316,6 +1317,13 @@ class SimulationRunnerResult:
             self,
             "counterfactual_audits",
             tuple(self.counterfactual_audits),
+        )
+        if isinstance(self.cognitive_budget_audits, (set, frozenset)):
+            raise TypeError("cognitive_budget_audits must be ordered")
+        object.__setattr__(
+            self,
+            "cognitive_budget_audits",
+            tuple(self.cognitive_budget_audits),
         )
         if isinstance(self.communication_intent_audits, (set, frozenset)):
             raise TypeError("communication_intent_audits must be ordered")

@@ -1160,5 +1160,7 @@ def build_cognitive_loop(
         semantic_naming_policy=resolved.semantic_naming_policy,
         cultural_narrative_mode=resolved.cultural_narrative_mode,
         cultural_narrative_policy=resolved.cultural_narrative_policy,
+        cognitive_budget_mode=resolved.cognitive_budget_mode,
+        cognitive_budget_policy=resolved.cognitive_budget_policy,
         production_knowledge_mode=resolved.production_knowledge_mode,
     )

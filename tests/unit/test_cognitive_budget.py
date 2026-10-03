@@ -358,6 +358,73 @@ def test_runner_v22_budget_schema_gates_and_round_trip() -> None:
 
 
 @pytest.mark.asyncio
+async def test_enforced_zero_llm_prepare_still_emits_one_command() -> None:
+    from agents.cognition.emotion import PassthroughEmotionalStateAppraiser
+    from agents.cognition.goal_manager import PassthroughGoalManager
+    from agents.cognition.loop import CognitiveLoop
+    from agents.cognition.models import CognitiveLoopInput, InternalAgentState
+    from tests.typecheck.cognitive_loop import (
+        ScriptedFutureImagination,
+        ScriptedIntentionSelector,
+        ScriptedMemoryRetriever,
+        ScriptedMemoryUpdateHook,
+        ScriptedMotivationEvaluator,
+        ScriptedPerceptionInterpreter,
+        ScriptedPlanner,
+        ScriptedSelfStateProjector,
+        ScriptedSituationModeler,
+    )
+    from world.identifiers import EntityId, WorldId, WorldRevision
+    from world.observations import Observation
+
+    owner = _owner()
+    policy = CognitiveBudgetPolicy(
+        max_llm_calls_per_tick=0,
+        max_tokens_per_tick=0,
+        max_imagination_branches=1,
+        max_planning_depth=1,
+        max_recalled_memories=1,
+        max_tom_targets=0,
+        reflection_interval_ticks=16,
+        timeout_seconds=0.0,
+    )
+    loop = CognitiveLoop(
+        perception=ScriptedPerceptionInterpreter(),
+        memory=ScriptedMemoryRetriever(),
+        situation=ScriptedSituationModeler(),
+        self_state=ScriptedSelfStateProjector(),
+        goal_manager=PassthroughGoalManager(),
+        emotional_state=PassthroughEmotionalStateAppraiser(),
+        futures=ScriptedFutureImagination(),
+        motivation=ScriptedMotivationEvaluator(),
+        intention=ScriptedIntentionSelector(),
+        planner=ScriptedPlanner(),
+        memory_updates=ScriptedMemoryUpdateHook(),
+        cognitive_budget_mode=CognitionBudgetMode.ENFORCED,
+        cognitive_budget_policy=policy,
+    )
+    proposal = await loop.prepare(
+        CognitiveLoopInput(
+            agent_id=owner,
+            observation=Observation(
+                world_id=WorldId("world-1"),
+                observer_id=EntityId("body-1"),
+                revision=WorldRevision(0),
+                tick=4,
+            ),
+            internal_state=InternalAgentState(owner_id=owner),
+        ),
+        invocation_id="inv-budget",
+    )
+    assert proposal.proposed_command is not None
+    audit = loop.last_cognitive_budget_audit()
+    assert isinstance(audit, CognitiveBudgetAudit)
+    assert audit.mode == CognitionBudgetMode.ENFORCED.value
+    assert audit.owner_id == owner
+    assert audit.tick == 4
+
+
+@pytest.mark.asyncio
 async def test_guarded_provider_refuses_when_llm_budget_zero() -> None:
     from agents.cognition.budget import BudgetExhaustedError, BudgetGuardedProvider
 
@@ -388,6 +455,79 @@ async def test_guarded_provider_refuses_when_llm_budget_zero() -> None:
     assert BudgetExhaustedReason.BUDGET_LLM in ledger.exhausted_reasons()
 
 
+def test_branch_depth_memory_tom_caps_and_epistemic_untouched() -> None:
+    from agents.cognition.emotion import PassthroughEmotionalStateAppraiser
+    from agents.cognition.goal_manager import PassthroughGoalManager
+    from agents.cognition.loop import CognitiveLoop
+    from agents.cognition.prospective import ProspectivePolicy
+    from tests.typecheck.cognitive_loop import (
+        ScriptedFutureImagination,
+        ScriptedIntentionSelector,
+        ScriptedMemoryRetriever,
+        ScriptedMemoryUpdateHook,
+        ScriptedMotivationEvaluator,
+        ScriptedPerceptionInterpreter,
+        ScriptedPlanner,
+        ScriptedSelfStateProjector,
+        ScriptedSituationModeler,
+    )
+
+    budget = CognitiveBudgetPolicy(
+        max_llm_calls_per_tick=0,
+        max_tokens_per_tick=64,
+        max_imagination_branches=2,
+        max_planning_depth=1,
+        max_recalled_memories=1,
+        max_tom_targets=0,
+        reflection_interval_ticks=16,
+        timeout_seconds=0.0,
+    )
+    ledger = TickBudgetLedger(owner_id=_owner(), tick=0, policy=budget)
+    assert ledger.effective_cap(BudgetDimension.BRANCHES, 16) == 2
+    assert ledger.effective_cap(BudgetDimension.DEPTH, 5) == 1
+    assert ledger.truncate_memories(5) == 1
+    assert BudgetExhaustedReason.BUDGET_MEMORIES in ledger.exhausted_reasons()
+    assert ledger.try_tom_target() is False
+    assert BudgetExhaustedReason.BUDGET_TOM in ledger.exhausted_reasons()
+    # Epistemic nesting is a separate local policy; tick depth does not clamp it.
+    epistemic_local_depth = 4
+    assert epistemic_local_depth == 4
+    assert ledger.effective_cap(BudgetDimension.DEPTH, 5) == 1
+
+    loop = CognitiveLoop(
+        perception=ScriptedPerceptionInterpreter(),
+        memory=ScriptedMemoryRetriever(),
+        situation=ScriptedSituationModeler(),
+        self_state=ScriptedSelfStateProjector(),
+        goal_manager=PassthroughGoalManager(),
+        emotional_state=PassthroughEmotionalStateAppraiser(),
+        futures=ScriptedFutureImagination(),
+        motivation=ScriptedMotivationEvaluator(),
+        intention=ScriptedIntentionSelector(),
+        planner=ScriptedPlanner(),
+        memory_updates=ScriptedMemoryUpdateHook(),
+        cognitive_budget_mode=CognitionBudgetMode.ENFORCED,
+        cognitive_budget_policy=budget,
+        prospective_policy=ProspectivePolicy(
+            horizon=3,
+            branching_factor=3,
+            max_branches=16,
+            max_depth=3,
+            max_llm_calls=4,
+            max_tokens=256,
+            timeout_seconds=0.0,
+            allow_provider=False,
+        ),
+    )
+    fresh = TickBudgetLedger(owner_id=_owner(), tick=1, policy=budget)
+    effective = loop._effective_prospective_policy(fresh)
+    assert effective is not None
+    assert effective.max_branches == 2
+    assert effective.max_depth == 1
+    assert effective.horizon == 1
+    assert effective.max_llm_calls == 0
+
+
 def test_reflection_interval_floor_and_skip_mark() -> None:
     from agents.cognition.reflection import ReflectionPolicy
 
@@ -414,6 +554,26 @@ def test_reflection_interval_floor_and_skip_mark() -> None:
     audit = ledger.snapshot()
     assert audit.reflection_ran is False
     assert audit.degraded is True
+
+
+def test_runtime_export_cognitive_budget_audits() -> None:
+    from types import SimpleNamespace
+
+    from simulation.runner_models import SimulationRunnerResult
+    from tests.unit.test_agent_runtime import _runtime
+
+    runtime, _memories, _beliefs = _runtime()
+    assert runtime.export_cognitive_budget_audits() == ()
+    audit = TickBudgetLedger(
+        owner_id=AgentId("agent-1"), tick=0, policy=low_cost_budget_limits()
+    ).snapshot()
+    runtime._loop = SimpleNamespace(last_cognitive_budget_audit=lambda: audit)
+    runtime._commit_cognitive_budget_audit(0)
+    exported = runtime.export_cognitive_budget_audits()
+    assert exported == (audit,)
+    assert type(exported[0]) is CognitiveBudgetAudit
+    field = SimulationRunnerResult.__dataclass_fields__["cognitive_budget_audits"]
+    assert field.default == ()
 
 
 def test_v1_regression_gate_does_not_list_experiment_ad() -> None:

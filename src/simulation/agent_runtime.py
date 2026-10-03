@@ -412,6 +412,7 @@ class AgentRuntime:
         "_causal_world_model",
         "_cognition_trace_repository",
         "_cognition_trace_spec",
+        "_cognitive_budget_audits",
         "_communication_intent_audits",
         "_competence",
         "_counterfactual_audits",
@@ -516,6 +517,7 @@ class AgentRuntime:
         self._world_model_audits: list[object] = []
         self._mind_audits: list[object] = []
         self._prospective_audits: list[object] = []
+        self._cognitive_budget_audits: list[object] = []
         self._counterfactual_audits: list[object] = []
         self._communication_intent_audits: list[object] = []
         self._applied_identity_operation_ids: set[str] = set()
@@ -1070,6 +1072,29 @@ class AgentRuntime:
             audit.expanded_count,
             audit.pruned_count,
             audit.timeout_hit,
+        )
+
+    def _commit_cognitive_budget_audit(self, tick: int) -> None:
+        """Keep the in-run cognitive budget audit when this tick produced one."""
+        owner = self._agent.agent_id
+        reader = getattr(self._loop, "last_cognitive_budget_audit", None)
+        audit = reader() if reader is not None else None
+        if audit is None:
+            return
+        from agents.cognition.budget import CognitiveBudgetAudit
+
+        if type(audit) is not CognitiveBudgetAudit:
+            raise TypeError("cognitive budget audit must be CognitiveBudgetAudit")
+        if audit.owner_id != owner or audit.tick != tick:
+            return
+        self._cognitive_budget_audits.append(audit)
+        _LOG.debug(
+            "cognitive_budget_audit_exported run_id=%s agent_id=%s tick=%s "
+            "exhausted_count=%s",
+            getattr(self._run_id, "value", ""),
+            owner.value,
+            tick,
+            len(audit.exhausted_reasons),
         )
 
     def apply_goal_status_transitions(
@@ -1940,6 +1965,7 @@ class AgentRuntime:
         )
         self._commit_communication_intent(pending.loop_result, pending.tick)
         self._commit_prospective_audit(pending.tick)
+        self._commit_cognitive_budget_audit(pending.tick)
         self._commit_counterfactual_audit(pending.tick)
         self._apply_reflection_journal(pending.tick)
         self._record_reflection_application(pending)
@@ -3000,6 +3026,9 @@ class AgentRuntime:
 
     def export_prospective_audits(self) -> tuple[object, ...]:
         return tuple(self._prospective_audits)
+
+    def export_cognitive_budget_audits(self) -> tuple[object, ...]:
+        return tuple(self._cognitive_budget_audits)
 
     def export_counterfactual_audits(self) -> tuple[object, ...]:
         return tuple(self._counterfactual_audits)

@@ -887,6 +887,7 @@ def rollout_prospective(
     emotional_state: EmotionalStateEvaluation | None = None,
     causal_world_model: object | None = None,
     theory_of_mind: object | None = None,
+    budget_ledger: object | None = None,
     **forbidden: object,
 ) -> ProspectiveRollout:
     """Expand action, predicted outcome, and next action under hard budgets."""
@@ -980,6 +981,16 @@ def rollout_prospective(
         if expanded + 1 > policy.max_branches:
             stop(ProspectivePruneReason.BUDGET_BRANCHES)
             break
+        if budget_ledger is not None:
+            from agents.cognition.budget import BudgetDimension, TickBudgetLedger
+
+            if type(budget_ledger) is TickBudgetLedger:
+                if budget_ledger.check_timeout():
+                    stop(ProspectivePruneReason.BUDGET_TIMEOUT)
+                    break
+                if not budget_ledger.try_consume(BudgetDimension.BRANCHES, 1):
+                    stop(ProspectivePruneReason.BUDGET_BRANCHES)
+                    break
         expanded += 1
         seeds = _affordances(
             observation=loop_input.observation,

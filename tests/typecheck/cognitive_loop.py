@@ -188,6 +188,7 @@ class ScriptedFutureImagination:
         theory_of_mind: object | None = None,
         prospective_policy: object | None = None,
         llm_provider: object | None = None,
+        budget_ledger: object | None = None,
     ) -> PossibleFutures:
         _ = (
             situation,
@@ -198,6 +199,7 @@ class ScriptedFutureImagination:
             causal_world_model,
             prospective_policy,
             llm_provider,
+            budget_ledger,
         )
         return PossibleFutures(
             owner_id=loop_input.agent_id,

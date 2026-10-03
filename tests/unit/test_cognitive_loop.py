@@ -153,8 +153,9 @@ async def test_loop_runs_exact_stage_order_once(
             theory_of_mind=None,
             prospective_policy=None,
             llm_provider=None,
+            budget_ledger=None,
         ):  # type: ignore[no-untyped-def]
-            _ = prospective_policy, llm_provider
+            _ = prospective_policy, llm_provider, budget_ledger
             calls.append("futures")
             return await super().imagine(
                 loop_input, situation, self_state, memory, goal_board
