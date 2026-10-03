@@ -109,6 +109,8 @@ Entries carry stable ids, optional `observer_focus`, parent/related ids, counts,
 - New `V2CapabilityFlags` slot or `multi_hop_testimony_tracking`
 - Folding traces into `EvidenceManifest`
 
+Godot presentation labels (Observed…Acted, expanded chain names, artifact-kind chrome) are **client-side only**. They map server `stage_code` values for researchers and must not be read as chain-of-thought, free-text rationales, or ground truth. See [Godot observer — Causal debugger](godot-observer.md#causal-debugger).
+
 ## See also
 
 - [Cognition and agent runtime](cognition-runtime.md)

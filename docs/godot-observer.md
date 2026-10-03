@@ -61,7 +61,60 @@ An optional perspective control can fetch SUBJECTIVE layers for one agent; prima
 
 ## Causal debugger
 
-Select an event log line and press **Explain** to `GET` the causal-trace route with the session token header. The panel renders ordered stage codes, statuses, counts, and id refs from the server JSON. HTTP `403` / missing `subjective_debug` uses the same `overlay_unavailable` pattern as narrative overlays — never an empty chain presented as “no cognition”. Activating a node with `observer_focus` seeks `(tick, sequence)` and highlights `event_id` in the log.
+Select an event log line and press **Why?** to `GET` the causal-trace route with the session token header. Godot is render + navigate only: it never assembles causality, invents stages, or shows private CoT / prompts / utterance / memory / belief text. Presentation labels live in the client (`debugger_labels.gd`) and must not be read as chain-of-thought. Research UI graphs and statistical analysis dashboards are out of scope for this panel.
+
+HTTP `403` / missing `subjective_debug` uses the same `overlay_unavailable` pattern as narrative overlays — never an empty chain presented as “no cognition”.
+
+### Compact strip (default)
+
+The inspector opens compact: eight researcher-facing cells with locked status rollup over their child wire nodes (`available` wins; else `truncated` → `failed` → `skipped` → `unavailable`, with one contributing `reason_code`):
+
+| Compact | Wire `stage_code` sources |
+| --- | --- |
+| Observed | `observation` |
+| Remembered | `relevant_memories`, `reconstruction` |
+| Believed | `beliefs`, `theory_of_mind` |
+| Felt | `emotional_state` |
+| Wanted | `goals` |
+| Expected | `imagined_futures`, `counterfactuals` |
+| Decided | `selected_intention` |
+| Acted | `action` |
+
+Supporting nodes (`situation_model`, `budget_summary`) stay secondary — never in the compact strip.
+
+**Expected** chrome: use artifact kind `counterfactual` when any Expected child is a non-`unavailable` `counterfactuals` stage, or when CF id_refs / selection codes (`counterfactual` / `cf_*`) appear; otherwise `imagination`.
+
+Header shows `availability`, `ambiguity`, `address.agent_id`, tick/sequence/`event_id` — not a raw wire dump.
+
+### Expanded artifacts
+
+**Expand** reveals the full ordered researcher chain in server `RESEARCHER_CHAIN_SEQUENCE` order (**Emotion before Goals**):
+
+Observation → Memories → Reconstructed memory → Beliefs → Emotion → Goals → Theory of Mind → Imagined futures → Counterfactuals → Intention → Action
+
+Rows show status, counts, command/intention codes, and id-ref counts only.
+
+### Artifact-kind chrome
+
+Closed presentation kinds distinguish objective vs subjective content so imagination/counterfactual rows never look like world facts: `objective_event`, `observation`, `memory`, `belief`, `imagination`, `counterfactual`, `analytical_inference`. Legend copy marks non-objective kinds as structured artifacts, not ground truth.
+
+### Seek vs Provenance
+
+Dual affordances — never combined in one click:
+
+1. **Seek** (Seek button or activate a row with `observer_focus`) — seek `(tick, sequence)` / highlight `event_id`; panel stays open; primary causal-trace payload stays stashed.
+2. **Provenance** (Provenance button, or right-click shortcut, when a mapped `id_ref` exists) — `GET …/debugger/lineage/{kind}/{id}?owner_id=…` with `owner_id` from `address.agent_id` only (never guessed from display names). Unmapped wire kinds WARN `unmapped_debugger_id_ref` and skip. Missing `owner_id` WARNs `owner_id_missing` and skips. Secondary pane lists entry id / status / optional `observer_focus` only.
+
+| Wire `id_ref` kind | Lineage `kind` |
+| --- | --- |
+| `memory` | `memory_derivation` |
+| `belief` / `semantic_belief` | `belief_evidence` |
+| `goal` | `goal_ancestry` |
+| prediction / CF subject ids | `prediction` |
+
+**Back** / return-to-decision pops a navigation stack (depth ≤8) and restores the stashed primary payload, clearing the secondary pane.
+
+Metadata-only logs (examples): `why_requested`, `debugger_opened`, `seek_from_debugger`, `debugger_nav_push`, `debugger_return_to_decision`, `owner_id_missing`.
 
 Deep-link / web query params (credential-free; UI “event N” = `sequence`):
 
@@ -127,7 +180,7 @@ Going backward requests a reconstructed frame. It does not play a reverse tween.
 
 ## Event log
 
-The log is one bounded page, near 200 lines, replaced on each seek. A line is `tick:sequence type actor target description`. The subject is `target_id` for `AGENT_DIED`, `NEEDS_APPLIED`, and `EXPOSURE_APPLIED`, and `actor_id` otherwise. Labels prefer `agent_id`, then the raw id. Location names prefer `display_name`, then `name`. Clicking a line seeks that event. **Explain** requests the research causal debugger for the selected line. Utterance text is not printed.
+The log is one bounded page, near 200 lines, replaced on each seek. A line is `tick:sequence type actor target description`. The subject is `target_id` for `AGENT_DIED`, `NEEDS_APPLIED`, and `EXPOSURE_APPLIED`, and `actor_id` otherwise. Labels prefer `agent_id`, then the raw id. Location names prefer `display_name`, then `name`. Clicking a line seeks that event. **Why?** requests the research causal debugger for the selected line. Utterance text is not printed.
 
 Three filters hide loaded lines and do not request another route:
 

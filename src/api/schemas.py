@@ -270,7 +270,7 @@ class DebuggerNodeStatusOut(StrEnum):
 
 
 class DebuggerFocusOut(StrictModel):
-    """Wire ``observer_focus`` handle for Godot seek/focus."""
+    """Wire ``observer_focus`` handle for observer seek/focus."""
 
     run_id: str
     tick: int = Field(ge=0)

@@ -459,8 +459,8 @@ class DebuggerEventAddress:
 class DebuggerFocusHandle:
     """Seek/focus handle for committed occurrences.
 
-    Serialized wire field name is ``observer_focus`` (Godot/API). Python name
-    avoids colliding with the ``observer`` package.
+    Serialized wire field name is ``observer_focus`` (presentation client / API).
+    Python name avoids colliding with the ``observer`` package.
     """
 
     run_id: RunId
@@ -948,7 +948,7 @@ class DebuggerEventLookupPort(Protocol):
 
 
 class InMemoryDebuggerEventLookup:
-    """Test fake for ``DebuggerEventLookupPort`` (no SQL / Godot)."""
+    """Test fake for ``DebuggerEventLookupPort`` (no SQL / presentation client)."""
 
     __slots__ = ("_by_cursor", "_by_id")
 
