@@ -41,6 +41,7 @@ from world.actions import (
     Eat,
     Flee,
     Help,
+    Inscribe,
     Move,
     Search,
     Sleep,
@@ -133,6 +134,9 @@ class MultiCriteriaIntentionSelector:
         social_conventions: object | None = None,
         social_convention_mode: object | None = None,
         convention_penalties: Mapping[str, float] | None = None,
+        artifact_interpretations: object | None = None,
+        artifact_interpretation_mode: object | None = None,
+        artifact_penalties: Mapping[str, float] | None = None,
     ) -> SelectedIntention:
         owner = loop_input.agent_id
         tick = loop_input.observation.tick
@@ -346,6 +350,26 @@ class MultiCriteriaIntentionSelector:
                 "convention_penalty_applied future_count=%s",
                 len(convention_penalties),
             )
+        _ = artifact_interpretations
+        if artifact_penalties is None and artifact_interpretation_mode is not None:
+            from agents.cognition.artifacts import artifact_inscribe_penalties
+
+            inbox = () if snapshot is None else snapshot.inbox
+            artifact_penalties = artifact_inscribe_penalties(
+                loop_input.observation,
+                tuple(
+                    futures_by_id[item.future_id]
+                    for item in undominated
+                    if item.future_id in futures_by_id
+                ),
+                mode=artifact_interpretation_mode,
+                inbox=inbox,
+            )
+        if artifact_penalties:
+            _LOG.debug(
+                "artifact_inscribe_penalty_applied future_count=%s",
+                len(artifact_penalties),
+            )
         winner, tie_break = _pairwise_select(
             undominated,
             futures_by_id,
@@ -361,6 +385,7 @@ class MultiCriteriaIntentionSelector:
             respect,
             norm_penalties,
             convention_penalties,
+            artifact_penalties,
         )
         future = futures_by_id.get(winner.future_id)
         direction = ActionDirection.WAIT if future is None else future.direction
@@ -620,6 +645,8 @@ class CommandPlanner:
         social_norm_mode: object | None = None,
         social_conventions: object | None = None,
         social_convention_mode: object | None = None,
+        artifact_interpretations: object | None = None,
+        artifact_interpretation_mode: object | None = None,
     ) -> ActionPlan:
         owner = loop_input.agent_id
         tick = loop_input.observation.tick
@@ -686,7 +713,7 @@ class CommandPlanner:
                     command = compiled
                 command_type = type(command).__name__
 
-        if type(command) not in {
+        allowed_commands = {
             Wait,
             Drink,
             Eat,
@@ -698,7 +725,12 @@ class CommandPlanner:
             Ask,
             Tell,
             Help,
-        }:
+        }
+        from agents.cognition.artifacts import ArtifactInterpretationMode
+
+        if artifact_interpretation_mode is ArtifactInterpretationMode.DETERMINISTIC:
+            allowed_commands.add(Inscribe)
+        if type(command) not in allowed_commands:
             _LOG.error(
                 "planner_invalid_output",
                 extra={
@@ -775,6 +807,29 @@ class CommandPlanner:
             identity=None if snapshot is None else snapshot.social_identity,
             ledger=prepared_conventions,
             mode=social_convention_mode,
+        )
+        from agents.cognition.artifacts import (
+            artifact_inscribe_command,
+            artifact_inscribe_preferred,
+        )
+
+        _ = artifact_interpretations
+        inbox = () if snapshot is None else snapshot.inbox
+        preferred_inscribe = (
+            intention.direction is ActionDirection.COMMUNICATE
+            and artifact_inscribe_preferred(
+                loop_input.observation,
+                futures.futures,
+                mode=artifact_interpretation_mode,
+                inbox=inbox,
+            )
+        )
+        command = artifact_inscribe_command(
+            command,
+            observation=loop_input.observation,
+            mode=artifact_interpretation_mode,
+            preferred=preferred_inscribe,
+            inbox=inbox,
         )
         command_type = type(command).__name__
 
@@ -1295,6 +1350,7 @@ def _pairwise_select(
     territorial_bias: Mapping[str, float] | None = None,
     norm_penalties: Mapping[str, float] | None = None,
     convention_penalties: Mapping[str, float] | None = None,
+    artifact_penalties: Mapping[str, float] | None = None,
 ) -> tuple[FutureAppraisal, str]:
     if len(appraisals) == 1:
         return appraisals[0], _TIE_BREAK_NONE
@@ -1318,6 +1374,7 @@ def _pairwise_select(
                 territorial_bias,
                 norm_penalties,
                 convention_penalties,
+                artifact_penalties,
             )
             if cmp > 0:
                 scores[left.future_id] += 1
@@ -1361,6 +1418,7 @@ def _pairwise_compare(
     territorial_bias: Mapping[str, float] | None = None,
     norm_penalties: Mapping[str, float] | None = None,
     convention_penalties: Mapping[str, float] | None = None,
+    artifact_penalties: Mapping[str, float] | None = None,
 ) -> int:
     """Return positive if left preferred, negative if right preferred, else 0."""
     active_drives = set(motivation.active_drive_kinds)
@@ -1515,6 +1573,9 @@ def _pairwise_compare(
     if convention_penalties is not None:
         total -= convention_penalties.get(left.future_id, 0.0)
         total += convention_penalties.get(right.future_id, 0.0)
+    if artifact_penalties is not None:
+        total -= artifact_penalties.get(left.future_id, 0.0)
+        total += artifact_penalties.get(right.future_id, 0.0)
     if total > 0:
         return 1
     if total < 0:

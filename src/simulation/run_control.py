@@ -596,6 +596,7 @@ class AgentRuntimeCheckpoint:
     group_formation: object | None = None
     social_norms: object | None = None
     social_conventions: object | None = None
+    artifact_interpretations: object | None = None
     competence_model: object | None = None
     declarative_advice: object | None = None
     recipe_beliefs: object | None = None
@@ -681,6 +682,13 @@ class AgentRuntimeCheckpoint:
             self.social_conventions,
             self.agent_id,
             field_name="social_conventions",
+        )
+        from agents.cognition.artifacts import require_owner_artifact_interpretations
+
+        require_owner_artifact_interpretations(
+            self.artifact_interpretations,
+            self.agent_id,
+            field_name="artifact_interpretations",
         )
         from agents.cognition.competence import require_owner_competence
 

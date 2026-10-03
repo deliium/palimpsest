@@ -168,6 +168,7 @@ class CognitiveLoop:
     """Sequential cognitive pipeline returning one closed ``AgentCommand``."""
 
     __slots__ = (
+        "_artifact_interpretation_mode",
         "_communication_strategy_mode",
         "_communication_strategy_policy",
         "_competence_policy",
@@ -267,6 +268,7 @@ class CognitiveLoop:
         social_norm_policy: object | None = None,
         social_convention_mode: object | None = None,
         social_convention_policy: object | None = None,
+        artifact_interpretation_mode: object | None = None,
         production_knowledge_mode: object | None = None,
         production_allow_provider: bool = False,
     ) -> None:
@@ -531,6 +533,18 @@ class CognitiveLoop:
             convention_policy = social_convention_policy
         self._social_convention_mode = conventioned
         self._social_convention_policy = convention_policy
+        from agents.cognition.artifacts import ArtifactInterpretationMode
+
+        artifact_mode = (
+            ArtifactInterpretationMode.DISABLED
+            if artifact_interpretation_mode is None
+            else artifact_interpretation_mode
+        )
+        if type(artifact_mode) is not ArtifactInterpretationMode:
+            raise TypeError(
+                "artifact_interpretation_mode must be ArtifactInterpretationMode"
+            )
+        self._artifact_interpretation_mode = artifact_mode
         from agents.cognition.competence import CompetenceBeliefPolicy
         from agents.cognition.configuration import CognitionSkillLearningMode
 
@@ -849,6 +863,68 @@ class CognitiveLoop:
         mapped = dict(penalties)
         _LOG.debug(
             "convention_penalty_applied future_count=%s",
+            len(mapped),
+        )
+        return mapped
+
+    def _prepare_artifact_interpretations(
+        self, loop_input: CognitiveLoopInput
+    ) -> object | None:
+        """Refresh one owner's artifact readings. Disabled mode leaves it absent."""
+        from agents.cognition.artifacts import (
+            ArtifactInterpretationLedger,
+            ArtifactInterpretationMode,
+            apply_artifact_interpretation_update,
+        )
+
+        owner_id = loop_input.agent_id
+        tick = loop_input.observation.tick
+        if self._artifact_interpretation_mode is not (
+            ArtifactInterpretationMode.DETERMINISTIC
+        ):
+            return None
+        snapshot = loop_input.snapshot
+        carried = None if snapshot is None else snapshot.artifact_interpretations
+        ledger = carried if type(carried) is ArtifactInterpretationLedger else None
+        updated = apply_artifact_interpretation_update(
+            loop_input.observation,
+            owner_id,
+            ledger,
+        )
+        _LOG.debug(
+            "artifact_interpretations_carried owner_id=%s entry_count=%s tick=%s",
+            owner_id.value,
+            0 if updated is None else len(updated.interpretations),
+            tick,
+        )
+        return updated
+
+    def _artifact_inscribe_penalties(
+        self,
+        loop_input: CognitiveLoopInput,
+        futures: object,
+    ) -> dict[str, float] | None:
+        """Prefer depositing a note when alone with a communicate future."""
+        from agents.cognition.artifacts import (
+            ArtifactInterpretationMode,
+            artifact_inscribe_penalties,
+        )
+
+        if self._artifact_interpretation_mode is not (
+            ArtifactInterpretationMode.DETERMINISTIC
+        ):
+            return None
+        snapshot = loop_input.snapshot
+        inbox = () if snapshot is None else snapshot.inbox
+        penalties = artifact_inscribe_penalties(
+            loop_input.observation,
+            getattr(futures, "futures", ()),
+            mode=self._artifact_interpretation_mode,
+            inbox=inbox,
+        )
+        mapped = dict(penalties)
+        _LOG.debug(
+            "artifact_inscribe_penalty_applied future_count=%s",
             len(mapped),
         )
         return mapped
@@ -1385,6 +1461,7 @@ class CognitiveLoop:
         group_formation = self._prepare_group_formation(loop_input)
         social_norms = self._prepare_social_norms(loop_input)
         social_conventions = self._prepare_social_conventions(loop_input)
+        artifact_interpretations = self._prepare_artifact_interpretations(loop_input)
         competence = self._prepare_competence(loop_input, memory)
         competence, advice = self._prepare_teaching(loop_input, competence)
         recipe_beliefs = self._prepare_recipe_beliefs(loop_input)
@@ -1499,6 +1576,7 @@ class CognitiveLoop:
         convention_penalty_map = self._social_convention_penalties(
             loop_input, social_conventions, futures
         )
+        artifact_penalty_map = self._artifact_inscribe_penalties(loop_input, futures)
         intention = await run_stage(
             kind=ComponentKind.INTENTION,
             ordinal=8,
@@ -1526,6 +1604,9 @@ class CognitiveLoop:
                     social_conventions=social_conventions,
                     social_convention_mode=self._social_convention_mode,
                     convention_penalties=convention_penalty_map,
+                    artifact_interpretations=artifact_interpretations,
+                    artifact_interpretation_mode=self._artifact_interpretation_mode,
+                    artifact_penalties=artifact_penalty_map,
                 ),
             ),
             expected_type=SelectedIntention,
@@ -1563,6 +1644,8 @@ class CognitiveLoop:
                     social_norm_mode=self._social_norm_mode,
                     social_conventions=social_conventions,
                     social_convention_mode=self._social_convention_mode,
+                    artifact_interpretations=artifact_interpretations,
+                    artifact_interpretation_mode=self._artifact_interpretation_mode,
                 ),
             ),
             expected_type=ActionPlan,
@@ -1602,6 +1685,7 @@ class CognitiveLoop:
             group_formation=group_formation,
             social_norms=social_norms,
             social_conventions=social_conventions,
+            artifact_interpretations=artifact_interpretations,
             competence_model=competence,
             declarative_advice=advice,
             recipe_beliefs=recipe_beliefs,
@@ -1757,6 +1841,7 @@ class CognitiveLoop:
             group_formation=proposal.group_formation,
             social_norms=proposal.social_norms,
             social_conventions=proposal.social_conventions,
+            artifact_interpretations=proposal.artifact_interpretations,
             competence_model=proposal.competence_model,
             declarative_advice=proposal.declarative_advice,
             recipe_beliefs=proposal.recipe_beliefs,

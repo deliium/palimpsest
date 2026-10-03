@@ -13,6 +13,9 @@ Compatibility:
   catalog supplies item and structure kinds the events do not repeat.
 - Replay schema v7: the v6 fold plus season, band, node, and hazard witnesses.
   Hazards are stored as start tick and duration. Remaining ticks are derived.
+- Replay schema v8: the v7 fold plus artifact create/modify/move/destroy.
+  Mark tokens live on codec-v5 checkpoints; event folds carry identity,
+  placement, and content revision only.
 Runs never mix replay schema versions.
 """
 
@@ -20,11 +23,12 @@ from __future__ import annotations
 
 import logging
 from collections.abc import Mapping, Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from enum import StrEnum
 from typing import Final
 
 from world._state import WorldState, rebuild_world_state
+from world.artifacts import ArtifactContent, InformationArtifact
 from world.environment import (
     ActiveHazard,
     EnvironmentalDynamicsSpec,
@@ -37,6 +41,11 @@ from world.events import (
     EVENT_SCHEMA_REPLAY_V5,
     EVENT_SCHEMA_REPLAY_V6,
     EVENT_SCHEMA_REPLAY_V7,
+    EVENT_SCHEMA_REPLAY_V8,
+    ArtifactCreated,
+    ArtifactDestroyed,
+    ArtifactModified,
+    ArtifactMoved,
     Asked,
     Attacked,
     CraftStarted,
@@ -215,6 +224,12 @@ def project_events(
                 len(working.structures),
                 len(working.production_jobs),
             )
+        if schema_version == EVENT_SCHEMA_REPLAY_V8:
+            _LOG.debug(
+                "artifact_fold tick=%s artifact_count=%s",
+                group.tick,
+                len(working.artifacts),
+            )
     return working
 
 
@@ -302,6 +317,7 @@ def _prepare_events(
             EVENT_SCHEMA_REPLAY_V5,
             EVENT_SCHEMA_REPLAY_V6,
             EVENT_SCHEMA_REPLAY_V7,
+            EVENT_SCHEMA_REPLAY_V8,
         }:
             raise ProjectionError(ProjectionErrorCode.UNSUPPORTED_SCHEMA)
     return normalized, schema_version, run_id
@@ -380,7 +396,7 @@ def _project_tick_group(
 
     if working.revision != resulting_revision:
         raise ProjectionError(ProjectionErrorCode.REVISION_MISMATCH)
-    if schema_version == EVENT_SCHEMA_REPLAY_V7:
+    if schema_version in {EVENT_SCHEMA_REPLAY_V7, EVENT_SCHEMA_REPLAY_V8}:
         season = (
             environmental_dynamics.season_at(group.tick).value
             if type(environmental_dynamics) is EnvironmentalDynamicsSpec
@@ -432,6 +448,7 @@ def _entity_known(state: WorldState, entity_id: EntityId) -> bool:
         or entity_id in state.locations
         or entity_id in state.resources
         or entity_id in state.structures
+        or entity_id in state.artifacts
     )
 
 
@@ -521,6 +538,14 @@ def _apply_event_effect(
             return _project_hazard_started(state, event, started)
         case EnvironmentalHazardEnded() as ended:
             return _project_hazard_ended(state, event, ended)
+        case ArtifactCreated() as created:
+            return _project_artifact_created(state, event, created), True
+        case ArtifactModified() as modified:
+            return _project_artifact_modified(state, event, modified), True
+        case ArtifactMoved() as moved_artifact:
+            return _project_artifact_moved(state, event, moved_artifact), True
+        case ArtifactDestroyed() as destroyed:
+            return _project_artifact_destroyed(state, event, destroyed), True
         case _:
             raise ProjectionError(ProjectionErrorCode.PRECONDITION_FAILED)
 
@@ -649,6 +674,129 @@ def _project_hazard_ended(
     ):
         _environment_mismatch(event.tick, ended.kind)
     return rebuild_world_state(state, active_hazards=tuple(kept)), True
+
+
+def _project_artifact_created(
+    state: WorldState,
+    event: WorldEvent,
+    details: ArtifactCreated,
+) -> WorldState:
+    if details.artifact_id in state.artifacts:
+        raise ProjectionError(ProjectionErrorCode.PRECONDITION_FAILED)
+    if event.actor_id is None or event.actor_id not in state.bodies:
+        raise ProjectionError(ProjectionErrorCode.ACTOR_MISSING)
+    if (
+        details.resulting_location_id is not None
+        and details.resulting_location_id not in state.locations
+    ):
+        raise ProjectionError(ProjectionErrorCode.PRECONDITION_FAILED)
+    if (
+        details.resulting_holder_id is not None
+        and details.resulting_holder_id not in state.bodies
+    ):
+        raise ProjectionError(ProjectionErrorCode.PRECONDITION_FAILED)
+    # Content tokens are checkpoint-owned; folds create an empty face.
+    created = InformationArtifact(
+        artifact_id=details.artifact_id,
+        kind=details.artifact_kind,
+        author_id=details.author_id,
+        created_tick=event.tick,
+        content=ArtifactContent(),
+        content_revision=details.content_revision,
+        location_id=details.resulting_location_id,
+        holder_id=details.resulting_holder_id,
+    )
+    artifacts = dict(state.artifacts)
+    artifacts[details.artifact_id] = created
+    try:
+        return rebuild_world_state(state, artifacts=artifacts)
+    except ValueError as exc:
+        raise ProjectionError(ProjectionErrorCode.INVARIANT_FAILED) from exc
+
+
+def _project_artifact_modified(
+    state: WorldState,
+    event: WorldEvent,
+    details: ArtifactModified,
+) -> WorldState:
+    del event  # tick unused; revision/placement come from the detail
+    prior = state.artifacts.get(details.artifact_id)
+    if prior is None:
+        raise ProjectionError(ProjectionErrorCode.TARGET_MISSING)
+    if (
+        details.resulting_location_id is not None
+        and details.resulting_location_id not in state.locations
+    ):
+        raise ProjectionError(ProjectionErrorCode.PRECONDITION_FAILED)
+    if (
+        details.resulting_holder_id is not None
+        and details.resulting_holder_id not in state.bodies
+    ):
+        raise ProjectionError(ProjectionErrorCode.PRECONDITION_FAILED)
+    updated = replace(
+        prior,
+        kind=details.artifact_kind,
+        content_revision=details.content_revision,
+        location_id=details.resulting_location_id,
+        holder_id=details.resulting_holder_id,
+    )
+    artifacts = dict(state.artifacts)
+    artifacts[details.artifact_id] = updated
+    try:
+        return rebuild_world_state(state, artifacts=artifacts)
+    except ValueError as exc:
+        raise ProjectionError(ProjectionErrorCode.INVARIANT_FAILED) from exc
+
+
+def _project_artifact_moved(
+    state: WorldState,
+    event: WorldEvent,
+    details: ArtifactMoved,
+) -> WorldState:
+    del event
+    prior = state.artifacts.get(details.artifact_id)
+    if prior is None:
+        raise ProjectionError(ProjectionErrorCode.TARGET_MISSING)
+    if (
+        details.resulting_location_id is not None
+        and details.resulting_location_id not in state.locations
+    ):
+        raise ProjectionError(ProjectionErrorCode.PRECONDITION_FAILED)
+    if (
+        details.resulting_holder_id is not None
+        and details.resulting_holder_id not in state.bodies
+    ):
+        raise ProjectionError(ProjectionErrorCode.PRECONDITION_FAILED)
+    updated = replace(
+        prior,
+        kind=details.artifact_kind,
+        content_revision=details.content_revision,
+        location_id=details.resulting_location_id,
+        holder_id=details.resulting_holder_id,
+    )
+    artifacts = dict(state.artifacts)
+    artifacts[details.artifact_id] = updated
+    try:
+        return rebuild_world_state(state, artifacts=artifacts)
+    except ValueError as exc:
+        raise ProjectionError(ProjectionErrorCode.INVARIANT_FAILED) from exc
+
+
+def _project_artifact_destroyed(
+    state: WorldState,
+    event: WorldEvent,
+    details: ArtifactDestroyed,
+) -> WorldState:
+    del event
+    prior = state.artifacts.get(details.artifact_id)
+    if prior is None or prior.content_revision != details.content_revision:
+        raise ProjectionError(ProjectionErrorCode.TARGET_MISSING)
+    artifacts = dict(state.artifacts)
+    del artifacts[details.artifact_id]
+    try:
+        return rebuild_world_state(state, artifacts=artifacts)
+    except ValueError as exc:
+        raise ProjectionError(ProjectionErrorCode.INVARIANT_FAILED) from exc
 
 
 def _apply_legacy_transfer(state: WorldState, event: WorldEvent) -> WorldState:

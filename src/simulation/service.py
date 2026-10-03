@@ -136,16 +136,19 @@ class PersistentSimulationService:
         schema_version, codec_version = checkpoint_schema_for_production(
             production_active=self._engine._production_catalog is not None,
             dynamics_active=self._engine._environmental_dynamics is not None,
+            artifacts_active=self._engine._artifacts_enabled,
         )
         production_rows: dict[str, tuple[object, ...]] = {}
-        if codec_version in {"v3", "v4"}:
+        if codec_version in {"v3", "v4", "v5"}:
             production_rows = {
                 "structures": tuple(state.structures.values()),
                 "production_jobs": tuple(state.production_jobs.values()),
                 "tool_marks": tuple(state.tool_marks.values()),
             }
-        if codec_version == "v4":
+        if codec_version in {"v4", "v5"}:
             production_rows["active_hazards"] = tuple(state.active_hazards)
+        if codec_version == "v5":
+            production_rows["artifacts"] = tuple(state.artifacts.values())
         draft = WorldSnapshot(
             snapshot_id=snapshot_id,
             run_id=self._engine.run_id,
@@ -192,6 +195,7 @@ class PersistentSimulationService:
             production_jobs=draft.production_jobs,
             tool_marks=draft.tool_marks,
             active_hazards=draft.active_hazards,
+            artifacts=draft.artifacts,
         )
 
     async def resolve_tick(

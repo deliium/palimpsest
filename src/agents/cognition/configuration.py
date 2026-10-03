@@ -13,6 +13,7 @@ from dataclasses import dataclass
 from enum import StrEnum
 from typing import Final
 
+from agents.cognition.artifacts import ArtifactInterpretationMode
 from agents.cognition.communication_strategy import (
     CommunicationStrategyPolicy,
     default_communication_strategy_policy,
@@ -368,6 +369,9 @@ class CognitionLoopConfig:
         CognitionSocialConventionMode.DISABLED
     )
     social_convention_policy: SocialConventionPolicy | None = None
+    artifact_interpretation_mode: ArtifactInterpretationMode = (
+        ArtifactInterpretationMode.DISABLED
+    )
     production_knowledge_mode: ProductionKnowledgeMode = (
         ProductionKnowledgeMode.DISABLED
     )
@@ -634,6 +638,14 @@ class CognitionLoopConfig:
             raise TypeError(
                 "social_convention_policy must be SocialConventionPolicy or None"
             )
+        if type(self.artifact_interpretation_mode) is not ArtifactInterpretationMode:
+            _LOG.error(
+                "invalid_enum path=artifact_interpretation_mode "
+                "reason_code=invalid_mode"
+            )
+            raise TypeError(
+                "artifact_interpretation_mode must be ArtifactInterpretationMode"
+            )
         if type(self.production_knowledge_mode) is not ProductionKnowledgeMode:
             _LOG.error(
                 "invalid_enum path=production_knowledge_mode reason_code=invalid_mode"
@@ -791,6 +803,7 @@ class CognitionLoopConfig:
             "group_formation_mode": self.group_formation_mode.value,
             "social_norm_mode": self.social_norm_mode.value,
             "social_convention_mode": self.social_convention_mode.value,
+            "artifact_interpretation_mode": self.artifact_interpretation_mode.value,
             "territorial_claim_policy_version": (
                 None
                 if self.territorial_claim_policy is None
@@ -847,6 +860,7 @@ def build_cognitive_loop(
     if type(resolved) is not CognitionLoopConfig:
         raise TypeError("config must be CognitionLoopConfig")
 
+    from agents.cognition.artifacts import ArtifactInterpretationMemoryUpdateHook
     from agents.cognition.communication import (
         CommunicatedMemoryUpdateHook,
         CompositeMemoryUpdateHook,
@@ -962,6 +976,9 @@ def build_cognitive_loop(
             (
                 DirectObservationMemoryUpdateHook(),
                 CommunicatedMemoryUpdateHook(),
+                ArtifactInterpretationMemoryUpdateHook(
+                    mode=resolved.artifact_interpretation_mode,
+                ),
                 SubjectiveRevisionHook(
                     resolve_counterpart=counterpart,
                     pending=pending,
@@ -1001,5 +1018,6 @@ def build_cognitive_loop(
         social_norm_policy=resolved.social_norm_policy,
         social_convention_mode=resolved.social_convention_mode,
         social_convention_policy=resolved.social_convention_policy,
+        artifact_interpretation_mode=resolved.artifact_interpretation_mode,
         production_knowledge_mode=resolved.production_knowledge_mode,
     )

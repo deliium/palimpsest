@@ -69,7 +69,7 @@ from simulation.subjective_state import (
 )
 from social.contracts import RelationshipReader
 from social.models import CommunicationEnvelope
-from world.actions import AgentCommand, require_agent_command
+from world.actions import AgentCommand, agent_command_tag, require_agent_command
 from world.identifiers import require_stable_id
 from world.models import LifeStatus
 from world.observations import Observation, ObservationAudienceRole
@@ -406,6 +406,7 @@ class AgentRuntime:
         "_agent",
         "_applied_identity_operation_ids",
         "_applied_reflection_operation_ids",
+        "_artifact_interpretations",
         "_belief_reader",
         "_belief_writer",
         "_causal_world_model",
@@ -549,6 +550,7 @@ class AgentRuntime:
         self._group_formation: object | None = None
         self._social_norms: object | None = None
         self._social_conventions: object | None = None
+        self._artifact_interpretations: object | None = None
         self._competence: object | None = None
         self._recipe_beliefs: object | None = None
         self._advice: object | None = None
@@ -859,6 +861,41 @@ class AgentRuntime:
             "social_conventions_carried owner_id=%s belief_count=%s tick=%s",
             owner.value,
             len(ledger.beliefs),
+            tick,
+        )
+
+    def _commit_artifact_interpretations(
+        self, ledger: object | None, tick: int
+    ) -> None:
+        from agents.cognition.artifacts import (
+            ArtifactInterpretationLedger,
+            ArtifactInterpretationMode,
+        )
+
+        owner = self._agent.agent_id
+        mode = getattr(
+            self._loop,
+            "_artifact_interpretation_mode",
+            ArtifactInterpretationMode.DISABLED,
+        )
+        if mode is not ArtifactInterpretationMode.DETERMINISTIC or ledger is None:
+            if mode is not ArtifactInterpretationMode.DETERMINISTIC:
+                self._artifact_interpretations = None
+            return
+        if type(ledger) is not ArtifactInterpretationLedger:
+            raise TypeError(
+                "artifact_interpretations must be ArtifactInterpretationLedger"
+            )
+        if ledger.owner_id != owner:
+            raise AgentRuntimeError(
+                AgentRuntimeErrorCode.OWNERSHIP,
+                agent_id=owner.value,
+            )
+        self._artifact_interpretations = ledger
+        _LOG.debug(
+            "artifact_interpretations_carried owner_id=%s entry_count=%s tick=%s",
+            owner.value,
+            len(ledger.interpretations),
             tick,
         )
 
@@ -1396,6 +1433,7 @@ class AgentRuntime:
                 group_formation=self._group_formation,
                 social_norms=self._social_norms,
                 social_conventions=self._social_conventions,
+                artifact_interpretations=self._artifact_interpretations,
                 competence_model=self._competence,
                 declarative_advice=self._advice,
                 recipe_beliefs=self._recipe_beliefs,
@@ -1818,6 +1856,9 @@ class AgentRuntime:
         self._commit_social_conventions(
             getattr(pending.loop_result, "social_conventions", None), pending.tick
         )
+        self._commit_artifact_interpretations(
+            getattr(pending.loop_result, "artifact_interpretations", None), pending.tick
+        )
         self._commit_competence(
             getattr(pending.loop_result, "competence_model", None), pending.tick
         )
@@ -1910,7 +1951,7 @@ class AgentRuntime:
         if type(observation) is not Observation:
             return
         command = pending.submission.command
-        command_kind = command.kind
+        command_kind = agent_command_tag(command)
         owner_entity = observation.observer_id.value
         successes = 0
         failures = 0
@@ -2224,6 +2265,9 @@ class AgentRuntime:
         self._group_formation = getattr(checkpoint, "group_formation", None)
         self._social_norms = getattr(checkpoint, "social_norms", None)
         self._social_conventions = getattr(checkpoint, "social_conventions", None)
+        self._artifact_interpretations = getattr(
+            checkpoint, "artifact_interpretations", None
+        )
         self._competence = checkpoint.competence_model
         self._recipe_beliefs = getattr(checkpoint, "recipe_beliefs", None)
         self._advice = checkpoint.declarative_advice
@@ -2286,6 +2330,7 @@ class AgentRuntime:
             group_formation=self._group_formation,
             social_norms=self._social_norms,
             social_conventions=self._social_conventions,
+            artifact_interpretations=self._artifact_interpretations,
             competence_model=self._competence,
             declarative_advice=self._advice,
             recipe_beliefs=self._recipe_beliefs,

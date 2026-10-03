@@ -260,6 +260,9 @@ def test_all_metric_families_assemble(reference_outcome) -> None:
             MetricFamilyId.OFFLINE_CONSOLIDATION,
             MetricFamilyId.PROSPECTIVE_IMAGINATION,
             MetricFamilyId.EMERGENT_GROUP_FORMATION,
+            MetricFamilyId.EMERGENT_SOCIAL_NORMS,
+            MetricFamilyId.PERSISTENT_SOCIAL_CONVENTIONS,
+            MetricFamilyId.EXTERNAL_ARTIFACT_MEMORY,
         }
     }
     assert required.issubset(produced)

@@ -3,9 +3,11 @@
 Visibility policy:
 - Always expose self, hour/day-phase, visibility modifier, current weather,
   current location, and adjacent exits.
-- Ground items, resource nodes, structures, and other bodies appear only when
-  effective visibility is at least ``CONTENT_VISIBILITY_THRESHOLD``.
-- Held inventory remains visible below the content threshold.
+- Ground items, resource nodes, structures, ground artifacts, and other bodies
+  appear only when effective visibility is at least
+  ``CONTENT_VISIBILITY_THRESHOLD``.
+- Held inventory and self-held artifacts remain visible below the content
+  threshold. Foreign held artifacts are never projected.
 - Dead registered observers still receive self/time/environment observations.
 - Physical target validation is not visibility-gated (handled elsewhere).
 - Prior-tick occurrences are redacted by audience using event occurrence context.
@@ -19,6 +21,7 @@ from collections.abc import Sequence
 from typing import Final
 
 from world._state import WorldState
+from world.artifacts import InformationArtifact
 from world.environment import (
     EnvironmentalDynamicsSpec,
     HazardKind,
@@ -27,6 +30,10 @@ from world.environment import (
     temperature_band,
 )
 from world.events import (
+    ArtifactCreated,
+    ArtifactDestroyed,
+    ArtifactModified,
+    ArtifactMoved,
     Asked,
     CraftStarted,
     ItemCrafted,
@@ -48,6 +55,7 @@ from world.observations import (
     ObservationContext,
     ObservationProvenance,
     ObservationSourceKind,
+    ObservedArtifact,
     ObservedCommunication,
     ObservedItem,
     ObservedItemPlacement,
@@ -71,6 +79,14 @@ _PRODUCTION_DETAIL_TYPES: Final[frozenset[type]] = frozenset(
         StructureBuilt,
         StructureRepaired,
         ItemStored,
+    }
+)
+_ARTIFACT_DETAIL_TYPES: Final[frozenset[type]] = frozenset(
+    {
+        ArtifactCreated,
+        ArtifactModified,
+        ArtifactMoved,
+        ArtifactDestroyed,
     }
 )
 
@@ -180,6 +196,12 @@ def _project_one(
         prior_events=prior_events,
     )
     structures = _sorted_structures(state, location_id) if content_visible else ()
+    artifacts = _sorted_artifacts(
+        state,
+        observer_id=observer_id,
+        location_id=location_id,
+        include_ground=content_visible,
+    )
     recipes = [
         occurrence.public_facts["recipe_id"]
         for occurrence in occurrences
@@ -191,6 +213,7 @@ def _project_one(
             recipes[0] if recipes else "-",
             len(structures),
         )
+    _LOG.debug("artifacts_observed count=%s", len(artifacts))
     season, band, kinds = _present_environment(
         state=state,
         location_id=location_id,
@@ -213,6 +236,7 @@ def _project_one(
         ),
         resources=(_sorted_resources(state, location_id) if content_visible else ()),
         structures=structures,
+        artifacts=artifacts,
         exits=_sorted_exits(state, location_id),
         visible_bodies=(
             _sorted_visible_bodies(state, location_id, observer_id)
@@ -423,6 +447,51 @@ def _sorted_structures(
     return tuple(selected)
 
 
+def _sorted_artifacts(
+    state: WorldState,
+    *,
+    observer_id: EntityId,
+    location_id: EntityId,
+    include_ground: bool,
+) -> tuple[ObservedArtifact, ...]:
+    selected: list[ObservedArtifact] = []
+    for artifact_id in sorted(state.artifacts, key=lambda entity: entity.value):
+        artifact = state.artifacts[artifact_id]
+        projected = _project_artifact(
+            artifact,
+            observer_id=observer_id,
+            location_id=location_id,
+            include_ground=include_ground,
+        )
+        if projected is not None:
+            selected.append(projected)
+    return tuple(selected)
+
+
+def _project_artifact(
+    artifact: InformationArtifact,
+    *,
+    observer_id: EntityId,
+    location_id: EntityId,
+    include_ground: bool,
+) -> ObservedArtifact | None:
+    if artifact.holder_id == observer_id:
+        placement = ObservedItemPlacement.HELD_BY_SELF
+    elif include_ground and artifact.location_id == location_id:
+        placement = ObservedItemPlacement.GROUND_HERE
+    else:
+        return None
+    return ObservedArtifact(
+        entity_id=artifact.artifact_id,
+        kind=artifact.kind,
+        author_id=artifact.author_id,
+        created_tick=artifact.created_tick,
+        content=artifact.content,
+        content_revision=artifact.content_revision,
+        placement=placement,
+    )
+
+
 def _sorted_visible_bodies(
     state: WorldState,
     location_id: EntityId,
@@ -578,6 +647,10 @@ def _success_fact(event: WorldEvent) -> bool | None:
 def _public_facts_for_role(
     event: WorldEvent, role: ObservationAudienceRole
 ) -> dict[str, object]:
+    artifact_facts = _artifact_public_facts(event)
+    if artifact_facts is not None:
+        # Artifact occurrences expose only identity/revision — never marks.
+        return {"kind": event.event_type, **artifact_facts}
     facts: dict[str, object] = {"kind": event.event_type}
     recipe_id = _production_recipe_id(event)
     if role is ObservationAudienceRole.BYSTANDER:
@@ -591,6 +664,17 @@ def _public_facts_for_role(
     if recipe_id is not None and role is ObservationAudienceRole.ACTOR:
         facts["recipe_id"] = recipe_id
     return facts
+
+
+def _artifact_public_facts(event: WorldEvent) -> dict[str, object] | None:
+    details = event.details
+    if type(details) not in _ARTIFACT_DETAIL_TYPES:
+        return None
+    return {
+        "artifact_id": details.artifact_id.value,  # type: ignore[union-attr]
+        "artifact_kind": details.artifact_kind.value,  # type: ignore[union-attr]
+        "content_revision": details.content_revision,  # type: ignore[union-attr]
+    }
 
 
 def _production_recipe_id(event: WorldEvent) -> str | None:

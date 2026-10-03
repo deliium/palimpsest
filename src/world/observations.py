@@ -15,6 +15,8 @@ held inventory item details  ALWAYS_SELF
 ground items (local)         VISIBILITY_GATED (≥0.5)
 resources (local quantity)   VISIBILITY_GATED (≥0.5)
 structures (local)           VISIBILITY_GATED (≥0.5)
+artifacts (ground local)       VISIBILITY_GATED (≥0.5)
+artifacts (held by self)       ALWAYS_SELF
 other bodies (coarse)        VISIBILITY_GATED (≥0.5)
 public occurrence facts      VISIBILITY_GATED or PARTICIPANT_ONLY
 participant occurrence detail PARTICIPANT_ONLY
@@ -38,6 +40,7 @@ from enum import StrEnum
 from typing import Literal
 
 from world._freeze import freeze_mapping, require_non_empty
+from world.artifacts import ArtifactContent, ArtifactKind, require_artifact_content
 from world.communications import StructuredUtterance
 from world.environment import HazardKind, Season, TemperatureBand
 from world.identifiers import (
@@ -78,6 +81,7 @@ __all__ = [
     "ObservationFieldAccess",
     "ObservationProvenance",
     "ObservationSourceKind",
+    "ObservedArtifact",
     "ObservedCommunication",
     "ObservedItem",
     "ObservedItemPlacement",
@@ -120,6 +124,7 @@ PERCEPTION_FIELD_ACCESS: Mapping[str, ObservationFieldAccess] = {
     "held_items": ObservationFieldAccess.ALWAYS_SELF,
     "ground_items": ObservationFieldAccess.VISIBILITY_GATED,
     "resources": ObservationFieldAccess.VISIBILITY_GATED,
+    "artifacts": ObservationFieldAccess.VISIBILITY_GATED,
     "visible_bodies": ObservationFieldAccess.VISIBILITY_GATED,
     "occurrences_public": ObservationFieldAccess.VISIBILITY_GATED,
     "occurrences_participant": ObservationFieldAccess.PARTICIPANT_ONLY,
@@ -390,6 +395,48 @@ class ObservedStructure:
 
 
 @dataclass(frozen=True, slots=True)
+class ObservedArtifact:
+    """Objective artifact marks visible without interpretation or presentation."""
+
+    entity_id: EntityId
+    kind: ArtifactKind
+    author_id: EntityId
+    created_tick: int
+    content: ArtifactContent
+    content_revision: int
+    placement: ObservedItemPlacement
+
+    def __post_init__(self) -> None:
+        if type(self.entity_id) is not EntityId:
+            raise TypeError("ObservedArtifact.entity_id must be EntityId")
+        if type(self.kind) is not ArtifactKind:
+            raise TypeError("ObservedArtifact.kind must be ArtifactKind")
+        if type(self.author_id) is not EntityId:
+            raise TypeError("ObservedArtifact.author_id must be EntityId")
+        if isinstance(self.created_tick, bool) or type(self.created_tick) is not int:
+            raise TypeError("ObservedArtifact.created_tick must be int")
+        if self.created_tick < 0:
+            raise ValueError("ObservedArtifact.created_tick must be non-negative")
+        require_artifact_content(self.content, field_name="ObservedArtifact.content")
+        if (
+            isinstance(self.content_revision, bool)
+            or type(self.content_revision) is not int
+        ):
+            raise TypeError("ObservedArtifact.content_revision must be int")
+        if self.content_revision < 0:
+            raise ValueError("ObservedArtifact.content_revision must be non-negative")
+        if type(self.placement) is not ObservedItemPlacement:
+            raise TypeError("ObservedArtifact.placement must be ObservedItemPlacement")
+        if self.placement not in {
+            ObservedItemPlacement.GROUND_HERE,
+            ObservedItemPlacement.HELD_BY_SELF,
+        }:
+            raise ValueError(
+                "ObservedArtifact.placement must be ground or held-by-self"
+            )
+
+
+@dataclass(frozen=True, slots=True)
 class ObservedSelf:
     """Exact self physiology available to the owning observer only."""
 
@@ -598,6 +645,7 @@ class Observation:
     items: Sequence[ObservedItem] = field(default_factory=tuple)
     resources: Sequence[ObservedResource] = field(default_factory=tuple)
     structures: Sequence[ObservedStructure] = field(default_factory=tuple)
+    artifacts: Sequence[ObservedArtifact] = field(default_factory=tuple)
     exits: Sequence[VisibleExit] = field(default_factory=tuple)
     visible_bodies: Sequence[VisibleBody] = field(default_factory=tuple)
     occurrences: Sequence[ObservedOccurrence] = field(default_factory=tuple)
@@ -650,6 +698,15 @@ class Observation:
                 "Observation.structures",
                 self.structures,
                 model_type=ObservedStructure,
+            ),
+        )
+        object.__setattr__(
+            self,
+            "artifacts",
+            _copy_models(
+                "Observation.artifacts",
+                self.artifacts,
+                model_type=ObservedArtifact,
             ),
         )
         object.__setattr__(
@@ -738,6 +795,10 @@ class Observation:
         _validate_ordered_ids(
             "Observation.structures",
             tuple(structure.entity_id for structure in self.structures),
+        )
+        _validate_ordered_ids(
+            "Observation.artifacts",
+            tuple(artifact.entity_id for artifact in self.artifacts),
         )
         _validate_ordered_ids(
             "Observation.visible_bodies",

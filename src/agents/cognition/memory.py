@@ -708,12 +708,18 @@ def build_direct_scene_memory_trace(
     observation: Observation,
     location_id: EntityId | None,
 ) -> MemoryTrace | None:
-    """Build one scene-level direct trace from visible observation fields."""
+    """Build one scene-level direct trace from visible observation fields.
+
+    Intentionally omits ``Observation.artifacts`` marks and relations. Artifact
+    readings enter memory only through
+    ``ArtifactInterpretationMemoryUpdateHook``.
+    """
     if type(observation) is not Observation:
         raise TypeError("observation must be Observation")
     concepts: list[ConceptMention] = []
     entities: list[EntityMention] = []
     index = 0
+    _ = observation.artifacts  # presence must not seed scene concepts
     for resource in observation.resources:
         concepts.append(
             ConceptMention(

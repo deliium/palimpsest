@@ -151,6 +151,7 @@ class Perspective:
     group_formation: object | None = None
     social_norms: object | None = None
     social_conventions: object | None = None
+    artifact_interpretations: object | None = None
     competence_model: object | None = None
     declarative_advice: object | None = None
     recipe_beliefs: object | None = None
@@ -317,6 +318,13 @@ class Perspective:
             self.agent_id,
             field_name="Perspective.social_conventions",
         )
+        from agents.cognition.artifacts import require_owner_artifact_interpretations
+
+        require_owner_artifact_interpretations(
+            self.artifact_interpretations,
+            self.agent_id,
+            field_name="Perspective.artifact_interpretations",
+        )
         from agents.cognition.competence import require_owner_competence
 
         require_owner_competence(
@@ -365,6 +373,7 @@ class Perspective:
             group_formation=self.group_formation,
             social_norms=self.social_norms,
             social_conventions=self.social_conventions,
+            artifact_interpretations=self.artifact_interpretations,
             competence_model=self.competence_model,
             declarative_advice=self.declarative_advice,
             recipe_beliefs=self.recipe_beliefs,

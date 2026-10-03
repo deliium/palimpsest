@@ -31,6 +31,7 @@ from simulation.persistence import (
 from simulation.serialization import (
     DomainSerializationError,
     _decode_agent_body,
+    _decode_artifact_content,
     _decode_event_cause,
     _decode_event_details,
     _decode_item,
@@ -39,6 +40,7 @@ from simulation.serialization import (
     _decode_resource,
     _decode_weather,
     _encode_agent_body,
+    _encode_artifact_content,
     _encode_event_cause,
     _encode_event_details,
     _encode_item,
@@ -47,6 +49,7 @@ from simulation.serialization import (
     _encode_resource,
     _encode_weather,
 )
+from world.artifacts import ArtifactKind, InformationArtifact
 from world.environment import ActiveHazard, HazardKind
 from world.events import (
     EVENT_SCHEMA_REPLAY_V2,
@@ -409,6 +412,7 @@ def bind_snapshot_commit_hash(
         production_jobs=snapshot.production_jobs,
         tool_marks=snapshot.tool_marks,
         active_hazards=snapshot.active_hazards,
+        artifacts=snapshot.artifacts,
     )
     return WorldSnapshot(
         snapshot_id=draft.snapshot_id,
@@ -434,6 +438,7 @@ def bind_snapshot_commit_hash(
         production_jobs=draft.production_jobs,
         tool_marks=draft.tool_marks,
         active_hazards=draft.active_hazards,
+        artifacts=draft.artifacts,
     )
 
 
@@ -718,7 +723,7 @@ def _encode_world_snapshot(
             "weather": [_encode_weather(item) for item in value.weather],
             "world_id": value.world_id.value,
         }
-        if value.persistence_codec_version in {"v3", "v4"}:
+        if value.persistence_codec_version in {"v3", "v4", "v5"}:
             payload["structures"] = [
                 _encode_structure(item) for item in value.structures
             ]
@@ -728,9 +733,13 @@ def _encode_world_snapshot(
             payload["tool_marks"] = [
                 _encode_tool_mark(item) for item in value.tool_marks
             ]
-        if value.persistence_codec_version == "v4":
+        if value.persistence_codec_version in {"v4", "v5"}:
             payload["active_hazards"] = [
                 _encode_active_hazard(item) for item in value.active_hazards
+            ]
+        if value.persistence_codec_version == "v5":
+            payload["artifacts"] = [
+                _encode_information_artifact(item) for item in value.artifacts
             ]
     except DomainSerializationError as exc:
         raise _map_domain_error(exc) from exc
@@ -762,10 +771,12 @@ def _decode_world_snapshot(data: dict[str, Any], *, path: str) -> WorldSnapshot:
         "integrity_hash",
         "predecessor_commit_hash",
     }
-    if codec in {"v3", "v4"}:
+    if codec in {"v3", "v4", "v5"}:
         keys |= {"structures", "production_jobs", "tool_marks"}
-    if codec == "v4":
+    if codec in {"v4", "v5"}:
         keys.add("active_hazards")
+    if codec == "v5":
+        keys.add("artifacts")
     _require_keys(data, keys, path=path)
     config_raw = data["config"]
     if not isinstance(config_raw, dict):
@@ -822,32 +833,100 @@ def _decode_world_snapshot(data: dict[str, Any], *, path: str) -> WorldSnapshot:
             structures=_decode_object_list(
                 data["structures"], _decode_structure, path=f"{path}.structures"
             )
-            if codec in {"v3", "v4"}
+            if codec in {"v3", "v4", "v5"}
             else (),
             production_jobs=_decode_object_list(
                 data["production_jobs"],
                 _decode_production_job,
                 path=f"{path}.production_jobs",
             )
-            if codec in {"v3", "v4"}
+            if codec in {"v3", "v4", "v5"}
             else (),
             tool_marks=_decode_object_list(
                 data["tool_marks"], _decode_tool_mark, path=f"{path}.tool_marks"
             )
-            if codec in {"v3", "v4"}
+            if codec in {"v3", "v4", "v5"}
             else (),
             active_hazards=_decode_object_list(
                 data["active_hazards"],
                 _decode_active_hazard,
                 path=f"{path}.active_hazards",
             )
-            if codec == "v4"
+            if codec in {"v4", "v5"}
+            else (),
+            artifacts=_decode_object_list(
+                data["artifacts"],
+                _decode_information_artifact,
+                path=f"{path}.artifacts",
+            )
+            if codec == "v5"
             else (),
         )
     except PersistenceSerializationError:
         raise
     except (TypeError, ValueError) as exc:
         raise PersistenceSerializationError("malformed_id", path) from exc
+
+
+def _encode_information_artifact(value: InformationArtifact) -> dict[str, Any]:
+    payload: dict[str, Any] = {
+        "artifact_id": value.artifact_id.value,
+        "author_id": value.author_id.value,
+        "content": _encode_artifact_content(value.content),
+        "content_revision": value.content_revision,
+        "created_tick": value.created_tick,
+        "kind": value.kind.value,
+    }
+    if value.location_id is not None:
+        payload["location_id"] = value.location_id.value
+    if value.holder_id is not None:
+        payload["holder_id"] = value.holder_id.value
+    return payload
+
+
+def _decode_information_artifact(
+    data: dict[str, Any], *, path: str
+) -> InformationArtifact:
+    base = {
+        "artifact_id",
+        "kind",
+        "author_id",
+        "created_tick",
+        "content",
+        "content_revision",
+    }
+    allowed = base | {"location_id", "holder_id"}
+    if set(data) - allowed or not base.issubset(data):
+        raise PersistenceSerializationError("invalid_fields", path)
+    location_raw = data.get("location_id")
+    holder_raw = data.get("holder_id")
+    location_id: EntityId | None
+    holder_id: EntityId | None
+    if location_raw is None:
+        location_id = None
+    elif isinstance(location_raw, str):
+        location_id = EntityId(location_raw)
+    else:
+        raise PersistenceSerializationError("invalid_string", f"{path}.location_id")
+    if holder_raw is None:
+        holder_id = None
+    elif isinstance(holder_raw, str):
+        holder_id = EntityId(holder_raw)
+    else:
+        raise PersistenceSerializationError("invalid_string", f"{path}.holder_id")
+    try:
+        return InformationArtifact(
+            artifact_id=EntityId(_str_field(data, "artifact_id", path=path)),
+            kind=ArtifactKind(_str_field(data, "kind", path=path)),
+            author_id=EntityId(_str_field(data, "author_id", path=path)),
+            created_tick=_nonneg_int_field(data, "created_tick", path=path),
+            content=_decode_artifact_content(data["content"], path=f"{path}.content"),
+            content_revision=_nonneg_int_field(data, "content_revision", path=path),
+            location_id=location_id,
+            holder_id=holder_id,
+        )
+    except DomainSerializationError as exc:
+        raise _map_domain_error(exc) from exc
 
 
 def _encode_active_hazard(value: ActiveHazard) -> dict[str, Any]:

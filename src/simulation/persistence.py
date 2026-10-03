@@ -8,6 +8,7 @@ safe repository/orchestration diagnostics only.
 
 from __future__ import annotations
 
+import logging
 import re
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
@@ -35,6 +36,7 @@ from simulation.run_control import (
     StreamRecord,
     StreamRecordDraft,
 )
+from world.artifacts import InformationArtifact
 from world.environment import ActiveHazard
 from world.events import (
     EVENT_SCHEMA_REPLAY_V2,
@@ -43,6 +45,7 @@ from world.events import (
     EVENT_SCHEMA_REPLAY_V5,
     EVENT_SCHEMA_REPLAY_V6,
     EVENT_SCHEMA_REPLAY_V7,
+    EVENT_SCHEMA_REPLAY_V8,
     WorldEvent,
     normalize_events,
 )
@@ -54,6 +57,8 @@ from world.identifiers import (
 )
 from world.models import AgentBody, Item, Location, Resource, Weather
 from world.production import ProductionJob, Structure, ToolMark
+
+_LOG: Final[logging.Logger] = logging.getLogger("simulation.persistence")
 
 # New-write versions for physical replay-v5 runs (structured communication).
 # Taxonomy / accepted-set policy: see simulation.compatibility.COMPATIBILITY_MATRIX.
@@ -70,11 +75,12 @@ ACCEPTED_EVENT_SCHEMA_VERSIONS: Final[frozenset[int]] = frozenset(
         EVENT_SCHEMA_REPLAY_V5,
         EVENT_SCHEMA_REPLAY_V6,
         EVENT_SCHEMA_REPLAY_V7,
+        EVENT_SCHEMA_REPLAY_V8,
     }
 )
 ACCEPTED_PROJECTOR_VERSIONS: Final[frozenset[str]] = frozenset({"v1", "v2"})
 ACCEPTED_PERSISTENCE_CODEC_VERSIONS: Final[frozenset[str]] = frozenset(
-    {"v1", "v2", "v3", "v4"}
+    {"v1", "v2", "v3", "v4", "v5"}
 )
 
 _SHA256_HEX_RE: Final[re.Pattern[str]] = re.compile(r"^[0-9a-f]{64}$")
@@ -161,19 +167,31 @@ def _require_accepted_schema_version(name: str, value: object) -> int:
 
 
 def checkpoint_schema_for_production(
-    *, production_active: bool, dynamics_active: bool = False
+    *,
+    production_active: bool,
+    dynamics_active: bool = False,
+    artifacts_active: bool = False,
 ) -> tuple[int, str]:
     """Choose the checkpoint schema for this run.
 
-    A set environmental spec writes replay-v7 and codec ``v4``, including when
-    a production catalog is also set. Production without that spec writes
-    replay-v6 and codec ``v3``. Every other run keeps replay-v5 and codec ``v2``.
+    Priority at run start: artifacts → ``(v8, v5)``; else dynamics →
+    ``(v7, v4)``; else production → ``(v6, v3)``; else replay-v5 / codec ``v2``.
     """
-    if dynamics_active:
-        return EVENT_SCHEMA_REPLAY_V7, "v4"
-    if production_active:
-        return EVENT_SCHEMA_REPLAY_V6, "v3"
-    return EVENT_SCHEMA_VERSION, PERSISTENCE_CODEC_VERSION
+    if artifacts_active:
+        pair = EVENT_SCHEMA_REPLAY_V8, "v5"
+    elif dynamics_active:
+        pair = EVENT_SCHEMA_REPLAY_V7, "v4"
+    elif production_active:
+        pair = EVENT_SCHEMA_REPLAY_V6, "v3"
+    else:
+        pair = EVENT_SCHEMA_VERSION, PERSISTENCE_CODEC_VERSION
+    _LOG.debug(
+        "artifact_schema_selected event_schema=%s codec=%s artifacts_active=%s",
+        pair[0],
+        pair[1],
+        artifacts_active,
+    )
+    return pair
 
 
 def _require_write_schema_version(name: str, value: object) -> int:
@@ -233,6 +251,7 @@ def schema_projector_compatible(
         EVENT_SCHEMA_REPLAY_V5,
         EVENT_SCHEMA_REPLAY_V6,
         EVENT_SCHEMA_REPLAY_V7,
+        EVENT_SCHEMA_REPLAY_V8,
     }:
         return projector_version == "v2"
     return False
@@ -365,6 +384,17 @@ def _copy_hazard_rows(values: object) -> tuple[ActiveHazard, ...]:
     return tuple(copied)
 
 
+def _copy_artifact_rows(values: object) -> tuple[InformationArtifact, ...]:
+    if isinstance(values, (str, bytes)) or not isinstance(values, Sequence):
+        raise TypeError("artifacts collection must be a sequence")
+    copied: list[InformationArtifact] = []
+    for value in values:
+        if type(value) is not InformationArtifact:
+            raise TypeError("entries must be InformationArtifact")
+        copied.append(value)
+    return tuple(copied)
+
+
 @dataclass(frozen=True, slots=True)
 class WorldSnapshot:
     """Immutable objective checkpoint. Contains no live World or session token."""
@@ -392,6 +422,7 @@ class WorldSnapshot:
     production_jobs: Sequence[ProductionJob] = ()
     tool_marks: Sequence[ToolMark] = ()
     active_hazards: Sequence[ActiveHazard] = ()
+    artifacts: Sequence[InformationArtifact] = ()
 
     def __post_init__(self) -> None:
         if type(self.snapshot_id) is not SnapshotId:
@@ -465,6 +496,7 @@ class WorldSnapshot:
             bodies=self.bodies,
             weather=self.weather,
             registrations=self.registrations,
+            artifacts=self.artifacts,
         )
         object.__setattr__(self, "locations", bootstrap.locations)
         object.__setattr__(self, "items", bootstrap.items)
@@ -472,6 +504,7 @@ class WorldSnapshot:
         object.__setattr__(self, "bodies", bootstrap.bodies)
         object.__setattr__(self, "weather", bootstrap.weather)
         object.__setattr__(self, "registrations", bootstrap.registrations)
+        object.__setattr__(self, "artifacts", bootstrap.artifacts)
         object.__setattr__(
             self, "structures", _copy_production_rows(self.structures, Structure)
         )
@@ -488,14 +521,32 @@ class WorldSnapshot:
         )
         if self.persistence_codec_version == "v3":
             if self.event_schema_version != EVENT_SCHEMA_REPLAY_V6:
+                _LOG.error(
+                    "codec_schema_mismatch reason_code=codec_v3_requires_schema_6"
+                )
                 raise ValueError("codec v3 requires event schema 6")
         elif self.persistence_codec_version == "v4":
             if self.event_schema_version != EVENT_SCHEMA_REPLAY_V7:
+                _LOG.error(
+                    "codec_schema_mismatch reason_code=codec_v4_requires_schema_7"
+                )
                 raise ValueError("codec v4 requires event schema 7")
+        elif self.persistence_codec_version == "v5":
+            if self.event_schema_version != EVENT_SCHEMA_REPLAY_V8:
+                _LOG.error(
+                    "codec_schema_mismatch reason_code=codec_v5_requires_schema_8"
+                )
+                raise ValueError("codec v5 requires event schema 8")
         elif self.structures or self.production_jobs or self.tool_marks:
             raise ValueError("production checkpoint fields require codec v3")
-        if self.persistence_codec_version != "v4" and self.active_hazards:
+        if (
+            self.persistence_codec_version not in {"v4", "v5"}
+            and self.active_hazards
+        ):
             raise ValueError("active_hazards require codec v4")
+        if self.persistence_codec_version != "v5" and self.artifacts:
+            _LOG.error("codec_schema_mismatch reason_code=artifacts_require_codec_v5")
+            raise ValueError("artifacts require codec v5")
 
 
 @dataclass(frozen=True, slots=True)
@@ -595,11 +646,17 @@ class RunCreateRequest:
             self.event_schema_version == EVENT_SCHEMA_REPLAY_V7
             and self.persistence_codec_version == "v4"
         )
+        artifacts_checkpoint = (
+            self.event_schema_version == EVENT_SCHEMA_REPLAY_V8
+            and self.persistence_codec_version == "v5"
+        )
         object.__setattr__(
             self,
             "event_schema_version",
             (
-                EVENT_SCHEMA_REPLAY_V7
+                EVENT_SCHEMA_REPLAY_V8
+                if artifacts_checkpoint
+                else EVENT_SCHEMA_REPLAY_V7
                 if dynamics_checkpoint
                 else EVENT_SCHEMA_REPLAY_V6
                 if production_checkpoint
@@ -619,7 +676,9 @@ class RunCreateRequest:
             self,
             "persistence_codec_version",
             (
-                "v4"
+                "v5"
+                if artifacts_checkpoint
+                else "v4"
                 if dynamics_checkpoint
                 else "v3"
                 if production_checkpoint

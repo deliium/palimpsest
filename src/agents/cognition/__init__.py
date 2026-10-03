@@ -1,5 +1,19 @@
 """Cognitive strategy protocols and immutable stage artifacts."""
 
+from agents.cognition.artifacts import (
+    ARTIFACT_INTERPRETATION_MEMORY_POLICY_VERSION,
+    ArtifactInterpretation,
+    ArtifactInterpretationLedger,
+    ArtifactInterpretationMemoryUpdateHook,
+    ArtifactInterpretationMode,
+    ArtifactReadingRelation,
+    apply_artifact_interpretation_update,
+    artifact_inscribe_command,
+    artifact_inscribe_penalties,
+    artifact_inscribe_preferred,
+    empty_artifact_interpretation_ledger,
+    require_owner_artifact_interpretations,
+)
 from agents.cognition.communication import (
     COMMUNICATED_MEMORY_POLICY_VERSION,
     SOCIAL_MESSAGE_POLICY_VERSION,
@@ -491,6 +505,7 @@ from agents.cognition.world_model import (
 )
 
 __all__ = [
+    "ARTIFACT_INTERPRETATION_MEMORY_POLICY_VERSION",
     "BOUNDARY_SCHEMA_VERSION",
     "COGNITION_FACTORY_VERSION",
     "COGNITION_IMAGINATION_POLICY_VERSION",
@@ -537,6 +552,11 @@ __all__ = [
     "AdviceDomain",
     "AdviceStore",
     "AgentEmotionalState",
+    "ArtifactInterpretation",
+    "ArtifactInterpretationLedger",
+    "ArtifactInterpretationMemoryUpdateHook",
+    "ArtifactInterpretationMode",
+    "ArtifactReadingRelation",
     "CausalAtom",
     "CausalEpisode",
     "CausalEpisodeRole",
@@ -795,6 +815,7 @@ __all__ = [
     "activate_drives",
     "aggregate_identity_confidence",
     "alternative_for",
+    "apply_artifact_interpretation_update",
     "apply_belief_channel",
     "apply_communication_strategy",
     "apply_convention_update",
@@ -803,6 +824,9 @@ __all__ = [
     "apply_reputation_update",
     "apply_territorial_update",
     "appraise_identity",
+    "artifact_inscribe_command",
+    "artifact_inscribe_penalties",
+    "artifact_inscribe_preferred",
     "aspect_rank",
     "assemble_counterfactual_scenarios",
     "assemble_identity_belief_view",
@@ -852,6 +876,7 @@ __all__ = [
     "derive_need_pressures",
     "diagnostic_projection",
     "empty_advice_store",
+    "empty_artifact_interpretation_ledger",
     "empty_competence_model",
     "empty_convention_ledger",
     "empty_emotional_state",
@@ -899,6 +924,7 @@ __all__ = [
     "reputation_evidence_id",
     "reputation_profile_id",
     "require_confidence",
+    "require_owner_artifact_interpretations",
     "require_owner_competence",
     "require_owner_group_formation",
     "require_owner_social_conventions",
