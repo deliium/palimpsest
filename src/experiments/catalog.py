@@ -1,4 +1,4 @@
-"""Named builders for Experiments A-Z and additive Experiments AA-AB."""
+"""Named builders for Experiments A-Z and additive Experiments AA-AC."""
 
 from __future__ import annotations
 
@@ -1477,6 +1477,52 @@ def experiment_y_social_conventions(
         condition_ids,
     )
     return definition
+
+
+def experiment_ac_cognitive_architectures(
+    base: SimulationRunnerConfig,
+    *,
+    seed_matrix: ExperimentSeedMatrix | None = None,
+) -> ExperimentDefinition:
+    """Shared-world matrix over named cognitive architecture variants.
+
+    Arms share seed, scenario layout, and stochastic identity; they differ only
+    by architecture expansion (modes/flags/schema). Off the V1 regression gate.
+    """
+    from agents.cognition.architectures import (
+        architecture_definition_digest,
+        get_architecture,
+    )
+    from experiments.architectures import (
+        expand_architecture,
+        registered_architecture_ids,
+    )
+
+    matrix = seed_matrix or ExperimentSeedMatrix(seeds=(base.seed,))
+    shared = replace(base, capability_flags=V2CapabilityFlags())
+    arms: list[tuple[str, str, SimulationRunnerConfig]] = []
+    digests: list[str] = []
+    for architecture_id in registered_architecture_ids():
+        definition = get_architecture(architecture_id)
+        digest = architecture_definition_digest(definition)
+        digests.append(f"{architecture_id}:{digest[:12]}")
+        expanded = expand_architecture(shared, architecture_id)
+        label = f"arch_{architecture_id}_{digest[:8]}"
+        arms.append((f"ac-{architecture_id}", label, expanded))
+
+    condition_ids = ",".join(condition_id for condition_id, _, _ in arms)
+    _LOG.info(
+        "experiment_ac_built experiment_id=%s condition_ids=%s digests=%s",
+        "experiment-ac-cognitive-architectures",
+        condition_ids,
+        ",".join(digests),
+    )
+    return _definition(
+        experiment_id="experiment-ac-cognitive-architectures",
+        base=shared,
+        seed_matrix=matrix,
+        arms=tuple(arms),
+    )
 
 
 def v1_regression_profile(config: SimulationRunnerConfig) -> SimulationRunnerConfig:

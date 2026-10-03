@@ -5,12 +5,14 @@ Domain packages (world, agents, cognition, memory, social) must never import
 this package or receive its collectors, truth specs, or results.
 """
 
+from experiments.architectures import expand_architecture, registered_architecture_ids
 from experiments.catalog import (
     EXPERIMENT_A_V1_CONDITION_IDS,
     experiment_a_memory,
     experiment_a_memory_v1_arms,
     experiment_aa_emergent_naming,
     experiment_ab_cultural_narratives,
+    experiment_ac_cognitive_architectures,
     experiment_b_imagination,
     experiment_c_mortality,
     experiment_d_drives,
@@ -209,10 +211,12 @@ __all__ = [
     "definition_fingerprint",
     "distributed_reputation_scenario",
     "emergent_naming_scenario",
+    "expand_architecture",
     "experiment_a_memory",
     "experiment_a_memory_v1_arms",
     "experiment_aa_emergent_naming",
     "experiment_ab_cultural_narratives",
+    "experiment_ac_cognitive_architectures",
     "experiment_b_imagination",
     "experiment_c_mortality",
     "experiment_d_drives",
@@ -246,6 +250,7 @@ __all__ = [
     "map_snapshot_to_analysis_sources",
     "materialize_assignments",
     "persist_metric_bundle",
+    "registered_architecture_ids",
     "seasonal_scarcity_scenario",
     "unwrap_arbiter_command",
     "v1_regression_profile",
