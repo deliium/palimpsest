@@ -19,10 +19,11 @@ HTTP GET only:
 - `/v1/simulations/{run_id}/observer/events`
 - `/v1/simulations/{run_id}/observer/run`
 - `/v1/simulations/{run_id}/observer/ticks`
+- `/v1/simulations/{run_id}/observer/agents/{agent_id}/labels` (optional researcher perspective; requires `subjective_debug`)
 
 It also opens `/v1/simulations/{run_id}/observer/stream` and never sends a text or binary WebSocket payload. Protocol `observer-protocol-v1` is required. A different `protocol_version` is shown as `unsupported_observer_protocol` and is not applied.
 
-The relationship route is out of scope. The client does not request cognition traces, memories, beliefs, goals, emotions, or utterance text. Speech bubbles show the semantic type and the other agent id, not invented dialogue.
+The relationship route stays out of scope for ordinary playback. An optional perspective control can fetch layer `subjective_labels` for one agent; secondary captions are marked subjective while primary captions keep researcher identity (`ObserverIdentity` / layout `display_name`). Objective names are never silently replaced. The client does not request cognition traces, memories, beliefs, goals, emotions, or utterance text. Speech bubbles show the semantic type and the other agent id, not invented dialogue.
 
 ## Same-origin setup
 

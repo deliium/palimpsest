@@ -47,7 +47,7 @@ Visible structures use the same content visibility threshold as local resources 
 
 ## Routes
 
-All HTTP methods are GET. The capability is `objective_inspection` except the relationship route, which requires `subjective_debug`.
+All HTTP methods are GET. The capability is `objective_inspection` except the relationship and labels routes, which require `subjective_debug`.
 
 | Path | Response |
 | --- | --- |
@@ -60,6 +60,7 @@ All HTTP methods are GET. The capability is `objective_inspection` except the re
 | `GET /v1/simulations/{run_id}/observer/events/{event_id}` | One adapted event |
 | `GET /v1/simulations/{run_id}/observer/run` | Run metadata without seed or credentials |
 | `GET /v1/simulations/{run_id}/observer/agents/{agent_id}/relationships` | Researcher summaries when debug is on |
+| `GET /v1/simulations/{run_id}/observer/agents/{agent_id}/labels` | Additive subjective label overlay from the live runtime checkpoint when debug is on |
 | `WS /v1/simulations/{run_id}/observer/stream` | Live envelopes |
 
 Optional `layout_id` defaults to `reference-v1`. Event cursors are `after_tick` and `after_sequence` together, or neither. An incomplete pair returns `incomplete_event_cursor`. A cursor at or past the high water returns `cursor_ahead_of_high_water`.
@@ -86,4 +87,4 @@ A client that missed events loads `GET .../observer/events` for the exclusive ga
 
 Two catalogs can place the same location at different screen positions. Neighbor ids, life status, holders, and action outcomes stay the ones committed by the engine.
 
-Ordinary manifest, state, event, tick, run, and stream payloads have no relationship, memory, belief, goal, emotion, or utterance field. Relationship dimension scores are available only on the researcher route, and only when subjective debug is enabled. That route copies stored dimension values and drops evidence rows. When debug is off the response is `debug_disabled`.
+Ordinary manifest, state, event, tick, run, and stream payloads have no relationship, memory, belief, goal, emotion, utterance, or terminology field. Relationship dimension scores are available only on the researcher route, and only when subjective debug is enabled. That route copies stored dimension values and drops evidence rows. Subjective labels use layer `subjective_labels` from the live `owner_runtime_checkpoint` path: each row keeps objective id/display beside the agent's closed label token, `label_source="agent_perspective"`, and closed `strength_band` (`candidate` / `low` / `mid` / `high`). Objective `display_name` is never silently replaced. Optional `tick=` fails closed with `labels_unavailable_at_tick` unless it matches the live head. When debug is off the response is `debug_disabled`.
