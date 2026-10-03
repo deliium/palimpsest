@@ -13,13 +13,17 @@ from sqlalchemy import text
 from infrastructure.database import DatabaseResources, session_scope
 from infrastructure.settings import Settings
 from persistence.memory_orm import SUBJECTIVE_MEMORY_TABLES
-from persistence.orm import AUTHORITATIVE_TABLES, SCIENTIFIC_EVIDENCE_TABLES
+from persistence.orm import (
+    AUTHORITATIVE_TABLES,
+    BRANCH_LINEAGE_TABLES,
+    SCIENTIFIC_EVIDENCE_TABLES,
+)
 from persistence.subjective_orm import SUBJECTIVE_AGENT_TABLES
 
 pytestmark = pytest.mark.integration
 
 ROOT = Path(__file__).resolve().parents[2]
-_EXPECTED_HEAD = "0014"
+_EXPECTED_HEAD = "0015"
 
 # Mutable lifecycle tables keep access/forgetting updates; reconstruction and
 # fragment tables are append-only. Trace content uses a selective trigger.
@@ -73,6 +77,7 @@ async def test_vector_extension_and_event_store_tables_exist(
         found = set(tables.scalars().all())
         assert set(AUTHORITATIVE_TABLES).issubset(found)
         assert set(SCIENTIFIC_EVIDENCE_TABLES).issubset(found)
+        assert set(BRANCH_LINEAGE_TABLES).issubset(found)
         assert set(SUBJECTIVE_MEMORY_TABLES).issubset(found)
         assert set(SUBJECTIVE_AGENT_TABLES).issubset(found)
 
@@ -88,6 +93,7 @@ async def test_orm_metadata_matches_migrated_tables(
     expected = (
         set(AUTHORITATIVE_TABLES)
         | set(SCIENTIFIC_EVIDENCE_TABLES)
+        | set(BRANCH_LINEAGE_TABLES)
         | set(SUBJECTIVE_MEMORY_TABLES)
         | set(SUBJECTIVE_AGENT_TABLES)
     )

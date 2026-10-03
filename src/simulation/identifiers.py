@@ -178,6 +178,102 @@ def derive_system_cause_id(
     )
 
 
+def _branch_digest(*parts: bytes) -> bytes:
+    """SHA-256 over length-prefixed parts under the research-branch namespace."""
+    hasher = hashlib.sha256()
+    hasher.update(b"research-branch-v1")
+    for part in parts:
+        hasher.update(_length_prefixed(part))
+    return hasher.digest()
+
+
+def derive_branch_run_id(
+    parent_run_id: RunId | str,
+    fork_tick: int,
+    intervention_fingerprint: str,
+    seed_stream_token: str,
+) -> RunId:
+    """Derive a reproducible child ``run_id`` for a research fork.
+
+    Distinct from seed-only ``derive_run_id``. Alternate seed streams participate
+    in the digest only when ``seed_stream_token`` encodes that choice; the
+    inherit path must pass the stable inherit token (not a new random stream).
+    """
+    if type(parent_run_id) is RunId:
+        parent_value = parent_run_id.value
+    elif isinstance(parent_run_id, str):
+        parent_value = parent_run_id
+    else:
+        raise TypeError("derive_branch_run_id requires RunId or str parent_run_id")
+    if isinstance(fork_tick, bool) or type(fork_tick) is not int or fork_tick < 0:
+        raise ValueError("fork_tick must be a non-negative int")
+    if (
+        not isinstance(intervention_fingerprint, str)
+        or len(intervention_fingerprint) != 64
+    ):
+        raise ValueError("intervention_fingerprint must be sha256 hex")
+    if not isinstance(seed_stream_token, str) or not seed_stream_token:
+        raise ValueError("seed_stream_token must be a non-empty str")
+    digest = _branch_digest(
+        b"branch-run",
+        parent_value.encode("utf-8"),
+        str(fork_tick).encode("utf-8"),
+        intervention_fingerprint.encode("ascii"),
+        seed_stream_token.encode("utf-8"),
+    )
+    child = RunId(digest.hex())
+    _LOGGER.debug(
+        "branch_run_id_derived parent_run_id=%s fork_tick=%s child_run_id=%s",
+        parent_value,
+        fork_tick,
+        child.value,
+    )
+    return child
+
+
+def derive_branch_id(
+    parent_run_id: RunId | str,
+    fork_tick: int,
+    intervention_fingerprint: str,
+    seed_stream_token: str,
+) -> str:
+    """Derive a stable genealogy ``branch_id`` for a research fork.
+
+    Shares inputs with ``derive_branch_run_id`` but uses a distinct purpose so
+    branch ids never collide with child run ids.
+    """
+    if type(parent_run_id) is RunId:
+        parent_value = parent_run_id.value
+    elif isinstance(parent_run_id, str):
+        parent_value = parent_run_id
+    else:
+        raise TypeError("derive_branch_id requires RunId or str parent_run_id")
+    if isinstance(fork_tick, bool) or type(fork_tick) is not int or fork_tick < 0:
+        raise ValueError("fork_tick must be a non-negative int")
+    if (
+        not isinstance(intervention_fingerprint, str)
+        or len(intervention_fingerprint) != 64
+    ):
+        raise ValueError("intervention_fingerprint must be sha256 hex")
+    if not isinstance(seed_stream_token, str) or not seed_stream_token:
+        raise ValueError("seed_stream_token must be a non-empty str")
+    digest = _branch_digest(
+        b"branch-id",
+        parent_value.encode("utf-8"),
+        str(fork_tick).encode("utf-8"),
+        intervention_fingerprint.encode("ascii"),
+        seed_stream_token.encode("utf-8"),
+    )
+    branch_id = digest.hex()
+    _LOGGER.debug(
+        "branch_id_derived parent_run_id=%s fork_tick=%s branch_id=%s",
+        parent_value,
+        fork_tick,
+        branch_id,
+    )
+    return branch_id
+
+
 def reject_operational_identifier(source: str, value: str) -> None:
     """Refuse HTTP/log correlation values as simulation identifiers."""
     raise TypeError(

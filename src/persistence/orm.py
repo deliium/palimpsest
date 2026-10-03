@@ -39,6 +39,7 @@ _STABLE_ID_LEN: Final[int] = 128
 
 __all__ = [
     "AUTHORITATIVE_TABLES",
+    "BRANCH_LINEAGE_TABLES",
     "COGNITION_TRACE_APPEND_ONLY_TABLES",
     "COGNITION_TRACE_TABLES",
     "SCIENTIFIC_EVIDENCE_APPEND_ONLY_TABLES",
@@ -62,6 +63,7 @@ __all__ = [
     "RunStreamRecordOrm",
     "RunnerAttemptStateOrm",
     "RunnerPendingFinalizationOrm",
+    "SimulationBranchOrm",
     "SimulationRunOrm",
     "SnapshotBodyOrm",
     "SnapshotInventoryOrm",
@@ -116,6 +118,8 @@ COGNITION_TRACE_TABLES: Final[tuple[str, ...]] = ("cognition_trace_invocations",
 COGNITION_TRACE_APPEND_ONLY_TABLES: Final[tuple[str, ...]] = (
     "cognition_trace_invocations",
 )
+
+BRANCH_LINEAGE_TABLES: Final[tuple[str, ...]] = ("simulation_branches",)
 
 
 class ExperimentOrm(Base):
@@ -1218,3 +1222,56 @@ class CognitionTraceInvocationOrm(Base):
     created_ordinal: Mapped[int] = mapped_column(
         BigInteger, Identity(always=False), nullable=False
     )
+
+
+class SimulationBranchOrm(Base):
+    """Control-plane research branch genealogy (non-authoritative).
+
+    Outside ``AUTHORITATIVE_TABLES`` and the objective event fold.
+    """
+
+    __tablename__ = "simulation_branches"
+    __table_args__ = (
+        PrimaryKeyConstraint("child_run_id"),
+        ForeignKeyConstraint(
+            ["child_run_id"],
+            ["simulation_runs.run_id"],
+            name="fk_simulation_branches_child",
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["parent_run_id"],
+            ["simulation_runs.run_id"],
+            name="fk_simulation_branches_parent",
+            ondelete="RESTRICT",
+        ),
+        CheckConstraint("fork_tick >= 0", name="ck_simulation_branches_fork_tick"),
+        CheckConstraint(
+            "created_as_of_parent_head >= 0",
+            name="ck_simulation_branches_parent_head",
+        ),
+        CheckConstraint(
+            f"char_length(intervention_fingerprint) = {SHA256_HEX_LEN}",
+            name="ck_simulation_branches_fingerprint",
+        ),
+        UniqueConstraint("branch_id", name="uq_simulation_branches_branch_id"),
+        Index("ix_simulation_branches_parent_run_id", "parent_run_id"),
+        Index(
+            "ix_simulation_branches_parent_fork",
+            "parent_run_id",
+            "fork_tick",
+        ),
+    )
+
+    child_run_id: Mapped[str] = mapped_column(String(_STABLE_ID_LEN), nullable=False)
+    parent_run_id: Mapped[str] = mapped_column(String(_STABLE_ID_LEN), nullable=False)
+    fork_tick: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    intervention_kind: Mapped[str] = mapped_column(Text, nullable=False)
+    intervention_fingerprint: Mapped[str] = mapped_column(
+        String(SHA256_HEX_LEN), nullable=False
+    )
+    intervention_canonical: Mapped[dict[str, object]] = mapped_column(
+        JSONB, nullable=False
+    )
+    branch_id: Mapped[str] = mapped_column(String(_STABLE_ID_LEN), nullable=False)
+    created_as_of_parent_head: Mapped[int] = mapped_column(BigInteger, nullable=False)

@@ -41,6 +41,7 @@ __all__ = [
     "PersistenceCorruptionError",
     "PersistenceNotFoundError",
     "create_analysis_evidence_loader",
+    "create_branch_lineage_repository",
     "create_cognition_trace_repository",
     "create_debugger_event_lookup",
     "create_debugger_lineage_ports",
@@ -208,6 +209,22 @@ def create_stream_repository(
         )
     from persistence.scientific_evidence_sqlalchemy import (
         create_stream_repository as impl,
+    )
+
+    return impl(session_factory)
+
+
+def create_branch_lineage_repository(
+    session_factory: async_sessionmaker[AsyncSession] | None = None,
+):
+    """Build the control-plane research branch lineage repository."""
+    if session_factory is None:
+        raise PersistenceAdapterError(
+            "missing_session_factory",
+            operation="create_branch_lineage_repository",
+        )
+    from persistence.branch_lineage_sqlalchemy import (
+        create_branch_lineage_repository as impl,
     )
 
     return impl(session_factory)

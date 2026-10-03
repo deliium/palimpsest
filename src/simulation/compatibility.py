@@ -83,7 +83,7 @@ from world.events import (
 _LOG: Final[logging.Logger] = logging.getLogger("simulation.compatibility")
 
 # Mirrored literals — owning packages must keep these equal (tested).
-ALEMBIC_HEAD_REVISION: Final[str] = "0014"
+ALEMBIC_HEAD_REVISION: Final[str] = "0015"
 EXPERIMENT_DEFINITION_SCHEMA_VERSION: Final[str] = "experiment-definition-v1"
 METRIC_DOCUMENT_SCHEMA_VERSION: Final[str] = "1"
 METRIC_CATALOG_VERSION: Final[str] = "metric-catalog-v1"
@@ -448,12 +448,12 @@ _MATRIX: dict[str, CompatibilityEntry] = {
         accepted_restore=_versions(ALEMBIC_HEAD_REVISION),
         bump_trigger=(
             "New indexed SQL columns required for inspection; "
-            "0014 stores stochastic_identity on simulation_runs"
+            "0015 adds simulation_branches genealogy (control plane)"
         ),
         owner_package="alembic/versions",
         v1_fixture_impact=(
-            "Head pin 0014; derivation-v3 replay reads stochastic_identity "
-            "from simulation_runs"
+            "Head pin 0015; research forks store lineage outside "
+            "AUTHORITATIVE_TABLES"
         ),
     ),
     "communication": CompatibilityEntry(

@@ -95,6 +95,7 @@ __all__ = [
     "PENDING_FINALIZATION_CODEC_VERSION",
     "PERSISTENCE_CODEC_VERSION",
     "PROJECTOR_VERSION",
+    "BranchLineageRepository",
     "CommitHash",
     "ExperimentId",
     "ExperimentMetadata",
@@ -1337,6 +1338,25 @@ class StreamRepository(Protocol):
     ) -> tuple[StreamRecord, ...]: ...
 
     async def high_water(self, *, run_id: RunId) -> int: ...
+
+
+class BranchLineageRepository(Protocol):
+    """Control-plane genealogy for research forks (not objective fold).
+
+    Concrete adapters accept/return ``simulation.branching.BranchLineage``.
+    """
+
+    async def put_lineage(self, lineage: object) -> object: ...
+
+    async def get_lineage(self, *, child_run_id: RunId) -> object | None: ...
+
+    async def list_children(
+        self,
+        *,
+        parent_run_id: RunId,
+        after_child_run_id: str | None = None,
+        limit: int = 100,
+    ) -> tuple[object, ...]: ...
 
 
 def persistence_diagnostic_fields(
