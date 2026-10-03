@@ -665,7 +665,11 @@ def _cognition_config_for(
         naming_mode.value,
         None if naming_policy is None else naming_policy.version,
     )
-    from agents.cognition.configuration import CognitionCulturalNarrativeMode
+    from agents.cognition.budget import policy_from_limits
+    from agents.cognition.configuration import (
+        CognitionBudgetMode,
+        CognitionCulturalNarrativeMode,
+    )
     from agents.cognition.cultural_narratives import default_cultural_narrative_policy
 
     narrative_mode = CognitionCulturalNarrativeMode(
@@ -678,6 +682,31 @@ def _cognition_config_for(
         "cognition_config_cultural_narrative_mode mode=%s policy_version=%s",
         narrative_mode.value,
         None if narrative_policy is None else narrative_policy.version,
+    )
+    budget_mode = CognitionBudgetMode(spec.cognitive_budget_mode.value)
+    budget_policy = None
+    if budget_mode is CognitionBudgetMode.ENFORCED:
+        limits = spec.cognitive_budget_limits
+        if limits is None:
+            raise ValueError(
+                "cognitive_budget_limits required when mode is ENFORCED "
+                "(code=limits_required)"
+            )
+        budget_policy = policy_from_limits(
+            max_llm_calls_per_tick=limits.max_llm_calls_per_tick,
+            max_tokens_per_tick=limits.max_tokens_per_tick,
+            max_imagination_branches=limits.max_imagination_branches,
+            max_planning_depth=limits.max_planning_depth,
+            max_recalled_memories=limits.max_recalled_memories,
+            max_tom_targets=limits.max_tom_targets,
+            reflection_interval_ticks=limits.reflection_interval_ticks,
+            timeout_seconds=limits.timeout_seconds,
+            clock=None,
+        )
+    _LOG.debug(
+        "cognition_config_cognitive_budget_mode mode=%s policy_version=%s",
+        budget_mode.value,
+        None if budget_policy is None else budget_policy.version,
     )
     return CognitionLoopConfig(
         memory_mode=CognitionMemoryMode(spec.memory_mode.value),
@@ -721,6 +750,8 @@ def _cognition_config_for(
         semantic_naming_policy=naming_policy,
         cultural_narrative_mode=narrative_mode,
         cultural_narrative_policy=narrative_policy,
+        cognitive_budget_mode=budget_mode,
+        cognitive_budget_policy=budget_policy,
         production_knowledge_mode=CognitionProductionKnowledgeMode(
             spec.production_knowledge_mode.value
         ),

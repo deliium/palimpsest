@@ -38,6 +38,7 @@ from simulation.runner_models import (
     RUNNER_SCHEMA_VERSION_V19,
     RUNNER_SCHEMA_VERSION_V20,
     RUNNER_SCHEMA_VERSION_V21,
+    RUNNER_SCHEMA_VERSION_V22,
     SUPPORTED_RUNNER_SCHEMA_VERSIONS,
 )
 
@@ -117,20 +118,25 @@ def test_runner_config_write_is_v4_with_legacy_accepted() -> None:
     assert RUNNER_SCHEMA_VERSION_V19 == "runner-config-v19"
     assert RUNNER_SCHEMA_VERSION_V20 == "runner-config-v20"
     assert RUNNER_SCHEMA_VERSION_V21 == "runner-config-v21"
+    assert RUNNER_SCHEMA_VERSION_V22 == "runner-config-v22"
     assert RUNNER_SCHEMA_VERSION_V18 in SUPPORTED_RUNNER_SCHEMA_VERSIONS
     assert RUNNER_SCHEMA_VERSION_V19 in SUPPORTED_RUNNER_SCHEMA_VERSIONS
     assert RUNNER_SCHEMA_VERSION_V20 in SUPPORTED_RUNNER_SCHEMA_VERSIONS
     assert RUNNER_SCHEMA_VERSION_V21 in SUPPORTED_RUNNER_SCHEMA_VERSIONS
+    assert RUNNER_SCHEMA_VERSION_V22 in SUPPORTED_RUNNER_SCHEMA_VERSIONS
     assert "runner-config-v18" in entry.accepted_restore
     assert "runner-config-v19" in entry.accepted_restore
     assert "runner-config-v20" in entry.accepted_restore
     assert "runner-config-v21" in entry.accepted_restore
+    assert "runner-config-v22" in entry.accepted_restore
     assert "artifact interpretation mode is deterministic" in entry.bump_trigger
     assert "semantic naming mode is deterministic" in entry.bump_trigger
     assert "cultural narrative mode is deterministic" in entry.bump_trigger
+    assert "cognitive budget mode is enforced" in entry.bump_trigger
     assert "artifacts-only" in entry.bump_trigger
     assert "conventions-only" in entry.bump_trigger
     assert "naming-only" in entry.bump_trigger
+    assert "narratives-only" in entry.bump_trigger
     assert "A-E" in entry.v1_fixture_impact
     assert "extended_self_model" in entry.v1_fixture_impact
     assert "V1 gate" in entry.v1_fixture_impact

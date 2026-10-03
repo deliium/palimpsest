@@ -14,6 +14,10 @@ from enum import StrEnum
 from typing import Final
 
 from agents.cognition.artifacts import ArtifactInterpretationMode
+from agents.cognition.budget import (
+    CognitiveBudgetPolicy,
+    default_cognitive_budget_policy,
+)
 from agents.cognition.communication_strategy import (
     CommunicationStrategyPolicy,
     default_communication_strategy_policy,
@@ -305,6 +309,17 @@ class CognitionCulturalNarrativeMode(StrEnum):
     DETERMINISTIC = "deterministic"
 
 
+class CognitionBudgetMode(StrEnum):
+    """Per-tick computational budget. Disabled leaves stage-local caps alone.
+
+    Lockstep with ``simulation.CognitiveBudgetMode``. This is not a
+    ``V2CapabilityFlags`` slot. ``DISABLED`` does not construct a ledger.
+    """
+
+    DISABLED = "disabled"
+    ENFORCED = "enforced"
+
+
 def _unit_interval(name: str, value: object) -> float:
     if isinstance(value, bool) or not isinstance(value, (int, float)):
         raise ValueError(f"{name}: not_unit_interval")
@@ -410,6 +425,8 @@ class CognitionLoopConfig:
         CognitionCulturalNarrativeMode.DISABLED
     )
     cultural_narrative_policy: CulturalNarrativePolicy | None = None
+    cognitive_budget_mode: CognitionBudgetMode = CognitionBudgetMode.DISABLED
+    cognitive_budget_policy: CognitiveBudgetPolicy | None = None
     production_knowledge_mode: ProductionKnowledgeMode = (
         ProductionKnowledgeMode.DISABLED
     )
@@ -728,6 +745,26 @@ class CognitionLoopConfig:
             raise TypeError(
                 "cultural_narrative_policy must be CulturalNarrativePolicy or None"
             )
+        if type(self.cognitive_budget_mode) is not CognitionBudgetMode:
+            _LOG.error(
+                "invalid_enum path=cognitive_budget_mode reason_code=invalid_mode"
+            )
+            raise TypeError("cognitive_budget_mode must be CognitionBudgetMode")
+        if self.cognitive_budget_mode is CognitionBudgetMode.DISABLED:
+            object.__setattr__(self, "cognitive_budget_policy", None)
+        elif self.cognitive_budget_policy is None:
+            object.__setattr__(
+                self,
+                "cognitive_budget_policy",
+                default_cognitive_budget_policy(),
+            )
+        elif type(self.cognitive_budget_policy) is not CognitiveBudgetPolicy:
+            _LOG.error(
+                "invalid_enum path=cognitive_budget_policy reason_code=invalid_type"
+            )
+            raise TypeError(
+                "cognitive_budget_policy must be CognitiveBudgetPolicy or None"
+            )
         if type(self.production_knowledge_mode) is not ProductionKnowledgeMode:
             _LOG.error(
                 "invalid_enum path=production_knowledge_mode reason_code=invalid_mode"
@@ -897,6 +934,12 @@ class CognitionLoopConfig:
                 None
                 if self.cultural_narrative_policy is None
                 else self.cultural_narrative_policy.version
+            ),
+            "cognitive_budget_mode": self.cognitive_budget_mode.value,
+            "cognitive_budget_policy_version": (
+                None
+                if self.cognitive_budget_policy is None
+                else self.cognitive_budget_policy.version
             ),
             "territorial_claim_policy_version": (
                 None

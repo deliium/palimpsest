@@ -43,6 +43,7 @@ from simulation.runner_models import (
     RUNNER_SCHEMA_VERSION_V19,
     RUNNER_SCHEMA_VERSION_V20,
     RUNNER_SCHEMA_VERSION_V21,
+    RUNNER_SCHEMA_VERSION_V22,
     SUPPORTED_RUNNER_SCHEMA_VERSIONS,
     AgentCognitionSpec,
     AgentRunnerSpec,
@@ -51,6 +52,8 @@ from simulation.runner_models import (
     CognitionFailurePolicy,
     CognitionTraceDetail,
     CognitionTraceSpec,
+    CognitiveBudgetLimits,
+    CognitiveBudgetMode,
     CommunicationStrategyMode,
     ConsolidationMode,
     CounterfactualMode,
@@ -360,6 +363,21 @@ _COGNITION_KEYS_V21: Final[set[str]] = {
     *_COGNITION_KEYS_V20,
     "cultural_narrative_mode",
 }
+_BUDGET_LIMIT_KEYS: Final[tuple[str, ...]] = (
+    "max_llm_calls_per_tick",
+    "max_tokens_per_tick",
+    "max_imagination_branches",
+    "max_planning_depth",
+    "max_recalled_memories",
+    "max_tom_targets",
+    "reflection_interval_ticks",
+    "timeout_seconds",
+)
+_COGNITION_KEYS_V22: Final[set[str]] = {
+    *_COGNITION_KEYS_V21,
+    "cognitive_budget_mode",
+    *_BUDGET_LIMIT_KEYS,
+}
 _SKILL_SCHEMA_VERSIONS: Final[frozenset[str]] = frozenset(
     {
         RUNNER_SCHEMA_VERSION_V11,
@@ -373,6 +391,7 @@ _SKILL_SCHEMA_VERSIONS: Final[frozenset[str]] = frozenset(
         RUNNER_SCHEMA_VERSION_V19,
         RUNNER_SCHEMA_VERSION_V20,
         RUNNER_SCHEMA_VERSION_V21,
+        RUNNER_SCHEMA_VERSION_V22,
     }
 )
 _COGNITION_SCHEMA_CONSOLIDATION: Final[frozenset[str]] = frozenset(
@@ -394,6 +413,7 @@ _COGNITION_SCHEMA_CONSOLIDATION: Final[frozenset[str]] = frozenset(
         RUNNER_SCHEMA_VERSION_V19,
         RUNNER_SCHEMA_VERSION_V20,
         RUNNER_SCHEMA_VERSION_V21,
+        RUNNER_SCHEMA_VERSION_V22,
     }
 )
 _COGNITION_SCHEMA_REFLECTION: Final[frozenset[str]] = frozenset(
@@ -414,6 +434,7 @@ _COGNITION_SCHEMA_REFLECTION: Final[frozenset[str]] = frozenset(
         RUNNER_SCHEMA_VERSION_V19,
         RUNNER_SCHEMA_VERSION_V20,
         RUNNER_SCHEMA_VERSION_V21,
+        RUNNER_SCHEMA_VERSION_V22,
     }
 )
 _COGNITION_SCHEMA_PROSPECTIVE: Final[frozenset[str]] = frozenset(
@@ -433,6 +454,7 @@ _COGNITION_SCHEMA_PROSPECTIVE: Final[frozenset[str]] = frozenset(
         RUNNER_SCHEMA_VERSION_V19,
         RUNNER_SCHEMA_VERSION_V20,
         RUNNER_SCHEMA_VERSION_V21,
+        RUNNER_SCHEMA_VERSION_V22,
     }
 )
 _COGNITION_SCHEMA_COUNTERFACTUAL: Final[frozenset[str]] = frozenset(
@@ -451,6 +473,7 @@ _COGNITION_SCHEMA_COUNTERFACTUAL: Final[frozenset[str]] = frozenset(
         RUNNER_SCHEMA_VERSION_V19,
         RUNNER_SCHEMA_VERSION_V20,
         RUNNER_SCHEMA_VERSION_V21,
+        RUNNER_SCHEMA_VERSION_V22,
     }
 )
 _COGNITION_SCHEMA_STRATEGY: Final[frozenset[str]] = frozenset(
@@ -468,6 +491,7 @@ _COGNITION_SCHEMA_STRATEGY: Final[frozenset[str]] = frozenset(
         RUNNER_SCHEMA_VERSION_V19,
         RUNNER_SCHEMA_VERSION_V20,
         RUNNER_SCHEMA_VERSION_V21,
+        RUNNER_SCHEMA_VERSION_V22,
     }
 )
 _COGNITION_SCHEMA_REPUTATION: Final[frozenset[str]] = frozenset(
@@ -484,6 +508,7 @@ _COGNITION_SCHEMA_REPUTATION: Final[frozenset[str]] = frozenset(
         RUNNER_SCHEMA_VERSION_V19,
         RUNNER_SCHEMA_VERSION_V20,
         RUNNER_SCHEMA_VERSION_V21,
+        RUNNER_SCHEMA_VERSION_V22,
     }
 )
 
@@ -765,6 +790,7 @@ def _encode_cognition(
         RUNNER_SCHEMA_VERSION_V19,
         RUNNER_SCHEMA_VERSION_V20,
         RUNNER_SCHEMA_VERSION_V21,
+        RUNNER_SCHEMA_VERSION_V22,
     }:
         payload["teaching_interaction_mode"] = value.teaching_interaction_mode.value
         for name in _TEACHING_WEIGHT_KEYS:
@@ -779,6 +805,7 @@ def _encode_cognition(
         RUNNER_SCHEMA_VERSION_V19,
         RUNNER_SCHEMA_VERSION_V20,
         RUNNER_SCHEMA_VERSION_V21,
+        RUNNER_SCHEMA_VERSION_V22,
     }:
         payload["production_knowledge_mode"] = value.production_knowledge_mode.value
         payload["production_catalog"] = _encode_production_catalog(
@@ -792,6 +819,7 @@ def _encode_cognition(
         RUNNER_SCHEMA_VERSION_V19,
         RUNNER_SCHEMA_VERSION_V20,
         RUNNER_SCHEMA_VERSION_V21,
+        RUNNER_SCHEMA_VERSION_V22,
     }:
         payload["territorial_claim_mode"] = value.territorial_claim_mode.value
     if schema_version in {
@@ -801,6 +829,7 @@ def _encode_cognition(
         RUNNER_SCHEMA_VERSION_V19,
         RUNNER_SCHEMA_VERSION_V20,
         RUNNER_SCHEMA_VERSION_V21,
+        RUNNER_SCHEMA_VERSION_V22,
     }:
         payload["group_formation_mode"] = value.group_formation_mode.value
     if schema_version in {
@@ -809,6 +838,7 @@ def _encode_cognition(
         RUNNER_SCHEMA_VERSION_V19,
         RUNNER_SCHEMA_VERSION_V20,
         RUNNER_SCHEMA_VERSION_V21,
+        RUNNER_SCHEMA_VERSION_V22,
     }:
         payload["social_norm_mode"] = value.social_norm_mode.value
     if schema_version in {
@@ -816,12 +846,14 @@ def _encode_cognition(
         RUNNER_SCHEMA_VERSION_V19,
         RUNNER_SCHEMA_VERSION_V20,
         RUNNER_SCHEMA_VERSION_V21,
+        RUNNER_SCHEMA_VERSION_V22,
     }:
         payload["social_convention_mode"] = value.social_convention_mode.value
     if schema_version in {
         RUNNER_SCHEMA_VERSION_V19,
         RUNNER_SCHEMA_VERSION_V20,
         RUNNER_SCHEMA_VERSION_V21,
+        RUNNER_SCHEMA_VERSION_V22,
     }:
         payload["artifact_interpretation_mode"] = (
             value.artifact_interpretation_mode.value
@@ -829,17 +861,36 @@ def _encode_cognition(
     if schema_version in {
         RUNNER_SCHEMA_VERSION_V20,
         RUNNER_SCHEMA_VERSION_V21,
+        RUNNER_SCHEMA_VERSION_V22,
     }:
         payload["semantic_naming_mode"] = value.semantic_naming_mode.value
-    if schema_version == RUNNER_SCHEMA_VERSION_V21:
+    if schema_version in {
+        RUNNER_SCHEMA_VERSION_V21,
+        RUNNER_SCHEMA_VERSION_V22,
+    }:
         payload["cultural_narrative_mode"] = value.cultural_narrative_mode.value
+    if schema_version == RUNNER_SCHEMA_VERSION_V22:
+        payload["cognitive_budget_mode"] = value.cognitive_budget_mode.value
+        limits = value.cognitive_budget_limits
+        if limits is None:
+            raise RunnerSerializationError("invalid_model", "$.cognitive_budget_limits")
+        payload["max_llm_calls_per_tick"] = limits.max_llm_calls_per_tick
+        payload["max_tokens_per_tick"] = limits.max_tokens_per_tick
+        payload["max_imagination_branches"] = limits.max_imagination_branches
+        payload["max_planning_depth"] = limits.max_planning_depth
+        payload["max_recalled_memories"] = limits.max_recalled_memories
+        payload["max_tom_targets"] = limits.max_tom_targets
+        payload["reflection_interval_ticks"] = limits.reflection_interval_ticks
+        payload["timeout_seconds"] = limits.timeout_seconds
     return payload
 
 
 def _decode_cognition(
     data: dict[str, Any], *, path: str, schema_version: str
 ) -> AgentCognitionSpec:
-    if schema_version == RUNNER_SCHEMA_VERSION_V21:
+    if schema_version == RUNNER_SCHEMA_VERSION_V22:
+        _require_keys(data, _COGNITION_KEYS_V22, path=path)
+    elif schema_version == RUNNER_SCHEMA_VERSION_V21:
         _require_keys(data, _COGNITION_KEYS_V21, path=path)
     elif schema_version == RUNNER_SCHEMA_VERSION_V20:
         _require_keys(data, _COGNITION_KEYS_V20, path=path)
@@ -981,6 +1032,7 @@ def _decode_cognition(
         RUNNER_SCHEMA_VERSION_V19,
         RUNNER_SCHEMA_VERSION_V20,
         RUNNER_SCHEMA_VERSION_V21,
+        RUNNER_SCHEMA_VERSION_V22,
     }:
         try:
             teaching_interaction_mode = TeachingInteractionMode(
@@ -1007,6 +1059,7 @@ def _decode_cognition(
         RUNNER_SCHEMA_VERSION_V19,
         RUNNER_SCHEMA_VERSION_V20,
         RUNNER_SCHEMA_VERSION_V21,
+        RUNNER_SCHEMA_VERSION_V22,
     }:
         try:
             production_knowledge_mode = ProductionKnowledgeMode(
@@ -1034,6 +1087,7 @@ def _decode_cognition(
         RUNNER_SCHEMA_VERSION_V19,
         RUNNER_SCHEMA_VERSION_V20,
         RUNNER_SCHEMA_VERSION_V21,
+        RUNNER_SCHEMA_VERSION_V22,
     }:
         try:
             territorial_claim_mode = TerritorialClaimMode(
@@ -1052,6 +1106,7 @@ def _decode_cognition(
         RUNNER_SCHEMA_VERSION_V19,
         RUNNER_SCHEMA_VERSION_V20,
         RUNNER_SCHEMA_VERSION_V21,
+        RUNNER_SCHEMA_VERSION_V22,
     }:
         try:
             group_formation_mode = GroupFormationMode(
@@ -1069,6 +1124,7 @@ def _decode_cognition(
         RUNNER_SCHEMA_VERSION_V19,
         RUNNER_SCHEMA_VERSION_V20,
         RUNNER_SCHEMA_VERSION_V21,
+        RUNNER_SCHEMA_VERSION_V22,
     }:
         try:
             social_norm_mode = SocialNormMode(
@@ -1085,6 +1141,7 @@ def _decode_cognition(
         RUNNER_SCHEMA_VERSION_V19,
         RUNNER_SCHEMA_VERSION_V20,
         RUNNER_SCHEMA_VERSION_V21,
+        RUNNER_SCHEMA_VERSION_V22,
     }:
         try:
             social_convention_mode = SocialConventionMode(
@@ -1100,6 +1157,7 @@ def _decode_cognition(
         RUNNER_SCHEMA_VERSION_V19,
         RUNNER_SCHEMA_VERSION_V20,
         RUNNER_SCHEMA_VERSION_V21,
+        RUNNER_SCHEMA_VERSION_V22,
     }:
         try:
             artifact_interpretation_mode = ArtifactInterpretationMode(
@@ -1115,6 +1173,7 @@ def _decode_cognition(
     if schema_version in {
         RUNNER_SCHEMA_VERSION_V20,
         RUNNER_SCHEMA_VERSION_V21,
+        RUNNER_SCHEMA_VERSION_V22,
     }:
         try:
             semantic_naming_mode = SemanticNamingMode(
@@ -1126,7 +1185,10 @@ def _decode_cognition(
             raise RunnerSerializationError(
                 "invalid_enum", f"{path}.semantic_naming_mode"
             ) from exc
-    if schema_version == RUNNER_SCHEMA_VERSION_V21:
+    if schema_version in {
+        RUNNER_SCHEMA_VERSION_V21,
+        RUNNER_SCHEMA_VERSION_V22,
+    }:
         try:
             cultural_narrative_mode = CulturalNarrativeMode(
                 _str_field(data, "cultural_narrative_mode", path=path)
@@ -1136,6 +1198,48 @@ def _decode_cognition(
         except ValueError as exc:
             raise RunnerSerializationError(
                 "invalid_enum", f"{path}.cultural_narrative_mode"
+            ) from exc
+    cognitive_budget_mode = CognitiveBudgetMode.DISABLED
+    cognitive_budget_limits: CognitiveBudgetLimits | None = None
+    if schema_version == RUNNER_SCHEMA_VERSION_V22:
+        try:
+            cognitive_budget_mode = CognitiveBudgetMode(
+                _str_field(data, "cognitive_budget_mode", path=path)
+            )
+        except RunnerSerializationError:
+            raise
+        except ValueError as exc:
+            raise RunnerSerializationError(
+                "invalid_enum", f"{path}.cognitive_budget_mode"
+            ) from exc
+        try:
+            cognitive_budget_limits = CognitiveBudgetLimits(
+                max_llm_calls_per_tick=_nonneg_int_field(
+                    data, "max_llm_calls_per_tick", path=path
+                ),
+                max_tokens_per_tick=_nonneg_int_field(
+                    data, "max_tokens_per_tick", path=path
+                ),
+                max_imagination_branches=_nonneg_int_field(
+                    data, "max_imagination_branches", path=path
+                ),
+                max_planning_depth=_nonneg_int_field(
+                    data, "max_planning_depth", path=path
+                ),
+                max_recalled_memories=_nonneg_int_field(
+                    data, "max_recalled_memories", path=path
+                ),
+                max_tom_targets=_nonneg_int_field(data, "max_tom_targets", path=path),
+                reflection_interval_ticks=_nonneg_int_field(
+                    data, "reflection_interval_ticks", path=path
+                ),
+                timeout_seconds=_required_float(data, "timeout_seconds", path=path),
+            )
+        except RunnerSerializationError:
+            raise
+        except (TypeError, ValueError) as exc:
+            raise RunnerSerializationError(
+                "invalid_model", f"{path}.cognitive_budget_limits"
             ) from exc
     overrides_raw = data["drive_overrides"]
     if not isinstance(overrides_raw, list):
@@ -1201,6 +1305,8 @@ def _decode_cognition(
             artifact_interpretation_mode=artifact_interpretation_mode,
             semantic_naming_mode=semantic_naming_mode,
             cultural_narrative_mode=cultural_narrative_mode,
+            cognitive_budget_mode=cognitive_budget_mode,
+            cognitive_budget_limits=cognitive_budget_limits,
             **(
                 {}
                 if production_catalog is None
@@ -1240,6 +1346,7 @@ def _encode_agent(value: AgentRunnerSpec, *, schema_version: str) -> dict[str, A
         RUNNER_SCHEMA_VERSION_V19,
         RUNNER_SCHEMA_VERSION_V20,
         RUNNER_SCHEMA_VERSION_V21,
+        RUNNER_SCHEMA_VERSION_V22,
     }:
         assert value.name is not None
         payload["name"] = value.name
@@ -1689,6 +1796,7 @@ def _encode_runner_document(config: SimulationRunnerConfig) -> dict[str, Any]:
         RUNNER_SCHEMA_VERSION_V19,
         RUNNER_SCHEMA_VERSION_V20,
         RUNNER_SCHEMA_VERSION_V21,
+        RUNNER_SCHEMA_VERSION_V22,
     }:
         document["capability_flags"] = _encode_capability_flags(config.capability_flags)
     if config.schema_version in {
@@ -1710,6 +1818,7 @@ def _encode_runner_document(config: SimulationRunnerConfig) -> dict[str, Any]:
         RUNNER_SCHEMA_VERSION_V19,
         RUNNER_SCHEMA_VERSION_V20,
         RUNNER_SCHEMA_VERSION_V21,
+        RUNNER_SCHEMA_VERSION_V22,
     }:
         document["cognition_trace"] = _encode_cognition_trace(config.cognition_trace)
     if config.schema_version == RUNNER_SCHEMA_VERSION_V14 or (
@@ -1722,6 +1831,7 @@ def _encode_runner_document(config: SimulationRunnerConfig) -> dict[str, Any]:
             RUNNER_SCHEMA_VERSION_V19,
             RUNNER_SCHEMA_VERSION_V20,
             RUNNER_SCHEMA_VERSION_V21,
+            RUNNER_SCHEMA_VERSION_V22,
         }
         and config.environmental_dynamics is not None
     ):
@@ -1849,6 +1959,7 @@ def decode_runner_config(payload: bytes) -> SimulationRunnerConfig:
         RUNNER_SCHEMA_VERSION_V19,
         RUNNER_SCHEMA_VERSION_V20,
         RUNNER_SCHEMA_VERSION_V21,
+        RUNNER_SCHEMA_VERSION_V22,
     }:
         root_keys = (
             _RUNNER_ROOT_KEYS_V14
@@ -1874,6 +1985,7 @@ def decode_runner_config(payload: bytes) -> SimulationRunnerConfig:
         RUNNER_SCHEMA_VERSION_V19,
         RUNNER_SCHEMA_VERSION_V20,
         RUNNER_SCHEMA_VERSION_V21,
+        RUNNER_SCHEMA_VERSION_V22,
     }:
         root_keys = _RUNNER_ROOT_KEYS_V4
     elif schema_version == RUNNER_SCHEMA_VERSION_V3:
@@ -1965,6 +2077,7 @@ def decode_runner_config(payload: bytes) -> SimulationRunnerConfig:
         RUNNER_SCHEMA_VERSION_V19,
         RUNNER_SCHEMA_VERSION_V20,
         RUNNER_SCHEMA_VERSION_V21,
+        RUNNER_SCHEMA_VERSION_V22,
     }:
         capability_flags = _decode_capability_flags(
             data["capability_flags"], path="$.capability_flags"
@@ -1991,6 +2104,7 @@ def decode_runner_config(payload: bytes) -> SimulationRunnerConfig:
         RUNNER_SCHEMA_VERSION_V19,
         RUNNER_SCHEMA_VERSION_V20,
         RUNNER_SCHEMA_VERSION_V21,
+        RUNNER_SCHEMA_VERSION_V22,
     }:
         cognition_trace = _decode_cognition_trace(
             data["cognition_trace"], path="$.cognition_trace"
@@ -2071,6 +2185,7 @@ def decode_runner_config(payload: bytes) -> SimulationRunnerConfig:
                         RUNNER_SCHEMA_VERSION_V19,
                         RUNNER_SCHEMA_VERSION_V20,
                         RUNNER_SCHEMA_VERSION_V21,
+                        RUNNER_SCHEMA_VERSION_V22,
                     }
                     and "environmental_dynamics" in data
                 )

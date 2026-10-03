@@ -65,6 +65,7 @@ from simulation.runner_models import (
     RUNNER_SCHEMA_VERSION_V19,
     RUNNER_SCHEMA_VERSION_V20,
     RUNNER_SCHEMA_VERSION_V21,
+    RUNNER_SCHEMA_VERSION_V22,
     SUPPORTED_RESULT_SCHEMA_VERSIONS,
     SUPPORTED_RUNNER_SCHEMA_VERSIONS,
 )
@@ -120,6 +121,7 @@ __all__ = [
     "RUNNER_SCHEMA_VERSION_V19",
     "RUNNER_SCHEMA_VERSION_V20",
     "RUNNER_SCHEMA_VERSION_V21",
+    "RUNNER_SCHEMA_VERSION_V22",
     "STREAM_ENVELOPE_VERSION",
     "WS_PROTOCOL_VERSION",
     "CompatibilityEntry",
@@ -292,6 +294,12 @@ _MATRIX: dict[str, CompatibilityEntry] = {
             f"config stays on {RUNNER_SCHEMA_VERSION_V20}; prior modes "
             "including semantic naming stay legal on "
             f"{RUNNER_SCHEMA_VERSION_V21}; "
+            f"{RUNNER_SCHEMA_VERSION_V22} is emitted only when some agent's "
+            "cognitive budget mode is enforced and carries every v21 "
+            "cognition key plus the nine budget keys; a narratives-only "
+            f"config stays on {RUNNER_SCHEMA_VERSION_V21}; prior modes "
+            "including cultural narratives stay legal on "
+            f"{RUNNER_SCHEMA_VERSION_V22}; "
             f"{RUNNER_SCHEMA_VERSION_V3} retained for capability flags; "
             "v1-v4 omit consolidation_mode, reflection_mode, prospective_mode, "
             "counterfactual_mode, communication_strategy_mode, and "
@@ -490,6 +498,7 @@ _LOG.debug(
         "runner_v19": RUNNER_SCHEMA_VERSION_V19,
         "runner_v20": RUNNER_SCHEMA_VERSION_V20,
         "runner_v21": RUNNER_SCHEMA_VERSION_V21,
+        "runner_v22": RUNNER_SCHEMA_VERSION_V22,
         "alembic_head": ALEMBIC_HEAD_REVISION,
         "accepted_event_count": len(ACCEPTED_EVENT_SCHEMA_VERSIONS),
     },

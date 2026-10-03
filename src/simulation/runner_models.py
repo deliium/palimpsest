@@ -90,6 +90,7 @@ RUNNER_SCHEMA_VERSION_V18: Final[str] = "runner-config-v18"
 RUNNER_SCHEMA_VERSION_V19: Final[str] = "runner-config-v19"
 RUNNER_SCHEMA_VERSION_V20: Final[str] = "runner-config-v20"
 RUNNER_SCHEMA_VERSION_V21: Final[str] = "runner-config-v21"
+RUNNER_SCHEMA_VERSION_V22: Final[str] = "runner-config-v22"
 RUNNER_SCHEMA_VERSION: Final[str] = RUNNER_SCHEMA_VERSION_V4
 SUPPORTED_RUNNER_SCHEMA_VERSIONS: Final[frozenset[str]] = frozenset(
     {
@@ -114,6 +115,7 @@ SUPPORTED_RUNNER_SCHEMA_VERSIONS: Final[frozenset[str]] = frozenset(
         RUNNER_SCHEMA_VERSION_V19,
         RUNNER_SCHEMA_VERSION_V20,
         RUNNER_SCHEMA_VERSION_V21,
+        RUNNER_SCHEMA_VERSION_V22,
     }
 )
 RESULT_SCHEMA_VERSION_V1: Final[str] = "runner-result-v1"
@@ -387,6 +389,99 @@ class CulturalNarrativeMode(StrEnum):
     DETERMINISTIC = "deterministic"
 
 
+class CognitiveBudgetMode(StrEnum):
+    """Closed per-tick computational budget treatments.
+
+    Default is ``DISABLED``, which leaves stage-local caps alone and does
+    not construct a cross-stage tick ledger. This is not a
+    ``V2CapabilityFlags`` slot. Lockstep with
+    ``agents.cognition.CognitionBudgetMode``.
+    """
+
+    DISABLED = "disabled"
+    ENFORCED = "enforced"
+
+
+@dataclass(frozen=True, slots=True)
+class CognitiveBudgetLimits:
+    """Flat numeric tick-budget limits nested on ``AgentCognitionSpec``.
+
+    Required / non-``None`` iff ``cognitive_budget_mode`` is ``ENFORCED``.
+    Runner JSON flattens these eight fields onto the cognition dict on v22.
+    """
+
+    max_llm_calls_per_tick: int
+    max_tokens_per_tick: int
+    max_imagination_branches: int
+    max_planning_depth: int
+    max_recalled_memories: int
+    max_tom_targets: int
+    reflection_interval_ticks: int
+    timeout_seconds: float
+
+    def __post_init__(self) -> None:
+        def _nonneg_int(name: str, value: object) -> int:
+            if isinstance(value, bool) or type(value) is not int:
+                raise TypeError(f"CognitiveBudgetLimits.{name} must be int")
+            if value < 0:
+                raise ValueError(f"CognitiveBudgetLimits.{name} must be >= 0")
+            return value
+
+        def _pos_int(name: str, value: object) -> int:
+            number = _nonneg_int(name, value)
+            if number < 1:
+                raise ValueError(f"CognitiveBudgetLimits.{name} must be >= 1")
+            return number
+
+        object.__setattr__(
+            self,
+            "max_llm_calls_per_tick",
+            _nonneg_int("max_llm_calls_per_tick", self.max_llm_calls_per_tick),
+        )
+        object.__setattr__(
+            self,
+            "max_tokens_per_tick",
+            _nonneg_int("max_tokens_per_tick", self.max_tokens_per_tick),
+        )
+        object.__setattr__(
+            self,
+            "max_imagination_branches",
+            _pos_int("max_imagination_branches", self.max_imagination_branches),
+        )
+        object.__setattr__(
+            self,
+            "max_planning_depth",
+            _pos_int("max_planning_depth", self.max_planning_depth),
+        )
+        object.__setattr__(
+            self,
+            "max_recalled_memories",
+            _pos_int("max_recalled_memories", self.max_recalled_memories),
+        )
+        object.__setattr__(
+            self,
+            "max_tom_targets",
+            _nonneg_int("max_tom_targets", self.max_tom_targets),
+        )
+        object.__setattr__(
+            self,
+            "reflection_interval_ticks",
+            _pos_int("reflection_interval_ticks", self.reflection_interval_ticks),
+        )
+        if isinstance(self.timeout_seconds, bool) or not isinstance(
+            self.timeout_seconds, (int, float)
+        ):
+            raise TypeError("CognitiveBudgetLimits.timeout_seconds must be float")
+        timeout = float(self.timeout_seconds)
+        if not math.isfinite(timeout) or timeout < 0.0:
+            raise ValueError(
+                "CognitiveBudgetLimits.timeout_seconds must be finite >= 0"
+            )
+        object.__setattr__(
+            self, "timeout_seconds", 0.0 if timeout == 0.0 else timeout
+        )
+
+
 class ProductionKnowledgeMode(StrEnum):
     """Closed production-belief treatments.
 
@@ -531,6 +626,7 @@ _SKILL_SCHEMAS: Final[frozenset[str]] = frozenset(
         RUNNER_SCHEMA_VERSION_V19,
         RUNNER_SCHEMA_VERSION_V20,
         RUNNER_SCHEMA_VERSION_V21,
+        RUNNER_SCHEMA_VERSION_V22,
     }
 )
 
@@ -1389,6 +1485,8 @@ class AgentCognitionSpec:
     )
     semantic_naming_mode: SemanticNamingMode = SemanticNamingMode.DISABLED
     cultural_narrative_mode: CulturalNarrativeMode = CulturalNarrativeMode.DISABLED
+    cognitive_budget_mode: CognitiveBudgetMode = CognitiveBudgetMode.DISABLED
+    cognitive_budget_limits: CognitiveBudgetLimits | None = None
 
     def __post_init__(self) -> None:
         if type(self.agent_id) is not AgentId:
@@ -1528,6 +1626,38 @@ class AgentCognitionSpec:
             raise TypeError(
                 "AgentCognitionSpec.cultural_narrative_mode must be "
                 "CulturalNarrativeMode"
+            )
+        if type(self.cognitive_budget_mode) is not CognitiveBudgetMode:
+            _LOGGER.error(
+                "invalid_enum path=AgentCognitionSpec.cognitive_budget_mode "
+                "reason_code=invalid_mode"
+            )
+            raise TypeError(
+                "AgentCognitionSpec.cognitive_budget_mode must be CognitiveBudgetMode"
+            )
+        if self.cognitive_budget_mode is CognitiveBudgetMode.DISABLED:
+            if self.cognitive_budget_limits is not None:
+                _LOGGER.error(
+                    "invalid_fields path=AgentCognitionSpec.cognitive_budget_limits "
+                    "reason_code=limits_require_enforced"
+                )
+                raise ValueError(
+                    "cognitive_budget_limits must be None when mode is DISABLED "
+                    "(code=limits_require_enforced)"
+                )
+        elif self.cognitive_budget_limits is None:
+            _LOGGER.error(
+                "invalid_fields path=AgentCognitionSpec.cognitive_budget_limits "
+                "reason_code=limits_required"
+            )
+            raise ValueError(
+                "cognitive_budget_limits is required when mode is ENFORCED "
+                "(code=limits_required)"
+            )
+        elif type(self.cognitive_budget_limits) is not CognitiveBudgetLimits:
+            raise TypeError(
+                "AgentCognitionSpec.cognitive_budget_limits must be "
+                "CognitiveBudgetLimits or None"
             )
         if self.policy_version != COGNITION_POLICY_VERSION:
             raise ValueError("unsupported cognition policy_version")
@@ -2046,6 +2176,7 @@ class SimulationRunnerConfig:
             RUNNER_SCHEMA_VERSION_V19,
             RUNNER_SCHEMA_VERSION_V20,
             RUNNER_SCHEMA_VERSION_V21,
+            RUNNER_SCHEMA_VERSION_V22,
         }
         if non_disabled and self.schema_version not in consolidation_schemas:
             _LOGGER.error(
@@ -2093,6 +2224,7 @@ class SimulationRunnerConfig:
             RUNNER_SCHEMA_VERSION_V19,
             RUNNER_SCHEMA_VERSION_V20,
             RUNNER_SCHEMA_VERSION_V21,
+            RUNNER_SCHEMA_VERSION_V22,
         }
         if reflecting and self.schema_version not in reflection_schemas:
             _LOGGER.error(
@@ -2140,6 +2272,7 @@ class SimulationRunnerConfig:
             RUNNER_SCHEMA_VERSION_V19,
             RUNNER_SCHEMA_VERSION_V20,
             RUNNER_SCHEMA_VERSION_V21,
+            RUNNER_SCHEMA_VERSION_V22,
         }
         if planning and self.schema_version not in prospective_schemas:
             _LOGGER.error(
@@ -2186,6 +2319,7 @@ class SimulationRunnerConfig:
             RUNNER_SCHEMA_VERSION_V19,
             RUNNER_SCHEMA_VERSION_V20,
             RUNNER_SCHEMA_VERSION_V21,
+            RUNNER_SCHEMA_VERSION_V22,
         }
         if considering and self.schema_version not in counterfactual_schemas:
             _LOGGER.error(
@@ -2231,6 +2365,7 @@ class SimulationRunnerConfig:
             RUNNER_SCHEMA_VERSION_V19,
             RUNNER_SCHEMA_VERSION_V20,
             RUNNER_SCHEMA_VERSION_V21,
+            RUNNER_SCHEMA_VERSION_V22,
         }:
             _LOGGER.error(
                 "invalid_fields path=agents.cognition.communication_strategy_mode "
@@ -2274,6 +2409,7 @@ class SimulationRunnerConfig:
             RUNNER_SCHEMA_VERSION_V19,
             RUNNER_SCHEMA_VERSION_V20,
             RUNNER_SCHEMA_VERSION_V21,
+            RUNNER_SCHEMA_VERSION_V22,
         }:
             _LOGGER.error(
                 "invalid_fields path=agents.cognition.reputation_mode "
@@ -2359,6 +2495,7 @@ class SimulationRunnerConfig:
             RUNNER_SCHEMA_VERSION_V19,
             RUNNER_SCHEMA_VERSION_V20,
             RUNNER_SCHEMA_VERSION_V21,
+            RUNNER_SCHEMA_VERSION_V22,
         }:
             _LOGGER.error(
                 "invalid_fields path=agents.cognition.teaching_interaction_mode "
@@ -2393,6 +2530,7 @@ class SimulationRunnerConfig:
             RUNNER_SCHEMA_VERSION_V19,
             RUNNER_SCHEMA_VERSION_V20,
             RUNNER_SCHEMA_VERSION_V21,
+            RUNNER_SCHEMA_VERSION_V22,
         }
         if (dynamics is not None and self.schema_version not in dynamics_schemas) or (
             self.schema_version == RUNNER_SCHEMA_VERSION_V14 and dynamics is None
@@ -2422,6 +2560,7 @@ class SimulationRunnerConfig:
             RUNNER_SCHEMA_VERSION_V19,
             RUNNER_SCHEMA_VERSION_V20,
             RUNNER_SCHEMA_VERSION_V21,
+            RUNNER_SCHEMA_VERSION_V22,
         }:
             _LOGGER.error(
                 "invalid_fields path=agents.cognition.territorial_claim_mode "
@@ -2457,6 +2596,7 @@ class SimulationRunnerConfig:
             RUNNER_SCHEMA_VERSION_V19,
             RUNNER_SCHEMA_VERSION_V20,
             RUNNER_SCHEMA_VERSION_V21,
+            RUNNER_SCHEMA_VERSION_V22,
         }:
             _LOGGER.error(
                 "invalid_fields path=agents.cognition.group_formation_mode "
@@ -2486,6 +2626,7 @@ class SimulationRunnerConfig:
             RUNNER_SCHEMA_VERSION_V19,
             RUNNER_SCHEMA_VERSION_V20,
             RUNNER_SCHEMA_VERSION_V21,
+            RUNNER_SCHEMA_VERSION_V22,
         }:
             _LOGGER.error(
                 "invalid_fields path=agents.cognition.social_norm_mode "
@@ -2518,6 +2659,7 @@ class SimulationRunnerConfig:
             RUNNER_SCHEMA_VERSION_V19,
             RUNNER_SCHEMA_VERSION_V20,
             RUNNER_SCHEMA_VERSION_V21,
+            RUNNER_SCHEMA_VERSION_V22,
         }
         if conventions_on and self.schema_version not in convention_schemas:
             _LOGGER.error(
@@ -2555,6 +2697,7 @@ class SimulationRunnerConfig:
             RUNNER_SCHEMA_VERSION_V19,
             RUNNER_SCHEMA_VERSION_V20,
             RUNNER_SCHEMA_VERSION_V21,
+            RUNNER_SCHEMA_VERSION_V22,
         }
         if artifacts_on and self.schema_version not in artifact_schemas:
             runner_log.error(
@@ -2588,6 +2731,7 @@ class SimulationRunnerConfig:
         naming_schemas = {
             RUNNER_SCHEMA_VERSION_V20,
             RUNNER_SCHEMA_VERSION_V21,
+            RUNNER_SCHEMA_VERSION_V22,
         }
         if naming_on and self.schema_version not in naming_schemas:
             runner_log.error(
@@ -2596,8 +2740,8 @@ class SimulationRunnerConfig:
                 self.schema_version,
             )
             raise ValueError(
-                "deterministic semantic_naming_mode requires runner-config-v20 "
-                "or runner-config-v21 "
+                "deterministic semantic_naming_mode requires runner-config-v20, "
+                "runner-config-v21, or runner-config-v22 "
                 "(code=semantic_naming_mode_requires_v20)"
             )
         if self.schema_version == RUNNER_SCHEMA_VERSION_V20 and not naming_on:
@@ -2616,7 +2760,25 @@ class SimulationRunnerConfig:
         narratives_on = any(
             mode is CulturalNarrativeMode.DETERMINISTIC for mode in narrative_modes
         )
-        if narratives_on and self.schema_version != RUNNER_SCHEMA_VERSION_V21:
+        narrative_schemas = {
+            RUNNER_SCHEMA_VERSION_V21,
+            RUNNER_SCHEMA_VERSION_V22,
+        }
+        budget_modes = tuple(
+            agent.cognition.cognitive_budget_mode for agent in self.agents
+        )
+        budgets_on = any(mode is CognitiveBudgetMode.ENFORCED for mode in budget_modes)
+        if budgets_on and self.schema_version != RUNNER_SCHEMA_VERSION_V22:
+            runner_log.error(
+                "invalid_fields path=agents.cognition.cognitive_budget_mode "
+                "reason_code=cognitive_budget_mode_requires_v22 schema_version=%s",
+                self.schema_version,
+            )
+            raise ValueError(
+                "enforced cognitive_budget_mode requires runner-config-v22 "
+                "(code=cognitive_budget_mode_requires_v22)"
+            )
+        if narratives_on and self.schema_version not in narrative_schemas:
             runner_log.error(
                 "invalid_fields path=agents.cognition.cultural_narrative_mode "
                 "reason_code=cultural_narrative_mode_requires_v21 schema_version=%s",
@@ -2624,6 +2786,7 @@ class SimulationRunnerConfig:
             )
             raise ValueError(
                 "deterministic cultural_narrative_mode requires runner-config-v21 "
+                "or runner-config-v22 "
                 "(code=cultural_narrative_mode_requires_v21)"
             )
         if self.schema_version == RUNNER_SCHEMA_VERSION_V21 and not narratives_on:
@@ -2635,6 +2798,22 @@ class SimulationRunnerConfig:
             raise ValueError(
                 "runner-config-v21 requires a deterministic cultural_narrative_mode "
                 "(code=v21_requires_cultural_narratives)"
+            )
+        if self.schema_version == RUNNER_SCHEMA_VERSION_V22 and not budgets_on:
+            runner_log.error(
+                "invalid_fields path=schema_version "
+                "reason_code=v22_requires_cognitive_budget schema_version=%s",
+                self.schema_version,
+            )
+            raise ValueError(
+                "runner-config-v22 requires an enforced cognitive_budget_mode "
+                "(code=v22_requires_cognitive_budget)"
+            )
+        if budgets_on:
+            runner_log.info(
+                "cognitive_budget_config schema_version=%s enforced_agent_count=%s",
+                self.schema_version,
+                sum(1 for mode in budget_modes if mode is CognitiveBudgetMode.ENFORCED),
             )
         if (
             self.schema_version in artifact_schemas
@@ -2691,6 +2870,7 @@ class SimulationRunnerConfig:
             RUNNER_SCHEMA_VERSION_V19,
             RUNNER_SCHEMA_VERSION_V20,
             RUNNER_SCHEMA_VERSION_V21,
+            RUNNER_SCHEMA_VERSION_V22,
         }:
             _LOGGER.error(
                 "invalid_fields path=agents.cognition.production_knowledge_mode "
@@ -2713,6 +2893,7 @@ class SimulationRunnerConfig:
             RUNNER_SCHEMA_VERSION_V19,
             RUNNER_SCHEMA_VERSION_V20,
             RUNNER_SCHEMA_VERSION_V21,
+            RUNNER_SCHEMA_VERSION_V22,
         }:
             from world.production import production_catalog_digest
 
@@ -2775,6 +2956,7 @@ class SimulationRunnerConfig:
             RUNNER_SCHEMA_VERSION_V19,
             RUNNER_SCHEMA_VERSION_V20,
             RUNNER_SCHEMA_VERSION_V21,
+            RUNNER_SCHEMA_VERSION_V22,
         }:
             shared_teaching = teaching_weight_tuple(self.agents[0].cognition)
             if any(
