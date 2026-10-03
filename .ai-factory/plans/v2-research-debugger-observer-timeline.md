@@ -250,14 +250,14 @@ Reject credential-like query keys (`token`, `api_key`, …) via existing `reject
 
 ### Phase 2: Lineage ports, persistence, HTTP API
 
-- [ ] Task 4: Define lineage enrichment ports and closed lineage DTOs
+- [x] Task 4: Define lineage enrichment ports and closed lineage DTOs
   - Deliverable: Protocols for belief evidence, memory derivation, communication lineage, narrative lineage, goal ancestry, and prediction provenance. Each response includes stable ids + optional `DebuggerFocusHandle`s for committed events. Ports accept `(run_id, owner/agent_id, subject_id)` and return structured summaries only. Prediction port must honor Task 1c (trace refs first → unavailable).
   - In-memory fakes for unit tests; no SQL in this task.
   - LOGGING REQUIREMENTS: DEBUG port entry/exit with kind/id/counts; WARN incomplete/legacy provenance; ERROR invalid kind; never log proposition/narrative text.
   - Files: `src/simulation/causal_debugger.py` (or `src/simulation/debugger_lineage.py`), fakes under `tests/fakes/`, unit tests
   - Depends on: Tasks 1, 1c
 
-- [ ] Task 5: Persistence adapters for event lookup, lineage enrichment, and cognition-trace reads
+- [x] Task 5: Persistence adapters for event lookup, lineage enrichment, and cognition-trace reads
   - Deliverable: SQLAlchemy (and in-memory where needed) implementations scoped to:
     - existing cognition-trace repository
     - `DebuggerEventLookupPort` over the objective event store / replay readers
@@ -268,7 +268,7 @@ Reject credential-like query keys (`token`, `api_key`, …) via existing `reject
   - Files: `src/persistence/*` (new or extend existing), `src/api/persistence_services.py` / durable wiring, architecture import-linter tests if new edges appear
   - Depends on: Tasks 1c, 1d, 4
 
-- [ ] Task 6: FastAPI read-only debugger routes
+- [x] Task 6: FastAPI read-only debugger routes
   - Deliverable: Versioned GET routes under `/v1/simulations/{run_id}/debugger/…` for causal-trace by `event_id` and by `tick`+`sequence`, invocation listing, and lineage drill-downs. **All** routes require `subjective_debug` (no objective stub routes). Enforce status matrix: `403` / `404` / `200`+`availability=unavailable`. Pydantic response models with exact key sets; wire focus field name `observer_focus`; OpenAPI descriptions state observational / non-mutating. Compose `CausalDebuggerService` in API — no `analysis` import.
   - LOGGING REQUIREMENTS: INFO `route_debugger_*` with route_template, status, run_id, duration_ms, counts; DEBUG address fields; never log secrets or subjective text bodies.
   - Files: `src/api/routes/debugger.py` (new), schemas, router registration, `tests/unit` / API contract tests

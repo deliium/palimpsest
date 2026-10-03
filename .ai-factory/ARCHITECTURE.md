@@ -32,7 +32,7 @@ src/
   simulation/            # WorldEngine, AgentRuntime, SimulationRunner, codecs, replay
                          # run_control.py (resume modes + finalization-command contracts)
                          # inspection.py (detached objective/agent-visible projection; no live observe)
-                         # causal_debugger.py (read-only event→invocation resolve + researcher chain)
+                         # causal_debugger.py / debugger_lineage.py (read-only research debugger)
   experiments/           # trusted experiment catalog/coordinator (A–Z plus AA–AD; F–AD off the V1 gate); never imported by domain
                          # matrix_*.py: experiment-matrix-v1 expand/batch/aggregate (filesystem manifests)
                          # composition.py maps neutral persistence snapshots → analysis sources

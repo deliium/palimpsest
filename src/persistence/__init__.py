@@ -42,6 +42,8 @@ __all__ = [
     "PersistenceNotFoundError",
     "create_analysis_evidence_loader",
     "create_cognition_trace_repository",
+    "create_debugger_event_lookup",
+    "create_debugger_lineage_ports",
     "create_experiment_record_repository",
     "create_experiment_repository",
     "create_inspection_evidence_loader",
@@ -223,6 +225,34 @@ def create_cognition_trace_repository(
     from persistence.cognition_trace_sqlalchemy import (
         create_cognition_trace_repository as impl,
     )
+
+    return impl(session_factory)
+
+
+def create_debugger_event_lookup(
+    session_factory: async_sessionmaker[AsyncSession] | None = None,
+):
+    """Build indexed debugger event identity lookup (no Alembic bump)."""
+    if session_factory is None:
+        raise PersistenceAdapterError(
+            "missing_session_factory",
+            operation="create_debugger_event_lookup",
+        )
+    from persistence.debugger_sqlalchemy import create_debugger_event_lookup as impl
+
+    return impl(session_factory)
+
+
+def create_debugger_lineage_ports(
+    session_factory: async_sessionmaker[AsyncSession] | None = None,
+):
+    """Build debugger lineage enrichment ports keyed by closed kind."""
+    if session_factory is None:
+        raise PersistenceAdapterError(
+            "missing_session_factory",
+            operation="create_debugger_lineage_ports",
+        )
+    from persistence.debugger_sqlalchemy import create_debugger_lineage_ports as impl
 
     return impl(session_factory)
 

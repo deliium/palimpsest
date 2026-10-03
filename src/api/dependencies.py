@@ -7,7 +7,12 @@ from typing import cast
 from fastapi import Request
 
 from api.observer_service import ObserverReadService
-from api.services import InspectionService, MetricReadService, ReplayApiService
+from api.services import (
+    CausalDebuggerApiService,
+    InspectionService,
+    MetricReadService,
+    ReplayApiService,
+)
 from api.simulation_manager import SimulationManager
 from infrastructure.database import DatabaseResources
 from infrastructure.settings import Settings
@@ -123,3 +128,10 @@ def get_replay_api_service(request: Request) -> ReplayApiService:
     if service is None:
         return ReplayApiService()
     return cast(ReplayApiService, service)
+
+
+def get_debugger_service(request: Request) -> CausalDebuggerApiService:
+    service = getattr(request.app.state, "debugger_service", None)
+    if service is None:
+        return CausalDebuggerApiService()
+    return cast(CausalDebuggerApiService, service)

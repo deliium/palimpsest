@@ -15,6 +15,16 @@ from api.errors import bad_request, forbidden, gone, not_found, unprocessable
 from api.schemas import (
     AgentVisibleOut,
     AvailabilityOut,
+    CausalTraceNodeOut,
+    CausalTraceOut,
+    DebuggerAddressOut,
+    DebuggerAvailabilityOut,
+    DebuggerFocusOut,
+    DebuggerInvocationPageOut,
+    DebuggerInvocationSummaryOut,
+    DebuggerLineageEntryOut,
+    DebuggerLineageOut,
+    DebuggerNodeStatusOut,
     EventCursorIn,
     EventPageOut,
     EventSummaryOut,
@@ -27,7 +37,12 @@ from api.schemas import (
     ReplayResultOut,
     SubjectivePageOut,
 )
-from api.services import InspectionService, MetricReadService, ReplayApiService
+from api.services import (
+    CausalDebuggerApiService,
+    InspectionService,
+    MetricReadService,
+    ReplayApiService,
+)
 from infrastructure.logging import get_logger
 from persistence.errors import PersistenceNotFoundError
 from simulation.clock import Tick
@@ -583,3 +598,264 @@ class PersistenceReplayApiService(ReplayApiService):
             ticks_replayed=ticks_replayed,
         )
         return out
+
+
+def _focus_out(handle: object) -> DebuggerFocusOut:
+    return DebuggerFocusOut(
+        run_id=str(getattr(getattr(handle, "run_id", None), "value", "")),
+        tick=int(getattr(handle, "tick", 0)),
+        sequence=getattr(handle, "sequence", None),
+        event_id=getattr(handle, "event_id", None),
+    )
+
+
+def _node_out(node: object) -> CausalTraceNodeOut:
+    status_raw = getattr(getattr(node, "status", None), "value", "unavailable")
+    return CausalTraceNodeOut(
+        stage_code=str(getattr(node, "stage_code", "")),
+        status=DebuggerNodeStatusOut(status_raw),
+        reason_code=getattr(node, "reason_code", None),
+        confidence=getattr(node, "confidence", None),
+        uncertainty_band=getattr(node, "uncertainty_band", None),
+        selection_codes=tuple(getattr(node, "selection_codes", ()) or ()),
+        id_refs=tuple(getattr(node, "id_refs", ()) or ()),
+        counts=(
+            None
+            if getattr(node, "counts", None) is None
+            else dict(node.counts)
+        ),
+        command_kind=getattr(node, "command_kind", None),
+        intention_code=getattr(node, "intention_code", None),
+        observer_focus=tuple(
+            _focus_out(item) for item in (getattr(node, "focus_handles", ()) or ())
+        ),
+        secondary=bool(getattr(node, "secondary", False)),
+    )
+
+
+def _address_out(address: object) -> DebuggerAddressOut:
+    agent = getattr(address, "agent_id", None)
+    return DebuggerAddressOut(
+        run_id=str(getattr(getattr(address, "run_id", None), "value", "")),
+        tick=int(getattr(address, "tick", 0)),
+        event_id=getattr(address, "event_id", None),
+        sequence=getattr(address, "sequence", None),
+        agent_id=None if agent is None else str(getattr(agent, "value", agent)),
+    )
+
+
+def _causal_trace_out(trace: object) -> CausalTraceOut:
+    availability = DebuggerAvailabilityOut(
+        getattr(getattr(trace, "availability", None), "value", "unavailable")
+    )
+    return CausalTraceOut(
+        address=_address_out(trace.address),
+        availability=availability,
+        nodes=tuple(_node_out(node) for node in getattr(trace, "nodes", ())),
+        invocation_id=getattr(trace, "invocation_id", None),
+        ambiguity=bool(getattr(trace, "ambiguity", False)),
+        reason_code=getattr(trace, "reason_code", None),
+        command_kind=getattr(trace, "command_kind", None),
+        supporting_nodes=tuple(
+            _node_out(node) for node in getattr(trace, "supporting_nodes", ())
+        ),
+    )
+
+
+class PersistenceCausalDebuggerService(CausalDebuggerApiService):
+    """Compose cognition-trace repo + event/lineage ports into debugger GETs."""
+
+    def __init__(
+        self,
+        *,
+        traces: object,
+        events: object,
+        lineage_ports: dict[str, object],
+        runs: SimulationRunRepository,
+    ) -> None:
+        self._traces = traces
+        self._events = events
+        self._lineage_ports = lineage_ports
+        self._runs = runs
+
+    async def causal_trace(
+        self,
+        run_id: str,
+        *,
+        event_id: str | None,
+        tick: int | None,
+        sequence: int | None,
+    ) -> CausalTraceOut:
+        from simulation.causal_debugger import (
+            CausalTrace,
+            CausalTraceAvailability,
+            assemble_causal_trace,
+            resolve_invocation_for_event,
+        )
+        from simulation.models import RunId
+
+        typed_run = RunId(run_id)
+        if await self._runs.get_run(typed_run) is None:
+            raise not_found(code="run_not_found", run_id=run_id)
+        _LOGGER.debug(
+            "debugger_causal_trace",
+            run_id=run_id,
+            event_id=event_id,
+            tick=tick,
+            sequence=sequence,
+        )
+        resolved = await resolve_invocation_for_event(
+            run_id=typed_run,
+            traces=self._traces,
+            events=self._events,
+            event_id=event_id,
+            tick=tick,
+            sequence=sequence,
+        )
+        if resolved.reason_code == "event_not_found":
+            raise not_found(code="event_not_found", run_id=run_id)
+        if resolved.availability is not CausalTraceAvailability.AVAILABLE:
+            empty = CausalTrace(
+                address=resolved.address,
+                availability=resolved.availability,
+                nodes=(),
+                reason_code=resolved.reason_code,
+                ambiguity=resolved.ambiguity,
+                command_kind=resolved.command_kind,
+            )
+            return _causal_trace_out(empty)
+        assert resolved.invocation_id is not None
+        assert resolved.address.agent_id is not None
+        invocation = await self._traces.get_invocation(
+            run_id=typed_run,
+            agent_id=resolved.address.agent_id,
+            tick=resolved.address.tick,
+            invocation_id=resolved.invocation_id,
+        )
+        if invocation is None:
+            empty = CausalTrace(
+                address=resolved.address,
+                availability=CausalTraceAvailability.UNAVAILABLE,
+                nodes=(),
+                reason_code="cognition_trace_missing",
+            )
+            return _causal_trace_out(empty)
+        assembled = assemble_causal_trace(
+            invocation,
+            address=resolved.address,
+            ambiguity=resolved.ambiguity,
+            ambiguity_reason=resolved.reason_code,
+        )
+        return _causal_trace_out(assembled)
+
+    async def list_invocations(
+        self,
+        run_id: str,
+        agent_id: str,
+        *,
+        tick: int | None,
+    ) -> DebuggerInvocationPageOut:
+        from simulation.cognition_trace import AgentId
+        from simulation.models import RunId
+
+        typed_run = RunId(run_id)
+        if await self._runs.get_run(typed_run) is None:
+            raise not_found(code="run_not_found", run_id=run_id)
+        page = await self._traces.list_invocations(
+            run_id=typed_run,
+            agent_id=AgentId(agent_id),
+            tick_min=tick,
+            tick_max=tick,
+            limit=100,
+        )
+        items = tuple(
+            DebuggerInvocationSummaryOut(
+                invocation_id=item.invocation_id,
+                agent_id=item.agent_id.value,
+                tick=item.tick,
+                command_kind=item.command_kind,
+                content_hash_prefix=item.content_hash[:12],
+            )
+            for item in page.items
+        )
+        availability = (
+            DebuggerAvailabilityOut.AVAILABLE
+            if items
+            else DebuggerAvailabilityOut.UNAVAILABLE
+        )
+        return DebuggerInvocationPageOut(
+            run_id=run_id,
+            agent_id=agent_id,
+            tick=tick,
+            items=items,
+            count=len(items),
+            availability=availability,
+        )
+
+    async def lineage(
+        self,
+        run_id: str,
+        *,
+        kind: str,
+        subject_id: str,
+        owner_id: str,
+    ) -> DebuggerLineageOut:
+        from simulation.cognition_trace import AgentId
+        from simulation.models import RunId
+
+        typed_run = RunId(run_id)
+        if await self._runs.get_run(typed_run) is None:
+            raise not_found(code="run_not_found", run_id=run_id)
+        port = self._lineage_ports.get(kind)
+        if port is None:
+            raise bad_request(code="invalid_kind")
+        owner = AgentId(owner_id)
+        if kind == "belief_evidence":
+            response = await port.belief_evidence(  # type: ignore[attr-defined]
+                run_id=typed_run, owner_id=owner, subject_id=subject_id
+            )
+        elif kind == "memory_derivation":
+            response = await port.memory_derivation(  # type: ignore[attr-defined]
+                run_id=typed_run, owner_id=owner, subject_id=subject_id
+            )
+        elif kind == "communication":
+            response = await port.communication_lineage(  # type: ignore[attr-defined]
+                run_id=typed_run, owner_id=owner, subject_id=subject_id
+            )
+        elif kind == "narrative":
+            response = await port.narrative_lineage(  # type: ignore[attr-defined]
+                run_id=typed_run, owner_id=owner, subject_id=subject_id
+            )
+        elif kind == "goal_ancestry":
+            response = await port.goal_ancestry(  # type: ignore[attr-defined]
+                run_id=typed_run, owner_id=owner, subject_id=subject_id
+            )
+        elif kind == "prediction":
+            response = await port.prediction_provenance(  # type: ignore[attr-defined]
+                run_id=typed_run, owner_id=owner, subject_id=subject_id
+            )
+        else:
+            raise bad_request(code="invalid_kind")
+        return DebuggerLineageOut(
+            run_id=run_id,
+            owner_id=owner_id,
+            kind=kind,
+            subject_id=subject_id,
+            availability=DebuggerAvailabilityOut(response.availability.value),
+            entries=tuple(
+                DebuggerLineageEntryOut(
+                    entry_id=entry.entry_id,
+                    kind=entry.kind.value,
+                    related_ids=entry.related_ids,
+                    reason_codes=entry.reason_codes,
+                    counts=None if entry.counts is None else dict(entry.counts),
+                    observer_focus=tuple(
+                        _focus_out(item) for item in entry.focus_handles
+                    ),
+                    parent_ids=entry.parent_ids,
+                    status_code=entry.status_code,
+                )
+                for entry in response.entries
+            ),
+            reason_code=response.reason_code,
+        )

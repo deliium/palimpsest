@@ -14,12 +14,14 @@ from api.errors import ApiError, api_error_handler
 from api.middleware import RequestIdMiddleware
 from api.observer_service import ObserverReadService
 from api.persistence_services import (
+    PersistenceCausalDebuggerService,
     PersistenceInspectionService,
     PersistenceMetricReadService,
     PersistenceReplayApiService,
 )
 from api.presentation_static import mount_presentation
 from api.routes import (
+    debugger_router,
     health_router,
     inspection_router,
     observer_router,
@@ -40,6 +42,9 @@ from infrastructure.logging import (
 )
 from infrastructure.settings import Settings, load_runtime_settings
 from persistence import (
+    create_cognition_trace_repository,
+    create_debugger_event_lookup,
+    create_debugger_lineage_ports,
     create_inspection_evidence_loader,
     create_metric_document_repository,
     create_metric_set_repository,
@@ -109,6 +114,17 @@ def _attach_persistence_services(app: FastAPI, session_factory: object) -> None:
         _LOGGER.info(
             "observer_service_attached",
             service="ObserverReadService",
+        )
+    if getattr(app.state, "debugger_service", None) is None:
+        app.state.debugger_service = PersistenceCausalDebuggerService(
+            traces=create_cognition_trace_repository(session_factory),  # type: ignore[arg-type]
+            events=create_debugger_event_lookup(session_factory),  # type: ignore[arg-type]
+            lineage_ports=create_debugger_lineage_ports(session_factory),  # type: ignore[arg-type]
+            runs=runs,
+        )
+        _LOGGER.info(
+            "debugger_service_attached",
+            service="PersistenceCausalDebuggerService",
         )
 
 
@@ -192,6 +208,7 @@ def create_app(
     app.include_router(health_router)
     app.include_router(simulations_router)
     app.include_router(inspection_router)
+    app.include_router(debugger_router)
     app.include_router(replay_router)
     app.include_router(streams_router)
     app.include_router(observer_router)

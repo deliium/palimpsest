@@ -71,6 +71,7 @@ __all__ = [
     "reject_forbidden_debugger_attributes",
     "resolve_invocation_for_event",
     "select_counterfactual_material",
+    "semantic_type_for_detail_kind",
 ]
 
 FORBIDDEN_DEBUGGER_ATTRIBUTES: Final[frozenset[str]] = frozenset(
@@ -85,6 +86,46 @@ FORBIDDEN_DEBUGGER_ATTRIBUTES: Final[frozenset[str]] = frozenset(
         "scenario_text",
     }
 )
+
+# detail_kind (WorldEvent.details.kind) → observer semantic type (no observer import).
+_DETAIL_KIND_TO_SEMANTIC_TYPE: Final[Mapping[str, str]] = {
+    "move": "AGENT_MOVED",
+    "search": "AGENT_SEARCHED",
+    "take": "AGENT_TOOK_ITEM",
+    "drop": "AGENT_DROPPED_ITEM",
+    "give": "AGENT_GAVE_ITEM",
+    "eat": "AGENT_ATE_ITEM",
+    "drink": "AGENT_DRANK",
+    "sleep": "AGENT_SLEPT",
+    "talk": "AGENT_TALKED",
+    "ask": "AGENT_ASKED",
+    "tell": "AGENT_TOLD",
+    "help": "AGENT_HELPED",
+    "attack": "AGENT_ATTACKED",
+    "flee": "AGENT_FLED",
+    "wait": "AGENT_WAITED",
+    "weather_changed": "WEATHER_CHANGED",
+    "resource_regenerated": "RESOURCE_REGENERATED",
+    "needs_applied": "NEEDS_APPLIED",
+    "exposure_applied": "EXPOSURE_APPLIED",
+    "died": "AGENT_DIED",
+    "resource_harvested": "RESOURCE_HARVESTED",
+    "craft_started": "CRAFT_STARTED",
+    "item_crafted": "ITEM_CRAFTED",
+    "structure_built": "STRUCTURE_BUILT",
+    "structure_repaired": "STRUCTURE_REPAIRED",
+    "item_stored": "ITEM_STORED",
+    "season_changed": "SEASON_CHANGED",
+    "temperature_band_changed": "TEMPERATURE_BAND_CHANGED",
+    "resource_node_depleted": "RESOURCE_NODE_DEPLETED",
+    "resource_node_recovered": "RESOURCE_NODE_RECOVERED",
+    "environmental_hazard_started": "ENVIRONMENTAL_HAZARD_STARTED",
+    "environmental_hazard_ended": "ENVIRONMENTAL_HAZARD_ENDED",
+    "artifact_created": "ARTIFACT_CREATED",
+    "artifact_modified": "ARTIFACT_MODIFIED",
+    "artifact_moved": "ARTIFACT_MOVED",
+    "artifact_destroyed": "ARTIFACT_DESTROYED",
+}
 
 # Semantic observer types / detail type names → cognition-trace command_kind.
 # Inverse of observer SEMANTIC_TYPE_BY_KIND for agent-authored actions only.
@@ -643,6 +684,15 @@ class CommandKindMapping:
             require_stable_id("CommandKindMapping.input_token", self.input_token),
         )
         reject_forbidden_debugger_attributes(self, type_name="CommandKindMapping")
+
+
+def semantic_type_for_detail_kind(detail_kind: str) -> str | None:
+    """Map world ``details.kind`` to closed observer semantic type.
+
+    Keeps simulation free of ``observer`` imports.
+    """
+    token = require_stable_id("detail_kind", detail_kind)
+    return _DETAIL_KIND_TO_SEMANTIC_TYPE.get(token)
 
 
 def map_event_to_command_kind(

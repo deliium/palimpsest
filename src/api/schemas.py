@@ -255,6 +255,103 @@ class StreamSubscribeIn(StrictModel):
         return value
 
 
+class DebuggerAvailabilityOut(StrEnum):
+    AVAILABLE = "available"
+    UNAVAILABLE = "unavailable"
+    NOT_APPLICABLE = "not_applicable"
+
+
+class DebuggerNodeStatusOut(StrEnum):
+    AVAILABLE = "available"
+    UNAVAILABLE = "unavailable"
+    SKIPPED = "skipped"
+    FAILED = "failed"
+    TRUNCATED = "truncated"
+
+
+class DebuggerFocusOut(StrictModel):
+    """Wire ``observer_focus`` handle for Godot seek/focus."""
+
+    run_id: str
+    tick: int = Field(ge=0)
+    sequence: int | None = Field(default=None, ge=0)
+    event_id: str | None = None
+
+
+class CausalTraceNodeOut(StrictModel):
+    stage_code: str
+    status: DebuggerNodeStatusOut
+    reason_code: str | None = None
+    confidence: float | None = Field(default=None, ge=0.0, le=1.0)
+    uncertainty_band: str | None = None
+    selection_codes: tuple[str, ...] = ()
+    id_refs: tuple[tuple[str, str], ...] = ()
+    counts: dict[str, int] | None = None
+    command_kind: str | None = None
+    intention_code: str | None = None
+    observer_focus: tuple[DebuggerFocusOut, ...] = ()
+    secondary: bool = False
+
+
+class DebuggerAddressOut(StrictModel):
+    run_id: str
+    tick: int = Field(ge=0)
+    event_id: str | None = None
+    sequence: int | None = Field(default=None, ge=0)
+    agent_id: str | None = None
+
+
+class CausalTraceOut(StrictModel):
+    """Read-only observational causal chain (non-mutating)."""
+
+    address: DebuggerAddressOut
+    availability: DebuggerAvailabilityOut
+    nodes: tuple[CausalTraceNodeOut, ...]
+    invocation_id: str | None = None
+    ambiguity: bool = False
+    reason_code: str | None = None
+    command_kind: str | None = None
+    supporting_nodes: tuple[CausalTraceNodeOut, ...] = ()
+
+
+class DebuggerInvocationSummaryOut(StrictModel):
+    invocation_id: str
+    agent_id: str
+    tick: int = Field(ge=0)
+    command_kind: str | None = None
+    content_hash_prefix: str = Field(min_length=1, max_length=16)
+
+
+class DebuggerInvocationPageOut(StrictModel):
+    run_id: str
+    agent_id: str
+    tick: int | None = Field(default=None, ge=0)
+    items: tuple[DebuggerInvocationSummaryOut, ...]
+    count: int = Field(ge=0)
+    availability: DebuggerAvailabilityOut
+
+
+class DebuggerLineageEntryOut(StrictModel):
+    entry_id: str
+    kind: str
+    related_ids: tuple[str, ...] = ()
+    reason_codes: tuple[str, ...] = ()
+    counts: dict[str, int] | None = None
+    observer_focus: tuple[DebuggerFocusOut, ...] = ()
+    parent_ids: tuple[str, ...] = ()
+    status_code: str | None = None
+
+
+class DebuggerLineageOut(StrictModel):
+    run_id: str
+    owner_id: str
+    kind: str
+    subject_id: str
+    availability: DebuggerAvailabilityOut
+    entries: tuple[DebuggerLineageEntryOut, ...] = ()
+    reason_code: str | None = None
+
+
 def stable_jsonable(value: Any) -> Any:
     """Convert nested structures for JSON without leaking bytes."""
     if isinstance(value, bytes):

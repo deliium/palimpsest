@@ -8,6 +8,9 @@ from api.errors import forbidden, gone, not_found
 from api.schemas import (
     AgentVisibleOut,
     AvailabilityOut,
+    CausalTraceOut,
+    DebuggerInvocationPageOut,
+    DebuggerLineageOut,
     EventCursorIn,
     EventPageOut,
     ExperimentalStateOut,
@@ -79,4 +82,37 @@ class ReplayApiService:
     async def replay_to_tick(
         self, run_id: str, body: ReplayRequest
     ) -> ReplayResultOut:
+        raise not_found(code="run_not_found", run_id=run_id)
+
+
+class CausalDebuggerApiService:
+    """Injectable read-only causal debugger facade (subjective_debug)."""
+
+    async def causal_trace(
+        self,
+        run_id: str,
+        *,
+        event_id: str | None,
+        tick: int | None,
+        sequence: int | None,
+    ) -> CausalTraceOut:
+        raise not_found(code="run_not_found", run_id=run_id)
+
+    async def list_invocations(
+        self,
+        run_id: str,
+        agent_id: str,
+        *,
+        tick: int | None,
+    ) -> DebuggerInvocationPageOut:
+        raise not_found(code="run_not_found", run_id=run_id)
+
+    async def lineage(
+        self,
+        run_id: str,
+        *,
+        kind: str,
+        subject_id: str,
+        owner_id: str,
+    ) -> DebuggerLineageOut:
         raise not_found(code="run_not_found", run_id=run_id)
