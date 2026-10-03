@@ -43,6 +43,10 @@ from analysis.evidence import (
     closed_evidence_stages,
     require_evidence_stage,
 )
+from analysis.external_artifact_metrics import (
+    EXTERNAL_ARTIFACT_MEMORY_METRIC_VERSION,
+    compute_external_artifact_memory,
+)
 from analysis.group_formation_metrics import (
     EMERGENT_GROUP_FORMATION_METRIC_VERSION,
     compute_emergent_group_candidates,
@@ -258,6 +262,7 @@ __all__ = [
     "EMERGENT_SOCIAL_NORMS_METRIC_VERSION",
     "EVENT_FACT_PROJECTOR_VERSION",
     "EVIDENCE_STAGE_SCHEMA_VERSION",
+    "EXTERNAL_ARTIFACT_MEMORY_METRIC_VERSION",
     "GRAPH_NODE_ORDER_POLICY",
     "IDENTITY_DYNAMICS_METRIC_VERSION",
     "INTERMEDIATE_DTYPE",
@@ -362,6 +367,7 @@ __all__ = [
     "compute_distributed_reputation",
     "compute_emergent_group_candidates",
     "compute_emergent_social_norms",
+    "compute_external_artifact_memory",
     "compute_false_belief_persistence",
     "compute_goal_completion",
     "compute_group_community_structure",

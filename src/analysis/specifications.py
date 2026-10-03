@@ -50,7 +50,7 @@ __all__ = [
 ]
 
 METRIC_CATALOG_VERSION: Final[str] = "metric-catalog-v1"
-METRIC_FAMILY_COUNT: Final[int] = 31
+METRIC_FAMILY_COUNT: Final[int] = 32
 
 # Align with existing memory-drift / transmission document versions.
 _ALGO_V1: Final[str] = "1"
@@ -108,6 +108,7 @@ class MetricFamilyId(StrEnum):
     EMERGENT_GROUP_FORMATION = "emergent_group_formation"
     EMERGENT_SOCIAL_NORMS = "emergent_social_norms"
     PERSISTENT_SOCIAL_CONVENTIONS = "persistent_social_conventions"
+    EXTERNAL_ARTIFACT_MEMORY = "external_artifact_memory"
 
 
 class DenominatorKind(StrEnum):
@@ -1169,6 +1170,52 @@ def _spec_emergent_social_norms() -> MetricSpecification:
     )
 
 
+def _spec_external_artifact_memory() -> MetricSpecification:
+    return _base(
+        family_id=MetricFamilyId.EXTERNAL_ARTIFACT_MEMORY,
+        evidence_inputs=frozenset({EvidenceStage.OBJECTIVE_EVENT_STATE}),
+        population="caller_supplied_artifact_memory_and_reading_rows",
+        denominator="cue_rows_readers_or_owner_pairs",
+        denominator_kind=DenominatorKind.OCCURRENCE,
+        cohort_window="caller-supplied rows after soft-forget",
+        deceased_policy="not_applicable",
+        zero_holding_policy="empty denominators -> availability=absent for that key",
+        opportunity_vs_occurrence=(
+            "a record counts when present on or after the forget tick; "
+            "absent readers are not a zero recovery rate"
+        ),
+        self_edge_policy="self pairs are dropped",
+        censoring_policy=(
+            "a missing interpretation row is not a recovered reading; "
+            "empty cue rows stay absent"
+        ),
+        formulas={
+            "record_present_after_forget": (
+                "1.0 when the scenario record is present on/after forget tick; else 0.0"
+            ),
+            "mean_content_revision": (
+                "mean content_revision among present rows at/after forget tick"
+            ),
+            "memory_loss_rate": "forgotten cue rows / cue rows for owner A",
+            "reading_recovery_rate": (
+                "owners with exact undistorted reading_marks / readers"
+            ),
+            "interpretation_divergence": (
+                "owner-pairs with differing reading_marks on "
+                "identical objective content"
+            ),
+        },
+        value_keys=(
+            "interpretation_divergence",
+            "mean_content_revision",
+            "memory_loss_rate",
+            "reading_recovery_rate",
+            "record_present_after_forget",
+        ),
+        empty_case="availability=absent; empty rows are not zero recovery",
+    )
+
+
 def _spec_persistent_social_conventions() -> MetricSpecification:
     return _base(
         family_id=MetricFamilyId.PERSISTENT_SOCIAL_CONVENTIONS,
@@ -1931,6 +1978,7 @@ _BUILDERS: Final[tuple[Callable[[], MetricSpecification], ...]] = (
     _spec_emergent_group_formation,
     _spec_emergent_social_norms,
     _spec_persistent_social_conventions,
+    _spec_external_artifact_memory,
 )
 
 

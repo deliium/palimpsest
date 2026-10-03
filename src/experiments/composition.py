@@ -7,7 +7,7 @@ SQLAlchemy. Composition roots inject protocol-typed readers.
 from __future__ import annotations
 
 import logging
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from typing import Final
 
 from analysis.models import (
@@ -37,6 +37,9 @@ from world.identifiers import require_exact_nonneg_int
 __all__ = [
     "EvidenceCompositionError",
     "EvidenceCompositionService",
+    "artifact_interpretation_rows_from_ledgers",
+    "artifact_memory_rows_from_traces",
+    "artifact_objective_rows_from_artifacts",
     "claim_rows_from_ledgers",
     "constrain_snapshot_to_manifest",
     "convention_habit_rows_from_ledgers",
@@ -574,6 +577,146 @@ def convention_habit_rows_from_ledgers(
             )
     _LOG.debug(
         "convention_habit_rows_built ledgers=%s rows=%s", len(ledgers), len(rows)
+    )
+    return tuple(rows)
+
+
+def artifact_objective_rows_from_artifacts(
+    artifacts: Sequence[object] | Mapping[object, object],
+    *,
+    tick: int = 0,
+    present: bool = True,
+) -> tuple[dict[str, object], ...]:
+    """Copy detached objective artifact rows for analysis."""
+    tick = require_exact_nonneg_int("tick", tick)
+    if isinstance(artifacts, Mapping):
+        values: Sequence[object] = tuple(artifacts.values())
+    elif isinstance(artifacts, (str, bytes)) or not isinstance(artifacts, Sequence):
+        raise TypeError("artifact_objective_rows_from_artifacts: invalid_artifacts")
+    else:
+        values = artifacts
+    rows: list[dict[str, object]] = []
+    for artifact in values:
+        kind = getattr(artifact, "kind", None)
+        kind_text = _id_text_or_none(getattr(kind, "value", kind))
+        content = getattr(artifact, "content", None)
+        marks = tuple(
+            _id_text(mark)
+            for mark in getattr(content, "marks", ())
+            if _id_text_or_none(mark) is not None
+        )
+        rows.append(
+            {
+                "tick": tick,
+                "artifact_id": _id_text(getattr(artifact, "artifact_id", None)),
+                "kind": kind_text,
+                "content_revision": int(
+                    getattr(artifact, "content_revision", 0) or 0
+                ),
+                "present": bool(present),
+                "marks": marks,
+            }
+        )
+    _LOG.debug(
+        "artifact_objective_rows_built artifacts=%s rows=%s present=%s",
+        len(values),
+        len(rows),
+        present,
+    )
+    return tuple(rows)
+
+
+def artifact_memory_rows_from_traces(
+    traces: Sequence[object],
+    *,
+    tick: int = 0,
+    cue_concepts: Sequence[str] = (),
+) -> tuple[dict[str, object], ...]:
+    """Copy detached episodic cue rows for soft-forget analysis."""
+    if isinstance(traces, (str, bytes)) or not isinstance(traces, Sequence):
+        raise TypeError("artifact_memory_rows_from_traces: invalid_traces")
+    tick = require_exact_nonneg_int("tick", tick)
+    cues = frozenset(str(item) for item in cue_concepts if isinstance(item, str))
+    rows: list[dict[str, object]] = []
+    for trace in traces:
+        owner = _id_text(getattr(trace, "owner_id", getattr(trace, "agent_id", None)))
+        concepts = getattr(trace, "concepts", ())
+        if isinstance(concepts, (str, bytes)) or not isinstance(concepts, Sequence):
+            concepts = ()
+        concept_tokens: list[str] = []
+        for item in concepts:
+            token = _id_text_or_none(getattr(item, "concept", item))
+            if token is not None:
+                concept_tokens.append(token)
+        if cues:
+            has_cue = any(token in cues for token in concept_tokens)
+        else:
+            has_cue = any(
+                "scarce" in token or token.startswith("artifact_reading:")
+                for token in concept_tokens
+            )
+        forgotten = bool(getattr(trace, "forgotten", False))
+        if getattr(trace, "soft_forgotten", None) is not None:
+            forgotten = bool(trace.soft_forgotten)
+        strength = getattr(trace, "strength", None)
+        if strength is not None:
+            try:
+                if float(strength) <= 0.0:
+                    forgotten = True
+            except (TypeError, ValueError):
+                pass
+        rows.append(
+            {
+                "tick": tick,
+                "owner_id": owner,
+                "has_cue_concept": has_cue,
+                "forgotten": forgotten,
+            }
+        )
+    _LOG.debug(
+        "artifact_memory_rows_built traces=%s rows=%s cue_count=%s",
+        len(traces),
+        len(rows),
+        len(cues),
+    )
+    return tuple(rows)
+
+
+def artifact_interpretation_rows_from_ledgers(
+    ledgers: Sequence[object],
+) -> tuple[dict[str, object], ...]:
+    """Copy detached interpretation readings for analysis. Empty stays empty."""
+    if isinstance(ledgers, (str, bytes)) or not isinstance(ledgers, Sequence):
+        raise TypeError("artifact_interpretation_rows_from_ledgers: invalid_ledgers")
+    rows: list[dict[str, object]] = []
+    for ledger in ledgers:
+        owner = _id_text(getattr(ledger, "owner_id", None))
+        entries = getattr(
+            ledger, "interpretations", getattr(ledger, "entries", ())
+        )
+        if not isinstance(entries, tuple):
+            raise TypeError("artifact_interpretation_rows_from_ledgers: invalid_ledger")
+        for entry in entries:
+            marks = tuple(
+                _id_text(mark)
+                for mark in getattr(entry, "reading_marks", ())
+                if _id_text_or_none(mark) is not None
+            )
+            rows.append(
+                {
+                    "owner_id": owner,
+                    "artifact_id": _id_text(getattr(entry, "artifact_id", None)),
+                    "observed_revision": int(
+                        getattr(entry, "observed_revision", 0) or 0
+                    ),
+                    "reading_marks": marks,
+                    "distorted": bool(getattr(entry, "distorted", False)),
+                }
+            )
+    _LOG.debug(
+        "artifact_interpretation_rows_built ledgers=%s rows=%s",
+        len(ledgers),
+        len(rows),
     )
     return tuple(rows)
 

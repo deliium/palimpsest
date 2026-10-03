@@ -33,6 +33,7 @@ from experiments.catalog import (
     experiment_w_emergent_groups,
     experiment_x_social_norms,
     experiment_y_social_conventions,
+    experiment_z_external_artifacts,
     v1_regression_profile,
 )
 from experiments.collectors import (
@@ -51,6 +52,9 @@ from experiments.collectors import (
 from experiments.composition import (
     EvidenceCompositionError,
     EvidenceCompositionService,
+    artifact_interpretation_rows_from_ledgers,
+    artifact_memory_rows_from_traces,
+    artifact_objective_rows_from_artifacts,
     map_consolidation_audits_to_report,
     map_recall_audits_to_dynamics_report,
     map_reflection_audits_to_report,
@@ -67,6 +71,7 @@ from experiments.environmental_scenario import (
     count_environmental_dynamics,
     seasonal_scarcity_scenario,
 )
+from experiments.external_artifacts_scenario import external_artifacts_scenario
 from experiments.interventions import (
     DEFAULT_OVERRIDE_BUDGET,
     MILESTONE_ARBITER_POLICY_VERSION,
@@ -179,6 +184,9 @@ __all__ = [
     "StoryTruthSpec",
     "TruthSpecRecord",
     "TruthSpecRepository",
+    "artifact_interpretation_rows_from_ledgers",
+    "artifact_memory_rows_from_traces",
+    "artifact_objective_rows_from_artifacts",
     "build_reference_scenario",
     "collect_arm_summary",
     "collect_catalog_metrics",
@@ -221,6 +229,8 @@ __all__ = [
     "experiment_w_emergent_groups",
     "experiment_x_social_norms",
     "experiment_y_social_conventions",
+    "experiment_z_external_artifacts",
+    "external_artifacts_scenario",
     "make_false_story_intervention",
     "map_consolidation_audits_to_report",
     "map_recall_audits_to_dynamics_report",

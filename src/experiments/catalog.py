@@ -1187,6 +1187,99 @@ def experiment_x_social_norms(
     return definition
 
 
+def experiment_z_external_artifacts(
+    *,
+    seed: int = 23,
+    max_ticks: int = 16,
+) -> ExperimentDefinition:
+    """Artifact-channel versus memory-only arms for external records.
+
+    Both arms share seed, topology, bodies, and stochastic identity, keep
+    ``artifacts_enabled=true``, and stay off the V1 regression gate.
+    """
+    from experiments.external_artifacts_scenario import external_artifacts_scenario
+    from simulation.runner_models import (
+        RUNNER_SCHEMA_VERSION_V19,
+        ArtifactInterpretationMode,
+        ConsolidationMode,
+    )
+
+    definition = external_artifacts_scenario(seed=seed, max_ticks=max_ticks)
+    by_id = {item.condition_id: item for item in definition.conditions}
+    channel = by_id["artifact_channel"]
+    memory_only = by_id["memory_only"]
+    if channel.label_code != "external_artifacts_channel":
+        raise ValueError("experiment z channel label mismatch")
+    if memory_only.label_code != "external_artifacts_memory_only":
+        raise ValueError("experiment z memory_only label mismatch")
+    if channel.runner_config.schema_version != RUNNER_SCHEMA_VERSION_V19:
+        raise ValueError("experiment z channel schema mismatch")
+    if memory_only.runner_config.schema_version != RUNNER_SCHEMA_VERSION_V19:
+        raise ValueError("experiment z memory_only schema mismatch")
+    if (
+        channel.runner_config.stochastic_identity
+        != memory_only.runner_config.stochastic_identity
+    ):
+        raise ValueError("experiment z identity mismatch")
+    if channel.runner_config.seed != memory_only.runner_config.seed:
+        raise ValueError("experiment z seed mismatch")
+    channel_bodies = tuple(
+        (body.entity_id, body.location_id, body.fatigue.value)
+        for body in channel.runner_config.scenario.bodies
+    )
+    memory_bodies = tuple(
+        (body.entity_id, body.location_id, body.fatigue.value)
+        for body in memory_only.runner_config.scenario.bodies
+    )
+    if channel_bodies != memory_bodies:
+        raise ValueError("experiment z body mismatch")
+    channel_places = tuple(
+        (place.entity_id, place.visibility_factor.value)
+        for place in channel.runner_config.scenario.locations
+    )
+    memory_places = tuple(
+        (place.entity_id, place.visibility_factor.value)
+        for place in memory_only.runner_config.scenario.locations
+    )
+    if channel_places != memory_places:
+        raise ValueError("experiment z topology mismatch")
+    if not channel.runner_config.artifacts_enabled:
+        raise ValueError("experiment z channel artifacts_enabled mismatch")
+    if not memory_only.runner_config.artifacts_enabled:
+        raise ValueError("experiment z memory_only artifacts_enabled mismatch")
+    if channel.runner_config.scenario.artifacts == ():
+        raise ValueError("experiment z channel seed mismatch")
+    if memory_only.runner_config.scenario.artifacts != ():
+        raise ValueError("experiment z memory_only must omit seeded record")
+    for arm in (channel, memory_only):
+        modes = {
+            agent.cognition.artifact_interpretation_mode
+            for agent in arm.runner_config.agents
+        }
+        consolidations = {
+            agent.cognition.consolidation_mode for agent in arm.runner_config.agents
+        }
+        if modes != {ArtifactInterpretationMode.DETERMINISTIC}:
+            raise ValueError("experiment z interpretation mode mismatch")
+        if consolidations != {ConsolidationMode.DETERMINISTIC}:
+            raise ValueError("experiment z consolidation mode mismatch")
+        for place in arm.runner_config.scenario.locations:
+            if place.visibility_factor.value < 0.75:
+                raise ValueError("experiment z visibility mismatch")
+        for body in arm.runner_config.scenario.bodies:
+            if body.fatigue.value >= 0.70:
+                raise ValueError("experiment z fatigue mismatch")
+    condition_ids = ",".join(
+        condition.condition_id for condition in definition.conditions
+    )
+    _LOG.info(
+        "experiment_z_built experiment_id=%s condition_ids=%s",
+        definition.experiment_id,
+        condition_ids,
+    )
+    return definition
+
+
 def experiment_y_social_conventions(
     *,
     seed: int = 19,
