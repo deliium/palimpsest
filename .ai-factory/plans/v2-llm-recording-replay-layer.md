@@ -292,13 +292,13 @@ Each checkpoint is a git commit on `main` created when those tasks are done. Do 
   - Files: `tests/unit/test_llm_recording_isolation.py`, `tests/unit/test_llm_recording_drift.py`
   - Dependencies: Tasks 4, 8a.
 
-- [ ] Task 10: Integration tests for exact replay
+- [x] Task 10: Integration tests for exact replay
   - Deliverable: Network-free `@pytest.mark.integration` module using `FakeLLMProvider` + `RecordingLLMProvider(record)` then `replay`: inner call-counter stays 0; identical `StructuredOutput` on a minimal reconstructor or single-selector path; fail-closed on miss, component mismatch, and schema-digest mismatch. No Docker/PostgreSQL/WorldEngine required.
   - Logging: metadata-only; no payload assertions via log text.
   - Files: `tests/integration/test_llm_recording_replay.py`, fixtures under `tests/fakes/` if needed
   - Dependencies: Tasks 8, 8a, 8b.
 
-- [ ] Task 11: Documentation checkpoint (`/aif-docs`)
+- [x] Task 11: Documentation checkpoint (`/aif-docs`)
   - Deliverable: Update `docs/llm-providers.md` (modes table, cache-key rules, wrap order, schema/prompt drift, privacy, fork/matrix namespace opt-in). Update `docs/simulation-runner.md` LLM reproducibility section and short pointers in `docs/configuration.md` / `docs/architecture.md` (`LLM_REPLAY_REQUIREMENT` satisfied by `deterministic_fake` or `replay` stores). Keep README lean.
   - Logging: document metadata-only policy for `llm.recording`.
   - Files: `docs/llm-providers.md`, `docs/simulation-runner.md`, `docs/configuration.md`, `docs/architecture.md` (short cross-links only)

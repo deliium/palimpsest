@@ -117,7 +117,7 @@ Committed objective ticks with interrupted subjective finalization rehydrate wit
 
 ## LLM reproducibility
 
-External LLM runs are reproducible only with deterministic fakes or recorded validated outputs. Exact reproducibility requests require fake/recorded provider mode. Credentials remain composition concerns and never enter canonical specs or hashes.
+External LLM runs are reproducible only with deterministic fakes or recorded/replayed validated outputs. `ExactReproducibilityMode.REQUIRED` allows `deterministic_fake` and `replay` only (`live` / `record` / `cache` fail closed). Pass `RecordingStoreSettings` beside credentials on `RunnerDependencyFactories` for `record` / `cache` / `replay`; store settings never enter provider JSON or fingerprints. See [LLM providers](llm-providers.md) for modes, cache keys, wrap order, and fork/matrix namespace isolation.
 
 ## Tests
 

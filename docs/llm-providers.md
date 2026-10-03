@@ -42,7 +42,7 @@ decision: Decision = result.output  # structure only — not a command
 | `LLMRequest[T]` | Immutable messages, `response_model`, local context, optional prompt ref/options |
 | `LLMResult[T]` | Validated `output` + `LLMResultMetadata` (no raw provider text) |
 | `LLMProvider` | `async generate(request) -> LLMResult[T]` |
-| `LLMRequestContext` | Local `run_id` / `agent_id` / `tick` + opaque `llm_request_id` |
+| `LLMRequestContext` | Local `run_id` / `agent_id` / `tick` + opaque `llm_request_id` + optional `component` |
 
 Pydantic validation proves **shape only**. It does not prove truth, policy validity, actor identity, authorization, or world authority. There is no `to_agent_command()` helper.
 
@@ -126,11 +126,54 @@ V1 ships one HTTP adapter (`OpenAICompatibleProvider`) aimed at OpenAI-compatibl
 
 Use `tests/fakes/llm.py` (`FakeLLMProvider`, `FakeClock`) for network-free tests: per-`llm_request_id` scripted successes/failures, concurrent isolation, no payload logs.
 
-Exact external LLM replay for simulation requires **recorded responses or deterministic stubs**. Local seed derivation alone is not enough.
+Exact external LLM replay for simulation requires **recorded responses or deterministic stubs**. Local seed derivation alone is not enough. The `LLM_REPLAY_REQUIREMENT` literal stays `recorded_or_stub`; it is satisfied by `deterministic_fake` **or** a `replay` store of validated exchanges.
+
+## Recording / replay layer (`llm.recording`)
+
+Research reproducibility for structured LLM I/O lives in `src/llm/recording/`. Modes ride on `RunnerProviderSettings.recording_policy` (provider-settings-v1 key-set unchanged). Store root, namespace, and lookup mode are **composition-only** via `RecordingStoreSettings` — never encoded into provider JSON, `provider_fingerprint`, result docs, evidence manifests, or trajectory hashes.
+
+| Mode | Provider contact | Persist | Lookup |
+| --- | --- | --- | --- |
+| `live` | yes | no | no |
+| `deterministic_fake` | no (offline synthesis) | no | no |
+| `record` | yes | yes | no (always call) |
+| `cache` | on miss only | yes on miss | by safe cache key |
+| `replay` | **never** | no | yes; miss/mismatch fail closed |
+
+Legacy wire value `recorded` decodes as an alias of `replay` (one WARNING: `recording_policy_recorded_alias`); encode writes `replay`.
+
+`ExactReproducibilityMode.REQUIRED` allows only `deterministic_fake` and `replay`. `live`, `record`, and `cache` fail closed with `exact_reproducibility_forbids_<mode>`.
+
+### Wrap order
+
+```text
+BudgetGuardedProvider          # per-prepare, agents.cognition.budget
+  → RecordingLLMProvider       # run-scoped, llm.recording
+    → inner LLMProvider        # live / deterministic_fake / FakeLLMProvider
+```
+
+Budget still charges on replay hits. Persist only validated successes (no transport/`LLMError`/budget rows).
+
+### Safe cache keys
+
+SHA-256 over canonical length-prefixed bytes. Namespace is first. Material includes provider/model/mode, schema qualname+digest, prompt identity (or `prompt_absent`), request-body digest, effective options (including `temperature=0`), and `agent_id`+`component`. Never key only on `llm_request_id` or raw message text. Schema or prompt digest change ⇒ different key (cache miss); on `replay`, fail closed (`schema_or_prompt_version_mismatch`).
+
+### Lookup modes (`RecordingStoreSettings.lookup_mode`)
+
+| Mode | Use |
+| --- | --- |
+| `by_cache_key` | Content-addressed within `cache_namespace` (default for cache) |
+| `by_correlation` | Exact `(namespace, agent_id, tick, component, llm_request_id)` (default for whole-run replay) |
+
+Default `cache_namespace = run_id`. Research forks and matrix cells do **not** auto-share parent namespaces — set an explicit shared namespace only when intentional.
+
+### Logging (`llm.recording`)
+
+Metadata-only: mode, hit/miss, reason codes, digest prefixes, latency, counts. Never prompts, messages, schemas, validated dumps, absolute home paths, or `exc_info` on validation failures.
 
 ## Logging policy
 
-Logger: `llm.openai_compatible` (stdlib). Prompt loader may emit DEBUG reason codes only.
+Logger: `llm.openai_compatible` / `llm.recording` (stdlib). Prompt loader may emit DEBUG reason codes only.
 
 | Level | Events |
 | --- | --- |

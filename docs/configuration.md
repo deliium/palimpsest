@@ -62,7 +62,7 @@ Copy `.env.example` to `.env` for local overrides. Do not commit `.env`.
 - Purpose labels for physical draws include `search_success`, `attack_hit`, `attack_damage`, `flee_success`, `flee_destination`, and `weather`.
 - `derive_run_id` / `derive_scoped_id` / `derive_system_cause_id` use the same digest scheme.
 - `LogicalClock` uses explicit `Tick` values. Domain contracts do not default to wall-clock or UUID factories.
-- Exact LLM replay needs recorded responses or stubs (`LLM_REPLAY_REQUIREMENT = recorded_or_stub`).
+- Exact LLM replay needs recorded responses or stubs (`LLM_REPLAY_REQUIREMENT = recorded_or_stub`). Satisfied by `deterministic_fake` or a `replay` recording store — see [LLM providers](llm-providers.md).
 
 ## See also
 
