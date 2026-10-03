@@ -235,19 +235,41 @@ def compute_trust_network_structure(
             else quantize_float(require_finite(numerator / denominator))
         )
 
+    mean_degree_centrality: float | None
+    mean_betweenness_centrality: float | None
+    mean_closeness_centrality: float | None
+    if n < 2:
+        mean_degree_centrality = None
+        mean_betweenness_centrality = None
+        mean_closeness_centrality = None
+    else:
+        (
+            mean_degree_centrality,
+            mean_betweenness_centrality,
+            mean_closeness_centrality,
+        ) = _mean_centrality_summaries(graph)
+
     availability = MetricAvailability.PRESENT
     if n == 1:
         availability = MetricAvailability.PARTIAL
 
+    centrality_present = {
+        "centralization_out": centralization_out is not None,
+        "mean_degree_centrality": mean_degree_centrality is not None,
+        "mean_betweenness_centrality": mean_betweenness_centrality is not None,
+        "mean_closeness_centrality": mean_closeness_centrality is not None,
+    }
     duration_ms = int((time.perf_counter() - started) * 1000)
     _LOG.debug(
         "trust_network_complete",
         extra={
             "operation": "compute_trust_network_structure",
+            "family_id": spec.family_id.value,
             "run_id": run_id,
             "node_count": n,
             "edge_count": m,
             "weak_components": weak_components,
+            "centrality_keys_present": centrality_present,
             "duration_ms": duration_ms,
         },
     )
@@ -269,10 +291,49 @@ def compute_trust_network_structure(
             "node_count": n,
             "edge_count": m,
             "centralization_out": centralization_out,
+            "mean_degree_centrality": mean_degree_centrality,
+            "mean_betweenness_centrality": mean_betweenness_centrality,
+            "mean_closeness_centrality": mean_closeness_centrality,
         },
         coverage=MetricCoverage(observed=m, expected=n * max(n - 1, 0), ratio=density),
         notes_code="ok",
     )
+
+
+def _mean_centrality_summaries(
+    digraph: nx.DiGraph,
+) -> tuple[float, float, float]:
+    """Exact mean centrality on nonnegative undirected projection.
+
+    Nodes are added in lexicographic order. Self-loops are dropped. Callers
+    must pass ``n >= 2``; empty/single-node graphs keep centrality keys absent.
+    """
+    projected = nonnegative_undirected_projection(digraph)
+    ordered = nx.Graph()
+    for node in sorted_graph_nodes(projected.nodes):
+        ordered.add_node(node)
+    for u, v, data in sorted(
+        projected.edges(data=True), key=lambda item: (item[0], item[1])
+    ):
+        if u == v:
+            continue
+        ordered.add_edge(u, v, **data)
+
+    degree_map = nx.degree_centrality(ordered)
+    betweenness_map = nx.betweenness_centrality(ordered, normalized=True)
+    closeness_map = nx.closeness_centrality(ordered)
+    nodes = sorted_graph_nodes(ordered.nodes)
+    count = len(nodes)
+    mean_degree = quantize_float(
+        require_finite(float(sum(degree_map[node] for node in nodes) / count))
+    )
+    mean_betweenness = quantize_float(
+        require_finite(float(sum(betweenness_map[node] for node in nodes) / count))
+    )
+    mean_closeness = quantize_float(
+        require_finite(float(sum(closeness_map[node] for node in nodes) / count))
+    )
+    return mean_degree, mean_betweenness, mean_closeness
 
 
 def compute_group_community_structure(

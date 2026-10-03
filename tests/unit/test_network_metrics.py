@@ -55,6 +55,75 @@ def test_trust_network_structure_metrics() -> None:
     assert doc.values["edge_count"] >= 3
     assert type(doc.values["density"]) is float
     assert type(doc.values["reciprocity"]) is float
+    assert type(doc.values["centralization_out"]) is float
+    assert type(doc.values["mean_degree_centrality"]) is float
+    assert type(doc.values["mean_betweenness_centrality"]) is float
+    assert type(doc.values["mean_closeness_centrality"]) is float
+
+
+def test_trust_network_reciprocal_dyad_centrality() -> None:
+    rows = [
+        RelationshipEdgeRow(
+            source_id="a",
+            target_id="b",
+            logical_tick=1,
+            activation_state="active",
+            trust=0.9,
+        ),
+        RelationshipEdgeRow(
+            source_id="b",
+            target_id="a",
+            logical_tick=1,
+            activation_state="active",
+            trust=0.9,
+        ),
+    ]
+    doc = compute_trust_network_structure(
+        rows, run_id="run-dyad", input_revision="rev-1", agent_ids=("a", "b")
+    )
+    assert doc.availability is MetricAvailability.PRESENT
+    assert doc.values["reciprocity"] == 1.0
+    assert doc.values["mean_degree_centrality"] == 1.0
+    assert doc.values["mean_betweenness_centrality"] == 0.0
+    assert type(doc.values["mean_closeness_centrality"]) is float
+    assert type(doc.values["centralization_out"]) is float
+
+
+def test_trust_network_star_centrality_present() -> None:
+    hub = "hub"
+    leaves = ("l1", "l2", "l3")
+    rows: list[RelationshipEdgeRow] = []
+    for leaf in leaves:
+        rows.append(
+            RelationshipEdgeRow(
+                source_id=hub,
+                target_id=leaf,
+                logical_tick=1,
+                activation_state="active",
+                trust=0.8,
+            )
+        )
+        rows.append(
+            RelationshipEdgeRow(
+                source_id=leaf,
+                target_id=hub,
+                logical_tick=1,
+                activation_state="active",
+                trust=0.5,
+            )
+        )
+    doc = compute_trust_network_structure(
+        rows,
+        run_id="run-star",
+        input_revision="rev-1",
+        agent_ids=(hub, *leaves),
+    )
+    assert doc.availability is MetricAvailability.PRESENT
+    assert doc.values["centralization_out"] is not None
+    assert doc.values["mean_degree_centrality"] is not None
+    assert doc.values["mean_betweenness_centrality"] is not None
+    assert doc.values["mean_closeness_centrality"] is not None
+    assert doc.values["mean_betweenness_centrality"] > 0.0
 
 
 def test_community_labels_canonical_and_permutation_stable() -> None:
@@ -78,6 +147,7 @@ def test_community_labels_canonical_and_permutation_stable() -> None:
 def test_empty_and_one_node_network() -> None:
     empty = compute_trust_network_structure([], run_id="run-n", input_revision="rev-1")
     assert empty.availability is MetricAvailability.UNKNOWN
+    assert "mean_degree_centrality" not in empty.values
     one = compute_trust_network_structure(
         [],
         run_id="run-n",
@@ -86,3 +156,7 @@ def test_empty_and_one_node_network() -> None:
     )
     assert one.values["node_count"] == 1
     assert one.values["density"] is None
+    assert one.values["centralization_out"] is None
+    assert one.values["mean_degree_centrality"] is None
+    assert one.values["mean_betweenness_centrality"] is None
+    assert one.values["mean_closeness_centrality"] is None

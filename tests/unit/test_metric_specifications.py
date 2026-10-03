@@ -41,8 +41,8 @@ from tests.unit.metric_fixtures import (
 
 def test_catalog_has_sixteen_unique_families() -> None:
     specs = validate_metric_catalog()
-    assert len(specs) == METRIC_FAMILY_COUNT == 34
-    assert len({spec.family_id for spec in specs}) == 34
+    assert len(specs) == METRIC_FAMILY_COUNT == 37
+    assert len({spec.family_id for spec in specs}) == 37
     assert frozenset(spec.family_id for spec in specs) == frozenset(MetricFamilyId)
     assert METRIC_CATALOG_VERSION.startswith("metric-catalog-")
 
@@ -143,6 +143,10 @@ def test_signed_trust_and_community_projection() -> None:
     assert "self-loop" in trust.self_edge_policy.lower() or (
         "self-loops" in trust.self_edge_policy
     )
+    assert "centralization_out" in trust.value_keys
+    assert "mean_degree_centrality" in trust.value_keys
+    assert "mean_betweenness_centrality" in trust.value_keys
+    assert "mean_closeness_centrality" in trust.value_keys
     assert community.community_algorithm == SUPPORTED_COMMUNITY_ALGORITHM
     assert "max(trust,0)" in community.signed_trust_policy or "nonnegative" in (
         community.signed_trust_policy + community.graph_projection

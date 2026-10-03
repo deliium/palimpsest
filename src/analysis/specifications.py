@@ -50,7 +50,7 @@ __all__ = [
 ]
 
 METRIC_CATALOG_VERSION: Final[str] = "metric-catalog-v1"
-METRIC_FAMILY_COUNT: Final[int] = 34
+METRIC_FAMILY_COUNT: Final[int] = 37
 
 # Align with existing memory-drift / transmission document versions.
 _ALGO_V1: Final[str] = "1"
@@ -112,6 +112,8 @@ class MetricFamilyId(StrEnum):
     EMERGENT_SEMANTIC_NAMING = "emergent_semantic_naming"
     CULTURAL_NARRATIVE_LINEAGE = "cultural_narrative_lineage"
     COGNITIVE_BUDGET = "cognitive_budget"
+    TERRITORIAL_CONCENTRATION = "territorial_concentration"
+    PREDICTION_CALIBRATION = "prediction_calibration"
 
 
 class DenominatorKind(StrEnum):
@@ -1922,7 +1924,22 @@ def _spec_trust_network() -> MetricSpecification:
             "weak_components": "number of weakly connected components",
             "centralization_out": (
                 "Freeman out-degree centralization on nonnegative abs(trust) "
-                "projection for ranking only"
+                "projection for ranking only; n<2 -> unknown (never coerce to 0)"
+            ),
+            "mean_degree_centrality": (
+                "mean NetworkX degree_centrality on nonnegative undirected "
+                "projection; lexicographic node order; self-loops dropped; "
+                "n<2 -> unknown"
+            ),
+            "mean_betweenness_centrality": (
+                "mean NetworkX betweenness_centrality (exact) on nonnegative "
+                "undirected projection; lexicographic node order; self-loops "
+                "dropped; n<2 -> unknown"
+            ),
+            "mean_closeness_centrality": (
+                "mean NetworkX closeness_centrality (exact) on nonnegative "
+                "undirected projection; lexicographic node order; self-loops "
+                "dropped; n<2 -> unknown"
             ),
         },
         value_keys=(
@@ -1933,13 +1950,19 @@ def _spec_trust_network() -> MetricSpecification:
             "weak_components",
             "node_count",
             "edge_count",
+            "centralization_out",
+            "mean_degree_centrality",
+            "mean_betweenness_centrality",
+            "mean_closeness_centrality",
         ),
         networkx_policy=_NX_POLICY,
         empty_case="n==0 -> unknown",
-        one_case="n==1 -> density unknown; components=1; degrees 0",
+        one_case=(
+            "n==1 -> density/centralization/centrality means unknown; "
+            "components=1; degrees 0"
+        ),
         all_zero_case="all trust zero below τ -> empty edge set density=0 present",
     )
-
 
 def _spec_group_community() -> MetricSpecification:
     return _base(
@@ -2139,6 +2162,85 @@ def action_resolution_rate_spec() -> SharedActionResolutionRateSpec:
     )
 
 
+def _spec_territorial_concentration() -> MetricSpecification:
+    return _base(
+        family_id=MetricFamilyId.TERRITORIAL_CONCENTRATION,
+        evidence_inputs=frozenset({EvidenceStage.OBJECTIVE_EVENT_STATE}),
+        population="detached_presence_and_control_spatial_rows",
+        denominator="location_share_mass",
+        denominator_kind=DenominatorKind.OCCURRENCE,
+        cohort_window="caller-supplied detached spatial rows after the run",
+        deceased_policy="living-agent presence rows only as supplied by caller",
+        zero_holding_policy="missing presence/control rows -> channel keys absent",
+        opportunity_vs_occurrence=(
+            "HHI and top shares over observed location mass; "
+            "missing channels stay absent"
+        ),
+        self_edge_policy="not_applicable",
+        censoring_policy="empty both channels -> availability=absent; never invent zeros",
+        formulas={
+            "presence_hhi": "sum of squared presence location shares",
+            "presence_top1_share": "largest presence location share",
+            "presence_top3_share": "sum of three largest presence location shares",
+            "control_hhi": "sum of squared control location shares",
+            "control_top1_share": "largest control location share",
+            "control_top3_share": "sum of three largest control location shares",
+            "presence_location_count": "distinct presence locations",
+            "control_location_count": "distinct control locations",
+        },
+        value_keys=(
+            "presence_hhi",
+            "presence_top1_share",
+            "presence_top3_share",
+            "control_hhi",
+            "control_top1_share",
+            "control_top3_share",
+            "presence_location_count",
+            "control_location_count",
+        ),
+        empty_case="availability=absent; reason no_spatial_rows",
+    )
+
+def _spec_prediction_calibration() -> MetricSpecification:
+    return _base(
+        family_id=MetricFamilyId.PREDICTION_CALIBRATION,
+        evidence_inputs=frozenset(
+            {
+                EvidenceStage.AGENT_VISIBLE_PROJECTION,
+                EvidenceStage.OBJECTIVE_EVENT_STATE,
+            }
+        ),
+        population="joined_confidence_outcome_rows",
+        denominator="evaluated_prediction_rows",
+        denominator_kind=DenominatorKind.OCCURRENCE,
+        cohort_window="caller-joined hypothesis confidence to empirical outcomes",
+        deceased_policy="not_applicable",
+        zero_holding_policy="empty evaluable rows -> availability=absent",
+        opportunity_vs_occurrence=(
+            "Brier and calibration error over joined rows; "
+            "never invent engine probabilities"
+        ),
+        self_edge_policy="not_applicable",
+        censoring_policy="unjoined hypotheses omitted by caller before compute",
+        formulas={
+            "brier_score": "mean squared error of predicted_confidence vs empirical_outcome",
+            "mean_absolute_calibration_error": (
+                "mean over nonempty fixed bins of "
+                "|mean(pred)-mean(outcome)|; bin edges "
+                "(0.0, 0.2, 0.4, 0.6, 0.8, 1.0]"
+            ),
+            "evaluated_count": "number of joined confidence/outcome rows",
+            "bin_count_used": "number of fixed bins with at least one sample",
+        },
+        value_keys=(
+            "brier_score",
+            "mean_absolute_calibration_error",
+            "evaluated_count",
+            "bin_count_used",
+        ),
+        empty_case="availability=absent; omit numeric values",
+    )
+
 _BUILDERS: Final[tuple[Callable[[], MetricSpecification], ...]] = (
     _spec_resource_inequality,
     _spec_cooperation,
@@ -2175,6 +2277,8 @@ _BUILDERS: Final[tuple[Callable[[], MetricSpecification], ...]] = (
     _spec_emergent_semantic_naming,
     _spec_cultural_narrative_lineage,
     _spec_cognitive_budget,
+    _spec_territorial_concentration,
+    _spec_prediction_calibration,
 )
 
 

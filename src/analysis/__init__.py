@@ -163,6 +163,12 @@ from analysis.objective_metrics import (
     compute_survival,
     living_agent_ticks,
 )
+from analysis.prediction_calibration_metrics import (
+    CALIBRATION_BIN_EDGES,
+    PREDICTION_CALIBRATION_METRIC_VERSION,
+    CalibrationRow,
+    compute_prediction_calibration,
+)
 from analysis.offline_consolidation_metrics import (
     OFFLINE_CONSOLIDATION_METRIC_VERSION,
     compute_offline_consolidation,
@@ -240,6 +246,11 @@ from analysis.specifications import (
     validate_metric_catalog,
     validate_metric_specification,
 )
+from analysis.territorial_concentration_metrics import (
+    TERRITORIAL_CONCENTRATION_METRIC_VERSION,
+    TerritorialConcentrationRow,
+    compute_territorial_concentration,
+)
 from analysis.theory_of_mind_metrics import (
     THEORY_OF_MIND_METRIC_VERSION,
     compute_theory_of_mind_metrics,
@@ -262,6 +273,7 @@ __all__ = [
     "ACTION_VOCABULARY_V1",
     "ADOPTION_STAGES_V1",
     "AGENT_VISIBLE_PROJECTOR_VERSION",
+    "CALIBRATION_BIN_EDGES",
     "CANONICAL_FLOAT_DECIMAL_PLACES",
     "CANONICAL_OUTPUT_CLAIM",
     "CAUSAL_WORLD_MODEL_METRIC_VERSION",
@@ -290,6 +302,7 @@ __all__ = [
     "OFFLINE_CONSOLIDATION_METRIC_VERSION",
     "PANDAS_NULL_SENTINEL_POLICY",
     "PERSISTENT_SOCIAL_CONVENTIONS_METRIC_VERSION",
+    "PREDICTION_CALIBRATION_METRIC_VERSION",
     "PROSPECTIVE_IMAGINATION_METRIC_VERSION",
     "REFLECTION_METRIC_VERSION",
     "SCIPY_DEGENERATE_POLICY",
@@ -297,11 +310,13 @@ __all__ = [
     "SOCIAL_TRANSMISSION_METRIC_VERSION",
     "SPATIAL_CONTROL_METRIC_VERSION",
     "SUPPORTED_COMMUNITY_ALGORITHM",
+    "TERRITORIAL_CONCENTRATION_METRIC_VERSION",
     "THEORY_OF_MIND_METRIC_VERSION",
     "ActionResolutionRow",
     "AdoptionStage",
     "AppliedActionRow",
     "BeliefClaimRow",
+    "CalibrationRow",
     "ChainNodeKind",
     "ClaimEvaluationOutcome",
     "ClaimExpectedValue",
@@ -352,6 +367,7 @@ __all__ = [
     "StructuredFactSet",
     "SubjectiveDerivationEdge",
     "SurvivalAgentRow",
+    "TerritorialConcentrationRow",
     "TransmissionDistortion",
     "TransmissionHopRecord",
     "TransmissionLineageEdge",
@@ -399,6 +415,7 @@ __all__ = [
     "compute_norm_persistence",
     "compute_offline_consolidation",
     "compute_persistent_social_conventions",
+    "compute_prediction_calibration",
     "compute_prospective_imagination_metrics",
     "compute_reflection",
     "compute_relationship_stability",
@@ -408,6 +425,7 @@ __all__ = [
     "compute_skill_learning",
     "compute_spatial_control",
     "compute_survival",
+    "compute_territorial_concentration",
     "compute_theory_of_mind_metrics",
     "compute_trust_network_structure",
     "concept_jaccard_loss",
