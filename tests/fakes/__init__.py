@@ -19,6 +19,10 @@ from tests.fakes.cognition import (
     clear_invocation,
     invocation_context,
 )
+from tests.fakes.debugger import (
+    InMemoryDebuggerEventLookup,
+    seed_attack_event,
+)
 from tests.fakes.llm import (
     FakeCallRecord,
     FakeClock,
@@ -66,6 +70,7 @@ __all__ = [
     "FakePlanner",
     "FakeSelfStateProjector",
     "FakeSituationModeler",
+    "InMemoryDebuggerEventLookup",
     "ScriptedDriftReconstructor",
     "ScriptedFailure",
     "ScriptedStageFailure",
@@ -74,4 +79,5 @@ __all__ = [
     "bind_invocation",
     "clear_invocation",
     "invocation_context",
+    "seed_attack_event",
 ]
