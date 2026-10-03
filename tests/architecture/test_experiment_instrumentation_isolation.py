@@ -94,6 +94,22 @@ def test_persistence_analysis_loader_stays_analysis_free() -> None:
     )
 
 
+
+def test_matrix_aggregate_and_collectors_not_imported_by_domain() -> None:
+    markers = (
+        "matrix_aggregate",
+        "MatrixAggregateDocument",
+        "MatrixBatchRunner",
+        "build_matrix_aggregate",
+    )
+    for package in _DOMAIN_ROOTS:
+        root = SRC / package
+        for path in root.rglob("*.py"):
+            text = path.read_text(encoding="utf-8")
+            for marker in markers:
+                assert marker not in text, f"{path}: {marker}"
+
+
 def test_research_runner_never_imports_api() -> None:
     root = SRC / "research_runner"
     assert root.is_dir()

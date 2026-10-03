@@ -561,6 +561,14 @@ forbidden_modules = [
 allow_indirect_imports = true
 
 [[tool.importlinter.contracts]]
+id = "research_runner_must_not_import_api"
+name = "research_runner must not import api"
+type = "forbidden"
+source_modules = ["research_runner"]
+forbidden_modules = ["api"]
+allow_indirect_imports = true
+
+[[tool.importlinter.contracts]]
 id = "domain_must_not_import_experiments"
 name = "Domain packages must not import experiments"
 type = "forbidden"
