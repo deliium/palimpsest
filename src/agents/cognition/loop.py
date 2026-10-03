@@ -206,6 +206,8 @@ class CognitiveLoop:
         "_self_state",
         "_situation",
         "_skill_learning_mode",
+        "_social_convention_mode",
+        "_social_convention_policy",
         "_social_norm_mode",
         "_social_norm_policy",
         "_teaching_mode",
@@ -263,6 +265,8 @@ class CognitiveLoop:
         group_formation_policy: object | None = None,
         social_norm_mode: object | None = None,
         social_norm_policy: object | None = None,
+        social_convention_mode: object | None = None,
+        social_convention_policy: object | None = None,
         production_knowledge_mode: object | None = None,
         production_allow_provider: bool = False,
     ) -> None:
@@ -499,6 +503,34 @@ class CognitiveLoop:
             norm_policy = social_norm_policy
         self._social_norm_mode = normed
         self._social_norm_policy = norm_policy
+        from agents.cognition.configuration import CognitionSocialConventionMode
+        from agents.cognition.social_conventions import SocialConventionPolicy
+
+        conventioned = (
+            CognitionSocialConventionMode.DISABLED
+            if social_convention_mode is None
+            else social_convention_mode
+        )
+        if type(conventioned) is not CognitionSocialConventionMode:
+            raise TypeError(
+                "social_convention_mode must be CognitionSocialConventionMode"
+            )
+        if conventioned is CognitionSocialConventionMode.DISABLED:
+            convention_policy = None
+        elif social_convention_policy is None:
+            from agents.cognition.social_conventions import (
+                default_social_convention_policy,
+            )
+
+            convention_policy = default_social_convention_policy()
+        elif type(social_convention_policy) is not SocialConventionPolicy:
+            raise TypeError(
+                "social_convention_policy must be SocialConventionPolicy"
+            )
+        else:
+            convention_policy = social_convention_policy
+        self._social_convention_mode = conventioned
+        self._social_convention_policy = convention_policy
         from agents.cognition.competence import CompetenceBeliefPolicy
         from agents.cognition.configuration import CognitionSkillLearningMode
 
@@ -748,6 +780,78 @@ class CognitiveLoop:
             tick,
         )
         return updated
+
+    def _prepare_social_conventions(
+        self, loop_input: CognitiveLoopInput
+    ) -> object | None:
+        """Refresh one owner's convention ledger. Disabled mode leaves it absent."""
+        from agents.cognition.configuration import CognitionSocialConventionMode
+        from agents.cognition.social_conventions import (
+            ConventionLedger,
+            apply_convention_update,
+        )
+
+        owner_id = loop_input.agent_id.value
+        tick = loop_input.observation.tick
+        if self._social_convention_mode is not (
+            CognitionSocialConventionMode.DETERMINISTIC
+        ):
+            return None
+        snapshot = loop_input.snapshot
+        carried = None if snapshot is None else snapshot.social_conventions
+        ledger = carried if type(carried) is ConventionLedger else None
+        identity = None if snapshot is None else snapshot.social_identity
+        if snapshot is None or identity is None:
+            _LOG.warning(
+                "convention_carry_rejected reason=%s",
+                "invalid_type" if snapshot is None else "owner_mismatch",
+            )
+            return None
+        memories = () if snapshot is None else snapshot.memories
+        updated = apply_convention_update(
+            loop_input.observation,
+            identity,
+            ledger,
+            memories=memories,
+            policy=self._social_convention_policy,
+        )
+        _LOG.debug(
+            "social_conventions_carried owner_id=%s belief_count=%s tick=%s",
+            owner_id,
+            0 if updated is None else len(updated.beliefs),
+            tick,
+        )
+        return updated
+
+    def _social_convention_penalties(
+        self,
+        loop_input: CognitiveLoopInput,
+        ledger: object | None,
+        futures: object,
+    ) -> dict[str, float] | None:
+        """Habit bias once futures exist. Disabled callers pass ``None``."""
+        from agents.cognition.configuration import CognitionSocialConventionMode
+        from agents.cognition.social_conventions import convention_habit_penalties
+
+        if (
+            self._social_convention_mode
+            is not CognitionSocialConventionMode.DETERMINISTIC
+            or ledger is None
+        ):
+            return None
+        penalties = convention_habit_penalties(
+            ledger,
+            loop_input.observation,
+            getattr(futures, "futures", ()),
+            mode=self._social_convention_mode,
+            policy=self._social_convention_policy,
+        )
+        mapped = dict(penalties)
+        _LOG.debug(
+            "convention_penalty_applied future_count=%s",
+            len(mapped),
+        )
+        return mapped
 
     def _social_norm_penalties(
         self,
@@ -1280,6 +1384,7 @@ class CognitiveLoop:
         territorial_claims = self._prepare_territorial_claims(loop_input)
         group_formation = self._prepare_group_formation(loop_input)
         social_norms = self._prepare_social_norms(loop_input)
+        social_conventions = self._prepare_social_conventions(loop_input)
         competence = self._prepare_competence(loop_input, memory)
         competence, advice = self._prepare_teaching(loop_input, competence)
         recipe_beliefs = self._prepare_recipe_beliefs(loop_input)
@@ -1391,6 +1496,9 @@ class CognitiveLoop:
             norm_penalty_map = norm_penalties[1]
         else:
             norm_penalty_map = None
+        convention_penalty_map = self._social_convention_penalties(
+            loop_input, social_conventions, futures
+        )
         intention = await run_stage(
             kind=ComponentKind.INTENTION,
             ordinal=8,
@@ -1415,6 +1523,9 @@ class CognitiveLoop:
                     social_norms=social_norms,
                     social_norm_mode=self._social_norm_mode,
                     norm_penalties=norm_penalty_map,
+                    social_conventions=social_conventions,
+                    social_convention_mode=self._social_convention_mode,
+                    convention_penalties=convention_penalty_map,
                 ),
             ),
             expected_type=SelectedIntention,
@@ -1450,6 +1561,8 @@ class CognitiveLoop:
                     territorial_claim_mode=self._territorial_claim_mode,
                     social_norms=social_norms,
                     social_norm_mode=self._social_norm_mode,
+                    social_conventions=social_conventions,
+                    social_convention_mode=self._social_convention_mode,
                 ),
             ),
             expected_type=ActionPlan,
@@ -1488,6 +1601,7 @@ class CognitiveLoop:
             territorial_claims=territorial_claims,
             group_formation=group_formation,
             social_norms=social_norms,
+            social_conventions=social_conventions,
             competence_model=competence,
             declarative_advice=advice,
             recipe_beliefs=recipe_beliefs,
@@ -1642,6 +1756,7 @@ class CognitiveLoop:
             territorial_claims=proposal.territorial_claims,
             group_formation=proposal.group_formation,
             social_norms=proposal.social_norms,
+            social_conventions=proposal.social_conventions,
             competence_model=proposal.competence_model,
             declarative_advice=proposal.declarative_advice,
             recipe_beliefs=proposal.recipe_beliefs,

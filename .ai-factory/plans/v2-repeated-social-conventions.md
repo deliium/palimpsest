@@ -197,7 +197,7 @@ Family id `persistent_social_conventions`. Tag `persistent_social_conventions@1`
 
 ### Phase 3: Runtime and Measurement
 
-- [ ] Task 7: Carry the ledger and pass habit penalties into deliberation.
+- [x] Task 7: Carry the ledger and pass habit penalties into deliberation.
   - Deliverable: add `social_conventions` beside `social_norms` on `SubjectiveSnapshot`, `CognitiveLoopProposal`, `CognitiveLoopResult`, `Perspective`, `build_perspective`, and `AgentRuntime` checkpoint state (same surfaces norms already use in `agent_runtime.py`, `perception.py`, and `run_control.py`). `require_owner_social_conventions` accepts `None` or matching-owner `ConventionLedger`. `CognitiveLoop.prepare` calls `_prepare_social_conventions` immediately after `_prepare_social_norms`, passing `snapshot.memories` into `apply_convention_update`. Thread through `_planner_options` and apply `convention_habit_penalties` next to norm penalties in `deliberation.py`. Wire `convention_communicate_utterance` beside `norm_communicate_utterance`. `DISABLED` keeps pre-convention commands.
   - Do not insert a `ComponentKind`. Do not bump `subjective-v1`.
   - Logging: DEBUG `social_conventions_carried` with owner id and belief count on logger `agents.cognition.loop`. DEBUG `convention_penalty_applied` with future count on logger `agents.cognition.deliberation`. WARNING `convention_carry_rejected` with reason `owner_mismatch` or `invalid_type`.
@@ -205,14 +205,14 @@ Family id `persistent_social_conventions`. Tag `persistent_social_conventions@1`
   - Depends on tasks 2 and 5.
   - Files: `src/agents/cognition/models.py`, `src/agents/cognition/contracts.py`, `src/agents/cognition/loop.py`, `src/agents/cognition/deliberation.py`, `src/simulation/agent_runtime.py`, `src/simulation/perception.py`, `src/simulation/run_control.py`, `tests/unit/test_social_conventions_runtime.py`.
 
-- [ ] Task 8: Add external detectors for persistent repeated conventions.
+- [x] Task 8: Add external detectors for persistent repeated conventions.
   - Deliverable: `compute_persistent_social_conventions` and `compute_convention_persistence` in `src/analysis/social_convention_metrics.py`. Add `MetricFamilyId.PERSISTENT_SOCIAL_CONVENTIONS`, bump `METRIC_FAMILY_COUNT` from 30 to 31, register tag `persistent_social_conventions@1`. Implement locked keys including `reason_loss_persistence` and analysis-only `ritual_like_persistence`. Leave `compute_repeated_conventions` and `compute_emergent_social_norms` unchanged.
   - Logging: logger `analysis.social_convention_metrics`. DEBUG `social_conventions_metric_computed` with situation count and active habit count. WARNING `social_conventions_metric_empty` with reason `no_rows` or `no_history`. No owner id lists.
   - Control: levels follow `PALIMPSEST_LOG_LEVEL`.
   - Depends on task 1.
   - Files: `src/analysis/social_convention_metrics.py`, `src/analysis/specifications.py`, `src/analysis/__init__.py`, `src/analysis/metric_service.py`, `tests/unit/test_social_convention_metrics.py`, `tests/unit/test_metric_specifications.py`.
 
-- [ ] Task 9: Add Experiment Y off the V1 gate.
+- [x] Task 9: Add Experiment Y off the V1 gate.
   - Deliverable: `experiment_y_social_conventions` pairs `y-disabled` / `social_conventions_disabled` on `runner-config-v4` with `y-enabled` / `social_conventions_deterministic` on `runner-config-v18`. Arms share seed, scenario, and stochastic identity. Register in `src/experiments/catalog.py` and export from `src/experiments/__init__.py`. Do not add to `tests/unit/test_v1_regression_gate.py`.
   - Scenario builder `social_conventions_scenario` in `src/experiments/social_conventions_scenario.py`: one location `clearing`, day/night weather, three agents `ada`, `ben`, `cy`, distinct body ids, modest food resource. `max_ticks` default 24 so promotion, fade window, and transmission can elapse. Builder accepts no tradition, ritual, convention, culture, or roster argument.
   - Enabled arm may finish with zero active habits. Disabled arm must finish with `social_conventions is None` on every runtime. Catalog test asserts metric blocks are requested for the enabled arm when rows exist.

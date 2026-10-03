@@ -179,6 +179,11 @@ from analysis.skill_learning_metrics import (
     SKILL_LEARNING_METRIC_VERSION,
     compute_skill_learning,
 )
+from analysis.social_convention_metrics import (
+    PERSISTENT_SOCIAL_CONVENTIONS_METRIC_VERSION,
+    compute_convention_persistence,
+    compute_persistent_social_conventions,
+)
 from analysis.social_norm_metrics import (
     EMERGENT_SOCIAL_NORMS_METRIC_VERSION,
     compute_emergent_social_norms,
@@ -263,6 +268,7 @@ __all__ = [
     "MINIMUM_LIBRARY_VERSIONS",
     "OFFLINE_CONSOLIDATION_METRIC_VERSION",
     "PANDAS_NULL_SENTINEL_POLICY",
+    "PERSISTENT_SOCIAL_CONVENTIONS_METRIC_VERSION",
     "PROSPECTIVE_IMAGINATION_METRIC_VERSION",
     "REFLECTION_METRIC_VERSION",
     "SCIPY_DEGENERATE_POLICY",
@@ -349,6 +355,7 @@ __all__ = [
     "compute_causal_world_model_metrics",
     "compute_communication_strategy_metrics",
     "compute_conflict",
+    "compute_convention_persistence",
     "compute_cooperation",
     "compute_counterfactual_reasoning_metrics",
     "compute_cultural_transmission",
@@ -365,6 +372,7 @@ __all__ = [
     "compute_memory_dynamics",
     "compute_norm_persistence",
     "compute_offline_consolidation",
+    "compute_persistent_social_conventions",
     "compute_prospective_imagination_metrics",
     "compute_reflection",
     "compute_relationship_stability",

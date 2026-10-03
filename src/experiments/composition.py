@@ -39,6 +39,7 @@ __all__ = [
     "EvidenceCompositionService",
     "claim_rows_from_ledgers",
     "constrain_snapshot_to_manifest",
+    "convention_habit_rows_from_ledgers",
     "map_consolidation_audits_to_report",
     "map_recall_audits_to_dynamics_report",
     "map_snapshot_to_analysis_sources",
@@ -524,6 +525,55 @@ def norm_belief_rows_from_ledgers(
             )
     _LOG.debug(
         "norm_belief_rows_built ledgers=%s rows=%s", len(ledgers), len(rows)
+    )
+    return tuple(rows)
+
+
+def convention_habit_rows_from_ledgers(
+    ledgers: Sequence[object],
+    *,
+    tick: int = 0,
+) -> tuple[dict[str, object], ...]:
+    """Copy detached convention habits for analysis. Empty ledgers stay empty."""
+    if isinstance(ledgers, (str, bytes)) or not isinstance(ledgers, Sequence):
+        raise TypeError("convention_habit_rows_from_ledgers: invalid_ledgers")
+    tick = require_exact_nonneg_int("tick", tick)
+    rows: list[dict[str, object]] = []
+    for ledger in ledgers:
+        owner = _id_text(getattr(ledger, "owner_id", None))
+        beliefs = getattr(ledger, "beliefs", ())
+        if not isinstance(beliefs, tuple):
+            raise TypeError("convention_habit_rows_from_ledgers: invalid_ledger")
+        for belief in beliefs:
+            content = getattr(belief, "content", None)
+            situation = _id_text(getattr(content, "situation", None))
+            usual_action = _id_text(getattr(content, "usual_action", None))
+            first_tick = int(getattr(belief, "first_tick", 0) or 0)
+            last_tick = int(getattr(belief, "last_tick", 0) or 0)
+            rows.append(
+                {
+                    "tick": tick,
+                    "owner_id": owner,
+                    "situation": situation,
+                    "usual_action": usual_action,
+                    "status": _id_text(getattr(belief, "status", None)),
+                    "strength": float(getattr(belief, "strength", 0.0)),
+                    "participant_count": len(getattr(belief, "participant_ids", ())),
+                    "transmission": _id_text(getattr(belief, "transmission", None)),
+                    "explanation": _id_text(
+                        getattr(belief, "remembered_explanation", None)
+                    ),
+                    "conceptualization": _id_text(
+                        getattr(belief, "conceptualization", None)
+                    ),
+                    "duration_ticks": max(0, last_tick - first_tick),
+                    "variant_count": len(
+                        getattr(belief, "competing_variant_ids", ())
+                    ),
+                }
+            )
+    _LOG.debug(
+        "convention_habit_rows_built ledgers=%s rows=%s", len(ledgers), len(rows)
     )
     return tuple(rows)
 

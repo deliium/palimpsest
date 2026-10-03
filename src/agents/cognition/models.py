@@ -713,6 +713,7 @@ class SubjectiveSnapshot:
     territorial_claims: object | None = None
     group_formation: object | None = None
     social_norms: object | None = None
+    social_conventions: object | None = None
     competence_model: object | None = None
     declarative_advice: object | None = None
     recipe_beliefs: object | None = None
@@ -880,6 +881,13 @@ class SubjectiveSnapshot:
             self.social_norms,
             self.owner_id,
             field_name="SubjectiveSnapshot.social_norms",
+        )
+        from agents.cognition.social_conventions import require_owner_social_conventions
+
+        require_owner_social_conventions(
+            self.social_conventions,
+            self.owner_id,
+            field_name="SubjectiveSnapshot.social_conventions",
         )
         from agents.cognition.competence import require_owner_competence
 
@@ -3670,6 +3678,7 @@ class CognitiveLoopProposal:
     territorial_claims: object | None = None
     group_formation: object | None = None
     social_norms: object | None = None
+    social_conventions: object | None = None
     competence_model: object | None = None
     declarative_advice: object | None = None
     recipe_beliefs: object | None = None
@@ -3747,6 +3756,13 @@ class CognitiveLoopProposal:
             self.social_norms,
             self.agent_id,
             field_name="CognitiveLoopProposal.social_norms",
+        )
+        from agents.cognition.social_conventions import require_owner_social_conventions
+
+        require_owner_social_conventions(
+            self.social_conventions,
+            self.agent_id,
+            field_name="CognitiveLoopProposal.social_conventions",
         )
         from agents.cognition.competence import require_owner_competence
 
@@ -3839,6 +3855,7 @@ class CognitiveLoopResult:
     territorial_claims: object | None = None
     group_formation: object | None = None
     social_norms: object | None = None
+    social_conventions: object | None = None
     competence_model: object | None = None
     declarative_advice: object | None = None
     recipe_beliefs: object | None = None
@@ -3893,6 +3910,13 @@ class CognitiveLoopResult:
             self.social_norms,
             self.agent_id,
             field_name="CognitiveLoopResult.social_norms",
+        )
+        from agents.cognition.social_conventions import require_owner_social_conventions
+
+        require_owner_social_conventions(
+            self.social_conventions,
+            self.agent_id,
+            field_name="CognitiveLoopResult.social_conventions",
         )
         if self.territorial_audits is not None:
             from agents.cognition.territorial import TerritorialClaimAudit

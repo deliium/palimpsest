@@ -595,6 +595,7 @@ class AgentRuntimeCheckpoint:
     territorial_claims: object | None = None
     group_formation: object | None = None
     social_norms: object | None = None
+    social_conventions: object | None = None
     competence_model: object | None = None
     declarative_advice: object | None = None
     recipe_beliefs: object | None = None
@@ -673,6 +674,13 @@ class AgentRuntimeCheckpoint:
             self.social_norms,
             self.agent_id,
             field_name="social_norms",
+        )
+        from agents.cognition.social_conventions import require_owner_social_conventions
+
+        require_owner_social_conventions(
+            self.social_conventions,
+            self.agent_id,
+            field_name="social_conventions",
         )
         from agents.cognition.competence import require_owner_competence
 

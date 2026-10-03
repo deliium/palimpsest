@@ -1187,6 +1187,67 @@ def experiment_x_social_norms(
     return definition
 
 
+def experiment_y_social_conventions(
+    *,
+    seed: int = 19,
+    max_ticks: int = 24,
+) -> ExperimentDefinition:
+    """Disabled v4 arm and deterministic v18 arm on one shared world.
+
+    Both arms share the seed, scenario, and stochastic identity. This
+    experiment is absent from the V1 regression gate.
+    """
+    from experiments.social_conventions_scenario import social_conventions_scenario
+    from simulation.runner_models import (
+        RUNNER_SCHEMA_VERSION_V4,
+        RUNNER_SCHEMA_VERSION_V18,
+        SocialConventionMode,
+    )
+
+    definition = social_conventions_scenario(seed=seed, max_ticks=max_ticks)
+    by_id = {item.condition_id: item for item in definition.conditions}
+    disabled = by_id["y-disabled"]
+    enabled = by_id["y-enabled"]
+    if disabled.label_code != "social_conventions_disabled":
+        raise ValueError("experiment y disabled label mismatch")
+    if enabled.label_code != "social_conventions_deterministic":
+        raise ValueError("experiment y enabled label mismatch")
+    if disabled.runner_config.schema_version != RUNNER_SCHEMA_VERSION_V4:
+        raise ValueError("experiment y disabled schema mismatch")
+    if enabled.runner_config.schema_version != RUNNER_SCHEMA_VERSION_V18:
+        raise ValueError("experiment y enabled schema mismatch")
+    if disabled.runner_config.scenario != enabled.runner_config.scenario:
+        raise ValueError("experiment y scenario mismatch")
+    if disabled.runner_config.seed != enabled.runner_config.seed:
+        raise ValueError("experiment y seed mismatch")
+    if (
+        disabled.runner_config.stochastic_identity
+        != enabled.runner_config.stochastic_identity
+    ):
+        raise ValueError("experiment y identity mismatch")
+    disabled_modes = {
+        agent.cognition.social_convention_mode
+        for agent in disabled.runner_config.agents
+    }
+    enabled_modes = {
+        agent.cognition.social_convention_mode
+        for agent in enabled.runner_config.agents
+    }
+    if disabled_modes != {SocialConventionMode.DISABLED}:
+        raise ValueError("experiment y disabled mode mismatch")
+    if enabled_modes != {SocialConventionMode.DETERMINISTIC}:
+        raise ValueError("experiment y enabled mode mismatch")
+    condition_ids = ",".join(
+        condition.condition_id for condition in definition.conditions
+    )
+    _LOG.debug(
+        "experiment_y_built experiment_id=%s condition_ids=%s",
+        definition.experiment_id,
+        condition_ids,
+    )
+    return definition
+
+
 def v1_regression_profile(config: SimulationRunnerConfig) -> SimulationRunnerConfig:
     """Require all V2 capability flags off and cognition tracing off.
 

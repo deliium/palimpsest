@@ -32,6 +32,7 @@ from experiments.catalog import (
     experiment_v_territorial_claims,
     experiment_w_emergent_groups,
     experiment_x_social_norms,
+    experiment_y_social_conventions,
     v1_regression_profile,
 )
 from experiments.collectors import (
@@ -219,6 +220,7 @@ __all__ = [
     "experiment_v_territorial_claims",
     "experiment_w_emergent_groups",
     "experiment_x_social_norms",
+    "experiment_y_social_conventions",
     "make_false_story_intervention",
     "map_consolidation_audits_to_report",
     "map_recall_audits_to_dynamics_report",

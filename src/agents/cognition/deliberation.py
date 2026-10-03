@@ -130,6 +130,9 @@ class MultiCriteriaIntentionSelector:
         social_norms: object | None = None,
         social_norm_mode: object | None = None,
         norm_penalties: Mapping[str, float] | None = None,
+        social_conventions: object | None = None,
+        social_convention_mode: object | None = None,
+        convention_penalties: Mapping[str, float] | None = None,
     ) -> SelectedIntention:
         owner = loop_input.agent_id
         tick = loop_input.observation.tick
@@ -325,6 +328,24 @@ class MultiCriteriaIntentionSelector:
                 "norm_penalty_applied future_count=%s",
                 len(norm_penalties),
             )
+        if convention_penalties is None and social_conventions is not None:
+            from agents.cognition.social_conventions import convention_habit_penalties
+
+            convention_penalties = convention_habit_penalties(
+                social_conventions,
+                loop_input.observation,
+                tuple(
+                    futures_by_id[item.future_id]
+                    for item in undominated
+                    if item.future_id in futures_by_id
+                ),
+                mode=social_convention_mode,
+            )
+        if convention_penalties:
+            _LOG.debug(
+                "convention_penalty_applied future_count=%s",
+                len(convention_penalties),
+            )
         winner, tie_break = _pairwise_select(
             undominated,
             futures_by_id,
@@ -339,6 +360,7 @@ class MultiCriteriaIntentionSelector:
             loop_input.observation,
             respect,
             norm_penalties,
+            convention_penalties,
         )
         future = futures_by_id.get(winner.future_id)
         direction = ActionDirection.WAIT if future is None else future.direction
@@ -596,6 +618,8 @@ class CommandPlanner:
         territorial_claim_mode: object | None = None,
         social_norms: object | None = None,
         social_norm_mode: object | None = None,
+        social_conventions: object | None = None,
+        social_convention_mode: object | None = None,
     ) -> ActionPlan:
         owner = loop_input.agent_id
         tick = loop_input.observation.tick
@@ -737,6 +761,20 @@ class CommandPlanner:
             identity=None if snapshot is None else snapshot.social_identity,
             ledger=prepared_norms,
             mode=social_norm_mode,
+        )
+        from agents.cognition.social_conventions import convention_communicate_utterance
+
+        prepared_conventions = social_conventions
+        if prepared_conventions is None and snapshot is not None:
+            prepared_conventions = snapshot.social_conventions
+        command = convention_communicate_utterance(
+            command,
+            owner_id=owner,
+            tick=tick,
+            observation=loop_input.observation,
+            identity=None if snapshot is None else snapshot.social_identity,
+            ledger=prepared_conventions,
+            mode=social_convention_mode,
         )
         command_type = type(command).__name__
 
@@ -1256,6 +1294,7 @@ def _pairwise_select(
     observation: object | None = None,
     territorial_bias: Mapping[str, float] | None = None,
     norm_penalties: Mapping[str, float] | None = None,
+    convention_penalties: Mapping[str, float] | None = None,
 ) -> tuple[FutureAppraisal, str]:
     if len(appraisals) == 1:
         return appraisals[0], _TIE_BREAK_NONE
@@ -1278,6 +1317,7 @@ def _pairwise_select(
                 observation,
                 territorial_bias,
                 norm_penalties,
+                convention_penalties,
             )
             if cmp > 0:
                 scores[left.future_id] += 1
@@ -1320,6 +1360,7 @@ def _pairwise_compare(
     observation: object | None = None,
     territorial_bias: Mapping[str, float] | None = None,
     norm_penalties: Mapping[str, float] | None = None,
+    convention_penalties: Mapping[str, float] | None = None,
 ) -> int:
     """Return positive if left preferred, negative if right preferred, else 0."""
     active_drives = set(motivation.active_drive_kinds)
@@ -1471,6 +1512,9 @@ def _pairwise_compare(
     if norm_penalties is not None:
         total -= norm_penalties.get(left.future_id, 0.0)
         total += norm_penalties.get(right.future_id, 0.0)
+    if convention_penalties is not None:
+        total -= convention_penalties.get(left.future_id, 0.0)
+        total += convention_penalties.get(right.future_id, 0.0)
     if total > 0:
         return 1
     if total < 0:

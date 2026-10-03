@@ -50,7 +50,7 @@ __all__ = [
 ]
 
 METRIC_CATALOG_VERSION: Final[str] = "metric-catalog-v1"
-METRIC_FAMILY_COUNT: Final[int] = 30
+METRIC_FAMILY_COUNT: Final[int] = 31
 
 # Align with existing memory-drift / transmission document versions.
 _ALGO_V1: Final[str] = "1"
@@ -107,6 +107,7 @@ class MetricFamilyId(StrEnum):
     SPATIAL_CONTROL = "spatial_control"
     EMERGENT_GROUP_FORMATION = "emergent_group_formation"
     EMERGENT_SOCIAL_NORMS = "emergent_social_norms"
+    PERSISTENT_SOCIAL_CONVENTIONS = "persistent_social_conventions"
 
 
 class DenominatorKind(StrEnum):
@@ -1168,6 +1169,90 @@ def _spec_emergent_social_norms() -> MetricSpecification:
     )
 
 
+def _spec_persistent_social_conventions() -> MetricSpecification:
+    return _base(
+        family_id=MetricFamilyId.PERSISTENT_SOCIAL_CONVENTIONS,
+        evidence_inputs=frozenset({EvidenceStage.OBJECTIVE_EVENT_STATE}),
+        population="caller_supplied_objective_and_habit_rows",
+        denominator="colocated_ticks_or_active_habits",
+        denominator_kind=DenominatorKind.OCCURRENCE,
+        cohort_window="caller-supplied rows after the run",
+        deceased_policy="not_applicable",
+        zero_holding_policy="empty denominators -> availability=absent for that key",
+        opportunity_vs_occurrence=(
+            "a meeting counts only on multi-agent colocated ticks; "
+            "absent windows are not a zero rate"
+        ),
+        self_edge_policy="self pairs are dropped",
+        censoring_policy=(
+            "a missing habit row is not an active habit; "
+            "ritual and tradition labels stay analysis-only"
+        ),
+        formulas={
+            "recurrent_meeting_rate": (
+                "colocated wait/talk ticks / multi-agent colocated ticks"
+            ),
+            "timed_gathering_rate": (
+                "matching day-phase meetings across at least 3 ticks / colocated"
+            ),
+            "habitual_exchange_rate": (
+                "repeated give pairs within 8 ticks / opened give opportunities"
+            ),
+            "collective_action_rate": (
+                "shared action-kind ticks / multi-agent colocated ticks"
+            ),
+            "active_habit_count": "rows whose status is active",
+            "mean_habit_strength": "mean strength of active rows",
+            "mean_duration_ticks": "mean last_tick - first_tick of active rows",
+            "mean_participant_count": "mean participants on active rows",
+            "transmission_adoption_rate": (
+                "active rows with communicated or both / active rows"
+            ),
+            "forgotten_reason_rate": "active rows with forgotten explanation / active",
+            "competing_variant_share": "active rows with variant_count >= 1 / active",
+            "named_custom_rate": "active rows with named_custom / active",
+            "repetition_without_habit": (
+                "situation rates at least 0.50 with no active habit"
+            ),
+            "habit_without_repetition": (
+                "active habits whose situation rate is below 0.50"
+            ),
+            "reason_loss_persistence": (
+                "adjacent history with active forgotten habits at strength >= 0.40"
+            ),
+            "ritual_like_persistence": (
+                "history steps with forgotten/unknown, duration >= 8, "
+                "participants >= 2, strength >= 0.40"
+            ),
+            "behavior_persistence": "adjacent ticks whose rate stays at least 0.50",
+            "habit_persistence": (
+                "adjacent ticks that keep the same owner+situation+action habit"
+            ),
+        },
+        value_keys=(
+            "active_habit_count",
+            "behavior_persistence",
+            "collective_action_rate",
+            "competing_variant_share",
+            "forgotten_reason_rate",
+            "habit_persistence",
+            "habit_without_repetition",
+            "habitual_exchange_rate",
+            "mean_duration_ticks",
+            "mean_habit_strength",
+            "mean_participant_count",
+            "named_custom_rate",
+            "reason_loss_persistence",
+            "recurrent_meeting_rate",
+            "repetition_without_habit",
+            "ritual_like_persistence",
+            "timed_gathering_rate",
+            "transmission_adoption_rate",
+        ),
+        empty_case="availability=absent; empty rows are not zero habit",
+    )
+
+
 def _spec_cultural_transmission() -> MetricSpecification:
     return _base(
         family_id=MetricFamilyId.CULTURAL_TRANSMISSION,
@@ -1845,6 +1930,7 @@ _BUILDERS: Final[tuple[Callable[[], MetricSpecification], ...]] = (
     _spec_spatial_control,
     _spec_emergent_group_formation,
     _spec_emergent_social_norms,
+    _spec_persistent_social_conventions,
 )
 
 
