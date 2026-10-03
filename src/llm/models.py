@@ -236,6 +236,7 @@ class LLMRequestContext:
     agent_id: str
     tick: int
     llm_request_id: str
+    component: str | None = None
 
     def __post_init__(self) -> None:
         object.__setattr__(
@@ -259,6 +260,15 @@ class LLMRequestContext:
                 self.llm_request_id,
             ),
         )
+        if self.component is not None:
+            object.__setattr__(
+                self,
+                "component",
+                _require_prompt_segment(
+                    "LLMRequestContext.component",
+                    self.component,
+                ),
+            )
 
     def __repr__(self) -> str:
         return (
@@ -266,7 +276,8 @@ class LLMRequestContext:
             f"run_id={self.run_id!r}, "
             f"agent_id={self.agent_id!r}, "
             f"tick={self.tick}, "
-            f"llm_request_id={self.llm_request_id!r})"
+            f"llm_request_id={self.llm_request_id!r}, "
+            f"component={self.component!r})"
         )
 
 

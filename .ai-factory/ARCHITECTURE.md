@@ -27,6 +27,7 @@ src/
   llm/                   # provider-neutral StructuredOutput / LLMResult (no vendor SDKs)
   llm/prompts/           # immutable versioned prompt package resources
   llm/providers/         # OpenAI-compatible HTTP adapter + pure codec
+  llm/recording/         # exchange records, safe cache keys, filesystem store, recording provider
   observer/              # read-only presentation: contracts, layouts, frames, semantic events
                          # no tick authority; must not import the engine or private world
   simulation/            # WorldEngine, AgentRuntime, SimulationRunner, codecs, replay
