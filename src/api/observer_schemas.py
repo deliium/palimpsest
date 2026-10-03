@@ -17,6 +17,9 @@ _OBJECTIVE_LEAK_KEYS = frozenset(
         "spatial_control",
         "territory_owner",
         "controller",
+        "semantic_naming",
+        "subjective_labels",
+        "labels",
     }
 )
 
@@ -285,11 +288,32 @@ class ObserverRelationshipPageOut(StrictModel):
     items: tuple[ObserverRelationshipSummaryOut, ...]
 
 
+class ObserverLabelReadingOut(StrictModel):
+    objective_id: str
+    objective_display_name: str
+    referent_kind: str
+    label_token: str
+    label_display: str
+    sense_revision: int = Field(ge=0)
+    strength_band: Literal["candidate", "low", "mid", "high"]
+    label_source: Literal["agent_perspective"] = "agent_perspective"
+
+
+class ObserverLabelOverlayOut(StrictModel):
+    run_id: str
+    agent_id: str
+    layer: Literal["subjective_labels"] = "subjective_labels"
+    protocol_version: str = OBSERVER_PROTOCOL_VERSION
+    count: int
+    readings: tuple[ObserverLabelReadingOut, ...]
+
+
 __all__ = [
     "ObserverAgentOut",
     "ObserverEventOut",
     "ObserverEventPageOut",
     "ObserverFrameOut",
+    "ObserverLabelOverlayOut",
     "ObserverManifestOut",
     "ObserverRelationshipPageOut",
     "ObserverRunOut",

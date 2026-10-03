@@ -446,6 +446,7 @@ class AgentRuntime:
         "_run_id",
         "_scientific_evidence",
         "_semantic_belief_reader",
+        "_semantic_naming",
         "_social_conventions",
         "_social_norms",
         "_status",
@@ -551,6 +552,7 @@ class AgentRuntime:
         self._social_norms: object | None = None
         self._social_conventions: object | None = None
         self._artifact_interpretations: object | None = None
+        self._semantic_naming: object | None = None
         self._competence: object | None = None
         self._recipe_beliefs: object | None = None
         self._advice: object | None = None
@@ -896,6 +898,35 @@ class AgentRuntime:
             "artifact_interpretations_carried owner_id=%s entry_count=%s tick=%s",
             owner.value,
             len(ledger.interpretations),
+            tick,
+        )
+
+    def _commit_semantic_naming(self, ledger: object | None, tick: int) -> None:
+        from agents.cognition.configuration import CognitionSemanticNamingMode
+        from agents.cognition.semantic_naming import TerminologyLedger
+
+        owner = self._agent.agent_id
+        mode = getattr(
+            self._loop,
+            "_semantic_naming_mode",
+            CognitionSemanticNamingMode.DISABLED,
+        )
+        if mode is not CognitionSemanticNamingMode.DETERMINISTIC or ledger is None:
+            if mode is not CognitionSemanticNamingMode.DETERMINISTIC:
+                self._semantic_naming = None
+            return
+        if type(ledger) is not TerminologyLedger:
+            raise TypeError("semantic_naming must be TerminologyLedger")
+        if ledger.owner_id != owner:
+            raise AgentRuntimeError(
+                AgentRuntimeErrorCode.OWNERSHIP,
+                agent_id=owner.value,
+            )
+        self._semantic_naming = ledger
+        _LOG.debug(
+            "semantic_naming_carried owner_id=%s binding_count=%s tick=%s",
+            owner.value,
+            len(ledger.bindings),
             tick,
         )
 
@@ -1434,6 +1465,7 @@ class AgentRuntime:
                 social_norms=self._social_norms,
                 social_conventions=self._social_conventions,
                 artifact_interpretations=self._artifact_interpretations,
+                semantic_naming=self._semantic_naming,
                 competence_model=self._competence,
                 declarative_advice=self._advice,
                 recipe_beliefs=self._recipe_beliefs,
@@ -1859,6 +1891,9 @@ class AgentRuntime:
         self._commit_artifact_interpretations(
             getattr(pending.loop_result, "artifact_interpretations", None), pending.tick
         )
+        self._commit_semantic_naming(
+            getattr(pending.loop_result, "semantic_naming", None), pending.tick
+        )
         self._commit_competence(
             getattr(pending.loop_result, "competence_model", None), pending.tick
         )
@@ -2268,6 +2303,7 @@ class AgentRuntime:
         self._artifact_interpretations = getattr(
             checkpoint, "artifact_interpretations", None
         )
+        self._semantic_naming = getattr(checkpoint, "semantic_naming", None)
         self._competence = checkpoint.competence_model
         self._recipe_beliefs = getattr(checkpoint, "recipe_beliefs", None)
         self._advice = checkpoint.declarative_advice
@@ -2331,6 +2367,7 @@ class AgentRuntime:
             social_norms=self._social_norms,
             social_conventions=self._social_conventions,
             artifact_interpretations=self._artifact_interpretations,
+            semantic_naming=self._semantic_naming,
             competence_model=self._competence,
             declarative_advice=self._advice,
             recipe_beliefs=self._recipe_beliefs,

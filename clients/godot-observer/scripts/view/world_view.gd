@@ -14,6 +14,7 @@ var _reducer = ReducerScript.new()
 @onready var _locations: Node2D = $LocationLayer
 @onready var _claims: Node2D = $ClaimOverlay
 @onready var _analytics: Node2D = $AnalyticsOverlay
+@onready var _labels: Node2D = $LabelOverlay
 @onready var _connections: Node2D = $ConnectionLayer
 @onready var _objects: Node2D = $ObjectLayer
 @onready var _agents: Node2D = $AgentLayer
@@ -61,6 +62,15 @@ func show_world(world: Variant) -> void:
 		_claims.set_centers(_centers)
 	if _analytics != null:
 		_analytics.set_centers(_centers)
+	if _labels != null:
+		var names := {}
+		for location in world.locations:
+			var caption := str(location.display_name)
+			if caption == "":
+				caption = str(location.name)
+			names[location.location_id] = caption
+		_labels.set_objective_names(names)
+		_labels.set_centers(_centers)
 
 
 func set_claim_overlay_enabled(enabled: bool) -> void:
@@ -81,6 +91,17 @@ func set_analytics_overlay_enabled(enabled: bool) -> void:
 func apply_research_analytics(payload: Variant) -> void:
 	if _analytics != null:
 		_analytics.apply_payload(payload)
+
+
+func set_label_overlay_enabled(enabled: bool) -> void:
+	if _labels != null:
+		_labels.set_enabled(enabled)
+
+
+func apply_subjective_labels(payload: Variant) -> void:
+	if _labels != null:
+		_labels.apply_payload(payload)
+		_labels.set_enabled(payload != null)
 
 
 func play_event(event: Variant) -> void:

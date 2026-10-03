@@ -240,7 +240,7 @@ Family id `emergent_semantic_naming`. Tag `emergent_semantic_naming@1`. Bump `ME
 
 ### Phase 3: Runtime Carry
 
-- [ ] Task 8: v2- Carry the ledger, build cues, and pass communicate penalties into deliberation.
+- [x] Task 8: v2- Carry the ledger, build cues, and pass communicate penalties into deliberation.
   - Deliverable: add `semantic_naming` beside `artifact_interpretations` on `SubjectiveSnapshot`, `CognitiveLoopProposal`, `CognitiveLoopResult`, `Perspective`, `build_perspective`, and `AgentRuntime` checkpoint state. `require_owner_semantic_naming` accepts `None` or matching-owner `TerminologyLedger`. `CognitiveLoop.prepare` calls `_prepare_semantic_naming` immediately after `_prepare_artifact_interpretations`: build `NamingCueSummary` from the owner's already-updated `group_formation` / `social_norms` / `social_conventions` snapshot fields (duck-typed active concept ids and usual/expect action kinds only), then call `apply_naming_update(..., cues=summary, memories=snapshot.memories)`. Thread through `_planner_options` and apply communicate-prefer penalties next to convention penalties in `deliberation.py`. Wire `naming_communicate_utterance` beside `convention_communicate_utterance`. Include `semantic_naming` on `export_runtime_checkpoint` / restore beside `artifact_interpretations` in `agent_runtime.py` / `run_control.py`. `DISABLED` keeps pre-naming commands.
   - Do not insert a `ComponentKind`. Do not bump `subjective-v1`.
   - Logging: DEBUG `semantic_naming_carried` with owner id and binding count on logger `agents.cognition.loop`. DEBUG `naming_penalty_applied` with future count on logger `agents.cognition.deliberation`. WARNING `naming_carry_rejected` with reason `owner_mismatch` or `invalid_type`.
@@ -250,14 +250,14 @@ Family id `emergent_semantic_naming`. Tag `emergent_semantic_naming@1`. Bump `ME
 
 ### Phase 4: Observer Perspective Overlays
 
-- [ ] Task 9: v2- Project subjective label overlays without mutating objective frames.
+- [x] Task 9: v2- Project subjective label overlays without mutating objective frames.
   - Deliverable: `project_subjective_label_overlay(...)` in `src/observer/labels.py` (relationships pattern) builds layer `subjective_labels` from duck-typed rows only — observer must not import `agents.cognition` or `TerminologyLedger`. Each row always includes objective id/display when a top candidate exists, plus subjective label fields, closed `strength_band`, and `label_source="agent_perspective"`. `project_frame` remains objective-only. API route `GET /v1/simulations/{run_id}/observer/agents/{agent_id}/labels` under `subjective_debug`, loading live `owner_runtime_checkpoint` the same way as territorial claims (`simulation_manager.owner_runtime_checkpoint`). When debug is off → `debug_disabled`. Empty ledger → empty readings, not an error. Optional `tick=` fails closed with `labels_unavailable_at_tick` unless it matches the live head.
   - Logging: logger `observer.labels` / API route logger. DEBUG with agent id and row count. WARNING on unavailable tick. Never log full lexicons at INFO.
   - Control: levels follow `PALIMPSEST_LOG_LEVEL`.
   - Depends on tasks 1 and 8.
   - Files: `src/observer/labels.py`, `src/observer/__init__.py`, `src/api/observer_service.py`, `src/api/observer_schemas.py`, `src/api/routes/observer.py`, `src/api/security.py` (reuse capability), `tests/unit/test_semantic_naming_observer.py`.
 
-- [ ] Task 10: v2- Add Godot perspective switching for subjective labels.
+- [x] Task 10: v2- Add Godot perspective switching for subjective labels.
   - Deliverable: Godot client gains a researcher perspective control and `label_overlay.gd` that consumes `layer == "subjective_labels"` payloads. Primary captions continue to use canonical researcher identity (`ObserverIdentity` / layout display names). Secondary captions show subjective labels and are visually marked as subjective. Switching perspective refetches the labels route for the selected agent and must not require or expose unrelated subjective debug collections (memories/beliefs). Protocol stays `observer-protocol-v1`. Add focused GDScript tests for overlay parse + non-replacement of objective names.
   - Logging: existing `ObserverLog.debug` with layer name and marker count only.
   - Control: client-side debug logging only.

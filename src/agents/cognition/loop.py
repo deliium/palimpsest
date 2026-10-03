@@ -169,6 +169,8 @@ class CognitiveLoop:
 
     __slots__ = (
         "_artifact_interpretation_mode",
+        "_semantic_naming_mode",
+        "_semantic_naming_policy",
         "_communication_strategy_mode",
         "_communication_strategy_policy",
         "_competence_policy",
@@ -269,6 +271,8 @@ class CognitiveLoop:
         social_convention_mode: object | None = None,
         social_convention_policy: object | None = None,
         artifact_interpretation_mode: object | None = None,
+        semantic_naming_mode: object | None = None,
+        semantic_naming_policy: object | None = None,
         production_knowledge_mode: object | None = None,
         production_allow_provider: bool = False,
     ) -> None:
@@ -545,6 +549,30 @@ class CognitiveLoop:
                 "artifact_interpretation_mode must be ArtifactInterpretationMode"
             )
         self._artifact_interpretation_mode = artifact_mode
+        from agents.cognition.configuration import CognitionSemanticNamingMode
+        from agents.cognition.semantic_naming import SemanticNamingPolicy
+
+        naming_mode = (
+            CognitionSemanticNamingMode.DISABLED
+            if semantic_naming_mode is None
+            else semantic_naming_mode
+        )
+        if type(naming_mode) is not CognitionSemanticNamingMode:
+            raise TypeError(
+                "semantic_naming_mode must be CognitionSemanticNamingMode"
+            )
+        if naming_mode is CognitionSemanticNamingMode.DISABLED:
+            naming_policy = None
+        elif semantic_naming_policy is None:
+            from agents.cognition.semantic_naming import default_semantic_naming_policy
+
+            naming_policy = default_semantic_naming_policy()
+        elif type(semantic_naming_policy) is not SemanticNamingPolicy:
+            raise TypeError("semantic_naming_policy must be SemanticNamingPolicy")
+        else:
+            naming_policy = semantic_naming_policy
+        self._semantic_naming_mode = naming_mode
+        self._semantic_naming_policy = naming_policy
         from agents.cognition.competence import CompetenceBeliefPolicy
         from agents.cognition.configuration import CognitionSkillLearningMode
 
@@ -898,6 +926,86 @@ class CognitiveLoop:
             tick,
         )
         return updated
+
+
+    def _prepare_semantic_naming(
+        self,
+        loop_input: CognitiveLoopInput,
+        *,
+        group_formation: object | None = None,
+        social_norms: object | None = None,
+        social_conventions: object | None = None,
+    ) -> object | None:
+        """Refresh one owner's terminology ledger. Disabled mode leaves it absent."""
+        from agents.cognition.configuration import CognitionSemanticNamingMode
+        from agents.cognition.semantic_naming import (
+            TerminologyLedger,
+            apply_naming_update,
+        )
+
+        owner_id = loop_input.agent_id.value
+        if self._semantic_naming_mode is not CognitionSemanticNamingMode.DETERMINISTIC:
+            return None
+        snapshot = loop_input.snapshot
+        carried = None if snapshot is None else snapshot.semantic_naming
+        ledger = carried if type(carried) is TerminologyLedger else None
+        identity = None if snapshot is None else snapshot.social_identity
+        if snapshot is None or identity is None:
+            _LOG.warning(
+                "naming_carry_rejected reason=%s",
+                "invalid_type" if snapshot is None else "owner_mismatch",
+            )
+            return None
+        cues = _build_naming_cue_summary(
+            group_formation=group_formation,
+            social_norms=social_norms,
+            social_conventions=social_conventions,
+        )
+        memories = () if snapshot is None else snapshot.memories
+        updated = apply_naming_update(
+            loop_input.observation,
+            identity,
+            ledger,
+            memories=memories,
+            cues=cues,
+            policy=self._semantic_naming_policy,
+        )
+        _LOG.debug(
+            "semantic_naming_carried owner_id=%s binding_count=%s",
+            owner_id,
+            0 if updated is None else len(updated.bindings),
+        )
+        return updated
+
+    def _naming_communicate_penalties(
+        self,
+        loop_input: CognitiveLoopInput,
+        ledger: object | None,
+        futures: object,
+    ) -> dict[str, float] | None:
+        """Prefer an existing communicate future for a speakable label."""
+        from agents.cognition.configuration import CognitionSemanticNamingMode
+        from agents.cognition.semantic_naming import naming_communicate_penalties
+
+        if (
+            self._semantic_naming_mode
+            is not CognitionSemanticNamingMode.DETERMINISTIC
+            or ledger is None
+        ):
+            return None
+        penalties = naming_communicate_penalties(
+            ledger,
+            getattr(futures, "futures", ()),
+            tick=loop_input.observation.tick,
+            mode=self._semantic_naming_mode,
+            policy=self._semantic_naming_policy,
+        )
+        mapped = dict(penalties)
+        _LOG.debug(
+            "naming_penalty_applied future_count=%s",
+            len(mapped),
+        )
+        return mapped
 
     def _artifact_inscribe_penalties(
         self,
@@ -1462,6 +1570,12 @@ class CognitiveLoop:
         social_norms = self._prepare_social_norms(loop_input)
         social_conventions = self._prepare_social_conventions(loop_input)
         artifact_interpretations = self._prepare_artifact_interpretations(loop_input)
+        semantic_naming = self._prepare_semantic_naming(
+            loop_input,
+            group_formation=group_formation,
+            social_norms=social_norms,
+            social_conventions=social_conventions,
+        )
         competence = self._prepare_competence(loop_input, memory)
         competence, advice = self._prepare_teaching(loop_input, competence)
         recipe_beliefs = self._prepare_recipe_beliefs(loop_input)
@@ -1577,6 +1691,9 @@ class CognitiveLoop:
             loop_input, social_conventions, futures
         )
         artifact_penalty_map = self._artifact_inscribe_penalties(loop_input, futures)
+        naming_penalty_map = self._naming_communicate_penalties(
+            loop_input, semantic_naming, futures
+        )
         intention = await run_stage(
             kind=ComponentKind.INTENTION,
             ordinal=8,
@@ -1607,6 +1724,9 @@ class CognitiveLoop:
                     artifact_interpretations=artifact_interpretations,
                     artifact_interpretation_mode=self._artifact_interpretation_mode,
                     artifact_penalties=artifact_penalty_map,
+                    semantic_naming=semantic_naming,
+                    semantic_naming_mode=self._semantic_naming_mode,
+                    naming_penalties=naming_penalty_map,
                 ),
             ),
             expected_type=SelectedIntention,
@@ -1646,6 +1766,8 @@ class CognitiveLoop:
                     social_convention_mode=self._social_convention_mode,
                     artifact_interpretations=artifact_interpretations,
                     artifact_interpretation_mode=self._artifact_interpretation_mode,
+                    semantic_naming=semantic_naming,
+                    semantic_naming_mode=self._semantic_naming_mode,
                 ),
             ),
             expected_type=ActionPlan,
@@ -1686,6 +1808,7 @@ class CognitiveLoop:
             social_norms=social_norms,
             social_conventions=social_conventions,
             artifact_interpretations=artifact_interpretations,
+            semantic_naming=semantic_naming,
             competence_model=competence,
             declarative_advice=advice,
             recipe_beliefs=recipe_beliefs,
@@ -1842,6 +1965,7 @@ class CognitiveLoop:
             social_norms=proposal.social_norms,
             social_conventions=proposal.social_conventions,
             artifact_interpretations=proposal.artifact_interpretations,
+            semantic_naming=proposal.semantic_naming,
             competence_model=proposal.competence_model,
             declarative_advice=proposal.declarative_advice,
             recipe_beliefs=proposal.recipe_beliefs,
@@ -2655,6 +2779,54 @@ def _reputation_agent(identity: object, entity_id: object) -> object | None:
             if type(agent_id) is AgentId:
                 return agent_id
     return None
+
+
+
+def _build_naming_cue_summary(
+    *,
+    group_formation: object | None,
+    social_norms: object | None,
+    social_conventions: object | None,
+) -> object:
+    """Duck-typed cue bag from already-updated group/norm/convention fields."""
+    from agents.cognition.semantic_naming import NamingCueSummary
+
+    group_ids: list[str] = []
+    practice_actions: list[str] = []
+    for concept in getattr(group_formation, "concepts", ()) or ():
+        status = getattr(concept, "status", None)
+        if str(getattr(status, "value", status)) != "active":
+            continue
+        concept_id = getattr(concept, "concept_id", None)
+        if isinstance(concept_id, str) and concept_id:
+            group_ids.append(concept_id)
+    for belief in getattr(social_conventions, "beliefs", ()) or ():
+        status = getattr(belief, "status", None)
+        if str(getattr(status, "value", status)) != "active":
+            continue
+        content = getattr(belief, "content", None)
+        action = getattr(content, "usual_action", None)
+        if isinstance(action, str) and action:
+            practice_actions.append(action)
+    for belief in getattr(social_norms, "beliefs", ()) or ():
+        status = getattr(belief, "status", None)
+        if str(getattr(status, "value", status)) != "active":
+            continue
+        expectation = getattr(belief, "expectation", None)
+        action = getattr(expectation, "action", None)
+        if action is None:
+            action = getattr(expectation, "action_kind", None)
+        if action is None:
+            pattern = getattr(belief, "pattern", None)
+            action = getattr(pattern, "expected_action", None)
+        if isinstance(action, str) and action:
+            practice_actions.append(action)
+        elif hasattr(action, "value") and isinstance(action.value, str):
+            practice_actions.append(action.value)
+    return NamingCueSummary(
+        group_concept_ids=tuple(group_ids),
+        practice_action_kinds=tuple(practice_actions),
+    )
 
 
 def _planner_options(

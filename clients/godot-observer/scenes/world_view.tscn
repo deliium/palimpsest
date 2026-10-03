@@ -1,9 +1,10 @@
-[gd_scene load_steps=10 format=3]
+[gd_scene load_steps=11 format=3]
 
 [ext_resource type="Script" path="res://scripts/view/world_view.gd" id="1_view"]
 [ext_resource type="Script" path="res://scripts/view/camera_rig.gd" id="7_camera"]
 [ext_resource type="Script" path="res://scripts/view/claim_overlay.gd" id="8_claims"]
 [ext_resource type="Script" path="res://scripts/view/analytics_overlay.gd" id="9_analytics"]
+[ext_resource type="Script" path="res://scripts/view/label_overlay.gd" id="10_labels"]
 [ext_resource type="PackedScene" path="res://scenes/layers/location_layer.tscn" id="2_locations"]
 [ext_resource type="PackedScene" path="res://scenes/layers/connection_layer.tscn" id="3_connections"]
 [ext_resource type="PackedScene" path="res://scenes/layers/object_layer.tscn" id="4_objects"]
@@ -23,6 +24,9 @@ script = ExtResource("8_claims")
 
 [node name="AnalyticsOverlay" type="Node2D" parent="."]
 script = ExtResource("9_analytics")
+
+[node name="LabelOverlay" type="Node2D" parent="."]
+script = ExtResource("10_labels")
 
 [node name="ConnectionLayer" parent="." instance=ExtResource("3_connections")]
 

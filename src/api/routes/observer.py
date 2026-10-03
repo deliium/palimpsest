@@ -7,11 +7,13 @@ import time
 from fastapi import APIRouter, Depends, Query, Request
 
 from api.dependencies import get_observer_service, get_settings
-from api.errors import bad_request
+from api.errors import bad_request, not_found
 from api.observer_schemas import (
     ObserverEventOut,
     ObserverEventPageOut,
     ObserverFrameOut,
+    ObserverLabelOverlayOut,
+    ObserverLabelReadingOut,
     ObserverManifestOut,
     ObserverRelationshipPageOut,
     ObserverRunOut,
@@ -21,6 +23,7 @@ from api.observer_service import ObserverReadService
 from api.security import ApiCapability, require_http_capability
 from infrastructure.logging import get_logger
 from infrastructure.settings import Settings
+from observer.labels import project_subjective_label_overlay
 from observer.version import DEFAULT_LAYOUT_ID
 
 router = APIRouter(prefix="/v1/simulations", tags=["observer"])
@@ -240,3 +243,93 @@ async def get_observer_relationships(
     )
     del request
     return result
+
+
+@router.get(
+    "/{run_id}/observer/agents/{agent_id}/labels",
+    response_model=ObserverLabelOverlayOut,
+)
+async def get_observer_labels(
+    run_id: str,
+    agent_id: str,
+    request: Request,
+    _: None = Depends(_debug),
+    service: ObserverReadService = Depends(get_observer_service),
+    tick: int | None = Query(default=None, ge=0),
+) -> ObserverLabelOverlayOut:
+    started = time.perf_counter()
+    manager = getattr(request.app.state, "simulation_manager", None)
+    checkpoint = None
+    if manager is not None and hasattr(manager, "owner_runtime_checkpoint"):
+        checkpoint = manager.owner_runtime_checkpoint(run_id, agent_id)
+    if tick is not None:
+        key = (
+            None
+            if checkpoint is None
+            else getattr(checkpoint, "last_observation_key", None)
+        )
+        live_tick = None if not isinstance(key, tuple) or not key else key[0]
+        if live_tick != tick:
+            _LOGGER.warning(
+                "labels_unavailable_at_tick run_id=%s agent_id=%s tick=%s",
+                run_id,
+                agent_id,
+                tick,
+            )
+            raise not_found(code="labels_unavailable_at_tick", run_id=run_id)
+    display_index: dict[str, str] = {}
+    try:
+        frame = await service.state(run_id, tick=None, layout_id=DEFAULT_LAYOUT_ID)
+        world = frame.world
+        for location in world.locations:
+            display_index[location.location_id] = location.display_name
+        for agent in world.agents:
+            if agent.agent_id:
+                display_index[agent.agent_id] = agent.agent_id
+            display_index[agent.entity_id] = (
+                agent.agent_id if agent.agent_id else agent.entity_id
+            )
+    except Exception:
+        display_index = {}
+    ledger = (
+        None
+        if checkpoint is None
+        else getattr(checkpoint, "semantic_naming", None)
+    )
+    rows = () if ledger is None else getattr(ledger, "bindings", ()) or ()
+    overlay = project_subjective_label_overlay(agent_id, rows, display_index)
+    _LOGGER.info(
+        "route_observer_labels",
+        route_template=(
+            "GET /v1/simulations/{run_id}/observer/agents/{agent_id}/labels"
+        ),
+        status=200,
+        run_id=run_id,
+        duration_ms=round((time.perf_counter() - started) * 1000, 3),
+        count=len(overlay.readings),
+    )
+    _LOGGER.debug(
+        "subjective_labels_served agent_id=%s row_count=%s",
+        agent_id,
+        len(overlay.readings),
+    )
+    return ObserverLabelOverlayOut(
+        run_id=run_id,
+        agent_id=overlay.agent_id,
+        layer=overlay.layer,
+        protocol_version=overlay.protocol_version,
+        count=len(overlay.readings),
+        readings=tuple(
+            ObserverLabelReadingOut(
+                objective_id=reading.objective_id,
+                objective_display_name=reading.objective_display_name,
+                referent_kind=reading.referent_kind,
+                label_token=reading.label_token,
+                label_display=reading.label_display,
+                sense_revision=reading.sense_revision,
+                strength_band=reading.strength_band,  # type: ignore[arg-type]
+                label_source=reading.label_source,
+            )
+            for reading in overlay.readings
+        ),
+    )

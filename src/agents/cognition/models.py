@@ -715,6 +715,7 @@ class SubjectiveSnapshot:
     social_norms: object | None = None
     social_conventions: object | None = None
     artifact_interpretations: object | None = None
+    semantic_naming: object | None = None
     competence_model: object | None = None
     declarative_advice: object | None = None
     recipe_beliefs: object | None = None
@@ -896,6 +897,13 @@ class SubjectiveSnapshot:
             self.artifact_interpretations,
             self.owner_id,
             field_name="SubjectiveSnapshot.artifact_interpretations",
+        )
+        from agents.cognition.semantic_naming import require_owner_semantic_naming
+
+        require_owner_semantic_naming(
+            self.semantic_naming,
+            self.owner_id,
+            field_name="SubjectiveSnapshot.semantic_naming",
         )
         from agents.cognition.competence import require_owner_competence
 
@@ -3688,6 +3696,7 @@ class CognitiveLoopProposal:
     social_norms: object | None = None
     social_conventions: object | None = None
     artifact_interpretations: object | None = None
+    semantic_naming: object | None = None
     competence_model: object | None = None
     declarative_advice: object | None = None
     recipe_beliefs: object | None = None
@@ -3779,6 +3788,13 @@ class CognitiveLoopProposal:
             self.artifact_interpretations,
             self.agent_id,
             field_name="CognitiveLoopProposal.artifact_interpretations",
+        )
+        from agents.cognition.semantic_naming import require_owner_semantic_naming
+
+        require_owner_semantic_naming(
+            self.semantic_naming,
+            self.agent_id,
+            field_name="CognitiveLoopProposal.semantic_naming",
         )
         from agents.cognition.competence import require_owner_competence
 
@@ -3873,6 +3889,7 @@ class CognitiveLoopResult:
     social_norms: object | None = None
     social_conventions: object | None = None
     artifact_interpretations: object | None = None
+    semantic_naming: object | None = None
     competence_model: object | None = None
     declarative_advice: object | None = None
     recipe_beliefs: object | None = None
@@ -3941,6 +3958,13 @@ class CognitiveLoopResult:
             self.artifact_interpretations,
             self.agent_id,
             field_name="CognitiveLoopResult.artifact_interpretations",
+        )
+        from agents.cognition.semantic_naming import require_owner_semantic_naming
+
+        require_owner_semantic_naming(
+            self.semantic_naming,
+            self.agent_id,
+            field_name="CognitiveLoopResult.semantic_naming",
         )
         if self.territorial_audits is not None:
             from agents.cognition.territorial import TerritorialClaimAudit

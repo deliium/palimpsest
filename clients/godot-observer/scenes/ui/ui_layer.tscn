@@ -1,10 +1,11 @@
-[gd_scene load_steps=6 format=3]
+[gd_scene load_steps=7 format=3]
 
 [ext_resource type="Script" path="res://scripts/ui/ui_layer.gd" id="1_ui"]
 [ext_resource type="PackedScene" path="res://scenes/ui/status_bar.tscn" id="2_status"]
 [ext_resource type="PackedScene" path="res://scenes/ui/event_log.tscn" id="3_log"]
 [ext_resource type="PackedScene" path="res://scenes/ui/inspector.tscn" id="4_inspector"]
 [ext_resource type="PackedScene" path="res://scenes/ui/timeline.tscn" id="5_timeline"]
+[ext_resource type="PackedScene" path="res://scenes/ui/perspective_control.tscn" id="6_perspective"]
 
 [node name="UILayer" type="CanvasLayer"]
 script = ExtResource("1_ui")
@@ -136,6 +137,12 @@ text = "8x"
 [node name="Speed16" type="Button" parent="Playback"]
 layout_mode = 2
 text = "16x"
+
+[node name="PerspectiveControl" parent="." instance=ExtResource("6_perspective")]
+offset_left = 16.0
+offset_top = 216.0
+offset_right = 520.0
+offset_bottom = 248.0
 
 [node name="Timeline" parent="." instance=ExtResource("5_timeline")]
 

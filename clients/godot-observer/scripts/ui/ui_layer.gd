@@ -13,6 +13,8 @@ signal control_pressed(action: String)
 signal event_seek_requested(tick: int, sequence: int)
 signal timeline_seek_requested(tick: int, sequence: int)
 signal play_fixture_requested
+signal perspective_requested(agent_id: String)
+signal labels_cleared
 
 var _live_tick := 0
 var _selected_id := ""
@@ -22,6 +24,12 @@ func _ready() -> void:
 	ObserverLog.debug("view", "scene_ready layer=%s" % name)
 	$StatusBar.connect_requested.connect(func(run_id: String) -> void:
 		connect_requested.emit(run_id)
+	)
+	$PerspectiveControl.perspective_requested.connect(func(agent_id: String) -> void:
+		perspective_requested.emit(agent_id)
+	)
+	$PerspectiveControl.labels_cleared.connect(func() -> void:
+		labels_cleared.emit()
 	)
 	$Controls/ZoomIn.pressed.connect(func() -> void: zoom_in_requested.emit())
 	$Controls/ZoomOut.pressed.connect(func() -> void: zoom_out_requested.emit())

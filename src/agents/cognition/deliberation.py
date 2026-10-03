@@ -137,6 +137,9 @@ class MultiCriteriaIntentionSelector:
         artifact_interpretations: object | None = None,
         artifact_interpretation_mode: object | None = None,
         artifact_penalties: Mapping[str, float] | None = None,
+        semantic_naming: object | None = None,
+        semantic_naming_mode: object | None = None,
+        naming_penalties: Mapping[str, float] | None = None,
     ) -> SelectedIntention:
         owner = loop_input.agent_id
         tick = loop_input.observation.tick
@@ -370,6 +373,24 @@ class MultiCriteriaIntentionSelector:
                 "artifact_inscribe_penalty_applied future_count=%s",
                 len(artifact_penalties),
             )
+        if naming_penalties is None and semantic_naming is not None:
+            from agents.cognition.semantic_naming import naming_communicate_penalties
+
+            naming_penalties = naming_communicate_penalties(
+                semantic_naming,
+                tuple(
+                    futures_by_id[item.future_id]
+                    for item in undominated
+                    if item.future_id in futures_by_id
+                ),
+                tick=tick,
+                mode=semantic_naming_mode,
+            )
+        if naming_penalties:
+            _LOG.debug(
+                "naming_penalty_applied future_count=%s",
+                len(naming_penalties),
+            )
         winner, tie_break = _pairwise_select(
             undominated,
             futures_by_id,
@@ -386,6 +407,7 @@ class MultiCriteriaIntentionSelector:
             norm_penalties,
             convention_penalties,
             artifact_penalties,
+            naming_penalties,
         )
         future = futures_by_id.get(winner.future_id)
         direction = ActionDirection.WAIT if future is None else future.direction
@@ -647,6 +669,8 @@ class CommandPlanner:
         social_convention_mode: object | None = None,
         artifact_interpretations: object | None = None,
         artifact_interpretation_mode: object | None = None,
+        semantic_naming: object | None = None,
+        semantic_naming_mode: object | None = None,
     ) -> ActionPlan:
         owner = loop_input.agent_id
         tick = loop_input.observation.tick
@@ -807,6 +831,20 @@ class CommandPlanner:
             identity=None if snapshot is None else snapshot.social_identity,
             ledger=prepared_conventions,
             mode=social_convention_mode,
+        )
+        from agents.cognition.semantic_naming import naming_communicate_utterance
+
+        prepared_naming = semantic_naming
+        if prepared_naming is None and snapshot is not None:
+            prepared_naming = snapshot.semantic_naming
+        command = naming_communicate_utterance(
+            command,
+            owner_id=owner,
+            tick=tick,
+            observation=loop_input.observation,
+            identity=None if snapshot is None else snapshot.social_identity,
+            ledger=prepared_naming,
+            mode=semantic_naming_mode,
         )
         from agents.cognition.artifacts import (
             artifact_inscribe_command,
@@ -1351,6 +1389,7 @@ def _pairwise_select(
     norm_penalties: Mapping[str, float] | None = None,
     convention_penalties: Mapping[str, float] | None = None,
     artifact_penalties: Mapping[str, float] | None = None,
+    naming_penalties: Mapping[str, float] | None = None,
 ) -> tuple[FutureAppraisal, str]:
     if len(appraisals) == 1:
         return appraisals[0], _TIE_BREAK_NONE
@@ -1375,6 +1414,7 @@ def _pairwise_select(
                 norm_penalties,
                 convention_penalties,
                 artifact_penalties,
+                naming_penalties,
             )
             if cmp > 0:
                 scores[left.future_id] += 1
@@ -1419,6 +1459,7 @@ def _pairwise_compare(
     norm_penalties: Mapping[str, float] | None = None,
     convention_penalties: Mapping[str, float] | None = None,
     artifact_penalties: Mapping[str, float] | None = None,
+    naming_penalties: Mapping[str, float] | None = None,
 ) -> int:
     """Return positive if left preferred, negative if right preferred, else 0."""
     active_drives = set(motivation.active_drive_kinds)
@@ -1576,6 +1617,9 @@ def _pairwise_compare(
     if artifact_penalties is not None:
         total -= artifact_penalties.get(left.future_id, 0.0)
         total += artifact_penalties.get(right.future_id, 0.0)
+    if naming_penalties is not None:
+        total -= naming_penalties.get(left.future_id, 0.0)
+        total += naming_penalties.get(right.future_id, 0.0)
     if total > 0:
         return 1
     if total < 0:

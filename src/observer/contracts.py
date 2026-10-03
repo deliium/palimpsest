@@ -29,6 +29,9 @@ _OBJECTIVE_LEAK_FIELDS: frozenset[str] = frozenset(
         "spatial_control",
         "territory_owner",
         "controller",
+        "semantic_naming",
+        "subjective_labels",
+        "labels",
     }
 )
 

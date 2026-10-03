@@ -1066,5 +1066,7 @@ def build_cognitive_loop(
         social_convention_mode=resolved.social_convention_mode,
         social_convention_policy=resolved.social_convention_policy,
         artifact_interpretation_mode=resolved.artifact_interpretation_mode,
+        semantic_naming_mode=resolved.semantic_naming_mode,
+        semantic_naming_policy=resolved.semantic_naming_policy,
         production_knowledge_mode=resolved.production_knowledge_mode,
     )

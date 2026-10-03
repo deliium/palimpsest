@@ -32,6 +32,9 @@ func _ready() -> void:
 	_ui.event_seek_requested.connect(_on_event_seek)
 	_ui.timeline_seek_requested.connect(_on_event_seek)
 	_ui.play_fixture_requested.connect(_play_fixture)
+	_ui.perspective_requested.connect(_on_perspective)
+	_ui.labels_cleared.connect(_on_labels_cleared)
+	_session.overlay_payload.connect(_on_overlay_payload)
 	_world.inspect_requested.connect(func(snapshot: Dictionary) -> void:
 		_ui.note_selection(str(snapshot.get("entity_id", "")))
 	)
@@ -75,3 +78,20 @@ func _on_control(action: String) -> void:
 
 func _play_fixture() -> void:
 	FixturePlayer.play_into(_world, _ui.get_node("EventLog"))
+
+
+func _on_perspective(agent_id: String) -> void:
+	_session.request_label_overlay(agent_id)
+
+
+func _on_labels_cleared() -> void:
+	_world.apply_subjective_labels(null)
+
+
+func _on_overlay_payload(kind: String, payload: Variant) -> void:
+	if kind == "subjective_labels":
+		_world.apply_subjective_labels(payload)
+	elif kind == "territorial_claims":
+		_world.apply_subjective_claims(payload)
+	elif kind == "spatial_control":
+		_world.apply_research_analytics(payload)

@@ -22,6 +22,11 @@ from observer.contracts import (
     ScreenPoint,
     VisualBounds,
 )
+from observer.labels import (
+    SubjectiveLabelOverlay,
+    SubjectiveLabelReading,
+    project_subjective_label_overlay,
+)
 from observer.version import (
     DEFAULT_LAYOUT_ID,
     OBSERVER_LAYOUT_SCHEMA_VERSION,
@@ -57,5 +62,8 @@ __all__ = [
     "ObserverWorldState",
     "PresentationSlot",
     "ScreenPoint",
+    "SubjectiveLabelOverlay",
+    "SubjectiveLabelReading",
     "VisualBounds",
+    "project_subjective_label_overlay",
 ]

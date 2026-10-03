@@ -220,6 +220,11 @@ func request_claim_overlay(owner_id: String) -> void:
 	_request_path("territorial_claims", path)
 
 
+func request_label_overlay(agent_id: String) -> void:
+	var path := "/v1/simulations/%s/observer/agents/%s/labels" % [run_id, agent_id]
+	_request_path("subjective_labels", path)
+
+
 func request_analytics_overlay(metric_set_id: String) -> void:
 	var path := "/v1/simulations/%s/metrics/%s/spatial_control" % [run_id, metric_set_id]
 	_request_path("spatial_control", path)
@@ -284,7 +289,7 @@ func _on_http(route: String, _status: int, body: Variant, reason_code: String) -
 	if seek_id >= 0 and seek_id < _seek_serial:
 		ObserverLog.debug("session", "seek_ignored reason_code=stale_response")
 		return
-	if kind == "territorial_claims" or kind == "spatial_control":
+	if kind == "territorial_claims" or kind == "spatial_control" or kind == "subjective_labels":
 		var overlay: Variant = null
 		if reason_code == "" and typeof(body) == TYPE_DICTIONARY:
 			overlay = body
