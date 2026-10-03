@@ -88,6 +88,7 @@ RUNNER_SCHEMA_VERSION_V16: Final[str] = "runner-config-v16"
 RUNNER_SCHEMA_VERSION_V17: Final[str] = "runner-config-v17"
 RUNNER_SCHEMA_VERSION_V18: Final[str] = "runner-config-v18"
 RUNNER_SCHEMA_VERSION_V19: Final[str] = "runner-config-v19"
+RUNNER_SCHEMA_VERSION_V20: Final[str] = "runner-config-v20"
 RUNNER_SCHEMA_VERSION: Final[str] = RUNNER_SCHEMA_VERSION_V4
 SUPPORTED_RUNNER_SCHEMA_VERSIONS: Final[frozenset[str]] = frozenset(
     {
@@ -110,6 +111,7 @@ SUPPORTED_RUNNER_SCHEMA_VERSIONS: Final[frozenset[str]] = frozenset(
         RUNNER_SCHEMA_VERSION_V17,
         RUNNER_SCHEMA_VERSION_V18,
         RUNNER_SCHEMA_VERSION_V19,
+        RUNNER_SCHEMA_VERSION_V20,
     }
 )
 RESULT_SCHEMA_VERSION_V1: Final[str] = "runner-result-v1"
@@ -353,6 +355,21 @@ class ArtifactInterpretationMode(StrEnum):
     DETERMINISTIC = "deterministic"
 
 
+class SemanticNamingMode(StrEnum):
+    """Closed owner-scoped semantic-naming treatments.
+
+    Default is ``DISABLED``, which leaves the snapshot field unset and does
+    not change commands, memories, semantic beliefs, relationships,
+    reputation, territorial claims, group formation, social norms, social
+    conventions, artifact interpretation, or audits. This is not a
+    ``V2CapabilityFlags`` slot. Lockstep with
+    ``agents.cognition.CognitionSemanticNamingMode``.
+    """
+
+    DISABLED = "disabled"
+    DETERMINISTIC = "deterministic"
+
+
 class ProductionKnowledgeMode(StrEnum):
     """Closed production-belief treatments.
 
@@ -495,6 +512,7 @@ _SKILL_SCHEMAS: Final[frozenset[str]] = frozenset(
         RUNNER_SCHEMA_VERSION_V17,
         RUNNER_SCHEMA_VERSION_V18,
         RUNNER_SCHEMA_VERSION_V19,
+        RUNNER_SCHEMA_VERSION_V20,
     }
 )
 
@@ -1351,6 +1369,7 @@ class AgentCognitionSpec:
     artifact_interpretation_mode: ArtifactInterpretationMode = (
         ArtifactInterpretationMode.DISABLED
     )
+    semantic_naming_mode: SemanticNamingMode = SemanticNamingMode.DISABLED
 
     def __post_init__(self) -> None:
         if type(self.agent_id) is not AgentId:
@@ -1473,6 +1492,14 @@ class AgentCognitionSpec:
             raise TypeError(
                 "AgentCognitionSpec.artifact_interpretation_mode must be "
                 "ArtifactInterpretationMode"
+            )
+        if type(self.semantic_naming_mode) is not SemanticNamingMode:
+            _LOGGER.error(
+                "invalid_enum path=AgentCognitionSpec.semantic_naming_mode "
+                "reason_code=invalid_mode"
+            )
+            raise TypeError(
+                "AgentCognitionSpec.semantic_naming_mode must be SemanticNamingMode"
             )
         if self.policy_version != COGNITION_POLICY_VERSION:
             raise ValueError("unsupported cognition policy_version")
@@ -1989,6 +2016,7 @@ class SimulationRunnerConfig:
             RUNNER_SCHEMA_VERSION_V17,
             RUNNER_SCHEMA_VERSION_V18,
             RUNNER_SCHEMA_VERSION_V19,
+            RUNNER_SCHEMA_VERSION_V20,
         }
         if non_disabled and self.schema_version not in consolidation_schemas:
             _LOGGER.error(
@@ -2034,6 +2062,7 @@ class SimulationRunnerConfig:
             RUNNER_SCHEMA_VERSION_V17,
             RUNNER_SCHEMA_VERSION_V18,
             RUNNER_SCHEMA_VERSION_V19,
+            RUNNER_SCHEMA_VERSION_V20,
         }
         if reflecting and self.schema_version not in reflection_schemas:
             _LOGGER.error(
@@ -2079,6 +2108,7 @@ class SimulationRunnerConfig:
             RUNNER_SCHEMA_VERSION_V17,
             RUNNER_SCHEMA_VERSION_V18,
             RUNNER_SCHEMA_VERSION_V19,
+            RUNNER_SCHEMA_VERSION_V20,
         }
         if planning and self.schema_version not in prospective_schemas:
             _LOGGER.error(
@@ -2123,6 +2153,7 @@ class SimulationRunnerConfig:
             RUNNER_SCHEMA_VERSION_V17,
             RUNNER_SCHEMA_VERSION_V18,
             RUNNER_SCHEMA_VERSION_V19,
+            RUNNER_SCHEMA_VERSION_V20,
         }
         if considering and self.schema_version not in counterfactual_schemas:
             _LOGGER.error(
@@ -2166,6 +2197,7 @@ class SimulationRunnerConfig:
             RUNNER_SCHEMA_VERSION_V17,
             RUNNER_SCHEMA_VERSION_V18,
             RUNNER_SCHEMA_VERSION_V19,
+            RUNNER_SCHEMA_VERSION_V20,
         }:
             _LOGGER.error(
                 "invalid_fields path=agents.cognition.communication_strategy_mode "
@@ -2207,6 +2239,7 @@ class SimulationRunnerConfig:
             RUNNER_SCHEMA_VERSION_V17,
             RUNNER_SCHEMA_VERSION_V18,
             RUNNER_SCHEMA_VERSION_V19,
+            RUNNER_SCHEMA_VERSION_V20,
         }:
             _LOGGER.error(
                 "invalid_fields path=agents.cognition.reputation_mode "
@@ -2290,6 +2323,7 @@ class SimulationRunnerConfig:
             RUNNER_SCHEMA_VERSION_V17,
             RUNNER_SCHEMA_VERSION_V18,
             RUNNER_SCHEMA_VERSION_V19,
+            RUNNER_SCHEMA_VERSION_V20,
         }:
             _LOGGER.error(
                 "invalid_fields path=agents.cognition.teaching_interaction_mode "
@@ -2322,6 +2356,7 @@ class SimulationRunnerConfig:
             RUNNER_SCHEMA_VERSION_V17,
             RUNNER_SCHEMA_VERSION_V18,
             RUNNER_SCHEMA_VERSION_V19,
+            RUNNER_SCHEMA_VERSION_V20,
         }
         if (dynamics is not None and self.schema_version not in dynamics_schemas) or (
             self.schema_version == RUNNER_SCHEMA_VERSION_V14 and dynamics is None
@@ -2349,6 +2384,7 @@ class SimulationRunnerConfig:
             RUNNER_SCHEMA_VERSION_V17,
             RUNNER_SCHEMA_VERSION_V18,
             RUNNER_SCHEMA_VERSION_V19,
+            RUNNER_SCHEMA_VERSION_V20,
         }:
             _LOGGER.error(
                 "invalid_fields path=agents.cognition.territorial_claim_mode "
@@ -2382,6 +2418,7 @@ class SimulationRunnerConfig:
             RUNNER_SCHEMA_VERSION_V17,
             RUNNER_SCHEMA_VERSION_V18,
             RUNNER_SCHEMA_VERSION_V19,
+            RUNNER_SCHEMA_VERSION_V20,
         }:
             _LOGGER.error(
                 "invalid_fields path=agents.cognition.group_formation_mode "
@@ -2409,6 +2446,7 @@ class SimulationRunnerConfig:
             RUNNER_SCHEMA_VERSION_V17,
             RUNNER_SCHEMA_VERSION_V18,
             RUNNER_SCHEMA_VERSION_V19,
+            RUNNER_SCHEMA_VERSION_V20,
         }:
             _LOGGER.error(
                 "invalid_fields path=agents.cognition.social_norm_mode "
@@ -2439,6 +2477,7 @@ class SimulationRunnerConfig:
         convention_schemas = {
             RUNNER_SCHEMA_VERSION_V18,
             RUNNER_SCHEMA_VERSION_V19,
+            RUNNER_SCHEMA_VERSION_V20,
         }
         if conventions_on and self.schema_version not in convention_schemas:
             _LOGGER.error(
@@ -2448,7 +2487,7 @@ class SimulationRunnerConfig:
             )
             raise ValueError(
                 "deterministic social_convention_mode requires runner-config-v18 "
-                "or runner-config-v19 "
+                "or runner-config-v19 or runner-config-v20 "
                 "(code=social_convention_mode_requires_v18)"
             )
         if self.schema_version == RUNNER_SCHEMA_VERSION_V18 and not conventions_on:
@@ -2472,7 +2511,11 @@ class SimulationRunnerConfig:
             mode is ArtifactInterpretationMode.DETERMINISTIC for mode in artifact_modes
         )
         runner_log = logging.getLogger("simulation.runner")
-        if artifacts_on and self.schema_version != RUNNER_SCHEMA_VERSION_V19:
+        artifact_schemas = {
+            RUNNER_SCHEMA_VERSION_V19,
+            RUNNER_SCHEMA_VERSION_V20,
+        }
+        if artifacts_on and self.schema_version not in artifact_schemas:
             runner_log.error(
                 "invalid_fields path=agents.cognition.artifact_interpretation_mode "
                 "reason_code=artifact_interpretation_mode_requires_v19 "
@@ -2481,7 +2524,7 @@ class SimulationRunnerConfig:
             )
             raise ValueError(
                 "deterministic artifact_interpretation_mode requires "
-                "runner-config-v19 "
+                "runner-config-v19 or runner-config-v20 "
                 "(code=artifact_interpretation_mode_requires_v19)"
             )
         if self.schema_version == RUNNER_SCHEMA_VERSION_V19 and not artifacts_on:
@@ -2495,8 +2538,34 @@ class SimulationRunnerConfig:
                 "artifact_interpretation_mode "
                 "(code=v19_requires_artifact_interpretation)"
             )
+        naming_modes = tuple(
+            agent.cognition.semantic_naming_mode for agent in self.agents
+        )
+        naming_on = any(
+            mode is SemanticNamingMode.DETERMINISTIC for mode in naming_modes
+        )
+        if naming_on and self.schema_version != RUNNER_SCHEMA_VERSION_V20:
+            runner_log.error(
+                "invalid_fields path=agents.cognition.semantic_naming_mode "
+                "reason_code=semantic_naming_mode_requires_v20 schema_version=%s",
+                self.schema_version,
+            )
+            raise ValueError(
+                "deterministic semantic_naming_mode requires runner-config-v20 "
+                "(code=semantic_naming_mode_requires_v20)"
+            )
+        if self.schema_version == RUNNER_SCHEMA_VERSION_V20 and not naming_on:
+            runner_log.error(
+                "invalid_fields path=schema_version "
+                "reason_code=v20_requires_semantic_naming schema_version=%s",
+                self.schema_version,
+            )
+            raise ValueError(
+                "runner-config-v20 requires a deterministic semantic_naming_mode "
+                "(code=v20_requires_semantic_naming)"
+            )
         if (
-            self.schema_version == RUNNER_SCHEMA_VERSION_V19
+            self.schema_version in artifact_schemas
             or artifacts_on
             or artifacts_active
         ):
@@ -2548,6 +2617,7 @@ class SimulationRunnerConfig:
             RUNNER_SCHEMA_VERSION_V17,
             RUNNER_SCHEMA_VERSION_V18,
             RUNNER_SCHEMA_VERSION_V19,
+            RUNNER_SCHEMA_VERSION_V20,
         }:
             _LOGGER.error(
                 "invalid_fields path=agents.cognition.production_knowledge_mode "
@@ -2568,6 +2638,7 @@ class SimulationRunnerConfig:
             RUNNER_SCHEMA_VERSION_V17,
             RUNNER_SCHEMA_VERSION_V18,
             RUNNER_SCHEMA_VERSION_V19,
+            RUNNER_SCHEMA_VERSION_V20,
         }:
             from world.production import production_catalog_digest
 
@@ -2628,6 +2699,7 @@ class SimulationRunnerConfig:
             RUNNER_SCHEMA_VERSION_V17,
             RUNNER_SCHEMA_VERSION_V18,
             RUNNER_SCHEMA_VERSION_V19,
+            RUNNER_SCHEMA_VERSION_V20,
         }:
             shared_teaching = teaching_weight_tuple(self.agents[0].cognition)
             if any(

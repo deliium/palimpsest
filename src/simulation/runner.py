@@ -648,11 +648,22 @@ def _cognition_config_for(
         None if convention_policy is None else convention_policy.version,
     )
     from agents.cognition.artifacts import ArtifactInterpretationMode
+    from agents.cognition.configuration import CognitionSemanticNamingMode
+    from agents.cognition.semantic_naming import default_semantic_naming_policy
 
     artifact_mode = ArtifactInterpretationMode(spec.artifact_interpretation_mode.value)
     _LOG.debug(
         "cognition_config_artifact_interpretation_mode mode=%s",
         artifact_mode.value,
+    )
+    naming_mode = CognitionSemanticNamingMode(spec.semantic_naming_mode.value)
+    naming_policy = None
+    if naming_mode is CognitionSemanticNamingMode.DETERMINISTIC:
+        naming_policy = default_semantic_naming_policy()
+    _LOG.debug(
+        "cognition_config_semantic_naming_mode mode=%s policy_version=%s",
+        naming_mode.value,
+        None if naming_policy is None else naming_policy.version,
     )
     return CognitionLoopConfig(
         memory_mode=CognitionMemoryMode(spec.memory_mode.value),
@@ -692,6 +703,8 @@ def _cognition_config_for(
         social_convention_mode=convention_mode,
         social_convention_policy=convention_policy,
         artifact_interpretation_mode=artifact_mode,
+        semantic_naming_mode=naming_mode,
+        semantic_naming_policy=naming_policy,
         production_knowledge_mode=CognitionProductionKnowledgeMode(
             spec.production_knowledge_mode.value
         ),

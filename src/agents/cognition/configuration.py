@@ -46,6 +46,10 @@ from agents.cognition.reputation import (
     ReputationFormationPolicy,
     default_reputation_policy,
 )
+from agents.cognition.semantic_naming import (
+    SemanticNamingPolicy,
+    default_semantic_naming_policy,
+)
 from agents.cognition.social_conventions import (
     SocialConventionPolicy,
     default_social_convention_policy,
@@ -275,6 +279,17 @@ class CognitionSocialConventionMode(StrEnum):
     DETERMINISTIC = "deterministic"
 
 
+class CognitionSemanticNamingMode(StrEnum):
+    """Owner-scoped terminology ledger. Disabled leaves the snapshot field unset.
+
+    Lockstep with ``simulation.SemanticNamingMode``. This is not a
+    ``V2CapabilityFlags`` slot. ``DISABLED`` does not allocate a ledger.
+    """
+
+    DISABLED = "disabled"
+    DETERMINISTIC = "deterministic"
+
+
 def _unit_interval(name: str, value: object) -> float:
     if isinstance(value, bool) or not isinstance(value, (int, float)):
         raise ValueError(f"{name}: not_unit_interval")
@@ -372,6 +387,10 @@ class CognitionLoopConfig:
     artifact_interpretation_mode: ArtifactInterpretationMode = (
         ArtifactInterpretationMode.DISABLED
     )
+    semantic_naming_mode: CognitionSemanticNamingMode = (
+        CognitionSemanticNamingMode.DISABLED
+    )
+    semantic_naming_policy: SemanticNamingPolicy | None = None
     production_knowledge_mode: ProductionKnowledgeMode = (
         ProductionKnowledgeMode.DISABLED
     )
@@ -646,6 +665,28 @@ class CognitionLoopConfig:
             raise TypeError(
                 "artifact_interpretation_mode must be ArtifactInterpretationMode"
             )
+        if type(self.semantic_naming_mode) is not CognitionSemanticNamingMode:
+            _LOG.error(
+                "invalid_enum path=semantic_naming_mode reason_code=invalid_mode"
+            )
+            raise TypeError(
+                "semantic_naming_mode must be CognitionSemanticNamingMode"
+            )
+        if self.semantic_naming_mode is CognitionSemanticNamingMode.DISABLED:
+            object.__setattr__(self, "semantic_naming_policy", None)
+        elif self.semantic_naming_policy is None:
+            object.__setattr__(
+                self,
+                "semantic_naming_policy",
+                default_semantic_naming_policy(),
+            )
+        elif type(self.semantic_naming_policy) is not SemanticNamingPolicy:
+            _LOG.error(
+                "invalid_enum path=semantic_naming_policy reason_code=invalid_type"
+            )
+            raise TypeError(
+                "semantic_naming_policy must be SemanticNamingPolicy or None"
+            )
         if type(self.production_knowledge_mode) is not ProductionKnowledgeMode:
             _LOG.error(
                 "invalid_enum path=production_knowledge_mode reason_code=invalid_mode"
@@ -804,6 +845,12 @@ class CognitionLoopConfig:
             "social_norm_mode": self.social_norm_mode.value,
             "social_convention_mode": self.social_convention_mode.value,
             "artifact_interpretation_mode": self.artifact_interpretation_mode.value,
+            "semantic_naming_mode": self.semantic_naming_mode.value,
+            "semantic_naming_policy_version": (
+                None
+                if self.semantic_naming_policy is None
+                else self.semantic_naming_policy.version
+            ),
             "territorial_claim_policy_version": (
                 None
                 if self.territorial_claim_policy is None

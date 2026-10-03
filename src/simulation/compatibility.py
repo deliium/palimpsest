@@ -63,6 +63,7 @@ from simulation.runner_models import (
     RUNNER_SCHEMA_VERSION_V17,
     RUNNER_SCHEMA_VERSION_V18,
     RUNNER_SCHEMA_VERSION_V19,
+    RUNNER_SCHEMA_VERSION_V20,
     SUPPORTED_RESULT_SCHEMA_VERSIONS,
     SUPPORTED_RUNNER_SCHEMA_VERSIONS,
 )
@@ -116,6 +117,7 @@ __all__ = [
     "RUNNER_SCHEMA_VERSION_V17",
     "RUNNER_SCHEMA_VERSION_V18",
     "RUNNER_SCHEMA_VERSION_V19",
+    "RUNNER_SCHEMA_VERSION_V20",
     "STREAM_ENVELOPE_VERSION",
     "WS_PROTOCOL_VERSION",
     "CompatibilityEntry",
@@ -276,6 +278,12 @@ _MATRIX: dict[str, CompatibilityEntry] = {
             f"{RUNNER_SCHEMA_VERSION_V18}; prior modes including social "
             "conventions stay legal on "
             f"{RUNNER_SCHEMA_VERSION_V19}; "
+            f"{RUNNER_SCHEMA_VERSION_V20} is emitted only when some agent's "
+            "semantic naming mode is deterministic and carries every v19 "
+            "cognition key plus semantic_naming_mode; an artifacts-only "
+            f"config stays on {RUNNER_SCHEMA_VERSION_V19}; prior modes "
+            "including artifact interpretation stay legal on "
+            f"{RUNNER_SCHEMA_VERSION_V20}; "
             f"{RUNNER_SCHEMA_VERSION_V3} retained for capability flags; "
             "v1-v4 omit consolidation_mode, reflection_mode, prospective_mode, "
             "counterfactual_mode, communication_strategy_mode, and "
@@ -472,6 +480,7 @@ _LOG.debug(
         "runner_v17": RUNNER_SCHEMA_VERSION_V17,
         "runner_v18": RUNNER_SCHEMA_VERSION_V18,
         "runner_v19": RUNNER_SCHEMA_VERSION_V19,
+        "runner_v20": RUNNER_SCHEMA_VERSION_V20,
         "alembic_head": ALEMBIC_HEAD_REVISION,
         "accepted_event_count": len(ACCEPTED_EVENT_SCHEMA_VERSIONS),
     },
