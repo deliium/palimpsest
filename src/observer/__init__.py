@@ -2,6 +2,7 @@
 
 from observer.contracts import (
     ObserverAgent,
+    ObserverArtifact,
     ObserverBodyMeasures,
     ObserverContractError,
     ObserverDimensionScore,
@@ -38,6 +39,7 @@ __all__ = [
     "SEMANTIC_EVENT_TYPES",
     "SEMANTIC_TYPE_BY_KIND",
     "ObserverAgent",
+    "ObserverArtifact",
     "ObserverBodyMeasures",
     "ObserverContractError",
     "ObserverDimensionScore",

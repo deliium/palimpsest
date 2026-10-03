@@ -32,6 +32,10 @@ const KNOWN_TYPES: Array[String] = [
 	"RESOURCE_NODE_RECOVERED",
 	"ENVIRONMENTAL_HAZARD_STARTED",
 	"ENVIRONMENTAL_HAZARD_ENDED",
+	"ARTIFACT_CREATED",
+	"ARTIFACT_MODIFIED",
+	"ARTIFACT_MOVED",
+	"ARTIFACT_DESTROYED",
 ]
 
 const BODY_FROM_TARGET: Array[String] = [
@@ -145,6 +149,27 @@ class ResourceModel:
 	var unit: String = ""
 
 
+class ArtifactPresentationModel:
+	extends RefCounted
+	var visual_category: Variant = null
+	var icon_key: Variant = null
+	var size_category: Variant = null
+	var display_label: Variant = null
+
+
+class ArtifactModel:
+	extends RefCounted
+	var artifact_id: String = ""
+	var kind: String = ""
+	var author_id: String = ""
+	var created_tick: int = 0
+	var content_revision: int = 0
+	var location_id: Variant = null
+	var holder_id: Variant = null
+	var marks: Array[String] = []
+	var presentation: ArtifactPresentationModel = null
+
+
 class WeatherModel:
 	extends RefCounted
 	var location_id: String = ""
@@ -172,13 +197,20 @@ class WorldModel:
 	var agents: Array = []
 	var items: Array = []
 	var resources: Array = []
+	var artifacts: Array = []
 	var weather: Array = []
 	var season: Variant = null
 	var temperature_bands: Array = []
 	var hazards: Array = []
 
 	func id_count() -> int:
-		return locations.size() + agents.size() + items.size() + resources.size()
+		return (
+			locations.size()
+			+ agents.size()
+			+ items.size()
+			+ resources.size()
+			+ artifacts.size()
+		)
 
 
 class CursorModel:
@@ -205,6 +237,7 @@ class EventModel:
 	var target_id: Variant = null
 	var item_id: Variant = null
 	var resource_id: Variant = null
+	var artifact_id: Variant = null
 	var origin_location_id: Variant = null
 	var destination_location_id: Variant = null
 
@@ -310,6 +343,7 @@ static func parse_event(data: Variant) -> ParseResult:
 	event.target_id = _optional_text(data, "target_id")
 	event.item_id = _optional_text(data, "item_id")
 	event.resource_id = _optional_text(data, "resource_id")
+	event.artifact_id = _optional_text(data, "artifact_id")
 	event.origin_location_id = _optional_text(data, "origin_location_id")
 	event.destination_location_id = _optional_text(data, "destination_location_id")
 	return ParseResult.success(event, "event", 1)
@@ -406,6 +440,12 @@ static func _world(data: Variant) -> Variant:
 		world.items.append(_item(item))
 	for item in _array(data, "resources"):
 		world.resources.append(_resource(item))
+	for item in _array(data, "artifacts"):
+		var artifact = _artifact(item)
+		if artifact is String:
+			return artifact
+		world.artifacts.append(artifact)
+	# Structures remain out of scope for this client parse path.
 	for item in _array(data, "weather"):
 		world.weather.append(_weather(item))
 	if data.has("season") and data["season"] != null:
@@ -560,6 +600,32 @@ static func _resource(data: Dictionary) -> ResourceModel:
 	resource.quantity = float(data.get("quantity", 0.0))
 	resource.unit = str(data.get("unit", ""))
 	return resource
+
+
+static func _artifact(data: Variant) -> Variant:
+	if typeof(data) != TYPE_DICTIONARY:
+		return "invalid_artifact"
+	var artifact := ArtifactModel.new()
+	artifact.artifact_id = str(data.get("artifact_id", ""))
+	artifact.kind = str(data.get("kind", ""))
+	artifact.author_id = str(data.get("author_id", ""))
+	artifact.created_tick = int(data.get("created_tick", 0))
+	artifact.content_revision = int(data.get("content_revision", 0))
+	artifact.location_id = _optional_text(data, "location_id")
+	artifact.holder_id = _optional_text(data, "holder_id")
+	for mark in _array(data, "marks"):
+		artifact.marks.append(str(mark))
+	var presentation_raw: Variant = data.get("presentation", null)
+	if presentation_raw != null:
+		if typeof(presentation_raw) != TYPE_DICTIONARY:
+			return "invalid_artifact_presentation"
+		var presentation := ArtifactPresentationModel.new()
+		presentation.visual_category = _optional_text(presentation_raw, "visual_category")
+		presentation.icon_key = _optional_text(presentation_raw, "icon_key")
+		presentation.size_category = _optional_text(presentation_raw, "size_category")
+		presentation.display_label = _optional_text(presentation_raw, "display_label")
+		artifact.presentation = presentation
+	return artifact
 
 
 static func _weather(data: Dictionary) -> WeatherModel:

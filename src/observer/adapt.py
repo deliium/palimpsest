@@ -8,6 +8,10 @@ from collections.abc import Sequence
 from observer.contracts import ObserverEvent
 from observer.version import OBSERVER_PROTOCOL_VERSION, SEMANTIC_TYPE_BY_KIND
 from world.events import (
+    ArtifactCreated,
+    ArtifactDestroyed,
+    ArtifactModified,
+    ArtifactMoved,
     CraftStarted,
     Died,
     Dropped,
@@ -74,6 +78,7 @@ def adapt_event(event: WorldEvent) -> ObserverEvent:
     resource_id: str | None = None
     recipe_id: str | None = None
     structure_id: str | None = None
+    artifact_id: str | None = None
     season: str | None = None
     temperature_band: str | None = None
     hazard_kind: str | None = None
@@ -115,6 +120,14 @@ def adapt_event(event: WorldEvent) -> ObserverEvent:
     elif isinstance(details, (StructureBuilt, StructureRepaired, ItemStored)):
         recipe_id = details.recipe_id.value
         structure_id = _text(details.structure_id)
+    elif isinstance(
+        details, (ArtifactCreated, ArtifactModified, ArtifactMoved, ArtifactDestroyed)
+    ):
+        artifact_id = _text(details.artifact_id)
+        if isinstance(
+            details, (ArtifactCreated, ArtifactModified, ArtifactMoved)
+        ) and details.resulting_location_id is not None:
+            destination = _text(details.resulting_location_id)
     elif isinstance(details, SeasonChanged):
         season = details.season.value
     elif isinstance(details, TemperatureBandChanged):
@@ -140,6 +153,7 @@ def adapt_event(event: WorldEvent) -> ObserverEvent:
         destination_location_id=destination,
         recipe_id=recipe_id,
         structure_id=structure_id,
+        artifact_id=artifact_id,
         season=season,
         temperature_band=temperature_band,
         hazard_kind=hazard_kind,
@@ -157,6 +171,12 @@ def adapt_event(event: WorldEvent) -> ObserverEvent:
         _LOGGER.debug(
             "production_projected structure_count=%s event_kind=%s",
             0 if structure_id is None else 1,
+            kind,
+        )
+    if artifact_id is not None:
+        _LOGGER.debug(
+            "artifacts_projected count=%s event_kind=%s",
+            1,
             kind,
         )
     _LOGGER.debug(

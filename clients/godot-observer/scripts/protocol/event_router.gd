@@ -44,6 +44,8 @@ static func route(event: Variant, policy: Dictionary, logical: Dictionary) -> Di
 				action = "resource"
 			"ENVIRONMENTAL_HAZARD_STARTED", "ENVIRONMENTAL_HAZARD_ENDED":
 				action = "hazard"
+			"ARTIFACT_CREATED", "ARTIFACT_MODIFIED", "ARTIFACT_MOVED", "ARTIFACT_DESTROYED":
+				action = "artifact"
 			_:
 				action = "activity"
 	var other := ""

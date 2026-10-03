@@ -79,6 +79,7 @@ class EntityPresentationOut(StrictModel):
     visual_category: str
     icon_key: str
     size_category: str
+    display_label: str | None = None
 
 
 class ObserverItemOut(StrictModel):
@@ -109,6 +110,18 @@ class ObserverStructureOut(StrictModel):
     presentation: EntityPresentationOut | None = None
 
 
+class ObserverArtifactOut(StrictModel):
+    artifact_id: str
+    kind: str
+    author_id: str
+    created_tick: int
+    content_revision: int
+    location_id: str | None = None
+    holder_id: str | None = None
+    marks: tuple[str, ...] = ()
+    presentation: EntityPresentationOut | None = None
+
+
 class ObserverWeatherOut(StrictModel):
     location_id: str
     condition: str
@@ -134,6 +147,7 @@ class ObserverWorldStateOut(StrictModel):
     resources: tuple[ObserverResourceOut, ...] = ()
     weather: tuple[ObserverWeatherOut, ...] = ()
     structures: tuple[ObserverStructureOut, ...] = ()
+    artifacts: tuple[ObserverArtifactOut, ...] = ()
     season: str | None = None
     temperature_bands: tuple[ObserverTemperatureBandOut, ...] = ()
     hazards: tuple[ObserverHazardOut, ...] = ()
@@ -175,6 +189,7 @@ class ObserverEventOut(StrictModel):
     destination_location_id: str | None = None
     recipe_id: str | None = None
     structure_id: str | None = None
+    artifact_id: str | None = None
     season: str | None = None
     temperature_band: str | None = None
     hazard_kind: str | None = None
@@ -184,7 +199,7 @@ class ObserverEventOut(StrictModel):
         payload = handler(self)
         if not isinstance(payload, dict):
             raise TypeError("observer event serializer requires a mapping")
-        for key in ("season", "temperature_band", "hazard_kind"):
+        for key in ("season", "temperature_band", "hazard_kind", "artifact_id"):
             if payload.get(key) is None:
                 payload.pop(key, None)
         return payload

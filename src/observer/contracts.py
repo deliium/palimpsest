@@ -374,6 +374,55 @@ class ObserverStructure:
 
 
 @dataclass(frozen=True, slots=True)
+class ObserverArtifact:
+    artifact_id: str
+    kind: str
+    author_id: str
+    created_tick: int
+    content_revision: int
+    location_id: str | None = None
+    holder_id: str | None = None
+    marks: tuple[str, ...] = ()
+    presentation: EntityPresentation | None = None
+
+    def __post_init__(self) -> None:
+        object.__setattr__(
+            self, "artifact_id", _require_text("artifact_id", self.artifact_id)
+        )
+        object.__setattr__(self, "kind", _require_text("kind", self.kind))
+        object.__setattr__(
+            self, "author_id", _require_text("author_id", self.author_id)
+        )
+        object.__setattr__(
+            self, "created_tick", _require_tick("created_tick", self.created_tick)
+        )
+        object.__setattr__(
+            self,
+            "content_revision",
+            _require_tick("content_revision", self.content_revision),
+        )
+        location_id = _optional_text("location_id", self.location_id)
+        holder_id = _optional_text("holder_id", self.holder_id)
+        if (location_id is None) == (holder_id is None):
+            _reject("location_id", "invalid_placement")
+        object.__setattr__(self, "location_id", location_id)
+        object.__setattr__(self, "holder_id", holder_id)
+        if isinstance(self.marks, (set, frozenset)):
+            _reject("marks", "unordered_inventory")
+        if isinstance(self.marks, (str, bytes)) or not isinstance(self.marks, Sequence):
+            _reject("marks", "invalid_sequence")
+        object.__setattr__(
+            self,
+            "marks",
+            tuple(_require_text("marks", mark) for mark in self.marks),
+        )
+        if self.presentation is not None and type(self.presentation) is not (
+            EntityPresentation
+        ):
+            _reject("presentation", "invalid_type")
+
+
+@dataclass(frozen=True, slots=True)
 class ObserverWeather:
     location_id: str
     condition: str
@@ -429,6 +478,7 @@ class ObserverWorldState:
     resources: tuple[ObserverResource, ...] = ()
     weather: tuple[ObserverWeather, ...] = ()
     structures: tuple[ObserverStructure, ...] = ()
+    artifacts: tuple[ObserverArtifact, ...] = ()
     season: str | None = None
     temperature_bands: tuple[ObserverTemperatureBand, ...] = ()
     hazards: tuple[ObserverHazard, ...] = ()
@@ -442,6 +492,7 @@ class ObserverWorldState:
         resources = _typed_tuple("resources", self.resources, ObserverResource)
         weather = _typed_tuple("weather", self.weather, ObserverWeather)
         structures = _typed_tuple("structures", self.structures, ObserverStructure)
+        artifacts = _typed_tuple("artifacts", self.artifacts, ObserverArtifact)
         bands = _typed_tuple(
             "temperature_bands", self.temperature_bands, ObserverTemperatureBand
         )
@@ -453,6 +504,7 @@ class ObserverWorldState:
         _unique("resources", tuple(item.resource_id for item in resources))
         _unique("weather", tuple(item.location_id for item in weather))
         _unique("structures", tuple(item.structure_id for item in structures))
+        _unique("artifacts", tuple(item.artifact_id for item in artifacts))
         _unique("temperature_bands", tuple(item.location_id for item in bands))
         _unique(
             "hazards",
@@ -464,6 +516,7 @@ class ObserverWorldState:
         object.__setattr__(self, "resources", resources)
         object.__setattr__(self, "weather", weather)
         object.__setattr__(self, "structures", structures)
+        object.__setattr__(self, "artifacts", artifacts)
         object.__setattr__(self, "season", season)
         object.__setattr__(self, "temperature_bands", bands)
         object.__setattr__(self, "hazards", hazards)
@@ -539,6 +592,7 @@ class ObserverEvent:
     destination_location_id: str | None = None
     recipe_id: str | None = None
     structure_id: str | None = None
+    artifact_id: str | None = None
     season: str | None = None
     temperature_band: str | None = None
     hazard_kind: str | None = None
@@ -559,6 +613,7 @@ class ObserverEvent:
         destination_location_id: str | None = None,
         recipe_id: str | None = None,
         structure_id: str | None = None,
+        artifact_id: str | None = None,
         season: str | None = None,
         temperature_band: str | None = None,
         hazard_kind: str | None = None,
@@ -600,6 +655,9 @@ class ObserverEvent:
         object.__setattr__(
             self, "structure_id", _optional_text("structure_id", structure_id)
         )
+        object.__setattr__(
+            self, "artifact_id", _optional_text("artifact_id", artifact_id)
+        )
         object.__setattr__(self, "season", _optional_text("season", season))
         object.__setattr__(
             self,
@@ -630,6 +688,8 @@ class ObserverEvent:
             payload["recipe_id"] = self.recipe_id
         if self.structure_id is not None:
             payload["structure_id"] = self.structure_id
+        if self.artifact_id is not None:
+            payload["artifact_id"] = self.artifact_id
         if self.season is not None:
             payload["season"] = self.season
         if self.temperature_band is not None:
@@ -794,6 +854,7 @@ class ObserverRelationshipSummary:
 
 __all__ = [
     "ObserverAgent",
+    "ObserverArtifact",
     "ObserverBodyMeasures",
     "ObserverContractError",
     "ObserverDimensionScore",

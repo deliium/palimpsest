@@ -8,6 +8,7 @@ from dataclasses import dataclass
 
 from simulation.bootstrap import AgentRegistration
 from simulation.persistence import WorldSnapshot
+from world.artifacts import InformationArtifact
 from world.environment import (
     ActiveHazard,
     EnvironmentalDynamicsSpec,
@@ -49,6 +50,7 @@ class ObjectiveFacts:
     weather: tuple[Weather, ...]
     registrations: tuple[AgentRegistration, ...]
     structures: tuple[Structure, ...] = ()
+    artifacts: tuple[InformationArtifact, ...] = ()
     season: str | None = None
     temperature_bands: tuple[tuple[str, str], ...] = ()
     hazards: tuple[tuple[str, str, int], ...] = ()
@@ -69,6 +71,7 @@ class ObjectiveScene:
     weather: tuple[Weather, ...]
     registrations: tuple[AgentRegistration, ...]
     structures: tuple[Structure, ...] = ()
+    artifacts: tuple[InformationArtifact, ...] = ()
     season: str | None = None
     temperature_bands: tuple[tuple[str, str], ...] = ()
     hazards: tuple[tuple[str, str, int], ...] = ()
@@ -101,6 +104,7 @@ def _freeze_facts(facts: ObjectiveFacts) -> ObjectiveScene:
         weather=weather,
         registrations=tuple(facts.registrations),
         structures=tuple(facts.structures),
+        artifacts=tuple(facts.artifacts),
         season=facts.season,
         temperature_bands=tuple(facts.temperature_bands),
         hazards=tuple(facts.hazards),
@@ -198,6 +202,7 @@ def scene_from_snapshot(
         weather=tuple(snapshot.weather),
         registrations=tuple(snapshot.registrations),
         structures=tuple(snapshot.structures),
+        artifacts=tuple(snapshot.artifacts),
     )
     return scene_from_facts(facts)
 

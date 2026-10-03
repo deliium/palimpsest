@@ -377,16 +377,19 @@ def _presentation(block: ObserverPresentation | None) -> dict[str, object] | Non
     }
 
 
-def _presentation_mapping(presentation: object | None) -> dict[str, str] | None:
+def _presentation_mapping(presentation: object | None) -> dict[str, str | None] | None:
     from observer.presentation import EntityPresentation
 
     if type(presentation) is not EntityPresentation:
         return None
-    return {
+    payload: dict[str, str | None] = {
         "visual_category": presentation.visual_category,
         "icon_key": presentation.icon_key,
         "size_category": presentation.size_category,
     }
+    if presentation.display_label is not None:
+        payload["display_label"] = presentation.display_label
+    return payload
 
 
 def _event_out(event: ObserverEvent) -> ObserverEventOut:
@@ -478,6 +481,20 @@ def _frame_out(frame: ObserverFrame) -> ObserverFrameOut:
                     "presentation": _presentation_mapping(item.presentation),
                 }
                 for item in world.structures
+            ],
+            "artifacts": [
+                {
+                    "artifact_id": item.artifact_id,
+                    "kind": item.kind,
+                    "author_id": item.author_id,
+                    "created_tick": item.created_tick,
+                    "content_revision": item.content_revision,
+                    "location_id": item.location_id,
+                    "holder_id": item.holder_id,
+                    "marks": list(item.marks),
+                    "presentation": _presentation_mapping(item.presentation),
+                }
+                for item in world.artifacts
             ],
             "weather": [
                 {"location_id": item.location_id, "condition": item.condition}

@@ -9,6 +9,7 @@ import pytest
 
 from observer.contracts import (
     ObserverAgent,
+    ObserverArtifact,
     ObserverBodyMeasures,
     ObserverContractError,
     ObserverEvent,
@@ -24,6 +25,7 @@ from observer.contracts import (
     ScreenPoint,
     VisualBounds,
 )
+from observer.presentation import EntityPresentation
 from observer.version import OBSERVER_PROTOCOL_VERSION, SEMANTIC_EVENT_TYPES
 
 pytestmark = pytest.mark.unit
@@ -62,6 +64,14 @@ _PRODUCTION_EVENT_NAMES = frozenset(
         "ITEM_STORED",
     }
 )
+_ARTIFACT_EVENT_NAMES = frozenset(
+    {
+        "ARTIFACT_CREATED",
+        "ARTIFACT_MODIFIED",
+        "ARTIFACT_MOVED",
+        "ARTIFACT_DESTROYED",
+    }
+)
 
 
 def test_event_fixtures_cover_closed_semantic_types() -> None:
@@ -69,11 +79,16 @@ def test_event_fixtures_cover_closed_semantic_types() -> None:
     previous = tuple(
         name
         for name in sorted(SEMANTIC_EVENT_TYPES)
-        if name not in _PRODUCTION_EVENT_NAMES | _ENVIRONMENT_EVENT_NAMES
+        if name
+        not in _PRODUCTION_EVENT_NAMES
+        | _ENVIRONMENT_EVENT_NAMES
+        | _ARTIFACT_EVENT_NAMES
     )
     assert names == previous
     assert len(names) == 20
     assert set(names) < set(SEMANTIC_EVENT_TYPES)
+    assert _ARTIFACT_EVENT_NAMES < set(SEMANTIC_EVENT_TYPES)
+    assert set(names).isdisjoint(_ARTIFACT_EVENT_NAMES)
 
 
 def test_event_fixtures_construct_observer_events() -> None:
@@ -159,6 +174,33 @@ def _world(payload: dict[str, object]) -> ObserverWorldState:
         items=tuple(_item(item) for item in _items(payload.get("items"))),
         resources=tuple(_resource(item) for item in _items(payload.get("resources"))),
         weather=tuple(_weather(item) for item in _items(payload.get("weather"))),
+        artifacts=tuple(
+            _artifact(item) for item in _items(payload.get("artifacts"))
+        ),
+    )
+
+
+def _artifact(payload: dict[str, object]) -> ObserverArtifact:
+    presentation = None
+    presentation_raw = payload.get("presentation")
+    if presentation_raw is not None:
+        presented = _mapping(presentation_raw)
+        presentation = EntityPresentation(
+            visual_category=str(presented["visual_category"]),
+            icon_key=str(presented["icon_key"]),
+            size_category=str(presented["size_category"]),
+            display_label=_optional_text(presented.get("display_label")),
+        )
+    return ObserverArtifact(
+        artifact_id=str(payload["artifact_id"]),
+        kind=str(payload["kind"]),
+        author_id=str(payload["author_id"]),
+        created_tick=int(str(payload["created_tick"])),
+        content_revision=int(str(payload["content_revision"])),
+        location_id=_optional_text(payload.get("location_id")),
+        holder_id=_optional_text(payload.get("holder_id")),
+        marks=tuple(str(item) for item in _items(payload.get("marks"))),
+        presentation=presentation,
     )
 
 

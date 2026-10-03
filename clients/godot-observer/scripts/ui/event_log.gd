@@ -217,6 +217,14 @@ func _describe(
 			return "hazard ended"
 		"RESOURCE_REGENERATED":
 			return "resource regenerated"
+		"ARTIFACT_CREATED":
+			return "%s inscribed" % subject
+		"ARTIFACT_MODIFIED":
+			return "%s amended" % subject
+		"ARTIFACT_MOVED":
+			return "%s transferred artifact" % subject
+		"ARTIFACT_DESTROYED":
+			return "%s erased" % subject
 		"NEEDS_APPLIED":
 			return "%s needs" % subject
 		"EXPOSURE_APPLIED":

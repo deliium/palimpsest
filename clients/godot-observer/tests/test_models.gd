@@ -12,6 +12,13 @@ const _ENVIRONMENT_TYPES: Array[String] = [
 	"ENVIRONMENTAL_HAZARD_ENDED",
 ]
 
+const _ARTIFACT_TYPES: Array[String] = [
+	"ARTIFACT_CREATED",
+	"ARTIFACT_MODIFIED",
+	"ARTIFACT_MOVED",
+	"ARTIFACT_DESTROYED",
+]
+
 
 func run() -> Array:
 	var failures: Array = []
@@ -26,7 +33,7 @@ func run() -> Array:
 
 func _every_semantic_fixture() -> String:
 	for type_name in Protocol.KNOWN_TYPES:
-		if type_name in _ENVIRONMENT_TYPES:
+		if type_name in _ENVIRONMENT_TYPES or type_name in _ARTIFACT_TYPES:
 			continue
 		var path := "res://fixtures/protocol/events/%s.json" % type_name
 		var parsed = Protocol.parse_text("event", FileAccess.get_file_as_string(path))
@@ -36,6 +43,17 @@ func _every_semantic_fixture() -> String:
 			return "event fixture mismatch %s" % type_name
 		if parsed.value.protocol_version != Protocol.PROTOCOL_VERSION:
 			return "event protocol mismatch %s" % type_name
+	for type_name in _ARTIFACT_TYPES:
+		var parsed_artifact = Protocol.parse_event({
+			"protocol_version": Protocol.PROTOCOL_VERSION,
+			"type": type_name,
+			"event_id": "evt-%s" % type_name,
+			"tick": 1,
+			"sequence": 0,
+			"artifact_id": "art-1",
+		})
+		if not parsed_artifact.ok or not parsed_artifact.value.known:
+			return "artifact type should be known %s" % type_name
 	return ""
 
 

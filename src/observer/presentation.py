@@ -11,6 +11,15 @@ _FORBIDDEN = frozenset(
     {"pixels", "sprite", "animation", "dx", "dy", "screen_x", "screen_y"}
 )
 
+_ARTIFACT_KINDS = (
+    "mark",
+    "sign",
+    "note",
+    "map",
+    "record",
+    "memorial",
+)
+
 
 @dataclass(frozen=True, slots=True)
 class EntityPresentation:
@@ -19,18 +28,26 @@ class EntityPresentation:
     visual_category: str
     icon_key: str
     size_category: str
+    display_label: str | None = None
 
 
 def _token(
-    visual_category: str, icon_key: str, size_category: str
+    visual_category: str,
+    icon_key: str,
+    size_category: str,
+    *,
+    display_label: str | None = None,
 ) -> EntityPresentation:
     fields = {
         "visual_category": visual_category,
         "icon_key": icon_key,
         "size_category": size_category,
     }
-    forbidden = _FORBIDDEN.intersection(fields)
-    if forbidden or _FORBIDDEN.intersection(fields.values()):
+    values = set(fields.values())
+    if display_label is not None:
+        values.add(display_label)
+    forbidden = _FORBIDDEN.intersection(fields) | _FORBIDDEN.intersection(values)
+    if forbidden:
         _LOGGER.error(
             "presentation_instruction_forbidden reason_code=%s",
             "presentation_instruction_forbidden",
@@ -40,6 +57,7 @@ def _token(
         visual_category=visual_category,
         icon_key=icon_key,
         size_category=size_category,
+        display_label=display_label,
     )
 
 
@@ -53,6 +71,13 @@ _BY_KIND_AND_NAME: dict[tuple[str, str], EntityPresentation] = {
     ("shelter", "shelter"): _token("shelter", "shelter", "large"),
     ("store", "store"): _token("store", "store", "large"),
 }
+for _kind in _ARTIFACT_KINDS:
+    _BY_KIND_AND_NAME[(_kind, _kind)] = _token(
+        "artifact",
+        f"artifact_{_kind}",
+        "small",
+        display_label=_kind,
+    )
 
 
 def entity_presentation(kind: str, name: str) -> EntityPresentation | None:

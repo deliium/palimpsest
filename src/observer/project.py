@@ -8,6 +8,7 @@ from typing import Literal
 
 from observer.contracts import (
     ObserverAgent,
+    ObserverArtifact,
     ObserverBodyMeasures,
     ObserverEvent,
     ObserverFrame,
@@ -148,6 +149,25 @@ def project_frame(
             key=lambda item: (item.location_id.value, item.entity_id.value),
         )
     )
+    artifacts = tuple(
+        ObserverArtifact(
+            artifact_id=item.artifact_id.value,
+            kind=item.kind.value,
+            author_id=item.author_id.value,
+            created_tick=item.created_tick,
+            content_revision=item.content_revision,
+            location_id=(
+                None if item.location_id is None else item.location_id.value
+            ),
+            holder_id=None if item.holder_id is None else item.holder_id.value,
+            marks=tuple(item.content.marks),
+            presentation=entity_presentation(item.kind.value, item.kind.value),
+        )
+        for item in sorted(
+            scene.artifacts,
+            key=lambda item: item.artifact_id.value,
+        )
+    )
     weather = tuple(
         ObserverWeather(
             location_id=item.location_id.value,
@@ -164,6 +184,7 @@ def project_frame(
         resources=resources,
         weather=weather,
         structures=structures,
+        artifacts=artifacts,
         season=scene.season,
         temperature_bands=tuple(
             ObserverTemperatureBand(location_id=location_id, band=band)
@@ -219,6 +240,11 @@ def project_frame(
             len(structures),
             "-" if not events else events[-1].domain_kind,
         )
+    _LOGGER.debug(
+        "artifacts_projected count=%s event_kind=%s",
+        len(artifacts),
+        "-" if not events else events[-1].domain_kind,
+    )
     return frame
 
 

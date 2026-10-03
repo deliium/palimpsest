@@ -647,6 +647,13 @@ def _cognition_config_for(
         convention_mode.value,
         None if convention_policy is None else convention_policy.version,
     )
+    from agents.cognition.artifacts import ArtifactInterpretationMode
+
+    artifact_mode = ArtifactInterpretationMode(spec.artifact_interpretation_mode.value)
+    _LOG.debug(
+        "cognition_config_artifact_interpretation_mode mode=%s",
+        artifact_mode.value,
+    )
     return CognitionLoopConfig(
         memory_mode=CognitionMemoryMode(spec.memory_mode.value),
         imagination_mode=CognitionImaginationMode(spec.imagination_mode.value),
@@ -684,6 +691,7 @@ def _cognition_config_for(
         social_norm_policy=norm_policy,
         social_convention_mode=convention_mode,
         social_convention_policy=convention_policy,
+        artifact_interpretation_mode=artifact_mode,
         production_knowledge_mode=CognitionProductionKnowledgeMode(
             spec.production_knowledge_mode.value
         ),
@@ -1017,6 +1025,7 @@ class SimulationRunner:
                 resources=config.scenario.resources,
                 bodies=config.scenario.bodies,
                 weather=config.scenario.weather,
+                artifacts=config.scenario.artifacts,
                 registrations=registrations,
             )
             translator = registration_translator(bootstrap)
@@ -1082,14 +1091,23 @@ class SimulationRunner:
                 }
             catalog = config.agents[0].cognition.production_catalog
             production_catalog = catalog if catalog.recipe_count > 0 else None
+            artifacts_active = bool(bootstrap.artifacts) or config.artifacts_enabled
             engine = WorldEngine(
                 config=run_config,
                 bootstrap=bootstrap,
                 run_id=resolved_run_id,
                 production_catalog=production_catalog,
                 environmental_dynamics=config.environmental_dynamics,
+                artifacts_enabled=artifacts_active,
                 **skill_kwargs,
                 **teaching_kwargs,
+            )
+            _LOG.debug(
+                "artifact_write_pair_inputs artifacts_active=%s "
+                "seed_artifact_count=%s artifacts_enabled=%s",
+                artifacts_active,
+                len(bootstrap.artifacts),
+                config.artifacts_enabled,
             )
 
             stage = "agents"
@@ -2596,17 +2614,20 @@ def _bootstrap_snapshot(engine: WorldEngine) -> WorldSnapshot:
     schema_version, codec_version = checkpoint_schema_for_production(
         production_active=engine._production_catalog is not None,
         dynamics_active=engine._environmental_dynamics is not None,
+        artifacts_active=engine._artifacts_enabled,
     )
     state = engine._snapshot.world.state
     production_rows: dict[str, tuple[object, ...]] = {}
-    if codec_version in {"v3", "v4"}:
+    if codec_version in {"v3", "v4", "v5"}:
         production_rows = {
             "structures": tuple(state.structures.values()),
             "production_jobs": tuple(state.production_jobs.values()),
             "tool_marks": tuple(state.tool_marks.values()),
         }
-    if codec_version == "v4":
+    if codec_version in {"v4", "v5"}:
         production_rows["active_hazards"] = tuple(state.active_hazards)
+    if codec_version == "v5":
+        production_rows["artifacts"] = tuple(state.artifacts.values())
     draft = WorldSnapshot(
         snapshot_id=SnapshotId(f"bootstrap-{engine.run_id.value}"),
         run_id=engine.run_id,
@@ -2653,6 +2674,7 @@ def _bootstrap_snapshot(engine: WorldEngine) -> WorldSnapshot:
         production_jobs=draft.production_jobs,
         tool_marks=draft.tool_marks,
         active_hazards=draft.active_hazards,
+        artifacts=draft.artifacts,
     )
 
 

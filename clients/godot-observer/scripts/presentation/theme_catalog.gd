@@ -52,6 +52,33 @@ const _HAZARDS := {
 
 const DEPLETED := Color(0.35, 0.32, 0.30, 0.55)
 
+const _ARTIFACT_COLORS := {
+	"mark": Color(0.72, 0.58, 0.38, 1.0),
+	"sign": Color(0.55, 0.68, 0.42, 1.0),
+	"note": Color(0.86, 0.78, 0.52, 1.0),
+	"map": Color(0.42, 0.62, 0.72, 1.0),
+	"record": Color(0.62, 0.48, 0.68, 1.0),
+	"memorial": Color(0.58, 0.58, 0.62, 1.0),
+}
+
+const ARTIFACT_FALLBACK := Color(0.70, 0.66, 0.58, 1.0)
+
+
+static func artifact_color(kind: Variant) -> Color:
+	var key := "" if kind == null else str(kind)
+	if _ARTIFACT_COLORS.has(key):
+		return _ARTIFACT_COLORS[key]
+	if not key.is_empty():
+		ObserverLog.debug("artifacts", "theme_unknown kind=%s" % key)
+	return ARTIFACT_FALLBACK
+
+
+static func artifact_icon(kind: Variant) -> String:
+	var key := "" if kind == null else str(kind)
+	if key.is_empty():
+		return "artifact_unknown"
+	return "artifact_%s" % key
+
 
 static func season_color(token: Variant) -> Color:
 	return _token_color(_SEASONS, token)

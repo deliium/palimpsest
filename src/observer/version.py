@@ -41,6 +41,10 @@ SEMANTIC_EVENT_TYPES: Final[tuple[str, ...]] = (
     "RESOURCE_NODE_RECOVERED",
     "ENVIRONMENTAL_HAZARD_STARTED",
     "ENVIRONMENTAL_HAZARD_ENDED",
+    "ARTIFACT_CREATED",
+    "ARTIFACT_MODIFIED",
+    "ARTIFACT_MOVED",
+    "ARTIFACT_DESTROYED",
 )
 
 SEMANTIC_TYPE_BY_KIND: Final[dict[str, str]] = {
@@ -76,6 +80,10 @@ SEMANTIC_TYPE_BY_KIND: Final[dict[str, str]] = {
     "resource_node_recovered": "RESOURCE_NODE_RECOVERED",
     "environmental_hazard_started": "ENVIRONMENTAL_HAZARD_STARTED",
     "environmental_hazard_ended": "ENVIRONMENTAL_HAZARD_ENDED",
+    "artifact_created": "ARTIFACT_CREATED",
+    "artifact_modified": "ARTIFACT_MODIFIED",
+    "artifact_moved": "ARTIFACT_MOVED",
+    "artifact_destroyed": "ARTIFACT_DESTROYED",
 }
 
 RELATIONSHIP_DIMENSION_CODES: Final[tuple[str, ...]] = (

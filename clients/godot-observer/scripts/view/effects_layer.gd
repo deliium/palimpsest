@@ -114,7 +114,7 @@ func _draw() -> void:
 		var alpha := 1.0 - float(mark["age"]) / float(mark["life"])
 		var color := Color(0.95, 0.9, 0.7, alpha)
 		match action:
-			"search", "weather", "resource":
+			"search", "weather", "resource", "artifact":
 				draw_arc(point, 18.0 + float(mark["age"]) * 24.0, 0, TAU, 24, color, 2.0)
 			"consume", "drink", "rest":
 				draw_circle(point + Vector2(0, -18), 6.0, color)
@@ -181,7 +181,7 @@ func _show_item(command: Dictionary, agents: Node) -> void:
 func _point_for(action: String, command: Dictionary, agents: Node, locations: Node) -> Vector2:
 	if action in ["search", "weather"]:
 		return locations.zone_center(str(command.get("location_id", command.get("origin", ""))))
-	if action == "resource":
+	if action == "resource" or action == "artifact":
 		return locations.zone_center(str(command.get("location_id", "")))
 	return agents.token_position(str(command.get("entity_id", "")))
 

@@ -14,6 +14,13 @@ const _ENVIRONMENT_TYPES: Array[String] = [
 	"ENVIRONMENTAL_HAZARD_ENDED",
 ]
 
+const _ARTIFACT_TYPES: Array[String] = [
+	"ARTIFACT_CREATED",
+	"ARTIFACT_MODIFIED",
+	"ARTIFACT_MOVED",
+	"ARTIFACT_DESTROYED",
+]
+
 
 func run() -> Array:
 	var failures: Array = []
@@ -25,7 +32,7 @@ func run() -> Array:
 	var play: Dictionary = Playback.policy(1.0, 0)
 	var last_location := str(world.agents[0].location_id)
 	for type_name in Protocol.KNOWN_TYPES:
-		if type_name in _ENVIRONMENT_TYPES:
+		if type_name in _ENVIRONMENT_TYPES or type_name in _ARTIFACT_TYPES:
 			continue
 		var text := FileAccess.get_file_as_string("res://fixtures/protocol/events/%s.json" % type_name)
 		var parsed = Protocol.parse_text("event", text)
@@ -53,6 +60,22 @@ func run() -> Array:
 		var environment_command: Dictionary = Router.route(parsed_environment.value, play, environment_logical)
 		if environment_command["action"] == "unknown":
 			failures.append("environment type treated as unknown %s" % type_name)
+	for type_name in _ARTIFACT_TYPES:
+		var parsed_artifact = Protocol.parse_event({
+			"protocol_version": Protocol.PROTOCOL_VERSION,
+			"type": type_name,
+			"event_id": "evt-%s" % type_name,
+			"tick": 9,
+			"sequence": 0,
+			"artifact_id": "art-1",
+		})
+		if not parsed_artifact.ok or not parsed_artifact.value.known:
+			failures.append("artifact type should be known %s" % type_name)
+			continue
+		var artifact_logical: Dictionary = reducer.apply_event(world, parsed_artifact.value)
+		var artifact_command: Dictionary = Router.route(parsed_artifact.value, play, artifact_logical)
+		if artifact_command["action"] != "artifact":
+			failures.append("artifact type should route as artifact %s" % type_name)
 	var unknown = Protocol.parse_event({"type": "RESOURCE_FOUND", "event_id": "evt-unknown", "tick": 9, "sequence": 0})
 	var before := str(world.agents[0].location_id)
 	var unknown_logical: Dictionary = reducer.apply_event(world, unknown.value)

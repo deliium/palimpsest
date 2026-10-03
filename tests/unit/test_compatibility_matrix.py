@@ -34,6 +34,8 @@ from simulation.runner_models import (
     RUNNER_SCHEMA_VERSION_V3,
     RUNNER_SCHEMA_VERSION_V4,
     RUNNER_SCHEMA_VERSION_V12,
+    RUNNER_SCHEMA_VERSION_V18,
+    RUNNER_SCHEMA_VERSION_V19,
     SUPPORTED_RUNNER_SCHEMA_VERSIONS,
 )
 
@@ -109,6 +111,14 @@ def test_runner_config_write_is_v4_with_legacy_accepted() -> None:
     assert "consolidation-only" in entry.bump_trigger
     assert "runner-config-v14" in entry.accepted_restore
     assert "environmental dynamics spec is set" in entry.bump_trigger
+    assert RUNNER_SCHEMA_VERSION_V18 == "runner-config-v18"
+    assert RUNNER_SCHEMA_VERSION_V19 == "runner-config-v19"
+    assert RUNNER_SCHEMA_VERSION_V18 in SUPPORTED_RUNNER_SCHEMA_VERSIONS
+    assert RUNNER_SCHEMA_VERSION_V19 in SUPPORTED_RUNNER_SCHEMA_VERSIONS
+    assert "runner-config-v18" in entry.accepted_restore
+    assert "runner-config-v19" in entry.accepted_restore
+    assert "artifact interpretation mode is deterministic" in entry.bump_trigger
+    assert "conventions-only" in entry.bump_trigger
     assert "A-E" in entry.v1_fixture_impact
     assert "extended_self_model" in entry.v1_fixture_impact
     assert "V1 gate" in entry.v1_fixture_impact
