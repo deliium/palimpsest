@@ -6,6 +6,7 @@ const MAX_LINES := 200
 const BODY_SUBJECTS: Array[String] = ["AGENT_DIED", "NEEDS_APPLIED", "EXPOSURE_APPLIED"]
 
 signal seek_requested(tick: int, sequence: int)
+signal explain_requested(tick: int, sequence: int, event_id: String)
 
 var lines: Array = []
 var visible_lines: Array = []
@@ -16,6 +17,7 @@ var _filter_type := ""
 var _filter_location := ""
 var _highlighted_event_ids := {}
 var _items: ItemList
+var _selected_index := -1
 
 
 func _ready() -> void:
@@ -24,6 +26,9 @@ func _ready() -> void:
 	$Column/Filters/Agent.text_changed.connect(func(value: String) -> void: _set_filter("agent", value))
 	$Column/Filters/Type.text_changed.connect(func(value: String) -> void: _set_filter("type", value))
 	$Column/Filters/Location.text_changed.connect(func(value: String) -> void: _set_filter("location", value))
+	var explain := $Column/Filters.get_node_or_null("Explain")
+	if explain != null:
+		explain.pressed.connect(explain_selected)
 
 
 func set_world(world: Variant) -> void:
@@ -80,12 +85,29 @@ func set_filters(agent: String, type_name: String, location: String) -> void:
 func click_line(index: int) -> void:
 	if index < 0 or index >= visible_lines.size():
 		return
+	_selected_index = index
 	var line: Dictionary = visible_lines[index]
 	ObserverLog.debug(
 		"log_view",
 		"seek_clicked tick=%s sequence=%s" % [int(line["tick"]), int(line["sequence"])],
 	)
 	seek_requested.emit(int(line["tick"]), int(line["sequence"]))
+
+
+func explain_selected() -> void:
+	## Open causal debugger for the selected log line (server assembly only).
+	if _selected_index < 0 or _selected_index >= visible_lines.size():
+		ObserverLog.warn("log_view", "explain_ignored reason_code=no_selection")
+		return
+	var line: Dictionary = visible_lines[_selected_index]
+	var tick := int(line["tick"])
+	var sequence := int(line["sequence"])
+	var event_id := str(line.get("event_id", ""))
+	ObserverLog.info(
+		"observer.debugger",
+		"explain_requested tick=%s sequence=%s event_id=%s" % [tick, sequence, event_id],
+	)
+	explain_requested.emit(tick, sequence, event_id)
 
 
 func contains_type(type_name: String) -> bool:
@@ -109,6 +131,7 @@ func focus_event_ids(event_ids: Array) -> void:
 			var line: Dictionary = visible_lines[index]
 			if _highlighted_event_ids.has(str(line.get("event_id", ""))):
 				if focused == 0:
+					_selected_index = index
 					_items.select(index)
 					_items.ensure_current_is_visible()
 				focused += 1
@@ -349,6 +372,7 @@ func _focus(event_tick: int, event_sequence: int) -> void:
 	for index in visible_lines.size():
 		var line: Dictionary = visible_lines[index]
 		if int(line["tick"]) == event_tick and int(line["sequence"]) == event_sequence:
+			_selected_index = index
 			_items.select(index)
 			_items.ensure_current_is_visible()
 			return

@@ -56,6 +56,7 @@ var last_request := {}
 var request_log: Array = []
 var _playing := false
 var _play_timer: Timer
+var _pending_deeplink := {}
 
 
 func _ready() -> void:
@@ -94,11 +95,35 @@ func begin() -> void:
 
 
 func apply_web_query(search: String) -> bool:
-	var parsed := Origin.web_run_id(search)
+	var state: Dictionary = Origin.web_debugger_state(search)
+	var reason := str(state.get("reason_code", ""))
+	if reason != "":
+		ObserverLog.warn(
+			"session",
+			"web_query_rejected reason_code=%s" % reason,
+		)
+		return false
+	var parsed := str(state.get("run_id", "")).strip_edges()
 	if parsed.is_empty():
 		return false
 	run_id = parsed
+	_pending_deeplink = {
+		"tick": state.get("tick", null),
+		"sequence": state.get("sequence", null),
+		"event_id": str(state.get("event_id", "")),
+		"agent_id": str(state.get("agent_id", "")),
+		"open_debugger": bool(state.get("open_debugger", false)),
+	}
 	ObserverLog.info("session", "web_run_id_applied run_id=%s" % run_id)
+	ObserverLog.debug(
+		"session",
+		"web_deeplink_parsed tick=%s sequence=%s event_id=%s open_debugger=%s" % [
+			str(_pending_deeplink.get("tick", null)),
+			str(_pending_deeplink.get("sequence", null)),
+			str(_pending_deeplink.get("event_id", "")),
+			str(_pending_deeplink.get("open_debugger", false)),
+		],
+	)
 	run_id_applied.emit(run_id)
 	_start()
 	return true
@@ -236,6 +261,54 @@ func request_narrative_hop_overlay(agent_id: String) -> void:
 	_request_path("narrative_hops", path)
 
 
+func request_causal_trace(
+	event_id: String = "",
+	tick: Variant = null,
+	sequence: Variant = null,
+) -> void:
+	## GET-only causal debugger payload. Capability token stays in header.
+	if run_id.is_empty():
+		_emit_overlay_unavailable("causal_debugger", "run_id_missing")
+		return
+	var path := ""
+	if event_id != "":
+		path = "/v1/simulations/%s/debugger/events/%s/causal-trace" % [run_id, event_id]
+		ObserverLog.debug(
+			"observer.debugger",
+			"causal_trace_request event_id=%s" % event_id,
+		)
+		_request_path("causal_debugger", path)
+		return
+	if tick == null or sequence == null:
+		_emit_overlay_unavailable("causal_debugger", "incomplete_event_cursor")
+		return
+	path = "/v1/simulations/%s/debugger/causal-trace" % run_id
+	ObserverLog.debug(
+		"observer.debugger",
+		"causal_trace_request tick=%s sequence=%s" % [int(tick), int(sequence)],
+	)
+	last_request = {
+		"kind": "causal_debugger",
+		"path": path,
+		"query": {"tick": int(tick), "sequence": int(sequence)},
+	}
+	request_log.append(last_request)
+	if _http == null:
+		return
+	var built: Dictionary = Urls.build_get(
+		origin,
+		path,
+		{"tick": int(tick), "sequence": int(sequence)},
+	)
+	if not bool(built.get("ok", false)):
+		_emit_overlay_unavailable("causal_debugger", "read_only")
+		return
+	_request_serial += 1
+	var request_id := str(_request_serial)
+	_pending[request_id] = {"kind": "causal_debugger", "seek_id": -1}
+	_http.get_json(str(built["url"]), request_id, _token)
+
+
 func request_analytics_overlay(_metric_set_id: String = "") -> void:
 	## Catalog discovery resolves metric_set_id; caller-supplied ids are ignored.
 	request_metric_family_overlay("spatial_control", "spatial_control")
@@ -284,6 +357,24 @@ func _emit_overlay_unavailable(kind: String, reason_code: String) -> void:
 	)
 	overlay_unavailable.emit(kind, reason_code)
 	overlay_payload.emit(kind, null)
+
+
+func _apply_pending_deeplink() -> void:
+	if _pending_deeplink.is_empty():
+		return
+	var pending: Dictionary = _pending_deeplink.duplicate(true)
+	_pending_deeplink = {}
+	var tick = pending.get("tick", null)
+	var sequence = pending.get("sequence", null)
+	var event_id := str(pending.get("event_id", ""))
+	if tick != null and sequence != null:
+		ObserverLog.info(
+			"session",
+			"deeplink_seek tick=%s sequence=%s" % [int(tick), int(sequence)],
+		)
+		seek_event(int(tick), int(sequence), null)
+	if bool(pending.get("open_debugger", false)):
+		request_causal_trace(event_id, tick, sequence)
 
 
 func _decode_metric_document(body: Dictionary) -> Variant:
@@ -373,15 +464,29 @@ func _on_http(route: String, _status: int, body: Variant, reason_code: String) -
 		or kind == "communication_strategy_audit"
 		or kind == "relationships"
 		or kind == "narrative_hops"
+		or kind == "causal_debugger"
 	):
 		var overlay: Variant = null
 		if reason_code == "" and typeof(body) == TYPE_DICTIONARY:
 			overlay = body
+			if kind == "causal_debugger":
+				ObserverLog.debug(
+					"observer.debugger",
+					"causal_trace_response status=200 node_count=%s" % [
+						(body.get("nodes", []) as Array).size(),
+					],
+				)
 		elif reason_code != "":
 			ObserverLog.warn(
 				"session",
 				"overlay_unavailable kind=%s reason_code=%s" % [kind, reason_code],
 			)
+			if kind == "causal_debugger":
+				_emit_overlay_unavailable(
+					"causal_debugger",
+					reason_code if reason_code != "" else "overlay_unavailable",
+				)
+				return
 		overlay_payload.emit(kind, overlay)
 		return
 	if kind == "metric_catalog":
@@ -454,6 +559,7 @@ func _on_http(route: String, _status: int, body: Variant, reason_code: String) -
 			status_changed.emit("ready", "tick %s" % str(world.tick))
 			if not _failed:
 				_open_socket()
+			_apply_pending_deeplink()
 		return
 	if kind == "state_cursor" or kind == "state_tick":
 		var sought = Protocol.parse_frame(body)

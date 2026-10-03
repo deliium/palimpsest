@@ -22,6 +22,11 @@ from observer.contracts import (
     ScreenPoint,
     VisualBounds,
 )
+from observer.debugger_state import (
+    DebuggerDeepLinkState,
+    DebuggerStateError,
+    parse_debugger_query,
+)
 from observer.labels import (
     SubjectiveLabelOverlay,
     SubjectiveLabelReading,
@@ -48,6 +53,8 @@ __all__ = [
     "RELATIONSHIP_DIMENSION_CODES",
     "SEMANTIC_EVENT_TYPES",
     "SEMANTIC_TYPE_BY_KIND",
+    "DebuggerDeepLinkState",
+    "DebuggerStateError",
     "ObserverAgent",
     "ObserverArtifact",
     "ObserverBodyMeasures",
@@ -72,6 +79,7 @@ __all__ = [
     "SubjectiveLabelOverlay",
     "SubjectiveLabelReading",
     "VisualBounds",
+    "parse_debugger_query",
     "project_strategy_audit_overlay",
     "project_subjective_label_overlay",
 ]

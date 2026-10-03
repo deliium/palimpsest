@@ -87,6 +87,13 @@ func run() -> Array:
 	log.click_line(1)
 	if clicked.size() != 1 or clicked[0]["tick"] != 4 or clicked[0]["sequence"] != 1:
 		failures.append("click should emit tick and sequence")
+	var explained: Array = []
+	log.explain_requested.connect(func(tick: int, sequence: int, event_id: String) -> void:
+		explained.append({"tick": tick, "sequence": sequence, "event_id": event_id})
+	)
+	log.explain_selected()
+	if explained.size() != 1 or explained[0]["tick"] != 4 or explained[0]["sequence"] != 1:
+		failures.append("explain should use selected tick and sequence")
 	moved.event_id = "evt-moved"
 	died.event_id = "evt-died"
 	log.replace_window([moved, died, waited], 4, 1)

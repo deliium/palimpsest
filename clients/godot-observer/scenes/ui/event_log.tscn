@@ -30,6 +30,10 @@ placeholder_text = "Event type"
 layout_mode = 2
 placeholder_text = "Location"
 
+[node name="Explain" type="Button" parent="Column/Filters"]
+layout_mode = 2
+text = "Explain"
+
 [node name="Items" type="ItemList" parent="Column"]
 layout_mode = 2
 custom_minimum_size = Vector2(300, 240)

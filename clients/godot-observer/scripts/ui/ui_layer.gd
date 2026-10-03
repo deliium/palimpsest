@@ -17,6 +17,8 @@ signal perspective_requested(agent_id: String)
 signal labels_cleared
 signal overlay_toggled(kind: String, evidence_class: String, enabled: bool)
 signal narrative_variant_selected(variant_id: String)
+signal explain_requested(tick: int, sequence: int, event_id: String)
+signal debugger_focus_requested(tick: int, sequence: int, event_id: String)
 
 var _live_tick := 0
 var _selected_id := ""
@@ -67,9 +69,17 @@ func _ready() -> void:
 	$EventLog.seek_requested.connect(func(tick: int, sequence: int) -> void:
 		event_seek_requested.emit(tick, sequence)
 	)
+	$EventLog.explain_requested.connect(func(tick: int, sequence: int, event_id: String) -> void:
+		explain_requested.emit(tick, sequence, event_id)
+	)
 	$Timeline.seek_requested.connect(func(tick: int, sequence: int) -> void:
 		timeline_seek_requested.emit(tick, sequence)
 	)
+	var debugger = $DebuggerPanel
+	if debugger != null and debugger.has_signal("focus_requested"):
+		debugger.focus_requested.connect(func(tick: int, sequence: int, event_id: String) -> void:
+			debugger_focus_requested.emit(tick, sequence, event_id)
+		)
 
 
 func jump_tick_value() -> int:
@@ -146,3 +156,15 @@ func clear_narrative_variants() -> void:
 
 func focus_narrative_event_ids(event_ids: Array) -> void:
 	$EventLog.focus_event_ids(event_ids)
+
+
+func open_debugger_payload(payload: Dictionary) -> void:
+	$DebuggerPanel.open_payload(payload)
+
+
+func show_debugger_unavailable(reason_code: String) -> void:
+	$DebuggerPanel.show_unavailable(reason_code)
+
+
+func close_debugger() -> void:
+	$DebuggerPanel.close_panel()
