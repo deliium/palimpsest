@@ -42,7 +42,8 @@ src/
                          # may implement experiments.persistence ports; transmission_mapping.py
   analysis/              # read-only analysis: drift/transmission, spatial_control@1,
                          # external_artifact_memory@1, metric DTOs, evidence stages, claim truth,
-                         # numerical policy, canonical codecs
+                         # numerical policy, canonical codecs, phenomenon-indicators-v1 panels,
+                         # matrix-metric-summary-v1 (no cognition feedback)
                          # MemoryDriftAnalysisService + SocialTransmissionAnalysisService
   api/                   # FastAPI composition root: /health + /v1 simulation
                          # control/inspection/replay/observer + WebSocket stream

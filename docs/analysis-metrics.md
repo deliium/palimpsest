@@ -28,8 +28,20 @@ Executable formula, population, and edge-case policy for all nineteen metric fam
 | `knowledge_diffusion` | `knowledge_diffusion@1` | delivery / traces / beliefs / reconstruction |
 | `rumor_distortion` | `rumor_distortion@1` | multi-hop structured content |
 | `counterfactual_reasoning` | `counterfactual_reasoning@1` | harvested counterfactual audits plus committed event ids |
+| `territorial_concentration` | `territorial_concentration@1` | detached presence / control spatial rows |
+| `prediction_calibration` | `prediction_calibration@1` | joined confidence / empirical outcome rows |
+| `belief_convergence` | `belief_convergence@1` | detached belief claim rows |
+| `cultural_similarity` | `cultural_similarity@1` | naming / norms / conventions / narratives rows |
 
-Catalog version: `metric-catalog-v1`. Document schema: `MetricDocument` schema `1`.
+Catalog version: `metric-catalog-v1`. Document schema: `MetricDocument` schema `1`. Closed catalog cardinality: **39** families (`METRIC_FAMILY_COUNT`). New opt-in families assemble only when their detached inputs are present.
+
+### Additive analysis surfaces (off the V1 gate)
+
+- **Trust centrality keys** on `trust_network_structure@1`: `centralization_out`, `mean_degree_centrality`, `mean_betweenness_centrality`, `mean_closeness_centrality` (exact NetworkX on nonnegative projection; `n<2` stays unknown).
+- **Reputation distributional keys** on `distributed_reputation@1`: `neighborhood_count`, `mean_pairwise_gap`, `max_pairwise_gap` (absent when `<2` neighborhoods). Legacy `*_gap` keys stay bit-identical.
+- **Survival cohort contrast** sibling document (`survival_cohort_contrast@1`) — not a catalog family. Missing cohort map omits the sibling; `survival@1` fingerprints stay unchanged.
+- **Phenomenon indicator panel** (`phenomenon-indicators-v1`): multi-indicator `support_band` codes `absent` / `weak` / `moderate` / `strong`. Forbidden: `culture_emerged`, `norm_emerged`, `society_formed`, `emerged`, `detected`.
+- **Matrix metric summary** (`matrix-metric-summary-v1`): percentile distribution + CI summaries over optional `cells/<cell_id>.metrics.json` sidecars. Sibling to ref-only `matrix-aggregate-v1`.
 
 `memory_dynamics@1` values: `recall_accuracy`, `source_confusion`, `memory_survival`, `interference`, `confidence_calibration`. Assembled only when `MetricComputationInputs.memory_dynamics_report` is present (in-run V2 audit export). REFERENCE / V1 reconstructive arms leave the family absent.
 

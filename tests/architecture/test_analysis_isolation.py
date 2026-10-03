@@ -219,6 +219,20 @@ def test_simulation_must_not_import_analysis_or_experiments() -> None:
     assert hits == []
 
 
+def test_phenomenon_panel_and_matrix_summary_not_imported_by_cognition() -> None:
+    forbidden = (
+        "analysis.phenomenon_panel",
+        "analysis.phenomenon_models",
+        "analysis.matrix_metric_summary",
+        "analysis.distribution_summary",
+    )
+    hits: list[str] = []
+    for package in ("agents", "simulation", "world"):
+        for path in (SRC / package).rglob("*.py"):
+            hits.extend(_module_imports_forbidden(path, forbidden))
+    assert hits == []
+
+
 def test_evidence_composition_lives_in_experiments_without_persistence() -> None:
     composition = SRC / "experiments" / "composition.py"
     assert composition.is_file()

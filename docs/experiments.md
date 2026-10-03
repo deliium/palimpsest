@@ -116,10 +116,13 @@ uv run palimpsest-matrix run --matrix matrix.json --manifest-root ./matrix-out
 uv run palimpsest-matrix resume --matrix matrix.json --manifest-root ./matrix-out
 uv run palimpsest-matrix status --manifest-root ./matrix-out
 uv run palimpsest-matrix aggregate --matrix matrix.json --manifest-root ./matrix-out
+uv run palimpsest-matrix aggregate --matrix matrix.json --manifest-root ./matrix-out --metric-summary
 # or: python -m research_runner …
 ```
 
 Optional `--print-fingerprint` prints the matrix fingerprint only. Never dump full configs or seeds by default. Collectors for matrix experiment ids use summary + trajectory + catalog fallback. Aggregates are `matrix-aggregate-v1` analysis-only documents.
+
+Completed cells may write optional `cells/<cell_id>.metrics.json` sidecars (encoded `MetricDocument` payloads, sorted by family) when present/partial documents exist. `--metric-summary` reads those sidecars and writes sibling `metric-summary.json` (`matrix-metric-summary-v1`) beside the aggregate — never replacing it. Missing sidecars contribute no numeric rows (not zeros). Phenomenon indicator panels and metric summaries are analysis-only and stay off the V1 regression gate.
 
 `RunVersionIdentity.code_revision` is optional metadata: pass `--code-revision` or set `PALIMPSEST_CODE_REVISION`. Empty is allowed; the CLI never invents a wall-clock surrogate.
 
