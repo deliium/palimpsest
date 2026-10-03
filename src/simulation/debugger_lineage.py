@@ -54,6 +54,8 @@ __all__ = [
     "PredictionProvenance",
     "PredictionProvenancePort",
     "assemble_prediction_provenance",
+    "project_goal_ancestry_from_checkpoint",
+    "project_narrative_lineage_from_checkpoint",
     "require_lineage_kind",
 ]
 
@@ -338,6 +340,294 @@ def _unavailable(
         availability=CausalTraceAvailability.UNAVAILABLE,
         reason_code=reason_code,
     )
+
+
+def _stable_id(value: object) -> str | None:
+    if value is None:
+        return None
+    text = str(getattr(value, "value", value)).strip()
+    return text or None
+
+
+def _enum_code(value: object) -> str | None:
+    if value is None:
+        return None
+    code = getattr(value, "value", value)
+    text = str(code).strip()
+    return text or None
+
+
+def _focus_from_variant(
+    *, run_id: RunId, variant: object
+) -> tuple[DebuggerFocusHandle, ...]:
+    event_id = _stable_id(getattr(variant, "source_event_id", None))
+    if event_id is None:
+        return ()
+    tick_raw = getattr(variant, "last_tick", None)
+    if tick_raw is None:
+        tick_raw = getattr(variant, "first_tick", None)
+    if tick_raw is None or isinstance(tick_raw, bool) or not isinstance(tick_raw, int):
+        return ()
+    if tick_raw < 0:
+        return ()
+    return (
+        DebuggerFocusHandle(
+            run_id=run_id,
+            tick=tick_raw,
+            sequence=None,
+            event_id=event_id,
+        ),
+    )
+
+
+def project_narrative_lineage_from_checkpoint(
+    *,
+    run_id: RunId,
+    owner_id: AgentId,
+    subject_id: str,
+    checkpoint: object | None,
+) -> NarrativeLineage:
+    """Project NarrativeLedger parents / competitors from a runtime checkpoint.
+
+    Metadata-only: no content tokens, fingerprints, or narrative text.
+    ``subject_id`` is the variant id.
+    """
+    _LOG.debug(
+        "narrative_lineage_entry run_id=%s owner_id=%s subject_id=%s has_checkpoint=%s",
+        run_id.value,
+        owner_id.value,
+        subject_id,
+        checkpoint is not None,
+    )
+    if checkpoint is None:
+        return _unavailable(
+            run_id=run_id,
+            owner_id=owner_id,
+            kind=DebuggerLineageKind.NARRATIVE,
+            subject_id=subject_id,
+            reason_code="checkpoint_unavailable",
+        )
+    ledger = getattr(checkpoint, "cultural_narratives", None)
+    if ledger is None:
+        return _unavailable(
+            run_id=run_id,
+            owner_id=owner_id,
+            kind=DebuggerLineageKind.NARRATIVE,
+            subject_id=subject_id,
+            reason_code="narrative_ledger_missing",
+        )
+    variants = tuple(getattr(ledger, "variants", ()) or ())
+    by_id: dict[str, object] = {}
+    for item in variants:
+        variant_id = _stable_id(getattr(item, "variant_id", None))
+        if variant_id is not None:
+            by_id[variant_id] = item
+    target = by_id.get(subject_id)
+    if target is None:
+        _LOG.warning(
+            "debugger_lineage_incomplete kind=%s reason_code=%s subject_id=%s",
+            "narrative",
+            "lineage_not_found",
+            subject_id,
+        )
+        return _unavailable(
+            run_id=run_id,
+            owner_id=owner_id,
+            kind=DebuggerLineageKind.NARRATIVE,
+            subject_id=subject_id,
+            reason_code="lineage_not_found",
+        )
+
+    parent_ids = tuple(
+        pid
+        for pid in (
+            _stable_id(item)
+            for item in (getattr(target, "parent_variant_ids", ()) or ())
+        )
+        if pid is not None
+    )
+    competing = tuple(
+        cid
+        for cid in (
+            _stable_id(item)
+            for item in (getattr(target, "competing_variant_ids", ()) or ())
+        )
+        if cid is not None
+    )
+    related = tuple(dict.fromkeys((*parent_ids, *competing)))
+    status_code = _enum_code(getattr(target, "status", None))
+    origin_code = _enum_code(getattr(target, "origin", None))
+    reason_codes: tuple[str, ...] = ()
+    if origin_code is not None:
+        reason_codes = (f"origin:{origin_code}",)
+    entries: list[DebuggerLineageEntry] = [
+        DebuggerLineageEntry(
+            entry_id=subject_id,
+            kind=DebuggerLineageKind.NARRATIVE,
+            related_ids=related,
+            parent_ids=parent_ids,
+            reason_codes=reason_codes,
+            counts={
+                "parent_count": len(parent_ids),
+                "competing_count": len(competing),
+            },
+            focus_handles=_focus_from_variant(run_id=run_id, variant=target),
+            status_code=status_code,
+        )
+    ]
+    for parent_id in parent_ids:
+        parent = by_id.get(parent_id)
+        if parent is None:
+            continue
+        entries.append(
+            DebuggerLineageEntry(
+                entry_id=parent_id,
+                kind=DebuggerLineageKind.NARRATIVE,
+                related_ids=(subject_id,),
+                parent_ids=tuple(
+                    pid
+                    for pid in (
+                        _stable_id(item)
+                        for item in (getattr(parent, "parent_variant_ids", ()) or ())
+                    )
+                    if pid is not None
+                ),
+                focus_handles=_focus_from_variant(run_id=run_id, variant=parent),
+                status_code=_enum_code(getattr(parent, "status", None)),
+            )
+        )
+    response = DebuggerLineageResponse(
+        run_id=run_id,
+        owner_id=owner_id,
+        kind=DebuggerLineageKind.NARRATIVE,
+        subject_id=subject_id,
+        availability=CausalTraceAvailability.AVAILABLE,
+        entries=tuple(entries),
+    )
+    _LOG.debug(
+        "narrative_lineage_exit entry_count=%s parent_count=%s competing_count=%s",
+        len(entries),
+        len(parent_ids),
+        len(competing),
+    )
+    return response
+
+
+def project_goal_ancestry_from_checkpoint(
+    *,
+    run_id: RunId,
+    owner_id: AgentId,
+    subject_id: str,
+    checkpoint: object | None,
+) -> GoalAncestryLineage:
+    """Project ``parent_goal_id`` ancestry from checkpoint ``goals``.
+
+    Metadata-only: ids, status/horizon codes, counts — never goal descriptions.
+    """
+    _LOG.debug(
+        "goal_ancestry_entry run_id=%s owner_id=%s subject_id=%s has_checkpoint=%s",
+        run_id.value,
+        owner_id.value,
+        subject_id,
+        checkpoint is not None,
+    )
+    if checkpoint is None:
+        return _unavailable(
+            run_id=run_id,
+            owner_id=owner_id,
+            kind=DebuggerLineageKind.GOAL_ANCESTRY,
+            subject_id=subject_id,
+            reason_code="checkpoint_unavailable",
+        )
+    goals = tuple(getattr(checkpoint, "goals", ()) or ())
+    by_id: dict[str, object] = {}
+    for goal in goals:
+        goal_id = _stable_id(getattr(goal, "goal_id", None))
+        if goal_id is not None:
+            by_id[goal_id] = goal
+    target = by_id.get(subject_id)
+    if target is None:
+        _LOG.warning(
+            "debugger_lineage_incomplete kind=%s reason_code=%s subject_id=%s",
+            "goal_ancestry",
+            "lineage_not_found",
+            subject_id,
+        )
+        return _unavailable(
+            run_id=run_id,
+            owner_id=owner_id,
+            kind=DebuggerLineageKind.GOAL_ANCESTRY,
+            subject_id=subject_id,
+            reason_code="lineage_not_found",
+        )
+
+    ancestors: list[str] = []
+    cursor = _stable_id(getattr(target, "parent_goal_id", None))
+    seen: set[str] = {subject_id}
+    while cursor is not None and cursor not in seen:
+        ancestors.append(cursor)
+        seen.add(cursor)
+        parent = by_id.get(cursor)
+        if parent is None:
+            break
+        cursor = _stable_id(getattr(parent, "parent_goal_id", None))
+    children = tuple(
+        sorted(
+            gid
+            for gid, goal in by_id.items()
+            if _stable_id(getattr(goal, "parent_goal_id", None)) == subject_id
+        )
+    )
+    parent_ids = tuple(ancestors)
+    related = tuple(dict.fromkeys((*parent_ids, *children)))
+    entries: list[DebuggerLineageEntry] = [
+        DebuggerLineageEntry(
+            entry_id=subject_id,
+            kind=DebuggerLineageKind.GOAL_ANCESTRY,
+            related_ids=related,
+            parent_ids=parent_ids[:1],
+            reason_codes=(),
+            counts={
+                "ancestor_count": len(parent_ids),
+                "child_count": len(children),
+            },
+            status_code=_enum_code(getattr(target, "status", None)),
+        )
+    ]
+    for ancestor_id in parent_ids:
+        ancestor = by_id.get(ancestor_id)
+        if ancestor is None:
+            continue
+        entries.append(
+            DebuggerLineageEntry(
+                entry_id=ancestor_id,
+                kind=DebuggerLineageKind.GOAL_ANCESTRY,
+                related_ids=(subject_id,),
+                parent_ids=tuple(
+                    pid
+                    for pid in [
+                        _stable_id(getattr(ancestor, "parent_goal_id", None))
+                    ]
+                    if pid is not None
+                ),
+                status_code=_enum_code(getattr(ancestor, "status", None)),
+            )
+        )
+    response = DebuggerLineageResponse(
+        run_id=run_id,
+        owner_id=owner_id,
+        kind=DebuggerLineageKind.GOAL_ANCESTRY,
+        subject_id=subject_id,
+        availability=CausalTraceAvailability.AVAILABLE,
+        entries=tuple(entries),
+    )
+    _LOG.debug(
+        "goal_ancestry_exit entry_count=%s ancestor_count=%s child_count=%s",
+        len(entries),
+        len(parent_ids),
+        len(children),
+    )
+    return response
 
 
 class _InMemoryLineageStore:

@@ -8,6 +8,8 @@ revision in this plan.
 
 from __future__ import annotations
 
+from collections.abc import Callable
+
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
@@ -22,24 +24,28 @@ from simulation.causal_debugger import (
     DebuggerEventLookupPort,
     DebuggerEventRecord,
     DebuggerFocusHandle,
-    DebuggerLineageEntry,
     DebuggerLineageKind,
-    DebuggerLineageResponse,
     semantic_type_for_detail_kind,
 )
 from simulation.cognition_trace import AgentId, CognitionTraceInvocation
 from simulation.debugger_lineage import (
     BeliefEvidenceLineage,
     CommunicationLineage,
+    DebuggerLineageEntry,
+    DebuggerLineageResponse,
     GoalAncestryLineage,
     MemoryDerivationLineage,
     NarrativeLineage,
     PredictionProvenance,
     assemble_prediction_provenance,
+    project_goal_ancestry_from_checkpoint,
+    project_narrative_lineage_from_checkpoint,
 )
 from simulation.models import RunId
 
 _LOGGER = get_logger("persistence.debugger_sqlalchemy")
+
+CheckpointLookup = Callable[[str, str], object | None]
 
 __all__ = [
     "SqlAlchemyBeliefEvidenceLineage",
@@ -62,8 +68,17 @@ def create_debugger_event_lookup(
 
 def create_debugger_lineage_ports(
     session_factory: async_sessionmaker[AsyncSession],
+    *,
+    checkpoint_lookup: CheckpointLookup | None = None,
 ) -> dict[str, object]:
-    """Factory map of lineage kind → port implementation."""
+    """Factory map of lineage kind → port implementation.
+
+    Narrative and goal ancestry use the same owner runtime checkpoint path as
+    observer narrative-hops / inspection subjective routes. When
+    ``checkpoint_lookup`` is omitted, those kinds fail closed with
+    ``checkpoint_unavailable``.
+    """
+    lookup: CheckpointLookup = checkpoint_lookup or (lambda _run, _owner: None)
     return {
         DebuggerLineageKind.BELIEF_EVIDENCE.value: SqlAlchemyBeliefEvidenceLineage(
             session_factory
@@ -74,12 +89,8 @@ def create_debugger_lineage_ports(
         DebuggerLineageKind.COMMUNICATION.value: SqlAlchemyCommunicationLineage(
             session_factory
         ),
-        DebuggerLineageKind.NARRATIVE.value: SqlAlchemyNarrativeLineage(
-            session_factory
-        ),
-        DebuggerLineageKind.GOAL_ANCESTRY.value: SqlAlchemyGoalAncestryLineage(
-            session_factory
-        ),
+        DebuggerLineageKind.NARRATIVE.value: SqlAlchemyNarrativeLineage(lookup),
+        DebuggerLineageKind.GOAL_ANCESTRY.value: SqlAlchemyGoalAncestryLineage(lookup),
         DebuggerLineageKind.PREDICTION.value: SqlAlchemyPredictionProvenance(),
     }
 
@@ -371,60 +382,58 @@ class SqlAlchemyCommunicationLineage:
 
 
 class SqlAlchemyNarrativeLineage:
-    """Narrative lineage requires an owner checkpoint; SQL-only path is unavailable."""
+    """Narrative lineage from owner runtime checkpoint (inspection/observer path)."""
 
-    __slots__ = ("_session_factory",)
+    __slots__ = ("_checkpoint_lookup",)
 
-    def __init__(self, session_factory: async_sessionmaker[AsyncSession]) -> None:
-        self._session_factory = session_factory
+    def __init__(self, checkpoint_lookup: CheckpointLookup) -> None:
+        self._checkpoint_lookup = checkpoint_lookup
 
     async def narrative_lineage(
         self, *, run_id: RunId, owner_id: AgentId, subject_id: str
     ) -> NarrativeLineage:
-        _LOGGER.warning(
+        checkpoint = self._checkpoint_lookup(run_id.value, owner_id.value)
+        _LOGGER.debug(
             "debugger_lineage_query",
             kind="narrative",
-            reason_code="checkpoint_lineage_required",
             run_id=run_id.value,
             owner_id=owner_id.value,
             subject_id=subject_id,
+            has_checkpoint=checkpoint is not None,
         )
-        return DebuggerLineageResponse(
+        return project_narrative_lineage_from_checkpoint(
             run_id=run_id,
             owner_id=owner_id,
-            kind=DebuggerLineageKind.NARRATIVE,
             subject_id=subject_id,
-            availability=CausalTraceAvailability.UNAVAILABLE,
-            reason_code="checkpoint_lineage_required",
+            checkpoint=checkpoint,
         )
 
 
 class SqlAlchemyGoalAncestryLineage:
-    """Goal ancestry requires GoalBoard/checkpoint projection; SQL-only unavailable."""
+    """Goal ancestry from checkpoint ``goals`` / ``parent_goal_id`` chain."""
 
-    __slots__ = ("_session_factory",)
+    __slots__ = ("_checkpoint_lookup",)
 
-    def __init__(self, session_factory: async_sessionmaker[AsyncSession]) -> None:
-        self._session_factory = session_factory
+    def __init__(self, checkpoint_lookup: CheckpointLookup) -> None:
+        self._checkpoint_lookup = checkpoint_lookup
 
     async def goal_ancestry(
         self, *, run_id: RunId, owner_id: AgentId, subject_id: str
     ) -> GoalAncestryLineage:
-        _LOGGER.warning(
+        checkpoint = self._checkpoint_lookup(run_id.value, owner_id.value)
+        _LOGGER.debug(
             "debugger_lineage_query",
             kind="goal_ancestry",
-            reason_code="checkpoint_lineage_required",
             run_id=run_id.value,
             owner_id=owner_id.value,
             subject_id=subject_id,
+            has_checkpoint=checkpoint is not None,
         )
-        return DebuggerLineageResponse(
+        return project_goal_ancestry_from_checkpoint(
             run_id=run_id,
             owner_id=owner_id,
-            kind=DebuggerLineageKind.GOAL_ANCESTRY,
             subject_id=subject_id,
-            availability=CausalTraceAvailability.UNAVAILABLE,
-            reason_code="checkpoint_lineage_required",
+            checkpoint=checkpoint,
         )
 
 

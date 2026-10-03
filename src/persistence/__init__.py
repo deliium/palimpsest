@@ -245,6 +245,8 @@ def create_debugger_event_lookup(
 
 def create_debugger_lineage_ports(
     session_factory: async_sessionmaker[AsyncSession] | None = None,
+    *,
+    checkpoint_lookup=None,
 ):
     """Build debugger lineage enrichment ports keyed by closed kind."""
     if session_factory is None:
@@ -254,7 +256,7 @@ def create_debugger_lineage_ports(
         )
     from persistence.debugger_sqlalchemy import create_debugger_lineage_ports as impl
 
-    return impl(session_factory)
+    return impl(session_factory, checkpoint_lookup=checkpoint_lookup)
 
 
 def create_truth_spec_repository(

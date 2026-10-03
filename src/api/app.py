@@ -116,10 +116,19 @@ def _attach_persistence_services(app: FastAPI, session_factory: object) -> None:
             service="ObserverReadService",
         )
     if getattr(app.state, "debugger_service", None) is None:
+        def _checkpoint_lookup(run_id: str, owner_id: str) -> object | None:
+            manager = getattr(app.state, "simulation_manager", None)
+            if manager is None or not hasattr(manager, "owner_runtime_checkpoint"):
+                return None
+            return manager.owner_runtime_checkpoint(run_id, owner_id)
+
         app.state.debugger_service = PersistenceCausalDebuggerService(
             traces=create_cognition_trace_repository(session_factory),  # type: ignore[arg-type]
             events=create_debugger_event_lookup(session_factory),  # type: ignore[arg-type]
-            lineage_ports=create_debugger_lineage_ports(session_factory),  # type: ignore[arg-type]
+            lineage_ports=create_debugger_lineage_ports(
+                session_factory,  # type: ignore[arg-type]
+                checkpoint_lookup=_checkpoint_lookup,
+            ),
             runs=runs,
         )
         _LOGGER.info(

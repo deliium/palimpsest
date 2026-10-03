@@ -126,6 +126,8 @@ from simulation.debugger_lineage import (
     PredictionProvenance,
     PredictionProvenancePort,
     assemble_prediction_provenance,
+    project_goal_ancestry_from_checkpoint,
+    project_narrative_lineage_from_checkpoint,
     require_lineage_kind,
 )
 from simulation.engine import EnginePhase, WorldEngine
@@ -770,6 +772,8 @@ __all__ = [
     "payload_hash",
     "pending_from_finalization_command",
     "persistence_diagnostic_fields",
+    "project_goal_ancestry_from_checkpoint",
+    "project_narrative_lineage_from_checkpoint",
     "project_replay_for_inspection",
     "provider_fingerprint",
     "registration_translator",

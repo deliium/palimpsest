@@ -24,6 +24,8 @@ from simulation import (
     RunId,
     assemble_prediction_provenance,
     build_cognition_trace_invocation,
+    project_goal_ancestry_from_checkpoint,
+    project_narrative_lineage_from_checkpoint,
     require_lineage_kind,
 )
 
@@ -126,3 +128,122 @@ async def test_prediction_port_unavailable_without_sources() -> None:
     )
     assert result.availability is CausalTraceAvailability.UNAVAILABLE
     assert result.reason_code == "cognition_trace_missing"
+
+
+def test_narrative_lineage_from_checkpoint_parents_and_focus() -> None:
+    run_id = RunId("run-narr")
+    owner = AgentId("alice")
+
+    class _Variant:
+        def __init__(
+            self,
+            *,
+            variant_id: str,
+            parents: tuple[str, ...] = (),
+            competing: tuple[str, ...] = (),
+            source_event_id: str | None = None,
+            last_tick: int | None = None,
+            status: str = "active",
+            origin: str = "observation",
+        ) -> None:
+            self.variant_id = variant_id
+            self.parent_variant_ids = parents
+            self.competing_variant_ids = competing
+            self.source_event_id = source_event_id
+            self.last_tick = last_tick
+            self.first_tick = last_tick
+            self.status = status
+            self.origin = origin
+
+    class _Ledger:
+        variants = (
+            _Variant(variant_id="parent-a", status="active"),
+            _Variant(
+                variant_id="child-1",
+                parents=("parent-a",),
+                competing=("rival-1",),
+                source_event_id="evt-n1",
+                last_tick=12,
+            ),
+        )
+
+    class _Checkpoint:
+        cultural_narratives = _Ledger()
+
+    result = project_narrative_lineage_from_checkpoint(
+        run_id=run_id,
+        owner_id=owner,
+        subject_id="child-1",
+        checkpoint=_Checkpoint(),
+    )
+    assert result.availability is CausalTraceAvailability.AVAILABLE
+    assert result.entries[0].parent_ids == ("parent-a",)
+    assert "rival-1" in result.entries[0].related_ids
+    assert result.entries[0].focus_handles[0].event_id == "evt-n1"
+    assert result.entries[0].focus_handles[0].tick == 12
+    assert not hasattr(result.entries[0], "narrative_text")
+    assert not hasattr(result.entries[0], "content")
+
+
+def test_goal_ancestry_from_checkpoint_walks_parents() -> None:
+    run_id = RunId("run-goal")
+    owner = AgentId("alice")
+
+    class _GoalId:
+        def __init__(self, value: str) -> None:
+            self.value = value
+
+    class _Goal:
+        def __init__(
+            self,
+            goal_id: str,
+            *,
+            parent: str | None = None,
+            status: str = "active",
+        ) -> None:
+            self.goal_id = _GoalId(goal_id)
+            self.parent_goal_id = None if parent is None else _GoalId(parent)
+            self.status = status
+            self.description = "must-not-leak"
+
+    class _Checkpoint:
+        goals = (
+            _Goal("root"),
+            _Goal("mid", parent="root"),
+            _Goal("leaf", parent="mid"),
+            _Goal("sibling", parent="mid"),
+        )
+
+    result = project_goal_ancestry_from_checkpoint(
+        run_id=run_id,
+        owner_id=owner,
+        subject_id="leaf",
+        checkpoint=_Checkpoint(),
+    )
+    assert result.availability is CausalTraceAvailability.AVAILABLE
+    assert result.entries[0].parent_ids == ("mid",)
+    assert result.entries[0].counts == {"ancestor_count": 2, "child_count": 0}
+    assert "root" in result.entries[0].related_ids
+    assert not hasattr(result.entries[0], "description")
+
+
+def test_checkpoint_lineage_missing_reasons() -> None:
+    run_id = RunId("run-miss")
+    owner = AgentId("alice")
+    missing_cp = project_narrative_lineage_from_checkpoint(
+        run_id=run_id, owner_id=owner, subject_id="v1", checkpoint=None
+    )
+    assert missing_cp.reason_code == "checkpoint_unavailable"
+
+    class _Empty:
+        cultural_narratives = None
+        goals = ()
+
+    no_ledger = project_narrative_lineage_from_checkpoint(
+        run_id=run_id, owner_id=owner, subject_id="v1", checkpoint=_Empty()
+    )
+    assert no_ledger.reason_code == "narrative_ledger_missing"
+    no_goal = project_goal_ancestry_from_checkpoint(
+        run_id=run_id, owner_id=owner, subject_id="g1", checkpoint=_Empty()
+    )
+    assert no_goal.reason_code == "lineage_not_found"
