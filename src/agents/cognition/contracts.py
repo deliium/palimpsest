@@ -618,6 +618,7 @@ class FutureImagination(Protocol):
         theory_of_mind: object | None = None,
         prospective_policy: object | None = None,
         llm_provider: object | None = None,
+        budget_ledger: object | None = None,
     ) -> PossibleFutures: ...
 
 

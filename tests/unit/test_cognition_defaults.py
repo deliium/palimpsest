@@ -12,6 +12,7 @@ from agents.cognition.defaults import (
     LiteralPerceptionInterpreter,
     PassthroughGoalManager,
     PlaceholderFutureImagination,
+    PresentStateImagination,
     StableIntentionSelector,
     StableMotivationEvaluator,
     WaitFallbackPlanner,
@@ -95,6 +96,38 @@ def _loop_input() -> CognitiveLoopInput:
         ),
         internal_state=InternalAgentState(owner_id=agent),
     )
+
+
+@pytest.mark.asyncio
+async def test_present_state_imagination_accepts_budget_ledger() -> None:
+    """Present-state imagination must accept CognitiveLoop's budget_ledger kwarg."""
+    from agents.cognition.models import SelfModel
+
+    owner = AgentId("agent-1")
+    situation = SituationModel(
+        owner_id=owner,
+        tick=1,
+        claim_codes=(SituationClaimCode.IDLE,),
+        confidence=1.0,
+    )
+    self_state = SelfModel(
+        owner_id=owner,
+        policy_id="test-policy",
+        policy_version="1",
+        life_status=LifeStatus.ALIVE,
+        beliefs=(),
+        goal_ids=(),
+        confidence=1.0,
+        candidate_count=0,
+    )
+    futures = await PresentStateImagination().imagine(
+        _loop_input(),
+        situation,
+        self_state,
+        budget_ledger=object(),
+    )
+    assert len(futures.futures) == 1
+    assert futures.futures[0].future_id == "present"
 
 
 @pytest.mark.asyncio

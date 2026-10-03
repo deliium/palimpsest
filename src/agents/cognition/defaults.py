@@ -338,9 +338,10 @@ class PlaceholderFutureImagination:
         theory_of_mind: object | None = None,
         prospective_policy: object | None = None,
         llm_provider: object | None = None,
+        budget_ledger: object | None = None,
     ) -> PossibleFutures:
         _ = self_state, memory, goal_board, emotional_state, prospective_policy
-        _ = llm_provider
+        _ = llm_provider, budget_ledger
         futures: list[ImaginedFuture] = []
         if SituationClaimCode.TERMINAL_SELF in situation.claim_codes:
             futures.append(
@@ -404,9 +405,10 @@ class PresentStateImagination:
         theory_of_mind: object | None = None,
         prospective_policy: object | None = None,
         llm_provider: object | None = None,
+        budget_ledger: object | None = None,
     ) -> PossibleFutures:
         _ = self_state, memory, goal_board, emotional_state, prospective_policy
-        _ = llm_provider
+        _ = llm_provider, budget_ledger
         if SituationClaimCode.TERMINAL_SELF in situation.claim_codes:
             claim_codes = (SituationClaimCode.TERMINAL_SELF,)
             future_id = "present-terminal"

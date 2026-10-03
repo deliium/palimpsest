@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import logging
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import Final
 
 from experiments.interventions import StoryInterventionArbiter
@@ -46,32 +46,14 @@ class ExperimentArmResult:
 def materialize_assignments(
     definition: ExperimentDefinition,
 ) -> tuple[ExperimentAssignment, ...]:
-    """Expand conditions × seeds × replicates in deterministic order."""
+    """Expand conditions x seeds x replicates in deterministic order."""
     if type(definition) is not ExperimentDefinition:
         raise TypeError("definition must be ExperimentDefinition")
     assignments: list[ExperimentAssignment] = []
     for condition_ordinal, condition in enumerate(definition.conditions):
         for seed_ordinal, seed in enumerate(definition.seed_matrix.seeds):
             for replicate_index in range(definition.seed_matrix.replicates_per_seed):
-                config = SimulationRunnerConfig(
-                    seed=seed,
-                    stochastic_identity=condition.runner_config.stochastic_identity,
-                    scenario=condition.runner_config.scenario,
-                    agents=condition.runner_config.agents,
-                    stop_policy=condition.runner_config.stop_policy,
-                    mortality_mode=condition.runner_config.mortality_mode,
-                    cognition_failure_policy=(
-                        condition.runner_config.cognition_failure_policy
-                    ),
-                    provider=condition.runner_config.provider,
-                    persistence=condition.runner_config.persistence,
-                    capability_flags=condition.runner_config.capability_flags,
-                    schema_version=condition.runner_config.schema_version,
-                    derivation_version=condition.runner_config.derivation_version,
-                    mortality_policy_version=(
-                        condition.runner_config.mortality_policy_version
-                    ),
-                )
+                config = replace(condition.runner_config, seed=seed)
                 run_id = RunId(
                     f"{definition.experiment_id}-{condition.condition_id}"
                     f"-s{seed_ordinal}-r{replicate_index}"
