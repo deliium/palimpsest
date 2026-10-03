@@ -111,6 +111,7 @@ class MetricFamilyId(StrEnum):
     EXTERNAL_ARTIFACT_MEMORY = "external_artifact_memory"
     EMERGENT_SEMANTIC_NAMING = "emergent_semantic_naming"
     CULTURAL_NARRATIVE_LINEAGE = "cultural_narrative_lineage"
+    COGNITIVE_BUDGET = "cognitive_budget"
 
 
 class DenominatorKind(StrEnum):
@@ -1172,6 +1173,58 @@ def _spec_emergent_social_norms() -> MetricSpecification:
     )
 
 
+def _spec_cognitive_budget() -> MetricSpecification:
+    return _base(
+        family_id=MetricFamilyId.COGNITIVE_BUDGET,
+        evidence_inputs=frozenset({EvidenceStage.OBJECTIVE_EVENT_STATE}),
+        population="caller_supplied_cognitive_budget_audit_rows",
+        denominator="audit_rows_per_arm",
+        denominator_kind=DenominatorKind.OCCURRENCE,
+        cohort_window="caller-supplied audits after the run",
+        deceased_policy="not_applicable",
+        zero_holding_policy="empty audit sequence -> availability=absent",
+        opportunity_vs_occurrence=(
+            "consumption totals sum used counts; empty rows are not zero use"
+        ),
+        self_edge_policy="not_applicable",
+        censoring_policy=(
+            "missing audits are not zero consumption; "
+            "analysis never re-enters cognition"
+        ),
+        formulas={
+            "total_llm_calls": "sum llm_calls_used",
+            "total_tokens": "sum tokens_used",
+            "total_imagination_branches": "sum imagination_branches_used",
+            "degraded_tick_rate": "degraded audits / audits",
+            "low_vs_high_llm_calls_strictly_fewer": (
+                "low_cost total llm calls < high_cost total llm calls"
+            ),
+            "low_vs_high_branches_strictly_fewer": (
+                "low_cost total branches < high_cost total branches"
+            ),
+        },
+        value_keys=(
+            "total_llm_calls",
+            "total_tokens",
+            "total_imagination_branches",
+            "total_memories_recalled",
+            "total_tom_targets",
+            "mean_llm_calls_per_tick",
+            "mean_branches_per_tick",
+            "degraded_tick_count",
+            "degraded_tick_rate",
+            "exhausted_reason_count",
+            "low_cost_total_llm_calls",
+            "high_cost_total_llm_calls",
+            "low_cost_total_branches",
+            "high_cost_total_branches",
+            "low_vs_high_llm_calls_strictly_fewer",
+            "low_vs_high_branches_strictly_fewer",
+        ),
+        empty_case="availability=absent; empty audits are not zero consumption",
+    )
+
+
 def _spec_cultural_narrative_lineage() -> MetricSpecification:
     return _base(
         family_id=MetricFamilyId.CULTURAL_NARRATIVE_LINEAGE,
@@ -2121,6 +2174,7 @@ _BUILDERS: Final[tuple[Callable[[], MetricSpecification], ...]] = (
     _spec_external_artifact_memory,
     _spec_emergent_semantic_naming,
     _spec_cultural_narrative_lineage,
+    _spec_cognitive_budget,
 )
 
 

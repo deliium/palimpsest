@@ -1479,6 +1479,105 @@ def experiment_y_social_conventions(
     return definition
 
 
+def experiment_ad_cognitive_budgets(
+    base: SimulationRunnerConfig,
+    *,
+    seed_matrix: ExperimentSeedMatrix | None = None,
+) -> ExperimentDefinition:
+    """Low-cost vs high-cost tick budgets on a shared full_v2_agent world.
+
+    Arms share seed, scenario, stochastic identity, and architecture; they
+    differ only by ``CognitiveBudgetLimits``. Off the V1 regression gate.
+    """
+    import hashlib
+
+    from agents.cognition.budget import (
+        high_cost_budget_limits,
+        low_cost_budget_limits,
+    )
+    from experiments.architectures import expand_architecture
+    from simulation.runner_models import (
+        RUNNER_SCHEMA_VERSION_V22,
+        CognitiveBudgetLimits,
+        CognitiveBudgetMode,
+        ProspectiveImaginationMode,
+    )
+
+    matrix = seed_matrix or ExperimentSeedMatrix(seeds=(base.seed,))
+    shared = replace(base, capability_flags=V2CapabilityFlags())
+    expanded = expand_architecture(shared, "full_v2_agent")
+
+    def _arm(policy_factory: object, *, condition_id: str, label: str) -> (
+        tuple[str, str, SimulationRunnerConfig]
+    ):
+        policy = policy_factory()  # type: ignore[operator]
+        limits = CognitiveBudgetLimits(
+            max_llm_calls_per_tick=policy.max_llm_calls_per_tick,
+            max_tokens_per_tick=policy.max_tokens_per_tick,
+            max_imagination_branches=policy.max_imagination_branches,
+            max_planning_depth=policy.max_planning_depth,
+            max_recalled_memories=policy.max_recalled_memories,
+            max_tom_targets=policy.max_tom_targets,
+            reflection_interval_ticks=policy.reflection_interval_ticks,
+            timeout_seconds=policy.timeout_seconds,
+        )
+        agents = []
+        for agent in expanded.agents:
+            agents.append(
+                replace(
+                    agent,
+                    cognition=replace(
+                        agent.cognition,
+                        prospective_mode=ProspectiveImaginationMode.DETERMINISTIC,
+                        cognitive_budget_mode=CognitiveBudgetMode.ENFORCED,
+                        cognitive_budget_limits=limits,
+                    ),
+                )
+            )
+        config = replace(
+            expanded,
+            agents=tuple(agents),
+            schema_version=RUNNER_SCHEMA_VERSION_V22,
+        )
+        digest = hashlib.sha256(
+            (
+                f"{limits.max_llm_calls_per_tick}|{limits.max_tokens_per_tick}|"
+                f"{limits.max_imagination_branches}|{limits.max_planning_depth}|"
+                f"{limits.max_recalled_memories}|{limits.max_tom_targets}|"
+                f"{limits.reflection_interval_ticks}|{limits.timeout_seconds}"
+            ).encode()
+        ).hexdigest()[:12]
+        _LOG.info(
+            "experiment_ad_built condition_id=%s budget_digest_prefix=%s",
+            condition_id,
+            digest,
+        )
+        return condition_id, label, config
+
+    low = _arm(low_cost_budget_limits, condition_id="ad-low-cost", label="budget_low")
+    high = _arm(
+        high_cost_budget_limits, condition_id="ad-high-cost", label="budget_high"
+    )
+    if low[2].seed != high[2].seed:
+        raise ValueError("experiment ad seed mismatch")
+    if low[2].scenario != high[2].scenario:
+        raise ValueError("experiment ad scenario mismatch")
+    if low[2].stochastic_identity != high[2].stochastic_identity:
+        raise ValueError("experiment ad identity mismatch")
+    condition_ids = f"{low[0]},{high[0]}"
+    _LOG.info(
+        "experiment_ad_built experiment_id=%s condition_ids=%s",
+        "experiment-ad-cognitive-budgets",
+        condition_ids,
+    )
+    return _definition(
+        experiment_id="experiment-ad-cognitive-budgets",
+        base=shared,
+        seed_matrix=matrix,
+        arms=(low, high),
+    )
+
+
 def experiment_ac_cognitive_architectures(
     base: SimulationRunnerConfig,
     *,

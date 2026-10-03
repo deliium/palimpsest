@@ -389,6 +389,16 @@ ArchitectureDefinition
 
 `compose_loop_config_from_snapshot` stays consistent with `_cognition_config_for` flag→mode mapping. Retrieval/reconstruction keys are declaration tokens only; they do not construct `MemoryService`-bound retrievers inside cognition factories.
 
+## Cognitive budgets (per-tick)
+
+`CognitiveBudgetMode` / `CognitionBudgetMode` defaults to `DISABLED`. This is **not** a `V2CapabilityFlags` slot. When `DISABLED`, stage-local caps (`ProspectivePolicy`, memory `limit`, ToM store size, reflection intervals) behave as today with no cross-stage ledger.
+
+When `ENFORCED`, `CognitiveLoop.prepare` constructs one `TickBudgetLedger` from `CognitiveBudgetPolicy` (`cognitive-budget-v1`) and degrades gracefully on exhaustion (refuse further LLM calls, truncate recall, stop expanding imagination / ToM targets, skip reflection) while still emitting exactly one closed `AgentCommand`. Cognition never calls `time.time` / `time.monotonic`; timeout uses an injected monotonic `clock` only (missing/non-callable disables the check).
+
+Charge dimensions: LLM calls, tokens, imagination branches (prospective nodes beyond root + kept counterfactuals), planning depth (prospective/counterfactual only — not epistemic nesting), recalled memories, ToM targets, reflection cadence floor, timeout. Reason codes stay on `BudgetExhaustedReason` (distinct from `ProspectivePruneReason`).
+
+`runner-config-v22` is emitted only when some agent's mode is `ENFORCED` (nine flat cognition keys: mode + eight numeric limits). Narratives-only configs stay on v21. Presets `low_cost_budget_limits()` / `high_cost_budget_limits()` live in cognition. In-run `CognitiveBudgetAudit` exports on `SimulationRunnerResult.cognitive_budget_audits` (not runner-result JSON). Tracing may project a final `BUDGET_SUMMARY` stage (`cognition-trace-stage-summary-v1` unchanged). Experiment AD and analysis `cognitive_budget@1` stay off the V1 regression gate.
+
 ### Preset → schema table
 
 | architecture_id | memory | imagination | reflection | prospective | mortality | owned flags | schema |
@@ -405,7 +415,7 @@ ArchitectureDefinition
 
 ### Digest and experiments
 
-`architecture_definition_digest(definition)` is diagnostics-only (logs / `label_code` prefix). It must not become a runner JSON field. Experiment AC (`experiment-ac-cognitive-architectures`, conditions `ac-<architecture_id>`) shares world scenario, seed matrix, and stochastic identity across arms; it stays **off** the V1 regression gate.
+`architecture_definition_digest(definition)` is diagnostics-only (logs / `label_code` prefix). It must not become a runner JSON field. Experiment AC (`experiment-ac-cognitive-architectures`, conditions `ac-<architecture_id>`) shares world scenario, seed matrix, and stochastic identity across arms; it stays **off** the V1 regression gate. Experiment AD (`experiment-ad-cognitive-budgets`, conditions `ad-low-cost` / `ad-high-cost`) expands `full_v2_agent`, then overrides `prospective_mode=DETERMINISTIC`, `cognitive_budget_mode=ENFORCED`, nested limits from the locked presets, and `schema_version=runner-config-v22`; arms differ only by limits and stay **off** the V1 gate.
 
 Validation reason codes: `architecture_missing_flag`, `architecture_forbidden_flag`, `architecture_mode_mismatch`, `architecture_slot_unbound`, `architecture_unknown_impl`, `architecture_unimplemented_flag`, `architecture_unknown`, `capability_unimplemented`.
 

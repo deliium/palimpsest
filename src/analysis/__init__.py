@@ -15,6 +15,10 @@ from analysis.causal_world_model_metrics import (
     CAUSAL_WORLD_MODEL_METRIC_VERSION,
     compute_causal_world_model_metrics,
 )
+from analysis.cognitive_budget_metrics import (
+    COGNITIVE_BUDGET_METRIC_VERSION,
+    compute_cognitive_budget_metrics,
+)
 from analysis.communication_strategy_metrics import (
     COMMUNICATION_STRATEGY_METRIC_VERSION,
     compute_communication_strategy_metrics,
@@ -262,6 +266,7 @@ __all__ = [
     "CANONICAL_OUTPUT_CLAIM",
     "CAUSAL_WORLD_MODEL_METRIC_VERSION",
     "CLAIM_TRUTH_SCHEMA_VERSION",
+    "COGNITIVE_BUDGET_METRIC_VERSION",
     "COMMUNICATION_STRATEGY_METRIC_VERSION",
     "COUNTERFACTUAL_REASONING_METRIC_VERSION",
     "CULTURAL_NARRATIVE_LINEAGE_METRIC_VERSION",
@@ -369,6 +374,7 @@ __all__ = [
     "compute_behavioral_specialization",
     "compute_belief_accuracy",
     "compute_causal_world_model_metrics",
+    "compute_cognitive_budget_metrics",
     "compute_communication_strategy_metrics",
     "compute_conflict",
     "compute_convention_persistence",

@@ -69,10 +69,21 @@ teaching on v12. Those experiments stay off the V1 regression gate.
 flag was added for reputation, skill learning, or teaching. `distributed_reputation@1`,
 `skill_learning@1`, and `cultural_transmission@1` are analysis-only.
 
+`CognitiveBudgetMode` defaults to `DISABLED` and is not a capability flag.
+`runner-config-v22` is accepted and is emitted only when some agent's mode is
+`ENFORCED`. That document carries every `runner-config-v21` cognition key plus
+nine flat budget keys (`cognitive_budget_mode` and eight numeric limits).
+`ENFORCED` is rejected on v1–v21, and v22 is rejected when every agent's budget
+mode is `DISABLED`. Cultural narratives remain encodable on `{v21, v22}`. Prior
+mode allowlists that ended at v21 widen through v22. Experiment AD
+(`experiment-ad-cognitive-budgets`) and analysis `cognitive_budget@1` stay off
+the V1 regression gate. Budgets never skip emitting one closed `AgentCommand`.
+
 Top-level `CognitionTraceSpec` (default disabled) rides in `runner-config-v4` only.
 Prior versions decode to a disabled spec. Tracing is **not** a capability flag;
 when enabled it may change `config_fingerprint` but must not change
-`exact_trajectory_hash` for the same seed/scenario under deterministic fakes.
+`exact_trajectory_hash` for the same seed/scenario under deterministic fakes
+(including when budget mode is `DISABLED`).
 
 ### Fingerprint vs trajectory identity
 

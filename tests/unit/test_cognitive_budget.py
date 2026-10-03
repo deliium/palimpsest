@@ -595,6 +595,36 @@ def test_budget_summary_trace_projection() -> None:
     assert "llm_calls_used" in stages[-1].counts
 
 
+def test_compute_cognitive_budget_metrics_low_vs_high() -> None:
+    from analysis.cognitive_budget_metrics import compute_cognitive_budget_metrics
+    from analysis.models import MetricAvailability
+
+    empty = compute_cognitive_budget_metrics(
+        (), run_id="run-empty", input_revision="rev-1"
+    )
+    assert empty.availability is MetricAvailability.ABSENT
+    doc = compute_cognitive_budget_metrics(
+        [
+            {
+                "llm_calls_used": 1,
+                "tokens_used": 10,
+                "imagination_branches_used": 2,
+                "memories_recalled": 1,
+                "tom_targets_used": 1,
+                "degraded": True,
+                "exhausted_reasons": ("budget_llm",),
+            }
+        ],
+        run_id="run-1",
+        input_revision="rev-1",
+        low_cost_rows=[{"llm_calls_used": 0, "imagination_branches_used": 1}],
+        high_cost_rows=[{"llm_calls_used": 3, "imagination_branches_used": 8}],
+    )
+    assert doc.availability is MetricAvailability.PRESENT
+    assert doc.values["low_vs_high_llm_calls_strictly_fewer"] is True
+    assert doc.values["low_vs_high_branches_strictly_fewer"] is True
+
+
 def test_v1_regression_gate_does_not_list_experiment_ad() -> None:
     from pathlib import Path
 
