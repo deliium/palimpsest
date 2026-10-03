@@ -23,6 +23,8 @@ HTTP GET only:
 - `/v1/simulations/{run_id}/observer/agents/{agent_id}/relationships` (SUBJECTIVE; `subjective_debug`)
 - `/v1/simulations/{run_id}/observer/agents/{agent_id}/narrative-hops` (SUBJECTIVE ledger hops; `subjective_debug`)
 - `/v1/simulations/{run_id}/observer/communication-strategy-audit` (ANALYTICAL research/debug; `subjective_debug`)
+- `/v1/simulations/{run_id}/debugger/events/{event_id}/causal-trace` (research causal debugger; `subjective_debug`)
+- `/v1/simulations/{run_id}/debugger/causal-trace?tick=&sequence=` (alternate address; `subjective_debug`)
 - `/v1/simulations/{run_id}/metrics` then `/metrics/{metric_set_id}/{family}` (ANALYTICAL catalog discovery; `objective_inspection`)
 
 It also opens `/v1/simulations/{run_id}/observer/stream` and never sends a text or binary WebSocket payload. Protocol `observer-protocol-v1` is required. A different `protocol_version` is shown as `unsupported_observer_protocol` and is not applied.
@@ -55,7 +57,24 @@ Analytical overlays call `GET .../metrics`, pick the newest catalog entry that l
 
 At high speed (`>= 8x` or dense pending motions) the client snaps motion, coalesces trivial same-entity activity marks, caps concurrent speech bubbles, and skips nonessential pulses while keeping reducer state correct.
 
-An optional perspective control can fetch SUBJECTIVE layers for one agent; primary captions keep researcher identity. The client does not request cognition traces, memories, beliefs, goals, emotions, or utterance text.
+An optional perspective control can fetch SUBJECTIVE layers for one agent; primary captions keep researcher identity. The client does not reconstruct memories, beliefs, goals, emotions, or utterance text locally. Causal explanation uses the server debugger payload only (see [Research causal debugger](research-causal-debugger.md)).
+
+## Causal debugger
+
+Select an event log line and press **Explain** to `GET` the causal-trace route with the session token header. The panel renders ordered stage codes, statuses, counts, and id refs from the server JSON. HTTP `403` / missing `subjective_debug` uses the same `overlay_unavailable` pattern as narrative overlays — never an empty chain presented as “no cognition”. Activating a node with `observer_focus` seeks `(tick, sequence)` and highlights `event_id` in the log.
+
+Deep-link / web query params (credential-free; UI “event N” = `sequence`):
+
+| Param | Required | Notes |
+| --- | --- | --- |
+| `run_id` | yes | Starts the session |
+| `tick` | for event focus | Non-negative int |
+| `event_id` / `event` | preferred | Opaque id |
+| `sequence` | with tick when known | Intra-tick sequence |
+| `agent_id` / `agent` | optional | Perspective hint |
+| `debugger` | optional | `1` / `causal` opens the debugger after seek |
+
+Query keys such as `token` / `api_key` are rejected (`query_string_secret`).
 
 ## Same-origin setup
 
@@ -63,7 +82,7 @@ URL code joins an origin string and a path. On a Web export the origin is `windo
 
 The four status lines are application version, protocol, export engine, and backend revision. A bad manifest, frame, or known event shows `unsupported_observer_protocol` and is not applied. The log line is `[observer.protocol] parse_failed reason_code=unsupported_observer_protocol`.
 
-`./run.sh` prints `INFO startup_ready url=http://127.0.0.1:8080/`. On a Web export, `/?run_id=<id>` fills the run field and starts the session. The log is `[observer.session] web_run_id_applied run_id=<id>`. The query never carries a token. A URL with no query, or an empty `run_id`, waits for Connect.
+`./run.sh` prints `INFO startup_ready url=http://127.0.0.1:8080/`. On a Web export, `/?run_id=<id>` fills the run field and starts the session. Optional deep-link params (`tick`, `sequence` / `event_id`, `debugger`) seek and may open the causal debugger after bootstrap — see [Causal debugger](#causal-debugger). The log is `[observer.session] web_run_id_applied run_id=<id>`. The query never carries a token. A URL with no query, or an empty `run_id`, waits for Connect.
 
 Scripts under `clients/godot-observer/scripts/` do not contain a loopback host. There is no second reverse proxy: `/health`, `/version`, `/v1`, and the observer WebSocket stay on the same origin as `index.html`.
 
@@ -108,7 +127,7 @@ Going backward requests a reconstructed frame. It does not play a reverse tween.
 
 ## Event log
 
-The log is one bounded page, near 200 lines, replaced on each seek. A line is `tick:sequence type actor target description`. The subject is `target_id` for `AGENT_DIED`, `NEEDS_APPLIED`, and `EXPOSURE_APPLIED`, and `actor_id` otherwise. Labels prefer `agent_id`, then the raw id. Location names prefer `display_name`, then `name`. Clicking a line seeks that event. Utterance text is not printed.
+The log is one bounded page, near 200 lines, replaced on each seek. A line is `tick:sequence type actor target description`. The subject is `target_id` for `AGENT_DIED`, `NEEDS_APPLIED`, and `EXPOSURE_APPLIED`, and `actor_id` otherwise. Labels prefer `agent_id`, then the raw id. Location names prefer `display_name`, then `name`. Clicking a line seeks that event. **Explain** requests the research causal debugger for the selected line. Utterance text is not printed.
 
 Three filters hide loaded lines and do not request another route:
 

@@ -26,6 +26,7 @@ Secrets use strong `SecretStr` values. Query-string secrets are rejected. Prefer
 - Metric catalog and immutable metric documents
 - Replay-to-tick endpoints (detached projection; never live `WorldEngine`)
 - Read-only observer manifest, state, events, ticks, run metadata, and live stream. See [Read-only observer](observer.md). Presentation coordinates are not simulation coordinates. Researcher relationship summaries stay on the debug capability.
+- Research causal debugger GET routes under `/v1/simulations/{run_id}/debugger/…` require `subjective_debug` (observational; tracing-off → `200` + `unavailable`). See [Research causal debugger](research-causal-debugger.md).
 
 Stable problem-detail errors carry closed reason codes. Lifecycle conflicts return conflict responses without leaking configuration or evidence payloads.
 

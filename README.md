@@ -59,7 +59,8 @@ Development credentials in `compose.yaml` are **not production**. `docker compos
 | [Analysis metrics](docs/analysis-metrics.md) | V1 metric catalog, populations/denominators, numerical policy, known-answer fixtures |
 | [Research API](docs/research-api.md) | FastAPI control/inspection/debug, WebSocket cursors/backpressure, capability credentials |
 | [Read-only observer](docs/observer.md) | Observer protocol, frames, and the read-only HTTP and WebSocket routes |
-| [Godot observer](docs/godot-observer.md) | Prebuilt Web client served by the API, version strip, `?run_id=` |
+| [Godot observer](docs/godot-observer.md) | Prebuilt Web client served by the API, version strip, deep-link `?run_id=` / debugger params |
+| [Research causal debugger](docs/research-causal-debugger.md) | Read-only event→cognition chain, lineage GET APIs, Godot Explain panel |
 | [Cognition and agent runtime](docs/cognition-runtime.md) | `CognitiveLoop`, drives/goals, subjective imagination/motivation/intention, `AgentRuntime`, metadata-only logs |
 | [Memory reconstruction](docs/memory-reconstruction.md) | Subjective recall, reconsolidation, lineage, drift analysis, Alembic `0006`/`0007`/`0008`, safe logging |
 | [Social communication](docs/social-communication.md) | Talk/Ask/Tell delivery vs testimony, owner-scoped traces, trust-weighted beliefs, transmission analysis |

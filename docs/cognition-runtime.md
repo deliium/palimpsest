@@ -139,7 +139,7 @@ Beliefs and theory-of-mind views are **trace-view projections** (not new `Cognit
 | `simulation.cognition_trace` | Run-scoped envelopes, `CognitionTraceRepository` Protocol, Null / in-memory, soft-append after bind |
 | `persistence` | Codec bytes only (`SqlAlchemyCognitionTraceRepository`); **must not** import `agents.cognition` |
 
-Configure via top-level frozen `CognitionTraceSpec` on `SimulationRunnerConfig` (`runner-config-v4`). This is **not** a V2 capability flag. When disabled, the runner injects `NullCognitionTraceRepository` (V1 behavioral parity). When enabled, append happens once after successful cognition **bind** (soft-fail: WARN + drop; never alters `ActionSubmission`). HTTP / debugger UI routes are deferred — repository ports are the consumer API.
+Configure via top-level frozen `CognitionTraceSpec` on `SimulationRunnerConfig` (`runner-config-v4`). This is **not** a V2 capability flag. When disabled, the runner injects `NullCognitionTraceRepository` (V1 behavioral parity). When enabled, append happens once after successful cognition **bind** (soft-fail: WARN + drop; never alters `ActionSubmission`). Read-only research debugger HTTP lives under `/v1/simulations/{run_id}/debugger/…` (`subjective_debug`); see [Research causal debugger](research-causal-debugger.md).
 
 ### Logging allowlist (trace)
 
@@ -425,7 +425,6 @@ Validation reason codes: `architecture_missing_flag`, `architecture_forbidden_fl
 - Concurrent agent execution
 - General M4 analysis metrics over cognition receipts
 - LLM provider lifecycle composition in API / `compose.yaml` (factory ports exist; deferred until a cognition consumer owns it)
-- HTTP / debugger UI over cognition-trace repository ports
 - Multi-hop testimony tracking (unowned capability flag)
 
 ## See Also

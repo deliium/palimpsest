@@ -278,19 +278,19 @@ Reject credential-like query keys (`token`, `api_key`, …) via existing `reject
 
 ### Phase 3: Observer deep links + Godot panel
 
-- [ ] Task 7: Define bidirectional deep-link / state parameter contract
+- [x] Task 7: Define bidirectional deep-link / state parameter contract
   - Deliverable: Document and implement canonical state params (`run_id`, `tick`, `event_id`/`sequence`, `agent_id`, `debugger`) for web query + in-client state. Clarify UI “event N” = `sequence`. Server responses for causal nodes include `observer_focus` handles (`DebuggerFocusHandle` serialized). Add a small pure helper (Python) to parse/validate debugger state without accepting credentials in query strings. Extend Godot `apply_web_query` to seek + optionally open debugger after connect.
   - LOGGING REQUIREMENTS: DEBUG parse/apply with param keys and reason codes; WARN invalid combinations (`incomplete_event_cursor`, etc.); never log tokens.
   - Files: `src/observer/` or `src/api/` helper + tests; `clients/godot-observer/scripts/**`; `docs/godot-observer.md` (final docs polish in Task 11)
   - Depends on: Task 1
 
-- [ ] Task 8: Godot — select event → request causal trace → open debugger panel
+- [x] Task 8: Godot — select event → request causal trace → open debugger panel
   - Deliverable: UI affordance on event log/timeline selection; HTTP GET via existing session client + capability token header; render ordered chain from server JSON (stage labels, statuses, counts, id refs). Show clear empty/unavailable states when tracing was off. On HTTP `403` / missing `subjective_debug`, use the same `overlay_unavailable` pattern as narrative/relationship overlays — do not present auth failure as an empty causal chain. No local causal reasoning.
   - LOGGING REQUIREMENTS: GDScript `[observer.debugger]` INFO open/close; DEBUG request address + HTTP status + node_count; WARN capability/unavailable reason codes; no utterance/memory text.
   - Files: `clients/godot-observer/scripts/**`, scenes as needed, `clients/godot-observer/tests/*.gd`
   - Depends on: Tasks 6, 7
 
-- [ ] Task 9: Godot — debugger evidence → seek/focus on timeline
+- [x] Task 9: Godot — debugger evidence → seek/focus on timeline
   - Deliverable: Activating a node that carries `observer_focus` emits existing `seek_event` / narrative focus paths so the timeline/log highlights the evidence occurrence. Round-trip test: event → debugger → evidence focus → same tick/sequence selected (and `event_id` focus when provided). Verify UI wiring end-to-end before marking complete.
   - LOGGING REQUIREMENTS: DEBUG focus handles; INFO seek from debugger; no payload bodies.
   - Files: `clients/godot-observer/scripts/**`, GDScript tests
@@ -300,7 +300,7 @@ Reject credential-like query keys (`token`, `api_key`, …) via existing `reject
 
 ### Phase 4: Hardening, docs, regression
 
-- [ ] Task 10: Tests for safety, determinism, and V1 gates
+- [x] Task 10: Tests for safety, determinism, and V1 gates
   - Deliverable:
     - Forbid-attribute / no-CoT tests on debugger DTOs and JSON responses
     - Deterministic resolve/assemble property or table tests (incl. command map + Died/Attacked cases)
@@ -313,7 +313,7 @@ Reject credential-like query keys (`token`, `api_key`, …) via existing `reject
   - Files: `tests/unit/`, `tests/architecture/` as needed
   - Depends on: Tasks 1–9
 
-- [ ] Task 11: Documentation checkpoint (`/aif-docs`)
+- [x] Task 11: Documentation checkpoint (`/aif-docs`)
   - Deliverable: Update contributor docs:
     - New or extended page for research causal debugger (addressing, sequence vs event_id, command map, chain mapping, lineage kinds, Task 1c sources, auth status matrix, non-mutation)
     - `docs/godot-observer.md` — deep-link params, select→explain flow, 403/unavailable handling, focus return path

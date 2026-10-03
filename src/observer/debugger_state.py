@@ -8,8 +8,9 @@ Never accept credential-like keys in the query string.
 from __future__ import annotations
 
 import logging
+from collections.abc import Mapping
 from dataclasses import dataclass
-from typing import Final, Mapping
+from typing import Final
 from urllib.parse import parse_qsl
 
 from world.identifiers import require_stable_id
@@ -61,7 +62,9 @@ class DebuggerDeepLinkState:
             require_stable_id("DebuggerDeepLinkState.run_id", self.run_id),
         )
         if self.tick is not None and (
-            isinstance(self.tick, bool) or not isinstance(self.tick, int) or self.tick < 0
+            isinstance(self.tick, bool)
+            or not isinstance(self.tick, int)
+            or self.tick < 0
         ):
             raise DebuggerStateError("invalid_tick")
         if self.sequence is not None and (

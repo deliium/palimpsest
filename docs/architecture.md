@@ -145,7 +145,7 @@ Later V2 feature plans plug into these seams only. They must not re-open WorldEn
 | CognitiveLoop stage protocols | `agents.cognition` constructor injection | Plain Python; no LangGraph/discovery plugins |
 | `AgentCognitionSpec` modes | `MemoryMode` / `ImaginationMode` (+ mortality on run config) | Closed enums; new modes need versioned bumps |
 | Run-level `V2CapabilityFlags` | `SimulationRunnerConfig` / `runner-config-v3+` | Default off = V1-equivalent; flags-on fail closed until owned |
-| Cognition execution trace | `CognitionTraceSpec` / `runner-config-v4` + Alembic `0013` | Default off; not a capability flag; non-authoritative; ports only (no HTTP yet) |
+| Cognition execution trace | `CognitionTraceSpec` / `runner-config-v4` + Alembic `0013` | Default off; not a capability flag; non-authoritative; HTTP debugger under `subjective_debug` (observational GET-only; see [Research causal debugger](research-causal-debugger.md)) |
 | `AgentRuntime` subjective finalization | `simulation.agent_runtime` | Episodic + beliefs + relationships; never objective fold |
 | PerceptionService | private `world._perception` | Observe-only; never forms memory/belief |
 | Communication eligibility | private world policy + `world.communications` | Event-only delivery; testimony distrust |
