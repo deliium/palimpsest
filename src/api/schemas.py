@@ -352,6 +352,119 @@ class DebuggerLineageOut(StrictModel):
     reason_code: str | None = None
 
 
+class BeliefPatchIn(StrictModel):
+    owner_id: str = Field(min_length=1, max_length=128)
+    belief_id: str = Field(min_length=1, max_length=128)
+    subject_kind: Literal["agent", "entity", "self"]
+    subject_id: str = Field(min_length=1, max_length=128)
+    predicate: str = Field(min_length=1, max_length=128)
+    value_kind: Literal["bool", "number", "text", "agent", "entity"]
+    bool_value: bool | None = None
+    number_value: float | None = None
+    text_value: str | None = None
+    agent_value: str | None = None
+    entity_value: str | None = None
+
+
+class CommunicationRemoveIn(StrictModel):
+    event_id: str | None = Field(default=None, min_length=1, max_length=128)
+    tick: int | None = Field(default=None, ge=0)
+    sequence: int | None = Field(default=None, ge=0)
+
+
+class CognitiveBudgetLimitsIn(StrictModel):
+    max_llm_calls_per_tick: int = Field(ge=0)
+    max_tokens_per_tick: int = Field(ge=0)
+    max_imagination_branches: int = Field(ge=1)
+    max_planning_depth: int = Field(ge=1)
+    max_recalled_memories: int = Field(ge=1)
+    max_tom_targets: int = Field(ge=0)
+    reflection_interval_ticks: int = Field(ge=1)
+    timeout_seconds: float = Field(gt=0)
+
+
+class ResearchInterventionIn(StrictModel):
+    kind: str = Field(min_length=1, max_length=64)
+    agent_ids: tuple[str, ...] = ()
+    memory_mode: str | None = None
+    belief_patch: BeliefPatchIn | None = None
+    communication_remove: CommunicationRemoveIn | None = None
+    mortality_mode: str | None = None
+    cognitive_budget_mode: str | None = None
+    cognitive_budget_limits: CognitiveBudgetLimitsIn | None = None
+    architecture_id: str | None = None
+    alternate_stochastic_identity: str | None = None
+
+
+class BranchCreateIn(StrictModel):
+    fork_tick: int = Field(ge=0)
+    intervention: ResearchInterventionIn
+
+
+class BranchLineageOut(StrictModel):
+    child_run_id: str
+    parent_run_id: str
+    fork_tick: int = Field(ge=0)
+    intervention_kind: str
+    intervention_fingerprint: str
+    intervention_summary: str
+    branch_id: str
+    created_as_of_parent_head: int = Field(ge=0)
+
+
+class BranchCreateOut(StrictModel):
+    child_run_id: str
+    branch_id: str
+    lineage: BranchLineageOut
+    idempotent_hit: bool
+    run: RunControlStatusOut | None = None
+
+
+class BranchListOut(StrictModel):
+    items: tuple[BranchLineageOut, ...]
+    next_cursor: str | None = None
+    count: int = Field(ge=0)
+
+
+class BranchForkPointOut(StrictModel):
+    parent_run_id: str
+    child_run_id: str
+    fork_tick: int = Field(ge=0)
+    parent_observer_tick: int = Field(ge=0)
+    child_observer_tick: int = Field(ge=0)
+
+
+class BranchStateOut(StrictModel):
+    run_id: str
+    parent_run_id: str | None = None
+    fork_tick: int | None = None
+    intervention_summary: str | None = None
+    branch_id: str | None = None
+    ticks_committed: int = Field(ge=0)
+    progress_cursor: int = Field(ge=0)
+    lifecycle_state: LifecycleStateOut | None = None
+
+
+class BranchTimelineCompareIn(StrictModel):
+    left_run_id: str = Field(min_length=1, max_length=128)
+    right_run_id: str = Field(min_length=1, max_length=128)
+    fork_tick: int | None = Field(default=None, ge=0)
+    include_event_kind_counts: bool = False
+
+
+class BranchTimelineCompareOut(StrictModel):
+    left_run_id: str
+    right_run_id: str
+    fork_tick: int = Field(ge=0)
+    prefix_equivalent: bool
+    diverge_tick: int | None = None
+    diverge_sequence: int | None = None
+    reason_code: str | None = None
+    left_post_fork_trajectory_hash: str | None = None
+    right_post_fork_trajectory_hash: str | None = None
+    event_kind_counts: dict[str, dict[str, int]] | None = None
+
+
 def stable_jsonable(value: Any) -> Any:
     """Convert nested structures for JSON without leaking bytes."""
     if isinstance(value, bytes):

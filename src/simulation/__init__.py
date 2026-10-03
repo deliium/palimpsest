@@ -28,6 +28,10 @@ from simulation.bootstrap import (
     WorldBootstrap,
     registration_translator,
 )
+from simulation.branch_compare import (
+    JournalBranchCompare,
+    compare_branch_timelines,
+)
 from simulation.branch_service import (
     BranchService,
     InMemorySubjectiveClonePort,
@@ -637,6 +641,7 @@ __all__ = [
     "InspectionSurface",
     "InterventionApplicationResult",
     "InvocationResolveResult",
+    "JournalBranchCompare",
     "LifecycleTransitionError",
     "LogicalClock",
     "MemoryDerivationLineage",
@@ -767,6 +772,7 @@ __all__ = [
     "classify_resume_mode",
     "cognition_fingerprint",
     "cognition_trace_content_hash",
+    "compare_branch_timelines",
     "compatibility_entry",
     "compute_commit_hash",
     "create_named_stream",

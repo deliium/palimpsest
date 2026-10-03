@@ -66,6 +66,7 @@ def test_manifest_rejects_foreign_protocol_and_open_read_only() -> None:
             layout_hash="abc",
             event_schema_version=5,
             projector_version="projector-v1",
+            run_id="run-1",
         )
     assert foreign.value.reason_code == "unsupported_observer_protocol"
     with pytest.raises(ObserverContractError) as opened:
@@ -76,9 +77,50 @@ def test_manifest_rejects_foreign_protocol_and_open_read_only() -> None:
             layout_hash="abc",
             event_schema_version=5,
             projector_version="projector-v1",
+            run_id="run-1",
             read_only=False,
         )
     assert opened.value.reason_code == "read_only_required"
+
+
+def test_manifest_requires_run_id_and_fork_fields_together() -> None:
+    root = ObserverManifest(
+        protocol_version=OBSERVER_PROTOCOL_VERSION,
+        layout_schema_version="observer-layout-v1",
+        layout_id="reference-v1",
+        layout_hash="abc",
+        event_schema_version=5,
+        projector_version="projector-v1",
+        run_id="run-root",
+    )
+    assert root.run_id == "run-root"
+    assert root.parent_run_id is None
+    fork = ObserverManifest(
+        protocol_version=OBSERVER_PROTOCOL_VERSION,
+        layout_schema_version="observer-layout-v1",
+        layout_id="reference-v1",
+        layout_hash="abc",
+        event_schema_version=5,
+        projector_version="projector-v1",
+        run_id="run-child",
+        parent_run_id="run-root",
+        fork_tick=3,
+        intervention_summary="mortality_disabled:aaaaaaaaaaaa",
+        branch_id="branch-1",
+    )
+    assert fork.branch_id == "branch-1"
+    with pytest.raises(ObserverContractError) as missing_fork:
+        ObserverManifest(
+            protocol_version=OBSERVER_PROTOCOL_VERSION,
+            layout_schema_version="observer-layout-v1",
+            layout_id="reference-v1",
+            layout_hash="abc",
+            event_schema_version=5,
+            projector_version="projector-v1",
+            run_id="run-child",
+            parent_run_id="run-root",
+        )
+    assert missing_fork.value.reason_code == "fork_tick_required"
 
 
 def test_world_state_has_no_relationship_attribute() -> None:

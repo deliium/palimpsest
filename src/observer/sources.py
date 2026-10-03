@@ -16,13 +16,44 @@ from world.events import WorldEvent
 _LOGGER = logging.getLogger("observer.sources")
 
 
+def _build_manifest(
+    *,
+    layout: ObserverLayoutCatalog,
+    event_schema_version: int,
+    projector_version: str,
+    run_id: str,
+    parent_run_id: str | None,
+    fork_tick: int | None,
+    intervention_summary: str | None,
+    branch_id: str | None,
+) -> ObserverManifest:
+    return ObserverManifest(
+        protocol_version=OBSERVER_PROTOCOL_VERSION,
+        layout_schema_version=layout.schema_version,
+        layout_id=layout.layout_id,
+        layout_hash=layout.content_hash(),
+        event_schema_version=event_schema_version,
+        projector_version=projector_version,
+        run_id=run_id,
+        parent_run_id=parent_run_id,
+        fork_tick=fork_tick,
+        intervention_summary=intervention_summary,
+        branch_id=branch_id,
+    )
+
+
 class ReplayObserverSource:
     """Historical source over a folded scene and the events that built it."""
 
     __slots__ = (
+        "_branch_id",
         "_events",
+        "_fork_tick",
+        "_intervention_summary",
         "_layout",
+        "_parent_run_id",
         "_projector_version",
+        "_run_id",
         "_scene",
         "_schema_version",
     )
@@ -35,6 +66,11 @@ class ReplayObserverSource:
         layout: ObserverLayoutCatalog,
         event_schema_version: int,
         projector_version: str,
+        run_id: str | None = None,
+        parent_run_id: str | None = None,
+        fork_tick: int | None = None,
+        intervention_summary: str | None = None,
+        branch_id: str | None = None,
     ) -> None:
         if type(scene) is not ObjectiveScene:
             raise TypeError("ReplayObserverSource requires ObjectiveScene")
@@ -43,15 +79,22 @@ class ReplayObserverSource:
         self._layout = layout
         self._schema_version = event_schema_version
         self._projector_version = projector_version
+        self._run_id = scene.run_id if run_id is None else run_id
+        self._parent_run_id = parent_run_id
+        self._fork_tick = fork_tick
+        self._intervention_summary = intervention_summary
+        self._branch_id = branch_id
 
     def manifest(self) -> ObserverManifest:
-        return ObserverManifest(
-            protocol_version=OBSERVER_PROTOCOL_VERSION,
-            layout_schema_version=self._layout.schema_version,
-            layout_id=self._layout.layout_id,
-            layout_hash=self._layout.content_hash(),
+        return _build_manifest(
+            layout=self._layout,
             event_schema_version=self._schema_version,
             projector_version=self._projector_version,
+            run_id=self._run_id,
+            parent_run_id=self._parent_run_id,
+            fork_tick=self._fork_tick,
+            intervention_summary=self._intervention_summary,
+            branch_id=self._branch_id,
         )
 
     def frame(self) -> ObserverFrame:
@@ -82,9 +125,14 @@ class LiveObserverSource:
     """Live source over the latest committed scene supplied by the caller."""
 
     __slots__ = (
+        "_branch_id",
         "_events",
+        "_fork_tick",
+        "_intervention_summary",
         "_layout",
+        "_parent_run_id",
         "_projector_version",
+        "_run_id",
         "_scene",
         "_schema_version",
     )
@@ -97,6 +145,11 @@ class LiveObserverSource:
         layout: ObserverLayoutCatalog,
         event_schema_version: int,
         projector_version: str,
+        run_id: str | None = None,
+        parent_run_id: str | None = None,
+        fork_tick: int | None = None,
+        intervention_summary: str | None = None,
+        branch_id: str | None = None,
     ) -> None:
         if type(scene) is not ObjectiveScene:
             raise TypeError("LiveObserverSource requires ObjectiveScene")
@@ -105,15 +158,22 @@ class LiveObserverSource:
         self._layout = layout
         self._schema_version = event_schema_version
         self._projector_version = projector_version
+        self._run_id = scene.run_id if run_id is None else run_id
+        self._parent_run_id = parent_run_id
+        self._fork_tick = fork_tick
+        self._intervention_summary = intervention_summary
+        self._branch_id = branch_id
 
     def manifest(self) -> ObserverManifest:
-        return ObserverManifest(
-            protocol_version=OBSERVER_PROTOCOL_VERSION,
-            layout_schema_version=self._layout.schema_version,
-            layout_id=self._layout.layout_id,
-            layout_hash=self._layout.content_hash(),
+        return _build_manifest(
+            layout=self._layout,
             event_schema_version=self._schema_version,
             projector_version=self._projector_version,
+            run_id=self._run_id,
+            parent_run_id=self._parent_run_id,
+            fork_tick=self._fork_tick,
+            intervention_summary=self._intervention_summary,
+            branch_id=self._branch_id,
         )
 
     def frame(self) -> ObserverFrame:
@@ -138,6 +198,3 @@ class LiveObserverSource:
             if (event.tick, event.sequence) > (after_tick, after_sequence)
         ]
         return tuple(selected[:limit])
-
-
-__all__ = ["LiveObserverSource", "ReplayObserverSource"]

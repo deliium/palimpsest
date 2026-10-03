@@ -783,9 +783,14 @@ class ObserverManifest:
     layout_hash: str
     event_schema_version: int
     projector_version: str
+    run_id: str
     ordering: Literal["tick_sequence"] = _ORDERING
     read_only: bool = True
     event_types: tuple[str, ...] = SEMANTIC_EVENT_TYPES
+    parent_run_id: str | None = None
+    fork_tick: int | None = None
+    intervention_summary: str | None = None
+    branch_id: str | None = None
 
     def __post_init__(self) -> None:
         protocol = _require_protocol(self.protocol_version)
@@ -797,6 +802,7 @@ class ObserverManifest:
         object.__setattr__(
             self, "layout_hash", _require_text("layout_hash", self.layout_hash)
         )
+        object.__setattr__(self, "run_id", _require_text("run_id", self.run_id))
         if self.ordering != "tick_sequence":
             _reject("ordering", "invalid_ordering")
         if type(self.read_only) is not bool:
@@ -817,10 +823,48 @@ class ObserverManifest:
             _require_text("projector_version", self.projector_version),
         )
         object.__setattr__(self, "protocol_version", protocol)
+        if self.parent_run_id is not None:
+            object.__setattr__(
+                self,
+                "parent_run_id",
+                _require_text("parent_run_id", self.parent_run_id),
+            )
+            if self.fork_tick is None:
+                _reject("fork_tick", "fork_tick_required")
+            if (
+                isinstance(self.fork_tick, bool)
+                or type(self.fork_tick) is not int
+                or self.fork_tick < 0
+            ):
+                _reject("fork_tick", "invalid_fork_tick")
+            if self.branch_id is None:
+                _reject("branch_id", "branch_id_required")
+            object.__setattr__(
+                self, "branch_id", _require_text("branch_id", self.branch_id)
+            )
+            if self.intervention_summary is not None:
+                object.__setattr__(
+                    self,
+                    "intervention_summary",
+                    _require_text("intervention_summary", self.intervention_summary),
+                )
+        else:
+            if self.fork_tick is not None or self.branch_id is not None:
+                _reject("parent_run_id", "parent_required_for_fork_fields")
+            if self.intervention_summary is not None:
+                _reject("parent_run_id", "parent_required_for_fork_fields")
         _log_built(
             "ObserverManifest",
             id_count=len(self.event_types),
             protocol_version=protocol,
+        )
+        _LOGGER.debug(
+            "observer_manifest_branch run_id=%s branch_id=%s parent_run_id=%s "
+            "fork_tick=%s",
+            self.run_id,
+            self.branch_id,
+            self.parent_run_id,
+            self.fork_tick,
         )
 
 

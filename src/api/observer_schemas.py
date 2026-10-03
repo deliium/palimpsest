@@ -245,6 +245,11 @@ class ObserverManifestOut(StrictModel):
     event_types: tuple[str, ...]
     event_schema_version: int
     projector_version: str
+    run_id: str
+    parent_run_id: str | None = None
+    fork_tick: int | None = None
+    intervention_summary: str | None = None
+    branch_id: str | None = None
 
 
 class ObserverEventPageOut(StrictModel):
@@ -277,6 +282,10 @@ class ObserverRunOut(StrictModel):
     tick: int
     latest_tick: int | None = None
     latest_sequence: int | None = None
+    parent_run_id: str | None = None
+    fork_tick: int | None = None
+    intervention_summary: str | None = None
+    branch_id: str | None = None
 
 
 class ObserverDimensionScoreOut(StrictModel):

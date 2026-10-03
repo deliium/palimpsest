@@ -6,6 +6,7 @@ from typing import cast
 
 from fastapi import Request
 
+from api.branch_api import BranchApiService
 from api.observer_service import ObserverReadService
 from api.services import (
     CausalDebuggerApiService,
@@ -17,6 +18,7 @@ from api.simulation_manager import SimulationManager
 from infrastructure.database import DatabaseResources
 from infrastructure.settings import Settings
 from persistence import (
+    create_branch_lineage_repository,
     create_experiment_repository,
     create_run_control_repository,
     create_run_repository,
@@ -24,6 +26,8 @@ from persistence import (
     create_stream_repository,
     create_tick_journal_repository,
 )
+from simulation.branch_compare import JournalBranchCompare
+from simulation.branch_service import BranchService
 from simulation.persistence import (
     ExperimentRepository,
     RunControlRepository,
@@ -135,3 +139,29 @@ def get_debugger_service(request: Request) -> CausalDebuggerApiService:
     if service is None:
         return CausalDebuggerApiService()
     return cast(CausalDebuggerApiService, service)
+
+
+def get_branch_api_service(request: Request) -> BranchApiService:
+    existing = getattr(request.app.state, "branch_api_service", None)
+    if existing is not None:
+        return cast(BranchApiService, existing)
+    resources = get_database_resources(request)
+    lineage = create_branch_lineage_repository(resources.session_factory)
+    runs = create_run_repository(resources.session_factory)
+    journal = create_tick_journal_repository(resources.session_factory)
+    snapshots = create_snapshot_repository(resources.session_factory)
+    run_control = get_run_control_repository(request)
+    branch = BranchService(
+        runs=runs,
+        journal=journal,
+        snapshots=snapshots,
+        lineage=lineage,
+        run_control=run_control,
+    )
+    compare = JournalBranchCompare(journal=journal, lineage=lineage)
+    return BranchApiService(
+        lineage=lineage,
+        branch=branch,
+        run_control=run_control,
+        compare=compare,
+    )

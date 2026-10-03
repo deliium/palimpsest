@@ -33,8 +33,10 @@ from observer.relationships import project_relationship_summaries
 from observer.sources import LiveObserverSource, ReplayObserverSource
 from observer.strategy_audit import StrategyAuditOverlay, project_strategy_audit_overlay
 from observer.version import DEFAULT_LAYOUT_ID, OBSERVER_PROTOCOL_VERSION
+from simulation.branching import BranchLineage
 from simulation.clock import Tick
 from simulation.models import RunId
+from simulation.persistence import BranchLineageRepository
 from simulation.replay import (
     FoldedObjectiveHistory,
     ObserverHistoryError,
@@ -55,26 +57,59 @@ class RelationshipScoreSource(Protocol):
 class ObserverReadService:
     """Read-only observer queries. Route handlers must not advance a tick."""
 
-    __slots__ = ("_relationships", "_replay")
+    __slots__ = ("_lineage", "_relationships", "_replay")
 
     def __init__(
         self,
         replay: ReplayService,
         relationships: RelationshipScoreSource | None = None,
+        lineage: BranchLineageRepository | None = None,
     ) -> None:
         if type(replay) is not ReplayService:
             raise TypeError("ObserverReadService requires ReplayService")
         self._replay = replay
         self._relationships = relationships
+        self._lineage = lineage
 
     @property
     def replay(self) -> ReplayService:
         return self._replay
 
+    async def _branch_fields(self, run_id: str) -> dict[str, object]:
+        if self._lineage is None:
+            return {
+                "run_id": run_id,
+                "parent_run_id": None,
+                "fork_tick": None,
+                "intervention_summary": None,
+                "branch_id": None,
+            }
+        loaded = await self._lineage.get_lineage(child_run_id=RunId(run_id))
+        if loaded is None or type(loaded) is not BranchLineage:
+            return {
+                "run_id": run_id,
+                "parent_run_id": None,
+                "fork_tick": None,
+                "intervention_summary": None,
+                "branch_id": None,
+            }
+        summary = (
+            f"{loaded.intervention_kind.value}:"
+            f"{loaded.intervention_fingerprint[:12]}"
+        )
+        return {
+            "run_id": run_id,
+            "parent_run_id": loaded.parent_run_id.value,
+            "fork_tick": loaded.fork_tick,
+            "intervention_summary": summary,
+            "branch_id": loaded.branch_id,
+        }
+
     async def manifest(self, run_id: str, *, layout_id: str) -> ObserverManifestOut:
         history = await self._history(run_id, target_tick=None)
         layout = _layout(layout_id)
-        source = _source(history, layout, mode="live")
+        branch = await self._branch_fields(run_id)
+        source = _source(history, layout, mode="live", branch=branch)
         return _manifest_out(source.manifest())
 
     async def state(
@@ -103,7 +138,8 @@ class ObserverReadService:
             history = await self._history(run_id, target_tick=target)
         layout = _layout(layout_id)
         mode = "replay" if tick is not None or through_sequence is not None else "live"
-        source = _source(history, layout, mode=mode)
+        branch = await self._branch_fields(run_id)
+        source = _source(history, layout, mode=mode, branch=branch)
         return _frame_out(source.frame())
 
     async def events(
@@ -193,6 +229,7 @@ class ObserverReadService:
         if history.events:
             latest_tick = history.events[-1].tick
             latest_sequence = history.events[-1].sequence
+        branch = await self._branch_fields(run_id)
         return ObserverRunOut(
             run_id=history.scene.run_id,
             world_id=history.scene.world_id,
@@ -203,6 +240,10 @@ class ObserverReadService:
             tick=history.scene.tick,
             latest_tick=latest_tick,
             latest_sequence=latest_sequence,
+            parent_run_id=branch["parent_run_id"],  # type: ignore[arg-type]
+            fork_tick=branch["fork_tick"],  # type: ignore[arg-type]
+            intervention_summary=branch["intervention_summary"],  # type: ignore[arg-type]
+            branch_id=branch["branch_id"],  # type: ignore[arg-type]
         )
 
     async def strategy_audit_overlay(
@@ -334,22 +375,24 @@ def _source(
     layout: ObserverLayoutCatalog,
     *,
     mode: str,
+    branch: dict[str, object] | None = None,
 ) -> LiveObserverSource | ReplayObserverSource:
+    fields = branch or {"run_id": history.scene.run_id}
+    common = {
+        "scene": history.scene,
+        "events": history.events,
+        "layout": layout,
+        "event_schema_version": history.result.event_schema_version,
+        "projector_version": history.result.projector_version,
+        "run_id": str(fields.get("run_id") or history.scene.run_id),
+        "parent_run_id": fields.get("parent_run_id"),
+        "fork_tick": fields.get("fork_tick"),
+        "intervention_summary": fields.get("intervention_summary"),
+        "branch_id": fields.get("branch_id"),
+    }
     if mode == "live":
-        return LiveObserverSource(
-            scene=history.scene,
-            events=history.events,
-            layout=layout,
-            event_schema_version=history.result.event_schema_version,
-            projector_version=history.result.projector_version,
-        )
-    return ReplayObserverSource(
-        scene=history.scene,
-        events=history.events,
-        layout=layout,
-        event_schema_version=history.result.event_schema_version,
-        projector_version=history.result.projector_version,
-    )
+        return LiveObserverSource(**common)  # type: ignore[arg-type]
+    return ReplayObserverSource(**common)  # type: ignore[arg-type]
 
 
 def _reject_ahead(
@@ -555,6 +598,11 @@ def _manifest_out(manifest: ObserverManifest) -> ObserverManifestOut:
         event_types=manifest.event_types,
         event_schema_version=manifest.event_schema_version,
         projector_version=manifest.projector_version,
+        run_id=manifest.run_id,
+        parent_run_id=manifest.parent_run_id,
+        fork_tick=manifest.fork_tick,
+        intervention_summary=manifest.intervention_summary,
+        branch_id=manifest.branch_id,
     )
 
 

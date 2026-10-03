@@ -21,6 +21,7 @@ from api.persistence_services import (
 )
 from api.presentation_static import mount_presentation
 from api.routes import (
+    branches_router,
     debugger_router,
     health_router,
     inspection_router,
@@ -42,6 +43,7 @@ from infrastructure.logging import (
 )
 from infrastructure.settings import Settings, load_runtime_settings
 from persistence import (
+    create_branch_lineage_repository,
     create_cognition_trace_repository,
     create_debugger_event_lookup,
     create_debugger_lineage_ports,
@@ -110,6 +112,7 @@ def _attach_persistence_services(app: FastAPI, session_factory: object) -> None:
         app.state.observer_service = ObserverReadService(
             replay=replay,
             relationships=RelationshipDimensionReader(session_factory),  # type: ignore[arg-type]
+            lineage=create_branch_lineage_repository(session_factory),  # type: ignore[arg-type]
         )
         _LOGGER.info(
             "observer_service_attached",
@@ -216,6 +219,7 @@ def create_app(
     app.add_middleware(RequestIdMiddleware)
     app.include_router(health_router)
     app.include_router(simulations_router)
+    app.include_router(branches_router)
     app.include_router(inspection_router)
     app.include_router(debugger_router)
     app.include_router(replay_router)
