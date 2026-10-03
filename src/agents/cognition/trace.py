@@ -117,6 +117,7 @@ class CognitionTraceStageKind(StrEnum):
     THEORY_OF_MIND = "theory_of_mind"
     SELECTED_INTENTION = "selected_intention"
     PLANNED_ACTION = "planned_action"
+    BUDGET_SUMMARY = "budget_summary"
 
 
 SCIENTIFIC_TRACE_STAGE_SEQUENCE: Final[tuple[CognitionTraceStageKind, ...]] = (
@@ -131,6 +132,7 @@ SCIENTIFIC_TRACE_STAGE_SEQUENCE: Final[tuple[CognitionTraceStageKind, ...]] = (
     CognitionTraceStageKind.THEORY_OF_MIND,
     CognitionTraceStageKind.SELECTED_INTENTION,
     CognitionTraceStageKind.PLANNED_ACTION,
+    CognitionTraceStageKind.BUDGET_SUMMARY,
 )
 
 
@@ -192,6 +194,13 @@ class CognitionTraceCountKey(StrEnum):
     VISIBLE_BODY_COUNT = "visible_body_count"
     ITEM_COUNT = "item_count"
     RESOURCE_COUNT = "resource_count"
+    LLM_CALLS_USED = "llm_calls_used"
+    TOKENS_USED = "tokens_used"
+    IMAGINATION_BRANCHES_USED = "imagination_branches_used"
+    PLANNING_DEPTH_REACHED = "planning_depth_reached"
+    MEMORIES_RECALLED = "memories_recalled"
+    TOM_TARGETS_USED = "tom_targets_used"
+    REFLECTION_RAN = "reflection_ran"
 
 
 # ComponentKind → trace stage(s). Projection-only stages are absent here.
@@ -559,6 +568,7 @@ def project_cognition_trace_stages(
     llm_meta_by_stage: (
         Mapping[CognitionTraceStageKind, CognitionTraceLlmMeta] | None
     ) = None,
+    budget_audit: object | None = None,
 ) -> tuple[CognitionTraceStageSummary, ...]:
     """Project loop receipts + snapshot context into the scientific stage sequence.
 
@@ -698,6 +708,13 @@ def project_cognition_trace_stages(
                     llm_meta=meta.get(stage_kind),
                 )
             )
+        elif stage_kind is CognitionTraceStageKind.BUDGET_SUMMARY:
+            stages.append(
+                _project_budget_summary(
+                    budget_audit,
+                    ordinal=ordinal,
+                )
+            )
         else:  # pragma: no cover - closed enum
             raise CognitionTraceValidationError(
                 "unsupported_stage",
@@ -705,6 +722,18 @@ def project_cognition_trace_stages(
             )
 
     result = tuple(stages)
+    exhausted_count = 0
+    if budget_audit is not None:
+        reasons = getattr(budget_audit, "exhausted_reasons", ())
+        if isinstance(reasons, tuple):
+            exhausted_count = len(reasons)
+    _LOG.debug(
+        "cognition_trace_budget_projected invocation_id=%s exhausted_count=%s "
+        "stage_count=%s",
+        resolved_invocation,
+        exhausted_count,
+        len(result),
+    )
     _LOG.debug(
         "cognition_trace_projected",
         extra={
@@ -716,6 +745,56 @@ def project_cognition_trace_stages(
         },
     )
     return result
+
+
+def _project_budget_summary(
+    budget_audit: object | None,
+    *,
+    ordinal: int,
+) -> CognitionTraceStageSummary:
+    """Projection-only budget stage. No ComponentKind / _STAGE_ORDER entry."""
+    if budget_audit is None:
+        return CognitionTraceStageSummary(
+            stage_kind=CognitionTraceStageKind.BUDGET_SUMMARY,
+            status=CognitionTraceStageStatus.SKIPPED,
+            ordinal=ordinal,
+            reason_code=None,
+        )
+    counts = {
+        CognitionTraceCountKey.LLM_CALLS_USED.value: int(
+            getattr(budget_audit, "llm_calls_used", 0) or 0
+        ),
+        CognitionTraceCountKey.TOKENS_USED.value: int(
+            getattr(budget_audit, "tokens_used", 0) or 0
+        ),
+        CognitionTraceCountKey.IMAGINATION_BRANCHES_USED.value: int(
+            getattr(budget_audit, "imagination_branches_used", 0) or 0
+        ),
+        CognitionTraceCountKey.PLANNING_DEPTH_REACHED.value: int(
+            getattr(budget_audit, "planning_depth_reached", 0) or 0
+        ),
+        CognitionTraceCountKey.MEMORIES_RECALLED.value: int(
+            getattr(budget_audit, "memories_recalled", 0) or 0
+        ),
+        CognitionTraceCountKey.TOM_TARGETS_USED.value: int(
+            getattr(budget_audit, "tom_targets_used", 0) or 0
+        ),
+        CognitionTraceCountKey.REFLECTION_RAN.value: int(
+            bool(getattr(budget_audit, "reflection_ran", False))
+        ),
+    }
+    degraded = bool(getattr(budget_audit, "degraded", False))
+    return CognitionTraceStageSummary(
+        stage_kind=CognitionTraceStageKind.BUDGET_SUMMARY,
+        status=(
+            CognitionTraceStageStatus.TRUNCATED
+            if degraded
+            else CognitionTraceStageStatus.COMPLETED
+        ),
+        ordinal=ordinal,
+        counts=counts,
+        reason_code="budget_exhausted" if degraded else None,
+    )
 
 
 def _resolve_boundary_records(

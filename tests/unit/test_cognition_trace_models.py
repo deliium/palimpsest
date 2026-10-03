@@ -36,6 +36,7 @@ def test_scientific_stage_sequence_order() -> None:
         CognitionTraceStageKind.THEORY_OF_MIND,
         CognitionTraceStageKind.SELECTED_INTENTION,
         CognitionTraceStageKind.PLANNED_ACTION,
+        CognitionTraceStageKind.BUDGET_SUMMARY,
     )
 
 
@@ -59,6 +60,9 @@ def test_component_kind_mapping() -> None:
     assert component_kinds_for_stage(
         CognitionTraceStageKind.EMOTIONAL_STATE
     ) == frozenset({ComponentKind.EMOTIONAL_STATE})
+    assert component_kinds_for_stage(
+        CognitionTraceStageKind.BUDGET_SUMMARY
+    ) == frozenset()
 
 
 def test_stage_summary_rejects_forbidden_attributes() -> None:

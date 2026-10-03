@@ -576,6 +576,25 @@ def test_runtime_export_cognitive_budget_audits() -> None:
     assert field.default == ()
 
 
+def test_budget_summary_trace_projection() -> None:
+    from agents.cognition.trace import (
+        CognitionTraceStageKind,
+        CognitionTraceStageStatus,
+        project_cognition_trace_stages,
+    )
+
+    stages = project_cognition_trace_stages(budget_audit=None)
+    assert stages[-1].stage_kind is CognitionTraceStageKind.BUDGET_SUMMARY
+    assert stages[-1].status is CognitionTraceStageStatus.SKIPPED
+    audit = TickBudgetLedger(
+        owner_id=_owner(), tick=1, policy=low_cost_budget_limits()
+    ).snapshot()
+    stages = project_cognition_trace_stages(budget_audit=audit)
+    assert stages[-1].stage_kind is CognitionTraceStageKind.BUDGET_SUMMARY
+    assert stages[-1].status is CognitionTraceStageStatus.COMPLETED
+    assert "llm_calls_used" in stages[-1].counts
+
+
 def test_v1_regression_gate_does_not_list_experiment_ad() -> None:
     from pathlib import Path
 
@@ -607,3 +626,67 @@ def test_identical_charge_sequence_low_strictly_below_high() -> None:
 
 
 @pytest.mark.asyncio
+async def test_budget_disabled_tracing_preserves_exact_trajectory_hash() -> None:
+    from simulation.models import RunId
+    from simulation.runner import SimulationRunner
+    from simulation.runner_models import (
+        RUNNER_SCHEMA_VERSION_V4,
+        CognitionTraceDetail,
+        CognitionTraceSpec,
+        CognitiveBudgetMode,
+        RunnerStopPolicy,
+        SimulationRunnerConfig,
+        V2CapabilityFlags,
+    )
+    from simulation.runner_serialization import (
+        build_runner_result_document,
+        decode_runner_config,
+    )
+
+    legacy = decode_runner_config(_CATALOG_A_FIXTURE.read_bytes())
+    assert all(
+        agent.cognition.cognitive_budget_mode is CognitiveBudgetMode.DISABLED
+        for agent in legacy.agents
+    )
+
+    def _short(trace: CognitionTraceSpec) -> SimulationRunnerConfig:
+        return SimulationRunnerConfig(
+            seed=legacy.seed,
+            stochastic_identity=legacy.stochastic_identity,
+            scenario=legacy.scenario,
+            agents=legacy.agents,
+            stop_policy=RunnerStopPolicy(max_ticks=2),
+            mortality_mode=legacy.mortality_mode,
+            cognition_failure_policy=legacy.cognition_failure_policy,
+            provider=legacy.provider,
+            persistence=legacy.persistence,
+            experiment=legacy.experiment,
+            capability_flags=V2CapabilityFlags(),
+            cognition_trace=trace,
+            schema_version=RUNNER_SCHEMA_VERSION_V4,
+        )
+
+    off = _short(CognitionTraceSpec())
+    on = _short(
+        CognitionTraceSpec(enabled=True, detail=CognitionTraceDetail.STRUCTURED)
+    )
+    run_id = RunId("run-budget-trace-traj")
+    async with await SimulationRunner.from_config(off, run_id=run_id) as runner:
+        result_off = await runner.run()
+        assert runner.export_cognitive_budget_audits() == ()
+    async with await SimulationRunner.from_config(on, run_id=run_id) as runner:
+        result_on = await runner.run()
+        assert runner.export_cognitive_budget_audits() == ()
+    from dataclasses import fields
+
+    doc_off = build_runner_result_document(result=result_off, config=off)
+    doc_on = build_runner_result_document(result=result_on, config=on)
+    assert doc_off.exact_trajectory_hash == doc_on.exact_trajectory_hash
+    # Tracing / budget-disabled must not invent new objective receipt fields.
+    assert result_off.finalized_tick_receipts
+    assert {type(item).__name__ for item in result_off.finalized_tick_receipts} == {
+        type(item).__name__ for item in result_on.finalized_tick_receipts
+    }
+    left_fields = {item.name for item in fields(result_off.finalized_tick_receipts[0])}
+    right_fields = {item.name for item in fields(result_on.finalized_tick_receipts[0])}
+    assert left_fields == right_fields

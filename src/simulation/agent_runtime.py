@@ -1862,6 +1862,8 @@ class AgentRuntime:
                     },
                 )
             return
+        budget_reader = getattr(self._loop, "last_cognitive_budget_audit", None)
+        budget_audit = budget_reader() if budget_reader is not None else None
         await maybe_append_cognition_trace(
             repository=self._cognition_trace_repository,
             spec=self._cognition_trace_spec,
@@ -1874,6 +1876,7 @@ class AgentRuntime:
             loop_input=loop_input,
             command_kind=command_kind,
             final_confidence=final_confidence,
+            budget_audit=budget_audit,
         )
 
     async def finalize_pending(

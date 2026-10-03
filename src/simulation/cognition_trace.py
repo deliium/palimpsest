@@ -494,6 +494,7 @@ async def maybe_append_cognition_trace(
     loop_input: object | None = None,
     command_kind: str | None = None,
     final_confidence: float | None = None,
+    budget_audit: object | None = None,
 ) -> bool:
     """Project and soft-append a cognition trace when enabled.
 
@@ -525,6 +526,7 @@ async def maybe_append_cognition_trace(
             agent_id=agent_id.value,
             tick=tick,
             invocation_id=invocation_id,
+            budget_audit=budget_audit,
         )
         if spec.max_bytes_per_invocation is not None:
             stages = _truncate_stages_to_budget(
