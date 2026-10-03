@@ -295,6 +295,45 @@ func request_causal_trace(
 	)
 
 
+func request_debugger_lineage(kind: String, subject_id: String, owner_id: String) -> void:
+	## GET lineage/{kind}/{subject_id}?owner_id=… — token stays in header only.
+	if run_id.is_empty():
+		_emit_overlay_unavailable("causal_debugger_lineage", "run_id_missing")
+		return
+	var trimmed_kind := kind.strip_edges()
+	var trimmed_subject := subject_id.strip_edges()
+	var trimmed_owner := owner_id.strip_edges()
+	if trimmed_kind.is_empty() or trimmed_subject.is_empty():
+		ObserverLog.warn(
+			"observer.debugger",
+			"lineage_skipped reason_code=invalid_kind kind=%s" % trimmed_kind,
+		)
+		_emit_overlay_unavailable("causal_debugger_lineage", "invalid_kind")
+		return
+	if trimmed_owner.is_empty():
+		ObserverLog.warn(
+			"observer.debugger",
+			"owner_id_missing reason_code=owner_id_missing",
+		)
+		_emit_overlay_unavailable("causal_debugger_lineage", "owner_id_missing")
+		return
+	var path := "/v1/simulations/%s/debugger/lineage/%s/%s" % [
+		run_id, trimmed_kind, trimmed_subject,
+	]
+	ObserverLog.debug(
+		"observer.debugger",
+		"lineage_request run_id=%s kind=%s subject_id=%s owner_id=%s" % [
+			run_id, trimmed_kind, trimmed_subject, trimmed_owner,
+		],
+	)
+	_request_path(
+		"causal_debugger_lineage",
+		path,
+		{},
+		{"owner_id": trimmed_owner},
+	)
+
+
 func request_analytics_overlay(_metric_set_id: String = "") -> void:
 	## Catalog discovery resolves metric_set_id; caller-supplied ids are ignored.
 	request_metric_family_overlay("spatial_control", "spatial_control")
@@ -405,7 +444,7 @@ func _request_path(
 		)
 		if kind == "metric_catalog" or kind == "metric_document":
 			_emit_overlay_unavailable(str(meta.get("overlay_kind", kind)), reason)
-		elif kind == "causal_debugger":
+		elif kind == "causal_debugger" or kind == "causal_debugger_lineage":
 			_emit_overlay_unavailable(kind, reason)
 		else:
 			overlay_payload.emit(kind, null)
@@ -470,6 +509,7 @@ func _on_http(route: String, _status: int, body: Variant, reason_code: String) -
 		or kind == "relationships"
 		or kind == "narrative_hops"
 		or kind == "causal_debugger"
+		or kind == "causal_debugger_lineage"
 	):
 		var overlay: Variant = null
 		if reason_code == "" and typeof(body) == TYPE_DICTIONARY:
@@ -481,14 +521,21 @@ func _on_http(route: String, _status: int, body: Variant, reason_code: String) -
 						(body.get("nodes", []) as Array).size(),
 					],
 				)
+			elif kind == "causal_debugger_lineage":
+				ObserverLog.debug(
+					"observer.debugger",
+					"lineage_response status=200 entry_count=%s" % [
+						(body.get("entries", []) as Array).size(),
+					],
+				)
 		elif reason_code != "":
 			ObserverLog.warn(
 				"session",
 				"overlay_unavailable kind=%s reason_code=%s" % [kind, reason_code],
 			)
-			if kind == "causal_debugger":
+			if kind == "causal_debugger" or kind == "causal_debugger_lineage":
 				_emit_overlay_unavailable(
-					"causal_debugger",
+					kind,
 					reason_code if reason_code != "" else "overlay_unavailable",
 				)
 				return

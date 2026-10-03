@@ -38,6 +38,7 @@ func _ready() -> void:
 	_ui.narrative_variant_selected.connect(_on_narrative_variant_selected)
 	_ui.explain_requested.connect(_on_explain_requested)
 	_ui.debugger_focus_requested.connect(_on_debugger_focus)
+	_ui.debugger_provenance_requested.connect(_on_debugger_provenance)
 	_session.overlay_payload.connect(_on_overlay_payload)
 	_session.overlay_unavailable.connect(_on_overlay_unavailable)
 	_world.inspect_requested.connect(func(snapshot: Dictionary) -> void:
@@ -200,11 +201,18 @@ func _on_overlay_payload(kind: String, payload: Variant) -> void:
 			_ui.open_debugger_payload(payload)
 		elif payload == null:
 			pass
+	elif kind == "causal_debugger_lineage":
+		if typeof(payload) == TYPE_DICTIONARY:
+			_ui.open_debugger_lineage(payload)
+		elif payload == null:
+			pass
 
 
 func _on_overlay_unavailable(kind: String, reason_code: String) -> void:
 	if kind == "causal_debugger":
 		_ui.show_debugger_unavailable(reason_code)
+	elif kind == "causal_debugger_lineage":
+		_ui.show_debugger_lineage_unavailable(reason_code)
 
 
 func _on_explain_requested(tick: int, sequence: int, event_id: String) -> void:
@@ -220,3 +228,13 @@ func _on_debugger_focus(tick: int, sequence: int, event_id: String) -> void:
 		_session.seek_event(tick, sequence, null)
 	if event_id != "":
 		_ui.focus_narrative_event_ids([event_id])
+
+
+func _on_debugger_provenance(lineage_kind: String, subject_id: String, owner_id: String) -> void:
+	ObserverLog.info(
+		"main",
+		"debugger_provenance kind=%s subject_id=%s owner_id=%s" % [
+			lineage_kind, subject_id, owner_id,
+		],
+	)
+	_session.request_debugger_lineage(lineage_kind, subject_id, owner_id)

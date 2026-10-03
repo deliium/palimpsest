@@ -19,6 +19,7 @@ signal overlay_toggled(kind: String, evidence_class: String, enabled: bool)
 signal narrative_variant_selected(variant_id: String)
 signal explain_requested(tick: int, sequence: int, event_id: String)
 signal debugger_focus_requested(tick: int, sequence: int, event_id: String)
+signal debugger_provenance_requested(lineage_kind: String, subject_id: String, owner_id: String)
 
 var _live_tick := 0
 var _selected_id := ""
@@ -79,6 +80,11 @@ func _ready() -> void:
 	if debugger != null and debugger.has_signal("focus_requested"):
 		debugger.focus_requested.connect(func(tick: int, sequence: int, event_id: String) -> void:
 			debugger_focus_requested.emit(tick, sequence, event_id)
+		)
+	if debugger != null and debugger.has_signal("provenance_requested"):
+		debugger.provenance_requested.connect(
+			func(lineage_kind: String, subject_id: String, owner_id: String) -> void:
+				debugger_provenance_requested.emit(lineage_kind, subject_id, owner_id)
 		)
 
 
@@ -162,8 +168,16 @@ func open_debugger_payload(payload: Dictionary) -> void:
 	$DebuggerPanel.open_payload(payload)
 
 
+func open_debugger_lineage(payload: Dictionary) -> void:
+	$DebuggerPanel.open_lineage_payload(payload)
+
+
 func show_debugger_unavailable(reason_code: String) -> void:
 	$DebuggerPanel.show_unavailable(reason_code)
+
+
+func show_debugger_lineage_unavailable(reason_code: String) -> void:
+	$DebuggerPanel.show_lineage_unavailable(reason_code)
 
 
 func close_debugger() -> void:

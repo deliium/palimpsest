@@ -9,6 +9,9 @@ func run() -> Array:
 	var failures: Array = []
 	_expect(failures, _render_and_focus(), "render focus")
 	_expect(failures, _compact_and_expand(), "compact expand")
+	_expect(failures, _seek_keeps_primary(), "seek keeps primary")
+	_expect(failures, _provenance_and_return(), "provenance return")
+	_expect(failures, _seek_vs_provenance_separate(), "seek vs provenance")
 	_expect(failures, _unavailable(), "unavailable")
 	return failures
 
@@ -147,6 +150,148 @@ func _compact_and_expand() -> String:
 	if supporting.get_item_count() < 1:
 		panel.queue_free()
 		return "supporting nodes should stay secondary"
+	panel.queue_free()
+	return ""
+
+
+func _seek_keeps_primary() -> String:
+	var panel: PanelContainer = DebuggerPanel.new()
+	var tree := Engine.get_main_loop() as SceneTree
+	if tree == null:
+		return "scene tree missing"
+	tree.root.add_child(panel)
+	panel.open_payload(_sample_payload())
+	panel.seek_at_expanded(0)
+	if panel.primary_payload().is_empty():
+		panel.queue_free()
+		return "seek must retain primary payload"
+	if not panel.is_open():
+		panel.queue_free()
+		return "seek must keep panel open"
+	if str(panel.primary_payload().get("address", {}).get("event_id", "")) != "evt-attack":
+		panel.queue_free()
+		return "primary address lost after seek"
+	if panel.nav_depth() != 0:
+		panel.queue_free()
+		return "seek must not push provenance nav"
+	panel.queue_free()
+	return ""
+
+
+func _provenance_and_return() -> String:
+	var panel: PanelContainer = DebuggerPanel.new()
+	var tree := Engine.get_main_loop() as SceneTree
+	if tree == null:
+		return "scene tree missing"
+	tree.root.add_child(panel)
+	var provenance: Array = []
+	panel.provenance_requested.connect(
+		func(lineage_kind: String, subject_id: String, owner_id: String) -> void:
+			provenance.append({
+				"kind": lineage_kind,
+				"subject_id": subject_id,
+				"owner_id": owner_id,
+			})
+	)
+	panel.open_payload(_sample_payload())
+	# goals is index 2 in ordered chain for the sample (observation, emotion, goals, action)
+	panel.request_provenance_at_expanded(2)
+	if provenance.size() != 1:
+		panel.queue_free()
+		return "provenance not emitted"
+	if provenance[0]["kind"] != "goal_ancestry" or provenance[0]["subject_id"] != "goal-1":
+		panel.queue_free()
+		return "provenance map mismatch"
+	if provenance[0]["owner_id"] != "alice":
+		panel.queue_free()
+		return "owner_id must come from address.agent_id"
+	if panel.nav_depth() != 1:
+		panel.queue_free()
+		return "provenance should push nav frame"
+	panel.open_lineage_payload({
+		"entries": [
+			{
+				"entry_id": "goal-1",
+				"status": "available",
+				"reason_code": "",
+				"observer_focus": [{"tick": 100, "sequence": 2, "event_id": "evt-goal"}],
+			},
+		],
+	})
+	var secondary: ItemList = panel.get_node("Column/SecondaryProvenance")
+	if not secondary.visible or secondary.get_item_count() != 1:
+		panel.queue_free()
+		return "secondary provenance pane missing"
+	panel.return_to_decision()
+	if panel.nav_depth() != 0:
+		panel.queue_free()
+		return "return should clear nav stack"
+	if secondary.visible:
+		panel.queue_free()
+		return "return should clear secondary pane"
+	if str(panel.primary_payload().get("address", {}).get("event_id", "")) != "evt-attack":
+		panel.queue_free()
+		return "return must restore primary decision"
+	var logged := "\n".join(Log.recent)
+	if "debugger_nav_push" not in logged or "debugger_return_to_decision" not in logged:
+		panel.queue_free()
+		return "nav logs missing"
+	panel.queue_free()
+	return ""
+
+
+func _seek_vs_provenance_separate() -> String:
+	var panel: PanelContainer = DebuggerPanel.new()
+	var tree := Engine.get_main_loop() as SceneTree
+	if tree == null:
+		return "scene tree missing"
+	tree.root.add_child(panel)
+	var focuses: Array = []
+	var provenance: Array = []
+	panel.focus_requested.connect(func(tick: int, sequence: int, event_id: String) -> void:
+		focuses.append(true)
+	)
+	panel.provenance_requested.connect(
+		func(_k: String, _s: String, _o: String) -> void:
+			provenance.append(true)
+	)
+	panel.open_payload(_sample_payload())
+	var seek_btn: Button = panel.get_node("Column").get_child(0).get_node("SeekButton")
+	var prov_btn: Button = panel.get_node("Column").get_child(0).get_node("ProvenanceButton")
+	if seek_btn == null or prov_btn == null:
+		panel.queue_free()
+		return "Seek/Provenance buttons missing"
+	if seek_btn.disabled:
+		panel.queue_free()
+		return "Seek should enable when observer_focus rows exist"
+	if prov_btn.disabled:
+		panel.queue_free()
+		return "Provenance should enable when mapped id_refs exist"
+	panel.seek_at_expanded(0)
+	if focuses.size() != 1 or provenance.size() != 0:
+		panel.queue_free()
+		return "seek must not trigger provenance"
+	panel.request_provenance_at_expanded(2)
+	if provenance.size() != 1:
+		panel.queue_free()
+		return "provenance path missing"
+	# Missing owner_id must skip lineage.
+	var bare := _sample_payload()
+	bare["address"].erase("agent_id")
+	panel.open_payload(bare)
+	prov_btn = panel.get_node("Column").get_child(0).get_node("ProvenanceButton")
+	if not prov_btn.disabled:
+		panel.queue_free()
+		return "Provenance must disable when owner_id missing"
+	var before := provenance.size()
+	panel.request_provenance_at_expanded(2)
+	if provenance.size() != before:
+		panel.queue_free()
+		return "missing owner_id must skip provenance emit"
+	var logged := "\n".join(Log.recent)
+	if "owner_id_missing" not in logged:
+		panel.queue_free()
+		return "owner_id_missing warn missing"
 	panel.queue_free()
 	return ""
 
