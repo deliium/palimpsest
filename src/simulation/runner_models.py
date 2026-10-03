@@ -84,6 +84,7 @@ RUNNER_SCHEMA_VERSION_V14: Final[str] = "runner-config-v14"
 RUNNER_SCHEMA_VERSION_V15: Final[str] = "runner-config-v15"
 RUNNER_SCHEMA_VERSION_V16: Final[str] = "runner-config-v16"
 RUNNER_SCHEMA_VERSION_V17: Final[str] = "runner-config-v17"
+RUNNER_SCHEMA_VERSION_V18: Final[str] = "runner-config-v18"
 RUNNER_SCHEMA_VERSION: Final[str] = RUNNER_SCHEMA_VERSION_V4
 SUPPORTED_RUNNER_SCHEMA_VERSIONS: Final[frozenset[str]] = frozenset(
     {
@@ -104,6 +105,7 @@ SUPPORTED_RUNNER_SCHEMA_VERSIONS: Final[frozenset[str]] = frozenset(
         RUNNER_SCHEMA_VERSION_V15,
         RUNNER_SCHEMA_VERSION_V16,
         RUNNER_SCHEMA_VERSION_V17,
+        RUNNER_SCHEMA_VERSION_V18,
     }
 )
 RESULT_SCHEMA_VERSION_V1: Final[str] = "runner-result-v1"
@@ -320,6 +322,20 @@ class SocialNormMode(StrEnum):
     DETERMINISTIC = "deterministic"
 
 
+class SocialConventionMode(StrEnum):
+    """Closed owner-scoped social-convention treatments.
+
+    Default is ``DISABLED``, which leaves the snapshot field unset and does
+    not change commands, memories, semantic beliefs, relationships, reputation,
+    territorial claims, group formation, social norms, or audits. This is not a
+    ``V2CapabilityFlags`` slot. Lockstep with
+    ``agents.cognition.CognitionSocialConventionMode``.
+    """
+
+    DISABLED = "disabled"
+    DETERMINISTIC = "deterministic"
+
+
 class ProductionKnowledgeMode(StrEnum):
     """Closed production-belief treatments.
 
@@ -460,6 +476,7 @@ _SKILL_SCHEMAS: Final[frozenset[str]] = frozenset(
         RUNNER_SCHEMA_VERSION_V15,
         RUNNER_SCHEMA_VERSION_V16,
         RUNNER_SCHEMA_VERSION_V17,
+        RUNNER_SCHEMA_VERSION_V18,
     }
 )
 
@@ -1312,6 +1329,7 @@ class AgentCognitionSpec:
     territorial_claim_mode: TerritorialClaimMode = TerritorialClaimMode.DISABLED
     group_formation_mode: GroupFormationMode = GroupFormationMode.DISABLED
     social_norm_mode: SocialNormMode = SocialNormMode.DISABLED
+    social_convention_mode: SocialConventionMode = SocialConventionMode.DISABLED
 
     def __post_init__(self) -> None:
         if type(self.agent_id) is not AgentId:
@@ -1416,6 +1434,15 @@ class AgentCognitionSpec:
             )
             raise TypeError(
                 "AgentCognitionSpec.social_norm_mode must be SocialNormMode"
+            )
+        if type(self.social_convention_mode) is not SocialConventionMode:
+            _LOGGER.error(
+                "invalid_enum path=AgentCognitionSpec.social_convention_mode "
+                "reason_code=invalid_mode"
+            )
+            raise TypeError(
+                "AgentCognitionSpec.social_convention_mode must be "
+                "SocialConventionMode"
             )
         if self.policy_version != COGNITION_POLICY_VERSION:
             raise ValueError("unsupported cognition policy_version")
@@ -1914,6 +1941,7 @@ class SimulationRunnerConfig:
             RUNNER_SCHEMA_VERSION_V15,
             RUNNER_SCHEMA_VERSION_V16,
             RUNNER_SCHEMA_VERSION_V17,
+            RUNNER_SCHEMA_VERSION_V18,
         }
         if non_disabled and self.schema_version not in consolidation_schemas:
             _LOGGER.error(
@@ -1957,6 +1985,7 @@ class SimulationRunnerConfig:
             RUNNER_SCHEMA_VERSION_V15,
             RUNNER_SCHEMA_VERSION_V16,
             RUNNER_SCHEMA_VERSION_V17,
+            RUNNER_SCHEMA_VERSION_V18,
         }
         if reflecting and self.schema_version not in reflection_schemas:
             _LOGGER.error(
@@ -2000,6 +2029,7 @@ class SimulationRunnerConfig:
             RUNNER_SCHEMA_VERSION_V15,
             RUNNER_SCHEMA_VERSION_V16,
             RUNNER_SCHEMA_VERSION_V17,
+            RUNNER_SCHEMA_VERSION_V18,
         }
         if planning and self.schema_version not in prospective_schemas:
             _LOGGER.error(
@@ -2042,6 +2072,7 @@ class SimulationRunnerConfig:
             RUNNER_SCHEMA_VERSION_V15,
             RUNNER_SCHEMA_VERSION_V16,
             RUNNER_SCHEMA_VERSION_V17,
+            RUNNER_SCHEMA_VERSION_V18,
         }
         if considering and self.schema_version not in counterfactual_schemas:
             _LOGGER.error(
@@ -2083,6 +2114,7 @@ class SimulationRunnerConfig:
             RUNNER_SCHEMA_VERSION_V15,
             RUNNER_SCHEMA_VERSION_V16,
             RUNNER_SCHEMA_VERSION_V17,
+            RUNNER_SCHEMA_VERSION_V18,
         }:
             _LOGGER.error(
                 "invalid_fields path=agents.cognition.communication_strategy_mode "
@@ -2122,6 +2154,7 @@ class SimulationRunnerConfig:
             RUNNER_SCHEMA_VERSION_V15,
             RUNNER_SCHEMA_VERSION_V16,
             RUNNER_SCHEMA_VERSION_V17,
+            RUNNER_SCHEMA_VERSION_V18,
         }:
             _LOGGER.error(
                 "invalid_fields path=agents.cognition.reputation_mode "
@@ -2203,6 +2236,7 @@ class SimulationRunnerConfig:
             RUNNER_SCHEMA_VERSION_V15,
             RUNNER_SCHEMA_VERSION_V16,
             RUNNER_SCHEMA_VERSION_V17,
+            RUNNER_SCHEMA_VERSION_V18,
         }:
             _LOGGER.error(
                 "invalid_fields path=agents.cognition.teaching_interaction_mode "
@@ -2233,6 +2267,7 @@ class SimulationRunnerConfig:
             RUNNER_SCHEMA_VERSION_V15,
             RUNNER_SCHEMA_VERSION_V16,
             RUNNER_SCHEMA_VERSION_V17,
+            RUNNER_SCHEMA_VERSION_V18,
         }
         if (dynamics is not None and self.schema_version not in dynamics_schemas) or (
             self.schema_version == RUNNER_SCHEMA_VERSION_V14 and dynamics is None
@@ -2244,7 +2279,8 @@ class SimulationRunnerConfig:
             )
             raise ValueError(
                 "environmental dynamics require runner-config-v14, "
-                "runner-config-v15, runner-config-v16, or runner-config-v17 "
+                "runner-config-v15, runner-config-v16, runner-config-v17, "
+                "or runner-config-v18 "
                 "(code=environment_spec_mismatch)"
             )
         claim_modes = tuple(
@@ -2257,6 +2293,7 @@ class SimulationRunnerConfig:
             RUNNER_SCHEMA_VERSION_V15,
             RUNNER_SCHEMA_VERSION_V16,
             RUNNER_SCHEMA_VERSION_V17,
+            RUNNER_SCHEMA_VERSION_V18,
         }:
             _LOGGER.error(
                 "invalid_fields path=agents.cognition.territorial_claim_mode "
@@ -2265,7 +2302,7 @@ class SimulationRunnerConfig:
             )
             raise ValueError(
                 "deterministic territorial_claim_mode requires runner-config-v15, "
-                "runner-config-v16, or runner-config-v17 "
+                "runner-config-v16, runner-config-v17, or runner-config-v18 "
                 "(code=territorial_claim_mode_requires_v15)"
             )
         if self.schema_version == RUNNER_SCHEMA_VERSION_V15 and not claiming:
@@ -2287,6 +2324,7 @@ class SimulationRunnerConfig:
         if grouping and self.schema_version not in {
             RUNNER_SCHEMA_VERSION_V16,
             RUNNER_SCHEMA_VERSION_V17,
+            RUNNER_SCHEMA_VERSION_V18,
         }:
             _LOGGER.error(
                 "invalid_fields path=agents.cognition.group_formation_mode "
@@ -2294,8 +2332,8 @@ class SimulationRunnerConfig:
                 self.schema_version,
             )
             raise ValueError(
-                "deterministic group_formation_mode requires runner-config-v16 "
-                "or runner-config-v17 "
+                "deterministic group_formation_mode requires runner-config-v16, "
+                "runner-config-v17, or runner-config-v18 "
                 "(code=group_formation_mode_requires_v16)"
             )
         if self.schema_version == RUNNER_SCHEMA_VERSION_V16 and not grouping:
@@ -2310,7 +2348,10 @@ class SimulationRunnerConfig:
             )
         norm_modes = tuple(agent.cognition.social_norm_mode for agent in self.agents)
         norms_on = any(mode is SocialNormMode.DETERMINISTIC for mode in norm_modes)
-        if norms_on and self.schema_version != RUNNER_SCHEMA_VERSION_V17:
+        if norms_on and self.schema_version not in {
+            RUNNER_SCHEMA_VERSION_V17,
+            RUNNER_SCHEMA_VERSION_V18,
+        }:
             _LOGGER.error(
                 "invalid_fields path=agents.cognition.social_norm_mode "
                 "reason_code=social_norm_mode_requires_v17 schema_version=%s",
@@ -2318,6 +2359,7 @@ class SimulationRunnerConfig:
             )
             raise ValueError(
                 "deterministic social_norm_mode requires runner-config-v17 "
+                "or runner-config-v18 "
                 "(code=social_norm_mode_requires_v17)"
             )
         if self.schema_version == RUNNER_SCHEMA_VERSION_V17 and not norms_on:
@@ -2329,6 +2371,32 @@ class SimulationRunnerConfig:
             raise ValueError(
                 "runner-config-v17 requires a deterministic social_norm_mode "
                 "(code=v17_requires_social_norms)"
+            )
+        convention_modes = tuple(
+            agent.cognition.social_convention_mode for agent in self.agents
+        )
+        conventions_on = any(
+            mode is SocialConventionMode.DETERMINISTIC for mode in convention_modes
+        )
+        if conventions_on and self.schema_version != RUNNER_SCHEMA_VERSION_V18:
+            _LOGGER.error(
+                "invalid_fields path=agents.cognition.social_convention_mode "
+                "reason_code=social_convention_mode_requires_v18 schema_version=%s",
+                self.schema_version,
+            )
+            raise ValueError(
+                "deterministic social_convention_mode requires runner-config-v18 "
+                "(code=social_convention_mode_requires_v18)"
+            )
+        if self.schema_version == RUNNER_SCHEMA_VERSION_V18 and not conventions_on:
+            _LOGGER.error(
+                "invalid_fields path=schema_version "
+                "reason_code=v18_requires_social_conventions schema_version=%s",
+                self.schema_version,
+            )
+            raise ValueError(
+                "runner-config-v18 requires a deterministic social_convention_mode "
+                "(code=v18_requires_social_conventions)"
             )
         if dynamics is not None:
             logging.getLogger("simulation.runner").info(
@@ -2363,6 +2431,7 @@ class SimulationRunnerConfig:
             RUNNER_SCHEMA_VERSION_V15,
             RUNNER_SCHEMA_VERSION_V16,
             RUNNER_SCHEMA_VERSION_V17,
+            RUNNER_SCHEMA_VERSION_V18,
         }:
             _LOGGER.error(
                 "invalid_fields path=agents.cognition.production_knowledge_mode "
@@ -2371,7 +2440,8 @@ class SimulationRunnerConfig:
             )
             raise ValueError(
                 "production requires runner-config-v13, runner-config-v14, "
-                "runner-config-v15, runner-config-v16, or runner-config-v17 "
+                "runner-config-v15, runner-config-v16, runner-config-v17, or "
+                "runner-config-v18 "
                 "(code=production_requires_v13)"
             )
         if self.schema_version in {
@@ -2380,6 +2450,7 @@ class SimulationRunnerConfig:
             RUNNER_SCHEMA_VERSION_V15,
             RUNNER_SCHEMA_VERSION_V16,
             RUNNER_SCHEMA_VERSION_V17,
+            RUNNER_SCHEMA_VERSION_V18,
         }:
             from world.production import production_catalog_digest
 
@@ -2438,6 +2509,7 @@ class SimulationRunnerConfig:
             RUNNER_SCHEMA_VERSION_V15,
             RUNNER_SCHEMA_VERSION_V16,
             RUNNER_SCHEMA_VERSION_V17,
+            RUNNER_SCHEMA_VERSION_V18,
         }:
             shared_teaching = teaching_weight_tuple(self.agents[0].cognition)
             if any(

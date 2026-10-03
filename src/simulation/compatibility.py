@@ -61,6 +61,7 @@ from simulation.runner_models import (
     RUNNER_SCHEMA_VERSION_V15,
     RUNNER_SCHEMA_VERSION_V16,
     RUNNER_SCHEMA_VERSION_V17,
+    RUNNER_SCHEMA_VERSION_V18,
     SUPPORTED_RESULT_SCHEMA_VERSIONS,
     SUPPORTED_RUNNER_SCHEMA_VERSIONS,
 )
@@ -111,6 +112,7 @@ __all__ = [
     "RUNNER_SCHEMA_VERSION_V15",
     "RUNNER_SCHEMA_VERSION_V16",
     "RUNNER_SCHEMA_VERSION_V17",
+    "RUNNER_SCHEMA_VERSION_V18",
     "STREAM_ENVELOPE_VERSION",
     "WS_PROTOCOL_VERSION",
     "CompatibilityEntry",
@@ -257,6 +259,12 @@ _MATRIX: dict[str, CompatibilityEntry] = {
             "consolidation, prospective imagination, counterfactual reasoning, "
             "environmental dynamics, territorial claims, and group formation "
             f"stay legal on {RUNNER_SCHEMA_VERSION_V17}; "
+            f"{RUNNER_SCHEMA_VERSION_V18} is emitted only when some agent's "
+            "social convention mode is deterministic and carries every v17 "
+            "cognition key plus social_convention_mode; a norms-only config "
+            f"stays on {RUNNER_SCHEMA_VERSION_V17}; prior modes including "
+            "social norms stay legal on "
+            f"{RUNNER_SCHEMA_VERSION_V18}; "
             f"{RUNNER_SCHEMA_VERSION_V3} retained for capability flags; "
             "v1-v4 omit consolidation_mode, reflection_mode, prospective_mode, "
             "counterfactual_mode, communication_strategy_mode, and "
@@ -451,6 +459,7 @@ _LOG.debug(
         "runner_v15": RUNNER_SCHEMA_VERSION_V15,
         "runner_v16": RUNNER_SCHEMA_VERSION_V16,
         "runner_v17": RUNNER_SCHEMA_VERSION_V17,
+        "runner_v18": RUNNER_SCHEMA_VERSION_V18,
         "alembic_head": ALEMBIC_HEAD_REVISION,
         "accepted_event_count": len(ACCEPTED_EVENT_SCHEMA_VERSIONS),
     },

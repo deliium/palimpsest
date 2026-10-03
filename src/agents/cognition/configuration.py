@@ -45,6 +45,10 @@ from agents.cognition.reputation import (
     ReputationFormationPolicy,
     default_reputation_policy,
 )
+from agents.cognition.social_conventions import (
+    SocialConventionPolicy,
+    default_social_convention_policy,
+)
 from agents.cognition.social_norms import (
     SocialNormPolicy,
     default_social_norm_policy,
@@ -259,6 +263,17 @@ class CognitionSocialNormMode(StrEnum):
     DETERMINISTIC = "deterministic"
 
 
+class CognitionSocialConventionMode(StrEnum):
+    """Owner-scoped convention ledger. Disabled leaves the snapshot field unset.
+
+    Lockstep with ``simulation.SocialConventionMode``. This is not a
+    ``V2CapabilityFlags`` slot. ``DISABLED`` does not allocate a ledger.
+    """
+
+    DISABLED = "disabled"
+    DETERMINISTIC = "deterministic"
+
+
 def _unit_interval(name: str, value: object) -> float:
     if isinstance(value, bool) or not isinstance(value, (int, float)):
         raise ValueError(f"{name}: not_unit_interval")
@@ -349,6 +364,10 @@ class CognitionLoopConfig:
     group_formation_policy: GroupFormationPolicy | None = None
     social_norm_mode: CognitionSocialNormMode = CognitionSocialNormMode.DISABLED
     social_norm_policy: SocialNormPolicy | None = None
+    social_convention_mode: CognitionSocialConventionMode = (
+        CognitionSocialConventionMode.DISABLED
+    )
+    social_convention_policy: SocialConventionPolicy | None = None
     production_knowledge_mode: ProductionKnowledgeMode = (
         ProductionKnowledgeMode.DISABLED
     )
@@ -593,6 +612,28 @@ class CognitionLoopConfig:
         elif type(self.social_norm_policy) is not SocialNormPolicy:
             _LOG.error("invalid_enum path=social_norm_policy reason_code=invalid_type")
             raise TypeError("social_norm_policy must be SocialNormPolicy or None")
+        if type(self.social_convention_mode) is not CognitionSocialConventionMode:
+            _LOG.error(
+                "invalid_enum path=social_convention_mode reason_code=invalid_mode"
+            )
+            raise TypeError(
+                "social_convention_mode must be CognitionSocialConventionMode"
+            )
+        if self.social_convention_mode is CognitionSocialConventionMode.DISABLED:
+            object.__setattr__(self, "social_convention_policy", None)
+        elif self.social_convention_policy is None:
+            object.__setattr__(
+                self,
+                "social_convention_policy",
+                default_social_convention_policy(),
+            )
+        elif type(self.social_convention_policy) is not SocialConventionPolicy:
+            _LOG.error(
+                "invalid_enum path=social_convention_policy reason_code=invalid_type"
+            )
+            raise TypeError(
+                "social_convention_policy must be SocialConventionPolicy or None"
+            )
         if type(self.production_knowledge_mode) is not ProductionKnowledgeMode:
             _LOG.error(
                 "invalid_enum path=production_knowledge_mode reason_code=invalid_mode"
@@ -749,6 +790,7 @@ class CognitionLoopConfig:
             "territorial_claim_mode": self.territorial_claim_mode.value,
             "group_formation_mode": self.group_formation_mode.value,
             "social_norm_mode": self.social_norm_mode.value,
+            "social_convention_mode": self.social_convention_mode.value,
             "territorial_claim_policy_version": (
                 None
                 if self.territorial_claim_policy is None
