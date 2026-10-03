@@ -1,0 +1,50 @@
+{
+  "pack": "v2_mechanics",
+  "description": "Structures, production events, overlay stubs, narrative hops, strategy audit",
+  "frame": "res://fixtures/protocol/reference_frame.json",
+  "events": [
+    "res://fixtures/protocol/events/RESOURCE_HARVESTED.json",
+    "res://fixtures/protocol/events/CRAFT_STARTED.json",
+    "res://fixtures/protocol/events/ITEM_CRAFTED.json",
+    "res://fixtures/protocol/events/STRUCTURE_BUILT.json",
+    "res://fixtures/protocol/events/STRUCTURE_REPAIRED.json",
+    "res://fixtures/protocol/events/ITEM_STORED.json",
+    "res://fixtures/protocol/events/AGENT_TALKED.json"
+  ],
+  "overlays": {
+    "metric_catalog_miss": {"items": []},
+    "narrative_hops": {
+      "layer": "subjective_narrative_hops",
+      "evidence_class": "SUBJECTIVE_TO_SELECTED_AGENT",
+      "owner_id": "ada",
+      "count": 1,
+      "variants": [
+        {
+          "variant_id": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "status": "active",
+          "origin": "retold_story",
+          "carrier_agent_ids": ["ada", "bo"],
+          "location_ids": ["loc-camp"],
+          "parent_variant_ids": [],
+          "merged_into_id": null,
+          "transmission_root_id": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+          "source_event_id": "evt-source",
+          "last_communication_id": "evt-agent-talked",
+          "strength_band": "mid"
+        }
+      ]
+    },
+    "strategy_audit": {
+      "layer": "research_strategy_audit",
+      "evidence_class": "ANALYTICAL_INFERRED",
+      "count": 1,
+      "entries": [
+        {
+          "event_id": "evt-agent-talked",
+          "category": "veridical",
+          "evidence_class": "ANALYTICAL_INFERRED"
+        }
+      ]
+    }
+  }
+}

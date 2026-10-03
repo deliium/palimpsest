@@ -76,19 +76,18 @@ _ARTIFACT_EVENT_NAMES = frozenset(
 
 def test_event_fixtures_cover_closed_semantic_types() -> None:
     names = tuple(sorted(path.stem for path in EVENTS.glob("*.json")))
-    previous = tuple(
+    expected = tuple(
         name
         for name in sorted(SEMANTIC_EVENT_TYPES)
-        if name
-        not in _PRODUCTION_EVENT_NAMES
-        | _ENVIRONMENT_EVENT_NAMES
-        | _ARTIFACT_EVENT_NAMES
+        if name not in _ENVIRONMENT_EVENT_NAMES | _ARTIFACT_EVENT_NAMES
     )
-    assert names == previous
-    assert len(names) == 20
+    assert names == expected
+    assert len(names) == 26
+    assert _PRODUCTION_EVENT_NAMES < set(names)
     assert set(names) < set(SEMANTIC_EVENT_TYPES)
     assert _ARTIFACT_EVENT_NAMES < set(SEMANTIC_EVENT_TYPES)
     assert set(names).isdisjoint(_ARTIFACT_EVENT_NAMES)
+    assert set(names).isdisjoint(_ENVIRONMENT_EVENT_NAMES)
 
 
 def test_event_fixtures_construct_observer_events() -> None:
