@@ -15,6 +15,15 @@ var _reducer = ReducerScript.new()
 @onready var _claims: Node2D = $ClaimOverlay
 @onready var _analytics: Node2D = $AnalyticsOverlay
 @onready var _labels: Node2D = $LabelOverlay
+@onready var _relationships: Node2D = get_node_or_null("RelationshipOverlay")
+@onready var _comm_flows: Node2D = get_node_or_null("CommunicationFlowOverlay")
+@onready var _groups: Node2D = get_node_or_null("GroupOverlay")
+@onready var _norms: Node2D = get_node_or_null("NormOverlay")
+@onready var _conventions: Node2D = get_node_or_null("ConventionOverlay")
+@onready var _reputation: Node2D = get_node_or_null("ReputationOverlay")
+@onready var _teaching: Node2D = get_node_or_null("TeachingOverlay")
+@onready var _skills: Node2D = get_node_or_null("SkillOverlay")
+@onready var _narrative: Node2D = get_node_or_null("NarrativeOverlay")
 @onready var _connections: Node2D = $ConnectionLayer
 @onready var _objects: Node2D = $ObjectLayer
 @onready var _agents: Node2D = $AgentLayer
@@ -71,6 +80,19 @@ func show_world(world: Variant) -> void:
 			names[location.location_id] = caption
 		_labels.set_objective_names(names)
 		_labels.set_centers(_centers)
+	var agent_points := {}
+	if _agents != null and _agents.has_method("capture_positions"):
+		agent_points = _agents.capture_positions()
+	if _relationships != null:
+		_relationships.set_agent_points(agent_points)
+	if _comm_flows != null:
+		_comm_flows.set_agent_points(agent_points)
+	for layer in [_groups, _norms, _conventions, _reputation, _teaching, _skills]:
+		if layer != null:
+			layer.set_centers(_centers)
+	if _narrative != null:
+		_narrative.set_centers(_centers)
+		_narrative.set_agent_points(agent_points)
 
 
 func set_claim_overlay_enabled(enabled: bool) -> void:
@@ -104,6 +126,100 @@ func apply_subjective_labels(payload: Variant) -> void:
 		_labels.set_enabled(payload != null)
 
 
+func set_relationship_overlay_enabled(enabled: bool) -> void:
+	if _relationships != null:
+		_relationships.set_enabled(enabled)
+
+
+func apply_relationships(payload: Variant) -> void:
+	if _relationships != null:
+		_relationships.apply_payload(payload)
+
+
+func set_communication_flows_enabled(enabled: bool) -> void:
+	if _comm_flows != null:
+		_comm_flows.set_enabled(enabled)
+
+
+func set_metric_overlay_enabled(kind: String, enabled: bool) -> void:
+	var layer := _metric_layer(kind)
+	if layer != null:
+		layer.set_enabled(enabled)
+
+
+func apply_metric_overlay(kind: String, payload: Variant) -> void:
+	var layer := _metric_layer(kind)
+	if layer != null:
+		layer.apply_payload(payload)
+
+
+func clear_subjective_overlays() -> void:
+	apply_subjective_labels(null)
+	apply_subjective_claims(null)
+	apply_relationships(null)
+	apply_narrative_hops(null)
+	set_claim_overlay_enabled(false)
+	set_relationship_overlay_enabled(false)
+	set_narrative_overlay_enabled(false)
+	if _labels != null:
+		_labels.set_enabled(false)
+
+
+func set_narrative_overlay_enabled(enabled: bool) -> void:
+	if _narrative != null:
+		_narrative.set_enabled(enabled)
+
+
+func apply_narrative_hops(payload: Variant) -> void:
+	if _narrative != null:
+		_narrative.apply_payload(payload)
+
+
+func select_narrative_variant(variant_id: String) -> void:
+	if _narrative != null:
+		_narrative.select_variant(variant_id)
+
+
+func narrative_variant_ids() -> Array:
+	if _narrative != null:
+		return _narrative.variant_ids()
+	return []
+
+
+func narrative_opaque_event_ids() -> Array:
+	if _narrative != null and _narrative.has_method("selected_opaque_event_ids"):
+		return _narrative.selected_opaque_event_ids()
+	return []
+
+
+func apply_strategy_audit(payload: Variant) -> void:
+	if _effects != null and _effects.has_method("set_strategy_audit"):
+		_effects.set_strategy_audit(payload)
+
+
+func set_research_speech_enabled(enabled: bool) -> void:
+	if _effects != null and _effects.has_method("set_research_speech_enabled"):
+		_effects.set_research_speech_enabled(enabled)
+
+
+func _metric_layer(kind: String) -> Node2D:
+	match kind:
+		"emergent_group_formation":
+			return _groups
+		"emergent_social_norms":
+			return _norms
+		"persistent_social_conventions":
+			return _conventions
+		"distributed_reputation":
+			return _reputation
+		"cultural_transmission":
+			return _teaching
+		"skill_learning":
+			return _skills
+		_:
+			return null
+
+
 func play_event(event: Variant) -> void:
 	if _world_state == null or not bool(event.known):
 		if event != null and not bool(event.known):
@@ -116,6 +232,12 @@ func play_event(event: Variant) -> void:
 	var command: Dictionary = Router.route(event, policy, logical)
 	command["ground"] = ground
 	_effects.play(command, _agents, _locations, _connections, _objects)
+	if str(command.get("action", "")) == "speech" and _comm_flows != null:
+		_comm_flows.record_delivery(
+			str(command.get("entity_id", "")),
+			str(command.get("other_id", "")),
+			str(command.get("type", "")),
+		)
 
 
 func set_playback_speed(speed: float) -> void:
@@ -190,6 +312,16 @@ func _on_agent_selected(entity_id: String) -> void:
 				summary = "%s (%s)" % [item.name, item.kind]
 				break
 		inventory.append(summary)
+	var fields: Dictionary = _reducer.event_fields_for(entity_id)
+	var structure_snapshot = null
+	var at_location := _objects.structure_at(str(agent.location_id))
+	if at_location != null:
+		structure_snapshot = {
+			"structure_id": str(at_location.structure_id),
+			"kind": str(at_location.kind),
+			"integrity": float(at_location.integrity),
+			"stored_quantity": int(at_location.stored_quantity),
+		}
 	inspect_requested.emit({
 		"entity_id": str(agent.entity_id),
 		"agent_id": "" if agent.agent_id == null else str(agent.agent_id),
@@ -197,6 +329,11 @@ func _on_agent_selected(entity_id: String) -> void:
 		"life_status": str(agent.life_status),
 		"inventory": inventory,
 		"latest_event": _reducer.activity_for(entity_id),
+		"recipe_id": str(fields.get("recipe_id", "")),
+		"structure_id": str(fields.get("structure_id", "")),
+		"resource_id": str(fields.get("resource_id", "")),
+		"item_id": str(fields.get("item_id", "")),
+		"structure": structure_snapshot,
 		"measures": agent.measures,
 	})
 

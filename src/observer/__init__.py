@@ -27,6 +27,11 @@ from observer.labels import (
     SubjectiveLabelReading,
     project_subjective_label_overlay,
 )
+from observer.strategy_audit import (
+    StrategyAuditEntry,
+    StrategyAuditOverlay,
+    project_strategy_audit_overlay,
+)
 from observer.version import (
     DEFAULT_LAYOUT_ID,
     OBSERVER_LAYOUT_SCHEMA_VERSION,
@@ -62,8 +67,11 @@ __all__ = [
     "ObserverWorldState",
     "PresentationSlot",
     "ScreenPoint",
+    "StrategyAuditEntry",
+    "StrategyAuditOverlay",
     "SubjectiveLabelOverlay",
     "SubjectiveLabelReading",
     "VisualBounds",
+    "project_strategy_audit_overlay",
     "project_subjective_label_overlay",
 ]

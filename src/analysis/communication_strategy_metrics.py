@@ -25,6 +25,7 @@ from world.identifiers import require_stable_id
 __all__ = [
     "COMMUNICATION_STRATEGY_METRIC_VERSION",
     "CommunicationStrategyMetricResult",
+    "classify_communication_audit",
     "compute_communication_strategy_metrics",
 ]
 
@@ -149,6 +150,13 @@ def compute_communication_strategy_metrics(
     return CommunicationStrategyMetricResult(
         document=document, categories=categories, cascade_count=cascade
     )
+
+
+def classify_communication_audit(
+    audit: object, events: Mapping[str, WorldEvent]
+) -> str:
+    """Public classification used by aggregate metrics and per-event projections."""
+    return _category(audit, events)
 
 
 def _category(audit: object, events: Mapping[str, WorldEvent]) -> str:

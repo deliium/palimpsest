@@ -43,9 +43,10 @@ func _rebuild() -> void:
 		marker.name = "AnalyticsMarker"
 		marker.position = _centers.get(reading["location_id"], Vector2.ZERO)
 		marker.set_meta("style", reading["style"])
-		marker.set_meta("copy", reading["copy"])
+		marker.set_meta("copy", "ANALYTICAL %s" % reading["copy"])
 		marker.set_meta("location_id", reading["location_id"])
 		marker.set_meta("contest_source", reading["contest_source"])
+		marker.set_meta("evidence_class", "ANALYTICAL_INFERRED")
 		add_child(marker)
 
 

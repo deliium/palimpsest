@@ -52,6 +52,7 @@ func _rebuild() -> void:
 		var marker := Node2D.new()
 		marker.name = "ClaimMarker"
 		marker.position = _centers.get(location_id, Vector2.ZERO)
-		marker.set_meta("copy", "selected agent claims this location")
+		marker.set_meta("copy", "SUBJECTIVE selected agent claims this location")
 		marker.set_meta("location_id", location_id)
+		marker.set_meta("evidence_class", "SUBJECTIVE_TO_SELECTED_AGENT")
 		add_child(marker)

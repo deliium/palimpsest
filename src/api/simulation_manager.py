@@ -123,6 +123,25 @@ class SimulationManager:
                 return state
         return None
 
+    def export_communication_intent_audits(self, run_id: str) -> tuple[object, ...]:
+        """Return in-process strategy audits for research projection, or empty."""
+        handle = self._handles.get(run_id)
+        runner = None if handle is None else handle.runner
+        if runner is None:
+            return ()
+        export = getattr(runner, "export_communication_intent_audits", None)
+        if export is None:
+            return ()
+        audits = export()
+        if not isinstance(audits, tuple):
+            return ()
+        _LOGGER.debug(
+            "communication_intent_audits_exported",
+            run_id=run_id,
+            count=len(audits),
+        )
+        return audits
+
     @property
     def draining(self) -> bool:
         return self._draining

@@ -21,6 +21,8 @@ _OBJECTIVE_LEAK_KEYS = frozenset(
         "cultural_narratives",
         "subjective_labels",
         "labels",
+        "communication_strategy_audit",
+        "strategy_audit",
     }
 )
 
@@ -197,13 +199,20 @@ class ObserverEventOut(StrictModel):
     season: str | None = None
     temperature_band: str | None = None
     hazard_kind: str | None = None
+    declared_confidence_band: str | None = None
 
     @model_serializer(mode="wrap")
     def _omit_absent_environment(self, handler: object) -> dict[str, object]:
         payload = handler(self)
         if not isinstance(payload, dict):
             raise TypeError("observer event serializer requires a mapping")
-        for key in ("season", "temperature_band", "hazard_kind", "artifact_id"):
+        for key in (
+            "season",
+            "temperature_band",
+            "hazard_kind",
+            "artifact_id",
+            "declared_confidence_band",
+        ):
             if payload.get(key) is None:
                 payload.pop(key, None)
         return payload
@@ -309,7 +318,53 @@ class ObserverLabelOverlayOut(StrictModel):
     readings: tuple[ObserverLabelReadingOut, ...]
 
 
+class StrategyAuditEntryOut(StrictModel):
+    event_id: str
+    category: str
+    evidence_class: Literal["ANALYTICAL_INFERRED"] = "ANALYTICAL_INFERRED"
+
+
+class StrategyAuditOverlayOut(StrictModel):
+    """Research/debug metadata. Ordinary speech must not consume this DTO."""
+
+    run_id: str
+    layer: Literal["research_strategy_audit"] = "research_strategy_audit"
+    evidence_class: Literal["ANALYTICAL_INFERRED"] = "ANALYTICAL_INFERRED"
+    protocol_version: str = OBSERVER_PROTOCOL_VERSION
+    count: int = Field(ge=0)
+    entries: tuple[StrategyAuditEntryOut, ...] = ()
+
+
+class NarrativeHopVariantOut(StrictModel):
+    variant_id: str
+    status: str
+    origin: str
+    carrier_agent_ids: tuple[str, ...] = ()
+    location_ids: tuple[str, ...] = ()
+    parent_variant_ids: tuple[str, ...] = ()
+    merged_into_id: str | None = None
+    transmission_root_id: str | None = None
+    source_event_id: str | None = None
+    last_communication_id: str | None = None
+    strength_band: Literal["low", "mid", "high"] = "mid"
+
+
+class NarrativeHopOverlayOut(StrictModel):
+    """SUBJECTIVE hop projection. No content tokens or fingerprints as labels."""
+
+    run_id: str
+    owner_id: str
+    layer: Literal["subjective_narrative_hops"] = "subjective_narrative_hops"
+    evidence_class: Literal["SUBJECTIVE_TO_SELECTED_AGENT"] = (
+        "SUBJECTIVE_TO_SELECTED_AGENT"
+    )
+    protocol_version: str = OBSERVER_PROTOCOL_VERSION
+    count: int = Field(ge=0)
+    variants: tuple[NarrativeHopVariantOut, ...] = ()
+
+
 __all__ = [
+    "NarrativeHopOverlayOut",
     "ObserverAgentOut",
     "ObserverEventOut",
     "ObserverEventPageOut",
@@ -319,4 +374,5 @@ __all__ = [
     "ObserverRelationshipPageOut",
     "ObserverRunOut",
     "ObserverTickPageOut",
+    "StrategyAuditOverlayOut",
 ]

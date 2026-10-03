@@ -26,6 +26,7 @@ signal world_replaced(world: Variant)
 signal live_event(event: Variant)
 signal frame_sought(frame: Variant, event: Variant, forward: bool)
 signal overlay_payload(kind: String, payload: Variant)
+signal overlay_unavailable(kind: String, reason_code: String)
 signal events_loaded(events: Array, focus_tick: int, focus_sequence: int)
 signal ticks_loaded(ticks: Array)
 signal run_loaded(record: Dictionary)
@@ -225,23 +226,100 @@ func request_label_overlay(agent_id: String) -> void:
 	_request_path("subjective_labels", path)
 
 
-func request_analytics_overlay(metric_set_id: String) -> void:
-	var path := "/v1/simulations/%s/metrics/%s/spatial_control" % [run_id, metric_set_id]
-	_request_path("spatial_control", path)
+func request_relationship_overlay(agent_id: String) -> void:
+	var path := "/v1/simulations/%s/observer/agents/%s/relationships" % [run_id, agent_id]
+	_request_path("relationships", path)
 
 
-func _request_path(kind: String, path: String) -> void:
+func request_narrative_hop_overlay(agent_id: String) -> void:
+	var path := "/v1/simulations/%s/observer/agents/%s/narrative-hops" % [run_id, agent_id]
+	_request_path("narrative_hops", path)
+
+
+func request_analytics_overlay(_metric_set_id: String = "") -> void:
+	## Catalog discovery resolves metric_set_id; caller-supplied ids are ignored.
+	request_metric_family_overlay("spatial_control", "spatial_control")
+
+
+func request_strategy_audit_overlay() -> void:
+	## Research/debug ANALYTICAL payload. Ordinary speech must not read this.
+	var path := "/v1/simulations/%s/observer/communication-strategy-audit" % run_id
+	_request_path("communication_strategy_audit", path)
+
+
+func request_metric_family_overlay(family: String, overlay_kind: String = "") -> void:
+	var kind := overlay_kind if overlay_kind != "" else family
+	if run_id.is_empty():
+		_emit_overlay_unavailable(kind, "run_id_missing")
+		return
+	var path := "/v1/simulations/%s/metrics" % run_id
+	_request_path(
+		"metric_catalog",
+		path,
+		{"family": family, "overlay_kind": kind, "seek_id": -1},
+	)
+
+
+static func resolve_metric_set_id(catalog: Dictionary, family: String) -> String:
+	## Deterministic: prefer the newest matching catalog entry (last in list).
+	var items: Variant = catalog.get("items", [])
+	if not items is Array:
+		return ""
+	var chosen := ""
+	for item in items:
+		if typeof(item) != TYPE_DICTIONARY:
+			continue
+		if str(item.get("metric_family", "")) != family:
+			continue
+		var set_id := str(item.get("metric_set_id", ""))
+		if set_id != "":
+			chosen = set_id
+	return chosen
+
+
+func _emit_overlay_unavailable(kind: String, reason_code: String) -> void:
+	ObserverLog.warn(
+		"session",
+		"overlay_unavailable kind=%s reason_code=%s" % [kind, reason_code],
+	)
+	overlay_unavailable.emit(kind, reason_code)
+	overlay_payload.emit(kind, null)
+
+
+func _decode_metric_document(body: Dictionary) -> Variant:
+	var encoded := str(body.get("payload_b64", ""))
+	if encoded.is_empty():
+		if str(body.get("layer", "")) != "":
+			return body
+		return null
+	var raw: PackedByteArray = Marshalls.base64_to_raw(encoded)
+	if raw.is_empty():
+		return null
+	var text := raw.get_string_from_utf8()
+	var parsed: Variant = JSON.parse_string(text)
+	if typeof(parsed) != TYPE_DICTIONARY:
+		return null
+	return parsed
+
+
+func _request_path(kind: String, path: String, meta: Dictionary = {}) -> void:
 	last_request = {"kind": kind, "path": path, "query": {}}
 	request_log.append(last_request)
 	if _http == null:
 		return
 	var built: Dictionary = Urls.build_get(origin, path, {})
 	if not bool(built.get("ok", false)):
-		overlay_payload.emit(kind, null)
+		if kind == "metric_catalog" or kind == "metric_document":
+			_emit_overlay_unavailable(str(meta.get("overlay_kind", kind)), "read_only")
+		else:
+			overlay_payload.emit(kind, null)
 		return
 	_request_serial += 1
 	var request_id := str(_request_serial)
-	_pending[request_id] = {"kind": kind, "seek_id": -1}
+	var pending := {"kind": kind, "seek_id": int(meta.get("seek_id", -1))}
+	for key in meta.keys():
+		pending[key] = meta[key]
+	_pending[request_id] = pending
 	_http.get_json(str(built["url"]), request_id, _token)
 
 
@@ -289,11 +367,67 @@ func _on_http(route: String, _status: int, body: Variant, reason_code: String) -
 	if seek_id >= 0 and seek_id < _seek_serial:
 		ObserverLog.debug("session", "seek_ignored reason_code=stale_response")
 		return
-	if kind == "territorial_claims" or kind == "spatial_control" or kind == "subjective_labels":
+	if (
+		kind == "territorial_claims"
+		or kind == "subjective_labels"
+		or kind == "communication_strategy_audit"
+		or kind == "relationships"
+		or kind == "narrative_hops"
+	):
 		var overlay: Variant = null
 		if reason_code == "" and typeof(body) == TYPE_DICTIONARY:
 			overlay = body
+		elif reason_code != "":
+			ObserverLog.warn(
+				"session",
+				"overlay_unavailable kind=%s reason_code=%s" % [kind, reason_code],
+			)
 		overlay_payload.emit(kind, overlay)
+		return
+	if kind == "metric_catalog":
+		var overlay_kind := str(meta.get("overlay_kind", ""))
+		var family := str(meta.get("family", ""))
+		if reason_code != "" or typeof(body) != TYPE_DICTIONARY:
+			_emit_overlay_unavailable(overlay_kind, reason_code if reason_code != "" else "overlay_unavailable")
+			return
+		var metric_set_id := resolve_metric_set_id(body, family)
+		if metric_set_id == "":
+			_emit_overlay_unavailable(overlay_kind, "metric_family_missing")
+			return
+		ObserverLog.info(
+			"session",
+			"metric_catalog_resolved family=%s metric_set_id=%s" % [family, metric_set_id],
+		)
+		var doc_path := "/v1/simulations/%s/metrics/%s/%s" % [run_id, metric_set_id, family]
+		_request_path(
+			"metric_document",
+			doc_path,
+			{
+				"family": family,
+				"overlay_kind": overlay_kind,
+				"metric_set_id": metric_set_id,
+				"seek_id": -1,
+			},
+		)
+		return
+	if kind == "metric_document":
+		var overlay_kind := str(meta.get("overlay_kind", ""))
+		if reason_code != "" or typeof(body) != TYPE_DICTIONARY:
+			_emit_overlay_unavailable(overlay_kind, reason_code if reason_code != "" else "overlay_unavailable")
+			return
+		var decoded: Variant = _decode_metric_document(body)
+		if decoded == null:
+			_emit_overlay_unavailable(overlay_kind, "metric_payload_invalid")
+			return
+		ObserverLog.debug(
+			"session",
+			"metric_document_loaded family=%s metric_set_id=%s overlay_kind=%s" % [
+				str(meta.get("family", "")),
+				str(meta.get("metric_set_id", "")),
+				overlay_kind,
+			],
+		)
+		overlay_payload.emit(overlay_kind, decoded)
 		return
 	if reason_code != "":
 		if seek_id >= 0:

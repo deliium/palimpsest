@@ -31,6 +31,7 @@ from observer.contracts import (
 from observer.layout import ObserverLayoutCatalog, ObserverLayoutError, load_layout
 from observer.relationships import project_relationship_summaries
 from observer.sources import LiveObserverSource, ReplayObserverSource
+from observer.strategy_audit import StrategyAuditOverlay, project_strategy_audit_overlay
 from observer.version import DEFAULT_LAYOUT_ID, OBSERVER_PROTOCOL_VERSION
 from simulation.clock import Tick
 from simulation.models import RunId
@@ -203,6 +204,27 @@ class ObserverReadService:
             latest_tick=latest_tick,
             latest_sequence=latest_sequence,
         )
+
+    async def strategy_audit_overlay(
+        self,
+        run_id: str,
+        *,
+        audits: tuple[object, ...],
+        agent_entity_ids: dict[str, str] | None = None,
+    ) -> StrategyAuditOverlay:
+        """Project ANALYTICAL per-event strategy categories from committed events."""
+        history = await self._history(run_id, target_tick=None)
+        overlay = project_strategy_audit_overlay(
+            audits,
+            history.events,
+            agent_entity_ids=agent_entity_ids,
+        )
+        _LOGGER.debug(
+            "strategy_audit_projected count=%s run_id=%s",
+            overlay.count,
+            run_id,
+        )
+        return overlay
 
     async def relationships(
         self, run_id: str, owner_id: str

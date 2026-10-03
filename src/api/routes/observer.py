@@ -9,6 +9,8 @@ from fastapi import APIRouter, Depends, Query, Request
 from api.dependencies import get_observer_service, get_settings
 from api.errors import bad_request, not_found
 from api.observer_schemas import (
+    NarrativeHopOverlayOut,
+    NarrativeHopVariantOut,
     ObserverEventOut,
     ObserverEventPageOut,
     ObserverFrameOut,
@@ -18,12 +20,15 @@ from api.observer_schemas import (
     ObserverRelationshipPageOut,
     ObserverRunOut,
     ObserverTickPageOut,
+    StrategyAuditEntryOut,
+    StrategyAuditOverlayOut,
 )
 from api.observer_service import ObserverReadService
 from api.security import ApiCapability, require_http_capability
 from infrastructure.logging import get_logger
 from infrastructure.settings import Settings
 from observer.labels import project_subjective_label_overlay
+from observer.narrative_hops import project_narrative_hop_overlay
 from observer.version import DEFAULT_LAYOUT_ID
 
 router = APIRouter(prefix="/v1/simulations", tags=["observer"])
@@ -216,6 +221,124 @@ async def get_observer_run(
     )
     del request
     return result
+
+
+@router.get(
+    "/{run_id}/observer/communication-strategy-audit",
+    response_model=StrategyAuditOverlayOut,
+)
+async def get_communication_strategy_audit(
+    run_id: str,
+    request: Request,
+    _: None = Depends(_debug),
+    service: ObserverReadService = Depends(get_observer_service),
+) -> StrategyAuditOverlayOut:
+    """ANALYTICAL research/debug mapping of event_id → strategy category.
+
+    Ordinary speech presentation must not consume this payload.
+    """
+    started = time.perf_counter()
+    manager = getattr(request.app.state, "simulation_manager", None)
+    audits: tuple[object, ...] = ()
+    if manager is not None and hasattr(manager, "export_communication_intent_audits"):
+        audits = manager.export_communication_intent_audits(run_id)
+    agent_entity_ids: dict[str, str] = {}
+    try:
+        frame = await service.state(run_id, tick=None, layout_id=DEFAULT_LAYOUT_ID)
+        for agent in frame.world.agents:
+            if agent.agent_id:
+                agent_entity_ids[agent.agent_id] = agent.entity_id
+    except Exception:
+        agent_entity_ids = {}
+    overlay = await service.strategy_audit_overlay(
+        run_id,
+        audits=tuple(audits),
+        agent_entity_ids=agent_entity_ids,
+    )
+    _LOGGER.info(
+        "route_observer_strategy_audit",
+        route_template=(
+            "GET /v1/simulations/{run_id}/observer/communication-strategy-audit"
+        ),
+        status=200,
+        run_id=run_id,
+        duration_ms=round((time.perf_counter() - started) * 1000, 3),
+        count=overlay.count,
+    )
+    _LOGGER.debug("strategy_audit_projected count=%s", overlay.count)
+    del request
+    return StrategyAuditOverlayOut(
+        run_id=run_id,
+        layer=overlay.layer,  # type: ignore[arg-type]
+        evidence_class=overlay.evidence_class,  # type: ignore[arg-type]
+        protocol_version=overlay.protocol_version,
+        count=overlay.count,
+        entries=tuple(
+            StrategyAuditEntryOut(
+                event_id=entry.event_id,
+                category=entry.category,
+                evidence_class=entry.evidence_class,  # type: ignore[arg-type]
+            )
+            for entry in overlay.entries
+        ),
+    )
+
+
+@router.get(
+    "/{run_id}/observer/agents/{agent_id}/narrative-hops",
+    response_model=NarrativeHopOverlayOut,
+)
+async def get_observer_narrative_hops(
+    run_id: str,
+    agent_id: str,
+    request: Request,
+    _: None = Depends(_debug),
+) -> NarrativeHopOverlayOut:
+    """SUBJECTIVE owner narrative-ledger hops. No content tokens on the wire."""
+    started = time.perf_counter()
+    manager = getattr(request.app.state, "simulation_manager", None)
+    checkpoint = None
+    if manager is not None and hasattr(manager, "owner_runtime_checkpoint"):
+        checkpoint = manager.owner_runtime_checkpoint(run_id, agent_id)
+    ledger = (
+        None if checkpoint is None else getattr(checkpoint, "cultural_narratives", None)
+    )
+    overlay = project_narrative_hop_overlay(agent_id, ledger)
+    _LOGGER.info(
+        "route_observer_narrative_hops",
+        route_template=(
+            "GET /v1/simulations/{run_id}/observer/agents/{agent_id}/narrative-hops"
+        ),
+        status=200,
+        run_id=run_id,
+        duration_ms=round((time.perf_counter() - started) * 1000, 3),
+        count=overlay.count,
+    )
+    del request
+    return NarrativeHopOverlayOut(
+        run_id=run_id,
+        owner_id=overlay.owner_id,
+        layer=overlay.layer,  # type: ignore[arg-type]
+        evidence_class=overlay.evidence_class,  # type: ignore[arg-type]
+        protocol_version=overlay.protocol_version,
+        count=overlay.count,
+        variants=tuple(
+            NarrativeHopVariantOut(
+                variant_id=item.variant_id,
+                status=item.status,
+                origin=item.origin,
+                carrier_agent_ids=item.carrier_agent_ids,
+                location_ids=item.location_ids,
+                parent_variant_ids=item.parent_variant_ids,
+                merged_into_id=item.merged_into_id,
+                transmission_root_id=item.transmission_root_id,
+                source_event_id=item.source_event_id,
+                last_communication_id=item.last_communication_id,
+                strength_band=item.strength_band,  # type: ignore[arg-type]
+            )
+            for item in overlay.variants
+        ),
+    )
 
 
 @router.get(

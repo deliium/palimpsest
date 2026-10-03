@@ -1,10 +1,14 @@
-[gd_scene load_steps=11 format=3]
+[gd_scene load_steps=15 format=3]
 
 [ext_resource type="Script" path="res://scripts/view/world_view.gd" id="1_view"]
 [ext_resource type="Script" path="res://scripts/view/camera_rig.gd" id="7_camera"]
 [ext_resource type="Script" path="res://scripts/view/claim_overlay.gd" id="8_claims"]
 [ext_resource type="Script" path="res://scripts/view/analytics_overlay.gd" id="9_analytics"]
 [ext_resource type="Script" path="res://scripts/view/label_overlay.gd" id="10_labels"]
+[ext_resource type="Script" path="res://scripts/view/relationship_overlay.gd" id="11_relationships"]
+[ext_resource type="Script" path="res://scripts/view/metric_overlay.gd" id="12_metrics"]
+[ext_resource type="Script" path="res://scripts/view/narrative_overlay.gd" id="13_narrative"]
+[ext_resource type="Script" path="res://scripts/view/communication_flow_overlay.gd" id="14_comm_flows"]
 [ext_resource type="PackedScene" path="res://scenes/layers/location_layer.tscn" id="2_locations"]
 [ext_resource type="PackedScene" path="res://scenes/layers/connection_layer.tscn" id="3_connections"]
 [ext_resource type="PackedScene" path="res://scenes/layers/object_layer.tscn" id="4_objects"]
@@ -27,6 +31,39 @@ script = ExtResource("9_analytics")
 
 [node name="LabelOverlay" type="Node2D" parent="."]
 script = ExtResource("10_labels")
+
+[node name="RelationshipOverlay" type="Node2D" parent="."]
+script = ExtResource("11_relationships")
+
+[node name="CommunicationFlowOverlay" type="Node2D" parent="."]
+script = ExtResource("14_comm_flows")
+
+[node name="GroupOverlay" type="Node2D" parent="."]
+script = ExtResource("12_metrics")
+overlay_kind = "emergent_group_formation"
+
+[node name="NormOverlay" type="Node2D" parent="."]
+script = ExtResource("12_metrics")
+overlay_kind = "emergent_social_norms"
+
+[node name="ConventionOverlay" type="Node2D" parent="."]
+script = ExtResource("12_metrics")
+overlay_kind = "persistent_social_conventions"
+
+[node name="ReputationOverlay" type="Node2D" parent="."]
+script = ExtResource("12_metrics")
+overlay_kind = "distributed_reputation"
+
+[node name="TeachingOverlay" type="Node2D" parent="."]
+script = ExtResource("12_metrics")
+overlay_kind = "cultural_transmission"
+
+[node name="SkillOverlay" type="Node2D" parent="."]
+script = ExtResource("12_metrics")
+overlay_kind = "skill_learning"
+
+[node name="NarrativeOverlay" type="Node2D" parent="."]
+script = ExtResource("13_narrative")
 
 [node name="ConnectionLayer" parent="." instance=ExtResource("3_connections")]
 

@@ -600,6 +600,7 @@ class ObserverEvent:
     season: str | None = None
     temperature_band: str | None = None
     hazard_kind: str | None = None
+    declared_confidence_band: str | None = None
 
     def __init__(
         self,
@@ -621,6 +622,7 @@ class ObserverEvent:
         season: str | None = None,
         temperature_band: str | None = None,
         hazard_kind: str | None = None,
+        declared_confidence_band: str | None = None,
         **extra: object,
     ) -> None:
         _reject_extra(extra)
@@ -671,6 +673,11 @@ class ObserverEvent:
         object.__setattr__(
             self, "hazard_kind", _optional_text("hazard_kind", hazard_kind)
         )
+        object.__setattr__(
+            self,
+            "declared_confidence_band",
+            _optional_text("declared_confidence_band", declared_confidence_band),
+        )
         _log_built("ObserverEvent", id_count=1, protocol_version=protocol)
 
     def public_mapping(self) -> dict[str, object]:
@@ -700,6 +707,8 @@ class ObserverEvent:
             payload["temperature_band"] = self.temperature_band
         if self.hazard_kind is not None:
             payload["hazard_kind"] = self.hazard_kind
+        if self.declared_confidence_band is not None:
+            payload["declared_confidence_band"] = self.declared_confidence_band
         return payload
 
 

@@ -86,6 +86,7 @@ func run() -> Array:
 	_assert_steps(session, failures)
 	_assert_environment_frame(session, failures)
 	_assert_territorial_overlays(failures)
+	_assert_metric_catalog(failures)
 	var kept_agent := _agent("body-bob", "dead")
 	var kept: Dictionary = AgentLayer.selection_for("body-bob", [kept_agent])
 	if not kept["keep"] or not kept["dead"] or not Identity.is_dead(kept_agent):
@@ -285,7 +286,7 @@ func _assert_territorial_overlays(failures: Array) -> void:
 	claims.set_enabled(true)
 	if claims.get_child_count() != 1:
 		failures.append("enabled subjective claims should add a marker")
-	if str(claims.get_child(0).get_meta("copy")) != "selected agent claims this location":
+	if str(claims.get_child(0).get_meta("copy")) != "SUBJECTIVE selected agent claims this location":
 		failures.append("claim marker copy should name the selected agent claim")
 	claims.apply_payload({"layer": "research_analytics", "heads": []})
 	if claims.get_child_count() != 0:
@@ -346,6 +347,89 @@ func _assert_territorial_overlays(failures: Array) -> void:
 	analytics.free()
 	agents.free()
 	locations.free()
+	session.free()
+
+
+func _assert_metric_catalog(failures: Array) -> void:
+	var newest := SessionScript.resolve_metric_set_id({
+		"items": [
+			{"metric_set_id": "set-old", "metric_family": "spatial_control"},
+			{"metric_set_id": "set-new", "metric_family": "spatial_control"},
+			{"metric_set_id": "set-other", "metric_family": "distributed_reputation"},
+		],
+	}, "spatial_control")
+	if newest != "set-new":
+		failures.append("catalog should prefer the newest matching set")
+	var missing := SessionScript.resolve_metric_set_id({"items": []}, "spatial_control")
+	if missing != "":
+		failures.append("empty catalog should resolve no set")
+	var session := SessionScript.new()
+	session.run_id = "run-1"
+	session.origin = ORIGIN
+	var unavailable: Array = []
+	session.overlay_unavailable.connect(func(kind: String, reason_code: String) -> void:
+		unavailable.append({"kind": kind, "reason_code": reason_code})
+	)
+	var received: Array = []
+	session.overlay_payload.connect(func(kind: String, payload: Variant) -> void:
+		received.append({"kind": kind, "payload": payload})
+	)
+	session.request_analytics_overlay()
+	if str(session.last_request.get("kind", "")) != "metric_catalog":
+		failures.append("analytics overlay should start with metric catalog discovery")
+	if "metrics" not in str(session.last_request.get("path", "")) or "spatial_control" in str(session.last_request.get("path", "")):
+		# catalog path is /metrics without family; family document comes after resolve
+		if not str(session.last_request.get("path", "")).ends_with("/metrics"):
+			failures.append("catalog path should be GET .../metrics")
+	session._pending["catalog-1"] = {
+		"kind": "metric_catalog",
+		"family": "spatial_control",
+		"overlay_kind": "spatial_control",
+		"seek_id": -1,
+	}
+	session._on_http("catalog-1", 200, {"items": []}, "")
+	if unavailable.is_empty() or unavailable[-1]["reason_code"] != "metric_family_missing":
+		failures.append("empty catalog should emit overlay_unavailable")
+	session._pending["catalog-2"] = {
+		"kind": "metric_catalog",
+		"family": "spatial_control",
+		"overlay_kind": "spatial_control",
+		"seek_id": -1,
+	}
+	session.request_log.clear()
+	session._on_http("catalog-2", 200, {
+		"items": [{"metric_set_id": "set-9", "metric_family": "spatial_control"}],
+	}, "")
+	if str(session.last_request.get("kind", "")) != "metric_document":
+		failures.append("resolved catalog should fetch the metric document")
+	if "metrics/set-9/spatial_control" not in str(session.last_request.get("path", "")):
+		failures.append("document path should include resolved set id")
+	var logged := "\n".join(Log.recent)
+	if "metric_catalog_resolved family=spatial_control metric_set_id=set-9" not in logged:
+		failures.append("catalog resolution should log INFO")
+	var payload_json := JSON.stringify({
+		"layer": "research_analytics",
+		"values": {"intervals": "loc-1:0:1:a:1", "repeated_control": true},
+	})
+	var encoded := Marshalls.raw_to_base64(payload_json.to_utf8_buffer())
+	session._pending["doc-1"] = {
+		"kind": "metric_document",
+		"family": "spatial_control",
+		"overlay_kind": "spatial_control",
+		"metric_set_id": "set-9",
+		"seek_id": -1,
+	}
+	session._on_http("doc-1", 200, {
+		"metric_set_id": "set-9",
+		"metric_family": "spatial_control",
+		"payload_b64": encoded,
+	}, "")
+	if received.is_empty() or received[-1]["kind"] != "spatial_control":
+		failures.append("metric document should emit spatial_control payload")
+	elif typeof(received[-1]["payload"]) != TYPE_DICTIONARY:
+		failures.append("decoded metric payload should be a dictionary")
+	elif str(received[-1]["payload"].get("layer", "")) != "research_analytics":
+		failures.append("decoded metric payload should keep research_analytics layer")
 	session.free()
 
 

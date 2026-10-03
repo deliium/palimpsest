@@ -7,11 +7,13 @@ from collections.abc import Sequence
 
 from observer.contracts import ObserverEvent
 from observer.version import OBSERVER_PROTOCOL_VERSION, SEMANTIC_TYPE_BY_KIND
+from world.communications import confidence_band
 from world.events import (
     ArtifactCreated,
     ArtifactDestroyed,
     ArtifactModified,
     ArtifactMoved,
+    Asked,
     CraftStarted,
     Died,
     Dropped,
@@ -35,7 +37,9 @@ from world.events import (
     StructureBuilt,
     StructureRepaired,
     Taken,
+    Talked,
     TemperatureBandChanged,
+    Told,
     WeatherChanged,
     WorldEvent,
 )
@@ -82,6 +86,7 @@ def adapt_event(event: WorldEvent) -> ObserverEvent:
     season: str | None = None
     temperature_band: str | None = None
     hazard_kind: str | None = None
+    declared_confidence_band: str | None = None
     details = event.details
     if isinstance(details, Moved):
         destination = _text(details.destination_id)
@@ -138,6 +143,14 @@ def adapt_event(event: WorldEvent) -> ObserverEvent:
     elif isinstance(details, (EnvironmentalHazardStarted, EnvironmentalHazardEnded)):
         origin = _text(details.location_id)
         hazard_kind = details.hazard_kind.value
+    elif isinstance(details, (Talked, Asked, Told)):
+        utterance = getattr(details, "utterance", None)
+        declared = getattr(utterance, "declared", None)
+        sender_confidence = getattr(declared, "sender_confidence", None)
+        if isinstance(sender_confidence, (int, float)) and not isinstance(
+            sender_confidence, bool
+        ):
+            declared_confidence_band = confidence_band(float(sender_confidence))
     adapted = ObserverEvent(
         protocol_version=OBSERVER_PROTOCOL_VERSION,
         type=semantic,
@@ -157,6 +170,7 @@ def adapt_event(event: WorldEvent) -> ObserverEvent:
         season=season,
         temperature_band=temperature_band,
         hazard_kind=hazard_kind,
+        declared_confidence_band=declared_confidence_band,
     )
     if season is not None or temperature_band is not None or hazard_kind is not None:
         _LOGGER.debug(
