@@ -166,7 +166,7 @@ Family id `persistent_social_conventions`. Tag `persistent_social_conventions@1`
 
 ### Phase 2: Private Habit Learning
 
-- [ ] Task 3: Apply observation and memory evidence into owner-scoped convention beliefs.
+- [x] Task 3: Apply observation and memory evidence into owner-scoped convention beliefs.
   - Deliverable: `apply_convention_update(...)` returns a new `ConventionLedger` for one owner. Accepts this tick's `Observation`, `OwnerSafeSocialIdentity`, previous ledger, and optional owner `memories` sequence. Passing `WorldState`, `WorldEvent`, or a metric document raises `TypeError`. Module must not import `analysis`, `simulation`, `world.models`, `world.events`, or `world._state`. May import `world.observations` and `world.communications` contracts for relation predicates only. May type-check `MemoryTrace` via `TYPE_CHECKING` or duck-typing on `concepts`/`relations`/`memory_id` without importing reconstructors or `MemoryService`.
   - Apply locked evidence table and tick order: open/match situations → conforming deltas → remembered reinforcement → participant/duration updates → explanation fade → candidate promotion → competing-variant links → decay. Meeting wait/talk uses exclusive attribution (timed vs colocated). Greetings require predicate exactly `greet`. Memory reinforces existing beliefs only (`+0.08`, channel `remembered`); never mints. Unknown occurrence kinds leave the ledger unchanged. Caps drop with `cap_exceeded`.
   - Logging: DEBUG `convention_belief_applied` with owner id, tick, and sign. DEBUG `convention_memory_reinforced` with owner id and tick when remembered evidence applies. INFO `convention_belief_updated` with owner id and belief count. WARNING `convention_evidence_dropped` with reason `cap_exceeded`, `ignored_kind`, `unresolved_entity`, or `memory_no_match`. ERROR on owner mismatch. No participant lists and no utterance text.
@@ -174,21 +174,21 @@ Family id `persistent_social_conventions`. Tag `persistent_social_conventions@1`
   - Depends on task 1.
   - Files: `src/agents/cognition/social_conventions.py`, `tests/unit/test_social_conventions.py`.
 
-- [ ] Task 4: Promote candidates, fade explanations while habits persist, and link competing variants.
+- [x] Task 4: Promote candidates, fade explanations while habits persist, and link competing variants.
   - Deliverable: promote `candidate` → `active` under locked thresholds. After `explanation_fade_ticks` without the original practical cue but with continuing conforming evidence, set explanation `forgotten` and keep `active` when strength `>= 0.40`. Link competing variants that share situation key and differ in `usual_action` (cap 4). Two owners updated from the same occurrences keep separate ledgers. Decay `0.05` when no evidence this tick; retire below `0.20`.
   - Logging: DEBUG `convention_belief_promoted`, `convention_explanation_forgotten`, or `convention_belief_retired` with owner id, tick, and status. WARNING `convention_belief_withheld` with reason `below_count`, `below_strength`, or `candidate`. No participant lists.
   - Control: levels follow `PALIMPSEST_LOG_LEVEL`.
   - Depends on task 3.
   - Files: `src/agents/cognition/social_conventions.py`, `tests/unit/test_social_conventions.py`.
 
-- [ ] Task 5: Adopt conventions from communication and emit `usually` without creating commands.
+- [x] Task 5: Adopt conventions from communication and emit `usually` without creating commands.
   - Deliverable: listener path adopts/reinforces from predicate `usually` (and upgrades conceptualization to `named_custom` only from predicate `custom`). `convention_habit_penalties(...)` and communicate-prefer path use locked quantum `0.30`. Add `convention_communicate_utterance(...)` mirroring `norm_communicate_utterance` (returns relation recipe for an existing Talk; does not construct commands). Disabled mode and non-ledger return empty map / `None`. Missing preferred future records `no_candidate`. Functions do not construct `Talk`, `Give`, or `Wait`.
   - Logging: DEBUG `convention_transmission_applied` / `convention_response_selected` with owner id, tick, and channel/response. WARNING `convention_response_withheld` with reason `no_candidate`, `candidate_only`, or `utterance_interval`. No utterance text.
   - Control: levels follow `PALIMPSEST_LOG_LEVEL`.
   - Depends on task 4.
   - Files: `src/agents/cognition/social_conventions.py`, `tests/unit/test_social_conventions.py`.
 
-- [ ] Task 6: Prove world authority is unchanged by convention habits.
+- [x] Task 6: Prove world authority is unchanged by convention habits.
   - Deliverable: focused regression in `tests/unit/test_social_conventions_world.py`: meetings, greetings, gives, and collective waits still admit under current physical rules with no engine convention check. Tests call existing operations only.
   - Logging: DEBUG only on existing world loggers; no convention tokens in world logs.
   - Control: levels follow `PALIMPSEST_LOG_LEVEL`.

@@ -12,15 +12,18 @@ from __future__ import annotations
 import hashlib
 import logging
 import math
-from collections.abc import Sequence
-from dataclasses import dataclass
+from collections import defaultdict
+from collections.abc import Mapping, Sequence
+from dataclasses import dataclass, field
 from decimal import ROUND_HALF_UP, Decimal
 from enum import StrEnum
 from typing import Final
 
+from agents.cognition.models import ActionDirection, OwnerSafeSocialIdentity
 from agents.models import AgentId
 from world.identifiers import EntityId, require_exact_nonneg_int
-from world.values import DayPhase
+from world.observations import Observation, ObservedCommunication, ObservedOccurrence
+from world.values import DayPhase, ResourceKind
 
 _LOG: Final[logging.Logger] = logging.getLogger("agents.cognition.social_conventions")
 
@@ -702,3 +705,1270 @@ def require_owner_social_conventions(
             "owner_mismatch",
         )
         raise ValueError(f"{field_name} owner_id mismatch")
+
+
+@dataclass
+class _BeliefDraft:
+    content: ConventionContent
+    strength: float
+    status: ConventionStatus
+    repetition_count: int
+    participant_ids: list[AgentId]
+    first_tick: int | None
+    last_tick: int | None
+    transmission: ConventionTransmission
+    remembered_explanation: ConventionExplanation
+    competing_variant_ids: list[str]
+    conceptualization: ConventionConceptualization
+    evidence: list[ConventionEvidenceItem]
+    last_utterance_tick: int | None
+    explanation_cue_absent_ticks: int
+    notices: list[str] = field(default_factory=list)
+    touched: bool = False
+    cue_present: bool = False
+    initial_others: int = 0
+
+
+def _lineage(tick: int, ordinal: int, occurrence: ObservedOccurrence) -> str:
+    event_id = occurrence.provenance.source_event_id
+    if event_id is None:
+        return f"tick-{tick}-{ordinal}"
+    return event_id.value
+
+
+def _comm_lineage(tick: int, ordinal: int, communication: ObservedCommunication) -> str:
+    event_id = communication.provenance.source_event_id
+    if event_id is None:
+        return f"tick-{tick}-c{ordinal}"
+    return event_id.value
+
+
+def _resolve_agent(
+    identity: OwnerSafeSocialIdentity, entity_id: EntityId | None
+) -> AgentId | None:
+    if type(entity_id) is not EntityId:
+        return None
+    if entity_id == identity.owner_entity_id:
+        return identity.owner_id
+    for binding in identity.counterparts:
+        if binding.entity_id == entity_id:
+            return binding.agent_id
+    return None
+
+
+def _notice(notices: list[str], reason: str) -> None:
+    if reason not in notices:
+        notices.append(reason)
+
+
+def _log_drop(reason: str) -> None:
+    _LOG.warning("convention_evidence_dropped reason=%s", reason)
+
+
+def _situation_key(content: ConventionContent) -> str:
+    location = "-" if content.location_id is None else content.location_id.value
+    phase = "-" if content.day_phase is None else content.day_phase.value
+    return f"{content.situation.value}|{location}|{phase}"
+
+
+def _delta_for(
+    situation: ConventionSituation, policy: SocialConventionPolicy
+) -> float:
+    if situation is ConventionSituation.COLOCATED_MEETING:
+        return policy.conforming_colocated_meeting
+    if situation is ConventionSituation.TIMED_GATHERING:
+        return policy.conforming_timed_gathering
+    if situation is ConventionSituation.GREETING_EXCHANGE:
+        return policy.conforming_greeting_exchange
+    if situation is ConventionSituation.HABITUAL_EXCHANGE:
+        return policy.conforming_habitual_exchange
+    return policy.conforming_collective_action
+
+
+def _initial_explanation(
+    content: ConventionContent,
+    *,
+    others_present: int,
+    scarce: bool,
+) -> ConventionExplanation:
+    if content.situation in {
+        ConventionSituation.COLOCATED_MEETING,
+        ConventionSituation.TIMED_GATHERING,
+    }:
+        if others_present >= 2:
+            return ConventionExplanation.COORDINATION
+        return ConventionExplanation.SOCIAL_CONTACT
+    if content.situation is ConventionSituation.GREETING_EXCHANGE:
+        return ConventionExplanation.SOCIAL_CONTACT
+    if content.situation is ConventionSituation.HABITUAL_EXCHANGE:
+        if scarce:
+            return ConventionExplanation.RESOURCE_ACCESS
+        return ConventionExplanation.UNKNOWN
+    if content.situation is ConventionSituation.COLLECTIVE_ACTION:
+        if content.usual_action == "sleep":
+            return ConventionExplanation.FATIGUE_REST
+        if content.usual_action == "eat":
+            return ConventionExplanation.HUNGER_RELIEF
+    return ConventionExplanation.UNKNOWN
+
+
+def _scarce(observation: Observation) -> bool:
+    for resource in observation.resources:
+        if resource.kind is ResourceKind.FOOD and resource.quantity <= 1.0:
+            return True
+    return False
+
+
+def _drafts_from(
+    previous: ConventionLedger | None, owner_id: AgentId
+) -> list[_BeliefDraft]:
+    drafts: list[_BeliefDraft] = []
+    if previous is None:
+        return drafts
+    if previous.owner_id != owner_id:
+        _LOG.error(
+            "convention_validation_failed field=%s reason_code=%s",
+            "owner_id",
+            "owner_mismatch",
+        )
+        raise ValueError("owner_id: owner_mismatch")
+    for belief in previous.beliefs:
+        drafts.append(
+            _BeliefDraft(
+                content=belief.content,
+                strength=belief.strength,
+                status=belief.status,
+                repetition_count=belief.repetition_count,
+                participant_ids=list(belief.participant_ids),
+                first_tick=belief.first_tick,
+                last_tick=belief.last_tick,
+                transmission=belief.transmission,
+                remembered_explanation=belief.remembered_explanation,
+                competing_variant_ids=list(belief.competing_variant_ids),
+                conceptualization=belief.conceptualization,
+                evidence=list(belief.evidence),
+                last_utterance_tick=belief.last_utterance_tick,
+                explanation_cue_absent_ticks=belief.explanation_cue_absent_ticks,
+                notices=list(belief.notices),
+            )
+        )
+    return drafts
+
+
+def _find_draft(
+    drafts: list[_BeliefDraft], content: ConventionContent
+) -> _BeliefDraft | None:
+    key = convention_content_key(content)
+    for draft in drafts:
+        if convention_content_key(draft.content) == key:
+            return draft
+    return None
+
+
+def _merge_participants(
+    draft: _BeliefDraft,
+    participants: Sequence[AgentId],
+    notices: list[str],
+    policy: SocialConventionPolicy,
+) -> None:
+    seen = {agent.value for agent in draft.participant_ids}
+    for agent in participants:
+        if agent.value in seen:
+            continue
+        if len(draft.participant_ids) >= policy.max_participants:
+            _notice(notices, "cap_exceeded")
+            _log_drop("cap_exceeded")
+            return
+        draft.participant_ids.append(agent)
+        seen.add(agent.value)
+
+
+def _record_conforming(
+    *,
+    drafts: list[_BeliefDraft],
+    notices: list[str],
+    owner_id: AgentId,
+    content: ConventionContent,
+    delta: float,
+    channel: ConventionEvidenceChannel,
+    lineage_ref: str,
+    tick: int,
+    actor_id: AgentId | None,
+    participants: Sequence[AgentId],
+    policy: SocialConventionPolicy,
+    seen: set[tuple[str, str, str]],
+    others_present: int,
+    scarce: bool,
+    predicate: str | None = None,
+    transmission: ConventionTransmission | None = None,
+) -> None:
+    dedup = (content.situation.value, content.usual_action, lineage_ref)
+    if dedup in seen:
+        return
+    seen.add(dedup)
+    draft = _find_draft(drafts, content)
+    if draft is None:
+        if len(drafts) >= policy.max_beliefs:
+            _notice(notices, "cap_exceeded")
+            _log_drop("cap_exceeded")
+            return
+        draft = _BeliefDraft(
+            content=content,
+            strength=0.0,
+            status=ConventionStatus.CANDIDATE,
+            repetition_count=0,
+            participant_ids=[],
+            first_tick=tick,
+            last_tick=tick,
+            transmission=transmission or ConventionTransmission.OBSERVED,
+            remembered_explanation=_initial_explanation(
+                content, others_present=others_present, scarce=scarce
+            ),
+            competing_variant_ids=[],
+            conceptualization=ConventionConceptualization.NONE,
+            evidence=[],
+            last_utterance_tick=None,
+            explanation_cue_absent_ticks=0,
+            initial_others=others_present,
+        )
+        drafts.append(draft)
+    if len(draft.evidence) >= policy.max_evidence:
+        _notice(notices, "cap_exceeded")
+        _log_drop("cap_exceeded")
+        return
+    before = draft.strength
+    draft.strength = _apply_delta(before, delta)
+    draft.repetition_count += 1
+    if draft.first_tick is None:
+        draft.first_tick = tick
+    draft.last_tick = tick
+    draft.touched = True
+    draft.cue_present = True
+    if transmission is not None:
+        if (
+            draft.transmission is ConventionTransmission.OBSERVED
+            and transmission is ConventionTransmission.COMMUNICATED
+        ):
+            draft.transmission = ConventionTransmission.BOTH
+        elif draft.transmission is ConventionTransmission.COMMUNICATED and (
+            transmission is ConventionTransmission.OBSERVED
+        ):
+            draft.transmission = ConventionTransmission.BOTH
+        elif draft.transmission is ConventionTransmission.OBSERVED:
+            draft.transmission = transmission
+    _merge_participants(draft, participants, notices, policy)
+    belief_id = convention_belief_id(owner_id, draft.content)
+    ordinal = len(draft.evidence)
+    draft.evidence.append(
+        ConventionEvidenceItem(
+            evidence_id=convention_evidence_id(
+                belief_id, ordinal, channel, lineage_ref
+            ),
+            ordinal=ordinal,
+            channel=channel,
+            lineage_ref=lineage_ref,
+            tick=tick,
+            actor_id=actor_id,
+            predicate=predicate,
+        )
+    )
+    if (
+        draft.status is ConventionStatus.RETIRED
+        and channel is ConventionEvidenceChannel.OBSERVED
+    ):
+        draft.status = ConventionStatus.CANDIDATE
+    _LOG.debug(
+        "convention_belief_applied owner_id=%s tick=%s sign=%s",
+        owner_id.value,
+        tick,
+        _sign(before, draft.strength),
+    )
+
+
+def _present_agents(
+    observation: Observation,
+    identity: OwnerSafeSocialIdentity,
+    notices: list[str],
+) -> list[AgentId]:
+    present: list[AgentId] = []
+    seen: set[str] = set()
+    if observation.self_body is not None:
+        present.append(identity.owner_id)
+        seen.add(identity.owner_id.value)
+    for body in observation.visible_bodies:
+        agent = _resolve_agent(identity, body.entity_id)
+        if agent is None:
+            _notice(notices, "unresolved_entity")
+            _log_drop("unresolved_entity")
+            continue
+        if agent.value not in seen:
+            present.append(agent)
+            seen.add(agent.value)
+    return present
+
+
+def _apply_meeting_evidence(
+    *,
+    observation: Observation,
+    identity: OwnerSafeSocialIdentity,
+    drafts: list[_BeliefDraft],
+    notices: list[str],
+    policy: SocialConventionPolicy,
+    seen: set[tuple[str, str, str]],
+    scarce: bool,
+) -> None:
+    present = _present_agents(observation, identity, notices)
+    if len(present) < 2:
+        return
+    location = (
+        None if observation.self_body is None else observation.self_body.location_id
+    )
+    tick = observation.tick
+    others = len(present) - 1
+    for ordinal, occurrence in enumerate(observation.occurrences):
+        if occurrence.kind not in {"wait", "talk"}:
+            continue
+        actor = _resolve_agent(identity, occurrence.actor_id)
+        if actor is None:
+            if occurrence.actor_id is not None:
+                _notice(notices, "unresolved_entity")
+                _log_drop("unresolved_entity")
+            continue
+        if actor.value not in {agent.value for agent in present}:
+            continue
+        if observation.day_phase is None:
+            situation = ConventionSituation.COLOCATED_MEETING
+            day_phase = None
+        else:
+            situation = ConventionSituation.TIMED_GATHERING
+            day_phase = observation.day_phase
+        if situation is ConventionSituation.TIMED_GATHERING:
+            phase_mismatch = False
+            for draft in drafts:
+                if (
+                    draft.content.situation is ConventionSituation.TIMED_GATHERING
+                    and draft.content.usual_action == occurrence.kind
+                    and draft.content.location_id == location
+                    and draft.content.day_phase is not None
+                    and draft.content.day_phase is not day_phase
+                ):
+                    phase_mismatch = True
+                    break
+            if phase_mismatch:
+                continue
+        content = ConventionContent(
+            situation=situation,
+            usual_action=occurrence.kind,
+            location_id=location,
+            day_phase=day_phase,
+            counterpart_class=ConventionCounterpartClass.ANY_PRESENT,
+        )
+        _record_conforming(
+            drafts=drafts,
+            notices=notices,
+            owner_id=identity.owner_id,
+            content=content,
+            delta=_delta_for(situation, policy),
+            channel=ConventionEvidenceChannel.OBSERVED,
+            lineage_ref=_lineage(tick, ordinal, occurrence),
+            tick=tick,
+            actor_id=actor,
+            participants=present,
+            policy=policy,
+            seen=seen,
+            others_present=others,
+            scarce=scarce,
+        )
+
+
+def _apply_greeting_evidence(
+    *,
+    observation: Observation,
+    identity: OwnerSafeSocialIdentity,
+    drafts: list[_BeliefDraft],
+    notices: list[str],
+    policy: SocialConventionPolicy,
+    seen: set[tuple[str, str, str]],
+    scarce: bool,
+) -> None:
+    location = (
+        None if observation.self_body is None else observation.self_body.location_id
+    )
+    tick = observation.tick
+    for ordinal, communication in enumerate(observation.communications):
+        if communication.action_kind not in {"talk", "ask", "tell"}:
+            continue
+        hop = communication.utterance.declared.hop_count
+        if hop not in {0, 1}:
+            continue
+        relations = communication.utterance.content.relations
+        if not any(relation.predicate == "greet" for relation in relations):
+            continue
+        speaker = _resolve_agent(identity, communication.speaker_id)
+        listener = _resolve_agent(identity, communication.listener_id)
+        if speaker is None or listener is None:
+            _notice(notices, "unresolved_entity")
+            _log_drop("unresolved_entity")
+            continue
+        content = ConventionContent(
+            situation=ConventionSituation.GREETING_EXCHANGE,
+            usual_action="talk",
+            location_id=location,
+            counterpart_class=ConventionCounterpartClass.ANY_PRESENT,
+        )
+        _record_conforming(
+            drafts=drafts,
+            notices=notices,
+            owner_id=identity.owner_id,
+            content=content,
+            delta=policy.conforming_greeting_exchange,
+            channel=ConventionEvidenceChannel.OBSERVED,
+            lineage_ref=_comm_lineage(tick, ordinal, communication),
+            tick=tick,
+            actor_id=speaker,
+            participants=(speaker, listener),
+            policy=policy,
+            seen=seen,
+            others_present=1,
+            scarce=scarce,
+            predicate="greet",
+        )
+
+
+def _apply_give_evidence(
+    *,
+    observation: Observation,
+    identity: OwnerSafeSocialIdentity,
+    drafts: list[_BeliefDraft],
+    notices: list[str],
+    policy: SocialConventionPolicy,
+    seen: set[tuple[str, str, str]],
+    scarce: bool,
+) -> None:
+    location = (
+        None if observation.self_body is None else observation.self_body.location_id
+    )
+    tick = observation.tick
+    owner = identity.owner_id
+    for ordinal, occurrence in enumerate(observation.occurrences):
+        if occurrence.kind != "give":
+            continue
+        if occurrence.success is False:
+            continue
+        actor = _resolve_agent(identity, occurrence.actor_id)
+        other = _resolve_agent(identity, occurrence.other_entity_id)
+        if actor is None or other is None:
+            if (
+                occurrence.actor_id is not None
+                or occurrence.other_entity_id is not None
+            ):
+                _notice(notices, "unresolved_entity")
+                _log_drop("unresolved_entity")
+            continue
+        involved = owner in {actor, other}
+        witnessed = observation.self_body is not None and len(
+            observation.visible_bodies
+        ) >= 0
+        if not involved and not witnessed:
+            continue
+        if actor == owner:
+            counterpart = other
+        elif other == owner:
+            counterpart = actor
+        else:
+            counterpart = other
+        content = ConventionContent(
+            situation=ConventionSituation.HABITUAL_EXCHANGE,
+            usual_action="give",
+            location_id=location,
+            counterpart_class=ConventionCounterpartClass.SPECIFIC_AGENT,
+            counterpart_id=counterpart,
+        )
+        _record_conforming(
+            drafts=drafts,
+            notices=notices,
+            owner_id=owner,
+            content=content,
+            delta=policy.conforming_habitual_exchange,
+            channel=ConventionEvidenceChannel.OBSERVED,
+            lineage_ref=_lineage(tick, ordinal, occurrence),
+            tick=tick,
+            actor_id=actor,
+            participants=(actor, other),
+            policy=policy,
+            seen=seen,
+            others_present=1,
+            scarce=scarce,
+        )
+
+
+def _apply_collective_evidence(
+    *,
+    observation: Observation,
+    identity: OwnerSafeSocialIdentity,
+    drafts: list[_BeliefDraft],
+    notices: list[str],
+    policy: SocialConventionPolicy,
+    seen: set[tuple[str, str, str]],
+    scarce: bool,
+) -> None:
+    location = (
+        None if observation.self_body is None else observation.self_body.location_id
+    )
+    tick = observation.tick
+    by_kind: dict[str, list[tuple[int, ObservedOccurrence, AgentId]]] = defaultdict(
+        list
+    )
+    for ordinal, occurrence in enumerate(observation.occurrences):
+        if occurrence.kind not in _USUAL_ACTIONS:
+            if "ignored_kind" not in notices:
+                _notice(notices, "ignored_kind")
+                _log_drop("ignored_kind")
+            continue
+        actor = _resolve_agent(identity, occurrence.actor_id)
+        if actor is None:
+            if occurrence.actor_id is not None:
+                _notice(notices, "unresolved_entity")
+                _log_drop("unresolved_entity")
+            continue
+        by_kind[occurrence.kind].append((ordinal, occurrence, actor))
+    for kind, items in by_kind.items():
+        agents = []
+        seen_agents: set[str] = set()
+        for _, _, agent in items:
+            if agent.value not in seen_agents:
+                agents.append(agent)
+                seen_agents.add(agent.value)
+        if len(agents) < 2:
+            continue
+        # One conforming update per kind this tick using first lineage.
+        ordinal, occurrence, actor = items[0]
+        content = ConventionContent(
+            situation=ConventionSituation.COLLECTIVE_ACTION,
+            usual_action=kind,
+            location_id=location,
+            counterpart_class=ConventionCounterpartClass.ANY_PRESENT,
+        )
+        _record_conforming(
+            drafts=drafts,
+            notices=notices,
+            owner_id=identity.owner_id,
+            content=content,
+            delta=policy.conforming_collective_action,
+            channel=ConventionEvidenceChannel.OBSERVED,
+            lineage_ref=_lineage(tick, ordinal, occurrence),
+            tick=tick,
+            actor_id=actor,
+            participants=agents[: policy.max_participants],
+            policy=policy,
+            seen=seen,
+            others_present=len(agents) - 1,
+            scarce=scarce,
+        )
+
+
+def _memory_tokens(trace: object) -> tuple[set[str], list[tuple[str, str, str]]]:
+    concepts: set[str] = set()
+    relations: list[tuple[str, str, str]] = []
+    for item in getattr(trace, "concepts", ()) or ():
+        token = getattr(item, "concept", None)
+        if isinstance(token, str):
+            concepts.add(token)
+    concept_by_id: dict[str, str] = {}
+    for item in getattr(trace, "concepts", ()) or ():
+        mention = getattr(item, "mention_id", None)
+        token = getattr(item, "concept", None)
+        if mention is not None and isinstance(token, str):
+            concept_by_id[getattr(mention, "value", "")] = token
+    for item in getattr(trace, "relations", ()) or ():
+        predicate = getattr(item, "predicate", None)
+        subject = getattr(item, "subject", None)
+        obj = getattr(item, "object", None)
+        if not isinstance(predicate, str):
+            continue
+        subject_token = ""
+        object_token = ""
+        if subject is not None:
+            mid = getattr(getattr(subject, "mention_id", None), "value", "")
+            subject_token = concept_by_id.get(mid, mid)
+        if obj is not None:
+            mid = getattr(getattr(obj, "mention_id", None), "value", "")
+            object_token = concept_by_id.get(mid, mid)
+        relations.append((subject_token, predicate, object_token))
+    return concepts, relations
+
+
+def _apply_memory_reinforcement(
+    *,
+    memories: Sequence[object] | None,
+    drafts: list[_BeliefDraft],
+    notices: list[str],
+    owner_id: AgentId,
+    tick: int,
+    policy: SocialConventionPolicy,
+) -> None:
+    if not memories or not drafts:
+        return
+    remembered_seen: set[tuple[str, str]] = set()
+    content_keys = {
+        convention_content_key(draft.content): draft for draft in drafts
+    }
+    situation_tokens = {draft.content.situation.value for draft in drafts}
+    action_tokens = {draft.content.usual_action for draft in drafts}
+    matched_any = False
+    for trace in memories:
+        forgotten = getattr(trace, "forgotten_at_tick", None)
+        expires = getattr(trace, "expires_at_tick", None)
+        if forgotten is not None:
+            continue
+        if expires is not None and isinstance(expires, int) and expires <= tick:
+            continue
+        memory_id = getattr(getattr(trace, "memory_id", None), "value", None)
+        if not isinstance(memory_id, str) or not memory_id:
+            continue
+        concepts, relations = _memory_tokens(trace)
+        matched_drafts: list[_BeliefDraft] = []
+        for key, draft in content_keys.items():
+            situation = draft.content.situation.value
+            action = draft.content.usual_action
+            if situation in concepts and action in concepts:
+                matched_drafts.append(draft)
+                continue
+            for subject, predicate, obj in relations:
+                if predicate not in {"usually", "greet", "custom"}:
+                    continue
+                if subject == situation and obj == action:
+                    matched_drafts.append(draft)
+                    break
+                if key in {subject, obj} or situation in {subject, obj}:
+                    matched_drafts.append(draft)
+                    break
+        if not matched_drafts and (
+            situation_tokens & concepts or action_tokens & concepts
+        ):
+            # Concepts alone without a full content key do not mint or reinforce.
+            pass
+        for draft in matched_drafts:
+            belief_id = convention_belief_id(owner_id, draft.content)
+            dedup = (belief_id, memory_id)
+            if dedup in remembered_seen:
+                continue
+            remembered_seen.add(dedup)
+            if len(draft.evidence) >= policy.max_evidence:
+                _notice(notices, "cap_exceeded")
+                _log_drop("cap_exceeded")
+                continue
+            before = draft.strength
+            draft.strength = _apply_delta(before, policy.remembered_delta)
+            draft.repetition_count += 1
+            draft.touched = True
+            if draft.last_tick is None or tick > draft.last_tick:
+                draft.last_tick = tick
+            ordinal = len(draft.evidence)
+            draft.evidence.append(
+                ConventionEvidenceItem(
+                    evidence_id=convention_evidence_id(
+                        belief_id,
+                        ordinal,
+                        ConventionEvidenceChannel.REMEMBERED,
+                        memory_id,
+                    ),
+                    ordinal=ordinal,
+                    channel=ConventionEvidenceChannel.REMEMBERED,
+                    lineage_ref=memory_id,
+                    tick=tick,
+                )
+            )
+            matched_any = True
+            _LOG.debug(
+                "convention_memory_reinforced owner_id=%s tick=%s",
+                owner_id.value,
+                tick,
+            )
+    if memories and drafts and not matched_any:
+        _notice(notices, "memory_no_match")
+        _log_drop("memory_no_match")
+
+
+def _apply_transmission(
+    *,
+    observation: Observation,
+    identity: OwnerSafeSocialIdentity,
+    drafts: list[_BeliefDraft],
+    notices: list[str],
+    policy: SocialConventionPolicy,
+    seen: set[tuple[str, str, str]],
+    scarce: bool,
+) -> None:
+    location = (
+        None if observation.self_body is None else observation.self_body.location_id
+    )
+    tick = observation.tick
+    owner_entity = identity.owner_entity_id
+    for ordinal, communication in enumerate(observation.communications):
+        if communication.listener_id != owner_entity:
+            continue
+        if communication.action_kind not in {"talk", "ask", "tell"}:
+            continue
+        hop = communication.utterance.declared.hop_count
+        if hop not in {0, 1}:
+            continue
+        speaker = _resolve_agent(identity, communication.speaker_id)
+        if speaker is None:
+            _notice(notices, "unresolved_entity")
+            _log_drop("unresolved_entity")
+            continue
+        for relation in communication.utterance.content.relations:
+            predicate = relation.predicate
+            if predicate not in {"usually", "custom"}:
+                continue
+            situation_token = relation.subject
+            action_token = relation.object
+            try:
+                situation = ConventionSituation(situation_token)
+            except ValueError:
+                continue
+            if action_token not in _USUAL_ACTIONS:
+                continue
+            content = ConventionContent(
+                situation=situation,
+                usual_action=action_token,
+                location_id=location,
+                day_phase=(
+                    observation.day_phase
+                    if situation is ConventionSituation.TIMED_GATHERING
+                    else None
+                ),
+                counterpart_class=ConventionCounterpartClass.ANY_PRESENT,
+            )
+            if predicate == "custom":
+                draft = _find_draft(drafts, content)
+                if draft is None:
+                    continue
+                if len(draft.evidence) >= policy.max_evidence:
+                    _notice(notices, "cap_exceeded")
+                    _log_drop("cap_exceeded")
+                    continue
+                belief_id = convention_belief_id(identity.owner_id, draft.content)
+                lineage = _comm_lineage(tick, ordinal, communication)
+                ordinal_e = len(draft.evidence)
+                draft.evidence.append(
+                    ConventionEvidenceItem(
+                        evidence_id=convention_evidence_id(
+                            belief_id,
+                            ordinal_e,
+                            ConventionEvidenceChannel.COMMUNICATED,
+                            lineage,
+                        ),
+                        ordinal=ordinal_e,
+                        channel=ConventionEvidenceChannel.COMMUNICATED,
+                        lineage_ref=lineage,
+                        tick=tick,
+                        actor_id=speaker,
+                        predicate="custom",
+                    )
+                )
+                draft.conceptualization = ConventionConceptualization.NAMED_CUSTOM
+                draft.touched = True
+                _LOG.debug(
+                    "convention_transmission_applied owner_id=%s tick=%s "
+                    "channel=%s",
+                    identity.owner_id.value,
+                    tick,
+                    "custom",
+                )
+                continue
+            _record_conforming(
+                drafts=drafts,
+                notices=notices,
+                owner_id=identity.owner_id,
+                content=content,
+                delta=policy.transmission_delta,
+                channel=ConventionEvidenceChannel.COMMUNICATED,
+                lineage_ref=_comm_lineage(tick, ordinal, communication),
+                tick=tick,
+                actor_id=speaker,
+                participants=(speaker, identity.owner_id),
+                policy=policy,
+                seen=seen,
+                others_present=1,
+                scarce=scarce,
+                predicate="usually",
+                transmission=ConventionTransmission.COMMUNICATED,
+            )
+            draft = _find_draft(drafts, content)
+            if (
+                draft is not None
+                and draft.conceptualization is ConventionConceptualization.NONE
+            ):
+                draft.conceptualization = ConventionConceptualization.NAMED_USUAL
+            _LOG.debug(
+                "convention_transmission_applied owner_id=%s tick=%s channel=%s",
+                identity.owner_id.value,
+                tick,
+                "communicated",
+            )
+
+
+def _practical_cue_present(draft: _BeliefDraft, observation: Observation) -> bool:
+    explanation = draft.remembered_explanation
+    if explanation is ConventionExplanation.FORGOTTEN:
+        return False
+    if explanation is ConventionExplanation.RESOURCE_ACCESS:
+        return _scarce(observation)
+    if explanation is ConventionExplanation.COORDINATION:
+        return len(observation.visible_bodies) >= 2
+    if explanation is ConventionExplanation.SOCIAL_CONTACT:
+        return len(observation.visible_bodies) >= 1
+    if explanation is ConventionExplanation.FATIGUE_REST:
+        return any(
+            occurrence.kind == "sleep" for occurrence in observation.occurrences
+        )
+    if explanation is ConventionExplanation.HUNGER_RELIEF:
+        return any(occurrence.kind == "eat" for occurrence in observation.occurrences)
+    if explanation is ConventionExplanation.UNKNOWN:
+        return True
+    return False
+
+
+def _fade_explanations(
+    drafts: list[_BeliefDraft],
+    observation: Observation,
+    policy: SocialConventionPolicy,
+    owner_id: AgentId,
+) -> None:
+    tick = observation.tick
+    for draft in drafts:
+        if draft.status is ConventionStatus.RETIRED:
+            continue
+        if draft.remembered_explanation is ConventionExplanation.FORGOTTEN:
+            continue
+        # Reason fade requires continuing conforming evidence without the cue.
+        if not draft.touched:
+            continue
+        if _practical_cue_present(draft, observation):
+            draft.explanation_cue_absent_ticks = 0
+            continue
+        draft.explanation_cue_absent_ticks += 1
+        if draft.explanation_cue_absent_ticks >= policy.explanation_fade_ticks:
+            draft.remembered_explanation = ConventionExplanation.FORGOTTEN
+            _LOG.debug(
+                "convention_explanation_forgotten owner_id=%s tick=%s status=%s",
+                owner_id.value,
+                tick,
+                draft.status.value,
+            )
+
+
+def _promote(
+    drafts: list[_BeliefDraft],
+    owner_id: AgentId,
+    tick: int,
+    policy: SocialConventionPolicy,
+    notices: list[str],
+) -> None:
+    for draft in drafts:
+        if draft.status is not ConventionStatus.CANDIDATE:
+            continue
+        participants = len(draft.participant_ids)
+        min_participants = 1 if (
+            draft.content.situation is ConventionSituation.HABITUAL_EXCHANGE
+        ) else 2
+        if draft.repetition_count < policy.promotion_count:
+            _notice(notices, "below_count")
+            _LOG.warning("convention_belief_withheld reason=%s", "below_count")
+            continue
+        if participants < min_participants:
+            _notice(notices, "below_count")
+            _LOG.warning("convention_belief_withheld reason=%s", "below_count")
+            continue
+        if draft.strength < policy.active_strength:
+            _notice(notices, "below_strength")
+            _LOG.warning("convention_belief_withheld reason=%s", "below_strength")
+            continue
+        draft.status = ConventionStatus.ACTIVE
+        _LOG.debug(
+            "convention_belief_promoted owner_id=%s tick=%s status=%s",
+            owner_id.value,
+            tick,
+            draft.status.value,
+        )
+
+
+def _link_variants(
+    drafts: list[_BeliefDraft],
+    owner_id: AgentId,
+    policy: SocialConventionPolicy,
+    notices: list[str],
+) -> None:
+    by_key: dict[str, list[_BeliefDraft]] = defaultdict(list)
+    for draft in drafts:
+        if draft.status is ConventionStatus.RETIRED:
+            continue
+        by_key[_situation_key(draft.content)].append(draft)
+    for group in by_key.values():
+        if len(group) < 2:
+            continue
+        ids = [convention_belief_id(owner_id, draft.content) for draft in group]
+        for index, draft in enumerate(group):
+            others = [item for j, item in enumerate(ids) if j != index]
+            for other in others:
+                if other in draft.competing_variant_ids:
+                    continue
+                if len(draft.competing_variant_ids) >= policy.max_variants:
+                    _notice(notices, "cap_exceeded")
+                    _log_drop("cap_exceeded")
+                    break
+                draft.competing_variant_ids.append(other)
+
+
+def _decay(
+    drafts: list[_BeliefDraft],
+    owner_id: AgentId,
+    tick: int,
+    policy: SocialConventionPolicy,
+) -> None:
+    for draft in drafts:
+        if draft.status is ConventionStatus.RETIRED:
+            continue
+        if draft.touched:
+            continue
+        before = draft.strength
+        draft.strength = _apply_delta(before, -policy.decay)
+        if draft.strength < policy.retire_strength:
+            draft.status = ConventionStatus.RETIRED
+            _LOG.debug(
+                "convention_belief_retired owner_id=%s tick=%s status=%s",
+                owner_id.value,
+                tick,
+                draft.status.value,
+            )
+
+
+def _freeze(
+    owner_id: AgentId,
+    drafts: list[_BeliefDraft],
+    notices: list[str],
+    plans: Sequence[ConventionUtterancePlan] = (),
+) -> ConventionLedger:
+    beliefs: list[ConventionBelief] = []
+    for draft in drafts:
+        beliefs.append(
+            ConventionBelief(
+                belief_id=convention_belief_id(owner_id, draft.content),
+                owner_id=owner_id,
+                content=draft.content,
+                status=draft.status,
+                strength=draft.strength,
+                repetition_count=draft.repetition_count,
+                participant_ids=tuple(draft.participant_ids),
+                first_tick=draft.first_tick,
+                last_tick=draft.last_tick,
+                transmission=draft.transmission,
+                remembered_explanation=draft.remembered_explanation,
+                competing_variant_ids=tuple(draft.competing_variant_ids),
+                conceptualization=draft.conceptualization,
+                evidence=tuple(draft.evidence),
+                last_utterance_tick=draft.last_utterance_tick,
+                explanation_cue_absent_ticks=draft.explanation_cue_absent_ticks,
+                notices=tuple(draft.notices),
+            )
+        )
+    return ConventionLedger(
+        owner_id=owner_id,
+        beliefs=tuple(beliefs),
+        notices=tuple(notices),
+        utterance_plans=tuple(plans),
+    )
+
+
+def apply_convention_update(
+    observation: object,
+    identity: object,
+    previous: object = None,
+    memories: Sequence[object] | None = None,
+    policy: SocialConventionPolicy | None = None,
+) -> ConventionLedger:
+    """Apply one tick of habit evidence for a single owner.
+
+    Disabled callers do not call this function. Passing world authority or a
+    metric document raises ``TypeError``. Memory reinforces existing beliefs
+    only and never mints a new belief.
+    """
+    _LOG.debug(
+        "apply_convention_update owner_id=%s tick=%s",
+        getattr(getattr(identity, "owner_id", None), "value", None),
+        getattr(observation, "tick", None),
+    )
+    for value in (observation, identity, previous, policy, memories):
+        _reject_forbidden(value)
+    if memories is not None:
+        for item in memories:
+            _reject_forbidden(item)
+    if type(observation) is not Observation:
+        raise TypeError("observation must be Observation")
+    if type(identity) is not OwnerSafeSocialIdentity:
+        raise TypeError("identity must be OwnerSafeSocialIdentity")
+    if previous is not None and type(previous) is not ConventionLedger:
+        raise TypeError("previous must be ConventionLedger or None")
+    active_policy = default_social_convention_policy() if policy is None else policy
+    if type(active_policy) is not SocialConventionPolicy:
+        raise TypeError("policy must be SocialConventionPolicy")
+    owner_id = identity.owner_id
+    tick = observation.tick
+    drafts = _drafts_from(previous, owner_id)
+    notices: list[str] = []
+    seen: set[tuple[str, str, str]] = set()
+    scarce = _scarce(observation)
+
+    _apply_meeting_evidence(
+        observation=observation,
+        identity=identity,
+        drafts=drafts,
+        notices=notices,
+        policy=active_policy,
+        seen=seen,
+        scarce=scarce,
+    )
+    _apply_greeting_evidence(
+        observation=observation,
+        identity=identity,
+        drafts=drafts,
+        notices=notices,
+        policy=active_policy,
+        seen=seen,
+        scarce=scarce,
+    )
+    _apply_give_evidence(
+        observation=observation,
+        identity=identity,
+        drafts=drafts,
+        notices=notices,
+        policy=active_policy,
+        seen=seen,
+        scarce=scarce,
+    )
+    _apply_collective_evidence(
+        observation=observation,
+        identity=identity,
+        drafts=drafts,
+        notices=notices,
+        policy=active_policy,
+        seen=seen,
+        scarce=scarce,
+    )
+    _apply_transmission(
+        observation=observation,
+        identity=identity,
+        drafts=drafts,
+        notices=notices,
+        policy=active_policy,
+        seen=seen,
+        scarce=scarce,
+    )
+    _apply_memory_reinforcement(
+        memories=memories,
+        drafts=drafts,
+        notices=notices,
+        owner_id=owner_id,
+        tick=tick,
+        policy=active_policy,
+    )
+    _fade_explanations(drafts, observation, active_policy, owner_id)
+    _promote(drafts, owner_id, tick, active_policy, notices)
+    _link_variants(drafts, owner_id, active_policy, notices)
+    _decay(drafts, owner_id, tick, active_policy)
+    ledger = _freeze(owner_id, drafts, notices)
+    _LOG.info(
+        "convention_belief_updated owner_id=%s belief_count=%s",
+        owner_id.value,
+        len(ledger.beliefs),
+    )
+    return ledger
+
+
+def _direction_value(future: object) -> str | None:
+    direction = getattr(future, "direction", None)
+    if type(direction) is ActionDirection:
+        return direction.value
+    value = getattr(direction, "value", None)
+    return value if isinstance(value, str) else None
+
+
+def _future_id(future: object) -> str | None:
+    value = getattr(future, "future_id", None)
+    return value if isinstance(value, str) and value else None
+
+
+def _observation_matches_situation(
+    observation: Observation, content: ConventionContent
+) -> bool:
+    if content.location_id is not None and observation.self_body is not None:
+        if observation.self_body.location_id != content.location_id:
+            return False
+    if content.situation is ConventionSituation.TIMED_GATHERING:
+        return (
+            observation.day_phase is not None
+            and content.day_phase is not None
+            and observation.day_phase is content.day_phase
+        )
+    if content.situation is ConventionSituation.COLOCATED_MEETING:
+        return observation.day_phase is None and len(observation.visible_bodies) >= 1
+    if content.situation is ConventionSituation.GREETING_EXCHANGE:
+        return True
+    if content.situation is ConventionSituation.HABITUAL_EXCHANGE:
+        return True
+    if content.situation is ConventionSituation.COLLECTIVE_ACTION:
+        return len(observation.visible_bodies) >= 1
+    return False
+
+
+def convention_habit_penalties(
+    ledger: object,
+    observation: object,
+    futures: Sequence[object],
+    *,
+    mode: object | None = None,
+    policy: SocialConventionPolicy | None = None,
+) -> Mapping[str, float]:
+    """Penalize non-matching futures. Does not construct commands."""
+    _reject_forbidden(observation)
+    _reject_forbidden(ledger)
+    if mode is not None:
+        from agents.cognition.configuration import CognitionSocialConventionMode
+
+        if mode is not CognitionSocialConventionMode.DETERMINISTIC:
+            return {}
+    if ledger is None or type(ledger) is not ConventionLedger:
+        return {}
+    if type(observation) is not Observation:
+        raise TypeError("observation must be Observation")
+    active_policy = default_social_convention_policy() if policy is None else policy
+    if type(active_policy) is not SocialConventionPolicy:
+        raise TypeError("policy must be SocialConventionPolicy")
+    penalties: dict[str, float] = {}
+    notices: list[str] = []
+    for belief in ledger.beliefs:
+        if belief.status is not ConventionStatus.ACTIVE:
+            if belief.status is ConventionStatus.CANDIDATE:
+                _notice(notices, "candidate_only")
+                _LOG.warning(
+                    "convention_response_withheld reason=%s", "candidate_only"
+                )
+            continue
+        if belief.strength < active_policy.active_strength:
+            continue
+        if not _observation_matches_situation(observation, belief.content):
+            continue
+        preferred = belief.content.usual_action
+        # Map talk/give to planner directions where needed.
+        preferred_directions = {preferred}
+        if preferred == "talk":
+            preferred_directions.add(ActionDirection.COMMUNICATE.value)
+        if preferred == "give":
+            preferred_directions.add(ActionDirection.HELP.value)
+        matching_ids = [
+            future_id
+            for future in futures
+            if (future_id := _future_id(future)) is not None
+            and _direction_value(future) in preferred_directions
+        ]
+        if not matching_ids:
+            _notice(notices, "no_candidate")
+            _LOG.warning("convention_response_withheld reason=%s", "no_candidate")
+            continue
+        for future in futures:
+            future_id = _future_id(future)
+            if future_id is None or future_id in matching_ids:
+                continue
+            current = penalties.get(future_id, 0.0)
+            total = _apply_delta(current, active_policy.penalty)
+            if total < 0.0:
+                raise _fail("penalty", "negative_penalty")
+            penalties[future_id] = total
+        _LOG.debug(
+            "convention_response_selected owner_id=%s tick=%s response=%s",
+            ledger.owner_id.value,
+            observation.tick,
+            "habit",
+        )
+    return penalties
+
+
+def convention_communicate_utterance(
+    command: object,
+    *,
+    owner_id: AgentId,
+    tick: int,
+    observation: Observation,
+    identity: OwnerSafeSocialIdentity | None,
+    ledger: object | None,
+    mode: object | None,
+) -> object:
+    """Stamp an existing Talk command with one convention relation recipe."""
+    from agents.cognition.configuration import CognitionSocialConventionMode
+    from world.actions import Talk
+    from world.communications import (
+        CommunicationRelation,
+        CommunicationSourceBasis,
+        origin_utterance,
+    )
+
+    if mode is not CognitionSocialConventionMode.DETERMINISTIC:
+        return command
+    if type(observation) is not Observation:
+        return command
+    if type(command) is not Talk:
+        return command
+    if type(ledger) is not ConventionLedger or not ledger.beliefs:
+        return command
+    if identity is None:
+        return command
+    if observation.tick != tick:
+        return command
+    policy = default_social_convention_policy()
+    chosen: ConventionBelief | None = None
+    for belief in ledger.beliefs:
+        if belief.status is not ConventionStatus.ACTIVE:
+            continue
+        if belief.strength < policy.active_strength:
+            continue
+        if belief.last_utterance_tick is not None and (
+            tick - belief.last_utterance_tick < policy.utterance_interval
+        ):
+            _LOG.warning(
+                "convention_response_withheld reason=%s", "utterance_interval"
+            )
+            continue
+        chosen = belief
+        break
+    if chosen is None:
+        return command
+    predicate = (
+        "custom"
+        if chosen.conceptualization is ConventionConceptualization.NAMED_CUSTOM
+        else "usually"
+    )
+    utterance = origin_utterance(
+        text=predicate,
+        speaker_id=identity.owner_entity_id,
+        communication_id=(
+            f"social-conventions-{owner_id.value}-{tick}-"
+            f"{chosen.content.situation.value}"
+        ),
+        relations=(
+            CommunicationRelation(
+                subject=chosen.content.situation.value,
+                predicate=predicate,
+                object=chosen.content.usual_action,
+            ),
+        ),
+        source_basis=CommunicationSourceBasis.UNREFERENCED,
+    )
+    _LOG.debug(
+        "convention_response_selected owner_id=%s tick=%s response=%s",
+        owner_id.value,
+        tick,
+        "communicate",
+    )
+    return Talk(recipient_id=command.recipient_id, utterance=utterance)

@@ -999,5 +999,7 @@ def build_cognitive_loop(
         group_formation_policy=resolved.group_formation_policy,
         social_norm_mode=resolved.social_norm_mode,
         social_norm_policy=resolved.social_norm_policy,
+        social_convention_mode=resolved.social_convention_mode,
+        social_convention_policy=resolved.social_convention_policy,
         production_knowledge_mode=resolved.production_knowledge_mode,
     )
