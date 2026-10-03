@@ -69,6 +69,60 @@ Identical re-writes are idempotent; divergent reuse conflicts. SQLAlchemy adapte
 
 `ExperimentCoordinator` materializes assignments in condition × seed × replicate order and runs one fresh `SimulationRunner` per arm. Optional story intervention arbiter binds before pending subjective state is created.
 
+## Experiment matrices (`experiment-matrix-v1`)
+
+Additive research batch orchestration over catalog applicators. Matrix documents expand into existing `experiment-definition-v1` arms + `SimulationRunnerConfig`; they do **not** bump runner-config schema sets or own `multi_hop_testimony_tracking`. Matrix batch runs stay **off** the V1 regression gate.
+
+### Locked axes and levels
+
+| Factor id | Level ids | Effect |
+| --- | --- | --- |
+| `memory_type` | `reference`, `reconstructive`, `reconstructive_v2` | `MemoryMode` |
+| `mortality` | `disabled`, `enabled` | `MortalityMode` |
+| `imagination` | `disabled`, `enabled` | `ImaginationMode` only |
+| `reflection` | `disabled`, `deterministic` | `ReflectionMode` |
+| `tom` | `off`, `on` | `advanced_social_inference` only |
+| `resource_scarcity` | `scarce`, `abundant` | scenario resource quantities (layout preserved) |
+| `seasonality` | `off`, `on` | clear / set `EnvironmentalDynamicsSpec` |
+| `cognitive_budget` | `disabled`, `low_cost`, `high_cost` | `CognitiveBudgetMode` + AD presets |
+
+Constraints accept only `exclude_combos`. Expansion requires ≥2 conditions after filtering.
+
+**Base config:** `expand_matrix` accepts an embedded `SimulationRunnerConfig` only. A `catalog` base id may appear in the matrix JSON schema, but expansion fail-closes with `catalog_base_unresolved` until a later plan wires catalog-builder resolution — embed the runner config instead.
+
+### Schema finalize (highest-wins)
+
+Factor applicators never set `schema_version`. After levels apply, `finalize_matrix_cell_config` picks the first match: budget → `v22`, cultural narratives → `v21`, semantic naming → `v20`, artifact interpretation → `v19`, environmental dynamics → `v14`, reflection → `v6`, else `v4`.
+
+### `group_role` composition
+
+1. Optional named `groups` overlay match → that role
+2. Else `treatment` if any selected level is `treatment`
+3. Else `control` if any is `control`
+4. Else `neutral`
+
+Labels are researcher metadata only — not world friend/enemy/leader roles.
+
+### Resume and crash recovery
+
+Filesystem store: `manifest.json` + `cells/<cell_id>.json` (+ completion sidecars). Validity requires matching matrix/cell/config fingerprints, schema versions, and `RunVersionIdentity`. On open, any cell `running` without a valid completion resets to `pending`. Divergent rewrite of the same matrix fingerprint fails closed. Process-local concurrency only (`max_concurrency`, default `1`); durable persistence requires serial execution.
+
+### CLI (no HTTP)
+
+Composition package `research_runner` (forbids `api`):
+
+```bash
+uv run palimpsest-matrix run --matrix matrix.json --manifest-root ./matrix-out
+uv run palimpsest-matrix resume --matrix matrix.json --manifest-root ./matrix-out
+uv run palimpsest-matrix status --manifest-root ./matrix-out
+uv run palimpsest-matrix aggregate --matrix matrix.json --manifest-root ./matrix-out
+# or: python -m research_runner …
+```
+
+Optional `--print-fingerprint` prints the matrix fingerprint only. Never dump full configs or seeds by default. Collectors for matrix experiment ids use summary + trajectory + catalog fallback. Aggregates are `matrix-aggregate-v1` analysis-only documents.
+
+`RunVersionIdentity.code_revision` is optional metadata: pass `--code-revision` or set `PALIMPSEST_CODE_REVISION`. Empty is allowed; the CLI never invents a wall-clock surrogate.
+
 ## Logging
 
 DEBUG/INFO may include experiment/condition/run IDs, ordinals, counts, versions, and hash prefixes. Never log seeds, story content, truth labels, drive values, prompts, credentials, or canonical JSON payloads.

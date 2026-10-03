@@ -45,6 +45,7 @@ uv run --frozen --python 3.12.14 pytest
 | `./scripts/api.sh` | Host Uvicorn + Compose `db`, migrate, `--reload` |
 | `./scripts/migrate.sh` | `alembic upgrade head` against configured DSN |
 | `./scripts/down.sh` | `docker compose down` (add `--volumes` to drop data) |
+| `uv run palimpsest-matrix` | Resumable experiment-matrix CLI (no HTTP; see [Experiments](docs/experiments.md)) |
 
 Development credentials in `compose.yaml` are **not production**. `docker compose config` expands values and is **not secret-safe**.
 

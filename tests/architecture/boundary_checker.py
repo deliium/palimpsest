@@ -25,6 +25,7 @@ BOUNDED_PACKAGES: Final[frozenset[str]] = frozenset(
         "llm",
         "simulation",
         "experiments",
+        "research_runner",
         "api",
         "analysis",
         "infrastructure",
@@ -42,6 +43,7 @@ BOUNDED_LAYERS: Final[tuple[str, ...]] = (
     "llm",
     "simulation",
     "experiments",
+    "research_runner",
     "api",
     "analysis",
     "infrastructure",
@@ -62,7 +64,15 @@ ALLOWED_IMPORTS: Final[dict[str, frozenset[str]]] = {
     "experiments": frozenset(
         {"simulation", "analysis", "agents", "world", "memory"}
     ),
-
+    "research_runner": frozenset(
+        {
+            "experiments",
+            "simulation",
+            "persistence",
+            "infrastructure",
+            "analysis",
+        }
+    ),
     "api": frozenset({"simulation", "infrastructure", "persistence", "observer"}),
     "observer": frozenset({"world", "simulation"}),
     "analysis": frozenset({"world", "simulation", "memory"}),

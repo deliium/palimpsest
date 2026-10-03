@@ -32,9 +32,11 @@ src/
   simulation/            # WorldEngine, AgentRuntime, SimulationRunner, codecs, replay
                          # run_control.py (resume modes + finalization-command contracts)
                          # inspection.py (detached objective/agent-visible projection; no live observe)
-  experiments/           # trusted experiment catalog/coordinator (A–Z plus AA–AC; F–AC off the V1 gate); never imported by domain
+  experiments/           # trusted experiment catalog/coordinator (A–Z plus AA–AD; F–AD off the V1 gate); never imported by domain
+                         # matrix_*.py: experiment-matrix-v1 expand/batch/aggregate (filesystem manifests)
                          # composition.py maps neutral persistence snapshots → analysis sources
                          # reference_scenario.py: canonical five-agent / 48-tick fixture + milestone arbiter
+  research_runner/       # thin CLI composition for matrix batches (forbids api); palimpsest-matrix entry
   persistence/           # SQLAlchemy adapters (simulation, memory, subjective, analysis loaders)
                          # inspection_sqlalchemy.py (keyset pagination + manifest-constrained reads)
                          # may implement experiments.persistence ports; transmission_mapping.py
@@ -68,6 +70,7 @@ tests/
 - ✅ `observer` may import public `world` and detached simulation facts; must not import `simulation.engine`, private `world._*` modules, `api`, `persistence`, or frameworks
 - ✅ Simulation owns immutable `EvidenceManifest` high-water marks (counts/hashes only — never truth payloads)
 - ✅ `experiments` may import public `simulation`, read-only `analysis`, and `memory` contracts; must not import `api`, `infrastructure`, or concrete SQLAlchemy/`persistence`
+- ✅ `research_runner` may import `experiments`, `simulation`, `persistence`, `infrastructure`, and `analysis`; must not import `api` or start an HTTP server
 - ✅ `experiments.composition` is the legal outer composition boundary that maps neutral detached persistence rows into analysis sources; persistence adapters implement `experiments.persistence` ports only
 - ✅ `persistence` may import public `simulation` contracts, public `memory` and `social` facades, `infrastructure`, and `experiments.persistence` ports only
 - ✅ `persistence` identity types for subjective/transmission mapping come from `memory.models` (re-exported `EntityId`) — never import `world` from persistence

@@ -25,6 +25,9 @@ dependencies = [
     "networkx>=3",
 ]
 
+[project.scripts]
+palimpsest-matrix = "research_runner.cli:main"
+
 [dependency-groups]
 dev = [
     "pytest",
@@ -56,6 +59,7 @@ packages = [
     "llm",
     "simulation",
     "experiments",
+    "research_runner",
     "api",
     "analysis",
     "infrastructure",
@@ -72,6 +76,7 @@ packages = [
     "src/llm",
     "src/simulation",
     "src/experiments",
+    "src/research_runner",
     "src/api",
     "src/analysis",
     "src/infrastructure",
@@ -193,6 +198,7 @@ root_packages = [
     "llm",
     "simulation",
     "experiments",
+    "research_runner",
     "api",
     "analysis",
     "infrastructure",

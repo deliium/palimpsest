@@ -66,6 +66,8 @@ Named cognitive architecture variants (`agents.cognition.architectures`, Experim
 
 `.ai-factory/plans/v2-computational-cognitive-budgets.md` is implemented. It adds default-off `CognitiveBudgetMode` / `TickBudgetLedger` on `runner-config-v22`, Experiment AD (`ad-low-cost` / `ad-high-cost`), and `cognitive_budget@1`. Per-tick LLM/token/branch/depth/memory/ToM/reflection/timeout caps degrade gracefully without skipping the closed command. No capability flag. M6 stays open for `multi_hop_testimony_tracking`.
 
+`.ai-factory/plans/v2-reproducible-experiment-matrices.md` is implemented. It adds `experiment-matrix-v1` factor grids, filesystem resume manifests, process-local `MatrixBatchRunner`, `matrix-aggregate-v1`, and the `research_runner` / `palimpsest-matrix` CLI (no HTTP). Composes already-owned modes/flags only; does not own `multi_hop_testimony_tracking`. M6 stays open for that flag.
+
 `.ai-factory/plans/v2-emergent-social-norms.md` is implemented. It adds an opt-in owner-scoped social-norm ledger on `runner-config-v17`, Experiment X, and `emergent_social_norms@1`. A norm is a private belief inferred from repeated observations. It is not a `WorldEngine` rule, and it does not own a capability flag. Opt-in group formation already landed on `runner-config-v16`. Territorial claims already landed as `runner-config-v15`, Experiment V, and `spatial_control@1`.
 
 **Out of scope until planned:** free-form affect narration, personality trait systems, HTTP debug UI for emotion, collapsing emotion+drives+goals into one reward scalar.

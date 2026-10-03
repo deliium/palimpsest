@@ -92,3 +92,11 @@ def test_persistence_analysis_loader_stays_analysis_free() -> None:
         m == "experiments.persistence" or m.startswith("experiments.persistence")
         for m in modules
     )
+
+
+def test_research_runner_never_imports_api() -> None:
+    root = SRC / "research_runner"
+    assert root.is_dir()
+    for path in root.rglob("*.py"):
+        modules = _imported_modules(path)
+        assert not any(m == "api" or m.startswith("api.") for m in modules)
