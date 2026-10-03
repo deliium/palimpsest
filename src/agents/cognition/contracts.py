@@ -40,6 +40,7 @@ from world.actions import AgentCommand
 from world.observations import Observation
 
 __all__ = [
+    "BeliefRevisionStage",
     "CognitionContractError",
     "CognitionContractErrorCode",
     "CognitionStrategy",
@@ -53,9 +54,13 @@ __all__ = [
     "PerceptionInterpreter",
     "Perspective",
     "Planner",
+    "ReconstructionStage",
+    "ReflectionStage",
     "SelfStateProjector",
     "SituationModeler",
     "SocialMessagePolicy",
+    "TheoryOfMindStage",
+    "WorldModelStage",
 ]
 
 
@@ -445,6 +450,105 @@ class MemoryRetriever(Protocol):
         perception: InterpretedPerception,
     ) -> RetrievedMemoryContext:
         """Return references only; must not mutate memory stores."""
+        ...
+
+
+class ReconstructionStage(Protocol):
+    """Cognition-facing reconstruction slot.
+
+    Selects or wraps an existing ``memory.contracts.MemoryReconstructor``
+    implementation (for example ``DeterministicMemoryReconstructor`` or
+    ``LLMMemoryReconstructor``). This Protocol must **not** be named
+    ``MemoryReconstructor`` — that name belongs to ``memory.contracts``.
+
+    Inputs/outputs stay on memory reconstruction artifacts
+    (``RecallEvidence`` → ``ReconstructedMemory``). Implementations must not
+    accept ``WorldState``, event stores, or another agent's private cognition.
+    """
+
+    async def reconstruct(self, evidence: object) -> object:
+        """Project owner-scoped recall evidence into reconstructed memory."""
+        ...
+
+
+class BeliefRevisionStage(Protocol):
+    """Owner-scoped belief/relationship revision intent production.
+
+    This is a **memory-update slot**, not a new ``CognitiveLoop`` ordinal.
+    Typical binding is ``SubjectiveRevisionHook``. Fail closed on owner
+    mismatch via ``CognitionContractError`` patterns where applicable.
+    """
+
+    async def propose_updates(
+        self,
+        loop_input: CognitiveLoopInput,
+        plan: ActionPlan,
+        perception: InterpretedPerception,
+        memory: RetrievedMemoryContext,
+        intention: SelectedIntention,
+        self_state: SelfModel | None = None,
+    ) -> tuple[MemoryUpdateIntent, ...]:
+        """Return deferred revision intents; must not mutate stores."""
+        ...
+
+
+class WorldModelStage(Protocol):
+    """Causal world-model stage over owner-scoped hypotheses.
+
+    Wraps ``WorldModelPolicy`` plus mode selection. Passthrough bindings leave
+    the model unchanged. Must not import ``WorldState`` or simulation types.
+    """
+
+    async def select(
+        self,
+        model: object,
+        *,
+        tick: int,
+        provider: object | None = None,
+    ) -> object:
+        """Re-rank or pass through owner-scoped causal hypotheses."""
+        ...
+
+
+class ReflectionStage(Protocol):
+    """Periodic reflection stage over owner-scoped evidence.
+
+    Wraps ``ReflectionPolicy`` / reflection planning. Disabled bindings return
+    ``None`` (no pass). Not a loop ordinal; runs after command selection when
+    reflection mode is enabled.
+    """
+
+    def plan(
+        self,
+        *,
+        context: object,
+        triggers: object,
+        mode: str,
+        consolidation: object | None = None,
+        acknowledged_goal_ids: tuple[object, ...] = (),
+        selected_ids: tuple[str, ...] | None = None,
+        fallback_used: bool = False,
+        causal_world_model: object | None = None,
+    ) -> object | None:
+        """Materialize a reflection plan, or ``None`` when no pass runs."""
+        ...
+
+
+class TheoryOfMindStage(Protocol):
+    """First-order theory-of-mind stage over owner-scoped hypotheses.
+
+    Wraps ``TheoryOfMindPolicy`` plus mode selection. Passthrough bindings
+    store no hypotheses. Must not accept another agent's private cognition.
+    """
+
+    async def select(
+        self,
+        model: object,
+        *,
+        tick: int,
+        provider: object | None = None,
+    ) -> object:
+        """Re-rank or pass through owner-scoped ToM hypotheses."""
         ...
 
 

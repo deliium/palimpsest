@@ -1,5 +1,17 @@
 """Cognitive strategy protocols and immutable stage artifacts."""
 
+from agents.cognition.architectures import (
+    ARCHITECTURES,
+    ArchitectureCompatibilityError,
+    ArchitectureDefinition,
+    ArchitectureModeSnapshot,
+    CapabilityDeclaration,
+    StageSlot,
+    architecture_definition_digest,
+    compose_loop_config_from_snapshot,
+    get_architecture,
+    validate_architecture_compatibility,
+)
 from agents.cognition.artifacts import (
     ARTIFACT_INTERPRETATION_MEMORY_POLICY_VERSION,
     ArtifactInterpretation,
@@ -96,6 +108,7 @@ from agents.cognition.consolidation import (
     orchestrate_offline_consolidation,
 )
 from agents.cognition.contracts import (
+    BeliefRevisionStage,
     CognitionContractError,
     CognitionContractErrorCode,
     CognitionStrategy,
@@ -109,8 +122,12 @@ from agents.cognition.contracts import (
     PerceptionInterpreter,
     Perspective,
     Planner,
+    ReconstructionStage,
+    ReflectionStage,
     SelfStateProjector,
     SituationModeler,
+    TheoryOfMindStage,
+    WorldModelStage,
 )
 from agents.cognition.counterfactual import (
     COUNTERFACTUAL_POLICY_VERSION,
@@ -556,6 +573,7 @@ from agents.cognition.world_model import (
 )
 
 __all__ = [
+    "ARCHITECTURES",
     "ARTIFACT_INTERPRETATION_MEMORY_POLICY_VERSION",
     "BOUNDARY_SCHEMA_VERSION",
     "COGNITION_FACTORY_VERSION",
@@ -605,11 +623,16 @@ __all__ = [
     "AdviceDomain",
     "AdviceStore",
     "AgentEmotionalState",
+    "ArchitectureCompatibilityError",
+    "ArchitectureDefinition",
+    "ArchitectureModeSnapshot",
     "ArtifactInterpretation",
     "ArtifactInterpretationLedger",
     "ArtifactInterpretationMemoryUpdateHook",
     "ArtifactInterpretationMode",
     "ArtifactReadingRelation",
+    "BeliefRevisionStage",
+    "CapabilityDeclaration",
     "CausalAtom",
     "CausalEpisode",
     "CausalEpisodeRole",
@@ -834,6 +857,7 @@ __all__ = [
     "ProspectivePruneReason",
     "ProspectiveRollout",
     "ReconstructedMemoryCandidate",
+    "ReconstructionStage",
     "ReferenceEpisode",
     "ReferenceMemoryRetriever",
     "ReflectionAudit",
@@ -842,6 +866,7 @@ __all__ = [
     "ReflectionCursor",
     "ReflectionPatternCode",
     "ReflectionPolicy",
+    "ReflectionStage",
     "ReflectionTriggerKind",
     "RelationshipOrdinalMark",
     "RememberedDecision",
@@ -872,6 +897,7 @@ __all__ = [
     "SpeakerStance",
     "StableIntentionSelector",
     "StableMotivationEvaluator",
+    "StageSlot",
     "SubjectiveDecisionRecord",
     "SubjectiveRevisionHook",
     "SubjectiveRisk",
@@ -885,9 +911,11 @@ __all__ = [
     "TerritorialEvidenceItem",
     "TheoryOfMind",
     "TheoryOfMindPolicy",
+    "TheoryOfMindStage",
     "UncertaintyBand",
     "WaitFallbackPlanner",
     "WorldModelPolicy",
+    "WorldModelStage",
     "action_direction_for_intention",
     "activate_drives",
     "aggregate_identity_confidence",
@@ -903,6 +931,7 @@ __all__ = [
     "apply_reputation_update",
     "apply_territorial_update",
     "appraise_identity",
+    "architecture_definition_digest",
     "artifact_inscribe_command",
     "artifact_inscribe_penalties",
     "artifact_inscribe_preferred",
@@ -923,6 +952,7 @@ __all__ = [
     "communication_intent",
     "communication_intent_id",
     "component_kinds_for_stage",
+    "compose_loop_config_from_snapshot",
     "confidence_band",
     "confidence_from_masses",
     "consider_counterfactuals",
@@ -975,6 +1005,7 @@ __all__ = [
     "epistemic_attribution_id_for",
     "epistemic_disclosure",
     "epistemic_proposition_ref",
+    "get_architecture",
     "group_belief_id",
     "group_concept_id",
     "group_evidence_id",
@@ -1038,4 +1069,5 @@ __all__ = [
     "update_competence",
     "update_epistemic_state",
     "update_world_model",
+    "validate_architecture_compatibility",
 ]
