@@ -10,5 +10,6 @@
   "item_id": null,
   "resource_id": null,
   "origin_location_id": "loc-camp",
-  "destination_location_id": null
+  "destination_location_id": null,
+  "declared_confidence_band": "mid"
 }

@@ -1,0 +1,15 @@
+[gd_scene load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/ui/narrative_selector.gd" id="1_selector"]
+
+[node name="NarrativeSelector" type="HBoxContainer"]
+theme_override_constants/separation = 8
+script = ExtResource("1_selector")
+
+[node name="Label" type="Label" parent="."]
+layout_mode = 2
+text = "Narrative [SUBJECTIVE]"
+
+[node name="Variants" type="OptionButton" parent="."]
+layout_mode = 2
+custom_minimum_size = Vector2(160, 0)
