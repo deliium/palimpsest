@@ -80,6 +80,7 @@ from social.models import (
 from world.actions import (
     ActionProposal,
     ActionRequest,
+    Amend,
     Ask,
     Attack,
     Build,
@@ -87,10 +88,12 @@ from world.actions import (
     Drink,
     Drop,
     Eat,
+    Erase,
     Flee,
     Give,
     Harvest,
     Help,
+    Inscribe,
     Move,
     Repair,
     Search,
@@ -99,9 +102,12 @@ from world.actions import (
     Take,
     Talk,
     Tell,
+    TransferArtifact,
     Wait,
+    agent_command_tag,
     require_agent_command,
 )
+from world.artifacts import ArtifactContent, ArtifactKind, ArtifactRelation
 from world.communications import (
     CommunicationContent,
     CommunicationId,
@@ -126,6 +132,11 @@ from world.events import (
     EVENT_SCHEMA_REPLAY_V5,
     EVENT_SCHEMA_REPLAY_V6,
     EVENT_SCHEMA_REPLAY_V7,
+    EVENT_SCHEMA_REPLAY_V8,
+    ArtifactCreated,
+    ArtifactDestroyed,
+    ArtifactModified,
+    ArtifactMoved,
     Asked,
     Attacked,
     CraftStarted,
@@ -188,6 +199,7 @@ from world.observations import (
     ObservationAudienceRole,
     ObservationProvenance,
     ObservationSourceKind,
+    ObservedArtifact,
     ObservedCommunication,
     ObservedItem,
     ObservedItemPlacement,
@@ -402,7 +414,7 @@ def _encode_top(value: object, *, path: str) -> tuple[str, dict[str, Any]]:
         command = require_agent_command(value)
     except TypeError as exc:
         raise DomainSerializationError("unsupported_type", path) from exc
-    return command.kind, _encode_command(command)
+    return agent_command_tag(command), _encode_command(command)
 
 
 def _decode_top(
@@ -473,6 +485,10 @@ _COMMAND_TAGS: Final[frozenset[str]] = frozenset(
         "build",
         "repair",
         "store",
+        "inscribe",
+        "amend",
+        "erase",
+        "transfer_artifact",
     }
 )
 
@@ -2351,8 +2367,80 @@ def _encode_command(value: object) -> dict[str, Any]:
             }
         case Store(recipe_id=recipe_id, item_id=item_id):
             return {"item_id": item_id.value, "recipe_id": recipe_id.value}
+        case Inscribe(kind=kind, content=content, hold=hold):
+            return {
+                "content": _encode_artifact_content(content),
+                "hold": hold,
+                "kind": kind.value,
+            }
+        case Amend(artifact_id=artifact_id, content=content):
+            return {
+                "artifact_id": artifact_id.value,
+                "content": _encode_artifact_content(content),
+            }
+        case Erase(artifact_id=artifact_id):
+            return {"artifact_id": artifact_id.value}
+        case TransferArtifact(
+            artifact_id=artifact_id,
+            mode=mode,
+            recipient_id=recipient_id,
+        ):
+            return {
+                "artifact_id": artifact_id.value,
+                "mode": mode,
+                "recipient_id": (
+                    None if recipient_id is None else recipient_id.value
+                ),
+            }
         case _:
             raise DomainSerializationError("unsupported_type", "$")
+
+
+def _encode_artifact_content(value: ArtifactContent) -> dict[str, Any]:
+    return {
+        "marks": list(value.marks),
+        "relations": [
+            {
+                "object": relation.object,
+                "predicate": relation.predicate,
+                "subject": relation.subject,
+            }
+            for relation in value.relations
+        ],
+    }
+
+
+def _decode_artifact_content(data: object, *, path: str) -> ArtifactContent:
+    if not isinstance(data, dict):
+        raise DomainSerializationError("invalid_object", path)
+    _require_keys(data, {"marks", "relations"}, path=path)
+    marks_raw = data["marks"]
+    relations_raw = data["relations"]
+    if not isinstance(marks_raw, list):
+        raise DomainSerializationError("invalid_array", f"{path}.marks")
+    if not isinstance(relations_raw, list):
+        raise DomainSerializationError("invalid_array", f"{path}.relations")
+    marks: list[str] = []
+    for index, item in enumerate(marks_raw):
+        if not isinstance(item, str):
+            raise DomainSerializationError(
+                "invalid_string", f"{path}.marks[{index}]"
+            )
+        marks.append(item)
+    relations: list[ArtifactRelation] = []
+    for index, item in enumerate(relations_raw):
+        item_path = f"{path}.relations[{index}]"
+        if not isinstance(item, dict):
+            raise DomainSerializationError("invalid_object", item_path)
+        _require_keys(item, {"subject", "predicate", "object"}, path=item_path)
+        relations.append(
+            ArtifactRelation(
+                subject=_str_field(item, "subject", path=item_path),
+                predicate=_str_field(item, "predicate", path=item_path),
+                object=_str_field(item, "object", path=item_path),
+            )
+        )
+    return ArtifactContent(marks=tuple(marks), relations=tuple(relations))
 
 
 def _decode_command(tag: str, data: dict[str, Any], *, path: str) -> object:
@@ -2437,6 +2525,33 @@ def _decode_command(tag: str, data: dict[str, Any], *, path: str) -> object:
                 RecipeId(_str_field(data, "recipe_id", path=path)),
                 EntityId(_str_field(data, "item_id", path=path)),
             )
+        if tag == "inscribe":
+            _require_keys(data, {"content", "hold", "kind"}, path=path)
+            hold = data["hold"]
+            if type(hold) is not bool:
+                raise DomainSerializationError("invalid_bool", f"{path}.hold")
+            return Inscribe(
+                ArtifactKind(_str_field(data, "kind", path=path)),
+                _decode_artifact_content(data["content"], path=f"{path}.content"),
+                hold,
+            )
+        if tag == "amend":
+            _require_keys(data, {"artifact_id", "content"}, path=path)
+            return Amend(
+                EntityId(_str_field(data, "artifact_id", path=path)),
+                _decode_artifact_content(data["content"], path=f"{path}.content"),
+            )
+        if tag == "erase":
+            _require_keys(data, {"artifact_id"}, path=path)
+            return Erase(EntityId(_str_field(data, "artifact_id", path=path)))
+        if tag == "transfer_artifact":
+            _require_keys(data, {"artifact_id", "mode", "recipient_id"}, path=path)
+            recipient = _optional_str(data, "recipient_id", path=path)
+            return TransferArtifact(
+                EntityId(_str_field(data, "artifact_id", path=path)),
+                _str_field(data, "mode", path=path),  # type: ignore[arg-type]
+                None if recipient is None else EntityId(recipient),
+            )
     except DomainSerializationError:
         raise
     except (TypeError, ValueError) as exc:
@@ -2445,7 +2560,10 @@ def _decode_command(tag: str, data: dict[str, Any], *, path: str) -> object:
 
 
 def _encode_proposal(value: ActionProposal) -> dict[str, Any]:
-    command_tag, command_data = value.command.kind, _encode_command(value.command)
+    command_tag, command_data = (
+        agent_command_tag(value.command),
+        _encode_command(value.command),
+    )
     return {
         "command": {"data": command_data, "type": command_tag},
         "proposal_id": value.proposal_id.value,
@@ -2522,6 +2640,9 @@ def _encode_observation(value: Observation) -> dict[str, Any]:
         "structures": [
             _encode_observed_structure(item) for item in value.structures
         ],
+        "artifacts": [
+            _encode_observed_artifact(item) for item in value.artifacts
+        ],
         "revision": value.revision.value,
         "self_body": None
         if value.self_body is None
@@ -2565,7 +2686,13 @@ def _decode_observation(data: dict[str, Any], *, path: str) -> Observation:
             "weather_condition",
         },
         path=path,
-        optional={"structures", "season", "temperature_band", "hazard_kinds"},
+        optional={
+            "structures",
+            "artifacts",
+            "season",
+            "temperature_band",
+            "hazard_kinds",
+        },
     )
     self_body_raw = data["self_body"]
     try:
@@ -2614,6 +2741,11 @@ def _decode_observation(data: dict[str, Any], *, path: str) -> Observation:
                 data.get("structures", []),
                 _decode_observed_structure,
                 path=f"{path}.structures",
+            ),
+            artifacts=_decode_object_list(
+                data.get("artifacts", []),
+                _decode_observed_artifact,
+                path=f"{path}.artifacts",
             ),
             exits=_decode_object_list(
                 data["exits"], _decode_visible_exit, path=f"{path}.exits"
@@ -2676,6 +2808,48 @@ def _decode_observed_structure(data: dict[str, Any], *, path: str) -> ObservedSt
             kind=StructureKind(_str_field(data, "kind", path=path)),
             integrity=_float_field(data, "integrity", path=path),
             stored_quantity=_int_field(data, "stored_quantity", path=path),
+        )
+    except DomainSerializationError:
+        raise
+    except (TypeError, ValueError) as exc:
+        raise DomainSerializationError("invalid_model", path) from exc
+
+
+def _encode_observed_artifact(value: ObservedArtifact) -> dict[str, Any]:
+    return {
+        "author_id": value.author_id.value,
+        "content": _encode_artifact_content(value.content),
+        "content_revision": value.content_revision,
+        "created_tick": value.created_tick,
+        "entity_id": value.entity_id.value,
+        "kind": value.kind.value,
+        "placement": value.placement.value,
+    }
+
+
+def _decode_observed_artifact(data: dict[str, Any], *, path: str) -> ObservedArtifact:
+    _require_keys(
+        data,
+        {
+            "entity_id",
+            "kind",
+            "author_id",
+            "created_tick",
+            "content",
+            "content_revision",
+            "placement",
+        },
+        path=path,
+    )
+    try:
+        return ObservedArtifact(
+            entity_id=EntityId(_str_field(data, "entity_id", path=path)),
+            kind=ArtifactKind(_str_field(data, "kind", path=path)),
+            author_id=EntityId(_str_field(data, "author_id", path=path)),
+            created_tick=_int_field(data, "created_tick", path=path),
+            content=_decode_artifact_content(data["content"], path=f"{path}.content"),
+            content_revision=_int_field(data, "content_revision", path=path),
+            placement=ObservedItemPlacement(_str_field(data, "placement", path=path)),
         )
     except DomainSerializationError:
         raise
@@ -3746,6 +3920,81 @@ def _encode_event_details(value: object) -> dict[str, Any]:
                 "location_id": location_id.value,
                 "remaining_ticks": remaining_ticks,
             }
+        case ArtifactCreated(
+            artifact_id=artifact_id,
+            artifact_kind=artifact_kind,
+            author_id=author_id,
+            content_revision=content_revision,
+            resulting_location_id=resulting_location_id,
+            resulting_holder_id=resulting_holder_id,
+            success=success,
+        ):
+            payload = {
+                "artifact_id": artifact_id.value,
+                "artifact_kind": artifact_kind.value,
+                "author_id": author_id.value,
+                "content_revision": content_revision,
+                "kind": "artifact_created",
+                "success": success,
+            }
+            if resulting_location_id is not None:
+                payload["resulting_location_id"] = resulting_location_id.value
+            if resulting_holder_id is not None:
+                payload["resulting_holder_id"] = resulting_holder_id.value
+            return payload
+        case ArtifactModified(
+            artifact_id=artifact_id,
+            artifact_kind=artifact_kind,
+            content_revision=content_revision,
+            resulting_location_id=resulting_location_id,
+            resulting_holder_id=resulting_holder_id,
+            success=success,
+        ):
+            payload = {
+                "artifact_id": artifact_id.value,
+                "artifact_kind": artifact_kind.value,
+                "content_revision": content_revision,
+                "kind": "artifact_modified",
+                "success": success,
+            }
+            if resulting_location_id is not None:
+                payload["resulting_location_id"] = resulting_location_id.value
+            if resulting_holder_id is not None:
+                payload["resulting_holder_id"] = resulting_holder_id.value
+            return payload
+        case ArtifactMoved(
+            artifact_id=artifact_id,
+            artifact_kind=artifact_kind,
+            content_revision=content_revision,
+            resulting_location_id=resulting_location_id,
+            resulting_holder_id=resulting_holder_id,
+            success=success,
+        ):
+            payload = {
+                "artifact_id": artifact_id.value,
+                "artifact_kind": artifact_kind.value,
+                "content_revision": content_revision,
+                "kind": "artifact_moved",
+                "success": success,
+            }
+            if resulting_location_id is not None:
+                payload["resulting_location_id"] = resulting_location_id.value
+            if resulting_holder_id is not None:
+                payload["resulting_holder_id"] = resulting_holder_id.value
+            return payload
+        case ArtifactDestroyed(
+            artifact_id=artifact_id,
+            artifact_kind=artifact_kind,
+            content_revision=content_revision,
+            success=success,
+        ):
+            return {
+                "artifact_id": artifact_id.value,
+                "artifact_kind": artifact_kind.value,
+                "content_revision": content_revision,
+                "kind": "artifact_destroyed",
+                "success": success,
+            }
         case _:
             raise DomainSerializationError("unsupported_type", "$")
 
@@ -3929,6 +4178,87 @@ def _decode_environment_details(
         EntityId(_str_field(fields, "location_id", path=path)),
         HazardKind(_str_field(fields, "hazard_kind", path=path)),
         _int_field(fields, "remaining_ticks", path=path),
+    )
+
+
+def _decode_artifact_placement(
+    fields: dict[str, Any], *, path: str
+) -> tuple[EntityId | None, EntityId | None]:
+    has_location = "resulting_location_id" in fields
+    has_holder = "resulting_holder_id" in fields
+    if has_location == has_holder:
+        raise DomainSerializationError("invalid_fields", path)
+    if has_location:
+        return EntityId(_str_field(fields, "resulting_location_id", path=path)), None
+    return None, EntityId(_str_field(fields, "resulting_holder_id", path=path))
+
+
+def _decode_artifact_details(
+    kind: str, fields: dict[str, Any], *, path: str
+) -> object:
+    """Decode replay-v8 artifact details. Exact keys only."""
+    success = fields.get("success")
+    if type(success) is not bool:
+        raise DomainSerializationError("invalid_bool", f"{path}.success")
+    if kind == "artifact_destroyed":
+        _require_keys(
+            fields,
+            {"artifact_id", "artifact_kind", "content_revision", "success"},
+            path=path,
+        )
+        return ArtifactDestroyed(
+            EntityId(_str_field(fields, "artifact_id", path=path)),
+            ArtifactKind(_str_field(fields, "artifact_kind", path=path)),
+            _int_field(fields, "content_revision", path=path),
+            success,
+        )
+    location_id: EntityId | None
+    holder_id: EntityId | None
+    if kind == "artifact_created":
+        base = {
+            "artifact_id",
+            "artifact_kind",
+            "author_id",
+            "content_revision",
+            "success",
+        }
+        allowed = base | {"resulting_location_id", "resulting_holder_id"}
+        if set(fields) - allowed or not base.issubset(fields):
+            raise DomainSerializationError("invalid_fields", path)
+        location_id, holder_id = _decode_artifact_placement(fields, path=path)
+        return ArtifactCreated(
+            EntityId(_str_field(fields, "artifact_id", path=path)),
+            ArtifactKind(_str_field(fields, "artifact_kind", path=path)),
+            EntityId(_str_field(fields, "author_id", path=path)),
+            _int_field(fields, "content_revision", path=path),
+            resulting_location_id=location_id,
+            resulting_holder_id=holder_id,
+            success=success,
+        )
+    base = {"artifact_id", "artifact_kind", "content_revision", "success"}
+    allowed = base | {"resulting_location_id", "resulting_holder_id"}
+    if set(fields) - allowed or not base.issubset(fields):
+        raise DomainSerializationError("invalid_fields", path)
+    location_id, holder_id = _decode_artifact_placement(fields, path=path)
+    artifact_id = EntityId(_str_field(fields, "artifact_id", path=path))
+    artifact_kind = ArtifactKind(_str_field(fields, "artifact_kind", path=path))
+    content_revision = _int_field(fields, "content_revision", path=path)
+    if kind == "artifact_modified":
+        return ArtifactModified(
+            artifact_id,
+            artifact_kind,
+            content_revision,
+            resulting_location_id=location_id,
+            resulting_holder_id=holder_id,
+            success=success,
+        )
+    return ArtifactMoved(
+        artifact_id,
+        artifact_kind,
+        content_revision,
+        resulting_location_id=location_id,
+        resulting_holder_id=holder_id,
+        success=success,
     )
 
 
@@ -4327,6 +4657,7 @@ def _decode_event_details(
             if schema_version not in {
                 EVENT_SCHEMA_REPLAY_V6,
                 EVENT_SCHEMA_REPLAY_V7,
+                EVENT_SCHEMA_REPLAY_V8,
             }:
                 raise DomainSerializationError("invalid_event_schema_version", path)
             return _decode_production_details(kind, fields, path=path)
@@ -4338,9 +4669,21 @@ def _decode_event_details(
             "environmental_hazard_started",
             "environmental_hazard_ended",
         }:
-            if schema_version != EVENT_SCHEMA_REPLAY_V7:
+            if schema_version not in {
+                EVENT_SCHEMA_REPLAY_V7,
+                EVENT_SCHEMA_REPLAY_V8,
+            }:
                 raise DomainSerializationError("invalid_event_schema_version", path)
             return _decode_environment_details(kind, fields, path=path)
+        if kind in {
+            "artifact_created",
+            "artifact_modified",
+            "artifact_moved",
+            "artifact_destroyed",
+        }:
+            if schema_version != EVENT_SCHEMA_REPLAY_V8:
+                raise DomainSerializationError("invalid_event_schema_version", path)
+            return _decode_artifact_details(kind, fields, path=path)
     except DomainSerializationError:
         raise
     except (TypeError, ValueError) as exc:
@@ -4357,7 +4700,10 @@ def _encode_world_event(value: WorldEvent) -> dict[str, Any]:
         "resource_node_recovered",
         "environmental_hazard_started",
         "environmental_hazard_ended",
-    } and value.schema_version != EVENT_SCHEMA_REPLAY_V7:
+    } and value.schema_version not in {
+        EVENT_SCHEMA_REPLAY_V7,
+        EVENT_SCHEMA_REPLAY_V8,
+    }:
         raise DomainSerializationError(
             "invalid_event_schema_version",
             "$.schema_version",
@@ -4372,7 +4718,18 @@ def _encode_world_event(value: WorldEvent) -> dict[str, Any]:
     } and value.schema_version not in {
         EVENT_SCHEMA_REPLAY_V6,
         EVENT_SCHEMA_REPLAY_V7,
+        EVENT_SCHEMA_REPLAY_V8,
     }:
+        raise DomainSerializationError(
+            "invalid_event_schema_version",
+            "$.schema_version",
+        )
+    if details_kind in {
+        "artifact_created",
+        "artifact_modified",
+        "artifact_moved",
+        "artifact_destroyed",
+    } and value.schema_version != EVENT_SCHEMA_REPLAY_V8:
         raise DomainSerializationError(
             "invalid_event_schema_version",
             "$.schema_version",
@@ -4536,6 +4893,7 @@ def _decode_world_event(data: dict[str, Any], *, path: str) -> WorldEvent:
             EVENT_SCHEMA_REPLAY_V5,
             EVENT_SCHEMA_REPLAY_V6,
             EVENT_SCHEMA_REPLAY_V7,
+            EVENT_SCHEMA_REPLAY_V8,
         }:
             raise DomainSerializationError("unsupported_schema_version", path)
         actor_raw = data["actor_id"]

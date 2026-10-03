@@ -5,6 +5,10 @@ from __future__ import annotations
 from collections.abc import Mapping, Sequence
 from types import MappingProxyType
 
+from world.artifacts import (
+    MAX_HELD_ARTIFACTS_PER_BODY,
+    InformationArtifact,
+)
 from world.environment import ActiveHazard
 from world.identifiers import (
     EntityId,
@@ -12,7 +16,7 @@ from world.identifiers import (
     WorldId,
     WorldRevision,
 )
-from world.models import AgentBody, Item, Location, Resource, Weather
+from world.models import AgentBody, Item, LifeStatus, Location, Resource, Weather
 from world.production import ProductionJob, Structure, ToolMark
 
 __all__: list[str] = ["ActiveHazard", "World", "WorldState", "rebuild_world_state"]
@@ -31,6 +35,7 @@ def rebuild_world_state(
     production_jobs: Mapping[EntityId, ProductionJob] | None = None,
     tool_marks: Mapping[EntityId, ToolMark] | None = None,
     active_hazards: Sequence[ActiveHazard] | None = None,
+    artifacts: Mapping[EntityId, InformationArtifact] | None = None,
 ) -> WorldState:
     """Build a new immutable snapshot with deterministic EntityId ordering."""
     if type(state) is not WorldState:
@@ -46,6 +51,7 @@ def rebuild_world_state(
     job_src = state.production_jobs if production_jobs is None else production_jobs
     mark_src = state.tool_marks if tool_marks is None else tool_marks
     hazard_src = state.active_hazards if active_hazards is None else active_hazards
+    artifact_src = state.artifacts if artifacts is None else artifacts
     return WorldState(
         state.revision if revision is None else revision,
         locations=tuple(
@@ -76,6 +82,9 @@ def rebuild_world_state(
                 key=lambda value: (value.location_id.value, value.kind.value),
             )
         ),
+        artifacts=tuple(
+            sorted(artifact_src.values(), key=lambda value: value.artifact_id.value)
+        ),
     )
 
 
@@ -103,6 +112,7 @@ class WorldState:
 
     __slots__ = (
         "_active_hazards",
+        "_artifacts",
         "_bodies",
         "_items",
         "_locations",
@@ -127,6 +137,7 @@ class WorldState:
         production_jobs: Sequence[ProductionJob] = (),
         tool_marks: Sequence[ToolMark] = (),
         active_hazards: Sequence[ActiveHazard] = (),
+        artifacts: Sequence[InformationArtifact] = (),
     ) -> None:
         if type(revision) is not WorldRevision:
             raise TypeError("WorldState.revision must be WorldRevision")
@@ -141,14 +152,25 @@ class WorldState:
         structure_index = _index_by_entity_id(
             "structures", structures, model_type=Structure
         )
+        artifact_index = _index_artifacts(artifacts)
         _reject_global_id_collisions(
-            location_index, item_index, resource_index, body_index, structure_index
+            location_index,
+            item_index,
+            resource_index,
+            body_index,
+            structure_index,
+            artifact_index,
         )
         for structure in structure_index.values():
             if structure.location_id not in location_index:
                 raise ValueError(
                     "Structure.location_id must reference a known location"
                 )
+        _validate_artifacts(
+            artifact_index,
+            location_index=location_index,
+            body_index=body_index,
+        )
         job_index = _index_jobs(production_jobs)
         mark_index = _index_tool_marks(tool_marks)
         hazard_index = _index_hazards(active_hazards, location_index)
@@ -176,6 +198,7 @@ class WorldState:
         self._production_jobs = MappingProxyType(job_index)
         self._tool_marks = MappingProxyType(mark_index)
         self._active_hazards = hazard_index
+        self._artifacts = MappingProxyType(artifact_index)
 
     @property
     def revision(self) -> WorldRevision:
@@ -216,6 +239,10 @@ class WorldState:
     @property
     def active_hazards(self) -> tuple[ActiveHazard, ...]:
         return self._active_hazards
+
+    @property
+    def artifacts(self) -> Mapping[EntityId, InformationArtifact]:
+        return self._artifacts
 
 
 class World:
@@ -349,12 +376,58 @@ def _index_tool_marks(marks: Sequence[ToolMark]) -> dict[EntityId, ToolMark]:
     return indexed
 
 
+def _index_artifacts(
+    artifacts: Sequence[InformationArtifact],
+) -> dict[EntityId, InformationArtifact]:
+    indexed: dict[EntityId, InformationArtifact] = {}
+    for artifact in artifacts:
+        if type(artifact) is not InformationArtifact:
+            raise TypeError("artifacts entries must be InformationArtifact")
+        artifact_id = artifact.artifact_id
+        if artifact_id in indexed:
+            raise ValueError(f"duplicate artifact entity_id {artifact_id.value!r}")
+        indexed[artifact_id] = artifact
+    return indexed
+
+
+def _validate_artifacts(
+    artifacts: Mapping[EntityId, InformationArtifact],
+    *,
+    location_index: Mapping[EntityId, Location],
+    body_index: Mapping[EntityId, AgentBody],
+) -> None:
+    held_counts: dict[EntityId, int] = {}
+    for artifact in artifacts.values():
+        if artifact.location_id is not None:
+            if artifact.location_id not in location_index:
+                raise ValueError(
+                    f"artifact {artifact.artifact_id.value!r} references unknown "
+                    f"location {artifact.location_id.value!r}"
+                )
+        if artifact.holder_id is not None:
+            holder = body_index.get(artifact.holder_id)
+            if holder is None or holder.life_status is not LifeStatus.ALIVE:
+                raise ValueError(
+                    f"artifact {artifact.artifact_id.value!r} holder_id must name "
+                    f"a living body"
+                )
+            held_counts[artifact.holder_id] = (
+                held_counts.get(artifact.holder_id, 0) + 1
+            )
+    for holder_id, count in held_counts.items():
+        if count > MAX_HELD_ARTIFACTS_PER_BODY:
+            raise ValueError(
+                f"body {holder_id.value!r}: artifact_hold_cap"
+            )
+
+
 def _reject_global_id_collisions(
     locations: Mapping[EntityId, Location],
     items: Mapping[EntityId, Item],
     resources: Mapping[EntityId, Resource],
     bodies: Mapping[EntityId, AgentBody],
     structures: Mapping[EntityId, Structure],
+    artifacts: Mapping[EntityId, InformationArtifact],
 ) -> None:
     seen: dict[EntityId, str] = {}
     for label, mapping in (
@@ -363,6 +436,7 @@ def _reject_global_id_collisions(
         ("resource", resources),
         ("body", bodies),
         ("structure", structures),
+        ("artifact", artifacts),
     ):
         for entity_id in mapping:
             prior = seen.get(entity_id)

@@ -207,8 +207,8 @@ def _accept(command: object, *, actor: str = "body-1") -> ValidatedWorldOperatio
     return operation
 
 
-def test_matrix_covers_all_twenty_operation_types() -> None:
-    assert len(COMMAND_RULE_MATRIX) == 20
+def test_matrix_covers_all_twenty_four_operation_types() -> None:
+    assert len(COMMAND_RULE_MATRIX) == 24
     kinds = {policy.disposition for policy in COMMAND_RULE_MATRIX.values()}
     assert RuleDisposition.MUTATE in kinds
     assert RuleDisposition.EVENT_ONLY in kinds

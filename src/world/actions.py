@@ -6,11 +6,19 @@ world validation step promotes a request to an authority-bearing operation.
 
 from __future__ import annotations
 
+import logging
 from collections.abc import Mapping
 from dataclasses import InitVar, dataclass, field
 from enum import StrEnum
 from typing import Final, Literal, Protocol, runtime_checkable
 
+from world.artifacts import (
+    ArtifactContent,
+    ArtifactKind,
+    artifact_kind_is_portable,
+    require_artifact_content,
+    require_artifact_kind,
+)
 from world.communications import StructuredUtterance, confidence_band
 from world.identifiers import (
     EntityId,
@@ -21,6 +29,8 @@ from world.identifiers import (
     WorldRevision,
 )
 from world.production import require_production_command_fields
+
+_ARTIFACT_LOG: Final[logging.Logger] = logging.getLogger("world.artifacts")
 
 
 @dataclass(frozen=True, slots=True)
@@ -279,6 +289,87 @@ class Store:
             raise TypeError("Store.item_id must be EntityId")
 
 
+@dataclass(frozen=True, slots=True)
+class Inscribe:
+    """Create an artifact at the actor location, or held when ``hold`` is true."""
+
+    kind: ArtifactKind
+    content: ArtifactContent
+    hold: bool = False
+
+    def __post_init__(self) -> None:
+        require_artifact_kind(self.kind, field_name="Inscribe.kind")
+        require_artifact_content(self.content, field_name="Inscribe.content")
+        if type(self.hold) is not bool:
+            _ARTIFACT_LOG.error(
+                "artifact_validation_failed field=%s reason_code=%s",
+                "Inscribe.hold",
+                "invalid_artifact_hold",
+            )
+            raise ValueError("Inscribe.hold: invalid_artifact_hold")
+        if self.hold and not artifact_kind_is_portable(self.kind):
+            _ARTIFACT_LOG.error(
+                "artifact_validation_failed field=%s reason_code=%s",
+                "Inscribe.hold",
+                "invalid_artifact_hold",
+            )
+            raise ValueError("Inscribe.hold: invalid_artifact_hold")
+        _ARTIFACT_LOG.debug(
+            "inscribe_constructed kind=%s mark_count=%s relation_count=%s hold=%s",
+            self.kind.value,
+            len(self.content.marks),
+            len(self.content.relations),
+            self.hold,
+        )
+
+
+@dataclass(frozen=True, slots=True)
+class Amend:
+    artifact_id: EntityId
+    content: ArtifactContent
+    kind: Literal["amend"] = field(default="amend", init=False)
+
+    def __post_init__(self) -> None:
+        if type(self.artifact_id) is not EntityId:
+            raise TypeError("Amend.artifact_id must be EntityId")
+        require_artifact_content(self.content, field_name="Amend.content")
+
+
+@dataclass(frozen=True, slots=True)
+class Erase:
+    artifact_id: EntityId
+    kind: Literal["erase"] = field(default="erase", init=False)
+
+    def __post_init__(self) -> None:
+        if type(self.artifact_id) is not EntityId:
+            raise TypeError("Erase.artifact_id must be EntityId")
+
+
+@dataclass(frozen=True, slots=True)
+class TransferArtifact:
+    artifact_id: EntityId
+    mode: Literal["deposit", "claim", "give"]
+    recipient_id: EntityId | None = None
+    kind: Literal["transfer_artifact"] = field(
+        default="transfer_artifact", init=False
+    )
+
+    def __post_init__(self) -> None:
+        if type(self.artifact_id) is not EntityId:
+            raise TypeError("TransferArtifact.artifact_id must be EntityId")
+        if self.mode not in ("deposit", "claim", "give"):
+            raise ValueError("TransferArtifact.mode: artifact_transfer_mode_invalid")
+        if self.mode in ("deposit", "claim"):
+            if self.recipient_id is not None:
+                raise ValueError(
+                    "TransferArtifact.recipient_id: artifact_transfer_mode_invalid"
+                )
+        elif self.recipient_id is None or type(self.recipient_id) is not EntityId:
+            raise ValueError(
+                "TransferArtifact.recipient_id: artifact_transfer_mode_invalid"
+            )
+
+
 AgentCommand = (
     Move
     | Search
@@ -300,6 +391,10 @@ AgentCommand = (
     | Build
     | Repair
     | Store
+    | Inscribe
+    | Amend
+    | Erase
+    | TransferArtifact
 )
 
 _COMMAND_TYPES: Final[frozenset[type]] = frozenset(
@@ -324,8 +419,22 @@ _COMMAND_TYPES: Final[frozenset[type]] = frozenset(
         Build,
         Repair,
         Store,
+        Inscribe,
+        Amend,
+        Erase,
+        TransferArtifact,
     }
 )
+
+
+def agent_command_tag(command: AgentCommand) -> str:
+    """Stable wire/command tag. ``Inscribe.kind`` is the artifact kind."""
+    if type(command) is Inscribe:
+        return "inscribe"
+    tag = command.kind
+    if type(tag) is not str:
+        raise TypeError(f"unsupported agent command tag type {type(tag).__name__}")
+    return tag
 
 
 def require_agent_command(value: object) -> AgentCommand:

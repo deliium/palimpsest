@@ -13,6 +13,7 @@ from pathlib import Path
 import pytest
 
 from world.actions import (
+    Amend,
     Ask,
     Attack,
     Build,
@@ -20,10 +21,12 @@ from world.actions import (
     Drink,
     Drop,
     Eat,
+    Erase,
     Flee,
     Give,
     Harvest,
     Help,
+    Inscribe,
     Move,
     Repair,
     Search,
@@ -32,6 +35,7 @@ from world.actions import (
     Take,
     Talk,
     Tell,
+    TransferArtifact,
     Wait,
     require_agent_command,
 )
@@ -41,7 +45,7 @@ from world.observations import Observation
 ROOT = Path(__file__).resolve().parents[2]
 SRC = ROOT / "src"
 
-# Closed command surface. Production adds five variants on the same change.
+# Closed command surface. Artifacts add four variants on the same change.
 _CLOSED_COMMAND_TYPES: frozenset[type] = frozenset(
     {
         Move,
@@ -64,10 +68,14 @@ _CLOSED_COMMAND_TYPES: frozenset[type] = frozenset(
         Build,
         Repair,
         Store,
+        Inscribe,
+        Amend,
+        Erase,
+        TransferArtifact,
     }
 )
 
-# Frozen Observation field names at scaffolding freeze (no additive fields here).
+# Frozen Observation field names — keep exact parity with Observation slots.
 _FROZEN_OBSERVATION_FIELDS: frozenset[str] = frozenset(
     {
         "world_id",
@@ -81,12 +89,16 @@ _FROZEN_OBSERVATION_FIELDS: frozenset[str] = frozenset(
         "exits",
         "visible_bodies",
         "structures",
+        "artifacts",
         "occurrences",
         "communications",
         "hour",
         "day_phase",
         "visibility",
         "weather_condition",
+        "season",
+        "temperature_band",
+        "hazard_kinds",
     }
 )
 
@@ -98,8 +110,8 @@ _PARITY_GATE = (
 )
 
 
-def test_agent_command_set_remains_closed_at_twenty() -> None:
-    assert len(_CLOSED_COMMAND_TYPES) == 20
+def test_agent_command_set_remains_closed_at_twenty_four() -> None:
+    assert len(_CLOSED_COMMAND_TYPES) == 24
     from world import actions as actions_mod
 
     # Mirror the public union membership without constructing parameterized commands.
@@ -124,6 +136,10 @@ def test_agent_command_set_remains_closed_at_twenty() -> None:
         Build,
         Repair,
         Store,
+        Inscribe,
+        Amend,
+        Erase,
+        TransferArtifact,
     }
     assert asserted == _CLOSED_COMMAND_TYPES
     assert hasattr(actions_mod, "AgentCommand")

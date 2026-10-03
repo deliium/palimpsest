@@ -13,6 +13,7 @@ from types import MappingProxyType
 from typing import TYPE_CHECKING
 
 from agents.models import AgentId
+from world.artifacts import InformationArtifact
 from world.identifiers import EntityId, WorldId, WorldRevision
 from world.models import AgentBody, Item, Location, Resource, Weather
 
@@ -27,6 +28,7 @@ __all__ = [
 ]
 
 _LOGGER = logging.getLogger("simulation.bootstrap")
+_ARTIFACT_ID_COLLISION = "artifact_id_collision"
 
 
 @dataclass(frozen=True, slots=True)
@@ -89,6 +91,7 @@ class WorldBootstrap:
     bodies: Sequence[AgentBody] = field(default_factory=tuple)
     weather: Sequence[Weather] = field(default_factory=tuple)
     registrations: Sequence[AgentRegistration] = field(default_factory=tuple)
+    artifacts: Sequence[InformationArtifact] = field(default_factory=tuple)
 
     def __post_init__(self) -> None:
         if type(self.world_id) is not WorldId:
@@ -111,30 +114,51 @@ class WorldBootstrap:
         registrations = _copy_registrations(
             "WorldBootstrap.registrations", self.registrations
         )
+        artifacts = _copy_models(
+            "WorldBootstrap.artifacts",
+            self.artifacts,
+            model_type=InformationArtifact,
+        )
         object.__setattr__(self, "locations", locations)
         object.__setattr__(self, "items", items)
         object.__setattr__(self, "resources", resources)
         object.__setattr__(self, "bodies", bodies)
         object.__setattr__(self, "weather", weather)
         object.__setattr__(self, "registrations", registrations)
+        object.__setattr__(self, "artifacts", artifacts)
         _validate_registrations_against_models(
             locations=locations,
             items=items,
             resources=resources,
             bodies=bodies,
             registrations=registrations,
+            artifacts=artifacts,
         )
         # Reuse authoritative graph validation without exposing WorldState.
         from world._state import WorldState
 
-        WorldState(
-            self.revision,
-            locations=locations,
-            items=items,
-            resources=resources,
-            bodies=bodies,
-            weather=weather,
-        )
+        try:
+            WorldState(
+                self.revision,
+                locations=locations,
+                items=items,
+                resources=resources,
+                bodies=bodies,
+                weather=weather,
+                artifacts=artifacts,
+            )
+        except ValueError as exc:
+            message = str(exc)
+            if (
+                "duplicate physical EntityId" in message
+                or "duplicate artifact entity_id" in message
+            ):
+                _LOGGER.error(
+                    "artifact_seed_failed reason_code=%s detail=%s",
+                    _ARTIFACT_ID_COLLISION,
+                    message,
+                )
+            raise
         translator = registration_translator(self)
         for registration in registrations:
             entity_id = translator.to_entity_id(registration.agent_id)
@@ -143,9 +167,13 @@ class WorldBootstrap:
             if translator.to_agent_id(entity_id) != registration.agent_id:
                 raise ValueError("registration translator round-trip mismatch")
         _LOGGER.debug(
+            "artifacts_seeded count=%s",
+            len(artifacts),
+        )
+        _LOGGER.debug(
             "world_bootstrap_validated world_id=%s revision=%s "
             "location_count=%s item_count=%s resource_count=%s body_count=%s "
-            "weather_count=%s registration_count=%s",
+            "weather_count=%s registration_count=%s artifact_count=%s",
             self.world_id.value,
             self.revision.value,
             len(locations),
@@ -154,6 +182,7 @@ class WorldBootstrap:
             len(bodies),
             len(weather),
             len(registrations),
+            len(artifacts),
         )
 
 
@@ -165,19 +194,38 @@ def registration_translator(bootstrap: WorldBootstrap) -> RegistrationTranslator
 
 
 def _materialize_world(bootstrap: WorldBootstrap) -> World:
-    """Internal: construct private World authority from a validated bootstrap."""
+    """Internal: construct private World authority from a validated bootstrap.
+
+    Copies seeded ``InformationArtifact`` rows into ``WorldState.artifacts``.
+    Does not create subjective interpretation ledgers.
+    """
     from world._state import World, WorldState
 
     if type(bootstrap) is not WorldBootstrap:
         raise TypeError("_materialize_world requires WorldBootstrap")
-    state = WorldState(
-        bootstrap.revision,
-        locations=bootstrap.locations,
-        items=bootstrap.items,
-        resources=bootstrap.resources,
-        bodies=bootstrap.bodies,
-        weather=bootstrap.weather,
-    )
+    try:
+        state = WorldState(
+            bootstrap.revision,
+            locations=bootstrap.locations,
+            items=bootstrap.items,
+            resources=bootstrap.resources,
+            bodies=bootstrap.bodies,
+            weather=bootstrap.weather,
+            artifacts=bootstrap.artifacts,
+        )
+    except ValueError as exc:
+        message = str(exc)
+        if (
+            "duplicate physical EntityId" in message
+            or "duplicate artifact entity_id" in message
+        ):
+            _LOGGER.error(
+                "artifact_seed_failed reason_code=%s detail=%s",
+                _ARTIFACT_ID_COLLISION,
+                message,
+            )
+        raise
+    _LOGGER.debug("artifacts_seeded count=%s", len(bootstrap.artifacts))
     return World(bootstrap.world_id, state)
 
 
@@ -196,6 +244,7 @@ def _bootstrap_from_snapshot(snapshot: object) -> WorldBootstrap:
         bodies=snapshot.bodies,
         weather=snapshot.weather,
         registrations=snapshot.registrations,
+        artifacts=snapshot.artifacts,
     )
 
 
@@ -241,11 +290,13 @@ def _validate_registrations_against_models(
     resources: Sequence[Resource],
     bodies: Sequence[AgentBody],
     registrations: Sequence[AgentRegistration],
+    artifacts: Sequence[InformationArtifact] = (),
 ) -> None:
     body_ids = {body.entity_id for body in bodies}
     location_ids = {location.entity_id for location in locations}
     item_ids = {item.entity_id for item in items}
     resource_ids = {resource.entity_id for resource in resources}
+    artifact_ids = {artifact.artifact_id for artifact in artifacts}
     _translator_from_registrations(registrations)
     for registration in registrations:
         entity_id = registration.entity_id
@@ -260,6 +311,10 @@ def _validate_registrations_against_models(
         if entity_id in resource_ids:
             raise ValueError(
                 f"registration entity_id {entity_id.value!r} refers to a resource"
+            )
+        if entity_id in artifact_ids:
+            raise ValueError(
+                f"registration entity_id {entity_id.value!r} refers to an artifact"
             )
         if entity_id not in body_ids:
             raise ValueError(

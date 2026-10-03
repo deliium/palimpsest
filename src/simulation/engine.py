@@ -93,6 +93,7 @@ from world.actions import (
     Flee,
     Harvest,
     Help,
+    Inscribe,
     Move,
     Repair,
     Search,
@@ -102,6 +103,7 @@ from world.effects import (
     ActionCause,
     ResolvedActionEffect,
     ResolvedActionEffects,
+    ResolvedArtifactInscribeEffect,
     ResolvedAttackEffect,
     ResolvedFleeEffect,
     ResolvedProductionEffect,
@@ -199,6 +201,7 @@ class WorldEngine:
     """Public authority for observation and ordered tick resolution."""
 
     __slots__ = (
+        "_artifacts_enabled",
         "_bootstrap",
         "_config",
         "_engine_id",
@@ -233,6 +236,7 @@ class WorldEngine:
         teaching_entity_ids: Sequence[object] | None = None,
         production_catalog: object | None = None,
         environmental_dynamics: object | None = None,
+        artifacts_enabled: bool = False,
     ) -> None:
         if type(config) is not SimulationRunConfig:
             raise TypeError("WorldEngine requires SimulationRunConfig")
@@ -283,13 +287,20 @@ class WorldEngine:
         self._environmental_dynamics = _optional_environmental_dynamics(
             environmental_dynamics
         )
+        if type(artifacts_enabled) is not bool:
+            raise TypeError("artifacts_enabled must be bool")
+        # Seeds alone activate artifact admission; explicit flag covers
+        # empty-seed tests.
+        self._artifacts_enabled = artifacts_enabled or bool(bootstrap.artifacts)
         _LOGGER.debug(
-            "%s world_id=%s revision=%s tick=%s registrations=%s",
+            "%s world_id=%s revision=%s tick=%s registrations=%s "
+            "artifacts_enabled=%s",
             EngineDiagnosticCode.BOOTSTRAP_VALIDATED.value,
             bootstrap.world_id.value,
             bootstrap.revision.value,
             tick.value,
             len(self._registrations),
+            self._artifacts_enabled,
         )
 
     @classmethod
@@ -308,6 +319,7 @@ class WorldEngine:
         teaching_offers: object | None = None,
         production_catalog: object | None = None,
         environmental_dynamics: object | None = None,
+        artifacts_enabled: bool = False,
     ) -> WorldEngine:
         """Restore an engine at ``AWAITING_OBSERVATION`` from a checkpoint.
 
@@ -367,6 +379,7 @@ class WorldEngine:
             production_jobs=snapshot.production_jobs,
             tool_marks=snapshot.tool_marks,
             active_hazards=snapshot.active_hazards,
+            artifacts=snapshot.artifacts,
         )
         resolved_catalog = _optional_production_catalog(production_catalog)
         if snapshot.persistence_codec_version == "v3" and resolved_catalog is None:
@@ -474,6 +487,14 @@ class WorldEngine:
         engine._environmental_dynamics = _optional_environmental_dynamics(
             environmental_dynamics
         )
+        if type(artifacts_enabled) is not bool:
+            raise TypeError("artifacts_enabled must be bool")
+        engine._artifacts_enabled = (
+            artifacts_enabled
+            or bool(snapshot.artifacts)
+            or snapshot.persistence_codec_version == "v5"
+            or bool(getattr(engine._bootstrap, "artifacts", ()))
+        )
         engine._require_refolded_teaching_offers(
             teaching_offers=teaching_offers,
             initial_state=base_state,
@@ -564,6 +585,18 @@ class WorldEngine:
             ),
             weather=weather,
             registrations=tuple(self._registrations),
+            structures=tuple(
+                sorted(
+                    state.structures.values(),
+                    key=lambda item: (item.location_id.value, item.entity_id.value),
+                )
+            ),
+            artifacts=tuple(
+                sorted(
+                    state.artifacts.values(),
+                    key=lambda item: item.artifact_id.value,
+                )
+            ),
             season=season,
             temperature_bands=bands,
             hazards=hazards,
@@ -1422,6 +1455,7 @@ class WorldEngine:
         event_schema, _codec = select_checkpoint_schema(
             production_active=self._production_catalog is not None,
             dynamics_active=self._environmental_dynamics is not None,
+            artifacts_active=self._artifacts_enabled,
         )
         prepared = finalize_pending_batch(
             merged,
@@ -1451,6 +1485,18 @@ class WorldEngine:
             }:
                 _LOGGER.info(
                     "production_event_committed event_id=%s tick=%s kind=%s",
+                    event.event_id.value,
+                    event.tick,
+                    event.details.kind,
+                )
+            if event.details.kind in {
+                "artifact_created",
+                "artifact_modified",
+                "artifact_moved",
+                "artifact_destroyed",
+            }:
+                _LOGGER.info(
+                    "artifact_event_committed event_id=%s tick=%s kind=%s",
                     event.event_id.value,
                     event.tick,
                     event.details.kind,
@@ -1723,7 +1769,37 @@ class WorldEngine:
                 )
                 if production_effect is not None:
                     by_request[request.request_id] = production_effect
+            elif type(command) is Inscribe:
+                by_request[request.request_id] = self._resolve_artifact_inscribe_effect(
+                    snap=snap,
+                    request=request,
+                )
         return ResolvedActionEffects(by_request=by_request)
+
+    def _resolve_artifact_inscribe_effect(
+        self,
+        *,
+        snap: _EngineSnapshot,
+        request: ActionRequest,
+    ) -> ResolvedArtifactInscribeEffect:
+        created_artifact_id = derive_entity_id(
+            self._config,
+            "information-artifact",
+            self._run_id.value,
+            self.world_id.value,
+            f"tick:{snap.tick.value}",
+            request.request_id.value,
+        )
+        _LOGGER.debug(
+            "artifact_inscribe_id tick=%s request_id=%s artifact_id=%s",
+            snap.tick.value,
+            request.request_id.value,
+            created_artifact_id.value,
+        )
+        return ResolvedArtifactInscribeEffect(
+            request_id=request.request_id,
+            created_artifact_id=created_artifact_id,
+        )
 
     def _bind_skill_state(
         self,
@@ -2434,7 +2510,10 @@ def _production_creates_entity(
 
 
 def select_checkpoint_schema(
-    *, production_active: bool, dynamics_active: bool
+    *,
+    production_active: bool,
+    dynamics_active: bool,
+    artifacts_active: bool = False,
 ) -> tuple[int, str]:
     """Return the legal event-schema and codec pair for this run."""
     from simulation.persistence import (
@@ -2442,23 +2521,35 @@ def select_checkpoint_schema(
         PERSISTENCE_CODEC_VERSION,
         checkpoint_schema_for_production,
     )
-    from world.events import EVENT_SCHEMA_REPLAY_V6, EVENT_SCHEMA_REPLAY_V7
+    from world.events import (
+        EVENT_SCHEMA_REPLAY_V6,
+        EVENT_SCHEMA_REPLAY_V7,
+        EVENT_SCHEMA_REPLAY_V8,
+    )
 
     schema_version, codec = checkpoint_schema_for_production(
         production_active=production_active,
         dynamics_active=dynamics_active,
+        artifacts_active=artifacts_active,
     )
     agreed = (
-        dynamics_active
+        artifacts_active
+        and schema_version == EVENT_SCHEMA_REPLAY_V8
+        and codec == "v5"
+    ) or (
+        not artifacts_active
+        and dynamics_active
         and schema_version == EVENT_SCHEMA_REPLAY_V7
         and codec == "v4"
     ) or (
-        not dynamics_active
+        not artifacts_active
+        and not dynamics_active
         and production_active
         and schema_version == EVENT_SCHEMA_REPLAY_V6
         and codec == "v3"
     ) or (
-        not dynamics_active
+        not artifacts_active
+        and not dynamics_active
         and not production_active
         and schema_version == EVENT_SCHEMA_VERSION
         and codec == PERSISTENCE_CODEC_VERSION
@@ -2471,10 +2562,17 @@ def select_checkpoint_schema(
         )
         raise ValueError("unsupported_schema_version")
     _LOGGER.debug(
-        "environment_schema_selected schema_version=%s codec=%s",
+        "artifact_schema_selected event_schema=%s codec=%s artifacts_active=%s",
         schema_version,
         codec,
+        artifacts_active,
     )
+    if dynamics_active and not artifacts_active:
+        _LOGGER.debug(
+            "environment_schema_selected schema_version=%s codec=%s",
+            schema_version,
+            codec,
+        )
     return schema_version, codec
 
 
@@ -2550,6 +2648,17 @@ def _map_batch_outcome(
         "structure_intact": ActionResolutionReason.STRUCTURAL_REJECTION,
         "shelter_already_present": ActionResolutionReason.STRUCTURAL_REJECTION,
         "store_already_present": ActionResolutionReason.STRUCTURAL_REJECTION,
+        "unknown_artifact": ActionResolutionReason.STRUCTURAL_REJECTION,
+        "artifact_not_portable": ActionResolutionReason.STRUCTURAL_REJECTION,
+        "artifact_not_held": ActionResolutionReason.STRUCTURAL_REJECTION,
+        "artifact_not_colocated": ActionResolutionReason.STRUCTURAL_REJECTION,
+        "artifact_content_invalid": ActionResolutionReason.STRUCTURAL_REJECTION,
+        "invalid_artifact_kind": ActionResolutionReason.STRUCTURAL_REJECTION,
+        "invalid_artifact_hold": ActionResolutionReason.STRUCTURAL_REJECTION,
+        "artifact_transfer_mode_invalid": ActionResolutionReason.STRUCTURAL_REJECTION,
+        "artifact_hold_cap": ActionResolutionReason.STRUCTURAL_REJECTION,
+        "recipient_unavailable": ActionResolutionReason.STRUCTURAL_REJECTION,
+        "not_an_item": ActionResolutionReason.STRUCTURAL_REJECTION,
         "malformed_envelope": ActionResolutionReason.MALFORMED_SUBMISSION,
         "wrong_trust_stage": ActionResolutionReason.MALFORMED_SUBMISSION,
         "wrong_world": ActionResolutionReason.STRUCTURAL_REJECTION,

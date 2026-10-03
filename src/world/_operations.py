@@ -7,14 +7,16 @@ not stop hostile reflection.
 
 from __future__ import annotations
 
+import logging
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from enum import StrEnum
-from typing import Final
+from typing import Final, Literal
 
 from world._state import WorldState, rebuild_world_state
 from world.actions import (
     ActionRequest,
+    Amend,
     Ask,
     Attack,
     Build,
@@ -22,10 +24,12 @@ from world.actions import (
     Drink,
     Drop,
     Eat,
+    Erase,
     Flee,
     Give,
     Harvest,
     Help,
+    Inscribe,
     Move,
     Repair,
     Search,
@@ -34,9 +38,11 @@ from world.actions import (
     Take,
     Talk,
     Tell,
+    TransferArtifact,
     Wait,
     require_agent_command,
 )
+from world.artifacts import ArtifactContent, ArtifactKind
 from world.communications import StructuredUtterance
 from world.effects import ActionCause, EventCause, require_event_cause
 from world.events import (
@@ -59,6 +65,8 @@ from world.identifiers import (
     require_stable_id,
 )
 from world.models import AgentBody, Item, LifeStatus, Location, Resource
+
+_LOG: Final[logging.Logger] = logging.getLogger("world._operations")
 
 __all__: list[str] = [
     "BatchItemOutcome",
@@ -87,6 +95,7 @@ class RejectionCode(StrEnum):
     WRONG_TARGET_CATEGORY = "wrong_target_category"
     MALFORMED_ENVELOPE = "malformed_envelope"
     DISTINCT_ID_VIOLATION = "distinct_id_violation"
+    NOT_AN_ITEM = "not_an_item"
 
 
 @dataclass(frozen=True, slots=True)
@@ -274,6 +283,47 @@ class _StoreOp:
     item_id: EntityId
 
 
+@dataclass(frozen=True, slots=True)
+class _InscribeOp:
+    request_id: RequestId
+    actor_id: EntityId
+    world_id: WorldId
+    base_revision: WorldRevision
+    artifact_kind: ArtifactKind
+    content: ArtifactContent
+    hold: bool
+
+
+@dataclass(frozen=True, slots=True)
+class _AmendOp:
+    request_id: RequestId
+    actor_id: EntityId
+    world_id: WorldId
+    base_revision: WorldRevision
+    artifact_id: EntityId
+    content: ArtifactContent
+
+
+@dataclass(frozen=True, slots=True)
+class _EraseOp:
+    request_id: RequestId
+    actor_id: EntityId
+    world_id: WorldId
+    base_revision: WorldRevision
+    artifact_id: EntityId
+
+
+@dataclass(frozen=True, slots=True)
+class _TransferArtifactOp:
+    request_id: RequestId
+    actor_id: EntityId
+    world_id: WorldId
+    base_revision: WorldRevision
+    artifact_id: EntityId
+    mode: Literal["deposit", "claim", "give"]
+    recipient_id: EntityId | None
+
+
 ValidatedWorldOperation = (
     _MoveOp
     | _SearchOp
@@ -295,6 +345,10 @@ ValidatedWorldOperation = (
     | _BuildOp
     | _RepairOp
     | _StoreOp
+    | _InscribeOp
+    | _AmendOp
+    | _EraseOp
+    | _TransferArtifactOp
 )
 
 _OPERATION_TYPES: Final[frozenset[type]] = frozenset(
@@ -319,6 +373,10 @@ _OPERATION_TYPES: Final[frozenset[type]] = frozenset(
         _BuildOp,
         _RepairOp,
         _StoreOp,
+        _InscribeOp,
+        _AmendOp,
+        _EraseOp,
+        _TransferArtifactOp,
     }
 )
 
@@ -406,11 +464,31 @@ def validate_action_request(
                     return rejected
             return OperationAccepted(_SearchOp(*base, target_id=target_id))
         case Take(item_id=item_id):
+            if item_id in state.artifacts:
+                _LOG.warning(
+                    "artifact_rejected actor_id=%s artifact_id=%s reason_code=%s",
+                    request.actor_id.value,
+                    item_id.value,
+                    RejectionCode.NOT_AN_ITEM.value,
+                )
+                return OperationRejected(
+                    code=RejectionCode.NOT_AN_ITEM, request_id=request_id
+                )
             rejected = _require_item(state, item_id, request_id)
             if rejected is not None:
                 return rejected
             return OperationAccepted(_TakeOp(*base, item_id=item_id))
         case Drop(item_id=item_id):
+            if item_id in state.artifacts:
+                _LOG.warning(
+                    "artifact_rejected actor_id=%s artifact_id=%s reason_code=%s",
+                    request.actor_id.value,
+                    item_id.value,
+                    RejectionCode.NOT_AN_ITEM.value,
+                )
+                return OperationRejected(
+                    code=RejectionCode.NOT_AN_ITEM, request_id=request_id
+                )
             rejected = _require_item(state, item_id, request_id)
             if rejected is not None:
                 return rejected
@@ -423,6 +501,16 @@ def validate_action_request(
             rejected = _require_body(state, recipient_id, request_id)
             if rejected is not None:
                 return rejected
+            if item_id in state.artifacts:
+                _LOG.warning(
+                    "artifact_rejected actor_id=%s artifact_id=%s reason_code=%s",
+                    request.actor_id.value,
+                    item_id.value,
+                    RejectionCode.NOT_AN_ITEM.value,
+                )
+                return OperationRejected(
+                    code=RejectionCode.NOT_AN_ITEM, request_id=request_id
+                )
             rejected = _require_item(state, item_id, request_id)
             if rejected is not None:
                 return rejected
@@ -530,6 +618,32 @@ def validate_action_request(
             return OperationAccepted(
                 _StoreOp(*base, recipe_id=recipe_id, item_id=item_id)
             )
+        case Inscribe(kind=artifact_kind, content=content, hold=hold):
+            return OperationAccepted(
+                _InscribeOp(
+                    *base,
+                    artifact_kind=artifact_kind,
+                    content=content,
+                    hold=hold,
+                )
+            )
+        case Amend(artifact_id=artifact_id, content=content):
+            return OperationAccepted(
+                _AmendOp(*base, artifact_id=artifact_id, content=content)
+            )
+        case Erase(artifact_id=artifact_id):
+            return OperationAccepted(_EraseOp(*base, artifact_id=artifact_id))
+        case TransferArtifact(
+            artifact_id=artifact_id, mode=mode, recipient_id=recipient_id
+        ):
+            return OperationAccepted(
+                _TransferArtifactOp(
+                    *base,
+                    artifact_id=artifact_id,
+                    mode=mode,
+                    recipient_id=recipient_id,
+                )
+            )
         case _:
             return OperationRejected(
                 code=RejectionCode.MALFORMED_ENVELOPE, request_id=request_id
@@ -611,8 +725,9 @@ def _exists_elsewhere(state: WorldState, entity_id: EntityId) -> bool:
         entity_id in state.locations
         or entity_id in state.items
         or entity_id in state.resources
-        or         entity_id in state.bodies
+        or entity_id in state.bodies
         or entity_id in state.structures
+        or entity_id in state.artifacts
     )
 
 

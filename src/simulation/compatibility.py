@@ -62,6 +62,7 @@ from simulation.runner_models import (
     RUNNER_SCHEMA_VERSION_V16,
     RUNNER_SCHEMA_VERSION_V17,
     RUNNER_SCHEMA_VERSION_V18,
+    RUNNER_SCHEMA_VERSION_V19,
     SUPPORTED_RESULT_SCHEMA_VERSIONS,
     SUPPORTED_RUNNER_SCHEMA_VERSIONS,
 )
@@ -73,6 +74,7 @@ from world.events import (
     EVENT_SCHEMA_REPLAY_V5,
     EVENT_SCHEMA_REPLAY_V6,
     EVENT_SCHEMA_REPLAY_V7,
+    EVENT_SCHEMA_REPLAY_V8,
 )
 
 _LOG: Final[logging.Logger] = logging.getLogger("simulation.compatibility")
@@ -113,6 +115,7 @@ __all__ = [
     "RUNNER_SCHEMA_VERSION_V16",
     "RUNNER_SCHEMA_VERSION_V17",
     "RUNNER_SCHEMA_VERSION_V18",
+    "RUNNER_SCHEMA_VERSION_V19",
     "STREAM_ENVELOPE_VERSION",
     "WS_PROTOCOL_VERSION",
     "CompatibilityEntry",
@@ -148,6 +151,7 @@ _MATRIX: dict[str, CompatibilityEntry] = {
             EVENT_SCHEMA_REPLAY_V5,
             EVENT_SCHEMA_REPLAY_V6,
             EVENT_SCHEMA_REPLAY_V7,
+            EVENT_SCHEMA_REPLAY_V8,
         ),
         bump_trigger=(
             "Wire shape change for WorldEvent / occurrence details; "
@@ -265,6 +269,13 @@ _MATRIX: dict[str, CompatibilityEntry] = {
             f"stays on {RUNNER_SCHEMA_VERSION_V17}; prior modes including "
             "social norms stay legal on "
             f"{RUNNER_SCHEMA_VERSION_V18}; "
+            f"{RUNNER_SCHEMA_VERSION_V19} is emitted only when some agent's "
+            "artifact interpretation mode is deterministic and carries every "
+            "v18 cognition key plus artifact_interpretation_mode; a "
+            "conventions-only config stays on "
+            f"{RUNNER_SCHEMA_VERSION_V18}; prior modes including social "
+            "conventions stay legal on "
+            f"{RUNNER_SCHEMA_VERSION_V19}; "
             f"{RUNNER_SCHEMA_VERSION_V3} retained for capability flags; "
             "v1-v4 omit consolidation_mode, reflection_mode, prospective_mode, "
             "counterfactual_mode, communication_strategy_mode, and "
@@ -460,6 +471,7 @@ _LOG.debug(
         "runner_v16": RUNNER_SCHEMA_VERSION_V16,
         "runner_v17": RUNNER_SCHEMA_VERSION_V17,
         "runner_v18": RUNNER_SCHEMA_VERSION_V18,
+        "runner_v19": RUNNER_SCHEMA_VERSION_V19,
         "alembic_head": ALEMBIC_HEAD_REVISION,
         "accepted_event_count": len(ACCEPTED_EVENT_SCHEMA_VERSIONS),
     },

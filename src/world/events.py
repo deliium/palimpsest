@@ -12,10 +12,15 @@ Compatibility matrix:
   payloads (Talked/Asked/Told). Default physical writes stay on v5.
 - ``EVENT_SCHEMA_REPLAY_V6`` (6): production details. Written only by a run
   whose catalog is non-empty and whose dynamics spec is absent. Also legal
-  on replay-v7.
+  on replay-v7 and replay-v8.
 - ``EVENT_SCHEMA_REPLAY_V7`` (7): environment details plus replay-v6
   production details. Written only by a run whose dynamics spec is set.
-  Illegal on every lower schema. Default writes stay on v5.
+  Also legal on replay-v8. Illegal on every lower schema. Default writes
+  stay on v5.
+- ``EVENT_SCHEMA_REPLAY_V8`` (8): artifact details plus replay-v6 production
+  and replay-v7 environment details. Written only by a run whose artifacts
+  channel is active. Illegal on every lower schema. Default writes stay
+  on v5.
 
 Runs never mix replay schema versions. ``WorldEvent.target_id`` retains detail
 counterparty semantics and is never treated as an occurrence location.
@@ -29,6 +34,11 @@ from dataclasses import dataclass, field
 from enum import StrEnum
 from typing import Final, Literal
 
+from world.artifacts import (
+    ArtifactKind,
+    artifact_kind_is_portable,
+    require_artifact_kind,
+)
 from world.communications import StructuredUtterance, confidence_band
 from world.effects import (
     ActionCause,
@@ -60,6 +70,7 @@ EVENT_SCHEMA_REPLAY_V4: Final[int] = 4
 EVENT_SCHEMA_REPLAY_V5: Final[int] = 5
 EVENT_SCHEMA_REPLAY_V6: Final[int] = 6
 EVENT_SCHEMA_REPLAY_V7: Final[int] = 7
+EVENT_SCHEMA_REPLAY_V8: Final[int] = 8
 SUPPORTED_EVENT_SCHEMA_VERSIONS: Final[frozenset[int]] = frozenset(
     {
         EVENT_SCHEMA_AUDIT_V1,
@@ -69,6 +80,7 @@ SUPPORTED_EVENT_SCHEMA_VERSIONS: Final[frozenset[int]] = frozenset(
         EVENT_SCHEMA_REPLAY_V5,
         EVENT_SCHEMA_REPLAY_V6,
         EVENT_SCHEMA_REPLAY_V7,
+        EVENT_SCHEMA_REPLAY_V8,
     }
 )
 REPLAYABLE_EVENT_SCHEMA_VERSIONS: Final[frozenset[int]] = frozenset(
@@ -79,6 +91,7 @@ REPLAYABLE_EVENT_SCHEMA_VERSIONS: Final[frozenset[int]] = frozenset(
         EVENT_SCHEMA_REPLAY_V5,
         EVENT_SCHEMA_REPLAY_V6,
         EVENT_SCHEMA_REPLAY_V7,
+        EVENT_SCHEMA_REPLAY_V8,
     }
 )
 PHYSICAL_REPLAY_EVENT_SCHEMA_VERSIONS: Final[frozenset[int]] = frozenset(
@@ -88,11 +101,16 @@ PHYSICAL_REPLAY_EVENT_SCHEMA_VERSIONS: Final[frozenset[int]] = frozenset(
         EVENT_SCHEMA_REPLAY_V5,
         EVENT_SCHEMA_REPLAY_V6,
         EVENT_SCHEMA_REPLAY_V7,
+        EVENT_SCHEMA_REPLAY_V8,
     }
 )
 _PRODUCTION_EVENT_SCHEMAS: Final[frozenset[int]] = frozenset(
-    {EVENT_SCHEMA_REPLAY_V6, EVENT_SCHEMA_REPLAY_V7}
+    {EVENT_SCHEMA_REPLAY_V6, EVENT_SCHEMA_REPLAY_V7, EVENT_SCHEMA_REPLAY_V8}
 )
+_ENVIRONMENT_EVENT_SCHEMAS: Final[frozenset[int]] = frozenset(
+    {EVENT_SCHEMA_REPLAY_V7, EVENT_SCHEMA_REPLAY_V8}
+)
+_ARTIFACT_EVENT_SCHEMAS: Final[frozenset[int]] = frozenset({EVENT_SCHEMA_REPLAY_V8})
 CURRENT_PHYSICAL_EVENT_SCHEMA_VERSION: Final[int] = EVENT_SCHEMA_REPLAY_V5
 _LOG: Final[logging.Logger] = logging.getLogger("world.events")
 _FORBIDDEN_PRESENTATION_FIELDS: Final[frozenset[str]] = frozenset(
@@ -930,6 +948,176 @@ class EnvironmentalHazardEnded:
         _reject_presentation_fields(self.kind, self.__slots__)
 
 
+def _require_artifact_placement(
+    *,
+    type_name: str,
+    artifact_kind: ArtifactKind,
+    resulting_location_id: EntityId | None,
+    resulting_holder_id: EntityId | None,
+) -> None:
+    if (
+        resulting_location_id is not None
+        and type(resulting_location_id) is not EntityId
+    ):
+        raise TypeError(f"{type_name}.resulting_location_id must be EntityId")
+    if resulting_holder_id is not None and type(resulting_holder_id) is not EntityId:
+        raise TypeError(f"{type_name}.resulting_holder_id must be EntityId")
+    has_location = resulting_location_id is not None
+    has_holder = resulting_holder_id is not None
+    if artifact_kind_is_portable(artifact_kind):
+        if has_location == has_holder:
+            raise ValueError(
+                f"{type_name} requires exactly one of "
+                "resulting_location_id or resulting_holder_id"
+            )
+    elif not has_location or has_holder:
+        raise ValueError(
+            f"{type_name} for fixed artifact_kind requires resulting_location_id only"
+        )
+
+
+def _require_content_revision(name: str, value: object) -> int:
+    revision = require_exact_nonneg_int(name, value)
+    return revision
+
+
+@dataclass(frozen=True, slots=True)
+class ArtifactCreated:
+    artifact_id: EntityId
+    artifact_kind: ArtifactKind
+    author_id: EntityId
+    content_revision: int
+    resulting_location_id: EntityId | None = None
+    resulting_holder_id: EntityId | None = None
+    success: bool = True
+    kind: Literal["artifact_created"] = field(default="artifact_created", init=False)
+
+    def __post_init__(self) -> None:
+        if type(self.artifact_id) is not EntityId:
+            raise TypeError("ArtifactCreated.artifact_id must be EntityId")
+        require_artifact_kind(
+            self.artifact_kind, field_name="ArtifactCreated.artifact_kind"
+        )
+        if type(self.author_id) is not EntityId:
+            raise TypeError("ArtifactCreated.author_id must be EntityId")
+        object.__setattr__(
+            self,
+            "content_revision",
+            _require_content_revision(
+                "ArtifactCreated.content_revision", self.content_revision
+            ),
+        )
+        if _require_success("ArtifactCreated.success", self.success) is not True:
+            raise ValueError("ArtifactCreated does not emit a failure detail")
+        _require_artifact_placement(
+            type_name="ArtifactCreated",
+            artifact_kind=self.artifact_kind,
+            resulting_location_id=self.resulting_location_id,
+            resulting_holder_id=self.resulting_holder_id,
+        )
+        _reject_presentation_fields(self.kind, self.__slots__)
+
+
+@dataclass(frozen=True, slots=True)
+class ArtifactModified:
+    artifact_id: EntityId
+    artifact_kind: ArtifactKind
+    content_revision: int
+    resulting_location_id: EntityId | None = None
+    resulting_holder_id: EntityId | None = None
+    success: bool = True
+    kind: Literal["artifact_modified"] = field(
+        default="artifact_modified", init=False
+    )
+
+    def __post_init__(self) -> None:
+        if type(self.artifact_id) is not EntityId:
+            raise TypeError("ArtifactModified.artifact_id must be EntityId")
+        require_artifact_kind(
+            self.artifact_kind, field_name="ArtifactModified.artifact_kind"
+        )
+        object.__setattr__(
+            self,
+            "content_revision",
+            _require_content_revision(
+                "ArtifactModified.content_revision", self.content_revision
+            ),
+        )
+        if _require_success("ArtifactModified.success", self.success) is not True:
+            raise ValueError("ArtifactModified does not emit a failure detail")
+        _require_artifact_placement(
+            type_name="ArtifactModified",
+            artifact_kind=self.artifact_kind,
+            resulting_location_id=self.resulting_location_id,
+            resulting_holder_id=self.resulting_holder_id,
+        )
+        _reject_presentation_fields(self.kind, self.__slots__)
+
+
+@dataclass(frozen=True, slots=True)
+class ArtifactMoved:
+    artifact_id: EntityId
+    artifact_kind: ArtifactKind
+    content_revision: int
+    resulting_location_id: EntityId | None = None
+    resulting_holder_id: EntityId | None = None
+    success: bool = True
+    kind: Literal["artifact_moved"] = field(default="artifact_moved", init=False)
+
+    def __post_init__(self) -> None:
+        if type(self.artifact_id) is not EntityId:
+            raise TypeError("ArtifactMoved.artifact_id must be EntityId")
+        require_artifact_kind(
+            self.artifact_kind, field_name="ArtifactMoved.artifact_kind"
+        )
+        if not artifact_kind_is_portable(self.artifact_kind):
+            raise ValueError("ArtifactMoved requires a portable artifact_kind")
+        object.__setattr__(
+            self,
+            "content_revision",
+            _require_content_revision(
+                "ArtifactMoved.content_revision", self.content_revision
+            ),
+        )
+        if _require_success("ArtifactMoved.success", self.success) is not True:
+            raise ValueError("ArtifactMoved does not emit a failure detail")
+        _require_artifact_placement(
+            type_name="ArtifactMoved",
+            artifact_kind=self.artifact_kind,
+            resulting_location_id=self.resulting_location_id,
+            resulting_holder_id=self.resulting_holder_id,
+        )
+        _reject_presentation_fields(self.kind, self.__slots__)
+
+
+@dataclass(frozen=True, slots=True)
+class ArtifactDestroyed:
+    artifact_id: EntityId
+    artifact_kind: ArtifactKind
+    content_revision: int
+    success: bool = True
+    kind: Literal["artifact_destroyed"] = field(
+        default="artifact_destroyed", init=False
+    )
+
+    def __post_init__(self) -> None:
+        if type(self.artifact_id) is not EntityId:
+            raise TypeError("ArtifactDestroyed.artifact_id must be EntityId")
+        require_artifact_kind(
+            self.artifact_kind, field_name="ArtifactDestroyed.artifact_kind"
+        )
+        object.__setattr__(
+            self,
+            "content_revision",
+            _require_content_revision(
+                "ArtifactDestroyed.content_revision", self.content_revision
+            ),
+        )
+        if _require_success("ArtifactDestroyed.success", self.success) is not True:
+            raise ValueError("ArtifactDestroyed does not emit a failure detail")
+        _reject_presentation_fields(self.kind, self.__slots__)
+
+
 EventDetails = (
     Moved
     | Searched
@@ -963,6 +1151,10 @@ EventDetails = (
     | ResourceNodeRecovered
     | EnvironmentalHazardStarted
     | EnvironmentalHazardEnded
+    | ArtifactCreated
+    | ArtifactModified
+    | ArtifactMoved
+    | ArtifactDestroyed
 )
 
 _DETAIL_TYPES: Final[frozenset[type]] = frozenset(
@@ -999,6 +1191,10 @@ _DETAIL_TYPES: Final[frozenset[type]] = frozenset(
         ResourceNodeRecovered,
         EnvironmentalHazardStarted,
         EnvironmentalHazardEnded,
+        ArtifactCreated,
+        ArtifactModified,
+        ArtifactMoved,
+        ArtifactDestroyed,
     }
 )
 
@@ -1021,6 +1217,15 @@ _ENVIRONMENT_DETAIL_TYPES: Final[frozenset[type]] = frozenset(
         ResourceNodeRecovered,
         EnvironmentalHazardStarted,
         EnvironmentalHazardEnded,
+    }
+)
+
+_ARTIFACT_DETAIL_TYPES: Final[frozenset[type]] = frozenset(
+    {
+        ArtifactCreated,
+        ArtifactModified,
+        ArtifactMoved,
+        ArtifactDestroyed,
     }
 )
 
@@ -1082,9 +1287,41 @@ def _environment_effect_complete(details: EventDetails) -> bool:
             return False
 
 
+def _artifact_effect_complete(details: EventDetails) -> bool:
+    match details:
+        case ArtifactDestroyed(success=success):
+            return success is True
+        case (
+            ArtifactCreated(
+                success=success,
+                resulting_location_id=location_id,
+                resulting_holder_id=holder_id,
+            )
+            | ArtifactModified(
+                success=success,
+                resulting_location_id=location_id,
+                resulting_holder_id=holder_id,
+            )
+            | ArtifactMoved(
+                success=success,
+                resulting_location_id=location_id,
+                resulting_holder_id=holder_id,
+            )
+        ):
+            if success is not True:
+                return False
+            return (location_id is None) != (holder_id is None)
+        case _:
+            return False
+
+
 def _payload_effect_complete(details: EventDetails, *, schema_version: int) -> bool:
+    if type(details) in _ARTIFACT_DETAIL_TYPES:
+        if schema_version not in _ARTIFACT_EVENT_SCHEMAS:
+            return False
+        return _artifact_effect_complete(details)
     if type(details) in _ENVIRONMENT_DETAIL_TYPES:
-        if schema_version != EVENT_SCHEMA_REPLAY_V7:
+        if schema_version not in _ENVIRONMENT_EVENT_SCHEMAS:
             return False
         return _environment_effect_complete(details)
     match details:
@@ -1265,6 +1502,13 @@ def target_id_for_details(details: EventDetails) -> EntityId | None:
             | ResourceNodeRecovered(resource_id=resource_id)
         ):
             return resource_id
+        case (
+            ArtifactCreated(artifact_id=artifact_id)
+            | ArtifactModified(artifact_id=artifact_id)
+            | ArtifactMoved(artifact_id=artifact_id)
+            | ArtifactDestroyed(artifact_id=artifact_id)
+        ):
+            return artifact_id
         case _:
             raise TypeError(
                 f"{EventValidationCode.UNKNOWN_EVENT_TYPE.value}: "
@@ -1352,7 +1596,15 @@ class WorldEvent:
                 )
                 raise ValueError(EventValidationCode.INVALID_SCHEMA_VERSION.value)
         if type(self.details) in _ENVIRONMENT_DETAIL_TYPES:
-            if self.schema_version != EVENT_SCHEMA_REPLAY_V7:
+            if self.schema_version not in _ENVIRONMENT_EVENT_SCHEMAS:
+                _LOG.error(
+                    "invalid_event_schema_version kind=%s schema_version=%s",
+                    self.details.kind,
+                    self.schema_version,
+                )
+                raise ValueError(EventValidationCode.INVALID_SCHEMA_VERSION.value)
+        if type(self.details) in _ARTIFACT_DETAIL_TYPES:
+            if self.schema_version not in _ARTIFACT_EVENT_SCHEMAS:
                 _LOG.error(
                     "invalid_event_schema_version kind=%s schema_version=%s",
                     self.details.kind,
@@ -1405,6 +1657,13 @@ class WorldEvent:
                 "environment_event_built schema_version=%s kind=%s",
                 self.schema_version,
                 self.details.kind,
+            )
+        if type(self.details) in _ARTIFACT_DETAIL_TYPES:
+            _LOG.debug(
+                "artifact_event_built schema_version=%s kind=%s artifact_id=%s",
+                self.schema_version,
+                self.details.kind,
+                self.details.artifact_id.value,
             )
 
     @property
@@ -1670,6 +1929,18 @@ def build_occurrence_context(
                 origin_location_id=origin_location_id,
                 destination_location_id=None,
                 affected_entity_ids=(structure_id, consumed_item_id),
+                private_recipient_ids=(),
+            )
+        case (
+            ArtifactCreated(artifact_id=artifact_id)
+            | ArtifactModified(artifact_id=artifact_id)
+            | ArtifactMoved(artifact_id=artifact_id)
+            | ArtifactDestroyed(artifact_id=artifact_id)
+        ):
+            return OccurrenceContext(
+                origin_location_id=origin_location_id,
+                destination_location_id=destination_location_id,
+                affected_entity_ids=(artifact_id,),
                 private_recipient_ids=(),
             )
         case _:

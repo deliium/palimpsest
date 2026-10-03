@@ -8,12 +8,14 @@ this module owns dispositions, reason codes, and precedence.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+import logging
+from dataclasses import dataclass, replace
 from enum import StrEnum
 from typing import Final
 
 from world._operations import (
     ValidatedWorldOperation,
+    _AmendOp,
     _AskOp,
     _AttackOp,
     _BuildOp,
@@ -21,10 +23,12 @@ from world._operations import (
     _DrinkOp,
     _DropOp,
     _EatOp,
+    _EraseOp,
     _FleeOp,
     _GiveOp,
     _HarvestOp,
     _HelpOp,
+    _InscribeOp,
     _MoveOp,
     _RepairOp,
     _SearchOp,
@@ -33,19 +37,30 @@ from world._operations import (
     _TakeOp,
     _TalkOp,
     _TellOp,
+    _TransferArtifactOp,
     _WaitOp,
 )
 from world._state import WorldState, rebuild_world_state
+from world.artifacts import (
+    MAX_HELD_ARTIFACTS_PER_BODY,
+    InformationArtifact,
+    artifact_kind_is_portable,
+)
 from world.communications import StructuredUtterance
 from world.effects import (
     DeathCause,
     ResolvedActionEffects,
+    ResolvedArtifactInscribeEffect,
     ResolvedAttackEffect,
     ResolvedFleeEffect,
     ResolvedProductionEffect,
     ResolvedSearchEffect,
 )
 from world.events import (
+    ArtifactCreated,
+    ArtifactDestroyed,
+    ArtifactModified,
+    ArtifactMoved,
     Asked,
     Attacked,
     Died,
@@ -89,6 +104,8 @@ from world.values import (
     clamp_need,
     round_physical,
 )
+
+_OPS_LOG: Final[logging.Logger] = logging.getLogger("world._operations")
 
 __all__: list[str] = [
     "COMMAND_RULE_MATRIX",
@@ -142,6 +159,17 @@ class RuleReason(StrEnum):
     STRUCTURE_INTACT = "structure_intact"
     SHELTER_ALREADY_PRESENT = "shelter_already_present"
     STORE_ALREADY_PRESENT = "store_already_present"
+    UNKNOWN_ARTIFACT = "unknown_artifact"
+    ARTIFACT_NOT_PORTABLE = "artifact_not_portable"
+    ARTIFACT_NOT_HELD = "artifact_not_held"
+    ARTIFACT_NOT_COLOCATED = "artifact_not_colocated"
+    ARTIFACT_CONTENT_INVALID = "artifact_content_invalid"
+    INVALID_ARTIFACT_KIND = "invalid_artifact_kind"
+    INVALID_ARTIFACT_HOLD = "invalid_artifact_hold"
+    ARTIFACT_TRANSFER_MODE_INVALID = "artifact_transfer_mode_invalid"
+    ARTIFACT_HOLD_CAP = "artifact_hold_cap"
+    RECIPIENT_UNAVAILABLE = "recipient_unavailable"
+    NOT_AN_ITEM = "not_an_item"
 
 
 @dataclass(frozen=True, slots=True)
@@ -347,6 +375,34 @@ COMMAND_RULE_MATRIX: Final[dict[type, CommandRulePolicy]] = {
             "mutate-or-event via resolved"
         ),
     ),
+    _InscribeOp: CommandRulePolicy(
+        disposition=RuleDisposition.MUTATE,
+        emits_event_when_applied=True,
+        mutates_state_when_applied=True,
+        requires_living_actor=True,
+        notes="create artifact at actor location or held (portable only)",
+    ),
+    _AmendOp: CommandRulePolicy(
+        disposition=RuleDisposition.MUTATE,
+        emits_event_when_applied=True,
+        mutates_state_when_applied=True,
+        requires_living_actor=True,
+        notes="replace content; actor colocated or holder",
+    ),
+    _EraseOp: CommandRulePolicy(
+        disposition=RuleDisposition.MUTATE,
+        emits_event_when_applied=True,
+        mutates_state_when_applied=True,
+        requires_living_actor=True,
+        notes="destroy artifact; actor colocated or holder",
+    ),
+    _TransferArtifactOp: CommandRulePolicy(
+        disposition=RuleDisposition.MUTATE,
+        emits_event_when_applied=True,
+        mutates_state_when_applied=True,
+        requires_living_actor=True,
+        notes="rebind portable placement: claim/deposit/give",
+    ),
 }
 
 _OPERATION_KIND: Final[dict[type, str]] = {
@@ -370,6 +426,10 @@ _OPERATION_KIND: Final[dict[type, str]] = {
     _BuildOp: "build",
     _RepairOp: "repair",
     _StoreOp: "store",
+    _InscribeOp: "inscribe",
+    _AmendOp: "amend",
+    _EraseOp: "erase",
+    _TransferArtifactOp: "transfer_artifact",
 }
 
 _SEARCH_RESOURCE_KINDS: Final[frozenset[ResourceKind]] = frozenset(
@@ -530,6 +590,16 @@ def evaluate_operation(
             )
         case _HarvestOp() | _CraftOp() | _BuildOp() | _RepairOp() | _StoreOp():
             return _evaluate_production(state, operation, kind, resolved=resolved)
+        case _InscribeOp():
+            return _evaluate_inscribe(
+                state, operation, kind, resolved=resolved
+            )
+        case _AmendOp():
+            return _evaluate_amend(state, operation, kind)
+        case _EraseOp():
+            return _evaluate_erase(state, operation, kind)
+        case _TransferArtifactOp():
+            return _evaluate_transfer_artifact(state, operation, kind)
         case _WaitOp():
             return RuleResult(
                 disposition=RuleDisposition.EVENT_ONLY,
@@ -1011,6 +1081,408 @@ _PRODUCTION_REASONS: Final[dict[str, RuleReason]] = {
 }
 
 
+def _held_artifact_count(state: WorldState, holder_id: EntityId) -> int:
+    return sum(
+        1 for artifact in state.artifacts.values() if artifact.holder_id == holder_id
+    )
+
+
+def _artifact_access_reject(
+    state: WorldState,
+    actor_id: EntityId,
+    artifact_id: EntityId,
+    kind: str,
+) -> RuleResult | None:
+    artifact = state.artifacts.get(artifact_id)
+    if artifact is None:
+        return _artifact_reject(
+            kind, RuleReason.UNKNOWN_ARTIFACT, actor_id, artifact_id
+        )
+    actor = state.bodies[actor_id]
+    if artifact.holder_id == actor_id:
+        return None
+    if (
+        artifact.location_id is not None
+        and artifact.location_id == actor.location_id
+    ):
+        return None
+    return _artifact_reject(
+        kind, RuleReason.ARTIFACT_NOT_COLOCATED, actor_id, artifact_id
+    )
+
+
+def _artifact_reject(
+    kind: str,
+    reason: RuleReason,
+    actor_id: EntityId,
+    artifact_id: EntityId | None,
+    *,
+    op: str | None = None,
+    mode: str | None = None,
+) -> RuleResult:
+    _OPS_LOG.warning(
+        "artifact_rejected actor_id=%s artifact_id=%s reason_code=%s",
+        actor_id.value,
+        None if artifact_id is None else artifact_id.value,
+        reason.value,
+    )
+    _OPS_LOG.debug(
+        "artifact_resolved kind=%s op=%s mode=%s reason_code=%s",
+        kind,
+        op or kind,
+        mode or "-",
+        reason.value,
+    )
+    return _reject(kind, reason)
+
+
+def _artifact_success(
+    kind: str,
+    *,
+    op: str,
+    mode: str | None = None,
+) -> RuleResult:
+    _OPS_LOG.debug(
+        "artifact_resolved kind=%s op=%s mode=%s reason_code=%s",
+        kind,
+        op,
+        mode or "-",
+        RuleReason.OCCURRENCE.value,
+    )
+    return RuleResult(
+        disposition=RuleDisposition.MUTATE,
+        reason=RuleReason.OCCURRENCE,
+        emits_event=True,
+        mutates_state=True,
+        action_kind=kind,
+    )
+
+
+def _evaluate_inscribe(
+    state: WorldState,
+    operation: _InscribeOp,
+    kind: str,
+    *,
+    resolved: ResolvedActionEffects | None,
+) -> RuleResult:
+    if operation.hold:
+        if not artifact_kind_is_portable(operation.artifact_kind):
+            return _artifact_reject(
+                kind,
+                RuleReason.INVALID_ARTIFACT_HOLD,
+                operation.actor_id,
+                None,
+                op="inscribe",
+            )
+        if (
+            _held_artifact_count(state, operation.actor_id)
+            >= MAX_HELD_ARTIFACTS_PER_BODY
+        ):
+            return _artifact_reject(
+                kind,
+                RuleReason.ARTIFACT_HOLD_CAP,
+                operation.actor_id,
+                None,
+                op="inscribe",
+            )
+    if resolved is None:
+        return _artifact_reject(
+            kind,
+            RuleReason.MISSING_RESOLVED_EFFECT,
+            operation.actor_id,
+            None,
+            op="inscribe",
+        )
+    try:
+        effect = resolved.require(
+            operation.request_id, ResolvedArtifactInscribeEffect
+        )
+    except (TypeError, ValueError):
+        return _artifact_reject(
+            kind,
+            RuleReason.MISSING_RESOLVED_EFFECT,
+            operation.actor_id,
+            None,
+            op="inscribe",
+        )
+    assert type(effect) is ResolvedArtifactInscribeEffect
+    return _artifact_success(kind, op="inscribe")
+
+
+def _evaluate_amend(
+    state: WorldState, operation: _AmendOp, kind: str
+) -> RuleResult:
+    access = _artifact_access_reject(
+        state, operation.actor_id, operation.artifact_id, kind
+    )
+    if access is not None:
+        return access
+    return _artifact_success(kind, op="amend")
+
+
+def _evaluate_erase(
+    state: WorldState, operation: _EraseOp, kind: str
+) -> RuleResult:
+    access = _artifact_access_reject(
+        state, operation.actor_id, operation.artifact_id, kind
+    )
+    if access is not None:
+        return access
+    return _artifact_success(kind, op="erase")
+
+
+def _evaluate_transfer_artifact(
+    state: WorldState, operation: _TransferArtifactOp, kind: str
+) -> RuleResult:
+    artifact = state.artifacts.get(operation.artifact_id)
+    if artifact is None:
+        return _artifact_reject(
+            kind,
+            RuleReason.UNKNOWN_ARTIFACT,
+            operation.actor_id,
+            operation.artifact_id,
+            op="transfer_artifact",
+            mode=operation.mode,
+        )
+    if not artifact_kind_is_portable(artifact.kind):
+        return _artifact_reject(
+            kind,
+            RuleReason.ARTIFACT_NOT_PORTABLE,
+            operation.actor_id,
+            operation.artifact_id,
+            op="transfer_artifact",
+            mode=operation.mode,
+        )
+    actor = state.bodies[operation.actor_id]
+    if operation.mode == "claim":
+        if artifact.location_id != actor.location_id or artifact.holder_id is not None:
+            return _artifact_reject(
+                kind,
+                RuleReason.ARTIFACT_NOT_COLOCATED,
+                operation.actor_id,
+                operation.artifact_id,
+                op="transfer_artifact",
+                mode=operation.mode,
+            )
+        if (
+            _held_artifact_count(state, operation.actor_id)
+            >= MAX_HELD_ARTIFACTS_PER_BODY
+        ):
+            return _artifact_reject(
+                kind,
+                RuleReason.ARTIFACT_HOLD_CAP,
+                operation.actor_id,
+                operation.artifact_id,
+                op="transfer_artifact",
+                mode=operation.mode,
+            )
+    elif operation.mode == "deposit":
+        if artifact.holder_id != operation.actor_id:
+            return _artifact_reject(
+                kind,
+                RuleReason.ARTIFACT_NOT_HELD,
+                operation.actor_id,
+                operation.artifact_id,
+                op="transfer_artifact",
+                mode=operation.mode,
+            )
+    elif operation.mode == "give":
+        if artifact.holder_id != operation.actor_id:
+            return _artifact_reject(
+                kind,
+                RuleReason.ARTIFACT_NOT_HELD,
+                operation.actor_id,
+                operation.artifact_id,
+                op="transfer_artifact",
+                mode=operation.mode,
+            )
+        recipient_id = operation.recipient_id
+        if recipient_id is None:
+            return _artifact_reject(
+                kind,
+                RuleReason.ARTIFACT_TRANSFER_MODE_INVALID,
+                operation.actor_id,
+                operation.artifact_id,
+                op="transfer_artifact",
+                mode=operation.mode,
+            )
+        recipient = state.bodies.get(recipient_id)
+        if (
+            recipient is None
+            or recipient.life_status is LifeStatus.DEAD
+            or recipient.location_id != actor.location_id
+        ):
+            return _artifact_reject(
+                kind,
+                RuleReason.RECIPIENT_UNAVAILABLE,
+                operation.actor_id,
+                operation.artifact_id,
+                op="transfer_artifact",
+                mode=operation.mode,
+            )
+        if _held_artifact_count(state, recipient_id) >= MAX_HELD_ARTIFACTS_PER_BODY:
+            return _artifact_reject(
+                kind,
+                RuleReason.ARTIFACT_HOLD_CAP,
+                operation.actor_id,
+                operation.artifact_id,
+                op="transfer_artifact",
+                mode=operation.mode,
+            )
+    else:
+        return _artifact_reject(
+            kind,
+            RuleReason.ARTIFACT_TRANSFER_MODE_INVALID,
+            operation.actor_id,
+            operation.artifact_id,
+            op="transfer_artifact",
+            mode=operation.mode,
+        )
+    return _artifact_success(
+        kind, op="transfer_artifact", mode=operation.mode
+    )
+
+
+def _apply_inscribe(
+    state: WorldState,
+    operation: _InscribeOp,
+    *,
+    result: RuleResult,
+    resolved: ResolvedActionEffects | None,
+    tick: int,
+) -> RuleApplication:
+    if resolved is None:
+        return RuleApplication(
+            result=_artifact_reject(
+                result.action_kind,
+                RuleReason.MISSING_RESOLVED_EFFECT,
+                operation.actor_id,
+                None,
+                op="inscribe",
+            ),
+            next_state=state,
+            event_details=None,
+        )
+    effect = resolved.require(
+        operation.request_id, ResolvedArtifactInscribeEffect
+    )
+    assert type(effect) is ResolvedArtifactInscribeEffect
+    actor = state.bodies[operation.actor_id]
+    location_id = None if operation.hold else actor.location_id
+    holder_id = operation.actor_id if operation.hold else None
+    created = InformationArtifact(
+        artifact_id=effect.created_artifact_id,
+        kind=operation.artifact_kind,
+        author_id=operation.actor_id,
+        created_tick=tick,
+        content=operation.content,
+        content_revision=0,
+        location_id=location_id,
+        holder_id=holder_id,
+    )
+    artifacts = dict(state.artifacts)
+    artifacts[effect.created_artifact_id] = created
+    next_state = rebuild_world_state(state, artifacts=artifacts)
+    return RuleApplication(
+        result=result,
+        next_state=next_state,
+        event_details=ArtifactCreated(
+            artifact_id=effect.created_artifact_id,
+            artifact_kind=operation.artifact_kind,
+            author_id=operation.actor_id,
+            content_revision=0,
+            resulting_location_id=location_id,
+            resulting_holder_id=holder_id,
+        ),
+    )
+
+
+def _apply_amend(
+    state: WorldState,
+    operation: _AmendOp,
+    *,
+    result: RuleResult,
+) -> RuleApplication:
+    prior = state.artifacts[operation.artifact_id]
+    updated = replace(
+        prior,
+        content=operation.content,
+        content_revision=prior.content_revision + 1,
+    )
+    artifacts = dict(state.artifacts)
+    artifacts[operation.artifact_id] = updated
+    next_state = rebuild_world_state(state, artifacts=artifacts)
+    return RuleApplication(
+        result=result,
+        next_state=next_state,
+        event_details=ArtifactModified(
+            artifact_id=operation.artifact_id,
+            artifact_kind=updated.kind,
+            content_revision=updated.content_revision,
+            resulting_location_id=updated.location_id,
+            resulting_holder_id=updated.holder_id,
+        ),
+    )
+
+
+def _apply_erase(
+    state: WorldState,
+    operation: _EraseOp,
+    *,
+    result: RuleResult,
+) -> RuleApplication:
+    prior = state.artifacts[operation.artifact_id]
+    artifacts = dict(state.artifacts)
+    del artifacts[operation.artifact_id]
+    next_state = rebuild_world_state(state, artifacts=artifacts)
+    return RuleApplication(
+        result=result,
+        next_state=next_state,
+        event_details=ArtifactDestroyed(
+            artifact_id=operation.artifact_id,
+            artifact_kind=prior.kind,
+            content_revision=prior.content_revision,
+        ),
+    )
+
+
+def _apply_transfer_artifact(
+    state: WorldState,
+    operation: _TransferArtifactOp,
+    *,
+    result: RuleResult,
+) -> RuleApplication:
+    prior = state.artifacts[operation.artifact_id]
+    actor = state.bodies[operation.actor_id]
+    if operation.mode == "claim":
+        updated = replace(
+            prior, location_id=None, holder_id=operation.actor_id
+        )
+    elif operation.mode == "deposit":
+        updated = replace(
+            prior, location_id=actor.location_id, holder_id=None
+        )
+    else:
+        assert operation.recipient_id is not None
+        updated = replace(
+            prior, location_id=None, holder_id=operation.recipient_id
+        )
+    artifacts = dict(state.artifacts)
+    artifacts[operation.artifact_id] = updated
+    next_state = rebuild_world_state(state, artifacts=artifacts)
+    return RuleApplication(
+        result=result,
+        next_state=next_state,
+        event_details=ArtifactMoved(
+            artifact_id=operation.artifact_id,
+            artifact_kind=updated.kind,
+            content_revision=updated.content_revision,
+            resulting_location_id=updated.location_id,
+            resulting_holder_id=updated.holder_id,
+        ),
+    )
+
+
 def _command_for_production(operation: ValidatedWorldOperation) -> object:
     from world.actions import Build, Craft, Harvest, Repair, Store
 
@@ -1239,6 +1711,20 @@ def apply_operation(
             tick=0 if tick is None else tick,
             witness_resource_nodes=witness_resource_nodes,
         )
+    if type(operation) is _InscribeOp:
+        return _apply_inscribe(
+            state,
+            operation,
+            result=result,
+            resolved=resolved,
+            tick=0 if tick is None else tick,
+        )
+    if type(operation) is _AmendOp:
+        return _apply_amend(state, operation, result=result)
+    if type(operation) is _EraseOp:
+        return _apply_erase(state, operation, result=result)
+    if type(operation) is _TransferArtifactOp:
+        return _apply_transfer_artifact(state, operation, result=result)
     if type(operation) is _FleeOp:
         return _apply_flee(
             state,
