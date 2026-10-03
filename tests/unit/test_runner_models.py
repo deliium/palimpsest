@@ -108,11 +108,64 @@ def test_runner_config_rejects_incomplete_body_coverage() -> None:
 
 
 def test_exact_reproducibility_rejects_live_recording() -> None:
-    with pytest.raises(ValueError, match="exact reproducibility"):
+    with pytest.raises(ValueError, match="exact_reproducibility_forbids_live"):
         RunnerProviderSettings(
             recording_policy=RecordingPolicy.LIVE,
             exact_reproducibility=ExactReproducibilityMode.REQUIRED,
         )
+
+
+@pytest.mark.parametrize(
+    ("policy", "code"),
+    [
+        (RecordingPolicy.RECORD, "exact_reproducibility_forbids_record"),
+        (RecordingPolicy.CACHE, "exact_reproducibility_forbids_cache"),
+    ],
+)
+def test_exact_reproducibility_rejects_record_and_cache(
+    policy: RecordingPolicy, code: str
+) -> None:
+    with pytest.raises(ValueError, match=code):
+        RunnerProviderSettings(
+            recording_policy=policy,
+            exact_reproducibility=ExactReproducibilityMode.REQUIRED,
+        )
+
+
+def test_exact_reproducibility_allows_replay() -> None:
+    settings = RunnerProviderSettings(
+        recording_policy=RecordingPolicy.REPLAY,
+        exact_reproducibility=ExactReproducibilityMode.REQUIRED,
+    )
+    assert settings.recording_policy is RecordingPolicy.REPLAY
+
+
+def test_recorded_alias_decodes_to_replay() -> None:
+    from simulation.runner_serialization import (
+        _decode_recording_policy,
+        encode_runner_config,
+        decode_runner_config,
+    )
+
+    assert (
+        _decode_recording_policy("recorded", path="$.provider") is RecordingPolicy.REPLAY
+    )
+    config = _config()
+    from dataclasses import replace
+
+    replay_config = replace(
+        config,
+        provider=replace(
+            config.provider,
+            recording_policy=RecordingPolicy.REPLAY,
+        ),
+    )
+    document = decode_runner_config(encode_runner_config(replay_config))
+    assert document.provider.recording_policy is RecordingPolicy.REPLAY
+    # Encode writes replay, never recorded.
+    raw = encode_runner_config(replay_config)
+    assert b'"recording_policy":"replay"' in raw
+    assert b'"recording_policy":"recorded"' not in raw
 
 
 def test_diagnostics_omit_seed_and_drive_values() -> None:

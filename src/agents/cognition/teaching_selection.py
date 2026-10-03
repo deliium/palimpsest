@@ -151,6 +151,7 @@ async def _generate(
                 agent_id=owner,
                 tick=tick,
                 llm_request_id=f"teaching-{tick}-{owner}",
+                component="teaching",
             ),
             prompt=rendered.reference,
         )

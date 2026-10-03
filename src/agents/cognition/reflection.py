@@ -2041,6 +2041,7 @@ class LLMReflectionSelector:
                     agent_id=owner_id.value,
                     tick=tick,
                     llm_request_id=f"reflection-{tick}-{owner_id.value}",
+                    component="reflection",
                 ),
                 prompt=rendered.reference,
             )

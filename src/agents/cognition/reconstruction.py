@@ -225,6 +225,7 @@ class LLMMemoryReconstructor:
                 llm_request_id=(
                     f"{self._request_id_prefix}-{evidence.reconstruction_id.value}"
                 ),
+                component="reconstructive_memory",
             ),
             prompt=rendered.reference,
             options=self._options,

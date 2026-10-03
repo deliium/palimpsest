@@ -126,6 +126,7 @@ async def _generate(
                 agent_id=beliefs.owner_id.value,
                 tick=tick,
                 llm_request_id=f"production-{tick}-{beliefs.owner_id.value}",
+                component="production",
             ),
             prompt=rendered.reference,
         )

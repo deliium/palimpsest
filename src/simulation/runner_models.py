@@ -1362,7 +1362,9 @@ class RecordingPolicy(StrEnum):
 
     LIVE = "live"
     DETERMINISTIC_FAKE = "deterministic_fake"
-    RECORDED = "recorded"
+    RECORD = "record"
+    CACHE = "cache"
+    REPLAY = "replay"
 
 
 class ExactReproducibilityMode(StrEnum):
@@ -1995,11 +1997,22 @@ class RunnerProviderSettings:
             raise TypeError("send_correlation_header must be bool")
         if self.exact_reproducibility is ExactReproducibilityMode.REQUIRED:
             if self.recording_policy is RecordingPolicy.LIVE:
+                raise ValueError("exact_reproducibility_forbids_live")
+            if self.recording_policy is RecordingPolicy.RECORD:
+                raise ValueError("exact_reproducibility_forbids_record")
+            if self.recording_policy is RecordingPolicy.CACHE:
+                raise ValueError("exact_reproducibility_forbids_cache")
+            if self.recording_policy not in {
+                RecordingPolicy.DETERMINISTIC_FAKE,
+                RecordingPolicy.REPLAY,
+            }:
                 raise ValueError(
-                    "exact reproducibility requires deterministic_fake or recorded "
-                    "recording_policy"
+                    f"exact_reproducibility_forbids_{self.recording_policy.value}"
                 )
-            if self.adapter_kind is ProviderAdapterKind.OPENAI_COMPATIBLE:
+            if (
+                self.recording_policy is RecordingPolicy.DETERMINISTIC_FAKE
+                and self.adapter_kind is ProviderAdapterKind.OPENAI_COMPATIBLE
+            ):
                 raise ValueError("exact reproducibility forbids live external adapters")
         forbidden = {"api_key", "base_url", "endpoint", "authorization"}
         # Structural guard: dataclass has no credential fields by construction.

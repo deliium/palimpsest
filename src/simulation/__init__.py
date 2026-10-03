@@ -348,6 +348,7 @@ from simulation.run_control import (
 from simulation.runner import (
     ProviderCredentialResolver,
     ProviderCredentials,
+    RecordingStoreSettings,
     RunnerConstructionError,
     RunnerConstructionErrorCode,
     RunnerDependencyFactories,
@@ -672,6 +673,7 @@ __all__ = [
     "ProviderCredentialResolver",
     "ProviderCredentials",
     "RecordingPolicy",
+    "RecordingStoreSettings",
     "ReflectionMode",
     "RegistrationTranslator",
     "ReplayFallbackPolicy",

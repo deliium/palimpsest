@@ -178,6 +178,7 @@ async def _generate(
                 agent_id=rollout.owner_id.value,
                 tick=tick,
                 llm_request_id=f"prospective-{tick}-{rollout.owner_id.value}",
+                component="prospective",
             ),
             prompt=rendered.reference,
             options=LLMRequestOptions(max_output_tokens=output_tokens),

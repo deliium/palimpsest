@@ -1,14 +1,16 @@
 """Strict canonical JSON codecs and fingerprints for runner configuration.
 
-Codecs are log-free. Errors expose only stable ``code`` and ``path`` metadata.
-Credentials, base URLs, prompts, and full seed-bearing dumps never appear in
-exception messages.
+Codecs are log-free except for one compatibility WARNING when decoding the
+legacy ``recording_policy=recorded`` alias. Errors expose only stable ``code``
+and ``path`` metadata. Credentials, base URLs, prompts, and full seed-bearing
+dumps never appear in exception messages.
 """
 
 from __future__ import annotations
 
 import hashlib
 import json
+import logging
 from collections.abc import Mapping
 from typing import Any, Final
 
@@ -138,6 +140,9 @@ __all__ = [
     "runner_result_fingerprint",
     "scenario_fingerprint",
 ]
+
+_LOG: Final[logging.Logger] = logging.getLogger("simulation.runner_serialization")
+_RECORDED_ALIAS_WARNED: bool = False
 
 
 class RunnerSerializationError(ValueError):
@@ -1509,6 +1514,25 @@ def _require_positive_number_field(
     return number
 
 
+def _decode_recording_policy(raw: str, *, path: str) -> RecordingPolicy:
+    """Decode recording policy; map legacy ``recorded`` → ``replay`` once."""
+    global _RECORDED_ALIAS_WARNED
+    value = raw
+    if value == "recorded":
+        if not _RECORDED_ALIAS_WARNED:
+            _LOG.warning(
+                "recording_policy_decode reason=recording_policy_recorded_alias"
+            )
+            _RECORDED_ALIAS_WARNED = True
+        value = RecordingPolicy.REPLAY.value
+    try:
+        return RecordingPolicy(value)
+    except ValueError as exc:
+        raise RunnerSerializationError(
+            "invalid_model", f"{path}.recording_policy"
+        ) from exc
+
+
 def _encode_provider(value: RunnerProviderSettings) -> dict[str, Any]:
     return {
         "adapter_kind": value.adapter_kind.value,
@@ -1606,8 +1630,9 @@ def _decode_provider(data: dict[str, Any], *, path: str) -> RunnerProviderSettin
             send_correlation_header=_bool_field(
                 data, "send_correlation_header", path=path
             ),
-            recording_policy=RecordingPolicy(
-                _str_field(data, "recording_policy", path=path)
+            recording_policy=_decode_recording_policy(
+                _str_field(data, "recording_policy", path=path),
+                path=path,
             ),
             exact_reproducibility=ExactReproducibilityMode(
                 _str_field(data, "exact_reproducibility", path=path)

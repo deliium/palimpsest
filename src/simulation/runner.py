@@ -7,10 +7,12 @@ It never imports environment settings, SQLAlchemy adapters, or API code.
 
 from __future__ import annotations
 
+import hashlib
 import logging
 from collections.abc import Awaitable, Callable, Sequence
 from dataclasses import dataclass
 from enum import StrEnum
+from pathlib import Path
 from typing import Final, Protocol
 
 from agents.cognition.communication_strategy import (
@@ -53,6 +55,12 @@ from llm.factory import (
     ProviderAdapterKind,
     ProviderFactoryConfig,
     create_llm_provider,
+)
+from llm.recording import (
+    LookupMode,
+    RecordingMode,
+    create_filesystem_recording_store,
+    wrap_recording_provider,
 )
 from memory.belief_service import InMemorySemanticBeliefService
 from memory.contracts import MemoryReconstructor, MemoryService, SemanticBeliefService
@@ -180,6 +188,7 @@ __all__ = [
     "MemoryServiceFactory",
     "ProviderCredentialResolver",
     "ProviderCredentials",
+    "RecordingStoreSettings",
     "RelationshipServiceFactory",
     "RunnerConstructionError",
     "RunnerConstructionErrorCode",
@@ -187,6 +196,22 @@ __all__ = [
     "SimulationRunner",
     "SubjectiveBundleFactory",
 ]
+
+_LLM_ASSISTED_POLICIES: Final[frozenset[RecordingPolicy]] = frozenset(
+    {
+        RecordingPolicy.LIVE,
+        RecordingPolicy.RECORD,
+        RecordingPolicy.CACHE,
+        RecordingPolicy.REPLAY,
+    }
+)
+_RECORDING_STORE_POLICIES: Final[frozenset[RecordingPolicy]] = frozenset(
+    {
+        RecordingPolicy.RECORD,
+        RecordingPolicy.CACHE,
+        RecordingPolicy.REPLAY,
+    }
+)
 
 
 class RunnerConstructionErrorCode(StrEnum):
@@ -236,6 +261,37 @@ class ProviderCredentials:
 
     api_key: str | None = None
     base_url: str | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class RecordingStoreSettings:
+    """Composition-only recording store settings (never in provider JSON)."""
+
+    root_dir: Path | str
+    cache_namespace: str
+    lookup_mode: LookupMode
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.root_dir, (Path, str)):
+            raise TypeError("root_dir must be Path or str")
+        if not isinstance(self.cache_namespace, str) or not self.cache_namespace.strip():
+            raise ValueError("cache_namespace must be a non-blank string")
+        if type(self.lookup_mode) is not LookupMode:
+            raise TypeError("lookup_mode must be LookupMode")
+        object.__setattr__(self, "cache_namespace", self.cache_namespace.strip())
+
+    def __repr__(self) -> str:
+        root_name = (
+            self.root_dir.name
+            if isinstance(self.root_dir, Path)
+            else Path(self.root_dir).name
+        )
+        return (
+            "RecordingStoreSettings("
+            f"root_basename={root_name!r}, "
+            f"namespace_chars={len(self.cache_namespace)}, "
+            f"lookup_mode={self.lookup_mode.value!r})"
+        )
 
 
 class ProviderCredentialResolver(Protocol):
@@ -302,6 +358,7 @@ class RunnerDependencyFactories:
         "_monotonic",
         "_pending_finalizations",
         "_provider_factory",
+        "_recording_store",
         "_relationship_factory",
         "_run_repository",
         "_scientific_evidence",
@@ -319,6 +376,7 @@ class RunnerDependencyFactories:
             ]
             | None
         ) = None,
+        recording_store: RecordingStoreSettings | None = None,
         memory_factory: MemoryServiceFactory | None = None,
         belief_factory: BeliefServiceFactory | None = None,
         relationship_factory: RelationshipServiceFactory | None = None,
@@ -333,6 +391,7 @@ class RunnerDependencyFactories:
     ) -> None:
         self._credential_resolver = credential_resolver
         self._provider_factory = provider_factory
+        self._recording_store = recording_store
         self._memory_factory = memory_factory
         self._belief_factory = belief_factory
         self._relationship_factory = relationship_factory
@@ -384,6 +443,7 @@ class RunnerDependencyFactories:
             credentials,
             sleep=self._sleep,
             monotonic=self._monotonic,
+            recording_store=self._recording_store,
         )
 
     def create_memory_service(
@@ -772,21 +832,73 @@ def _default_provider(
     *,
     sleep: AsyncSleep | None,
     monotonic: MonotonicClock | None,
+    recording_store: RecordingStoreSettings | None = None,
 ) -> AsyncCloseable:
     if settings.recording_policy is RecordingPolicy.DETERMINISTIC_FAKE:
         _LOG.info(
-            "provider_deterministic_fake adapter_kind=%s recording_policy=%s",
+            "provider_deterministic_fake adapter_kind=%s recording_policy=%s "
+            "store_configured=%s",
             settings.adapter_kind.value,
             settings.recording_policy.value,
+            False,
         )
         return DeterministicFakeLLMProvider()
-    if settings.recording_policy is RecordingPolicy.RECORDED:
-        _LOG.warning(
-            "provider_recorded_fallback adapter_kind=%s recording_policy=%s",
-            settings.adapter_kind.value,
-            settings.recording_policy.value,
+
+    if settings.recording_policy in _RECORDING_STORE_POLICIES:
+        if recording_store is None:
+            _LOG.error(
+                "provider_construction_failed reason=recording_store_required "
+                "recording_policy=%s",
+                settings.recording_policy.value,
+            )
+            raise RunnerConstructionError(
+                RunnerConstructionErrorCode.PROVIDER_FAILED,
+                stage="recording_store_required",
+            )
+        if monotonic is None:
+            raise RunnerConstructionError(
+                RunnerConstructionErrorCode.PROVIDER_FAILED,
+                stage="provider_clocks",
+            )
+        inner = _inner_provider_for_recording(
+            settings,
+            credentials,
+            sleep=sleep,
+            monotonic=monotonic,
         )
-        return DeterministicFakeLLMProvider(provider_name="recorded_fallback")
+        store = create_filesystem_recording_store(recording_store.root_dir)
+        mode = RecordingMode(settings.recording_policy.value)
+        _LOG.info(
+            "provider_recording_wrap mode=%s adapter_kind=%s store_configured=%s "
+            "lookup_mode=%s",
+            mode.value,
+            settings.adapter_kind.value,
+            True,
+            recording_store.lookup_mode.value,
+        )
+        _LOG.debug(
+            "recording_store_configured namespace_prefix=%s lookup_mode=%s",
+            hashlib.sha256(recording_store.cache_namespace.encode("utf-8")).hexdigest()[
+                :12
+            ],
+            recording_store.lookup_mode.value,
+        )
+        return wrap_recording_provider(
+            inner=inner,
+            mode=mode,
+            store=store,
+            cache_namespace=recording_store.cache_namespace,
+            lookup_mode=recording_store.lookup_mode,
+            structured_output_mode=settings.structured_output_mode,
+            provider_name=(
+                "openai_compatible"
+                if settings.adapter_kind is ProviderAdapterKind.OPENAI_COMPATIBLE
+                else settings.adapter_kind.value
+            ),
+            model_name=settings.model or "unspecified",
+            monotonic=monotonic,
+        )
+
     if settings.adapter_kind is ProviderAdapterKind.DISABLED:
         return DisabledLLMProvider()
     if sleep is None or monotonic is None:
@@ -809,7 +921,54 @@ def _default_provider(
         max_header_bytes=settings.max_header_bytes,
         send_correlation_header=settings.send_correlation_header,
     )
+    _LOG.info(
+        "provider_live adapter_kind=%s recording_policy=%s store_configured=%s",
+        settings.adapter_kind.value,
+        settings.recording_policy.value,
+        False,
+    )
     return create_llm_provider(factory_config, sleep=sleep, monotonic=monotonic)
+
+
+def _inner_provider_for_recording(
+    settings: RunnerProviderSettings,
+    credentials: ProviderCredentials,
+    *,
+    sleep: AsyncSleep | None,
+    monotonic: MonotonicClock,
+) -> AsyncCloseable:
+    """Build the inner provider for record/cache/replay wraps."""
+    if settings.recording_policy is RecordingPolicy.REPLAY:
+        # Non-network stub; generate must never be reached on a store hit.
+        return DeterministicFakeLLMProvider(provider_name="replay_stub")
+    if settings.adapter_kind is ProviderAdapterKind.DISABLED:
+        return DisabledLLMProvider()
+    if settings.adapter_kind is ProviderAdapterKind.OPENAI_COMPATIBLE:
+        if sleep is None:
+            raise RunnerConstructionError(
+                RunnerConstructionErrorCode.PROVIDER_FAILED,
+                stage="provider_clocks",
+            )
+        return create_llm_provider(
+            ProviderFactoryConfig(
+                adapter_kind=settings.adapter_kind,
+                model=settings.model,
+                base_url=credentials.base_url,
+                api_key=credentials.api_key,
+                mode=settings.structured_output_mode,
+                temperature=settings.temperature,
+                max_attempts=settings.retry_count,
+                per_attempt_timeout_seconds=settings.per_attempt_timeout_seconds,
+                total_deadline_seconds=settings.total_deadline_seconds,
+                max_request_bytes=settings.max_request_bytes,
+                max_response_bytes=settings.max_response_bytes,
+                max_header_bytes=settings.max_header_bytes,
+                send_correlation_header=settings.send_correlation_header,
+            ),
+            sleep=sleep,
+            monotonic=monotonic,
+        )
+    return DeterministicFakeLLMProvider()
 
 
 def _consolidation_selector_for(
@@ -822,10 +981,7 @@ def _consolidation_selector_for(
         return None
     from agents.cognition.consolidation import LLMOfflineConsolidationSelector
 
-    if (
-        settings.recording_policy is RecordingPolicy.LIVE
-        and settings.adapter_kind is ProviderAdapterKind.OPENAI_COMPATIBLE
-    ):
+    if _llm_assisted_provider_bound(settings):
         return LLMOfflineConsolidationSelector(provider)  # type: ignore[arg-type]
     return LLMOfflineConsolidationSelector(None)
 
@@ -840,12 +996,18 @@ def _reflection_selector_for(
         return None
     from agents.cognition.reflection import LLMReflectionSelector
 
-    if (
-        settings.recording_policy is RecordingPolicy.LIVE
-        and settings.adapter_kind is ProviderAdapterKind.OPENAI_COMPATIBLE
-    ):
+    if _llm_assisted_provider_bound(settings):
         return LLMReflectionSelector(provider)  # type: ignore[arg-type]
     return LLMReflectionSelector(None)
+
+
+def _llm_assisted_provider_bound(settings: RunnerProviderSettings) -> bool:
+    """Whether LLM-assisted cognition may use the constructed provider."""
+    if settings.recording_policy not in _LLM_ASSISTED_POLICIES:
+        return False
+    if settings.recording_policy is RecordingPolicy.LIVE:
+        return settings.adapter_kind is ProviderAdapterKind.OPENAI_COMPATIBLE
+    return True
 
 
 def _reconstructor_for(
@@ -854,9 +1016,12 @@ def _reconstructor_for(
 ) -> MemoryReconstructor:
     if settings.recording_policy is RecordingPolicy.DETERMINISTIC_FAKE:
         return DeterministicMemoryReconstructor()
-    if settings.adapter_kind is ProviderAdapterKind.DISABLED:
+    if (
+        settings.adapter_kind is ProviderAdapterKind.DISABLED
+        and settings.recording_policy is RecordingPolicy.LIVE
+    ):
         return DeterministicMemoryReconstructor()
-    if settings.recording_policy is RecordingPolicy.LIVE:
+    if settings.recording_policy in _LLM_ASSISTED_POLICIES:
         return LLMMemoryReconstructor(provider)  # type: ignore[arg-type]
     return DeterministicMemoryReconstructor()
 
@@ -1173,11 +1338,7 @@ class SimulationRunner:
             stage = "agents"
             memory_run_id = MemoryRunId(resolved_run_id.value)
             scoring_policy = _default_scoring_policy()
-            allow_provider = (
-                config.provider.recording_policy is RecordingPolicy.LIVE
-                and config.provider.adapter_kind
-                is ProviderAdapterKind.OPENAI_COMPATIBLE
-            )
+            allow_provider = _llm_assisted_provider_bound(config.provider)
             reconstruction_policy = _default_reconstruction_policy(
                 allow_provider=allow_provider
             )

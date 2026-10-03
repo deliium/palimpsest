@@ -160,6 +160,7 @@ async def _generate_world_model_selection(
                 agent_id=model.owner_id.value,
                 tick=tick,
                 llm_request_id=f"world-model-{tick}-{model.owner_id.value}",
+                component="world_model",
             ),
             prompt=rendered.reference,
         )

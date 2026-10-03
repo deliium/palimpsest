@@ -631,6 +631,7 @@ class LLMOfflineConsolidationSelector:
                         f"offline-consolidation-{selection.tick}-"
                         f"{selection.owner_id.value}"
                     ),
+                    component="offline_consolidation",
                 ),
                 prompt=rendered.reference,
             )

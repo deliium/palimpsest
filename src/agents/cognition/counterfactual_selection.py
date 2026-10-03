@@ -221,6 +221,7 @@ async def _generate(
                 agent_id=owner_id,
                 tick=tick,
                 llm_request_id=f"counterfactual-{tick}-{owner_id}",
+                component="counterfactual",
             ),
             prompt=rendered.reference,
             options=LLMRequestOptions(max_output_tokens=output_tokens),

@@ -158,6 +158,7 @@ async def _generate(
                 agent_id=model.owner_id.value,
                 tick=tick,
                 llm_request_id=f"theory-of-mind-{tick}-{model.owner_id.value}",
+                component="theory_of_mind",
             ),
             prompt=rendered.reference,
         )

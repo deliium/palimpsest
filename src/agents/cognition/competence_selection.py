@@ -152,6 +152,7 @@ async def _generate(
                 agent_id=model.owner_id.value,
                 tick=tick,
                 llm_request_id=f"competence-{tick}-{model.owner_id.value}",
+                component="competence",
             ),
             prompt=rendered.reference,
         )

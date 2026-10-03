@@ -260,25 +260,25 @@ Each checkpoint is a git commit on `main` created when those tasks are done. Do 
 
 ### Phase 3: Simulation wiring
 
-- [ ] Task 7: Expand `RecordingPolicy` and exact-reproducibility rules
+- [x] Task 7: Expand `RecordingPolicy` and exact-reproducibility rules
   - Deliverable: Add `RECORD`, `CACHE`, `REPLAY`. In `_decode_provider`, alias `recorded` → `replay` before enum construction; encode `replay`. Update `ExactReproducibilityMode.REQUIRED` guards to allow only `deterministic_fake` and `replay`. Keep `provider-settings-v1` exact key-set unchanged. Update diagnostics / serialization tests.
   - Logging: one WARNING on alias decode; construction errors stay exception codes without payload.
   - Files: `src/simulation/runner_models.py`, `src/simulation/runner_serialization.py`, `src/simulation/__init__.py`, `tests/unit/test_runner_models.py`, `tests/unit/test_v2_golden_runner_configs.py` (only if provider blobs appear there)
   - Dependencies: Task 5.
 
-- [ ] Task 8: Wire `_default_provider` and LLM-assisted cognition gates
+- [x] Task 8: Wire `_default_provider` and LLM-assisted cognition gates
   - Deliverable: Replace `recorded_fallback` fake with real recording wrap; require store for `record`/`cache`/`replay`. Widen LIVE-only gates for memory/reflection/consolidation (and any peer LIVE-only provider binds) to `{LIVE, RECORD, CACHE, REPLAY}`. Leave component labeling and store-settings type to Tasks 8a/8b.
   - Logging: keep `provider_*` events; add mode + `store_configured` boolean (not path).
   - Files: `src/simulation/runner.py`, `tests/unit/test_simulation_runner_construction.py`
   - Dependencies: Task 7.
 
-- [ ] Task 8a: Composition-only `RecordingStoreSettings`
+- [x] Task 8a: Composition-only `RecordingStoreSettings`
   - Deliverable: Add frozen `RecordingStoreSettings` (`root_dir`, `cache_namespace`, `lookup_mode`) parallel to `ProviderCredentials`. Thread through `SimulationRunner` construction. Prove store settings never appear in `_encode_provider`, `provider_fingerprint`, or result documents. Construction fails closed when policy is `record`/`cache`/`replay` and settings are missing.
   - Logging: DEBUG `recording_store_configured namespace_prefix=%s lookup_mode=%s` (no absolute paths at INFO).
   - Files: `src/simulation/runner_models.py` (or adjacent), `src/simulation/runner.py`, `src/simulation/__init__.py`, `tests/unit/test_simulation_runner_construction.py`, `tests/unit/test_runner_models.py`
   - Dependencies: Task 7.
 
-- [ ] Task 8b: Label every production `LLMRequestContext` with closed component strings
+- [x] Task 8b: Label every production `LLMRequestContext` with closed component strings
   - Deliverable: Pass the closed labels from the Design Decisions table at all ten call sites. Unit-assert each site supplies non-blank `component` (parametrized or snapshot of construction helpers).
   - Logging: existing cognition LLM start/complete events may include `component=` when already metadata-safe; never log prompts/outputs.
   - Files: `src/agents/cognition/reconstruction.py`, `reflection.py`, `consolidation.py`, `world_model_selection.py`, `prospective_selection.py`, `counterfactual_selection.py`, `theory_of_mind_selection.py`, `competence_selection.py`, `teaching_selection.py`, `production_selection.py`, `tests/unit/test_llm_request_components.py`

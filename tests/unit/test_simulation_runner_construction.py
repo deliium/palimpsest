@@ -261,6 +261,59 @@ async def test_from_config_uses_deterministic_fake_provider() -> None:
 
 
 @pytest.mark.asyncio
+async def test_replay_without_store_fails_closed(tmp_path: object) -> None:
+    from dataclasses import replace
+
+    from llm.recording import LookupMode, RecordingLLMProvider
+    from simulation.runner import RecordingStoreSettings
+    from simulation.runner_models import ExactReproducibilityMode, RecordingPolicy
+
+    config = _config()
+    provider = replace(
+        config.provider,
+        recording_policy=RecordingPolicy.REPLAY,
+        exact_reproducibility=ExactReproducibilityMode.REQUIRED,
+    )
+    config = replace(config, provider=provider)
+    with pytest.raises(RunnerConstructionError) as exc_info:
+        await SimulationRunner.from_config(
+            config,
+            run_id=RunId("run-replay-missing-store"),
+            factories=RunnerDependencyFactories(),
+        )
+    assert exc_info.value.code is RunnerConstructionErrorCode.PROVIDER_FAILED
+    assert exc_info.value.stage == "recording_store_required"
+
+    factories = RunnerDependencyFactories(
+        recording_store=RecordingStoreSettings(
+            root_dir=tmp_path,  # type: ignore[arg-type]
+            cache_namespace="run-replay-1",
+            lookup_mode=LookupMode.BY_CORRELATION,
+        ),
+        monotonic=lambda: 0.0,
+    )
+    async with await SimulationRunner.from_config(
+        config, run_id=RunId("run-replay-ok"), factories=factories
+    ) as runner:
+        assert type(runner._provider) is RecordingLLMProvider
+        assert runner._provider.mode.value == "replay"
+
+
+def test_recording_store_settings_absent_from_provider_json() -> None:
+    from simulation.runner_serialization import (
+        encode_runner_config,
+        provider_fingerprint,
+    )
+
+    config = _config()
+    encoded = encode_runner_config(config)
+    assert b"cache_namespace" not in encoded
+    assert b"lookup_mode" not in encoded
+    assert b"root_dir" not in encoded
+    assert provider_fingerprint(config) == provider_fingerprint(config)
+
+
+@pytest.mark.asyncio
 async def test_from_config_rejects_durable_without_adapters() -> None:
     config = _config(durable=True)
     with pytest.raises(RunnerConstructionError) as exc_info:
