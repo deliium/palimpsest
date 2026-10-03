@@ -46,11 +46,24 @@ static func route(event: Variant, policy: Dictionary, logical: Dictionary) -> Di
 				action = "hazard"
 			"ARTIFACT_CREATED", "ARTIFACT_MODIFIED", "ARTIFACT_MOVED", "ARTIFACT_DESTROYED":
 				action = "artifact"
+			"RESOURCE_HARVESTED":
+				action = "harvest"
+			"CRAFT_STARTED", "ITEM_CRAFTED":
+				action = "craft"
+			"STRUCTURE_BUILT":
+				action = "build"
+			"STRUCTURE_REPAIRED":
+				action = "repair"
+			"ITEM_STORED":
+				action = "store"
 			_:
 				action = "activity"
 	var other := ""
 	if str(event.type) in _SPEECH or action in ["strike", "link", "item"]:
 		other = "" if event.target_id == null else str(event.target_id)
+	var recipe_id := "" if event.recipe_id == null else str(event.recipe_id)
+	var structure_id := "" if event.structure_id == null else str(event.structure_id)
+	var resource_id := "" if event.resource_id == null else str(event.resource_id)
 	return {
 		"action": action,
 		"skip": bool(policy.get("skip", false)),
@@ -64,6 +77,12 @@ static func route(event: Variant, policy: Dictionary, logical: Dictionary) -> Di
 		"destination": str(logical.get("destination", "")),
 		"other_id": other,
 		"item_id": "" if event.item_id == null else str(event.item_id),
+		"resource_id": resource_id,
+		"recipe_id": recipe_id,
+		"structure_id": structure_id,
+		"declared_confidence_band": (
+			"" if event.declared_confidence_band == null else str(event.declared_confidence_band)
+		),
 		"location_id": "" if event.origin_location_id == null else str(event.origin_location_id),
 		"moves_location": action == "move" and bool(logical.get("moved", false)),
 	}

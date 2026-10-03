@@ -137,6 +137,21 @@
         "unit": "liters"
       }
     ],
+    "structures": [
+      {
+        "structure_id": "struct-shelter-1",
+        "location_id": "loc-camp",
+        "kind": "shelter",
+        "integrity": 1.0,
+        "stored_quantity": 2,
+        "presentation": {
+          "visual_category": "structure",
+          "icon_key": "shelter",
+          "size_category": "medium",
+          "display_label": "shelter"
+        }
+      }
+    ],
     "weather": [
       {
         "location_id": "loc-camp",

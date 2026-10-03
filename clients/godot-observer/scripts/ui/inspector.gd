@@ -15,13 +15,15 @@ func show_agent(snapshot: Dictionary) -> void:
 	var entity_id := str(snapshot.get("entity_id", ""))
 	var inventory: Array = snapshot.get("inventory", [])
 	var inventory_text := "(empty)" if inventory.is_empty() else ", ".join(inventory)
-	_body.text = "agent_id %s\nentity_id %s\nlocation %s\nlife_status %s\ninventory %s\nlatest %s" % [
+	var extras := _optional_ids(snapshot)
+	_body.text = "agent_id %s\nentity_id %s\nlocation %s\nlife_status %s\ninventory %s\nlatest %s%s" % [
 		str(snapshot.get("agent_id", "")),
 		entity_id,
 		str(snapshot.get("location_name", "")),
 		str(snapshot.get("life_status", "")),
 		inventory_text,
 		str(snapshot.get("latest_event", "")),
+		extras,
 	]
 	var measures: Variant = snapshot.get("measures", null)
 	if measures == null:
@@ -37,6 +39,27 @@ func show_agent(snapshot: Dictionary) -> void:
 			measures.health, measures.hunger, measures.thirst, measures.fatigue, measures.temperature,
 		]
 	ObserverLog.debug("inspector", "opened entity_id=%s" % entity_id)
+
+
+func _optional_ids(snapshot: Dictionary) -> String:
+	var lines: Array[String] = []
+	for key in ["recipe_id", "structure_id", "resource_id", "item_id"]:
+		var value := str(snapshot.get(key, ""))
+		if value != "":
+			lines.append("%s %s" % [key, value])
+	var structure: Variant = snapshot.get("structure", null)
+	if typeof(structure) == TYPE_DICTIONARY:
+		lines.append(
+			"structure %s kind=%s integrity=%s stored=%s" % [
+				str(structure.get("structure_id", "")),
+				str(structure.get("kind", "")),
+				str(structure.get("integrity", "")),
+				str(structure.get("stored_quantity", "")),
+			]
+		)
+	if lines.is_empty():
+		return ""
+	return "\n" + "\n".join(lines)
 
 
 func clear_agent() -> void:

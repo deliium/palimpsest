@@ -23,6 +23,7 @@ const _ARTIFACT_TYPES: Array[String] = [
 func run() -> Array:
 	var failures: Array = []
 	_expect(failures, _every_semantic_fixture(), "semantic fixtures parse")
+	_expect(failures, _production_optional_fields(), "production optional fields parse")
 	_expect(failures, _reference_frame(), "reference frame parses")
 	_expect(failures, _unknown_event(), "unknown event is structured")
 	_expect(failures, _rejects_foreign_protocol(), "foreign protocol is rejected")
@@ -57,6 +58,37 @@ func _every_semantic_fixture() -> String:
 	return ""
 
 
+func _production_optional_fields() -> String:
+	var crafted = Protocol.parse_text(
+		"event",
+		FileAccess.get_file_as_string("res://fixtures/protocol/events/ITEM_CRAFTED.json")
+	)
+	if not crafted.ok or crafted.value.recipe_id != "recipe-axe":
+		return "recipe_id missing on ITEM_CRAFTED"
+	if crafted.value.item_id != "item-axe":
+		return "item_id missing on ITEM_CRAFTED"
+	var built = Protocol.parse_text(
+		"event",
+		FileAccess.get_file_as_string("res://fixtures/protocol/events/STRUCTURE_BUILT.json")
+	)
+	if not built.ok or built.value.structure_id != "struct-shelter-1":
+		return "structure_id missing on STRUCTURE_BUILT"
+	var with_band = Protocol.parse_event({
+		"protocol_version": Protocol.PROTOCOL_VERSION,
+		"type": "AGENT_TALKED",
+		"domain_kind": "talk",
+		"event_id": "evt-talk-band",
+		"tick": 1,
+		"sequence": 0,
+		"actor_id": "body-ada",
+		"target_id": "body-bo",
+		"declared_confidence_band": "medium",
+	})
+	if not with_band.ok or with_band.value.declared_confidence_band != "medium":
+		return "declared_confidence_band missing"
+	return ""
+
+
 func _reference_frame() -> String:
 	var text := FileAccess.get_file_as_string("res://fixtures/protocol/reference_frame.json")
 	var parsed = Protocol.parse_text("frame", text)
@@ -88,6 +120,21 @@ func _reference_frame() -> String:
 		return "folded events missing"
 	if frame.world.agents[0].location_id != frame.events[0].destination_location_id:
 		return "folded move was not already in world"
+	if frame.world.structures.size() != 1:
+		return "structure count"
+	var structure = frame.world.structures[0]
+	if structure.structure_id != "struct-shelter-1":
+		return "structure id"
+	if structure.location_id != "loc-camp":
+		return "structure location"
+	if structure.kind != "shelter":
+		return "structure kind"
+	if not is_equal_approx(structure.integrity, 1.0):
+		return "structure integrity"
+	if structure.stored_quantity != 2:
+		return "structure stored_quantity"
+	if structure.presentation == null or structure.presentation.icon_key != "shelter":
+		return "structure presentation"
 	return ""
 
 

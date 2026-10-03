@@ -1,0 +1,15 @@
+{
+  "protocol_version": "observer-protocol-v1",
+  "type": "STRUCTURE_REPAIRED",
+  "domain_kind": "structure_repaired",
+  "event_id": "evt-structure-repaired",
+  "tick": 8,
+  "sequence": 0,
+  "actor_id": "body-ada",
+  "target_id": null,
+  "item_id": null,
+  "resource_id": null,
+  "origin_location_id": "loc-camp",
+  "destination_location_id": null,
+  "structure_id": "struct-shelter-1"
+}

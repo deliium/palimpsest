@@ -26,6 +26,12 @@ const KNOWN_TYPES: Array[String] = [
 	"NEEDS_APPLIED",
 	"EXPOSURE_APPLIED",
 	"AGENT_DIED",
+	"RESOURCE_HARVESTED",
+	"CRAFT_STARTED",
+	"ITEM_CRAFTED",
+	"STRUCTURE_BUILT",
+	"STRUCTURE_REPAIRED",
+	"ITEM_STORED",
 	"SEASON_CHANGED",
 	"TEMPERATURE_BAND_CHANGED",
 	"RESOURCE_NODE_DEPLETED",
@@ -170,6 +176,16 @@ class ArtifactModel:
 	var presentation: ArtifactPresentationModel = null
 
 
+class StructureModel:
+	extends RefCounted
+	var structure_id: String = ""
+	var location_id: String = ""
+	var kind: String = ""
+	var integrity: float = 0.0
+	var stored_quantity: int = 0
+	var presentation: ArtifactPresentationModel = null
+
+
 class WeatherModel:
 	extends RefCounted
 	var location_id: String = ""
@@ -197,6 +213,7 @@ class WorldModel:
 	var agents: Array = []
 	var items: Array = []
 	var resources: Array = []
+	var structures: Array = []
 	var artifacts: Array = []
 	var weather: Array = []
 	var season: Variant = null
@@ -209,6 +226,7 @@ class WorldModel:
 			+ agents.size()
 			+ items.size()
 			+ resources.size()
+			+ structures.size()
 			+ artifacts.size()
 		)
 
@@ -240,6 +258,13 @@ class EventModel:
 	var artifact_id: Variant = null
 	var origin_location_id: Variant = null
 	var destination_location_id: Variant = null
+	var recipe_id: Variant = null
+	var structure_id: Variant = null
+	var season: Variant = null
+	var temperature_band: Variant = null
+	var hazard_kind: Variant = null
+	## Speaker-declared confidence band only; omitted when null. Not a strategy verdict.
+	var declared_confidence_band: Variant = null
 
 	func affected_entity_id() -> Variant:
 		if type in BODY_FROM_TARGET:
@@ -331,6 +356,8 @@ static func parse_event(data: Variant) -> ParseResult:
 	var known := KNOWN_TYPES.has(type_name)
 	if known and not _protocol_matches(data):
 		return ParseResult.failure("unsupported_observer_protocol")
+	if not known:
+		ObserverLog.warn("protocol", "unknown_event_type type=%s" % type_name)
 	var event := EventModel.new()
 	event.known = known
 	event.protocol_version = str(data.get("protocol_version", ""))
@@ -346,6 +373,12 @@ static func parse_event(data: Variant) -> ParseResult:
 	event.artifact_id = _optional_text(data, "artifact_id")
 	event.origin_location_id = _optional_text(data, "origin_location_id")
 	event.destination_location_id = _optional_text(data, "destination_location_id")
+	event.recipe_id = _optional_text(data, "recipe_id")
+	event.structure_id = _optional_text(data, "structure_id")
+	event.season = _optional_text(data, "season")
+	event.temperature_band = _optional_text(data, "temperature_band")
+	event.hazard_kind = _optional_text(data, "hazard_kind")
+	event.declared_confidence_band = _optional_text(data, "declared_confidence_band")
 	return ParseResult.success(event, "event", 1)
 
 
@@ -440,12 +473,16 @@ static func _world(data: Variant) -> Variant:
 		world.items.append(_item(item))
 	for item in _array(data, "resources"):
 		world.resources.append(_resource(item))
+	for item in _array(data, "structures"):
+		var structure = _structure(item)
+		if structure is String:
+			return structure
+		world.structures.append(structure)
 	for item in _array(data, "artifacts"):
 		var artifact = _artifact(item)
 		if artifact is String:
 			return artifact
 		world.artifacts.append(artifact)
-	# Structures remain out of scope for this client parse path.
 	for item in _array(data, "weather"):
 		world.weather.append(_weather(item))
 	if data.has("season") and data["season"] != null:
@@ -600,6 +637,28 @@ static func _resource(data: Dictionary) -> ResourceModel:
 	resource.quantity = float(data.get("quantity", 0.0))
 	resource.unit = str(data.get("unit", ""))
 	return resource
+
+
+static func _structure(data: Variant) -> Variant:
+	if typeof(data) != TYPE_DICTIONARY:
+		return "invalid_structure"
+	var structure := StructureModel.new()
+	structure.structure_id = str(data.get("structure_id", ""))
+	structure.location_id = str(data.get("location_id", ""))
+	structure.kind = str(data.get("kind", ""))
+	structure.integrity = float(data.get("integrity", 0.0))
+	structure.stored_quantity = int(data.get("stored_quantity", 0))
+	var presentation_raw: Variant = data.get("presentation", null)
+	if presentation_raw != null:
+		if typeof(presentation_raw) != TYPE_DICTIONARY:
+			return "invalid_structure_presentation"
+		var presentation := ArtifactPresentationModel.new()
+		presentation.visual_category = _optional_text(presentation_raw, "visual_category")
+		presentation.icon_key = _optional_text(presentation_raw, "icon_key")
+		presentation.size_category = _optional_text(presentation_raw, "size_category")
+		presentation.display_label = _optional_text(presentation_raw, "display_label")
+		structure.presentation = presentation
+	return structure
 
 
 static func _artifact(data: Variant) -> Variant:

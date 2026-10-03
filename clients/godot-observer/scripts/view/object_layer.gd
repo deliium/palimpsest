@@ -7,6 +7,7 @@ const Scale := preload("res://scripts/presentation/scale.gd")
 
 var _items: Array = []
 var _resources: Array = []
+var _structures: Array = []
 var _artifacts: Array = []
 var _agents: Array = []
 var _locations: Array = []
@@ -22,6 +23,7 @@ func _ready() -> void:
 func show_world(world: Variant, zone_centers: Dictionary) -> void:
 	_items = world.items
 	_resources = world.resources
+	_structures = world.structures if world.get("structures") != null else []
 	_artifacts = world.artifacts if world.get("artifacts") != null else []
 	_agents = world.agents
 	_locations = world.locations
@@ -39,7 +41,41 @@ func show_world(world: Variant, zone_centers: Dictionary) -> void:
 		"artifacts",
 		"artifacts_painted ground_count=%s held_count=%s" % [ground_count, held_count],
 	)
+	ObserverLog.debug("structures", "structures_painted count=%s" % _structures.size())
 	queue_redraw()
+
+
+func structure_at(location_id: String) -> Variant:
+	for structure in _structures:
+		if str(structure.location_id) == location_id:
+			return structure
+	return null
+
+
+func structures_plan() -> Array:
+	var plan: Array = []
+	var index_by_location := {}
+	for structure in _structures:
+		var location_id := str(structure.location_id)
+		var seen: int = int(index_by_location.get(location_id, 0))
+		index_by_location[location_id] = seen + 1
+		var integrity := float(structure.integrity)
+		var band := "high"
+		if integrity < 0.34:
+			band = "low"
+		elif integrity < 0.67:
+			band = "mid"
+		plan.append({
+			"structure_id": str(structure.structure_id),
+			"location_id": location_id,
+			"kind": str(structure.kind),
+			"integrity": integrity,
+			"integrity_band": band,
+			"stored_quantity": int(structure.stored_quantity),
+			"point": _structure_origin(location_id, seen),
+			"color": Themes.structure_color(structure.kind),
+		})
+	return plan
 
 
 func paint_plan() -> Array:
@@ -120,6 +156,30 @@ func release_item(item_id: String) -> void:
 func _draw() -> void:
 	var font := ThemeDB.fallback_font
 	var font_size := ThemeDB.fallback_font_size
+	for entry in structures_plan():
+		var point: Vector2 = entry["point"]
+		var color: Color = entry["color"]
+		var size := Vector2(14, 12)
+		draw_rect(Rect2(point - size * 0.5, size), color, true)
+		var band := str(entry["integrity_band"])
+		var outline := Color(0.85, 0.85, 0.8, 0.9)
+		if band == "mid":
+			outline = Color(0.9, 0.7, 0.3, 0.95)
+		elif band == "low":
+			outline = Color(0.9, 0.35, 0.28, 0.95)
+		draw_rect(Rect2(point - size * 0.5, size), outline, false, 1.5)
+		var stored := int(entry["stored_quantity"])
+		if stored > 0:
+			draw_circle(point + Vector2(8, -8), 3.0, Color(0.95, 0.85, 0.45, 0.95))
+		draw_string(
+			font,
+			point + Vector2(10, 4),
+			str(entry["kind"]),
+			HORIZONTAL_ALIGNMENT_LEFT,
+			-1,
+			font_size,
+			Color(0.92, 0.9, 0.84),
+		)
 	var resource_index := {}
 	for resource in _resources:
 		var seen: int = int(resource_index.get(resource.location_id, 0))
@@ -138,7 +198,18 @@ func _draw() -> void:
 		if _hidden.has(str(item.item_id)):
 			continue
 		var point := _ground_origin(str(item.location_id), seen)
-		draw_rect(Rect2(point - Vector2(5, 5), Vector2(10, 10)), Color(0.86, 0.72, 0.38), true)
+		var item_color: Color = Themes.item_color(item.kind)
+		if Themes.is_tool_kind(item.kind):
+			draw_colored_polygon(
+				PackedVector2Array([
+					point + Vector2(0, -6),
+					point + Vector2(5, 5),
+					point + Vector2(-5, 5),
+				]),
+				item_color,
+			)
+		else:
+			draw_rect(Rect2(point - Vector2(5, 5), Vector2(10, 10)), item_color, true)
 		draw_string(font, point + Vector2(10, 4), item.name, HORIZONTAL_ALIGNMENT_LEFT, -1, font_size, Color(0.96, 0.92, 0.82))
 	for entry in paint_plan():
 		var point: Vector2 = entry["point"]
@@ -176,6 +247,11 @@ func _ground_origin(location_id: String, index: int) -> Vector2:
 func _artifact_ground_origin(location_id: String, index: int) -> Vector2:
 	var center: Vector2 = _centers.get(location_id, Vector2.ZERO)
 	return center + Vector2(-24.0, 16.0 + float(index) * 18.0)
+
+
+func _structure_origin(location_id: String, index: int) -> Vector2:
+	var center: Vector2 = _centers.get(location_id, Vector2.ZERO)
+	return center + Vector2(0.0, -28.0 - float(index) * 16.0)
 
 
 func _build_holder_points() -> Dictionary:

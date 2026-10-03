@@ -5,6 +5,7 @@ const MOVE_TYPES: Array[String] = ["AGENT_MOVED", "AGENT_FLED"]
 const TARGET_BODY: Array[String] = ["AGENT_DIED", "NEEDS_APPLIED", "EXPOSURE_APPLIED"]
 
 var activity := {}
+var _event_fields := {}
 
 
 func adopt_frame(frame: Variant) -> Dictionary:
@@ -24,6 +25,12 @@ func apply_event(world: Variant, event: Variant) -> Dictionary:
 		agent.life_status = "dead"
 	if event.known and body != null:
 		activity[str(body)] = str(event.type)
+		_event_fields[str(body)] = {
+			"recipe_id": "" if event.recipe_id == null else str(event.recipe_id),
+			"structure_id": "" if event.structure_id == null else str(event.structure_id),
+			"resource_id": "" if event.resource_id == null else str(event.resource_id),
+			"item_id": "" if event.item_id == null else str(event.item_id),
+		}
 	_move_item(world, event, agent)
 	return {
 		"known": bool(event.known),
@@ -40,6 +47,13 @@ func apply_event(world: Variant, event: Variant) -> Dictionary:
 
 func activity_for(entity_id: String) -> String:
 	return str(activity.get(entity_id, ""))
+
+
+func event_fields_for(entity_id: String) -> Dictionary:
+	var fields: Variant = _event_fields.get(entity_id, {})
+	if typeof(fields) != TYPE_DICTIONARY:
+		return {}
+	return fields
 
 
 func _agent(world: Variant, entity_id: Variant) -> Variant:

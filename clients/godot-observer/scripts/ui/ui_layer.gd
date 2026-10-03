@@ -15,6 +15,8 @@ signal timeline_seek_requested(tick: int, sequence: int)
 signal play_fixture_requested
 signal perspective_requested(agent_id: String)
 signal labels_cleared
+signal overlay_toggled(kind: String, evidence_class: String, enabled: bool)
+signal narrative_variant_selected(variant_id: String)
 
 var _live_tick := 0
 var _selected_id := ""
@@ -30,6 +32,12 @@ func _ready() -> void:
 	)
 	$PerspectiveControl.labels_cleared.connect(func() -> void:
 		labels_cleared.emit()
+	)
+	$OverlayLegend.overlay_toggled.connect(func(kind: String, evidence_class: String, enabled: bool) -> void:
+		overlay_toggled.emit(kind, evidence_class, enabled)
+	)
+	$NarrativeSelector.variant_selected.connect(func(variant_id: String) -> void:
+		narrative_variant_selected.emit(variant_id)
 	)
 	$Controls/ZoomIn.pressed.connect(func() -> void: zoom_in_requested.emit())
 	$Controls/ZoomOut.pressed.connect(func() -> void: zoom_out_requested.emit())
@@ -117,3 +125,24 @@ func show_inspector(snapshot: Dictionary) -> void:
 
 func clear_inspector() -> void:
 	$Inspector.clear_agent()
+
+
+func is_overlay_enabled(kind: String) -> bool:
+	return $OverlayLegend.is_overlay_enabled(kind)
+
+
+func set_overlay_enabled(kind: String, enabled: bool) -> void:
+	$OverlayLegend.set_overlay_enabled(kind, enabled)
+
+
+func set_narrative_variants(ids: Array) -> void:
+	$NarrativeSelector.set_variants(ids)
+
+
+func clear_narrative_variants() -> void:
+	$NarrativeSelector.clear_variants()
+	$EventLog.clear_event_focus()
+
+
+func focus_narrative_event_ids(event_ids: Array) -> void:
+	$EventLog.focus_event_ids(event_ids)

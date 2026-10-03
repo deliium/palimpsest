@@ -1,0 +1,15 @@
+{
+  "protocol_version": "observer-protocol-v1",
+  "type": "CRAFT_STARTED",
+  "domain_kind": "craft_started",
+  "event_id": "evt-craft-started",
+  "tick": 5,
+  "sequence": 0,
+  "actor_id": "body-ada",
+  "target_id": null,
+  "item_id": null,
+  "resource_id": null,
+  "origin_location_id": "loc-camp",
+  "destination_location_id": null,
+  "recipe_id": "recipe-axe"
+}

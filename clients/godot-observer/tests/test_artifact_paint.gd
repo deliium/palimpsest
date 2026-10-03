@@ -214,8 +214,18 @@ func _artifact_types_are_known() -> String:
 		"STRUCTURE_REPAIRED",
 		"ITEM_STORED",
 	]:
-		if Protocol.KNOWN_TYPES.has(type_name):
-			return "production type must stay unknown %s" % type_name
+		if not Protocol.KNOWN_TYPES.has(type_name):
+			return "production type must be known %s" % type_name
+		var production = Protocol.parse_event({
+			"protocol_version": Protocol.PROTOCOL_VERSION,
+			"type": type_name,
+			"domain_kind": type_name.to_lower(),
+			"event_id": "evt-%s" % type_name,
+			"tick": 1,
+			"sequence": 0,
+		})
+		if not production.ok or not production.value.known:
+			return "production type should parse as known %s" % type_name
 	return ""
 
 

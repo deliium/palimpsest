@@ -14,6 +14,7 @@ var _world: Variant = null
 var _filter_agent := ""
 var _filter_type := ""
 var _filter_location := ""
+var _highlighted_event_ids := {}
 var _items: ItemList
 
 
@@ -94,6 +95,37 @@ func contains_type(type_name: String) -> bool:
 	return false
 
 
+func focus_event_ids(event_ids: Array) -> void:
+	## Highlight opaque narrative-related event ids already in the loaded window.
+	_highlighted_event_ids = {}
+	for item in event_ids:
+		var event_id := str(item)
+		if event_id != "":
+			_highlighted_event_ids[event_id] = true
+	_render()
+	var focused := 0
+	if _items != null:
+		for index in visible_lines.size():
+			var line: Dictionary = visible_lines[index]
+			if _highlighted_event_ids.has(str(line.get("event_id", ""))):
+				if focused == 0:
+					_items.select(index)
+					_items.ensure_current_is_visible()
+				focused += 1
+	ObserverLog.debug(
+		"log_view",
+		"narrative_event_focus count=%s highlighted=%s" % [
+			focused,
+			_highlighted_event_ids.size(),
+		],
+	)
+
+
+func clear_event_focus() -> void:
+	_highlighted_event_ids = {}
+	_render()
+
+
 func line_text(index: int) -> String:
 	if index < 0 or index >= visible_lines.size():
 		return ""
@@ -131,9 +163,13 @@ func _record(event: Variant) -> Dictionary:
 	var origin := _location_name(origin_id)
 	var destination := _location_name(destination_id)
 	var subject := target if type_name in BODY_SUBJECTS else actor
+	var event_id := ""
+	if "event_id" in event:
+		event_id = str(event.event_id)
 	return {
 		"tick": int(event.tick),
 		"sequence": int(event.sequence),
+		"event_id": event_id,
 		"type": type_name,
 		"actor": actor,
 		"target": target,
@@ -225,6 +261,18 @@ func _describe(
 			return "%s transferred artifact" % subject
 		"ARTIFACT_DESTROYED":
 			return "%s erased" % subject
+		"RESOURCE_HARVESTED":
+			return "%s harvested" % subject
+		"CRAFT_STARTED":
+			return "%s began craft" % subject
+		"ITEM_CRAFTED":
+			return "%s crafted" % subject
+		"STRUCTURE_BUILT":
+			return "%s built" % subject
+		"STRUCTURE_REPAIRED":
+			return "%s repaired" % subject
+		"ITEM_STORED":
+			return "%s stored" % subject
 		"NEEDS_APPLIED":
 			return "%s needs" % subject
 		"EXPOSURE_APPLIED":
@@ -307,6 +355,15 @@ func _focus(event_tick: int, event_sequence: int) -> void:
 
 
 func _format(line: Dictionary) -> String:
-	return "%s:%s %s %s %s %s" % [
-		line["tick"], line["sequence"], line["type"], line["actor"], line["target"], line["description"],
+	var prefix := ""
+	if _highlighted_event_ids.has(str(line.get("event_id", ""))):
+		prefix = "* "
+	return "%s%s:%s %s %s %s %s" % [
+		prefix,
+		line["tick"],
+		line["sequence"],
+		line["type"],
+		line["actor"],
+		line["target"],
+		line["description"],
 	]

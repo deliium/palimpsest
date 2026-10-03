@@ -24,6 +24,7 @@ class World:
 class Event:
 	var tick: int
 	var sequence: int
+	var event_id: String
 	var type: String
 	var actor_id: Variant
 	var target_id: Variant
@@ -86,9 +87,20 @@ func run() -> Array:
 	log.click_line(1)
 	if clicked.size() != 1 or clicked[0]["tick"] != 4 or clicked[0]["sequence"] != 1:
 		failures.append("click should emit tick and sequence")
+	moved.event_id = "evt-moved"
+	died.event_id = "evt-died"
+	log.replace_window([moved, died, waited], 4, 1)
+	log.focus_event_ids(["evt-died"])
+	if not log.line_text(1).begins_with("* "):
+		failures.append("narrative event focus should mark matching log lines")
+	log.clear_event_focus()
+	if log.line_text(1).begins_with("* "):
+		failures.append("clearing event focus should remove markers")
 	var text := "\n".join(Log.recent)
 	if "seek_clicked" not in text or "filter_set" not in text:
 		failures.append("log view should record seek_clicked and filter_set")
+	if "narrative_event_focus" not in text:
+		failures.append("log view should record narrative_event_focus")
 	return failures
 
 
@@ -104,6 +116,7 @@ func _event(
 	var event := Event.new()
 	event.tick = tick
 	event.sequence = sequence
+	event.event_id = ""
 	event.type = type_name
 	event.actor_id = null if actor_id == "" else actor_id
 	event.target_id = null if target_id == "" else target_id

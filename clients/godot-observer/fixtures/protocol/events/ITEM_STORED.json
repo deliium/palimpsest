@@ -1,0 +1,15 @@
+{
+  "protocol_version": "observer-protocol-v1",
+  "type": "ITEM_STORED",
+  "domain_kind": "item_stored",
+  "event_id": "evt-item-stored",
+  "tick": 9,
+  "sequence": 0,
+  "actor_id": "body-ada",
+  "target_id": null,
+  "item_id": "item-wood",
+  "resource_id": null,
+  "origin_location_id": "loc-camp",
+  "destination_location_id": null,
+  "structure_id": "struct-shelter-1"
+}

@@ -51,6 +51,9 @@ const _HAZARDS := {
 }
 
 const DEPLETED := Color(0.35, 0.32, 0.30, 0.55)
+## Soft scarcity outline for positive but low objective quantities (presentation only).
+const SCARCE := Color(0.72, 0.55, 0.28, 0.65)
+const SCARCE_QUANTITY_MAX := 2.0
 
 const _ARTIFACT_COLORS := {
 	"mark": Color(0.72, 0.58, 0.38, 1.0),
@@ -104,3 +107,57 @@ static func weather_tint(condition: Variant) -> Color:
 	if _WEATHER.has(key):
 		return _WEATHER[key]
 	return Color(1, 1, 1, 0)
+
+
+## Evidence-class badge colors (short labels OBJECTIVE / SUBJECTIVE / ANALYTICAL).
+const EVIDENCE_OBJECTIVE := Color(0.55, 0.72, 0.58, 1.0)
+const EVIDENCE_SUBJECTIVE := Color(0.72, 0.62, 0.42, 1.0)
+const EVIDENCE_ANALYTICAL := Color(0.55, 0.58, 0.78, 1.0)
+
+
+static func evidence_color(evidence_class: String) -> Color:
+	var key := evidence_class.to_upper()
+	if key == "OBJECTIVE":
+		return EVIDENCE_OBJECTIVE
+	if key.begins_with("SUBJECTIVE"):
+		return EVIDENCE_SUBJECTIVE
+	if key.begins_with("ANALYTICAL"):
+		return EVIDENCE_ANALYTICAL
+	return EVIDENCE_ANALYTICAL
+
+
+const _STRUCTURE_COLORS := {
+	"shelter": Color(0.62, 0.52, 0.38, 1.0),
+	"storage": Color(0.58, 0.48, 0.42, 1.0),
+	"workshop": Color(0.52, 0.50, 0.44, 1.0),
+}
+
+const STRUCTURE_FALLBACK := Color(0.58, 0.54, 0.48, 1.0)
+
+const _TOOL_KINDS := {
+	"tool": true,
+	"axe": true,
+	"pick": true,
+	"knife": true,
+	"hammer": true,
+}
+
+
+static func structure_color(kind: Variant) -> Color:
+	var key := "" if kind == null else str(kind)
+	if _STRUCTURE_COLORS.has(key):
+		return _STRUCTURE_COLORS[key]
+	if not key.is_empty():
+		ObserverLog.debug("structures", "theme_unknown kind=%s" % key)
+	return STRUCTURE_FALLBACK
+
+
+static func is_tool_kind(kind: Variant) -> bool:
+	var key := "" if kind == null else str(kind).to_lower()
+	return _TOOL_KINDS.has(key)
+
+
+static func item_color(kind: Variant) -> Color:
+	if is_tool_kind(kind):
+		return Color(0.72, 0.58, 0.28, 1.0)
+	return Color(0.70, 0.68, 0.62, 1.0)

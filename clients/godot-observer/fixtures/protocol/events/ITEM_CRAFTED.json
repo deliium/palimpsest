@@ -1,0 +1,15 @@
+{
+  "protocol_version": "observer-protocol-v1",
+  "type": "ITEM_CRAFTED",
+  "domain_kind": "item_crafted",
+  "event_id": "evt-item-crafted",
+  "tick": 6,
+  "sequence": 0,
+  "actor_id": "body-ada",
+  "target_id": null,
+  "item_id": "item-axe",
+  "resource_id": null,
+  "origin_location_id": "loc-camp",
+  "destination_location_id": null,
+  "recipe_id": "recipe-axe"
+}

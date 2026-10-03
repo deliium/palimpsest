@@ -76,6 +76,32 @@ func run() -> Array:
 		var artifact_command: Dictionary = Router.route(parsed_artifact.value, play, artifact_logical)
 		if artifact_command["action"] != "artifact":
 			failures.append("artifact type should route as artifact %s" % type_name)
+	var production_actions := {
+		"RESOURCE_HARVESTED": "harvest",
+		"CRAFT_STARTED": "craft",
+		"ITEM_CRAFTED": "craft",
+		"STRUCTURE_BUILT": "build",
+		"STRUCTURE_REPAIRED": "repair",
+		"ITEM_STORED": "store",
+	}
+	for type_name in production_actions.keys():
+		var parsed_production = Protocol.parse_text(
+			"event",
+			FileAccess.get_file_as_string("res://fixtures/protocol/events/%s.json" % type_name)
+		)
+		if not parsed_production.ok or not parsed_production.value.known:
+			failures.append("production type should be known %s" % type_name)
+			continue
+		var production_logical: Dictionary = reducer.apply_event(world, parsed_production.value)
+		var production_command: Dictionary = Router.route(parsed_production.value, play, production_logical)
+		if production_command["action"] != production_actions[type_name]:
+			failures.append(
+				"production type should route as %s got %s for %s" % [
+					production_actions[type_name],
+					production_command["action"],
+					type_name,
+				]
+			)
 	var unknown = Protocol.parse_event({"type": "RESOURCE_FOUND", "event_id": "evt-unknown", "tick": 9, "sequence": 0})
 	var before := str(world.agents[0].location_id)
 	var unknown_logical: Dictionary = reducer.apply_event(world, unknown.value)

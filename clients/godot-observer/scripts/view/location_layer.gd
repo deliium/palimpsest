@@ -9,6 +9,7 @@ var _weather := {}
 var _bands := {}
 var _hazards := {}
 var _depleted := {}
+var _scarce := {}
 var _season: Variant = null
 var _rings := {}
 
@@ -23,6 +24,7 @@ func show_world(world: Variant) -> void:
 	_bands = {}
 	_hazards = {}
 	_depleted = {}
+	_scarce = {}
 	_season = world.get("season")
 	for item in world.weather:
 		_weather[item.location_id] = item.condition
@@ -40,16 +42,29 @@ func show_world(world: Variant) -> void:
 	var resources: Variant = world.get("resources")
 	if resources is Array:
 		for item in resources:
-			if float(item.quantity) == 0.0:
-				_depleted[str(item.location_id)] = true
+			var quantity := float(item.quantity)
+			var location_id := str(item.location_id)
+			if quantity == 0.0:
+				_depleted[location_id] = true
+				_scarce.erase(location_id)
+			elif (
+				quantity > 0.0
+				and quantity <= Themes.SCARCE_QUANTITY_MAX
+				and not _depleted.has(location_id)
+			):
+				_scarce[location_id] = true
 	var hazard_count := 0
 	for kinds in _hazards.values():
 		hazard_count += kinds.size()
 	var season_token := "-" if _season == null else str(_season)
 	ObserverLog.debug(
 		"locations",
-		"environment_painted tick=%s season=%s hazard_count=%s" % [
-			world.tick, season_token, hazard_count
+		"environment_painted tick=%s season=%s hazard_count=%s depleted_count=%s scarce_count=%s" % [
+			world.tick,
+			season_token,
+			hazard_count,
+			_depleted.size(),
+			_scarce.size(),
 		],
 	)
 	_rings = _ring_positions()
@@ -99,6 +114,8 @@ func _draw() -> void:
 			draw_rect(rect, Themes.hazard_color(kind), true)
 		if _depleted.has(location.location_id):
 			draw_rect(rect, Themes.DEPLETED, false, 3.0)
+		elif _scarce.has(location.location_id):
+			draw_rect(rect, Themes.SCARCE, false, 2.0)
 		draw_rect(rect, color, false, 2.0)
 		var label := str(location.display_name) if str(location.display_name) != "" else str(location.name)
 		var text_size := font.get_string_size(label, HORIZONTAL_ALIGNMENT_LEFT, -1, font_size)
