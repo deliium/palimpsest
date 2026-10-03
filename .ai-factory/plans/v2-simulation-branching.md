@@ -223,31 +223,31 @@ Each checkpoint is a git commit on `main` created when those tasks are done. Do 
 
 ### Phase 2: Fork materialization and interventions
 
-- [ ] Task 4: Rematerialize objective prefix + child bootstrap from replay.
+- [x] Task 4: Rematerialize objective prefix + child bootstrap from replay.
   - Deliverable: `BranchService.fork` restores parent at `fork_tick` via existing replay/scene APIs (read-only), writes child `RunManifest` + bootstrap snapshot with recomputed `integrity_hash`, **rematerializes** objective commits/events with `event.tick < fork_tick` under child `run_id` (recompute `commit_hash` / predecessor links via `compute_commit_hash` / journal helpers), and leaves parent head unchanged. Prove with an in-memory fake repository that parent event ids/hashes are untouched and child prefix verifies under `verify_commit_chain`. Reject `fork_tick` above parent head. Do not call `open_durable` on the temporary parent restore engine. Do not bit-copy parent commit hashes.
   - Logging: INFO `research_fork_objective_materialized parent_run_id=%s child_run_id=%s fork_tick=%s event_count=%s`; DEBUG snapshot/commit counts and rehash confirmation.
   - Depends on tasks 2, 3, 3b.
   - Files: `src/simulation/branch_service.py`, `src/simulation/journal.py` (reuse helpers; avoid drive-by refactors), `src/simulation/replay.py` (hooks only if needed), `tests/unit/test_simulation_branch_fork.py`.
 
-- [ ] Task 5: Clone subjective state into the child scope via an explicit port.
+- [x] Task 5: Clone subjective state into the child scope via an explicit port.
   - Deliverable: Define `SubjectiveClonePort` and implement adapters that clone owner-scoped episodic memory, semantic beliefs, relationships, and goals as-of tick `T` into `child_run_id`. Fail closed if the clone is partial (`subjective_clone_incomplete`). Explicitly **exclude** cognition-trace rows, scientific evidence manifests, and stream-outbox cursors. Unit tests prove owner isolation and that parent subjective rows remain unchanged.
   - Logging: DEBUG per-store clone counts (`memory_rows`, `belief_rows`, …); ERROR on incomplete clone.
   - Depends on task 4.
   - Files: `src/simulation/branch_service.py`, `src/simulation/persistence.py` (port protocol), persistence subjective/memory adapters as needed, `tests/unit/test_simulation_branch_subjective_clone.py`.
 
-- [ ] Task 5b: Rebase runtime checkpoints onto the child `run_id`.
+- [x] Task 5b: Rebase runtime checkpoints onto the child `run_id`.
   - Deliverable: Add `rebase_runtime_checkpoint(checkpoint, child_run_id)` (or equivalent pure helper) that rewrites only run-scoped identity fields so `SimulationRunner.apply_runtime_checkpoint` accepts the checkpoint on the child runner. Prove parent checkpoint `run_id` unchanged after rebase-from-copy; prove child apply succeeds; prove direct apply of an unrebased parent checkpoint still raises `run_id mismatch`.
   - Logging: DEBUG `runtime_checkpoint_rebased parent_run_id=%s child_run_id=%s ticks_committed=%s`.
   - Depends on task 5.
   - Files: `src/simulation/run_control.py` and/or `branch_service.py`, `tests/unit/test_simulation_branch_runtime_rebase.py`.
 
-- [ ] Task 6: Apply one closed research intervention and open child continuation.
+- [x] Task 6: Apply one closed research intervention and open child continuation.
   - Deliverable: After clone + rebase, apply the single intervention to child config/subjective state per the catalog table. Inherit parent `stochastic_identity` unless kind is `ALTERNATE_SEED_STREAM`. Apply `AGENT_ARCHITECTURE` via `agents.cognition.architectures.get_architecture` + mode/flag application inside simulation/composition — **never** import `experiments`. Then open child durable continuation from tick `T` through existing runner/persistence seams. Cover each intervention kind with at least one unit test; `COMMUNICATION_REMOVE` proves `intervention_past_event` when the event is already in the prefix and success when `event.tick >= fork_tick`; `ALTERNATE_SEED_STREAM` proves non-default path only when requested; `AGENT_ARCHITECTURE` expands presets without writing `architecture_id` into runner JSON. Record `BranchLineage` using Task 3b idempotency (transactional with child create).
   - Logging: INFO `research_fork_created parent_run_id=%s child_run_id=%s fork_tick=%s kind=%s fingerprint=%s`; DEBUG intervention application reason codes.
   - Depends on tasks 3b, 5, 5b.
   - Files: `src/simulation/branch_service.py`, `src/simulation/runner_models.py` (clone helpers only if needed), `src/agents/cognition/architectures.py` (read-only registry use), `tests/unit/test_simulation_branch_interventions.py`.
 
-- [ ] Task 6b: Persist child `RunControlRecord` for resume/rehydrate.
+- [x] Task 6b: Persist child `RunControlRecord` for resume/rehydrate.
   - Deliverable: After successful fork materialization, write a child `RunControlRecord` with the cloned-then-intervened runner `config_payload` so API rehydrate/`SimulationManager` can see the child. Do not copy parent stream-outbox cursors or cognition-trace rows. Prove list/get control paths observe the child and that config payload bytes are never logged.
   - Logging: DEBUG `research_fork_run_control_written child_run_id=%s lifecycle=%s`; never log config payload.
   - Depends on task 6.

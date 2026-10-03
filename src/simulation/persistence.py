@@ -123,6 +123,7 @@ __all__ = [
     "SnapshotId",
     "SnapshotRepository",
     "StreamRepository",
+    "SubjectiveClonePort",
     "TickAppendRequest",
     "TickCommit",
     "TickJournalRepository",
@@ -1357,6 +1358,22 @@ class BranchLineageRepository(Protocol):
         after_child_run_id: str | None = None,
         limit: int = 100,
     ) -> tuple[object, ...]: ...
+
+
+class SubjectiveClonePort(Protocol):
+    """Clone owner-scoped subjective stores into a child run as-of a tick.
+
+    Must not clone cognition-trace rows, scientific evidence manifests, or
+    stream-outbox cursors.
+    """
+
+    async def clone_as_of(
+        self,
+        *,
+        parent_run_id: RunId,
+        child_run_id: RunId,
+        fork_tick: int,
+    ) -> object: ...
 
 
 def persistence_diagnostic_fields(

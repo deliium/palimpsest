@@ -8,8 +8,9 @@ in logs.
 
 from __future__ import annotations
 
+import logging
 from collections.abc import Mapping
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from enum import StrEnum
 from typing import Final
 
@@ -65,11 +66,13 @@ __all__ = [
     "is_lifecycle_transition_allowed",
     "is_terminal_lifecycle_state",
     "make_stream_envelope",
+    "rebase_runtime_checkpoint",
 ]
 
 FINALIZATION_COMMAND_CODEC_VERSION: Final[str] = "finalization-command-v1"
 STREAM_RECORD_SCHEMA_VERSION: Final[str] = "stream-record-v1"
 EMOTIONAL_STATE_CODEC_VERSION: Final[str] = "emotional-state-v1"
+_LOG: Final[logging.Logger] = logging.getLogger("simulation.branching")
 _EMOTIONAL_STATE_KEYS: Final[frozenset[str]] = frozenset(
     {
         "codec_version",
@@ -1041,3 +1044,27 @@ class StreamRecord:
             f"kind={self.kind.value!r}, "
             f"hash_prefix={self.envelope.content_hash[:12]!r})"
         )
+
+
+def rebase_runtime_checkpoint(
+    checkpoint: RunnerRuntimeCheckpoint,
+    child_run_id: RunId,
+) -> RunnerRuntimeCheckpoint:
+    """Rewrite only run-scoped identity so the child runner can apply it.
+
+    Does not mutate the input checkpoint. Parent ``run_id`` remains unchanged
+    on the source object.
+    """
+    if type(checkpoint) is not RunnerRuntimeCheckpoint:
+        raise TypeError("rebase_runtime_checkpoint requires RunnerRuntimeCheckpoint")
+    if type(child_run_id) is not RunId:
+        raise TypeError("rebase_runtime_checkpoint requires RunId")
+    rebased = replace(checkpoint, run_id=child_run_id)
+    _LOG.debug(
+        "runtime_checkpoint_rebased parent_run_id=%s child_run_id=%s "
+        "ticks_committed=%s",
+        checkpoint.run_id.value,
+        child_run_id.value,
+        checkpoint.ticks_committed,
+    )
+    return rebased
