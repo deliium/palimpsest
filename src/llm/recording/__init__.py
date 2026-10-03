@@ -14,6 +14,10 @@ from llm.recording.codec import (
     encode_exchange_record,
     encode_exchange_record_bytes,
 )
+from llm.recording.factory import (
+    create_filesystem_recording_store,
+    wrap_recording_provider,
+)
 from llm.recording.models import (
     LLM_EXCHANGE_SCHEMA_ID,
     ExchangeCorrelation,
@@ -25,6 +29,7 @@ from llm.recording.models import (
     LLMExchangeRecord,
     SchemaIdentity,
 )
+from llm.recording.provider import RecordingLLMProvider, RecordingMode
 from llm.recording.store import (
     CorrelationKey,
     FilesystemRecordingStore,
@@ -45,9 +50,12 @@ __all__ = [
     "FilesystemRecordingStore",
     "LLMExchangeRecord",
     "LookupMode",
+    "RecordingLLMProvider",
+    "RecordingMode",
     "RecordingStore",
     "RecordingStoreError",
     "SchemaIdentity",
+    "create_filesystem_recording_store",
     "decode_exchange_record",
     "decode_exchange_record_bytes",
     "derive_cache_key",
@@ -58,4 +66,5 @@ __all__ = [
     "normalize_message_content",
     "response_model_qualname",
     "schema_identity_for",
+    "wrap_recording_provider",
 ]

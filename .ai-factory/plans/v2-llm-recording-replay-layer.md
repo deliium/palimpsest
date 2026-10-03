@@ -240,19 +240,19 @@ Each checkpoint is a git commit on `main` created when those tasks are done. Do 
 
 ### Phase 2: Recording provider
 
-- [ ] Task 4: Implement `RecordingLLMProvider` mode machine
+- [x] Task 4: Implement `RecordingLLMProvider` mode machine
   - Deliverable: Modes `live` (passthrough), `record`, `cache`, `replay`. Inject monotonic clock for latency; no `time.time` domain decisions. Honor wrap-order contract (Recording is the inner provider that Budget wraps). `replay` never calls inner; miss/mismatch → `LLMError(CONFIGURATION)`. Persist only validated successes. Re-validate stored JSON through the request’s `response_model` before returning.
   - Logging: DEBUG start/lookup; INFO hit/miss/persist with mode + digests prefixes + latency; ERROR terminal reason codes. Metadata allowlist only.
   - Files: `src/llm/recording/provider.py`, `src/llm/recording/__init__.py`, `tests/unit/test_llm_recording_provider.py`
   - Dependencies: Task 3.
 
-- [ ] Task 5: Factory helpers without infrastructure imports
+- [x] Task 5: Factory helpers without infrastructure imports
   - Deliverable: Add `wrap_recording_provider(...)` / store factory in `src/llm/recording/factory.py` that accepts explicit root path + namespace + lookup mode + mode + inner provider + clocks. Keep `create_llm_provider` unchanged for non-recording construction.
   - Logging: DEBUG construction mode + namespace prefix.
   - Files: `src/llm/recording/factory.py`, `src/llm/factory.py` (re-export if needed), `tests/unit/test_llm_factory.py`, `tests/unit/test_llm_recording_factory.py`
   - Dependencies: Task 4.
 
-- [ ] Task 6: Architecture gates for `llm.recording`
+- [x] Task 6: Architecture gates for `llm.recording`
   - Deliverable: Ensure import-linter + AST checker keep `llm.recording` inside `llm` only; forbid recording modules from importing simulation/agents/infrastructure. Extend isolation tests.
   - Logging: n/a (tests).
   - Files: `pyproject.toml` (if contracts need an entry), `tests/architecture/boundary_checker.py`, `tests/architecture/test_llm_provider_isolation.py`

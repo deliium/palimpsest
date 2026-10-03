@@ -264,3 +264,44 @@ def test_future_cognition_translation_remains_separate() -> None:
     assert "admit_agent_command" not in llm.__all__
     assert "WorldEngine" not in llm.__all__
     assert "require_agent_command" not in dir(llm)
+
+
+def test_llm_recording_stays_inside_llm_boundary() -> None:
+    """Recording package must not import simulation/agents/infrastructure."""
+    recording_root = LLM_ROOT / "recording"
+    assert recording_root.is_dir()
+    hits: list[str] = []
+    forbidden_roots = frozenset(
+        {
+            "simulation",
+            "agents",
+            "infrastructure",
+            "persistence",
+            "api",
+            "world",
+            "memory",
+            "social",
+            "analysis",
+            "experiments",
+            "observer",
+        }
+    )
+    for path in recording_root.rglob("*.py"):
+        tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
+        for node in ast.walk(tree):
+            if isinstance(node, ast.Import):
+                for alias in node.names:
+                    root = alias.name.split(".", 1)[0]
+                    if root in forbidden_roots or root in PROVIDER_SDKS:
+                        hits.append(f"{path}:{node.lineno}:{alias.name}")
+            elif isinstance(node, ast.ImportFrom):
+                module = node.module or ""
+                if node.level:
+                    continue
+                root = module.split(".", 1)[0]
+                if root in forbidden_roots or root in PROVIDER_SDKS:
+                    hits.append(f"{path}:{node.lineno}:{module}")
+    assert hits == []
+    assert "RecordingLLMProvider" in llm.__all__
+    assert "wrap_recording_provider" in llm.__all__
+    assert "RecordingLLMProvider" not in FORBIDDEN_CONVERSION_NAMES

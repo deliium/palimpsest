@@ -237,8 +237,7 @@ class FilesystemRecordingStore:
             if _payload_digest(existing_corr) != _payload_digest(payload):
                 _LOG.warning(
                     "recording_store_put reason=correlation_overwrite "
-                    "agent_id=%s tick=%s component=%s",
-                    corr.agent_id,
+                    "tick=%s component=%s",
                     corr.tick,
                     corr.component,
                 )
@@ -270,9 +269,7 @@ class FilesystemRecordingStore:
         path = self._corr_path(key)
         if not path.exists():
             _LOG.debug(
-                "recording_store_get reason=correlation_miss agent_id=%s tick=%s "
-                "component=%s",
-                key.agent_id,
+                "recording_store_get reason=correlation_miss tick=%s component=%s",
                 key.tick,
                 key.component,
             )
