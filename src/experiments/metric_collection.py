@@ -34,6 +34,7 @@ __all__ = [
     "MetricCollectionResult",
     "MetricCollectionService",
     "compare_compatible_bundles",
+    "inputs_with_opt_in_metric_rows",
     "inputs_with_spatial_rows",
     "persist_metric_bundle",
 ]
@@ -216,6 +217,122 @@ def inputs_with_spatial_rows(
         spatial_action_rows=action_rows,
         spatial_claim_rows=claim_rows,
     )
+
+
+def inputs_with_opt_in_metric_rows(
+    inputs: MetricComputationInputs,
+    *,
+    events: Sequence[object] | None = None,
+    claim_ledgers: Sequence[object] | None = None,
+    world_model_audits: Sequence[object] | None = None,
+    physical_rules: object | None = None,
+    belief_convergence_claims: Sequence[object] | None = None,
+    cultural_naming_rows: Sequence[object] | None = None,
+    cultural_norms_rows: Sequence[object] | None = None,
+    cultural_conventions_rows: Sequence[object] | None = None,
+    cultural_narratives_rows: Sequence[object] | None = None,
+    reputation_ledgers: Sequence[object] | None = None,
+    reputation_neighborhoods: Mapping[str, str] | None = None,
+    reputation_target_id: str | None = None,
+    survival_cohort_map: Mapping[str, Sequence[str]] | None = None,
+) -> MetricComputationInputs:
+    """Attach opt-in family inputs from harvested evidence when present.
+
+    Missing harvests leave the corresponding family out of assembly (not
+    zeros). Spatial rows still follow ``inputs_with_spatial_rows``.
+    """
+    updated = inputs_with_spatial_rows(
+        inputs, events, claim_ledgers=claim_ledgers
+    )
+    from experiments.composition import (
+        calibration_rows_from_world_model_audits,
+        territorial_control_rows_from_spatial_actions,
+        territorial_presence_rows_from_spatial_actions,
+    )
+
+    attached: dict[str, int] = {}
+    presence = None
+    control = None
+    if updated.spatial_action_rows is not None:
+        presence = territorial_presence_rows_from_spatial_actions(
+            updated.spatial_action_rows
+        )
+        control = territorial_control_rows_from_spatial_actions(
+            updated.spatial_action_rows
+        )
+        attached["territorial_presence"] = len(presence)
+        attached["territorial_control"] = len(control)
+        updated = replace(
+            updated,
+            territorial_presence_rows=presence,
+            territorial_control_rows=control,
+        )
+    else:
+        _LOG.debug(
+            "opt_in_metric_skip",
+            extra={"reason_code": "no_spatial_events", "block": "territorial"},
+        )
+
+    calibration = None
+    if (
+        world_model_audits is not None
+        and events is not None
+        and physical_rules is not None
+    ):
+        calibration = calibration_rows_from_world_model_audits(
+            world_model_audits,
+            events,
+            physical_rules=physical_rules,
+        )
+        attached["prediction_calibration"] = len(calibration)
+        updated = replace(updated, prediction_calibration_rows=calibration)
+    elif world_model_audits is not None:
+        _LOG.warning(
+            "opt_in_metric_skip",
+            extra={
+                "reason_code": "calibration_inputs_incomplete",
+                "block": "prediction_calibration",
+            },
+        )
+
+    if belief_convergence_claims is not None:
+        attached["belief_convergence"] = len(belief_convergence_claims)
+        updated = replace(
+            updated, belief_convergence_claims=belief_convergence_claims
+        )
+    if cultural_naming_rows is not None:
+        attached["cultural_naming"] = len(cultural_naming_rows)
+        updated = replace(updated, cultural_naming_rows=cultural_naming_rows)
+    if cultural_norms_rows is not None:
+        attached["cultural_norms"] = len(cultural_norms_rows)
+        updated = replace(updated, cultural_norms_rows=cultural_norms_rows)
+    if cultural_conventions_rows is not None:
+        attached["cultural_conventions"] = len(cultural_conventions_rows)
+        updated = replace(
+            updated, cultural_conventions_rows=cultural_conventions_rows
+        )
+    if cultural_narratives_rows is not None:
+        attached["cultural_narratives"] = len(cultural_narratives_rows)
+        updated = replace(
+            updated, cultural_narratives_rows=cultural_narratives_rows
+        )
+    if reputation_ledgers is not None:
+        attached["reputation"] = len(reputation_ledgers)
+        updated = replace(
+            updated,
+            reputation_ledgers=reputation_ledgers,
+            reputation_neighborhoods=reputation_neighborhoods,
+            reputation_target_id=reputation_target_id,
+        )
+    if survival_cohort_map is not None:
+        attached["survival_cohort"] = len(survival_cohort_map)
+        updated = replace(updated, survival_cohort_map=survival_cohort_map)
+
+    _LOG.debug(
+        "opt_in_metric_rows_attached",
+        extra={"operation": "inputs_with_opt_in_metric_rows", "blocks": attached},
+    )
+    return updated
 
 
 def compare_compatible_bundles(

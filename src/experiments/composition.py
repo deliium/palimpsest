@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import logging
 from collections.abc import Mapping, Sequence
+from dataclasses import dataclass
 from typing import Final
 
 from analysis.models import (
@@ -16,12 +17,14 @@ from analysis.models import (
     MemoryDynamicsReport,
     SubjectiveDerivationEdge,
 )
+from analysis.prediction_calibration_metrics import CalibrationRow
 from analysis.sources import (
     InMemoryMemoryEvidenceSource,
     InMemoryObjectiveEventSource,
     reconstruction_evidence_from_durable,
 )
 from analysis.spatial_control_metrics import SpatialActionRow, SpatialClaimRow
+from analysis.territorial_concentration_metrics import TerritorialConcentrationRow
 from experiments.persistence import (
     AnalysisEvidenceSnapshotReader,
     PersistedAnalysisSnapshot,
@@ -35,19 +38,25 @@ from world.events import WorldEvent
 from world.identifiers import require_exact_nonneg_int
 
 __all__ = [
+    "CulturalChannelRow",
     "EvidenceCompositionError",
     "EvidenceCompositionService",
     "artifact_interpretation_rows_from_ledgers",
     "artifact_memory_rows_from_traces",
     "artifact_objective_rows_from_artifacts",
+    "calibration_rows_from_world_model_audits",
     "claim_rows_from_ledgers",
     "constrain_snapshot_to_manifest",
     "convention_habit_rows_from_ledgers",
+    "cultural_channel_rows_from_convention_habits",
+    "cultural_channel_rows_from_norm_beliefs",
     "map_consolidation_audits_to_report",
     "map_recall_audits_to_dynamics_report",
     "map_snapshot_to_analysis_sources",
     "norm_belief_rows_from_ledgers",
     "spatial_action_rows_from_events",
+    "territorial_control_rows_from_spatial_actions",
+    "territorial_presence_rows_from_spatial_actions",
 ]
 
 _LOG: Final[logging.Logger] = logging.getLogger("experiments.composition")
@@ -459,6 +468,23 @@ _SPATIAL_KINDS: Final[frozenset[str]] = frozenset(
         "drink",
     }
 )
+_CONTROL_KINDS: Final[frozenset[str]] = frozenset(
+    {
+        "take",
+        "resource_harvested",
+        "structure_built",
+        "structure_repaired",
+        "item_stored",
+    }
+)
+
+
+@dataclass(frozen=True, slots=True)
+class CulturalChannelRow:
+    """Detached per-owner cultural token for cultural_similarity@1."""
+
+    owner_id: str
+    token: str
 
 
 def spatial_action_rows_from_events(
@@ -486,6 +512,203 @@ def spatial_action_rows_from_events(
         len(rows),
     )
     return tuple(rows)
+
+
+def territorial_presence_rows_from_spatial_actions(
+    actions: Sequence[object],
+) -> tuple[TerritorialConcentrationRow, ...]:
+    """Map successful spatial actions into presence-concentration rows."""
+    if isinstance(actions, (str, bytes)) or not isinstance(actions, Sequence):
+        raise TypeError(
+            "territorial_presence_rows_from_spatial_actions: invalid_actions"
+        )
+    rows: list[TerritorialConcentrationRow] = []
+    for action in actions:
+        if not bool(getattr(action, "success", True)):
+            continue
+        location_id = _id_text_or_none(getattr(action, "location_id", None))
+        if location_id is None:
+            continue
+        agent_id = _id_text_or_none(getattr(action, "agent_id", None)) or ""
+        tick = int(getattr(action, "tick", 0) or 0)
+        rows.append(
+            TerritorialConcentrationRow(
+                location_id=location_id,
+                tick=tick,
+                agent_id=agent_id,
+            )
+        )
+    _LOG.debug(
+        "territorial_presence_rows_built actions=%s rows=%s",
+        len(actions),
+        len(rows),
+    )
+    return tuple(rows)
+
+
+def territorial_control_rows_from_spatial_actions(
+    actions: Sequence[object],
+) -> tuple[TerritorialConcentrationRow, ...]:
+    """Map control-like spatial actions into control-concentration rows."""
+    if isinstance(actions, (str, bytes)) or not isinstance(actions, Sequence):
+        raise TypeError(
+            "territorial_control_rows_from_spatial_actions: invalid_actions"
+        )
+    rows: list[TerritorialConcentrationRow] = []
+    for action in actions:
+        if not bool(getattr(action, "success", True)):
+            continue
+        kind = _id_text_or_none(getattr(action, "action_kind", None))
+        if kind is None or kind not in _CONTROL_KINDS:
+            continue
+        location_id = _id_text_or_none(getattr(action, "location_id", None))
+        if location_id is None:
+            continue
+        agent_id = _id_text_or_none(getattr(action, "agent_id", None)) or ""
+        tick = int(getattr(action, "tick", 0) or 0)
+        rows.append(
+            TerritorialConcentrationRow(
+                location_id=location_id,
+                tick=tick,
+                agent_id=agent_id,
+            )
+        )
+    _LOG.debug(
+        "territorial_control_rows_built actions=%s rows=%s",
+        len(actions),
+        len(rows),
+    )
+    return tuple(rows)
+
+
+def calibration_rows_from_world_model_audits(
+    audits: Sequence[object],
+    events: Sequence[object],
+    *,
+    physical_rules: object,
+) -> tuple[CalibrationRow, ...]:
+    """Join world-model audits to empirical outcomes for calibration rows.
+
+    Reuses causal comparison matching. Unmatched hypotheses are dropped, not
+    zeroed. Does not invent engine probabilities.
+    """
+    from analysis.causal_world_model_metrics import compute_causal_world_model_metrics
+    from world.events import WorldEvent
+    from world.models import PhysicalRules
+
+    if isinstance(audits, (str, bytes)) or not isinstance(audits, Sequence):
+        raise TypeError("calibration_rows_from_world_model_audits: invalid_audits")
+    if isinstance(events, (str, bytes)) or not isinstance(events, Sequence):
+        raise TypeError("calibration_rows_from_world_model_audits: invalid_events")
+    if type(physical_rules) is not PhysicalRules:
+        raise TypeError("calibration_rows_from_world_model_audits: invalid_rules")
+    world_events: list[WorldEvent] = []
+    for event in events:
+        if type(event) is not WorldEvent:
+            raise TypeError("calibration_rows_from_world_model_audits: invalid_event")
+        world_events.append(event)
+    if not audits:
+        _LOG.debug(
+            "calibration_rows_skip",
+            extra={"reason_code": "no_world_model_audits", "row_count": 0},
+        )
+        return ()
+    result = compute_causal_world_model_metrics(
+        audits,
+        tuple(world_events),
+        physical_rules=physical_rules,
+        run_id="compose-calibration",
+        input_revision="compose-calibration",
+    )
+    rows: list[CalibrationRow] = []
+    for comparison in result.comparisons:
+        if comparison.empirical_status != "matched":
+            continue
+        if comparison.empirical_rate is None:
+            continue
+        rows.append(
+            CalibrationRow(
+                predicted_confidence=float(comparison.predicted_confidence),
+                empirical_outcome=float(comparison.empirical_rate),
+            )
+        )
+    _LOG.debug(
+        "calibration_rows_built audits=%s matched_rows=%s",
+        len(audits),
+        len(rows),
+    )
+    return tuple(rows)
+
+
+def cultural_channel_rows_from_norm_beliefs(
+    rows: Sequence[object],
+) -> tuple[CulturalChannelRow, ...]:
+    """Project detached norm belief dict/rows into cultural channel tokens."""
+    if isinstance(rows, (str, bytes)) or not isinstance(rows, Sequence):
+        raise TypeError("cultural_channel_rows_from_norm_beliefs: invalid_rows")
+    out: list[CulturalChannelRow] = []
+    for row in rows:
+        owner = _cultural_owner(row)
+        pattern = _cultural_field(row, "pattern", "norm_head")
+        status = _cultural_field(row, "status")
+        response = _cultural_field(row, "response")
+        if owner is None or pattern is None:
+            continue
+        token = "|".join(part for part in (pattern, status, response) if part)
+        out.append(CulturalChannelRow(owner_id=owner, token=token))
+    _LOG.debug(
+        "cultural_norm_channel_rows_built source_rows=%s channel_rows=%s",
+        len(rows),
+        len(out),
+    )
+    return tuple(out)
+
+
+def cultural_channel_rows_from_convention_habits(
+    rows: Sequence[object],
+) -> tuple[CulturalChannelRow, ...]:
+    """Project detached convention habit dict/rows into cultural tokens."""
+    if isinstance(rows, (str, bytes)) or not isinstance(rows, Sequence):
+        raise TypeError(
+            "cultural_channel_rows_from_convention_habits: invalid_rows"
+        )
+    out: list[CulturalChannelRow] = []
+    for row in rows:
+        owner = _cultural_owner(row)
+        situation = _cultural_field(row, "situation")
+        usual_action = _cultural_field(row, "usual_action", "habit_token")
+        if owner is None or situation is None or usual_action is None:
+            continue
+        out.append(
+            CulturalChannelRow(
+                owner_id=owner,
+                token=f"{situation}|{usual_action}",
+            )
+        )
+    _LOG.debug(
+        "cultural_convention_channel_rows_built source_rows=%s channel_rows=%s",
+        len(rows),
+        len(out),
+    )
+    return tuple(out)
+
+
+def _cultural_owner(row: object) -> str | None:
+    if isinstance(row, Mapping):
+        return _id_text_or_none(row.get("owner_id"))
+    return _id_text_or_none(getattr(row, "owner_id", None))
+
+
+def _cultural_field(row: object, *names: str) -> str | None:
+    for name in names:
+        if isinstance(row, Mapping):
+            value = row.get(name)
+        else:
+            value = getattr(row, name, None)
+        text = _id_text_or_none(value)
+        if text is not None:
+            return text
+    return None
 
 
 def norm_belief_rows_from_ledgers(

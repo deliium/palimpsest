@@ -16,10 +16,12 @@ from analysis.behavior_metrics import (
     compute_behavioral_specialization,
     compute_repeated_conventions,
 )
+from analysis.belief_convergence_metrics import compute_belief_convergence
 from analysis.belief_metrics import (
     compute_belief_accuracy,
     compute_false_belief_persistence,
 )
+from analysis.cultural_similarity_metrics import compute_cultural_similarity
 from analysis.memory_drift import compute_memory_drift
 from analysis.memory_dynamics_metrics import compute_memory_dynamics
 from analysis.models import (
@@ -47,7 +49,10 @@ from analysis.objective_metrics import (
     compute_goal_completion,
     compute_resource_inequality,
     compute_survival,
+    compute_survival_cohort_contrast,
 )
+from analysis.prediction_calibration_metrics import compute_prediction_calibration
+from analysis.reputation_metrics import compute_distributed_reputation
 from analysis.offline_consolidation_metrics import (
     OfflineConsolidationReport,
     compute_offline_consolidation,
@@ -60,9 +65,14 @@ from analysis.serialization import (
 )
 from analysis.spatial_control_metrics import compute_spatial_control
 from analysis.specifications import MetricFamilyId, metric_specification
+from analysis.territorial_concentration_metrics import compute_territorial_concentration
 from analysis.transmission_metrics import (
     compute_knowledge_diffusion,
     compute_rumor_distortion,
+)
+
+_NON_CATALOG_FAMILIES: Final[frozenset[str]] = frozenset(
+    {"action_resolution_rates", "survival_cohort_contrast"}
 )
 from analysis.truth import ClaimTruthSpec
 from world.identifiers import require_exact_nonneg_int, require_stable_id
@@ -104,6 +114,18 @@ class MetricComputationInputs:
     eligible_agent_ids: Sequence[str] = ()
     spatial_action_rows: Sequence[object] | None = None
     spatial_claim_rows: Sequence[object] | None = None
+    territorial_presence_rows: Sequence[object] | None = None
+    territorial_control_rows: Sequence[object] | None = None
+    belief_convergence_claims: Sequence[object] | None = None
+    cultural_naming_rows: Sequence[object] | None = None
+    cultural_norms_rows: Sequence[object] | None = None
+    cultural_conventions_rows: Sequence[object] | None = None
+    cultural_narratives_rows: Sequence[object] | None = None
+    prediction_calibration_rows: Sequence[object] | None = None
+    reputation_ledgers: Sequence[object] | None = None
+    reputation_neighborhoods: Mapping[str, str] | None = None
+    reputation_target_id: str | None = None
+    survival_cohort_map: Mapping[str, Sequence[str]] | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -386,6 +408,119 @@ def assemble_metric_documents(inputs: MetricComputationInputs) -> MetricBundle:
                 input_revision=revision,
             ),
         )
+    optional_blocks = {
+        "territorial_presence": inputs.territorial_presence_rows is not None,
+        "territorial_control": inputs.territorial_control_rows is not None,
+        "belief_convergence": inputs.belief_convergence_claims is not None,
+        "cultural_channels": any(
+            block is not None
+            for block in (
+                inputs.cultural_naming_rows,
+                inputs.cultural_norms_rows,
+                inputs.cultural_conventions_rows,
+                inputs.cultural_narratives_rows,
+            )
+        ),
+        "prediction_calibration": inputs.prediction_calibration_rows is not None,
+        "reputation": inputs.reputation_ledgers is not None,
+        "survival_cohort": inputs.survival_cohort_map is not None,
+    }
+    _LOG.debug(
+        "metric_optional_inputs",
+        extra={
+            "operation": "assemble_metric_documents",
+            "run_id": run_id,
+            "optional_blocks_attached": {
+                key: value for key, value in optional_blocks.items() if value
+            },
+        },
+    )
+    if (
+        inputs.territorial_presence_rows is not None
+        or inputs.territorial_control_rows is not None
+    ):
+        presence = inputs.territorial_presence_rows
+        control = inputs.territorial_control_rows
+        _safe(
+            "territorial_concentration",
+            lambda: compute_territorial_concentration(
+                presence,
+                control,
+                run_id=run_id,
+                input_revision=revision,
+            ),
+        )
+    if inputs.belief_convergence_claims is not None:
+        claims = inputs.belief_convergence_claims
+        _safe(
+            "belief_convergence",
+            lambda: compute_belief_convergence(
+                claims,
+                run_id=run_id,
+                input_revision=revision,
+            ),
+        )
+    if optional_blocks["cultural_channels"]:
+        naming = inputs.cultural_naming_rows
+        norms = inputs.cultural_norms_rows
+        conventions = inputs.cultural_conventions_rows
+        narratives = inputs.cultural_narratives_rows
+        _safe(
+            "cultural_similarity",
+            lambda: compute_cultural_similarity(
+                naming_rows=naming,
+                norms_rows=norms,
+                conventions_rows=conventions,
+                narratives_rows=narratives,
+                run_id=run_id,
+                input_revision=revision,
+            ),
+        )
+    if inputs.prediction_calibration_rows is not None:
+        calibration_rows = inputs.prediction_calibration_rows
+        _safe(
+            "prediction_calibration",
+            lambda: compute_prediction_calibration(
+                calibration_rows,
+                run_id=run_id,
+                input_revision=revision,
+            ),
+        )
+    if inputs.reputation_ledgers is not None:
+        ledgers = inputs.reputation_ledgers
+        neighborhoods = inputs.reputation_neighborhoods or {}
+        target = inputs.reputation_target_id or "target"
+        _safe(
+            "distributed_reputation",
+            lambda: compute_distributed_reputation(
+                ledgers,
+                neighborhoods,
+                target_id=target,
+                run_id=run_id,
+                input_revision=revision,
+            ).document,
+        )
+    if inputs.survival_cohort_map is not None:
+        cohort_map = inputs.survival_cohort_map
+        sibling = compute_survival_cohort_contrast(
+            inputs.survival_agents,
+            cohort_map,
+            run_id=run_id,
+            input_revision=revision,
+            final_tick=window_end,
+        )
+        if sibling is not None:
+            documents.append(sibling)
+        else:
+            _LOG.warning(
+                "metric_optional_skip",
+                extra={
+                    "operation": "assemble_metric_documents",
+                    "run_id": run_id,
+                    "metric_family": "survival_cohort_contrast",
+                    "reason_code": "empty_cohort_map",
+                },
+            )
     _safe(
         "rumor_distortion",
         lambda: compute_rumor_distortion(
@@ -407,7 +542,7 @@ def assemble_metric_documents(inputs: MetricComputationInputs) -> MetricBundle:
     for doc in documents:
         encode_metric_document(doc)
         # Validate family is known when present in catalog.
-        if doc.metric_family != "action_resolution_rates":
+        if doc.metric_family not in _NON_CATALOG_FAMILIES:
             metric_specification(MetricFamilyId(doc.metric_family))
 
     duration_ms = int((time.perf_counter() - started) * 1000)

@@ -9,7 +9,7 @@ from analysis.metric_service import MetricComputationInputs, assemble_metric_doc
 from analysis.models import MetricAvailability
 from experiments.metric_collection import (
     collector_fields_from_documents,
-    inputs_with_spatial_rows,
+    inputs_with_opt_in_metric_rows,
 )
 from simulation.runner_models import SimulationRunnerResultDocument
 from simulation.runner_serialization import (
@@ -71,7 +71,7 @@ def collect_trajectory_stats(arm: Any) -> CollectorMetricDocument:
     )
 
 
-def _run_level_bundle(
+def assemble_arm_metric_bundle(
     arm: Any,
     *,
     memory_dynamics_report: object | None = None,
@@ -80,6 +80,12 @@ def _run_level_bundle(
 ):
     """Assemble run-level catalog metrics without requiring experiment membership."""
     from analysis.models import MemoryDynamicsReport
+    from experiments.composition import (
+        convention_habit_rows_from_ledgers,
+        cultural_channel_rows_from_convention_habits,
+        cultural_channel_rows_from_norm_beliefs,
+        norm_belief_rows_from_ledgers,
+    )
 
     ticks = int(arm.runner_result.ticks_committed)
     agent_ids = tuple(
@@ -108,10 +114,63 @@ def _run_level_bundle(
     ledgers = getattr(arm, "territorial_ledgers", None)
     if ledgers is None:
         ledgers = getattr(arm.runner_result, "territorial_ledgers", None)
-    if events is not None:
-        inputs = inputs_with_spatial_rows(
-            inputs, events, claim_ledgers=ledgers
-        )
+    world_model_audits = getattr(arm.runner_result, "world_model_audits", None)
+    if world_model_audits is not None and len(world_model_audits) == 0:
+        world_model_audits = None
+    physical_rules = None
+    try:
+        physical_rules = arm.assignment.runner_config.resolve_physical_rules()
+    except (AttributeError, TypeError, ValueError):
+        physical_rules = None
+
+    cultural_naming = getattr(arm, "cultural_naming_rows", None)
+    cultural_narratives = getattr(arm, "cultural_narratives_rows", None)
+    cultural_norms = getattr(arm, "cultural_norms_rows", None)
+    if cultural_norms is None:
+        norm_ledgers = getattr(arm, "social_norm_ledgers", None)
+        if norm_ledgers is None:
+            norm_ledgers = getattr(arm.runner_result, "social_norm_ledgers", None)
+        if norm_ledgers is not None:
+            cultural_norms = cultural_channel_rows_from_norm_beliefs(
+                norm_belief_rows_from_ledgers(norm_ledgers)
+            )
+    cultural_conventions = getattr(arm, "cultural_conventions_rows", None)
+    if cultural_conventions is None:
+        convention_ledgers = getattr(arm, "social_convention_ledgers", None)
+        if convention_ledgers is None:
+            convention_ledgers = getattr(
+                arm.runner_result, "social_convention_ledgers", None
+            )
+        if convention_ledgers is not None:
+            cultural_conventions = cultural_channel_rows_from_convention_habits(
+                convention_habit_rows_from_ledgers(convention_ledgers)
+            )
+    belief_claims = getattr(arm, "belief_convergence_claims", None)
+    if belief_claims is None:
+        belief_claims = getattr(arm.runner_result, "belief_convergence_claims", None)
+    reputation_ledgers = getattr(arm, "reputation_ledgers", None)
+    if reputation_ledgers is None:
+        reputation_ledgers = getattr(arm.runner_result, "reputation_ledgers", None)
+    reputation_neighborhoods = getattr(arm, "reputation_neighborhoods", None)
+    reputation_target_id = getattr(arm, "reputation_target_id", None)
+    survival_cohort_map = getattr(arm, "survival_cohort_map", None)
+
+    inputs = inputs_with_opt_in_metric_rows(
+        inputs,
+        events=events,
+        claim_ledgers=ledgers,
+        world_model_audits=world_model_audits,
+        physical_rules=physical_rules,
+        belief_convergence_claims=belief_claims,
+        cultural_naming_rows=cultural_naming,
+        cultural_norms_rows=cultural_norms,
+        cultural_conventions_rows=cultural_conventions,
+        cultural_narratives_rows=cultural_narratives,
+        reputation_ledgers=reputation_ledgers,
+        reputation_neighborhoods=reputation_neighborhoods,
+        reputation_target_id=reputation_target_id,
+        survival_cohort_map=survival_cohort_map,
+    )
     return assemble_metric_documents(inputs)
 
 
@@ -120,7 +179,7 @@ def collect_catalog_metrics(arm: Any) -> CollectorMetricDocument:
     report = _memory_dynamics_report_for(arm)
     consolidation = _offline_consolidation_report_for(arm)
     reflection = _reflection_report_for(arm)
-    bundle = _run_level_bundle(
+    bundle = assemble_arm_metric_bundle(
         arm,
         memory_dynamics_report=report,
         offline_consolidation_report=consolidation,
@@ -142,6 +201,67 @@ def collect_catalog_metrics(arm: Any) -> CollectorMetricDocument:
         run_id=arm.assignment.run_id.value,
         condition_id=arm.assignment.condition_id,
         fields=fields,
+    )
+
+
+def collect_phenomenon_panel(arm: Any) -> CollectorMetricDocument | None:
+    """Build analysis-only phenomenon panel after metric bundle assembly.
+
+    Skipped when documents are insufficient. Never feeds cognition.
+    """
+    import logging
+
+    from analysis.phenomenon_panel import build_phenomenon_indicator_panel
+
+    log = logging.getLogger("experiments.collectors")
+    report = _memory_dynamics_report_for(arm)
+    consolidation = _offline_consolidation_report_for(arm)
+    reflection = _reflection_report_for(arm)
+    bundle = assemble_arm_metric_bundle(
+        arm,
+        memory_dynamics_report=report,
+        offline_consolidation_report=consolidation,
+        reflection_report=reflection,
+    )
+    if len(bundle.documents) < 1:
+        log.warning(
+            "phenomenon_panel_skip",
+            extra={
+                "experiment": {
+                    "reason_code": "insufficient_metric_documents",
+                    "run_id": arm.assignment.run_id.value,
+                }
+            },
+        )
+        return None
+    panel = build_phenomenon_indicator_panel(
+        bundle.documents,
+        run_id=arm.assignment.run_id.value,
+        input_revision=bundle.input_revision,
+    )
+    present = sum(
+        1 for reading in panel.readings if reading.support_band.value != "absent"
+    )
+    log.debug(
+        "phenomenon_panel_attached",
+        extra={
+            "experiment": {
+                "run_id": arm.assignment.run_id.value,
+                "phenomenon_count": len(panel.readings),
+                "non_absent_count": present,
+            }
+        },
+    )
+    return CollectorMetricDocument(
+        schema_version=COLLECTOR_SCHEMA_VERSION,
+        family="phenomenon_indicators",
+        run_id=arm.assignment.run_id.value,
+        condition_id=arm.assignment.condition_id,
+        fields=(
+            ("schema_version", panel.schema_version),
+            ("phenomenon_count", len(panel.readings)),
+            ("non_absent_count", present),
+        ),
     )
 
 
@@ -214,7 +334,7 @@ def collect_memory_drift(arm: Any) -> CollectorMetricDocument:
     """Experiment A: memory-mode treatment plus catalog memory_drift availability."""
     mode = arm.assignment.runner_config.agents[0].cognition.memory_mode.value
     report = _memory_dynamics_report_for(arm)
-    bundle = _run_level_bundle(arm, memory_dynamics_report=report)
+    bundle = assemble_arm_metric_bundle(arm, memory_dynamics_report=report)
     drift_docs = [
         doc for doc in bundle.documents if doc.metric_family == "memory_drift"
     ]
@@ -242,7 +362,7 @@ def collect_memory_dynamics(arm: Any) -> CollectorMetricDocument:
     mode = arm.assignment.runner_config.agents[0].cognition.memory_mode.value
     report = _memory_dynamics_report_for(arm)
     audit_count = 0 if report is None else len(report.audits)
-    bundle = _run_level_bundle(arm, memory_dynamics_report=report)
+    bundle = assemble_arm_metric_bundle(arm, memory_dynamics_report=report)
     dynamics_docs = [
         doc for doc in bundle.documents if doc.metric_family == "memory_dynamics"
     ]
@@ -337,20 +457,22 @@ def collect_for_experiment(arm: Any) -> tuple[CollectorMetricDocument, ...]:
     summary = collect_arm_summary(arm)
     trajectory = collect_trajectory_stats(arm)
     catalog = collect_catalog_metrics(arm)
+    panel = collect_phenomenon_panel(arm)
+    core: tuple[CollectorMetricDocument, ...] = (summary, trajectory, catalog)
+    if panel is not None:
+        core = (*core, panel)
     if experiment_id.startswith("experiment-a"):
         return (
-            summary,
-            trajectory,
-            catalog,
+            *core,
             collect_memory_drift(arm),
             collect_memory_dynamics(arm),
         )
     if experiment_id.startswith("experiment-b"):
-        return (summary, trajectory, catalog, collect_imagination_outcomes(arm))
+        return (*core, collect_imagination_outcomes(arm))
     if experiment_id.startswith("experiment-c"):
-        return (summary, trajectory, catalog, collect_mortality_outcomes(arm))
+        return (*core, collect_mortality_outcomes(arm))
     if experiment_id.startswith("experiment-d"):
-        return (summary, trajectory, catalog, collect_drive_outcomes(arm))
+        return (*core, collect_drive_outcomes(arm))
     if experiment_id.startswith("experiment-e"):
-        return (summary, trajectory, catalog, collect_propagation(arm))
-    return (summary, trajectory, catalog)
+        return (*core, collect_propagation(arm))
+    return core

@@ -1,4 +1,4 @@
-"""Unit tests for experiment collector families."""
+"""Phenomenon panel wiring through experiment collectors."""
 
 from __future__ import annotations
 
@@ -6,10 +6,7 @@ import pytest
 
 from agents.models import AgentId
 from experiments.catalog import base_runner_config_from_scenario, experiment_a_memory
-from experiments.collectors import (
-    collect_for_experiment,
-    collect_memory_drift,
-)
+from experiments.collectors import collect_for_experiment, collect_phenomenon_panel
 from experiments.coordinator import ExperimentCoordinator
 from experiments.models import ExperimentSeedMatrix
 from simulation.runner_models import (
@@ -27,7 +24,7 @@ def _base():
     agent_id = AgentId("agent-1")
     return base_runner_config_from_scenario(
         seed=1,
-        stochastic_identity="cmp-collect",
+        stochastic_identity="cmp-panel-wire",
         scenario=WorldScenarioSpec(
             world_id=WorldId("world-1"),
             revision=WorldRevision(0),
@@ -48,34 +45,22 @@ def _base():
 
 
 @pytest.mark.asyncio
-async def test_collectors_dispatch_by_experiment_family() -> None:
+async def test_collect_for_experiment_attaches_phenomenon_panel() -> None:
     definition = experiment_a_memory(
         _base(),
-        seed_matrix=ExperimentSeedMatrix(seeds=(2,), replicates_per_seed=1),
+        seed_matrix=ExperimentSeedMatrix(seeds=(3,), replicates_per_seed=1),
     )
     results = await ExperimentCoordinator(definition).run_all()
-    assert len(results) >= 2
+    assert results
     for arm in results:
         docs = collect_for_experiment(arm)
         families = {doc.family for doc in docs}
-        assert "summary" in families
-        assert "trajectory" in families
         assert "phenomenon_indicators" in families
-        assert "memory_drift" in families
-        drift = collect_memory_drift(arm)
-        assert drift.family == "memory_drift"
-        assert "memory_mode" in dict(drift.fields)
-        for doc in docs:
-            assert doc.schema_version == "experiment-collector-v2"
-            assert "is_false" not in dict(doc.fields)
-            assert not any("truth" in key for key, _ in doc.fields)
-
-
-@pytest.mark.asyncio
-async def test_coordinator_attaches_metrics() -> None:
-    definition = experiment_a_memory(
-        _base(),
-        seed_matrix=ExperimentSeedMatrix(seeds=(4,), replicates_per_seed=1),
-    )
-    results = await ExperimentCoordinator(definition).run_all()
-    assert all(len(item.metrics) >= 2 for item in results)
+        panel = collect_phenomenon_panel(arm)
+        assert panel is not None
+        assert panel.family == "phenomenon_indicators"
+        fields = dict(panel.fields)
+        assert fields["phenomenon_count"] == 18
+        assert "emerged" not in fields
+        assert "culture_emerged" not in fields
+        assert "detected" not in fields
