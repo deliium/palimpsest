@@ -48,6 +48,8 @@ Establish the modular-monolith foundation: packaging, bounded packages, typed co
 
 `advanced_social_inference` is owned and default off. When enabled, each agent keeps a private first-order model of other agents from its own observations and uses it to bias social action. Off is a passthrough: no hypotheses, no command bias, no audit. The model can be wrong. Experiment L and `theory_of_mind@1` stay analysis-only and off the V1 regression gate. One agent does not receive another agent's private cognition.
 
+Named cognitive architecture variants (`agents.cognition.architectures`, Experiment AC) compose owned flags and cognition modes as experiment presets without new flag slots or a runner `architecture_id` schema key (2026-10-03).
+
 **Still unimplemented:** `multi_hop_testimony_tracking`. Enabling it still fails closed with `capability_unimplemented`.
 
 **Next plan:** own `multi_hop_testimony_tracking` (still fails closed with `capability_unimplemented`).
