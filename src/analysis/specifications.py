@@ -50,7 +50,7 @@ __all__ = [
 ]
 
 METRIC_CATALOG_VERSION: Final[str] = "metric-catalog-v1"
-METRIC_FAMILY_COUNT: Final[int] = 33
+METRIC_FAMILY_COUNT: Final[int] = 34
 
 # Align with existing memory-drift / transmission document versions.
 _ALGO_V1: Final[str] = "1"
@@ -110,6 +110,7 @@ class MetricFamilyId(StrEnum):
     PERSISTENT_SOCIAL_CONVENTIONS = "persistent_social_conventions"
     EXTERNAL_ARTIFACT_MEMORY = "external_artifact_memory"
     EMERGENT_SEMANTIC_NAMING = "emergent_semantic_naming"
+    CULTURAL_NARRATIVE_LINEAGE = "cultural_narrative_lineage"
 
 
 class DenominatorKind(StrEnum):
@@ -1171,6 +1172,79 @@ def _spec_emergent_social_norms() -> MetricSpecification:
     )
 
 
+def _spec_cultural_narrative_lineage() -> MetricSpecification:
+    return _base(
+        family_id=MetricFamilyId.CULTURAL_NARRATIVE_LINEAGE,
+        evidence_inputs=frozenset({EvidenceStage.OBJECTIVE_EVENT_STATE}),
+        population="caller_supplied_narrative_variant_history_rows",
+        denominator="active_variants_or_founding_lineages",
+        denominator_kind=DenominatorKind.OCCURRENCE,
+        cohort_window="caller-supplied rows after the run",
+        deceased_policy="not_applicable",
+        zero_holding_policy="empty denominators -> availability=absent for that key",
+        opportunity_vs_occurrence=(
+            "a lineage persists only when an active or merged-into-active "
+            "variant remains; empty rows are not a zero persistence rate"
+        ),
+        self_edge_policy="self pairs are dropped",
+        censoring_policy=(
+            "a missing variant row is not an active narrative; "
+            "analysis joins never re-enter cognition"
+        ),
+        formulas={
+            "active_variant_count": "rows with status active at final tick",
+            "mean_active_strength": "mean strength of active rows",
+            "mean_duration_ticks": "mean last_tick - first_tick of active/merged",
+            "persistence_rate": (
+                "founding fingerprints still represented by active/merged lineage"
+            ),
+            "branch_rate": "child variants / founding variants",
+            "mean_mutation_generation": "mean generation over active rows",
+            "fingerprint_churn": "mean distinct fingerprints per transmission root",
+            "token_add_rate": "mean added tokens vs founding per active child",
+            "token_loss_rate": "mean lost tokens vs founding per active child",
+            "inaccuracy_vs_objective": (
+                "active variants failing caller-supplied covers_source / covered"
+            ),
+            "source_event_drop_rate": (
+                "active lineages that lost has_source_event from founding"
+            ),
+            "origin_shift_rate": "active children whose origin differs from founding",
+            "orphan_retell_rate": "active retold_story without source ids / active",
+            "merge_rate": "merged parents / variants that ever reached active",
+            "mean_parents_per_merge": "mean parent arity on merge results",
+            "competing_variant_share": "active with competitors / active",
+            "mean_location_span": "mean distinct location_ids on active rows",
+            "mean_carrier_span": "mean distinct carrier_agent_ids on active rows",
+            "multi_location_rate": "active with location_count >= 2 / active",
+            "social_reach_rate": "active with carrier_count >= 3 / active",
+        },
+        value_keys=(
+            "active_variant_count",
+            "branch_rate",
+            "competing_variant_share",
+            "fingerprint_churn",
+            "inaccuracy_vs_objective",
+            "mean_active_strength",
+            "mean_carrier_span",
+            "mean_duration_ticks",
+            "mean_location_span",
+            "mean_mutation_generation",
+            "mean_parents_per_merge",
+            "merge_rate",
+            "multi_location_rate",
+            "orphan_retell_rate",
+            "origin_shift_rate",
+            "persistence_rate",
+            "social_reach_rate",
+            "source_event_drop_rate",
+            "token_add_rate",
+            "token_loss_rate",
+        ),
+        empty_case="availability=absent; empty rows are not zero persistence",
+    )
+
+
 def _spec_emergent_semantic_naming() -> MetricSpecification:
     return _base(
         family_id=MetricFamilyId.EMERGENT_SEMANTIC_NAMING,
@@ -2046,6 +2120,7 @@ _BUILDERS: Final[tuple[Callable[[], MetricSpecification], ...]] = (
     _spec_persistent_social_conventions,
     _spec_external_artifact_memory,
     _spec_emergent_semantic_naming,
+    _spec_cultural_narrative_lineage,
 )
 
 

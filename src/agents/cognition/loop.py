@@ -169,8 +169,6 @@ class CognitiveLoop:
 
     __slots__ = (
         "_artifact_interpretation_mode",
-        "_semantic_naming_mode",
-        "_semantic_naming_policy",
         "_communication_strategy_mode",
         "_communication_strategy_policy",
         "_competence_policy",
@@ -183,6 +181,8 @@ class CognitiveLoop:
         "_counterfactual_policy",
         "_counterfactual_skipped",
         "_counterfactual_state",
+        "_cultural_narrative_mode",
+        "_cultural_narrative_policy",
         "_deferred_dissonance",
         "_emotional_state",
         "_epistemic_policy",
@@ -207,6 +207,8 @@ class CognitiveLoop:
         "_reputation_mode",
         "_reputation_policy",
         "_self_state",
+        "_semantic_naming_mode",
+        "_semantic_naming_policy",
         "_situation",
         "_skill_learning_mode",
         "_social_convention_mode",
@@ -273,6 +275,8 @@ class CognitiveLoop:
         artifact_interpretation_mode: object | None = None,
         semantic_naming_mode: object | None = None,
         semantic_naming_policy: object | None = None,
+        cultural_narrative_mode: object | None = None,
+        cultural_narrative_policy: object | None = None,
         production_knowledge_mode: object | None = None,
         production_allow_provider: bool = False,
     ) -> None:
@@ -573,6 +577,34 @@ class CognitiveLoop:
             naming_policy = semantic_naming_policy
         self._semantic_naming_mode = naming_mode
         self._semantic_naming_policy = naming_policy
+        from agents.cognition.configuration import CognitionCulturalNarrativeMode
+        from agents.cognition.cultural_narratives import CulturalNarrativePolicy
+
+        narrative_mode = (
+            CognitionCulturalNarrativeMode.DISABLED
+            if cultural_narrative_mode is None
+            else cultural_narrative_mode
+        )
+        if type(narrative_mode) is not CognitionCulturalNarrativeMode:
+            raise TypeError(
+                "cultural_narrative_mode must be CognitionCulturalNarrativeMode"
+            )
+        if narrative_mode is CognitionCulturalNarrativeMode.DISABLED:
+            narrative_policy = None
+        elif cultural_narrative_policy is None:
+            from agents.cognition.cultural_narratives import (
+                default_cultural_narrative_policy,
+            )
+
+            narrative_policy = default_cultural_narrative_policy()
+        elif type(cultural_narrative_policy) is not CulturalNarrativePolicy:
+            raise TypeError(
+                "cultural_narrative_policy must be CulturalNarrativePolicy"
+            )
+        else:
+            narrative_policy = cultural_narrative_policy
+        self._cultural_narrative_mode = narrative_mode
+        self._cultural_narrative_policy = narrative_policy
         from agents.cognition.competence import CompetenceBeliefPolicy
         from agents.cognition.configuration import CognitionSkillLearningMode
 
@@ -976,6 +1008,85 @@ class CognitiveLoop:
             0 if updated is None else len(updated.bindings),
         )
         return updated
+
+    def _prepare_cultural_narratives(
+        self,
+        loop_input: CognitiveLoopInput,
+        *,
+        artifact_interpretations: object | None = None,
+        retrieve_context: object | None = None,
+    ) -> object | None:
+        """Refresh one owner's narrative ledger. Disabled mode leaves it absent."""
+        from agents.cognition.configuration import CognitionCulturalNarrativeMode
+        from agents.cognition.cultural_narratives import (
+            NarrativeLedger,
+            apply_narrative_update,
+        )
+
+        owner_id = loop_input.agent_id.value
+        if (
+            self._cultural_narrative_mode
+            is not CognitionCulturalNarrativeMode.DETERMINISTIC
+        ):
+            return None
+        snapshot = loop_input.snapshot
+        carried = None if snapshot is None else snapshot.cultural_narratives
+        ledger = carried if type(carried) is NarrativeLedger else None
+        identity = None if snapshot is None else snapshot.social_identity
+        if snapshot is None or identity is None:
+            _LOG.warning(
+                "narrative_carry_rejected reason=%s",
+                "invalid_type" if snapshot is None else "owner_mismatch",
+            )
+            return None
+        cues = _build_narrative_cue_summary(
+            artifact_interpretations=artifact_interpretations,
+            retrieve_context=retrieve_context,
+        )
+        memories = () if snapshot is None else snapshot.memories
+        updated = apply_narrative_update(
+            observation=loop_input.observation,
+            identity=identity,
+            previous=ledger,
+            memories=memories,
+            cues=cues,
+            policy=self._cultural_narrative_policy,
+        )
+        _LOG.debug(
+            "cultural_narratives_carried owner_id=%s variant_count=%s",
+            owner_id,
+            0 if updated is None else len(updated.variants),
+        )
+        return updated
+
+    def _narrative_communicate_penalties(
+        self,
+        loop_input: CognitiveLoopInput,
+        ledger: object | None,
+        futures: object,
+    ) -> dict[str, float] | None:
+        """Prefer an existing communicate future for a speakable narrative."""
+        from agents.cognition.configuration import CognitionCulturalNarrativeMode
+        from agents.cognition.cultural_narratives import (
+            narrative_communicate_penalties,
+        )
+
+        if (
+            self._cultural_narrative_mode
+            is not CognitionCulturalNarrativeMode.DETERMINISTIC
+            or ledger is None
+        ):
+            return None
+        penalties = narrative_communicate_penalties(
+            ledger,
+            getattr(futures, "futures", ()),
+            tick=loop_input.observation.tick,
+            mode=self._cultural_narrative_mode,
+            policy=self._cultural_narrative_policy,
+        )
+        mapped = dict(penalties)
+        _LOG.debug("narrative_penalty_applied future_count=%s", len(mapped))
+        return mapped
 
     def _naming_communicate_penalties(
         self,
@@ -1576,6 +1687,11 @@ class CognitiveLoop:
             social_norms=social_norms,
             social_conventions=social_conventions,
         )
+        cultural_narratives = self._prepare_cultural_narratives(
+            loop_input,
+            artifact_interpretations=artifact_interpretations,
+            retrieve_context=memory,
+        )
         competence = self._prepare_competence(loop_input, memory)
         competence, advice = self._prepare_teaching(loop_input, competence)
         recipe_beliefs = self._prepare_recipe_beliefs(loop_input)
@@ -1694,6 +1810,9 @@ class CognitiveLoop:
         naming_penalty_map = self._naming_communicate_penalties(
             loop_input, semantic_naming, futures
         )
+        narrative_penalty_map = self._narrative_communicate_penalties(
+            loop_input, cultural_narratives, futures
+        )
         intention = await run_stage(
             kind=ComponentKind.INTENTION,
             ordinal=8,
@@ -1727,6 +1846,9 @@ class CognitiveLoop:
                     semantic_naming=semantic_naming,
                     semantic_naming_mode=self._semantic_naming_mode,
                     naming_penalties=naming_penalty_map,
+                    cultural_narratives=cultural_narratives,
+                    cultural_narrative_mode=self._cultural_narrative_mode,
+                    narrative_penalties=narrative_penalty_map,
                 ),
             ),
             expected_type=SelectedIntention,
@@ -1768,6 +1890,8 @@ class CognitiveLoop:
                     artifact_interpretation_mode=self._artifact_interpretation_mode,
                     semantic_naming=semantic_naming,
                     semantic_naming_mode=self._semantic_naming_mode,
+                    cultural_narratives=cultural_narratives,
+                    cultural_narrative_mode=self._cultural_narrative_mode,
                 ),
             ),
             expected_type=ActionPlan,
@@ -1809,6 +1933,7 @@ class CognitiveLoop:
             social_conventions=social_conventions,
             artifact_interpretations=artifact_interpretations,
             semantic_naming=semantic_naming,
+            cultural_narratives=cultural_narratives,
             competence_model=competence,
             declarative_advice=advice,
             recipe_beliefs=recipe_beliefs,
@@ -1912,6 +2037,10 @@ class CognitiveLoop:
             updates=updates,
             identity_revisions=identity_revisions,
         )
+        updates = self._merge_narrative_belief_uplift(
+            proposal=proposal,
+            updates=updates,
+        )
 
         next_state = InternalAgentState(
             owner_id=loop_input.agent_id,
@@ -1966,6 +2095,7 @@ class CognitiveLoop:
             social_conventions=proposal.social_conventions,
             artifact_interpretations=proposal.artifact_interpretations,
             semantic_naming=proposal.semantic_naming,
+            cultural_narratives=proposal.cultural_narratives,
             competence_model=proposal.competence_model,
             declarative_advice=proposal.declarative_advice,
             recipe_beliefs=proposal.recipe_beliefs,
@@ -2404,6 +2534,39 @@ class CognitiveLoop:
             tick=loop_input.observation.tick,
         )
 
+    def _merge_narrative_belief_uplift(
+        self,
+        *,
+        proposal: CognitiveLoopProposal,
+        updates: tuple[object, ...],
+    ) -> tuple[object, ...]:
+        from agents.cognition.configuration import CognitionCulturalNarrativeMode
+        from agents.cognition.cultural_narratives import narrative_semantic_evidence
+
+        if (
+            self._cultural_narrative_mode
+            is not CognitionCulturalNarrativeMode.DETERMINISTIC
+        ):
+            return updates
+        requests = narrative_semantic_evidence(
+            proposal.cultural_narratives,
+            owner_id=proposal.agent_id,
+            tick=proposal.loop_input.observation.tick,
+            mode=self._cultural_narrative_mode,
+            policy=self._cultural_narrative_policy,
+        )
+        if not requests:
+            return updates
+        extra = tuple(
+            MemoryUpdateIntent(
+                owner_id=proposal.agent_id,
+                kind=MemoryUpdateKind.REVISE_SEMANTIC_BELIEF,
+                belief_revision=request,
+            )
+            for request in requests
+        )
+        return (*updates, *extra)
+
     def _merge_counterfactual_conclusions(
         self,
         *,
@@ -2826,6 +2989,84 @@ def _build_naming_cue_summary(
     return NamingCueSummary(
         group_concept_ids=tuple(group_ids),
         practice_action_kinds=tuple(practice_actions),
+    )
+
+
+def _build_narrative_cue_summary(
+    *,
+    artifact_interpretations: object | None,
+    retrieve_context: object | None,
+) -> object:
+    """Duck-typed cue bag from prepared artifacts and retrieve reconstructions."""
+    from agents.cognition.cultural_narratives import NarrativeCueSummary
+
+    distorted: list[tuple[str, bool, int, int]] = []
+    for entry in getattr(artifact_interpretations, "interpretations", ()) or ():
+        artifact_id = getattr(entry, "artifact_id", None)
+        if hasattr(artifact_id, "value"):
+            artifact_id = artifact_id.value
+        if not isinstance(artifact_id, str) or not artifact_id:
+            continue
+        distorted_flag = bool(getattr(entry, "distorted", False))
+        reading_relations = getattr(entry, "reading_relations", ()) or ()
+        mark_relations = getattr(entry, "mark_relations", ()) or ()
+        # Also accept count fields if present.
+        reading_count = getattr(entry, "reading_relation_count", None)
+        mark_count = getattr(entry, "mark_relation_count", None)
+        if not isinstance(reading_count, int):
+            reading_count = len(reading_relations)
+        if not isinstance(mark_count, int):
+            mark_count = len(mark_relations)
+        distorted.append(
+            (artifact_id, distorted_flag, int(reading_count), int(mark_count))
+        )
+    reconstructions: list[
+        tuple[str, tuple[str, ...], tuple[str, ...], tuple[tuple[str, str, str], ...]]
+    ] = []
+    for item in getattr(retrieve_context, "reconstructions", ()) or ():
+        reconstruction_id = getattr(item, "reconstruction_id", None)
+        if hasattr(reconstruction_id, "value"):
+            reconstruction_id = reconstruction_id.value
+        if not isinstance(reconstruction_id, str) or not reconstruction_id:
+            continue
+        source_ids: list[str] = []
+        for mid in getattr(item, "source_memory_ids", ()) or ():
+            value = getattr(mid, "value", mid)
+            if isinstance(value, str) and value:
+                source_ids.append(value)
+        concepts: list[str] = []
+        for concept in getattr(item, "concepts", ()) or ():
+            token = getattr(concept, "concept", None)
+            if isinstance(token, str) and token:
+                concepts.append(token)
+            elif isinstance(concept, str):
+                concepts.append(concept)
+        relations: list[tuple[str, str, str]] = []
+        for rel in getattr(item, "relations", ()) or ():
+            subject = getattr(rel, "subject", None)
+            predicate = getattr(rel, "predicate", None)
+            obj = getattr(rel, "object", None)
+            subject_token = getattr(subject, "concept", None) or getattr(
+                subject, "value", subject
+            )
+            object_token = getattr(obj, "concept", None) or getattr(obj, "value", obj)
+            if (
+                isinstance(subject_token, str)
+                and isinstance(predicate, str)
+                and isinstance(object_token, str)
+            ):
+                relations.append((subject_token, predicate, object_token))
+        reconstructions.append(
+            (
+                reconstruction_id,
+                tuple(source_ids),
+                tuple(concepts),
+                tuple(relations),
+            )
+        )
+    return NarrativeCueSummary(
+        distorted_artifacts=tuple(distorted),
+        reconstructions=tuple(reconstructions),
     )
 
 

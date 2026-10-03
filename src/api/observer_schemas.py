@@ -18,6 +18,7 @@ _OBJECTIVE_LEAK_KEYS = frozenset(
         "territory_owner",
         "controller",
         "semantic_naming",
+        "cultural_narratives",
         "subjective_labels",
         "labels",
     }

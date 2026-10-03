@@ -29,6 +29,10 @@ from analysis.counterfactual_metrics import (
     COUNTERFACTUAL_REASONING_METRIC_VERSION,
     compute_counterfactual_reasoning_metrics,
 )
+from analysis.cultural_narrative_metrics import (
+    CULTURAL_NARRATIVE_LINEAGE_METRIC_VERSION,
+    compute_cultural_narrative_lineage,
+)
 from analysis.cultural_transmission_metrics import (
     CULTURAL_TRANSMISSION_METRIC_VERSION,
     compute_cultural_transmission,
@@ -46,11 +50,6 @@ from analysis.evidence import (
 from analysis.external_artifact_metrics import (
     EXTERNAL_ARTIFACT_MEMORY_METRIC_VERSION,
     compute_external_artifact_memory,
-)
-from analysis.semantic_naming_metrics import (
-    EMERGENT_SEMANTIC_NAMING_METRIC_VERSION,
-    compute_emergent_semantic_naming,
-    compute_naming_persistence,
 )
 from analysis.group_formation_metrics import (
     EMERGENT_GROUP_FORMATION_METRIC_VERSION,
@@ -177,6 +176,11 @@ from analysis.reputation_metrics import (
     DISTRIBUTED_REPUTATION_METRIC_VERSION,
     compute_distributed_reputation,
 )
+from analysis.semantic_naming_metrics import (
+    EMERGENT_SEMANTIC_NAMING_METRIC_VERSION,
+    compute_emergent_semantic_naming,
+    compute_naming_persistence,
+)
 from analysis.serialization import (
     MetricSerializationError,
     decode_metric_document,
@@ -260,6 +264,7 @@ __all__ = [
     "CLAIM_TRUTH_SCHEMA_VERSION",
     "COMMUNICATION_STRATEGY_METRIC_VERSION",
     "COUNTERFACTUAL_REASONING_METRIC_VERSION",
+    "CULTURAL_NARRATIVE_LINEAGE_METRIC_VERSION",
     "CULTURAL_TRANSMISSION_METRIC_VERSION",
     "DISTRIBUTED_REPUTATION_METRIC_VERSION",
     "DRIFT_METRIC_VERSION",
@@ -369,13 +374,13 @@ __all__ = [
     "compute_convention_persistence",
     "compute_cooperation",
     "compute_counterfactual_reasoning_metrics",
+    "compute_cultural_narrative_lineage",
     "compute_cultural_transmission",
     "compute_distributed_reputation",
     "compute_emergent_group_candidates",
     "compute_emergent_semantic_naming",
     "compute_emergent_social_norms",
     "compute_external_artifact_memory",
-    "compute_naming_persistence",
     "compute_false_belief_persistence",
     "compute_goal_completion",
     "compute_group_community_structure",
@@ -384,6 +389,7 @@ __all__ = [
     "compute_knowledge_diffusion",
     "compute_memory_drift",
     "compute_memory_dynamics",
+    "compute_naming_persistence",
     "compute_norm_persistence",
     "compute_offline_consolidation",
     "compute_persistent_social_conventions",

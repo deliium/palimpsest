@@ -140,6 +140,9 @@ class MultiCriteriaIntentionSelector:
         semantic_naming: object | None = None,
         semantic_naming_mode: object | None = None,
         naming_penalties: Mapping[str, float] | None = None,
+        cultural_narratives: object | None = None,
+        cultural_narrative_mode: object | None = None,
+        narrative_penalties: Mapping[str, float] | None = None,
     ) -> SelectedIntention:
         owner = loop_input.agent_id
         tick = loop_input.observation.tick
@@ -391,6 +394,26 @@ class MultiCriteriaIntentionSelector:
                 "naming_penalty_applied future_count=%s",
                 len(naming_penalties),
             )
+        if narrative_penalties is None and cultural_narratives is not None:
+            from agents.cognition.cultural_narratives import (
+                narrative_communicate_penalties,
+            )
+
+            narrative_penalties = narrative_communicate_penalties(
+                cultural_narratives,
+                tuple(
+                    futures_by_id[item.future_id]
+                    for item in undominated
+                    if item.future_id in futures_by_id
+                ),
+                tick=tick,
+                mode=cultural_narrative_mode,
+            )
+        if narrative_penalties:
+            _LOG.debug(
+                "narrative_penalty_applied future_count=%s",
+                len(narrative_penalties),
+            )
         winner, tie_break = _pairwise_select(
             undominated,
             futures_by_id,
@@ -408,6 +431,7 @@ class MultiCriteriaIntentionSelector:
             convention_penalties,
             artifact_penalties,
             naming_penalties,
+            narrative_penalties,
         )
         future = futures_by_id.get(winner.future_id)
         direction = ActionDirection.WAIT if future is None else future.direction
@@ -671,6 +695,8 @@ class CommandPlanner:
         artifact_interpretation_mode: object | None = None,
         semantic_naming: object | None = None,
         semantic_naming_mode: object | None = None,
+        cultural_narratives: object | None = None,
+        cultural_narrative_mode: object | None = None,
     ) -> ActionPlan:
         owner = loop_input.agent_id
         tick = loop_input.observation.tick
@@ -845,6 +871,22 @@ class CommandPlanner:
             identity=None if snapshot is None else snapshot.social_identity,
             ledger=prepared_naming,
             mode=semantic_naming_mode,
+        )
+        from agents.cognition.cultural_narratives import (
+            narrative_communicate_utterance,
+        )
+
+        prepared_narratives = cultural_narratives
+        if prepared_narratives is None and snapshot is not None:
+            prepared_narratives = snapshot.cultural_narratives
+        command = narrative_communicate_utterance(
+            command,
+            owner_id=owner,
+            tick=tick,
+            observation=loop_input.observation,
+            identity=None if snapshot is None else snapshot.social_identity,
+            ledger=prepared_narratives,
+            mode=cultural_narrative_mode,
         )
         from agents.cognition.artifacts import (
             artifact_inscribe_command,
@@ -1390,6 +1432,7 @@ def _pairwise_select(
     convention_penalties: Mapping[str, float] | None = None,
     artifact_penalties: Mapping[str, float] | None = None,
     naming_penalties: Mapping[str, float] | None = None,
+    narrative_penalties: Mapping[str, float] | None = None,
 ) -> tuple[FutureAppraisal, str]:
     if len(appraisals) == 1:
         return appraisals[0], _TIE_BREAK_NONE
@@ -1415,6 +1458,7 @@ def _pairwise_select(
                 convention_penalties,
                 artifact_penalties,
                 naming_penalties,
+                narrative_penalties,
             )
             if cmp > 0:
                 scores[left.future_id] += 1
@@ -1460,6 +1504,7 @@ def _pairwise_compare(
     convention_penalties: Mapping[str, float] | None = None,
     artifact_penalties: Mapping[str, float] | None = None,
     naming_penalties: Mapping[str, float] | None = None,
+    narrative_penalties: Mapping[str, float] | None = None,
 ) -> int:
     """Return positive if left preferred, negative if right preferred, else 0."""
     active_drives = set(motivation.active_drive_kinds)
@@ -1620,6 +1665,9 @@ def _pairwise_compare(
     if naming_penalties is not None:
         total -= naming_penalties.get(left.future_id, 0.0)
         total += naming_penalties.get(right.future_id, 0.0)
+    if narrative_penalties is not None:
+        total -= narrative_penalties.get(left.future_id, 0.0)
+        total += narrative_penalties.get(right.future_id, 0.0)
     if total > 0:
         return 1
     if total < 0:

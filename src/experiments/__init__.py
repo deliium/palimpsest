@@ -9,6 +9,8 @@ from experiments.catalog import (
     EXPERIMENT_A_V1_CONDITION_IDS,
     experiment_a_memory,
     experiment_a_memory_v1_arms,
+    experiment_aa_emergent_naming,
+    experiment_ab_cultural_narratives,
     experiment_b_imagination,
     experiment_c_mortality,
     experiment_d_drives,
@@ -33,7 +35,6 @@ from experiments.catalog import (
     experiment_w_emergent_groups,
     experiment_x_social_norms,
     experiment_y_social_conventions,
-    experiment_aa_emergent_naming,
     experiment_z_external_artifacts,
     v1_regression_profile,
 )
@@ -67,12 +68,13 @@ from experiments.coordinator import (
     ExperimentCoordinator,
     materialize_assignments,
 )
+from experiments.cultural_narratives_scenario import cultural_narratives_scenario
+from experiments.emergent_naming_scenario import emergent_naming_scenario
 from experiments.environmental_scenario import (
     ENVIRONMENTAL_DYNAMICS_METRIC_VERSION,
     count_environmental_dynamics,
     seasonal_scarcity_scenario,
 )
-from experiments.emergent_naming_scenario import emergent_naming_scenario
 from experiments.external_artifacts_scenario import external_artifacts_scenario
 from experiments.interventions import (
     DEFAULT_OVERRIDE_BUDGET,
@@ -203,10 +205,14 @@ __all__ = [
     "compare_compatible_bundles",
     "condition_fingerprint",
     "count_environmental_dynamics",
+    "cultural_narratives_scenario",
     "definition_fingerprint",
     "distributed_reputation_scenario",
+    "emergent_naming_scenario",
     "experiment_a_memory",
     "experiment_a_memory_v1_arms",
+    "experiment_aa_emergent_naming",
+    "experiment_ab_cultural_narratives",
     "experiment_b_imagination",
     "experiment_c_mortality",
     "experiment_d_drives",
@@ -231,9 +237,7 @@ __all__ = [
     "experiment_w_emergent_groups",
     "experiment_x_social_norms",
     "experiment_y_social_conventions",
-    "experiment_aa_emergent_naming",
     "experiment_z_external_artifacts",
-    "emergent_naming_scenario",
     "external_artifacts_scenario",
     "make_false_story_intervention",
     "map_consolidation_audits_to_report",

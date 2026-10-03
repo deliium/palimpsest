@@ -417,6 +417,7 @@ class AgentRuntime:
         "_counterfactual_audits",
         "_counterfactual_capture",
         "_counterfactual_state",
+        "_cultural_narratives",
         "_decision_journal",
         "_emotional_state",
         "_finalized_hashes",
@@ -553,6 +554,7 @@ class AgentRuntime:
         self._social_conventions: object | None = None
         self._artifact_interpretations: object | None = None
         self._semantic_naming: object | None = None
+        self._cultural_narratives: object | None = None
         self._competence: object | None = None
         self._recipe_beliefs: object | None = None
         self._advice: object | None = None
@@ -927,6 +929,35 @@ class AgentRuntime:
             "semantic_naming_carried owner_id=%s binding_count=%s tick=%s",
             owner.value,
             len(ledger.bindings),
+            tick,
+        )
+
+    def _commit_cultural_narratives(self, ledger: object | None, tick: int) -> None:
+        from agents.cognition.configuration import CognitionCulturalNarrativeMode
+        from agents.cognition.cultural_narratives import NarrativeLedger
+
+        owner = self._agent.agent_id
+        mode = getattr(
+            self._loop,
+            "_cultural_narrative_mode",
+            CognitionCulturalNarrativeMode.DISABLED,
+        )
+        if mode is not CognitionCulturalNarrativeMode.DETERMINISTIC or ledger is None:
+            if mode is not CognitionCulturalNarrativeMode.DETERMINISTIC:
+                self._cultural_narratives = None
+            return
+        if type(ledger) is not NarrativeLedger:
+            raise TypeError("cultural_narratives must be NarrativeLedger")
+        if ledger.owner_id != owner:
+            raise AgentRuntimeError(
+                AgentRuntimeErrorCode.OWNERSHIP,
+                agent_id=owner.value,
+            )
+        self._cultural_narratives = ledger
+        _LOG.debug(
+            "cultural_narratives_carried owner_id=%s variant_count=%s tick=%s",
+            owner.value,
+            len(ledger.variants),
             tick,
         )
 
@@ -1466,6 +1497,7 @@ class AgentRuntime:
                 social_conventions=self._social_conventions,
                 artifact_interpretations=self._artifact_interpretations,
                 semantic_naming=self._semantic_naming,
+                cultural_narratives=self._cultural_narratives,
                 competence_model=self._competence,
                 declarative_advice=self._advice,
                 recipe_beliefs=self._recipe_beliefs,
@@ -1894,6 +1926,9 @@ class AgentRuntime:
         self._commit_semantic_naming(
             getattr(pending.loop_result, "semantic_naming", None), pending.tick
         )
+        self._commit_cultural_narratives(
+            getattr(pending.loop_result, "cultural_narratives", None), pending.tick
+        )
         self._commit_competence(
             getattr(pending.loop_result, "competence_model", None), pending.tick
         )
@@ -2304,6 +2339,7 @@ class AgentRuntime:
             checkpoint, "artifact_interpretations", None
         )
         self._semantic_naming = getattr(checkpoint, "semantic_naming", None)
+        self._cultural_narratives = getattr(checkpoint, "cultural_narratives", None)
         self._competence = checkpoint.competence_model
         self._recipe_beliefs = getattr(checkpoint, "recipe_beliefs", None)
         self._advice = checkpoint.declarative_advice
@@ -2368,6 +2404,7 @@ class AgentRuntime:
             social_conventions=self._social_conventions,
             artifact_interpretations=self._artifact_interpretations,
             semantic_naming=self._semantic_naming,
+            cultural_narratives=self._cultural_narratives,
             competence_model=self._competence,
             declarative_advice=self._advice,
             recipe_beliefs=self._recipe_beliefs,

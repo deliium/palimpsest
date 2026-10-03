@@ -153,6 +153,7 @@ class Perspective:
     social_conventions: object | None = None
     artifact_interpretations: object | None = None
     semantic_naming: object | None = None
+    cultural_narratives: object | None = None
     competence_model: object | None = None
     declarative_advice: object | None = None
     recipe_beliefs: object | None = None
@@ -333,6 +334,15 @@ class Perspective:
             self.agent_id,
             field_name="Perspective.semantic_naming",
         )
+        from agents.cognition.cultural_narratives import (
+            require_owner_cultural_narratives,
+        )
+
+        require_owner_cultural_narratives(
+            self.cultural_narratives,
+            self.agent_id,
+            field_name="Perspective.cultural_narratives",
+        )
         from agents.cognition.competence import require_owner_competence
 
         require_owner_competence(
@@ -383,6 +393,7 @@ class Perspective:
             social_conventions=self.social_conventions,
             artifact_interpretations=self.artifact_interpretations,
             semantic_naming=self.semantic_naming,
+            cultural_narratives=self.cultural_narratives,
             competence_model=self.competence_model,
             declarative_advice=self.declarative_advice,
             recipe_beliefs=self.recipe_beliefs,
