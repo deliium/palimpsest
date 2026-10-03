@@ -266,14 +266,14 @@ Family id `emergent_semantic_naming`. Tag `emergent_semantic_naming@1`. Bump `ME
 
 ### Phase 5: Measurement and Experiment
 
-- [ ] Task 11: v2- Add external detectors for vocabulary convergence and semantic drift.
+- [x] Task 11: v2- Add external detectors for vocabulary convergence and semantic drift.
   - Deliverable: `compute_emergent_semantic_naming` and `compute_naming_persistence` in `src/analysis/semantic_naming_metrics.py`. Add `MetricFamilyId.EMERGENT_SEMANTIC_NAMING`, bump `METRIC_FAMILY_COUNT` from 32 to 33, register tag `emergent_semantic_naming@1` in `all_metric_specifications()`. Implement locked keys. Leave prior social metric families unchanged.
   - Logging: logger `analysis.semantic_naming_metrics`. DEBUG `semantic_naming_metric_computed` with entity count and active binding count. WARNING `semantic_naming_metric_empty` with reason `no_rows` or `no_history`. No owner id lists.
   - Control: levels follow `PALIMPSEST_LOG_LEVEL`.
   - Depends on task 1.
   - Files: `src/analysis/semantic_naming_metrics.py`, `src/analysis/specifications.py`, `src/analysis/__init__.py`, `src/analysis/metric_service.py`, `tests/unit/test_semantic_naming_metrics.py`, `tests/unit/test_metric_specifications.py`.
 
-- [ ] Task 12: v2- Add Experiment AA off the V1 gate.
+- [x] Task 12: v2- Add Experiment AA off the V1 gate.
   - Deliverable: `experiment_aa_emergent_naming` pairs `aa-disabled` / `semantic_naming_disabled` on `runner-config-v4` with `aa-enabled` / `semantic_naming_deterministic` on `runner-config-v20`. Arms share seed, scenario, and stochastic identity. Register in `src/experiments/catalog.py` and export from `src/experiments/__init__.py`. Do not add to `tests/unit/test_v1_regression_gate.py`. Extend catalog lettering docs from A–Z to include AA for this additive arm.
   - Scenario builder `emergent_naming_scenario` in `src/experiments/emergent_naming_scenario.py`: two locations with researcher-canonical names (`Northern Forest`, `Clearing`), modest hazard or depleting resource at the forest, three agents `alice`, `bob`, `cy`, distinct body ids. `max_ticks` default 24 so promotion, competition, and transmission can elapse. Builder accepts no language, lexicon, glossary, dialect, or shared-name argument. Location names must not be used as label seeds; agents mint digest tokens. Bootstrap/layout display names remain the researcher canonical names.
   - Enabled arm may finish with zero active bindings. Disabled arm must finish with `semantic_naming is None` on every runtime. Catalog test asserts metric blocks are requested for the enabled arm when rows exist.
@@ -284,7 +284,7 @@ Family id `emergent_semantic_naming`. Tag `emergent_semantic_naming@1`. Bump `ME
 
 ### Phase 6: Proofs
 
-- [ ] Task 13: v2- Prove spread/compete/merge/shift/extinction, mapping privacy, digest seeds, and observer non-replacement.
+- [x] Task 13: v2- Prove spread/compete/merge/shift/extinction, mapping privacy, digest seeds, and observer non-replacement.
   - Deliverable: tests that fail if a scenario accepts a language/lexicon field, if a metric document can be passed into `apply_naming_update`, if one conforming event promotes a binding, if one owner's ledger appears on another owner, if a `call` utterance copies speaker candidate referents, if objective observer `display_name` is overwritten by a subjective token, if the labels route works without `subjective_debug`, if memory alone mints a binding, if seeds are derived from location/exit names, if two owners mint identical seeds for the same location, if empty-candidate adopted labels enter competition, or if disabled mode changes the command.
   - Required cases across `tests/unit/test_semantic_naming.py`, `test_semantic_naming_runtime.py`, `test_semantic_naming_world.py`, `test_semantic_naming_observer.py`, `test_semantic_naming_experiment.py`, and `test_semantic_naming_metrics.py`:
     - Three location presence ticks promote a `location` binding; one tick stays `candidate` with `below_count`.

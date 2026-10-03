@@ -417,6 +417,7 @@ class LabelBinding:
     evidence: tuple[NamingEvidenceItem, ...] = ()
     last_utterance_tick: int | None = None
     meaning_shift_streak: int = 0
+    pending_top_id: str | None = None
     notices: tuple[str, ...] = ()
 
     def __post_init__(self) -> None:
@@ -457,6 +458,9 @@ class LabelBinding:
             raise _fail("meaning_shift_streak", "invalid_type")
         if self.meaning_shift_streak < 0:
             raise _fail("meaning_shift_streak", "out_of_range")
+        if self.pending_top_id is not None:
+            if type(self.pending_top_id) is not str or not self.pending_top_id:
+                raise _fail("pending_top_id", "invalid_type")
         candidates = _require_tuple("candidates", self.candidates)
         checked_candidates: list[NamingCandidate] = []
         for item in candidates:
@@ -909,6 +913,7 @@ def _drafts_from(
                 last_utterance_tick=binding.last_utterance_tick,
                 meaning_shift_streak=binding.meaning_shift_streak,
                 notices=list(binding.notices),
+                pending_top_id=binding.pending_top_id,
             )
         )
     return drafts
@@ -920,14 +925,20 @@ def _find_draft(
     label_token: str,
     referent_kind: NamingReferentKind,
 ) -> _BindingDraft | None:
+    """Return the live draft for a token, or a non-merged retired slot.
+
+    Merged-away tokens stay retired and must not remint a duplicate binding id.
+    """
+    retired: _BindingDraft | None = None
     for draft in drafts:
-        if (
-            draft.label_token == label_token
-            and draft.referent_kind is referent_kind
-            and draft.status is not NamingStatus.RETIRED
-        ):
+        if draft.label_token != label_token or draft.referent_kind is not referent_kind:
+            continue
+        if draft.merged_into is not None:
             return draft
-    return None
+        if draft.status is not NamingStatus.RETIRED:
+            return draft
+        retired = draft
+    return retired
 
 
 def _top_candidate(draft: _BindingDraft) -> NamingCandidate | None:
@@ -1705,59 +1716,41 @@ def _meaning_shift(
         ordered = sorted(
             draft.candidates, key=lambda item: (-item.confidence, item.entity_id)
         )
-        top, second = ordered[0], ordered[1]
-        lead = _quantize(top.confidence - second.confidence)
-        # pending_top_id tracks the alternate leader when lead flips.
+        top = ordered[0]
         if draft.pending_top_id is None:
             draft.pending_top_id = top.entity_id
-        if second.confidence - (
-            next(
-                (
-                    item.confidence
-                    for item in draft.candidates
-                    if item.entity_id == draft.pending_top_id
-                ),
-                top.confidence,
-            )
-        ) >= policy.meaning_shift_lead or (
-            top.entity_id != draft.pending_top_id
-            and lead >= 0.0
-            and (top.confidence - second.confidence) >= 0.0
-            and second.entity_id == draft.pending_top_id
-            and top.confidence - second.confidence >= policy.meaning_shift_lead
-        ):
-            # Alternate candidate leads current pending by >= 0.20
-            if top.entity_id != draft.pending_top_id and (
-                top.confidence
-                - next(
-                    (
-                        c.confidence
-                        for c in draft.candidates
-                        if c.entity_id == draft.pending_top_id
-                    ),
-                    0.0,
-                )
-                >= policy.meaning_shift_lead
-            ):
-                draft.meaning_shift_streak += 1
-                if draft.meaning_shift_streak >= policy.meaning_shift_ticks:
-                    draft.pending_top_id = top.entity_id
-                    draft.sense_revision += 1
-                    draft.meaning_shift_streak = 0
-                    draft.candidates = tuple(ordered)  # type: ignore[assignment]
-                    draft.candidates = list(ordered)
-                    _LOG.debug(
-                        "naming_meaning_shifted owner_id=%s tick=%s status=%s",
-                        owner_id.value,
-                        tick,
-                        draft.status.value,
-                    )
-            else:
-                draft.meaning_shift_streak = 0
+            draft.meaning_shift_streak = 0
+            continue
+        committed = next(
+            (
+                item.confidence
+                for item in draft.candidates
+                if item.entity_id == draft.pending_top_id
+            ),
+            None,
+        )
+        if committed is None:
+            draft.pending_top_id = top.entity_id
+            draft.meaning_shift_streak = 0
+            continue
+        lead = _quantize(top.confidence - committed)
+        if top.entity_id != draft.pending_top_id and lead >= policy.meaning_shift_lead:
+            draft.meaning_shift_streak += 1
+            if draft.meaning_shift_streak >= policy.meaning_shift_ticks:
                 draft.pending_top_id = top.entity_id
+                draft.sense_revision += 1
+                draft.meaning_shift_streak = 0
+                draft.candidates = list(ordered)
+                _LOG.debug(
+                    "naming_meaning_shifted owner_id=%s tick=%s status=%s",
+                    owner_id.value,
+                    tick,
+                    draft.status.value,
+                )
         else:
             draft.meaning_shift_streak = 0
-            draft.pending_top_id = top.entity_id
+            if top.entity_id == draft.pending_top_id:
+                draft.pending_top_id = top.entity_id
 
 
 def _decay(
@@ -1838,6 +1831,7 @@ def _freeze(
                 evidence=tuple(draft.evidence),
                 last_utterance_tick=draft.last_utterance_tick,
                 meaning_shift_streak=draft.meaning_shift_streak,
+                pending_top_id=draft.pending_top_id,
                 notices=tuple(draft.notices),
             )
         )

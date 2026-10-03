@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import hashlib
+from dataclasses import replace
 from types import SimpleNamespace
 
 import pytest
@@ -321,6 +322,7 @@ def test_three_location_ticks_promote_binding() -> None:
     one = apply_naming_update(_observe(1), identity, None)
     assert one.bindings[0].status is NamingStatus.CANDIDATE
     assert one.bindings[0].evidence_count == 1
+    assert "below_count" in one.notices or "below_count" in one.bindings[0].notices
 
 
 def test_two_owners_mint_different_place_seeds() -> None:
@@ -436,6 +438,122 @@ def test_call_transmission_adopts_without_speaker_candidates() -> None:
     assert adopted_binding.transmission is NamingTransmission.COMMUNICATED
     assert adopted_binding.candidates == ()
     assert adopted_binding.status is NamingStatus.CANDIDATE
+    assert adopted_binding.competing_label_ids == ()
+    # Self-bind a local label; empty-candidate adoption stays out of competition.
+    local = adopted
+    for tick in (2, 3, 4):
+        local = apply_naming_update(
+            _observe(tick, owner="ben", location="forest"), listener, local
+        )
+    active_local = next(
+        item
+        for item in local.bindings
+        if item.status is NamingStatus.ACTIVE and item.candidates
+    )
+    still_empty = next(item for item in local.bindings if item.label_token == token)
+    assert still_empty.candidates == ()
+    assert still_empty.binding_id not in active_local.competing_label_ids
+    assert still_empty.competing_label_ids == ()
+
+
+def test_hazard_mints_competing_dark_without_renaming_world() -> None:
+    identity = _identity()
+    ledger = None
+    for tick in (1, 2, 3):
+        ledger = apply_naming_update(_observe(tick), identity, ledger)
+    assert ledger is not None
+    place = next(
+        item
+        for item in ledger.bindings
+        if item.label_token.startswith("place_")
+        and item.status is NamingStatus.ACTIVE
+    )
+    digest = place.label_token.removeprefix("place_")
+    for tick in (4, 5, 6):
+        ledger = apply_naming_update(
+            _observe(tick, hazard_kinds=(HazardKind.COLD_SNAP,)),
+            identity,
+            ledger,
+        )
+    tokens = {item.label_token for item in ledger.bindings}
+    assert f"dark_{digest}" in tokens
+    dark = next(item for item in ledger.bindings if item.label_token == f"dark_{digest}")
+    assert dark.candidates[0].entity_id == "clearing"
+    # World location id is unchanged; only a competing private label was minted.
+    assert place.candidates[0].entity_id == "clearing"
+
+
+def test_competing_labels_merge_weaker_into_stronger() -> None:
+    identity = _identity()
+    ledger = None
+    for tick in (1, 2, 3):
+        ledger = apply_naming_update(_observe(tick), identity, ledger)
+    for tick in (4, 5, 6, 7):
+        ledger = apply_naming_update(
+            _observe(tick, hazard_kinds=(HazardKind.COLD_SNAP,)),
+            identity,
+            ledger,
+        )
+    assert ledger is not None
+    actives = [
+        item
+        for item in ledger.bindings
+        if item.status is NamingStatus.ACTIVE and item.candidates
+    ]
+    retired = [
+        item
+        for item in ledger.bindings
+        if item.status is NamingStatus.RETIRED and item.merged_into is not None
+    ]
+    assert any(item.competing_label_ids for item in actives) or retired
+    if retired:
+        survivor = next(
+            item
+            for item in ledger.bindings
+            if item.binding_id == retired[0].merged_into
+        )
+        assert survivor.status is NamingStatus.ACTIVE
+
+
+def test_meaning_shift_increments_sense_revision() -> None:
+    identity = _identity()
+    ledger = None
+    for tick in (1, 2, 3):
+        ledger = apply_naming_update(_observe(tick), identity, ledger)
+    assert ledger is not None
+    binding = ledger.bindings[0]
+    crafted = replace(
+        binding,
+        candidates=(
+            NamingCandidate(
+                kind=NamingReferentKind.LOCATION,
+                entity_id="forest",
+                confidence=0.90,
+            ),
+            NamingCandidate(
+                kind=NamingReferentKind.LOCATION,
+                entity_id="clearing",
+                confidence=0.50,
+            ),
+        ),
+        pending_top_id="clearing",
+        sense_revision=0,
+        meaning_shift_streak=0,
+        strength=1.0,
+        status=NamingStatus.ACTIVE,
+    )
+    ledger = replace(ledger, bindings=(crafted,))
+    for tick in range(10, 16):
+        ledger = apply_naming_update(
+            _observe(tick, location="other"),
+            identity,
+            ledger,
+        )
+    shifted = next(
+        item for item in ledger.bindings if item.label_token == crafted.label_token
+    )
+    assert shifted.sense_revision >= 1
+    assert shifted.pending_top_id == "forest"
 
 
 def test_seeds_ignore_location_display_names() -> None:

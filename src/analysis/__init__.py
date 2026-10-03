@@ -47,6 +47,11 @@ from analysis.external_artifact_metrics import (
     EXTERNAL_ARTIFACT_MEMORY_METRIC_VERSION,
     compute_external_artifact_memory,
 )
+from analysis.semantic_naming_metrics import (
+    EMERGENT_SEMANTIC_NAMING_METRIC_VERSION,
+    compute_emergent_semantic_naming,
+    compute_naming_persistence,
+)
 from analysis.group_formation_metrics import (
     EMERGENT_GROUP_FORMATION_METRIC_VERSION,
     compute_emergent_group_candidates,
@@ -259,6 +264,7 @@ __all__ = [
     "DISTRIBUTED_REPUTATION_METRIC_VERSION",
     "DRIFT_METRIC_VERSION",
     "EMERGENT_GROUP_FORMATION_METRIC_VERSION",
+    "EMERGENT_SEMANTIC_NAMING_METRIC_VERSION",
     "EMERGENT_SOCIAL_NORMS_METRIC_VERSION",
     "EVENT_FACT_PROJECTOR_VERSION",
     "EVIDENCE_STAGE_SCHEMA_VERSION",
@@ -366,8 +372,10 @@ __all__ = [
     "compute_cultural_transmission",
     "compute_distributed_reputation",
     "compute_emergent_group_candidates",
+    "compute_emergent_semantic_naming",
     "compute_emergent_social_norms",
     "compute_external_artifact_memory",
+    "compute_naming_persistence",
     "compute_false_belief_persistence",
     "compute_goal_completion",
     "compute_group_community_structure",

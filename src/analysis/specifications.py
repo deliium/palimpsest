@@ -50,7 +50,7 @@ __all__ = [
 ]
 
 METRIC_CATALOG_VERSION: Final[str] = "metric-catalog-v1"
-METRIC_FAMILY_COUNT: Final[int] = 32
+METRIC_FAMILY_COUNT: Final[int] = 33
 
 # Align with existing memory-drift / transmission document versions.
 _ALGO_V1: Final[str] = "1"
@@ -109,6 +109,7 @@ class MetricFamilyId(StrEnum):
     EMERGENT_SOCIAL_NORMS = "emergent_social_norms"
     PERSISTENT_SOCIAL_CONVENTIONS = "persistent_social_conventions"
     EXTERNAL_ARTIFACT_MEMORY = "external_artifact_memory"
+    EMERGENT_SEMANTIC_NAMING = "emergent_semantic_naming"
 
 
 class DenominatorKind(StrEnum):
@@ -1170,6 +1171,71 @@ def _spec_emergent_social_norms() -> MetricSpecification:
     )
 
 
+def _spec_emergent_semantic_naming() -> MetricSpecification:
+    return _base(
+        family_id=MetricFamilyId.EMERGENT_SEMANTIC_NAMING,
+        evidence_inputs=frozenset({EvidenceStage.OBJECTIVE_EVENT_STATE}),
+        population="caller_supplied_terminology_binding_rows",
+        denominator="entities_owners_or_active_bindings",
+        denominator_kind=DenominatorKind.OCCURRENCE,
+        cohort_window="caller-supplied rows after the run",
+        deceased_policy="not_applicable",
+        zero_holding_policy="empty denominators -> availability=absent for that key",
+        opportunity_vs_occurrence=(
+            "a shared label counts only when two owners hold the same active token; "
+            "absent rows are not a zero convergence rate"
+        ),
+        self_edge_policy="self pairs are dropped",
+        censoring_policy=(
+            "a missing binding row is not an active label; "
+            "analysis joins never re-enter cognition"
+        ),
+        formulas={
+            "shared_label_rate": (
+                "entities with the same active top token on >=2 owners / entities"
+            ),
+            "mean_labels_per_entity": "mean distinct active tokens per entity",
+            "mean_owners_per_label": "mean distinct owners per active token",
+            "preferred_label_agreement": (
+                "owner-pairs whose max-strength labels match / owner-pairs"
+            ),
+            "empty_lexicon_owner_rate": "owners with zero active bindings / owners",
+            "mean_sense_revision": "mean sense_revision of active bindings",
+            "label_turnover_rate": (
+                "adjacent preferred-label changes / adjacent owner-entity windows"
+            ),
+            "meaning_shift_rate": "active bindings with sense_revision >= 1 / active",
+            "merge_rate": "retired bindings with merged_into / retired+active",
+            "competition_rate": "active bindings with competitors / active",
+            "extinction_rate": (
+                "labels active at window start and retired at end / start-active"
+            ),
+            "label_persistence": (
+                "adjacent ticks keeping owner+token+candidate active at >=0.40"
+            ),
+            "sense_stability": (
+                "adjacent ticks keeping active sense_revision unchanged"
+            ),
+        },
+        value_keys=(
+            "competition_rate",
+            "empty_lexicon_owner_rate",
+            "extinction_rate",
+            "label_persistence",
+            "label_turnover_rate",
+            "mean_labels_per_entity",
+            "mean_owners_per_label",
+            "mean_sense_revision",
+            "meaning_shift_rate",
+            "merge_rate",
+            "preferred_label_agreement",
+            "sense_stability",
+            "shared_label_rate",
+        ),
+        empty_case="availability=absent; empty rows are not zero convergence",
+    )
+
+
 def _spec_external_artifact_memory() -> MetricSpecification:
     return _base(
         family_id=MetricFamilyId.EXTERNAL_ARTIFACT_MEMORY,
@@ -1979,6 +2045,7 @@ _BUILDERS: Final[tuple[Callable[[], MetricSpecification], ...]] = (
     _spec_emergent_social_norms,
     _spec_persistent_social_conventions,
     _spec_external_artifact_memory,
+    _spec_emergent_semantic_naming,
 )
 
 
