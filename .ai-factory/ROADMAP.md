@@ -72,6 +72,8 @@ Named cognitive architecture variants (`agents.cognition.architectures`, Experim
 
 `.ai-factory/plans/v2-expanded-analysis-beyond-v1-metrics.md` is implemented (2026-10-03). It expands analysis-only phenomenon indicator panels, four new catalog families (count 39), survival cohort contrast sibling docs, optional cell metric sidecars, and `matrix-metric-summary-v1` / `--metric-summary` without owning `multi_hop_testimony_tracking`. M6 stays open for that flag.
 
+`.ai-factory/plans/v2-simulation-branching.md` is implemented (2026-10-04). It adds research-only deterministic forks (`ResearchIntervention`, Alembic `0015` `simulation_branches`, `/v1/.../branches`, observer lineage metadata) over replay checkpoints without rewriting parent history or adding a capability flag. Agent `CounterfactualScenario` stays separate. M6 stays open for `multi_hop_testimony_tracking`.
+
 `.ai-factory/plans/v2-emergent-social-norms.md` is implemented. It adds an opt-in owner-scoped social-norm ledger on `runner-config-v17`, Experiment X, and `emergent_social_norms@1`. A norm is a private belief inferred from repeated observations. It is not a `WorldEngine` rule, and it does not own a capability flag. Opt-in group formation already landed on `runner-config-v16`. Territorial claims already landed as `runner-config-v15`, Experiment V, and `spatial_control@1`.
 
 **Out of scope until planned:** free-form affect narration, personality trait systems, HTTP debug UI for emotion, collapsing emotion+drives+goals into one reward scalar.

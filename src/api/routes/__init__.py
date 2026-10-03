@@ -1,7 +1,7 @@
 """HTTP route modules."""
 
-from api.routes.debugger import router as debugger_router
 from api.routes.branches import router as branches_router
+from api.routes.debugger import router as debugger_router
 from api.routes.health import router as health_router
 from api.routes.inspection import router as inspection_router
 from api.routes.observer import router as observer_router
