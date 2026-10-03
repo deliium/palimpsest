@@ -787,6 +787,71 @@ def test_bare_talk_is_not_greeting_exchange() -> None:
     )
 
 
+def test_greet_predicate_creates_greeting_exchange() -> None:
+    from world.communications import CommunicationRelation, origin_utterance
+    from world.observations import ObservedCommunication
+
+    identity = _identity()
+    greeting = ObservedCommunication(
+        provenance=ObservationProvenance(
+            source_kind=ObservationSourceKind.COMMUNICATION,
+            source_tick=0,
+            source_event_id=EventId("greet-0"),
+        ),
+        speaker_id=EntityId("body-ben"),
+        listener_id=EntityId("body-ada"),
+        utterance=origin_utterance(
+            text="hello",
+            speaker_id=EntityId("body-ben"),
+            relations=(
+                CommunicationRelation(
+                    subject="greeting_exchange",
+                    predicate="greet",
+                    object="talk",
+                ),
+            ),
+        ),
+        action_kind="talk",
+    )
+    ledger = None
+    for tick in range(4):
+        ledger = apply_convention_update(
+            Observation(
+                world_id=WorldId("world-w"),
+                observer_id=EntityId("body-ada"),
+                revision=WorldRevision(1),
+                tick=tick + 1,
+                self_body=_self(),
+                communications=(
+                    ObservedCommunication(
+                        provenance=ObservationProvenance(
+                            source_kind=ObservationSourceKind.COMMUNICATION,
+                            source_tick=tick,
+                            source_event_id=EventId(f"greet-{tick}"),
+                        ),
+                        speaker_id=greeting.speaker_id,
+                        listener_id=greeting.listener_id,
+                        utterance=greeting.utterance,
+                        action_kind="talk",
+                    ),
+                ),
+                visible_bodies=(_body("body-ben"),),
+            ),
+            identity,
+            ledger,
+        )
+    assert ledger is not None
+    belief = _belief(ledger, ConventionSituation.GREETING_EXCHANGE, "talk")
+    assert belief.status is ConventionStatus.ACTIVE
+    assert belief.repetition_count == 4
+    assert belief.strength >= 0.40
+    assert belief.remembered_explanation is ConventionExplanation.SOCIAL_CONTACT
+    assert all(
+        item.content.situation is ConventionSituation.GREETING_EXCHANGE
+        for item in ledger.beliefs
+    )
+
+
 def test_owners_keep_separate_ledgers_and_no_ritual_fields() -> None:
     ada = _identity()
     ben = OwnerSafeSocialIdentity(
