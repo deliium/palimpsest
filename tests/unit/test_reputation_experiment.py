@@ -109,6 +109,12 @@ def test_neighborhood_means_disagree_and_readings_stay_outside_cognition() -> No
     )
     assert result.document.availability is MetricAvailability.PRESENT
     assert result.gaps["harm"] >= 0.4
+    assert result.document.values["neighborhood_count"] == 2.0
+    assert type(result.document.values["mean_pairwise_gap"]) is float
+    assert type(result.document.values["max_pairwise_gap"]) is float
+    # Legacy gap keys remain present and finite.
+    assert type(result.document.values["reliability_gap"]) is float
+    assert type(result.document.values["harm_gap"]) is float
     by_neighborhood = {row.neighborhood_id: row for row in result.neighborhoods}
     assert "trustworthy" in by_neighborhood["east"].readings
     assert "dangerous" in by_neighborhood["west"].readings

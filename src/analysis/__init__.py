@@ -5,6 +5,11 @@ from analysis.behavior_metrics import (
     compute_repeated_conventions,
     motif_token,
 )
+from analysis.belief_convergence_metrics import (
+    BELIEF_CONVERGENCE_METRIC_VERSION,
+    claim_overlap_token,
+    compute_belief_convergence,
+)
 from analysis.belief_metrics import (
     ClaimEvaluationOutcome,
     compute_belief_accuracy,
@@ -36,6 +41,10 @@ from analysis.counterfactual_metrics import (
 from analysis.cultural_narrative_metrics import (
     CULTURAL_NARRATIVE_LINEAGE_METRIC_VERSION,
     compute_cultural_narrative_lineage,
+)
+from analysis.cultural_similarity_metrics import (
+    CULTURAL_SIMILARITY_METRIC_VERSION,
+    compute_cultural_similarity,
 )
 from analysis.cultural_transmission_metrics import (
     CULTURAL_TRANSMISSION_METRIC_VERSION,
@@ -154,6 +163,7 @@ from analysis.numerical import (
     stable_seed_tuple,
 )
 from analysis.objective_metrics import (
+    SURVIVAL_COHORT_CONTRAST_METRIC_VERSION,
     applied_actions_from_world_events,
     compute_action_resolution_rates,
     compute_conflict,
@@ -161,6 +171,7 @@ from analysis.objective_metrics import (
     compute_goal_completion,
     compute_resource_inequality,
     compute_survival,
+    compute_survival_cohort_contrast,
     living_agent_ticks,
 )
 from analysis.prediction_calibration_metrics import (
@@ -273,6 +284,7 @@ __all__ = [
     "ACTION_VOCABULARY_V1",
     "ADOPTION_STAGES_V1",
     "AGENT_VISIBLE_PROJECTOR_VERSION",
+    "BELIEF_CONVERGENCE_METRIC_VERSION",
     "CALIBRATION_BIN_EDGES",
     "CANONICAL_FLOAT_DECIMAL_PLACES",
     "CANONICAL_OUTPUT_CLAIM",
@@ -282,6 +294,7 @@ __all__ = [
     "COMMUNICATION_STRATEGY_METRIC_VERSION",
     "COUNTERFACTUAL_REASONING_METRIC_VERSION",
     "CULTURAL_NARRATIVE_LINEAGE_METRIC_VERSION",
+    "CULTURAL_SIMILARITY_METRIC_VERSION",
     "CULTURAL_TRANSMISSION_METRIC_VERSION",
     "DISTRIBUTED_REPUTATION_METRIC_VERSION",
     "DRIFT_METRIC_VERSION",
@@ -310,6 +323,7 @@ __all__ = [
     "SOCIAL_TRANSMISSION_METRIC_VERSION",
     "SPATIAL_CONTROL_METRIC_VERSION",
     "SUPPORTED_COMMUNITY_ALGORITHM",
+    "SURVIVAL_COHORT_CONTRAST_METRIC_VERSION",
     "TERRITORIAL_CONCENTRATION_METRIC_VERSION",
     "THEORY_OF_MIND_METRIC_VERSION",
     "ActionResolutionRow",
@@ -383,12 +397,14 @@ __all__ = [
     "build_social_transmission_report",
     "canonical_python_scalar",
     "canonicalize_community_labels",
+    "claim_overlap_token",
     "closed_evidence_stages",
     "compare_fact_sets",
     "compare_metric_documents",
     "compute_action_resolution_rates",
     "compute_behavioral_specialization",
     "compute_belief_accuracy",
+    "compute_belief_convergence",
     "compute_causal_world_model_metrics",
     "compute_cognitive_budget_metrics",
     "compute_communication_strategy_metrics",
@@ -397,6 +413,7 @@ __all__ = [
     "compute_cooperation",
     "compute_counterfactual_reasoning_metrics",
     "compute_cultural_narrative_lineage",
+    "compute_cultural_similarity",
     "compute_cultural_transmission",
     "compute_distributed_reputation",
     "compute_emergent_group_candidates",
@@ -425,6 +442,7 @@ __all__ = [
     "compute_skill_learning",
     "compute_spatial_control",
     "compute_survival",
+    "compute_survival_cohort_contrast",
     "compute_territorial_concentration",
     "compute_theory_of_mind_metrics",
     "compute_trust_network_structure",

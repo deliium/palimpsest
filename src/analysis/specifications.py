@@ -50,7 +50,7 @@ __all__ = [
 ]
 
 METRIC_CATALOG_VERSION: Final[str] = "metric-catalog-v1"
-METRIC_FAMILY_COUNT: Final[int] = 37
+METRIC_FAMILY_COUNT: Final[int] = 39
 
 # Align with existing memory-drift / transmission document versions.
 _ALGO_V1: Final[str] = "1"
@@ -114,6 +114,8 @@ class MetricFamilyId(StrEnum):
     COGNITIVE_BUDGET = "cognitive_budget"
     TERRITORIAL_CONCENTRATION = "territorial_concentration"
     PREDICTION_CALIBRATION = "prediction_calibration"
+    BELIEF_CONVERGENCE = "belief_convergence"
+    CULTURAL_SIMILARITY = "cultural_similarity"
 
 
 class DenominatorKind(StrEnum):
@@ -1018,12 +1020,24 @@ def _spec_distributed_reputation() -> MetricSpecification:
             "harm_gap": "max neighborhood mean minus min for harm",
             "generosity_gap": "max neighborhood mean minus min for generosity",
             "competence_gap": "max neighborhood mean minus min for competence",
+            "neighborhood_count": "number of neighborhoods with at least one reading",
+            "mean_pairwise_gap": (
+                "mean over neighborhood pairs of mean absolute dimension gap; "
+                "absent when neighborhood_count < 2"
+            ),
+            "max_pairwise_gap": (
+                "max over neighborhood pairs of mean absolute dimension gap; "
+                "absent when neighborhood_count < 2"
+            ),
         },
         value_keys=(
             "reliability_gap",
             "harm_gap",
             "generosity_gap",
             "competence_gap",
+            "neighborhood_count",
+            "mean_pairwise_gap",
+            "max_pairwise_gap",
         ),
         empty_case="availability=absent; omit numeric values",
     )
@@ -1964,6 +1978,7 @@ def _spec_trust_network() -> MetricSpecification:
         all_zero_case="all trust zero below τ -> empty edge set density=0 present",
     )
 
+
 def _spec_group_community() -> MetricSpecification:
     return _base(
         family_id=MetricFamilyId.GROUP_COMMUNITY_STRUCTURE,
@@ -2201,6 +2216,7 @@ def _spec_territorial_concentration() -> MetricSpecification:
         empty_case="availability=absent; reason no_spatial_rows",
     )
 
+
 def _spec_prediction_calibration() -> MetricSpecification:
     return _base(
         family_id=MetricFamilyId.PREDICTION_CALIBRATION,
@@ -2241,6 +2257,86 @@ def _spec_prediction_calibration() -> MetricSpecification:
         empty_case="availability=absent; omit numeric values",
     )
 
+
+def _spec_belief_convergence() -> MetricSpecification:
+    return _base(
+        family_id=MetricFamilyId.BELIEF_CONVERGENCE,
+        evidence_inputs=frozenset({EvidenceStage.BELIEF_REVISION_TESTIMONY}),
+        population="detached_belief_claim_rows",
+        denominator="owner_pairs_with_active_claim_sets",
+        denominator_kind=DenominatorKind.POPULATION_SIZE,
+        cohort_window="ordered claim rows after the run",
+        deceased_policy="not_applicable",
+        zero_holding_policy="empty or single-owner -> availability=absent",
+        opportunity_vs_occurrence=(
+            "pairwise Jaccard on active claim overlap identity "
+            "(claim_id, value_kind, normalized value); convergence != accuracy"
+        ),
+        self_edge_policy="not_applicable",
+        censoring_policy="inactive claims excluded from overlap sets",
+        formulas={
+            "mean_pairwise_jaccard_final": (
+                "mean pairwise Jaccard of active claim sets at final tick"
+            ),
+            "mean_pairwise_jaccard_delta": (
+                "final mean pairwise Jaccard minus first-tick mean"
+            ),
+            "owner_count": "distinct claim owners",
+            "claim_universe_size": "distinct overlap identity tokens",
+        },
+        value_keys=(
+            "mean_pairwise_jaccard_final",
+            "mean_pairwise_jaccard_delta",
+            "owner_count",
+            "claim_universe_size",
+        ),
+        empty_case="availability=absent; unevaluable_claims",
+    )
+
+
+def _spec_cultural_similarity() -> MetricSpecification:
+    return _base(
+        family_id=MetricFamilyId.CULTURAL_SIMILARITY,
+        evidence_inputs=frozenset({EvidenceStage.AGENT_VISIBLE_PROJECTION}),
+        population="detached_naming_norm_convention_narrative_rows",
+        denominator="owner_pairs_per_channel",
+        denominator_kind=DenominatorKind.POPULATION_SIZE,
+        cohort_window="caller-supplied channel rows after the run",
+        deceased_policy="not_applicable",
+        zero_holding_policy=(
+            "missing channel -> that channel key absent without zeroing others"
+        ),
+        opportunity_vs_occurrence=(
+            "per-channel mean pairwise Jaccard; no blended culture score"
+        ),
+        self_edge_policy="not_applicable",
+        censoring_policy="all channels empty -> availability=absent",
+        formulas={
+            "naming_mean_pairwise_similarity": (
+                "mean pairwise Jaccard of naming token sets"
+            ),
+            "norms_mean_pairwise_similarity": (
+                "mean pairwise Jaccard of norm head sets"
+            ),
+            "conventions_mean_pairwise_similarity": (
+                "mean pairwise Jaccard of convention habit sets"
+            ),
+            "narratives_mean_pairwise_similarity": (
+                "mean pairwise Jaccard of narrative variant fingerprints"
+            ),
+            "channels_present": "count of channels with evaluable owner pairs",
+        },
+        value_keys=(
+            "naming_mean_pairwise_similarity",
+            "norms_mean_pairwise_similarity",
+            "conventions_mean_pairwise_similarity",
+            "narratives_mean_pairwise_similarity",
+            "channels_present",
+        ),
+        empty_case="availability=absent; all_channels_empty",
+    )
+
+
 _BUILDERS: Final[tuple[Callable[[], MetricSpecification], ...]] = (
     _spec_resource_inequality,
     _spec_cooperation,
@@ -2279,6 +2375,8 @@ _BUILDERS: Final[tuple[Callable[[], MetricSpecification], ...]] = (
     _spec_cognitive_budget,
     _spec_territorial_concentration,
     _spec_prediction_calibration,
+    _spec_belief_convergence,
+    _spec_cultural_similarity,
 )
 
 

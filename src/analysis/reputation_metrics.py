@@ -102,15 +102,18 @@ def compute_distributed_reputation(
             grouped[str(neighborhood)].append(_dimension_values(profile))
     neighborhoods = _means(grouped)
     gaps = _gaps(neighborhoods)
+    pairwise = _pairwise_gaps(neighborhoods)
     _LOG.debug(
         "distributed_reputation_metric ledger_count=%s neighborhood_count=%s "
-        "reliability_gap=%s harm_gap=%s generosity_gap=%s competence_gap=%s",
+        "reliability_gap=%s harm_gap=%s generosity_gap=%s competence_gap=%s "
+        "mean_pairwise_gap_present=%s",
         len(ledgers),
         len(neighborhoods),
         gaps["reliability"],
         gaps["harm"],
         gaps["generosity"],
         gaps["competence"],
+        pairwise is not None,
     )
     spec = metric_specification(MetricFamilyId.DISTRIBUTED_REPUTATION)
     if not ledgers or not neighborhoods:
@@ -126,9 +129,13 @@ def compute_distributed_reputation(
             neighborhoods=(),
             gaps={},
         )
-    values = {
+    values: dict[str, float] = {
         f"{name}_gap": quantize_float(gaps[name]) for name in _DIMENSIONS
     }
+    values["neighborhood_count"] = float(len(neighborhoods))
+    if pairwise is not None:
+        values["mean_pairwise_gap"] = pairwise[0]
+        values["max_pairwise_gap"] = pairwise[1]
     return DistributedReputationMetricResult(
         document=_document(
             spec,
@@ -210,6 +217,27 @@ def _gaps(
             continue
         gaps[name] = quantize_float(max(numbers) - min(numbers))
     return gaps
+
+
+def _pairwise_gaps(
+    neighborhoods: Sequence[NeighborhoodReputationMeans],
+) -> tuple[float, float] | None:
+    """Mean/max pairwise mean-absolute dimension gap; absent when ``<2``."""
+    if len(neighborhoods) < 2:
+        return None
+    ordered = sorted(neighborhoods, key=lambda row: row.neighborhood_id)
+    pair_gaps: list[float] = []
+    for index, left in enumerate(ordered):
+        for right in ordered[index + 1 :]:
+            dim_gaps = [
+                abs(float(getattr(left, name)) - float(getattr(right, name)))
+                for name in _DIMENSIONS
+            ]
+            pair_gaps.append(float(sum(dim_gaps) / len(_DIMENSIONS)))
+    pair_gaps.sort()
+    mean_gap = quantize_float(float(sum(pair_gaps) / len(pair_gaps)))
+    max_gap = quantize_float(float(pair_gaps[-1]))
+    return mean_gap, max_gap
 
 
 def _document(

@@ -23,6 +23,7 @@ from analysis.objective_metrics import (
     compute_goal_completion,
     compute_resource_inequality,
     compute_survival,
+    compute_survival_cohort_contrast,
     living_agent_ticks,
 )
 from analysis.serialization import (
@@ -239,6 +240,47 @@ def test_survival_reference_and_censoring() -> None:
 def test_survival_empty_unknown() -> None:
     doc = compute_survival([], run_id="run-s", input_revision="rev-1", final_tick=10)
     assert doc.availability is MetricAvailability.UNKNOWN
+
+
+def test_survival_fingerprint_unchanged_without_cohort_map() -> None:
+    agents = [
+        SurvivalAgentRow(agent_id="a1", death_tick=10),
+        SurvivalAgentRow(agent_id="a2"),
+        SurvivalAgentRow(agent_id="a3"),
+    ]
+    first = compute_survival(
+        agents, run_id="run-s", input_revision="rev-1", final_tick=48
+    )
+    second = compute_survival(
+        agents, run_id="run-s", input_revision="rev-1", final_tick=48
+    )
+    assert metric_document_fingerprint(first) == metric_document_fingerprint(second)
+    assert (
+        compute_survival_cohort_contrast(
+            agents, None, run_id="run-s", input_revision="rev-1", final_tick=48
+        )
+        is None
+    )
+
+
+def test_survival_cohort_contrast_gap() -> None:
+    agents = [
+        SurvivalAgentRow(agent_id="a1", death_tick=5),
+        SurvivalAgentRow(agent_id="a2", death_tick=5),
+        SurvivalAgentRow(agent_id="b1"),
+        SurvivalAgentRow(agent_id="b2"),
+    ]
+    doc = compute_survival_cohort_contrast(
+        agents,
+        {"east": ("a1", "a2"), "west": ("b1", "b2")},
+        run_id="run-s",
+        input_revision="rev-1",
+        final_tick=48,
+    )
+    assert doc is not None
+    assert doc.metric_family == "survival_cohort_contrast"
+    assert doc.values["cohort_count"] == 2
+    assert doc.values["max_cohort_gap"] == 1.0
 
 
 def test_goal_completion_rates_and_legacy() -> None:

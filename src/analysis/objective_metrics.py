@@ -50,6 +50,7 @@ from world.identifiers import require_exact_nonneg_int, require_stable_id
 
 __all__ = [
     "ACTION_RESOLUTION_RATES_FAMILY",
+    "SURVIVAL_COHORT_CONTRAST_METRIC_VERSION",
     "applied_actions_from_world_events",
     "compute_action_resolution_rates",
     "compute_conflict",
@@ -57,8 +58,11 @@ __all__ = [
     "compute_goal_completion",
     "compute_resource_inequality",
     "compute_survival",
+    "compute_survival_cohort_contrast",
     "living_agent_ticks",
 ]
+
+SURVIVAL_COHORT_CONTRAST_METRIC_VERSION: Final[str] = "survival_cohort_contrast@1"
 
 _LOG: Final[logging.Logger] = logging.getLogger("analysis.objective_metrics")
 
@@ -726,6 +730,95 @@ def compute_survival(
         },
     )
     return doc
+
+
+def compute_survival_cohort_contrast(
+    agents: Sequence[SurvivalAgentRow],
+    cohort_map: Mapping[str, Sequence[str]] | None,
+    *,
+    run_id: str,
+    input_revision: str,
+    final_tick: int,
+) -> MetricDocument | None:
+    """Sibling survival contrast by researcher cohort labels.
+
+    Not registered in ``MetricFamilyId``. Missing/empty cohort map returns
+    ``None`` (does not alter ``survival@1``). Cohorts are labels only — never
+    friend/enemy/culture roles.
+    """
+    if cohort_map is None or not cohort_map:
+        return None
+    if not isinstance(cohort_map, Mapping):
+        raise TypeError("cohort_map: invalid_type")
+    document_run = require_stable_id("run_id", run_id)
+    revision = require_stable_id("input_revision", input_revision)
+    final_tick = require_exact_nonneg_int("final_tick", final_tick)
+    by_id = {row.agent_id: row for row in agents}
+    rates: list[float] = []
+    empty_denominator = False
+    for cohort_id in sorted(cohort_map):
+        member_ids = cohort_map[cohort_id]
+        if isinstance(member_ids, (str, bytes, set, frozenset, Mapping)) or not isinstance(
+            member_ids, Sequence
+        ):
+            raise TypeError("cohort_map: invalid_member_sequence")
+        members = [by_id[agent_id] for agent_id in member_ids if agent_id in by_id]
+        if not members:
+            empty_denominator = True
+            continue
+        alive = sum(
+            1
+            for row in members
+            if row.death_tick is None or row.death_tick > final_tick
+        )
+        rates.append(float(alive) / float(len(members)))
+    cohort_count = len(cohort_map)
+    _LOG.debug(
+        "survival_cohort_contrast",
+        extra={
+            "operation": "compute_survival_cohort_contrast",
+            "metric_family": "survival_cohort_contrast",
+            "run_id": document_run,
+            "cohort_count": cohort_count,
+            "rate_count": len(rates),
+            "empty_denominator": empty_denominator,
+        },
+    )
+    if empty_denominator or len(rates) < 2:
+        return _document(
+            family="survival_cohort_contrast",
+            algorithm_version="1",
+            run_id=document_run,
+            input_revision=revision,
+            evidence_stages=frozenset({EvidenceStage.OBJECTIVE_EVENT_STATE}),
+            population="researcher_cohort_labels",
+            denominator="cohort_member_counts",
+            availability=MetricAvailability.UNKNOWN,
+            values={
+                "max_cohort_gap": None,
+                "cohort_count": cohort_count,
+            },
+            coverage=None,
+            notes_code="empty_cohort_denominator",
+        )
+    rates.sort()
+    gap = quantize_float(require_finite(float(rates[-1] - rates[0])))
+    return _document(
+        family="survival_cohort_contrast",
+        algorithm_version="1",
+        run_id=document_run,
+        input_revision=revision,
+        evidence_stages=frozenset({EvidenceStage.OBJECTIVE_EVENT_STATE}),
+        population="researcher_cohort_labels",
+        denominator="cohort_member_counts",
+        availability=MetricAvailability.PRESENT,
+        values={
+            "max_cohort_gap": gap,
+            "cohort_count": cohort_count,
+        },
+        coverage=MetricCoverage(observed=len(rates), expected=cohort_count),
+        notes_code="ok",
+    )
 
 
 def compute_goal_completion(
