@@ -41,6 +41,8 @@ Catalog version: `metric-catalog-v1`. Document schema: `MetricDocument` schema `
 
 `counterfactual_reasoning@1` values: `scenario_count` and `event_overlap_count`. The family is present only when a counterfactual audit exists; a disabled run with an empty audit tuple stays absent. It compares harvested audit counts with committed event ids after the run and reports that no scenario id equals a world event id when the overlap is zero. Assembly logs `counterfactual_metric` with the arm id, scenario count, and overlap count. It does not log scenario payloads. `runner-config-v8` is the counterfactual schema and may also carry consolidation, reflection, and prospective imagination. The document is not an input to the cognitive loop.
 
+`cultural_narrative_lineage@1` values: `active_variant_count`, `mean_active_strength`, `mean_duration_ticks`, `persistence_rate`, `branch_rate`, `mean_mutation_generation`, `fingerprint_churn`, `token_add_rate`, `token_loss_rate`, `inaccuracy_vs_objective`, `source_event_drop_rate`, `origin_shift_rate`, `orphan_retell_rate`, `merge_rate`, `mean_parents_per_merge`, `competing_variant_share`, `mean_location_span`, `mean_carrier_span`, `multi_location_rate`, `social_reach_rate`. Computed from caller-supplied detached variant history rows after the run. Empty denominators are absent for that key only. Experiment AB stays off the V1 gate. The document is not an input to cognition.
+
 ### Supporting formulas (not a separate family)
 
 `action_resolution_rates@1` defines attempted / applied / rejected / conflicted rates **only** from `ActionResolution` evidence. Never infer rejected attempts from absent world events. Task 11 implementations reuse this shared spec beside cooperation/conflict occurrence rates.
