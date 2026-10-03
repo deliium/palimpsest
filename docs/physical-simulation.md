@@ -97,15 +97,38 @@ A hazard starts when its season, weather, and band match and that kind is not al
 
 Loggers: `world.environment`, `world.events`, `simulation.engine`, `world._perception`, `simulation.replay`, `simulation.runner`, `agents.cognition.world_model`, `observer.project`, `observer.adapt`, and `experiments.catalog`. Reason codes include `yield_undefined`, `duplicate_shortage_window`, `environment_witness_mismatch`, `environment_spec_mismatch`, and `presentation_instruction_forbidden`. Do not log seeds.
 
+## External information artifacts
+
+Artifacts are objective `WorldEngine` objects on `WorldState.artifacts` (default empty). They are not `Item`, `Structure`, `Resource`, or `MemoryTrace` values. Closed kinds: `mark`, `sign`, `note`, `map`, `record`, `memorial`. Content is structured marks and relations only — no free-form prose and no presentation or meaning fields. Existence does not download information into memory; meaning stays owner-scoped and opt-in (see [Memory reconstruction](memory-reconstruction.md)).
+
+Portable kinds (`note`, `map`, `mark`) sit at exactly one of `location_id` or `holder_id`. Fixed kinds (`sign`, `record`, `memorial`) always use `location_id`. Held portable artifacts are parallel to inventory: they are not members of `AgentBody.inventory`, do not consume carry capacity, and transfer only via `TransferArtifact`. Cap is 8 held artifacts per living body (`artifact_hold_cap`). `Take` / `Drop` / `Give` reject artifact ids (`not_an_item`).
+
+Closed commands: `Inscribe(kind, content, hold=False)`, `Amend`, `Erase`, `TransferArtifact(artifact_id, mode, recipient_id=None)` with `mode` ∈ {`deposit`, `claim`, `give`}. The closed `AgentCommand` union is 24. World admission may accept these when tests or scripts submit them; cognition compiles them only when `ArtifactInterpretationMode` is `DETERMINISTIC`. Off is an empty artifacts map plus mode `DISABLED` — not a capability flag. `multi_hop_testimony_tracking` stays unowned.
+
+Reject reasons: `unknown_artifact`, `artifact_not_portable`, `artifact_not_held`, `artifact_not_colocated`, `artifact_content_invalid`, `invalid_artifact_kind`, `invalid_artifact_hold`, `artifact_transfer_mode_invalid`, `artifact_hold_cap`, `recipient_unavailable`, `not_an_item`. Perception exposes ground artifacts at the observer location when visibility ≥ 0.5, and always exposes artifacts held by self. Foreign held artifacts are omitted. Occurrence `public_facts` may include only `artifact_id`, `artifact_kind`, and `content_revision`.
+
+Event/codec write pair is chosen at run start (`artifacts_active` from non-empty seed or `artifacts_enabled`, default false) and never mid-run:
+
+| Condition | Event schema | Codec |
+| --- | --- | --- |
+| `artifacts_active` | replay-v8 | `v5` |
+| else dynamics | replay-v7 | `v4` |
+| else production | replay-v6 | `v3` |
+| else | replay-v5 | `v2` |
+
+Codec `v5` requires `artifacts` plus every v4 key. A v4 checkpoint rejects `artifacts`. Detail types `ArtifactCreated` / `ArtifactModified` / `ArtifactMoved` / `ArtifactDestroyed` are effect-complete only on schema 8; schema 8 also accepts production (v6) and environment (v7) details. Default event write stays replay-v5; default codec stays `v2`; `CURRENT_PHYSICAL_EVENT_SCHEMA_VERSION` stays 5. `runner-config-v19` carries every v18 cognition key plus `artifact_interpretation_mode` and is emitted only when some mode is `DETERMINISTIC`. Conventions-only configs still write v18. Experiment Z (`experiment-z-external-artifacts`) and `external_artifact_memory@1` stay analysis-only and off the V1 regression gate.
+
+Loggers: `world.artifacts`, `world.events`, `world._operations`, `world._perception`, `simulation.bootstrap`, `simulation.engine`, `simulation.persistence`, `simulation.replay`, `simulation.runner`, `agents.cognition.artifacts`, `observer.project`, `observer.adapt`, `experiments.external_artifacts`, `analysis.external_artifact_memory`. Do not log mark tokens or seeds at INFO.
+
 ## Seeds and schemas
 
 - Named streams: run, world, tick, ordinal or system entity, purpose, derivation-v2 (rules fingerprint). Never module-global RNG or Python `hash()`.
 - **Never log seeds**, random draws, inventories, event payloads, observation contents, communication text, or full snapshots.
-- Audit schema v1: decode/export only. Replay schema v2: legacy projector. Replay schema v3: physical runs without occurrence context (readable). Replay schema v4: physical runs with occurrence context (new writes). Replay-v7 is accepted and is written only when an environmental dynamics spec is set. The default write stays replay-v5. Runs do not mix replay schemas.
+- Audit schema v1: decode/export only. Replay schema v2: legacy projector. Replay schema v3: physical runs without occurrence context (readable). Replay schema v4: physical runs with occurrence context (new writes). Replay-v7 is accepted and is written only when an environmental dynamics spec is set. Replay-v8 is accepted and is written only when artifacts are active at run start. The default write stays replay-v5. Runs do not mix replay schemas.
 
 ## Snapshot contents
 
-Checkpoints capture locations (adjacency/capacities/environment), bodies (physiology + carry capacity), items (kind/load/placement), resources (kind/quantity/max/regen), weather (condition), revision, next tick, and integrity hashes. A dynamics-on checkpoint also stores active hazards. Physical rules version/fingerprint/canonical bytes persist on the run. `PhysicalRules` stays `physical-v1`.
+Checkpoints capture locations (adjacency/capacities/environment), bodies (physiology + carry capacity), items (kind/load/placement), resources (kind/quantity/max/regen), weather (condition), revision, next tick, and integrity hashes. A dynamics-on checkpoint also stores active hazards. An artifacts-active checkpoint (codec `v5`) also stores `artifacts`. Physical rules version/fingerprint/canonical bytes persist on the run. `PhysicalRules` stays `physical-v1`.
 
 ## Tests
 

@@ -14,6 +14,12 @@ Downstream cognition consumes `ReconstructedMemory` episodes as subjective exper
 
 V2 is selected by injecting `MemoryRecallRequest.dynamics_policy` (`memory-dynamics-v1` defaults). When `dynamics_policy is None`, the V1 path stays bit-identical. Soft-forget remains the only deactivation path — V2 never hard-deletes by age.
 
+## External artifacts (no auto-download)
+
+Objective `Observation.artifacts` prove physical presence and marks only. `build_direct_scene_memory_trace` and `DirectObservationMemoryUpdateHook` must not copy artifact ids, marks, or relations into episodic memory. Presence alone does not create a `MemoryTrace`.
+
+Opt-in `ArtifactInterpretationMode` (`DISABLED` default, `DETERMINISTIC` on `runner-config-v19`) keeps an owner-scoped `ArtifactInterpretationLedger`. Updates read only that owner's observation and prior ledger. Distortion (visibility `< 0.75` or self fatigue `≥ 0.70`) drops the last relation and sets confidence `0.55`; otherwise confidence is `0.85`. Cap 16 entries (`cap_exceeded`). Interpretation memory uses only `ArtifactInterpretationMemoryUpdateHook` (concepts prefixed `artifact_reading:`). Analysis metric `external_artifact_memory@1` and Experiment Z stay off the V1 gate and out of cognition. Logger: `agents.cognition.artifacts` (`unresolved_entity`, `cap_exceeded`, `no_candidate`, `artifact_command_withheld`). See [Physical simulation](physical-simulation.md#external-information-artifacts).
+
 ## Offline consolidation during sleep
 
 Optional `ConsolidationMode` on `AgentCognitionSpec` (default `DISABLED`) reorganizes traces the agent already holds when the effective command is `Sleep`. `DETERMINISTIC` is a pure policy (`offline-consolidation-v1`). `LLM_ASSISTED` may only select IDs from that candidate set (`offline_consolidation.selection.v1`); any foreign ID or provider failure applies the deterministic selection (`fallback_used`). Consolidation does not read world state, analysis reports, or other agents, and it does not rewrite a false memory toward a fact the owner does not already hold.

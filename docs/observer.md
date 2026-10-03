@@ -19,9 +19,19 @@ Protocol version: `observer-protocol-v1`. Layout documents use `observer-layout-
 
 ## Production facts
 
-A frame may include `structures`. Each record has `structure_id`, `location_id`, `kind`, `integrity`, `stored_quantity`, and an optional presentation (`visual_category`, `icon_key`, `size_category`) from `observer.presentation`. Missing catalog rows leave presentation empty. Presentation is not stored on `Item`, `Resource`, `Structure`, `Location`, or `WorldEvent`.
+A frame may include `structures`. Each record has `structure_id`, `location_id`, `kind`, `integrity`, `stored_quantity`, and an optional presentation (`visual_category`, `icon_key`, `size_category`, optional `display_label`) from `observer.presentation`. Missing catalog rows leave presentation empty. Presentation is not stored on `Item`, `Resource`, `Structure`, `Location`, or `WorldEvent`.
 
 The six production semantic types are `RESOURCE_HARVESTED`, `CRAFT_STARTED`, `ITEM_CRAFTED`, `STRUCTURE_BUILT`, `STRUCTURE_REPAIRED`, and `ITEM_STORED`. `ObserverEvent` adds `recipe_id` and `structure_id` only when they are set. Protocol version stays `observer-protocol-v1`. Godot is not required to read the projection. The current client ignores unknown event types and unknown world keys, so a frame that adds `structures` still parses as protocol v1.
+
+## Artifact facts
+
+A frame may include ordered `artifacts`. Each `ObserverArtifact` carries `artifact_id`, `kind`, placement (`location_id` or `holder_id`), `author_id`, `created_tick`, `content_revision`, optional mark tokens for researcher inspection, and optional `EntityPresentation`. Catalog rows use `visual_category="artifact"`, `icon_key="artifact_{kind}"`, `size_category="small"`, and `display_label` equal to the kind token (`"sign"`, …). Presentation must not encode an agent's private reading.
+
+The four artifact semantic types are `ARTIFACT_CREATED`, `ARTIFACT_MODIFIED`, `ARTIFACT_MOVED`, and `ARTIFACT_DESTROYED` (`len(SEMANTIC_EVENT_TYPES) == 36`). `ObserverEvent` may add optional `artifact_id` only when set. Frames never carry per-agent interpretation ledgers. Domain/world payloads still reject `pixels`, `sprite`, `animation`, `dx`, `dy`, and inverse agent types (`presentation_instruction_forbidden`).
+
+The Godot client replaces its world from `state_tick` / `world_replaced`, parses `world.artifacts`, and paints ground artifacts from kind → local theme/icon mapping in `theme_catalog.gd`. Held artifacts may appear in a slot cue only when `holder_id` matches a visible body. No interpretation overlays. Event router/log/`KNOWN_TYPES` recognize the four artifact semantic types only. Protocol stays `observer-protocol-v1`.
+
+`observer.project` and `observer.adapt` log `artifacts_projected`. An unknown kind logs `unknown_event_kind`. A presentation command logs `presentation_instruction_forbidden`. Do not log icon keys at INFO.
 
 ## Environment tokens
 
