@@ -33,6 +33,10 @@ from agents.cognition.counterfactual import (
     CounterfactualPolicy,
     default_counterfactual_policy,
 )
+from agents.cognition.cultural_narratives import (
+    CulturalNarrativePolicy,
+    default_cultural_narrative_policy,
+)
 from agents.cognition.epistemic import EpistemicPolicy, default_epistemic_policy
 from agents.cognition.group_formation import (
     GroupFormationPolicy,
@@ -290,6 +294,17 @@ class CognitionSemanticNamingMode(StrEnum):
     DETERMINISTIC = "deterministic"
 
 
+class CognitionCulturalNarrativeMode(StrEnum):
+    """Owner-scoped narrative ledger. Disabled leaves the snapshot field unset.
+
+    Lockstep with ``simulation.CulturalNarrativeMode``. This is not a
+    ``V2CapabilityFlags`` slot. ``DISABLED`` does not allocate a ledger.
+    """
+
+    DISABLED = "disabled"
+    DETERMINISTIC = "deterministic"
+
+
 def _unit_interval(name: str, value: object) -> float:
     if isinstance(value, bool) or not isinstance(value, (int, float)):
         raise ValueError(f"{name}: not_unit_interval")
@@ -391,6 +406,10 @@ class CognitionLoopConfig:
         CognitionSemanticNamingMode.DISABLED
     )
     semantic_naming_policy: SemanticNamingPolicy | None = None
+    cultural_narrative_mode: CognitionCulturalNarrativeMode = (
+        CognitionCulturalNarrativeMode.DISABLED
+    )
+    cultural_narrative_policy: CulturalNarrativePolicy | None = None
     production_knowledge_mode: ProductionKnowledgeMode = (
         ProductionKnowledgeMode.DISABLED
     )
@@ -687,6 +706,28 @@ class CognitionLoopConfig:
             raise TypeError(
                 "semantic_naming_policy must be SemanticNamingPolicy or None"
             )
+        if type(self.cultural_narrative_mode) is not CognitionCulturalNarrativeMode:
+            _LOG.error(
+                "invalid_enum path=cultural_narrative_mode reason_code=invalid_mode"
+            )
+            raise TypeError(
+                "cultural_narrative_mode must be CognitionCulturalNarrativeMode"
+            )
+        if self.cultural_narrative_mode is CognitionCulturalNarrativeMode.DISABLED:
+            object.__setattr__(self, "cultural_narrative_policy", None)
+        elif self.cultural_narrative_policy is None:
+            object.__setattr__(
+                self,
+                "cultural_narrative_policy",
+                default_cultural_narrative_policy(),
+            )
+        elif type(self.cultural_narrative_policy) is not CulturalNarrativePolicy:
+            _LOG.error(
+                "invalid_enum path=cultural_narrative_policy reason_code=invalid_type"
+            )
+            raise TypeError(
+                "cultural_narrative_policy must be CulturalNarrativePolicy or None"
+            )
         if type(self.production_knowledge_mode) is not ProductionKnowledgeMode:
             _LOG.error(
                 "invalid_enum path=production_knowledge_mode reason_code=invalid_mode"
@@ -850,6 +891,12 @@ class CognitionLoopConfig:
                 None
                 if self.semantic_naming_policy is None
                 else self.semantic_naming_policy.version
+            ),
+            "cultural_narrative_mode": self.cultural_narrative_mode.value,
+            "cultural_narrative_policy_version": (
+                None
+                if self.cultural_narrative_policy is None
+                else self.cultural_narrative_policy.version
             ),
             "territorial_claim_policy_version": (
                 None
@@ -1068,5 +1115,7 @@ def build_cognitive_loop(
         artifact_interpretation_mode=resolved.artifact_interpretation_mode,
         semantic_naming_mode=resolved.semantic_naming_mode,
         semantic_naming_policy=resolved.semantic_naming_policy,
+        cultural_narrative_mode=resolved.cultural_narrative_mode,
+        cultural_narrative_policy=resolved.cultural_narrative_policy,
         production_knowledge_mode=resolved.production_knowledge_mode,
     )

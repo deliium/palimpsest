@@ -665,6 +665,20 @@ def _cognition_config_for(
         naming_mode.value,
         None if naming_policy is None else naming_policy.version,
     )
+    from agents.cognition.configuration import CognitionCulturalNarrativeMode
+    from agents.cognition.cultural_narratives import default_cultural_narrative_policy
+
+    narrative_mode = CognitionCulturalNarrativeMode(
+        spec.cultural_narrative_mode.value
+    )
+    narrative_policy = None
+    if narrative_mode is CognitionCulturalNarrativeMode.DETERMINISTIC:
+        narrative_policy = default_cultural_narrative_policy()
+    _LOG.debug(
+        "cognition_config_cultural_narrative_mode mode=%s policy_version=%s",
+        narrative_mode.value,
+        None if narrative_policy is None else narrative_policy.version,
+    )
     return CognitionLoopConfig(
         memory_mode=CognitionMemoryMode(spec.memory_mode.value),
         imagination_mode=CognitionImaginationMode(spec.imagination_mode.value),
@@ -705,6 +719,8 @@ def _cognition_config_for(
         artifact_interpretation_mode=artifact_mode,
         semantic_naming_mode=naming_mode,
         semantic_naming_policy=naming_policy,
+        cultural_narrative_mode=narrative_mode,
+        cultural_narrative_policy=narrative_policy,
         production_knowledge_mode=CognitionProductionKnowledgeMode(
             spec.production_knowledge_mode.value
         ),
