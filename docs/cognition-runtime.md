@@ -354,6 +354,61 @@ Off-limits from cognition: `WorldState`, `WorldEvent` stores, analysis reports, 
 
 Full seam map: [Architecture — V2 extension seams](architecture.md#v2-extension-seams-scaffolding).
 
+## Cognitive architecture variants
+
+Named architecture ids (`reactive_baseline`, `v1_memory_agent`, `reconstructive_memory_agent`, `imagination_agent`, `reflection_agent`, `theory_of_mind_agent`, `full_v2_agent`) are **composition presets** registered in `agents.cognition.architectures`. They expand into ordinary `AgentCognitionSpec` modes and `V2CapabilityFlags` — they are **not** new capability-flag slots and **not** a runner-config schema bump for `architecture_id`.
+
+### Stage slots
+
+Stable slot → Protocol bindings (composition table, not mid-loop switches):
+
+| Slot | Protocol | Notes |
+| --- | --- | --- |
+| `perception` | `PerceptionInterpreter` | Existing |
+| `retrieval` | `MemoryRetriever` | Declaration key → `MemoryMode`; runner injects `ScopedMemoryRetriever` |
+| `reconstruction` | `ReconstructionStage` | Cognition-facing wrapper around `memory.contracts.MemoryReconstructor` (do not shadow that name) |
+| `beliefs` | `BeliefRevisionStage` | Memory-update slot (`SubjectiveRevisionHook`), not a new loop ordinal |
+| `world_model` | `WorldModelStage` | Wraps `WorldModelPolicy` + mode |
+| `reflection` | `ReflectionStage` | Wraps `ReflectionPolicy` / planning |
+| `imagination` | `FutureImagination` | Existing |
+| `motivation` | `MotivationEvaluator` | Existing |
+| `theory_of_mind` | `TheoryOfMindStage` | Wraps `TheoryOfMindPolicy` + mode |
+| `planning` | `Planner` (+ intention under planning compose) | Existing |
+
+Missing capability ⇒ bind the slot’s passthrough / empty implementation. Forbidden in `CognitiveLoop`, `AgentRuntime`, or `SimulationRunner` tick paths: `if architecture_id == ...`.
+
+### Expansion path (single authoritative path)
+
+```text
+ArchitectureDefinition
+  → validate_architecture_compatibility(definition, ArchitectureModeSnapshot)
+  → experiments.architectures.expand_architecture → SimulationRunnerConfig
+  → SimulationRunner._cognition_config_for + _memory_retriever_for
+  → build_cognitive_loop(CognitionLoopConfig)
+```
+
+`compose_loop_config_from_snapshot` stays consistent with `_cognition_config_for` flag→mode mapping. Retrieval/reconstruction keys are declaration tokens only; they do not construct `MemoryService`-bound retrievers inside cognition factories.
+
+### Preset → schema table
+
+| architecture_id | memory | imagination | reflection | prospective | mortality | owned flags | schema |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| `reactive_baseline` | reference | disabled | disabled | disabled | disabled | all off | v4 |
+| `v1_memory_agent` | reconstructive | enabled | disabled | disabled | enabled | all off | v4 |
+| `reconstructive_memory_agent` | reconstructive_v2 | enabled | disabled | disabled | enabled | all off | v4 |
+| `imagination_agent` | reconstructive | enabled | disabled | deterministic | enabled | all off | v7 |
+| `reflection_agent` | reconstructive | enabled | deterministic | disabled | enabled | all off | v6 |
+| `theory_of_mind_agent` | reconstructive | enabled | disabled | disabled | enabled | `advanced_social_inference` | v4 |
+| `full_v2_agent` | reconstructive_v2 | enabled | deterministic | disabled | enabled | all four owned | v6 |
+
+`full_v2_agent` is cognitive-core only: social ledger modes stay `DISABLED`; prospective stays `DISABLED` so schema can be v6. `multi_hop_testimony_tracking` must not be required or enabled via any architecture (`architecture_unimplemented_flag` / `capability_unimplemented`).
+
+### Digest and experiments
+
+`architecture_definition_digest(definition)` is diagnostics-only (logs / `label_code` prefix). It must not become a runner JSON field. Experiment AC (`experiment-ac-cognitive-architectures`, conditions `ac-<architecture_id>`) shares world scenario, seed matrix, and stochastic identity across arms; it stays **off** the V1 regression gate.
+
+Validation reason codes: `architecture_missing_flag`, `architecture_forbidden_flag`, `architecture_mode_mismatch`, `architecture_slot_unbound`, `architecture_unknown_impl`, `architecture_unimplemented_flag`, `architecture_unknown`, `capability_unimplemented`.
+
 ## Deferred
 
 - Production LLM-backed cognition stages (beyond optional reconstructive recall)
@@ -361,7 +416,7 @@ Full seam map: [Architecture — V2 extension seams](architecture.md#v2-extensio
 - General M4 analysis metrics over cognition receipts
 - LLM provider lifecycle composition in API / `compose.yaml` (factory ports exist; deferred until a cognition consumer owns it)
 - HTTP / debugger UI over cognition-trace repository ports
-- Theory-of-mind cognition (trace records `unavailable` until owned)
+- Multi-hop testimony tracking (unowned capability flag)
 
 ## See Also
 
