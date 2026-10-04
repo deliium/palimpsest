@@ -1,27 +1,29 @@
 """Thin benchmark scenario builders over existing catalog arms.
 
-Locked condition-id mapping (must match the V2 benchmark suite catalog):
+Locked condition-id mapping (V2 benchmark suite catalog):
 
-| scenario_id | condition / composition |
-| --- | --- |
-| bench-01-seasonal-planning | ``u-learned`` vs ``u-naive`` |
-| bench-02-memory-interference | ``a-reconstructive-v2`` vs ``a-reconstructive`` (shared seed) |
-| bench-03-reflection-revision | ``g-deterministic`` vs ``g-disabled`` |
-| bench-04-tom-social-failure | ``l-enabled`` (shared seed with #5; not a new ToM catalog arm) |
-| bench-05-tom-cooperation | ``l-enabled`` (same world/seed matrix as #4) |
-| bench-06-deception-reputation | custom runner-config-v10 strategy+reputation; ``q-disabled`` / strategy-only controls |
-| bench-07-skill-specialization | ``r-enabled`` and/or ``t-enabled`` vs disabled peers |
-| bench-08-territorial | ``v-scarce`` vs ``v-abundant`` |
-| bench-09-social-clusters | ``w-enabled`` vs ``w-disabled`` |
-| bench-10-norms | ``x-enabled`` vs ``x-disabled`` |
-| bench-11-conventions | ``y-enabled`` vs ``y-disabled`` |
-| bench-12-artifacts | ``artifact_channel`` vs ``memory_only`` |
-| bench-13-naming-drift | ``aa-enabled`` vs ``aa-disabled`` |
-| bench-14-rumor-narrative | ``ab-enabled`` vs ``ab-disabled`` |
-| bench-15-architecture-matrix | ``ac-<architecture_id>`` arms |
-| bench-16-forked-intervention | ``ResearchInterventionKind.COMMUNICATION_REMOVE`` fork |
+- bench-01-seasonal-planning: ``u-learned`` / ``u-naive``
+- bench-02-memory-interference: ``a-reconstructive-v2`` /
+  ``a-reconstructive`` (shared seed)
+- bench-03-reflection-revision: ``g-deterministic`` / ``g-disabled``
+- bench-04-tom-social-failure: ``l-enabled`` (shared seed with #5;
+  no new ToM arm)
+- bench-05-tom-cooperation: ``l-enabled`` (same world/seed as #4)
+- bench-06-deception-reputation: custom v10 strategy+reputation;
+  ``q-disabled`` / strategy-only
+- bench-07-skill-specialization: ``r-enabled`` / ``t-enabled`` vs
+  disabled peers
+- bench-08-territorial: ``v-scarce`` / ``v-abundant``
+- bench-09-social-clusters: ``w-enabled`` / ``w-disabled``
+- bench-10-norms: ``x-enabled`` / ``x-disabled``
+- bench-11-conventions: ``y-enabled`` / ``y-disabled``
+- bench-12-artifacts: ``artifact_channel`` / ``memory_only``
+- bench-13-naming-drift: ``aa-enabled`` / ``aa-disabled``
+- bench-14-rumor-narrative: ``ab-enabled`` / ``ab-disabled``
+- bench-15-architecture-matrix: ``ac-<architecture_id>`` arms
+- bench-16-forked-intervention: ``COMMUNICATION_REMOVE`` fork
 
-Task 2 wires callable slots that fail closed until Tasks 4–11 install concrete
+Task 2 wires callable slots that fail closed until Tasks 4-11 install concrete
 builders. Concrete modules under this package must wrap catalog helpers — they
 must not invent WorldEngine semantics.
 """
@@ -29,7 +31,7 @@ must not invent WorldEngine semantics.
 from __future__ import annotations
 
 import logging
-from collections.abc import Callable, Mapping
+from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import Final, Protocol
 
@@ -214,12 +216,22 @@ def build_benchmark_scenario(
 
 def _load_concrete_builders() -> None:
     """Import concrete builder modules so they self-register."""
-    from experiments.benchmark_scenarios import (  # noqa: F401
+    from experiments.benchmark_scenarios import (
         architecture_scenarios as _architecture,
+    )
+    from experiments.benchmark_scenarios import (
         cognition_scenarios as _cognition,
+    )
+    from experiments.benchmark_scenarios import (
         culture_scenarios as _culture,
+    )
+    from experiments.benchmark_scenarios import (
         fork_scenarios as _fork,
+    )
+    from experiments.benchmark_scenarios import (
         skill_scenarios as _skill,
+    )
+    from experiments.benchmark_scenarios import (
         social_scenarios as _social,
     )
 

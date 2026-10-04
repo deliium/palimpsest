@@ -56,7 +56,10 @@ def test_bench_16_builder_parent_child_template() -> None:
     ]
     parent, child = result.definition.conditions
     assert parent.runner_config.seed == child.runner_config.seed
-    assert parent.runner_config.stochastic_identity == child.runner_config.stochastic_identity
+    assert (
+        parent.runner_config.stochastic_identity
+        == child.runner_config.stochastic_identity
+    )
 
 
 def test_bench_16_communication_remove_keeps_parent_events_immutable() -> None:
@@ -78,4 +81,7 @@ def test_bench_16_communication_remove_keeps_parent_events_immutable() -> None:
     assert applied.removed_communication["tick"] == 7
     # Child template retains shared seed/stochastic identity (inherit stream).
     assert applied.runner_config.seed == parent_config.seed
-    assert applied.runner_config.stochastic_identity == parent_config.stochastic_identity
+    assert (
+        applied.runner_config.stochastic_identity
+        == parent_config.stochastic_identity
+    )

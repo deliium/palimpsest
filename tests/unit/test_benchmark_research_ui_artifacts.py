@@ -67,7 +67,8 @@ async def running_client(app: FastAPI) -> AsyncIterator[httpx.AsyncClient]:
 
 
 def _install_benchmark_matrix_tree(root: Path) -> Path:
-    """Allowlisted runtime tree shaped like a completed matrix under RESEARCH_MATRIX_ROOT."""
+    """Allowlisted runtime tree shaped like a completed matrix under
+    RESEARCH_MATRIX_ROOT."""
     matrix = root / "v2-benchmark-suite"
     cells = matrix / "cells"
     cells.mkdir(parents=True)
@@ -149,7 +150,8 @@ async def test_research_ui_resolves_benchmark_matrix_artifacts(
 async def test_research_web_root_unset_skips_static_mount(
     tmp_path: Path,
 ) -> None:
-    """When RESEARCH_WEB_ROOT is unset, matrix FS still works; /research/ is not required."""
+    """When RESEARCH_WEB_ROOT is unset, matrix FS still works; /research/ is not
+    required."""
     root = tmp_path / "matrices"
     root.mkdir()
     _install_benchmark_matrix_tree(root)

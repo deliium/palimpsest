@@ -94,13 +94,16 @@ def test_invariant_strings_reject_forbidden_mandate_phrases() -> None:
             lowered = text.lower()
             for phrase in _FORBIDDEN_MANDATE_PHRASES:
                 assert phrase not in lowered, (
-                    f"{spec.scenario_id} contains forbidden phrase {phrase!r} in {text!r}"
+                    f"{spec.scenario_id} contains forbidden phrase "
+                    f"{phrase!r} in {text!r}"
                 )
 
 
 def test_configuration_rejects_unordered_condition_ids() -> None:
     with pytest.raises(BenchmarkSpecError) as exc:
-        BenchmarkConfiguration(condition_ids={"u-learned", "u-naive"})  # type: ignore[arg-type]
+        BenchmarkConfiguration(
+            condition_ids={"u-learned", "u-naive"}  # type: ignore[arg-type]
+        )
     assert exc.value.code == "unordered_condition_ids"
 
 
@@ -109,7 +112,9 @@ def test_spec_requires_off_v1_gate() -> None:
         BenchmarkScenarioSpec(
             scenario_id="bench-temp",
             title="temp",
-            configuration=BenchmarkConfiguration(condition_ids=("u-learned", "u-naive")),
+            configuration=BenchmarkConfiguration(
+                condition_ids=("u-learned", "u-naive")
+            ),
             seed_strategy="paired",
             expected_invariants=("mechanism available",),
             measurable_outputs=("environmental_dynamics@1",),

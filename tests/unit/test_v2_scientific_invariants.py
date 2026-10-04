@@ -81,9 +81,9 @@ def test_v2_scientific_invariants_ok() -> None:
     assert recording_test.is_file()
 
     # Branch compare + matrix CLI + Research UI mount helpers exist.
-    from simulation.branch_compare import compare_branch_timelines
-    from experiments.matrix_expand import expand_matrix
     from api.research_static import mount_research_ui, research_ui_configured
+    from experiments.matrix_expand import expand_matrix
+    from simulation.branch_compare import compare_branch_timelines
 
     assert callable(compare_branch_timelines)
     assert callable(expand_matrix)

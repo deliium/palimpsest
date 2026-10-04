@@ -1,4 +1,4 @@
-"""Benchmark builders for scenarios 1–3 (planning, memory, reflection)."""
+"""Benchmark builders for scenarios 1-3 (planning, memory, reflection)."""
 
 from __future__ import annotations
 
@@ -6,8 +6,6 @@ import logging
 from typing import Final
 
 from experiments.benchmark_scenarios._common import filter_conditions, with_seed_matrix
-
-from . import BenchmarkBuildResult, register_benchmark_builder
 from experiments.benchmark_suite import (
     BENCH_01_SEASONAL_PLANNING,
     BENCH_02_MEMORY_INTERFERENCE,
@@ -21,6 +19,8 @@ from experiments.catalog import (
 from experiments.models import ExperimentSeedMatrix
 from simulation.runner_models import SimulationRunnerConfig
 
+from . import BenchmarkBuildResult, register_benchmark_builder
+
 _LOG: Final[logging.Logger] = logging.getLogger("experiments.benchmark_scenarios")
 
 
@@ -29,7 +29,7 @@ def build_bench_01_seasonal_planning(
     *,
     seed_matrix: ExperimentSeedMatrix | None = None,
 ) -> BenchmarkBuildResult:
-    """Wrap Experiment U ``u-learned`` / ``u-naive`` (LONG_TERM goals already on arms)."""
+    """Wrap Experiment U ``u-learned`` / ``u-naive`` (LONG_TERM goals on arms)."""
     seed = base.seed if seed_matrix is None else seed_matrix.seeds[0]
     max_ticks = min(base.stop_policy.max_ticks, 64)
     definition = experiment_u_seasonal_scarcity(seed=seed, max_ticks=max_ticks)
@@ -107,7 +107,10 @@ def build_bench_03_reflection_revision(
 
 def register_cognition_scenario_builders() -> None:
     """Install builders for bench-01…bench-03."""
-    register_benchmark_builder(BENCH_01_SEASONAL_PLANNING, build_bench_01_seasonal_planning)
+    register_benchmark_builder(
+        BENCH_01_SEASONAL_PLANNING,
+        build_bench_01_seasonal_planning,
+    )
     register_benchmark_builder(
         BENCH_02_MEMORY_INTERFERENCE, build_bench_02_memory_interference
     )

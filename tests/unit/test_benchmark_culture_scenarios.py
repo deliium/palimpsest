@@ -1,4 +1,4 @@
-"""Unit tests for benchmark scenarios 8–14 (culture/social processes)."""
+"""Unit tests for benchmark scenarios 8-14 (culture/social processes)."""
 
 from __future__ import annotations
 

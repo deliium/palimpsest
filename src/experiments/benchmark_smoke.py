@@ -13,8 +13,8 @@ from dataclasses import dataclass, replace
 from typing import Final
 
 from experiments.benchmark_scenarios import (
-    BenchmarkBuildResult,
     BenchmarkBuilderError,
+    BenchmarkBuildResult,
     build_benchmark_scenario,
     is_benchmark_builder_implemented,
 )
@@ -62,7 +62,11 @@ class BenchmarkSmokeResult:
     ran: bool
 
 
-def smoke_tick_budget(scenario_id: str, *, tick_budget: int = DEFAULT_SMOKE_TICK_BUDGET) -> int:
+def smoke_tick_budget(
+    scenario_id: str,
+    *,
+    tick_budget: int = DEFAULT_SMOKE_TICK_BUDGET,
+) -> int:
     """Return the effective smoke tick budget for a registered scenario."""
     require_stable_id("scenario_id", scenario_id)
     if type(tick_budget) is not int or isinstance(tick_budget, bool) or tick_budget < 1:

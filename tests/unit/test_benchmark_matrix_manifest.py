@@ -62,7 +62,7 @@ def test_v2_benchmark_matrix_fixture_expands() -> None:
     assert {"memory_type", "tom", "seasonality", "resource_scarcity"} <= factor_ids
     assert list(spec.seed_matrix.seeds) == [11, 13, 17]
     definition, cells = expand_matrix(spec)
-    # Cells = conditions × seeds (replicates_per_seed=1).
+    # Cells = conditions x seeds (replicates_per_seed=1).
     assert len(definition.conditions) == 16
     assert len(cells) == 48
     document = json.loads(payload.decode("utf-8"))

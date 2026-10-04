@@ -96,7 +96,10 @@ async def test_smoke_helper_runs_first_implemented_arm() -> None:
         }
         assert "must emerge" not in item.measurable_output.lower()
         assert "must form" not in item.measurable_output.lower()
-    assert any("memory_dynamics@1" in item.measurable_output for item in result.metrics_available)
+    assert any(
+        "memory_dynamics@1" in item.measurable_output
+        for item in result.metrics_available
+    )
 
 
 @pytest.mark.asyncio

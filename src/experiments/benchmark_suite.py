@@ -116,7 +116,8 @@ class BenchmarkConfiguration:
         for mode in modes:
             if type(mode) is not str or not mode:
                 raise BenchmarkSpecError(
-                    "invalid_required_mode", "required_modes entries must be non-empty str"
+                    "invalid_required_mode",
+                    "required_modes entries must be non-empty str",
                 )
         object.__setattr__(self, "required_modes", modes)
         if type(self.composition_notes) is not str:
@@ -154,7 +155,12 @@ class BenchmarkScenarioSpec:
                 "invalid_seed_strategy", "seed_strategy must be non-empty str"
             )
         object.__setattr__(
-            self, "expected_invariants", _require_str_tuple("expected_invariants", self.expected_invariants)
+            self,
+            "expected_invariants",
+            _require_str_tuple(
+                "expected_invariants",
+                self.expected_invariants,
+            ),
         )
         object.__setattr__(
             self,
@@ -164,7 +170,10 @@ class BenchmarkScenarioSpec:
         object.__setattr__(
             self, "non_goals", _require_str_tuple("non_goals", self.non_goals)
         )
-        if type(self.statistical_comparison) is not str or not self.statistical_comparison.strip():
+        if (
+            type(self.statistical_comparison) is not str or
+            not self.statistical_comparison.strip()
+        ):
             raise BenchmarkSpecError(
                 "invalid_statistical_comparison",
                 "statistical_comparison must be non-empty str",
@@ -243,11 +252,18 @@ def _build_registry() -> dict[str, BenchmarkScenarioSpec]:
             condition_ids=("u-learned", "u-naive"),
             required_modes=("EnvironmentalDynamicsSpec", "initial_goals LONG_TERM"),
             composition_notes="Experiment U; predictive world model vs naive",
-            seed_strategy="matrix: multi-seed; shared scenario + stochastic identity across arms",
+            seed_strategy=(
+                "matrix: multi-seed; shared scenario + stochastic identity "
+                "across arms"
+            ),
             expected_invariants=(
-                "When Experiment U arms run, environmental_dynamics@1 and goal_completion@1 are assemblable.",
-                "LONG_TERM initial_goals remain on both u-learned and u-naive without a second goal system.",
-                "Capability flags stay opt-in; suite does not enable multi_hop_testimony_tracking.",
+                "When Experiment U arms run, environmental_dynamics@1 and "
+                "goal_completion@1 are assemblable.",
+                "LONG_TERM initial_goals remain on both u-learned and u-naive "
+                "without a "
+                "second goal system.",
+                "Capability flags stay opt-in; suite does not enable "
+                "multi_hop_testimony_tracking.",
             ),
             measurable_outputs=(
                 "goal lifecycle counts",
@@ -259,18 +275,31 @@ def _build_registry() -> dict[str, BenchmarkScenarioSpec]:
                 "Do not assert that agents always stockpile before winter.",
                 "Do not invent a second goal system beyond Experiment U initial_goals.",
             ),
-            statistical_comparison="multi-seed matrix; planning-ahead action-rate distribution",
+            statistical_comparison=(
+                "multi-seed matrix; planning-ahead action-rate "
+                "distribution"
+            ),
             max_ticks=64,
         ),
         _spec(
             scenario_id=BENCH_02_MEMORY_INTERFERENCE,
             title="Memory interference changing behavior",
             condition_ids=("a-reconstructive-v2", "a-reconstructive"),
-            required_modes=("MemoryMode.RECONSTRUCTIVE_V2", "MemoryMode.RECONSTRUCTIVE"),
-            composition_notes="Experiment A reconstructive-V2 vs reconstructive; shared seed",
-            seed_strategy="paired: shared seed; identical scenario and stochastic identity",
+            required_modes=(
+                "MemoryMode.RECONSTRUCTIVE_V2",
+                "MemoryMode.RECONSTRUCTIVE",
+            ),
+            composition_notes=(
+                "Experiment A reconstructive-V2 vs reconstructive; "
+                "shared seed"
+            ),
+            seed_strategy=(
+                "paired: shared seed; identical scenario and stochastic "
+                "identity"
+            ),
             expected_invariants=(
-                "When reconstructive-V2 is enabled, memory_dynamics@1 interference/source-confusion fields are assemblable.",
+                "When reconstructive-V2 is enabled, memory_dynamics@1 "
+                "interference/source-confusion fields are assemblable.",
                 "Paired arms share seed and scenario fingerprint.",
             ),
             measurable_outputs=(
@@ -288,11 +317,16 @@ def _build_registry() -> dict[str, BenchmarkScenarioSpec]:
             title="Reflection revising a false belief",
             condition_ids=("g-deterministic", "g-disabled"),
             required_modes=("ReflectionMode.DETERMINISTIC", "ReflectionMode.DISABLED"),
-            composition_notes="Experiment G; planted false belief uses analysis truth only",
+            composition_notes=(
+                "Experiment G; planted false belief uses analysis truth "
+                "only"
+            ),
             seed_strategy="paired: on/off reflection; shared seed",
             expected_invariants=(
-                "When ReflectionMode=DETERMINISTIC, reflection audits are emitted and belief revision events are countable in analysis.",
-                "Planted false belief is analysis-truth only — never agent-visible is_false.",
+                "When ReflectionMode=DETERMINISTIC, reflection audits are emitted and "
+                "belief revision events are countable in analysis.",
+                "Planted false belief is analysis-truth only — never agent-visible "
+                "is_false.",
             ),
             measurable_outputs=(
                 "reflection audits",
@@ -303,7 +337,10 @@ def _build_registry() -> dict[str, BenchmarkScenarioSpec]:
                 "Do not assert every seed revises the planted belief.",
                 "Do not expose is_false to agent-visible observation.",
             ),
-            statistical_comparison="on/off reflection; revision rate after contradictory evidence",
+            statistical_comparison=(
+                "on/off reflection; revision rate after "
+                "contradictory evidence"
+            ),
             max_ticks=64,
         ),
         _spec(
@@ -311,11 +348,19 @@ def _build_registry() -> dict[str, BenchmarkScenarioSpec]:
             title="Incorrect ToM measurable social failure when mismatch occurs",
             condition_ids=("l-enabled", "l-disabled"),
             required_modes=("advanced_social_inference",),
-            composition_notes="Experiment L (+ optional M ledger); shared seed with bench-05; not a new wrong/corrected catalog arm",
-            seed_strategy="matrix: multi-seed shared with bench-05; same world/seed matrix",
+            composition_notes=(
+                "Experiment L (+ optional M ledger); shared seed with "
+                "bench-05; not a new wrong/corrected catalog arm"
+            ),
+            seed_strategy=(
+                "matrix: multi-seed shared with bench-05; same world/seed "
+                "matrix"
+            ),
             expected_invariants=(
-                "When advanced_social_inference is on, theory_of_mind@1 mismatch indicators are assemblable.",
-                "Failed cooperation/ask rates are reported when present — absence is a valid outcome.",
+                "When advanced_social_inference is on, theory_of_mind@1 mismatch "
+                "indicators are assemblable.",
+                "Failed cooperation/ask rates are reported when present — absence is a "
+                "valid outcome.",
             ),
             measurable_outputs=(
                 "theory_of_mind@1 mismatch indicators",
@@ -325,7 +370,10 @@ def _build_registry() -> dict[str, BenchmarkScenarioSpec]:
                 "Do not assert social failure on every seed.",
                 "Do not add wrong-vs-corrected Experiment L catalog arms.",
             ),
-            statistical_comparison="multi-seed support/detectability — never failure-must-occur",
+            statistical_comparison=(
+                "multi-seed support/detectability — never "
+                "failure-must-occur"
+            ),
             max_ticks=64,
         ),
         _spec(
@@ -334,10 +382,14 @@ def _build_registry() -> dict[str, BenchmarkScenarioSpec]:
             condition_ids=("l-enabled", "l-disabled"),
             required_modes=("advanced_social_inference",),
             composition_notes="Experiment L; same world/seed matrix as bench-04",
-            seed_strategy="matrix: multi-seed shared with bench-04; same world/seed matrix",
+            seed_strategy=(
+                "matrix: multi-seed shared with bench-04; same world/seed "
+                "matrix"
+            ),
             expected_invariants=(
                 "When advanced_social_inference is on, cooperation@1 is assemblable.",
-                "Handoff success and ToM support for partner goal are reported when present.",
+                "Handoff success and ToM support for partner goal are reported when "
+                "present.",
             ),
             measurable_outputs=(
                 "cooperation@1",
@@ -348,7 +400,10 @@ def _build_registry() -> dict[str, BenchmarkScenarioSpec]:
                 "Do not assert cooperation on every seed.",
                 "Do not add wrong-vs-corrected Experiment L catalog arms.",
             ),
-            statistical_comparison="multi-seed success-rate CI; no mandated cooperation",
+            statistical_comparison=(
+                "multi-seed success-rate CI; no mandated "
+                "cooperation"
+            ),
             max_ticks=64,
         ),
         _spec(
@@ -366,7 +421,8 @@ def _build_registry() -> dict[str, BenchmarkScenarioSpec]:
             seed_strategy="matrix: multi-seed; shared scenario + stochastic identity",
             expected_invariants=(
                 "When CommunicationStrategyMode and ReputationMode are DETERMINISTIC, "
-                "communication_strategy@1 and distributed_reputation@1 are assemblable.",
+                "communication_strategy@1 and distributed_reputation@1 "
+                "are assemblable.",
                 "o-enabled alone is not treated as carrying reputation.",
             ),
             measurable_outputs=(
@@ -377,7 +433,10 @@ def _build_registry() -> dict[str, BenchmarkScenarioSpec]:
                 "Do not invent a second LLM recording stack.",
                 "Do not log utterance text.",
             ),
-            statistical_comparison="multi-seed; reputation shift after observed deception vs control",
+            statistical_comparison=(
+                "multi-seed; reputation shift after observed "
+                "deception vs control"
+            ),
             max_ticks=64,
         ),
         _spec(
@@ -413,7 +472,8 @@ def _build_registry() -> dict[str, BenchmarkScenarioSpec]:
             composition_notes="Experiment V paired-world contract",
             seed_strategy="paired: existing V scarce vs abundant world contract",
             expected_invariants=(
-                "When TerritorialClaimMode=DETERMINISTIC, claim ledger updates are owner-scoped "
+                "When TerritorialClaimMode=DETERMINISTIC, claim ledger updates are "
+                "owner-scoped "
                 "and analysis spatial_control@1 is assemblable.",
             ),
             measurable_outputs=(
@@ -432,7 +492,10 @@ def _build_registry() -> dict[str, BenchmarkScenarioSpec]:
             title="Formation and dissolution of social clusters",
             condition_ids=("w-enabled", "w-disabled"),
             required_modes=("GroupFormationMode.DETERMINISTIC",),
-            composition_notes="Experiment W; measure churn when present; no scripted shock",
+            composition_notes=(
+                "Experiment W; measure churn when present; no scripted "
+                "shock"
+            ),
             seed_strategy="matrix: multi-seed support_band distribution",
             expected_invariants=(
                 "When GroupFormationMode=DETERMINISTIC, group ledger churn metrics and "
@@ -448,7 +511,10 @@ def _build_registry() -> dict[str, BenchmarkScenarioSpec]:
                 "Do not invent a scripted world shock to force dissolution.",
                 "Do not require boolean group-formation outcomes.",
             ),
-            statistical_comparison="multi-seed support_band distribution — never boolean group formed",
+            statistical_comparison=(
+                "multi-seed support_band distribution — never "
+                "boolean group formed"
+            ),
             max_ticks=64,
         ),
         _spec(
@@ -460,7 +526,8 @@ def _build_registry() -> dict[str, BenchmarkScenarioSpec]:
             seed_strategy="paired: on/off mode; shared seed",
             expected_invariants=(
                 "When SocialNormMode=DETERMINISTIC, norm ledger entries and violation "
-                "observations are countable; sanction/talk responses reported when ledger non-empty.",
+                "observations are countable; sanction/talk responses reported when "
+                "ledger non-empty.",
             ),
             measurable_outputs=(
                 "norm ledger entries",
@@ -481,7 +548,8 @@ def _build_registry() -> dict[str, BenchmarkScenarioSpec]:
             composition_notes="Experiment Y on/off",
             seed_strategy="matrix: multi-seed persistence distribution",
             expected_invariants=(
-                "When SocialConventionMode=DETERMINISTIC, persistent_social_conventions@1 is assemblable.",
+                "When SocialConventionMode=DETERMINISTIC, "
+                "persistent_social_conventions@1 is assemblable.",
             ),
             measurable_outputs=(
                 "persistent_social_conventions@1",
@@ -501,8 +569,11 @@ def _build_registry() -> dict[str, BenchmarkScenarioSpec]:
             composition_notes="Experiment Z present vs absent artifact channel",
             seed_strategy="paired: present vs absent arms; shared seed",
             expected_invariants=(
-                "When artifact channel is active, external_artifact_memory@1 is assemblable.",
-                "Later use after author absence/death is reported when a terminal event occurs.",
+                "When artifact channel is active, external_artifact_memory@1 is "
+                "assemblable.",
+                "Later use after author absence/death is reported when a "
+                "terminal event "
+                "occurs.",
             ),
             measurable_outputs=(
                 "external_artifact_memory@1",
@@ -522,7 +593,8 @@ def _build_registry() -> dict[str, BenchmarkScenarioSpec]:
             composition_notes="Experiment AA on/off",
             seed_strategy="matrix: multi-seed drift vs convergence indicators",
             expected_invariants=(
-                "When SemanticNamingMode=DETERMINISTIC, emergent_semantic_naming@1 is assemblable.",
+                "When SemanticNamingMode=DETERMINISTIC, emergent_semantic_naming@1 is "
+                "assemblable.",
             ),
             measurable_outputs=(
                 "emergent_semantic_naming@1",
@@ -540,9 +612,14 @@ def _build_registry() -> dict[str, BenchmarkScenarioSpec]:
             condition_ids=("ab-enabled", "ab-disabled"),
             required_modes=("CulturalNarrativeMode.DETERMINISTIC",),
             composition_notes="Experiment AB (+ E/P stimulus patterns only as needed)",
-            seed_strategy="matrix: multi-seed support when inaccurate persistent variant occurs",
+            seed_strategy=(
+                "matrix: multi-seed support when inaccurate persistent "
+                "variant occurs"
+            ),
             expected_invariants=(
-                "When CulturalNarrativeMode=DETERMINISTIC, cultural_narrative_lineage@1 and "
+                "When CulturalNarrativeMode=DETERMINISTIC, "
+                "cultural_narrative_lineage@1 "
+                "and "
                 "rumor_distortion@1 are assemblable.",
                 "If narrative lineage rows exist, cultural_narrative_lineage@1 reports "
                 "support_band that is not a coding error or ABSENT for wrong reasons.",
@@ -556,7 +633,10 @@ def _build_registry() -> dict[str, BenchmarkScenarioSpec]:
                 "Do not script a myth.",
                 "Do not assert an inaccurate narrative must persist on every seed.",
             ),
-            statistical_comparison="multi-seed support when inaccurate persistent variant occurs",
+            statistical_comparison=(
+                "multi-seed support when inaccurate persistent "
+                "variant occurs"
+            ),
             max_ticks=64,
         ),
         _spec(
@@ -567,10 +647,14 @@ def _build_registry() -> dict[str, BenchmarkScenarioSpec]:
                 for architecture_id in registered_architecture_ids()
             ),
             required_modes=("architecture_expand",),
-            composition_notes="Experiment AC ac-<architecture_id> arms; shared scenario fingerprint",
+            composition_notes=(
+                "Experiment AC ac-<architecture_id> arms; shared "
+                "scenario fingerprint"
+            ),
             seed_strategy="matrix: shared-seed architecture factor",
             expected_invariants=(
-                "Architecture arms share scenario fingerprint and seed; each produces valid closed commands.",
+                "Architecture arms share scenario fingerprint and seed; each produces "
+                "valid closed commands.",
                 "Architecture digests are diagnostics only — never fed into cognition.",
             ),
             measurable_outputs=(
@@ -593,10 +677,14 @@ def _build_registry() -> dict[str, BenchmarkScenarioSpec]:
                 "One ResearchIntervention(kind=COMMUNICATION_REMOVE); "
                 "parent immutable; child post-fork hash diverges"
             ),
-            seed_strategy="n/a: single deterministic intervention (not a culture matrix)",
+            seed_strategy=(
+                "n/a: single deterministic intervention (not a culture "
+                "matrix)"
+            ),
             expected_invariants=(
                 "Parent history remains immutable after COMMUNICATION_REMOVE fork.",
-                "Child prefix equals parent prefix; post-fork trajectory hash diverges.",
+                "Child prefix equals parent prefix; post-fork trajectory "
+                "hash diverges.",
                 "branch_compare document is assemblable for parent/child run ids.",
             ),
             measurable_outputs=(
@@ -608,7 +696,10 @@ def _build_registry() -> dict[str, BenchmarkScenarioSpec]:
                 "Do not use a culture matrix for this scenario.",
                 "Do not rewrite parent event history.",
             ),
-            statistical_comparison="n/a: single deterministic intervention (not a culture matrix)",
+            statistical_comparison=(
+                "n/a: single deterministic intervention (not a "
+                "culture matrix)"
+            ),
             max_ticks=64,
         ),
     )

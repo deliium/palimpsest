@@ -5,8 +5,6 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-import pytest
-
 from experiments.observer_graphical_scenario import (
     OBSERVER_GRAPHICAL_SCENARIO_ID,
     OBSERVER_GRAPHICAL_SEEK_HIGH_WATER,

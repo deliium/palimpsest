@@ -275,7 +275,9 @@ async def test_same_seed_with_and_without_projection() -> None:
 async def test_observer_graphical_projection_does_not_change_trajectory(
     caplog: pytest.LogCaptureFixture,
 ) -> None:
-    from experiments.observer_graphical_scenario import build_observer_graphical_scenario
+    from experiments.observer_graphical_scenario import (
+        build_observer_graphical_scenario,
+    )
 
     bundle = build_observer_graphical_scenario(max_ticks=4, death_tick=1)
     config = bundle.config

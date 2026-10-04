@@ -7,7 +7,10 @@ from typing import Final
 
 from experiments.benchmark_scenarios._common import with_seed_matrix
 from experiments.benchmark_suite import BENCH_07_SKILL_SPECIALIZATION
-from experiments.catalog import experiment_r_skill_learning, experiment_t_skill_specialization
+from experiments.catalog import (
+    experiment_r_skill_learning,
+    experiment_t_skill_specialization,
+)
 from experiments.models import (
     EXPERIMENT_SCHEMA_VERSION,
     ExperimentCondition,
@@ -37,7 +40,9 @@ def build_bench_07_skill_specialization(
     missing = [item for item in ordered_ids if item not in by_id]
     if missing:
         raise ValueError(f"missing_condition_ids:{','.join(missing)}")
-    conditions: tuple[ExperimentCondition, ...] = tuple(by_id[item] for item in ordered_ids)
+    conditions: tuple[ExperimentCondition, ...] = tuple(
+        by_id[item] for item in ordered_ids
+    )
     definition = ExperimentDefinition(
         experiment_id=BENCH_07_SKILL_SPECIALIZATION,
         schema_version=EXPERIMENT_SCHEMA_VERSION,

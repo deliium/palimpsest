@@ -13,9 +13,9 @@ from experiments.benchmark_scenarios import (
     registered_benchmark_builders,
 )
 from experiments.benchmark_suite import (
-    BENCHMARK_SCENARIO_IDS,
     BENCH_01_SEASONAL_PLANNING,
     BENCH_02_MEMORY_INTERFERENCE,
+    BENCHMARK_SCENARIO_IDS,
 )
 from experiments.catalog import base_runner_config_from_scenario
 from simulation.runner_models import (

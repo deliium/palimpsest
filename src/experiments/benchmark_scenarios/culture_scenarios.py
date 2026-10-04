@@ -1,4 +1,4 @@
-"""Benchmark builders for scenarios 8–14 (territory through rumor/narrative)."""
+"""Benchmark builders for scenarios 8-14 (territory through rumor/narrative)."""
 
 from __future__ import annotations
 

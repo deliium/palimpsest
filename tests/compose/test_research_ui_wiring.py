@@ -52,7 +52,8 @@ def test_research_ui_index_when_dist_served() -> None:
 
 
 def test_research_ui_matrix_metric_summary_when_mounted() -> None:
-    """Smoke: allowlisted metric-summary for v2-benchmark-suite when MATRIX_ROOT is live.
+    """Smoke: allowlisted metric-summary for v2-benchmark-suite when
+    MATRIX_ROOT is live.
 
     Skips unless ``PALIMPSEST_COMPOSE_RESEARCH_SMOKE_URL`` is set and the running
     stack has ``PALIMPSEST_RESEARCH_MATRIX_ROOT`` populated with that matrix id.

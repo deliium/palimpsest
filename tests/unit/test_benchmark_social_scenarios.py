@@ -1,4 +1,4 @@
-"""Unit tests for benchmark scenarios 4–6 (ToM + deception/reputation)."""
+"""Unit tests for benchmark scenarios 4-6 (ToM + deception/reputation)."""
 
 from __future__ import annotations
 

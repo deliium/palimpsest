@@ -1,4 +1,4 @@
-"""Benchmark builders for scenarios 4–6 (ToM detectability, deception+reputation)."""
+"""Benchmark builders for scenarios 4-6 (ToM detectability, deception+reputation)."""
 
 from __future__ import annotations
 
@@ -114,7 +114,8 @@ def build_bench_06_deception_reputation(
     *,
     seed_matrix: ExperimentSeedMatrix | None = None,
 ) -> BenchmarkBuildResult:
-    """Compose strategy+reputation on runner-config-v10 with strategy-only / disabled controls."""
+    """Compose strategy+reputation on runner-config-v10 with strategy-only / disabled
+    controls."""
     matrix = seed_matrix or ExperimentSeedMatrix(seeds=(base.seed,))
     strategy_reputation = _with_strategy_reputation(
         base,

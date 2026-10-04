@@ -1,4 +1,4 @@
-"""Unit tests for benchmark scenarios 1–3 (planning, memory, reflection)."""
+"""Unit tests for benchmark scenarios 1-3 (planning, memory, reflection)."""
 
 from __future__ import annotations
 
@@ -142,7 +142,9 @@ async def test_bench_01_through_03_smoke_availability() -> None:
         BENCH_02_MEMORY_INTERFERENCE,
         BENCH_03_REFLECTION_REVISION,
     ):
-        smoke = await run_benchmark_smoke(scenario_id, _base(max_ticks=8), tick_budget=4)
+        smoke = await run_benchmark_smoke(
+            scenario_id, _base(max_ticks=8), tick_budget=4
+        )
         assert smoke.ran is True
         assert smoke.ticks <= 4
         assert smoke.metrics_available
