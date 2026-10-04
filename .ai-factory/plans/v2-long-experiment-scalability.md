@@ -200,19 +200,19 @@ Each checkpoint is a git commit on `main` when those tasks are done. Do not squa
 
 ### Phase 3: Observer API, seeking, WebSocket, presentation
 
-- [ ] Task 10: Harden bounded live observer buffers and multi-observer isolation.
+- [x] Task 10: Harden bounded live observer buffers and multi-observer isolation.
   - Deliverable: Wire observer stream queue size and catch-up batch size to scale settings (today queue uses `api_stream_queue_size`; producer batch is hard-coded 50 — make configurable). Prove N concurrent read-only observer sockets: one paused/slow disconnects with `slow_consumer` while others and the runner continue. Extend unit tests around `ObserverStreamSession` and add integration coverage mirroring `test_api_stream_backpressure.py`.
   - Logging: existing `observer_stream_slow_consumer`; add `[api.observer_stream] catchup_batch run_id=%s count=%s queue_size=%s` at DEBUG.
   - Depends on task 3.
   - Files: `src/api/routes/observer_stream.py`, `src/infrastructure/settings.py`, `tests/unit/` + `tests/integration/`.
 
-- [ ] Task 11: Reconnect-by-sequence, batch event retrieval, snapshot-assisted seek.
+- [x] Task 11: Reconnect-by-sequence, batch event retrieval, snapshot-assisted seek.
   - Deliverable: Ensure reconnect uses exclusive `(after_tick, after_sequence)` pages until caught up; support larger batch retrieval within `api_max_page_size`. Optimize `scene_at_tick` / `scene_through_event` for 10k+ tick jumps via cadence snapshots (tasks 4–5). Add server tests for jump 10k+ ticks and reconnect after many missed events (synthetic journal). Godot session path already gap-fills — add GDScript tests for buffer discard → batch GET → resume.
   - Logging: `[api.observer] reconnect_catchup run_id=%s pages=%s events=%s` at INFO; seek snapshot DEBUG from task 4.
   - Depends on tasks 4, 5, 10.
   - Files: `src/api/observer_service.py`, `src/api/routes/observer.py`, `src/simulation/replay.py`, `clients/godot-observer/scripts/net/session.gd`, tests.
 
-- [ ] Task 12: Large timeline pagination, event filters, presentation-only coalescing.
+- [x] Task 12: Large timeline pagination, event filters, presentation-only coalescing.
   - Deliverable: (a) Server-side optional filters on `GET .../observer/events` for agent id / semantic type / location id using indexed columns where possible; keep client filters as an additional UX layer on the loaded page. Stay on `observer-protocol-v1` — additive query params only. (b) Efficient `ticks` pagination for large runs. (c) Optional presentation coalescing in Godot / observer projection only; scientific WS journal stays complete. Never alter stored events.
   - Logging: `[api.observer] events_filtered run_id=%s limit=%s filter_codes=%s result_count=%s` at DEBUG; `[observer.playback] presentation_coalesced skipped=%s` at DEBUG in Godot.
   - Depends on tasks 6, 10.

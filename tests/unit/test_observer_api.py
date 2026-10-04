@@ -155,6 +155,46 @@ async def test_observer_ticks_rejects_range_above_api_max_page_size() -> None:
 
 
 @pytest.mark.asyncio
+async def test_observer_events_filter_and_catch_up(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    app = _app()
+    with caplog.at_level(logging.DEBUG):
+        async with _client(app) as client:
+            moved = await client.get(
+                f"/v1/simulations/{RUN_ID}/observer/events",
+                params={
+                    "event_type": "AGENT_MOVED",
+                    "limit": 10,
+                },
+            )
+            by_agent = await client.get(
+                f"/v1/simulations/{RUN_ID}/observer/events",
+                params={
+                    "agent_id": BODY_ID,
+                    "limit": 10,
+                },
+            )
+            catch_up = await client.get(
+                f"/v1/simulations/{RUN_ID}/observer/events",
+                params={
+                    "after_tick": 0,
+                    "after_sequence": 0,
+                    "catch_up": "true",
+                    "limit": 10,
+                },
+            )
+    assert moved.status_code == 200
+    assert moved.json()["count"] >= 1
+    assert all(item["type"] == "AGENT_MOVED" for item in moved.json()["events"])
+    assert by_agent.status_code == 200
+    assert by_agent.json()["count"] >= 1
+    assert catch_up.status_code == 200
+    assert "reconnect_catchup" in caplog.text
+    assert "events_filtered" in caplog.text
+
+
+@pytest.mark.asyncio
 async def test_observer_reads_and_rejects_bad_cursors(
     logging_sandbox: None,
     caplog: pytest.LogCaptureFixture,

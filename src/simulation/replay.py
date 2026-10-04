@@ -723,11 +723,15 @@ class ReplayService:
         after_sequence: int = -1,
         to_tick: Tick | None = None,
         limit: int = _DEFAULT_PAGE_SIZE,
+        actor_id: str | None = None,
+        event_type: str | None = None,
     ) -> ReplayEventPage:
         """Detached keyset page of events ordered by ``(tick, sequence)``.
 
         Pass ``after_sequence=-1`` with ``after_tick=0`` to start from the head.
         Chunked reads request ``limit + 1`` rows to compute the next cursor.
+        Optional ``actor_id`` / ``event_type`` push indexed SQL filters when the
+        journal supports them.
         """
         if type(run_id) is not RunId:
             raise TypeError("run_id must be RunId")
@@ -758,15 +762,32 @@ class ReplayService:
                 event
                 for event in raw
                 if (event.tick, event.sequence) > (after_tick, after_sequence)
+                and (actor_id is None or _event_matches_actor(event, actor_id))
+                and (event_type is None or event.event_type == event_type)
             )[: limit + 1]
         else:
-            filtered = await list_events_keyset(
-                run_id,
-                after_tick=after_tick,
-                after_sequence=after_sequence,
-                to_tick=to_tick,
-                limit=limit + 1,
-            )
+            kwargs: dict[str, object] = {
+                "after_tick": after_tick,
+                "after_sequence": after_sequence,
+                "to_tick": to_tick,
+                "limit": limit + 1,
+            }
+            # Older fakes may omit filter kwargs; only pass when supported.
+            try:
+                filtered = await list_events_keyset(
+                    run_id,
+                    actor_id=actor_id,
+                    event_type=event_type,
+                    **kwargs,  # type: ignore[arg-type]
+                )
+            except TypeError:
+                filtered = await list_events_keyset(run_id, **kwargs)  # type: ignore[arg-type]
+                filtered = tuple(
+                    event
+                    for event in filtered
+                    if (actor_id is None or _event_matches_actor(event, actor_id))
+                    and (event_type is None or event.event_type == event_type)
+                )
         page = filtered[:limit]
         next_offset = None
         if len(filtered) > limit:
@@ -894,6 +915,12 @@ class ReplayService:
             engine=None,
             predecessor_commit_hash=None,
         )
+
+
+def _event_matches_actor(event: WorldEvent, actor_id: str) -> bool:
+    actor = None if event.actor_id is None else event.actor_id.value
+    target = None if event.target_id is None else event.target_id.value
+    return actor == actor_id or target == actor_id
 
 
 def _versions_compatible(

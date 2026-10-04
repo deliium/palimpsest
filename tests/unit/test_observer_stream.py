@@ -155,6 +155,7 @@ async def test_journal_tail_is_exclusive_and_ordered(
         after_tick=0,
         after_sequence=-1,
         queue_size=8,
+        catchup_batch_size=50,
         heartbeat_seconds=30.0,
         poll_seconds=0.01,
         hello={"kind": "hello"},
@@ -173,6 +174,7 @@ async def test_journal_tail_is_exclusive_and_ordered(
         after_tick=0,
         after_sequence=1,
         queue_size=8,
+        catchup_batch_size=50,
         heartbeat_seconds=30.0,
         poll_seconds=0.01,
         hello={"kind": "hello"},
@@ -226,6 +228,7 @@ async def test_slow_consumer_disconnects_without_waiting() -> None:
             after_tick=0,
             after_sequence=-1,
             queue_size=1,
+            catchup_batch_size=50,
             heartbeat_seconds=30.0,
             poll_seconds=0.01,
             hello={"kind": "hello"},
@@ -235,6 +238,92 @@ async def test_slow_consumer_disconnects_without_waiting() -> None:
         envelopes.append(item)
         await asyncio.sleep(0.02)
     assert len(envelopes) < 30
+
+
+@pytest.mark.asyncio
+async def test_slow_observer_does_not_block_sibling_subscriber(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """One slow queue disconnects; a healthy sibling still drains to completion."""
+    shared: list[dict[str, object]] = [
+        {"tick": index, "sequence": 0, "event_id": f"evt-{index}"} for index in range(20)
+    ]
+    read_limits: list[int] = []
+
+    async def read_events(
+        after_tick: int, after_sequence: int, limit: int
+    ) -> tuple[object, ...]:
+        read_limits.append(limit)
+        selected = [
+            event
+            for event in shared
+            if (int(event["tick"]), int(event["sequence"]))
+            > (after_tick, after_sequence)
+        ]
+        return tuple(selected[:limit])
+
+    async def head() -> int:
+        return 19
+
+    async def done() -> bool:
+        # Completion is driven by the producer once the journal is drained;
+        # keep False so catch-up may span multiple batches.
+        return False
+
+    slow = ObserverStreamSession(
+        read_events=read_events, head_tick=head, completed=done
+    )
+    healthy = ObserverStreamSession(
+        read_events=read_events, head_tick=head, completed=done
+    )
+
+    async def drain_slow() -> int:
+        count = 0
+        async for _item in slow.subscribe(
+            ObserverStreamConfig(
+                run_id=f"{RUN_ID}-slow",
+                after_tick=0,
+                after_sequence=-1,
+                queue_size=1,
+                catchup_batch_size=10,
+                heartbeat_seconds=30.0,
+                poll_seconds=0.01,
+                hello={"kind": "hello"},
+                head_tick=0,
+            )
+        ):
+            count += 1
+            await asyncio.sleep(0.05)
+        return count
+
+    async def drain_healthy() -> list[str]:
+        kinds: list[str] = []
+        async for item in healthy.subscribe(
+            ObserverStreamConfig(
+                run_id=f"{RUN_ID}-ok",
+                after_tick=0,
+                after_sequence=-1,
+                queue_size=64,
+                catchup_batch_size=10,
+                heartbeat_seconds=30.0,
+                poll_seconds=0.01,
+                hello={"kind": "hello"},
+                head_tick=0,
+            )
+        ):
+            kinds.append(str(item["kind"]))
+            if kinds.count("event") >= 20:
+                break
+        return kinds
+
+    slow_count, healthy_kinds = await asyncio.gather(drain_slow(), drain_healthy())
+    assert slow_count < 20
+    assert healthy_kinds[0] == "hello"
+    assert healthy_kinds.count("event") == 20
+    assert 10 in read_limits
+    captured = capsys.readouterr()
+    assert "observer_stream_slow_consumer" in captured.out
+    assert "catchup_batch" in captured.out
 
 
 @pytest.mark.asyncio

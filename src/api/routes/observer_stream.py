@@ -34,6 +34,7 @@ class ObserverStreamConfig:
     after_tick: int
     after_sequence: int
     queue_size: int
+    catchup_batch_size: int
     heartbeat_seconds: float
     poll_seconds: float
     hello: Mapping[str, object]
@@ -77,7 +78,17 @@ class ObserverStreamSession:
             try:
                 await _offer(queue, config.hello)
                 while not self._closed:
-                    batch = await self._read_events(cursor[0], cursor[1], 50)
+                    batch = await self._read_events(
+                        cursor[0], cursor[1], config.catchup_batch_size
+                    )
+                    if batch:
+                        _LOGGER.debug(
+                            "[api.observer_stream] catchup_batch run_id=%s "
+                            "count=%s queue_size=%s",
+                            config.run_id,
+                            len(batch),
+                            queue.qsize(),
+                        )
                     for raw in batch:
                         mapping = _event_mapping(raw)
                         pair = _cursor_pair(mapping)
@@ -341,7 +352,8 @@ async def observer_stream(websocket: WebSocket, run_id: str) -> None:
         run_id=run_id,
         after_tick=after_tick,
         after_sequence=after_sequence,
-        queue_size=settings.api_stream_queue_size,
+        queue_size=settings.observer_stream_queue_size,
+        catchup_batch_size=settings.observer_catchup_page_size,
         heartbeat_seconds=settings.api_stream_heartbeat_seconds,
         poll_seconds=settings.api_stream_poll_seconds,
         hello=hello,

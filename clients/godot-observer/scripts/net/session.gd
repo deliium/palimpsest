@@ -10,7 +10,7 @@ const Origin := preload("res://scripts/net/origin.gd")
 const HttpClient := preload("res://scripts/net/http_client.gd")
 const StreamClient := preload("res://scripts/net/stream_client.gd")
 
-const PAGE_LIMIT := 50
+const PAGE_LIMIT := 100
 const EVENT_WINDOW := 200
 const BUFFER_LIMIT := 256
 const CLOSE_REASONS := {
@@ -640,8 +640,14 @@ func _on_http(route: String, _status: int, body: Variant, reason_code: String) -
 		if not caught.ok:
 			ObserverLog.error("session", "seek_failed reason_code=%s" % caught.reason_code)
 			return
+		var catch_count := 0
 		for event in caught.value.events:
 			_apply_live_event(event)
+			catch_count += 1
+		ObserverLog.info(
+			"session",
+			"reconnect_catchup events=%s" % catch_count,
+		)
 		transport.buffer_dropped = false
 		transport.sync_behind()
 		_request("state_refresh")
@@ -813,7 +819,7 @@ func _buffer_live_event(event: Variant) -> void:
 
 func _catch_up_live() -> void:
 	_live_buffer.clear()
-	var query := {"limit": EVENT_WINDOW}
+	var query := {"limit": PAGE_LIMIT, "catch_up": true}
 	if Urls.resume_allowed(cursor_after_tick, cursor_after_sequence):
 		query["after_tick"] = cursor_after_tick
 		query["after_sequence"] = cursor_after_sequence

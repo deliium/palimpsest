@@ -33,4 +33,10 @@ func run() -> Array:
 	var sixteen: Dictionary = Playback.policy(16.0, 0)
 	if not sixteen["skip"] or float(sixteen["duration"]) != 0.0:
 		failures.append("speed 16 should skip")
+	var kept: Array = Playback.coalesce_tick_envelopes([1, 2, 3, 4], 8.0, 0)
+	if kept.size() != 1 or kept[0] != 4:
+		failures.append("high-speed should coalesce to latest tick envelope")
+	var full: Array = Playback.coalesce_tick_envelopes([1, 2, 3], 1.0, 0)
+	if full.size() != 3:
+		failures.append("normal speed should keep all tick envelopes")
 	return failures

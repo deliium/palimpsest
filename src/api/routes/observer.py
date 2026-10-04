@@ -122,6 +122,10 @@ async def list_observer_events(
     after_sequence: int | None = Query(default=None, ge=0),
     limit: int | None = Query(default=None, ge=1, le=1000),
     layout_id: str = Query(default=DEFAULT_LAYOUT_ID),
+    agent_id: str | None = Query(default=None, min_length=1, max_length=128),
+    event_type: str | None = Query(default=None, min_length=1, max_length=128),
+    location_id: str | None = Query(default=None, min_length=1, max_length=128),
+    catch_up: bool = Query(default=False),
 ) -> ObserverEventPageOut:
     page_limit = limit if limit is not None else settings.api_max_page_size
     if page_limit > settings.api_max_page_size:
@@ -135,6 +139,10 @@ async def list_observer_events(
         after_sequence=after_sequence,
         limit=page_limit,
         layout_id=layout_id,
+        agent_id=agent_id,
+        event_type=event_type,
+        location_id=location_id,
+        catch_up=catch_up,
     )
     _LOGGER.info(
         "route_observer_events",

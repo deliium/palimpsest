@@ -150,18 +150,79 @@ class ObserverReadService:
         after_sequence: int | None,
         limit: int,
         layout_id: str,
+        agent_id: str | None = None,
+        event_type: str | None = None,
+        location_id: str | None = None,
+        catch_up: bool = False,
     ) -> ObserverEventPageOut:
         _layout(layout_id)
         typed = _run_id(run_id)
         history = await self._history(run_id, target_tick=None)
         _reject_ahead(history.scene.tick, after_tick, after_sequence, run_id=run_id)
-        page = await self._replay.read_event_keyset_page(
-            typed,
-            after_tick=0 if after_tick is None else after_tick,
-            after_sequence=-1 if after_sequence is None else after_sequence,
-            limit=limit,
-        )
-        adapted = tuple(adapt_event(event) for event in page.events)
+        cursor_tick = 0 if after_tick is None else after_tick
+        cursor_sequence = -1 if after_sequence is None else after_sequence
+        filter_codes: list[str] = []
+        if agent_id is not None:
+            filter_codes.append("agent_id")
+        if event_type is not None:
+            filter_codes.append("event_type")
+        if location_id is not None:
+            filter_codes.append("location_id")
+
+        adapted: list[ObserverEvent] = []
+        pages = 0
+        needs_scan = catch_up or location_id is not None or event_type is not None
+        max_pages = 64 if needs_scan else 1
+        domain_event_type = _domain_event_type_filter(event_type)
+        while pages < max_pages and len(adapted) < limit:
+            page = await self._replay.read_event_keyset_page(
+                typed,
+                after_tick=cursor_tick,
+                after_sequence=cursor_sequence,
+                limit=limit,
+                actor_id=agent_id,
+                event_type=domain_event_type,
+            )
+            pages += 1
+            if not page.events:
+                break
+            for event in page.events:
+                item = adapt_event(event)
+                if event_type is not None and not _event_matches_type(
+                    item, event_type
+                ):
+                    continue
+                if location_id is not None and not _event_matches_location(
+                    item, location_id
+                ):
+                    continue
+                adapted.append(item)
+                if len(adapted) >= limit:
+                    break
+            last = page.events[-1]
+            cursor_tick = last.tick
+            cursor_sequence = last.sequence
+            if len(page.events) < limit and not needs_scan:
+                break
+            if not needs_scan:
+                break
+
+        if catch_up:
+            _LOGGER.info(
+                "[api.observer] reconnect_catchup run_id=%s pages=%s events=%s",
+                run_id,
+                pages,
+                len(adapted),
+            )
+        if filter_codes:
+            _LOGGER.debug(
+                "[api.observer] events_filtered run_id=%s limit=%s "
+                "filter_codes=%s result_count=%s",
+                run_id,
+                limit,
+                ",".join(filter_codes),
+                len(adapted),
+            )
         return ObserverEventPageOut(
             run_id=run_id,
             count=len(adapted),
@@ -458,6 +519,29 @@ def _presentation_mapping(presentation: object | None) -> dict[str, str | None] 
     if presentation.display_label is not None:
         payload["display_label"] = presentation.display_label
     return payload
+
+
+def _domain_event_type_filter(event_type: str | None) -> str | None:
+    """Map observer semantic types to indexed domain ``event_type`` when possible."""
+    if event_type is None:
+        return None
+    from observer.version import SEMANTIC_TYPE_BY_KIND
+
+    for domain_kind, semantic in SEMANTIC_TYPE_BY_KIND.items():
+        if event_type == semantic or event_type == domain_kind:
+            return domain_kind
+    return event_type
+
+
+def _event_matches_type(event: ObserverEvent, event_type: str) -> bool:
+    return event_type in {event.type, event.domain_kind}
+
+
+def _event_matches_location(event: ObserverEvent, location_id: str) -> bool:
+    return location_id in {
+        event.origin_location_id,
+        event.destination_location_id,
+    }
 
 
 def _event_out(event: ObserverEvent) -> ObserverEventOut:

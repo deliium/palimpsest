@@ -409,6 +409,8 @@ class SqlAlchemyTickJournalRepository:
         after_sequence: int,
         to_tick: Tick | None,
         limit: int,
+        actor_id: str | None = None,
+        event_type: str | None = None,
     ) -> tuple[WorldEvent, ...]:
         if type(run_id) is not RunId:
             raise TypeError("run_id must be RunId")
@@ -439,6 +441,15 @@ class SqlAlchemyTickJournalRepository:
         )
         if to_tick is not None:
             stmt = stmt.where(WorldEventOrm.tick <= to_tick.value)
+        if actor_id is not None:
+            stmt = stmt.where(
+                or_(
+                    WorldEventOrm.actor_id == actor_id,
+                    WorldEventOrm.target_id == actor_id,
+                )
+            )
+        if event_type is not None:
+            stmt = stmt.where(WorldEventOrm.event_type == event_type)
         async with session_scope(self._session_factory) as session:
             result = await session.execute(stmt)
             rows = result.scalars().all()

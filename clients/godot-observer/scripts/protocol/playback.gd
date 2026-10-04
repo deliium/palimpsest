@@ -24,3 +24,18 @@ static func policy(speed: float, pending: int) -> Dictionary:
 		"speed": speed,
 		"pending": pending,
 	}
+
+
+## Presentation-only: drop intermediate tick envelopes when high-speed skip is on.
+## Scientific event pages / WS journal stay complete and uncoalesced.
+static func coalesce_tick_envelopes(ticks: Array, speed: float, pending: int) -> Array:
+	var rules: Dictionary = policy(speed, pending)
+	if not bool(rules.get("skip", false)) or ticks.size() <= 1:
+		return ticks
+	var kept: Array = [ticks[ticks.size() - 1]]
+	var skipped := ticks.size() - 1
+	ObserverLog.debug(
+		"playback",
+		"[observer.playback] presentation_coalesced skipped=%s" % skipped,
+	)
+	return kept
