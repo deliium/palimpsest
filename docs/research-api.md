@@ -2,7 +2,7 @@
 
 [← Architecture](architecture.md) · [Simulation runner](simulation-runner.md) · [Persistence](persistence.md) · [Back to README](../README.md)
 
-Palimpsest V1 exposes a FastAPI **research and inspection** surface — not a production public service. There is no production frontend.
+Palimpsest V1 exposes a FastAPI **research and inspection** surface — not a production public service. A researcher SPA is served at **`/research/`** when `PALIMPSEST_RESEARCH_WEB_ROOT` is configured (see [Research UI](research-ui.md)). Godot remains at `/`. Mount `/research/` before the presentation catch-all.
 
 ## Capabilities
 
@@ -11,9 +11,9 @@ Separate credentials gate four capability classes (`PALIMPSEST_API_*`):
 | Capability | Purpose |
 | --- | --- |
 | Simulation control | create / configure / start / tick / run / stop / list / status |
-| Objective inspection | world projection, commits/events, agent-visible observations, metrics catalog/documents, replay |
+| Objective inspection | world projection, commits/events, agent-visible observations, metrics catalog/documents, replay, inspect run index, matrix FS |
 | Streaming | resumable WebSocket progress/events from the durable outbox |
-| Subjective debug | owner-scoped memories / beliefs / relationships (disabled by default) |
+| Subjective debug | owner-scoped memories / beliefs / relationships, projections, graph summaries, debugger (disabled by default) |
 
 Secrets use strong `SecretStr` values. Query-string secrets are rejected. Prefer header or WebSocket subprotocol transport.
 
@@ -21,9 +21,12 @@ Secrets use strong `SecretStr` values. Query-string secrets are rejected. Prefer
 
 - `POST /v1/simulations` — create/configure with canonical runner-config payload
 - `POST /v1/simulations/{run_id}/start|tick|run|stop`
-- `GET /v1/simulations` / `GET /v1/simulations/{run_id}` — list/status
+- `GET /v1/simulations` / `GET /v1/simulations/{run_id}` — list/status (`simulation_control`)
+- `GET /v1/research/runs` — inspect-scoped read-only run index (`objective_inspection`; Research UI default discovery)
 - Objective world, commits/events (keyset pagination), agent-visible observation
 - Metric catalog and immutable metric documents
+- Subjective **projections** under `subjective_debug`: goals, emotional-state, self-model (identity/goals projection — not a second belief store), theory-of-mind, group-formation, social-norms, social-conventions, cultural-narratives; plus metadata-safe `memories/summary` and `beliefs/summary` for graphs (count-only `SubjectivePageOut` pages stay for existing clients)
+- Read-only matrix filesystem under `PALIMPSEST_RESEARCH_MATRIX_ROOT`: `GET /v1/research/matrices` and allowlisted `manifest.json` / `cells/*` / `aggregate.json` / `metric-summary.json` (path traversal fail-closed; no `analysis` import; no batch starts)
 - Replay-to-tick endpoints (detached projection; never live `WorldEngine`)
 - Read-only observer manifest, state, events, ticks, run metadata, and live stream. See [Read-only observer](observer.md). Presentation coordinates are not simulation coordinates. Researcher relationship summaries stay on the debug capability.
 - Observer event pages accept additive optional filters (`agent_id`, `event_type`, `location_id`) and `catch_up=true` for multi-page reconnect fill within `PALIMPSEST_API_MAX_PAGE_SIZE`. Filter `agent_id` matches events where that id equals **`actor_id` or `target_id`** after adapt (presentation filter; includes target-only rows such as `AGENT_DIED`). Protocol remains `observer-protocol-v1` — no layout/protocol rename for scale.

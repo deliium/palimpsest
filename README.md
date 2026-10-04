@@ -58,6 +58,7 @@ Development credentials in `compose.yaml` are **not production**. `docker compos
 | [Experiments](docs/experiments.md) | Trusted A–E catalog, `v1_regression_profile`, false-story boundary, coordinator, persistence (`0010`) |
 | [Analysis metrics](docs/analysis-metrics.md) | V1 metric catalog, populations/denominators, numerical policy, known-answer fixtures |
 | [Research API](docs/research-api.md) | FastAPI control/inspection/debug, WebSocket cursors/backpressure, capability credentials |
+| [Research UI](docs/research-ui.md) | Researcher SPA at `/research/`, epistemic chrome, graphs/metrics/matrix, Godot deep links |
 | [Read-only observer](docs/observer.md) | Observer protocol, frames, and the read-only HTTP and WebSocket routes |
 | [Godot observer](docs/godot-observer.md) | Prebuilt Web client served by the API, version strip, deep-link `?run_id=` / debugger params |
 | [Research causal debugger](docs/research-causal-debugger.md) | Read-only event→cognition chain, lineage GET APIs, Godot Explain panel |

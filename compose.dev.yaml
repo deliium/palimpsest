@@ -1,5 +1,11 @@
 # Local image build for contributors. Compose does not load this file
 # automatically. `./run-dev.sh` passes it explicitly with compose.yaml.
+#
+# Optional Research UI: `pnpm --dir clients/research-ui build`, then either
+# export PALIMPSEST_RESEARCH_WEB_ROOT to the host dist path when using
+# `./scripts/api.sh`, or for compose-dev bind-mount that dist to
+# /app/share/research-ui and set PALIMPSEST_RESEARCH_WEB_ROOT accordingly.
+# Missing index.html skips the /research/ mount (ERROR reason code).
 
 services:
   migrate:
@@ -17,3 +23,6 @@ services:
       network: host
       args:
         PALIMPSEST_REVISION: ${PALIMPSEST_REVISION:-unknown}
+    environment:
+      PALIMPSEST_RESEARCH_WEB_ROOT: ${PALIMPSEST_RESEARCH_WEB_ROOT:-}
+      PALIMPSEST_RESEARCH_MATRIX_ROOT: ${PALIMPSEST_RESEARCH_MATRIX_ROOT:-}

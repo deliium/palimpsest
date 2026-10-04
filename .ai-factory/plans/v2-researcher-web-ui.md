@@ -335,19 +335,19 @@ Each checkpoint is a git commit on the current branch when those tasks complete.
 
 ### Phase 6: Hardening, docs, verification
 
-- [ ] Task 17: Unit/contract tests for epistemic mapping, mount order, matrix FS, graph wire safety
+- [x] Task 17: Unit/contract tests for epistemic mapping, mount order, matrix FS, graph wire safety
   - Deliverable: Pytest for deep-link secret rejection, epistemic mapping (analytical → `research_inference`), `/research/` mount-before-`/`, matrix path traversal rejection, inspect run index capability, new inspection/graph routes (available/unavailable), **no forbidden payload keys** on graph summaries. Keep `tests/architecture/test_analysis_isolation.py` green. Client unit tests for deeplink parse/build and class badge rendering. No default-pytest Docker/Godot launch.
   - Logging: assert WARN/INFO reason codes in API tests where applicable.
   - Depends on tasks 2, 3, 3b, 7, 7b, 14.
   - Files: `tests/unit/test_research_ui_*.py`, architecture suite (unchanged contracts), `clients/research-ui` test config.
 
-- [ ] Task 18: Compose/dev wiring for built Research UI (optional smoke)
+- [x] Task 18: Compose/dev wiring for built Research UI (optional smoke)
   - Deliverable: Document and, if practical, wire `PALIMPSEST_RESEARCH_WEB_ROOT` in `compose.dev.yaml` / scripts. Opt-in compose smoke that checks `/research/` returns `index.html` when built artifacts exist — mark `compose`, keep out of default pytest.
   - Logging: startup INFO when research root mounted.
   - Depends on task 2.
   - Files: `compose.dev.yaml` / scripts, optional `tests/compose/…`.
 
-- [ ] Task 19: Documentation checkpoint (`/aif-docs` scope)
+- [x] Task 19: Documentation checkpoint (`/aif-docs` scope)
   - Deliverable: Add `docs/research-ui.md`; update `docs/research-api.md` (frontend exists; inspect run index; projection + graph summary routes; matrix FS; `/research/` mount order; per-capability auth); update `docs/godot-observer.md` (outbound Research links, same-origin embed + fallback); README table row; epistemic labeling rules and responsibility split. State explicitly that inferred groups/norms are analytical. Note count-only subjective pages vs new graph summaries.
   - Logging: n/a (docs).
   - Depends on tasks 1–18.

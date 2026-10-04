@@ -19,6 +19,7 @@ Palimpsest is a Python 3.12+ modular monolith for reproducible, discrete, text-b
 - `PALIMPSEST_` settings (including disabled-by-default `PALIMPSEST_LLM_*`), structured logging (no observation/communication/memory/belief/relationship/LLM payloads), async SQLAlchemy lifecycle, Alembic + pgvector bootstrap (migration head `0017` for memory embedding HNSW; `0016` event filter indexes; `0015` research branch lineage; cognition-trace tables remain non-authoritative; V2 capability flags remain runner JSON only)
 - FastAPI research API: `/health`, versioned `/v1` simulation control/inspection/replay, resumable WebSocket stream from durable outbox; capability credentials (`PALIMPSEST_API_*`); debug disabled by default; LLM provider lifecycle composition remains deferred
 - Optional read-only presentation client: Godot 4.7 Compatibility under `clients/godot-observer/` (not a Python package). The API serves the prebuilt file tree from `PALIMPSEST_PRESENTATION_WEB_ROOT` and does not import the client. `GET /version` reports the application version, `observer-protocol-v1`, the export engine, and the backend revision.
+- Optional researcher SPA under `clients/research-ui/` (Svelte; not a Python package), served at `/research/` from `PALIMPSEST_RESEARCH_WEB_ROOT` (mounted before Godot `/`). Inspect run index, subjective projections/graph summaries, matrix FS (`PALIMPSEST_RESEARCH_MATRIX_ROOT`), and epistemic chrome; inferred groups/norms stay analytical.
 
 ## Tech Stack
 

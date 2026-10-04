@@ -64,7 +64,9 @@ An optional perspective control can fetch SUBJECTIVE layers for one agent; prima
 
 ## Causal debugger
 
-Select an event log line and press **Why?** to `GET` the causal-trace route with the session token header. Godot is render + navigate only: it never assembles causality, invents stages, or shows private CoT / prompts / utterance / memory / belief text. Presentation labels live in the client (`debugger_labels.gd`) and must not be read as chain-of-thought. Research UI graphs and statistical analysis dashboards are out of scope for this panel.
+Select an event log line and press **Why?** to `GET` the causal-trace route with the session token header. Godot is render + navigate only: it never assembles causality, invents stages, or shows private CoT / prompts / utterance / memory / belief text. Presentation labels live in the client (`debugger_labels.gd`) and must not be read as chain-of-thought. Multi-graph analysis and matrices live in the [Research UI](research-ui.md) (`/research/`), not this panel.
+
+Outbound **Research UI** navigation uses `ResearchUiLink` (`scripts/protocol/research_ui_link.gd`): Web opens via `JavaScriptBridge`, desktop via `OS.shell_open`, logging `research_ui_link_opened`. The Why? panel exposes a **Research UI** button (`view=traces`). Research UI may embed the Observer in a same-origin iframe and falls back to a new tab on bootstrap failure — no shared mutable store.
 
 HTTP `403` / missing `subjective_debug` uses the same `overlay_unavailable` pattern as narrative overlays — never an empty chain presented as “no cognition”.
 

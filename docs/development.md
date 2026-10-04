@@ -121,6 +121,8 @@ The second command extracts the web files without opening the editor. A URL `/?r
 
 Order: database health → one-shot `alembic upgrade head` → API. The API image runs Uvicorn as uid **1001** on port 8080. Healthcheck uses Python `urllib`, not `curl`. Host `./scripts/api.sh` leaves `PALIMPSEST_PRESENTATION_WEB_ROOT` unset, so it does not mount the export.
 
+Optional Research UI: `pnpm --dir clients/research-ui build` then set `PALIMPSEST_RESEARCH_WEB_ROOT` to `clients/research-ui/dist`. `compose.dev.yaml` passes through `PALIMPSEST_RESEARCH_WEB_ROOT` / `PALIMPSEST_RESEARCH_MATRIX_ROOT`. Opt-in compose checks: `pytest -m compose tests/compose/test_research_ui_wiring.py`. Smoke against a running stack: set `PALIMPSEST_COMPOSE_RESEARCH_SMOKE_URL=http://127.0.0.1:8080` when dist is mounted. See [Research UI](research-ui.md).
+
 The database image stays digest-pinned. The API image is `PALIMPSEST_API_IMAGE` or `ghcr.io/deliium/palimpsest:0.1.0`. Application install uses `uv sync --frozen --no-dev --no-editable`. Contributor builds set `network: host` so `uv` can resolve PyPI when the Docker bridge DNS is unavailable. Manual image builds on the same hosts may need `docker build --network=host`.
 
 Development passwords in `compose.yaml` are **non-production**. Expanded `docker compose config` output is **not secret-safe**. Production extension-privilege design is deferred.
