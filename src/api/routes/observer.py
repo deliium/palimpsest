@@ -127,6 +127,7 @@ async def list_observer_events(
     location_id: str | None = Query(default=None, min_length=1, max_length=128),
     catch_up: bool = Query(default=False),
 ) -> ObserverEventPageOut:
+    """List observer events. ``agent_id`` matches actor_id or target_id."""
     page_limit = limit if limit is not None else settings.api_max_page_size
     if page_limit > settings.api_max_page_size:
         raise bad_request(code="limit_exceeds_maximum")

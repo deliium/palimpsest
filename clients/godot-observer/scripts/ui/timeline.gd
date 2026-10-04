@@ -46,6 +46,17 @@ func set_selected(entity_id: String) -> void:
 	queue_redraw()
 
 
+func clear_marks() -> void:
+	_events = []
+	_deaths = []
+	_selected = []
+	_selected_id = ""
+	viewed_tick = 0
+	live_tick = 0
+	queue_redraw()
+	ObserverLog.debug("timeline", "marks_cleared")
+
+
 func mark_at(local_position: Vector2) -> Dictionary:
 	var marks := _drawn_marks()
 	var best: Dictionary = {}

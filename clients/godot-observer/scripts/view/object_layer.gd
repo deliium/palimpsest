@@ -20,6 +20,20 @@ func _ready() -> void:
 	ObserverLog.debug("view", "scene_ready layer=%s" % name)
 
 
+func clear_world() -> void:
+	_items = []
+	_resources = []
+	_structures = []
+	_artifacts = []
+	_agents = []
+	_locations = []
+	_centers = {}
+	_hidden = {}
+	_holder_points = {}
+	queue_redraw()
+	ObserverLog.debug("objects", "world_cleared")
+
+
 func show_world(world: Variant, zone_centers: Dictionary) -> void:
 	_items = world.items
 	_resources = world.resources

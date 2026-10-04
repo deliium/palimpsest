@@ -18,7 +18,18 @@ func _ready() -> void:
 
 func get_json(url: String, route: String, token: String) -> void:
 	_queue.append({"url": url, "route": route, "token": token})
+	ObserverLog.debug("http", "queued route=%s depth=%s" % [route, _queue.size()])
 	_pump()
+
+
+func clear_queue() -> void:
+	## Drop pending GETs. In-flight completion is ignored by the session epoch.
+	var dropped := _queue.size()
+	_queue.clear()
+	ObserverLog.debug("http", "queue_cleared dropped=%s in_flight=%s" % [
+		dropped,
+		0 if _active.is_empty() else 1,
+	])
 
 
 func _pump() -> void:

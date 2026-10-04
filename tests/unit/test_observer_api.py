@@ -12,19 +12,57 @@ import pytest
 from fastapi import FastAPI
 from fastapi.routing import APIRoute
 
+from agents.models import AgentId
 from api.app import DisposableEngine, create_app
 from api.observer_service import ObserverReadService
 from api.simulation_manager import SimulationManager
+from experiments.reference_scenario import _build_locations
 from infrastructure.logging import reset_logging_for_tests
 from infrastructure.settings import Settings, load_settings
+from simulation.bootstrap import AgentRegistration
+from simulation.clock import Tick
+from simulation.journal import (
+    compute_commit_hash,
+    hash_snapshot,
+    hash_tick_events,
+    hash_tick_payload,
+)
 from simulation.memory_run_control import InMemoryRunControlRepository
+from simulation.models import DERIVATION_VERSION, RunId, SimulationRunConfig
+from simulation.persistence import (
+    EVENT_SCHEMA_VERSION,
+    PERSISTENCE_CODEC_VERSION,
+    PROJECTOR_VERSION,
+    PayloadHash,
+    SnapshotId,
+    TickAppendRequest,
+    TickCommit,
+    WorldSnapshot,
+)
+from simulation.replay import ReplayService
+from tests.simulation_helpers import alive_body, weather_for_locations
 from tests.unit.test_observer_replay import (
     BODY_ID,
     LOC_CAMP,
     LOC_SPRING,
     RUN_ID,
+    WORLD_ID,
+    FakeJournal,
+    FakeRuns,
+    FakeSnapshots,
+    _manifest,
     observer_replay_service,
 )
+from world.effects import ActionCause, DeathCause, SystemCause, SystemEffectFamily
+from world.events import (
+    Attacked,
+    Died,
+    Helped,
+    Waited,
+    build_occurrence_context,
+    make_physical_replayable_event,
+)
+from world.identifiers import EntityId, EventId, RequestId, WorldId, WorldRevision
 
 pytestmark = pytest.mark.unit
 
@@ -154,6 +192,186 @@ async def test_observer_ticks_rejects_range_above_api_max_page_size() -> None:
     assert ok.status_code == 200
 
 
+OTHER_ID = "body-other"
+OTHER_AGENT = "agent-other"
+
+
+def _two_body_snapshot() -> WorldSnapshot:
+    locations = _build_locations()
+    draft = WorldSnapshot(
+        snapshot_id=SnapshotId("snap-agent-focus"),
+        run_id=RunId(RUN_ID),
+        world_id=WorldId(WORLD_ID),
+        seed=7,
+        config=SimulationRunConfig(seed=7),
+        registrations=(
+            AgentRegistration(AgentId("agent-mira"), EntityId(BODY_ID)),
+            AgentRegistration(AgentId(OTHER_AGENT), EntityId(OTHER_ID)),
+        ),
+        locations=locations,
+        bodies=(
+            alive_body(BODY_ID, location_id=LOC_CAMP),
+            alive_body(OTHER_ID, location_id=LOC_CAMP),
+        ),
+        items=(),
+        resources=(),
+        weather=weather_for_locations(locations),
+        next_tick=Tick(0),
+        revision=WorldRevision(0),
+        event_schema_version=EVENT_SCHEMA_VERSION,
+        projector_version=PROJECTOR_VERSION,
+        persistence_codec_version=PERSISTENCE_CODEC_VERSION,
+        derivation_version=DERIVATION_VERSION,
+        integrity_hash=PayloadHash("a" * 64),
+        predecessor_commit_hash=None,
+    )
+    return WorldSnapshot(
+        snapshot_id=draft.snapshot_id,
+        run_id=draft.run_id,
+        world_id=draft.world_id,
+        seed=draft.seed,
+        config=draft.config,
+        registrations=draft.registrations,
+        locations=draft.locations,
+        bodies=draft.bodies,
+        items=draft.items,
+        resources=draft.resources,
+        weather=draft.weather,
+        next_tick=draft.next_tick,
+        revision=draft.revision,
+        event_schema_version=draft.event_schema_version,
+        projector_version=draft.projector_version,
+        persistence_codec_version=draft.persistence_codec_version,
+        derivation_version=draft.derivation_version,
+        integrity_hash=hash_snapshot(draft),
+        predecessor_commit_hash=draft.predecessor_commit_hash,
+    )
+
+
+def _agent_focus_replay_service() -> ReplayService:
+    """Alice attacks, is helped, then dies; unrelated other wait must not match."""
+    attack = make_physical_replayable_event(
+        event_id=EventId("evt-attack"),
+        run_id=RUN_ID,
+        world_id=WorldId(WORLD_ID),
+        tick=0,
+        sequence=0,
+        cause=ActionCause(RequestId("req-attack"), EntityId(BODY_ID)),
+        resulting_revision=WorldRevision(1),
+        details=Attacked(
+            EntityId(OTHER_ID),
+            hit=True,
+            damage=4,
+            resulting_target_health=96.0,
+        ),
+        occurrence=build_occurrence_context(
+            Attacked(
+                EntityId(OTHER_ID),
+                hit=True,
+                damage=4,
+                resulting_target_health=96.0,
+            ),
+            origin_location_id=EntityId(LOC_CAMP),
+        ),
+    )
+    helped = make_physical_replayable_event(
+        event_id=EventId("evt-help"),
+        run_id=RUN_ID,
+        world_id=WorldId(WORLD_ID),
+        tick=0,
+        sequence=1,
+        cause=ActionCause(RequestId("req-help"), EntityId(OTHER_ID)),
+        resulting_revision=WorldRevision(1),
+        details=Helped(
+            EntityId(BODY_ID),
+            health_delta=2.0,
+            resulting_target_health=100.0,
+            helper_fatigue_delta=1.0,
+            resulting_helper_fatigue=1.0,
+        ),
+        occurrence=build_occurrence_context(
+            Helped(
+                EntityId(BODY_ID),
+                health_delta=2.0,
+                resulting_target_health=100.0,
+                helper_fatigue_delta=1.0,
+                resulting_helper_fatigue=1.0,
+            ),
+            origin_location_id=EntityId(LOC_CAMP),
+        ),
+    )
+    died = make_physical_replayable_event(
+        event_id=EventId("evt-died-alice"),
+        run_id=RUN_ID,
+        world_id=WorldId(WORLD_ID),
+        tick=0,
+        sequence=2,
+        cause=SystemCause(
+            RequestId("sys-died"),
+            SystemEffectFamily.COMBINED_NEEDS,
+            EntityId(BODY_ID),
+            0,
+        ),
+        resulting_revision=WorldRevision(1),
+        details=Died(EntityId(BODY_ID), DeathCause.COMBINED_NEEDS),
+        occurrence=build_occurrence_context(
+            Died(EntityId(BODY_ID), DeathCause.COMBINED_NEEDS),
+            origin_location_id=EntityId(LOC_SPRING),
+        ),
+    )
+    other_wait = make_physical_replayable_event(
+        event_id=EventId("evt-other-wait"),
+        run_id=RUN_ID,
+        world_id=WorldId(WORLD_ID),
+        tick=0,
+        sequence=3,
+        cause=ActionCause(RequestId("req-other-wait"), EntityId(OTHER_ID)),
+        resulting_revision=WorldRevision(1),
+        details=Waited(),
+        occurrence=build_occurrence_context(
+            Waited(), origin_location_id=EntityId(LOC_CAMP)
+        ),
+    )
+    events = (attack, helped, died, other_wait)
+    request = TickAppendRequest(
+        run_id=RunId(RUN_ID),
+        tick=Tick(0),
+        expected_base_revision=WorldRevision(0),
+        expected_predecessor_commit_hash=None,
+        idempotency_key="idem-agent-focus",
+        events=events,
+    )
+    payload = hash_tick_payload(request.events)
+    event_hashes = hash_tick_events(request.events)
+    commit_hash = compute_commit_hash(
+        predecessor_commit_hash=None,
+        run_id=request.run_id,
+        tick=request.tick,
+        base_revision=request.expected_base_revision,
+        resulting_revision=WorldRevision(1),
+        event_hashes=event_hashes,
+        payload_hash=payload,
+    )
+    commit = TickCommit(
+        run_id=request.run_id,
+        tick=request.tick,
+        resulting_tick=Tick(1),
+        base_revision=request.expected_base_revision,
+        resulting_revision=WorldRevision(1),
+        predecessor_commit_hash=None,
+        commit_hash=commit_hash,
+        idempotency_key=request.idempotency_key,
+        event_count=len(request.events),
+        payload_hash=payload,
+        snapshot_id=None,
+    )
+    return ReplayService(
+        FakeRuns(_manifest()),
+        FakeJournal(commit, events),
+        FakeSnapshots(_two_body_snapshot()),
+    )
+
+
 @pytest.mark.asyncio
 async def test_observer_events_filter_and_catch_up(
     caplog: pytest.LogCaptureFixture,
@@ -192,6 +410,45 @@ async def test_observer_events_filter_and_catch_up(
     assert catch_up.status_code == 200
     assert "reconnect_catchup" in caplog.text
     assert "events_filtered" in caplog.text
+
+
+@pytest.mark.asyncio
+async def test_observer_events_agent_id_matches_actor_or_target(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    settings = _settings()
+    app = create_app(
+        settings=settings,
+        database_factory=lambda _s: FakeResources(),
+        simulation_manager=SimulationManager(
+            settings=settings,
+            run_control=InMemoryRunControlRepository(),
+        ),
+        attach_default_manager=False,
+    )
+    app.state.observer_service = ObserverReadService(_agent_focus_replay_service())
+    with caplog.at_level(logging.DEBUG):
+        async with _client(app) as client:
+            unfiltered = await client.get(
+                f"/v1/simulations/{RUN_ID}/observer/events",
+                params={"limit": 20},
+            )
+            alice = await client.get(
+                f"/v1/simulations/{RUN_ID}/observer/events",
+                params={"agent_id": BODY_ID, "limit": 20},
+            )
+    assert unfiltered.status_code == 200
+    assert unfiltered.json()["count"] == 4
+    assert alice.status_code == 200
+    types = {item["type"] for item in alice.json()["events"]}
+    assert types == {"AGENT_ATTACKED", "AGENT_HELPED", "AGENT_DIED"}
+    assert alice.json()["count"] == 3
+    assert all(
+        BODY_ID in {item.get("actor_id"), item.get("target_id")}
+        for item in alice.json()["events"]
+    )
+    assert "agent_match_mode=actor_or_target" in caplog.text
+    assert "filter_codes=agent_id" in caplog.text
 
 
 @pytest.mark.asyncio

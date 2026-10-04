@@ -79,9 +79,22 @@ static func _build(origin: String, path: String, query: Dictionary, method: Stri
 			"reason_code": "read_only",
 		}
 	var params := {}
+	var allowed := [
+		"limit",
+		"tick",
+		"layout_id",
+		"through_sequence",
+		"from_tick",
+		"to_tick",
+		"agent_id",
+		"event_type",
+		"location_id",
+		"after_child_run_id",
+		"sequence",
+	]
 	for key in query.keys():
 		var name := str(key)
-		if name not in ["limit", "tick", "layout_id", "through_sequence", "from_tick", "to_tick"]:
+		if name not in allowed:
 			continue
 		if query[key] == null:
 			continue

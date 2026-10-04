@@ -70,4 +70,22 @@ func run() -> Array:
 	var walked: Dictionary = Urls.walk_pages([full, short])
 	if not walked["done"] or walked["event_count"] != 3 or walked["cursors"].size() != 1:
 		failures.append("pager did not stop on the short page")
+	var focused: Dictionary = Urls.build_get(ORIGIN, EVENTS, {
+		"agent_id": "body-a",
+		"event_type": "AGENT_ATTACKED",
+		"location_id": "loc-1",
+		"after_child_run_id": "child-1",
+		"sequence": 9,
+		"limit": 5,
+	})
+	var focused_url := str(focused["url"])
+	for key in [
+		"agent_id=body-a",
+		"event_type=AGENT_ATTACKED",
+		"location_id=loc-1",
+		"after_child_run_id=child-1",
+		"sequence=9",
+	]:
+		if key not in focused_url:
+			failures.append("focus/branch allowlist missing %s" % key)
 	return failures

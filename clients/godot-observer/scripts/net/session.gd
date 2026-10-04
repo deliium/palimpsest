@@ -23,6 +23,7 @@ const CLOSE_REASONS := {
 signal status_changed(code: String, detail: String)
 signal run_id_applied(value: String)
 signal world_replaced(world: Variant)
+signal source_cleared
 signal live_event(event: Variant)
 signal frame_sought(frame: Variant, event: Variant, forward: bool)
 signal overlay_payload(kind: String, payload: Variant)
@@ -45,6 +46,7 @@ var _pending := {}
 var _seek_meta := {}
 var _request_serial := 0
 var _seek_serial := 0
+var _http_epoch := 0
 var _opened := false
 var _failed := false
 var _gap_events := 0
@@ -57,6 +59,8 @@ var request_log: Array = []
 var _playing := false
 var _play_timer: Timer
 var _pending_deeplink := {}
+var _pending_switch_seek := {}
+var _switching := false
 
 
 func _ready() -> void:
@@ -131,11 +135,68 @@ func apply_web_query(search: String) -> bool:
 
 func start_with_run_id(requested: String) -> void:
 	var trimmed := requested.strip_edges()
-	if not trimmed.is_empty():
-		run_id = trimmed
-	_failed = false
-	_opened = false
+	if trimmed.is_empty():
+		_fail("run_id_missing")
+		return
+	switch_run(trimmed, null, null, true)
+
+
+func switch_run(
+	next_run_id: String,
+	seek_tick: Variant = null,
+	seek_sequence: Variant = null,
+	push_history: bool = true,
+) -> void:
+	## Replace ObserverSource cleanly: one run, one stream, no merged occupancy.
+	var trimmed := next_run_id.strip_edges()
+	if trimmed.is_empty():
+		_fail("run_id_missing")
+		return
+	var from_run_id := run_id
+	_teardown_source(push_history)
+	run_id = trimmed
+	run_id_applied.emit(run_id)
+	_pending_switch_seek = {}
+	if seek_tick != null:
+		_pending_switch_seek = {
+			"tick": int(seek_tick),
+			"sequence": null if seek_sequence == null else int(seek_sequence),
+		}
+	ObserverLog.info(
+		"session",
+		"run_switched from_run_id=%s to_run_id=%s" % [from_run_id, run_id],
+	)
 	_start()
+
+
+func _teardown_source(_push_history: bool) -> void:
+	_switching = true
+	status_changed.emit("switching_run", "Switching run")
+	if _stream != null:
+		_stream.close_stream(true)
+	ObserverLog.debug("session", "stream_closed")
+	_playing = false
+	if _play_timer != null:
+		_play_timer.stop()
+	_seek_serial += 1
+	_seek_meta.clear()
+	_cancel_http("switch_run")
+	_event_window.clear()
+	_live_buffer.clear()
+	_navigation = ""
+	_gap_events = 0
+	_reconnect_pending = false
+	_pending_deeplink = {}
+	_opened = false
+	_failed = false
+	world = null
+	cursor_after_tick = null
+	cursor_after_sequence = null
+	transport = TransportScript.new()
+	ObserverLog.debug("session", "cursor_reset")
+	source_cleared.emit()
+	ObserverLog.debug("session", "world_cleared")
+	_switching = false
 
 
 func _start() -> void:
@@ -201,6 +262,7 @@ func fetch_run(seek_id: int = -1) -> void:
 func _begin_seek(event_tick: int, event_sequence: int, event: Variant) -> void:
 	var forward := _is_forward(event_tick, event_sequence)
 	_enter_replay()
+	_cancel_http("seek")
 	_seek_serial += 1
 	_seek_meta[_seek_serial] = {
 		"event": event,
@@ -212,8 +274,17 @@ func _begin_seek(event_tick: int, event_sequence: int, event: Variant) -> void:
 		"session",
 		"seek_started tick=%s sequence=%s" % [event_tick, event_sequence],
 	)
+	status_changed.emit("seeking", "Seeking")
 	var before := _events_before(event_tick, event_sequence)
 	fetch_events(before.get("after_tick", null), before.get("after_sequence", null), _seek_serial)
+
+
+func _cancel_http(reason: String) -> void:
+	_http_epoch += 1
+	_pending.clear()
+	if _http != null and _http.has_method("clear_queue"):
+		_http.clear_queue()
+	ObserverLog.debug("session", "queue_cleared reason=%s epoch=%s" % [reason, _http_epoch])
 
 
 func _events_before(event_tick: int, event_sequence: int) -> Dictionary:
@@ -384,6 +455,26 @@ func _emit_overlay_unavailable(kind: String, reason_code: String) -> void:
 	overlay_payload.emit(kind, null)
 
 
+func _apply_pending_switch_seek() -> void:
+	if _pending_switch_seek.is_empty():
+		return
+	var pending: Dictionary = _pending_switch_seek.duplicate(true)
+	_pending_switch_seek = {}
+	var tick = pending.get("tick", null)
+	if tick == null:
+		return
+	var sequence = pending.get("sequence", null)
+	if sequence == null:
+		ObserverLog.info("session", "switch_seek tick=%s" % int(tick))
+		seek_tick(int(tick))
+		return
+	ObserverLog.info(
+		"session",
+		"switch_seek tick=%s sequence=%s" % [int(tick), int(sequence)],
+	)
+	seek_event(int(tick), int(sequence), null)
+
+
 func _apply_pending_deeplink() -> void:
 	if _pending_deeplink.is_empty():
 		return
@@ -451,7 +542,11 @@ func _request_path(
 		return
 	_request_serial += 1
 	var request_id := str(_request_serial)
-	var pending := {"kind": kind, "seek_id": int(meta.get("seek_id", -1))}
+	var pending := {
+		"kind": kind,
+		"seek_id": int(meta.get("seek_id", -1)),
+		"epoch": _http_epoch,
+	}
 	for key in meta.keys():
 		pending[key] = meta[key]
 	_pending[request_id] = pending
@@ -488,7 +583,7 @@ func _request(kind: String, query: Dictionary = {}, seek_id: int = -1) -> void:
 		return
 	_request_serial += 1
 	var request_id := str(_request_serial)
-	_pending[request_id] = {"kind": kind, "seek_id": seek_id}
+	_pending[request_id] = {"kind": kind, "seek_id": seek_id, "epoch": _http_epoch}
 	_http.get_json(str(built["url"]), request_id, _token)
 
 
@@ -496,6 +591,10 @@ func _on_http(route: String, _status: int, body: Variant, reason_code: String) -
 	var meta: Dictionary = _pending.get(route, {})
 	_pending.erase(route)
 	if meta.is_empty():
+		ObserverLog.debug("session", "http_ignored reason_code=unknown_route")
+		return
+	if int(meta.get("epoch", -1)) != _http_epoch:
+		ObserverLog.debug("session", "http_ignored reason_code=stale_epoch")
 		return
 	var kind := str(meta.get("kind", ""))
 	var seek_id := int(meta.get("seek_id", -1))
@@ -626,6 +725,7 @@ func _on_http(route: String, _status: int, body: Variant, reason_code: String) -
 			status_changed.emit("ready", "tick %s" % str(world.tick))
 			if not _failed:
 				_open_socket()
+			_apply_pending_switch_seek()
 			_apply_pending_deeplink()
 		return
 	if kind == "state_cursor" or kind == "state_tick":

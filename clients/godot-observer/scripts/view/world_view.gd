@@ -165,6 +165,36 @@ func clear_subjective_overlays() -> void:
 		_labels.set_enabled(false)
 
 
+func clear_world() -> void:
+	## Drop occupancy/overlays for the prior ObserverSource. Bookmarks stay on disk.
+	_agents.clear_motions()
+	_effects.clear_motions()
+	_agents.clear_tokens()
+	_locations.clear_world()
+	_objects.clear_world()
+	_connections.clear_world()
+	if _comm_flows != null and _comm_flows.has_method("clear_edges"):
+		_comm_flows.clear_edges()
+	clear_subjective_overlays()
+	apply_research_analytics(null)
+	apply_strategy_audit(null)
+	for kind in [
+		"emergent_group_formation",
+		"emergent_social_norms",
+		"persistent_social_conventions",
+		"distributed_reputation",
+		"cultural_transmission",
+		"skill_learning",
+	]:
+		apply_metric_overlay(kind, null)
+		set_metric_overlay_enabled(kind, false)
+	_centers = {}
+	_world_state = null
+	_reducer.clear()
+	inspect_cleared.emit()
+	ObserverLog.debug("view", "world_cleared")
+
+
 func set_narrative_overlay_enabled(enabled: bool) -> void:
 	if _narrative != null:
 		_narrative.set_enabled(enabled)

@@ -69,6 +69,19 @@ func clear_motions() -> void:
 	_motions = 0
 
 
+func clear_tokens() -> void:
+	clear_motions()
+	for child in get_children():
+		child.queue_free()
+	_tokens = {}
+	_world = null
+	_centers = {}
+	if selected_entity_id != "":
+		selected_entity_id = ""
+		selection_cleared.emit()
+	ObserverLog.debug("agents", "tokens_cleared")
+
+
 func capture_positions() -> Dictionary:
 	var positions := {}
 	for entity_id in _tokens.keys():

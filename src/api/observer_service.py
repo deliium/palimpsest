@@ -155,6 +155,12 @@ class ObserverReadService:
         location_id: str | None = None,
         catch_up: bool = False,
     ) -> ObserverEventPageOut:
+        """Page adapted observer events with optional presentation filters.
+
+        ``agent_id`` matches adapted ``actor_id`` **or** ``target_id`` (no
+        protocol bump). Journal keyset filtering uses the same actor|target
+        semantics when supported.
+        """
         _layout(layout_id)
         typed = _run_id(run_id)
         history = await self._history(run_id, target_tick=None)
@@ -164,6 +170,10 @@ class ObserverReadService:
         filter_codes: list[str] = []
         if agent_id is not None:
             filter_codes.append("agent_id")
+            _LOGGER.debug(
+                "[api.observer] agent_match_mode=actor_or_target run_id=%s",
+                run_id,
+            )
         if event_type is not None:
             filter_codes.append("event_type")
         if location_id is not None:
@@ -171,7 +181,12 @@ class ObserverReadService:
 
         adapted: list[ObserverEvent] = []
         pages = 0
-        needs_scan = catch_up or location_id is not None or event_type is not None
+        needs_scan = (
+            catch_up
+            or location_id is not None
+            or event_type is not None
+            or agent_id is not None
+        )
         max_pages = 64 if needs_scan else 1
         domain_event_type = _domain_event_type_filter(event_type)
         while pages < max_pages and len(adapted) < limit:
@@ -194,6 +209,10 @@ class ObserverReadService:
                     continue
                 if location_id is not None and not _event_matches_location(
                     item, location_id
+                ):
+                    continue
+                if agent_id is not None and not _event_matches_agent(
+                    item, agent_id
                 ):
                     continue
                 adapted.append(item)
@@ -542,6 +561,11 @@ def _event_matches_location(event: ObserverEvent, location_id: str) -> bool:
         event.origin_location_id,
         event.destination_location_id,
     }
+
+
+def _event_matches_agent(event: ObserverEvent, agent_id: str) -> bool:
+    """Presentation filter: entity id equals adapted actor **or** target."""
+    return agent_id in {event.actor_id, event.target_id}
 
 
 def _event_out(event: ObserverEvent) -> ObserverEventOut:

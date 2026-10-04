@@ -18,6 +18,7 @@ func _ready() -> void:
 	_session.run_loaded.connect(_on_run_loaded)
 	_session.live_event.connect(_world.play_event)
 	_session.live_event.connect(_ui.append_event)
+	_session.source_cleared.connect(_on_source_cleared)
 	_world.inspect_requested.connect(_ui.show_inspector)
 	_world.inspect_cleared.connect(_ui.clear_inspector)
 	_ui.connect_requested.connect(_session.start_with_run_id)
@@ -50,6 +51,12 @@ func _ready() -> void:
 
 func _on_events_loaded(events: Array, focus_tick: int, focus_sequence: int) -> void:
 	_ui.replace_events(events, focus_tick, focus_sequence, _session.world)
+
+
+func _on_source_cleared() -> void:
+	_world.clear_world()
+	_ui.clear_for_source_switch()
+	ObserverLog.debug("main", "source_cleared")
 
 
 func _on_run_loaded(record: Dictionary) -> void:

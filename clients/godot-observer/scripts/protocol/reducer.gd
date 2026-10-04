@@ -12,6 +12,11 @@ func adopt_frame(frame: Variant) -> Dictionary:
 	return {"world": frame.world, "animations": []}
 
 
+func clear() -> void:
+	activity = {}
+	_event_fields = {}
+
+
 func apply_event(world: Variant, event: Variant) -> Dictionary:
 	var body: Variant = event.affected_entity_id()
 	var agent = _agent(world, body)

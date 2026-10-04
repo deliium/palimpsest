@@ -143,6 +143,17 @@ func clear_inspector() -> void:
 	$Inspector.clear_agent()
 
 
+func clear_for_source_switch() -> void:
+	## Clear presentation chrome for a new ObserverSource. Bookmark files stay.
+	$EventLog.replace_window([], 0, 0)
+	$Timeline.clear_marks()
+	clear_inspector()
+	clear_narrative_variants()
+	note_selection("")
+	close_debugger()
+	ObserverLog.debug("ui", "source_cleared")
+
+
 func is_overlay_enabled(kind: String) -> bool:
 	return $OverlayLegend.is_overlay_enabled(kind)
 

@@ -11,6 +11,14 @@ func _ready() -> void:
 	ObserverLog.debug("view", "scene_ready layer=%s" % name)
 
 
+func clear_world() -> void:
+	_locations = []
+	_index = {}
+	set_meta("zone_centers", {})
+	queue_redraw()
+	ObserverLog.debug("connections", "world_cleared")
+
+
 func show_world(world: Variant, zone_centers: Dictionary) -> void:
 	_locations = world.locations
 	_index = {}

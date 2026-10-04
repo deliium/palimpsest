@@ -18,6 +18,19 @@ func _ready() -> void:
 	ObserverLog.debug("view", "scene_ready layer=%s" % name)
 
 
+func clear_world() -> void:
+	_locations = []
+	_weather = {}
+	_bands = {}
+	_hazards = {}
+	_depleted = {}
+	_scarce = {}
+	_season = null
+	_rings = {}
+	queue_redraw()
+	ObserverLog.debug("locations", "world_cleared")
+
+
 func show_world(world: Variant) -> void:
 	_locations = world.locations
 	_weather = {}
