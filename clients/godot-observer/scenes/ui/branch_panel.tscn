@@ -1,0 +1,57 @@
+[gd_scene load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/ui/branch_panel.gd" id="1_branch"]
+
+[node name="BranchPanel" type="PanelContainer"]
+offset_left = 1120.0
+offset_top = 128.0
+offset_right = 1580.0
+offset_bottom = 420.0
+script = ExtResource("1_branch")
+
+[node name="Column" type="VBoxContainer" parent="."]
+layout_mode = 2
+theme_override_constants/separation = 6
+
+[node name="Title" type="Label" parent="Column"]
+layout_mode = 2
+text = "Branch"
+
+[node name="Summary" type="Label" parent="Column"]
+layout_mode = 2
+autowrap_mode = 3
+text = "Connect a run"
+
+[node name="Empty" type="Label" parent="Column"]
+layout_mode = 2
+text = "No child branches"
+visible = false
+
+[node name="Children" type="ItemList" parent="Column"]
+custom_minimum_size = Vector2(0, 120)
+layout_mode = 2
+size_flags_vertical = 3
+
+[node name="Actions" type="HBoxContainer" parent="Column"]
+layout_mode = 2
+theme_override_constants/separation = 6
+
+[node name="ReturnPrevious" type="Button" parent="Column/Actions"]
+layout_mode = 2
+disabled = true
+text = "Return to previous run"
+
+[node name="OpenParent" type="Button" parent="Column/Actions"]
+layout_mode = 2
+visible = false
+text = "Open parent at fork"
+
+[node name="OpenChild" type="Button" parent="Column/Actions"]
+layout_mode = 2
+disabled = true
+text = "Open child"
+
+[node name="LoadMore" type="Button" parent="Column/Actions"]
+layout_mode = 2
+visible = false
+text = "More children"

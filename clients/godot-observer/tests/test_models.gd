@@ -30,7 +30,53 @@ func run() -> Array:
 	_expect(failures, _rejects_catalog_anchor_dict(), "catalog anchor dict is rejected")
 	_expect(failures, _status_shows_versions_and_protocol_failure(), "status shows protocol failure")
 	_expect(failures, _manifest_branch_lineage_optional(), "manifest branch lineage optional")
+	_expect(failures, _branch_list_and_fork_point(), "branch list and fork-point parse")
 	return failures
+
+
+func _branch_list_and_fork_point() -> String:
+	var listed: Dictionary = Protocol.parse_branch_list({
+		"items": [
+			{
+				"child_run_id": "run-child",
+				"parent_run_id": "run-root",
+				"fork_tick": 9,
+				"intervention_summary": "seed:abcd",
+				"branch_id": "b1",
+				"future_field": true,
+			},
+		],
+		"next_cursor": "run-child",
+		"count": 1,
+	})
+	if not bool(listed.get("ok", false)):
+		return "branch list parse failed"
+	var items: Array = listed.get("items", [])
+	if items.size() != 1 or str(items[0].get("child_run_id", "")) != "run-child":
+		return "branch list item missing"
+	if str(listed.get("next_cursor", "")) != "run-child":
+		return "branch next_cursor missing"
+	var bad: Dictionary = Protocol.parse_branch_list("nope")
+	if bool(bad.get("ok", false)):
+		return "invalid branch list should fail"
+	var fork: Dictionary = Protocol.parse_branch_fork_point({
+		"parent_run_id": "run-root",
+		"child_run_id": "run-child",
+		"fork_tick": 9,
+		"parent_observer_tick": 9,
+		"child_observer_tick": 9,
+		"ignored": 1,
+	})
+	if not bool(fork.get("ok", false)):
+		return "fork point parse failed"
+	if str(fork.get("parent_run_id", "")) != "run-root":
+		return "fork parent missing"
+	if int(fork.get("parent_observer_tick", -1)) != 9:
+		return "parent_observer_tick missing"
+	var rootish: Dictionary = Protocol.parse_branch_fork_point({"child_run_id": "x"})
+	if bool(rootish.get("ok", false)) or str(rootish.get("reason_code", "")) != "branch_root":
+		return "empty parent should be branch_root"
+	return ""
 
 
 func _manifest_branch_lineage_optional() -> String:

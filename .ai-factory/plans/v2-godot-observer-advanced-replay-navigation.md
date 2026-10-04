@@ -214,13 +214,13 @@ Each checkpoint is a git commit on `main` when those tasks are done. Do not squa
   - Depends on task 1 only for client allowlist readiness; Python change may land in the same commit as task 1.
   - Files: `src/api/observer_service.py`, persistence event keyset if needed for target index/filter, `tests/unit/test_observer_api.py` (or focused new module).
 
-- [ ] Task 2: Client run navigation stack (“return to previous run”).
+- [x] Task 2: Client run navigation stack (“return to previous run”).
   - Deliverable: Maintain a bounded stack (e.g. 16) of `{run_id, tick, sequence}` on switches when `push_history` is true. UI control **Return to previous run** pops and `switch_run` without pushing. Empty stack → empty-state message. Do not persist the stack across browser reloads in this plan (session-only). Focused unit test for push/pop/empty.
   - Logging: DEBUG `nav_stack_push/pop depth=%s run_id=%s`; INFO on successful return.
   - Depends on task 1.
   - Files: `session.gd`, `ui_layer.gd` / new branch panel script, tests.
 
-- [ ] Task 3: Branch metadata panel and open parent/child.
+- [x] Task 3: Branch metadata panel and open parent/child.
   - Deliverable: UI shows current run, parent (when present), fork tick, intervention summary, and paged children from `GET /v1/simulations/{run_id}/branches` using `after_child_run_id` when `next_cursor` is present. **Open parent at fork point** uses `GET .../branch/fork-point` then switch+seek to `parent_observer_tick`. **Open child** switches to selected child (optional seek to fork tick). Parse `BranchListOut` / `BranchForkPointOut` in a small protocol helper (unknown keys ignored). Root runs without lineage show empty-state, not errors. Capability failures surface reason codes. Focused parse/UI unit tests; full branch UX covered in Task 9.
   - Logging: DEBUG `branch_children_loaded count=%s`; INFO `branch_open_parent` / `branch_open_child` with ids and fork_tick.
   - Depends on tasks 1–2.

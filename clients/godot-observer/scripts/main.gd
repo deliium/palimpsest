@@ -19,6 +19,8 @@ func _ready() -> void:
 	_session.live_event.connect(_world.play_event)
 	_session.live_event.connect(_ui.append_event)
 	_session.source_cleared.connect(_on_source_cleared)
+	_session.branch_updated.connect(_on_branch_updated)
+	_session.nav_stack_changed.connect(_ui.set_nav_depth)
 	_world.inspect_requested.connect(_ui.show_inspector)
 	_world.inspect_cleared.connect(_ui.clear_inspector)
 	_ui.connect_requested.connect(_session.start_with_run_id)
@@ -40,6 +42,10 @@ func _ready() -> void:
 	_ui.explain_requested.connect(_on_explain_requested)
 	_ui.debugger_focus_requested.connect(_on_debugger_focus)
 	_ui.debugger_provenance_requested.connect(_on_debugger_provenance)
+	_ui.return_previous_run_requested.connect(_session.return_to_previous_run)
+	_ui.open_parent_branch_requested.connect(_session.open_parent_at_fork)
+	_ui.open_child_branch_requested.connect(_session.open_child_branch)
+	_ui.load_more_branches_requested.connect(_on_load_more_branches)
 	_session.overlay_payload.connect(_on_overlay_payload)
 	_session.overlay_unavailable.connect(_on_overlay_unavailable)
 	_world.inspect_requested.connect(func(snapshot: Dictionary) -> void:
@@ -57,6 +63,21 @@ func _on_source_cleared() -> void:
 	_world.clear_world()
 	_ui.clear_for_source_switch()
 	ObserverLog.debug("main", "source_cleared")
+
+
+func _on_branch_updated() -> void:
+	_ui.show_branch_panel(
+		_session.run_id,
+		_session.lineage,
+		_session.branch_children,
+		_session.branch_next_cursor,
+		_session.branch_reason_code,
+		_session.nav_stack_depth(),
+	)
+
+
+func _on_load_more_branches() -> void:
+	_session.fetch_branch_children(_session.branch_next_cursor)
 
 
 func _on_run_loaded(record: Dictionary) -> void:

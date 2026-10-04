@@ -20,6 +20,10 @@ signal narrative_variant_selected(variant_id: String)
 signal explain_requested(tick: int, sequence: int, event_id: String)
 signal debugger_focus_requested(tick: int, sequence: int, event_id: String)
 signal debugger_provenance_requested(lineage_kind: String, subject_id: String, owner_id: String)
+signal return_previous_run_requested
+signal open_parent_branch_requested
+signal open_child_branch_requested(child_run_id: String, fork_tick: int)
+signal load_more_branches_requested
 
 var _live_tick := 0
 var _selected_id := ""
@@ -86,6 +90,15 @@ func _ready() -> void:
 			func(lineage_kind: String, subject_id: String, owner_id: String) -> void:
 				debugger_provenance_requested.emit(lineage_kind, subject_id, owner_id)
 		)
+	var branch = $BranchPanel
+	if branch != null:
+		branch.return_requested.connect(func() -> void: return_previous_run_requested.emit())
+		branch.open_parent_requested.connect(func() -> void: open_parent_branch_requested.emit())
+		branch.open_child_requested.connect(
+			func(child_run_id: String, fork_tick: int) -> void:
+				open_child_branch_requested.emit(child_run_id, fork_tick)
+		)
+		branch.load_more_children_requested.connect(func() -> void: load_more_branches_requested.emit())
 
 
 func jump_tick_value() -> int:
@@ -151,7 +164,33 @@ func clear_for_source_switch() -> void:
 	clear_narrative_variants()
 	note_selection("")
 	close_debugger()
+	var branch = $BranchPanel
+	if branch != null:
+		branch.set_busy(true)
 	ObserverLog.debug("ui", "source_cleared")
+
+
+func show_branch_panel(
+	run_id: String,
+	lineage: Dictionary,
+	children: Array,
+	next_cursor: Variant,
+	reason_code: String,
+	nav_depth: int,
+) -> void:
+	var branch = $BranchPanel
+	if branch == null:
+		return
+	var payload := lineage.duplicate(true)
+	payload["run_id"] = run_id
+	branch.show_lineage(payload, children, next_cursor, reason_code, nav_depth)
+	branch.set_busy(false)
+
+
+func set_nav_depth(depth: int) -> void:
+	var branch = $BranchPanel
+	if branch != null:
+		branch.set_nav_depth(depth)
 
 
 func is_overlay_enabled(kind: String) -> bool:

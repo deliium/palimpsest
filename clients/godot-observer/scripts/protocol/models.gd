@@ -334,6 +334,55 @@ static func parse_manifest(data: Variant) -> ParseResult:
 	return ParseResult.success(manifest, "manifest", manifest.event_types.size())
 
 
+static func parse_branch_list(data: Variant) -> Dictionary:
+	## BranchListOut — unknown keys ignored; never invents children.
+	if typeof(data) != TYPE_DICTIONARY:
+		return {"ok": false, "reason_code": "invalid_json", "items": [], "next_cursor": null, "count": 0}
+	var items: Array = []
+	var raw_items: Variant = data.get("items", [])
+	if raw_items is Array:
+		for item in raw_items:
+			if typeof(item) != TYPE_DICTIONARY:
+				continue
+			items.append({
+				"child_run_id": str(item.get("child_run_id", "")).strip_edges(),
+				"parent_run_id": str(item.get("parent_run_id", "")).strip_edges(),
+				"fork_tick": int(item.get("fork_tick", 0)),
+				"intervention_summary": str(item.get("intervention_summary", "")).strip_edges(),
+				"branch_id": str(item.get("branch_id", "")).strip_edges(),
+			})
+	var next_cursor: Variant = data.get("next_cursor", null)
+	if next_cursor != null:
+		next_cursor = str(next_cursor).strip_edges()
+		if str(next_cursor).is_empty():
+			next_cursor = null
+	return {
+		"ok": true,
+		"reason_code": "",
+		"items": items,
+		"next_cursor": next_cursor,
+		"count": int(data.get("count", items.size())),
+	}
+
+
+static func parse_branch_fork_point(data: Variant) -> Dictionary:
+	## BranchForkPointOut — unknown keys ignored.
+	if typeof(data) != TYPE_DICTIONARY:
+		return {"ok": false, "reason_code": "invalid_json"}
+	var parent_run_id := str(data.get("parent_run_id", "")).strip_edges()
+	if parent_run_id.is_empty():
+		return {"ok": false, "reason_code": "branch_root"}
+	return {
+		"ok": true,
+		"reason_code": "",
+		"parent_run_id": parent_run_id,
+		"child_run_id": str(data.get("child_run_id", "")).strip_edges(),
+		"fork_tick": int(data.get("fork_tick", 0)),
+		"parent_observer_tick": int(data.get("parent_observer_tick", data.get("fork_tick", 0))),
+		"child_observer_tick": int(data.get("child_observer_tick", data.get("fork_tick", 0))),
+	}
+
+
 static func parse_frame(data: Variant) -> ParseResult:
 	if typeof(data) != TYPE_DICTIONARY:
 		return ParseResult.failure("unsupported_observer_protocol")

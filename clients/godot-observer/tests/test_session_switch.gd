@@ -13,6 +13,7 @@ func run() -> Array:
 	_assert_allowlist(failures)
 	_assert_queue_epoch(failures)
 	_assert_switch_clears_window(failures)
+	_assert_nav_stack(failures)
 	return failures
 
 
@@ -104,3 +105,40 @@ func _assert_switch_clears_window(failures: Array) -> void:
 		failures.append("switch_run should log run_switched")
 	if "stream_closed" not in logged or "world_cleared" not in logged or "cursor_reset" not in logged:
 		failures.append("switch_run should log teardown steps")
+
+
+func _assert_nav_stack(failures: Array) -> void:
+	var session: SessionScript = SessionScript.new()
+	session.origin = ORIGIN
+	session._http = null
+	session.run_id = "run-a"
+	session.transport.set_cursor(session.transport.MODE_REPLAY, 12, 3, 1.0, false)
+	session.switch_run("run-b", null, null, true)
+	if session.nav_stack_depth() != 1:
+		failures.append("switch with push_history should push prior run")
+	var top: Dictionary = session._nav_stack[0]
+	if str(top.get("run_id", "")) != "run-a":
+		failures.append("nav stack should store prior run_id")
+	if int(top.get("tick", -1)) != 12 or int(top.get("sequence", -1)) != 3:
+		failures.append("nav stack should store prior tick/sequence")
+	session.transport.set_cursor(session.transport.MODE_REPLAY, 1, 0, 1.0, false)
+	session.switch_run("run-c", 2, null, true)
+	if session.nav_stack_depth() != 2:
+		failures.append("second switch should deepen nav stack")
+	var popped: Dictionary = session.return_to_previous_run()
+	if not bool(popped.get("ok", false)) or str(popped.get("run_id", "")) != "run-b":
+		failures.append("return should pop previous run")
+	if session.nav_stack_depth() != 1:
+		failures.append("return should reduce nav depth")
+	if session.run_id != "run-b":
+		failures.append("return should switch to popped run_id")
+	# Empty the stack, then return should empty-state.
+	session._nav_stack.clear()
+	var empty: Dictionary = session.return_to_previous_run()
+	if bool(empty.get("ok", false)) or str(empty.get("reason_code", "")) != "nav_stack_empty":
+		failures.append("empty nav stack should return nav_stack_empty")
+	var logged := "\n".join(Log.recent)
+	if "nav_stack_push" not in logged or "nav_stack_pop" not in logged:
+		failures.append("nav stack should log push/pop")
+	if "nav_stack_return" not in logged:
+		failures.append("successful return should log nav_stack_return")

@@ -31,6 +31,11 @@ signal overlay_unavailable(kind: String, reason_code: String)
 signal events_loaded(events: Array, focus_tick: int, focus_sequence: int)
 signal ticks_loaded(ticks: Array)
 signal run_loaded(record: Dictionary)
+signal branch_updated
+signal nav_stack_changed(depth: int)
+
+const NAV_STACK_LIMIT := 16
+const BRANCH_PAGE_LIMIT := 50
 
 var run_id := ""
 var origin := ""
@@ -38,6 +43,15 @@ var world: Variant = null
 var cursor_after_tick: Variant = null
 var cursor_after_sequence: Variant = null
 var transport := TransportScript.new()
+var lineage := {
+	"parent_run_id": "",
+	"fork_tick": -1,
+	"intervention_summary": "",
+	"branch_id": "",
+}
+var branch_children: Array = []
+var branch_next_cursor: Variant = null
+var branch_reason_code := ""
 
 var _token := ""
 var _http: Node
@@ -61,6 +75,7 @@ var _play_timer: Timer
 var _pending_deeplink := {}
 var _pending_switch_seek := {}
 var _switching := false
+var _nav_stack: Array = []
 
 
 func _ready() -> void:
@@ -153,7 +168,9 @@ func switch_run(
 		_fail("run_id_missing")
 		return
 	var from_run_id := run_id
-	_teardown_source(push_history)
+	if push_history and not from_run_id.is_empty() and from_run_id != trimmed:
+		_nav_stack_push(from_run_id, transport.tick, transport.sequence)
+	_teardown_source()
 	run_id = trimmed
 	run_id_applied.emit(run_id)
 	_pending_switch_seek = {}
@@ -169,7 +186,86 @@ func switch_run(
 	_start()
 
 
-func _teardown_source(_push_history: bool) -> void:
+func return_to_previous_run() -> Dictionary:
+	if _nav_stack.is_empty():
+		ObserverLog.debug("session", "nav_stack_pop depth=0 reason_code=nav_stack_empty")
+		status_changed.emit("nav_stack_empty", "No previous run")
+		return {"ok": false, "reason_code": "nav_stack_empty"}
+	var entry: Dictionary = _nav_stack.pop_back()
+	var prior_id := str(entry.get("run_id", ""))
+	ObserverLog.debug(
+		"session",
+		"nav_stack_pop depth=%s run_id=%s" % [_nav_stack.size(), prior_id],
+	)
+	nav_stack_changed.emit(_nav_stack.size())
+	switch_run(
+		prior_id,
+		entry.get("tick", null),
+		entry.get("sequence", null),
+		false,
+	)
+	ObserverLog.info("session", "nav_stack_return run_id=%s" % prior_id)
+	return {"ok": true, "run_id": prior_id, "depth": _nav_stack.size()}
+
+
+func nav_stack_depth() -> int:
+	return _nav_stack.size()
+
+
+func _nav_stack_push(prior_run_id: String, tick: int, sequence: Variant) -> void:
+	_nav_stack.append({
+		"run_id": prior_run_id,
+		"tick": tick,
+		"sequence": sequence,
+	})
+	while _nav_stack.size() > NAV_STACK_LIMIT:
+		_nav_stack.pop_front()
+	ObserverLog.debug(
+		"session",
+		"nav_stack_push depth=%s run_id=%s" % [_nav_stack.size(), prior_run_id],
+	)
+	nav_stack_changed.emit(_nav_stack.size())
+
+
+func fetch_branch_children(after_child_run_id: Variant = null) -> void:
+	if run_id.is_empty():
+		return
+	var query := {"limit": BRANCH_PAGE_LIMIT}
+	if after_child_run_id != null and str(after_child_run_id) != "":
+		query["after_child_run_id"] = str(after_child_run_id)
+	_request_path(
+		"branch_children",
+		"/v1/simulations/%s/branches" % run_id,
+		{"append": after_child_run_id != null and str(after_child_run_id) != ""},
+		query,
+	)
+
+
+func open_parent_at_fork() -> void:
+	if run_id.is_empty():
+		_fail("run_id_missing")
+		return
+	if str(lineage.get("parent_run_id", "")).is_empty():
+		branch_reason_code = "branch_root"
+		branch_updated.emit()
+		status_changed.emit("branch_root", "No parent branch")
+		return
+	_request_path("branch_fork_point", "/v1/simulations/%s/branch/fork-point" % run_id)
+
+
+func open_child_branch(child_run_id: String, child_fork_tick: Variant = null) -> void:
+	var trimmed := child_run_id.strip_edges()
+	if trimmed.is_empty():
+		return
+	var fork_tick: Variant = child_fork_tick
+	ObserverLog.info(
+		"session",
+		"branch_open_child child_run_id=%s fork_tick=%s" % [trimmed, str(fork_tick)],
+	)
+	switch_run(trimmed, fork_tick, null, true)
+
+
+func _teardown_source() -> void:
 	_switching = true
 	status_changed.emit("switching_run", "Switching run")
 	if _stream != null:
@@ -193,8 +289,18 @@ func _teardown_source(_push_history: bool) -> void:
 	cursor_after_tick = null
 	cursor_after_sequence = null
 	transport = TransportScript.new()
+	lineage = {
+		"parent_run_id": "",
+		"fork_tick": -1,
+		"intervention_summary": "",
+		"branch_id": "",
+	}
+	branch_children = []
+	branch_next_cursor = null
+	branch_reason_code = ""
 	ObserverLog.debug("session", "cursor_reset")
 	source_cleared.emit()
+	branch_updated.emit()
 	ObserverLog.debug("session", "world_cleared")
 	_switching = false
 
@@ -537,6 +643,9 @@ func _request_path(
 			_emit_overlay_unavailable(str(meta.get("overlay_kind", kind)), reason)
 		elif kind == "causal_debugger" or kind == "causal_debugger_lineage":
 			_emit_overlay_unavailable(kind, reason)
+		elif kind == "branch_children" or kind == "branch_fork_point":
+			branch_reason_code = reason
+			branch_updated.emit()
 		else:
 			overlay_payload.emit(kind, null)
 		return
@@ -685,6 +794,62 @@ func _on_http(route: String, _status: int, body: Variant, reason_code: String) -
 		)
 		overlay_payload.emit(overlay_kind, decoded)
 		return
+	if kind == "branch_children":
+		if reason_code != "":
+			branch_reason_code = reason_code
+			if not bool(meta.get("append", false)):
+				branch_children = []
+				branch_next_cursor = null
+			ObserverLog.warn(
+				"session",
+				"branch_children_failed reason_code=%s" % reason_code,
+			)
+			branch_updated.emit()
+			return
+		var parsed_children: Dictionary = Protocol.parse_branch_list(body)
+		if not bool(parsed_children.get("ok", false)):
+			branch_reason_code = str(parsed_children.get("reason_code", "invalid_json"))
+			branch_updated.emit()
+			return
+		branch_reason_code = ""
+		var items: Array = parsed_children.get("items", [])
+		if bool(meta.get("append", false)):
+			branch_children.append_array(items)
+		else:
+			branch_children = items
+		branch_next_cursor = parsed_children.get("next_cursor", null)
+		ObserverLog.debug(
+			"session",
+			"branch_children_loaded count=%s" % branch_children.size(),
+		)
+		branch_updated.emit()
+		return
+	if kind == "branch_fork_point":
+		if reason_code != "":
+			branch_reason_code = reason_code
+			ObserverLog.warn(
+				"session",
+				"branch_fork_point_failed reason_code=%s" % reason_code,
+			)
+			branch_updated.emit()
+			if reason_code == "not_found":
+				status_changed.emit("branch_root", "No parent branch")
+			return
+		var fork: Dictionary = Protocol.parse_branch_fork_point(body)
+		if not bool(fork.get("ok", false)):
+			branch_reason_code = str(fork.get("reason_code", "invalid_json"))
+			branch_updated.emit()
+			return
+		var parent_id := str(fork.get("parent_run_id", ""))
+		var parent_tick := int(fork.get("parent_observer_tick", fork.get("fork_tick", 0)))
+		ObserverLog.info(
+			"session",
+			"branch_open_parent parent_run_id=%s fork_tick=%s" % [
+				parent_id, parent_tick,
+			],
+		)
+		switch_run(parent_id, parent_tick, null, true)
+		return
 	if reason_code != "":
 		if seek_id >= 0:
 			ObserverLog.error("session", "seek_failed reason_code=%s" % reason_code)
@@ -698,6 +863,12 @@ func _on_http(route: String, _status: int, body: Variant, reason_code: String) -
 			return
 		var model = manifest.value
 		if model != null and not str(model.run_id).is_empty():
+			lineage = {
+				"parent_run_id": str(model.parent_run_id),
+				"fork_tick": int(model.fork_tick),
+				"intervention_summary": str(model.intervention_summary),
+				"branch_id": str(model.branch_id),
+			}
 			ObserverLog.debug(
 				"session",
 				"branch_lineage run_id=%s parent_run_id=%s fork_tick=%s" % [
@@ -706,6 +877,7 @@ func _on_http(route: String, _status: int, body: Variant, reason_code: String) -
 					str(model.fork_tick),
 				],
 			)
+			branch_updated.emit()
 			if not str(model.parent_run_id).is_empty():
 				status_changed.emit(
 					"loading",
@@ -725,6 +897,7 @@ func _on_http(route: String, _status: int, body: Variant, reason_code: String) -
 			status_changed.emit("ready", "tick %s" % str(world.tick))
 			if not _failed:
 				_open_socket()
+			fetch_branch_children()
 			_apply_pending_switch_seek()
 			_apply_pending_deeplink()
 		return
