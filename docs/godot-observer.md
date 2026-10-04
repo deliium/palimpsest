@@ -255,6 +255,12 @@ A completed seek logs in this shape, with no token:
 [observer.session] seek_applied mode=REPLAY tick=4 sequence=1
 ```
 
+## V2 graphical benchmark fixture
+
+Deterministic `observer-graphical-v2` (see [V2 benchmark suite](v2-benchmark-suite.md)) exercises multi-location movement, resources, communication, exchange, environmental dynamics, production, a terminal event, artifacts, and social transmission. Fixture JSON: `clients/godot-observer/fixtures/observer_graphical_v2.json`. Protocol coverage gap-fills pause/seek/return-to-live/filters/follow/debugger/fork switch without rewriting working controls. Presentation seek/pause must not change simulation outcomes.
+
+Normal researchers use the prebuilt Web export via `./run.sh` — not the Godot editor. Zero-install acceptance is Docker/container + browser only.
+
 ## Headless checks
 
 Godot protocol tests are outside default pytest. Pytest only checks that the golden JSON still constructs `observer-protocol-v1` values and that the smoke file's unknown type is outside the closed semantic list.

@@ -72,8 +72,13 @@ export PALIMPSEST_RESEARCH_WEB_ROOT="$PWD/dist"
 
 See [Development](development.md) and `compose.dev.yaml` for optional compose env passthrough.
 
+## V2 benchmark artifacts
+
+Allowlisted matrix trees under `PALIMPSEST_RESEARCH_MATRIX_ROOT` may include the example `v2-benchmark-suite` manifest plus runtime `aggregate.json` / `metric-summary.json` sidecars. See [V2 benchmark suite](v2-benchmark-suite.md). Unit acceptance: `tests/unit/test_benchmark_research_ui_artifacts.py`.
+
 ## See also
 
 - [Research API](research-api.md)
 - [Godot observer](godot-observer.md)
 - [Research causal debugger](research-causal-debugger.md)
+- [V2 benchmark suite](v2-benchmark-suite.md)

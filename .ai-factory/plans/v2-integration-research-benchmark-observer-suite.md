@@ -345,13 +345,13 @@ Each checkpoint is a git commit on `main` created when those tasks are done. Do 
   - Depends on tasks 11b, 14.
   - Files: `tests/unit/test_v2_scientific_invariants.py`.
 
-- [ ] Task 15b: Architecture isolation for the benchmark suite.
+- [x] Task 15b: Architecture isolation for the benchmark suite.
   - Deliverable: Architecture tests proving (a) V1 regression gate source does not reference `benchmark_suite` / `bench-` ids / `observer-graphical-v2`, (b) `experiments` still forbids `api`, (c) `src/` still does not import `clients/godot-observer`. Follow patterns in `tests/architecture/test_godot_client_isolation.py` / `test_causal_debugger_boundaries.py`.
   - Logging: assertion failures only (pytest).
   - Depends on tasks 11b, 12.
   - Files: `tests/architecture/test_benchmark_suite_isolation.py` (or extend existing isolation modules).
 
-- [ ] Task 16: Zero-install + published observer acceptance.
+- [x] Task 16: Zero-install + published observer acceptance.
   - Deliverable: Extend compose/browser acceptance so published path `./run.sh` / `compose.yaml` (no Godot on host) verifies: image pull/obtain, `/health` ok, `/` observer page, WASM init, observer connect/hello, deterministic sim view (reference or `observer-graphical-v2`), and at least one replay control (pause or seek) via Playwright. Static tests in `test_published_startup.py` gain any missing “no godot in launcher” assertions. Document `PALIMPSEST_API_IMAGE` requirement for CI. Keep `@pytest.mark.compose`. **Out of this task:** re-implementing LLM recording tests (covered by Task 15 contract pointer + existing integration file).
   - Logging: reuse `startup_*` / `observer_browser_*` reason codes; no secrets.
   - Depends on tasks 12–15b.
@@ -360,19 +360,19 @@ Each checkpoint is a git commit on `main` created when those tasks are done. Do 
 
 ### Phase 6: Matrix, Research UI, docs
 
-- [ ] Task 17: Wire matrix batch examples for statistical scenarios.
+- [x] Task 17: Wire matrix batch examples for statistical scenarios.
   - Deliverable: Example `experiment-matrix-v1` manifest(s) covering scenarios that declare statistical comparison; expand dry-run unit test; optional metric sidecars → `matrix-metric-summary-v1` smoke. Filesystem only; no HTTP batch start. Manifest condition ids must match the locked catalog.
   - Logging: matrix expand cell counts; aggregate write INFO.
   - Depends on task 11b.
   - Files: `tests/fixtures/matrices/v2-benchmark-suite.json`, `tests/unit/test_benchmark_matrix_manifest.py`.
 
-- [ ] Task 17b: Research UI acceptance for benchmark artifacts.
+- [x] Task 17b: Research UI acceptance for benchmark artifacts.
   - Deliverable: Extend or add compose/unit checks that `/research/` serves when `PALIMPSEST_RESEARCH_WEB_ROOT` is set (reuse `test_research_ui_wiring.py`), and that matrix/analytics paths can resolve allowlisted sidecar/summary documents produced by the benchmark matrix fixture. No SPA feature rewrite. Skip cleanly when dist/env unset.
   - Logging: existing research UI smoke patterns; no tokens.
   - Depends on task 17.
   - Files: `tests/compose/test_research_ui_wiring.py` (extend) and/or focused unit tests for FS allowlist paths.
 
-- [ ] Task 18: Documentation checkpoint (`Docs: yes`).
+- [x] Task 18: Documentation checkpoint (`Docs: yes`).
   - Deliverable: Add `docs/v2-benchmark-suite.md` with the 16-scenario table (including locked condition ids), observer graphical checklist, zero-install acceptance, scientific invariants, Research UI acceptance, and explicit non-assertions (no “must emerge”). Update `docs/experiments.md`, `docs/godot-observer.md`, `docs/development.md` cross-links; README one-line pointer if landing table already indexes experiments/observer. State M6 still open for `multi_hop_testimony_tracking`. Update `.ai-factory/DESCRIPTION.md` one-line surface note if accurate.
   - Logging: n/a for docs.
   - Depends on tasks 15–17b.

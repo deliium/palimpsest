@@ -56,6 +56,7 @@ Development credentials in `compose.yaml` are **not production**. `docker compos
 | [Architecture](docs/architecture.md) | Bounded packages, `WorldEngine` lifecycle, perception boundary, eleven invariants, V2 seams + downstream plan contract |
 | [Simulation runner](docs/simulation-runner.md) | Config-driven `SimulationRunner`, `runner-config-v3` flags, fingerprint vs trajectory identity |
 | [Experiments](docs/experiments.md) | Trusted A–E catalog, `v1_regression_profile`, false-story boundary, coordinator, persistence (`0010`) |
+| [V2 benchmark suite](docs/v2-benchmark-suite.md) | Sixteen composition scenarios, observer graphical fixture, zero-install + scientific gates (off V1 gate) |
 | [Analysis metrics](docs/analysis-metrics.md) | V1 metric catalog, populations/denominators, numerical policy, known-answer fixtures |
 | [Research API](docs/research-api.md) | FastAPI control/inspection/debug, WebSocket cursors/backpressure, capability credentials |
 | [Research UI](docs/research-ui.md) | Researcher SPA at `/research/`, epistemic chrome, graphs/metrics/matrix, Godot deep links |

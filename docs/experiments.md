@@ -126,6 +126,10 @@ Completed cells may write optional `cells/<cell_id>.metrics.json` sidecars (enco
 
 `RunVersionIdentity.code_revision` is optional metadata: pass `--code-revision` or set `PALIMPSEST_CODE_REVISION`. Empty is allowed; the CLI never invents a wall-clock surrogate.
 
+## V2 benchmark suite
+
+Composition/validation scenarios (`bench-01`…`bench-16`), observer graphical world, scientific invariants, and zero-install acceptance are documented in [V2 benchmark suite](v2-benchmark-suite.md). Example matrix fixture: `tests/fixtures/matrices/v2-benchmark-suite.json`. The suite stays off the V1 regression gate and does not own `multi_hop_testimony_tracking`.
+
 ## Logging
 
 DEBUG/INFO may include experiment/condition/run IDs, ordinals, counts, versions, and hash prefixes. Never log seeds, story content, truth labels, drive values, prompts, credentials, or canonical JSON payloads.
