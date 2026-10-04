@@ -17,7 +17,10 @@
   import EpistemicBadge from '../components/EpistemicBadge.svelte'
   import { pushRunRoute } from '../router'
   import AgentPanel from './AgentPanel.svelte'
+  import AnalyticsPanel from './AnalyticsPanel.svelte'
+  import DecisionTracePanel from './DecisionTracePanel.svelte'
   import GraphsPanel from './GraphsPanel.svelte'
+  import ObjSubjComparePanel from './ObjSubjComparePanel.svelte'
 
   interface Props {
     runId: string
@@ -171,16 +174,14 @@
     <AgentPanel {runId} agentId={deepLink.agentId} />
   {:else if view === 'graphs'}
     <GraphsPanel {runId} agentId={deepLink.agentId} />
+  {:else if view === 'analytics'}
+    <AnalyticsPanel {runId} agentId={deepLink.agentId} />
+  {:else if view === 'traces'}
+    <DecisionTracePanel {runId} {deepLink} />
+  {:else if view === 'compare'}
+    <ObjSubjComparePanel {runId} {deepLink} />
   {:else}
-    <p class="status empty">
-      {view} view placeholder — data panels arrive in later tasks.
-      {#if deepLink.agentId}
-        Focus agent: {deepLink.agentId}.
-      {/if}
-      {#if deepLink.tick !== null}
-        Focus tick: {deepLink.tick}.
-      {/if}
-    </p>
+    <p class="status empty">Unknown view.</p>
   {/if}
 </section>
 

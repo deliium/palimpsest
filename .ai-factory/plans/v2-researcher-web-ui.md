@@ -291,7 +291,7 @@ Each checkpoint is a git commit on the current branch when those tasks complete.
 
 ### Phase 4: Analytics, traces, objective vs subjective
 
-- [ ] Task 11: Analytics + per-run experiment statistics
+- [x] Task 11: Analytics + per-run experiment statistics
   - Deliverable: Analytics tab loads metric catalog + family documents (`emergent_group_formation@1`, `spatial_control@1` / `territorial_concentration@1`, `emergent_social_norms@1`, `persistent_social_conventions@1`, `cultural_narrative_lineage@1`, phenomenon panels when present) **and** a per-run statistics subsection (document counts, availability, key scalars). All metric chrome = `research_inference`. Show `support_band` codes; forbid boolean “emerged” labels. Pair with subjective ledger summaries from Task 7 when debug-enabled, visually separated (`agent_belief` vs `research_inference`). Cross-run distributions remain matrix Task 14.
   - Logging: DEBUG metric family fetch status; never dump metric payloads to server logs.
   - Depends on tasks 4, 7.
