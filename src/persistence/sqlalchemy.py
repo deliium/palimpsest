@@ -7,7 +7,7 @@ from __future__ import annotations
 
 from decimal import Decimal
 
-from sqlalchemy import select, text
+from sqlalchemy import null, select, text
 from sqlalchemy.exc import DBAPIError, IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
@@ -166,7 +166,11 @@ class SqlAlchemySimulationRunRepository:
                         bootstrap_snapshot_id=bootstrap.snapshot_id.value,
                         physical_rules_version=rules_version,
                         physical_rules_fingerprint=rules_fingerprint,
-                        physical_rules_canonical=rules_canonical,
+                        # JSONB None binds as JSON null, which fails rules_pair
+                        # IS NULL checks; use SQL NULL when rules are absent.
+                        physical_rules_canonical=(
+                            null() if rules_canonical is None else rules_canonical
+                        ),
                         stochastic_identity=(
                             None
                             if request.config.stochastic_identity is None

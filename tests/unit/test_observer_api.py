@@ -127,6 +127,34 @@ def test_observer_routes_are_get_only() -> None:
 
 
 @pytest.mark.asyncio
+async def test_observer_ticks_rejects_range_above_api_max_page_size() -> None:
+    settings = _settings(api_max_page_size=10, observer_catchup_page_size=10)
+    app = create_app(
+        settings=settings,
+        database_factory=lambda _s: FakeResources(),
+        simulation_manager=SimulationManager(
+            settings=settings,
+            run_control=InMemoryRunControlRepository(),
+        ),
+        attach_default_manager=False,
+    )
+    service, _events = observer_replay_service()
+    app.state.observer_service = ObserverReadService(service)
+    async with _client(app) as client:
+        oversized = await client.get(
+            f"/v1/simulations/{RUN_ID}/observer/ticks",
+            params={"from_tick": 0, "to_tick": 10},
+        )
+        ok = await client.get(
+            f"/v1/simulations/{RUN_ID}/observer/ticks",
+            params={"from_tick": 0, "to_tick": 9},
+        )
+    assert oversized.status_code == 400
+    assert oversized.json()["code"] == "tick_range_exceeds_maximum"
+    assert ok.status_code == 200
+
+
+@pytest.mark.asyncio
 async def test_observer_reads_and_rejects_bad_cursors(
     logging_sandbox: None,
     caplog: pytest.LogCaptureFixture,

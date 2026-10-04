@@ -386,6 +386,7 @@ def create_memory_service(
     session_factory: async_sessionmaker[AsyncSession] | None = None,
     scoring_policy: MemoryScoringPolicy,
     retention_policy: MemoryRetentionPolicy | None = None,
+    max_candidates: int | None = None,
 ) -> MemoryService:
     """Build an owner-scoped durable ``MemoryService`` (no unscoped admin API)."""
     if session_factory is None:
@@ -394,12 +395,15 @@ def create_memory_service(
         )
     from persistence.memory_sqlalchemy import create_sqlalchemy_memory_service as impl
 
-    return impl(
-        scope=scope,
-        session_factory=session_factory,
-        scoring_policy=scoring_policy,
-        retention_policy=retention_policy,
-    )
+    kwargs: dict[str, object] = {
+        "scope": scope,
+        "session_factory": session_factory,
+        "scoring_policy": scoring_policy,
+        "retention_policy": retention_policy,
+    }
+    if max_candidates is not None:
+        kwargs["max_candidates"] = max_candidates
+    return impl(**kwargs)  # type: ignore[arg-type]
 
 
 def create_subjective_state_service(

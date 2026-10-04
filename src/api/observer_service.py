@@ -175,15 +175,18 @@ class ObserverReadService:
         *,
         from_tick: int,
         to_tick: int,
+        limit: int = 100,
     ) -> ObserverTickPageOut:
         if to_tick < from_tick:
             raise bad_request(code="invalid_tick_range", run_id=run_id)
+        if limit < 1:
+            raise bad_request(code="invalid_page_limit", run_id=run_id)
         typed = _run_id(run_id)
         page = await self._replay.read_event_page(
             typed,
             from_tick=Tick(from_tick),
             to_tick=Tick(to_tick),
-            limit=1000,
+            limit=limit,
         )
         grouped: dict[int, list[int]] = {}
         for event in page.events:

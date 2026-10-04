@@ -424,3 +424,43 @@ async def test_sql_reconsolidation_idempotent_and_leaves_source_unchanged(
     stored_derived = await service.get(MemoryId("m-derived"))
     assert stored_derived is not None
     assert stored_derived.lineage.reconstruction_id == ReconstructionId("recon-sql")
+
+
+async def test_retrieve_respects_candidate_cap(
+    database_resources: DatabaseResources,
+) -> None:
+    run_id = await _prepare_run(database_resources)
+    policy = _policy()
+    service = create_memory_service(
+        scope=MemoryScope(run_id=MemoryRunId(run_id), owner_id=AgentId("agent-1")),
+        session_factory=database_resources.session_factory,
+        scoring_policy=policy,
+        max_candidates=5,
+    )
+    writes = tuple(
+        _trace(memory_id=f"m-{index}", owner_id="agent-1", tick=index, salience=0.5)
+        for index in range(1, 21)
+    )
+    await service.apply(MemoryMutationBatch(writes=writes))
+    result = await service.retrieve(
+        MemoryRetrieveRequest(
+            current_tick=30,
+            scoring_policy=policy,
+            filters=MemoryQueryFilters(),
+            context=MemoryQueryContext(),
+            limit=10,
+        )
+    )
+    assert result.candidate_count <= 5
+    assert len(result.hits) <= 5
+
+
+async def test_retrieve_rejects_limit_above_max_query_limit() -> None:
+    with pytest.raises(ValueError, match="out_of_range"):
+        MemoryRetrieveRequest(
+            current_tick=1,
+            scoring_policy=_policy(),
+            filters=MemoryQueryFilters(),
+            context=MemoryQueryContext(),
+            limit=257,
+        )

@@ -178,19 +178,19 @@ Each checkpoint is a git commit on `main` when those tasks are done. Do not squa
 
 ### Phase 2: Memory retrieval and pgvector
 
-- [ ] Task 7: Enforce SQL candidate prefilter caps (request limit already exists).
+- [x] Task 7: Enforce SQL candidate prefilter caps (request limit already exists).
   - Deliverable: Keep `MemoryRetrieveRequest.limit` ≤ `_MAX_QUERY_LIMIT` (256). Add settings-driven **max candidate** prefilter in `memory_sqlalchemy` so `_load_filtered_traces` cannot load an unbounded owner corpus before `rank_traces`. Cognition stages continue to pass explicit recall limits. Tests: large corpora only materialize ≤ candidate cap; oversized candidate setting fails closed; existing limit>256 still rejects.
   - Logging: `[memory.retrieve] candidate_count=%s result_count=%s limit=%s candidate_cap=%s` at DEBUG; WARN on reject.
   - Depends on task 3.
   - Files: `src/persistence/memory_sqlalchemy.py`, `src/infrastructure/settings.py`, `src/agents/cognition/memory.py` only if call sites need wiring, unit tests.
 
-- [ ] Task 8: Hybrid pgvector shortlist + `rank_traces`.
+- [x] Task 8: Hybrid pgvector shortlist + `rank_traces`.
   - Deliverable: When `query_embedding` is set, use SQL prefilter + optional vector distance / ANN to build a candidate shortlist, then run existing deterministic `rank_traces` for final hits. Add ANN index (HNSW preferred if extension supports) in Alembic for non-null embeddings. Embeddings-off and deterministic fake paths keep today’s behavior (`path=python_rank` or `sql_limit` without ANN). Document hybrid ranking and that ANN is not used for objective replay.
   - Logging: `[memory.retrieve] path=%s semantic=%s candidate_count=%s` at DEBUG (`path=python_rank|sql_limit|sql_ann_shortlist`).
   - Depends on tasks 6, 7.
   - Files: `src/persistence/memory_sqlalchemy.py`, Alembic revision, `docs/memory-reconstruction.md` (finalized in docs task).
 
-- [ ] Task 9: Analytics pagination and scan guards for long runs.
+- [x] Task 9: Analytics pagination and scan guards for long runs.
   - Deliverable: Ensure analysis/inspection loaders used after long runs cannot default to unbounded full-journal loads (watch `limit=10_000_000` call sites in branch compare — leave research compare as explicit opt-in with WARN). Observer ticks/events pages honor `api_max_page_size`. Add/extend tests for large timeline pagination stability (keyset monotonicity).
   - Logging: `[analysis.load] reason_code=unbounded_limit_rejected` or WARN when explicit huge limits are used in research tools.
   - Depends on task 6.

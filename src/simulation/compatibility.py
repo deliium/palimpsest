@@ -83,7 +83,7 @@ from world.events import (
 _LOG: Final[logging.Logger] = logging.getLogger("simulation.compatibility")
 
 # Mirrored literals — owning packages must keep these equal (tested).
-ALEMBIC_HEAD_REVISION: Final[str] = "0016"
+ALEMBIC_HEAD_REVISION: Final[str] = "0017"
 EXPERIMENT_DEFINITION_SCHEMA_VERSION: Final[str] = "experiment-definition-v1"
 METRIC_DOCUMENT_SCHEMA_VERSION: Final[str] = "1"
 METRIC_CATALOG_VERSION: Final[str] = "metric-catalog-v1"

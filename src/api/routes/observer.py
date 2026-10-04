@@ -160,11 +160,22 @@ async def list_observer_ticks(
     request: Request,
     _: None = Depends(_inspect),
     service: ObserverReadService = Depends(get_observer_service),
+    settings: Settings = Depends(get_settings),
     from_tick: int = Query(ge=0),
     to_tick: int = Query(ge=0),
 ) -> ObserverTickPageOut:
+    if to_tick < from_tick:
+        raise bad_request(code="invalid_tick_range", run_id=run_id)
+    span = to_tick - from_tick + 1
+    if span > settings.api_max_page_size:
+        raise bad_request(code="tick_range_exceeds_maximum", run_id=run_id)
     started = time.perf_counter()
-    result = await service.ticks(run_id, from_tick=from_tick, to_tick=to_tick)
+    result = await service.ticks(
+        run_id,
+        from_tick=from_tick,
+        to_tick=to_tick,
+        limit=settings.api_max_page_size,
+    )
     _LOGGER.info(
         "route_observer_ticks",
         route_template="GET /v1/simulations/{run_id}/observer/ticks",

@@ -82,6 +82,9 @@ __all__ = [
 
 _LOG: Final[logging.Logger] = logging.getLogger("persistence.memory")
 _MAX_OPERATION_ID_CHARS: Final[int] = 128
+# Matches infrastructure.settings default; factory may override from settings.
+_DEFAULT_MAX_CANDIDATES: Final[int] = 4_096
+_MAX_CANDIDATES_CEILING: Final[int] = 100_000
 
 
 def create_sqlalchemy_memory_service(
@@ -90,6 +93,7 @@ def create_sqlalchemy_memory_service(
     session_factory: async_sessionmaker[AsyncSession],
     scoring_policy: MemoryScoringPolicy,
     retention_policy: MemoryRetentionPolicy | None = None,
+    max_candidates: int = _DEFAULT_MAX_CANDIDATES,
 ) -> MemoryService:
     """Construct an owner-scoped durable memory service."""
     if type(scope) is not MemoryScope:
@@ -111,11 +115,21 @@ def create_sqlalchemy_memory_service(
         raise PersistenceAdapterError(
             "invalid_retention_policy", operation="create_memory_service"
         )
+    if (
+        isinstance(max_candidates, bool)
+        or type(max_candidates) is not int
+        or max_candidates < 1
+        or max_candidates > _MAX_CANDIDATES_CEILING
+    ):
+        raise PersistenceAdapterError(
+            "invalid_max_candidates", operation="create_memory_service"
+        )
     return SqlAlchemyMemoryService(
         scope=scope,
         session_factory=session_factory,
         scoring_policy=scoring_policy,
         retention_policy=retention_policy,
+        max_candidates=max_candidates,
     )
 
 
@@ -123,6 +137,7 @@ class SqlAlchemyMemoryService:
     """Async PostgreSQL episodic memory bound to one :class:`MemoryScope`."""
 
     __slots__ = (
+        "_max_candidates",
         "_orchestrator",
         "_retention_policy",
         "_scope",
@@ -137,11 +152,13 @@ class SqlAlchemyMemoryService:
         session_factory: async_sessionmaker[AsyncSession],
         scoring_policy: MemoryScoringPolicy,
         retention_policy: MemoryRetentionPolicy | None,
+        max_candidates: int = _DEFAULT_MAX_CANDIDATES,
     ) -> None:
         self._scope = scope
         self._session_factory = session_factory
         self._scoring_policy = scoring_policy
         self._retention_policy = retention_policy
+        self._max_candidates = max_candidates
         from memory.reconstruction import MemoryRecallOrchestrator
 
         self._orchestrator = MemoryRecallOrchestrator()
@@ -152,6 +169,7 @@ class SqlAlchemyMemoryService:
                 "run_id": scope.run_id.value,
                 "owner_id": scope.owner_id.value,
                 "policy_version": scoring_policy.version,
+                "max_candidates": max_candidates,
             },
         )
 
@@ -182,7 +200,12 @@ class SqlAlchemyMemoryService:
 
         async with session_scope(self._session_factory) as session:
             load_started = time.perf_counter()
-            candidates = await self._load_filtered_traces(session, request.filters)
+            candidates, retrieve_path = await self._load_filtered_traces(
+                session,
+                request.filters,
+                query_embedding=request.query_embedding,
+                candidate_cap=self._max_candidates,
+            )
             load_ms = (time.perf_counter() - load_started) * 1000.0
             loaded_count = len(candidates)
             embeddings = {
@@ -218,6 +241,16 @@ class SqlAlchemyMemoryService:
             loaded_count,
         )
         _LOG.debug(
+            "[memory.retrieve] path=%s semantic=%s candidate_count=%s "
+            "result_count=%s limit=%s candidate_cap=%s",
+            retrieve_path,
+            request.query_embedding is not None,
+            candidate_count,
+            len(hits),
+            request.limit,
+            self._max_candidates,
+        )
+        _LOG.debug(
             "memory_retrieve_complete",
             extra={
                 "operation": "retrieve",
@@ -231,6 +264,8 @@ class SqlAlchemyMemoryService:
                 "semantic_enabled": request.query_embedding is not None,
                 "candidate_count": candidate_count,
                 "result_count": len(hits),
+                "candidate_cap": self._max_candidates,
+                "path": retrieve_path,
             },
         )
         return MemoryRetrieveResult(
@@ -485,7 +520,13 @@ class SqlAlchemyMemoryService:
     async def snapshot(self) -> tuple[MemoryTrace, ...]:
         filters = MemoryQueryFilters(require_active=True)
         async with session_scope(self._session_factory) as session:
-            return await self._load_filtered_traces(session, filters)
+            traces, _path = await self._load_filtered_traces(
+                session,
+                filters,
+                query_embedding=None,
+                candidate_cap=self._max_candidates,
+            )
+            return traces
 
     async def forget(self, request: MemoryForgetRequest) -> MemoryForgetResult:
         if type(request) is not MemoryForgetRequest:
@@ -572,8 +613,13 @@ class SqlAlchemyMemoryService:
         return forgotten
 
     async def _load_filtered_traces(
-        self, session: AsyncSession, filters: MemoryQueryFilters
-    ) -> tuple[MemoryTrace, ...]:
+        self,
+        session: AsyncSession,
+        filters: MemoryQueryFilters,
+        *,
+        query_embedding: MemoryEmbedding | None,
+        candidate_cap: int,
+    ) -> tuple[tuple[MemoryTrace, ...], str]:
         stmt = select(MemoryTraceOrm).where(
             MemoryTraceOrm.run_id == self._scope.run_id.value,
             MemoryTraceOrm.owner_id == self._scope.owner_id.value,
@@ -642,8 +688,27 @@ class SqlAlchemyMemoryService:
                 )
                 stmt = stmt.where(relation_exists)
 
+        if query_embedding is not None:
+            # Hybrid path: ANN/SQL distance shortlist only; final hits still use
+            # deterministic rank_traces. Not used for objective replay.
+            stmt = stmt.where(MemoryTraceOrm.embedding.is_not(None))
+            stmt = stmt.order_by(
+                MemoryTraceOrm.embedding.cosine_distance(
+                    list(query_embedding.vector)
+                )
+            )
+            retrieve_path = "sql_ann_shortlist"
+        else:
+            stmt = stmt.order_by(
+                MemoryTraceOrm.created_tick.desc(),
+                MemoryTraceOrm.memory_id.asc(),
+            )
+            retrieve_path = "sql_limit"
+
+        stmt = stmt.limit(candidate_cap)
         rows = list((await session.execute(stmt)).scalars().all())
-        return await self._assemble_traces(session, rows)
+        traces = await self._assemble_traces(session, rows)
+        return traces, retrieve_path
 
     async def _assemble_traces(
         self, session: AsyncSession, rows: Sequence[MemoryTraceOrm]

@@ -115,6 +115,13 @@ async def compare_branch_timelines(
             offset=0,
         )
     )
+    _LOG.warning(
+        "[analysis.load] reason_code=explicit_huge_limit_opt_in "
+        "limit=%s left_run_id=%s right_run_id=%s",
+        10_000_000,
+        request.left_run_id.value,
+        request.right_run_id.value,
+    )
     left_prefix = [e for e in left_events if e.tick < fork_tick]
     right_prefix = [e for e in right_events if e.tick < fork_tick]
     prefix_equivalent = True

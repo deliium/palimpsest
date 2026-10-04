@@ -59,6 +59,12 @@ MemoryRecallRequest (+ optional dynamics_policy)
 
 Opaque `EventId` may appear as `observed_source_id` correlation only. Memory, agents, cognition, and reconstruction APIs never accept or dereference `WorldEvent`.
 
+## Hybrid retrieve (SQLAlchemy / pgvector)
+
+Durable `SqlAlchemyMemoryService.retrieve` always applies a settings-driven **candidate cap** (`PALIMPSEST_MEMORY_RETRIEVE_MAX_CANDIDATES`, default 4096) as a SQL `LIMIT` before `rank_traces`. Request `limit` remains ≤ 256.
+
+When `query_embedding` is set, SQL builds a distance **shortlist** (`path=sql_ann_shortlist`: `ORDER BY embedding <=> query LIMIT candidate_cap`) then runs the same deterministic `rank_traces` scoring for final hits. Embeddings-off paths use `path=sql_limit` (deterministic created-tick order under the cap). ANN indexes (HNSW) are deferred until a fixed embedding dimension is pinned on the column; shortlist queries still work without them. Shortlists are for semantic retrieval latency only — never for objective replay.
+
 ## Subjective semantics
 
 - Reconstruction may omit, blend, reinterpret, or invent details relative to sources.
