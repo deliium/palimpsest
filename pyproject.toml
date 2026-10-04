@@ -110,6 +110,7 @@ markers = [
     "compose: opt-in Docker Compose smoke tests",
     "architecture: import-boundary and structural checks",
     "typecheck: fixtures consumed by static type checkers",
+    "scale: long-run / observer scalability benchmarks (also marked integration)",
 ]
 asyncio_mode = "auto"
 asyncio_default_fixture_loop_scope = "function"

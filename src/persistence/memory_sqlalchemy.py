@@ -11,6 +11,7 @@ authority, or replay readers.
 from __future__ import annotations
 
 import logging
+import time
 from collections.abc import Sequence
 from typing import Final, cast
 
@@ -180,7 +181,10 @@ class SqlAlchemyMemoryService:
                 raise MemoryServiceError(MemoryServiceErrorCode.INVALID_REQUEST)
 
         async with session_scope(self._session_factory) as session:
+            load_started = time.perf_counter()
             candidates = await self._load_filtered_traces(session, request.filters)
+            load_ms = (time.perf_counter() - load_started) * 1000.0
+            loaded_count = len(candidates)
             embeddings = {
                 trace.memory_id.value: trace.embedding
                 for trace in candidates
@@ -206,6 +210,12 @@ class SqlAlchemyMemoryService:
                 operation_id=operation_id,
             )
             for hit in hits
+        )
+        _LOG.debug(
+            "[scale.profile] component=memory operation=retrieve_candidates "
+            "duration_ms=%.3f count=%s",
+            load_ms,
+            loaded_count,
         )
         _LOG.debug(
             "memory_retrieve_complete",

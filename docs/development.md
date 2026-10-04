@@ -44,6 +44,7 @@ uv run --frozen --python 3.12.14 pytest
 | `uv run --frozen --python 3.12.14 pytest -m integration tests/integration/test_agent_runtime_world_engine.py -q` | In-memory AgentRuntime ↔ WorldEngine (no Postgres) |
 | `PALIMPSEST_TEST_DATABASE_URL=... uv run --frozen --python 3.12.14 pytest -m integration tests/integration/test_episodic_memory_pgvector.py tests/integration/test_memory_concurrency.py tests/integration/test_migrations.py tests/integration/test_subjective_state_persistence.py tests/integration/test_experiment_repository.py -q` | Opt-in Postgres episodic + subjective + experiment records + migration head `0010` |
 | `uv run --frozen --python 3.12.14 pytest -m integration` | Disposable Postgres via `PALIMPSEST_TEST_DATABASE_URL` |
+| `PALIMPSEST_TEST_DATABASE_URL=... uv run --frozen --python 3.12.14 pytest -m "integration and scale" tests/benchmarks/ -q` | Long-run scale harness (deterministic fake cognition; default 1k/10k ticks; `PALIMPSEST_SCALE_BENCH_EXTENDED=1` adds 50k; optional `PALIMPSEST_SCALE_BENCH_TICKS`) |
 | `uv run --frozen --python 3.12.14 pytest -m compose` | Compose file checks and optional stack smoke |
 | `uv run --frozen --python 3.12.14 ruff check src tests` | Lint |
 | `uv run --frozen --python 3.12.14 mypy src tests` | Strict typing |

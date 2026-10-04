@@ -355,6 +355,10 @@ from simulation.runner import (
     SimulationRunner,
 )
 from simulation.runner_models import (
+    LONG_RUN_CHECKPOINT_CADENCE_100,
+    LONG_RUN_CHECKPOINT_CADENCE_500,
+    LONG_RUN_CHECKPOINT_CADENCE_1000,
+    LONG_RUN_CHECKPOINT_CADENCES,
     RESULT_SCHEMA_VERSION,
     RUNNER_SCHEMA_VERSION,
     RUNNER_SCHEMA_VERSION_V1,
@@ -426,6 +430,8 @@ from simulation.runner_models import (
     capability_flags_digest,
     describe_runner_config,
     evaluate_goals_after_finalization,
+    long_run_checkpoint_policy,
+    long_run_persistence_spec,
 )
 from simulation.runner_serialization import (
     RunnerSerializationError,
@@ -492,6 +498,10 @@ __all__ = [
     "GOAL_REVISION_SCHEMA_VERSION",
     "INHERIT_SEED_STREAM_TOKEN",
     "LLM_REPLAY_REQUIREMENT",
+    "LONG_RUN_CHECKPOINT_CADENCES",
+    "LONG_RUN_CHECKPOINT_CADENCE_100",
+    "LONG_RUN_CHECKPOINT_CADENCE_500",
+    "LONG_RUN_CHECKPOINT_CADENCE_1000",
     "MAX_INSPECTION_PAGE_SIZE",
     "PERSISTENCE_CODEC_VERSION",
     "PROJECTOR_VERSION",
@@ -840,6 +850,8 @@ __all__ = [
     "log_run_configured",
     "log_runner_config_diagnostics",
     "log_stochastic_identity_mismatch",
+    "long_run_checkpoint_policy",
+    "long_run_persistence_spec",
     "make_export",
     "make_stream_envelope",
     "manifest_hash_prefix",

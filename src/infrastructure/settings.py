@@ -38,12 +38,18 @@ _DEFAULT_LLM_MAX_RESPONSE_BYTES: Final[int] = 1_048_576
 _DEFAULT_LLM_MAX_HEADER_BYTES: Final[int] = 8_192
 _DEFAULT_API_MAX_PAGE_SIZE: Final[int] = 100
 _DEFAULT_API_STREAM_QUEUE_SIZE: Final[int] = 64
+_DEFAULT_OBSERVER_STREAM_QUEUE_SIZE: Final[int] = 64
+_DEFAULT_OBSERVER_CATCHUP_PAGE_SIZE: Final[int] = 50
+_DEFAULT_MEMORY_RETRIEVE_MAX_CANDIDATES: Final[int] = 4_096
+_DEFAULT_LLM_MAX_CONCURRENCY: Final[int] = 1
 _DEFAULT_API_STREAM_HEARTBEAT_SECONDS: Final[float] = 15.0
 _DEFAULT_API_STREAM_POLL_SECONDS: Final[float] = 0.25
 _DEFAULT_API_LEASE_TTL_SECONDS: Final[float] = 30.0
 _DEFAULT_API_LEASE_HEARTBEAT_SECONDS: Final[float] = 10.0
 _DEFAULT_API_DRAIN_TIMEOUT_SECONDS: Final[float] = 30.0
 _MIN_API_CREDENTIAL_LENGTH: Final[int] = 32
+_MAX_MEMORY_RETRIEVE_MAX_CANDIDATES: Final[int] = 100_000
+_MAX_LLM_MAX_CONCURRENCY: Final[int] = 256
 
 
 class SettingsError(Exception):
@@ -188,6 +194,22 @@ class Settings(BaseSettings):
     api_drain_timeout_seconds: Annotated[float, Field(gt=0)] = (
         _DEFAULT_API_DRAIN_TIMEOUT_SECONDS
     )
+    # Long-experiment scale knobs (defaults preserve short-run behavior).
+    # These never imply in-DB DELETE of snapshots, stream records, or traces.
+    observer_stream_queue_size: Annotated[int, Field(ge=1, le=10_000)] = (
+        _DEFAULT_OBSERVER_STREAM_QUEUE_SIZE
+    )
+    observer_catchup_page_size: Annotated[int, Field(ge=1, le=1000)] = (
+        _DEFAULT_OBSERVER_CATCHUP_PAGE_SIZE
+    )
+    memory_retrieve_max_candidates: Annotated[
+        int, Field(ge=1, le=_MAX_MEMORY_RETRIEVE_MAX_CANDIDATES)
+    ] = _DEFAULT_MEMORY_RETRIEVE_MAX_CANDIDATES
+    llm_max_concurrency: Annotated[int, Field(ge=1, le=_MAX_LLM_MAX_CONCURRENCY)] = (
+        _DEFAULT_LLM_MAX_CONCURRENCY
+    )
+    cognition_trace_soft_cap_invocations: Annotated[int | None, Field(ge=1)] = None
+    cognition_trace_soft_cap_bytes: Annotated[int | None, Field(ge=1)] = None
     presentation_web_root: Path | None = None
     revision: str = ""
 
@@ -202,6 +224,12 @@ class Settings(BaseSettings):
         "llm_max_header_bytes",
         "api_max_page_size",
         "api_stream_queue_size",
+        "observer_stream_queue_size",
+        "observer_catchup_page_size",
+        "memory_retrieve_max_candidates",
+        "llm_max_concurrency",
+        "cognition_trace_soft_cap_invocations",
+        "cognition_trace_soft_cap_bytes",
         mode="before",
     )
     @classmethod
@@ -360,6 +388,15 @@ class Settings(BaseSettings):
         return self
 
     @model_validator(mode="after")
+    def validate_scale_knobs(self) -> Settings:
+        if self.observer_catchup_page_size > self.api_max_page_size:
+            raise ValueError(
+                "PALIMPSEST_OBSERVER_CATCHUP_PAGE_SIZE must be <= "
+                "PALIMPSEST_API_MAX_PAGE_SIZE"
+            )
+        return self
+
+    @model_validator(mode="after")
     def validate_api_auth_consistency(self) -> Settings:
         if self.api_auth_required:
             if self.api_control_credential is None:
@@ -468,8 +505,38 @@ class Settings(BaseSettings):
             "has_api_debug_credential": self.api_debug_credential is not None,
             "api_max_page_size": self.api_max_page_size,
             "api_stream_queue_size": self.api_stream_queue_size,
+            "observer_stream_queue_size": self.observer_stream_queue_size,
+            "observer_catchup_page_size": self.observer_catchup_page_size,
+            "memory_retrieve_max_candidates": self.memory_retrieve_max_candidates,
+            "llm_max_concurrency": self.llm_max_concurrency,
+            "cognition_trace_soft_cap_invocations_enabled": (
+                self.cognition_trace_soft_cap_invocations is not None
+            ),
+            "cognition_trace_soft_cap_bytes_enabled": (
+                self.cognition_trace_soft_cap_bytes is not None
+            ),
             "has_presentation_web_root": self.presentation_web_root is not None,
             "has_revision": bool(self.revision),
+        }
+
+    def scale_knob_fields(self) -> dict[str, int | str]:
+        """Secret-safe scale knob values for DEBUG load logging."""
+        return {
+            "api_stream_queue_size": self.api_stream_queue_size,
+            "observer_stream_queue_size": self.observer_stream_queue_size,
+            "observer_catchup_page_size": self.observer_catchup_page_size,
+            "memory_retrieve_max_candidates": self.memory_retrieve_max_candidates,
+            "llm_max_concurrency": self.llm_max_concurrency,
+            "cognition_trace_soft_cap_invocations": (
+                "disabled"
+                if self.cognition_trace_soft_cap_invocations is None
+                else self.cognition_trace_soft_cap_invocations
+            ),
+            "cognition_trace_soft_cap_bytes": (
+                "disabled"
+                if self.cognition_trace_soft_cap_bytes is None
+                else self.cognition_trace_soft_cap_bytes
+            ),
         }
 
     def __repr__(self) -> str:

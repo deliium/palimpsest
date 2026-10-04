@@ -7,6 +7,9 @@ import pytest
 from agents.models import AgentId, DriveKind
 from simulation.models import StochasticIdentity
 from simulation.runner_models import (
+    LONG_RUN_CHECKPOINT_CADENCE_100,
+    LONG_RUN_CHECKPOINT_CADENCE_500,
+    LONG_RUN_CHECKPOINT_CADENCE_1000,
     AgentCognitionSpec,
     AgentRunnerSpec,
     DriveOverrideSpec,
@@ -15,11 +18,14 @@ from simulation.runner_models import (
     MemoryMode,
     MortalityMode,
     RecordingPolicy,
+    RunnerCheckpointPolicy,
     RunnerProviderSettings,
     RunnerStopPolicy,
     SimulationRunnerConfig,
     WorldScenarioSpec,
     describe_runner_config,
+    long_run_checkpoint_policy,
+    long_run_persistence_spec,
 )
 from simulation.runner_serialization import (
     build_runner_diagnostics,
@@ -659,3 +665,26 @@ def test_skill_learning_mode_requires_v11_and_shared_rates(
     assert "reason_code=skill_rate_mismatch" in messages
     assert "agent_count=2" in messages
     assert "0.03" not in messages
+
+
+def test_long_run_checkpoint_presets_are_opt_in() -> None:
+    default = RunnerCheckpointPolicy()
+    assert default.enabled is False
+    assert default.cadence_ticks is None
+
+    for cadence in (
+        LONG_RUN_CHECKPOINT_CADENCE_100,
+        LONG_RUN_CHECKPOINT_CADENCE_500,
+        LONG_RUN_CHECKPOINT_CADENCE_1000,
+    ):
+        policy = long_run_checkpoint_policy(cadence)
+        assert policy.enabled is True
+        assert policy.cadence_ticks == cadence
+        persistence = long_run_persistence_spec(cadence_ticks=cadence)
+        assert persistence.durable is True
+        assert persistence.checkpoint == policy
+
+    with pytest.raises(ValueError):
+        long_run_checkpoint_policy(0)
+    with pytest.raises(ValueError):
+        long_run_checkpoint_policy(-1)

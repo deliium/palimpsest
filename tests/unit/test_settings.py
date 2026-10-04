@@ -366,3 +366,56 @@ def test_api_auth_required_needs_capability_credentials() -> None:
     )
     assert settings.api_auth_required is True
     assert settings.api_max_page_size == 100
+
+
+def test_scale_knob_defaults_preserve_short_run_behavior() -> None:
+    settings = load_settings(env_file=False)
+    assert settings.observer_stream_queue_size == 64
+    assert settings.observer_catchup_page_size == 50
+    assert settings.memory_retrieve_max_candidates == 4096
+    assert settings.llm_max_concurrency == 1
+    assert settings.cognition_trace_soft_cap_invocations is None
+    assert settings.cognition_trace_soft_cap_bytes is None
+    knobs = settings.scale_knob_fields()
+    assert knobs["llm_max_concurrency"] == 1
+    assert knobs["cognition_trace_soft_cap_invocations"] == "disabled"
+    assert knobs["cognition_trace_soft_cap_bytes"] == "disabled"
+    fields = settings.bootstrap_fields()
+    assert fields["observer_catchup_page_size"] == 50
+    assert fields["cognition_trace_soft_cap_invocations_enabled"] is False
+
+
+def test_scale_knobs_fail_closed_on_invalid_values() -> None:
+    with pytest.raises(SettingsError):
+        load_settings(env_file=False, observer_stream_queue_size=0)
+    with pytest.raises(SettingsError):
+        load_settings(env_file=False, observer_catchup_page_size=0)
+    with pytest.raises(SettingsError):
+        load_settings(env_file=False, memory_retrieve_max_candidates=0)
+    with pytest.raises(SettingsError):
+        load_settings(env_file=False, llm_max_concurrency=0)
+    with pytest.raises(SettingsError):
+        load_settings(env_file=False, cognition_trace_soft_cap_invocations=0)
+    with pytest.raises(SettingsError):
+        load_settings(env_file=False, cognition_trace_soft_cap_bytes=0)
+    with pytest.raises(SettingsError, match="OBSERVER_CATCHUP_PAGE_SIZE"):
+        load_settings(
+            env_file=False,
+            api_max_page_size=10,
+            observer_catchup_page_size=50,
+        )
+    with pytest.raises(SettingsError, match="booleans"):
+        load_settings(env_file=False, llm_max_concurrency=True)
+
+
+def test_scale_knobs_accept_explicit_soft_caps() -> None:
+    settings = load_settings(
+        env_file=False,
+        cognition_trace_soft_cap_invocations=1000,
+        cognition_trace_soft_cap_bytes=1_048_576,
+        observer_catchup_page_size=100,
+        api_max_page_size=100,
+    )
+    assert settings.cognition_trace_soft_cap_invocations == 1000
+    assert settings.cognition_trace_soft_cap_bytes == 1_048_576
+    assert settings.scale_knob_fields()["cognition_trace_soft_cap_invocations"] == 1000

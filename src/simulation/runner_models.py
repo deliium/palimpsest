@@ -1879,6 +1879,48 @@ class RunnerPersistenceSpec:
             raise ValueError("checkpoints require durable persistence")
 
 
+# Documented long-run cadence presets (opt-in; short-run default stays off).
+LONG_RUN_CHECKPOINT_CADENCE_100: Final[int] = 100
+LONG_RUN_CHECKPOINT_CADENCE_500: Final[int] = 500
+LONG_RUN_CHECKPOINT_CADENCE_1000: Final[int] = 1000
+LONG_RUN_CHECKPOINT_CADENCES: Final[tuple[int, ...]] = (
+    LONG_RUN_CHECKPOINT_CADENCE_100,
+    LONG_RUN_CHECKPOINT_CADENCE_500,
+    LONG_RUN_CHECKPOINT_CADENCE_1000,
+)
+
+
+def long_run_checkpoint_policy(
+    cadence_ticks: int = LONG_RUN_CHECKPOINT_CADENCE_100,
+) -> RunnerCheckpointPolicy:
+    """Enable durable checkpoints at a positive committed-tick cadence.
+
+    Does **not** change short-run defaults. Callers must still set
+    ``RunnerPersistenceSpec(durable=True, checkpoint=...)``. Never deletes
+    snapshot rows — storage is bounded only by write cadence.
+
+    Documented presets: 100 / 500 / 1000 committed ticks. Any positive int is
+    accepted.
+    """
+    return RunnerCheckpointPolicy(
+        enabled=True,
+        cadence_ticks=_require_positive_int(
+            "long_run_checkpoint_policy.cadence_ticks", cadence_ticks
+        ),
+    )
+
+
+def long_run_persistence_spec(
+    *,
+    cadence_ticks: int = LONG_RUN_CHECKPOINT_CADENCE_100,
+) -> RunnerPersistenceSpec:
+    """Durable persistence with an opt-in long-run checkpoint cadence."""
+    return RunnerPersistenceSpec(
+        durable=True,
+        checkpoint=long_run_checkpoint_policy(cadence_ticks),
+    )
+
+
 @dataclass(frozen=True, slots=True)
 class RunnerProviderSettings:
     """Credential-free, fingerprintable LLM settings for a run.

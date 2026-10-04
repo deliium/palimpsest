@@ -8,6 +8,7 @@ allowed only at the durable head.
 from __future__ import annotations
 
 import logging
+import time
 from dataclasses import dataclass
 
 from simulation.clock import Tick
@@ -141,6 +142,7 @@ async def scene_at_tick(
         raise TypeError("run_id must be RunId")
     if target_tick is not None and type(target_tick) is not Tick:
         raise TypeError("target_tick must be Tick or None")
+    started = time.perf_counter()
     outcome = await service.replay(
         ReplayRequest(run_id=run_id, target_tick=target_tick)
     )
@@ -162,6 +164,13 @@ async def scene_at_tick(
         result=outcome.result,
         snapshot_location_ids=raw_locations,
         snapshot_body_locations=raw_bodies,
+    )
+    duration_ms = (time.perf_counter() - started) * 1000.0
+    _LOGGER.debug(
+        "[scale.profile] component=replay operation=scene_at_tick "
+        "duration_ms=%.3f count=%s",
+        duration_ms,
+        len(history.events),
     )
     del engine
     return history

@@ -229,9 +229,10 @@ def clear_log_context() -> None:
 
 
 def log_bootstrap(settings: Settings) -> None:
-    get_logger("infrastructure.settings").debug(
-        "settings_loaded", **settings.bootstrap_fields()
-    )
+    log = get_logger("infrastructure.settings")
+    log.debug("settings_loaded", **settings.bootstrap_fields())
+    for name, value in settings.scale_knob_fields().items():
+        log.debug("scale_knob", name=name, value=value)
 
 
 def log_lifecycle(event: str, **fields: str | int | bool) -> None:

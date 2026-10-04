@@ -10,6 +10,7 @@ public facade.
 from __future__ import annotations
 
 import logging
+import time
 from collections.abc import Sequence
 from typing import Final
 
@@ -344,6 +345,7 @@ class PersistentSimulationService:
             expected_commit.value[:8],
         )
         existing: TickCommit | None = None
+        append_started = time.perf_counter()
         try:
             existing = await self._journal.get_tick_commit(
                 self._engine.run_id, candidate.tick
@@ -362,6 +364,21 @@ class PersistentSimulationService:
             if self._engine._snapshot is not live_before:
                 self._engine._snapshot = live_before
             raise
+        append_ms = (time.perf_counter() - append_started) * 1000.0
+        if bound_snapshot is not None:
+            _LOGGER.debug(
+                "[scale.profile] component=persistence operation=snapshot_write "
+                "duration_ms=%.3f count=%s",
+                append_ms,
+                1,
+            )
+        else:
+            _LOGGER.debug(
+                "[scale.profile] component=persistence operation=tick_append "
+                "duration_ms=%.3f count=%s",
+                append_ms,
+                len(candidate.events),
+            )
 
         if type(commit) is not TickCommit:
             self._fence(candidate.tick, reason="invalid_commit_type")
