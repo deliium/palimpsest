@@ -84,11 +84,27 @@ Named cognitive architecture variants (`agents.cognition.architectures`, Experim
 
 `.ai-factory/plans/v2-integration-research-benchmark-observer-suite.md` is implemented (2026-10-04). It composes sixteen `bench-*` scenarios, `observer-graphical-v2`, zero-install Docker+browser acceptance, scientific-invariant / architecture gates, matrix fixture + Research UI artifact resolution, and docs — without owning `multi_hop_testimony_tracking` or adding capability flags. M6 stays open for that flag.
 
+`.ai-factory/plans/v3-01-generational-architecture.md` is implemented (2026-10-04) under **M7** (V3 scaffolding only). It does not own `multi_hop_testimony_tracking`. M6 stays open for that flag.
+
 `.ai-factory/plans/v2-emergent-social-norms.md` is implemented. It adds an opt-in owner-scoped social-norm ledger on `runner-config-v17`, Experiment X, and `emergent_social_norms@1`. A norm is a private belief inferred from repeated observations. It is not a `WorldEngine` rule, and it does not own a capability flag. Opt-in group formation already landed on `runner-config-v16`. Territorial claims already landed as `runner-config-v15`, Experiment V, and `spatial_control@1`.
 
 **Out of scope until planned:** free-form affect narration, personality trait systems, HTTP debug UI for emotion, collapsing emotion+drives+goals into one reward scalar.
 
 **Plans:** `.ai-factory/plans/v2-emergent-dynamic-identity.md` (owns `extended_self_model` only). `.ai-factory/plans/v2-learned-causal-worldmodel.md` (owns `predictive_world_model` only). `.ai-factory/plans/v2-first-order-theory-of-mind.md` (owns `advanced_social_inference` only). Opt-in work that did not claim a flag already shipped as M5.4 and M5.5. `.ai-factory/plans/v2-subjective-territorial-claims.md` (no flag; `runner-config-v15`). `.ai-factory/plans/v2-emergent-group-formation.md` (implemented 2026-10-02; no flag; `runner-config-v16`). `.ai-factory/plans/v2-emergent-social-norms.md` (implemented 2026-10-02; no flag; `runner-config-v17`). `.ai-factory/plans/v2-repeated-social-conventions.md` (implemented 2026-10-03; no flag; `runner-config-v18`). `.ai-factory/plans/v2-physical-external-artifacts.md` (implemented 2026-10-03; no flag; `runner-config-v19`). `.ai-factory/plans/v2-emergent-semantic-naming.md` (implemented 2026-10-03; no flag; `runner-config-v20`). `.ai-factory/plans/v2-long-lived-cultural-narratives.md` (implemented 2026-10-03; no flag; `runner-config-v21`). `.ai-factory/plans/v2-computational-cognitive-budgets.md` (implemented 2026-10-03; no flag; `runner-config-v22`). `.ai-factory/plans/v2-godot-observer-mechanics-viz.md` (implemented 2026-10-03; no flag; presentation-only). `.ai-factory/plans/v2-long-experiment-scalability.md` (implemented 2026-10-04; no flag; scale infrastructure).
+
+### M7 — V3 Generational Civilization (in progress)
+
+**Goal:** Evolve completed V2 into generational civilization simulation under reserved, default-off `V3CapabilityFlags`, without reopening WorldEngine authority, Observation trust boundaries, replay identity, or Godot write authority. No scripted civilization/institution/kinship outcomes.
+
+**Scaffolding landed (2026-10-04):** `.ai-factory/plans/v3-01-generational-architecture.md` — closed `V3CapabilityFlags` (`generational_population`, `kinship_inheritance`, `multi_polity_migration`, `institutional_economy`, `cultural_historical_memory`) on accepted `runner-config-v23` (= full v22 keyset ∪ sibling `v3_capability_flags`); default write stays `runner-config-v4` when all V3 flags are off; flags-on fail closed at `SimulationRunner.from_config` with `capability_unimplemented`; Alembic head stays `0017` (flags in runner JSON only); Observer `observer-protocol-v1` / Research UI `/research/` stable; Downstream V3 plan contract + module seams documented. No demographic, kinship, institutional, migration, or language-evolution behavior in the scaffolding plan.
+
+**Still unimplemented (empty V3 owned allowlist):** all five V3 flags. Enabling any still fails closed until an owning later plan lands.
+
+**Next plans (under this milestone):** own individual V3 flag slots with real generational mechanisms (population/lifetimes, kinship/inheritance, multi-polity migration, institutional economy, cultural-historical memory / language evolution), each with V1 gate + `test_v2_scientific_invariants` green under V3 flags-off and accepted-set / exact key-set discipline.
+
+**Out of scope for M7 scaffolding (already true):** claiming `multi_hop_testimony_tracking` (remains M6); Alembic `0018+` without a proven inspection need; `/v2` HTTP; protocol rename; scripted emergence helpers.
+
+**Plans:** `.ai-factory/plans/v3-01-generational-architecture.md` (scaffolding only; owns no V3 flag behavior).
 
 ## V1 status
 

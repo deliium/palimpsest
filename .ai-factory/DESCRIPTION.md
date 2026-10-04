@@ -36,7 +36,7 @@ Palimpsest is a Python 3.12+ modular monolith for reproducible, discrete, text-b
 
 ## V3 scaffolding
 
-Compatibility foundation for generational civilization plans: reserved default-off `V3CapabilityFlags` (`generational_population`, `kinship_inheritance`, `multi_polity_migration`, `institutional_economy`, `cultural_historical_memory`) on accepted `runner-config-v23` (= full v22 keyset ∪ sibling `v3_capability_flags`); default write stays `runner-config-v4` when all V3 flags are off; enabling any V3 flag fails closed at `SimulationRunner.from_config` with `capability_unimplemented` until an owning plan lands; Alembic head stays `0017` (flags remain runner JSON only). No demographic/kinship/institutional/migration/language behavior in this scaffolding. Seams and downstream contract: `docs/architecture.md`. Register M7/V3 via `/aif-roadmap`.
+Compatibility foundation for generational civilization plans: reserved default-off `V3CapabilityFlags` (`generational_population`, `kinship_inheritance`, `multi_polity_migration`, `institutional_economy`, `cultural_historical_memory`) on accepted `runner-config-v23` (= full v22 keyset ∪ sibling `v3_capability_flags`); default write stays `runner-config-v4` when all V3 flags are off; enabling any V3 flag fails closed at `SimulationRunner.from_config` with `capability_unimplemented` until an owning plan lands; Alembic head stays `0017` (flags remain runner JSON only). No demographic/kinship/institutional/migration/language behavior in this scaffolding. Seams and downstream contract: `docs/architecture.md`. Milestone: **M7 — V3 Generational Civilization** (`.ai-factory/ROADMAP.md`; scaffolding landed; flags still unowned).
 
 ## V2 scaffolding
 
