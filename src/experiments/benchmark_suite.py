@@ -587,7 +587,7 @@ def _build_registry() -> dict[str, BenchmarkScenarioSpec]:
         _spec(
             scenario_id=BENCH_16_FORKED_INTERVENTION,
             title="Forked replay after one controlled intervention",
-            condition_ids=("fork-communication-remove",),
+            condition_ids=("fork-parent", "fork-child-comm-remove"),
             required_modes=("ResearchInterventionKind.COMMUNICATION_REMOVE",),
             composition_notes=(
                 "One ResearchIntervention(kind=COMMUNICATION_REMOVE); "

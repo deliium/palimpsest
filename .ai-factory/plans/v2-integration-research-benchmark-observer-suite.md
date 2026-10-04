@@ -285,19 +285,19 @@ Each checkpoint is a git commit on `main` created when those tasks are done. Do 
 
 ### Phase 3: Culture, architecture, fork, suite smoke (8–16)
 
-- [ ] Task 8: Implement scenarios 8–11 (territory, clusters, norms, conventions).
+- [x] Task 8: Implement scenarios 8–11 (territory, clusters, norms, conventions).
   - Deliverable: Wrap V/W/X/Y with locked condition ids and phenomenon panels / family metrics. Tests assert ledgers update under DETERMINISTIC modes and support_band machinery runs; **forbid** boolean emerged assertions. For clusters: measure membership churn / decay / retire **when present**. **Non-goal:** inventing a scripted world shock to force dissolution.
   - Logging: ledger head counts; panel support_band codes.
   - Depends on tasks 2–3.
   - Files: benchmark modules, tests.
 
-- [ ] Task 9: Implement scenarios 12–14 (artifacts, naming drift, rumor/narrative).
+- [x] Task 9: Implement scenarios 12–14 (artifacts, naming drift, rumor/narrative).
   - Deliverable: Wrap Z/AA/AB with locked ids; artifact persistence after author absence/death **when terminal occurs** for #12; naming drift metrics for #13; narrative lineage + rumor distortion detectability for #14. Non-goals explicitly forbid scripting a myth.
   - Logging: artifact/label/narrative counts and opaque ids only.
   - Depends on tasks 2–3.
   - Files: benchmark modules, tests.
 
-- [ ] Task 10: Implement scenario 15 (architecture matrix).
+- [x] Task 10: Implement scenario 15 (architecture matrix).
   - Deliverable: Wrap Experiment AC (`ac-<architecture_id>`); prove identical world/seed across architectures; each architecture produces valid closed commands; suite records architecture digests as diagnostics only.
   - Logging: `architecture_id` + digest prefix; schema versions.
   - Depends on tasks 2–3.

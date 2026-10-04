@@ -215,12 +215,15 @@ def build_benchmark_scenario(
 def _load_concrete_builders() -> None:
     """Import concrete builder modules so they self-register."""
     from experiments.benchmark_scenarios import (  # noqa: F401
+        architecture_scenarios as _architecture,
         cognition_scenarios as _cognition,
+        culture_scenarios as _culture,
+        fork_scenarios as _fork,
         skill_scenarios as _skill,
         social_scenarios as _social,
     )
 
-    del _cognition, _social, _skill
+    del _cognition, _social, _skill, _culture, _architecture, _fork
 
 
 _load_concrete_builders()

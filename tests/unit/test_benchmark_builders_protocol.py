@@ -53,39 +53,12 @@ def _base(*, max_ticks: int = 4):
     )
 
 
-def test_unimplemented_slots_fail_closed() -> None:
+def test_all_sixteen_slots_registered_and_implemented() -> None:
     builders = registered_benchmark_builders()
     assert set(builders) == set(BENCHMARK_SCENARIO_IDS)
     assert len(builders) == 16
-    base = _base()
-    # Tasks 4+ fill concrete builders; remaining slots stay fail-closed.
-    from experiments.benchmark_suite import (
-        BENCH_01_SEASONAL_PLANNING,
-        BENCH_02_MEMORY_INTERFERENCE,
-        BENCH_03_REFLECTION_REVISION,
-        BENCH_04_TOM_SOCIAL_FAILURE,
-        BENCH_05_TOM_COOPERATION,
-        BENCH_06_DECEPTION_REPUTATION,
-        BENCH_07_SKILL_SPECIALIZATION,
-    )
-
-    implemented = {
-        BENCH_01_SEASONAL_PLANNING,
-        BENCH_02_MEMORY_INTERFERENCE,
-        BENCH_03_REFLECTION_REVISION,
-        BENCH_04_TOM_SOCIAL_FAILURE,
-        BENCH_05_TOM_COOPERATION,
-        BENCH_06_DECEPTION_REPUTATION,
-        BENCH_07_SKILL_SPECIALIZATION,
-    }
     for scenario_id in BENCHMARK_SCENARIO_IDS:
-        if scenario_id in implemented:
-            assert is_benchmark_builder_implemented(scenario_id) is True
-            continue
-        assert is_benchmark_builder_implemented(scenario_id) is False
-        with pytest.raises(BenchmarkBuilderError) as exc:
-            build_benchmark_scenario(scenario_id, base)
-        assert exc.value.code == "builder_not_implemented"
+        assert is_benchmark_builder_implemented(scenario_id) is True
 
 
 def test_concrete_bench_02_builder_builds_known_experiment_a_arm() -> None:
@@ -101,7 +74,10 @@ def test_concrete_bench_02_builder_builds_known_experiment_a_arm() -> None:
 
 def test_unknown_builder_registration_fails_closed() -> None:
     with pytest.raises(BenchmarkBuilderError) as exc:
-        register_benchmark_builder("bench-99-missing", lambda base, *, seed_matrix=None: None)  # type: ignore[arg-type,return-value]
+        register_benchmark_builder(
+            "bench-99-missing",
+            lambda base, *, seed_matrix=None: None,  # type: ignore[arg-type,return-value]
+        )
     assert exc.value.code == "unknown_scenario_id"
 
 

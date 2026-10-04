@@ -11,14 +11,10 @@ from experiments.benchmark_scenarios import (
 )
 from experiments.benchmark_smoke import (
     DEFAULT_SMOKE_TICK_BUDGET,
-    BenchmarkSmokeError,
     run_benchmark_smoke,
     smoke_tick_budget,
 )
-from experiments.benchmark_suite import (
-    BENCH_02_MEMORY_INTERFERENCE,
-    BENCH_08_TERRITORIAL,
-)
+from experiments.benchmark_suite import BENCH_02_MEMORY_INTERFERENCE
 from experiments.catalog import base_runner_config_from_scenario
 from simulation.runner_models import (
     AgentCognitionSpec,
@@ -61,12 +57,16 @@ def test_smoke_tick_budget_caps_at_four() -> None:
     assert smoke_tick_budget(BENCH_02_MEMORY_INTERFERENCE, tick_budget=2) == 2
 
 
-def test_smoke_requires_implemented_builder() -> None:
+def test_smoke_unknown_scenario_fails_closed() -> None:
     import asyncio
 
-    with pytest.raises(BenchmarkSmokeError) as exc:
-        asyncio.run(run_benchmark_smoke(BENCH_08_TERRITORIAL, _base()))
-    assert exc.value.code == "builder_not_implemented"
+    with pytest.raises(Exception) as exc:
+        asyncio.run(run_benchmark_smoke("bench-99-missing", _base()))
+    # Suite lookup fails closed before/while smoke starts.
+    assert getattr(exc.value, "code", "") in {
+        "unknown_scenario_id",
+        "builder_not_implemented",
+    } or "unknown" in str(exc.value).lower()
 
 
 @pytest.mark.asyncio
