@@ -210,7 +210,9 @@ async def test_version_uses_distribution_revision_and_build_info(
         "export_engine",
         "export_renderer",
         "revision",
+        "research_ui_configured",
     }
+    assert body["research_ui_configured"] is False
     assert "route_version" in caplog.text
     assert "status" in caplog.text
     assert "duration" in caplog.text

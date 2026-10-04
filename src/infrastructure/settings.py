@@ -211,6 +211,7 @@ class Settings(BaseSettings):
     cognition_trace_soft_cap_invocations: Annotated[int | None, Field(ge=1)] = None
     cognition_trace_soft_cap_bytes: Annotated[int | None, Field(ge=1)] = None
     presentation_web_root: Path | None = None
+    research_web_root: Path | None = None
     revision: str = ""
 
     @field_validator(
@@ -252,7 +253,7 @@ class Settings(BaseSettings):
     def reject_boolean_floats(cls, value: object) -> object:
         return _reject_bool(value)
 
-    @field_validator("presentation_web_root", mode="before")
+    @field_validator("presentation_web_root", "research_web_root", mode="before")
     @classmethod
     def empty_presentation_root_is_unset(cls, value: object) -> object:
         if value is None:
@@ -516,6 +517,7 @@ class Settings(BaseSettings):
                 self.cognition_trace_soft_cap_bytes is not None
             ),
             "has_presentation_web_root": self.presentation_web_root is not None,
+            "has_research_web_root": self.research_web_root is not None,
             "has_revision": bool(self.revision),
         }
 

@@ -1,0 +1,38 @@
+:root {
+  font-family: "Source Sans 3", "Segoe UI", "Helvetica Neue", sans-serif;
+  line-height: 1.4;
+  font-weight: 400;
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+
+  /* Epistemic chrome (presentation-only; Task 3) */
+  --ep-objective-world: #2f5d50;
+  --ep-agent-observation: #3d6b8c;
+  --ep-agent-memory: #6b5b8c;
+  --ep-agent-belief: #8a6a3a;
+  --ep-agent-imagination: #5c7a8a;
+  --ep-counterfactual: #8a4a5c;
+  --ep-research-inference: #5a5a5a;
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  min-width: 320px;
+  min-height: 100vh;
+}
+
+#app {
+  min-height: 100vh;
+}
+
+a {
+  color: inherit;
+}

@@ -27,6 +27,17 @@ from observer.debugger_state import (
     DebuggerStateError,
     parse_debugger_query,
 )
+from observer.research_ui_state import (
+    EPISTEMIC_CLASSES,
+    RESEARCH_UI_VIEWS,
+    ResearchUiDeepLinkState,
+    ResearchUiStateError,
+    build_research_ui_query,
+    epistemic_from_debugger_artifact,
+    epistemic_from_evidence_class,
+    epistemic_from_overlay_kind,
+    parse_research_ui_query,
+)
 from observer.labels import (
     SubjectiveLabelOverlay,
     SubjectiveLabelReading,
@@ -79,7 +90,16 @@ __all__ = [
     "SubjectiveLabelOverlay",
     "SubjectiveLabelReading",
     "VisualBounds",
+    "EPISTEMIC_CLASSES",
+    "RESEARCH_UI_VIEWS",
+    "ResearchUiDeepLinkState",
+    "ResearchUiStateError",
+    "build_research_ui_query",
+    "epistemic_from_debugger_artifact",
+    "epistemic_from_evidence_class",
+    "epistemic_from_overlay_kind",
     "parse_debugger_query",
+    "parse_research_ui_query",
     "project_strategy_audit_overlay",
     "project_subjective_label_overlay",
 ]

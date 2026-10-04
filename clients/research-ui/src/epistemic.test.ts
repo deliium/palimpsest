@@ -1,0 +1,23 @@
+import { describe, expect, it } from 'vitest'
+import {
+  epistemicFromDebuggerArtifact,
+  epistemicFromEvidenceClass,
+  epistemicFromOverlayKind,
+} from './epistemic'
+
+describe('epistemic mapping', () => {
+  it('maps analytical overlays to research_inference', () => {
+    expect(epistemicFromOverlayKind('emergent_group_formation')).toBe('research_inference')
+    expect(epistemicFromOverlayKind('spatial_control')).toBe('research_inference')
+    expect(epistemicFromEvidenceClass('ANALYTICAL_INFERRED')).toBe('research_inference')
+  })
+
+  it('maps debugger artifact kinds', () => {
+    expect(epistemicFromDebuggerArtifact('observation')).toBe('agent_observation')
+    expect(epistemicFromDebuggerArtifact('memory')).toBe('agent_memory')
+    expect(epistemicFromDebuggerArtifact('belief')).toBe('agent_belief')
+    expect(epistemicFromDebuggerArtifact('imagination')).toBe('agent_imagination')
+    expect(epistemicFromDebuggerArtifact('counterfactual')).toBe('counterfactual')
+    expect(epistemicFromDebuggerArtifact('objective_event')).toBe('objective_world')
+  })
+})

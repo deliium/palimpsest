@@ -122,7 +122,9 @@ def _optional_text(value: object) -> str | None:
     return None
 
 
-def version_payload(settings: Settings) -> dict[str, str | None]:
+def version_payload(settings: Settings) -> dict[str, str | bool | None]:
+    from api.research_static import research_ui_configured
+
     try:
         application_version = version("palimpsest")
     except PackageNotFoundError:
@@ -133,10 +135,12 @@ def version_payload(settings: Settings) -> dict[str, str | None]:
         )
     info = read_build_info(presentation_root(settings))
     revision = settings.revision or _optional_text(info.get("revision"))
+    research_configured = research_ui_configured(settings)
     _LOGGER.debug(
         "version_payload_built",
         has_export_engine=_optional_text(info.get("export_engine")) is not None,
         has_revision=revision is not None,
+        research_ui_configured=research_configured,
     )
     return {
         "application_version": application_version,
@@ -144,6 +148,7 @@ def version_payload(settings: Settings) -> dict[str, str | None]:
         "export_engine": _optional_text(info.get("export_engine")),
         "export_renderer": _optional_text(info.get("export_renderer")),
         "revision": revision,
+        "research_ui_configured": research_configured,
     }
 
 

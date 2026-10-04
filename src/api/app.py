@@ -20,6 +20,7 @@ from api.persistence_services import (
     PersistenceReplayApiService,
 )
 from api.presentation_static import mount_presentation
+from api.research_static import mount_research_ui
 from api.routes import (
     branches_router,
     debugger_router,
@@ -228,5 +229,7 @@ def create_app(
     app.include_router(observer_router)
     app.include_router(observer_stream_router)
     app.include_router(version_router)
+    # Research UI before Godot catch-all `/` so `/research/` is not stolen.
+    mount_research_ui(app, resolved)
     mount_presentation(app, resolved)
     return app
