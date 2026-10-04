@@ -1,28 +1,52 @@
 <script lang="ts">
-  type NavItem = { href: string; label: string }
+  import { onMount } from 'svelte'
+  import AuthPanel from './AuthPanel.svelte'
+  import RunList from '../views/RunList.svelte'
+  import RunOverview from '../views/RunOverview.svelte'
+  import { resolveRoute, type Route } from '../router'
 
-  const nav: NavItem[] = [
-    { href: '/research/', label: 'Runs' },
-    { href: '/research/matrix', label: 'Matrix' },
-  ]
+  let route = $state<Route>(resolveRoute())
+
+  function refresh(): void {
+    route = resolveRoute()
+  }
+
+  onMount(() => {
+    refresh()
+    window.addEventListener('popstate', refresh)
+    return () => window.removeEventListener('popstate', refresh)
+  })
 </script>
 
 <div class="shell">
   <header class="top">
     <a class="brand" href="/research/">Palimpsest Research</a>
     <nav aria-label="Primary">
-      {#each nav as item (item.href)}
-        <a href={item.href}>{item.label}</a>
-      {/each}
+      <a href="/research/">Runs</a>
+      <a href="/research/matrix">Matrix</a>
     </nav>
+    <AuthPanel />
   </header>
   <main class="outlet">
-    <p class="eyebrow">Research UI</p>
-    <h1>Why did it happen?</h1>
-    <p class="lede">
-      Analysis and debugging surface complementary to the Godot world observer.
-      Run discovery, graphs, and metrics land in later tasks.
-    </p>
+    {#if route.kind === 'run_list'}
+      <RunList />
+    {:else if route.kind === 'run'}
+      <RunOverview runId={route.runId} view={route.view} deepLink={route.deepLink} />
+    {:else if route.kind === 'matrix_list' || route.kind === 'matrix_detail'}
+      <section>
+        <p class="eyebrow">Matrix</p>
+        <h1>Experiment matrices</h1>
+        <p class="lede">
+          Matrix overview lands in a later task. Configure
+          <code>PALIMPSEST_RESEARCH_MATRIX_ROOT</code> when ready.
+        </p>
+      </section>
+    {:else}
+      <section>
+        <h1>Not found</h1>
+        <p class="lede"><a href="/research/">Return to runs</a></p>
+      </section>
+    {/if}
   </main>
 </div>
 
@@ -59,6 +83,7 @@
   nav {
     display: flex;
     gap: 1rem;
+    margin-right: auto;
   }
 
   nav a {
@@ -72,8 +97,9 @@
   }
 
   .outlet {
-    padding: 2.5rem 1.5rem 3rem;
-    max-width: 42rem;
+    padding: 2rem 1.5rem 3rem;
+    max-width: 56rem;
+    width: 100%;
   }
 
   .eyebrow {
@@ -87,9 +113,8 @@
   h1 {
     margin: 0 0 0.75rem;
     font-family: "Iowan Old Style", "Palatino Linotype", Palatino, Georgia, serif;
-    font-size: clamp(1.8rem, 4vw, 2.4rem);
+    font-size: clamp(1.6rem, 3.5vw, 2.1rem);
     font-weight: 600;
-    line-height: 1.15;
   }
 
   .lede {

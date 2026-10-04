@@ -229,25 +229,25 @@ Each checkpoint is a git commit on the current branch when those tasks complete.
 
 ### Phase 2: Run discovery, metadata, auth, deep links
 
-- [ ] Task 3b: Inspect-scoped read-only run index
+- [x] Task 3b: Inspect-scoped read-only run index
   - Deliverable: Add `GET` under `objective_inspection` that lists runs via the existing `list_runs` port (reuse `RunListOut` or a thin identical envelope). No create/configure/tick/stop. Keyset pagination + `api_max_page_size` caps match control list. Unit tests: inspect credential succeeds; control-only mutation routes unchanged; open-local when inspection secret unset.
   - Logging: INFO `route_inspect_run_list` with count only.
   - Depends on task 2 (router wiring conventions).
   - Files: `src/api/routes/inspection.py` (or dedicated router), `src/api/simulation_manager.py` reuse, tests.
 
-- [ ] Task 4: Run list + simulation metadata views
+- [x] Task 4: Run list + simulation metadata views
   - Deliverable: SPA pages call Task 3b inspect index (not control `GET /v1/simulations` by default) plus `GET .../observer/run`, `GET .../experimental`, `GET .../branch` when capable. Show lifecycle, ticks, experiment membership metadata (never seeds/condition values), optional fork lineage. Capability errors surface reason codes.
   - Logging: client DEBUG fetch status codes; no payload logs.
   - Depends on tasks 1–3, 3b.
   - Files: `clients/research-ui/src/views/RunList*`, `RunOverview*`, API client module.
 
-- [ ] Task 5: Per-capability credential UX (header-only)
+- [x] Task 5: Per-capability credential UX (header-only)
   - Deliverable: Four local slots — `simulation_control`, `objective_inspection`, `agent_visible`, `subjective_debug` — stored in memory or sessionStorage. For each fetch, send `x-palimpsest-token` (or Bearer) with the **credential that matches that route’s capability**. Never put tokens in URLs, deep links, or iframe `src`. Document open-local default. Surface 401/403 reason codes (`missing_credential`, `invalid_credential`, `debug_disabled`). No OAuth refresh flow.
   - Logging: WARN client-side if a pasted URL contains banned secret keys; strip before navigation.
   - Depends on task 3.
   - Files: `clients/research-ui/src/auth*`, docs note in Task 19.
 
-- [ ] Task 6: Bidirectional deep-link application in the SPA
+- [x] Task 6: Bidirectional deep-link application in the SPA
   - Deliverable: On boot, parse `window.location.search` via shared contract; route to the correct view; keep URL updated on tab/agent/event focus without credentials. “Open in World Observer” builds Godot `/?…` links (new tab or embed host).
   - Logging: DEBUG `research_ui_deeplink_applied run_id=%s view=%s` (ids only).
   - Depends on tasks 3–4.

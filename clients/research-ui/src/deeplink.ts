@@ -166,11 +166,17 @@ export function buildResearchUiQuery(state: ResearchUiDeepLink): string {
   return text === '' ? '' : `?${text}`
 }
 
+export type GodotLinkInput = {
+  runId: string | null
+  tick: number | null
+  eventId: string | null
+  sequence: number | null
+  agentId: string | null
+  debugger: boolean
+}
+
 /** Build Godot observer URL (Research UI → World Observer). */
-export function buildGodotObserverUrl(
-  state: Omit<ResearchUiDeepLink, 'view'> & { debugger?: boolean },
-  origin = '',
-): string {
+export function buildGodotObserverUrl(state: GodotLinkInput, origin = ''): string {
   const params = new URLSearchParams()
   if (state.runId !== null && state.runId !== '') {
     params.set('run_id', state.runId)
@@ -187,7 +193,7 @@ export function buildGodotObserverUrl(
   if (state.agentId !== null && state.agentId !== '') {
     params.set('agent_id', state.agentId)
   }
-  if (state.debugger === true) {
+  if (state.debugger) {
     params.set('debugger', '1')
   }
   const q = params.toString()

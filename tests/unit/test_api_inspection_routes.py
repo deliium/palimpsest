@@ -172,6 +172,65 @@ async def test_objective_and_events_and_experimental(logging_sandbox: None) -> N
         assert metrics.json()["count"] == 0
 
 
+async def test_inspect_run_index_open_local_when_inspection_unset(
+    logging_sandbox: None, caplog: pytest.LogCaptureFixture
+) -> None:
+    with caplog.at_level(logging.INFO):
+        async with running_client(_app()) as client:
+            response = await client.get("/v1/research/runs")
+    assert response.status_code == 200
+    body = response.json()
+    assert body["count"] == 0
+    assert body["items"] == []
+    assert "route_inspect_run_list" in caplog.text
+
+
+async def test_inspect_run_index_accepts_inspection_credential(
+    logging_sandbox: None,
+) -> None:
+    control = "c" * 32
+    inspect = "i" * 32
+    settings = _settings(
+        api_auth_required=True,
+        api_control_credential=control,
+        api_inspection_credential=inspect,
+        api_agent_visible_credential=inspect,
+    )
+    async with running_client(_app(settings)) as client:
+        missing = await client.get("/v1/research/runs")
+        assert missing.status_code == 401
+        assert missing.json()["code"] == "missing_credential"
+        wrong = await client.get(
+            "/v1/research/runs",
+            headers={"x-palimpsest-token": control},
+        )
+        assert wrong.status_code == 401
+        assert wrong.json()["code"] == "invalid_credential"
+        ok = await client.get(
+            "/v1/research/runs",
+            headers={"x-palimpsest-token": inspect},
+        )
+        assert ok.status_code == 200
+        assert ok.json()["count"] == 0
+        # Control-plane list still requires control credential.
+        control_list = await client.get(
+            "/v1/simulations",
+            headers={"x-palimpsest-token": inspect},
+        )
+        assert control_list.status_code == 401
+        create = await client.post(
+            "/v1/simulations",
+            headers={"x-palimpsest-token": inspect},
+            json={
+                "run_id": "r1",
+                "config_schema_version": "runner-config-v4",
+                "config_fingerprint": "fp",
+                "config_payload_b64": "e30=",
+            },
+        )
+        assert create.status_code == 401
+
+
 async def test_debug_routes_disabled_by_default(logging_sandbox: None) -> None:
     async with running_client(_app()) as client:
         response = await client.get("/v1/simulations/run-1/owners/agent-1/memories")

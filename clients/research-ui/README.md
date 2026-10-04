@@ -35,3 +35,8 @@ The API serves the SPA at `/research/` (HTML5 history fallback). Godot keeps `/`
 Owns run list, matrices, graphs, subjective ledgers, metrics, fork compare,
 decision traces, and deep links. Does **not** own authoritative world rendering
 or tick mutation.
+
+## Discovery API
+
+Default run list uses inspect-scoped `GET /v1/research/runs`
+(`objective_inspection`), not control-plane `GET /v1/simulations`.

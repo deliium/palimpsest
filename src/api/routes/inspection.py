@@ -11,6 +11,7 @@ from api.dependencies import (
     get_inspection_service,
     get_metric_read_service,
     get_settings,
+    get_simulation_manager,
 )
 from api.errors import bad_request
 from api.schemas import (
@@ -24,18 +25,23 @@ from api.schemas import (
     MetricCatalogOut,
     MetricDocumentOut,
     ObjectiveWorldOut,
+    RunListOut,
     SubjectiveClaimsOut,
     SubjectivePageOut,
     TerritorialClaimHeadOut,
 )
 from api.security import ApiCapability, require_http_capability
 from api.services import InspectionService, MetricReadService
+from api.simulation_manager import SimulationManager
 from infrastructure.logging import get_logger
 from infrastructure.settings import Settings
 from simulation.inspection import subjective_claims_document
 from simulation.run_control import AgentRuntimeCheckpoint
 
 router = APIRouter(prefix="/v1/simulations", tags=["inspection"])
+# Inspect-scoped discovery (not control-plane). Avoids colliding with
+# GET /v1/simulations which remains simulation_control-only.
+research_router = APIRouter(prefix="/v1/research", tags=["research"])
 _LOGGER = get_logger("api.routes.inspection")
 
 
@@ -43,6 +49,35 @@ def _inspect(request: Request, settings: Settings = Depends(get_settings)) -> No
     require_http_capability(
         request, settings, capability=ApiCapability.OBJECTIVE_INSPECTION
     )
+
+
+@research_router.get("/runs", response_model=RunListOut)
+async def list_runs_for_inspection(
+    request: Request,
+    _: None = Depends(_inspect),
+    manager: SimulationManager = Depends(get_simulation_manager),
+    settings: Settings = Depends(get_settings),
+    after: str | None = Query(default=None, max_length=128),
+    limit: int | None = Query(default=None, ge=1, le=1000),
+) -> RunListOut:
+    """Read-only run index for Research UI (objective_inspection).
+
+    Reuses the same ``list_runs`` port / ``RunListOut`` envelope as control
+    ``GET /v1/simulations``. Does not create, configure, tick, or stop runs.
+    """
+    started = time.perf_counter()
+    page_limit = limit if limit is not None else settings.api_max_page_size
+    if page_limit > settings.api_max_page_size:
+        raise bad_request(code="limit_exceeds_maximum")
+    result = await manager.list_runs(after_run_id=after, limit=page_limit)
+    _LOGGER.info(
+        "route_inspect_run_list",
+        route_template="GET /v1/research/runs",
+        status=200,
+        count=result.count,
+        duration_ms=round((time.perf_counter() - started) * 1000, 3),
+    )
+    return result
 
 
 def _agent_visible(

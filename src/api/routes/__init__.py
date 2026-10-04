@@ -3,6 +3,7 @@
 from api.routes.branches import router as branches_router
 from api.routes.debugger import router as debugger_router
 from api.routes.health import router as health_router
+from api.routes.inspection import research_router as research_router
 from api.routes.inspection import router as inspection_router
 from api.routes.observer import router as observer_router
 from api.routes.observer_stream import router as observer_stream_router
@@ -16,6 +17,7 @@ __all__ = [
     "debugger_router",
     "health_router",
     "inspection_router",
+    "research_router",
     "observer_router",
     "observer_stream_router",
     "replay_router",
