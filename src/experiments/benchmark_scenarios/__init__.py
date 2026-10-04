@@ -210,3 +210,17 @@ def build_benchmark_scenario(
             cognition.reflection_mode.value,
         )
     return result
+
+
+def _load_concrete_builders() -> None:
+    """Import concrete builder modules so they self-register."""
+    from experiments.benchmark_scenarios import (  # noqa: F401
+        cognition_scenarios as _cognition,
+        skill_scenarios as _skill,
+        social_scenarios as _social,
+    )
+
+    del _cognition, _social, _skill
+
+
+_load_concrete_builders()

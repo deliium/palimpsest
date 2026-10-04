@@ -6,21 +6,18 @@ import pytest
 
 from agents.models import AgentId
 from experiments.benchmark_scenarios import (
-    BenchmarkBuildResult,
     BenchmarkBuilderError,
     build_benchmark_scenario,
     is_benchmark_builder_implemented,
     register_benchmark_builder,
     registered_benchmark_builders,
-    uninstall_benchmark_builder,
 )
 from experiments.benchmark_suite import (
     BENCHMARK_SCENARIO_IDS,
     BENCH_01_SEASONAL_PLANNING,
     BENCH_02_MEMORY_INTERFERENCE,
 )
-from experiments.catalog import base_runner_config_from_scenario, experiment_a_memory
-from experiments.models import ExperimentSeedMatrix
+from experiments.catalog import base_runner_config_from_scenario
 from simulation.runner_models import (
     AgentCognitionSpec,
     AgentRunnerSpec,
@@ -56,59 +53,50 @@ def _base(*, max_ticks: int = 4):
     )
 
 
-def test_all_sixteen_slots_registered_fail_closed() -> None:
+def test_unimplemented_slots_fail_closed() -> None:
     builders = registered_benchmark_builders()
     assert set(builders) == set(BENCHMARK_SCENARIO_IDS)
     assert len(builders) == 16
     base = _base()
+    # Tasks 4+ fill concrete builders; remaining slots stay fail-closed.
+    from experiments.benchmark_suite import (
+        BENCH_01_SEASONAL_PLANNING,
+        BENCH_02_MEMORY_INTERFERENCE,
+        BENCH_03_REFLECTION_REVISION,
+        BENCH_04_TOM_SOCIAL_FAILURE,
+        BENCH_05_TOM_COOPERATION,
+        BENCH_06_DECEPTION_REPUTATION,
+        BENCH_07_SKILL_SPECIALIZATION,
+    )
+
+    implemented = {
+        BENCH_01_SEASONAL_PLANNING,
+        BENCH_02_MEMORY_INTERFERENCE,
+        BENCH_03_REFLECTION_REVISION,
+        BENCH_04_TOM_SOCIAL_FAILURE,
+        BENCH_05_TOM_COOPERATION,
+        BENCH_06_DECEPTION_REPUTATION,
+        BENCH_07_SKILL_SPECIALIZATION,
+    }
     for scenario_id in BENCHMARK_SCENARIO_IDS:
+        if scenario_id in implemented:
+            assert is_benchmark_builder_implemented(scenario_id) is True
+            continue
         assert is_benchmark_builder_implemented(scenario_id) is False
         with pytest.raises(BenchmarkBuilderError) as exc:
             build_benchmark_scenario(scenario_id, base)
         assert exc.value.code == "builder_not_implemented"
 
 
-def test_implemented_stub_builds_known_experiment_a_arm() -> None:
-    def _stub(
-        base,
-        *,
-        seed_matrix: ExperimentSeedMatrix | None = None,
-    ) -> BenchmarkBuildResult:
-        definition = experiment_a_memory(base, seed_matrix=seed_matrix)
-        # Keep only the locked reconstructive pair for this scenario.
-        conditions = tuple(
-            item
-            for item in definition.conditions
-            if item.condition_id in {"a-reconstructive", "a-reconstructive-v2"}
-        )
-        from experiments.models import ExperimentDefinition
-
-        paired = ExperimentDefinition(
-            experiment_id="bench-02-memory-interference",
-            schema_version=definition.schema_version,
-            seed_matrix=definition.seed_matrix,
-            conditions=conditions,
-            paired_world_group="bench-02-memory-interference-world",
-        )
-        return BenchmarkBuildResult(
-            scenario_id=BENCH_02_MEMORY_INTERFERENCE,
-            definition=paired,
-            matrix_factors=("memory_type",),
-        )
-
-    register_benchmark_builder(BENCH_02_MEMORY_INTERFERENCE, _stub)
-    try:
-        assert is_benchmark_builder_implemented(BENCH_02_MEMORY_INTERFERENCE) is True
-        result = build_benchmark_scenario(BENCH_02_MEMORY_INTERFERENCE, _base())
-        assert result.scenario_id == BENCH_02_MEMORY_INTERFERENCE
-        assert {item.condition_id for item in result.definition.conditions} == {
-            "a-reconstructive",
-            "a-reconstructive-v2",
-        }
-        assert result.matrix_factors == ("memory_type",)
-    finally:
-        uninstall_benchmark_builder(BENCH_02_MEMORY_INTERFERENCE)
-        assert is_benchmark_builder_implemented(BENCH_02_MEMORY_INTERFERENCE) is False
+def test_concrete_bench_02_builder_builds_known_experiment_a_arm() -> None:
+    assert is_benchmark_builder_implemented(BENCH_02_MEMORY_INTERFERENCE) is True
+    result = build_benchmark_scenario(BENCH_02_MEMORY_INTERFERENCE, _base())
+    assert result.scenario_id == BENCH_02_MEMORY_INTERFERENCE
+    assert {item.condition_id for item in result.definition.conditions} == {
+        "a-reconstructive",
+        "a-reconstructive-v2",
+    }
+    assert result.matrix_factors == ("memory_type",)
 
 
 def test_unknown_builder_registration_fails_closed() -> None:

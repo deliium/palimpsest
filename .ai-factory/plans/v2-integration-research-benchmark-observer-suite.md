@@ -258,25 +258,25 @@ Each checkpoint is a git commit on `main` created when those tasks are done. Do 
 
 ### Phase 2: Cognition and social scenarios (1–7)
 
-- [ ] Task 4: Implement scenarios 1–3 (seasonal planning, memory interference, reflection revision).
+- [x] Task 4: Implement scenarios 1–3 (seasonal planning, memory interference, reflection revision).
   - Deliverable: Fill builders + specs + tests for `bench-01`…`bench-03` using locked condition ids (`u-learned`/`u-naive`, `a-reconstructive-v2`/`a-reconstructive`, `g-deterministic`/`g-disabled`). Assert mechanism engagement and metric/audit detectability; paired/matrix comparison hooks where listed. Planted false belief in #3 uses trusted experiment patterns (analysis truth only — never agent-visible `is_false`). Experiment U already carries LONG_TERM `initial_goals` — do not invent a second goal system.
   - Logging: scenario build/smoke logs; DEBUG belief/revision counts as integers only.
   - Depends on tasks 2–3 (helper available; not full-suite smoke).
   - Files: `src/experiments/benchmark_scenarios/` modules, reuse `environmental_scenario` / catalog A+G, unit tests.
 
-- [ ] Task 5: Implement scenarios 4–5 (ToM failure detectability and ToM cooperation detectability).
+- [x] Task 5: Implement scenarios 4–5 (ToM failure detectability and ToM cooperation detectability).
   - Deliverable: Shared-world/seed strategy using `l-enabled` (optional M ledger). **Do not** add wrong-vs-corrected catalog arms. Tests prove `theory_of_mind@1` / `cooperation@1` are assemblable and that mismatch/success indicators are **detectable when present**; multi-seed distributions allowed. Forbidden: asserting social failure or cooperation must occur on every seed.
   - Logging: INFO arm ids; DEBUG hypothesis mismatch / cooperation counts only.
   - Depends on tasks 2–3.
   - Files: benchmark modules wrapping Experiment L/M, tests.
 
-- [ ] Task 6: Implement scenario 6 (deception + reputation).
+- [x] Task 6: Implement scenario 6 (deception + reputation).
   - Deliverable: Compose strategy+reputation on `runner-config-v10` per locked catalog; assert `communication_strategy@1` and `distributed_reputation@1` measurable; controls vs enabled. Do not invent a second recording stack here.
   - Logging: category counts only — never utterance text.
   - Depends on tasks 2–3.
   - Files: benchmark modules, tests.
 
-- [ ] Task 7: Implement scenario 7 (skill learning + specialization).
+- [x] Task 7: Implement scenario 7 (skill learning + specialization).
   - Deliverable: Wrap R/T with locked ids; assert skill audits and specialization metrics; shared-seed contrast arms.
   - Logging: skill ids / success counts only.
   - Depends on tasks 2–3.

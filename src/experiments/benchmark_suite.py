@@ -309,7 +309,7 @@ def _build_registry() -> dict[str, BenchmarkScenarioSpec]:
         _spec(
             scenario_id=BENCH_04_TOM_SOCIAL_FAILURE,
             title="Incorrect ToM measurable social failure when mismatch occurs",
-            condition_ids=("l-enabled",),
+            condition_ids=("l-enabled", "l-disabled"),
             required_modes=("advanced_social_inference",),
             composition_notes="Experiment L (+ optional M ledger); shared seed with bench-05; not a new wrong/corrected catalog arm",
             seed_strategy="matrix: multi-seed shared with bench-05; same world/seed matrix",
@@ -322,7 +322,7 @@ def _build_registry() -> dict[str, BenchmarkScenarioSpec]:
                 "failed cooperation/ask rates when present",
             ),
             non_goals=(
-                "Do not assert social failure must occur on every seed.",
+                "Do not assert social failure on every seed.",
                 "Do not add wrong-vs-corrected Experiment L catalog arms.",
             ),
             statistical_comparison="multi-seed support/detectability — never failure-must-occur",
@@ -331,7 +331,7 @@ def _build_registry() -> dict[str, BenchmarkScenarioSpec]:
         _spec(
             scenario_id=BENCH_05_TOM_COOPERATION,
             title="Successful cooperation using ToM when hypotheses help",
-            condition_ids=("l-enabled",),
+            condition_ids=("l-enabled", "l-disabled"),
             required_modes=("advanced_social_inference",),
             composition_notes="Experiment L; same world/seed matrix as bench-04",
             seed_strategy="matrix: multi-seed shared with bench-04; same world/seed matrix",
@@ -345,7 +345,7 @@ def _build_registry() -> dict[str, BenchmarkScenarioSpec]:
                 "ToM support for partner goal",
             ),
             non_goals=(
-                "Do not assert cooperation must occur on every seed.",
+                "Do not assert cooperation on every seed.",
                 "Do not add wrong-vs-corrected Experiment L catalog arms.",
             ),
             statistical_comparison="multi-seed success-rate CI; no mandated cooperation",
