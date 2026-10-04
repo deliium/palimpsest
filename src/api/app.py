@@ -26,6 +26,7 @@ from api.routes import (
     debugger_router,
     health_router,
     inspection_router,
+    research_matrix_router,
     research_router,
     observer_router,
     observer_stream_router,
@@ -225,6 +226,7 @@ def create_app(
     app.include_router(branches_router)
     app.include_router(inspection_router)
     app.include_router(research_router)
+    app.include_router(research_matrix_router)
     app.include_router(debugger_router)
     app.include_router(replay_router)
     app.include_router(streams_router)

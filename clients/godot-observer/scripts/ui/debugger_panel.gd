@@ -20,6 +20,7 @@ var _back: Button
 var _expand: Button
 var _seek: Button
 var _provenance: Button
+var _research: Button
 var _compact_list: ItemList
 var _expanded_list: ItemList
 var _supporting_list: ItemList
@@ -48,6 +49,7 @@ func _ready() -> void:
 	_expand.pressed.connect(_toggle_expanded)
 	_seek.pressed.connect(_on_seek_pressed)
 	_provenance.pressed.connect(_on_provenance_pressed)
+	_research.pressed.connect(_on_research_pressed)
 	_compact_list.item_activated.connect(_on_compact_activated)
 	_expanded_list.item_activated.connect(_on_expanded_activated)
 	_expanded_list.item_clicked.connect(_on_expanded_clicked)
@@ -84,6 +86,10 @@ func _ensure_children() -> void:
 	_provenance.name = "ProvenanceButton"
 	_provenance.disabled = true
 	title_row.add_child(_provenance)
+	_research = Button.new()
+	_research.text = "Research UI"
+	_research.name = "ResearchUiButton"
+	title_row.add_child(_research)
 	_close = Button.new()
 	_close.text = "Close"
 	title_row.add_child(_close)
@@ -541,6 +547,31 @@ func _on_provenance_pressed() -> void:
 		)
 		return
 	_request_provenance_for_row(index)
+
+
+func _on_research_pressed() -> void:
+	var address: Variant = _payload.get("address", {})
+	var run_id := ""
+	var tick: Variant = null
+	var event_id := ""
+	var sequence: Variant = null
+	var agent_id := ""
+	if typeof(address) == TYPE_DICTIONARY:
+		run_id = str(address.get("run_id", "")).strip_edges()
+		if address.get("tick", null) != null:
+			tick = int(address.get("tick"))
+		event_id = str(address.get("event_id", "")).strip_edges()
+		if address.get("sequence", null) != null:
+			sequence = int(address.get("sequence"))
+		agent_id = str(address.get("agent_id", "")).strip_edges()
+	ResearchUiLink.open(
+		run_id,
+		tick,
+		event_id,
+		sequence,
+		agent_id,
+		"traces",
+	)
 
 
 func request_provenance_at_expanded(index: int) -> void:

@@ -297,13 +297,13 @@ Each checkpoint is a git commit on the current branch when those tasks complete.
   - Depends on tasks 4, 7.
   - Files: `clients/research-ui/src/views/Analytics*`.
 
-- [ ] Task 12: Cognitive decision trace view
+- [x] Task 12: Cognitive decision trace view
   - Deliverable: Consume existing debugger GETs (`causal-trace`, invocations, lineage) to render the researcher chain with epistemic classes mapped from debugger artifact kinds (`observation` → `agent_observation`, memories → `agent_memory`, beliefs/ToM/goals/emotion → `agent_belief`, imagined → `agent_imagination`, counterfactuals → `counterfactual`, action → `objective_world`). Link “Open tick/event in World Observer”.
   - Logging: client DEBUG stage availability only.
   - Depends on tasks 3, 6.
   - Files: `clients/research-ui/src/views/DecisionTrace*`.
 
-- [ ] Task 13: Objective vs subjective event comparison
+- [x] Task 13: Objective vs subjective event comparison
   - Deliverable: Side-by-side view for a focused `(run_id, tick, event_id|sequence, agent_id)`: objective event summary + agent-visible observation metadata + memory/belief summary links (Task 7b) + optional drift/transmission metric snippets when documents exist. Each column locked to its epistemic class. Unavailable sources show reason codes — never fabricate alignment.
   - Logging: DEBUG which columns available.
   - Depends on tasks 4, 10, 12.
@@ -313,19 +313,19 @@ Each checkpoint is a git commit on the current branch when those tasks complete.
 
 ### Phase 5: Matrix, Godot embed, forks
 
-- [ ] Task 14: Read-only matrix filesystem API + overview UI
+- [x] Task 14: Read-only matrix filesystem API + overview UI
   - Deliverable: Settings `PALIMPSEST_RESEARCH_MATRIX_ROOT`. Routes e.g. `GET /v1/research/matrices` and `GET /v1/research/matrices/{matrix_id}/…` (under `/v1`, not the static `/research/` mount). List only immediate child directories with valid `manifest.json` (`experiment-matrix-v1`). Serve allowlisted files only (manifest, cell refs, metrics sidecars, aggregate, metric-summary). Path traversal fail-closed (`resolve` under root). Capability: `objective_inspection`. SPA matrix overview + cell table + aggregate/summary charts. Do not start runs from this UI. Never log seeds/full configs.
   - Logging: INFO list counts; WARN `matrix_fs_rejected reason_code=%s`.
   - Depends on tasks 2, 4.
   - Files: `src/api/routes/research_matrix.py`, settings, SPA matrix views, tests.
 
-- [ ] Task 15: Godot outbound deep links + optional same-origin embed
+- [x] Task 15: Godot outbound deep links + optional same-origin embed
   - Deliverable: In Godot, “Open in Research UI” actions (selected event / agent / tick) building `/research/?run_id&tick&event_id&agent_id&view=…` via `JavaScriptBridge` (Web) or `OS.shell_open` (desktop), using Task 3 builders. Research UI optional adjacent pane: **same-origin** iframe to `/?run_id=…` (threads off / no COOP-COEP required). On iframe bootstrap failure, degrade to new tab. Optional `postMessage` focus relay; URL reload on iframe is enough. No shared JS imports. Do not reimplement `switch_run` in the SPA.
   - Logging: Godot INFO `research_ui_link_opened`; SPA DEBUG embed load / `embed_fallback_new_tab`.
   - Depends on tasks 3, 6.
   - Files: `clients/godot-observer/scripts/**`, `clients/research-ui/src/embed/*`, Godot tests for URL builder.
 
-- [ ] Task 16: Forked run comparison UI
+- [x] Task 16: Forked run comparison UI
   - Deliverable: UI over lineage list + `POST /v1/simulations/branches/compare` showing divergence ticks/event-kind deltas. Label research forks as research-intervention `counterfactual` chrome distinct from agent imagination. Link either side into Observer or Research views via deep links.
   - Logging: DEBUG compare response counts only.
   - Depends on tasks 4, 6.

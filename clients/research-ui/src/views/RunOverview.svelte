@@ -16,9 +16,11 @@
   } from '../deeplink'
   import EpistemicBadge from '../components/EpistemicBadge.svelte'
   import { pushRunRoute } from '../router'
+  import GodotEmbed from '../embed/GodotEmbed.svelte'
   import AgentPanel from './AgentPanel.svelte'
   import AnalyticsPanel from './AnalyticsPanel.svelte'
   import DecisionTracePanel from './DecisionTracePanel.svelte'
+  import ForkComparePanel from './ForkComparePanel.svelte'
   import GraphsPanel from './GraphsPanel.svelte'
   import ObjSubjComparePanel from './ObjSubjComparePanel.svelte'
 
@@ -180,8 +182,13 @@
     <DecisionTracePanel {runId} {deepLink} />
   {:else if view === 'compare'}
     <ObjSubjComparePanel {runId} {deepLink} />
+    <ForkComparePanel {runId} {deepLink} />
   {:else}
     <p class="status empty">Unknown view.</p>
+  {/if}
+
+  {#if view === 'overview'}
+    <GodotEmbed {deepLink} />
   {/if}
 </section>
 

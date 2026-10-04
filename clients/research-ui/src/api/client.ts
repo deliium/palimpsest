@@ -499,3 +499,89 @@ export const getCulturalNarratives = (runId: string, ownerId: string) =>
   debugGet<LedgerProjection>(
     `/v1/simulations/${runId}/owners/${ownerId}/cultural-narratives`,
   )
+
+export type MatrixListItem = {
+  matrix_id: string
+  schema_version: string
+  has_aggregate: boolean
+  has_metric_summary: boolean
+}
+
+export type MatrixList = {
+  items: MatrixListItem[]
+  count: number
+  availability: string
+}
+
+export type MatrixCellList = {
+  matrix_id: string
+  cell_ids: string[]
+  count: number
+}
+
+export type BranchTimelineCompare = {
+  left_run_id: string
+  right_run_id: string
+  fork_tick: number
+  prefix_equivalent: boolean
+  diverge_tick: number | null
+  diverge_sequence: number | null
+  reason_code: string | null
+  left_post_fork_trajectory_hash: string | null
+  right_post_fork_trajectory_hash: string | null
+  event_kind_counts: Record<string, Record<string, number>> | null
+}
+
+export function listMatrices(): Promise<MatrixList> {
+  return apiFetch<MatrixList>('/v1/research/matrices', {
+    capability: 'objective_inspection',
+  })
+}
+
+export function getMatrixManifest(matrixId: string): Promise<Record<string, unknown>> {
+  return apiFetch<Record<string, unknown>>(
+    `/v1/research/matrices/${encodeURIComponent(matrixId)}/manifest`,
+    { capability: 'objective_inspection' },
+  )
+}
+
+export function getMatrixAggregate(matrixId: string): Promise<Record<string, unknown>> {
+  return apiFetch<Record<string, unknown>>(
+    `/v1/research/matrices/${encodeURIComponent(matrixId)}/aggregate`,
+    { capability: 'objective_inspection' },
+  )
+}
+
+export function getMatrixMetricSummary(
+  matrixId: string,
+): Promise<Record<string, unknown>> {
+  return apiFetch<Record<string, unknown>>(
+    `/v1/research/matrices/${encodeURIComponent(matrixId)}/metric-summary`,
+    { capability: 'objective_inspection' },
+  )
+}
+
+export function listMatrixCells(matrixId: string): Promise<MatrixCellList> {
+  return apiFetch<MatrixCellList>(
+    `/v1/research/matrices/${encodeURIComponent(matrixId)}/cells`,
+    { capability: 'objective_inspection' },
+  )
+}
+
+export function compareBranches(body: {
+  left_run_id: string
+  right_run_id: string
+  fork_tick?: number | null
+  include_event_kind_counts?: boolean
+}): Promise<BranchTimelineCompare> {
+  return apiFetch<BranchTimelineCompare>('/v1/simulations/branches/compare', {
+    capability: 'objective_inspection',
+    method: 'POST',
+    body: {
+      left_run_id: body.left_run_id,
+      right_run_id: body.right_run_id,
+      fork_tick: body.fork_tick ?? undefined,
+      include_event_kind_counts: body.include_event_kind_counts ?? true,
+    },
+  })
+}

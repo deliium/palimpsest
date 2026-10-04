@@ -1,6 +1,7 @@
 <script lang="ts">
   import { onMount } from 'svelte'
   import AuthPanel from './AuthPanel.svelte'
+  import MatrixPanel from '../views/MatrixPanel.svelte'
   import RunList from '../views/RunList.svelte'
   import RunOverview from '../views/RunOverview.svelte'
   import { resolveRoute, type Route } from '../router'
@@ -32,15 +33,10 @@
       <RunList />
     {:else if route.kind === 'run'}
       <RunOverview runId={route.runId} view={route.view} deepLink={route.deepLink} />
-    {:else if route.kind === 'matrix_list' || route.kind === 'matrix_detail'}
-      <section>
-        <p class="eyebrow">Matrix</p>
-        <h1>Experiment matrices</h1>
-        <p class="lede">
-          Matrix overview lands in a later task. Configure
-          <code>PALIMPSEST_RESEARCH_MATRIX_ROOT</code> when ready.
-        </p>
-      </section>
+    {:else if route.kind === 'matrix_list'}
+      <MatrixPanel />
+    {:else if route.kind === 'matrix_detail'}
+      <MatrixPanel matrixId={route.matrixId} />
     {:else}
       <section>
         <h1>Not found</h1>
@@ -102,25 +98,4 @@
     width: 100%;
   }
 
-  .eyebrow {
-    margin: 0 0 0.35rem;
-    font-size: 0.8rem;
-    letter-spacing: 0.08em;
-    text-transform: uppercase;
-    color: #5a6a72;
-  }
-
-  h1 {
-    margin: 0 0 0.75rem;
-    font-family: "Iowan Old Style", "Palatino Linotype", Palatino, Georgia, serif;
-    font-size: clamp(1.6rem, 3.5vw, 2.1rem);
-    font-weight: 600;
-  }
-
-  .lede {
-    margin: 0;
-    font-size: 1.05rem;
-    line-height: 1.5;
-    color: #3a474e;
-  }
 </style>
