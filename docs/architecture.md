@@ -78,12 +78,13 @@ Objective `WorldState` stays private. Agent-facing cognition sees only immutable
 
 ### Domain-contract evolution (Observation / commands / communications)
 
-Later V2 feature plans may evolve agent-facing contracts only under this accepted-set discipline (this scaffolding plan adds **no** new fields, commands, or communication variants):
+Later V2/V3 feature plans may evolve agent-facing contracts only under this accepted-set discipline (V3 scaffolding adds **no** new fields, commands, communication variants, birth events, kinship facts, settlement entities, or institution world rules):
 
 1. **Observation and related codecs** — new write versions only when the wire shape changes; legacy decode remains in an `ACCEPTED_*` set. Cognition inputs must not silently widen to authority types (`WorldState`, private `world._*`, `WorldEvent` stores).
 2. **Closed `AgentCommand` set** — remains closed at twenty-four variants, including harvest, craft, build, repair, store, and the four artifact commands (`Inscribe` / `Amend` / `Erase` / `TransferArtifact`). A later bump still lands together with admission rules, world-operation evaluation, event details, and replay codecs in the same change. The production catalog is not an observation field and is not a cognition input to the engine.
 3. **Communications** — stay event-only (`Talk`/`Ask`/`Tell` → `Talked`/`Asked`/`Told`). Delivery proves delivery, not truth; declared lineage on `StructuredUtterance` is distrustable testimony. Content never becomes world-owned fact.
-4. **Hard gate for any domain bump** — live and restored engines at the same tick must emit equal observations (including canonical serialization). Required regression: `tests/unit/test_checkpoint_restoration.py::test_live_and_restored_observations_match_with_prior_events` (and siblings). Do not ship a domain wire change that breaks live/restored parity.
+4. **Roster / birth / kinship-visible facts** — mid-run roster changes, birth-class occurrences, and kinship-visible observation fields require explicit versioned seams (event schema + codec/projector + admission + Observation write version) co-landed with live/restored observation parity. Do **not** silently widen `Observation` for generational facts.
+5. **Hard gate for any domain bump** — live and restored engines at the same tick must emit equal observations (including canonical serialization). Required regression: `tests/unit/test_checkpoint_restoration.py::test_live_and_restored_observations_match_with_prior_events` (and siblings). Do not ship a domain wire change that breaks live/restored parity.
 
 See also `simulation.compatibility` (version taxonomy) and [.ai-factory/ARCHITECTURE.md](../.ai-factory/ARCHITECTURE.md).
 
@@ -135,6 +136,12 @@ These are encoded as types and import rules, and enforced by `WorldEngine` for o
 No Anthropic-native adapters, pathfinding beyond one adjacent edge, crafting, diseases, revival, or multi-tick sleeping state. Psychological **fear of death** is implemented as subjective opportunity foreclosure inside cognition (see [Cognition and agent runtime](cognition-runtime.md)); it does not alter physical death rules. Reconstructive recall and append-only reconsolidation are **implemented** (see [Memory reconstruction](memory-reconstruction.md)); LLM-backed reconstruction remains optional and provider lifecycle is not wired into the API/`compose` composition root yet. No Kafka, Kubernetes, Celery, or extra vector databases.
 
 Production PostgreSQL privilege design for `CREATE EXTENSION` is deferred; development credentials may create `vector`.
+
+## V3 scaffolding invariant inventory
+
+V3 compatibility scaffolding reuses the existing architecture gates under `tests/architecture/` (world authority, cognitive-loop / LLM / social / experiment / analysis / Godot / observer isolation, cognitive-architecture boundaries, import-linter) plus `tests/unit/test_v2_scientific_invariants.py`. Gap pins for fixed bootstrap roster (no mid-run register/unbind API today), `prepare_parallel=False`, Godot/presentation non-authority, and forbid scripted `civilization_emerged` / `institution_formed` / `kinship_must_form` mandate helpers live in `tests/architecture/test_v3_scaffolding_invariants.py`. Analysis and experiment packages must still never feed live cognition.
+
+Version taxonomy: `simulation.compatibility` pins Alembic head `0017`, default runner write `runner-config-v4`, planned accepted `runner-config-v23` (v22 ∪ `v3_capability_flags`), observer `observer-protocol-v1` / `observer-layout-v1`, Research UI `/research/`, and event write replay-v5. See [Persistence](persistence.md).
 
 ## V2 extension seams (scaffolding)
 

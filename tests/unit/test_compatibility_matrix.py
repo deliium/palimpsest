@@ -14,7 +14,13 @@ from simulation.compatibility import (
     EXPERIMENT_DEFINITION_SCHEMA_VERSION,
     METRIC_CATALOG_VERSION,
     METRIC_DOCUMENT_SCHEMA_VERSION,
+    OBSERVER_LAYOUT_SCHEMA_VERSION,
+    OBSERVER_PROTOCOL_VERSION,
+    PLANNED_RUNNER_SCHEMA_VERSION_V23,
+    RESEARCH_UI_MOUNT,
     STREAM_ENVELOPE_VERSION,
+    V3_CAPABILITY_FLAGS_WIRE_KEY,
+    V3_CAPABILITY_FLAG_NAMES,
     WS_PROTOCOL_VERSION,
     CompatibilityEntry,
     compatibility_entry,
@@ -67,6 +73,10 @@ def test_matrix_covers_required_taxonomy_ids() -> None:
         "ws_protocol",
         "alembic_head",
         "communication",
+        "observer_protocol",
+        "observer_layout",
+        "research_ui_mount",
+        "v3_capability_flags",
     }
     assert set(COMPATIBILITY_MATRIX) == required
     assert list_compatibility_ids() == tuple(sorted(required))
@@ -87,7 +97,8 @@ def test_event_schema_stays_at_v5_write() -> None:
     entry = compatibility_entry("event_schema")
     assert entry.write_version == "5"
     bump = entry.bump_trigger.lower()
-    assert "no v6" in bump or "stay at replay-v5" in bump
+    assert "replay-v5" in bump
+    assert "2-8" in entry.v1_fixture_impact or "2-8" in entry.bump_trigger
 
 
 def test_runner_config_write_is_v4_with_legacy_accepted() -> None:
@@ -137,10 +148,38 @@ def test_runner_config_write_is_v4_with_legacy_accepted() -> None:
     assert "conventions-only" in entry.bump_trigger
     assert "naming-only" in entry.bump_trigger
     assert "narratives-only" in entry.bump_trigger
+    assert PLANNED_RUNNER_SCHEMA_VERSION_V23 in entry.bump_trigger
+    assert V3_CAPABILITY_FLAGS_WIRE_KEY in entry.bump_trigger
+    assert "v22 keyset" in entry.bump_trigger
     assert "A-E" in entry.v1_fixture_impact
     assert "extended_self_model" in entry.v1_fixture_impact
     assert "V1 gate" in entry.v1_fixture_impact
+    assert "V3 flags" in entry.v1_fixture_impact
     assert entry.write_version == "runner-config-v4"
+
+
+def test_v3_scaffolding_matrix_rows() -> None:
+    flags = compatibility_entry("v3_capability_flags")
+    assert flags.write_version == V3_CAPABILITY_FLAGS_WIRE_KEY
+    assert flags.accepted_restore == frozenset(V3_CAPABILITY_FLAG_NAMES)
+    assert len(V3_CAPABILITY_FLAG_NAMES) == 5
+    assert "capability_unimplemented" in flags.bump_trigger
+    assert PLANNED_RUNNER_SCHEMA_VERSION_V23 in flags.bump_trigger
+
+    protocol = compatibility_entry("observer_protocol")
+    assert protocol.write_version == OBSERVER_PROTOCOL_VERSION == "observer-protocol-v1"
+    assert "no V3 fields on GET /version" in protocol.v1_fixture_impact
+
+    layout = compatibility_entry("observer_layout")
+    assert layout.write_version == OBSERVER_LAYOUT_SCHEMA_VERSION == "observer-layout-v1"
+
+    research = compatibility_entry("research_ui_mount")
+    assert research.write_version == RESEARCH_UI_MOUNT == "/research/"
+
+    alembic = compatibility_entry("alembic_head")
+    assert alembic.write_version == "0017"
+    assert "no 0018" in alembic.bump_trigger
+    assert "0017" in alembic.v1_fixture_impact
 
 
 def test_alembic_head_pin_and_0017_exists() -> None:
@@ -160,6 +199,12 @@ def test_cross_package_mirrors_stay_in_sync() -> None:
     from api.schemas import STREAM_ENVELOPE_VERSION as api_envelope
     from api.security import WS_PROTOCOL_VERSION as api_ws
     from experiments.models import EXPERIMENT_SCHEMA_VERSION
+    from observer.version import (
+        OBSERVER_LAYOUT_SCHEMA_VERSION as observer_layout,
+    )
+    from observer.version import (
+        OBSERVER_PROTOCOL_VERSION as observer_protocol,
+    )
     from world.communications import (
         COMMUNICATION_SCHEMA_VERSION as world_comm,
     )
@@ -171,6 +216,9 @@ def test_cross_package_mirrors_stay_in_sync() -> None:
     assert WS_PROTOCOL_VERSION == api_ws
     assert API_HTTP_PREFIX == "/v1"
     assert COMMUNICATION_SCHEMA_VERSION == world_comm
+    assert OBSERVER_PROTOCOL_VERSION == observer_protocol
+    assert OBSERVER_LAYOUT_SCHEMA_VERSION == observer_layout
+    assert PLANNED_RUNNER_SCHEMA_VERSION_V23 == "runner-config-v23"
     assert compatibility_entry("projector").write_version == PROJECTOR_VERSION
     assert (
         compatibility_entry("persistence_codec").write_version
@@ -187,6 +235,10 @@ def test_facade_reexports_compatibility_surface() -> None:
     assert "RUNNER_SCHEMA_VERSION_V4" in simulation.__all__
     assert "CognitionTraceSpec" in simulation.__all__
     assert "ALEMBIC_HEAD_REVISION" in simulation.__all__
+    assert "PLANNED_RUNNER_SCHEMA_VERSION_V23" in simulation.__all__
+    assert "OBSERVER_PROTOCOL_VERSION" in simulation.__all__
+    assert "V3_CAPABILITY_FLAG_NAMES" in simulation.__all__
     assert simulation.compatibility_entry is compatibility_entry
     assert simulation.RUNNER_SCHEMA_VERSION_V3 == RUNNER_SCHEMA_VERSION_V3
     assert simulation.RUNNER_SCHEMA_VERSION_V4 == RUNNER_SCHEMA_VERSION_V4
+    assert simulation.PLANNED_RUNNER_SCHEMA_VERSION_V23 == PLANNED_RUNNER_SCHEMA_VERSION_V23

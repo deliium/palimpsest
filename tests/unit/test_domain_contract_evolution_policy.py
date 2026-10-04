@@ -1,8 +1,10 @@
 """Policy regressions for agent-facing domain-contract evolution.
 
-V2 scaffolding freezes Observation / AgentCommand / communications wire shape.
-Later plans must follow accepted-set discipline and keep live/restored
-observation parity as a hard gate.
+V2/V3 scaffolding freezes Observation / AgentCommand / communications wire
+shape. Later V3 plans must follow accepted-set discipline and keep
+live/restored observation parity as a hard gate. Mid-run roster, birth, and
+kinship-visible facts require explicit versioned seams — not silent Observation
+widenings.
 """
 
 from __future__ import annotations
@@ -199,3 +201,32 @@ def test_require_agent_command_rejects_non_commands() -> None:
         require_agent_command({"kind": "wait"})  # type: ignore[arg-type]
     with pytest.raises(TypeError):
         require_agent_command("wait")  # type: ignore[arg-type]
+
+
+def test_v3_scaffolding_adds_no_roster_birth_or_kinship_observation_fields() -> None:
+    """V3 scaffolding must not silently widen Observation for generational facts."""
+    fields = {f.name for f in Observation.__dataclass_fields__.values()}
+    forbidden_widenings = {
+        "kinship",
+        "parents",
+        "children",
+        "birth_tick",
+        "age",
+        "developmental_stage",
+        "settlement_id",
+        "institution_id",
+        "roster",
+        "lineage",
+    }
+    assert fields & forbidden_widenings == set()
+    assert fields == _FROZEN_OBSERVATION_FIELDS
+
+
+def test_v3_domain_bump_policy_documents_parity_gate() -> None:
+    """Architecture docs must keep parity + accepted-set rules for V3 bumps."""
+    arch = (ROOT / "docs" / "architecture.md").read_text(encoding="utf-8")
+    assert "Domain-contract evolution" in arch
+    assert "live/restored" in arch.lower() or "live and restored" in arch.lower()
+    assert "test_checkpoint_restoration" in arch
+    assert "birth" in arch.lower() or "roster" in arch.lower()
+    assert "kinship" in arch.lower()

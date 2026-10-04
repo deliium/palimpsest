@@ -70,8 +70,8 @@ Contributor summary:
 | `PERSISTENCE_CODEC_VERSION` | Canonical JSON codec for manifests/snapshots/commits (`v2` write; accept `v1`/`v2`) |
 | Derivation v1 / v2 / v3 | Deterministic ID/stream derivation (v2 includes rules fingerprint) |
 | Subjective codec v1 | Semantic beliefs, relationship profiles, mutation receipts (non-authoritative) |
-| Runner config | Write `runner-config-v4` (`cognition_trace` + V2 capability flags); accept `v1`/`v2`/`v3` decode with default-off flags and disabled tracing |
-| Alembic head | Pin **`0017`** — hybrid memory retrieve shortlist readiness (HNSW deferred: untyped `vector` column); prior `0016` event filter indexes and `0015` branch lineage remain; capability flags stay runner JSON only |
+| Runner config | Write `runner-config-v4` when all V3 flags are off (`cognition_trace` + V2 capability flags); accept `v1`…`v22` decode with default-off V2/V3 flags and disabled tracing; planned `runner-config-v23` = v22 keyset ∪ sibling `v3_capability_flags` |
+| Alembic head | Pin **`0017`** — hybrid memory retrieve shortlist readiness (HNSW deferred: untyped `vector` column); prior `0016` event filter indexes and `0015` branch lineage remain; V2/V3 capability flags stay runner JSON only (no `0018` in V3 scaffolding) |
 
 Runs never mix replay schema versions. Legacy schema-v1 audit events remain decodable for export but must not enter the authoritative log. Alembic revision `0004` persists SQL cause/occurrence columns so restored engines reproduce the same next observation as live engines (eventful and eventless prior windows). Revision `0005` adds owner-scoped episodic memory tables. Revision `0006` adds reconstruction/derivation provenance with selective immutability. Revision `0007` adds semantic belief and directed relationship tables. Revision `0008` adds communicated transmission metadata and testimony-factor columns. Observation codecs round-trip every field and provenance type with exact keys.
 

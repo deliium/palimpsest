@@ -48,7 +48,7 @@ Stable problem-detail errors carry closed reason codes. Lifecycle conflicts retu
 - Introduce `/v2` only when a request/response shape cannot be expressed as optional additive fields on `/v1`.
 - WebSocket subprotocol remains `palimpsest.v1` (credentials via header / subprotocol only — never query strings).
 - `SimulationManager` stores opaque `config_payload` + fingerprint; decode happens at runner construction.
-- Accepted runner config wire versions: `runner-config-v1`, `runner-config-v2` (legacy), and `runner-config-v3` (current write with default-off `V2CapabilityFlags`). Legacy v2 payloads must remain creatable/configurable and constructible.
+- Accepted runner config wire versions: `runner-config-v1`…`runner-config-v22` (mode-driven), with default write **`runner-config-v4`** (default-off `V2CapabilityFlags` + disabled tracing). Planned `runner-config-v23` carries sibling root `v3_capability_flags` (V3 scaffolding; writers emit v23 only when some V3 flag is true). Legacy v1/v2 payloads must remain creatable/configurable and constructible.
 
 ## Debug security
 

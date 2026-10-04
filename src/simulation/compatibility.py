@@ -1,15 +1,20 @@
-"""V2 compatibility taxonomy for schema and protocol versions.
+"""Compatibility taxonomy for schema and protocol versions (V1–V3 scaffolding).
 
 Single source of truth for write versions, accepted restore sets, bump
 triggers, and owning packages. Cross-package version strings are mirrored as
 literals here so ``simulation`` never imports ``analysis``, ``experiments``,
-``api``, or Alembic. Unit tests assert those mirrors stay in sync.
+``api``, ``observer``, or Alembic. Unit tests assert those mirrors stay in sync.
 
-Reserved decisions for this V2 scaffolding plan:
-- Event schema write remains replay-v5 (no v6 bump in this plan).
-- Alembic migration head remains ``0012`` (no ``0013``).
-- Runner config write becomes ``runner-config-v3`` in the capability-flags task
-  while keeping v1/v2 decode.
+Locked decisions for V3 scaffolding (this plan):
+- Default runner write stays ``runner-config-v4`` when all V3 flags are off.
+- Planned accepted schema ``runner-config-v23`` = full v22 keyset ∪ root
+  ``v3_capability_flags`` (sibling of V2 ``capability_flags``); writers emit
+  v23 only when some V3 flag is true (Task 4 owns encode/decode).
+- Event schema write remains replay-v5 (no write bump in this plan).
+- Alembic migration head remains ``0017`` (no ``0018``); V3 flags live only in
+  runner JSON inside ``run_control.config_payload``.
+- Observer protocol / layout identities stay ``observer-protocol-v1`` /
+  ``observer-layout-v1``; Research UI mount stays ``/research/``.
 """
 
 from __future__ import annotations
@@ -92,6 +97,20 @@ WS_PROTOCOL_VERSION: Final[str] = "palimpsest.v1"
 API_HTTP_PREFIX: Final[str] = "/v1"
 LEGACY_PENDING_FINALIZATION_CODEC_VERSION: Final[str] = "pending-finalization-v1"
 COMMUNICATION_SCHEMA_VERSION: Final[str] = "communication.v1"
+# Observer / Research UI mirrors — simulation must not import observer or api.
+OBSERVER_PROTOCOL_VERSION: Final[str] = "observer-protocol-v1"
+OBSERVER_LAYOUT_SCHEMA_VERSION: Final[str] = "observer-layout-v1"
+RESEARCH_UI_MOUNT: Final[str] = "/research/"
+# Planned runner schema for V3 capability flags (encode/decode owned by Task 4).
+PLANNED_RUNNER_SCHEMA_VERSION_V23: Final[str] = "runner-config-v23"
+V3_CAPABILITY_FLAGS_WIRE_KEY: Final[str] = "v3_capability_flags"
+V3_CAPABILITY_FLAG_NAMES: Final[tuple[str, ...]] = (
+    "generational_population",
+    "kinship_inheritance",
+    "multi_polity_migration",
+    "institutional_economy",
+    "cultural_historical_memory",
+)
 
 __all__ = [
     "ALEMBIC_HEAD_REVISION",
@@ -102,6 +121,10 @@ __all__ = [
     "LEGACY_PENDING_FINALIZATION_CODEC_VERSION",
     "METRIC_CATALOG_VERSION",
     "METRIC_DOCUMENT_SCHEMA_VERSION",
+    "OBSERVER_LAYOUT_SCHEMA_VERSION",
+    "OBSERVER_PROTOCOL_VERSION",
+    "PLANNED_RUNNER_SCHEMA_VERSION_V23",
+    "RESEARCH_UI_MOUNT",
     "RUNNER_SCHEMA_VERSION_V3",
     "RUNNER_SCHEMA_VERSION_V4",
     "RUNNER_SCHEMA_VERSION_V5",
@@ -123,6 +146,8 @@ __all__ = [
     "RUNNER_SCHEMA_VERSION_V21",
     "RUNNER_SCHEMA_VERSION_V22",
     "STREAM_ENVELOPE_VERSION",
+    "V3_CAPABILITY_FLAGS_WIRE_KEY",
+    "V3_CAPABILITY_FLAG_NAMES",
     "WS_PROTOCOL_VERSION",
     "CompatibilityEntry",
     "compatibility_entry",
@@ -132,7 +157,7 @@ __all__ = [
 
 @dataclass(frozen=True, slots=True)
 class CompatibilityEntry:
-    """One row of the V2 version taxonomy."""
+    """One row of the version taxonomy (V1/V2 pins + V3 scaffolding)."""
 
     entry_id: str
     write_version: str
@@ -162,10 +187,10 @@ _MATRIX: dict[str, CompatibilityEntry] = {
         bump_trigger=(
             "Wire shape change for WorldEvent / occurrence details; "
             "requires new ACCEPTED_* member and replay fixtures. "
-            "V2 scaffolding: stay at replay-v5 (no v6)."
+            "V3 scaffolding: stay at replay-v5 write (accepted set 2-8 unchanged)."
         ),
         owner_package="world.events / simulation.persistence",
-        v1_fixture_impact="Schemas 2-5 fixtures must remain restoreable",
+        v1_fixture_impact="Schemas 2-8 fixtures must remain restoreable",
     ),
     "projector": CompatibilityEntry(
         entry_id="projector",
@@ -300,7 +325,14 @@ _MATRIX: dict[str, CompatibilityEntry] = {
             f"config stays on {RUNNER_SCHEMA_VERSION_V21}; prior modes "
             "including cultural narratives stay legal on "
             f"{RUNNER_SCHEMA_VERSION_V22}; "
-            f"{RUNNER_SCHEMA_VERSION_V3} retained for capability flags; "
+            f"planned {PLANNED_RUNNER_SCHEMA_VERSION_V23} = full v22 keyset "
+            f"plus sibling root {V3_CAPABILITY_FLAGS_WIRE_KEY} (exact child "
+            "keys = five reserved V3 flag names); default write stays "
+            f"{RUNNER_SCHEMA_VERSION_V4} when all V3 flags are off; "
+            f"writers emit {PLANNED_RUNNER_SCHEMA_VERSION_V23} only when some "
+            "V3 flag is true; mode allowlists that top out at v22 widen to "
+            "accept v23 and cognitive_budget_mode accepts {{v22,v23}}; "
+            f"{RUNNER_SCHEMA_VERSION_V3} retained for V2 capability flags; "
             "v1-v4 omit consolidation_mode, reflection_mode, prospective_mode, "
             "counterfactual_mode, communication_strategy_mode, and "
             "reputation_mode and restore DISABLED; "
@@ -320,7 +352,8 @@ _MATRIX: dict[str, CompatibilityEntry] = {
             "catalog A-E fingerprints stay on v4; "
             "extended_self_model, predictive_world_model, "
             "short_term_emotional_state, and advanced_social_inference are "
-            "owned default-off flags on existing keys and are off the V1 gate"
+            "owned default-off flags on existing keys and are off the V1 gate; "
+            "V3 flags default off and do not change V1 trajectory identity"
         ),
     ),
     "runner_result": CompatibilityEntry(
@@ -448,12 +481,13 @@ _MATRIX: dict[str, CompatibilityEntry] = {
         accepted_restore=_versions(ALEMBIC_HEAD_REVISION),
         bump_trigger=(
             "New indexed SQL columns required for inspection; "
-            "0015 adds simulation_branches genealogy (control plane)"
+            "V3 scaffolding: head stays 0017 (no 0018); V3 capability flags "
+            "live only in runner JSON config_payload, not Alembic columns"
         ),
         owner_package="alembic/versions",
         v1_fixture_impact=(
-            "Head pin 0015; research forks store lineage outside "
-            "AUTHORITATIVE_TABLES"
+            "Head pin 0017; research forks (0015) store lineage outside "
+            "AUTHORITATIVE_TABLES; no V3 flag columns"
         ),
     ),
     "communication": CompatibilityEntry(
@@ -466,6 +500,60 @@ _MATRIX: dict[str, CompatibilityEntry] = {
         ),
         owner_package="world.communications",
         v1_fixture_impact="communication.v1 + legacy text decode remain",
+    ),
+    "observer_protocol": CompatibilityEntry(
+        entry_id="observer_protocol",
+        write_version=OBSERVER_PROTOCOL_VERSION,
+        accepted_restore=_versions(OBSERVER_PROTOCOL_VERSION),
+        bump_trigger=(
+            "Rename/bump only if wire identity cannot stay backward compatible; "
+            "prefer additive optional fields and semantic types. "
+            "V3 scaffolding: keep observer-protocol-v1 (no rename)."
+        ),
+        owner_package="observer.version",
+        v1_fixture_impact=(
+            "Godot and HTTP clients stay on observer-protocol-v1; "
+            "no V3 fields on GET /version"
+        ),
+    ),
+    "observer_layout": CompatibilityEntry(
+        entry_id="observer_layout",
+        write_version=OBSERVER_LAYOUT_SCHEMA_VERSION,
+        accepted_restore=_versions(OBSERVER_LAYOUT_SCHEMA_VERSION),
+        bump_trigger=(
+            "Layout catalog wire shape change; keep observer-layout-v1 unless "
+            "a dual-accept bump is required"
+        ),
+        owner_package="observer.version",
+        v1_fixture_impact="Presentation layout identity unchanged in V3 scaffolding",
+    ),
+    "research_ui_mount": CompatibilityEntry(
+        entry_id="research_ui_mount",
+        write_version=RESEARCH_UI_MOUNT,
+        accepted_restore=_versions(RESEARCH_UI_MOUNT),
+        bump_trigger=(
+            "Research UI mount path or origin policy change; V3 scaffolding "
+            "keeps /research/ on the API origin with /v1 data"
+        ),
+        owner_package="api.research_static",
+        v1_fixture_impact="SPA mount /research/ remains stable; additive inspect only",
+    ),
+    "v3_capability_flags": CompatibilityEntry(
+        entry_id="v3_capability_flags",
+        write_version=V3_CAPABILITY_FLAGS_WIRE_KEY,
+        accepted_restore=_versions(*V3_CAPABILITY_FLAG_NAMES),
+        bump_trigger=(
+            "Closed reserved V3 flag set on SimulationRunnerConfig; wire key "
+            f"{V3_CAPABILITY_FLAGS_WIRE_KEY} is a sibling of V2 capability_flags; "
+            f"requires {PLANNED_RUNNER_SCHEMA_VERSION_V23}; enabling any flag "
+            "before an owning plan fails closed at SimulationRunner.from_config "
+            "with capability_unimplemented; empty owned allowlist in scaffolding"
+        ),
+        owner_package="simulation.runner_models / simulation.runner",
+        v1_fixture_impact=(
+            "All five flags default off; decode of runner-config-v1..v22 "
+            "synthesizes defaults; V1/V2 trajectory identity unchanged when off"
+        ),
     ),
 }
 
@@ -499,8 +587,12 @@ _LOG.debug(
         "runner_v20": RUNNER_SCHEMA_VERSION_V20,
         "runner_v21": RUNNER_SCHEMA_VERSION_V21,
         "runner_v22": RUNNER_SCHEMA_VERSION_V22,
+        "planned_runner_v23": PLANNED_RUNNER_SCHEMA_VERSION_V23,
+        "observer_protocol": OBSERVER_PROTOCOL_VERSION,
+        "research_ui_mount": RESEARCH_UI_MOUNT,
         "alembic_head": ALEMBIC_HEAD_REVISION,
         "accepted_event_count": len(ACCEPTED_EVENT_SCHEMA_VERSIONS),
+        "v3_flag_count": len(V3_CAPABILITY_FLAG_NAMES),
     },
 )
 
