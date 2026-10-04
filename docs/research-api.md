@@ -26,6 +26,7 @@ Secrets use strong `SecretStr` values. Query-string secrets are rejected. Prefer
 - Metric catalog and immutable metric documents
 - Replay-to-tick endpoints (detached projection; never live `WorldEngine`)
 - Read-only observer manifest, state, events, ticks, run metadata, and live stream. See [Read-only observer](observer.md). Presentation coordinates are not simulation coordinates. Researcher relationship summaries stay on the debug capability.
+- Observer event pages accept additive optional filters (`agent_id`, `event_type`, `location_id`) and `catch_up=true` for multi-page reconnect fill within `PALIMPSEST_API_MAX_PAGE_SIZE`. Protocol remains `observer-protocol-v1` — no layout/protocol rename for scale.
 - Research causal debugger GET routes under `/v1/simulations/{run_id}/debugger/…` require `subjective_debug` (observational; tracing-off → `200` + `unavailable`). See [Research causal debugger](research-causal-debugger.md).
 - Research **simulation branches** (deterministic forks):
   - `POST /v1/simulations/{parent_run_id}/branches` — create one child from `fork_tick` + exactly one closed `ResearchIntervention` (`simulation_control`; idempotent on identical fingerprint)
@@ -66,6 +67,22 @@ Owner/run scoped, paginated, and absent from logs (no memories, beliefs, relatio
 - Heartbeats and graceful shutdown
 
 `LISTEN/NOTIFY` may wake pollers but is never authoritative.
+
+Observer live WebSocket (`/v1/simulations/{run_id}/observer/stream`) uses the same backpressure pattern: per-subscriber bounded queues (`PALIMPSEST_OBSERVER_STREAM_QUEUE_SIZE`), catch-up batch size (`PALIMPSEST_OBSERVER_CATCHUP_PAGE_SIZE`, capped by `api_max_page_size`), and `slow_consumer` disconnect of that subscriber only. Simulation ticks must not await observer drains. After a client discard-behind-live, reconnect via `GET .../observer/events` (optionally `catch_up=true`) then resume the socket — scientific history stays complete; presentation coalescing lives only in Godot / observer projection helpers.
+
+## Long-run research settings (opt-in)
+
+Defaults preserve short V1 runs. Scale knobs are settings / helpers, not capability flags:
+
+| Knob | Role |
+| --- | --- |
+| `long_run_checkpoint_policy` / `long_run_persistence_spec` | Enable write-time snapshot cadence (e.g. every 100/500/1000 ticks); no in-DB snapshot DELETE |
+| `PALIMPSEST_OBSERVER_STREAM_QUEUE_SIZE` / `PALIMPSEST_OBSERVER_CATCHUP_PAGE_SIZE` | Observer WS backpressure and reconnect batching |
+| `PALIMPSEST_MEMORY_RETRIEVE_MAX_CANDIDATES` | SQL candidate cap before `rank_traces` (default 4096) |
+| `PALIMPSEST_LLM_MAX_CONCURRENCY` | Process-wide `generate` semaphore (default 1); parallel agent prepare stays off |
+| `PALIMPSEST_COGNITION_TRACE_SOFT_CAP_*` | Optional soft stop-append for traces (fail-soft; never DELETE rows) |
+
+See [Persistence](persistence.md), [Observer](observer.md), [Memory reconstruction](memory-reconstruction.md), and [Development](development.md) (`pytest -m scale`) for details. Do not prune append-only tables in place; do not introduce Kafka/K8s for this surface.
 
 ## Logging
 

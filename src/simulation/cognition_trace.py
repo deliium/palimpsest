@@ -535,7 +535,9 @@ class SoftCapCognitionTraceRepository:
                 self._invocations_appended,
             )
             return
-        approx_bytes = len(invocation.content_hash) + 64 * max(1, len(invocation.stages))
+        approx_bytes = len(invocation.content_hash) + 64 * max(
+            1, len(invocation.stages)
+        )
         if (
             self._max_invocations is not None
             and self._invocations_appended >= self._max_invocations

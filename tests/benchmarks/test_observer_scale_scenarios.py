@@ -129,7 +129,8 @@ async def test_scale_multi_observer_slow_consumer_isolation(
 ) -> None:
     del database_resources
     journal = [
-        {"tick": index, "sequence": 0, "event_id": f"evt-{index}"} for index in range(40)
+        {"tick": index, "sequence": 0, "event_id": f"evt-{index}"}
+        for index in range(40)
     ]
 
     async def read_events(

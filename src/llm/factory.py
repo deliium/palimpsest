@@ -185,7 +185,10 @@ def _synthesize_structured[T: StructuredOutput](
     *,
     request: LLMRequest[T],
 ) -> T:
-    """Build a deterministic structured candidate from request evidence when possible."""
+    """Build a deterministic structured candidate from request evidence.
+
+    Uses request evidence when a reconstruction-shaped model is requested.
+    """
     if model.__name__ == "ReconstructedMemoryCandidate":
         payload = _extract_evidence_payload(request)
         sources = payload.get("sources", []) if isinstance(payload, dict) else []
@@ -394,7 +397,7 @@ def create_llm_provider(
 class ConcurrencyLimitedLLMProvider:
     """Process-scoped semaphore around ``generate`` (default max=1)."""
 
-    __slots__ = ("_inner", "_max", "_semaphore", "_in_flight")
+    __slots__ = ("_in_flight", "_inner", "_max", "_semaphore")
 
     def __init__(self, inner: object, *, max_concurrency: int = 1) -> None:
         if (

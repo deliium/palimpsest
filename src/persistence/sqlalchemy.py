@@ -418,7 +418,11 @@ class SqlAlchemyTickJournalRepository:
             raise TypeError("to_tick must be Tick or None")
         if isinstance(limit, bool) or not isinstance(limit, int) or limit < 0:
             raise ValueError("limit must be a non-negative int")
-        if isinstance(after_tick, bool) or not isinstance(after_tick, int) or after_tick < 0:
+        if (
+            isinstance(after_tick, bool)
+            or not isinstance(after_tick, int)
+            or after_tick < 0
+        ):
             raise ValueError("after_tick must be a non-negative int")
         if isinstance(after_sequence, bool) or not isinstance(after_sequence, int):
             raise ValueError("after_sequence must be an int")

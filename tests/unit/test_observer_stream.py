@@ -246,7 +246,8 @@ async def test_slow_observer_does_not_block_sibling_subscriber(
 ) -> None:
     """One slow queue disconnects; a healthy sibling still drains to completion."""
     shared: list[dict[str, object]] = [
-        {"tick": index, "sequence": 0, "event_id": f"evt-{index}"} for index in range(20)
+        {"tick": index, "sequence": 0, "event_id": f"evt-{index}"}
+        for index in range(20)
     ]
     read_limits: list[int] = []
 

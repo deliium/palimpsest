@@ -23,7 +23,8 @@ async def test_observer_stream_slow_consumer_isolates_from_sibling(
     """
     del database_resources
     journal = [
-        {"tick": index, "sequence": 0, "event_id": f"evt-{index}"} for index in range(24)
+        {"tick": index, "sequence": 0, "event_id": f"evt-{index}"}
+        for index in range(24)
     ]
     producer_progress = {"reads": 0}
 

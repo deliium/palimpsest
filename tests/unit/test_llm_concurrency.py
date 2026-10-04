@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 
 import pytest
+from pydantic import Field
 
 from llm.factory import (
     ConcurrencyLimitedLLMProvider,
@@ -21,7 +22,6 @@ from llm.models import (
     MessageRole,
     StructuredOutput,
 )
-from pydantic import Field
 
 
 class _Out(StructuredOutput):
@@ -37,11 +37,11 @@ async def test_wrap_llm_concurrency_serializes_under_max_one() -> None:
     peaks: list[int] = []
 
     async def _hold() -> None:
-        async with wrapped._semaphore:  # noqa: SLF001
-            wrapped._in_flight += 1  # noqa: SLF001
-            peaks.append(wrapped._in_flight)  # noqa: SLF001
+        async with wrapped._semaphore:
+            wrapped._in_flight += 1
+            peaks.append(wrapped._in_flight)
             await asyncio.sleep(0.02)
-            wrapped._in_flight -= 1  # noqa: SLF001
+            wrapped._in_flight -= 1
 
     await asyncio.gather(_hold(), _hold(), _hold())
     assert max(peaks) == 1
