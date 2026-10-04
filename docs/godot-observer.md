@@ -16,9 +16,10 @@ HTTP GET only:
 
 - `/v1/simulations/{run_id}/observer/manifest`
 - `/v1/simulations/{run_id}/observer/state`
-- `/v1/simulations/{run_id}/observer/events`
+- `/v1/simulations/{run_id}/observer/events` with optional `agent_id`, `event_type`, `location_id` (and resume cursors)
 - `/v1/simulations/{run_id}/observer/run`
 - `/v1/simulations/{run_id}/observer/ticks`
+- `/v1/simulations/{run_id}/branches` / `branch` / `branch/fork-point` (lineage GETs; `objective_inspection`)
 - `/v1/simulations/{run_id}/observer/agents/{agent_id}/labels` (SUBJECTIVE perspective; `subjective_debug`)
 - `/v1/simulations/{run_id}/observer/agents/{agent_id}/relationships` (SUBJECTIVE; `subjective_debug`)
 - `/v1/simulations/{run_id}/observer/agents/{agent_id}/narrative-hops` (SUBJECTIVE ledger hops; `subjective_debug`)
@@ -29,7 +30,7 @@ HTTP GET only:
 
 It also opens `/v1/simulations/{run_id}/observer/stream` and never sends a text or binary WebSocket payload. Protocol `observer-protocol-v1` is required. A different `protocol_version` is shown as `unsupported_observer_protocol` and is not applied.
 
-Manifest and run envelopes always carry `run_id`. Optional fork fields (`parent_run_id`, `fork_tick`, `intervention_summary`, `branch_id`) appear on research branch children only — unknown keys are ignored. Switching branches means reconnecting with another `run_id` on the same observer routes. There is **no** dual-world viewport or simultaneous fold of two runs in the client.
+Manifest and run envelopes always carry `run_id`. Optional fork fields (`parent_run_id`, `fork_tick`, `intervention_summary`, `branch_id`) appear on research branch children only — unknown keys are ignored. Branch navigation replaces the active `ObserverSource` (close stream, clear world/log/timeline marks, bootstrap the other `run_id`). There is **no** dual-world viewport or simultaneous fold of two runs in the client. The client never creates forks (`POST .../branches`) from Godot.
 
 ## Evidence classes
 
@@ -180,6 +181,35 @@ The playback row is read-only. None of these controls pause, step, or reseed the
 
 Going backward requests a reconstructed frame. It does not play a reverse tween.
 
+Status chrome always shows `LIVE` or `REPLAY` (plus paused / behind live when applicable), and distinct `loading` / `seeking` / `switching_run` copy while bootstrap or seek work is in flight. Protocol mismatch keeps reason `unsupported_observer_protocol` and names expected `observer-protocol-v1`.
+
+### Keyboard shortcuts
+
+Shortcuts use InputMap / `_unhandled_input` and do not fire while a text field has focus:
+
+| Key | Action |
+| --- | --- |
+| Space | Play / pause (local) |
+| ← / → | Previous / next event |
+| Shift+← / Shift+→ | Previous / next tick |
+| L | Return to live |
+| F | Toggle follow on the current focus target |
+| B | Bookmark the viewed tick |
+| `[` / `]` | Previous / next focused event |
+| Esc | Clear follow / selection where safe |
+
+## Branch navigation
+
+The branch panel shows the current `run_id`, optional parent / fork tick / intervention summary / `branch_id`, and a paged child list from `GET .../branches` (`after_child_run_id` when `next_cursor` is present). Root runs without lineage show an empty state, not an error. Missing `objective_inspection` surfaces a capability reason code.
+
+| Control | Effect |
+| --- | --- |
+| Open parent at fork point | `GET .../branch/fork-point`, then clean `switch_run(parent)` and seek to `parent_observer_tick` |
+| Open child | `switch_run(child)`; optional seek to that child's fork tick |
+| Return to previous run | Pop a session-only stack (depth ≤16) of `{run_id, tick, sequence}` and restore that source |
+
+Each switch tears down the stream, cancels HTTP seeks (queue clear + request epoch), clears world layers / log / timeline marks (not bookmark files), and bootstraps one new source. No occupancy or log lines merge across runs.
+
 ## Event log
 
 The log is one bounded page, near 200 lines, replaced on each seek. A line is `tick:sequence type actor target description`. The subject is `target_id` for `AGENT_DIED`, `NEEDS_APPLIED`, and `EXPOSURE_APPLIED`, and `actor_id` otherwise. Labels prefer `agent_id`, then the raw id. Location names prefer `display_name`, then `name`. Clicking a line seeks that event. **Why?** requests the research causal debugger for the selected line. Utterance text is not printed.
@@ -192,9 +222,26 @@ Three filters hide loaded lines and do not request another route:
 
 Empty filters show every loaded line.
 
-## Timeline
+Selecting an agent (entity id from `world.agents`) or location can also refresh the window via `GET .../events?agent_id=` / `location_id=`. Server-side `agent_id` matches **actor or target** after adapt (so Alice as death/help target is included). Client substring filters remain a secondary aid on the loaded page. Next / previous focused event prefer neighbors inside that window, then bounded GETs / probes (no full-journal reverse scan).
 
-The bar shows the viewed event tick and the live tick from `GET .../observer/run`. `AGENT_DIED` marks come from the loaded log window. Selected-agent marks use that same window and stay off until the Selected agent toggle is on. Clicking a mark seeks that event. The client does not page the whole run to paint marks.
+## Focus and follow
+
+Agent focus and location focus may combine in the log filter. **Follow** is mutually exclusive (one camera/UI target): it recenters via `camera_rig.focus_on` only. Follow never pauses the run, never calls simulation control / admission / fork routes, and never changes seeds or event ids. Clearing selection or turning Follow off stops tracking only.
+
+## Timeline markers
+
+The bar shows the viewed event tick and the live tick from `GET .../observer/run`. Configurable category toggles (ProjectSettings / local config) paint marks for death, attack, major weather/environment, artifact creation, structure creation, and synthetic **branch_point** ticks from lineage. Birth stays empty until a birth-class semantic type exists in the protocol — roster presence is not invented as birth.
+
+Loading strategy: paint first from the bounded log window; optional enrichment runs at most one refresh with ≤3 sequential `event_type` pages; drawn marks cap at 64 (DEBUG when truncated). The client does not scan the whole journal. Clicking a mark seeks that event (branch points use tick-start `state?tick=`).
+
+## Local bookmarks
+
+Researcher bookmarks are **observer metadata only** — not authoritative simulation history. They are never written into journals, snapshots, manifests, evidence exports, or branch lineage.
+
+- Store: `user://observer_bookmarks/<safe_stem>.json` where `safe_stem` is a filesystem-safe encoding of `run_id` (slug + short hash). The JSON body always includes the original `run_id`.
+- Fields: `tick`, optional `sequence`, `note`, `created_at_utc` (wall clock for researcher notes — never simulation time).
+- UI: add / edit / delete / jump (jump seeks like Jump to Tick/Event).
+- Web/HTML5: Godot `user://` persistence; private/incognito sessions may drop bookmarks. No server bookmark API.
 
 ## Pause and behind live
 

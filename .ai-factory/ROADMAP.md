@@ -78,6 +78,8 @@ Named cognitive architecture variants (`agents.cognition.architectures`, Experim
 
 `.ai-factory/plans/v2-long-experiment-scalability.md` is implemented (2026-10-04). It adds long-run infrastructure (checkpoint cadence presets, event filter indexes `0016`, hybrid memory candidate caps / deferred HNSW `0017`, observer backpressure and `catch_up`, presentation-only coalesce, LLM concurrency, cognition-trace soft caps/export, `@pytest.mark.scale` harness) without claiming a capability flag or weakening append-only DELETE rejection. M6 stays open for `multi_hop_testimony_tracking`.
 
+`.ai-factory/plans/v2-godot-observer-advanced-replay-navigation.md` is implemented (2026-10-04). It adds clean `ObserverSource` replacement, branch panel navigation, configurable timeline markers, agent/location focus+follow (camera/UI only), local `user://` bookmarks, and usability chrome on the Godot observer, plus `agent_id` actor|target event filter semantics. No capability flag, no protocol/runner bump. M6 stays open for `multi_hop_testimony_tracking`.
+
 `.ai-factory/plans/v2-emergent-social-norms.md` is implemented. It adds an opt-in owner-scoped social-norm ledger on `runner-config-v17`, Experiment X, and `emergent_social_norms@1`. A norm is a private belief inferred from repeated observations. It is not a `WorldEngine` rule, and it does not own a capability flag. Opt-in group formation already landed on `runner-config-v16`. Territorial claims already landed as `runner-config-v15`, Experiment V, and `spatial_control@1`.
 
 **Out of scope until planned:** free-form affect narration, personality trait systems, HTTP debug UI for emotion, collapsing emotion+drives+goals into one reward scalar.

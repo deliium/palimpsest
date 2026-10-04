@@ -268,13 +268,13 @@ Each checkpoint is a git commit on `main` when those tasks are done. Do not squa
 
 ### Phase 4: Integration tests and docs
 
-- [ ] Task 9: Integration Godot suite for advanced navigation.
+- [x] Task 9: Integration Godot suite for advanced navigation.
   - Deliverable: Automated Godot **integration** tests (not a second copy of every unit proof) covering end-to-end: clean switch (no merged state); nav stack return; marker category collect/cap including synthetic branch_point; agent next/prev focus including actor|target semantics via fixtures; follow does not call non-GET control routes; bookmarks persist per run_id (safe stem) and jump seeks; protocol mismatch copy/reason; URL allowlist accepts focus/branch keys. Assert key log tokens where practical. Rely on Tasks 1–8 for focused unit coverage.
   - Logging: tests assert tokens such as `run_switched`, `branch_open_`, `follow_agent`, `bookmark_jump`, `unsupported_observer_protocol`, `agent_match_mode` (Python side covered in Task 1b tests).
   - Depends on tasks 1–8.
   - Files: `clients/godot-observer/tests/*.gd`, fixtures as needed.
 
-- [ ] Task 10: Documentation checkpoint via `/aif-docs` ownership.
+- [x] Task 10: Documentation checkpoint via `/aif-docs` ownership.
   - Deliverable: Update `docs/godot-observer.md` and `docs/research-api.md` for branch navigation, `agent_id` actor|target filter semantics, marker categories + fetch budget, agent/location follow (presentation-only), local bookmarks + safe stem + Web persistence caveat, shortcuts, and status indicators. No README bloat beyond a one-line pointer if the landing page already links docs. State explicitly that bookmarks are not authoritative history.
   - Logging: n/a (docs only).
   - Depends on tasks 8–9.

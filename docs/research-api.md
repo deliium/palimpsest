@@ -26,7 +26,8 @@ Secrets use strong `SecretStr` values. Query-string secrets are rejected. Prefer
 - Metric catalog and immutable metric documents
 - Replay-to-tick endpoints (detached projection; never live `WorldEngine`)
 - Read-only observer manifest, state, events, ticks, run metadata, and live stream. See [Read-only observer](observer.md). Presentation coordinates are not simulation coordinates. Researcher relationship summaries stay on the debug capability.
-- Observer event pages accept additive optional filters (`agent_id`, `event_type`, `location_id`) and `catch_up=true` for multi-page reconnect fill within `PALIMPSEST_API_MAX_PAGE_SIZE`. Protocol remains `observer-protocol-v1` — no layout/protocol rename for scale.
+- Observer event pages accept additive optional filters (`agent_id`, `event_type`, `location_id`) and `catch_up=true` for multi-page reconnect fill within `PALIMPSEST_API_MAX_PAGE_SIZE`. Filter `agent_id` matches events where that id equals **`actor_id` or `target_id`** after adapt (presentation filter; includes target-only rows such as `AGENT_DIED`). Protocol remains `observer-protocol-v1` — no layout/protocol rename for scale.
+- Godot observer branch navigation uses the existing lineage GETs (`/branches`, `/branch`, `/branch/fork-point`) under `objective_inspection` and replaces one `ObserverSource` at a time. Local researcher bookmarks stay in the client (`user://`); they are not authoritative history and have no server API.
 - Research causal debugger GET routes under `/v1/simulations/{run_id}/debugger/…` require `subjective_debug` (observational; tracing-off → `200` + `unavailable`). See [Research causal debugger](research-causal-debugger.md).
 - Research **simulation branches** (deterministic forks):
   - `POST /v1/simulations/{parent_run_id}/branches` — create one child from `fork_tick` + exactly one closed `ResearchIntervention` (`simulation_control`; idempotent on identical fingerprint)
