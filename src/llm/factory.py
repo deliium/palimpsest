@@ -11,6 +11,7 @@ compose wiring remain out of scope until that consumer exists).
 
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
 import re
@@ -33,12 +34,15 @@ from llm.models import (
 from llm.providers.openai_compatible import OpenAICompatibleProvider
 
 __all__ = [
+    "ConcurrencyLimitedLLMProvider",
     "DeterministicFakeLLMProvider",
     "DisabledLLMProvider",
     "ProviderAdapterKind",
     "ProviderFactoryConfig",
     "create_llm_provider",
+    "wrap_llm_concurrency",
 ]
+
 
 _LOG: Final[logging.Logger] = logging.getLogger("llm.factory")
 
@@ -385,3 +389,58 @@ def create_llm_provider(
         config.max_attempts,
     )
     return provider
+
+
+class ConcurrencyLimitedLLMProvider:
+    """Process-scoped semaphore around ``generate`` (default max=1)."""
+
+    __slots__ = ("_inner", "_max", "_semaphore", "_in_flight")
+
+    def __init__(self, inner: object, *, max_concurrency: int = 1) -> None:
+        if (
+            isinstance(max_concurrency, bool)
+            or type(max_concurrency) is not int
+            or max_concurrency < 1
+        ):
+            raise ValueError("max_concurrency must be >= 1")
+        self._inner = inner
+        self._max = max_concurrency
+        self._semaphore = asyncio.Semaphore(max_concurrency)
+        self._in_flight = 0
+
+    @property
+    def provider_name(self) -> str:
+        name = getattr(self._inner, "provider_name", None)
+        return str(name) if name is not None else "concurrency_limited"
+
+    async def close(self) -> None:
+        close = getattr(self._inner, "close", None)
+        if close is not None:
+            await close()
+
+    async def generate[T: StructuredOutput](
+        self,
+        request: LLMRequest[T],
+    ) -> LLMResult[T]:
+        async with self._semaphore:
+            self._in_flight += 1
+            try:
+                _LOG.debug(
+                    "[llm.concurrency] acquired in_flight=%s max=%s",
+                    self._in_flight,
+                    self._max,
+                )
+                return await self._inner.generate(request)  # type: ignore[no-any-return]
+            finally:
+                self._in_flight -= 1
+
+
+def wrap_llm_concurrency(
+    provider: object,
+    *,
+    max_concurrency: int = 1,
+) -> object:
+    """Gate ``generate`` with a process-scoped semaphore (identity when max=1)."""
+    if max_concurrency == 1 and type(provider) is ConcurrencyLimitedLLMProvider:
+        return provider
+    return ConcurrencyLimitedLLMProvider(provider, max_concurrency=max_concurrency)

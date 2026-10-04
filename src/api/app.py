@@ -173,7 +173,8 @@ async def _lifespan(app: FastAPI) -> AsyncIterator[None]:
                 settings=settings,
                 run_control=run_control,
                 runner_factory=make_durable_runner_factory(
-                    resources.session_factory  # type: ignore[arg-type]
+                    resources.session_factory,  # type: ignore[arg-type]
+                    settings=settings,
                 ),
             )
         _attach_persistence_services(app, resources.session_factory)

@@ -33,6 +33,9 @@ from simulation.runner_serialization import runner_config_fingerprint
 
 _LOG: Final[logging.Logger] = logging.getLogger("experiments.matrix_runner")
 
+# Durable cells at-or-above this max_ticks should enable checkpoint cadence.
+_LONG_CELL_TICK_WARN_THRESHOLD: Final[int] = 1_000
+
 
 @dataclass(frozen=True, slots=True)
 class MatrixBatchDependencies:
@@ -159,6 +162,8 @@ class MatrixBatchRunner:
             )
         if durable:
             max_concurrency = 1
+
+        _warn_long_run_checkpoint_guidance(definition, cells, condition_ordinals)
 
         semaphore = asyncio.Semaphore(max_concurrency)
         completed = 0
@@ -342,6 +347,33 @@ class MatrixBatchRunner:
             failed=failed,
             skipped_valid=skipped_valid,
             matrix_fingerprint=matrix_fp,
+        )
+
+
+def _warn_long_run_checkpoint_guidance(
+    definition: ExperimentDefinition,
+    cells: tuple[MatrixCell, ...],
+    condition_ordinals: dict[str, int],
+) -> None:
+    """WARN when durable long cells run with checkpoints disabled."""
+    recommended = 100
+    for cell in cells:
+        condition = definition.conditions[condition_ordinals[cell.condition_id]]
+        config = condition.runner_config
+        if not config.persistence.durable:
+            continue
+        max_ticks = config.stop_policy.max_ticks
+        if max_ticks < _LONG_CELL_TICK_WARN_THRESHOLD:
+            continue
+        checkpoint = config.persistence.checkpoint
+        if checkpoint.enabled and checkpoint.cadence_ticks is not None:
+            continue
+        _LOG.warning(
+            "[matrix] long_run_checkpoint_recommended cadence_ticks=%s "
+            "cell_id=%s max_ticks=%s",
+            recommended,
+            cell.cell_id,
+            max_ticks,
         )
 
 

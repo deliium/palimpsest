@@ -34,9 +34,12 @@ __all__ = [
     "CognitionTraceStageRecord",
     "InMemoryCognitionTraceRepository",
     "NullCognitionTraceRepository",
+    "SoftCapCognitionTraceRepository",
     "build_cognition_trace_invocation",
+    "export_cognition_trace_invocations",
     "maybe_append_cognition_trace",
     "select_cognition_trace_repository",
+    "wrap_cognition_trace_soft_caps",
 ]
 
 COGNITION_TRACE_SCHEMA_VERSION: Final[str] = "cognition-trace-v1"
@@ -479,6 +482,171 @@ def select_cognition_trace_repository(
     if in_memory is not None:
         return in_memory
     return InMemoryCognitionTraceRepository()
+
+
+class SoftCapCognitionTraceRepository:
+    """Fail-soft stop-append wrapper. Never deletes prior rows."""
+
+    __slots__ = (
+        "_bytes_appended",
+        "_inner",
+        "_invocations_appended",
+        "_max_bytes",
+        "_max_invocations",
+        "_stopped_reason",
+    )
+
+    def __init__(
+        self,
+        inner: CognitionTraceRepository,
+        *,
+        max_invocations: int | None = None,
+        max_bytes: int | None = None,
+    ) -> None:
+        if max_invocations is not None and (
+            isinstance(max_invocations, bool)
+            or type(max_invocations) is not int
+            or max_invocations < 1
+        ):
+            raise ValueError("max_invocations must be >= 1 when set")
+        if max_bytes is not None and (
+            isinstance(max_bytes, bool) or type(max_bytes) is not int or max_bytes < 1
+        ):
+            raise ValueError("max_bytes must be >= 1 when set")
+        self._inner = inner
+        self._max_invocations = max_invocations
+        self._max_bytes = max_bytes
+        self._invocations_appended = 0
+        self._bytes_appended = 0
+        self._stopped_reason: str | None = None
+
+    @property
+    def stopped_reason(self) -> str | None:
+        return self._stopped_reason
+
+    async def append_invocation(self, invocation: CognitionTraceInvocation) -> None:
+        if type(invocation) is not CognitionTraceInvocation:
+            raise TypeError("append_invocation requires CognitionTraceInvocation")
+        if self._stopped_reason is not None:
+            _LOG.debug(
+                "[cognition_trace] soft_cap_skip run_id=%s reason_code=%s count=%s",
+                invocation.run_id.value,
+                self._stopped_reason,
+                self._invocations_appended,
+            )
+            return
+        approx_bytes = len(invocation.content_hash) + 64 * max(1, len(invocation.stages))
+        if (
+            self._max_invocations is not None
+            and self._invocations_appended >= self._max_invocations
+        ):
+            self._stopped_reason = "soft_cap_invocations"
+            _LOG.warning(
+                "[cognition_trace] soft_cap_reached run_id=%s reason_code=%s count=%s",
+                invocation.run_id.value,
+                self._stopped_reason,
+                self._invocations_appended,
+            )
+            return
+        if (
+            self._max_bytes is not None
+            and self._bytes_appended + approx_bytes > self._max_bytes
+        ):
+            self._stopped_reason = "soft_cap_bytes"
+            _LOG.warning(
+                "[cognition_trace] soft_cap_reached run_id=%s reason_code=%s count=%s",
+                invocation.run_id.value,
+                self._stopped_reason,
+                self._invocations_appended,
+            )
+            return
+        await self._inner.append_invocation(invocation)
+        self._invocations_appended += 1
+        self._bytes_appended += approx_bytes
+
+    async def get_invocation(
+        self,
+        *,
+        run_id: RunId,
+        agent_id: AgentId,
+        tick: int,
+        invocation_id: str,
+    ) -> CognitionTraceInvocation | None:
+        return await self._inner.get_invocation(
+            run_id=run_id,
+            agent_id=agent_id,
+            tick=tick,
+            invocation_id=invocation_id,
+        )
+
+    async def list_invocations(
+        self,
+        *,
+        run_id: RunId,
+        agent_id: AgentId | None = None,
+        tick_min: int | None = None,
+        tick_max: int | None = None,
+        after_cursor: str | None = None,
+        limit: int = 50,
+    ) -> CognitionTracePage:
+        return await self._inner.list_invocations(
+            run_id=run_id,
+            agent_id=agent_id,
+            tick_min=tick_min,
+            tick_max=tick_max,
+            after_cursor=after_cursor,
+            limit=limit,
+        )
+
+
+def wrap_cognition_trace_soft_caps(
+    repository: CognitionTraceRepository,
+    *,
+    max_invocations: int | None = None,
+    max_bytes: int | None = None,
+) -> CognitionTraceRepository:
+    """Apply optional soft stop-append caps (default-off when both None)."""
+    if max_invocations is None and max_bytes is None:
+        return repository
+    return SoftCapCognitionTraceRepository(
+        repository,
+        max_invocations=max_invocations,
+        max_bytes=max_bytes,
+    )
+
+
+async def export_cognition_trace_invocations(
+    repository: CognitionTraceRepository,
+    *,
+    run_id: RunId,
+    agent_id: AgentId | None = None,
+    limit: int = 1000,
+) -> tuple[CognitionTraceInvocation, ...]:
+    """Read-only export copy for offline archival. Does not delete live rows."""
+    collected: list[CognitionTraceInvocation] = []
+    after_cursor: str | None = None
+    pages = 0
+    while len(collected) < limit and pages < 10_000:
+        page = await repository.list_invocations(
+            run_id=run_id,
+            agent_id=agent_id,
+            after_cursor=after_cursor,
+            limit=min(100, limit - len(collected)),
+        )
+        pages += 1
+        if not page.items:
+            break
+        collected.extend(page.items)
+        after_cursor = page.next_cursor
+        if after_cursor is None:
+            break
+    _LOG.debug(
+        "[cognition_trace] export_copy run_id=%s count=%s pages=%s",
+        run_id.value,
+        len(collected),
+        pages,
+    )
+    return tuple(collected)
 
 
 async def maybe_append_cognition_trace(

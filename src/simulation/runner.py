@@ -356,6 +356,7 @@ class RunnerDependencyFactories:
         "_cognition_trace_repository",
         "_credential_resolver",
         "_journal",
+        "_llm_max_concurrency",
         "_memory_factory",
         "_monotonic",
         "_pending_finalizations",
@@ -390,7 +391,14 @@ class RunnerDependencyFactories:
         pending_finalizations: PendingFinalizationRepository | None = None,
         cognition_trace_repository: CognitionTraceRepository | None = None,
         scientific_evidence: ScientificEvidenceRepository | None = None,
+        llm_max_concurrency: int = 1,
     ) -> None:
+        if (
+            isinstance(llm_max_concurrency, bool)
+            or type(llm_max_concurrency) is not int
+            or llm_max_concurrency < 1
+        ):
+            raise ValueError("llm_max_concurrency must be >= 1")
         self._credential_resolver = credential_resolver
         self._provider_factory = provider_factory
         self._recording_store = recording_store
@@ -405,6 +413,7 @@ class RunnerDependencyFactories:
         self._pending_finalizations = pending_finalizations
         self._cognition_trace_repository = cognition_trace_repository
         self._scientific_evidence = scientific_evidence
+        self._llm_max_concurrency = llm_max_concurrency
 
     @property
     def run_repository(self) -> SimulationRunRepository | None:
@@ -439,13 +448,19 @@ class RunnerDependencyFactories:
         credentials: ProviderCredentials,
     ) -> AsyncCloseable:
         if self._provider_factory is not None:
-            return self._provider_factory(settings, credentials)
-        return _default_provider(
-            settings,
-            credentials,
-            sleep=self._sleep,
-            monotonic=self._monotonic,
-            recording_store=self._recording_store,
+            provider = self._provider_factory(settings, credentials)
+        else:
+            provider = _default_provider(
+                settings,
+                credentials,
+                sleep=self._sleep,
+                monotonic=self._monotonic,
+                recording_store=self._recording_store,
+            )
+        from llm.factory import wrap_llm_concurrency
+
+        return wrap_llm_concurrency(  # type: ignore[return-value]
+            provider, max_concurrency=self._llm_max_concurrency
         )
 
     def create_memory_service(

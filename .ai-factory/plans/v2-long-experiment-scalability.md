@@ -222,19 +222,19 @@ Each checkpoint is a git commit on `main` when those tasks are done. Do not squa
 
 ### Phase 4: Cognition traces, batch runs, LLM concurrency
 
-- [ ] Task 13: Cognition-trace soft caps and export (no DELETE).
+- [x] Task 13: Cognition-trace soft caps and export (no DELETE).
   - Deliverable: Optional default-off soft stop-append when a configured invocation/byte cap is hit (fail-soft with stable reason code; prior rows remain). Optional read-only export copy for offline archival. Do **not** `DELETE`/`TRUNCATE` `cognition_trace_invocations` (triggers must keep rejecting). Paginated reads remain; stress test with tracing on for moderate tick counts. Tracing-off trajectories / `exact_trajectory_hash` unchanged.
   - Logging: `[cognition_trace] soft_cap_reached run_id=%s reason_code=%s count=%s` at WARN; export DEBUG counts — **no** `archive_applied removed=` delete logs.
   - Depends on task 3.
   - Files: `src/persistence/cognition_trace_sqlalchemy.py`, settings, tests proving tracing-off hash stability + DELETE still rejected.
 
-- [ ] Task 14: Batch / matrix long-cell guidance and resource bounds.
+- [x] Task 14: Batch / matrix long-cell guidance and resource bounds.
   - Deliverable: Document and optionally enforce that durable matrix cells use `max_concurrency=1` (already) plus recommended checkpoint cadence for long cells. Add matrix/research_runner validation WARN when durable long `max_ticks` runs with checkpoints disabled. No HTTP matrix API.
   - Logging: `[matrix] long_run_checkpoint_recommended cadence_ticks=%s` at WARN.
   - Depends on task 4.
   - Files: `src/experiments/matrix_runner.py` / models, `docs/experiments.md`, tests for WARN path.
 
-- [ ] Task 15: Process-wide LLM concurrency limits (determinism-preserving).
+- [x] Task 15: Process-wide LLM concurrency limits (determinism-preserving).
   - Deliverable: Settings/runner knob `llm_max_concurrency` (default 1). Gate `LLMProvider.generate` (composition/factory wrapper) with a semaphore. Parallel agent prepare remains **default off**. Before enabling: audit shared mutable state across `AgentRuntime.prepare_observation` and the shared provider. When enabled: `asyncio.gather` prepares, then bind/submit in runtime ordinal order. Property test: parallel prepare + concurrency>1 with deterministic fake LLM matches sequential `exact_trajectory_hash`. `CognitiveBudgetMode` remains the per-agent tick budget.
   - Logging: `[llm.concurrency] acquired in_flight=%s max=%s` at DEBUG; `[simulation.runner] prepare_parallel enabled=%s agent_count=%s` at INFO once per run.
   - Depends on task 3.
