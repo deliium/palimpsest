@@ -132,6 +132,8 @@ Exact external LLM replay for simulation requires **recorded responses or determ
 
 Research reproducibility for structured LLM I/O lives in `src/llm/recording/`. Modes ride on `RunnerProviderSettings.recording_policy` (provider-settings-v1 key-set unchanged). Store root, namespace, and lookup mode are **composition-only** via `RecordingStoreSettings` — never encoded into provider JSON, `provider_fingerprint`, result docs, evidence manifests, or trajectory hashes.
 
+Process-wide `PALIMPSEST_LLM_MAX_CONCURRENCY` (default `1`) wraps provider `generate` with a semaphore via `wrap_llm_concurrency`. Parallel agent prepare stays **default off**; submission order for resolve remains runtime ordinal order. Concurrency does not change deterministic fake / flags-off trajectory hashes.
+
 | Mode | Provider contact | Persist | Lookup |
 | --- | --- | --- | --- |
 | `live` | yes | no | no |

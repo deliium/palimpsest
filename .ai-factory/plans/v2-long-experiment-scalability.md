@@ -244,7 +244,7 @@ Each checkpoint is a git commit on `main` when those tasks are done. Do not squa
 
 ### Phase 5: Benchmark scenarios, verification, docs
 
-- [ ] Task 16: Implement required observer/scale benchmark scenarios.
+- [x] Task 16: Implement required observer/scale benchmark scenarios.
   - Deliverable: Automated scenarios (Python integration and/or Godot protocol tests) covering:
     1. live observation while simulation runs
     2. viewer paused far behind live (buffer discard + catch-up)
@@ -256,13 +256,13 @@ Each checkpoint is a git commit on `main` when those tasks are done. Do not squa
   - Depends on tasks 1, 10–12.
   - Files: `tests/benchmarks/` / integration / `clients/godot-observer/tests/`.
 
-- [ ] Task 17: Regression, architecture, and append-only gates for scale changes.
+- [x] Task 17: Regression, architecture, and append-only gates for scale changes.
   - Deliverable: V1 regression gate green flags-off/tracing-off; import-linter/AST boundaries unchanged (`observer` still read-only; no engine commit from API stream). Add architecture test that presentation coalesce helpers do not import persistence event writers. Exact trajectory hash tests for concurrency defaults. **Re-run / extend** `tests/integration/test_append_only.py` (or equivalent) so `DELETE` on `world_snapshots`, `run_stream_records`, and `cognition_trace_invocations` still fails after scale work — fail the plan if any path disabled those triggers.
   - Logging: standard pytest; no new payload logs.
   - Depends on tasks 5, 13, 15, 16.
   - Files: `tests/unit/test_v1_regression_gate.py` (run only), `tests/integration/test_append_only.py`, new architecture/unit tests.
 
-- [ ] Task 18: Documentation checkpoint (`/aif-docs`).
+- [x] Task 18: Documentation checkpoint (`/aif-docs`).
   - Deliverable: Update `docs/persistence.md`, `docs/observer.md`, `docs/research-api.md`, `docs/memory-reconstruction.md`, `docs/development.md` (and README links if needed) with: long-run checkpoint guidance, write-time sparseness (no snapshot DELETE), observer backpressure/reconnect, `observer-protocol-v1` stability, presentation vs scientific history, memory candidate caps + hybrid pgvector, LLM concurrency, cognition-trace soft caps/export, benchmark how-to. No Kafka/K8s recommendations. No advice to prune append-only tables in place.
   - Logging: n/a for docs prose; code samples follow existing metadata-only log rules.
   - Depends on tasks 16–17.
@@ -275,7 +275,7 @@ Each checkpoint is a git commit on `main` when those tasks are done. Do not squa
 - Baseline profile artifact path: `tests/benchmarks/BASELINE_TEMPLATE.md` (task 2)
 - Top bottlenecks: see artifact (seek fold / durable tick append / memory candidate load)
 - Target tick horizons proven in CI vs optional nightly: _TBD_ (suggest CI ≤10k durable fake; longer behind env)
-- Append-only DELETE rejection reconfirmed: _TBD after task 17_
+- Append-only DELETE rejection reconfirmed: `tests/integration/test_append_only.py::test_scale_tables_delete_still_rejected` (snapshots, stream records, cognition traces)
 
 ## Implementation order reminder
 

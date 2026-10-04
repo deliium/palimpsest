@@ -83,9 +83,11 @@ The snapshot `next_tick` is the replay cursor. Events folded for a tick-only tar
 
 The socket authenticates like the inspection stream: capability `objective_inspection`, subprotocol `palimpsest.v1`, no query-string credential. It polls the ordered event journal. It does not subscribe to `StreamFanout`.
 
-The first envelope is `hello` (manifest, current frame, cursor). Later envelopes are `event`, `tick` when the high water moves, `heartbeat`, and `completion`. A client text frame returns `rejected` with `client_mutation_rejected` and does not change the run. A full subscriber queue disconnects that client and does not block tick commit.
+The first envelope is `hello` (manifest, current frame, cursor). Later envelopes are `event`, `tick` when the high water moves, `heartbeat`, and `completion`. A client text frame returns `rejected` with `client_mutation_rejected` and does not change the run. A full subscriber queue disconnects that client and does not block tick commit. Queue size and catch-up batch size come from `PALIMPSEST_OBSERVER_STREAM_QUEUE_SIZE` / `PALIMPSEST_OBSERVER_CATCHUP_PAGE_SIZE` (defaults preserve short-run behavior). One slow observer never stalls siblings or the runner.
 
-A client that missed events loads `GET .../observer/events` for the exclusive gap, then resumes the socket at the last event it applied. The next session does not repeat those events.
+Optional additive GET filters on `.../observer/events`: `agent_id`, `event_type` (semantic or domain kind), `location_id`, and `catch_up=true` for multi-page reconnect catch-up within `api_max_page_size`. Protocol remains `observer-protocol-v1`. Tick ranges that exceed `api_max_page_size` fail closed with `tick_range_exceeds_maximum`.
+
+A client that missed events loads `GET .../observer/events` for the exclusive gap (optionally with `catch_up=true`), then resumes the socket at the last event it applied. The next session does not repeat those events. Presentation coalescing (high-speed tick envelope merge / motion skip) lives only in Godot / observer projection — scientific event pages and the WS journal stay complete.
 
 ## Layout and privacy
 

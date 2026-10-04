@@ -170,3 +170,65 @@ async def test_scientific_evidence_append_only_registry(
                     {"table": table, "tgname": tgname},
                 )
                 assert result.scalars().all() == [tgname], table
+
+
+async def test_scale_tables_delete_still_rejected(
+    database_resources: DatabaseResources,
+) -> None:
+    """Scale work must not disable DELETE rejection on snapshots/stream/traces."""
+    async with session_scope(database_resources.session_factory) as session:
+        run_id, snap_id, _exp_id = await _seed_minimal_history(session)
+        await session.execute(
+            text(
+                """
+                INSERT INTO run_stream_heads (run_id, high_water)
+                VALUES (:run_id, 0)
+                """
+            ),
+            {"run_id": run_id},
+        )
+        await session.execute(
+            text(
+                """
+                INSERT INTO run_stream_records (
+                    run_id, cursor_value, record_kind, schema_version,
+                    content_hash, payload, related_tick
+                ) VALUES (
+                    :run_id, 1, 'eventless_tick', 'stream-v1',
+                    :hash, decode('7b7d', 'hex'), 0
+                )
+                """
+            ),
+            {"run_id": run_id, "hash": _HASH_A},
+        )
+        await session.execute(
+            text(
+                """
+                INSERT INTO cognition_trace_invocations (
+                    run_id, agent_id, tick, invocation_id, schema_version,
+                    content_hash, payload, command_kind, final_confidence
+                ) VALUES (
+                    :run_id, 'agent-1', 0, 'inv-1', 'cognition-trace-v1',
+                    :hash, decode('7b7d', 'hex'), 'wait', NULL
+                )
+                """
+            ),
+            {"run_id": run_id, "hash": _HASH_A},
+        )
+        await session.commit()
+
+    for table, sql in (
+        ("world_snapshots", "DELETE FROM world_snapshots WHERE snapshot_id = :id"),
+        ("run_stream_records", "DELETE FROM run_stream_records WHERE run_id = :id"),
+        (
+            "cognition_trace_invocations",
+            "DELETE FROM cognition_trace_invocations WHERE run_id = :id",
+        ),
+    ):
+        async with session_scope(database_resources.session_factory) as session:
+            with pytest.raises((IntegrityError, DBAPIError)):
+                await session.execute(
+                    text(sql),
+                    {"id": snap_id if table == "world_snapshots" else run_id},
+                )
+                await session.commit()

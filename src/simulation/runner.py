@@ -1629,6 +1629,11 @@ class SimulationRunner:
             len(self._runtimes),
             self._config.stop_policy.max_ticks,
         )
+        _LOG.info(
+            "[simulation.runner] prepare_parallel enabled=%s agent_count=%s",
+            False,
+            len(self._runtimes),
+        )
 
     async def run_tick(self) -> RunnerAttemptReceipt:
         """Observe, prepare, bind, commit, and finalize one tick."""

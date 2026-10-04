@@ -104,6 +104,7 @@ Append-only `experiment_definitions`, `experiment_assignments`, and `experiment_
 
 - **`0013_v2_cognition_trace`:** append-only `cognition_trace_invocations` outside `AUTHORITATIVE_TABLES` / `EvidenceManifest` / objective high-water. Indexed for inspection: `(run_id, tick)` and `(run_id, agent_id, tick)`. Payload is `cognition-trace-v1` codec bytes + content hash; FK to `simulation_runs` RESTRICT.
 - Factory: `persistence.create_cognition_trace_repository(...)`. Composition injects SQLAlchemy only when tracing is enabled + durable; otherwise Null / in-memory.
+- Optional default-off soft stop-append caps (`PALIMPSEST_COGNITION_TRACE_SOFT_CAP_INVOCATIONS` / `..._BYTES`) fail-soft with `soft_cap_reached` and never `DELETE` prior rows. Read-only `export_cognition_trace_invocations` copies pages for offline archival only.
 - Not folded into objective replay; stream-outbox / manifest integration is deferred. HTTP read routes are deferred — use `CognitionTraceRepository` ports.
 
 ## Research branch lineage (`0015`)

@@ -105,7 +105,7 @@ Labels are researcher metadata only — not world friend/enemy/leader roles.
 
 ### Resume and crash recovery
 
-Filesystem store: `manifest.json` + `cells/<cell_id>.json` (+ completion sidecars). Validity requires matching matrix/cell/config fingerprints, schema versions, and `RunVersionIdentity`. On open, any cell `running` without a valid completion resets to `pending`. Divergent rewrite of the same matrix fingerprint fails closed. Process-local concurrency only (`max_concurrency`, default `1`); durable persistence requires serial execution.
+Filesystem store: `manifest.json` + `cells/<cell_id>.json` (+ completion sidecars). Validity requires matching matrix/cell/config fingerprints, schema versions, and `RunVersionIdentity`. On open, any cell `running` without a valid completion resets to `pending`. Divergent rewrite of the same matrix fingerprint fails closed. Process-local concurrency only (`max_concurrency`, default `1`); durable persistence requires serial execution. Durable cells with `max_ticks >= 1000` and checkpoints disabled emit WARN `[matrix] long_run_checkpoint_recommended cadence_ticks=100` — use `long_run_persistence_spec` / `long_run_checkpoint_policy` rather than in-DB snapshot DELETE.
 
 ### CLI (no HTTP)
 
