@@ -177,6 +177,135 @@ class SubjectiveClaimsOut(StrictModel):
     heads: tuple[TerritorialClaimHeadOut, ...] = ()
 
 
+class GoalSummaryOut(StrictModel):
+    goal_id: str
+    status: str
+    horizon: str
+    priority: float
+    confidence: float | None = None
+    created_tick: int = Field(ge=0)
+    parent_goal_id: str | None = None
+    dependency_count: int = Field(ge=0)
+
+
+class GoalsProjectionOut(StrictModel):
+    schema_version: Literal["research-goals-v1"] = "research-goals-v1"
+    owner_id: str
+    availability: AvailabilityOut
+    head_count: int = Field(ge=0)
+    items: tuple[GoalSummaryOut, ...] = ()
+
+
+class EmotionIntensityOut(StrictModel):
+    kind: str
+    intensity: float
+
+
+class EmotionalStateProjectionOut(StrictModel):
+    schema_version: Literal["research-emotional-state-v1"] = (
+        "research-emotional-state-v1"
+    )
+    owner_id: str
+    availability: AvailabilityOut
+    tick: int | None = None
+    last_update_tick: int | None = None
+    policy_version: str | None = None
+    head_count: int = Field(ge=0)
+    intensities: tuple[EmotionIntensityOut, ...] = ()
+
+
+class SelfModelProjectionOut(StrictModel):
+    schema_version: Literal["research-self-model-v1"] = "research-self-model-v1"
+    owner_id: str
+    availability: AvailabilityOut
+    identity_tick: int | None = None
+    identity_operation_count: int = Field(ge=0)
+    goal_count: int = Field(ge=0)
+    goal_ids: tuple[str, ...] = ()
+    note: str = ""
+
+
+class LedgerItemSummaryOut(StrictModel):
+    item_id: str
+    kind_code: str
+    status: str | None = None
+    strength: float | None = None
+    target_id: str | None = None
+    evidence_count: int = Field(ge=0)
+
+
+class TheoryOfMindProjectionOut(StrictModel):
+    schema_version: Literal["research-theory-of-mind-v1"] = (
+        "research-theory-of-mind-v1"
+    )
+    owner_id: str
+    availability: AvailabilityOut
+    head_count: int = Field(ge=0)
+    items: tuple[LedgerItemSummaryOut, ...] = ()
+
+
+class GroupFormationProjectionOut(StrictModel):
+    schema_version: Literal["research-group-formation-v1"] = (
+        "research-group-formation-v1"
+    )
+    owner_id: str
+    availability: AvailabilityOut
+    head_count: int = Field(ge=0)
+    concept_count: int = Field(ge=0)
+    items: tuple[LedgerItemSummaryOut, ...] = ()
+
+
+class SocialNormsProjectionOut(StrictModel):
+    schema_version: Literal["research-social-norms-v1"] = "research-social-norms-v1"
+    owner_id: str
+    availability: AvailabilityOut
+    head_count: int = Field(ge=0)
+    items: tuple[LedgerItemSummaryOut, ...] = ()
+
+
+class SocialConventionsProjectionOut(StrictModel):
+    schema_version: Literal["research-social-conventions-v1"] = (
+        "research-social-conventions-v1"
+    )
+    owner_id: str
+    availability: AvailabilityOut
+    head_count: int = Field(ge=0)
+    items: tuple[LedgerItemSummaryOut, ...] = ()
+
+
+class CulturalNarrativesProjectionOut(StrictModel):
+    schema_version: Literal["research-cultural-narratives-v1"] = (
+        "research-cultural-narratives-v1"
+    )
+    owner_id: str
+    availability: AvailabilityOut
+    head_count: int = Field(ge=0)
+    items: tuple[LedgerItemSummaryOut, ...] = ()
+
+
+class GraphNodeSummaryOut(StrictModel):
+    """Metadata-safe graph node (no proposition/utterance/prompt bodies)."""
+
+    node_id: str
+    created_tick: int = Field(ge=0)
+    source_kind: str | None = None
+    strength: float | None = None
+    target_id: str | None = None
+    lineage_ref_ids: tuple[str, ...] = ()
+
+
+class SubjectiveGraphSummaryOut(StrictModel):
+    run_id: str
+    owner_id: str
+    kind: Literal["memories", "beliefs"]
+    availability: AvailabilityOut
+    limit: int = Field(ge=0)
+    count: int = Field(ge=0)
+    next_cursor: str | None = None
+    items: tuple[GraphNodeSummaryOut, ...] = ()
+    surface: Literal["debug"] = "debug"
+
+
 class MetricCatalogItemOut(StrictModel):
     metric_set_id: str
     metric_family: str

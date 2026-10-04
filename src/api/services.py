@@ -19,6 +19,7 @@ from api.schemas import (
     ObjectiveWorldOut,
     ReplayRequest,
     ReplayResultOut,
+    SubjectiveGraphSummaryOut,
     SubjectivePageOut,
 )
 
@@ -57,6 +58,26 @@ class InspectionService:
         limit: int,
     ) -> SubjectivePageOut:
         raise forbidden(code="debug_disabled")
+
+    async def graph_summary_page(
+        self,
+        run_id: str,
+        owner_id: str,
+        *,
+        kind: Literal["memories", "beliefs"],
+        after: str | None,
+        limit: int,
+    ) -> SubjectiveGraphSummaryOut:
+        del after
+        return SubjectiveGraphSummaryOut(
+            run_id=run_id,
+            owner_id=owner_id,
+            kind=kind,
+            availability=AvailabilityOut.UNAVAILABLE,
+            limit=limit,
+            count=0,
+            items=(),
+        )
 
 
 class MetricReadService:

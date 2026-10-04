@@ -16,6 +16,8 @@
   } from '../deeplink'
   import EpistemicBadge from '../components/EpistemicBadge.svelte'
   import { pushRunRoute } from '../router'
+  import AgentPanel from './AgentPanel.svelte'
+  import GraphsPanel from './GraphsPanel.svelte'
 
   interface Props {
     runId: string
@@ -165,6 +167,10 @@
         </dd>
       </div>
     </dl>
+  {:else if view === 'agent'}
+    <AgentPanel {runId} agentId={deepLink.agentId} />
+  {:else if view === 'graphs'}
+    <GraphsPanel {runId} agentId={deepLink.agentId} />
   {:else}
     <p class="status empty">
       {view} view placeholder — data panels arrive in later tasks.

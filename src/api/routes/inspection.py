@@ -17,18 +17,30 @@ from api.errors import bad_request
 from api.schemas import (
     AgentVisibleOut,
     AvailabilityOut,
+    CulturalNarrativesProjectionOut,
+    EmotionalStateProjectionOut,
+    EmotionIntensityOut,
     EventCursorIn,
     EventPageOut,
     EventSummaryOut,
     ExperimentalStateOut,
+    GoalSummaryOut,
+    GoalsProjectionOut,
+    GroupFormationProjectionOut,
+    LedgerItemSummaryOut,
     MetricCatalogItemOut,
     MetricCatalogOut,
     MetricDocumentOut,
     ObjectiveWorldOut,
     RunListOut,
+    SelfModelProjectionOut,
+    SocialConventionsProjectionOut,
+    SocialNormsProjectionOut,
     SubjectiveClaimsOut,
+    SubjectiveGraphSummaryOut,
     SubjectivePageOut,
     TerritorialClaimHeadOut,
+    TheoryOfMindProjectionOut,
 )
 from api.security import ApiCapability, require_http_capability
 from api.services import InspectionService, MetricReadService
@@ -37,6 +49,16 @@ from infrastructure.logging import get_logger
 from infrastructure.settings import Settings
 from simulation.inspection import subjective_claims_document
 from simulation.run_control import AgentRuntimeCheckpoint
+from simulation.subjective_projections import (
+    project_cultural_narratives,
+    project_emotional_state,
+    project_goals,
+    project_group_formation,
+    project_self_model,
+    project_social_conventions,
+    project_social_norms,
+    project_theory_of_mind,
+)
 
 router = APIRouter(prefix="/v1/simulations", tags=["inspection"])
 # Inspect-scoped discovery (not control-plane). Avoids colliding with
@@ -92,6 +114,34 @@ def _debug(request: Request, settings: Settings = Depends(get_settings)) -> None
     require_http_capability(
         request, settings, capability=ApiCapability.SUBJECTIVE_DEBUG
     )
+
+
+def _owner_checkpoint(
+    request: Request, run_id: str, owner_id: str
+) -> AgentRuntimeCheckpoint | None:
+    manager = getattr(request.app.state, "simulation_manager", None)
+    checkpoint = None
+    if manager is not None and hasattr(manager, "owner_runtime_checkpoint"):
+        checkpoint = manager.owner_runtime_checkpoint(run_id, owner_id)
+    if type(checkpoint) is AgentRuntimeCheckpoint:
+        return checkpoint
+    return None
+
+
+def _ledger_items(items: tuple[object, ...]) -> tuple[LedgerItemSummaryOut, ...]:
+    out: list[LedgerItemSummaryOut] = []
+    for item in items:
+        out.append(
+            LedgerItemSummaryOut(
+                item_id=str(getattr(item, "item_id", "")),
+                kind_code=str(getattr(item, "kind_code", "")),
+                status=getattr(item, "status", None),
+                strength=getattr(item, "strength", None),
+                target_id=getattr(item, "target_id", None),
+                evidence_count=int(getattr(item, "evidence_count", 0)),
+            )
+        )
+    return tuple(out)
 
 
 @router.get("/{run_id}/world", response_model=ObjectiveWorldOut)
@@ -303,6 +353,322 @@ async def list_territorial_claims(
             for head in document.heads
         ),
     )
+
+
+@router.get(
+    "/{run_id}/owners/{owner_id}/goals",
+    response_model=GoalsProjectionOut,
+)
+async def get_owner_goals(
+    run_id: str,
+    owner_id: str,
+    request: Request,
+    _: None = Depends(_debug),
+) -> GoalsProjectionOut:
+    document = project_goals(owner_id, _owner_checkpoint(request, run_id, owner_id))
+    _LOGGER.info(
+        "route_owner_goals",
+        route_template="GET /v1/simulations/{run_id}/owners/{owner_id}/goals",
+        status=200,
+        run_id=run_id,
+        heads=document.head_count,
+    )
+    return GoalsProjectionOut(
+        owner_id=document.owner_id,
+        availability=AvailabilityOut(document.availability),
+        head_count=document.head_count,
+        items=tuple(
+            GoalSummaryOut(
+                goal_id=item.goal_id,
+                status=item.status,
+                horizon=item.horizon,
+                priority=item.priority,
+                confidence=item.confidence,
+                created_tick=item.created_tick,
+                parent_goal_id=item.parent_goal_id,
+                dependency_count=item.dependency_count,
+            )
+            for item in document.items
+        ),
+    )
+
+
+@router.get(
+    "/{run_id}/owners/{owner_id}/emotional-state",
+    response_model=EmotionalStateProjectionOut,
+)
+async def get_owner_emotional_state(
+    run_id: str,
+    owner_id: str,
+    request: Request,
+    _: None = Depends(_debug),
+) -> EmotionalStateProjectionOut:
+    document = project_emotional_state(
+        owner_id, _owner_checkpoint(request, run_id, owner_id)
+    )
+    _LOGGER.info(
+        "route_owner_emotional_state",
+        route_template=(
+            "GET /v1/simulations/{run_id}/owners/{owner_id}/emotional-state"
+        ),
+        status=200,
+        run_id=run_id,
+        heads=document.head_count,
+    )
+    return EmotionalStateProjectionOut(
+        owner_id=document.owner_id,
+        availability=AvailabilityOut(document.availability),
+        tick=document.tick,
+        last_update_tick=document.last_update_tick,
+        policy_version=document.policy_version,
+        head_count=document.head_count,
+        intensities=tuple(
+            EmotionIntensityOut(kind=item.kind, intensity=item.intensity)
+            for item in document.intensities
+        ),
+    )
+
+
+@router.get(
+    "/{run_id}/owners/{owner_id}/self-model",
+    response_model=SelfModelProjectionOut,
+)
+async def get_owner_self_model(
+    run_id: str,
+    owner_id: str,
+    request: Request,
+    _: None = Depends(_debug),
+) -> SelfModelProjectionOut:
+    document = project_self_model(
+        owner_id, _owner_checkpoint(request, run_id, owner_id)
+    )
+    _LOGGER.info(
+        "route_owner_self_model",
+        route_template="GET /v1/simulations/{run_id}/owners/{owner_id}/self-model",
+        status=200,
+        run_id=run_id,
+        heads=document.goal_count,
+    )
+    return SelfModelProjectionOut(
+        owner_id=document.owner_id,
+        availability=AvailabilityOut(document.availability),
+        identity_tick=document.identity_tick,
+        identity_operation_count=document.identity_operation_count,
+        goal_count=document.goal_count,
+        goal_ids=document.goal_ids,
+        note=document.note,
+    )
+
+
+@router.get(
+    "/{run_id}/owners/{owner_id}/theory-of-mind",
+    response_model=TheoryOfMindProjectionOut,
+)
+async def get_owner_theory_of_mind(
+    run_id: str,
+    owner_id: str,
+    request: Request,
+    _: None = Depends(_debug),
+) -> TheoryOfMindProjectionOut:
+    document = project_theory_of_mind(
+        owner_id, _owner_checkpoint(request, run_id, owner_id)
+    )
+    _LOGGER.info(
+        "route_owner_theory_of_mind",
+        route_template=(
+            "GET /v1/simulations/{run_id}/owners/{owner_id}/theory-of-mind"
+        ),
+        status=200,
+        run_id=run_id,
+        heads=document.head_count,
+    )
+    return TheoryOfMindProjectionOut(
+        owner_id=document.owner_id,
+        availability=AvailabilityOut(document.availability),
+        head_count=document.head_count,
+        items=_ledger_items(document.items),
+    )
+
+
+@router.get(
+    "/{run_id}/owners/{owner_id}/group-formation",
+    response_model=GroupFormationProjectionOut,
+)
+async def get_owner_group_formation(
+    run_id: str,
+    owner_id: str,
+    request: Request,
+    _: None = Depends(_debug),
+) -> GroupFormationProjectionOut:
+    document = project_group_formation(
+        owner_id, _owner_checkpoint(request, run_id, owner_id)
+    )
+    _LOGGER.info(
+        "route_owner_group_formation",
+        route_template=(
+            "GET /v1/simulations/{run_id}/owners/{owner_id}/group-formation"
+        ),
+        status=200,
+        run_id=run_id,
+        heads=document.head_count,
+    )
+    return GroupFormationProjectionOut(
+        owner_id=document.owner_id,
+        availability=AvailabilityOut(document.availability),
+        head_count=document.head_count,
+        concept_count=document.concept_count,
+        items=_ledger_items(document.items),
+    )
+
+
+@router.get(
+    "/{run_id}/owners/{owner_id}/social-norms",
+    response_model=SocialNormsProjectionOut,
+)
+async def get_owner_social_norms(
+    run_id: str,
+    owner_id: str,
+    request: Request,
+    _: None = Depends(_debug),
+) -> SocialNormsProjectionOut:
+    document = project_social_norms(
+        owner_id, _owner_checkpoint(request, run_id, owner_id)
+    )
+    _LOGGER.info(
+        "route_owner_social_norms",
+        route_template=(
+            "GET /v1/simulations/{run_id}/owners/{owner_id}/social-norms"
+        ),
+        status=200,
+        run_id=run_id,
+        heads=document.head_count,
+    )
+    return SocialNormsProjectionOut(
+        owner_id=document.owner_id,
+        availability=AvailabilityOut(document.availability),
+        head_count=document.head_count,
+        items=_ledger_items(document.items),
+    )
+
+
+@router.get(
+    "/{run_id}/owners/{owner_id}/social-conventions",
+    response_model=SocialConventionsProjectionOut,
+)
+async def get_owner_social_conventions(
+    run_id: str,
+    owner_id: str,
+    request: Request,
+    _: None = Depends(_debug),
+) -> SocialConventionsProjectionOut:
+    document = project_social_conventions(
+        owner_id, _owner_checkpoint(request, run_id, owner_id)
+    )
+    _LOGGER.info(
+        "route_owner_social_conventions",
+        route_template=(
+            "GET /v1/simulations/{run_id}/owners/{owner_id}/social-conventions"
+        ),
+        status=200,
+        run_id=run_id,
+        heads=document.head_count,
+    )
+    return SocialConventionsProjectionOut(
+        owner_id=document.owner_id,
+        availability=AvailabilityOut(document.availability),
+        head_count=document.head_count,
+        items=_ledger_items(document.items),
+    )
+
+
+@router.get(
+    "/{run_id}/owners/{owner_id}/cultural-narratives",
+    response_model=CulturalNarrativesProjectionOut,
+)
+async def get_owner_cultural_narratives(
+    run_id: str,
+    owner_id: str,
+    request: Request,
+    _: None = Depends(_debug),
+) -> CulturalNarrativesProjectionOut:
+    document = project_cultural_narratives(
+        owner_id, _owner_checkpoint(request, run_id, owner_id)
+    )
+    _LOGGER.info(
+        "route_owner_cultural_narratives",
+        route_template=(
+            "GET /v1/simulations/{run_id}/owners/{owner_id}/cultural-narratives"
+        ),
+        status=200,
+        run_id=run_id,
+        heads=document.head_count,
+    )
+    return CulturalNarrativesProjectionOut(
+        owner_id=document.owner_id,
+        availability=AvailabilityOut(document.availability),
+        head_count=document.head_count,
+        items=_ledger_items(document.items),
+    )
+
+
+@router.get(
+    "/{run_id}/owners/{owner_id}/memories/summary",
+    response_model=SubjectiveGraphSummaryOut,
+)
+async def get_memory_graph_summary(
+    run_id: str,
+    owner_id: str,
+    request: Request,
+    _: None = Depends(_debug),
+    service: InspectionService = Depends(get_inspection_service),
+    settings: Settings = Depends(get_settings),
+    after: str | None = Query(default=None, max_length=256),
+    limit: int | None = Query(default=None, ge=1, le=1000),
+) -> SubjectiveGraphSummaryOut:
+    page_limit = limit if limit is not None else settings.api_max_page_size
+    result = await service.graph_summary_page(
+        run_id, owner_id, kind="memories", after=after, limit=page_limit
+    )
+    _LOGGER.info(
+        "route_memory_graph_summary",
+        route_template=(
+            "GET /v1/simulations/{run_id}/owners/{owner_id}/memories/summary"
+        ),
+        status=200,
+        run_id=run_id,
+        count=result.count,
+    )
+    return result
+
+
+@router.get(
+    "/{run_id}/owners/{owner_id}/beliefs/summary",
+    response_model=SubjectiveGraphSummaryOut,
+)
+async def get_belief_graph_summary(
+    run_id: str,
+    owner_id: str,
+    request: Request,
+    _: None = Depends(_debug),
+    service: InspectionService = Depends(get_inspection_service),
+    settings: Settings = Depends(get_settings),
+    after: str | None = Query(default=None, max_length=256),
+    limit: int | None = Query(default=None, ge=1, le=1000),
+) -> SubjectiveGraphSummaryOut:
+    page_limit = limit if limit is not None else settings.api_max_page_size
+    result = await service.graph_summary_page(
+        run_id, owner_id, kind="beliefs", after=after, limit=page_limit
+    )
+    _LOGGER.info(
+        "route_belief_graph_summary",
+        route_template=(
+            "GET /v1/simulations/{run_id}/owners/{owner_id}/beliefs/summary"
+        ),
+        status=200,
+        run_id=run_id,
+        count=result.count,
+    )
+    return result
 
 
 @router.get("/{run_id}/metrics", response_model=MetricCatalogOut)

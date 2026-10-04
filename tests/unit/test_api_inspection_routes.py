@@ -252,6 +252,42 @@ async def test_debug_routes_with_credential(logging_sandbox: None) -> None:
         assert ok.json()["surface"] == "debug"
 
 
+async def test_subjective_projection_routes_and_graph_summary_wire_safety(
+    logging_sandbox: None,
+) -> None:
+    secret = "d" * 32
+    settings = _settings(api_debug_enabled=True, api_debug_credential=secret)
+    headers = {"x-palimpsest-token": secret}
+    forbidden = {
+        "proposition",
+        "utterance",
+        "prompt",
+        "narrative",
+        "description",
+        "content",
+    }
+    async with running_client(_app(settings)) as client:
+        for path in (
+            "/v1/simulations/run-1/owners/alice/goals",
+            "/v1/simulations/run-1/owners/alice/emotional-state",
+            "/v1/simulations/run-1/owners/alice/self-model",
+            "/v1/simulations/run-1/owners/alice/theory-of-mind",
+            "/v1/simulations/run-1/owners/alice/group-formation",
+            "/v1/simulations/run-1/owners/alice/social-norms",
+            "/v1/simulations/run-1/owners/alice/social-conventions",
+            "/v1/simulations/run-1/owners/alice/cultural-narratives",
+            "/v1/simulations/run-1/owners/alice/memories/summary",
+            "/v1/simulations/run-1/owners/alice/beliefs/summary",
+        ):
+            response = await client.get(path, headers=headers)
+            assert response.status_code == 200, path
+            body = response.json()
+            assert body["availability"] in {"available", "unavailable"}
+            flat = str(body).lower()
+            for key in forbidden:
+                assert f"'{key}'" not in flat and f'"{key}"' not in flat
+
+
 @pytest.mark.integration
 async def test_api_event_pagination_integration_stub() -> None:
     pytest.skip("integration stub reserved for Task 21")

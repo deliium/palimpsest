@@ -257,31 +257,31 @@ Each checkpoint is a git commit on the current branch when those tasks complete.
 
 ### Phase 3: Subjective projections + graphs
 
-- [ ] Task 7: Additive subjective_debug projection routes for checkpoint ledgers
+- [x] Task 7: Additive subjective_debug projection routes for checkpoint ledgers
   - Deliverable: Owner GET summaries (closed schema versions) for: `goals`, `emotional-state`, `self-model` (**projection**: emergent `SelfModel` / identity over owner-scoped beliefs and `identity_cursor` — not a checkpoint `self_model` column and not a second belief store), `theory-of-mind`, `group-formation`, `social-norms`, `social-conventions`, `cultural-narratives`. Source from `owner_runtime_checkpoint` + simulation helpers patterned on `subjective_claims_document`. Return `availability=unavailable` when mode/flag off or checkpoint missing. Gate with `subjective_debug`. Metadata-safe fields only (ids, counts, strengths, bands, statuses). Subjective ledgers use `agent_belief` chrome in the client — never `research_inference`.
   - Logging: INFO route templates + head counts; never log propositions/narratives/utterances.
   - Depends on task 2.
   - Files: `src/api/routes/inspection.py`, `src/api/schemas.py`, `src/simulation/inspection.py` (or sibling projectors), tests.
 
-- [ ] Task 7b: Metadata-safe subjective graph / summary DTOs
+- [x] Task 7b: Metadata-safe subjective graph / summary DTOs
   - Deliverable: Under `subjective_debug`, expose paginated summary endpoints (or additive fields) for memory and belief graph construction: opaque ids, created ticks, source/kind codes, strength/confidence bands, target ids, evidence/lineage ref ids — **no** proposition text, utterance bodies, prompts, or reconstruction narratives. Relationship graphs **reuse** `GET .../observer/agents/{agent_id}/relationships` (already has `items` + dimensions). Document that count-only `SubjectivePageOut` remains unchanged for existing clients. Unit tests prove no forbidden payload keys on the wire.
   - Logging: INFO counts only; DEBUG page sizes.
   - Depends on task 3, 7 (schema/logging conventions).
   - Files: `src/api/schemas.py`, `src/api/routes/inspection.py` and/or observer routes, persistence loaders, tests.
 
-- [ ] Task 8: Agent panel UI (self-model, goals, emotion, ToM)
+- [x] Task 8: Agent panel UI (self-model, goals, emotion, ToM)
   - Deliverable: Agent tab rendering Task 7 documents with `agent_belief` chrome. Empty/unavailable states explain flag/mode requirements without implying objective absence of social reality.
   - Logging: client DEBUG which panels unavailable + reason codes.
   - Depends on tasks 4, 7.
   - Files: `clients/research-ui/src/views/AgentPanel*`.
 
-- [ ] Task 9: Relationship + social graph views
+- [x] Task 9: Relationship + social graph views
   - Deliverable: Relationship graph from observer relationship summaries (`items` + dimensions) tagged `agent_belief`. Social/communication graph from bounded observer event pages (`Talked` / `Asked` / `Told` semantic types) tagged `objective_world` for delivery-only edges. No friend/enemy/leader labels. Cap nodes/edges with explicit truncation DEBUG.
   - Logging: DEBUG node/edge counts only.
   - Depends on tasks 3, 4, 7b.
   - Files: `clients/research-ui/src/graphs/social*`, `relationship*`.
 
-- [ ] Task 10: Memory + belief graph views
+- [x] Task 10: Memory + belief graph views
   - Deliverable: Build graphs from Task 7b summaries + debugger lineage GETs when `event_id`/`agent_id` focused. Epistemic classes: `agent_memory` vs `agent_belief`. Reconstructive nodes must not look like objective journal rows. Do **not** use count-only inspection pages as the sole data source.
   - Logging: DEBUG graph size + unavailable lineage reason codes.
   - Depends on tasks 3, 7, 7b.
