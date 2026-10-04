@@ -120,12 +120,6 @@ func highlight(entity_id: String) -> bool:
 	return found
 
 
-func token_position(entity_id: String) -> Vector2:
-	if not _tokens.has(entity_id):
-		return Vector2.ZERO
-	return _tokens[entity_id].position
-
-
 func selected_position() -> Variant:
 	if selected_entity_id == "" or not _tokens.has(selected_entity_id):
 		return null

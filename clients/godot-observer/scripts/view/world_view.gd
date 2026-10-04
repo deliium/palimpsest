@@ -363,7 +363,7 @@ func _on_agent_selected(entity_id: String) -> void:
 		inventory.append(summary)
 	var fields: Dictionary = _reducer.event_fields_for(entity_id)
 	var structure_snapshot = null
-	var at_location := _objects.structure_at(str(agent.location_id))
+	var at_location: Variant = _objects.structure_at(str(agent.location_id))
 	if at_location != null:
 		structure_snapshot = {
 			"structure_id": str(at_location.structure_id),

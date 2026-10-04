@@ -66,7 +66,7 @@ func _rebuild() -> void:
 		marker.set_meta("target_id", target_id)
 		marker.set_meta("copy", "SUBJECTIVE relationship dimensions")
 		var dims: Variant = item.get("dimensions", [])
-		var dim_count := dims.size() if dims is Array else 0
+		var dim_count: int = dims.size() if dims is Array else 0
 		marker.set_meta("dimension_count", dim_count)
 		var badge := Label.new()
 		badge.text = "SUBJECTIVE dims=%s" % dim_count

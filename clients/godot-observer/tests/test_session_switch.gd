@@ -79,14 +79,14 @@ func _assert_switch_clears_window(failures: Array) -> void:
 	session.cursor_after_tick = 9
 	session.cursor_after_sequence = 3
 	session.transport.set_cursor(session.transport.MODE_REPLAY, 9, 3, 1.0, false)
-	var cleared := false
+	var cleared := {"value": false}
 	session.source_cleared.connect(func() -> void:
-		cleared = true
+		cleared["value"] = true
 	)
 	# Avoid real HTTP/origin during unit teardown+bootstrap attempt.
 	session._http = null
 	session.switch_run("run-new", 4, null, true)
-	if not cleared:
+	if not bool(cleared["value"]):
 		failures.append("switch_run should emit source_cleared")
 	if session.run_id != "run-new":
 		failures.append("switch_run should set run_id")

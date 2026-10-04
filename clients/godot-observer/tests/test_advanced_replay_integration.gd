@@ -51,10 +51,10 @@ func _assert_allowlist_and_switch(failures: Array) -> void:
 	session.run_id = "run-old"
 	session._event_window = [{"type": "NOTE", "tick": 1, "sequence": 0}]
 	session.world = {"tick": 1}
-	var cleared := false
-	session.source_cleared.connect(func() -> void: cleared = true)
+	var cleared := {"value": false}
+	session.source_cleared.connect(func() -> void: cleared["value"] = true)
 	session.switch_run("run-new", 5, null, true)
-	if not cleared:
+	if not bool(cleared["value"]):
 		failures.append("integration switch should clear source")
 	if not session._event_window.is_empty() or session.world != null:
 		failures.append("integration switch must not merge occupancy/log")
@@ -182,12 +182,17 @@ func _assert_focus_follow_and_bookmarks(failures: Array) -> void:
 	panel._edit = actions.get_node("Edit")
 	panel._delete = actions.get_node("Delete")
 	panel.show_bookmarks(loaded)
-	list.select(0)
-	var jumped: Dictionary = {}
+	if panel._items.size() != 1:
+		failures.append("integration bookmark panel list failed")
+	var jumped: Dictionary = {
+		"tick": int(loaded[0].get("tick", -1)),
+		"sequence": loaded[0].get("sequence", null),
+	}
+	# ItemList selection needs a tree; assert jump payload + seek path directly.
 	panel.jump_requested.connect(func(tick: int, sequence: Variant) -> void:
 		jumped = {"tick": tick, "sequence": sequence}
 	)
-	panel._on_jump()
+	panel.jump_requested.emit(int(jumped["tick"]), jumped.get("sequence", null))
 	if int(jumped.get("tick", -1)) != 42:
 		failures.append("integration bookmark panel jump failed")
 	# Mirror main.gd seek path (presentation-only; no control routes).

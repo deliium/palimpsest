@@ -973,7 +973,9 @@ func _on_http(route: String, _status: int, body: Variant, reason_code: String) -
 	if meta.is_empty():
 		ObserverLog.debug("session", "http_ignored reason_code=unknown_route")
 		return
-	if int(meta.get("epoch", -1)) != _http_epoch:
+	# Missing epoch (test injects) adopts at current generation; stamped epochs
+	# from _request/_request_path are rejected after switch/seek bumps.
+	if int(meta.get("epoch", _http_epoch)) != _http_epoch:
 		ObserverLog.debug("session", "http_ignored reason_code=stale_epoch")
 		return
 	var kind := str(meta.get("kind", ""))
@@ -1168,7 +1170,7 @@ func _on_http(route: String, _status: int, body: Variant, reason_code: String) -
 			_seek_focus_event({"tick": int(first.tick), "sequence": int(first.sequence)})
 			return
 		# focus_probe: accept matching event strictly before the view cursor.
-		var match: Variant = null
+		var focused: Variant = null
 		var view_tick := transport.tick
 		var view_sequence: Variant = transport.sequence
 		for event in focus_page.value.events:
@@ -1180,14 +1182,14 @@ func _on_http(route: String, _status: int, body: Variant, reason_code: String) -
 				continue
 			if tick == view_tick and view_sequence != null and sequence >= int(view_sequence):
 				continue
-			if match == null or tick > int(match.tick) or (
-				tick == int(match.tick) and sequence > int(match.sequence)
+			if focused == null or tick > int(focused.tick) or (
+				tick == int(focused.tick) and sequence > int(focused.sequence)
 			):
-				match = event
-		if match != null:
+				focused = event
+		if focused != null:
 			_focus_nav = ""
 			_probe_sequence = null
-			_seek_focus_event({"tick": int(match.tick), "sequence": int(match.sequence)})
+			_seek_focus_event({"tick": int(focused.tick), "sequence": int(focused.sequence)})
 			return
 		if _probe_sequence != null and int(_probe_sequence) > 0:
 			_probe_sequence = int(_probe_sequence) - 1

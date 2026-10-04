@@ -56,7 +56,7 @@ func show_state(code: String, detail: String) -> void:
 	var copy := detail if detail != "" else code
 	match code:
 		"unsupported_observer_protocol":
-			copy = "Unsupported protocol — expected observer-protocol-v1"
+			copy = "Unsupported protocol — expected observer-protocol-v1 (unsupported_observer_protocol)"
 		"loading":
 			copy = "Loading"
 		"seeking":

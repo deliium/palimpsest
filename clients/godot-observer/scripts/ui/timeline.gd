@@ -191,12 +191,12 @@ func _collect() -> void:
 		counts[category] = 0
 	for source in [_events, _enriched]:
 		for event in source:
-			var type_name := _event_field(event, "type")
+			var type_name: String = str(_event_field(event, "type"))
 			var tick := int(_event_field(event, "tick"))
 			var sequence := int(_event_field(event, "sequence"))
 			var actor := str(_event_field(event, "actor_id"))
 			var target := str(_event_field(event, "target_id"))
-			var category := _category_for_type(type_name)
+			var category: String = _category_for_type(type_name)
 			if category != "" and bool(_categories.get(category, false)):
 				collected.append({
 					"tick": tick,
