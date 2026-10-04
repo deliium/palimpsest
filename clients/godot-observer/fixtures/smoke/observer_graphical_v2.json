@@ -1,0 +1,43 @@
+{
+  "pack": "observer_graphical_v2",
+  "scenario_id": "observer-graphical-v2",
+  "description": "Graphical observer validation pack: movement, talk/ask/tell, items, weather, production, death, seek high-water",
+  "frame": "res://fixtures/protocol/reference_frame.json",
+  "seek_high_water": 1000,
+  "features": [
+    "agents_ge_5",
+    "multi_location",
+    "movement",
+    "resources",
+    "communication_talk_ask_tell",
+    "item_exchange",
+    "environmental_dynamics",
+    "crafting_building",
+    "terminal_death",
+    "external_artifact",
+    "social_information_transmission"
+  ],
+  "events": [
+    "res://fixtures/protocol/events/AGENT_MOVED.json",
+    "res://fixtures/protocol/events/AGENT_TALKED.json",
+    "res://fixtures/protocol/events/AGENT_ASKED.json",
+    "res://fixtures/protocol/events/AGENT_TOLD.json",
+    "res://fixtures/protocol/events/AGENT_GAVE_ITEM.json",
+    "res://fixtures/protocol/events/AGENT_TOOK_ITEM.json",
+    "res://fixtures/protocol/events/WEATHER_CHANGED.json",
+    "res://fixtures/protocol/events/RESOURCE_HARVESTED.json",
+    "res://fixtures/protocol/events/CRAFT_STARTED.json",
+    "res://fixtures/protocol/events/ITEM_CRAFTED.json",
+    "res://fixtures/protocol/events/STRUCTURE_BUILT.json",
+    "res://fixtures/protocol/events/AGENT_DIED.json"
+  ],
+  "cursor_high_water": {
+    "run_id": "run-observer-graphical-v2",
+    "mode": "replay",
+    "tick": 1000,
+    "protocol_version": "observer-protocol-v1",
+    "sequence": 0,
+    "after_tick": 999,
+    "after_sequence": 0
+  }
+}

@@ -269,3 +269,29 @@ async def test_same_seed_with_and_without_projection() -> None:
     projected = await _drive(_ProjectingRunner)
     assert plain[0] == projected[0]
     assert plain[1] == projected[1]
+
+
+@pytest.mark.asyncio
+async def test_observer_graphical_projection_does_not_change_trajectory(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    from experiments.observer_graphical_scenario import build_observer_graphical_scenario
+
+    bundle = build_observer_graphical_scenario(max_ticks=4, death_tick=1)
+    config = bundle.config
+
+    async def _hash(runner_type: type[SimulationRunner]) -> str:
+        async with await runner_type.from_config(
+            config, run_id=RunId("run-observer-graphical-auth")
+        ) as runner:
+            result = await runner.run()
+        return exact_trajectory_hash(
+            run_id="run-observer-graphical-auth",
+            tick_receipts=result.finalized_tick_receipts,
+        )
+
+    with caplog.at_level(logging.INFO):
+        plain = await _hash(SimulationRunner)
+        projected = await _hash(_ProjectingRunner)
+    assert plain == projected
+    assert plain  # non-empty hash

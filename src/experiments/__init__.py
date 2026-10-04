@@ -185,6 +185,11 @@ from experiments.matrix_serialization import (
     encode_run_version_identity,
 )
 from experiments.memory_repository import InMemoryExperimentRecordRepository
+from experiments.observer_graphical_scenario import (
+    OBSERVER_GRAPHICAL_SCENARIO_ID,
+    ObserverGraphicalScenarioBundle,
+    build_observer_graphical_scenario,
+)
 from experiments.metric_collection import (
     MetricCollectionResult,
     MetricCollectionService,
@@ -246,6 +251,7 @@ __all__ = [
     "MATRIX_AGGREGATE_SCHEMA_VERSION",
     "MATRIX_MANIFEST_SCHEMA_VERSION",
     "MILESTONE_ARBITER_POLICY_VERSION",
+    "OBSERVER_GRAPHICAL_SCENARIO_ID",
     "REFERENCE_DEATH_TICK",
     "REFERENCE_DEFAULT_OVERRIDE_BUDGET",
     "REFERENCE_MAX_TICKS",
@@ -312,6 +318,7 @@ __all__ = [
     "MilestoneInterventionArbiter",
     "MilestoneOverride",
     "MilestoneStatus",
+    "ObserverGraphicalScenarioBundle",
     "PersistedAnalysisSnapshot",
     "PersistedDerivationEdge",
     "PersistedReconstructionRow",
@@ -332,6 +339,7 @@ __all__ = [
     "artifact_objective_rows_from_artifacts",
     "benchmark_suite_registry",
     "build_matrix_aggregate",
+    "build_observer_graphical_scenario",
     "build_reference_scenario",
     "calibration_rows_from_world_model_audits",
     "cell_factor_fingerprint",

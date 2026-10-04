@@ -303,13 +303,13 @@ Each checkpoint is a git commit on `main` created when those tasks are done. Do 
   - Depends on tasks 2–3.
   - Files: benchmark modules, tests reusing architecture contract patterns.
 
-- [ ] Task 11: Implement scenario 16 (forked intervention).
+- [x] Task 11: Implement scenario 16 (forked intervention).
   - Deliverable: Parent run → one `ResearchIntervention(kind=COMMUNICATION_REMOVE)` → child branch; assert parent history immutable; prefix equality; post-fork compare document; observer can address child `run_id`. Network-free unit/integration tests preferred.
   - Logging: fork_tick, parent/child run ids, compare hash equality flags — no payloads.
   - Depends on tasks 2–3.
   - Files: benchmark modules, `tests/unit/test_benchmark_fork_scenario.py`, reuse `branch_service` / `branch_compare`.
 
-- [ ] Task 11b: Full 16-scenario smoke gate.
+- [x] Task 11b: Full 16-scenario smoke gate.
   - Deliverable: Network-free test that every registered `bench-*` builder is implemented and passes the smoke helper (≤ 4 ticks unless a scenario declares a lower budget). Assert metric/audit availability reporting only — no emergence booleans. Assert `tests/unit/test_v1_regression_gate.py` does not import benchmark suite modules or scenario ids.
   - Logging: INFO `benchmark_suite_smoke_ok scenario_count=16`; ERROR per-scenario reason codes.
   - Depends on tasks 4–11.
@@ -318,19 +318,19 @@ Each checkpoint is a git commit on `main` created when those tasks are done. Do 
 
 ### Phase 4: Observer graphical scenario and controls
 
-- [ ] Task 12: Build `observer-graphical-v2` deterministic world.
+- [x] Task 12: Build `observer-graphical-v2` deterministic world.
   - Deliverable: Trusted experiment/scenario builder with ≥5 agents, multi-location topology, resources, movement, communication, item exchange, environmental dynamics, crafting/building, one death/terminal, external artifact, social transmission. Emit runner config + fixture JSON for Godot offline play. Keep off V1 gate. Short executable arm for CI; optional longer recorded high-water (≥ 1000) for seek-jump tests.
   - Logging: INFO agent/location/event-type counts; ERROR if required semantic types missing from trace.
   - Depends on task 2.
   - Files: `src/experiments/observer_graphical_scenario.py`, `clients/godot-observer/fixtures/smoke/observer_graphical_v2.json` (or equivalent), Python tests for required event classes present.
 
-- [ ] Task 13: Godot protocol/UI control checklist gap-fill.
+- [x] Task 13: Godot protocol/UI control checklist gap-fill.
   - Deliverable: Add or extend GDScript tests so the locked 13-row control matrix is fully covered. Prefer existing `session.pause` / `seek_event` / `seek_tick` / `jump_to_*` / `return_to_live` / `switch_run` / follow / debugger APIs. Document in test comments which row each test owns. Presentation-only: no simulation mutation. Register in `tests/run_protocol.gd`.
   - Logging: Godot harness INFO lines with reason codes; no tokens.
   - Depends on task 12.
   - Files: `clients/godot-observer/tests/*.gd` (extend `test_advanced_replay_integration.gd` or add focused files), fixtures, `tests/unit/test_godot_observer_fixtures.py` if needed.
 
-- [ ] Task 14: Prove observer cannot change outcomes / presentation coordinates isolated.
+- [x] Task 14: Prove observer cannot change outcomes / presentation coordinates isolated.
   - Deliverable: Extend existing authority coverage (`tests/unit/test_observer_authority.py` patterns): identical seed runs with and without observer stream clients yield identical `exact_trajectory_hash`; layout catalog coordinate changes do not alter world events; client text frames still `client_mutation_rejected`.
   - Logging: hash compare INFO; ERROR on divergence.
   - Depends on tasks 12–13.

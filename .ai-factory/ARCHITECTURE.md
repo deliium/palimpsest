@@ -36,6 +36,7 @@ src/
                          # causal_debugger.py / debugger_lineage.py (read-only research debugger)
   experiments/           # trusted experiment catalog/coordinator (A–Z plus AA–AD; F–AD off the V1 gate); never imported by domain
                          # benchmark_suite.py / benchmark_scenarios/ / benchmark_smoke.py: V2 validation suite (off V1 gate)
+                         # observer_graphical_scenario.py: deterministic Godot validation world (off V1 gate)
                          # matrix_*.py: experiment-matrix-v1 expand/batch/aggregate (filesystem manifests)
                          # composition.py maps neutral persistence snapshots → analysis sources
                          # reference_scenario.py: canonical five-agent / 48-tick fixture + milestone arbiter
