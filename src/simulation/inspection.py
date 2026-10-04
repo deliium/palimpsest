@@ -233,6 +233,73 @@ class SubjectiveInspectionPage:
 
 
 @dataclass(frozen=True, slots=True)
+class SubjectiveGraphNodeSummary:
+    """Metadata-safe graph node for research UI (no proposition bodies)."""
+
+    node_id: str
+    created_tick: int
+    source_kind: str | None = None
+    strength: float | None = None
+    target_id: str | None = None
+    lineage_ref_ids: tuple[str, ...] = ()
+
+    def __post_init__(self) -> None:
+        object.__setattr__(
+            self,
+            "node_id",
+            require_stable_id("SubjectiveGraphNodeSummary.node_id", self.node_id),
+        )
+        object.__setattr__(
+            self,
+            "created_tick",
+            require_exact_nonneg_int(
+                "SubjectiveGraphNodeSummary.created_tick", self.created_tick
+            ),
+        )
+
+
+@dataclass(frozen=True, slots=True)
+class SubjectiveGraphSummaryPage:
+    """Detached metadata-safe graph page (debug surface)."""
+
+    run_id: str
+    owner_id: str
+    kind: str
+    limit: int
+    items: tuple[SubjectiveGraphNodeSummary, ...]
+    next_cursor: MemoryKeysetCursor | None
+    availability: InspectionAvailability
+    surface: InspectionSurface = InspectionSurface.DEBUG
+
+    def __post_init__(self) -> None:
+        object.__setattr__(
+            self,
+            "run_id",
+            require_stable_id("SubjectiveGraphSummaryPage.run_id", self.run_id),
+        )
+        object.__setattr__(
+            self,
+            "owner_id",
+            require_stable_id("SubjectiveGraphSummaryPage.owner_id", self.owner_id),
+        )
+        object.__setattr__(
+            self,
+            "limit",
+            require_exact_nonneg_int("SubjectiveGraphSummaryPage.limit", self.limit),
+        )
+        if self.kind not in {"memories", "beliefs"}:
+            raise TypeError("kind must be memories or beliefs")
+        if type(self.availability) is not InspectionAvailability:
+            raise TypeError("availability must be InspectionAvailability")
+        if type(self.surface) is not InspectionSurface:
+            raise TypeError("surface must be InspectionSurface")
+        if self.next_cursor is not None and type(self.next_cursor) is not (
+            MemoryKeysetCursor
+        ):
+            raise TypeError("next_cursor must be MemoryKeysetCursor or None")
+
+
+@dataclass(frozen=True, slots=True)
 class AgentVisibleProjection:
     """Exact agent-visible historical observation (public surface).
 

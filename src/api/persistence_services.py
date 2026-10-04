@@ -29,12 +29,14 @@ from api.schemas import (
     EventPageOut,
     EventSummaryOut,
     ExperimentalStateOut,
+    GraphNodeSummaryOut,
     MetricCatalogItemOut,
     MetricCatalogOut,
     MetricDocumentOut,
     ObjectiveWorldOut,
     ReplayRequest,
     ReplayResultOut,
+    SubjectiveGraphSummaryOut,
     SubjectivePageOut,
 )
 from api.services import (
@@ -52,6 +54,7 @@ from simulation.inspection import (
     InspectionError,
     InspectionReplayProjection,
     MemoryKeysetCursor,
+    SubjectiveGraphSummaryPage,
 )
 from simulation.models import RunId
 from simulation.persistence import (
@@ -105,6 +108,16 @@ class SubjectiveEvidenceLoaderPort(Protocol):
         after: MemoryKeysetCursor | None = None,
         limit: int = 100,
         manifest: object | None = None,
+    ) -> object: ...
+
+    async def load_graph_summary_page(
+        self,
+        *,
+        run_id: str,
+        owner_id: str,
+        kind: Literal["memories", "beliefs"],
+        after: MemoryKeysetCursor | None = None,
+        limit: int = 100,
     ) -> object: ...
 
 
@@ -433,6 +446,74 @@ class PersistenceInspectionService(InspectionService):
             ),
             content_available=bool(getattr(page, "content_available", False)),
             kind=kind,
+        )
+
+    async def graph_summary_page(
+        self,
+        run_id: str,
+        owner_id: str,
+        *,
+        kind: Literal["memories", "beliefs"],
+        after: str | None,
+        limit: int,
+    ) -> SubjectiveGraphSummaryOut:
+        cursor = _parse_memory_cursor(after)
+        loader = self._evidence.subjective
+        _LOGGER.info(
+            "[FIX] inspection_graph_summary",
+            run_id=run_id,
+            owner_id=owner_id,
+            kind=kind,
+            limit=limit,
+        )
+        try:
+            page = await loader.load_graph_summary_page(
+                run_id=run_id,
+                owner_id=owner_id,
+                kind=kind,
+                after=cursor,
+                limit=limit,
+            )
+        except PersistenceNotFoundError as exc:
+            raise not_found(code=exc.code, run_id=run_id) from exc
+        except InspectionError as exc:
+            _translate_inspection_error(exc, run_id=run_id)
+            raise
+        if type(page) is not SubjectiveGraphSummaryPage:
+            raise TypeError("load_graph_summary_page must return SubjectiveGraphSummaryPage")
+        next_raw = page.next_cursor
+        next_cursor = (
+            _encode_memory_cursor(next_raw)
+            if isinstance(next_raw, MemoryKeysetCursor)
+            else None
+        )
+        items = tuple(
+            GraphNodeSummaryOut(
+                node_id=item.node_id,
+                created_tick=item.created_tick,
+                source_kind=item.source_kind,
+                strength=item.strength,
+                target_id=item.target_id,
+                lineage_ref_ids=item.lineage_ref_ids,
+            )
+            for item in page.items
+        )
+        _LOGGER.debug(
+            "[FIX] inspection_graph_summary_page_size",
+            run_id=run_id,
+            owner_id=owner_id,
+            kind=kind,
+            count=len(items),
+        )
+        return SubjectiveGraphSummaryOut(
+            run_id=run_id,
+            owner_id=owner_id,
+            kind=kind,
+            availability=_map_availability(page.availability),
+            limit=page.limit,
+            count=len(items),
+            next_cursor=next_cursor,
+            items=items,
         )
 
     async def _inspect(

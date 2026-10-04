@@ -51,9 +51,13 @@ src/
                          # control/inspection/replay/observer + WebSocket stream
                          # security.py (capability credentials), simulation_manager.py
                          # streaming.py (durable outbox catch-up + live handoff)
+                         # research_static.py mounts /research/ before presentation /
+                         # research_matrix.py: read-only experiment-matrix-v1 FS allowlist
   infrastructure/        # settings (PALIMPSEST_*), logging, database adapters
 clients/godot-observer/  # read-only presentation client; not a Python package; the API serves its prebuilt tree
                          # HTTP GET + observer WebSocket only; no import from src/
+clients/research-ui/     # researcher Svelte SPA (not a Python package); built dist served at /research/
+                         # graphs/metrics/matrix/traces; HTTP to /v1 only; no import from src/
 alembic/versions/        # migrations through 0017 (memory HNSW; 0016 event indexes; 0015 branch lineage; 0013 cognition-trace)
                          # V2 capability flags stay runner JSON only (not Alembic columns)
 docs/                    # contributor docs (architecture, memory, social-communication, …)
@@ -92,7 +96,8 @@ tests/
 - ❌ Agents, cognition, memory, reconstruction protocols, and runtime composition must not import, receive, or dereference `WorldEvent`, event repositories, replay services, snapshots, or private world state (opaque `EventId` only)
 - ❌ Cognition must not feed analysis results back into live planning or memory formation
 - ❌ Experiment collectors, truth specifications, and objective snapshots must never flow into cognition, memory formation, prompts, or action selection
-- ❌ `src/` must not import `clients/godot-observer` or contain that name. The API serves the prebuilt tree and still does not import it
+- ❌ `src/` must not import `clients/godot-observer` or `clients/research-ui` (or contain those client package paths). The API serves prebuilt trees and still does not import the clients
+- ❌ `api` must not import `analysis` when serving Research UI matrix FS JSON (allowlisted files only; no batch starts)
 
 ## Layer/Module Communication
 

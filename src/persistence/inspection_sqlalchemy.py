@@ -39,6 +39,8 @@ from simulation.inspection import (
     InspectionError,
     InspectionEventPage,
     MemoryKeysetCursor,
+    SubjectiveGraphNodeSummary,
+    SubjectiveGraphSummaryPage,
     SubjectiveInspectionPage,
     clamp_inspection_page_limit,
     constrain_events_to_manifest,
@@ -364,6 +366,140 @@ class SqlAlchemySubjectiveEvidenceLoader:
             high_water_field="beliefs",
             query_type="beliefs",
         )
+
+    async def load_graph_summary_page(
+        self,
+        *,
+        run_id: str,
+        owner_id: str,
+        kind: str,
+        after: MemoryKeysetCursor | None = None,
+        limit: int = DEFAULT_INSPECTION_PAGE_SIZE,
+    ) -> SubjectiveGraphSummaryPage:
+        """Metadata-safe id/edge page for Research UI graphs (no proposition bodies)."""
+        if kind not in {"memories", "beliefs"}:
+            raise InspectionError("invalid_graph_summary_kind")
+        run_id = RunId(run_id).value
+        owner_id = AgentId(owner_id).value
+        limit = clamp_inspection_page_limit(limit)
+        after_tick, after_id = _memory_after(after)
+        started = time.perf_counter()
+        async with session_scope(self._session_factory) as session:
+            await _require_run(
+                session, run_id=run_id, operation=f"load_{kind}_graph_summary"
+            )
+            if kind == "memories":
+                rows = list(
+                    (
+                        await session.execute(
+                            select(MemoryTraceOrm)
+                            .where(
+                                MemoryTraceOrm.run_id == run_id,
+                                MemoryTraceOrm.owner_id == owner_id,
+                            )
+                            .order_by(
+                                MemoryTraceOrm.created_tick, MemoryTraceOrm.memory_id
+                            )
+                        )
+                    )
+                    .scalars()
+                    .all()
+                )
+                filtered = [
+                    row
+                    for row in rows
+                    if (int(row.created_tick), row.memory_id) > (after_tick, after_id)
+                ]
+                page_rows = filtered[:limit]
+                has_more = len(filtered) > limit
+                items = tuple(
+                    SubjectiveGraphNodeSummary(
+                        node_id=row.memory_id,
+                        created_tick=int(row.created_tick),
+                        source_kind=str(row.source_kind),
+                        strength=float(row.confidence),
+                        target_id=row.speaker_id,
+                        lineage_ref_ids=tuple(
+                            ref
+                            for ref in (
+                                row.supersedes_memory_id,
+                                row.observed_source_id,
+                                row.transmission_communication_id,
+                            )
+                            if isinstance(ref, str) and ref
+                        ),
+                    )
+                    for row in page_rows
+                )
+                next_cursor = None
+                if has_more and page_rows:
+                    last = page_rows[-1]
+                    next_cursor = MemoryKeysetCursor(
+                        created_tick=int(last.created_tick), row_id=last.memory_id
+                    )
+            else:
+                rows = list(
+                    (
+                        await session.execute(
+                            select(SemanticBeliefOrm)
+                            .where(
+                                SemanticBeliefOrm.run_id == run_id,
+                                SemanticBeliefOrm.owner_id == owner_id,
+                            )
+                            .order_by(
+                                SemanticBeliefOrm.created_tick,
+                                SemanticBeliefOrm.belief_id,
+                            )
+                        )
+                    )
+                    .scalars()
+                    .all()
+                )
+                filtered = [
+                    row
+                    for row in rows
+                    if (int(row.created_tick), row.belief_id) > (after_tick, after_id)
+                ]
+                page_rows = filtered[:limit]
+                has_more = len(filtered) > limit
+                items = tuple(
+                    SubjectiveGraphNodeSummary(
+                        node_id=row.belief_id,
+                        created_tick=int(row.created_tick),
+                        source_kind=str(row.activation_state),
+                        strength=float(row.confidence),
+                        target_id=row.subject_agent_id or row.subject_entity_id,
+                        lineage_ref_ids=(row.current_revision_id,),
+                    )
+                    for row in page_rows
+                )
+                next_cursor = None
+                if has_more and page_rows:
+                    last = page_rows[-1]
+                    next_cursor = MemoryKeysetCursor(
+                        created_tick=int(last.created_tick), row_id=last.belief_id
+                    )
+        page = SubjectiveGraphSummaryPage(
+            run_id=run_id,
+            owner_id=owner_id,
+            kind=kind,
+            limit=limit,
+            items=items,
+            next_cursor=next_cursor,
+            availability=InspectionAvailability.AVAILABLE,
+        )
+        _LOG.info(
+            "subjective_graph_summary_page",
+            extra={
+                "operation": "load_graph_summary_page",
+                "query_type": kind,
+                "run_id": run_id,
+                "owner_id": owner_id,
+                "count": len(items),
+                "duration_ms": round((time.perf_counter() - started) * 1000, 3),
+            },
+        )
+        return page
 
     async def load_relationships_page(
         self,

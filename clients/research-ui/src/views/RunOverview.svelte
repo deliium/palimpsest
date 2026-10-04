@@ -175,7 +175,7 @@
   {:else if view === 'agent'}
     <AgentPanel {runId} agentId={deepLink.agentId} />
   {:else if view === 'graphs'}
-    <GraphsPanel {runId} agentId={deepLink.agentId} />
+    <GraphsPanel {runId} agentId={deepLink.agentId} eventId={deepLink.eventId} />
   {:else if view === 'analytics'}
     <AnalyticsPanel {runId} agentId={deepLink.agentId} />
   {:else if view === 'traces'}

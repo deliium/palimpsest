@@ -4,9 +4,11 @@
   import {
     ApiClientError,
     getBeliefSummary,
+    getDebuggerLineage,
     getMemorySummary,
     getObserverEvents,
     getObserverRelationships,
+    type GraphSummary,
     type ObserverEventOut,
   } from '../api/client'
   import ResearchGraph from '../graphs/ResearchGraph.svelte'
@@ -14,13 +16,15 @@
   interface Props {
     runId: string
     agentId: string | null
+    eventId?: string | null
   }
 
-  let { runId, agentId }: Props = $props()
+  let { runId, agentId, eventId = null }: Props = $props()
 
   const COMM_TYPES = new Set(['talk', 'ask', 'tell'])
   const COMM_KINDS = new Set(['Talked', 'Asked', 'Told'])
   const MAX_SOCIAL_EDGES = 80
+  const MAX_LINEAGE_EXPAND = 4
 
   let owner = $state('')
   let relationshipElements = $state<ElementDefinition[]>([])
@@ -69,6 +73,113 @@
     return { elements: [...nodes.values(), ...edges], truncated }
   }
 
+  function baseGraphElements(summary: GraphSummary): ElementDefinition[] {
+    const nodes = new Map<string, ElementDefinition>()
+    const edges: ElementDefinition[] = []
+    for (const item of summary.items) {
+      nodes.set(item.node_id, {
+        data: {
+          id: item.node_id,
+          label: item.source_kind ?? item.node_id.slice(0, 8),
+        },
+      })
+      for (const ref of item.lineage_ref_ids) {
+        if (!nodes.has(ref)) {
+          nodes.set(ref, { data: { id: ref, label: ref.slice(0, 8) } })
+        }
+        edges.push({
+          data: {
+            id: `${item.node_id}->${ref}`,
+            source: item.node_id,
+            target: ref,
+          },
+        })
+      }
+      if (item.target_id) {
+        if (!nodes.has(item.target_id)) {
+          nodes.set(item.target_id, {
+            data: { id: item.target_id, label: item.target_id },
+          })
+        }
+        edges.push({
+          data: {
+            id: `${item.node_id}-target-${item.target_id}`,
+            source: item.node_id,
+            target: item.target_id,
+          },
+        })
+      }
+    }
+    return [...nodes.values(), ...edges]
+  }
+
+  async function expandLineage(
+    summary: GraphSummary,
+    kind: 'memory_derivation' | 'belief_evidence',
+    ownerId: string,
+    base: ElementDefinition[],
+  ): Promise<ElementDefinition[]> {
+    const ordered = [...summary.items]
+    if (eventId) {
+      ordered.sort((a, b) => {
+        const aHit = a.node_id === eventId || a.lineage_ref_ids.includes(eventId) ? 0 : 1
+        const bHit = b.node_id === eventId || b.lineage_ref_ids.includes(eventId) ? 0 : 1
+        return aHit - bHit
+      })
+    }
+    const focusIds = ordered.slice(0, MAX_LINEAGE_EXPAND).map((item) => item.node_id)
+    if (focusIds.length === 0) {
+      return base
+    }
+    const nodes = new Map<string, ElementDefinition>()
+    const edges: ElementDefinition[] = []
+    for (const el of base) {
+      const id = String(el.data.id)
+      if ('source' in el.data) {
+        edges.push(el)
+      } else {
+        nodes.set(id, el)
+      }
+    }
+    for (const subjectId of focusIds) {
+      try {
+        const lineage = await getDebuggerLineage(runId, kind, subjectId, ownerId)
+        if (lineage.availability !== 'available') {
+          if (import.meta.env.DEV) {
+            console.debug(
+              `research_ui_graph lineage_unavailable kind=${kind} reason=${lineage.reason_code ?? lineage.availability}`,
+            )
+          }
+          continue
+        }
+        for (const entry of lineage.entries) {
+          for (const related of [...entry.related_ids, ...entry.parent_ids]) {
+            if (!nodes.has(related)) {
+              nodes.set(related, {
+                data: { id: related, label: related.slice(0, 8) },
+              })
+            }
+            edges.push({
+              data: {
+                id: `${subjectId}-lin-${entry.entry_id}-${related}`,
+                source: subjectId,
+                target: related,
+              },
+            })
+          }
+        }
+      } catch (err) {
+        const reason = err instanceof ApiClientError ? err.code : 'fetch_failed'
+        if (import.meta.env.DEV) {
+          console.debug(
+            `research_ui_graph lineage_unavailable kind=${kind} reason=${reason}`,
+          )
+        }
+      }
+    }
+    return [...nodes.values(), ...edges]
+  }
+
   async function load(target: string): Promise<void> {
     loading = true
     error = null
@@ -113,24 +224,26 @@
         )
       }
 
-      memoryElements = memories.items.map((item) => ({
-        data: {
-          id: item.node_id,
-          label: item.source_kind ?? item.node_id.slice(0, 8),
-        },
-      }))
-      beliefElements = beliefs.items.map((item) => ({
-        data: {
-          id: item.node_id,
-          label: item.source_kind ?? item.node_id.slice(0, 8),
-        },
-      }))
+      const memoryBase = baseGraphElements(memories)
+      const beliefBase = baseGraphElements(beliefs)
+      memoryElements = await expandLineage(
+        memories,
+        'memory_derivation',
+        target,
+        memoryBase,
+      )
+      beliefElements = await expandLineage(
+        beliefs,
+        'belief_evidence',
+        target,
+        beliefBase,
+      )
       if (import.meta.env.DEV) {
         console.debug(
-          `research_ui_graph kind=memory nodes=${memoryElements.length} unavailable=${memories.availability}`,
+          `research_ui_graph kind=memory nodes=${memoryElements.filter((el) => !('source' in el.data)).length} size=${memoryElements.length} unavailable=${memories.availability}`,
         )
         console.debug(
-          `research_ui_graph kind=belief nodes=${beliefElements.length} unavailable=${beliefs.availability}`,
+          `research_ui_graph kind=belief nodes=${beliefElements.filter((el) => !('source' in el.data)).length} size=${beliefElements.length} unavailable=${beliefs.availability}`,
         )
       }
     } catch (err) {
@@ -207,7 +320,8 @@
     />
     <p class="note">
       Delivery edges are objective_world (Talked/Asked/Told). Relationship
-      dimensions remain agent_belief. No friend/enemy/leader labels.
+      dimensions remain agent_belief. Focused lineage expands via debugger GETs
+      (metadata ids only).
     </p>
   {/if}
 </section>

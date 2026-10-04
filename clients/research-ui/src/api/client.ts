@@ -480,6 +480,37 @@ export function listDebuggerInvocations(
   )
 }
 
+export type DebuggerLineage = {
+  run_id: string
+  owner_id: string
+  kind: string
+  subject_id: string
+  availability: string
+  entries: Array<{
+    entry_id: string
+    kind: string
+    related_ids: string[]
+    parent_ids: string[]
+    reason_codes: string[]
+  }>
+  reason_code: string | null
+}
+
+export function getDebuggerLineage(
+  runId: string,
+  kind: string,
+  subjectId: string,
+  ownerId: string,
+): Promise<DebuggerLineage> {
+  return apiFetch<DebuggerLineage>(
+    `/v1/simulations/${runId}/debugger/lineage/${encodeURIComponent(kind)}/${encodeURIComponent(subjectId)}`,
+    {
+      capability: 'subjective_debug',
+      query: { owner_id: ownerId },
+    },
+  )
+}
+
 export const getGroupFormation = (runId: string, ownerId: string) =>
   debugGet<LedgerProjection>(
     `/v1/simulations/${runId}/owners/${ownerId}/group-formation`,
