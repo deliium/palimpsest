@@ -21,6 +21,7 @@ func _ready() -> void:
 	_session.source_cleared.connect(_on_source_cleared)
 	_session.branch_updated.connect(_on_branch_updated)
 	_session.nav_stack_changed.connect(_ui.set_nav_depth)
+	_session.marker_enrichment_loaded.connect(_ui.set_marker_enrichment)
 	_world.inspect_requested.connect(_ui.show_inspector)
 	_world.inspect_cleared.connect(_ui.clear_inspector)
 	_ui.connect_requested.connect(_session.start_with_run_id)
@@ -46,17 +47,36 @@ func _ready() -> void:
 	_ui.open_parent_branch_requested.connect(_session.open_parent_at_fork)
 	_ui.open_child_branch_requested.connect(_session.open_child_branch)
 	_ui.load_more_branches_requested.connect(_on_load_more_branches)
+	_ui.location_focus_requested.connect(_on_location_focus)
+	_ui.follow_agent_requested.connect(_on_follow_agent)
+	_ui.follow_location_requested.connect(_on_follow_location)
+	_ui.focused_prev_requested.connect(_session.previous_focused_event)
+	_ui.focused_next_requested.connect(_session.next_focused_event)
+	_session.follow_changed.connect(_ui.note_follow)
+	_session.follow_changed.connect(_on_follow_changed)
+	_session.world_replaced.connect(_on_world_for_follow)
+	_session.frame_sought.connect(_on_frame_for_follow)
+	_session.live_event.connect(_on_live_for_follow)
 	_session.overlay_payload.connect(_on_overlay_payload)
 	_session.overlay_unavailable.connect(_on_overlay_unavailable)
 	_world.inspect_requested.connect(func(snapshot: Dictionary) -> void:
-		_ui.note_selection(str(snapshot.get("entity_id", "")))
+		var entity_id := str(snapshot.get("entity_id", ""))
+		_ui.note_selection(entity_id)
+		_session.set_agent_focus(entity_id)
+		_ui.set_filters_from_focus(entity_id, _session.focus_location_id)
 	)
-	_world.inspect_cleared.connect(func() -> void: _ui.note_selection(""))
+	_world.inspect_cleared.connect(func() -> void:
+		_ui.note_selection("")
+		if _session.follow_mode == "agent":
+			_session.set_follow("agent", false)
+	)
+	_world.location_selected.connect(_on_location_focus)
 	_session.begin()
 
 
 func _on_events_loaded(events: Array, focus_tick: int, focus_sequence: int) -> void:
 	_ui.replace_events(events, focus_tick, focus_sequence, _session.world)
+	_refresh_markers()
 
 
 func _on_source_cleared() -> void:
@@ -74,10 +94,67 @@ func _on_branch_updated() -> void:
 		_session.branch_reason_code,
 		_session.nav_stack_depth(),
 	)
+	_apply_branch_marks()
+	_refresh_markers()
+
+
+func _apply_branch_marks() -> void:
+	var ticks: Array = []
+	var fork_tick := int(_session.lineage.get("fork_tick", -1))
+	if fork_tick >= 0 and str(_session.lineage.get("parent_run_id", "")) != "":
+		ticks.append(fork_tick)
+	for child in _session.branch_children:
+		if typeof(child) != TYPE_DICTIONARY:
+			continue
+		ticks.append(int(child.get("fork_tick", 0)))
+	_ui.set_branch_marks(ticks)
+
+
+func _refresh_markers() -> void:
+	_session.start_marker_enrichment(_ui.marker_enrichment_types(3))
 
 
 func _on_load_more_branches() -> void:
 	_session.fetch_branch_children(_session.branch_next_cursor)
+
+
+func _on_location_focus(location_id: String) -> void:
+	_session.set_location_focus(location_id)
+	_ui.note_location_focus(location_id)
+	_ui.set_filters_from_focus(_session.focus_agent_id, location_id)
+
+
+func _on_follow_agent(enabled: bool) -> void:
+	_session.set_follow("agent", enabled)
+	_apply_follow_camera()
+
+
+func _on_follow_location(enabled: bool) -> void:
+	_session.set_follow("location", enabled)
+	_apply_follow_camera()
+
+
+func _on_follow_changed(_mode: String) -> void:
+	_apply_follow_camera()
+
+
+func _on_world_for_follow(_world_state: Variant) -> void:
+	_apply_follow_camera()
+
+
+func _on_frame_for_follow(_frame: Variant, _event: Variant, _forward: bool) -> void:
+	_apply_follow_camera()
+
+
+func _on_live_for_follow(_event: Variant) -> void:
+	_apply_follow_camera()
+
+
+func _apply_follow_camera() -> void:
+	if _session.follow_mode == "agent" and _session.focus_agent_id != "":
+		_world.focus_agent(_session.focus_agent_id)
+	elif _session.follow_mode == "location" and _session.focus_location_id != "":
+		_world.focus_location(_session.focus_location_id)
 
 
 func _on_run_loaded(record: Dictionary) -> void:

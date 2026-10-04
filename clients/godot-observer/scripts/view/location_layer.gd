@@ -4,6 +4,8 @@ const ObserverLog := preload("res://scripts/log.gd")
 const Scale := preload("res://scripts/presentation/scale.gd")
 const Themes := preload("res://scripts/presentation/theme_catalog.gd")
 
+signal location_selected(location_id: String)
+
 var _locations: Array = []
 var _weather := {}
 var _bands := {}
@@ -16,6 +18,22 @@ var _rings := {}
 
 func _ready() -> void:
 	ObserverLog.debug("view", "scene_ready layer=%s" % name)
+
+
+func _unhandled_input(event: InputEvent) -> void:
+	if not (event is InputEventMouseButton):
+		return
+	var mouse := event as InputEventMouseButton
+	if not mouse.pressed or mouse.button_index != MOUSE_BUTTON_LEFT:
+		return
+	var point := get_global_mouse_position()
+	for location in _locations:
+		if _rect_for(location).has_point(point):
+			var location_id := str(location.location_id)
+			ObserverLog.debug("locations", "selected location_id=%s" % location_id)
+			location_selected.emit(location_id)
+			get_viewport().set_input_as_handled()
+			return
 
 
 func clear_world() -> void:

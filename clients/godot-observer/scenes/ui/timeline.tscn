@@ -3,11 +3,11 @@
 [ext_resource type="Script" path="res://scripts/ui/timeline.gd" id="1_timeline"]
 
 [node name="Timeline" type="Control"]
-custom_minimum_size = Vector2(640, 36)
+custom_minimum_size = Vector2(900, 64)
 offset_left = 16.0
-offset_top = 216.0
-offset_right = 900.0
-offset_bottom = 252.0
+offset_top = 288.0
+offset_right = 1100.0
+offset_bottom = 352.0
 script = ExtResource("1_timeline")
 
 [node name="Toggle" type="CheckButton" parent="."]
@@ -17,3 +17,11 @@ offset_top = 2.0
 offset_right = 880.0
 offset_bottom = 32.0
 text = "Selected agent"
+
+[node name="Categories" type="HBoxContainer" parent="."]
+layout_mode = 0
+offset_left = 0.0
+offset_top = 34.0
+offset_right = 900.0
+offset_bottom = 62.0
+theme_override_constants/separation = 4

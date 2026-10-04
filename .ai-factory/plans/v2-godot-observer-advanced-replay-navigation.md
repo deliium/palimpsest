@@ -230,19 +230,19 @@ Each checkpoint is a git commit on `main` when those tasks are done. Do not squa
 
 ### Phase 2: Markers and focused playback
 
-- [ ] Task 4: Configurable timeline marker categories.
+- [x] Task 4: Configurable timeline marker categories.
   - Deliverable: Extend `timeline.gd` (+ theme colors) with category toggles per Design Decisions. Collect marks from the loaded events window first; optional enrichment with ≤3 type pages, one refresh in flight, cancel on seek/switch. Cap drawn marks at 64. Add synthetic `branch_point` marks from current lineage `fork_tick` (manifest/run fields available after task 1) and from loaded children when Task 3 data is present. Birth category is no-op until a birth-class semantic type exists. Clicking a mark seeks. Selected-agent marks remain optional and compatible with categories. Focused unit test for collect/cap/category toggles.
   - Logging: DEBUG `marks_set` with per-category counts and `truncated=%s`; no event payloads.
   - Depends on task 1 (allowlist + cancel). Branch children enrichment soft-depends on task 3 (use lineage fields alone until children load).
   - Files: `clients/godot-observer/scripts/ui/timeline.gd`, `ui_layer.gd`, `session.gd` (marker refresh), theme/presentation helpers, tests.
 
-- [ ] Task 5: Agent-focused playback (filter, next/prev, follow).
+- [x] Task 5: Agent-focused playback (filter, next/prev, follow).
   - Deliverable: Selecting an agent sets focus using **entity id** from `world.agents`. Show related events via log filter + `agent_id=<entity_id>` refresh (requires Task 1b). Implement next/previous focused events with the locked algorithm (loaded lines → forward filtered page → reverse probe ≤32). **Follow** tracks camera/UI only via `camera_rig.focus_on` after seeks and live updates; prove no simulation control calls. Follow does not require `subjective_debug`. Focused unit tests for neighbor algorithm and follow camera-only.
   - Logging: DEBUG `focus_agent id=%s`; INFO `follow_agent enabled=%s`; DEBUG neighbor seek ticks/sequences and `focus_probe count=%s`.
   - Depends on tasks 1, 1b.
   - Files: `session.gd`, `event_log.gd`, `camera_rig.gd`, `agent_layer.gd` / `world_view.gd`, `ui_layer.gd`, tests.
 
-- [ ] Task 6: Location-focused playback (filter, follow activity).
+- [x] Task 6: Location-focused playback (filter, follow activity).
   - Deliverable: Select location; show events with location filter + `location_id=` query on refresh. Reuse Task 5 neighbor algorithm with location filter. Follow location centers camera on the anchor; optional snap-to-next-event remains off by default. Mutual exclusion with agent Follow as locked above. Focused unit test for filter + follow mutex.
   - Logging: DEBUG `focus_location id=%s`; INFO `follow_location enabled=%s`.
   - Depends on task 5.

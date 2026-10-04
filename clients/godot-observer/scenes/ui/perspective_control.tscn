@@ -24,3 +24,26 @@ text = "Labels"
 [node name="Clear" type="Button" parent="."]
 layout_mode = 2
 text = "Clear labels"
+
+[node name="LocationId" type="LineEdit" parent="."]
+custom_minimum_size = Vector2(140, 0)
+layout_mode = 2
+placeholder_text = "location id"
+
+[node name="FollowAgent" type="Button" parent="."]
+layout_mode = 2
+toggle_mode = true
+text = "Follow agent"
+
+[node name="FollowLocation" type="Button" parent="."]
+layout_mode = 2
+toggle_mode = true
+text = "Follow location"
+
+[node name="FocusPrev" type="Button" parent="."]
+layout_mode = 2
+text = "[ Focus"
+
+[node name="FocusNext" type="Button" parent="."]
+layout_mode = 2
+text = "Focus ]"

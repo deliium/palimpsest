@@ -33,9 +33,14 @@ signal ticks_loaded(ticks: Array)
 signal run_loaded(record: Dictionary)
 signal branch_updated
 signal nav_stack_changed(depth: int)
+signal marker_enrichment_loaded(events: Array)
+signal focus_changed
+signal follow_changed(mode: String)
 
 const NAV_STACK_LIMIT := 16
 const BRANCH_PAGE_LIMIT := 50
+const MARKER_TYPE_BUDGET := 3
+const FOCUS_PROBE_LIMIT := 32
 
 var run_id := ""
 var origin := ""
@@ -52,6 +57,10 @@ var lineage := {
 var branch_children: Array = []
 var branch_next_cursor: Variant = null
 var branch_reason_code := ""
+var focus_agent_id := ""
+var focus_location_id := ""
+var follow_mode := ""  # "", "agent", "location"
+var follow_snap_location := false
 
 var _token := ""
 var _http: Node
@@ -76,6 +85,13 @@ var _pending_deeplink := {}
 var _pending_switch_seek := {}
 var _switching := false
 var _nav_stack: Array = []
+var _marker_serial := 0
+var _marker_queue: Array = []
+var _marker_events: Array = []
+var _focus_probe_left := 0
+var _focus_nav := ""
+var _probe_tick := 0
+var _probe_sequence: Variant = null
 
 
 func _ready() -> void:
@@ -253,6 +269,56 @@ func open_parent_at_fork() -> void:
 	_request_path("branch_fork_point", "/v1/simulations/%s/branch/fork-point" % run_id)
 
 
+func start_marker_enrichment(type_names: Array) -> void:
+	## At most one refresh; ≤3 sequential type pages; cancelled on seek/switch.
+	if not _opened or _switching:
+		return
+	_marker_serial += 1
+	_marker_queue = []
+	_marker_events = []
+	var budget := 0
+	for type_name in type_names:
+		if budget >= MARKER_TYPE_BUDGET:
+			break
+		var trimmed := str(type_name).strip_edges()
+		if trimmed.is_empty():
+			continue
+		_marker_queue.append(trimmed)
+		budget += 1
+	ObserverLog.debug(
+		"session",
+		"marker_refresh_started count=%s serial=%s" % [_marker_queue.size(), _marker_serial],
+	)
+	_pump_marker_enrichment(_marker_serial)
+
+
+func cancel_marker_enrichment() -> void:
+	_marker_serial += 1
+	_marker_queue.clear()
+	_marker_events.clear()
+	ObserverLog.debug("session", "marker_refresh_cancelled serial=%s" % _marker_serial)
+
+
+func _pump_marker_enrichment(serial: int) -> void:
+	if serial != _marker_serial:
+		return
+	if _marker_queue.is_empty():
+		marker_enrichment_loaded.emit(_marker_events)
+		ObserverLog.debug(
+			"session",
+			"marker_refresh_done event_count=%s" % _marker_events.size(),
+		)
+		return
+	var type_name := str(_marker_queue.pop_front())
+	_request(
+		"marker_events",
+		{"limit": EVENT_WINDOW, "event_type": type_name},
+		-1,
+	)
+	# Bind the in-flight type to the pending meta via a dedicated path request.
+	# _request stores kind=marker_events; completion appends then pumps.
+
+
 func open_child_branch(child_run_id: String, child_fork_tick: Variant = null) -> void:
 	var trimmed := child_run_id.strip_edges()
 	if trimmed.is_empty():
@@ -263,6 +329,195 @@ func open_child_branch(child_run_id: String, child_fork_tick: Variant = null) ->
 		"branch_open_child child_run_id=%s fork_tick=%s" % [trimmed, str(fork_tick)],
 	)
 	switch_run(trimmed, fork_tick, null, true)
+
+
+func set_agent_focus(entity_id: String) -> void:
+	focus_agent_id = entity_id.strip_edges()
+	ObserverLog.debug("session", "focus_agent id=%s" % focus_agent_id)
+	focus_changed.emit()
+	refresh_focused_events()
+
+
+func set_location_focus(location_id: String) -> void:
+	focus_location_id = location_id.strip_edges()
+	ObserverLog.debug("session", "focus_location id=%s" % focus_location_id)
+	focus_changed.emit()
+	refresh_focused_events()
+
+
+func clear_focus() -> void:
+	focus_agent_id = ""
+	focus_location_id = ""
+	set_follow("", false)
+	focus_changed.emit()
+
+
+func set_follow(mode: String, enabled: bool) -> void:
+	## Presentation-only camera/UI follow. Never calls simulation control.
+	var next := ""
+	if enabled:
+		next = mode
+		if next == "agent" and focus_agent_id.is_empty():
+			next = ""
+		if next == "location" and focus_location_id.is_empty():
+			next = ""
+	if next == "agent":
+		ObserverLog.info("session", "follow_agent enabled=true")
+	elif follow_mode == "agent" and next != "agent":
+		ObserverLog.info("session", "follow_agent enabled=false")
+	if next == "location":
+		ObserverLog.info("session", "follow_location enabled=true")
+	elif follow_mode == "location" and next != "location":
+		ObserverLog.info("session", "follow_location enabled=false")
+	follow_mode = next
+	follow_changed.emit(follow_mode)
+
+
+func toggle_follow_agent() -> void:
+	if follow_mode == "agent":
+		set_follow("agent", false)
+	else:
+		set_follow("agent", true)
+
+
+func toggle_follow_location() -> void:
+	if follow_mode == "location":
+		set_follow("location", false)
+	else:
+		set_follow("location", true)
+
+
+func refresh_focused_events() -> void:
+	if not _opened or run_id.is_empty():
+		return
+	if focus_agent_id.is_empty() and focus_location_id.is_empty():
+		return
+	var query := {"limit": EVENT_WINDOW}
+	if focus_agent_id != "":
+		query["agent_id"] = focus_agent_id
+	if focus_location_id != "":
+		query["location_id"] = focus_location_id
+	_request("focus_events", query, -1)
+
+
+func next_focused_event() -> void:
+	if focus_agent_id.is_empty() and focus_location_id.is_empty():
+		status_changed.emit("no_focused_event", "No focus selected")
+		return
+	var neighbor := _focused_neighbor(true)
+	if not neighbor.is_empty():
+		_seek_focus_event(neighbor)
+		return
+	var query := {"limit": EVENT_WINDOW}
+	if focus_agent_id != "":
+		query["agent_id"] = focus_agent_id
+	if focus_location_id != "":
+		query["location_id"] = focus_location_id
+	if Urls.resume_allowed(transport.tick, transport.sequence):
+		query["after_tick"] = transport.tick
+		query["after_sequence"] = transport.sequence
+	_focus_nav = "next"
+	_request("focus_seek", query, -1)
+
+
+func previous_focused_event() -> void:
+	if focus_agent_id.is_empty() and focus_location_id.is_empty():
+		status_changed.emit("no_focused_event", "No focus selected")
+		return
+	var neighbor := _focused_neighbor(false)
+	if not neighbor.is_empty():
+		_seek_focus_event(neighbor)
+		return
+	_focus_probe_left = FOCUS_PROBE_LIMIT
+	_probe_tick = transport.tick
+	_probe_sequence = transport.sequence
+	_focus_nav = "previous"
+	ObserverLog.debug("session", "focus_probe count=%s" % _focus_probe_left)
+	_probe_previous_focused()
+
+
+func _focused_neighbor(forward: bool) -> Dictionary:
+	var best: Dictionary = {}
+	for event in _event_window:
+		if not _event_matches_focus(event):
+			continue
+		var tick := int(event.tick)
+		var sequence := int(event.sequence)
+		if forward:
+			if tick < transport.tick:
+				continue
+			if tick == transport.tick and (transport.sequence != null and sequence <= int(transport.sequence)):
+				continue
+			if best.is_empty() or tick < int(best["tick"]) or (
+				tick == int(best["tick"]) and sequence < int(best["sequence"])
+			):
+				best = {"tick": tick, "sequence": sequence}
+		else:
+			if tick > transport.tick:
+				continue
+			if tick == transport.tick and (
+				transport.sequence == null or sequence >= int(transport.sequence)
+			):
+				continue
+			if best.is_empty() or tick > int(best["tick"]) or (
+				tick == int(best["tick"]) and sequence > int(best["sequence"])
+			):
+				best = {"tick": tick, "sequence": sequence}
+	return best
+
+
+func _event_matches_focus(event: Variant) -> bool:
+	if focus_agent_id.is_empty() and focus_location_id.is_empty():
+		return false
+	if focus_agent_id != "":
+		var actor := "" if event.actor_id == null else str(event.actor_id)
+		var target := "" if event.target_id == null else str(event.target_id)
+		if actor != focus_agent_id and target != focus_agent_id:
+			return false
+	if focus_location_id != "":
+		var origin := "" if event.origin_location_id == null else str(event.origin_location_id)
+		var destination := (
+			"" if event.destination_location_id == null else str(event.destination_location_id)
+		)
+		if origin != focus_location_id and destination != focus_location_id:
+			return false
+	return true
+
+
+func _seek_focus_event(target: Dictionary) -> void:
+	ObserverLog.debug(
+		"session",
+		"focus_seek tick=%s sequence=%s" % [int(target["tick"]), int(target["sequence"])],
+	)
+	seek_event(int(target["tick"]), int(target["sequence"]), null)
+
+
+func _probe_previous_focused() -> void:
+	if _focus_probe_left <= 0:
+		_focus_nav = ""
+		status_changed.emit("no_previous_focused_event", "No previous focused event")
+		ObserverLog.debug("session", "focus_probe count=0 reason_code=no_previous_focused_event")
+		return
+	_focus_probe_left -= 1
+	ObserverLog.debug("session", "focus_probe count=%s" % (FOCUS_PROBE_LIMIT - _focus_probe_left))
+	var query := {"limit": 16}
+	if focus_agent_id != "":
+		query["agent_id"] = focus_agent_id
+	if focus_location_id != "":
+		query["location_id"] = focus_location_id
+	if _probe_sequence != null and int(_probe_sequence) > 0:
+		var before := _events_before(_probe_tick, int(_probe_sequence))
+		if Urls.resume_allowed(before.get("after_tick", null), before.get("after_sequence", null)):
+			query["after_tick"] = before["after_tick"]
+			query["after_sequence"] = before["after_sequence"]
+		_request("focus_probe", query, -1)
+		return
+	if _probe_tick <= 0:
+		_focus_nav = ""
+		status_changed.emit("no_previous_focused_event", "No previous focused event")
+		return
+	fetch_ticks(maxi(_probe_tick - 1, 0), _probe_tick, _seek_serial)
+	_navigation = "focus_previous_tick"
 
 
 func _teardown_source() -> void:
@@ -298,9 +553,16 @@ func _teardown_source() -> void:
 	branch_children = []
 	branch_next_cursor = null
 	branch_reason_code = ""
+	focus_agent_id = ""
+	focus_location_id = ""
+	follow_mode = ""
+	_focus_nav = ""
+	_focus_probe_left = 0
 	ObserverLog.debug("session", "cursor_reset")
 	source_cleared.emit()
 	branch_updated.emit()
+	focus_changed.emit()
+	follow_changed.emit("")
 	ObserverLog.debug("session", "world_cleared")
 	_switching = false
 
@@ -390,6 +652,7 @@ func _cancel_http(reason: String) -> void:
 	_pending.clear()
 	if _http != null and _http.has_method("clear_queue"):
 		_http.clear_queue()
+	cancel_marker_enrichment()
 	ObserverLog.debug("session", "queue_cleared reason=%s epoch=%s" % [reason, _http_epoch])
 
 
@@ -664,7 +927,15 @@ func _request_path(
 
 func _request(kind: String, query: Dictionary = {}, seek_id: int = -1) -> void:
 	var route_name := kind
-	if kind == "gap" or kind == "events_window" or kind == "catch_up":
+	if (
+		kind == "gap"
+		or kind == "events_window"
+		or kind == "catch_up"
+		or kind == "marker_events"
+		or kind == "focus_events"
+		or kind == "focus_seek"
+		or kind == "focus_probe"
+	):
 		route_name = "events"
 	if kind.begins_with("state"):
 		route_name = "state"
@@ -849,6 +1120,85 @@ func _on_http(route: String, _status: int, body: Variant, reason_code: String) -
 			],
 		)
 		switch_run(parent_id, parent_tick, null, true)
+		return
+	if kind == "marker_events":
+		if reason_code != "":
+			ObserverLog.debug(
+				"session",
+				"marker_page_failed reason_code=%s" % reason_code,
+			)
+			_pump_marker_enrichment(_marker_serial)
+			return
+		var marker_page = Protocol.parse_event_page(body)
+		if marker_page.ok:
+			for event in marker_page.value.events:
+				_marker_events.append(event)
+		else:
+			ObserverLog.debug(
+				"session",
+				"marker_page_failed reason_code=%s" % marker_page.reason_code,
+			)
+		_pump_marker_enrichment(_marker_serial)
+		return
+	if kind == "focus_events" or kind == "focus_seek" or kind == "focus_probe":
+		if reason_code != "":
+			if kind == "focus_seek" or kind == "focus_probe":
+				status_changed.emit("no_focused_event", reason_code)
+			_focus_nav = ""
+			return
+		var focus_page = Protocol.parse_event_page(body)
+		if not focus_page.ok:
+			_focus_nav = ""
+			status_changed.emit("no_focused_event", focus_page.reason_code)
+			return
+		if kind == "focus_events":
+			_event_window = focus_page.value.events
+			events_loaded.emit(focus_page.value.events, transport.tick, int(transport.sequence) if transport.sequence != null else 0)
+			return
+		if kind == "focus_seek":
+			var first: Variant = null
+			for event in focus_page.value.events:
+				if _event_matches_focus(event):
+					first = event
+					break
+			_focus_nav = ""
+			if first == null:
+				status_changed.emit("no_focused_event", "No next focused event")
+				return
+			_seek_focus_event({"tick": int(first.tick), "sequence": int(first.sequence)})
+			return
+		# focus_probe: accept matching event strictly before the view cursor.
+		var match: Variant = null
+		var view_tick := transport.tick
+		var view_sequence: Variant = transport.sequence
+		for event in focus_page.value.events:
+			if not _event_matches_focus(event):
+				continue
+			var tick := int(event.tick)
+			var sequence := int(event.sequence)
+			if tick > view_tick:
+				continue
+			if tick == view_tick and view_sequence != null and sequence >= int(view_sequence):
+				continue
+			if match == null or tick > int(match.tick) or (
+				tick == int(match.tick) and sequence > int(match.sequence)
+			):
+				match = event
+		if match != null:
+			_focus_nav = ""
+			_probe_sequence = null
+			_seek_focus_event({"tick": int(match.tick), "sequence": int(match.sequence)})
+			return
+		if _probe_sequence != null and int(_probe_sequence) > 0:
+			_probe_sequence = int(_probe_sequence) - 1
+		elif _probe_tick > 0:
+			_probe_tick -= 1
+			_probe_sequence = 0
+		else:
+			_focus_nav = ""
+			status_changed.emit("no_previous_focused_event", "No previous focused event")
+			return
+		_probe_previous_focused()
 		return
 	if reason_code != "":
 		if seek_id >= 0:
@@ -1308,6 +1658,22 @@ func _finish_navigation(records: Array) -> void:
 	elif action == "previous_tick":
 		var prev := _record_before(records, current)
 		target = TransportScript.previous_tick(prev.get("tick", null), prev.get("last", null))
+	elif action == "focus_previous_tick":
+		var prev := _record_before(records, _probe_tick)
+		target = TransportScript.previous_event(
+			_probe_tick,
+			_probe_sequence,
+			prev.get("tick", null),
+			prev.get("last", null),
+		)
+		if target.is_empty() or not bool(target.get("found", false)):
+			_focus_nav = ""
+			status_changed.emit("no_previous_focused_event", "No previous focused event")
+			return
+		_probe_tick = int(target["tick"])
+		_probe_sequence = int(target["sequence"])
+		_probe_previous_focused()
+		return
 	if target.is_empty() or not bool(target.get("found", false)):
 		_playing = false
 		return

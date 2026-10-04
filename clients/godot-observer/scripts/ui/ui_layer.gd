@@ -24,6 +24,11 @@ signal return_previous_run_requested
 signal open_parent_branch_requested
 signal open_child_branch_requested(child_run_id: String, fork_tick: int)
 signal load_more_branches_requested
+signal location_focus_requested(location_id: String)
+signal follow_agent_requested(enabled: bool)
+signal follow_location_requested(enabled: bool)
+signal focused_prev_requested
+signal focused_next_requested
 
 var _live_tick := 0
 var _selected_id := ""
@@ -40,6 +45,23 @@ func _ready() -> void:
 	$PerspectiveControl.labels_cleared.connect(func() -> void:
 		labels_cleared.emit()
 	)
+	var perspective = $PerspectiveControl
+	if perspective.has_signal("location_focus_requested"):
+		perspective.location_focus_requested.connect(func(location_id: String) -> void:
+			location_focus_requested.emit(location_id)
+		)
+	if perspective.has_signal("follow_agent_requested"):
+		perspective.follow_agent_requested.connect(func(enabled: bool) -> void:
+			follow_agent_requested.emit(enabled)
+		)
+	if perspective.has_signal("follow_location_requested"):
+		perspective.follow_location_requested.connect(func(enabled: bool) -> void:
+			follow_location_requested.emit(enabled)
+		)
+	if perspective.has_signal("focused_prev_requested"):
+		perspective.focused_prev_requested.connect(func() -> void: focused_prev_requested.emit())
+	if perspective.has_signal("focused_next_requested"):
+		perspective.focused_next_requested.connect(func() -> void: focused_next_requested.emit())
 	$OverlayLegend.overlay_toggled.connect(func(kind: String, evidence_class: String, enabled: bool) -> void:
 		overlay_toggled.emit(kind, evidence_class, enabled)
 	)
@@ -132,10 +154,26 @@ func append_event(event: Variant) -> void:
 	$EventLog.append_event(event)
 
 
+func set_filters_from_focus(agent_id: String, location_id: String) -> void:
+	$EventLog.set_filters(agent_id, "", location_id)
+
+
 func replace_events(events: Array, focus_tick: int, focus_sequence: int, world: Variant) -> void:
 	$EventLog.set_world(world)
 	$EventLog.replace_window(events, focus_tick, focus_sequence)
 	$Timeline.set_window(events, focus_tick, _live_tick, _selected_id)
+
+
+func set_marker_enrichment(events: Array) -> void:
+	$Timeline.set_enriched_events(events)
+
+
+func set_branch_marks(ticks: Array) -> void:
+	$Timeline.set_branch_points(ticks)
+
+
+func marker_enrichment_types(budget: int = 3) -> Array:
+	return $Timeline.enabled_enrichment_types(budget)
 
 
 func note_live_tick(live_tick: int) -> void:
@@ -146,6 +184,25 @@ func note_live_tick(live_tick: int) -> void:
 func note_selection(entity_id: String) -> void:
 	_selected_id = entity_id
 	$Timeline.set_selected(entity_id)
+	var perspective = $PerspectiveControl
+	if perspective != null and perspective.has_method("set_agent_id"):
+		perspective.set_agent_id(entity_id)
+
+
+func note_location_focus(location_id: String) -> void:
+	var perspective = $PerspectiveControl
+	if perspective != null and perspective.has_method("set_location_id"):
+		perspective.set_location_id(location_id)
+
+
+func note_follow(mode: String) -> void:
+	var perspective = $PerspectiveControl
+	if perspective == null:
+		return
+	if perspective.has_method("set_follow_agent"):
+		perspective.set_follow_agent(mode == "agent")
+	if perspective.has_method("set_follow_location"):
+		perspective.set_follow_location(mode == "location")
 
 
 func show_inspector(snapshot: Dictionary) -> void:

@@ -114,6 +114,24 @@ const EVIDENCE_OBJECTIVE := Color(0.55, 0.72, 0.58, 1.0)
 const EVIDENCE_SUBJECTIVE := Color(0.72, 0.62, 0.42, 1.0)
 const EVIDENCE_ANALYTICAL := Color(0.55, 0.58, 0.78, 1.0)
 
+const MARKER_COLORS := {
+	"birth": Color(0.55, 0.82, 0.62, 1.0),
+	"death": Color(0.85, 0.35, 0.3, 1.0),
+	"attack": Color(0.88, 0.48, 0.28, 1.0),
+	"weather_environment": Color(0.42, 0.68, 0.82, 1.0),
+	"artifact_creation": Color(0.78, 0.68, 0.38, 1.0),
+	"structure_creation": Color(0.62, 0.52, 0.38, 1.0),
+	"branch_point": Color(0.72, 0.55, 0.82, 1.0),
+	"selected": Color(0.55, 0.7, 0.9, 1.0),
+}
+
+
+static func marker_color(category: Variant) -> Color:
+	var key := str(category)
+	if MARKER_COLORS.has(key):
+		return MARKER_COLORS[key]
+	return Color(0.7, 0.7, 0.68, 1.0)
+
 
 static func evidence_color(evidence_class: String) -> Color:
 	var key := evidence_class.to_upper()

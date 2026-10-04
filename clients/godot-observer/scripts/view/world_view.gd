@@ -32,11 +32,16 @@ var _reducer = ReducerScript.new()
 
 signal inspect_requested(snapshot: Dictionary)
 signal inspect_cleared
+signal location_selected(location_id: String)
 
 
 func _ready() -> void:
 	_agents.agent_selected.connect(_on_agent_selected)
 	_agents.selection_cleared.connect(func() -> void: inspect_cleared.emit())
+	if _locations != null and _locations.has_signal("location_selected"):
+		_locations.location_selected.connect(func(location_id: String) -> void:
+			location_selected.emit(location_id)
+		)
 
 
 func replace_sought_frame(frame: Variant, event: Variant, forward: bool) -> void:
@@ -294,6 +299,20 @@ func focus_selected() -> void:
 		return
 	_camera.focus_on(selected)
 
+
+func focus_agent(entity_id: String) -> void:
+	var point: Variant = _agents.token_position(entity_id)
+	if point == null:
+		return
+	_camera.focus_on(point)
+	ObserverLog.debug("view", "follow_camera entity_id=%s" % entity_id)
+
+
+func focus_location(location_id: String) -> void:
+	if location_id.is_empty() or not _centers.has(location_id):
+		return
+	_camera.focus_on(_centers[location_id])
+	ObserverLog.debug("view", "follow_camera location_id=%s" % location_id)
 
 func _maybe_tween(event: Variant, forward: bool, prior: Dictionary) -> void:
 	if event == null or not forward or not bool(event.known):

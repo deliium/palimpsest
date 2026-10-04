@@ -101,6 +101,12 @@ static func selection_for(selected_id: String, agents: Array) -> Dictionary:
 	return {"keep": false, "dead": false}
 
 
+func token_position(entity_id: String) -> Variant:
+	if entity_id.is_empty() or not _tokens.has(entity_id):
+		return null
+	return _tokens[entity_id].position
+
+
 func highlight(entity_id: String) -> bool:
 	selected_entity_id = entity_id
 	var found := false
