@@ -354,6 +354,8 @@ Off-limits from cognition: `WorldState`, `WorldEvent` stores, analysis reports, 
 
 Full seam map: [Architecture — V2 extension seams](architecture.md#v2-extension-seams-scaffolding).
 
+V3 generational cognition must plug in as constructor-injected stage slots / modes — not by renumbering fixed `CognitiveLoop` ordinals. Runtime pins: no mid-run roster; per-tick ordinal = bootstrap registration order; `prepare_parallel=False` until owned. See [Architecture — V3 extension seams](architecture.md#v3-extension-seams-scaffolding).
+
 ## Cognitive architecture variants
 
 Named architecture ids (`reactive_baseline`, `v1_memory_agent`, `reconstructive_memory_agent`, `imagination_agent`, `reflection_agent`, `theory_of_mind_agent`, `full_v2_agent`) are **composition presets** registered in `agents.cognition.architectures`. They expand into ordinary `AgentCognitionSpec` modes and `V2CapabilityFlags` — they are **not** new capability-flag slots and **not** a runner-config schema bump for `architecture_id`.

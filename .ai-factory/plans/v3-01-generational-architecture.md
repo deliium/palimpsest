@@ -286,19 +286,19 @@ Forbidden in this plan: implementing births, ages, kinship graphs, settlement cr
 
 ### Phase 3: Module Seams, Observer/Research UI, Replay, API, and Regression Gates
 
-- [ ] Task 8: Document V3 module evolution seams without implementing behavior.
+- [x] Task 8: Document V3 module evolution seams without implementing behavior.
   - Deliverable: Map plug-in points for later V3 plans: dynamic roster / birth registration (future), lifetime/developmental stage hooks beside physiology/`Died`/`TERMINAL`, kinship/inheritance beside owner-scoped ledgers + teaching, multi-settlement/migration beside location graph + Move, institutional/economy beside group/norm/convention/production, cultural-historical memory beside narrative/naming/memory analysis, long-horizon matrix/branch/scale tooling, run-level `V3CapabilityFlags`, and **API/`llm.factory` LLM lifecycle composition** (not a runner flag). Explicitly pin: no mid-run roster; per-tick ordinal = registration order; `prepare_parallel=False` until owned; new cognition = slots/modes not renumbered loop ordinals; no scripted civilization helpers. State off-limits seams (WorldEngine admission, event immutability, Observation trust, Godot write authority, scripted emergence). Capture “default-off V3 flags → V2-equivalent wiring; flags-on fail closed at from_config until a later plan owns them.”
   - Files: `.ai-factory/ARCHITECTURE.md`, `docs/architecture.md`, `docs/cognition-runtime.md` (pointer), `.ai-factory/DESCRIPTION.md` (V3 scaffolding note only).
   - Logging: Docs-only; N/A.
   - Dependencies: Tasks 2, 4.
 
-- [ ] Task 9: Observer Protocol and Research UI extension strategy (docs + minimal pins).
+- [x] Task 9: Observer Protocol and Research UI extension strategy (docs + minimal pins).
   - Deliverable: Publish the locked strategies: keep `observer-protocol-v1` / `observer-layout-v1`; additive optional fields and semantic types only; birth/settlement/institution overlays reserved as presentation mappings; Godot read-only + non-semantic coordinates; Research UI additive inspect/chrome only under `/research/` + `/v1`; no protocol rename and no `/v2` HTTP in this plan. Add compatibility-matrix/registry pins. Add a **Godot↔Python mirror assertion** that `clients/godot-observer/scripts/protocol/models.gd` `PROTOCOL_VERSION` / layout const equals `OBSERVER_PROTOCOL_VERSION` / `OBSERVER_LAYOUT_SCHEMA_VERSION` (extend `test_compatibility_matrix.py` cross-package mirrors or a focused unit test). Explicit non-goal: no V3 fields on `GET /version`. Do not build new Godot features.
   - Files: `src/observer/version.py` (comments/exports only if needed), `src/simulation/compatibility.py`, `docs/research-api.md`, `docs/research-ui.md`, `clients/godot-observer/scripts/protocol/models.gd` (read-only pin target), `tests/unit/test_compatibility_matrix.py` and/or `tests/unit/test_godot_protocol_mirror.py`.
   - Logging: Existing API WARN on protocol mismatch only; never frame payloads.
   - Dependencies: Tasks 2, 8.
 
-- [ ] Task 10: Snapshot/replay and `/v1` API compatibility acceptance suite.
+- [x] Task 10: Snapshot/replay and `/v1` API compatibility acceptance suite.
   - Deliverable: Focused proofs: (a) V1/V2 event fixtures at accepted schemas still restore; (b) V3 flags-off equivalent runs preserve objective trajectory/commit identity for V1 regression scenarios; (c) subjective table divergence does not change objective fold; (d) create/configure accept legacy runner payloads; runner start/decode accepts upgrade to default-off V3 flags; (e) research branch lineage and observer protocol identity remain unchanged. Extend existing replay/API suites; add `tests/unit/test_v3_v2_replay_compat.py` only if needed.
   - Files: `tests/unit/test_replay_service.py`, `tests/unit/test_simulation_replay_determinism.py`, `tests/integration/test_simulation_persistence_replay.py`, `tests/unit/test_api_simulation_manager.py`, `tests/integration/test_v1_api_e2e.py`, `docs/research-api.md`.
   - Logging: Tests assert on hashes/version codes; runner DEBUG may emit run_id/tick/version; never event payloads or `config_payload`.

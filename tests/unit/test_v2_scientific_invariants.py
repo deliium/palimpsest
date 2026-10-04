@@ -62,9 +62,15 @@ def test_v2_scientific_invariants_ok() -> None:
         ),
         max_ticks=2,
     )
+    from experiments import v2_regression_profile, v3_scaffolding_profile
+    from simulation.runner_models import V3CapabilityFlags
+
     profiled = v1_regression_profile(base)
     assert profiled.capability_flags == V2CapabilityFlags()
     assert profiled.capability_flags.multi_hop_testimony_tracking is False
+    assert profiled.v3_capability_flags == V3CapabilityFlags()
+    assert v3_scaffolding_profile(profiled) is profiled
+    assert v2_regression_profile(profiled) is profiled
 
     # Suite registry complete; builders implemented; off V1 gate.
     assert len(BENCHMARK_SCENARIO_IDS) == BENCHMARK_SCENARIO_COUNT == 16

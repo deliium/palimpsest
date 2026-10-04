@@ -4,6 +4,7 @@ class_name ObserverProtocol
 const ObserverLog := preload("res://scripts/log.gd")
 
 const PROTOCOL_VERSION := "observer-protocol-v1"
+const LAYOUT_SCHEMA_VERSION := "observer-layout-v1"
 
 const KNOWN_TYPES: Array[String] = [
 	"AGENT_MOVED",
@@ -314,7 +315,9 @@ static func parse_manifest(data: Variant) -> ParseResult:
 		return ParseResult.failure("unsupported_observer_protocol")
 	var manifest := ManifestModel.new()
 	manifest.protocol_version = PROTOCOL_VERSION
-	manifest.layout_schema_version = str(data.get("layout_schema_version", ""))
+	manifest.layout_schema_version = str(
+		data.get("layout_schema_version", LAYOUT_SCHEMA_VERSION)
+	)
 	manifest.layout_id = str(data.get("layout_id", ""))
 	manifest.layout_hash = str(data.get("layout_hash", ""))
 	manifest.ordering = str(data.get("ordering", ""))

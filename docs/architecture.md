@@ -190,3 +190,24 @@ Register roadmap milestones via `/aif-roadmap` (e.g. M5 for this scaffolding) �
 - [Configuration](configuration.md)
 - [Development](development.md)
 - [Persistence](persistence.md)
+
+
+## V3 extension seams (scaffolding)
+
+Later V3 generational plans plug into these seams only. They must not re-open WorldEngine authority, Observation trust, Godot write authority, or scripted emergence.
+
+| Seam | Where today | Pin / reserved against |
+| --- | --- | --- |
+| Dynamic roster / birth registration | Bootstrap `AgentRegistration` + fixed runner/engine roster | No mid-run spawn/unbind in scaffolding; per-tick ordinal = registration order |
+| Lifetimes / developmental stages | Physiology, `Died`, `LifeStatus`, `MortalityMode`, runtime `TERMINAL` | One-way death; no age/birth lifecycle yet (`generational_population`) |
+| Kinship / inheritance | Owner-scoped ledgers + teaching modes | No parent/child model; handoff is subjective-only unless a later plan proves otherwise (`kinship_inheritance`) |
+| Multi-settlement / migration | Location graph + Move + capacities | Topology bootstrap-fixed (`multi_polity_migration`) |
+| Institutional / economy | Structures, production, group/norm/convention ledgers | Beliefs ≠ world authority; no scripted institution outcomes (`institutional_economy`) |
+| Cultural-historical memory / language | Narrative/naming/memory analysis | No society-wide memory or NL authority (`cultural_historical_memory`) |
+| Long-horizon experiments | Matrix runner, branching, scale infra | Experiment/matrix extension only |
+| Run-level `V3CapabilityFlags` | `SimulationRunnerConfig` / `runner-config-v23` | Default-off = V2-equivalent wiring; flags-on fail closed at `from_config` until owned |
+| LLM lifecycle composition | `api` + `llm.factory` | **Not** a runner flag; still deferred |
+
+**Runtime pins:** `prepare_parallel=False` until an owned plan changes it. New generational cognition plugs in as constructor-injected stage slots/modes — not by renumbering fixed `CognitiveLoop` ordinals. No scripted civilization/institution/kinship helpers.
+
+**Off-limits:** WorldEngine admission, event immutability / `AUTHORITATIVE_TABLES`, Observation → authority type widening, Godot write authority, scripted emergence booleans.

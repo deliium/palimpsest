@@ -76,6 +76,10 @@ See [Development](development.md) and `compose.dev.yaml` for optional compose en
 
 Allowlisted matrix trees under `PALIMPSEST_RESEARCH_MATRIX_ROOT` may include the example `v2-benchmark-suite` manifest plus runtime `aggregate.json` / `metric-summary.json` sidecars. See [V2 benchmark suite](v2-benchmark-suite.md). Unit acceptance: `tests/unit/test_benchmark_research_ui_artifacts.py`.
 
+## V3 extension strategy
+
+Keep `/research/` mount and `/v1` data origin. Prefer additive inspect views, optional query params, and existing epistemic chrome (`agent_belief` vs `research_inference`). Future lineage/settlement/institution/long-horizon compare surfaces consume existing inspection/matrix/branch APIs first; new HTTP shapes only when optional fields cannot express them. Research UI must not start batches, mutate world state, or treat analytical labels as agent-visible truth. Matrix FS schemas stay v1 unless a later plan needs a versioned bump.
+
 ## See also
 
 - [Research API](research-api.md)
