@@ -187,11 +187,6 @@ from experiments.matrix_serialization import (
     encode_run_version_identity,
 )
 from experiments.memory_repository import InMemoryExperimentRecordRepository
-from experiments.observer_graphical_scenario import (
-    OBSERVER_GRAPHICAL_SCENARIO_ID,
-    ObserverGraphicalScenarioBundle,
-    build_observer_graphical_scenario,
-)
 from experiments.metric_collection import (
     MetricCollectionResult,
     MetricCollectionService,
@@ -206,6 +201,11 @@ from experiments.models import (
     ExperimentSeedMatrix,
     condition_fingerprint,
     definition_fingerprint,
+)
+from experiments.observer_graphical_scenario import (
+    OBSERVER_GRAPHICAL_SCENARIO_ID,
+    ObserverGraphicalScenarioBundle,
+    build_observer_graphical_scenario,
 )
 from experiments.persistence import (
     EXPERIMENT_RECORD_SCHEMA_VERSION,

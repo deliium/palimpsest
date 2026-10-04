@@ -19,8 +19,8 @@ from simulation.compatibility import (
     PLANNED_RUNNER_SCHEMA_VERSION_V23,
     RESEARCH_UI_MOUNT,
     STREAM_ENVELOPE_VERSION,
-    V3_CAPABILITY_FLAGS_WIRE_KEY,
     V3_CAPABILITY_FLAG_NAMES,
+    V3_CAPABILITY_FLAGS_WIRE_KEY,
     WS_PROTOCOL_VERSION,
     CompatibilityEntry,
     compatibility_entry,
@@ -171,7 +171,8 @@ def test_v3_scaffolding_matrix_rows() -> None:
     assert "no V3 fields on GET /version" in protocol.v1_fixture_impact
 
     layout = compatibility_entry("observer_layout")
-    assert layout.write_version == OBSERVER_LAYOUT_SCHEMA_VERSION == "observer-layout-v1"
+    assert layout.write_version == OBSERVER_LAYOUT_SCHEMA_VERSION
+    assert OBSERVER_LAYOUT_SCHEMA_VERSION == "observer-layout-v1"
 
     research = compatibility_entry("research_ui_mount")
     assert research.write_version == RESEARCH_UI_MOUNT == "/research/"
@@ -241,4 +242,7 @@ def test_facade_reexports_compatibility_surface() -> None:
     assert simulation.compatibility_entry is compatibility_entry
     assert simulation.RUNNER_SCHEMA_VERSION_V3 == RUNNER_SCHEMA_VERSION_V3
     assert simulation.RUNNER_SCHEMA_VERSION_V4 == RUNNER_SCHEMA_VERSION_V4
-    assert simulation.PLANNED_RUNNER_SCHEMA_VERSION_V23 == PLANNED_RUNNER_SCHEMA_VERSION_V23
+    assert (
+        simulation.PLANNED_RUNNER_SCHEMA_VERSION_V23
+        == PLANNED_RUNNER_SCHEMA_VERSION_V23
+    )

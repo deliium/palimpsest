@@ -201,6 +201,9 @@ def test_v23_flag_true_encode_decode_golden() -> None:
     async def _fail_closed() -> None:
         with pytest.raises(RunnerConstructionError) as exc_info:
             await SimulationRunner.from_config(flagged, run_id=RunId("run-v3-golden"))
-        assert exc_info.value.code is RunnerConstructionErrorCode.CAPABILITY_UNIMPLEMENTED
+        assert (
+            exc_info.value.code
+            is RunnerConstructionErrorCode.CAPABILITY_UNIMPLEMENTED
+        )
 
     asyncio.run(_fail_closed())

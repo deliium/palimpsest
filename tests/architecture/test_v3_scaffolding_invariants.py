@@ -1,12 +1,13 @@
-"""V3 scaffolding invariant gaps — fixed roster, presentation non-authority, no mandates.
+"""V3 scaffolding invariant gaps: fixed roster, presentation non-authority.
 
 Inventory (existing gates remain authoritative; this file adds only missing pins):
 - test_world_authority, test_cognitive_loop_isolation, test_llm_provider_isolation
-- test_social_isolation, test_experiment_instrumentation_isolation, test_analysis_isolation
-- test_godot_client_isolation, test_observer_isolation, test_cognitive_architecture_boundaries
-- import-linter (pyproject.toml), tests/unit/test_v2_scientific_invariants.py
+- test_social_isolation, test_experiment_instrumentation_isolation
+- test_analysis_isolation, test_godot_client_isolation, test_observer_isolation
+- test_cognitive_architecture_boundaries, import-linter (pyproject.toml)
+- tests/unit/test_v2_scientific_invariants.py
 
-Non-goal: rewrite WorldState / WorldEvent / LLM→command bans already covered elsewhere.
+Non-goal: rewrite WorldState / WorldEvent / LLM→command bans covered elsewhere.
 """
 
 from __future__ import annotations

@@ -2,13 +2,13 @@
 
 from __future__ import annotations
 
+from dataclasses import replace
+
 from experiments.matrix_factors import (
     apply_factor_levels,
     matrix_reference_fixture_base,
 )
 from experiments.matrix_schema import finalize_matrix_cell_config
-from dataclasses import replace
-
 from simulation.runner_models import (
     RUNNER_SCHEMA_VERSION_V4,
     RUNNER_SCHEMA_VERSION_V6,

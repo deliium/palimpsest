@@ -38,13 +38,13 @@ from simulation.runner_models import (
     ReputationMode,
     RunnerStopPolicy,
     SimulationRunnerConfig,
-    V3CapabilityFlags,
-    v3_capability_flags_digest,
     SkillLearningMode,
     TeachingInteractionMode,
     V2CapabilityFlags,
+    V3CapabilityFlags,
     WorldScenarioSpec,
     capability_flags_digest,
+    v3_capability_flags_digest,
 )
 from world.values import Fatigue
 

@@ -1,4 +1,4 @@
-"""Compatibility taxonomy for schema and protocol versions (V1–V3 scaffolding).
+"""Compatibility taxonomy for schema and protocol versions (V1-V3 scaffolding).
 
 Single source of truth for write versions, accepted restore sets, bump
 triggers, and owning packages. Cross-package version strings are mirrored as
@@ -7,7 +7,7 @@ literals here so ``simulation`` never imports ``analysis``, ``experiments``,
 
 Locked decisions for V3 scaffolding (this plan):
 - Default runner write stays ``runner-config-v4`` when all V3 flags are off.
-- Planned accepted schema ``runner-config-v23`` = full v22 keyset ∪ root
+- Planned accepted schema ``runner-config-v23`` = full v22 keyset union root
   ``v3_capability_flags`` (sibling of V2 ``capability_flags``); writers emit
   v23 only when some V3 flag is true (Task 4 owns encode/decode).
 - Event schema write remains replay-v5 (no write bump in this plan).

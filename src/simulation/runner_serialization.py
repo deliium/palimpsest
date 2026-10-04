@@ -48,7 +48,6 @@ from simulation.runner_models import (
     RUNNER_SCHEMA_VERSION_V22,
     RUNNER_SCHEMA_VERSION_V23,
     SUPPORTED_RUNNER_SCHEMA_VERSIONS,
-    V3CapabilityFlags,
     AgentCognitionSpec,
     AgentRunnerSpec,
     ArtifactInterpretationMode,
@@ -90,6 +89,7 @@ from simulation.runner_models import (
     TeachingInteractionMode,
     TerritorialClaimMode,
     V2CapabilityFlags,
+    V3CapabilityFlags,
     WorldScenarioSpec,
     runner_config_diagnostics,
 )
@@ -2245,7 +2245,7 @@ def decode_runner_config(payload: bytes) -> SimulationRunnerConfig:
             data["v3_capability_flags"], path="$.v3_capability_flags"
         )
     else:
-        # Legacy v1–v22 decode upgrades to default-off V3 flags.
+        # Legacy v1-v22 decode upgrades to default-off V3 flags.
         v3_capability_flags = V3CapabilityFlags()
         _LOG.debug(
             "runner_config_v3_flags_synthesized schema_version=%s",
