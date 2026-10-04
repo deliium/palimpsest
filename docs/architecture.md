@@ -180,13 +180,6 @@ Every later V2 feature plan must satisfy this checklist before merge:
 
 Register roadmap milestones via `/aif-roadmap` (e.g. M5 for this scaffolding) — not from individual feature plans inventing milestone IDs ad hoc.
 
-## See also
-
-- [Cognition and agent runtime](cognition-runtime.md)
-- [Memory reconstruction](memory-reconstruction.md)
-- [Social communication](social-communication.md)
-- [LLM providers](llm-providers.md)
-- [Physical simulation](physical-simulation.md)
 ## V3 extension seams (scaffolding)
 
 Later V3 generational plans plug into these seams only. They must not re-open WorldEngine authority, Observation trust, Godot write authority, or scripted emergence.
