@@ -156,19 +156,19 @@ Each checkpoint is a git commit on `main` when those tasks are done. Do not squa
 
 ### Phase 1: Event persistence, snapshots, indexes
 
-- [ ] Task 4: Configurable snapshot intervals + long-run checkpoint presets.
+- [x] Task 4: Configurable snapshot intervals + long-run checkpoint presets.
   - Deliverable: Keep `RunnerCheckpointPolicy`; add a documented durable long-run preset helper that enables checkpoints at a positive `cadence_ticks`. Ensure runner logs cadence hits at INFO already present remain; add DEBUG when a seek uses `snapshot_next_tick` distance. Tests: enabling cadence writes snapshots at expected ticks; disabled remains default.
   - Logging: existing `checkpoint_cadence_hit`; add `[simulation.replay] seek_snapshot_selected run_id=%s target_tick=%s snapshot_next_tick=%s fold_event_count=%s` at DEBUG.
   - Depends on task 3.
   - Files: `src/simulation/runner_models.py`, `src/simulation/runner.py`, `src/simulation/replay.py`, tests under `tests/unit/` / integration.
 
-- [ ] Task 5: Write-time snapshot sparseness (no snapshot DELETE).
+- [x] Task 5: Write-time snapshot sparseness (no snapshot DELETE).
   - Deliverable: Bound snapshot storage solely by write policy (`RunnerCheckpointPolicy` + long-run presets from task 4). Document that `world_snapshots` / projection tables are authoritative and DELETE-rejected — implementers must not add snapshot GC. Optional offline **export** of snapshot payloads for cold storage is allowed as a copy. Tests: long-run preset produces expected snapshot counts; seek to sampled ticks with cadence snapshots matches fold correctness; attempting DELETE via the normal DB role still fails (covered with task 17 / `test_append_only`).
   - Logging: `[persistence.snapshots] write_policy run_id=%s cadence_ticks=%s snapshot_count=%s` at DEBUG/INFO as appropriate — **no** `retention_applied removed=` delete logs.
   - Depends on task 4.
   - Files: docs + preset helpers near runner persistence; tests. Avoid Alembic changes that relax triggers.
 
-- [ ] Task 6: Database indexes for real long-run query gaps.
+- [x] Task 6: Database indexes for real long-run query gaps.
   - Deliverable: Static audit of ORM/SQL. **Do not** add a redundant index for `(run_id, tick, sequence)` — that is already the `world_events` primary key used by `list_events_keyset`. Confirm `ix_world_snapshots_run_next_tick` serves seek. Add only missing useful indexes (candidates: `(run_id, event_type)` and/or actor/target composites for observer filters; memory embedding ANN in task 8; confirm stream/trace indexes from `0012`/`0013`). Migration head beyond `0015` only for additive indexes; no authoritative column semantics change.
   - Logging: migration log module name; optional slow-path DEBUG via task 2 timers.
   - Depends on task 3 (settings/filter needs). Baseline profiling from task 2 is informational only.

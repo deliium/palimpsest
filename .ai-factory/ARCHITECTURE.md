@@ -54,7 +54,7 @@ src/
   infrastructure/        # settings (PALIMPSEST_*), logging, database adapters
 clients/godot-observer/  # read-only presentation client; not a Python package; the API serves its prebuilt tree
                          # HTTP GET + observer WebSocket only; no import from src/
-alembic/versions/        # migrations through 0015 (research branch lineage; 0013 cognition-trace)
+alembic/versions/        # migrations through 0016 (long-run event indexes; 0015 branch lineage; 0013 cognition-trace)
                          # V2 capability flags stay runner JSON only (not Alembic columns)
 docs/                    # contributor docs (architecture, memory, social-communication, …)
 tests/

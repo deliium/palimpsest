@@ -23,7 +23,7 @@ from persistence.subjective_orm import SUBJECTIVE_AGENT_TABLES
 pytestmark = pytest.mark.integration
 
 ROOT = Path(__file__).resolve().parents[2]
-_EXPECTED_HEAD = "0015"
+_EXPECTED_HEAD = "0016"
 
 # Mutable lifecycle tables keep access/forgetting updates; reconstruction and
 # fragment tables are append-only. Trace content uses a selective trigger.

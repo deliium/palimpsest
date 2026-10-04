@@ -2692,6 +2692,15 @@ class SimulationRunner:
                     next_committed,
                     checkpoint_id.value,
                 )
+                _LOG.debug(
+                    "[persistence.snapshots] write_policy run_id=%s "
+                    "cadence_ticks=%s snapshot_count=%s",
+                    self._run_id.value,
+                    policy.cadence_ticks,
+                    next_committed // policy.cadence_ticks
+                    if policy.cadence_ticks
+                    else 0,
+                )
             result = self._engine.last_tick_result
             if result is None:
                 raise RunnerConstructionError(

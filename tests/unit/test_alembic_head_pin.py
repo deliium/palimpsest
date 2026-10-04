@@ -1,4 +1,4 @@
-"""Pin Alembic head at 0015 for research branch lineage."""
+"""Pin Alembic head at 0016 for long-run event filter indexes."""
 
 from __future__ import annotations
 
@@ -15,13 +15,13 @@ ROOT = Path(__file__).resolve().parents[2]
 VERSIONS = ROOT / "alembic" / "versions"
 
 
-def test_alembic_head_is_0015_with_simulation_branches() -> None:
-    assert ALEMBIC_HEAD_REVISION == "0015"
+def test_alembic_head_is_0016_with_long_run_event_indexes() -> None:
+    assert ALEMBIC_HEAD_REVISION == "0016"
     entry = compatibility_entry("alembic_head")
-    assert entry.write_version == "0015"
-    assert (VERSIONS / "0014_stochastic_identity.py").is_file()
+    assert entry.write_version == "0016"
     assert (VERSIONS / "0015_simulation_branches.py").is_file()
-    assert sorted(VERSIONS.glob("0016_*.py")) == []
+    assert (VERSIONS / "0016_long_run_event_indexes.py").is_file()
+    assert sorted(VERSIONS.glob("0017_*.py")) == []
 
 
 def test_cognition_trace_tables_outside_authoritative() -> None:

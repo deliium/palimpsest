@@ -71,7 +71,7 @@ Contributor summary:
 | Derivation v1 / v2 / v3 | Deterministic ID/stream derivation (v2 includes rules fingerprint) |
 | Subjective codec v1 | Semantic beliefs, relationship profiles, mutation receipts (non-authoritative) |
 | Runner config | Write `runner-config-v4` (`cognition_trace` + V2 capability flags); accept `v1`/`v2`/`v3` decode with default-off flags and disabled tracing |
-| Alembic head | Pin **`0015`** — `simulation_branches` control-plane lineage (non-authoritative); prior `0013` cognition-trace indexes remain; capability flags stay runner JSON only |
+| Alembic head | Pin **`0016`** — additive long-run `world_events` filter indexes `(run_id, event_type|actor_id|target_id)`; prior `0015` branch lineage and `0013` cognition-trace indexes remain; capability flags stay runner JSON only |
 
 Runs never mix replay schema versions. Legacy schema-v1 audit events remain decodable for export but must not enter the authoritative log. Alembic revision `0004` persists SQL cause/occurrence columns so restored engines reproduce the same next observation as live engines (eventful and eventless prior windows). Revision `0005` adds owner-scoped episodic memory tables. Revision `0006` adds reconstruction/derivation provenance with selective immutability. Revision `0007` adds semantic belief and directed relationship tables. Revision `0008` adds communicated transmission metadata and testimony-factor columns. Observation codecs round-trip every field and provenance type with exact keys.
 
@@ -111,7 +111,13 @@ Append-only `experiment_definitions`, `experiment_assignments`, and `experiment_
 - **`0015_simulation_branches`:** control-plane genealogy (`parent_run_id`, `child_run_id`, `fork_tick`, intervention fingerprint/canonical, `branch_id`) **outside** `AUTHORITATIVE_TABLES`. Forking rematerializes a child journal under a new `run_id` and never rewrites parent history. Default seed stream **inherits** parent `stochastic_identity` unless intervention kind `alternate_seed_stream` is selected.
 - Factory: `persistence.create_branch_lineage_repository(...)`. Observer manifests stay on `observer-protocol-v1` with required `run_id` plus optional fork fields.
 
-Migration head is `0015`. V2 capability flags are **not** Alembic columns — they are carried only inside canonical runner-config JSON stored in existing `run_control.config_payload` (`0011`). Tests may target only databases whose name contains `palimpsest_test`; Alembic receives the validated URL directly and fails closed on conflicting ambient URLs.
+## Long-run snapshot cadence and indexes (`0016`)
+
+- **Write-time sparseness only.** `world_snapshots` and snapshot projection tables are authoritative and **DELETE-rejected**. Bound snapshot storage by enabling `RunnerCheckpointPolicy` with a positive `cadence_ticks` (helpers: `long_run_checkpoint_policy` / `long_run_persistence_spec` for 100 / 500 / 1000). Do **not** implement in-DB snapshot GC. Optional offline **export copies** of snapshot payloads are allowed; copies never authorize deleting live append-only rows.
+- Short-run default remains checkpoints **off** (bootstrap snapshot only). Seek uses `ix_world_snapshots_run_next_tick` via nearest verified snapshot at-or-before the target, then folds events.
+- **`0016_long_run_event_indexes`:** additive indexes `ix_world_events_run_event_type`, `ix_world_events_run_actor_id`, `ix_world_events_run_target_id` for run-scoped observer filters. PK `(run_id, tick, sequence)` continues to serve keyset pages. No authoritative column semantics change; append-only triggers unchanged.
+
+Migration head is `0016`. V2 capability flags are **not** Alembic columns — they are carried only inside canonical runner-config JSON stored in existing `run_control.config_payload` (`0011`). Tests may target only databases whose name contains `palimpsest_test`; Alembic receives the validated URL directly and fails closed on conflicting ambient URLs.
 
 ## Logging
 

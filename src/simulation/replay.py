@@ -572,6 +572,15 @@ class ReplayService:
                     persistence_codec_version=manifest.persistence_codec_version,
                 )
 
+        _LOGGER.debug(
+            "[simulation.replay] seek_snapshot_selected run_id=%s target_tick=%s "
+            "snapshot_next_tick=%s fold_event_count=%s",
+            run_id.value,
+            target_tick.value,
+            snapshot.next_tick.value,
+            len(events),
+        )
+
         committed_through = to_commit_tick
         try:
             engine = WorldEngine.restore_from_snapshot(
