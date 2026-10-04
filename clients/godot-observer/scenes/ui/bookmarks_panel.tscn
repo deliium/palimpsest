@@ -1,0 +1,51 @@
+[gd_scene load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/ui/bookmarks_panel.gd" id="1_bookmarks"]
+
+[node name="BookmarksPanel" type="PanelContainer"]
+offset_left = 1120.0
+offset_top = 430.0
+offset_right = 1580.0
+offset_bottom = 700.0
+script = ExtResource("1_bookmarks")
+
+[node name="Column" type="VBoxContainer" parent="."]
+layout_mode = 2
+theme_override_constants/separation = 6
+
+[node name="Title" type="Label" parent="Column"]
+layout_mode = 2
+text = "Bookmarks"
+
+[node name="Empty" type="Label" parent="Column"]
+layout_mode = 2
+text = "No bookmarks for this run"
+
+[node name="List" type="ItemList" parent="Column"]
+custom_minimum_size = Vector2(0, 120)
+layout_mode = 2
+size_flags_vertical = 3
+
+[node name="Note" type="LineEdit" parent="Column"]
+layout_mode = 2
+placeholder_text = "Optional note"
+
+[node name="Actions" type="HBoxContainer" parent="Column"]
+layout_mode = 2
+theme_override_constants/separation = 6
+
+[node name="Add" type="Button" parent="Column/Actions"]
+layout_mode = 2
+text = "Add at tick"
+
+[node name="Jump" type="Button" parent="Column/Actions"]
+layout_mode = 2
+text = "Jump"
+
+[node name="Edit" type="Button" parent="Column/Actions"]
+layout_mode = 2
+text = "Edit note"
+
+[node name="Delete" type="Button" parent="Column/Actions"]
+layout_mode = 2
+text = "Delete"

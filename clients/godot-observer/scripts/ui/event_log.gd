@@ -263,41 +263,41 @@ func _describe(
 		"AGENT_WAITED":
 			return "%s waited" % subject
 		"WEATHER_CHANGED":
-			return "weather"
+			return "weather changed at %s" % (origin if origin != "" else "location")
 		"SEASON_CHANGED":
-			return "season"
+			return "season changed"
 		"TEMPERATURE_BAND_CHANGED":
-			return "temperature"
+			return "temperature band changed at %s" % (origin if origin != "" else "location")
 		"RESOURCE_NODE_DEPLETED":
-			return "resource depleted"
+			return "resource depleted at %s" % (origin if origin != "" else "location")
 		"RESOURCE_NODE_RECOVERED":
-			return "resource recovered"
+			return "resource recovered at %s" % (origin if origin != "" else "location")
 		"ENVIRONMENTAL_HAZARD_STARTED":
-			return "hazard started"
+			return "hazard started at %s" % (origin if origin != "" else "location")
 		"ENVIRONMENTAL_HAZARD_ENDED":
-			return "hazard ended"
+			return "hazard ended at %s" % (origin if origin != "" else "location")
 		"RESOURCE_REGENERATED":
 			return "resource regenerated"
 		"ARTIFACT_CREATED":
-			return "%s inscribed" % subject
+			return "%s created artifact at %s" % [subject, origin if origin != "" else "location"]
 		"ARTIFACT_MODIFIED":
-			return "%s amended" % subject
+			return "%s amended artifact" % subject
 		"ARTIFACT_MOVED":
-			return "%s transferred artifact" % subject
+			return "%s moved artifact %s -> %s" % [subject, origin, destination]
 		"ARTIFACT_DESTROYED":
-			return "%s erased" % subject
+			return "%s erased artifact" % subject
 		"RESOURCE_HARVESTED":
-			return "%s harvested" % subject
+			return "%s harvested at %s" % [subject, origin if origin != "" else "location"]
 		"CRAFT_STARTED":
 			return "%s began craft" % subject
 		"ITEM_CRAFTED":
 			return "%s crafted" % subject
 		"STRUCTURE_BUILT":
-			return "%s built" % subject
+			return "%s built structure at %s" % [subject, origin if origin != "" else "location"]
 		"STRUCTURE_REPAIRED":
-			return "%s repaired" % subject
+			return "%s repaired structure" % subject
 		"ITEM_STORED":
-			return "%s stored" % subject
+			return "%s stored item" % subject
 		"NEEDS_APPLIED":
 			return "%s needs" % subject
 		"EXPOSURE_APPLIED":

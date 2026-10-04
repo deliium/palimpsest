@@ -29,6 +29,10 @@ signal follow_agent_requested(enabled: bool)
 signal follow_location_requested(enabled: bool)
 signal focused_prev_requested
 signal focused_next_requested
+signal bookmark_add_requested(note: String)
+signal bookmark_jump_requested(tick: int, sequence: Variant)
+signal bookmark_delete_requested(index: int)
+signal bookmark_edit_requested(index: int, note: String)
 
 var _live_tick := 0
 var _selected_id := ""
@@ -121,6 +125,16 @@ func _ready() -> void:
 				open_child_branch_requested.emit(child_run_id, fork_tick)
 		)
 		branch.load_more_children_requested.connect(func() -> void: load_more_branches_requested.emit())
+	var bookmarks = $BookmarksPanel
+	if bookmarks != null:
+		bookmarks.add_requested.connect(func(note: String) -> void: bookmark_add_requested.emit(note))
+		bookmarks.jump_requested.connect(func(tick: int, sequence: Variant) -> void:
+			bookmark_jump_requested.emit(tick, sequence)
+		)
+		bookmarks.delete_requested.connect(func(index: int) -> void: bookmark_delete_requested.emit(index))
+		bookmarks.edit_requested.connect(func(index: int, note: String) -> void:
+			bookmark_edit_requested.emit(index, note)
+		)
 
 
 func jump_tick_value() -> int:
@@ -248,6 +262,12 @@ func set_nav_depth(depth: int) -> void:
 	var branch = $BranchPanel
 	if branch != null:
 		branch.set_nav_depth(depth)
+
+
+func show_bookmarks(items: Array) -> void:
+	var bookmarks = $BookmarksPanel
+	if bookmarks != null:
+		bookmarks.show_bookmarks(items)
 
 
 func is_overlay_enabled(kind: String) -> bool:

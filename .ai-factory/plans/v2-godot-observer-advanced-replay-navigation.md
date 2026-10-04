@@ -252,13 +252,13 @@ Each checkpoint is a git commit on `main` when those tasks are done. Do not squa
 
 ### Phase 3: Bookmarks and usability
 
-- [ ] Task 7: Local researcher bookmarks.
+- [x] Task 7: Local researcher bookmarks.
   - Deliverable: Persist bookmarks under `user://observer_bookmarks/<safe_stem>.json` with filesystem-safe stem + original `run_id` in JSON; fields tick, optional sequence, note, `created_at_utc`. UI to add (default note empty or short prompt), list, edit note, delete, and jump (seek). Bookmarks survive run switches for that `run_id` and must not be written to any simulation API. Document Web persistence limits in code comment + docs task. Empty list empty-state. Focused unit test for sanitize stem, persist/reload, jump seek.
   - Logging: INFO `bookmark_jump tick=%s`; DEBUG add/delete with tick/sequence and `note_len` only.
   - Depends on task 1.
   - Files: new `clients/godot-observer/scripts/ui/bookmarks.gd` (or `protocol/bookmarks.gd` store + UI), `ui_layer.gd`, `session.gd`, tests (temp `user://` paths).
 
-- [ ] Task 8: Usability chrome — shortcuts, status, inspector, descriptions.
+- [x] Task 8: Usability chrome — shortcuts, status, inspector, descriptions.
   - Deliverable: Implement keyboard shortcuts (without breaking LineEdit focus), loading/seeking/switching indicators, connection + LIVE/REPLAY/behind-live badges, clearer protocol-mismatch and empty-state copy, richer selected-agent inspector (still read-only objective snapshot fields), and improved `_describe` strings for major env/artifact/structure events. Verify Web export constraints (no thread features, shortcuts work in browser when focus is not in a text field). Focused unit tests for describe strings and status copy; shortcut wiring covered in Task 9 where hard to unit-test headlessly.
   - Logging: DEBUG `shortcut action=%s`; status transitions already INFO/DEBUG via session; inspector DEBUG on open.
   - Depends on tasks 5–7 for follow/bookmark shortcuts.

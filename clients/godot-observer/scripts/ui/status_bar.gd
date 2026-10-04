@@ -53,7 +53,39 @@ func status_text() -> String:
 
 
 func show_state(code: String, detail: String) -> void:
-	_state.text = detail if detail != "" else code
+	var copy := detail if detail != "" else code
+	match code:
+		"unsupported_observer_protocol":
+			copy = "Unsupported protocol — expected observer-protocol-v1"
+		"loading":
+			copy = "Loading"
+		"seeking":
+			copy = "Seeking…"
+		"switching_run":
+			copy = "Switching run…"
+		"behind_live":
+			copy = "REPLAY (behind live)"
+		"ready":
+			if detail != "" and not detail.begins_with("LIVE") and not detail.begins_with("REPLAY"):
+				copy = detail
+		"nav_stack_empty":
+			copy = "No previous run"
+		"branch_root":
+			copy = "No parent branch"
+		"unauthorized":
+			copy = "Capability denied"
+	_state.text = copy
+
+
+func show_transport(mode: String, paused: bool, behind_live: bool, detail: String = "") -> void:
+	var badge := mode
+	if paused:
+		badge += " paused"
+	if behind_live:
+		badge += " behind live"
+	if detail != "":
+		badge += " — %s" % detail
+	_state.text = badge
 
 
 func _on_connect() -> void:

@@ -2,6 +2,7 @@ extends Node
 
 const ObserverLog := preload("res://scripts/log.gd")
 const FixturePlayer := preload("res://scripts/net/fixture_player.gd")
+const Bookmarks := preload("res://scripts/protocol/bookmarks.gd")
 
 @onready var _world: Node2D = $WorldView
 @onready var _ui: CanvasLayer = $UILayer
@@ -11,6 +12,7 @@ const FixturePlayer := preload("res://scripts/net/fixture_player.gd")
 func _ready() -> void:
 	ObserverLog.start()
 	ObserverLog.info("main", "client_boot renderer=gl_compatibility")
+	_ensure_shortcuts()
 	_session.status_changed.connect(_ui.show_status)
 	_session.world_replaced.connect(_world.show_world)
 	_session.frame_sought.connect(_world.replace_sought_frame)
@@ -22,7 +24,6 @@ func _ready() -> void:
 	_session.branch_updated.connect(_on_branch_updated)
 	_session.nav_stack_changed.connect(_ui.set_nav_depth)
 	_session.marker_enrichment_loaded.connect(_ui.set_marker_enrichment)
-	_world.inspect_requested.connect(_ui.show_inspector)
 	_world.inspect_cleared.connect(_ui.clear_inspector)
 	_ui.connect_requested.connect(_session.start_with_run_id)
 	_session.run_id_applied.connect(_ui.set_run_id)
@@ -64,6 +65,8 @@ func _ready() -> void:
 		_ui.note_selection(entity_id)
 		_session.set_agent_focus(entity_id)
 		_ui.set_filters_from_focus(entity_id, _session.focus_location_id)
+		snapshot["follow"] = _session.follow_mode == "agent"
+		_ui.show_inspector(snapshot)
 	)
 	_world.inspect_cleared.connect(func() -> void:
 		_ui.note_selection("")
@@ -71,6 +74,11 @@ func _ready() -> void:
 			_session.set_follow("agent", false)
 	)
 	_world.location_selected.connect(_on_location_focus)
+	_ui.bookmark_add_requested.connect(_on_bookmark_add)
+	_ui.bookmark_jump_requested.connect(_on_bookmark_jump)
+	_ui.bookmark_delete_requested.connect(_on_bookmark_delete)
+	_ui.bookmark_edit_requested.connect(_on_bookmark_edit)
+	_session.run_id_applied.connect(_reload_bookmarks)
 	_session.begin()
 
 
@@ -155,6 +163,121 @@ func _apply_follow_camera() -> void:
 		_world.focus_agent(_session.focus_agent_id)
 	elif _session.follow_mode == "location" and _session.focus_location_id != "":
 		_world.focus_location(_session.focus_location_id)
+
+
+func _reload_bookmarks(_run_id: String = "") -> void:
+	if _session.run_id.is_empty():
+		_ui.show_bookmarks([])
+		return
+	_ui.show_bookmarks(Bookmarks.load_for(_session.run_id))
+
+
+func _on_bookmark_add(note: String) -> void:
+	if _session.run_id.is_empty():
+		return
+	var items := Bookmarks.add(
+		_session.run_id,
+		_session.transport.tick,
+		_session.transport.sequence,
+		note,
+	)
+	_ui.show_bookmarks(items)
+
+
+func _on_bookmark_jump(tick: int, sequence: Variant) -> void:
+	ObserverLog.info("main", "bookmark_jump tick=%s" % tick)
+	if sequence == null:
+		_session.jump_to_tick(tick)
+	else:
+		_session.jump_to_event(tick, int(sequence))
+
+
+func _on_bookmark_delete(index: int) -> void:
+	if _session.run_id.is_empty():
+		return
+	_ui.show_bookmarks(Bookmarks.remove_at(_session.run_id, index))
+
+
+func _on_bookmark_edit(index: int, note: String) -> void:
+	if _session.run_id.is_empty():
+		return
+	_ui.show_bookmarks(Bookmarks.update_note(_session.run_id, index, note))
+
+
+func _ensure_shortcuts() -> void:
+	_bind_key("observer_play_pause", KEY_SPACE)
+	_bind_key("observer_prev_event", KEY_LEFT)
+	_bind_key("observer_next_event", KEY_RIGHT)
+	_bind_key("observer_prev_tick", KEY_LEFT, true)
+	_bind_key("observer_next_tick", KEY_RIGHT, true)
+	_bind_key("observer_live", KEY_L)
+	_bind_key("observer_follow", KEY_F)
+	_bind_key("observer_bookmark", KEY_B)
+	_bind_key("observer_focus_prev", KEY_BRACKETLEFT)
+	_bind_key("observer_focus_next", KEY_BRACKETRIGHT)
+	_bind_key("observer_clear_focus", KEY_ESCAPE)
+
+
+func _bind_key(action: String, keycode: Key, shift: bool = false) -> void:
+	if not InputMap.has_action(action):
+		InputMap.add_action(action)
+	var event := InputEventKey.new()
+	event.keycode = keycode
+	event.shift_pressed = shift
+	InputMap.action_add_event(action, event)
+
+
+func _unhandled_input(event: InputEvent) -> void:
+	if _text_field_focused():
+		return
+	if event.is_action_pressed("observer_play_pause"):
+		_shortcut("play_pause")
+		if _session.transport.paused:
+			_session.play()
+		else:
+			_session.pause()
+	elif event.is_action_pressed("observer_prev_event"):
+		_shortcut("previous_event")
+		_session.previous_event()
+	elif event.is_action_pressed("observer_next_event"):
+		_shortcut("next_event")
+		_session.next_event()
+	elif event.is_action_pressed("observer_prev_tick"):
+		_shortcut("previous_tick")
+		_session.previous_tick()
+	elif event.is_action_pressed("observer_next_tick"):
+		_shortcut("next_tick")
+		_session.next_tick()
+	elif event.is_action_pressed("observer_live"):
+		_shortcut("return_live")
+		_session.return_to_live()
+	elif event.is_action_pressed("observer_follow"):
+		_shortcut("follow_toggle")
+		_session.toggle_follow_agent()
+	elif event.is_action_pressed("observer_bookmark"):
+		_shortcut("bookmark")
+		_on_bookmark_add("")
+	elif event.is_action_pressed("observer_focus_prev"):
+		_shortcut("focus_prev")
+		_session.previous_focused_event()
+	elif event.is_action_pressed("observer_focus_next"):
+		_shortcut("focus_next")
+		_session.next_focused_event()
+	elif event.is_action_pressed("observer_clear_focus"):
+		_shortcut("clear_focus")
+		_session.clear_focus()
+		_session.set_follow("", false)
+		_ui.note_selection("")
+
+
+func _shortcut(action: String) -> void:
+	ObserverLog.debug("main", "shortcut action=%s" % action)
+	get_viewport().set_input_as_handled()
+
+
+func _text_field_focused() -> bool:
+	var focused := get_viewport().gui_get_focus_owner()
+	return focused is LineEdit or focused is TextEdit or focused is SpinBox
 
 
 func _on_run_loaded(record: Dictionary) -> void:

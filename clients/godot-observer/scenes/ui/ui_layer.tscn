@@ -1,4 +1,4 @@
-[gd_scene load_steps=11 format=3]
+[gd_scene load_steps=12 format=3]
 
 [ext_resource type="Script" path="res://scripts/ui/ui_layer.gd" id="1_ui"]
 [ext_resource type="PackedScene" path="res://scenes/ui/status_bar.tscn" id="2_status"]
@@ -10,6 +10,7 @@
 [ext_resource type="PackedScene" path="res://scenes/ui/narrative_selector.tscn" id="8_narrative"]
 [ext_resource type="PackedScene" path="res://scenes/ui/debugger_panel.tscn" id="9_debugger"]
 [ext_resource type="PackedScene" path="res://scenes/ui/branch_panel.tscn" id="10_branch"]
+[ext_resource type="PackedScene" path="res://scenes/ui/bookmarks_panel.tscn" id="11_bookmarks"]
 
 [node name="UILayer" type="CanvasLayer"]
 script = ExtResource("1_ui")
@@ -161,6 +162,8 @@ offset_right = 1100.0
 offset_bottom = 420.0
 
 [node name="BranchPanel" parent="." instance=ExtResource("10_branch")]
+
+[node name="BookmarksPanel" parent="." instance=ExtResource("11_bookmarks")]
 
 [node name="Timeline" parent="." instance=ExtResource("5_timeline")]
 

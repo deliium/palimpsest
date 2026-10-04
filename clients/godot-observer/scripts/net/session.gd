@@ -1360,6 +1360,10 @@ func _apply_sought_frame(frame: Variant, seek_id: int) -> void:
 		"session",
 		"seek_applied mode=%s tick=%s sequence=%s" % [transport.mode, transport.tick, sequence_text],
 	)
+	status_changed.emit(
+		"ready",
+		"%s tick %s" % [transport.mode, transport.tick],
+	)
 	frame_sought.emit(frame, meta.get("event", null), bool(meta.get("forward", false)))
 	if _playing:
 		_schedule_step()

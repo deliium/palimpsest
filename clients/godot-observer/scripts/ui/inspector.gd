@@ -16,13 +16,20 @@ func show_agent(snapshot: Dictionary) -> void:
 	var inventory: Array = snapshot.get("inventory", [])
 	var inventory_text := "(empty)" if inventory.is_empty() else ", ".join(inventory)
 	var extras := _optional_ids(snapshot)
-	_body.text = "agent_id %s\nentity_id %s\nlocation %s\nlife_status %s\ninventory %s\nlatest %s%s" % [
+	var follow := "off"
+	if bool(snapshot.get("follow", false)):
+		follow = "on"
+	_body.text = (
+		"agent_id %s\nentity_id %s\nlocation %s\nlife_status %s\ninventory %s\n"
+		+ "latest %s\nfollow %s%s"
+	) % [
 		str(snapshot.get("agent_id", "")),
 		entity_id,
 		str(snapshot.get("location_name", "")),
 		str(snapshot.get("life_status", "")),
 		inventory_text,
 		str(snapshot.get("latest_event", "")),
+		follow,
 		extras,
 	]
 	var measures: Variant = snapshot.get("measures", null)
