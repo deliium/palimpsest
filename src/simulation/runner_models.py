@@ -91,6 +91,7 @@ RUNNER_SCHEMA_VERSION_V19: Final[str] = "runner-config-v19"
 RUNNER_SCHEMA_VERSION_V20: Final[str] = "runner-config-v20"
 RUNNER_SCHEMA_VERSION_V21: Final[str] = "runner-config-v21"
 RUNNER_SCHEMA_VERSION_V22: Final[str] = "runner-config-v22"
+RUNNER_SCHEMA_VERSION_V23: Final[str] = "runner-config-v23"
 RUNNER_SCHEMA_VERSION: Final[str] = RUNNER_SCHEMA_VERSION_V4
 SUPPORTED_RUNNER_SCHEMA_VERSIONS: Final[frozenset[str]] = frozenset(
     {
@@ -116,6 +117,7 @@ SUPPORTED_RUNNER_SCHEMA_VERSIONS: Final[frozenset[str]] = frozenset(
         RUNNER_SCHEMA_VERSION_V20,
         RUNNER_SCHEMA_VERSION_V21,
         RUNNER_SCHEMA_VERSION_V22,
+        RUNNER_SCHEMA_VERSION_V23,
     }
 )
 RESULT_SCHEMA_VERSION_V1: Final[str] = "runner-result-v1"
@@ -146,6 +148,17 @@ _V2_OWNED_CAPABILITY_FLAGS: Final[frozenset[str]] = frozenset(
         "short_term_emotional_state",
     }
 )
+
+_V3_CAPABILITY_FLAG_NAMES: Final[tuple[str, ...]] = (
+    "generational_population",
+    "kinship_inheritance",
+    "multi_polity_migration",
+    "institutional_economy",
+    "cultural_historical_memory",
+)
+
+# Empty until later V3 plans own individual flags.
+_V3_OWNED_CAPABILITY_FLAGS: Final[frozenset[str]] = frozenset()
 
 _OVERRIDEABLE_DRIVE_KINDS: Final[frozenset[DriveKind]] = frozenset(
     {
@@ -627,6 +640,7 @@ _SKILL_SCHEMAS: Final[frozenset[str]] = frozenset(
         RUNNER_SCHEMA_VERSION_V20,
         RUNNER_SCHEMA_VERSION_V21,
         RUNNER_SCHEMA_VERSION_V22,
+        RUNNER_SCHEMA_VERSION_V23,
     }
 )
 
@@ -763,6 +777,49 @@ class V2CapabilityFlags:
 
 # Alias kept for plan wording; prefer V2CapabilityFlags in new code.
 CapabilityProfile = V2CapabilityFlags
+
+
+@dataclass(frozen=True, slots=True)
+class V3CapabilityFlags:
+    """Run-level reserved V3 capability identifiers (configuration only).
+
+    Defaults are all off (V2-equivalent wiring). Enabling any flag fails closed
+    at ``SimulationRunner.from_config`` with ``capability_unimplemented`` until
+    a later plan owns it. Wire key ``v3_capability_flags`` is a sibling of V2
+    ``capability_flags`` and requires ``runner-config-v23``.
+    """
+
+    generational_population: bool = False
+    kinship_inheritance: bool = False
+    multi_polity_migration: bool = False
+    institutional_economy: bool = False
+    cultural_historical_memory: bool = False
+
+    def __post_init__(self) -> None:
+        for name in _V3_CAPABILITY_FLAG_NAMES:
+            value = getattr(self, name)
+            if type(value) is not bool:
+                raise TypeError(f"V3CapabilityFlags.{name} must be bool")
+
+    def any_enabled(self) -> bool:
+        return any(getattr(self, name) for name in _V3_CAPABILITY_FLAG_NAMES)
+
+    def enabled_names(self) -> tuple[str, ...]:
+        return tuple(name for name in _V3_CAPABILITY_FLAG_NAMES if getattr(self, name))
+
+    def unimplemented_enabled_names(self) -> tuple[str, ...]:
+        """Enabled flags that are not yet owned by an implementation plan."""
+        return tuple(
+            name
+            for name in self.enabled_names()
+            if name not in _V3_OWNED_CAPABILITY_FLAGS
+        )
+
+    def owned_enabled_names(self) -> tuple[str, ...]:
+        """Enabled flags owned by an implemented plan."""
+        return tuple(
+            name for name in self.enabled_names() if name in _V3_OWNED_CAPABILITY_FLAGS
+        )
 
 
 class CognitionTraceDetail(StrEnum):
@@ -2107,6 +2164,7 @@ class SimulationRunnerConfig:
     persistence: RunnerPersistenceSpec = RunnerPersistenceSpec()
     experiment: ExperimentAssignmentRef | None = None
     capability_flags: V2CapabilityFlags = V2CapabilityFlags()
+    v3_capability_flags: V3CapabilityFlags = V3CapabilityFlags()
     cognition_trace: CognitionTraceSpec = CognitionTraceSpec()
     schema_version: str = RUNNER_SCHEMA_VERSION
     derivation_version: str = DERIVATION_VERSION_V3
@@ -2160,6 +2218,8 @@ class SimulationRunnerConfig:
             raise TypeError("experiment must be ExperimentAssignmentRef or None")
         if type(self.capability_flags) is not V2CapabilityFlags:
             raise TypeError("capability_flags must be V2CapabilityFlags")
+        if type(self.v3_capability_flags) is not V3CapabilityFlags:
+            raise TypeError("v3_capability_flags must be V3CapabilityFlags")
         if type(self.cognition_trace) is not CognitionTraceSpec:
             raise TypeError("cognition_trace must be CognitionTraceSpec")
         if self.schema_version not in SUPPORTED_RUNNER_SCHEMA_VERSIONS:
@@ -2180,6 +2240,20 @@ class SimulationRunnerConfig:
             raise ValueError(
                 "capability flags require runner-config-v3+ "
                 "(code=capability_requires_v3)"
+            )
+        if (
+            self.v3_capability_flags.any_enabled()
+            and self.schema_version != RUNNER_SCHEMA_VERSION_V23
+        ):
+            _LOGGER.error(
+                "v3_capability_requires_v23 schema_version=%s "
+                "flag_count=%s reason_code=v3_capability_requires_v23",
+                self.schema_version,
+                len(self.v3_capability_flags.enabled_names()),
+            )
+            raise ValueError(
+                "V3 capability flags require runner-config-v23 "
+                "(code=v3_capability_requires_v23)"
             )
         if (
             self.schema_version
@@ -2213,6 +2287,25 @@ class SimulationRunnerConfig:
                 len(enabled),
                 ",".join(enabled),
             )
+        v3_enabled = self.v3_capability_flags.enabled_names()
+        if v3_enabled:
+            _LOGGER.info(
+                "runner_config_v3_capability_flags_enabled schema_version=%s "
+                "flag_count=%s flag_names=%s",
+                self.schema_version,
+                len(v3_enabled),
+                ",".join(v3_enabled),
+            )
+        _LOGGER.debug(
+            "runner_config_v3_capability_flags schema_version=%s "
+            "flag_names=%s flag_values=%s",
+            self.schema_version,
+            ",".join(_V3_CAPABILITY_FLAG_NAMES),
+            ",".join(
+                str(getattr(self.v3_capability_flags, name)).lower()
+                for name in _V3_CAPABILITY_FLAG_NAMES
+            ),
+        )
         consolidation_modes = tuple(
             agent.cognition.consolidation_mode for agent in self.agents
         )
@@ -2240,6 +2333,7 @@ class SimulationRunnerConfig:
             RUNNER_SCHEMA_VERSION_V20,
             RUNNER_SCHEMA_VERSION_V21,
             RUNNER_SCHEMA_VERSION_V22,
+            RUNNER_SCHEMA_VERSION_V23,
         }
         if non_disabled and self.schema_version not in consolidation_schemas:
             _LOGGER.error(
@@ -2288,6 +2382,7 @@ class SimulationRunnerConfig:
             RUNNER_SCHEMA_VERSION_V20,
             RUNNER_SCHEMA_VERSION_V21,
             RUNNER_SCHEMA_VERSION_V22,
+            RUNNER_SCHEMA_VERSION_V23,
         }
         if reflecting and self.schema_version not in reflection_schemas:
             _LOGGER.error(
@@ -2336,6 +2431,7 @@ class SimulationRunnerConfig:
             RUNNER_SCHEMA_VERSION_V20,
             RUNNER_SCHEMA_VERSION_V21,
             RUNNER_SCHEMA_VERSION_V22,
+            RUNNER_SCHEMA_VERSION_V23,
         }
         if planning and self.schema_version not in prospective_schemas:
             _LOGGER.error(
@@ -2383,6 +2479,7 @@ class SimulationRunnerConfig:
             RUNNER_SCHEMA_VERSION_V20,
             RUNNER_SCHEMA_VERSION_V21,
             RUNNER_SCHEMA_VERSION_V22,
+            RUNNER_SCHEMA_VERSION_V23,
         }
         if considering and self.schema_version not in counterfactual_schemas:
             _LOGGER.error(
@@ -2429,6 +2526,7 @@ class SimulationRunnerConfig:
             RUNNER_SCHEMA_VERSION_V20,
             RUNNER_SCHEMA_VERSION_V21,
             RUNNER_SCHEMA_VERSION_V22,
+            RUNNER_SCHEMA_VERSION_V23,
         }:
             _LOGGER.error(
                 "invalid_fields path=agents.cognition.communication_strategy_mode "
@@ -2473,6 +2571,7 @@ class SimulationRunnerConfig:
             RUNNER_SCHEMA_VERSION_V20,
             RUNNER_SCHEMA_VERSION_V21,
             RUNNER_SCHEMA_VERSION_V22,
+            RUNNER_SCHEMA_VERSION_V23,
         }:
             _LOGGER.error(
                 "invalid_fields path=agents.cognition.reputation_mode "
@@ -2559,6 +2658,7 @@ class SimulationRunnerConfig:
             RUNNER_SCHEMA_VERSION_V20,
             RUNNER_SCHEMA_VERSION_V21,
             RUNNER_SCHEMA_VERSION_V22,
+            RUNNER_SCHEMA_VERSION_V23,
         }:
             _LOGGER.error(
                 "invalid_fields path=agents.cognition.teaching_interaction_mode "
@@ -2594,6 +2694,7 @@ class SimulationRunnerConfig:
             RUNNER_SCHEMA_VERSION_V20,
             RUNNER_SCHEMA_VERSION_V21,
             RUNNER_SCHEMA_VERSION_V22,
+            RUNNER_SCHEMA_VERSION_V23,
         }
         if (dynamics is not None and self.schema_version not in dynamics_schemas) or (
             self.schema_version == RUNNER_SCHEMA_VERSION_V14 and dynamics is None
@@ -2624,6 +2725,7 @@ class SimulationRunnerConfig:
             RUNNER_SCHEMA_VERSION_V20,
             RUNNER_SCHEMA_VERSION_V21,
             RUNNER_SCHEMA_VERSION_V22,
+            RUNNER_SCHEMA_VERSION_V23,
         }:
             _LOGGER.error(
                 "invalid_fields path=agents.cognition.territorial_claim_mode "
@@ -2660,6 +2762,7 @@ class SimulationRunnerConfig:
             RUNNER_SCHEMA_VERSION_V20,
             RUNNER_SCHEMA_VERSION_V21,
             RUNNER_SCHEMA_VERSION_V22,
+            RUNNER_SCHEMA_VERSION_V23,
         }:
             _LOGGER.error(
                 "invalid_fields path=agents.cognition.group_formation_mode "
@@ -2690,6 +2793,7 @@ class SimulationRunnerConfig:
             RUNNER_SCHEMA_VERSION_V20,
             RUNNER_SCHEMA_VERSION_V21,
             RUNNER_SCHEMA_VERSION_V22,
+            RUNNER_SCHEMA_VERSION_V23,
         }:
             _LOGGER.error(
                 "invalid_fields path=agents.cognition.social_norm_mode "
@@ -2723,6 +2827,7 @@ class SimulationRunnerConfig:
             RUNNER_SCHEMA_VERSION_V20,
             RUNNER_SCHEMA_VERSION_V21,
             RUNNER_SCHEMA_VERSION_V22,
+            RUNNER_SCHEMA_VERSION_V23,
         }
         if conventions_on and self.schema_version not in convention_schemas:
             _LOGGER.error(
@@ -2761,6 +2866,7 @@ class SimulationRunnerConfig:
             RUNNER_SCHEMA_VERSION_V20,
             RUNNER_SCHEMA_VERSION_V21,
             RUNNER_SCHEMA_VERSION_V22,
+            RUNNER_SCHEMA_VERSION_V23,
         }
         if artifacts_on and self.schema_version not in artifact_schemas:
             runner_log.error(
@@ -2795,6 +2901,7 @@ class SimulationRunnerConfig:
             RUNNER_SCHEMA_VERSION_V20,
             RUNNER_SCHEMA_VERSION_V21,
             RUNNER_SCHEMA_VERSION_V22,
+            RUNNER_SCHEMA_VERSION_V23,
         }
         if naming_on and self.schema_version not in naming_schemas:
             runner_log.error(
@@ -2826,12 +2933,17 @@ class SimulationRunnerConfig:
         narrative_schemas = {
             RUNNER_SCHEMA_VERSION_V21,
             RUNNER_SCHEMA_VERSION_V22,
+            RUNNER_SCHEMA_VERSION_V23,
         }
         budget_modes = tuple(
             agent.cognition.cognitive_budget_mode for agent in self.agents
         )
         budgets_on = any(mode is CognitiveBudgetMode.ENFORCED for mode in budget_modes)
-        if budgets_on and self.schema_version != RUNNER_SCHEMA_VERSION_V22:
+        budget_schemas = {
+            RUNNER_SCHEMA_VERSION_V22,
+            RUNNER_SCHEMA_VERSION_V23,
+        }
+        if budgets_on and self.schema_version not in budget_schemas:
             runner_log.error(
                 "invalid_fields path=agents.cognition.cognitive_budget_mode "
                 "reason_code=cognitive_budget_mode_requires_v22 schema_version=%s",
@@ -2839,6 +2951,7 @@ class SimulationRunnerConfig:
             )
             raise ValueError(
                 "enforced cognitive_budget_mode requires runner-config-v22 "
+                "or runner-config-v23 "
                 "(code=cognitive_budget_mode_requires_v22)"
             )
         if narratives_on and self.schema_version not in narrative_schemas:
@@ -2934,6 +3047,7 @@ class SimulationRunnerConfig:
             RUNNER_SCHEMA_VERSION_V20,
             RUNNER_SCHEMA_VERSION_V21,
             RUNNER_SCHEMA_VERSION_V22,
+            RUNNER_SCHEMA_VERSION_V23,
         }:
             _LOGGER.error(
                 "invalid_fields path=agents.cognition.production_knowledge_mode "
@@ -2957,6 +3071,7 @@ class SimulationRunnerConfig:
             RUNNER_SCHEMA_VERSION_V20,
             RUNNER_SCHEMA_VERSION_V21,
             RUNNER_SCHEMA_VERSION_V22,
+            RUNNER_SCHEMA_VERSION_V23,
         }:
             from world.production import production_catalog_digest
 
@@ -3020,6 +3135,7 @@ class SimulationRunnerConfig:
             RUNNER_SCHEMA_VERSION_V20,
             RUNNER_SCHEMA_VERSION_V21,
             RUNNER_SCHEMA_VERSION_V22,
+            RUNNER_SCHEMA_VERSION_V23,
         }:
             shared_teaching = teaching_weight_tuple(self.agents[0].cognition)
             if any(
@@ -3145,6 +3261,9 @@ class RunnerConfigDiagnostics:
     capability_flag_names: tuple[str, ...]
     enabled_capability_flags: tuple[str, ...]
     capability_flags_digest_prefix: str
+    v3_capability_flag_names: tuple[str, ...]
+    enabled_v3_capability_flags: tuple[str, ...]
+    v3_capability_flags_digest_prefix: str
     cognition_trace_enabled: bool
     cognition_trace_detail: str
 
@@ -3162,6 +3281,8 @@ def runner_config_diagnostics(
         raise TypeError("runner_config_diagnostics requires SimulationRunnerConfig")
     enabled = config.capability_flags.enabled_names()
     flags_digest = capability_flags_digest(config.capability_flags)
+    v3_enabled = config.v3_capability_flags.enabled_names()
+    v3_flags_digest = v3_capability_flags_digest(config.v3_capability_flags)
     return RunnerConfigDiagnostics(
         schema_version=config.schema_version,
         derivation_version=config.derivation_version,
@@ -3192,6 +3313,9 @@ def runner_config_diagnostics(
         capability_flag_names=_V2_CAPABILITY_FLAG_NAMES,
         enabled_capability_flags=enabled,
         capability_flags_digest_prefix=flags_digest[:12],
+        v3_capability_flag_names=_V3_CAPABILITY_FLAG_NAMES,
+        enabled_v3_capability_flags=v3_enabled,
+        v3_capability_flags_digest_prefix=v3_flags_digest[:12],
         cognition_trace_enabled=config.cognition_trace.enabled,
         cognition_trace_detail=config.cognition_trace.detail.value,
     )
@@ -3202,6 +3326,17 @@ def capability_flags_digest(flags: V2CapabilityFlags) -> str:
     if type(flags) is not V2CapabilityFlags:
         raise TypeError("capability_flags_digest requires V2CapabilityFlags")
     document = {name: getattr(flags, name) for name in _V2_CAPABILITY_FLAG_NAMES}
+    payload = json.dumps(document, separators=(",", ":"), sort_keys=True).encode(
+        "utf-8"
+    )
+    return hashlib.sha256(payload).hexdigest()
+
+
+def v3_capability_flags_digest(flags: V3CapabilityFlags) -> str:
+    """Stable hex digest over closed V3 flag names/values (no payloads)."""
+    if type(flags) is not V3CapabilityFlags:
+        raise TypeError("v3_capability_flags_digest requires V3CapabilityFlags")
+    document = {name: getattr(flags, name) for name in _V3_CAPABILITY_FLAG_NAMES}
     payload = json.dumps(document, separators=(",", ":"), sort_keys=True).encode(
         "utf-8"
     )
@@ -3236,6 +3371,11 @@ def describe_runner_config(
         "capability_flag_names": diagnostics.capability_flag_names,
         "enabled_capability_flags": diagnostics.enabled_capability_flags,
         "capability_flags_digest_prefix": diagnostics.capability_flags_digest_prefix,
+        "v3_capability_flag_names": diagnostics.v3_capability_flag_names,
+        "enabled_v3_capability_flags": diagnostics.enabled_v3_capability_flags,
+        "v3_capability_flags_digest_prefix": (
+            diagnostics.v3_capability_flags_digest_prefix
+        ),
         "cognition_trace_enabled": diagnostics.cognition_trace_enabled,
         "cognition_trace_detail": diagnostics.cognition_trace_detail,
     }

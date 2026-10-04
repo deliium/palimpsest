@@ -259,25 +259,25 @@ Forbidden in this plan: implementing births, ages, kinship graphs, settlement cr
 
 ### Phase 2: V3 Capability Flags, Golden Fixtures, and Persistence Decision
 
-- [ ] Task 4: Introduce `V3CapabilityFlags` and `runner-config-v23` encode/decode without changing default write.
+- [x] Task 4: Introduce `V3CapabilityFlags` and `runner-config-v23` encode/decode without changing default write.
   - Deliverable: Add frozen `V3CapabilityFlags` on `SimulationRunnerConfig` (run-level) with the five reserved identifiers and empty owned allowlist. Add `RUNNER_SCHEMA_VERSION_V23` to `SUPPORTED_RUNNER_SCHEMA_VERSIONS`. Implement versioned exact `_require_keys` for v23 where **v23 keyset = full v22 root/cognition keyset ∪ root `v3_capability_flags`** (exact child keys = the five reserved names). Decode v1–v22 → default-off V3 flags. When any V3 flag is true, `__post_init__` requires `schema_version == runner-config-v23` (`v3_capability_requires_v23`); do **not** silent-bump in encode. Widen every mode allowlist ending at v22 to include v23, and change budget equality to accept `{v22, v23}`. Widen `experiments/matrix_schema.py` finalize/allowlist for v23; default finalize stays v4 when all V3 flags are off. Include V3 flags in fingerprints/diagnostics when present on the encoded document (optional sibling digest helper if V2 already has `capability_flags_digest`). Fail-closed: any V3 flag on → `SimulationRunner.from_config` raises `capability_unimplemented`; config+encode of flag-true v23 must still round-trip. V3 flags-off leaves existing wiring unchanged. Do **not** change `COGNITION_POLICY_VERSION`. Do **not** alter `V2CapabilityFlags` ownership or the V2 `capability_flags` child key set.
   - Files: `src/simulation/runner_models.py`, `src/simulation/runner_serialization.py`, `src/simulation/runner.py`, `src/simulation/__init__.py`, `src/experiments/matrix_schema.py`, `tests/unit/test_runner_models.py`, `tests/unit/test_runner_serialization.py`, `tests/unit/test_simulation_runner_construction.py`, `tests/unit/test_matrix_schema.py` (or existing matrix schema tests), `tests/typecheck/simulation_runner.py` (if present).
   - Logging: DEBUG construction with run_id/schema_version/flag names/values; INFO when any V3 flag is true (IDs/counts only); WARN on legacy schema decode/upgrade; ERROR stable `unsupported_version` / `v3_capability_requires_v23` / `capability_unimplemented` codes. Never log seeds, goals, observations, or command bodies.
   - Dependencies: Task 2.
 
-- [ ] Task 5: Capture golden V1/V2 runner-config payloads and fingerprint/trajectory identity rules under V3 scaffolding.
+- [x] Task 5: Capture golden V1/V2 runner-config payloads and fingerprint/trajectory identity rules under V3 scaffolding.
   - Deliverable: Ensure golden fixtures for representative `runner-config-v2` / `v4` (and at least one higher mode-driven schema if already present) still decode with default-off V3 flags. Add at least one encode/decode golden for `runner-config-v23` with a V3 flag true (create must fail closed; encode/decode must succeed). Document and test: after V3 scaffolding, V1 regression scenarios keep objective trajectory/commit identity; `config_fingerprint` changes only when encode path intentionally differs. Prefer extending `tests/unit/test_v2_golden_runner_configs.py` over new engines.
   - Files: `tests/unit/fixtures/` or `tests/fixtures/runner_configs/`, `tests/unit/test_v2_golden_runner_configs.py` (extend; add `test_v3_golden_runner_configs.py` only if needed), `tests/unit/test_runner_serialization.py`, `docs/simulation-runner.md` (identity rules).
   - Logging: Tests assert hashes/version codes; DEBUG fixture names and schema_version only.
   - Dependencies: Task 4.
 
-- [ ] Task 6: Experiment compatibility helpers and V2/V3 profiles.
+- [x] Task 6: Experiment compatibility helpers and V2/V3 profiles.
   - Deliverable: Keep `experiment-definition-v1`. Catalog A–E and reference scenario stay on default-off V2/V3 flags (builders continue emitting their current schemas; decode upgrades synthesize V3 defaults). Add `v3_scaffolding_profile()` asserting all V3 flags off. Add **new** `v2_regression_profile()` that composes: all V3 flags off + existing `v1_regression_profile` rules (V2 capability flags off + tracing off); do **not** mandate every V2 cognition mode `DISABLED`. Export both helpers from `experiments`. Do not add V3 catalog experiments in this plan.
   - Files: `src/experiments/catalog.py`, `src/experiments/reference_scenario.py`, `src/experiments/__init__.py`, `tests/unit/test_experiment_definitions.py`, `tests/unit/test_v2_flag_defaults.py` (extend), `tests/unit/test_v3_flag_defaults.py` (new if needed).
   - Logging: DEBUG experiment_id/condition_id/schema_version/flag digest prefixes; never log full runner JSON or seeds in INFO+.
   - Dependencies: Task 4.
 
-- [ ] Task 7: Record the no-Alembic-migration decision and head pin at `0017`.
+- [x] Task 7: Record the no-Alembic-migration decision and head pin at `0017`.
   - Deliverable: Document that V3 capability flags are carried only in runner JSON (`run_control.config_payload`); Alembic head remains `0017`. Extend `tests/unit/test_alembic_head_pin.py` (already forbids capability-flag table names) and/or compatibility pins so no `0018_*.py` is introduced by this plan and authoritative table semantics are unchanged. Explicitly forbid inventing indexed V3 flag columns without a later justified plan.
   - Files: `docs/persistence.md`, `tests/unit/test_alembic_head_pin.py`, `tests/unit/test_compatibility_matrix.py` (cross-link only if needed), `.ai-factory/ARCHITECTURE.md` (migration head note).
   - Logging: N/A beyond existing Alembic conventions if touched (should not be).

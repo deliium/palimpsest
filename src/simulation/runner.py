@@ -1209,12 +1209,17 @@ class SimulationRunner:
             enabled_flags = config.capability_flags.enabled_names()
             owned_enabled = config.capability_flags.owned_enabled_names()
             unimplemented_flags = config.capability_flags.unimplemented_enabled_names()
+            v3_enabled_flags = config.v3_capability_flags.enabled_names()
+            v3_unimplemented = (
+                config.v3_capability_flags.unimplemented_enabled_names()
+            )
             _LOG.debug(
                 "runner_construction_start schema_version=%s agent_count=%s "
                 "mortality_mode=%s durable=%s capability_flag_count=%s "
                 "enabled_flag_count=%s owned_enabled_flag_count=%s "
                 "unimplemented_flag_count=%s owned_enabled_flags=%s "
-                "unimplemented_flags=%s",
+                "unimplemented_flags=%s v3_enabled_flag_count=%s "
+                "v3_unimplemented_flag_count=%s",
                 config.schema_version,
                 len(config.agents),
                 config.mortality_mode.value,
@@ -1225,6 +1230,8 @@ class SimulationRunner:
                 len(unimplemented_flags),
                 ",".join(owned_enabled) if owned_enabled else "",
                 ",".join(unimplemented_flags) if unimplemented_flags else "",
+                len(v3_enabled_flags),
+                len(v3_unimplemented),
             )
             if unimplemented_flags:
                 _LOG.error(
@@ -1239,6 +1246,20 @@ class SimulationRunner:
                 raise RunnerConstructionError(
                     RunnerConstructionErrorCode.CAPABILITY_UNIMPLEMENTED,
                     stage="capability_flags",
+                )
+            if v3_unimplemented:
+                _LOG.error(
+                    "runner_construction_v3_capability_unimplemented "
+                    "schema_version=%s flag_count=%s unimplemented_flags=%s "
+                    "reason_code=%s",
+                    config.schema_version,
+                    len(v3_unimplemented),
+                    ",".join(v3_unimplemented),
+                    RunnerConstructionErrorCode.CAPABILITY_UNIMPLEMENTED.value,
+                )
+                raise RunnerConstructionError(
+                    RunnerConstructionErrorCode.CAPABILITY_UNIMPLEMENTED,
+                    stage="v3_capability_flags",
                 )
 
             stage = "physical_rules"

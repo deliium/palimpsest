@@ -15,6 +15,7 @@ from simulation.runner_models import (
     RUNNER_SCHEMA_VERSION_V20,
     RUNNER_SCHEMA_VERSION_V21,
     RUNNER_SCHEMA_VERSION_V22,
+    RUNNER_SCHEMA_VERSION_V23,
     ArtifactInterpretationMode,
     CognitiveBudgetMode,
     CulturalNarrativeMode,
@@ -34,6 +35,7 @@ def finalize_matrix_cell_config(
         raise TypeError("config must be SimulationRunnerConfig")
 
     agents = config.agents
+    v3_flags_on = config.v3_capability_flags.any_enabled()
     budget_on = any(
         agent.cognition.cognitive_budget_mode is CognitiveBudgetMode.ENFORCED
         for agent in agents
@@ -57,7 +59,9 @@ def finalize_matrix_cell_config(
         for agent in agents
     )
 
-    if budget_on:
+    if v3_flags_on:
+        schema_version, rule = RUNNER_SCHEMA_VERSION_V23, "v3_capability_flags_on"
+    elif budget_on:
         schema_version, rule = RUNNER_SCHEMA_VERSION_V22, "cognitive_budget_enforced"
     elif narratives_on:
         schema_version, rule = RUNNER_SCHEMA_VERSION_V21, "cultural_narratives_on"

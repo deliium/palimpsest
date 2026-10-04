@@ -121,3 +121,86 @@ async def test_flags_off_v2_and_v3_share_exact_trajectory_hash() -> None:
         == doc_v3.replica_normalized_trajectory_hash
     )
     assert doc_v2.config_fingerprint != doc_v3.config_fingerprint
+
+
+def test_golden_v2_fixtures_synthesize_default_off_v3_flags() -> None:
+    from simulation.runner_models import V3CapabilityFlags
+
+    payload = _load_fixture("catalog_a_condition_v2.json")
+    decoded = decode_runner_config(payload)
+    assert decoded.v3_capability_flags == V3CapabilityFlags()
+    assert not decoded.v3_capability_flags.any_enabled()
+
+
+def test_v4_round_trip_keeps_v3_flags_off_and_stable_fingerprint() -> None:
+    from simulation.runner_models import (
+        RUNNER_SCHEMA_VERSION_V4,
+        V3CapabilityFlags,
+    )
+
+    payload = _load_fixture("catalog_a_condition_v2.json")
+    legacy = decode_runner_config(payload)
+    v4 = SimulationRunnerConfig(
+        seed=legacy.seed,
+        stochastic_identity=legacy.stochastic_identity,
+        scenario=legacy.scenario,
+        agents=legacy.agents,
+        stop_policy=legacy.stop_policy,
+        mortality_mode=legacy.mortality_mode,
+        cognition_failure_policy=legacy.cognition_failure_policy,
+        provider=legacy.provider,
+        persistence=legacy.persistence,
+        experiment=legacy.experiment,
+        capability_flags=V2CapabilityFlags(),
+        v3_capability_flags=V3CapabilityFlags(),
+        schema_version=RUNNER_SCHEMA_VERSION_V4,
+    )
+    encoded = encode_runner_config(v4)
+    document = json.loads(encoded.decode("utf-8"))
+    assert document["schema_version"] == RUNNER_SCHEMA_VERSION_V4
+    assert "v3_capability_flags" not in document
+    decoded = decode_runner_config(encoded)
+    assert decoded.v3_capability_flags == V3CapabilityFlags()
+    assert runner_config_fingerprint(decoded) == runner_config_fingerprint(v4)
+
+
+def test_v23_flag_true_encode_decode_golden() -> None:
+    from simulation.runner import RunnerConstructionError, RunnerConstructionErrorCode
+    from simulation.runner_models import (
+        RUNNER_SCHEMA_VERSION_V23,
+        V3CapabilityFlags,
+    )
+
+    payload = _load_fixture("catalog_a_condition_v2.json")
+    legacy = decode_runner_config(payload)
+    flagged = SimulationRunnerConfig(
+        seed=legacy.seed,
+        stochastic_identity=legacy.stochastic_identity,
+        scenario=legacy.scenario,
+        agents=legacy.agents,
+        stop_policy=legacy.stop_policy,
+        mortality_mode=legacy.mortality_mode,
+        cognition_failure_policy=legacy.cognition_failure_policy,
+        provider=legacy.provider,
+        persistence=legacy.persistence,
+        experiment=legacy.experiment,
+        capability_flags=V2CapabilityFlags(),
+        v3_capability_flags=V3CapabilityFlags(cultural_historical_memory=True),
+        schema_version=RUNNER_SCHEMA_VERSION_V23,
+    )
+    encoded = encode_runner_config(flagged)
+    document = json.loads(encoded.decode("utf-8"))
+    assert document["schema_version"] == RUNNER_SCHEMA_VERSION_V23
+    assert document["v3_capability_flags"]["cultural_historical_memory"] is True
+    decoded = decode_runner_config(encoded)
+    assert decoded.v3_capability_flags.cultural_historical_memory is True
+    assert runner_config_fingerprint(decoded) == runner_config_fingerprint(flagged)
+
+    import asyncio
+
+    async def _fail_closed() -> None:
+        with pytest.raises(RunnerConstructionError) as exc_info:
+            await SimulationRunner.from_config(flagged, run_id=RunId("run-v3-golden"))
+        assert exc_info.value.code is RunnerConstructionErrorCode.CAPABILITY_UNIMPLEMENTED
+
+    asyncio.run(_fail_closed())

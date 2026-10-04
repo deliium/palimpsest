@@ -45,8 +45,23 @@ def test_authoritative_tables_unchanged_by_capability_flags() -> None:
     assert "tick_commits" in names
     for forbidden in (
         "v2_capability_flags",
+        "v3_capability_flags",
         "capability_flags",
         "runner_capability_flags",
         "simulation_branches",
+        "generational_population",
+        "kinship_inheritance",
     ):
         assert forbidden not in names
+
+
+def test_v3_scaffolding_forbids_alembic_0018_and_flag_columns() -> None:
+    """V3 capability flags live only in runner JSON; head stays 0017."""
+    assert sorted(VERSIONS.glob("0018_*.py")) == []
+    entry = compatibility_entry("alembic_head")
+    assert "no 0018" in entry.bump_trigger
+    assert "runner JSON" in entry.bump_trigger or "config_payload" in entry.bump_trigger
+    for path in VERSIONS.glob("*.py"):
+        text = path.read_text(encoding="utf-8")
+        assert "v3_capability_flags" not in text
+        assert "generational_population" not in text

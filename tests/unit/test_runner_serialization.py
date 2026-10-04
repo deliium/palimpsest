@@ -914,3 +914,63 @@ def test_teaching_round_trips_only_on_v12() -> None:
             schema_version=RUNNER_SCHEMA_VERSION_V12,
             skill_learning_mode=SkillLearningMode.DETERMINISTIC,
         )
+
+
+def test_v23_v3_capability_flags_round_trip_and_legacy_synthesize() -> None:
+    from dataclasses import replace
+
+    from simulation.runner_models import (
+        RUNNER_SCHEMA_VERSION_V23,
+        V3CapabilityFlags,
+    )
+
+    base = _config()
+    legacy = decode_runner_config(encode_runner_config(base))
+    assert legacy.v3_capability_flags == V3CapabilityFlags()
+    assert "v3_capability_flags" not in json.loads(
+        encode_runner_config(base).decode("utf-8")
+    )
+
+    flagged = replace(
+        base,
+        schema_version=RUNNER_SCHEMA_VERSION_V23,
+        v3_capability_flags=V3CapabilityFlags(institutional_economy=True),
+    )
+    encoded = encode_runner_config(flagged)
+    document = json.loads(encoded.decode("utf-8"))
+    assert document["schema_version"] == RUNNER_SCHEMA_VERSION_V23
+    assert document["v3_capability_flags"] == {
+        "cultural_historical_memory": False,
+        "generational_population": False,
+        "institutional_economy": True,
+        "kinship_inheritance": False,
+        "multi_polity_migration": False,
+    }
+    cognition = document["agents"][0]["cognition"]
+    assert cognition["cognitive_budget_mode"] == "disabled"
+    assert cognition["max_llm_calls_per_tick"] is None
+    decoded = decode_runner_config(encoded)
+    assert decoded.v3_capability_flags.institutional_economy is True
+    assert runner_config_fingerprint(decoded) == runner_config_fingerprint(flagged)
+
+
+def test_v23_rejects_extra_v3_capability_flag_field() -> None:
+    from dataclasses import replace
+
+    from simulation.runner_models import (
+        RUNNER_SCHEMA_VERSION_V23,
+        V3CapabilityFlags,
+    )
+
+    flagged = replace(
+        _config(),
+        schema_version=RUNNER_SCHEMA_VERSION_V23,
+        v3_capability_flags=V3CapabilityFlags(),
+    )
+    document = json.loads(encode_runner_config(flagged).decode("utf-8"))
+    document["v3_capability_flags"]["extra_flag"] = False
+    with pytest.raises(RunnerSerializationError) as rejected:
+        decode_runner_config(
+            json.dumps(document, separators=(",", ":"), sort_keys=True).encode("utf-8")
+        )
+    assert rejected.value.code == "invalid_fields"

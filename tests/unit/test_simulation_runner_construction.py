@@ -794,3 +794,32 @@ async def test_v11_skill_learning_config_logs_mode_without_rates(
         for line in skill_logs
     )
     assert all("0.02" not in line and "0.25" not in line for line in skill_logs)
+
+
+@pytest.mark.asyncio
+async def test_from_config_fails_closed_when_v3_capability_flag_enabled() -> None:
+    from dataclasses import replace
+
+    from simulation.runner_models import (
+        RUNNER_SCHEMA_VERSION_V23,
+        V3CapabilityFlags,
+    )
+    from simulation.runner_serialization import (
+        decode_runner_config,
+        encode_runner_config,
+    )
+
+    base = _config()
+    config = replace(
+        base,
+        schema_version=RUNNER_SCHEMA_VERSION_V23,
+        v3_capability_flags=V3CapabilityFlags(multi_polity_migration=True),
+    )
+    # Encode/decode of flag-true v23 remains allowed.
+    round_trip = decode_runner_config(encode_runner_config(config))
+    assert round_trip.v3_capability_flags.multi_polity_migration is True
+
+    with pytest.raises(RunnerConstructionError) as exc_info:
+        await SimulationRunner.from_config(config, run_id=RunId("run-v3-cap-on"))
+    assert exc_info.value.code is RunnerConstructionErrorCode.CAPABILITY_UNIMPLEMENTED
+    assert exc_info.value.stage == "v3_capability_flags"

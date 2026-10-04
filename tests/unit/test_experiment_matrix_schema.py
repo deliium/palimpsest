@@ -7,11 +7,15 @@ from experiments.matrix_factors import (
     matrix_reference_fixture_base,
 )
 from experiments.matrix_schema import finalize_matrix_cell_config
+from dataclasses import replace
+
 from simulation.runner_models import (
     RUNNER_SCHEMA_VERSION_V4,
     RUNNER_SCHEMA_VERSION_V6,
     RUNNER_SCHEMA_VERSION_V14,
     RUNNER_SCHEMA_VERSION_V22,
+    RUNNER_SCHEMA_VERSION_V23,
+    V3CapabilityFlags,
 )
 
 
@@ -54,3 +58,23 @@ def test_reflection_plus_budget_finalize_to_v22() -> None:
     )
     finalized = finalize_matrix_cell_config(applied)
     assert finalized.schema_version == RUNNER_SCHEMA_VERSION_V22
+
+
+def test_v3_flags_finalize_keeps_v23_as_highest_wins() -> None:
+    base = matrix_reference_fixture_base()
+    # Config must already be schema-valid: flags-on requires v23 before finalize.
+    flagged = replace(
+        base,
+        schema_version=RUNNER_SCHEMA_VERSION_V23,
+        v3_capability_flags=V3CapabilityFlags(generational_population=True),
+    )
+    finalized = finalize_matrix_cell_config(flagged)
+    assert finalized.schema_version == RUNNER_SCHEMA_VERSION_V23
+    assert finalized.v3_capability_flags.generational_population is True
+
+    with_budget = apply_factor_levels(
+        flagged,
+        (("cognitive_budget", "high_cost"),),
+    )
+    finalized_budget = finalize_matrix_cell_config(with_budget)
+    assert finalized_budget.schema_version == RUNNER_SCHEMA_VERSION_V23

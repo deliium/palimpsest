@@ -38,6 +38,8 @@ from simulation.runner_models import (
     ReputationMode,
     RunnerStopPolicy,
     SimulationRunnerConfig,
+    V3CapabilityFlags,
+    v3_capability_flags_digest,
     SkillLearningMode,
     TeachingInteractionMode,
     V2CapabilityFlags,
@@ -1656,3 +1658,47 @@ def v1_regression_profile(config: SimulationRunnerConfig) -> SimulationRunnerCon
             "(code=v1_regression_trace_enabled)"
         )
     return config
+
+
+def v3_scaffolding_profile(config: SimulationRunnerConfig) -> SimulationRunnerConfig:
+    """Require all V3 capability flags off (V3 scaffolding baseline).
+
+    Returns the same config when valid; raises ``ValueError`` with stable code
+    ``v3_scaffolding_flags_enabled`` otherwise. Does not mutate the config.
+    """
+    if type(config) is not SimulationRunnerConfig:
+        raise TypeError("v3_scaffolding_profile requires SimulationRunnerConfig")
+    if type(config.v3_capability_flags) is not V3CapabilityFlags:
+        raise TypeError("v3_capability_flags must be V3CapabilityFlags")
+    enabled = config.v3_capability_flags.enabled_names()
+    digest_prefix = v3_capability_flags_digest(config.v3_capability_flags)[:12]
+    _LOG.debug(
+        "v3_scaffolding_profile_check schema_version=%s "
+        "enabled_v3_flag_count=%s v3_capability_flags_digest_prefix=%s",
+        config.schema_version,
+        len(enabled),
+        digest_prefix,
+    )
+    if enabled:
+        raise ValueError(
+            "v3 scaffolding requires all V3 capability flags off "
+            f"(code=v3_scaffolding_flags_enabled flag_count={len(enabled)})"
+        )
+    return config
+
+
+def v2_regression_profile(config: SimulationRunnerConfig) -> SimulationRunnerConfig:
+    """V2 regression under V3 scaffolding: V3 flags off + V1 regression rules.
+
+    Composes ``v3_scaffolding_profile`` then ``v1_regression_profile``. Does
+    **not** require every V2 cognition mode to be ``DISABLED``.
+    """
+    if type(config) is not SimulationRunnerConfig:
+        raise TypeError("v2_regression_profile requires SimulationRunnerConfig")
+    v3_scaffolding_profile(config)
+    profiled = v1_regression_profile(config)
+    _LOG.debug(
+        "v2_regression_profile_ok schema_version=%s",
+        profiled.schema_version,
+    )
+    return profiled

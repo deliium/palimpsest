@@ -89,9 +89,11 @@ when enabled it may change `config_fingerprint` but must not change
 
 | Identity | Stable across schema bumps with flags-off / tracing-off? |
 | --- | --- |
-| `config_fingerprint` | **No** — may change when schema/key set grows (flags, `cognition_trace`) |
-| `exact_trajectory_hash` / objective commit identity | **Yes** — same seed, scenario, stochastic identity; flags off; tracing on or off |
+| `config_fingerprint` | **No** — may change when schema/key set grows (V2/V3 flags, `cognition_trace`, intentional `runner-config-v23` encode) |
+| `exact_trajectory_hash` / objective commit identity | **Yes** — same seed, scenario, stochastic identity; V2/V3 flags off; tracing on or off |
 | `replica_normalized_trajectory_hash` | **Yes** under the same conditions (run-derived IDs stripped) |
+
+V3 scaffolding: default write stays `runner-config-v4` with all `V3CapabilityFlags` off. Enabling any V3 flag requires `runner-config-v23` and fails closed at `SimulationRunner.from_config` until an owning plan lands. Legacy `v1`…`v22` decode synthesizes default-off V3 flags without changing objective trajectory identity.
 
 Golden `runner-config-v2` fixtures live under `tests/fixtures/runner_configs/`.
 

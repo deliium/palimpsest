@@ -119,7 +119,7 @@ Append-only `experiment_definitions`, `experiment_assignments`, and `experiment_
 - **`0016_long_run_event_indexes`:** additive indexes `ix_world_events_run_event_type`, `ix_world_events_run_actor_id`, `ix_world_events_run_target_id` for run-scoped observer filters. PK `(run_id, tick, sequence)` continues to serve keyset pages. No authoritative column semantics change; append-only triggers unchanged.
 - **`0017_memory_embedding_hnsw`:** documents hybrid retrieve readiness. HNSW/IVFFlat are **not** created yet because `memory_traces.embedding` is untyped `vector` (fixed `vector(N)` required for ANN indexes). Runtime still shortlists via SQL cosine distance + `LIMIT` when `query_embedding` is set, then `rank_traces`. `PALIMPSEST_MEMORY_RETRIEVE_MAX_CANDIDATES` (default 4096) caps SQL materialization before ranking.
 
-Migration head is `0017`. V2 capability flags are **not** Alembic columns — they are carried only inside canonical runner-config JSON stored in existing `run_control.config_payload` (`0011`). Tests may target only databases whose name contains `palimpsest_test`; Alembic receives the validated URL directly and fails closed on conflicting ambient URLs.
+Migration head is `0017`. V2/V3 capability flags are **not** Alembic columns — they are carried only inside canonical runner-config JSON stored in existing `run_control.config_payload` (`0011`). V3 scaffolding does **not** add `0018`; do not invent indexed V3 flag columns without a later justified plan. Tests may target only databases whose name contains `palimpsest_test`; Alembic receives the validated URL directly and fails closed on conflicting ambient URLs.
 
 ## Logging
 

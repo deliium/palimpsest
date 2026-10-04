@@ -60,6 +60,8 @@ from experiments.catalog import (
     experiment_y_social_conventions,
     experiment_z_external_artifacts,
     v1_regression_profile,
+    v2_regression_profile,
+    v3_scaffolding_profile,
 )
 from experiments.collectors import (
     CollectorMetricDocument,
@@ -432,4 +434,6 @@ __all__ = [
     "territorial_presence_rows_from_spatial_actions",
     "unwrap_arbiter_command",
     "v1_regression_profile",
+    "v2_regression_profile",
+    "v3_scaffolding_profile",
 ]

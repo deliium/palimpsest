@@ -688,3 +688,40 @@ def test_long_run_checkpoint_presets_are_opt_in() -> None:
         long_run_checkpoint_policy(0)
     with pytest.raises(ValueError):
         long_run_checkpoint_policy(-1)
+
+
+def test_v3_capability_flags_default_off_and_require_v23() -> None:
+    from dataclasses import replace
+
+    from simulation.runner_models import (
+        RUNNER_SCHEMA_VERSION_V23,
+        V3CapabilityFlags,
+        v3_capability_flags_digest,
+    )
+
+    config = _config()
+    assert config.v3_capability_flags == V3CapabilityFlags()
+    assert not config.v3_capability_flags.any_enabled()
+    assert config.v3_capability_flags.unimplemented_enabled_names() == ()
+
+    with pytest.raises(ValueError, match="v3_capability_requires_v23"):
+        replace(
+            config,
+            v3_capability_flags=V3CapabilityFlags(kinship_inheritance=True),
+        )
+
+    flagged = replace(
+        config,
+        schema_version=RUNNER_SCHEMA_VERSION_V23,
+        v3_capability_flags=V3CapabilityFlags(kinship_inheritance=True),
+    )
+    assert flagged.v3_capability_flags.enabled_names() == ("kinship_inheritance",)
+    assert flagged.v3_capability_flags.unimplemented_enabled_names() == (
+        "kinship_inheritance",
+    )
+    assert flagged.v3_capability_flags.owned_enabled_names() == ()
+    digest = v3_capability_flags_digest(flagged.v3_capability_flags)
+    assert len(digest) == 64
+    diagnostics = build_runner_diagnostics(flagged)
+    assert diagnostics.enabled_v3_capability_flags == ("kinship_inheritance",)
+    assert len(diagnostics.v3_capability_flags_digest_prefix) == 12

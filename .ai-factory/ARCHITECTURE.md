@@ -61,7 +61,7 @@ clients/godot-observer/  # read-only presentation client; not a Python package; 
 clients/research-ui/     # researcher Svelte SPA (not a Python package); built dist served at /research/
                          # graphs/metrics/matrix/traces; HTTP to /v1 only; no import from src/
 alembic/versions/        # migrations through 0017 (memory HNSW; 0016 event indexes; 0015 branch lineage; 0013 cognition-trace)
-                         # V2 capability flags stay runner JSON only (not Alembic columns)
+                         # V2/V3 capability flags stay runner JSON only (not Alembic columns; no 0018 in V3 scaffolding)
 docs/                    # contributor docs (architecture, memory, social-communication, …)
 tests/
   unit/ architecture/ integration/ compose/ typecheck/ fakes/

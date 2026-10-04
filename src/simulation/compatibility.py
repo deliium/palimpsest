@@ -71,6 +71,7 @@ from simulation.runner_models import (
     RUNNER_SCHEMA_VERSION_V20,
     RUNNER_SCHEMA_VERSION_V21,
     RUNNER_SCHEMA_VERSION_V22,
+    RUNNER_SCHEMA_VERSION_V23,
     SUPPORTED_RESULT_SCHEMA_VERSIONS,
     SUPPORTED_RUNNER_SCHEMA_VERSIONS,
 )
@@ -101,8 +102,9 @@ COMMUNICATION_SCHEMA_VERSION: Final[str] = "communication.v1"
 OBSERVER_PROTOCOL_VERSION: Final[str] = "observer-protocol-v1"
 OBSERVER_LAYOUT_SCHEMA_VERSION: Final[str] = "observer-layout-v1"
 RESEARCH_UI_MOUNT: Final[str] = "/research/"
-# Planned runner schema for V3 capability flags (encode/decode owned by Task 4).
-PLANNED_RUNNER_SCHEMA_VERSION_V23: Final[str] = "runner-config-v23"
+# Accepted runner schema for V3 capability flags (encode/decode in Task 4).
+# Alias kept for matrix wording from Task 2; prefer RUNNER_SCHEMA_VERSION_V23.
+PLANNED_RUNNER_SCHEMA_VERSION_V23: Final[str] = RUNNER_SCHEMA_VERSION_V23
 V3_CAPABILITY_FLAGS_WIRE_KEY: Final[str] = "v3_capability_flags"
 V3_CAPABILITY_FLAG_NAMES: Final[tuple[str, ...]] = (
     "generational_population",
@@ -145,6 +147,7 @@ __all__ = [
     "RUNNER_SCHEMA_VERSION_V20",
     "RUNNER_SCHEMA_VERSION_V21",
     "RUNNER_SCHEMA_VERSION_V22",
+    "RUNNER_SCHEMA_VERSION_V23",
     "STREAM_ENVELOPE_VERSION",
     "V3_CAPABILITY_FLAGS_WIRE_KEY",
     "V3_CAPABILITY_FLAG_NAMES",
