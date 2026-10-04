@@ -6,6 +6,26 @@ this package or receive its collectors, truth specs, or results.
 """
 
 from experiments.architectures import expand_architecture, registered_architecture_ids
+from experiments.benchmark_smoke import (
+    DEFAULT_SMOKE_TICK_BUDGET,
+    BenchmarkSmokeError,
+    BenchmarkSmokeResult,
+    SmokeOutputAvailability,
+    run_benchmark_smoke,
+    smoke_tick_budget,
+)
+from experiments.benchmark_suite import (
+    BENCHMARK_SCENARIO_COUNT,
+    BENCHMARK_SCENARIO_IDS,
+    BENCHMARK_SUITE_ID,
+    BenchmarkConfiguration,
+    BenchmarkScenarioSpec,
+    BenchmarkSpecError,
+    benchmark_suite_registry,
+    get_benchmark_scenario,
+    list_benchmark_scenarios,
+    registered_benchmark_scenario_ids,
+)
 from experiments.catalog import (
     EXPERIMENT_A_V1_CONDITION_IDS,
     experiment_a_memory,
@@ -213,7 +233,11 @@ from experiments.reference_scenario import (
 from experiments.reputation_scenario import distributed_reputation_scenario
 
 __all__ = [
+    "BENCHMARK_SCENARIO_COUNT",
+    "BENCHMARK_SCENARIO_IDS",
+    "BENCHMARK_SUITE_ID",
     "DEFAULT_OVERRIDE_BUDGET",
+    "DEFAULT_SMOKE_TICK_BUDGET",
     "DEFAULT_SUCCESS_STOP_REASONS",
     "ENVIRONMENTAL_DYNAMICS_METRIC_VERSION",
     "EXPERIMENT_A_V1_CONDITION_IDS",
@@ -229,6 +253,11 @@ __all__ = [
     "REFERENCE_SCENARIO_VERSION",
     "AnalysisEvidenceSnapshotReader",
     "ArbiterOverrideDecision",
+    "BenchmarkConfiguration",
+    "BenchmarkScenarioSpec",
+    "BenchmarkSmokeError",
+    "BenchmarkSmokeResult",
+    "BenchmarkSpecError",
     "CollectorMetricDocument",
     "CommandOverrideArbiter",
     "CulturalChannelRow",
@@ -290,6 +319,7 @@ __all__ = [
     "ReferenceScenarioBundle",
     "RetryPolicy",
     "RunVersionIdentity",
+    "SmokeOutputAvailability",
     "StoryIntervention",
     "StoryInterventionArbiter",
     "StoryTruthSpec",
@@ -300,6 +330,7 @@ __all__ = [
     "artifact_interpretation_rows_from_ledgers",
     "artifact_memory_rows_from_traces",
     "artifact_objective_rows_from_artifacts",
+    "benchmark_suite_registry",
     "build_matrix_aggregate",
     "build_reference_scenario",
     "calibration_rows_from_world_model_audits",
@@ -367,8 +398,10 @@ __all__ = [
     "experiment_z_external_artifacts",
     "external_artifacts_scenario",
     "finalize_matrix_cell_config",
+    "get_benchmark_scenario",
     "inputs_with_opt_in_metric_rows",
     "inputs_with_spatial_rows",
+    "list_benchmark_scenarios",
     "make_false_story_intervention",
     "map_consolidation_audits_to_report",
     "map_recall_audits_to_dynamics_report",
@@ -381,8 +414,11 @@ __all__ = [
     "matrix_spec_fingerprint",
     "persist_metric_bundle",
     "registered_architecture_ids",
+    "registered_benchmark_scenario_ids",
+    "run_benchmark_smoke",
     "run_one_assignment",
     "seasonal_scarcity_scenario",
+    "smoke_tick_budget",
     "spatial_action_rows_from_events",
     "territorial_control_rows_from_spatial_actions",
     "territorial_presence_rows_from_spatial_actions",
