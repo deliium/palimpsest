@@ -242,6 +242,29 @@ def test_published_observer_page_reaches_camp(
             while time.monotonic() < socket_deadline and not hello["seen"]:
                 page.wait_for_timeout(250)
             assert hello["seen"] is True
+            # Replay seek against the running stack (observer HTTP; no host Godot).
+            seek0 = httpx.get(
+                f"{base}/v1/simulations/{run_id}/observer/state",
+                params={"tick": 0},
+                timeout=30.0,
+            )
+            seek1 = httpx.get(
+                f"{base}/v1/simulations/{run_id}/observer/state",
+                params={"tick": 1},
+                timeout=30.0,
+            )
+            assert seek0.status_code == 200
+            assert seek1.status_code == 200
+            body0 = seek0.json()
+            body1 = seek1.json()
+            assert body0.get("world", {}).get("tick") == 0
+            assert body1.get("world", {}).get("tick") == 1
+            _LOGGER.info(
+                "observer_browser_seek_ok run_id=%s ticks=%s,%s",
+                run_id,
+                body0.get("world", {}).get("tick"),
+                body1.get("world", {}).get("tick"),
+            )
             browser.close()
     except Exception as exc:
         if "map_timeout" not in str(exc):

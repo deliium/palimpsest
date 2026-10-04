@@ -339,7 +339,7 @@ Each checkpoint is a git commit on `main` created when those tasks are done. Do 
 
 ### Phase 5: Scientific invariants, architecture, zero-install
 
-- [ ] Task 15: Add `tests/unit/test_v2_scientific_invariants.py` completion gate.
+- [x] Task 15: Add `tests/unit/test_v2_scientific_invariants.py` completion gate.
   - Deliverable: Network-free gate checking the scientific invariants list from Goal via imports/builders/docs pins: flags-off V1 profile still valid; subjective/objective separation; suite smoke registry complete; recording replay proof path exists (`tests/integration/test_llm_recording_replay.py` referenced/imported as contract); branch compare path exists; matrix CLI entry exists; Research UI static mount helpers exist; scale docs pin referenced. Do **not** append cases to `test_v1_regression_gate.py`. Explicitly assert suite does not enable unowned `multi_hop_testimony_tracking`.
   - Logging: INFO `v2_scientific_invariants_ok`; ERROR reason codes.
   - Depends on tasks 11b, 14.

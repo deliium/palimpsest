@@ -31,10 +31,22 @@ def test_published_launchers_do_not_export_or_build() -> None:
     for name in ("run.sh", "run.ps1", "scripts/up.sh"):
         text = _text(name)
         assert "godot" not in text.lower()
+        assert "export template" not in text.lower()
         assert "--export-release" not in text
         assert "compose up --build" not in text
         assert "up -d --build" not in text
         assert "up --build" not in text
+
+
+def test_published_compose_documents_api_image_requirement() -> None:
+    text = COMPOSE.read_text(encoding="utf-8")
+    assert "PALIMPSEST_API_IMAGE" in text
+    docs = _text("docs/development.md")
+    assert "PALIMPSEST_API_IMAGE" in docs
+    # Zero-install path: Docker + browser only; no host Godot install step.
+    run_sh = _text("run.sh")
+    assert "docker" in run_sh.lower()
+    assert "godot" not in run_sh.lower()
 
 
 def test_live_stack_pulls_the_database_before_never() -> None:
