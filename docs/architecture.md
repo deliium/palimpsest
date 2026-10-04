@@ -187,11 +187,6 @@ Register roadmap milestones via `/aif-roadmap` (e.g. M5 for this scaffolding) �
 - [Social communication](social-communication.md)
 - [LLM providers](llm-providers.md)
 - [Physical simulation](physical-simulation.md)
-- [Configuration](configuration.md)
-- [Development](development.md)
-- [Persistence](persistence.md)
-
-
 ## V3 extension seams (scaffolding)
 
 Later V3 generational plans plug into these seams only. They must not re-open WorldEngine authority, Observation trust, Godot write authority, or scripted emergence.
@@ -211,3 +206,30 @@ Later V3 generational plans plug into these seams only. They must not re-open Wo
 **Runtime pins:** `prepare_parallel=False` until an owned plan changes it. New generational cognition plugs in as constructor-injected stage slots/modes — not by renumbering fixed `CognitiveLoop` ordinals. No scripted civilization/institution/kinship helpers.
 
 **Off-limits:** WorldEngine admission, event immutability / `AUTHORITATIVE_TABLES`, Observation → authority type widening, Godot write authority, scripted emergence booleans.
+
+### Downstream V3 plan contract
+
+Every later V3 feature plan must satisfy this checklist before merge:
+
+1. **V1/V2 invariants intact** — WorldEngine authority, Observation trust, append-only history, subjective ≠ objective fold, LLM non-authority, no silent cross-agent copy, reproducible seeds/stubs where claimed, Godot read-only / non-semantic coordinates.
+2. **V3 flags opt-in** — reserved `V3CapabilityFlags` stay default-off; enabling a flag without an owning plan fails closed at `SimulationRunner.from_config` (`capability_unimplemented`); no silent behavior when off. Wire is sibling root `v3_capability_flags` on `runner-config-v23` (= full v22 keyset ∪ flags); default write stays `runner-config-v4` when all V3 flags are off.
+3. **V1 + V2 regression green** — `tests/unit/test_v1_regression_gate.py` and `tests/unit/test_v2_scientific_invariants.py` remain passing under V3 flags off; use `v3_scaffolding_profile` / `v2_regression_profile`.
+4. **Schema bumps use accepted-set + exact key-set discipline** — never drop accepted V1/V2 versions in the same change that adds a write version; runner JSON uses versioned `_require_keys` (no silent extra fields on an existing schema id). Mode allowlists that top out at v22 include v23; budget mode accepts `{v22,v23}`.
+5. **No scripted emergence** — no `civilization_emerged` / `institution_formed` / `kinship_must_form` / `culture_emerged` mandates.
+6. **No LLM → world shortcuts** — validated LLM shape still requires cognition translation + normal admission.
+7. **Experiments stay reproducible** — `experiment-definition-v1`; flags ride in runner JSON; prefer deterministic fakes or recorded LLM paths.
+8. **Optional tracing/analysis stay outside the objective fold** — not in `EvidenceManifest` / objective high-water; no V3 fields on `GET /version`.
+9. **Alembic** — head stays `0017` unless a later plan proves indexed SQL columns are necessary; V3 flags remain runner JSON only.
+
+Register roadmap milestones via `/aif-roadmap` (e.g. **M7 — V3 Generational Architecture Scaffolding**) — not from individual feature plans inventing milestone IDs ad hoc. Keep later plan filenames / bundle stems prefixed with `v3-`.
+
+## See also
+
+- [Cognition and agent runtime](cognition-runtime.md)
+- [Memory reconstruction](memory-reconstruction.md)
+- [Social communication](social-communication.md)
+- [LLM providers](llm-providers.md)
+- [Physical simulation](physical-simulation.md)
+- [Configuration](configuration.md)
+- [Development](development.md)
+- [Persistence](persistence.md)

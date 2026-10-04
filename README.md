@@ -53,9 +53,9 @@ Development credentials in `compose.yaml` are **not production**. `docker compos
 
 | Page | Contents |
 | --- | --- |
-| [Architecture](docs/architecture.md) | Bounded packages, `WorldEngine` lifecycle, perception boundary, eleven invariants, V2 seams + downstream plan contract |
-| [Simulation runner](docs/simulation-runner.md) | Config-driven `SimulationRunner`, `runner-config-v3` flags, fingerprint vs trajectory identity |
-| [Experiments](docs/experiments.md) | Trusted A–E catalog, `v1_regression_profile`, false-story boundary, coordinator, persistence (`0010`) |
+| [Architecture](docs/architecture.md) | Bounded packages, `WorldEngine` lifecycle, perception boundary, eleven invariants, V2/V3 seams + downstream plan contracts |
+| [Simulation runner](docs/simulation-runner.md) | Config-driven `SimulationRunner`, V2/V3 capability flags, fingerprint vs trajectory identity |
+| [Experiments](docs/experiments.md) | Trusted A–E catalog, `v1_regression_profile` / `v2_regression_profile` / `v3_scaffolding_profile`, coordinator, persistence (`0010`) |
 | [V2 benchmark suite](docs/v2-benchmark-suite.md) | Sixteen composition scenarios, observer graphical fixture, zero-install + scientific gates (off V1 gate) |
 | [Analysis metrics](docs/analysis-metrics.md) | V1 metric catalog, populations/denominators, numerical policy, known-answer fixtures |
 | [Research API](docs/research-api.md) | FastAPI control/inspection/debug, WebSocket cursors/backpressure, capability credentials |
@@ -69,8 +69,8 @@ Development credentials in `compose.yaml` are **not production**. `docker compos
 | [LLM providers](docs/llm-providers.md) | Structured `LLMProvider`, modes, retries, prompts, local OpenAI-compatible config, fakes |
 | [Physical simulation](docs/physical-simulation.md) | Topology, capacities, actions, physiology, death, schema-v4, tests |
 | [Configuration](docs/configuration.md) | `PALIMPSEST_` settings (including `PALIMPSEST_LLM_*`), logging, redaction, seeds, identifiers, clocks |
-| [Development](docs/development.md) | Tests, migrations (head `0012`), local and Docker workflows, exact commands |
-| [Persistence](docs/persistence.md) | Event store, Alembic through `0012`, subjective + scientific evidence, run control, stream outbox, replay |
+| [Development](docs/development.md) | Tests, migrations (head `0017`), local and Docker workflows, exact commands |
+| [Persistence](docs/persistence.md) | Event store, Alembic through `0017`, subjective + scientific evidence, run control, stream outbox, replay |
 
 ## Invariants (summary)
 

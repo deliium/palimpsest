@@ -304,7 +304,7 @@ Forbidden in this plan: implementing births, ages, kinship graphs, settlement cr
   - Logging: Tests assert on hashes/version codes; runner DEBUG may emit run_id/tick/version; never event payloads or `config_payload`.
   - Dependencies: Tasks 4, 5.
 
-- [ ] Task 11: End-to-end V1 + V2 regression gates under V3 scaffolding.
+- [x] Task 11: End-to-end V1 + V2 regression gates under V3 scaffolding.
   - Deliverable: (1) Keep `tests/unit/test_v1_regression_gate.py` green (catalog A–E + reference; flags-off; tracing-off; V3 flags off). (2) Keep `tests/unit/test_v2_scientific_invariants.py` as the V2 gate; add only a short V3-off pin there if needed (do **not** create `test_v2_regression_gate.py`). (3) Add `tests/unit/test_v3_scaffolding_gate.py` (network-free) asserting `v3_scaffolding_profile()`, `v2_regression_profile()` on a base config, and that enabling any V3 flag fails closed at `from_config` while encode/decode of that config succeeds. Hard rule: do not append V3 demographic/institutional cases into the V1 gate; do not import the full 16-scenario benchmark suite into the default unit path.
   - Files: `tests/unit/test_v1_regression_gate.py` (untouched except fixes if scaffolding breaks it), `tests/unit/test_v2_scientific_invariants.py` (optional one-line V3-off pin), `tests/unit/test_v3_scaffolding_gate.py` (new), `src/experiments/catalog.py`.
   - Logging: INFO gate start/end with experiment_id/tick counts/flag digests; DEBUG per-condition fingerprints; ERROR stable failure codes; never observations/memories.
@@ -313,7 +313,7 @@ Forbidden in this plan: implementing births, ages, kinship graphs, settlement cr
 
 ### Phase 4: Docs Checkpoint and Downstream Plan Contract
 
-- [ ] Task 12: Contributor documentation, migration matrix, and Downstream V3 plan contract.
+- [x] Task 12: Contributor documentation, migration matrix, and Downstream V3 plan contract.
   - Deliverable: `/aif-docs` checkpoint updating architecture/persistence/simulation-runner/experiments/research-api/research-ui with the V3 compatibility matrix, `V3CapabilityFlags` + sibling `v3_capability_flags` wire + `runner-config-v23` = v22∪flags rule, allowlist widen incl. budget `{v22,v23}`, matrix finalize note, no-`0018` decision, Observer/Research UI extension strategies (incl. Godot mirror + **no V3 fields on `/version`**), domain-contract evolution rules, fingerprint vs trajectory identity, and module seams table (incl. ordinal/parallel pins). Include a concise **Downstream V3 plan contract** checklist every future V3 feature plan must satisfy: V1/V2 invariants intact; V3 flags opt-in and fail closed at from_config until owned; V1 gate + `test_v2_scientific_invariants` green with V3 flags off; schema bumps follow accepted-set + exact key-set discipline; no scripted emergence; no LLM→world shortcuts; Godot read-only / non-semantic coordinates; experiments remain reproducible; optional tracing/analysis outside the objective fold. Add a short “V3 scaffolding” section to DESCRIPTION/ARCHITECTURE. Do not invent ROADMAP milestones; link to `/aif-roadmap` for M7/V3.
   - Files: `docs/architecture.md`, `docs/persistence.md`, `docs/simulation-runner.md`, `docs/experiments.md`, `docs/research-api.md`, `docs/research-ui.md`, `.ai-factory/DESCRIPTION.md`, `.ai-factory/ARCHITECTURE.md`, `README.md` (landing pointers only if needed).
   - Logging: N/A (docs).
