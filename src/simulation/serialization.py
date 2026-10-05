@@ -135,6 +135,7 @@ from world.events import (
     EVENT_SCHEMA_REPLAY_V8,
     EVENT_SCHEMA_REPLAY_V9,
     EVENT_SCHEMA_REPLAY_V10,
+    EVENT_SCHEMA_REPLAY_V11,
     AgentCreated,
     AgentEnteredWorld,
     AgentInitializationRecorded,
@@ -157,6 +158,7 @@ from world.events import (
     Helped,
     ItemCrafted,
     ItemStored,
+    KinshipEdgeRecorded,
     LifecycleStageChanged,
     Moved,
     NeedsApplied,
@@ -4136,6 +4138,21 @@ def _encode_event_details(value: object) -> dict[str, Any]:
                 "previous_stage": previous_stage,
                 "success": success,
             }
+        case KinshipEdgeRecorded(
+            parent_agent_id=parent_agent_id,
+            child_agent_id=child_agent_id,
+            established_tick=established_tick,
+            edge_id=edge_id,
+            success=success,
+        ):
+            return {
+                "child_agent_id": child_agent_id,
+                "edge_id": edge_id,
+                "established_tick": established_tick,
+                "kind": "kinship_edge_recorded",
+                "parent_agent_id": parent_agent_id,
+                "success": success,
+            }
         case _:
             raise DomainSerializationError("unsupported_type", "$")
 
@@ -4487,6 +4504,25 @@ def _decode_lifecycle_details(
             tuple(refs),
             dict(conditions_raw),
             _str_field(fields, "creation_config_id", path=path),
+            success,
+        )
+    if kind == "kinship_edge_recorded":
+        _require_keys(
+            fields,
+            {
+                "child_agent_id",
+                "edge_id",
+                "established_tick",
+                "parent_agent_id",
+                "success",
+            },
+            path=path,
+        )
+        return KinshipEdgeRecorded(
+            _str_field(fields, "parent_agent_id", path=path),
+            _str_field(fields, "child_agent_id", path=path),
+            _int_field(fields, "established_tick", path=path),
+            _str_field(fields, "edge_id", path=path),
             success,
         )
     _require_keys(
@@ -4909,6 +4945,7 @@ def _decode_event_details(
                 EVENT_SCHEMA_REPLAY_V8,
                 EVENT_SCHEMA_REPLAY_V9,
                 EVENT_SCHEMA_REPLAY_V10,
+                EVENT_SCHEMA_REPLAY_V11,
             }:
                 raise DomainSerializationError("invalid_event_schema_version", path)
             return _decode_production_details(kind, fields, path=path)
@@ -4925,6 +4962,7 @@ def _decode_event_details(
                 EVENT_SCHEMA_REPLAY_V8,
                 EVENT_SCHEMA_REPLAY_V9,
                 EVENT_SCHEMA_REPLAY_V10,
+                EVENT_SCHEMA_REPLAY_V11,
             }:
                 raise DomainSerializationError("invalid_event_schema_version", path)
             return _decode_environment_details(kind, fields, path=path)
@@ -4938,6 +4976,7 @@ def _decode_event_details(
                 EVENT_SCHEMA_REPLAY_V8,
                 EVENT_SCHEMA_REPLAY_V9,
                 EVENT_SCHEMA_REPLAY_V10,
+                EVENT_SCHEMA_REPLAY_V11,
             }:
                 raise DomainSerializationError("invalid_event_schema_version", path)
             return _decode_artifact_details(kind, fields, path=path)
@@ -4949,11 +4988,19 @@ def _decode_event_details(
             if schema_version not in {
                 EVENT_SCHEMA_REPLAY_V9,
                 EVENT_SCHEMA_REPLAY_V10,
+                EVENT_SCHEMA_REPLAY_V11,
             }:
                 raise DomainSerializationError("invalid_event_schema_version", path)
             return _decode_lifecycle_details(kind, fields, path=path)
         if kind == "agent_initialization_recorded":
-            if schema_version != EVENT_SCHEMA_REPLAY_V10:
+            if schema_version not in {
+                EVENT_SCHEMA_REPLAY_V10,
+                EVENT_SCHEMA_REPLAY_V11,
+            }:
+                raise DomainSerializationError("invalid_event_schema_version", path)
+            return _decode_lifecycle_details(kind, fields, path=path)
+        if kind == "kinship_edge_recorded":
+            if schema_version != EVENT_SCHEMA_REPLAY_V11:
                 raise DomainSerializationError("invalid_event_schema_version", path)
             return _decode_lifecycle_details(kind, fields, path=path)
     except DomainSerializationError:
@@ -4977,6 +5024,7 @@ def _encode_world_event(value: WorldEvent) -> dict[str, Any]:
         EVENT_SCHEMA_REPLAY_V8,
         EVENT_SCHEMA_REPLAY_V9,
         EVENT_SCHEMA_REPLAY_V10,
+        EVENT_SCHEMA_REPLAY_V11,
     }:
         raise DomainSerializationError(
             "invalid_event_schema_version",
@@ -4995,6 +5043,7 @@ def _encode_world_event(value: WorldEvent) -> dict[str, Any]:
         EVENT_SCHEMA_REPLAY_V8,
         EVENT_SCHEMA_REPLAY_V9,
         EVENT_SCHEMA_REPLAY_V10,
+        EVENT_SCHEMA_REPLAY_V11,
     }:
         raise DomainSerializationError(
             "invalid_event_schema_version",
@@ -5009,6 +5058,7 @@ def _encode_world_event(value: WorldEvent) -> dict[str, Any]:
         EVENT_SCHEMA_REPLAY_V8,
         EVENT_SCHEMA_REPLAY_V9,
         EVENT_SCHEMA_REPLAY_V10,
+        EVENT_SCHEMA_REPLAY_V11,
     }:
         raise DomainSerializationError(
             "invalid_event_schema_version",
@@ -5021,14 +5071,23 @@ def _encode_world_event(value: WorldEvent) -> dict[str, Any]:
     } and value.schema_version not in {
         EVENT_SCHEMA_REPLAY_V9,
         EVENT_SCHEMA_REPLAY_V10,
+        EVENT_SCHEMA_REPLAY_V11,
+    }:
+        raise DomainSerializationError(
+            "invalid_event_schema_version",
+            "$.schema_version",
+        )
+    if details_kind == "agent_initialization_recorded" and value.schema_version not in {
+        EVENT_SCHEMA_REPLAY_V10,
+        EVENT_SCHEMA_REPLAY_V11,
     }:
         raise DomainSerializationError(
             "invalid_event_schema_version",
             "$.schema_version",
         )
     if (
-        details_kind == "agent_initialization_recorded"
-        and value.schema_version != EVENT_SCHEMA_REPLAY_V10
+        details_kind == "kinship_edge_recorded"
+        and value.schema_version != EVENT_SCHEMA_REPLAY_V11
     ):
         raise DomainSerializationError(
             "invalid_event_schema_version",
@@ -5195,6 +5254,8 @@ def _decode_world_event(data: dict[str, Any], *, path: str) -> WorldEvent:
             EVENT_SCHEMA_REPLAY_V7,
             EVENT_SCHEMA_REPLAY_V8,
             EVENT_SCHEMA_REPLAY_V9,
+            EVENT_SCHEMA_REPLAY_V10,
+            EVENT_SCHEMA_REPLAY_V11,
         }:
             raise DomainSerializationError("unsupported_schema_version", path)
         actor_raw = data["actor_id"]

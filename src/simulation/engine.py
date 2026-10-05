@@ -122,13 +122,21 @@ from world.events import (
     AgentEnteredWorld,
     AgentInitializationRecorded,
     Died,
+    KinshipEdgeRecorded,
     LifecycleStageChanged,
     WorldEvent,
     build_occurrence_context,
     make_physical_replayable_event,
     normalize_events,
 )
-from world.identifiers import EntityId, EventId, RequestId, WorldId, WorldRevision
+from world.identifiers import (
+    EntityId,
+    EventId,
+    RequestId,
+    WorldId,
+    WorldRevision,
+    require_exact_nonneg_int,
+)
 from world.lifecycle import (
     AgentLifecycleRecord,
     OriginProvenance,
@@ -432,6 +440,7 @@ class WorldEngine:
         artifacts_enabled: bool = False,
         population_lifecycle: object | None = None,
         new_agent_initialization: object | None = None,
+        kinship_spec: object | None = None,
     ) -> WorldEngine:
         """Restore an engine at ``AWAITING_OBSERVATION`` from a checkpoint.
 
@@ -604,13 +613,13 @@ class WorldEngine:
         engine._artifacts_enabled = (
             artifacts_enabled
             or bool(snapshot.artifacts)
-            or snapshot.persistence_codec_version in {"v5", "v6", "v7"}
+            or snapshot.persistence_codec_version in {"v5", "v6", "v7", "v8"}
             or bool(getattr(engine._bootstrap, "artifacts", ()))
         )
-        if snapshot.persistence_codec_version in {"v6", "v7"}:
+        if snapshot.persistence_codec_version in {"v6", "v7", "v8"}:
             if population_lifecycle is None and snapshot.lifecycle_records:
                 raise ValueError(
-                    "codec v6/v7 restore requires population_lifecycle "
+                    "codec v6/v7/v8 restore requires population_lifecycle "
                     "(code=lifecycle_restore_missing_spec)"
                 )
             engine._population_lifecycle, engine._lifecycle_records = (
@@ -637,10 +646,10 @@ class WorldEngine:
                     )
                 engine._new_agent_initialization = new_agent_initialization
             elif (
-                snapshot.persistence_codec_version == "v7"
-                and snapshot.event_schema_version == 10
+                snapshot.persistence_codec_version in {"v7", "v8"}
+                and snapshot.event_schema_version in {10, 11}
             ):
-                # Prefer explicit restore arg; else pull from snapshot config when v25.
+                # Prefer explicit restore arg; else pull from snapshot config when v25+.
                 config_init = getattr(snapshot.config, "new_agent_initialization", None)
                 if config_init is not None:
                     engine._new_agent_initialization = config_init
@@ -656,6 +665,69 @@ class WorldEngine:
             engine._population_lifecycle = None
             engine._lifecycle_records = ()
             engine._new_agent_initialization = None
+        from simulation.runner_models import KinshipSpec
+        from world.kinship import KinshipEdge, KinshipGraph, establish_edge
+
+        engine._kinship_spec = None
+        engine._kinship_graph = KinshipGraph.empty()
+        if snapshot.persistence_codec_version == "v8":
+            resolved_kinship = kinship_spec
+            if resolved_kinship is None:
+                resolved_kinship = getattr(snapshot.config, "kinship", None)
+            if resolved_kinship is not None and type(resolved_kinship) is not KinshipSpec:
+                raise TypeError("kinship_spec must be KinshipSpec or None")
+            engine._kinship_spec = resolved_kinship
+            max_parents = (
+                resolved_kinship.max_parents_per_child
+                if type(resolved_kinship) is KinshipSpec
+                else 2
+            )
+            graph = KinshipGraph.empty(max_parents_per_child=max_parents)
+            known_ids = {
+                registration.agent_id for registration in engine._registrations
+            }
+            for raw_edge in snapshot.kinship_edges:
+                if type(raw_edge) is not KinshipEdge:
+                    raise TypeError("kinship_edges entries must be KinshipEdge")
+                known_ids.add(raw_edge.parent_agent_id)
+                known_ids.add(raw_edge.child_agent_id)
+                graph, _ = establish_edge(
+                    graph,
+                    parent_agent_id=raw_edge.parent_agent_id,
+                    child_agent_id=raw_edge.child_agent_id,
+                    established_tick=raw_edge.established_tick,
+                    max_parents_per_child=max_parents,
+                    known_agent_ids=known_ids,
+                )
+            for event in normalized_events:
+                details = event.details
+                if type(details) is not KinshipEdgeRecorded:
+                    continue
+                parent = AgentId(details.parent_agent_id)
+                child = AgentId(details.child_agent_id)
+                known_ids.add(parent)
+                known_ids.add(child)
+                graph, _ = establish_edge(
+                    graph,
+                    parent_agent_id=parent,
+                    child_agent_id=child,
+                    established_tick=details.established_tick,
+                    max_parents_per_child=max_parents,
+                    known_agent_ids=known_ids,
+                )
+            engine._kinship_graph = graph
+            _LOGGER.debug(
+                "kinship_restore codec_version=%s edge_count=%s "
+                "kinship_channel=%s events_applied=%s",
+                snapshot.persistence_codec_version,
+                len(graph.edges),
+                "on" if engine._kinship_spec is not None else "off",
+                sum(
+                    1
+                    for event in normalized_events
+                    if type(event.details) is KinshipEdgeRecorded
+                ),
+            )
         engine._require_refolded_teaching_offers(
             teaching_offers=teaching_offers,
             initial_state=base_state,
@@ -708,6 +780,139 @@ class WorldEngine:
     @property
     def kinship_graph(self) -> object:
         return self._kinship_graph
+
+    def establish_kinship_edge(
+        self,
+        *,
+        parent_agent_id: AgentId,
+        child_agent_id: AgentId,
+        established_tick: int | None = None,
+        emit_event: bool = True,
+    ) -> KinshipEdgeRecorded:
+        """Establish one objective parent→child edge (WorldEngine authority only).
+
+        Relatedness never implies trust, affection, loyalty, obligation,
+        inheritance rights, or group identity — no social/SelfModel writes.
+        """
+        from simulation.runner_models import KinshipSpec
+        from world.kinship import KinshipGraph, establish_edge
+
+        if type(self._kinship_spec) is not KinshipSpec:
+            raise ValueError(
+                "kinship channel inactive (code=kinship_channel_off)"
+            )
+        if type(parent_agent_id) is not AgentId or type(child_agent_id) is not AgentId:
+            raise TypeError("parent_agent_id and child_agent_id must be AgentId")
+        tick = (
+            self._snapshot.tick.value
+            if established_tick is None
+            else require_exact_nonneg_int("established_tick", established_tick)
+        )
+        known = {registration.agent_id for registration in self._registrations}
+        graph = self._kinship_graph
+        if type(graph) is not KinshipGraph:
+            raise TypeError("kinship_graph must be KinshipGraph")
+        next_graph, edge = establish_edge(
+            graph,
+            parent_agent_id=parent_agent_id,
+            child_agent_id=child_agent_id,
+            established_tick=tick,
+            max_parents_per_child=self._kinship_spec.max_parents_per_child,
+            known_agent_ids=known,
+        )
+        self._kinship_graph = next_graph
+        details = KinshipEdgeRecorded(
+            parent_agent_id=parent_agent_id.value,
+            child_agent_id=child_agent_id.value,
+            established_tick=tick,
+            edge_id=edge.edge_id,
+        )
+        _LOGGER.info(
+            "kinship_edge_recorded parent_agent_id=%s child_agent_id=%s "
+            "tick=%s edge_id=%s",
+            parent_agent_id.value,
+            child_agent_id.value,
+            tick,
+            edge.edge_id,
+        )
+        if emit_event:
+            child_body_id = next(
+                (
+                    registration.entity_id
+                    for registration in self._registrations
+                    if registration.agent_id == child_agent_id
+                ),
+                None,
+            )
+            if child_body_id is None:
+                raise ValueError(
+                    "child agent not registered (code=kinship_unknown_agent)"
+                )
+            event_schema, _codec = select_checkpoint_schema(
+                production_active=self._production_catalog is not None,
+                dynamics_active=self._environmental_dynamics is not None,
+                artifacts_active=self._artifacts_enabled,
+                lifecycle_active=self.lifecycle_channel_active,
+                new_agent_provenance_active=self.new_agent_provenance_active,
+                kinship_active=True,
+            )
+            snap = self._snapshot
+            same_tick = [
+                event for event in snap.event_history if event.tick == tick
+            ]
+            sequence = len(same_tick)
+            origin_location = snap.world.state.bodies[child_body_id].location_id
+            cause_id = derive_system_cause_id(
+                self._config,
+                run_id=self._run_id,
+                world_id=self.world_id,
+                tick=tick,
+                effect_family=SystemEffectFamily.LIFECYCLE.value,
+                entity_id=child_body_id,
+                family_ordinal=sequence,
+            )
+            event = make_physical_replayable_event(
+                event_id=derive_event_id(
+                    self._config,
+                    *canonical_system_effect_keys(
+                        run_id=self._run_id,
+                        world_id=self.world_id,
+                        tick=Tick(tick),
+                        effect_family=SystemEffectFamily.LIFECYCLE.value,
+                        entity_id=child_body_id,
+                        family_ordinal=sequence,
+                        sequence=0,
+                    ),
+                ),
+                run_id=run_id_for_event(self._run_id),
+                world_id=self.world_id,
+                tick=tick,
+                sequence=sequence,
+                cause=SystemCause(
+                    cause_id,
+                    SystemEffectFamily.LIFECYCLE,
+                    child_body_id,
+                    sequence,
+                ),
+                resulting_revision=snap.world.state.revision,
+                details=details,
+                occurrence=build_occurrence_context(
+                    details,
+                    origin_location_id=origin_location,
+                ),
+                schema_version=event_schema,
+            )
+            self._snapshot = _EngineSnapshot(
+                world=snap.world,
+                tick=snap.tick,
+                phase=snap.phase,
+                token=snap.token,
+                observation_batch=snap.observation_batch,
+                resolution_history=snap.resolution_history,
+                event_history=(*snap.event_history, event),
+                prior_event_window=(*snap.prior_event_window, event),
+            )
+        return details
 
     @property
     def lifecycle_records(self) -> tuple[object, ...]:
@@ -892,12 +1097,21 @@ class WorldEngine:
             new_agent_provenance_active=self.new_agent_provenance_active,
             kinship_active=self.kinship_channel_active,
         )
+        next_registrations = (*self._registrations, registration)
+        self._registrations = next_registrations
+        self._translator = _translator_from_registrations(next_registrations)
+        self._lifecycle_records = (*self._lifecycle_records, lifecycle_record)
         detail_seq = self._population_entry_detail_sequence(
             candidate=candidate,
             entry_tick=entry_tick,
             spawn_location=spawn_location,
             prepared=prepared,
         )
+        kinship_details = self._establish_admit_kinship_links(
+            candidate=candidate,
+            entry_tick=entry_tick,
+        )
+        detail_seq = (*detail_seq, *kinship_details)
         same_tick = [event for event in snap.event_history if event.tick == entry_tick]
         sequence_start = len(same_tick)
         events_list: list[WorldEvent] = []
@@ -945,10 +1159,6 @@ class WorldEngine:
                 )
             )
         events = tuple(events_list)
-        next_registrations = (*self._registrations, registration)
-        self._registrations = next_registrations
-        self._translator = _translator_from_registrations(next_registrations)
-        self._lifecycle_records = (*self._lifecycle_records, lifecycle_record)
         self._snapshot = _EngineSnapshot(
             world=World(self.world_id, next_state),
             tick=snap.tick,
@@ -1206,6 +1416,81 @@ class WorldEngine:
             creation_config_id=prepared.creation_config_id,
         )
         return (created, recorded, entered)
+
+    def _establish_admit_kinship_links(
+        self,
+        *,
+        candidate: object,
+        entry_tick: int,
+    ) -> tuple[KinshipEdgeRecorded, ...]:
+        """Establish mid-run parent links when both kinship + lifecycle channels allow."""
+        from simulation.demographic_policy import DemographicEntryCandidate
+        from simulation.runner_models import KinshipSpec
+
+        if type(candidate) is not DemographicEntryCandidate:
+            raise TypeError("candidate must be DemographicEntryCandidate")
+        if not candidate.parent_agent_ids:
+            return ()
+        if type(self._kinship_spec) is not KinshipSpec:
+            raise ValueError(
+                "admit parent links require kinship_inheritance "
+                "(code=kinship_admit_requires_flag)"
+            )
+        if self._population_lifecycle is None:
+            raise ValueError(
+                "admit parent links require generational_population "
+                "(code=kinship_admit_requires_lifecycle)"
+            )
+        policy = self._kinship_spec.admit_link_policy
+        if not policy.allow_parent_links_on_admit:
+            raise ValueError(
+                "admit parent links disabled "
+                "(code=kinship_admit_links_disabled)"
+            )
+        known = {registration.agent_id for registration in self._registrations}
+        known.add(candidate.agent_id)
+        recorded: list[KinshipEdgeRecorded] = []
+        state = self._snapshot.world.state
+        for parent_id in candidate.parent_agent_ids:
+            if parent_id not in known:
+                raise ValueError(
+                    f"unknown parent agent {parent_id.value!r} "
+                    "(code=kinship_unknown_agent)"
+                )
+            if policy.require_living_parent:
+                parent_reg = next(
+                    (
+                        registration
+                        for registration in self._registrations
+                        if registration.agent_id == parent_id
+                    ),
+                    None,
+                )
+                if parent_reg is None:
+                    raise ValueError(
+                        f"unknown parent agent {parent_id.value!r} "
+                        "(code=kinship_unknown_agent)"
+                    )
+                parent_body = state.bodies.get(parent_reg.entity_id)
+                if parent_body is None or parent_body.life_status is not LifeStatus.ALIVE:
+                    _LOGGER.warning(
+                        "kinship_admit_parent_not_living parent=%s child=%s "
+                        "reason_code=kinship_parent_not_living",
+                        parent_id.value,
+                        candidate.agent_id.value,
+                    )
+                    raise ValueError(
+                        f"parent {parent_id.value!r} not living "
+                        "(code=kinship_parent_not_living)"
+                    )
+            details = self.establish_kinship_edge(
+                parent_agent_id=parent_id,
+                child_agent_id=candidate.agent_id,
+                established_tick=entry_tick,
+                emit_event=False,
+            )
+            recorded.append(details)
+        return tuple(recorded)
 
     def _living_registered_population(self) -> int:
         state = self._snapshot.world.state

@@ -2210,6 +2210,13 @@ def build_occurrence_context(
                 affected_entity_ids=(body_id,),
                 private_recipient_ids=(),
             )
+        case KinshipEdgeRecorded():
+            return OccurrenceContext(
+                origin_location_id=origin_location_id,
+                destination_location_id=None,
+                affected_entity_ids=(),
+                private_recipient_ids=(),
+            )
         case AgentEnteredWorld(body_id=body_id, location_id=location_id):
             return OccurrenceContext(
                 origin_location_id=location_id,

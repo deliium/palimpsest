@@ -43,6 +43,7 @@ class DemographicEntryCandidate:
     creation_reason: str = "demographic_policy"
     origin_refs: tuple[object, ...] = ()
     creation_config_id: str | None = None
+    parent_agent_ids: tuple[AgentId, ...] = ()
 
     def __post_init__(self) -> None:
         from simulation.new_agent_initialization import (
@@ -91,6 +92,23 @@ class DemographicEntryCandidate:
                 "creation_config_id",
                 require_stable_id("creation_config_id", self.creation_config_id),
             )
+        if isinstance(self.parent_agent_ids, (str, bytes)) or not isinstance(
+            self.parent_agent_ids, tuple
+        ):
+            raise TypeError("parent_agent_ids must be a tuple")
+        parents: list[AgentId] = []
+        seen: set[str] = set()
+        for parent in self.parent_agent_ids:
+            if type(parent) is not AgentId:
+                raise TypeError("parent_agent_ids entries must be AgentId")
+            if parent.value in seen:
+                raise ValueError(
+                    "duplicate parent_agent_ids "
+                    "(code=kinship_duplicate_parent_id)"
+                )
+            seen.add(parent.value)
+            parents.append(parent)
+        object.__setattr__(self, "parent_agent_ids", tuple(parents))
 
 
 @dataclass(frozen=True, slots=True)

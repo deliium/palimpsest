@@ -44,6 +44,7 @@ from world.events import (
     EVENT_SCHEMA_REPLAY_V8,
     EVENT_SCHEMA_REPLAY_V9,
     EVENT_SCHEMA_REPLAY_V10,
+    EVENT_SCHEMA_REPLAY_V11,
     AgentCreated,
     AgentEnteredWorld,
     AgentInitializationRecorded,
@@ -66,6 +67,7 @@ from world.events import (
     Helped,
     ItemCrafted,
     ItemStored,
+    KinshipEdgeRecorded,
     LifecycleStageChanged,
     Moved,
     NeedsApplied,
@@ -327,6 +329,7 @@ def _prepare_events(
             EVENT_SCHEMA_REPLAY_V8,
             EVENT_SCHEMA_REPLAY_V9,
             EVENT_SCHEMA_REPLAY_V10,
+            EVENT_SCHEMA_REPLAY_V11,
         }:
             raise ProjectionError(ProjectionErrorCode.UNSUPPORTED_SCHEMA)
     return normalized, schema_version, run_id
@@ -563,6 +566,8 @@ def _apply_event_effect(
             return _project_agent_entered(state, event, entered), True
         case LifecycleStageChanged() as stage_changed:
             return _project_lifecycle_stage_changed(state, event, stage_changed)
+        case KinshipEdgeRecorded() as kinship_edge:
+            return _project_kinship_edge_recorded(state, event, kinship_edge)
         case _:
             raise ProjectionError(ProjectionErrorCode.PRECONDITION_FAILED)
 
@@ -870,6 +875,18 @@ def _project_lifecycle_stage_changed(
     del event
     if details.body_id not in state.bodies:
         raise ProjectionError(ProjectionErrorCode.TARGET_MISSING)
+    return state, False
+
+
+def _project_kinship_edge_recorded(
+    state: WorldState,
+    event: WorldEvent,
+    details: KinshipEdgeRecorded,
+) -> tuple[WorldState, bool]:
+    """Kinship graph lives on the engine; fold is a schema-gated no-op on WorldState."""
+    del details
+    if event.schema_version != EVENT_SCHEMA_REPLAY_V11:
+        raise ProjectionError(ProjectionErrorCode.PRECONDITION_FAILED)
     return state, False
 
 

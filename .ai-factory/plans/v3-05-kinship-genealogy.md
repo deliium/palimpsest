@@ -277,14 +277,14 @@ Hard boundary: experiment collectors / inspection / analysis outputs must not fl
 
 ### Phase 2: Engine events & persistence
 
-- [ ] Task 4: `KinshipEdgeRecorded` event + replay-v11 / codec v8 write pair
+- [x] Task 4: `KinshipEdgeRecorded` event + replay-v11 / codec v8 write pair
   - Add `KinshipEdgeRecorded` + kind `kinship_edge_recorded` to closed event union; extend replay projector; bump `EVENT_SCHEMA_REPLAY_V11` + codec `v8` journal field for kinship edges; extend `checkpoint_schema_for_production` **and** `select_checkpoint_schema` agreed-or chain (`kinship_active` first); wire `WorldEngine.kinship_channel_active`.
   - Co-land: `ACCEPTED_EVENT_SCHEMA_VERSIONS`, `ACCEPTED_PERSISTENCE_CODEC_VERSIONS`, compatibility matrix, serialization round-trip, replay restore of bootstrap + mid-run edges.
   - LOGGING: INFO on edge recorded `{parent_agent_id, child_agent_id, tick, edge_id}`; DEBUG on schema pair choice `{kinship_active, event_schema, codec}`.
   - Files: `src/world/events.py`, `src/world/_replay.py`, `src/simulation/persistence.py`, `src/simulation/serialization.py`, `src/simulation/journal.py`, `src/simulation/engine.py`, `tests/unit/test_kinship_events_replay.py`, `tests/unit/test_v3_v2_replay_compat.py` (extend)
   - Depends on: Task 1, Task 2
 
-- [ ] Task 5: WorldEngine establish API + mid-run admit parent links
+- [x] Task 5: WorldEngine establish API + mid-run admit parent links
   - Internal/engine API to establish edges (bootstrap + explicit admit path). Extend `DemographicEntryCandidate` with exact optional `parent_agent_ids: tuple[AgentId, ...]` (empty when absent) — **not** `OriginRef.role`. When `admit_link_policy.allow_parent_links_on_admit` and both flags on, validate parents (living/known per policy), enforce `max_parents_per_child`, emit `KinshipEdgeRecorded` in the same atomic commit as `AgentCreated`/`AgentEnteredWorld`.
   - Reject admit kinship without `generational_population`; keep `OriginRef` / `_KINSHIP_ORIGIN_ROLES` banned on provenance.
   - LOGGING: INFO/WARN with stable codes; no relationship payloads.

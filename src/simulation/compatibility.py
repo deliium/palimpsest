@@ -75,6 +75,7 @@ from simulation.runner_models import (
     RUNNER_SCHEMA_VERSION_V24,
     RUNNER_SCHEMA_VERSION_V25,
     RUNNER_SCHEMA_VERSION_V26,
+    RUNNER_SCHEMA_VERSION_V27,
     SUPPORTED_RESULT_SCHEMA_VERSIONS,
     SUPPORTED_RUNNER_SCHEMA_VERSIONS,
 )
@@ -333,12 +334,16 @@ _MATRIX: dict[str, CompatibilityEntry] = {
             "keys = five reserved V3 flag names); "
             f"{RUNNER_SCHEMA_VERSION_V24} = full v23 keyset plus root "
             "population_lifecycle (owned generational_population requires "
-            f"v24|v25|v26); {RUNNER_SCHEMA_VERSION_V25} = full v24 keyset plus "
+            f"v24|v25|v26|v27); {RUNNER_SCHEMA_VERSION_V25} = full v24 keyset plus "
             "root new_agent_initialization (explicit init requires v25+; "
             "v24 decode synthesizes default init); "
             f"{RUNNER_SCHEMA_VERSION_V26} = full v25 keyset with developmental "
             "children under population_lifecycle (stage effects / gradual "
             "aging / lifespan distribution; non-default requires v26); "
+            f"{RUNNER_SCHEMA_VERSION_V27} = full v23 keyset plus sibling root "
+            "kinship (owned kinship_inheritance; kinship-only forbids lifecycle/"
+            "init roots; combined requires both); kinship write-pair is "
+            "replay-v11/codec v8; "
             "default write stays "
             f"{RUNNER_SCHEMA_VERSION_V4} when all V3 flags are off; "
             f"writers emit {PLANNED_RUNNER_SCHEMA_VERSION_V23} when some "
@@ -348,9 +353,10 @@ _MATRIX: dict[str, CompatibilityEntry] = {
             f"writers emit {RUNNER_SCHEMA_VERSION_V25} when "
             "new_agent_initialization is explicit without developmental "
             "extensions; writers emit {RUNNER_SCHEMA_VERSION_V26} when "
-            "developmental children are non-default; mode allowlists that "
-            "top out at v25 widen to accept v26 and cognitive_budget_mode "
-            "accepts {{v22,v23,v24,v25,v26}}; "
+            "developmental children are non-default; writers emit "
+            f"{RUNNER_SCHEMA_VERSION_V27} when kinship is present; "
+            "mode allowlists that top out at v26 widen to accept v27 and "
+            "cognitive_budget_mode accepts {{v22,v23,v24,v25,v26,v27}}; "
             f"{RUNNER_SCHEMA_VERSION_V3} retained for V2 capability flags; "
             "v1-v4 omit consolidation_mode, reflection_mode, prospective_mode, "
             "counterfactual_mode, communication_strategy_mode, and "
@@ -566,10 +572,13 @@ _MATRIX: dict[str, CompatibilityEntry] = {
             f"{V3_CAPABILITY_FLAGS_WIRE_KEY} is a sibling of V2 capability_flags; "
             f"generational_population is owned and requires "
             f"{RUNNER_SCHEMA_VERSION_V24}|{RUNNER_SCHEMA_VERSION_V25}|"
-            f"{RUNNER_SCHEMA_VERSION_V26} with exact population_lifecycle; "
+            f"{RUNNER_SCHEMA_VERSION_V26}|{RUNNER_SCHEMA_VERSION_V27} with exact "
+            "population_lifecycle; "
             f"explicit new_agent_initialization requires "
             f"{RUNNER_SCHEMA_VERSION_V25}+; non-default developmental "
             f"children require {RUNNER_SCHEMA_VERSION_V26}; "
+            f"owned kinship_inheritance requires {RUNNER_SCHEMA_VERSION_V27} "
+            "with exact kinship (write-pair replay-v11/codec v8); "
             f"other flags still require at least {PLANNED_RUNNER_SCHEMA_VERSION_V23} "
             "and fail closed at SimulationRunner.from_config with "
             "capability_unimplemented until owned"
@@ -578,9 +587,10 @@ _MATRIX: dict[str, CompatibilityEntry] = {
         v1_fixture_impact=(
             "All five flags default off; decode of runner-config-v1..v22 "
             "synthesizes defaults; V1/V2 trajectory identity unchanged when off; "
-            "owned generational_population may enable on v24|v25|v26; v24/v25 "
+            "owned generational_population may enable on v24|v25|v26|v27; v24/v25 "
             "decode synthesizes developmental passthrough defaults; v24 decode "
-            "synthesizes default new_agent_initialization"
+            "synthesizes default new_agent_initialization; kinship off leaves "
+            "AE/AF/AG hashes unchanged"
         ),
     ),
 }
@@ -619,6 +629,7 @@ _LOG.debug(
         "runner_v24": RUNNER_SCHEMA_VERSION_V24,
         "runner_v25": RUNNER_SCHEMA_VERSION_V25,
         "runner_v26": RUNNER_SCHEMA_VERSION_V26,
+        "runner_v27": RUNNER_SCHEMA_VERSION_V27,
         "observer_protocol": OBSERVER_PROTOCOL_VERSION,
         "research_ui_mount": RESEARCH_UI_MOUNT,
         "alembic_head": ALEMBIC_HEAD_REVISION,
