@@ -44,7 +44,7 @@ def stable_kinship_edge_id(
 ) -> str:
     payload = (
         f"{parent_agent_id.value}|{child_agent_id.value}|{established_tick}"
-    ).encode("utf-8")
+    ).encode()
     return hashlib.sha256(payload).hexdigest()[:32]
 
 
@@ -188,7 +188,9 @@ class KinshipGraph:
             _validate_acyclic(children)
 
     @classmethod
-    def empty(cls, *, max_parents_per_child: int = _MAX_PARENTS_DEFAULT) -> KinshipGraph:
+    def empty(
+        cls, *, max_parents_per_child: int = _MAX_PARENTS_DEFAULT
+    ) -> KinshipGraph:
         return cls(
             edges=(),
             max_parents_per_child=max_parents_per_child,

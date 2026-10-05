@@ -46,21 +46,14 @@ from analysis.cultural_similarity_metrics import (
     CULTURAL_SIMILARITY_METRIC_VERSION,
     compute_cultural_similarity,
 )
+from analysis.cultural_transmission_metrics import (
+    CULTURAL_TRANSMISSION_METRIC_VERSION,
+    compute_cultural_transmission,
+)
 from analysis.distribution_summary import (
     DistributionSummary,
     proportion_confidence_interval,
     summarize_distribution,
-)
-from analysis.matrix_metric_summary import (
-    MATRIX_METRIC_SUMMARY_SCHEMA_VERSION,
-    MatrixMetricCellRef,
-    MatrixMetricKeySummary,
-    MatrixMetricSummary,
-    build_matrix_metric_summary,
-)
-from analysis.cultural_transmission_metrics import (
-    CULTURAL_TRANSMISSION_METRIC_VERSION,
-    compute_cultural_transmission,
 )
 from analysis.evidence import (
     EVIDENCE_STAGE_SCHEMA_VERSION,
@@ -85,6 +78,18 @@ from analysis.identity_dynamics_metrics import (
     IDENTITY_DYNAMICS_METRIC_VERSION,
     build_identity_audit,
     compute_identity_dynamics,
+)
+from analysis.kinship_genealogy_metrics import (
+    KINSHIP_GENEALOGY_METRIC_VERSION,
+    KinshipEdgeRow,
+    compute_kinship_genealogy,
+)
+from analysis.matrix_metric_summary import (
+    MATRIX_METRIC_SUMMARY_SCHEMA_VERSION,
+    MatrixMetricCellRef,
+    MatrixMetricKeySummary,
+    MatrixMetricSummary,
+    build_matrix_metric_summary,
 )
 from analysis.memory_drift import (
     AGENT_VISIBLE_PROJECTOR_VERSION,
@@ -186,6 +191,10 @@ from analysis.objective_metrics import (
     compute_survival_cohort_contrast,
     living_agent_ticks,
 )
+from analysis.offline_consolidation_metrics import (
+    OFFLINE_CONSOLIDATION_METRIC_VERSION,
+    compute_offline_consolidation,
+)
 from analysis.phenomenon_models import (
     PHENOMENON_INDICATORS_SCHEMA_VERSION,
     PhenomenonId,
@@ -207,10 +216,6 @@ from analysis.prediction_calibration_metrics import (
     PREDICTION_CALIBRATION_METRIC_VERSION,
     CalibrationRow,
     compute_prediction_calibration,
-)
-from analysis.offline_consolidation_metrics import (
-    OFFLINE_CONSOLIDATION_METRIC_VERSION,
-    compute_offline_consolidation,
 )
 from analysis.prospective_imagination_metrics import (
     PROSPECTIVE_IMAGINATION_METRIC_VERSION,
@@ -317,9 +322,6 @@ __all__ = [
     "CANONICAL_FLOAT_DECIMAL_PLACES",
     "CANONICAL_OUTPUT_CLAIM",
     "CAUSAL_WORLD_MODEL_METRIC_VERSION",
-    "MATRIX_METRIC_SUMMARY_SCHEMA_VERSION",
-    "PHENOMENON_INDICATORS_SCHEMA_VERSION",
-    "SUPPORT_BAND_RULES",
     "CLAIM_TRUTH_SCHEMA_VERSION",
     "COGNITIVE_BUDGET_METRIC_VERSION",
     "COMMUNICATION_STRATEGY_METRIC_VERSION",
@@ -338,6 +340,8 @@ __all__ = [
     "GRAPH_NODE_ORDER_POLICY",
     "IDENTITY_DYNAMICS_METRIC_VERSION",
     "INTERMEDIATE_DTYPE",
+    "KINSHIP_GENEALOGY_METRIC_VERSION",
+    "MATRIX_METRIC_SUMMARY_SCHEMA_VERSION",
     "MEMORY_DYNAMICS_METRIC_VERSION",
     "METRIC_CATALOG_VERSION",
     "METRIC_DOCUMENT_SCHEMA_VERSION",
@@ -346,6 +350,7 @@ __all__ = [
     "OFFLINE_CONSOLIDATION_METRIC_VERSION",
     "PANDAS_NULL_SENTINEL_POLICY",
     "PERSISTENT_SOCIAL_CONVENTIONS_METRIC_VERSION",
+    "PHENOMENON_INDICATORS_SCHEMA_VERSION",
     "PREDICTION_CALIBRATION_METRIC_VERSION",
     "PROSPECTIVE_IMAGINATION_METRIC_VERSION",
     "REFLECTION_METRIC_VERSION",
@@ -354,6 +359,7 @@ __all__ = [
     "SOCIAL_TRANSMISSION_METRIC_VERSION",
     "SPATIAL_CONTROL_METRIC_VERSION",
     "SUPPORTED_COMMUNITY_ALGORITHM",
+    "SUPPORT_BAND_RULES",
     "SURVIVAL_COHORT_CONTRAST_METRIC_VERSION",
     "TERRITORIAL_CONCENTRATION_METRIC_VERSION",
     "THEORY_OF_MIND_METRIC_VERSION",
@@ -379,6 +385,7 @@ __all__ = [
     "GoalTransitionRow",
     "InMemoryMemoryEvidenceSource",
     "InMemoryObjectiveEventSource",
+    "KinshipEdgeRow",
     "MatrixMetricCellRef",
     "MatrixMetricKeySummary",
     "MatrixMetricSummary",
@@ -468,6 +475,7 @@ __all__ = [
     "compute_group_community_structure",
     "compute_group_persistence",
     "compute_identity_dynamics",
+    "compute_kinship_genealogy",
     "compute_knowledge_diffusion",
     "compute_memory_drift",
     "compute_memory_dynamics",
@@ -489,11 +497,6 @@ __all__ = [
     "compute_territorial_concentration",
     "compute_theory_of_mind_metrics",
     "compute_trust_network_structure",
-    "phenomenon_indicator_refs",
-    "proportion_confidence_interval",
-    "resolve_support_band",
-    "summarize_distribution",
-    "validate_phenomenon_mappings",
     "concept_jaccard_loss",
     "cumulative_drift",
     "decode_metric_document",
@@ -511,19 +514,24 @@ __all__ = [
     "motif_token",
     "nonnegative_undirected_projection",
     "normalize_signed_zero",
+    "phenomenon_indicator_refs",
     "project_agent_visible_observation",
     "project_memory_trace",
     "project_reconstructed_memory",
     "project_reconstruction_evidence",
     "project_world_event",
+    "proportion_confidence_interval",
     "quantize_float",
     "reconstruction_evidence_from_durable",
     "require_evidence_stage",
     "require_finite",
     "require_metric_family_id",
     "resolve_objective_link",
+    "resolve_support_band",
     "sorted_graph_nodes",
     "stable_seed_tuple",
+    "summarize_distribution",
     "validate_metric_catalog",
     "validate_metric_specification",
+    "validate_phenomenon_mappings",
 ]

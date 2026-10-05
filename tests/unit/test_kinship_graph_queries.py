@@ -7,7 +7,6 @@ import pytest
 from agents.models import AgentId
 from world.kinship import (
     KinshipEdge,
-    KinshipGraph,
     ancestors_of,
     children_of,
     descendants_of,

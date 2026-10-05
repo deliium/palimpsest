@@ -346,7 +346,7 @@ Hard boundary: experiment collectors / inspection / analysis outputs must not fl
   - Files: extend `tests/unit/test_v3_*` compat/flag tests
   - Depends on: Task 12
 
-- [ ] Task 14: Documentation checkpoint (`/aif-docs`)
+- [x] Task 14: Documentation checkpoint (`/aif-docs`)
   - Update `docs/architecture.md` V3 seams: own `kinship_inheritance`; objective genealogy vs subjective social; perception modes; death persistence; write-pair v11/v8; research/query scaffolding for later UI; Experiment AH; Downstream V3 checklist.
   - Update configuration / social-communication / observer docs as needed; brief `.ai-factory/DESCRIPTION.md` / `ARCHITECTURE.md` blurb.
   - Explicit non-goals: biology; cultural inheritance; auto social valence; full UI trees.
