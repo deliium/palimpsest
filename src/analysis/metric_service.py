@@ -64,6 +64,7 @@ from analysis.serialization import (
     metric_document_fingerprint,
 )
 from analysis.spatial_control_metrics import compute_spatial_control
+from analysis.kinship_genealogy_metrics import compute_kinship_genealogy
 from analysis.specifications import MetricFamilyId, metric_specification
 from analysis.territorial_concentration_metrics import compute_territorial_concentration
 from analysis.transmission_metrics import (
@@ -114,6 +115,9 @@ class MetricComputationInputs:
     eligible_agent_ids: Sequence[str] = ()
     spatial_action_rows: Sequence[object] | None = None
     spatial_claim_rows: Sequence[object] | None = None
+    kinship_edge_rows: Sequence[object] | None = None
+    kinship_known_agent_ids: Sequence[str] | None = None
+    kinship_max_depth: int = 8
     territorial_presence_rows: Sequence[object] | None = None
     territorial_control_rows: Sequence[object] | None = None
     belief_convergence_claims: Sequence[object] | None = None
@@ -408,7 +412,22 @@ def assemble_metric_documents(inputs: MetricComputationInputs) -> MetricBundle:
                 input_revision=revision,
             ),
         )
+    if inputs.kinship_edge_rows is not None:
+        kinship_rows = inputs.kinship_edge_rows
+        known = inputs.kinship_known_agent_ids
+        depth = inputs.kinship_max_depth
+        _safe(
+            "kinship_genealogy",
+            lambda: compute_kinship_genealogy(
+                kinship_rows,
+                run_id=run_id,
+                input_revision=revision,
+                known_agent_ids=known,
+                max_depth=depth,
+            ),
+        )
     optional_blocks = {
+        "kinship_genealogy": inputs.kinship_edge_rows is not None,
         "territorial_presence": inputs.territorial_presence_rows is not None,
         "territorial_control": inputs.territorial_control_rows is not None,
         "belief_convergence": inputs.belief_convergence_claims is not None,

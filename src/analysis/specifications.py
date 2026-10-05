@@ -50,7 +50,7 @@ __all__ = [
 ]
 
 METRIC_CATALOG_VERSION: Final[str] = "metric-catalog-v1"
-METRIC_FAMILY_COUNT: Final[int] = 39
+METRIC_FAMILY_COUNT: Final[int] = 40
 
 # Align with existing memory-drift / transmission document versions.
 _ALGO_V1: Final[str] = "1"
@@ -116,6 +116,7 @@ class MetricFamilyId(StrEnum):
     PREDICTION_CALIBRATION = "prediction_calibration"
     BELIEF_CONVERGENCE = "belief_convergence"
     CULTURAL_SIMILARITY = "cultural_similarity"
+    KINSHIP_GENEALOGY = "kinship_genealogy"
 
 
 class DenominatorKind(StrEnum):
@@ -1063,6 +1064,38 @@ def _spec_skill_learning() -> MetricSpecification:
         },
         value_keys=("matched_count", "unmatched_count", "max_gap"),
         empty_case="availability=absent; omit numeric values",
+    )
+
+
+def _spec_kinship_genealogy() -> MetricSpecification:
+    return _base(
+        family_id=MetricFamilyId.KINSHIP_GENEALOGY,
+        evidence_inputs=frozenset({EvidenceStage.OBJECTIVE_EVENT_STATE}),
+        population="detached_kinship_edge_rows",
+        denominator="registered_agents",
+        denominator_kind=DenominatorKind.POPULATION_SIZE,
+        cohort_window="caller-supplied kinship edges after the run",
+        deceased_policy="include_dead_by_default",
+        zero_holding_policy="empty edge rows with no known agents -> availability=absent",
+        opportunity_vs_occurrence=(
+            "parent→child edges only; sibling/ancestor/descendant are derived elsewhere"
+        ),
+        self_edge_policy="self_parent rejected",
+        censoring_policy="relatedness never implies social valence or inheritance rights",
+        formulas={
+            "edge_count": "number of directed parent→child edges",
+            "component_sizes": "weakly connected component sizes (desc)",
+            "mean_depth_reached": "mean max outbound depth within cap",
+            "orphan_count": "agents with degree zero in the genealogy digraph",
+        },
+        value_keys=(
+            "component_sizes",
+            "edge_count",
+            "mean_depth_reached",
+            "orphan_count",
+        ),
+        empty_case="availability=absent; no_kinship_rows",
+        networkx_policy="weak_components_and_outbound_depth_only",
     )
 
 
@@ -2366,6 +2399,7 @@ _BUILDERS: Final[tuple[Callable[[], MetricSpecification], ...]] = (
     _spec_skill_learning,
     _spec_cultural_transmission,
     _spec_spatial_control,
+    _spec_kinship_genealogy,
     _spec_emergent_group_formation,
     _spec_emergent_social_norms,
     _spec_persistent_social_conventions,

@@ -320,19 +320,19 @@ Hard boundary: experiment collectors / inspection / analysis outputs must not fl
 
 ### Phase 4: Research surfaces & experiment
 
-- [ ] Task 10: Inspection projection + bounded query helpers for research
+- [x] Task 10: Inspection projection + bounded query helpers for research
   - Detached objective kinship DTO + query helpers suitable for later UI (parents/children/siblings/ancestors/descendants with depth). Wire read path via existing inspection loader patterns; HTTP route only if it fits current `/v1/simulations/...` inspection style under `objective_inspection` without Alembic.
   - LOGGING: INFO/DEBUG on query `{run_id, agent_id, relation, depth, result_count}` — no cognition feedback.
   - Files: `src/simulation/inspection.py`, `src/api/` inspection routes if applicable, `src/persistence/` if loader needed, unit tests
   - Depends on: Task 1, Task 8
 
-- [ ] Task 11: Analysis metric `kinship_genealogy@1`
+- [x] Task 11: Analysis metric `kinship_genealogy@1`
   - Analysis-only specification + collector following `spatial_control@1` pattern (`MetricFamilyId` in `analysis/specifications.py`, compute module, wire in `metric_service.py`); NetworkX ok inside analysis only; register in phenomenon/metric catalog; never imported by cognition.
   - LOGGING: metadata-only metric ids/counts.
   - Files: `src/analysis/kinship_genealogy_metrics.py` (or sibling), `src/analysis/specifications.py`, `src/analysis/metric_service.py`, `tests/unit/test_kinship_genealogy_metric.py`
   - Depends on: Task 1, Task 8
 
-- [ ] Task 12: Experiment AH + catalog profile
+- [x] Task 12: Experiment AH + catalog profile
   - Add `experiment-ah-kinship-genealogy` / `kinship_genealogy_profile` on v27; arms per Design Decisions; off V1 gate; AE/AF/AG unchanged; matrix allowlist includes AH.
   - LOGGING: experiment coordinator metadata-only.
   - Files: `src/experiments/catalog.py`, `tests/unit/test_kinship_catalog_arm.py`

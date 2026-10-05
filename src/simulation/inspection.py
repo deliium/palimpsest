@@ -45,6 +45,8 @@ __all__ = [
     "InspectionEventPage",
     "InspectionReplayProjection",
     "InspectionSurface",
+    "KinshipInspectionDocument",
+    "KinshipInspectionEdge",
     "MemoryKeysetCursor",
     "ObjectiveEvidenceLoader",
     "SubjectiveClaimHead",
@@ -457,6 +459,33 @@ def clamp_inspection_page_limit(
 
 
 SUBJECTIVE_CLAIMS_SCHEMA: Final[str] = "subjective-claims-v1"
+KINSHIP_INSPECTION_SCHEMA: Final[str] = "kinship-inspection-v1"
+
+
+@dataclass(frozen=True, slots=True)
+class KinshipInspectionEdge:
+    """Detached parent→child edge for research/UI scaffolding."""
+
+    parent_agent_id: str
+    child_agent_id: str
+    established_tick: int
+    edge_id: str
+
+
+@dataclass(frozen=True, slots=True)
+class KinshipInspectionDocument:
+    """Read-only kinship projection. Outside cognition / EvidenceManifest."""
+
+    schema_version: str
+    run_id: str
+    tick: int
+    channel_active: bool
+    max_query_depth: int
+    edges: tuple[KinshipInspectionEdge, ...]
+    # Scaffolding note for later Research UI / Godot family-tree consumers.
+    ui_scaffold_note: str = (
+        "Consume via objective_inspection; not a cognition input"
+    )
 
 
 @dataclass(frozen=True, slots=True)
@@ -502,6 +531,125 @@ class DetachedInspectionProjector:
             },
         )
         return projection
+
+    def project_kinship(self, engine: WorldEngine) -> KinshipInspectionDocument:
+        """Detached objective kinship graph for research inspection."""
+        if type(engine) is not WorldEngine:
+            raise TypeError("project_kinship requires WorldEngine")
+        from world.kinship import KinshipGraph
+
+        started = time.perf_counter()
+        active = engine.kinship_channel_active
+        graph = engine.kinship_graph
+        edges: list[KinshipInspectionEdge] = []
+        max_depth = 8
+        if active and type(graph) is KinshipGraph:
+            from simulation.runner_models import KinshipSpec
+
+            spec = getattr(engine, "_kinship_spec", None)
+            if type(spec) is KinshipSpec:
+                max_depth = spec.max_query_depth
+            for edge in sorted(
+                graph.edges,
+                key=lambda item: (
+                    item.parent_agent_id.value,
+                    item.child_agent_id.value,
+                    item.established_tick,
+                ),
+            ):
+                edges.append(
+                    KinshipInspectionEdge(
+                        parent_agent_id=edge.parent_agent_id.value,
+                        child_agent_id=edge.child_agent_id.value,
+                        established_tick=edge.established_tick,
+                        edge_id=edge.edge_id,
+                    )
+                )
+        document = KinshipInspectionDocument(
+            schema_version=KINSHIP_INSPECTION_SCHEMA,
+            run_id=engine.run_id.value,
+            tick=engine.tick.value,
+            channel_active=active,
+            max_query_depth=max_depth,
+            edges=tuple(edges),
+        )
+        _LOG.info(
+            "inspection_kinship_projected run_id=%s tick=%s edge_count=%s "
+            "channel_active=%s duration_ms=%s",
+            engine.run_id.value,
+            engine.tick.value,
+            len(edges),
+            active,
+            round((time.perf_counter() - started) * 1000, 3),
+        )
+        return document
+
+    def query_kinship(
+        self,
+        engine: WorldEngine,
+        *,
+        agent_id: AgentId,
+        relation: str,
+        max_depth: int | None = None,
+    ) -> tuple[str, ...]:
+        """Bounded parents/children/siblings/ancestors/descendants query."""
+        if type(engine) is not WorldEngine:
+            raise TypeError("query_kinship requires WorldEngine")
+        if type(agent_id) is not AgentId:
+            raise TypeError("agent_id must be AgentId")
+        relation_id = require_stable_id("relation", relation)
+        from world.kinship import (
+            KinshipGraph,
+            ancestors_of,
+            children_of,
+            descendants_of,
+            parents_of,
+            siblings_of,
+        )
+
+        graph = engine.kinship_graph
+        if type(graph) is not KinshipGraph or not engine.kinship_channel_active:
+            _LOG.debug(
+                "inspection_kinship_query_empty run_id=%s agent_id=%s relation=%s",
+                engine.run_id.value,
+                agent_id.value,
+                relation_id,
+            )
+            return ()
+        from simulation.runner_models import KinshipSpec
+
+        spec = getattr(engine, "_kinship_spec", None)
+        config_cap = (
+            spec.max_query_depth if type(spec) is KinshipSpec else 8
+        )
+        depth = config_cap if max_depth is None else max_depth
+        if relation_id == "parents":
+            result = parents_of(graph, agent_id)
+        elif relation_id == "children":
+            result = children_of(graph, agent_id)
+        elif relation_id == "siblings":
+            result = siblings_of(graph, agent_id)
+        elif relation_id == "ancestors":
+            result = ancestors_of(
+                graph, agent_id, max_depth=depth, config_max_depth=config_cap
+            )
+        elif relation_id == "descendants":
+            result = descendants_of(
+                graph, agent_id, max_depth=depth, config_max_depth=config_cap
+            )
+        else:
+            raise InspectionError("unknown_kinship_relation")
+        values = tuple(item.value for item in result)
+        _LOG.debug(
+            "inspection_kinship_query run_id=%s agent_id=%s relation=%s "
+            "depth=%s result_count=%s",
+            engine.run_id.value,
+            agent_id.value,
+            relation_id,
+            depth,
+            len(values),
+        )
+        return values
 
     def project_agent_visible(
         self,

@@ -2054,3 +2054,205 @@ def experiment_ag_developmental_stages(
             ),
         ),
     )
+
+
+def kinship_genealogy_profile(
+    config: SimulationRunnerConfig,
+) -> SimulationRunnerConfig:
+    """Require owned ``kinship_inheritance`` + exact kinship on runner-config-v27.
+
+    Allows kinship-only or kinship+generational combined arms. Off the V1 gate.
+    """
+    from simulation.runner_models import RUNNER_SCHEMA_VERSION_V27
+
+    if type(config) is not SimulationRunnerConfig:
+        raise TypeError("kinship_genealogy_profile requires SimulationRunnerConfig")
+    if type(config.v3_capability_flags) is not V3CapabilityFlags:
+        raise TypeError("v3_capability_flags must be V3CapabilityFlags")
+    if config.v3_capability_flags.kinship_inheritance is not True:
+        raise ValueError(
+            "kinship genealogy profile requires kinship_inheritance=true "
+            "(code=kinship_genealogy_profile_flag_off)"
+        )
+    if config.schema_version != RUNNER_SCHEMA_VERSION_V27:
+        raise ValueError(
+            "kinship genealogy profile requires runner-config-v27 "
+            "(code=kinship_genealogy_profile_requires_v27)"
+        )
+    if config.kinship is None:
+        raise ValueError(
+            "kinship genealogy profile requires kinship object "
+            "(code=kinship_genealogy_profile_missing_kinship)"
+        )
+    allowed = {"kinship_inheritance", "generational_population"}
+    other = tuple(
+        name
+        for name in config.v3_capability_flags.enabled_names()
+        if name not in allowed
+    )
+    if other:
+        raise ValueError(
+            "kinship genealogy profile forbids unowned V3 flags "
+            f"(code=kinship_genealogy_profile_extra_flags "
+            f"flag_count={len(other)})"
+        )
+    if config.v3_capability_flags.generational_population:
+        if config.population_lifecycle is None:
+            raise ValueError(
+                "combined kinship+generational arm requires population_lifecycle "
+                "(code=kinship_genealogy_profile_missing_lifecycle)"
+            )
+    elif config.population_lifecycle is not None:
+        raise ValueError(
+            "kinship-only arm forbids population_lifecycle "
+            "(code=kinship_genealogy_profile_lifecycle_without_flag)"
+        )
+    _LOG.debug(
+        "kinship_genealogy_profile_ok schema_version=%s "
+        "perception_mode=%s generational_population=%s edge_count=%s",
+        config.schema_version,
+        config.kinship.perception_mode,
+        config.v3_capability_flags.generational_population,
+        len(config.kinship.bootstrap_edges),
+    )
+    return config
+
+
+def experiment_ah_kinship_genealogy(
+    base: SimulationRunnerConfig,
+    *,
+    seed_matrix: ExperimentSeedMatrix | None = None,
+    max_ticks: int = 8,
+) -> ExperimentDefinition:
+    """Off-gate Experiment AH proving objective kinship on runner-config-v27.
+
+    Arms: kinship-only bootstrap chain, perception modes, and a combined
+    kinship+generational admit arm. Does not claim dynasty/loyalty emergence.
+    """
+    from simulation.new_agent_initialization import (
+        default_new_agent_initialization_spec,
+    )
+    from simulation.runner_models import (
+        RUNNER_SCHEMA_VERSION_V27,
+        KinshipAdmitLinkPolicy,
+        KinshipBootstrapEdgeSpec,
+        KinshipSpec,
+        example_population_lifecycle_spec,
+    )
+
+    matrix = seed_matrix or ExperimentSeedMatrix(seeds=(base.seed,))
+    # Prefer parents already present on the base roster when possible.
+    agent_ids = tuple(agent.agent_id for agent in base.agents)
+    if len(agent_ids) < 2:
+        raise ValueError(
+            "experiment AH requires at least two agents on the base roster "
+            "(code=kinship_ah_roster_too_small)"
+        )
+    parent_id = agent_ids[0]
+    child_id = agent_ids[1]
+    sibling_id = agent_ids[2] if len(agent_ids) >= 3 else None
+    bootstrap_edges = [
+        KinshipBootstrapEdgeSpec(
+            parent_agent_id=parent_id,
+            child_agent_id=child_id,
+            established_tick=0,
+        )
+    ]
+    if sibling_id is not None:
+        bootstrap_edges.append(
+            KinshipBootstrapEdgeSpec(
+                parent_agent_id=parent_id,
+                child_agent_id=sibling_id,
+                established_tick=0,
+            )
+        )
+    edges = tuple(bootstrap_edges)
+    control = replace(
+        base,
+        mortality_mode=MortalityMode.DISABLED,
+        stop_policy=RunnerStopPolicy(max_ticks=max_ticks),
+        v3_capability_flags=V3CapabilityFlags(),
+        kinship=None,
+        population_lifecycle=None,
+        new_agent_initialization=None,
+    )
+    kinship_none = replace(
+        base,
+        schema_version=RUNNER_SCHEMA_VERSION_V27,
+        mortality_mode=MortalityMode.DISABLED,
+        stop_policy=RunnerStopPolicy(max_ticks=max_ticks),
+        v3_capability_flags=V3CapabilityFlags(kinship_inheritance=True),
+        kinship=KinshipSpec(
+            bootstrap_edges=edges,
+            perception_mode="none",
+        ),
+        population_lifecycle=None,
+        new_agent_initialization=None,
+    )
+    kinship_public = replace(
+        kinship_none,
+        kinship=KinshipSpec(
+            bootstrap_edges=edges,
+            perception_mode="self_incident_public",
+        ),
+    )
+    combined = replace(
+        base,
+        schema_version=RUNNER_SCHEMA_VERSION_V27,
+        mortality_mode=MortalityMode.DISABLED,
+        stop_policy=RunnerStopPolicy(max_ticks=max_ticks),
+        v3_capability_flags=V3CapabilityFlags(
+            kinship_inheritance=True,
+            generational_population=True,
+        ),
+        kinship=KinshipSpec(
+            bootstrap_edges=edges,
+            perception_mode="none",
+            admit_link_policy=KinshipAdmitLinkPolicy(
+                allow_parent_links_on_admit=True,
+                require_living_parent=True,
+            ),
+        ),
+        population_lifecycle=example_population_lifecycle_spec(
+            lifespan_ticks=40,
+            max_population=max(4, len(agent_ids) + 2),
+            policy_id="fixed_interval_entry",
+        ),
+        new_agent_initialization=default_new_agent_initialization_spec(),
+    )
+    for arm in (kinship_none, kinship_public, combined):
+        kinship_genealogy_profile(arm)
+    _LOG.info(
+        "experiment_ah_built experiment_id=experiment-ah-kinship-genealogy "
+        "schema_version=%s tick_count=%s edge_count=%s",
+        RUNNER_SCHEMA_VERSION_V27,
+        max_ticks,
+        len(edges),
+    )
+    return _definition(
+        experiment_id="experiment-ah-kinship-genealogy",
+        base=base,
+        seed_matrix=matrix,
+        arms=(
+            (
+                "ah-kinship-off",
+                "kinship_inheritance_disabled",
+                control,
+            ),
+            (
+                "ah-kinship-only-none",
+                "kinship_only_perception_none",
+                kinship_none,
+            ),
+            (
+                "ah-kinship-only-public",
+                "kinship_only_perception_self_incident_public",
+                kinship_public,
+            ),
+            (
+                "ah-kinship-combined",
+                "kinship_plus_generational_admit",
+                combined,
+            ),
+        ),
+    )
