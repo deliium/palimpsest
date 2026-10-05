@@ -1708,11 +1708,14 @@ def v2_regression_profile(config: SimulationRunnerConfig) -> SimulationRunnerCon
 def generational_population_profile(
     config: SimulationRunnerConfig,
 ) -> SimulationRunnerConfig:
-    """Require owned ``generational_population`` on runner-config-v24.
+    """Require owned ``generational_population`` on runner-config-v24|v25.
 
     Off the V1/V2 regression gates. Returns the same config when valid.
     """
-    from simulation.runner_models import RUNNER_SCHEMA_VERSION_V24
+    from simulation.runner_models import (
+        RUNNER_SCHEMA_VERSION_V24,
+        RUNNER_SCHEMA_VERSION_V25,
+    )
 
     if type(config) is not SimulationRunnerConfig:
         raise TypeError(
@@ -1726,9 +1729,12 @@ def generational_population_profile(
             "generational_population=true "
             "(code=generational_population_profile_flag_off)"
         )
-    if config.schema_version != RUNNER_SCHEMA_VERSION_V24:
+    if config.schema_version not in {
+        RUNNER_SCHEMA_VERSION_V24,
+        RUNNER_SCHEMA_VERSION_V25,
+    }:
         raise ValueError(
-            "generational population profile requires runner-config-v24 "
+            "generational population profile requires runner-config-v24|v25 "
             "(code=generational_population_profile_requires_v24)"
         )
     if config.population_lifecycle is None:
@@ -1754,6 +1760,31 @@ def generational_population_profile(
         config.population_lifecycle.demographic_policy_id,
     )
     return config
+
+
+def new_agent_bootstrap_profile(
+    config: SimulationRunnerConfig,
+) -> SimulationRunnerConfig:
+    """Require v25 + explicit new_agent_initialization on generational channel."""
+    from simulation.runner_models import RUNNER_SCHEMA_VERSION_V25
+
+    profiled = generational_population_profile(config)
+    if profiled.schema_version != RUNNER_SCHEMA_VERSION_V25:
+        raise ValueError(
+            "new agent bootstrap profile requires runner-config-v25 "
+            "(code=new_agent_bootstrap_profile_requires_v25)"
+        )
+    if profiled.new_agent_initialization is None:
+        raise ValueError(
+            "new agent bootstrap profile requires new_agent_initialization "
+            "(code=new_agent_bootstrap_profile_missing_init)"
+        )
+    _LOG.debug(
+        "new_agent_bootstrap_profile_ok schema_version=%s species_defaults_id=%s",
+        profiled.schema_version,
+        profiled.new_agent_initialization.species_defaults_id,
+    )
+    return profiled
 
 
 def experiment_ae_generational_population(
@@ -1809,6 +1840,72 @@ def experiment_ae_generational_population(
             (
                 "ae-generational-on",
                 "generational_population_enabled",
+                enabled,
+            ),
+        ),
+    )
+
+
+def experiment_af_new_agent_bootstrap(
+    base: SimulationRunnerConfig,
+    *,
+    seed_matrix: ExperimentSeedMatrix | None = None,
+    max_ticks: int = 12,
+) -> ExperimentDefinition:
+    """Off-gate arm proving blank-slate NewAgentInitialization on v25.
+
+    Does not claim scientific emergence. Keeps other V3 flags off. AE stays on v24.
+    """
+    from simulation.new_agent_initialization import (
+        default_new_agent_initialization_spec,
+    )
+    from simulation.runner_models import RUNNER_SCHEMA_VERSION_V25
+
+    matrix = seed_matrix or ExperimentSeedMatrix(seeds=(base.seed,))
+    lifecycle = example_population_lifecycle_spec(
+        lifespan_ticks=40,
+        max_population=4,
+        policy_id="fixed_interval_entry",
+    )
+    init = default_new_agent_initialization_spec()
+    control = replace(
+        base,
+        mortality_mode=MortalityMode.DISABLED,
+        stop_policy=RunnerStopPolicy(max_ticks=max_ticks),
+        v3_capability_flags=V3CapabilityFlags(),
+        population_lifecycle=None,
+        new_agent_initialization=None,
+    )
+    enabled = replace(
+        base,
+        schema_version=RUNNER_SCHEMA_VERSION_V25,
+        mortality_mode=MortalityMode.DISABLED,
+        stop_policy=RunnerStopPolicy(max_ticks=max_ticks),
+        v3_capability_flags=V3CapabilityFlags(generational_population=True),
+        population_lifecycle=lifecycle,
+        new_agent_initialization=init,
+    )
+    new_agent_bootstrap_profile(enabled)
+    _LOG.info(
+        "experiment_af_built experiment_id=experiment-af-new-agent-bootstrap "
+        "schema_version=%s tick_count=%s species_defaults_id=%s",
+        RUNNER_SCHEMA_VERSION_V25,
+        max_ticks,
+        init.species_defaults_id,
+    )
+    return _definition(
+        experiment_id="experiment-af-new-agent-bootstrap",
+        base=base,
+        seed_matrix=matrix,
+        arms=(
+            (
+                "af-new-agent-off",
+                "new_agent_initialization_disabled",
+                control,
+            ),
+            (
+                "af-new-agent-on",
+                "new_agent_initialization_enabled",
                 enabled,
             ),
         ),
