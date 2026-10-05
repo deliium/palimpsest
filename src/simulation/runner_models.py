@@ -1274,7 +1274,9 @@ class PopulationLifecycleSpec:
             return True
         return False
 
-    def canonical_payload(self, *, include_developmental: bool = False) -> dict[str, object]:
+    def canonical_payload(
+        self, *, include_developmental: bool = False
+    ) -> dict[str, object]:
         """Exact wire object for ``population_lifecycle``.
 
         Base keys are always present. Developmental children are included only

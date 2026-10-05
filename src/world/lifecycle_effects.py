@@ -19,9 +19,9 @@ from world.lifecycle import LifecycleStageId, LifecycleStageThreshold
 _LOGGER: Final[logging.Logger] = logging.getLogger("world.lifecycle_effects")
 
 __all__ = [
-    "ContinuousLifecycleFactors",
     "LIFECYCLE_DENIED_COMMAND_KINDS_ALLOWLIST",
     "PASSTHROUGH_CONTINUOUS_FACTORS",
+    "ContinuousLifecycleFactors",
     "StageCapabilityEffect",
     "interpolate_continuous_factors",
     "require_lifecycle_denied_command_kinds",
@@ -84,7 +84,9 @@ PASSTHROUGH_CONTINUOUS_FACTORS: Final[ContinuousLifecycleFactors] = (
 
 def require_positive_factor_in_unit_two(name: str, value: object) -> float:
     """Accept a positive float in the closed range ``(0, 2]``."""
-    if isinstance(value, bool) or type(value) is not float and type(value) is not int:
+    if isinstance(value, bool) or (
+        type(value) is not float and type(value) is not int
+    ):
         raise TypeError(f"{name} must be a number (code=lifecycle_factor_type)")
     factor = float(value)
     if not (0.0 < factor <= _FACTOR_MAX):
@@ -262,7 +264,9 @@ def validate_stage_capability_effects_cover(
 
 def resolve_stage_effect(
     stage: LifecycleStageId,
-    effects: Sequence[StageCapabilityEffect] | Mapping[str, StageCapabilityEffect] | None,
+    effects: (
+        Sequence[StageCapabilityEffect] | Mapping[str, StageCapabilityEffect] | None
+    ),
 ) -> StageCapabilityEffect:
     """Return the effect for ``stage``, or passthrough when effects are absent."""
     if type(stage) is not LifecycleStageId:

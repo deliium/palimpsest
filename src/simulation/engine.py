@@ -3197,7 +3197,7 @@ class WorldEngine:
             factor = float(factors.physical_capacity_factor)  # type: ignore[attr-defined]
             if factor == 1.0:
                 continue
-            effective = max(0, int(round(body.carry_capacity.value * factor)))
+            effective = max(0, round(body.carry_capacity.value * factor))
             result[raw.body_id] = effective
             _LOGGER.debug(
                 "lifecycle_capacity_factor body_id=%s stage=%s factor=%s "
@@ -3216,7 +3216,7 @@ class WorldEngine:
             return None
         if len(self._population_lifecycle.stage_capability_effects) == 0:
             return None
-        from world.lifecycle import AgentLifecycleRecord, chronological_age
+        from world.lifecycle import AgentLifecycleRecord
         from world.lifecycle_effects import resolve_stage_effect
 
         del tick  # denies stay discrete by current stage on the record
@@ -3284,7 +3284,7 @@ class WorldEngine:
     def _skill_efficiency_map(self, *, rules: object) -> dict[object, object] | None:
         if self._skill_policy is None or self._skill_ledger is None:
             # Lifecycle fatigue still applies when skill mode is off: synthesize
-            # overrides from base rules × lifecycle factor when needed.
+            # overrides from base rules x lifecycle factor when needed.
             if self._population_lifecycle is None:
                 return None
             if not self._population_lifecycle.has_developmental_extensions():
