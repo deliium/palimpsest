@@ -128,7 +128,13 @@ def test_default_write_stays_replay_v5_and_v7_is_accepted() -> None:
         "exposure",
         "production",
     ]
-    assert names[-4:] == ["season", "temperature_band", "hazard", "resource_node"]
+    assert names[-5:] == [
+        "season",
+        "temperature_band",
+        "hazard",
+        "resource_node",
+        "lifecycle",
+    ]
 
 
 def test_lower_schemas_reject_environment_details(

@@ -47,6 +47,7 @@ class DeathCause(StrEnum):
     ATTACK = "attack"
     COMBINED_NEEDS = "combined_needs"
     EXPOSURE = "exposure"
+    LIFESPAN = "lifespan"
 
 
 class SystemEffectFamily(StrEnum):
@@ -61,6 +62,7 @@ class SystemEffectFamily(StrEnum):
     TEMPERATURE_BAND = "temperature_band"
     HAZARD = "hazard"
     RESOURCE_NODE = "resource_node"
+    LIFECYCLE = "lifecycle"
 
 
 @dataclass(frozen=True, slots=True)

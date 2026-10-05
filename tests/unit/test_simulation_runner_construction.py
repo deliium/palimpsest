@@ -132,6 +132,7 @@ def test_non_lethal_rules_cover_all_death_causes() -> None:
         "attack",
         "combined_needs",
         "exposure",
+        "lifespan",
     }
 
 

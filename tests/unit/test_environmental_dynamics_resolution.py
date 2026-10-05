@@ -148,6 +148,7 @@ def test_spec_off_matches_all_ones_and_skips_environment_events() -> None:
         DeathCause.ATTACK,
         DeathCause.COMBINED_NEEDS,
         DeathCause.EXPOSURE,
+        DeathCause.LIFESPAN,
     ]
 
 

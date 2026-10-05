@@ -34,8 +34,10 @@ from world.values import (
 PHYSICAL_RULES_VERSION: Final[str] = "physical-v1"
 NON_LETHAL_PHYSICAL_RULES_VERSION: Final[str] = "physical-nonlethal-v1"
 # Closed DeathCause values covered by non-lethal mapping (world.effects.DeathCause).
+# ``lifespan`` is chronological (channel-gated), not damage-based; classified so
+# non_lethal_physical_rules rejects unclassified DeathCause members.
 _NON_LETHAL_COVERED_DEATH_CAUSES: Final[frozenset[str]] = frozenset(
-    {"attack", "combined_needs", "exposure"}
+    {"attack", "combined_needs", "exposure", "lifespan"}
 )
 
 
