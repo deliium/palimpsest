@@ -78,12 +78,12 @@ Objective `WorldState` stays private. Agent-facing cognition sees only immutable
 
 ### Domain-contract evolution (Observation / commands / communications)
 
-Later V2/V3 feature plans may evolve agent-facing contracts only under this accepted-set discipline (V3 scaffolding adds **no** new fields, commands, communication variants, birth events, kinship facts, settlement entities, or institution world rules):
+Later V2/V3 feature plans may evolve agent-facing contracts only under this accepted-set discipline (V3 scaffolding alone adds **no** kinship/settlement/institution wire; owned `generational_population` co-lands versioned seams below):
 
-1. **Observation and related codecs** — new write versions only when the wire shape changes; legacy decode remains in an `ACCEPTED_*` set. Cognition inputs must not silently widen to authority types (`WorldState`, private `world._*`, `WorldEvent` stores).
+1. **Observation and related codecs** — new write versions only when the wire shape changes; legacy decode remains in an `ACCEPTED_*` set. Cognition inputs must not silently widen to authority types (`WorldState`, private `world._*`, `WorldEvent` stores). Channel-off Observation stays unchanged; channel-on may add closed optional `lifecycle` fields only.
 2. **Closed `AgentCommand` set** — remains closed at twenty-four variants, including harvest, craft, build, repair, store, and the four artifact commands (`Inscribe` / `Amend` / `Erase` / `TransferArtifact`). A later bump still lands together with admission rules, world-operation evaluation, event details, and replay codecs in the same change. The production catalog is not an observation field and is not a cognition input to the engine.
 3. **Communications** — stay event-only (`Talk`/`Ask`/`Tell` → `Talked`/`Asked`/`Told`). Delivery proves delivery, not truth; declared lineage on `StructuredUtterance` is distrustable testimony. Content never becomes world-owned fact.
-4. **Roster / birth / kinship-visible facts** — mid-run roster changes, birth-class occurrences, and kinship-visible observation fields require explicit versioned seams (event schema + codec/projector + admission + Observation write version) co-landed with live/restored observation parity. Do **not** silently widen `Observation` for generational facts.
+4. **Roster / birth / kinship-visible facts** — mid-run roster and birth-class occurrences for `generational_population` co-landed in v3-02 (`admit_population_entry`, replay-v9 / codec v6, Observation `lifecycle`). Kinship-visible fields remain reserved for `kinship_inheritance`. Do **not** silently widen `Observation` outside closed additive objects.
 5. **Hard gate for any domain bump** — live and restored engines at the same tick must emit equal observations (including canonical serialization). Required regression: `tests/unit/test_checkpoint_restoration.py::test_live_and_restored_observations_match_with_prior_events` (and siblings). Do not ship a domain wire change that breaks live/restored parity.
 
 See also `simulation.compatibility` (version taxonomy) and [.ai-factory/ARCHITECTURE.md](../.ai-factory/ARCHITECTURE.md).
