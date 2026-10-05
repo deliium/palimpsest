@@ -42,6 +42,9 @@ from world.events import (
     EVENT_SCHEMA_REPLAY_V6,
     EVENT_SCHEMA_REPLAY_V7,
     EVENT_SCHEMA_REPLAY_V8,
+    EVENT_SCHEMA_REPLAY_V9,
+    AgentCreated,
+    AgentEnteredWorld,
     ArtifactCreated,
     ArtifactDestroyed,
     ArtifactModified,
@@ -61,6 +64,7 @@ from world.events import (
     Helped,
     ItemCrafted,
     ItemStored,
+    LifecycleStageChanged,
     Moved,
     NeedsApplied,
     ResourceHarvested,
@@ -90,6 +94,7 @@ from world.identifiers import (
     WorldRevision,
     require_stable_id,
 )
+from world.lifecycle import default_entrant_body
 from world.models import (
     AgentBody,
     Item,
@@ -318,6 +323,7 @@ def _prepare_events(
             EVENT_SCHEMA_REPLAY_V6,
             EVENT_SCHEMA_REPLAY_V7,
             EVENT_SCHEMA_REPLAY_V8,
+            EVENT_SCHEMA_REPLAY_V9,
         }:
             raise ProjectionError(ProjectionErrorCode.UNSUPPORTED_SCHEMA)
     return normalized, schema_version, run_id
@@ -546,6 +552,12 @@ def _apply_event_effect(
             return _project_artifact_moved(state, event, moved_artifact), True
         case ArtifactDestroyed() as destroyed:
             return _project_artifact_destroyed(state, event, destroyed), True
+        case AgentCreated() as created:
+            return _project_agent_created(state, event, created)
+        case AgentEnteredWorld() as entered:
+            return _project_agent_entered(state, event, entered), True
+        case LifecycleStageChanged() as stage_changed:
+            return _project_lifecycle_stage_changed(state, event, stage_changed)
         case _:
             raise ProjectionError(ProjectionErrorCode.PRECONDITION_FAILED)
 
@@ -797,6 +809,53 @@ def _project_artifact_destroyed(
         return rebuild_world_state(state, artifacts=artifacts)
     except ValueError as exc:
         raise ProjectionError(ProjectionErrorCode.INVARIANT_FAILED) from exc
+
+
+def _project_agent_created(
+    state: WorldState,
+    event: WorldEvent,
+    details: AgentCreated,
+) -> tuple[WorldState, bool]:
+    """Identity reservation: body must not exist yet; no WorldState mutation."""
+    if details.body_id in state.bodies:
+        raise ProjectionError(ProjectionErrorCode.PRECONDITION_FAILED)
+    if event.actor_id is not None and event.actor_id not in state.bodies:
+        raise ProjectionError(ProjectionErrorCode.ACTOR_MISSING)
+    return state, False
+
+
+def _project_agent_entered(
+    state: WorldState,
+    event: WorldEvent,
+    details: AgentEnteredWorld,
+) -> WorldState:
+    """Place a new living body at the entry location with deterministic defaults."""
+    del event
+    if details.body_id in state.bodies:
+        raise ProjectionError(ProjectionErrorCode.PRECONDITION_FAILED)
+    if details.location_id not in state.locations:
+        raise ProjectionError(ProjectionErrorCode.PRECONDITION_FAILED)
+    body = default_entrant_body(
+        body_id=details.body_id, location_id=details.location_id
+    )
+    bodies = dict(state.bodies)
+    bodies[details.body_id] = body
+    try:
+        return rebuild_world_state(state, bodies=bodies)
+    except ValueError as exc:
+        raise ProjectionError(ProjectionErrorCode.INVARIANT_FAILED) from exc
+
+
+def _project_lifecycle_stage_changed(
+    state: WorldState,
+    event: WorldEvent,
+    details: LifecycleStageChanged,
+) -> tuple[WorldState, bool]:
+    """Stage lives on engine lifecycle records; fold validates body presence."""
+    del event
+    if details.body_id not in state.bodies:
+        raise ProjectionError(ProjectionErrorCode.TARGET_MISSING)
+    return state, False
 
 
 def _apply_legacy_transfer(state: WorldState, event: WorldEvent) -> WorldState:

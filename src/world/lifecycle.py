@@ -16,6 +16,15 @@ from world.identifiers import (
     require_exact_nonneg_int,
     require_stable_id,
 )
+from world.models import AgentBody, LifeStatus
+from world.values import (
+    CarryCapacity,
+    Fatigue,
+    Health,
+    Hunger,
+    TemperatureCelsius,
+    Thirst,
+)
 
 __all__ = [
     "AgentLifecycleRecord",
@@ -24,6 +33,7 @@ __all__ = [
     "LifecycleStageThreshold",
     "OriginProvenance",
     "chronological_age",
+    "default_entrant_body",
     "require_lifecycle_stage_id",
     "resolve_dependency_status",
     "resolve_lifecycle_stage",
@@ -159,6 +169,26 @@ def chronological_age(*, entry_tick: int, current_tick: int) -> int:
             "(code=lifecycle_age_tick_order)"
         )
     return current - entry
+
+
+def default_entrant_body(*, body_id: EntityId, location_id: EntityId) -> AgentBody:
+    """Deterministic default body shell for mid-run demographic entry."""
+    if type(body_id) is not EntityId:
+        raise TypeError("body_id must be EntityId")
+    if type(location_id) is not EntityId:
+        raise TypeError("location_id must be EntityId")
+    return AgentBody(
+        entity_id=body_id,
+        location_id=location_id,
+        health=Health(100),
+        hunger=Hunger(0),
+        thirst=Thirst(0),
+        fatigue=Fatigue(0),
+        temperature=TemperatureCelsius(36.5),
+        inventory=(),
+        life_status=LifeStatus.ALIVE,
+        carry_capacity=CarryCapacity(10),
+    )
 
 
 def resolve_lifecycle_stage(

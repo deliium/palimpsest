@@ -46,6 +46,7 @@ from world.events import (
     EVENT_SCHEMA_REPLAY_V6,
     EVENT_SCHEMA_REPLAY_V7,
     EVENT_SCHEMA_REPLAY_V8,
+    EVENT_SCHEMA_REPLAY_V9,
     WorldEvent,
     normalize_events,
 )
@@ -76,11 +77,12 @@ ACCEPTED_EVENT_SCHEMA_VERSIONS: Final[frozenset[int]] = frozenset(
         EVENT_SCHEMA_REPLAY_V6,
         EVENT_SCHEMA_REPLAY_V7,
         EVENT_SCHEMA_REPLAY_V8,
+        EVENT_SCHEMA_REPLAY_V9,
     }
 )
 ACCEPTED_PROJECTOR_VERSIONS: Final[frozenset[str]] = frozenset({"v1", "v2"})
 ACCEPTED_PERSISTENCE_CODEC_VERSIONS: Final[frozenset[str]] = frozenset(
-    {"v1", "v2", "v3", "v4", "v5"}
+    {"v1", "v2", "v3", "v4", "v5", "v6"}
 )
 
 _SHA256_HEX_RE: Final[re.Pattern[str]] = re.compile(r"^[0-9a-f]{64}$")
@@ -173,13 +175,17 @@ def checkpoint_schema_for_production(
     production_active: bool,
     dynamics_active: bool = False,
     artifacts_active: bool = False,
+    lifecycle_active: bool = False,
 ) -> tuple[int, str]:
     """Choose the checkpoint schema for this run.
 
-    Priority at run start: artifacts → ``(v8, v5)``; else dynamics →
-    ``(v7, v4)``; else production → ``(v6, v3)``; else replay-v5 / codec ``v2``.
+    Priority at run start: lifecycle → ``(v9, v6)``; else artifacts →
+    ``(v8, v5)``; else dynamics → ``(v7, v4)``; else production →
+    ``(v6, v3)``; else replay-v5 / codec ``v2``.
     """
-    if artifacts_active:
+    if lifecycle_active:
+        pair = EVENT_SCHEMA_REPLAY_V9, "v6"
+    elif artifacts_active:
         pair = EVENT_SCHEMA_REPLAY_V8, "v5"
     elif dynamics_active:
         pair = EVENT_SCHEMA_REPLAY_V7, "v4"
@@ -188,9 +194,11 @@ def checkpoint_schema_for_production(
     else:
         pair = EVENT_SCHEMA_VERSION, PERSISTENCE_CODEC_VERSION
     _LOG.debug(
-        "artifact_schema_selected event_schema=%s codec=%s artifacts_active=%s",
+        "checkpoint_schema_selected event_schema=%s codec=%s "
+        "lifecycle_active=%s artifacts_active=%s",
         pair[0],
         pair[1],
+        lifecycle_active,
         artifacts_active,
     )
     return pair

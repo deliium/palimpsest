@@ -204,7 +204,13 @@ def test_require_agent_command_rejects_non_commands() -> None:
 
 
 def test_v3_scaffolding_adds_no_roster_birth_or_kinship_observation_fields() -> None:
-    """V3 scaffolding must not silently widen Observation for generational facts."""
+    """Observation birth/roster/kinship widenings require versioned seams.
+
+    Scaffolding freeze remains: no silent Observation keys. Generational
+    population admits may later add a closed optional ``lifecycle`` object only
+    when co-landed with event schema / codec / live-restored parity (v3-02
+    Task 11), never sex/parentage/kinship fields.
+    """
     fields = {f.name for f in Observation.__dataclass_fields__.values()}
     forbidden_widenings = {
         "kinship",
@@ -217,9 +223,15 @@ def test_v3_scaffolding_adds_no_roster_birth_or_kinship_observation_fields() -> 
         "institution_id",
         "roster",
         "lineage",
+        "sex",
+        "fertility",
+        "pregnancy",
+        "parent_ids",
     }
     assert fields & forbidden_widenings == set()
     assert fields == _FROZEN_OBSERVATION_FIELDS
+    # Versioned seam reserved name is still absent until Observation write bumps.
+    assert "lifecycle" not in fields
 
 
 def test_v3_domain_bump_policy_documents_parity_gate() -> None:

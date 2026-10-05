@@ -71,6 +71,7 @@ EVENT_SCHEMA_REPLAY_V5: Final[int] = 5
 EVENT_SCHEMA_REPLAY_V6: Final[int] = 6
 EVENT_SCHEMA_REPLAY_V7: Final[int] = 7
 EVENT_SCHEMA_REPLAY_V8: Final[int] = 8
+EVENT_SCHEMA_REPLAY_V9: Final[int] = 9
 SUPPORTED_EVENT_SCHEMA_VERSIONS: Final[frozenset[int]] = frozenset(
     {
         EVENT_SCHEMA_AUDIT_V1,
@@ -81,6 +82,7 @@ SUPPORTED_EVENT_SCHEMA_VERSIONS: Final[frozenset[int]] = frozenset(
         EVENT_SCHEMA_REPLAY_V6,
         EVENT_SCHEMA_REPLAY_V7,
         EVENT_SCHEMA_REPLAY_V8,
+        EVENT_SCHEMA_REPLAY_V9,
     }
 )
 REPLAYABLE_EVENT_SCHEMA_VERSIONS: Final[frozenset[int]] = frozenset(
@@ -92,6 +94,7 @@ REPLAYABLE_EVENT_SCHEMA_VERSIONS: Final[frozenset[int]] = frozenset(
         EVENT_SCHEMA_REPLAY_V6,
         EVENT_SCHEMA_REPLAY_V7,
         EVENT_SCHEMA_REPLAY_V8,
+        EVENT_SCHEMA_REPLAY_V9,
     }
 )
 PHYSICAL_REPLAY_EVENT_SCHEMA_VERSIONS: Final[frozenset[int]] = frozenset(
@@ -102,15 +105,24 @@ PHYSICAL_REPLAY_EVENT_SCHEMA_VERSIONS: Final[frozenset[int]] = frozenset(
         EVENT_SCHEMA_REPLAY_V6,
         EVENT_SCHEMA_REPLAY_V7,
         EVENT_SCHEMA_REPLAY_V8,
+        EVENT_SCHEMA_REPLAY_V9,
     }
 )
 _PRODUCTION_EVENT_SCHEMAS: Final[frozenset[int]] = frozenset(
-    {EVENT_SCHEMA_REPLAY_V6, EVENT_SCHEMA_REPLAY_V7, EVENT_SCHEMA_REPLAY_V8}
+    {
+        EVENT_SCHEMA_REPLAY_V6,
+        EVENT_SCHEMA_REPLAY_V7,
+        EVENT_SCHEMA_REPLAY_V8,
+        EVENT_SCHEMA_REPLAY_V9,
+    }
 )
 _ENVIRONMENT_EVENT_SCHEMAS: Final[frozenset[int]] = frozenset(
-    {EVENT_SCHEMA_REPLAY_V7, EVENT_SCHEMA_REPLAY_V8}
+    {EVENT_SCHEMA_REPLAY_V7, EVENT_SCHEMA_REPLAY_V8, EVENT_SCHEMA_REPLAY_V9}
 )
-_ARTIFACT_EVENT_SCHEMAS: Final[frozenset[int]] = frozenset({EVENT_SCHEMA_REPLAY_V8})
+_ARTIFACT_EVENT_SCHEMAS: Final[frozenset[int]] = frozenset(
+    {EVENT_SCHEMA_REPLAY_V8, EVENT_SCHEMA_REPLAY_V9}
+)
+_LIFECYCLE_EVENT_SCHEMAS: Final[frozenset[int]] = frozenset({EVENT_SCHEMA_REPLAY_V9})
 CURRENT_PHYSICAL_EVENT_SCHEMA_VERSION: Final[int] = EVENT_SCHEMA_REPLAY_V5
 _LOG: Final[logging.Logger] = logging.getLogger("world.events")
 _FORBIDDEN_PRESENTATION_FIELDS: Final[frozenset[str]] = frozenset(
@@ -1118,6 +1130,158 @@ class ArtifactDestroyed:
         _reject_presentation_fields(self.kind, self.__slots__)
 
 
+@dataclass(frozen=True, slots=True)
+class AgentCreated:
+    """Mid-run population entry: identity reserved (not bootstrap)."""
+
+    body_id: EntityId
+    agent_id: str
+    generation_index: int
+    cohort_id: str
+    provenance: str
+    success: bool = True
+    kind: Literal["agent_created"] = field(default="agent_created", init=False)
+
+    def __post_init__(self) -> None:
+        from world.identifiers import require_exact_nonneg_int, require_stable_id
+        from world.lifecycle import OriginProvenance
+
+        if type(self.body_id) is not EntityId:
+            raise TypeError("AgentCreated.body_id must be EntityId")
+        object.__setattr__(
+            self, "agent_id", require_stable_id("AgentCreated.agent_id", self.agent_id)
+        )
+        object.__setattr__(
+            self,
+            "generation_index",
+            require_exact_nonneg_int(
+                "AgentCreated.generation_index", self.generation_index
+            ),
+        )
+        object.__setattr__(
+            self,
+            "cohort_id",
+            require_stable_id("AgentCreated.cohort_id", self.cohort_id),
+        )
+        object.__setattr__(
+            self,
+            "provenance",
+            require_stable_id("AgentCreated.provenance", self.provenance),
+        )
+        if self.provenance not in {item.value for item in OriginProvenance}:
+            raise ValueError(
+                "AgentCreated.provenance must be a closed OriginProvenance"
+            )
+        if self.provenance == OriginProvenance.BOOTSTRAP.value:
+            raise ValueError(
+                "AgentCreated forbids bootstrap provenance "
+                "(code=lifecycle_bootstrap_no_created_event)"
+            )
+        if _require_success("AgentCreated.success", self.success) is not True:
+            raise ValueError("AgentCreated does not emit a failure detail")
+        _reject_presentation_fields(self.kind, self.__slots__)
+
+
+@dataclass(frozen=True, slots=True)
+class AgentEnteredWorld:
+    """Mid-run population entry: body present at location (not bootstrap)."""
+
+    body_id: EntityId
+    agent_id: str
+    location_id: EntityId
+    entry_tick: int
+    success: bool = True
+    kind: Literal["agent_entered_world"] = field(
+        default="agent_entered_world", init=False
+    )
+
+    def __post_init__(self) -> None:
+        from world.identifiers import require_exact_nonneg_int, require_stable_id
+
+        if type(self.body_id) is not EntityId:
+            raise TypeError("AgentEnteredWorld.body_id must be EntityId")
+        object.__setattr__(
+            self,
+            "agent_id",
+            require_stable_id("AgentEnteredWorld.agent_id", self.agent_id),
+        )
+        if type(self.location_id) is not EntityId:
+            raise TypeError("AgentEnteredWorld.location_id must be EntityId")
+        object.__setattr__(
+            self,
+            "entry_tick",
+            require_exact_nonneg_int(
+                "AgentEnteredWorld.entry_tick", self.entry_tick
+            ),
+        )
+        if _require_success("AgentEnteredWorld.success", self.success) is not True:
+            raise ValueError("AgentEnteredWorld does not emit a failure detail")
+        _reject_presentation_fields(self.kind, self.__slots__)
+
+
+@dataclass(frozen=True, slots=True)
+class LifecycleStageChanged:
+    """Objective lifecycle stage transition for one body."""
+
+    body_id: EntityId
+    previous_stage: str
+    new_stage: str
+    chronological_age: int
+    dependency_status: str
+    success: bool = True
+    kind: Literal["lifecycle_stage_changed"] = field(
+        default="lifecycle_stage_changed", init=False
+    )
+
+    def __post_init__(self) -> None:
+        from world.identifiers import require_exact_nonneg_int, require_stable_id
+        from world.lifecycle import DependencyStatus
+
+        if type(self.body_id) is not EntityId:
+            raise TypeError("LifecycleStageChanged.body_id must be EntityId")
+        object.__setattr__(
+            self,
+            "previous_stage",
+            require_stable_id(
+                "LifecycleStageChanged.previous_stage", self.previous_stage
+            ),
+        )
+        object.__setattr__(
+            self,
+            "new_stage",
+            require_stable_id("LifecycleStageChanged.new_stage", self.new_stage),
+        )
+        if self.previous_stage == self.new_stage:
+            raise ValueError(
+                "LifecycleStageChanged requires stage change "
+                "(code=lifecycle_stage_unchanged)"
+            )
+        object.__setattr__(
+            self,
+            "chronological_age",
+            require_exact_nonneg_int(
+                "LifecycleStageChanged.chronological_age",
+                self.chronological_age,
+            ),
+        )
+        object.__setattr__(
+            self,
+            "dependency_status",
+            require_stable_id(
+                "LifecycleStageChanged.dependency_status",
+                self.dependency_status,
+            ),
+        )
+        if self.dependency_status not in {item.value for item in DependencyStatus}:
+            raise ValueError(
+                "LifecycleStageChanged.dependency_status must be closed "
+                "DependencyStatus"
+            )
+        if _require_success("LifecycleStageChanged.success", self.success) is not True:
+            raise ValueError("LifecycleStageChanged does not emit a failure detail")
+        _reject_presentation_fields(self.kind, self.__slots__)
+
+
 EventDetails = (
     Moved
     | Searched
@@ -1155,6 +1319,9 @@ EventDetails = (
     | ArtifactModified
     | ArtifactMoved
     | ArtifactDestroyed
+    | AgentCreated
+    | AgentEnteredWorld
+    | LifecycleStageChanged
 )
 
 _DETAIL_TYPES: Final[frozenset[type]] = frozenset(
@@ -1195,6 +1362,9 @@ _DETAIL_TYPES: Final[frozenset[type]] = frozenset(
         ArtifactModified,
         ArtifactMoved,
         ArtifactDestroyed,
+        AgentCreated,
+        AgentEnteredWorld,
+        LifecycleStageChanged,
     }
 )
 
@@ -1226,6 +1396,14 @@ _ARTIFACT_DETAIL_TYPES: Final[frozenset[type]] = frozenset(
         ArtifactModified,
         ArtifactMoved,
         ArtifactDestroyed,
+    }
+)
+
+_LIFECYCLE_DETAIL_TYPES: Final[frozenset[type]] = frozenset(
+    {
+        AgentCreated,
+        AgentEnteredWorld,
+        LifecycleStageChanged,
     }
 )
 
@@ -1316,6 +1494,8 @@ def _artifact_effect_complete(details: EventDetails) -> bool:
 
 
 def _payload_effect_complete(details: EventDetails, *, schema_version: int) -> bool:
+    if type(details) in _LIFECYCLE_DETAIL_TYPES:
+        return schema_version in _LIFECYCLE_EVENT_SCHEMAS
     if type(details) in _ARTIFACT_DETAIL_TYPES:
         if schema_version not in _ARTIFACT_EVENT_SCHEMAS:
             return False
@@ -1509,6 +1689,12 @@ def target_id_for_details(details: EventDetails) -> EntityId | None:
             | ArtifactDestroyed(artifact_id=artifact_id)
         ):
             return artifact_id
+        case (
+            AgentCreated(body_id=body_id)
+            | AgentEnteredWorld(body_id=body_id)
+            | LifecycleStageChanged(body_id=body_id)
+        ):
+            return body_id
         case _:
             raise TypeError(
                 f"{EventValidationCode.UNKNOWN_EVENT_TYPE.value}: "
@@ -1607,6 +1793,15 @@ class WorldEvent:
             if self.schema_version not in _ARTIFACT_EVENT_SCHEMAS:
                 _LOG.error(
                     "invalid_event_schema_version kind=%s schema_version=%s",
+                    self.details.kind,
+                    self.schema_version,
+                )
+                raise ValueError(EventValidationCode.INVALID_SCHEMA_VERSION.value)
+        if type(self.details) in _LIFECYCLE_DETAIL_TYPES:
+            if self.schema_version not in _LIFECYCLE_EVENT_SCHEMAS:
+                _LOG.error(
+                    "invalid_event_schema_version kind=%s schema_version=%s "
+                    "reason_code=lifecycle_requires_v9",
                     self.details.kind,
                     self.schema_version,
                 )
@@ -1805,9 +2000,18 @@ def build_occurrence_context(
             Died(body_id=body_id)
             | NeedsApplied(body_id=body_id)
             | ExposureApplied(body_id=body_id)
+            | AgentCreated(body_id=body_id)
+            | LifecycleStageChanged(body_id=body_id)
         ):
             return OccurrenceContext(
                 origin_location_id=origin_location_id,
+                destination_location_id=None,
+                affected_entity_ids=(body_id,),
+                private_recipient_ids=(),
+            )
+        case AgentEnteredWorld(body_id=body_id, location_id=location_id):
+            return OccurrenceContext(
+                origin_location_id=location_id,
                 destination_location_id=None,
                 affected_entity_ids=(body_id,),
                 private_recipient_ids=(),

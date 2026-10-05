@@ -10,7 +10,7 @@ from __future__ import annotations
 import hashlib
 import logging
 from collections.abc import Awaitable, Callable, Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from enum import StrEnum
 from pathlib import Path
 from typing import Final, Protocol
@@ -130,6 +130,7 @@ from simulation.run_control import (
 from simulation.runner_models import (
     _V2_CAPABILITY_FLAG_NAMES,
     AgentCognitionSpec,
+    AgentRunnerSpec,
     CognitionCounters,
     CognitionFailurePolicy,
     DetachedObjectiveProjection,
@@ -1091,6 +1092,7 @@ class SimulationRunner:
         "_diagnostics",
         "_durable",
         "_engine",
+        "_factories",
         "_finalized_tick_receipts",
         "_goal_transition_receipts",
         "_injected_stop",
@@ -1121,6 +1123,7 @@ class SimulationRunner:
         pending_finalizations: PendingFinalizationRepository | None = None,
         observation_sink: ExperimentalObservationSink | None = None,
         crash_hook: Callable[[RunnerCrashPoint, int | None], None] | None = None,
+        factories: RunnerDependencyFactories | None = None,
     ) -> None:
         self._config = config
         self._run_id = run_id
@@ -1139,6 +1142,9 @@ class SimulationRunner:
             else ExperimentalObservationSink()
         )
         self._crash_hook = crash_hook
+        self._factories = (
+            factories if factories is not None else RunnerDependencyFactories()
+        )
         self._closed = False
         self._started = False
         self._ticks_committed = 0
@@ -1588,6 +1594,7 @@ class SimulationRunner:
                 diagnostics=diagnostics,
                 durable=durable_service,
                 pending_finalizations=deps.pending_finalizations,
+                factories=deps,
             )
         except RunnerConstructionError:
             await _cleanup_created(created_closables, stage=stage)
@@ -1749,6 +1756,7 @@ class SimulationRunner:
                 for runtime in self._runtimes
             ):
                 tick_result = await self._commit_tick(())
+                await self._sync_mid_run_population_entries()
                 await self._record_finalized_tick(tick_result, pendings=())
                 self._ticks_committed += 1
                 return RunnerAttemptReceipt(
@@ -1781,6 +1789,7 @@ class SimulationRunner:
                 tick_value,
                 len(submissions),
             )
+            await self._sync_mid_run_population_entries()
             self._acknowledge_arbiter(tick_result.resolutions)
             self._maybe_crash(RunnerCrashPoint.AFTER_OBJECTIVE_COMMIT)
 
@@ -2718,6 +2727,150 @@ class SimulationRunner:
             stage="runtime_lookup",
         )
 
+    async def _sync_mid_run_population_entries(self) -> None:
+        """Bind AgentBundles for engine admits and refresh translators.
+
+        Per-tick ordinal is registration order including mid-run appends.
+        New agents are eligible on the next observe tick.
+        """
+        if not self._engine.lifecycle_channel_active:
+            return
+        translator = self._engine.registration_translator
+        for runtime in self._runtimes:
+            runtime.replace_translator(translator)
+        known = {runtime.agent_id for runtime in self._runtimes}
+        new_registrations = [
+            registration
+            for registration in self._engine.ordered_registrations
+            if registration.agent_id not in known
+        ]
+        if not new_registrations:
+            return
+        template = self._config.agents[0]
+        allow_provider = _llm_assisted_provider_bound(self._config.provider)
+        scoring_policy = _default_scoring_policy()
+        reconstruction_policy = _default_reconstruction_policy(
+            allow_provider=allow_provider
+        )
+        reconstructor = _reconstructor_for(self._config.provider, self._provider)
+        counterpart = _counterpart_resolver(translator)
+        memory_run_id = MemoryRunId(self._run_id.value)
+        cognition_trace_repository: CognitionTraceRepository = (
+            select_cognition_trace_repository(
+                enabled=self._config.cognition_trace.enabled,
+                durable=self._factories.cognition_trace_repository,
+            )
+        )
+        deps = self._factories
+        agents = list(self._agents)
+        runtimes = list(self._runtimes)
+        for registration in new_registrations:
+            cognition = replace(
+                template.cognition, agent_id=registration.agent_id
+            )
+            agent_spec = AgentRunnerSpec(
+                agent_id=registration.agent_id,
+                entity_id=registration.entity_id,
+                cognition=cognition,
+                name=registration.agent_id.value,
+                initial_goals=(),
+            )
+            owner = agent_spec.agent_id
+            scope = MemoryScope(run_id=memory_run_id, owner_id=owner)
+            memory_service = deps.create_memory_service(
+                scope, reconstructor=reconstructor
+            )
+            belief_service = deps.create_belief_service(scope)
+            relationship_service = deps.create_relationship_service(owner)
+            owner_bundle = deps.create_subjective_bundle(
+                scope,
+                memory_service=memory_service,
+                belief_service=belief_service,
+                relationship_service=relationship_service,
+            )
+            legacy_beliefs = BeliefStore(owner)
+            loop_config = _cognition_config_for(
+                agent_spec.cognition,
+                mortality_mode=self._config.mortality_mode,
+                capability_flags=self._config.capability_flags,
+            )
+            memory_retriever = _memory_retriever_for(
+                agent_spec.cognition.memory_mode,
+                memory_service=memory_service,
+                scoring_policy=scoring_policy,
+                reconstruction_policy=reconstruction_policy,
+                belief_reader=None,
+                emotion_bias=(
+                    loop_config.emotional_state_mode
+                    is CognitionEmotionalStateMode.ENABLED
+                ),
+            )
+            cognitive_loop = build_cognitive_loop(
+                loop_config,
+                memory=memory_retriever,
+                resolve_counterpart=counterpart,
+                identity_history=owner_bundle.semantic_belief_reader.history,
+                consolidation_selector=_consolidation_selector_for(
+                    self._config.provider,
+                    self._provider,
+                    loop_config.consolidation_mode,
+                ),
+                reflection_selector=_reflection_selector_for(
+                    self._config.provider,
+                    self._provider,
+                    loop_config.reflection_mode,
+                ),
+            )
+            agent = Agent(
+                agent_id=owner,
+                name=agent_spec.name if agent_spec.name is not None else owner.value,
+                goals=agent_spec.initial_goals,
+                drives=agent_spec.cognition.resolve_drive_profile(),
+            )
+            runtime = AgentRuntime(
+                agent=agent,
+                translator=translator,
+                cognitive_loop=cognitive_loop,
+                memory_reader=owner_bundle.memory_reader,
+                memory_writer=MemoryStore(owner),
+                belief_reader=legacy_beliefs,
+                belief_writer=legacy_beliefs,
+                memory_service=memory_service,
+                semantic_belief_reader=owner_bundle.semantic_belief_reader,
+                relationship_reader=owner_bundle.relationship_reader,
+                subjective_state=owner_bundle.commit_service,
+                run_id=self._run_id,
+                cognition_trace_repository=cognition_trace_repository,
+                cognition_trace_spec=self._config.cognition_trace,
+                scientific_evidence=deps.scientific_evidence,
+            )
+            if self._started and runtime.status is AgentRuntimeStatus.CREATED:
+                runtime.start()
+            bundle = _AgentBundle(
+                runtime=runtime,
+                bundle=owner_bundle,
+                memory_service=memory_service,
+                belief_service=belief_service,
+                relationship_service=relationship_service,
+                subjective_state=owner_bundle.commit_service,
+                memory_retriever=memory_retriever,
+            )
+            agents.append(bundle)
+            runtimes.append(runtime)
+            _LOG.info(
+                "runner_mid_run_agent_bound agent_id=%s body_id=%s "
+                "registration_ordinal=%s",
+                owner.value,
+                registration.entity_id.value,
+                len(runtimes) - 1,
+            )
+        self._agents = tuple(agents)
+        self._runtimes = tuple(runtimes)
+        # Ordinal semantics: registration order including mid-run appends.
+        assert [rt.agent_id for rt in self._runtimes] == [
+            reg.agent_id for reg in self._engine.ordered_registrations
+        ]
+
     async def _commit_tick(
         self, submissions: tuple[ActionSubmission, ...]
     ) -> TickResult:
@@ -2936,6 +3089,7 @@ def _bootstrap_snapshot(engine: WorldEngine) -> WorldSnapshot:
         production_active=engine._production_catalog is not None,
         dynamics_active=engine._environmental_dynamics is not None,
         artifacts_active=engine._artifacts_enabled,
+        lifecycle_active=engine.lifecycle_channel_active,
     )
     state = engine._snapshot.world.state
     production_rows: dict[str, tuple[object, ...]] = {}

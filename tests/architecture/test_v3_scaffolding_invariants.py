@@ -27,7 +27,8 @@ ROOT = Path(__file__).resolve().parents[2]
 SRC = ROOT / "src"
 RUNNER_PY = SRC / "simulation" / "runner.py"
 
-# Mid-run roster mutation APIs must not exist on authority surfaces today.
+# Mid-run roster mutation APIs must not exist on authority surfaces except the
+# gated lifecycle admit path (owned by generational_population).
 _FORBIDDEN_ROSTER_METHODS = frozenset(
     {
         "register_agent",
@@ -39,6 +40,9 @@ _FORBIDDEN_ROSTER_METHODS = frozenset(
         "bind_agent",
     }
 )
+
+_ALLOWED_GATED_ROSTER_METHODS = frozenset({"admit_population_entry"})
+
 
 # Scripted-emergence mandate identifiers reserved against V3 scaffolding.
 _FORBIDDEN_MANDATE_IDENTIFIERS = frozenset(
@@ -100,6 +104,24 @@ def test_world_engine_and_runner_have_no_mid_run_roster_api() -> None:
         }
         overlap = public & _FORBIDDEN_ROSTER_METHODS
         assert overlap == set(), f"{cls.__name__} exposes roster mutators: {overlap}"
+
+
+def test_world_engine_exposes_only_gated_admit_population_entry() -> None:
+    """Deny-list mutators stay forbidden; only admit_population_entry is allowed."""
+    public = {
+        name
+        for name in dir(WorldEngine)
+        if not name.startswith("_") and callable(getattr(WorldEngine, name, None))
+    }
+    assert public & _FORBIDDEN_ROSTER_METHODS == set()
+    assert _ALLOWED_GATED_ROSTER_METHODS <= public
+    runner_public = {
+        name
+        for name in dir(SimulationRunner)
+        if not name.startswith("_") and callable(getattr(SimulationRunner, name, None))
+    }
+    assert runner_public & _FORBIDDEN_ROSTER_METHODS == set()
+    assert runner_public & _ALLOWED_GATED_ROSTER_METHODS == set()
 
 
 def test_prepare_parallel_remains_hardcoded_false() -> None:

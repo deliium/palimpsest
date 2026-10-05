@@ -1412,6 +1412,12 @@ class AgentRuntime:
             },
         )
 
+    def replace_translator(self, translator: RegistrationTranslator) -> None:
+        """Replace the registration translator after mid-run population admit."""
+        if type(translator) is not RegistrationTranslator:
+            raise TypeError("translator must be RegistrationTranslator")
+        self._translator = translator
+
     async def prepare_observation(
         self,
         observation: Observation,

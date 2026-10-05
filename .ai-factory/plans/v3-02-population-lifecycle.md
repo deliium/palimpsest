@@ -264,31 +264,31 @@ Rules:
 
 ### Phase 3: WorldEngine events and progression
 
-- [ ] Task 7: Add lifecycle WorldEvent detail types, schema v9, and write-pair priority.
+- [x] Task 7: Add lifecycle WorldEvent detail types, schema v9, and write-pair priority.
   - Deliverable: Add `AgentCreated`, `AgentEnteredWorld`, `LifecycleStageChanged` to the closed event detail union. Introduce `EVENT_SCHEMA_REPLAY_V9`. Update `checkpoint_schema_for_production` (or successor) with locked priority: lifecycle → `(9, "v6")` else artifacts → `(8, "v5")` else dynamics → `(7, "v4")` else production → `(6, "v3")` else default. v9 detail union accepts lower-channel kinds when those channels are also active; lifecycle kinds illegal on schemas &lt; 9. Update `SUPPORTED_EVENT_SCHEMA_VERSIONS`, compatibility matrix, normalize/validate paths, and unit encode/decode fixtures.
   - Files: `src/world/events.py`, `src/simulation/persistence.py`, `src/simulation/compatibility.py`, `tests/unit/test_lifecycle_events_schema_v9.py`.
   - Logging: ERROR on schema/channel mismatch reason codes; DEBUG event_type + schema version + channel flags only.
   - Dependencies: Tasks 1, 2.
 
-- [ ] Task 8: Implement mid-run `admit_population_entry` under WorldEngine authority.
+- [x] Task 8: Implement mid-run `admit_population_entry` under WorldEngine authority.
   - Deliverable: When lifecycle channel is on, implement engine-owned `admit_population_entry` that appends body + registration, rebuilds `RegistrationTranslator`, emits `AgentCreated` then `AgentEnteredWorld`, creates lifecycle record (`entry_tick`, provenance, generation/cohort), and returns public facts for runner bind. Flag-off must reject entry attempts. Enforce `max_population`. Preserve append-only event immutability. Do not use deny-listed public method names. Rewrite `tests/architecture/test_v3_scaffolding_invariants.py` so deny-list mutators remain forbidden and only the gated admit path is allowed when channel on. Update `tests/unit/test_domain_contract_evolution_policy.py` scaffolding “no birth fields” assertions to versioned-seam expectations.
   - Files: `src/simulation/engine.py`, `src/simulation/bootstrap.py`, private world ops as needed (`src/world/_state.py` / `_operations.py` / `_rules.py`), `tests/unit/test_mid_run_agent_entry.py`, `tests/architecture/test_v3_scaffolding_invariants.py`, `tests/unit/test_domain_contract_evolution_policy.py`.
   - Logging: INFO/DEBUG entry accepted with agent_id/body_id/tick/population_count; ERROR reject reason codes (`population_cap`, `lifecycle_channel_off`, …).
   - Dependencies: Tasks 5, 6, 7.
 
-- [ ] Task 9: Implement deterministic lifecycle progression + lifespan death in the tick path.
+- [x] Task 9: Implement deterministic lifecycle progression + lifespan death in the tick path.
   - Deliverable: On each tick when channel is on, after logical tick advances and for living agents: recompute age/stage/dependency; emit `LifecycleStageChanged` on change with `SystemEffectFamily.LIFECYCLE`; if `natural_death_on_lifespan` and age ≥ lifespan, emit `Died(death_cause=LIFESPAN)` via the same death authority path (runtime becomes `TERMINAL`). Then run demographic policy consult/admit per Task 6 schedule. Progression must be replay-stable. Flag-off: zero new events/types from this hook.
   - Files: `src/world/_physical.py` and/or `src/simulation/engine.py` (prefer private world autonomous step consistency), `tests/unit/test_lifecycle_progression_determinism.py`.
   - Logging: DEBUG stage_changed count + lifespan_death count + demographic_admit_count per tick; never observation payloads.
   - Dependencies: Tasks 2, 3, 7, 8.
 
-- [ ] Task 10: Mid-run `_AgentBundle` construction (memory/cognition parity with bootstrap).
+- [x] Task 10: Mid-run `_AgentBundle` construction (memory/cognition parity with bootstrap).
   - Deliverable: When entry commits, construct a full `_AgentBundle` for the new agent using the same dependency path as `from_config` agent construction: `MemoryScope`, memory/belief/relationship services, subjective commit service, cognitive loop from the demographic agent blueprint’s cognition template, `Agent` + `AgentRuntime` with the **rebuilt** translator. Do not leave a runtime shell without subjective services. Unit-test that mid-run agents can observe/act on the next eligible tick.
   - Files: `src/simulation/runner.py`, helpers extracted if needed for shared construct path, `tests/unit/test_mid_run_agent_bundle.py`.
   - Logging: DEBUG bundle_constructed agent_id + ordinal + memory_mode; never payloads.
   - Dependencies: Task 8.
 
-- [ ] Task 10b: Runner ordinal semantics and stop reasons for dynamic roster.
+- [x] Task 10b: Runner ordinal semantics and stop reasons for dynamic roster.
   - Deliverable: After Task 10 bind, document and test per-tick ordinal = registration order including mid-run appends. Propagate rebuilt translator to all existing runtimes. Dead/terminal agents remain non-acting as today. No `prepare_parallel=True`. Ensure stop reasons (`ALL_AGENTS_TERMINAL`, etc.) still make sense with dynamic population.
   - Files: `src/simulation/runner.py`, `src/simulation/agent_runtime.py` (if needed), `tests/unit/test_runner_dynamic_roster_ordinal.py`.
   - Logging: DEBUG runtime_bind agent_id + ordinal + population_count.

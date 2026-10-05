@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import logging
 from collections.abc import Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from enum import StrEnum
 from typing import TYPE_CHECKING, Final
 
@@ -32,10 +32,13 @@ from simulation.actions import (
     tick_for_event,
 )
 from simulation.bootstrap import (
+    AgentRegistration,
+    RegistrationTranslator,
     WorldBootstrap,
     _bootstrap_from_snapshot,
     _materialize_projected_world,
     _materialize_world,
+    _translator_from_registrations,
     registration_translator,
 )
 from simulation.clock import Tick
@@ -84,7 +87,7 @@ from world._rules import (
     find_eligible_flee_destinations,
     find_eligible_search_resource,
 )
-from world._state import World
+from world._state import World, rebuild_world_state
 from world.actions import (
     ActionRequest,
     Attack,
@@ -101,6 +104,7 @@ from world.actions import (
 )
 from world.effects import (
     ActionCause,
+    DeathCause,
     ResolvedActionEffect,
     ResolvedActionEffects,
     ResolvedArtifactInscribeEffect,
@@ -113,11 +117,28 @@ from world.effects import (
     SystemCause,
     SystemEffectFamily,
 )
-from world.events import Died, WorldEvent, normalize_events
+from world.events import (
+    AgentCreated,
+    AgentEnteredWorld,
+    Died,
+    LifecycleStageChanged,
+    WorldEvent,
+    build_occurrence_context,
+    make_physical_replayable_event,
+    normalize_events,
+)
 from world.identifiers import EntityId, EventId, RequestId, WorldId, WorldRevision
-from world.models import AgentBody, LifeStatus, default_physical_rules
+from world.lifecycle import (
+    AgentLifecycleRecord,
+    OriginProvenance,
+    chronological_age,
+    default_entrant_body,
+    resolve_dependency_status,
+    resolve_lifecycle_stage,
+)
+from world.models import AgentBody, LifeStatus, copy_body, default_physical_rules
 from world.observations import Observation, ObservationContext
-from world.values import WeatherCondition, clamp_unit_interval
+from world.values import Health, WeatherCondition, clamp_unit_interval
 
 if TYPE_CHECKING:
     from simulation.observer_facts import ObjectiveFacts
@@ -164,6 +185,26 @@ class _PreparedTickCandidate:
     next_snapshot: _EngineSnapshot
     events: tuple[WorldEvent, ...]
     skill_ledger: object | None = None
+    registrations: tuple[AgentRegistration, ...] | None = None
+    lifecycle_records: tuple[object, ...] | None = None
+    translator: RegistrationTranslator | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class PopulationEntryAdmission:
+    """Public facts returned after a successful mid-run population admit."""
+
+    agent_id: AgentId
+    body_id: EntityId
+    location_id: EntityId
+    entry_tick: int
+    generation_index: int
+    cohort_id: str
+    provenance: OriginProvenance
+    name_prefix: str
+    registration: AgentRegistration
+    lifecycle_record: AgentLifecycleRecord
+    events: tuple[WorldEvent, ...]
 
 
 def _request_id_set(value: object | None) -> set[str]:
@@ -562,6 +603,636 @@ class WorldEngine:
     @property
     def population_lifecycle(self) -> object | None:
         return self._population_lifecycle
+
+    @property
+    def registration_translator(self) -> RegistrationTranslator:
+        """Current ordered registration translator (rebuilds on mid-run admit)."""
+        return self._translator
+
+    @property
+    def ordered_registrations(self) -> tuple[AgentRegistration, ...]:
+        return tuple(self._registrations)
+
+    def admit_population_entry(
+        self,
+        candidate: object,
+        *,
+        body: AgentBody | None = None,
+    ) -> PopulationEntryAdmission:
+        """Admit one mid-run population entry when the lifecycle channel is on.
+
+        Appends body + registration, rebuilds the translator, emits
+        ``AgentCreated`` then ``AgentEnteredWorld``, and creates a lifecycle
+        record. Flag-off and capacity violations fail closed with stable codes.
+        """
+        from simulation.demographic_policy import DemographicEntryCandidate
+        from simulation.runner_models import PopulationLifecycleSpec
+        from world.events import EVENT_SCHEMA_REPLAY_V9
+
+        if self._population_lifecycle is None:
+            _LOGGER.error(
+                "population_entry_rejected reason_code=lifecycle_channel_off"
+            )
+            raise RuntimeError(
+                "admit_population_entry requires lifecycle channel "
+                "(code=lifecycle_channel_off)"
+            )
+        spec = self._population_lifecycle
+        if type(spec) is not PopulationLifecycleSpec:
+            raise TypeError("population_lifecycle must be PopulationLifecycleSpec")
+        if type(candidate) is not DemographicEntryCandidate:
+            raise TypeError("candidate must be DemographicEntryCandidate")
+        snap = self._snapshot
+        if snap.phase is not EnginePhase.AWAITING_OBSERVATION or snap.token is not None:
+            _LOGGER.error(
+                "%s reason=admit_wrong_phase phase=%s tick=%s",
+                EngineDiagnosticCode.LIFECYCLE_MISUSE.value,
+                snap.phase.value,
+                snap.tick.value,
+            )
+            raise RuntimeError(
+                "admit_population_entry requires awaiting_observation "
+                "(code=lifecycle_admit_wrong_phase)"
+            )
+        if candidate.provenance is OriginProvenance.BOOTSTRAP:
+            _LOGGER.error(
+                "population_entry_rejected "
+                "reason_code=lifecycle_bootstrap_no_created_event"
+            )
+            raise ValueError(
+                "admit_population_entry forbids bootstrap provenance "
+                "(code=lifecycle_bootstrap_no_created_event)"
+            )
+
+        living = self._living_registered_population()
+        if living >= spec.max_population:
+            _LOGGER.error(
+                "population_entry_rejected reason_code=population_cap "
+                "living=%s max_population=%s",
+                living,
+                spec.max_population,
+            )
+            raise ValueError(
+                "population cap reached (code=population_cap)"
+            )
+
+        state = snap.world.state
+        known_agents = {reg.agent_id.value for reg in self._registrations}
+        known_bodies = {reg.entity_id.value for reg in self._registrations}
+        if (
+            candidate.agent_id.value in known_agents
+            or candidate.body_id.value in known_bodies
+            or candidate.body_id in state.bodies
+        ):
+            _LOGGER.error(
+                "population_entry_rejected reason_code=id_collision agent_id=%s "
+                "body_id=%s",
+                candidate.agent_id.value,
+                candidate.body_id.value,
+            )
+            raise ValueError(
+                "population entry id collision (code=id_collision)"
+            )
+        if candidate.spawn_location_id not in state.locations:
+            _LOGGER.error(
+                "population_entry_rejected reason_code=unknown_spawn_location "
+                "location_id=%s",
+                candidate.spawn_location_id.value,
+            )
+            raise ValueError(
+                "spawn location unknown (code=unknown_spawn_location)"
+            )
+
+        entry_tick = snap.tick.value
+        entrant_body = body
+        if entrant_body is None:
+            entrant_body = default_entrant_body(
+                body_id=candidate.body_id,
+                location_id=candidate.spawn_location_id,
+            )
+        elif type(entrant_body) is not AgentBody:
+            raise TypeError("body must be AgentBody or None")
+        elif entrant_body.entity_id != candidate.body_id:
+            raise ValueError(
+                "body.entity_id must match candidate.body_id "
+                "(code=lifecycle_body_id_mismatch)"
+            )
+        elif entrant_body.location_id != candidate.spawn_location_id:
+            raise ValueError(
+                "body.location_id must match candidate.spawn_location_id "
+                "(code=lifecycle_spawn_mismatch)"
+            )
+
+        stage = resolve_lifecycle_stage(0, spec.stage_thresholds)
+        dependency = resolve_dependency_status(
+            stage,
+            spec.dependent_until_stage,
+            stage_order=spec.stage_order,
+        )
+        lifecycle_record = AgentLifecycleRecord(
+            body_id=candidate.body_id,
+            agent_id=candidate.agent_id.value,
+            entry_tick=entry_tick,
+            stage=stage,
+            dependency_status=dependency,
+            generation_index=candidate.generation_index,
+            cohort_id=candidate.cohort_id,
+            provenance=candidate.provenance,
+        )
+        registration = AgentRegistration(
+            agent_id=candidate.agent_id,
+            entity_id=candidate.body_id,
+        )
+
+        bodies = dict(state.bodies)
+        bodies[candidate.body_id] = entrant_body
+        resulting_revision = WorldRevision(state.revision.value + 1)
+        try:
+            next_state = rebuild_world_state(
+                state, revision=resulting_revision, bodies=bodies
+            )
+        except ValueError as exc:
+            _LOGGER.error(
+                "population_entry_rejected reason_code=world_invariant detail=%s",
+                type(exc).__name__,
+            )
+            raise ValueError(
+                f"population entry world invariant failed (code=world_invariant): {exc}"
+            ) from exc
+
+        created_details = AgentCreated(
+            body_id=candidate.body_id,
+            agent_id=candidate.agent_id.value,
+            generation_index=candidate.generation_index,
+            cohort_id=candidate.cohort_id,
+            provenance=candidate.provenance.value,
+        )
+        entered_details = AgentEnteredWorld(
+            body_id=candidate.body_id,
+            agent_id=candidate.agent_id.value,
+            location_id=candidate.spawn_location_id,
+            entry_tick=entry_tick,
+        )
+        created_cause_id = derive_system_cause_id(
+            self._config,
+            run_id=self._run_id,
+            world_id=self.world_id,
+            tick=entry_tick,
+            effect_family=SystemEffectFamily.LIFECYCLE.value,
+            entity_id=candidate.body_id,
+            family_ordinal=0,
+        )
+        entered_cause_id = derive_system_cause_id(
+            self._config,
+            run_id=self._run_id,
+            world_id=self.world_id,
+            tick=entry_tick,
+            effect_family=SystemEffectFamily.LIFECYCLE.value,
+            entity_id=candidate.body_id,
+            family_ordinal=1,
+        )
+        same_tick = [event for event in snap.event_history if event.tick == entry_tick]
+        sequence_start = len(same_tick)
+        created_event = make_physical_replayable_event(
+            event_id=derive_event_id(
+                self._config,
+                *canonical_system_effect_keys(
+                    run_id=self._run_id,
+                    world_id=self.world_id,
+                    tick=Tick(entry_tick),
+                    effect_family=SystemEffectFamily.LIFECYCLE.value,
+                    entity_id=candidate.body_id,
+                    family_ordinal=0,
+                    sequence=0,
+                ),
+            ),
+            run_id=run_id_for_event(self._run_id),
+            world_id=self.world_id,
+            tick=entry_tick,
+            sequence=sequence_start,
+            cause=SystemCause(
+                created_cause_id,
+                SystemEffectFamily.LIFECYCLE,
+                candidate.body_id,
+                0,
+            ),
+            resulting_revision=resulting_revision,
+            details=created_details,
+            occurrence=build_occurrence_context(
+                created_details,
+                origin_location_id=candidate.spawn_location_id,
+            ),
+            schema_version=EVENT_SCHEMA_REPLAY_V9,
+        )
+        entered_event = make_physical_replayable_event(
+            event_id=derive_event_id(
+                self._config,
+                *canonical_system_effect_keys(
+                    run_id=self._run_id,
+                    world_id=self.world_id,
+                    tick=Tick(entry_tick),
+                    effect_family=SystemEffectFamily.LIFECYCLE.value,
+                    entity_id=candidate.body_id,
+                    family_ordinal=1,
+                    sequence=0,
+                ),
+            ),
+            run_id=run_id_for_event(self._run_id),
+            world_id=self.world_id,
+            tick=entry_tick,
+            sequence=sequence_start + 1,
+            cause=SystemCause(
+                entered_cause_id,
+                SystemEffectFamily.LIFECYCLE,
+                candidate.body_id,
+                1,
+            ),
+            resulting_revision=resulting_revision,
+            details=entered_details,
+            occurrence=build_occurrence_context(
+                entered_details,
+                origin_location_id=candidate.spawn_location_id,
+            ),
+            schema_version=EVENT_SCHEMA_REPLAY_V9,
+        )
+        events = (created_event, entered_event)
+        next_registrations = (*self._registrations, registration)
+        self._registrations = next_registrations
+        self._translator = _translator_from_registrations(next_registrations)
+        self._lifecycle_records = (*self._lifecycle_records, lifecycle_record)
+        self._snapshot = _EngineSnapshot(
+            world=World(self.world_id, next_state),
+            tick=snap.tick,
+            phase=snap.phase,
+            token=None,
+            observation_batch=None,
+            resolution_history=snap.resolution_history,
+            event_history=(*snap.event_history, *events),
+            prior_event_window=(*snap.prior_event_window, *events),
+        )
+        _LOGGER.info(
+            "population_entry_admitted agent_id=%s body_id=%s tick=%s "
+            "population_count=%s provenance=%s",
+            candidate.agent_id.value,
+            candidate.body_id.value,
+            entry_tick,
+            living + 1,
+            candidate.provenance.value,
+        )
+        _LOGGER.debug(
+            "population_entry_events created=1 entered=1 revision=%s "
+            "registration_count=%s",
+            resulting_revision.value,
+            len(next_registrations),
+        )
+        return PopulationEntryAdmission(
+            agent_id=candidate.agent_id,
+            body_id=candidate.body_id,
+            location_id=candidate.spawn_location_id,
+            entry_tick=entry_tick,
+            generation_index=candidate.generation_index,
+            cohort_id=candidate.cohort_id,
+            provenance=candidate.provenance,
+            name_prefix=candidate.name_prefix,
+            registration=registration,
+            lifecycle_record=lifecycle_record,
+            events=events,
+        )
+
+    def _living_registered_population(self) -> int:
+        state = self._snapshot.world.state
+        living = 0
+        for registration in self._registrations:
+            body = state.bodies.get(registration.entity_id)
+            if body is not None and body.life_status is LifeStatus.ALIVE:
+                living += 1
+        return living
+
+    def _apply_lifecycle_channel(
+        self,
+        *,
+        snap: _EngineSnapshot,
+        working_state: object,
+        registrations: tuple[AgentRegistration, ...],
+        lifecycle_records: tuple[object, ...],
+    ) -> tuple[
+        object,
+        list[PendingEvent],
+        tuple[AgentRegistration, ...],
+        tuple[object, ...],
+        RegistrationTranslator,
+        bool,
+        int,
+        int,
+        int,
+    ]:
+        """Progress stages / lifespan death, then consult demographic policy."""
+        from simulation.demographic_policy import (
+            DemographicPopulationSnapshot,
+            demographic_policy_for,
+        )
+        from simulation.runner_models import PopulationLifecycleSpec
+        from world._state import WorldState
+
+        if type(working_state) is not WorldState:
+            raise TypeError("working_state must be WorldState")
+        spec = self._population_lifecycle
+        if type(spec) is not PopulationLifecycleSpec:
+            raise TypeError("population_lifecycle must be PopulationLifecycleSpec")
+
+        tick = snap.tick.value
+        pending: list[PendingEvent] = []
+        family_ordinal = 0
+        semantic_mutation = False
+        stage_changed_count = 0
+        lifespan_death_count = 0
+        bodies = dict(working_state.bodies)
+        records_by_body: dict[str, AgentLifecycleRecord] = {}
+        ordered_records: list[AgentLifecycleRecord] = []
+        for raw in lifecycle_records:
+            if type(raw) is not AgentLifecycleRecord:
+                raise TypeError(
+                    "lifecycle_records entries must be AgentLifecycleRecord"
+                )
+            records_by_body[raw.body_id.value] = raw
+            ordered_records.append(raw)
+
+        for registration in registrations:
+            record = records_by_body.get(registration.entity_id.value)
+            if record is None:
+                continue
+            body = bodies.get(registration.entity_id)
+            if body is None or body.life_status is not LifeStatus.ALIVE:
+                continue
+            age = chronological_age(entry_tick=record.entry_tick, current_tick=tick)
+            stage_age = age
+            if spec.natural_death_on_lifespan and age >= spec.lifespan_ticks:
+                # Thresholds cover [0, lifespan_ticks-1]; death age is outside.
+                stage_age = max(spec.lifespan_ticks - 1, 0)
+            stage = resolve_lifecycle_stage(stage_age, spec.stage_thresholds)
+            dependency = resolve_dependency_status(
+                stage,
+                spec.dependent_until_stage,
+                stage_order=spec.stage_order,
+            )
+            if (
+                stage.value != record.stage.value
+                or dependency is not record.dependency_status
+            ):
+                previous_stage = record.stage.value
+                record = replace(
+                    record, stage=stage, dependency_status=dependency
+                )
+                records_by_body[record.body_id.value] = record
+                details = LifecycleStageChanged(
+                    body_id=record.body_id,
+                    previous_stage=previous_stage,
+                    new_stage=stage.value,
+                    chronological_age=age,
+                    dependency_status=dependency.value,
+                )
+                cause_id = derive_system_cause_id(
+                    self._config,
+                    run_id=self._run_id,
+                    world_id=self.world_id,
+                    tick=tick,
+                    effect_family=SystemEffectFamily.LIFECYCLE.value,
+                    entity_id=record.body_id,
+                    family_ordinal=family_ordinal,
+                )
+                pending.append(
+                    PendingEvent(
+                        cause=SystemCause(
+                            cause_id,
+                            SystemEffectFamily.LIFECYCLE,
+                            record.body_id,
+                            family_ordinal,
+                        ),
+                        details=details,
+                        occurrence=build_occurrence_context(
+                            details, origin_location_id=body.location_id
+                        ),
+                    )
+                )
+                family_ordinal += 1
+                stage_changed_count += 1
+
+            if spec.natural_death_on_lifespan and age >= spec.lifespan_ticks:
+                bodies[registration.entity_id] = copy_body(
+                    body,
+                    health=Health(0.0),
+                    life_status=LifeStatus.DEAD,
+                )
+                semantic_mutation = True
+                details = Died(
+                    body_id=registration.entity_id,
+                    death_cause=DeathCause.LIFESPAN,
+                )
+                cause_id = derive_system_cause_id(
+                    self._config,
+                    run_id=self._run_id,
+                    world_id=self.world_id,
+                    tick=tick,
+                    effect_family=SystemEffectFamily.LIFECYCLE.value,
+                    entity_id=registration.entity_id,
+                    family_ordinal=family_ordinal,
+                )
+                pending.append(
+                    PendingEvent(
+                        cause=SystemCause(
+                            cause_id,
+                            SystemEffectFamily.LIFECYCLE,
+                            registration.entity_id,
+                            family_ordinal,
+                        ),
+                        details=details,
+                        occurrence=build_occurrence_context(
+                            details, origin_location_id=body.location_id
+                        ),
+                    )
+                )
+                family_ordinal += 1
+                lifespan_death_count += 1
+
+        next_records = tuple(
+            records_by_body[record.body_id.value] for record in ordered_records
+        )
+        if semantic_mutation or bodies != dict(working_state.bodies):
+            working_state = rebuild_world_state(working_state, bodies=bodies)
+            semantic_mutation = True
+
+        # Demographic consult after progression / lifespan death.
+        policy = demographic_policy_for(spec.demographic_policy_id)
+        living = sum(
+            1
+            for registration in registrations
+            if (body := working_state.bodies.get(registration.entity_id)) is not None
+            and body.life_status is LifeStatus.ALIVE
+        )
+        known_agent_ids = frozenset(reg.agent_id.value for reg in registrations)
+        known_body_ids = frozenset(reg.entity_id.value for reg in registrations)
+        snapshot = DemographicPopulationSnapshot(
+            tick=tick,
+            living_population=living,
+            max_population=spec.max_population,
+            known_agent_ids=known_agent_ids,
+            known_body_ids=known_body_ids,
+        )
+        rng = create_named_stream(
+            self._config,
+            StreamScope(
+                namespace="demographic",
+                names=(
+                    self._run_id.value,
+                    self.world_id.value,
+                    f"tick:{tick}",
+                ),
+            ),
+        )
+        candidates = policy.propose_entries(
+            snapshot=snapshot,
+            params=spec.demographic_policy_params,
+            rng_draw=rng.randrange(1_000_000_000),
+        )
+        next_registrations = list(registrations)
+        next_lifecycle: list[AgentLifecycleRecord] = list(next_records)
+        demographic_admit_count = 0
+        for candidate in candidates:
+            if living >= spec.max_population:
+                _LOGGER.error(
+                    "population_entry_rejected reason_code=population_cap "
+                    "living=%s max_population=%s",
+                    living,
+                    spec.max_population,
+                )
+                break
+            if (
+                candidate.agent_id.value in known_agent_ids
+                or candidate.body_id.value in known_body_ids
+                or candidate.body_id in working_state.bodies
+            ):
+                _LOGGER.error(
+                    "population_entry_rejected reason_code=id_collision "
+                    "agent_id=%s body_id=%s",
+                    candidate.agent_id.value,
+                    candidate.body_id.value,
+                )
+                continue
+            if candidate.spawn_location_id not in working_state.locations:
+                _LOGGER.error(
+                    "population_entry_rejected reason_code=unknown_spawn_location "
+                    "location_id=%s",
+                    candidate.spawn_location_id.value,
+                )
+                continue
+            if candidate.provenance is OriginProvenance.BOOTSTRAP:
+                continue
+
+            entrant = default_entrant_body(
+                body_id=candidate.body_id,
+                location_id=candidate.spawn_location_id,
+            )
+            bodies = dict(working_state.bodies)
+            bodies[candidate.body_id] = entrant
+            try:
+                working_state = rebuild_world_state(working_state, bodies=bodies)
+            except ValueError:
+                _LOGGER.error(
+                    "population_entry_rejected reason_code=world_invariant "
+                    "body_id=%s",
+                    candidate.body_id.value,
+                )
+                continue
+            semantic_mutation = True
+            stage = resolve_lifecycle_stage(0, spec.stage_thresholds)
+            dependency = resolve_dependency_status(
+                stage,
+                spec.dependent_until_stage,
+                stage_order=spec.stage_order,
+            )
+            lifecycle_record = AgentLifecycleRecord(
+                body_id=candidate.body_id,
+                agent_id=candidate.agent_id.value,
+                entry_tick=tick,
+                stage=stage,
+                dependency_status=dependency,
+                generation_index=candidate.generation_index,
+                cohort_id=candidate.cohort_id,
+                provenance=candidate.provenance,
+            )
+            registration = AgentRegistration(
+                agent_id=candidate.agent_id,
+                entity_id=candidate.body_id,
+            )
+            created = AgentCreated(
+                body_id=candidate.body_id,
+                agent_id=candidate.agent_id.value,
+                generation_index=candidate.generation_index,
+                cohort_id=candidate.cohort_id,
+                provenance=candidate.provenance.value,
+            )
+            entered = AgentEnteredWorld(
+                body_id=candidate.body_id,
+                agent_id=candidate.agent_id.value,
+                location_id=candidate.spawn_location_id,
+                entry_tick=tick,
+            )
+            for details, ordinal_offset in ((created, 0), (entered, 1)):
+                ordinal = family_ordinal + ordinal_offset
+                cause_id = derive_system_cause_id(
+                    self._config,
+                    run_id=self._run_id,
+                    world_id=self.world_id,
+                    tick=tick,
+                    effect_family=SystemEffectFamily.LIFECYCLE.value,
+                    entity_id=candidate.body_id,
+                    family_ordinal=ordinal,
+                )
+                pending.append(
+                    PendingEvent(
+                        cause=SystemCause(
+                            cause_id,
+                            SystemEffectFamily.LIFECYCLE,
+                            candidate.body_id,
+                            ordinal,
+                        ),
+                        details=details,
+                        occurrence=build_occurrence_context(
+                            details,
+                            origin_location_id=candidate.spawn_location_id,
+                        ),
+                    )
+                )
+            family_ordinal += 2
+            next_registrations.append(registration)
+            next_lifecycle.append(lifecycle_record)
+            known_agent_ids = frozenset({*known_agent_ids, candidate.agent_id.value})
+            known_body_ids = frozenset({*known_body_ids, candidate.body_id.value})
+            living += 1
+            demographic_admit_count += 1
+            _LOGGER.info(
+                "population_entry_admitted agent_id=%s body_id=%s tick=%s "
+                "population_count=%s provenance=%s",
+                candidate.agent_id.value,
+                candidate.body_id.value,
+                tick,
+                living,
+                candidate.provenance.value,
+            )
+
+        regs_tuple = tuple(next_registrations)
+        translator = _translator_from_registrations(regs_tuple)
+        return (
+            working_state,
+            pending,
+            regs_tuple,
+            tuple(next_lifecycle),
+            translator,
+            semantic_mutation,
+            stage_changed_count,
+            lifespan_death_count,
+            demographic_admit_count,
+        )
 
     @property
     def last_tick_result(self) -> TickResult | None:
@@ -1044,8 +1715,8 @@ class WorldEngine:
         typed = tuple(require_action_submission(item) for item in submissions)
         for submission in typed:
             self._validate_token(submission.token, snap.token)
-        resolutions, events, candidate_world, next_ledger = self._resolve_ordered(
-            snap=snap, submissions=typed
+        resolutions, events, candidate_world, next_ledger, roster = (
+            self._resolve_ordered(snap=snap, submissions=typed)
         )
         result = TickResult(
             tick=snap.tick,
@@ -1076,6 +1747,9 @@ class WorldEngine:
             next_snapshot=next_snapshot,
             events=events,
             skill_ledger=next_ledger,
+            registrations=roster[0],
+            lifecycle_records=roster[1],
+            translator=roster[2],
         )
 
     def _finalize_tick_candidate(self, candidate: _PreparedTickCandidate) -> TickResult:
@@ -1091,6 +1765,12 @@ class WorldEngine:
         )
         self._snapshot = candidate.next_snapshot
         self._skill_ledger = candidate.skill_ledger
+        if candidate.registrations is not None:
+            self._registrations = candidate.registrations
+        if candidate.lifecycle_records is not None:
+            self._lifecycle_records = candidate.lifecycle_records
+        if candidate.translator is not None:
+            self._translator = candidate.translator
         result = candidate.result
         self._last_tick_result = result
         death_count = sum(
@@ -1152,7 +1832,17 @@ class WorldEngine:
         *,
         snap: _EngineSnapshot,
         submissions: tuple[ActionSubmission, ...],
-    ) -> tuple[tuple[ActionResolution, ...], tuple[WorldEvent, ...], World]:
+    ) -> tuple[
+        tuple[ActionResolution, ...],
+        tuple[WorldEvent, ...],
+        World,
+        object | None,
+        tuple[
+            tuple[AgentRegistration, ...],
+            tuple[object, ...],
+            RegistrationTranslator,
+        ],
+    ]:
         seen_agents: dict[AgentId, int] = {}
         admitted: list[ActionRequest | None] = []
         early_resolutions: dict[int, ActionResolution] = {}
@@ -1405,18 +2095,53 @@ class WorldEngine:
                     ),
                 )
             )
+
+        working_state = physical.working_state
+        semantic_mutation = (
+            action_pending.semantic_mutation
+            or physical.semantic_mutation
+            or completion_state is not action_pending.working_state
+        )
+        lifecycle_pending: list[PendingEvent] = []
+        next_registrations = tuple(self._registrations)
+        next_lifecycle_records = tuple(self._lifecycle_records)
+        next_translator = self._translator
+        if self._population_lifecycle is not None:
+            (
+                working_state,
+                lifecycle_pending,
+                next_registrations,
+                next_lifecycle_records,
+                next_translator,
+                life_mutation,
+                stage_changed_count,
+                lifespan_death_count,
+                demographic_admit_count,
+            ) = self._apply_lifecycle_channel(
+                snap=snap,
+                working_state=working_state,
+                registrations=next_registrations,
+                lifecycle_records=next_lifecycle_records,
+            )
+            semantic_mutation = semantic_mutation or life_mutation
+            _LOGGER.debug(
+                "lifecycle_tick_applied tick=%s stage_changed=%s "
+                "lifespan_death=%s demographic_admit=%s",
+                snap.tick.value,
+                stage_changed_count,
+                lifespan_death_count,
+                demographic_admit_count,
+            )
+
         merged = PendingBatch(
-            working_state=physical.working_state,
-            semantic_mutation=(
-                action_pending.semantic_mutation
-                or physical.semantic_mutation
-                or completion_state is not action_pending.working_state
-            ),
+            working_state=working_state,
+            semantic_mutation=semantic_mutation,
             outcomes=action_pending.outcomes,
             pending_events=(
                 action_pending.pending_events
                 + tuple(production_pending)
                 + tuple(system_pending)
+                + tuple(lifecycle_pending)
             ),
         )
 
@@ -1483,6 +2208,7 @@ class WorldEngine:
             production_active=self._production_catalog is not None,
             dynamics_active=self._environmental_dynamics is not None,
             artifacts_active=self._artifacts_enabled,
+            lifecycle_active=self.lifecycle_channel_active,
         )
         prepared = finalize_pending_batch(
             merged,
@@ -1587,7 +2313,14 @@ class WorldEngine:
             _log_resolution(status, snap.tick.value, ordinal, request.request_id.value)
 
         candidate_world = World(self.world_id, prepared.candidate_state)
-        return tuple(resolutions), prepared.events, candidate_world, folded_ledger
+        roster = (next_registrations, next_lifecycle_records, next_translator)
+        return (
+            tuple(resolutions),
+            prepared.events,
+            candidate_world,
+            folded_ledger,
+            roster,
+        )
 
     def _fold_skill_ledger(
         self,
@@ -2541,6 +3274,7 @@ def select_checkpoint_schema(
     production_active: bool,
     dynamics_active: bool,
     artifacts_active: bool = False,
+    lifecycle_active: bool = False,
 ) -> tuple[int, str]:
     """Return the legal event-schema and codec pair for this run."""
     from simulation.persistence import (
@@ -2552,30 +3286,40 @@ def select_checkpoint_schema(
         EVENT_SCHEMA_REPLAY_V6,
         EVENT_SCHEMA_REPLAY_V7,
         EVENT_SCHEMA_REPLAY_V8,
+        EVENT_SCHEMA_REPLAY_V9,
     )
 
     schema_version, codec = checkpoint_schema_for_production(
         production_active=production_active,
         dynamics_active=dynamics_active,
         artifacts_active=artifacts_active,
+        lifecycle_active=lifecycle_active,
     )
     agreed = (
-        artifacts_active
+        lifecycle_active
+        and schema_version == EVENT_SCHEMA_REPLAY_V9
+        and codec == "v6"
+    ) or (
+        not lifecycle_active
+        and artifacts_active
         and schema_version == EVENT_SCHEMA_REPLAY_V8
         and codec == "v5"
     ) or (
-        not artifacts_active
+        not lifecycle_active
+        and not artifacts_active
         and dynamics_active
         and schema_version == EVENT_SCHEMA_REPLAY_V7
         and codec == "v4"
     ) or (
-        not artifacts_active
+        not lifecycle_active
+        and not artifacts_active
         and not dynamics_active
         and production_active
         and schema_version == EVENT_SCHEMA_REPLAY_V6
         and codec == "v3"
     ) or (
-        not artifacts_active
+        not lifecycle_active
+        and not artifacts_active
         and not dynamics_active
         and not production_active
         and schema_version == EVENT_SCHEMA_VERSION
@@ -2589,12 +3333,14 @@ def select_checkpoint_schema(
         )
         raise ValueError("unsupported_schema_version")
     _LOGGER.debug(
-        "artifact_schema_selected event_schema=%s codec=%s artifacts_active=%s",
+        "checkpoint_schema_selected event_schema=%s codec=%s "
+        "lifecycle_active=%s artifacts_active=%s",
         schema_version,
         codec,
+        lifecycle_active,
         artifacts_active,
     )
-    if dynamics_active and not artifacts_active:
+    if dynamics_active and not artifacts_active and not lifecycle_active:
         _LOGGER.debug(
             "environment_schema_selected schema_version=%s codec=%s",
             schema_version,

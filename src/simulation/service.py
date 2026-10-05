@@ -138,6 +138,7 @@ class PersistentSimulationService:
             production_active=self._engine._production_catalog is not None,
             dynamics_active=self._engine._environmental_dynamics is not None,
             artifacts_active=self._engine._artifacts_enabled,
+            lifecycle_active=self._engine.lifecycle_channel_active,
         )
         production_rows: dict[str, tuple[object, ...]] = {}
         if codec_version in {"v3", "v4", "v5"}:

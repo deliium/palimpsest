@@ -133,6 +133,9 @@ from world.events import (
     EVENT_SCHEMA_REPLAY_V6,
     EVENT_SCHEMA_REPLAY_V7,
     EVENT_SCHEMA_REPLAY_V8,
+    EVENT_SCHEMA_REPLAY_V9,
+    AgentCreated,
+    AgentEnteredWorld,
     ArtifactCreated,
     ArtifactDestroyed,
     ArtifactModified,
@@ -152,6 +155,7 @@ from world.events import (
     Helped,
     ItemCrafted,
     ItemStored,
+    LifecycleStageChanged,
     Moved,
     NeedsApplied,
     OccurrenceContext,
@@ -3995,6 +3999,55 @@ def _encode_event_details(value: object) -> dict[str, Any]:
                 "kind": "artifact_destroyed",
                 "success": success,
             }
+        case AgentCreated(
+            body_id=body_id,
+            agent_id=agent_id,
+            generation_index=generation_index,
+            cohort_id=cohort_id,
+            provenance=provenance,
+            success=success,
+        ):
+            return {
+                "agent_id": agent_id,
+                "body_id": body_id.value,
+                "cohort_id": cohort_id,
+                "generation_index": generation_index,
+                "kind": "agent_created",
+                "provenance": provenance,
+                "success": success,
+            }
+        case AgentEnteredWorld(
+            body_id=body_id,
+            agent_id=agent_id,
+            location_id=location_id,
+            entry_tick=entry_tick,
+            success=success,
+        ):
+            return {
+                "agent_id": agent_id,
+                "body_id": body_id.value,
+                "entry_tick": entry_tick,
+                "kind": "agent_entered_world",
+                "location_id": location_id.value,
+                "success": success,
+            }
+        case LifecycleStageChanged(
+            body_id=body_id,
+            previous_stage=previous_stage,
+            new_stage=new_stage,
+            chronological_age=chronological_age,
+            dependency_status=dependency_status,
+            success=success,
+        ):
+            return {
+                "body_id": body_id.value,
+                "chronological_age": chronological_age,
+                "dependency_status": dependency_status,
+                "kind": "lifecycle_stage_changed",
+                "new_stage": new_stage,
+                "previous_stage": previous_stage,
+                "success": success,
+            }
         case _:
             raise DomainSerializationError("unsupported_type", "$")
 
@@ -4259,6 +4312,74 @@ def _decode_artifact_details(
         resulting_location_id=location_id,
         resulting_holder_id=holder_id,
         success=success,
+    )
+
+
+def _decode_lifecycle_details(
+    kind: str, fields: dict[str, Any], *, path: str
+) -> object:
+    success = fields.get("success")
+    if type(success) is not bool:
+        raise DomainSerializationError("invalid_bool", f"{path}.success")
+    if kind == "agent_created":
+        _require_keys(
+            fields,
+            {
+                "agent_id",
+                "body_id",
+                "cohort_id",
+                "generation_index",
+                "provenance",
+                "success",
+            },
+            path=path,
+        )
+        return AgentCreated(
+            EntityId(_str_field(fields, "body_id", path=path)),
+            _str_field(fields, "agent_id", path=path),
+            _int_field(fields, "generation_index", path=path),
+            _str_field(fields, "cohort_id", path=path),
+            _str_field(fields, "provenance", path=path),
+            success,
+        )
+    if kind == "agent_entered_world":
+        _require_keys(
+            fields,
+            {
+                "agent_id",
+                "body_id",
+                "entry_tick",
+                "location_id",
+                "success",
+            },
+            path=path,
+        )
+        return AgentEnteredWorld(
+            EntityId(_str_field(fields, "body_id", path=path)),
+            _str_field(fields, "agent_id", path=path),
+            EntityId(_str_field(fields, "location_id", path=path)),
+            _int_field(fields, "entry_tick", path=path),
+            success,
+        )
+    _require_keys(
+        fields,
+        {
+            "body_id",
+            "chronological_age",
+            "dependency_status",
+            "new_stage",
+            "previous_stage",
+            "success",
+        },
+        path=path,
+    )
+    return LifecycleStageChanged(
+        EntityId(_str_field(fields, "body_id", path=path)),
+        _str_field(fields, "previous_stage", path=path),
+        _str_field(fields, "new_stage", path=path),
+        _int_field(fields, "chronological_age", path=path),
+        _str_field(fields, "dependency_status", path=path),
+        success,
     )
 
 
@@ -4658,6 +4779,7 @@ def _decode_event_details(
                 EVENT_SCHEMA_REPLAY_V6,
                 EVENT_SCHEMA_REPLAY_V7,
                 EVENT_SCHEMA_REPLAY_V8,
+                EVENT_SCHEMA_REPLAY_V9,
             }:
                 raise DomainSerializationError("invalid_event_schema_version", path)
             return _decode_production_details(kind, fields, path=path)
@@ -4672,6 +4794,7 @@ def _decode_event_details(
             if schema_version not in {
                 EVENT_SCHEMA_REPLAY_V7,
                 EVENT_SCHEMA_REPLAY_V8,
+                EVENT_SCHEMA_REPLAY_V9,
             }:
                 raise DomainSerializationError("invalid_event_schema_version", path)
             return _decode_environment_details(kind, fields, path=path)
@@ -4681,9 +4804,20 @@ def _decode_event_details(
             "artifact_moved",
             "artifact_destroyed",
         }:
-            if schema_version != EVENT_SCHEMA_REPLAY_V8:
+            if schema_version not in {
+                EVENT_SCHEMA_REPLAY_V8,
+                EVENT_SCHEMA_REPLAY_V9,
+            }:
                 raise DomainSerializationError("invalid_event_schema_version", path)
             return _decode_artifact_details(kind, fields, path=path)
+        if kind in {
+            "agent_created",
+            "agent_entered_world",
+            "lifecycle_stage_changed",
+        }:
+            if schema_version != EVENT_SCHEMA_REPLAY_V9:
+                raise DomainSerializationError("invalid_event_schema_version", path)
+            return _decode_lifecycle_details(kind, fields, path=path)
     except DomainSerializationError:
         raise
     except (TypeError, ValueError) as exc:
@@ -4703,6 +4837,7 @@ def _encode_world_event(value: WorldEvent) -> dict[str, Any]:
     } and value.schema_version not in {
         EVENT_SCHEMA_REPLAY_V7,
         EVENT_SCHEMA_REPLAY_V8,
+        EVENT_SCHEMA_REPLAY_V9,
     }:
         raise DomainSerializationError(
             "invalid_event_schema_version",
@@ -4719,6 +4854,7 @@ def _encode_world_event(value: WorldEvent) -> dict[str, Any]:
         EVENT_SCHEMA_REPLAY_V6,
         EVENT_SCHEMA_REPLAY_V7,
         EVENT_SCHEMA_REPLAY_V8,
+        EVENT_SCHEMA_REPLAY_V9,
     }:
         raise DomainSerializationError(
             "invalid_event_schema_version",
@@ -4729,7 +4865,19 @@ def _encode_world_event(value: WorldEvent) -> dict[str, Any]:
         "artifact_modified",
         "artifact_moved",
         "artifact_destroyed",
-    } and value.schema_version != EVENT_SCHEMA_REPLAY_V8:
+    } and value.schema_version not in {
+        EVENT_SCHEMA_REPLAY_V8,
+        EVENT_SCHEMA_REPLAY_V9,
+    }:
+        raise DomainSerializationError(
+            "invalid_event_schema_version",
+            "$.schema_version",
+        )
+    if details_kind in {
+        "agent_created",
+        "agent_entered_world",
+        "lifecycle_stage_changed",
+    } and value.schema_version != EVENT_SCHEMA_REPLAY_V9:
         raise DomainSerializationError(
             "invalid_event_schema_version",
             "$.schema_version",
@@ -4894,6 +5042,7 @@ def _decode_world_event(data: dict[str, Any], *, path: str) -> WorldEvent:
             EVENT_SCHEMA_REPLAY_V6,
             EVENT_SCHEMA_REPLAY_V7,
             EVENT_SCHEMA_REPLAY_V8,
+            EVENT_SCHEMA_REPLAY_V9,
         }:
             raise DomainSerializationError("unsupported_schema_version", path)
         actor_raw = data["actor_id"]
