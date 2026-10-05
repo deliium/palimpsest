@@ -106,6 +106,7 @@ RUNNER_SCHEMA_VERSION_V24: Final[str] = "runner-config-v24"
 RUNNER_SCHEMA_VERSION_V25: Final[str] = "runner-config-v25"
 RUNNER_SCHEMA_VERSION_V26: Final[str] = "runner-config-v26"
 RUNNER_SCHEMA_VERSION_V27: Final[str] = "runner-config-v27"
+RUNNER_SCHEMA_VERSION_V28: Final[str] = "runner-config-v28"
 RUNNER_SCHEMA_VERSION: Final[str] = RUNNER_SCHEMA_VERSION_V4
 SUPPORTED_RUNNER_SCHEMA_VERSIONS: Final[frozenset[str]] = frozenset(
     {
@@ -135,7 +136,8 @@ SUPPORTED_RUNNER_SCHEMA_VERSIONS: Final[frozenset[str]] = frozenset(
         RUNNER_SCHEMA_VERSION_V24,
         RUNNER_SCHEMA_VERSION_V25,
         RUNNER_SCHEMA_VERSION_V26,
-            RUNNER_SCHEMA_VERSION_V27,
+        RUNNER_SCHEMA_VERSION_V27,
+        RUNNER_SCHEMA_VERSION_V28,
     }
 )
 RESULT_SCHEMA_VERSION_V1: Final[str] = "runner-result-v1"
@@ -665,6 +667,7 @@ _SKILL_SCHEMAS: Final[frozenset[str]] = frozenset(
         RUNNER_SCHEMA_VERSION_V25,
         RUNNER_SCHEMA_VERSION_V26,
             RUNNER_SCHEMA_VERSION_V27,
+    RUNNER_SCHEMA_VERSION_V28,
     }
 )
 
@@ -1479,6 +1482,264 @@ def example_kinship_spec(
                 established_tick=0,
             ),
         ),
+    )
+
+
+_DEPENDENCY_CARE_PERCEPTION_MODES: Final[frozenset[str]] = frozenset(
+    {"none", "self_and_colocated"}
+)
+_DEPENDENCY_CARE_COGNITION_MODES: Final[frozenset[str]] = frozenset(
+    {"disabled", "deterministic"}
+)
+_DEPENDENCY_CARE_FORBIDDEN_KEYS: Final[frozenset[str]] = frozenset(
+    {
+        "love",
+        "attention",
+        "emotion",
+        "parenting",
+        "attachment",
+        "sex",
+        "fertility",
+        "pregnancy",
+        "lactation",
+        "nanny",
+        "guardian",
+        "caregiver",
+        "ward",
+        "parent_id",
+        "assigned_caregiver",
+    }
+)
+
+
+@dataclass(frozen=True, slots=True)
+class CareActionPolicySpec:
+    """Gates which structured care actions are legal."""
+
+    allow_feed: bool = False
+    allow_transport: bool = False
+    allow_help_safety: bool = True
+    allow_teach_learning: bool = False
+    require_colocated: bool = True
+
+    def __post_init__(self) -> None:
+        for name in (
+            "allow_feed",
+            "allow_transport",
+            "allow_help_safety",
+            "allow_teach_learning",
+            "require_colocated",
+        ):
+            if type(getattr(self, name)) is not bool:
+                raise TypeError(f"{name} must be bool")
+
+
+@dataclass(frozen=True, slots=True)
+class DependencyCareNeedPolicySpec:
+    """Exact per-need policy under dependency_care.need_policies."""
+
+    self_satisfy: bool
+    unmet_accrual_per_tick: float
+    critical_threshold: float
+    critical_consequence: str
+
+    def __post_init__(self) -> None:
+        from world.dependency_care import CareNeedPolicy
+
+        # Validate numeric/bool shape via domain CareNeedPolicy.
+        CareNeedPolicy(
+            self_satisfy=self.self_satisfy,
+            unmet_accrual_per_tick=self.unmet_accrual_per_tick,
+            critical_threshold=self.critical_threshold,
+            critical_consequence=self.critical_consequence,
+        )
+
+
+@dataclass(frozen=True, slots=True)
+class DependencyCareSpec:
+    """Objective dependency-care configuration (runner-config-v28 sibling).
+
+    Lives under owned ``generational_population`` — not a new V3 flag.
+    ``caregiving_cognition_mode`` is config-only (no AgentCognitionSpec bump).
+    """
+
+    enabled_needs: tuple[str, ...]
+    need_policies: Mapping[str, DependencyCareNeedPolicySpec]
+    care_action_policy: CareActionPolicySpec = field(
+        default_factory=CareActionPolicySpec
+    )
+    perception_mode: str = "none"
+    caregiving_cognition_mode: str = "disabled"
+
+    def __post_init__(self) -> None:
+        from world.dependency_care import (
+            FORBIDDEN_NEED_ALIASES,
+            CareNeedId,
+            CareNeedPolicy,
+            require_care_need_policy,
+        )
+
+        if isinstance(self.enabled_needs, (str, bytes)) or not isinstance(
+            self.enabled_needs, Sequence
+        ):
+            raise TypeError("enabled_needs must be a sequence")
+        if not self.enabled_needs:
+            raise ValueError(
+                "enabled_needs must be non-empty when dependency_care present "
+                "(code=dependency_care_enabled_needs_empty)"
+            )
+        needs: list[str] = []
+        seen: set[str] = set()
+        for raw in self.enabled_needs:
+            if type(raw) is not str:
+                raise TypeError("enabled_needs entries must be str")
+            if raw in FORBIDDEN_NEED_ALIASES or raw in _DEPENDENCY_CARE_FORBIDDEN_KEYS:
+                raise ValueError(
+                    f"forbidden need id {raw!r} "
+                    "(code=dependency_care_forbidden_need)"
+                )
+            try:
+                need = CareNeedId(raw)
+            except ValueError as exc:
+                raise ValueError(
+                    f"unknown need id {raw!r} (code=dependency_care_unknown_need)"
+                ) from exc
+            if need.value in seen:
+                raise ValueError(
+                    f"duplicate enabled need {need.value!r} "
+                    "(code=dependency_care_need_duplicate)"
+                )
+            seen.add(need.value)
+            needs.append(need.value)
+        object.__setattr__(self, "enabled_needs", tuple(needs))
+        if isinstance(self.need_policies, (str, bytes)) or not isinstance(
+            self.need_policies, Mapping
+        ):
+            raise TypeError("need_policies must be a mapping")
+        policy_keys = set(self.need_policies)
+        if policy_keys != set(needs):
+            raise ValueError(
+                "need_policies must cover enabled_needs exactly once "
+                "(code=dependency_care_need_policies_mismatch)"
+            )
+        cleaned_policies: dict[str, DependencyCareNeedPolicySpec] = {}
+        for need_id in needs:
+            raw_policy = self.need_policies[need_id]
+            if type(raw_policy) is not DependencyCareNeedPolicySpec:
+                raise TypeError(
+                    "need_policies values must be DependencyCareNeedPolicySpec"
+                )
+            domain = CareNeedPolicy(
+                self_satisfy=raw_policy.self_satisfy,
+                unmet_accrual_per_tick=raw_policy.unmet_accrual_per_tick,
+                critical_threshold=raw_policy.critical_threshold,
+                critical_consequence=raw_policy.critical_consequence,
+            )
+            require_care_need_policy(CareNeedId(need_id), domain)
+            cleaned_policies[need_id] = DependencyCareNeedPolicySpec(
+                self_satisfy=domain.self_satisfy,
+                unmet_accrual_per_tick=domain.unmet_accrual_per_tick,
+                critical_threshold=domain.critical_threshold,
+                critical_consequence=domain.critical_consequence,
+            )
+        object.__setattr__(self, "need_policies", dict(cleaned_policies))
+        if type(self.care_action_policy) is not CareActionPolicySpec:
+            raise TypeError("care_action_policy must be CareActionPolicySpec")
+        mode = require_stable_id(
+            "DependencyCareSpec.perception_mode", self.perception_mode
+        )
+        if mode not in _DEPENDENCY_CARE_PERCEPTION_MODES:
+            raise ValueError(
+                f"unknown perception_mode {mode!r} "
+                "(code=dependency_care_perception_mode)"
+            )
+        object.__setattr__(self, "perception_mode", mode)
+        cognition = require_stable_id(
+            "DependencyCareSpec.caregiving_cognition_mode",
+            self.caregiving_cognition_mode,
+        )
+        if cognition not in _DEPENDENCY_CARE_COGNITION_MODES:
+            raise ValueError(
+                f"unknown caregiving_cognition_mode {cognition!r} "
+                "(code=dependency_care_cognition_mode)"
+            )
+        object.__setattr__(self, "caregiving_cognition_mode", cognition)
+
+    def to_domain_policies(self) -> Mapping[object, object]:
+        from world.dependency_care import CareNeedId, CareNeedPolicy
+
+        return {
+            CareNeedId(need_id): CareNeedPolicy(
+                self_satisfy=policy.self_satisfy,
+                unmet_accrual_per_tick=policy.unmet_accrual_per_tick,
+                critical_threshold=policy.critical_threshold,
+                critical_consequence=policy.critical_consequence,
+            )
+            for need_id, policy in self.need_policies.items()
+        }
+
+    def canonical_payload(self) -> dict[str, object]:
+        return {
+            "care_action_policy": {
+                "allow_feed": self.care_action_policy.allow_feed,
+                "allow_help_safety": self.care_action_policy.allow_help_safety,
+                "allow_teach_learning": self.care_action_policy.allow_teach_learning,
+                "allow_transport": self.care_action_policy.allow_transport,
+                "require_colocated": self.care_action_policy.require_colocated,
+            },
+            "caregiving_cognition_mode": self.caregiving_cognition_mode,
+            "enabled_needs": list(self.enabled_needs),
+            "need_policies": {
+                need_id: {
+                    "critical_consequence": policy.critical_consequence,
+                    "critical_threshold": policy.critical_threshold,
+                    "self_satisfy": policy.self_satisfy,
+                    "unmet_accrual_per_tick": policy.unmet_accrual_per_tick,
+                }
+                for need_id, policy in self.need_policies.items()
+            },
+            "perception_mode": self.perception_mode,
+        }
+
+
+def example_dependency_care_spec(
+    *,
+    enabled_needs: tuple[str, ...] = ("food", "water", "safety"),
+    caregiving_cognition_mode: str = "disabled",
+    perception_mode: str = "none",
+    allow_feed: bool = True,
+    allow_transport: bool = True,
+) -> DependencyCareSpec:
+    """Reference dependency-care spec for tests and Experiment AI."""
+    consequence_by_need = {
+        "food": "accelerate_hunger",
+        "water": "accelerate_thirst",
+        "safety": "health_damage",
+        "movement": "no_extra",
+        "shelter": "fatigue_accrual",
+        "learning": "learning_rate_zero",
+    }
+    policies = {
+        need: DependencyCareNeedPolicySpec(
+            self_satisfy=False,
+            unmet_accrual_per_tick=0.05,
+            critical_threshold=0.8,
+            critical_consequence=consequence_by_need[need],
+        )
+        for need in enabled_needs
+    }
+    return DependencyCareSpec(
+        enabled_needs=enabled_needs,
+        need_policies=policies,
+        care_action_policy=CareActionPolicySpec(
+            allow_feed=allow_feed,
+            allow_transport=allow_transport,
+            allow_help_safety=True,
+            allow_teach_learning=False,
+            require_colocated=True,
+        ),
+        perception_mode=perception_mode,
+        caregiving_cognition_mode=caregiving_cognition_mode,
     )
 
 
@@ -3079,6 +3340,7 @@ class SimulationRunnerConfig:
     population_lifecycle: PopulationLifecycleSpec | None = None
     new_agent_initialization: object | None = None
     kinship: KinshipSpec | None = None
+    dependency_care: DependencyCareSpec | None = None
 
     def __post_init__(self) -> None:
         # Late import avoids circular import with new_agent_initialization.
@@ -3110,6 +3372,11 @@ class SimulationRunnerConfig:
             )
         if self.kinship is not None and type(self.kinship) is not KinshipSpec:
             raise TypeError("kinship must be KinshipSpec or None")
+        if (
+            self.dependency_care is not None
+            and type(self.dependency_care) is not DependencyCareSpec
+        ):
+            raise TypeError("dependency_care must be DependencyCareSpec or None")
         if type(self.scenario) is not WorldScenarioSpec:
             raise TypeError("scenario must be WorldScenarioSpec")
         agents = _copy_ordered(
@@ -3198,6 +3465,7 @@ class SimulationRunnerConfig:
             RUNNER_SCHEMA_VERSION_V25,
             RUNNER_SCHEMA_VERSION_V26,
             RUNNER_SCHEMA_VERSION_V27,
+            RUNNER_SCHEMA_VERSION_V28,
         }
         if (
             self.v3_capability_flags.generational_population
@@ -3210,17 +3478,23 @@ class SimulationRunnerConfig:
             )
             raise ValueError(
                 "generational_population requires runner-config-v24, "
-                "runner-config-v25, runner-config-v26, or runner-config-v27 "
+                "runner-config-v25, runner-config-v26, runner-config-v27, "
+                "or runner-config-v28 "
                 "(code=generational_population_requires_v24)"
             )
+        _kinship_schemas = {
+            RUNNER_SCHEMA_VERSION_V27,
+            RUNNER_SCHEMA_VERSION_V28,
+        }
         if self.v3_capability_flags.kinship_inheritance:
-            if self.schema_version != RUNNER_SCHEMA_VERSION_V27:
+            if self.schema_version not in _kinship_schemas:
                 _LOGGER.error(
                     "kinship_requires_v27 schema_version=%s reason_code=kinship_requires_v27",
                     self.schema_version,
                 )
                 raise ValueError(
-                    "kinship_inheritance requires runner-config-v27 "
+                    "kinship_inheritance requires runner-config-v27 or "
+                    "runner-config-v28 "
                     "(code=kinship_requires_v27)"
                 )
             if self.kinship is None:
@@ -3243,6 +3517,47 @@ class SimulationRunnerConfig:
                 "kinship config requires kinship_inheritance flag "
                 "(code=kinship_config_without_flag)"
             )
+        if self.dependency_care is not None:
+            if self.schema_version != RUNNER_SCHEMA_VERSION_V28:
+                _LOGGER.error(
+                    "dependency_care_requires_v28 schema_version=%s "
+                    "reason_code=dependency_care_requires_v28",
+                    self.schema_version,
+                )
+                raise ValueError(
+                    "dependency_care requires runner-config-v28 "
+                    "(code=dependency_care_requires_v28)"
+                )
+            if not self.v3_capability_flags.generational_population:
+                _LOGGER.error(
+                    "dependency_care_without_lifecycle_flag schema_version=%s "
+                    "reason_code=dependency_care_without_lifecycle_flag",
+                    self.schema_version,
+                )
+                raise ValueError(
+                    "dependency_care requires generational_population "
+                    "(code=dependency_care_without_lifecycle_flag)"
+                )
+            if self.population_lifecycle is None:
+                _LOGGER.error(
+                    "dependency_care_requires_lifecycle schema_version=%s "
+                    "reason_code=dependency_care_requires_lifecycle",
+                    self.schema_version,
+                )
+                raise ValueError(
+                    "dependency_care requires population_lifecycle "
+                    "(code=dependency_care_requires_lifecycle)"
+                )
+            _LOGGER.info(
+                "dependency_care_schema_select schema_version=%s "
+                "generational_population=%s enabled_needs=%s "
+                "caregiving_cognition_mode=%s perception_mode=%s",
+                self.schema_version,
+                self.v3_capability_flags.generational_population,
+                list(self.dependency_care.enabled_needs),
+                self.dependency_care.caregiving_cognition_mode,
+                self.dependency_care.perception_mode,
+            )
         other_v3_enabled = tuple(
             name
             for name in self.v3_capability_flags.enabled_names()
@@ -3254,6 +3569,7 @@ class SimulationRunnerConfig:
             RUNNER_SCHEMA_VERSION_V25,
             RUNNER_SCHEMA_VERSION_V26,
             RUNNER_SCHEMA_VERSION_V27,
+            RUNNER_SCHEMA_VERSION_V28,
         }:
             _LOGGER.error(
                 "v3_capability_requires_v23 schema_version=%s "
@@ -3265,12 +3581,12 @@ class SimulationRunnerConfig:
                 "V3 capability flags require runner-config-v23+ "
                 "(code=v3_capability_requires_v23)"
             )
-        _v27_kinship_only = (
-            self.schema_version == RUNNER_SCHEMA_VERSION_V27
+        _v27_or_v28_kinship_only = (
+            self.schema_version in _kinship_schemas
             and self.v3_capability_flags.kinship_inheritance
             and not self.v3_capability_flags.generational_population
         )
-        if _v27_kinship_only:
+        if _v27_or_v28_kinship_only:
             if self.population_lifecycle is not None:
                 _LOGGER.error(
                     "kinship_only_forbids_lifecycle_spec schema_version=%s "
@@ -3278,7 +3594,7 @@ class SimulationRunnerConfig:
                     self.schema_version,
                 )
                 raise ValueError(
-                    "kinship-only v27 forbids population_lifecycle "
+                    "kinship-only v27/v28 forbids population_lifecycle "
                     "(code=kinship_only_forbids_lifecycle_spec)"
                 )
             if self.new_agent_initialization is not None:
@@ -3288,16 +3604,24 @@ class SimulationRunnerConfig:
                     self.schema_version,
                 )
                 raise ValueError(
-                    "kinship-only v27 forbids new_agent_initialization "
+                    "kinship-only v27/v28 forbids new_agent_initialization "
                     "(code=kinship_only_forbids_new_agent_init)"
+                )
+            if self.dependency_care is not None:
+                raise ValueError(
+                    "dependency_care requires generational_population "
+                    "(code=dependency_care_without_lifecycle_flag)"
                 )
         if self.schema_version in _lifecycle_schemas:
             requires_lifecycle = (
-                self.schema_version != RUNNER_SCHEMA_VERSION_V27
+                self.schema_version
+                not in {RUNNER_SCHEMA_VERSION_V27, RUNNER_SCHEMA_VERSION_V28}
                 or self.v3_capability_flags.generational_population
             )
             if requires_lifecycle and self.population_lifecycle is None:
-                if self.schema_version == RUNNER_SCHEMA_VERSION_V27:
+                if self.schema_version == RUNNER_SCHEMA_VERSION_V28:
+                    code = "v28_requires_population_lifecycle"
+                elif self.schema_version == RUNNER_SCHEMA_VERSION_V27:
                     code = "v27_requires_population_lifecycle"
                 elif self.schema_version == RUNNER_SCHEMA_VERSION_V26:
                     code = "v26_requires_population_lifecycle"
@@ -3322,8 +3646,7 @@ class SimulationRunnerConfig:
                 self.schema_version,
             )
             raise ValueError(
-                "population_lifecycle requires runner-config-v24, "
-                "runner-config-v25, runner-config-v26, or runner-config-v27 "
+                "population_lifecycle requires runner-config-v24+ "
                 "(code=population_lifecycle_requires_v24)"
             )
         if (
@@ -3338,7 +3661,11 @@ class SimulationRunnerConfig:
             self.population_lifecycle is not None
             and self.population_lifecycle.has_developmental_extensions()
             and self.schema_version
-            not in {RUNNER_SCHEMA_VERSION_V26, RUNNER_SCHEMA_VERSION_V27}
+            not in {
+                RUNNER_SCHEMA_VERSION_V26,
+                RUNNER_SCHEMA_VERSION_V27,
+                RUNNER_SCHEMA_VERSION_V28,
+            }
         ):
             _LOGGER.error(
                 "developmental_stages_require_v26 schema_version=%s "
@@ -3346,20 +3673,22 @@ class SimulationRunnerConfig:
                 self.schema_version,
             )
             raise ValueError(
-                "developmental stage extensions require runner-config-v26 "
-                "or runner-config-v27 "
+                "developmental stage extensions require runner-config-v26+ "
                 "(code=developmental_stages_require_v26)"
             )
         _requires_new_agent_init = self.schema_version in {
             RUNNER_SCHEMA_VERSION_V25,
             RUNNER_SCHEMA_VERSION_V26,
         } or (
-            self.schema_version == RUNNER_SCHEMA_VERSION_V27
+            self.schema_version
+            in {RUNNER_SCHEMA_VERSION_V27, RUNNER_SCHEMA_VERSION_V28}
             and self.v3_capability_flags.generational_population
         )
         if _requires_new_agent_init:
             if self.new_agent_initialization is None:
-                if self.schema_version == RUNNER_SCHEMA_VERSION_V27:
+                if self.schema_version == RUNNER_SCHEMA_VERSION_V28:
+                    code = "v28_requires_new_agent_initialization"
+                elif self.schema_version == RUNNER_SCHEMA_VERSION_V27:
                     code = "v27_requires_new_agent_initialization"
                 elif self.schema_version == RUNNER_SCHEMA_VERSION_V26:
                     code = "v26_requires_new_agent_initialization"
@@ -3475,6 +3804,7 @@ class SimulationRunnerConfig:
             RUNNER_SCHEMA_VERSION_V25,
             RUNNER_SCHEMA_VERSION_V26,
             RUNNER_SCHEMA_VERSION_V27,
+        RUNNER_SCHEMA_VERSION_V28,
         }
         if non_disabled and self.schema_version not in consolidation_schemas:
             _LOGGER.error(
@@ -3528,6 +3858,7 @@ class SimulationRunnerConfig:
             RUNNER_SCHEMA_VERSION_V25,
             RUNNER_SCHEMA_VERSION_V26,
             RUNNER_SCHEMA_VERSION_V27,
+        RUNNER_SCHEMA_VERSION_V28,
         }
         if reflecting and self.schema_version not in reflection_schemas:
             _LOGGER.error(
@@ -3581,6 +3912,7 @@ class SimulationRunnerConfig:
             RUNNER_SCHEMA_VERSION_V25,
             RUNNER_SCHEMA_VERSION_V26,
             RUNNER_SCHEMA_VERSION_V27,
+        RUNNER_SCHEMA_VERSION_V28,
         }
         if planning and self.schema_version not in prospective_schemas:
             _LOGGER.error(
@@ -3633,6 +3965,7 @@ class SimulationRunnerConfig:
             RUNNER_SCHEMA_VERSION_V25,
             RUNNER_SCHEMA_VERSION_V26,
             RUNNER_SCHEMA_VERSION_V27,
+        RUNNER_SCHEMA_VERSION_V28,
         }
         if considering and self.schema_version not in counterfactual_schemas:
             _LOGGER.error(
@@ -3684,6 +4017,7 @@ class SimulationRunnerConfig:
             RUNNER_SCHEMA_VERSION_V25,
             RUNNER_SCHEMA_VERSION_V26,
             RUNNER_SCHEMA_VERSION_V27,
+        RUNNER_SCHEMA_VERSION_V28,
         }:
             _LOGGER.error(
                 "invalid_fields path=agents.cognition.communication_strategy_mode "
@@ -3733,6 +4067,7 @@ class SimulationRunnerConfig:
             RUNNER_SCHEMA_VERSION_V25,
             RUNNER_SCHEMA_VERSION_V26,
             RUNNER_SCHEMA_VERSION_V27,
+        RUNNER_SCHEMA_VERSION_V28,
         }:
             _LOGGER.error(
                 "invalid_fields path=agents.cognition.reputation_mode "
@@ -3824,6 +4159,7 @@ class SimulationRunnerConfig:
             RUNNER_SCHEMA_VERSION_V25,
             RUNNER_SCHEMA_VERSION_V26,
             RUNNER_SCHEMA_VERSION_V27,
+        RUNNER_SCHEMA_VERSION_V28,
         }:
             _LOGGER.error(
                 "invalid_fields path=agents.cognition.teaching_interaction_mode "
@@ -3864,6 +4200,7 @@ class SimulationRunnerConfig:
             RUNNER_SCHEMA_VERSION_V25,
             RUNNER_SCHEMA_VERSION_V26,
             RUNNER_SCHEMA_VERSION_V27,
+        RUNNER_SCHEMA_VERSION_V28,
         }
         if (dynamics is not None and self.schema_version not in dynamics_schemas) or (
             self.schema_version == RUNNER_SCHEMA_VERSION_V14 and dynamics is None
@@ -3899,6 +4236,7 @@ class SimulationRunnerConfig:
             RUNNER_SCHEMA_VERSION_V25,
             RUNNER_SCHEMA_VERSION_V26,
             RUNNER_SCHEMA_VERSION_V27,
+        RUNNER_SCHEMA_VERSION_V28,
         }:
             _LOGGER.error(
                 "invalid_fields path=agents.cognition.territorial_claim_mode "
@@ -3940,6 +4278,7 @@ class SimulationRunnerConfig:
             RUNNER_SCHEMA_VERSION_V25,
             RUNNER_SCHEMA_VERSION_V26,
             RUNNER_SCHEMA_VERSION_V27,
+        RUNNER_SCHEMA_VERSION_V28,
         }:
             _LOGGER.error(
                 "invalid_fields path=agents.cognition.group_formation_mode "
@@ -3975,6 +4314,7 @@ class SimulationRunnerConfig:
             RUNNER_SCHEMA_VERSION_V25,
             RUNNER_SCHEMA_VERSION_V26,
             RUNNER_SCHEMA_VERSION_V27,
+        RUNNER_SCHEMA_VERSION_V28,
         }:
             _LOGGER.error(
                 "invalid_fields path=agents.cognition.social_norm_mode "
@@ -4013,6 +4353,7 @@ class SimulationRunnerConfig:
             RUNNER_SCHEMA_VERSION_V25,
             RUNNER_SCHEMA_VERSION_V26,
             RUNNER_SCHEMA_VERSION_V27,
+        RUNNER_SCHEMA_VERSION_V28,
         }
         if conventions_on and self.schema_version not in convention_schemas:
             _LOGGER.error(
@@ -4056,6 +4397,7 @@ class SimulationRunnerConfig:
             RUNNER_SCHEMA_VERSION_V25,
             RUNNER_SCHEMA_VERSION_V26,
             RUNNER_SCHEMA_VERSION_V27,
+        RUNNER_SCHEMA_VERSION_V28,
         }
         if artifacts_on and self.schema_version not in artifact_schemas:
             runner_log.error(
@@ -4095,6 +4437,7 @@ class SimulationRunnerConfig:
             RUNNER_SCHEMA_VERSION_V25,
             RUNNER_SCHEMA_VERSION_V26,
             RUNNER_SCHEMA_VERSION_V27,
+        RUNNER_SCHEMA_VERSION_V28,
         }
         if naming_on and self.schema_version not in naming_schemas:
             runner_log.error(
@@ -4131,6 +4474,7 @@ class SimulationRunnerConfig:
             RUNNER_SCHEMA_VERSION_V25,
             RUNNER_SCHEMA_VERSION_V26,
             RUNNER_SCHEMA_VERSION_V27,
+        RUNNER_SCHEMA_VERSION_V28,
         }
         budget_modes = tuple(
             agent.cognition.cognitive_budget_mode for agent in self.agents
@@ -4143,6 +4487,7 @@ class SimulationRunnerConfig:
             RUNNER_SCHEMA_VERSION_V25,
             RUNNER_SCHEMA_VERSION_V26,
             RUNNER_SCHEMA_VERSION_V27,
+        RUNNER_SCHEMA_VERSION_V28,
         }
         if budgets_on and self.schema_version not in budget_schemas:
             runner_log.error(
@@ -4253,6 +4598,7 @@ class SimulationRunnerConfig:
             RUNNER_SCHEMA_VERSION_V25,
             RUNNER_SCHEMA_VERSION_V26,
             RUNNER_SCHEMA_VERSION_V27,
+        RUNNER_SCHEMA_VERSION_V28,
         }:
             _LOGGER.error(
                 "invalid_fields path=agents.cognition.production_knowledge_mode "
@@ -4281,6 +4627,7 @@ class SimulationRunnerConfig:
             RUNNER_SCHEMA_VERSION_V25,
             RUNNER_SCHEMA_VERSION_V26,
             RUNNER_SCHEMA_VERSION_V27,
+        RUNNER_SCHEMA_VERSION_V28,
         }:
             from world.production import production_catalog_digest
 
@@ -4349,6 +4696,7 @@ class SimulationRunnerConfig:
             RUNNER_SCHEMA_VERSION_V25,
             RUNNER_SCHEMA_VERSION_V26,
             RUNNER_SCHEMA_VERSION_V27,
+        RUNNER_SCHEMA_VERSION_V28,
         }:
             shared_teaching = teaching_weight_tuple(self.agents[0].cognition)
             if any(

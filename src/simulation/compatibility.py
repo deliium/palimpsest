@@ -76,6 +76,7 @@ from simulation.runner_models import (
     RUNNER_SCHEMA_VERSION_V25,
     RUNNER_SCHEMA_VERSION_V26,
     RUNNER_SCHEMA_VERSION_V27,
+    RUNNER_SCHEMA_VERSION_V28,
     SUPPORTED_RESULT_SCHEMA_VERSIONS,
     SUPPORTED_RUNNER_SCHEMA_VERSIONS,
 )
@@ -355,6 +356,7 @@ _MATRIX: dict[str, CompatibilityEntry] = {
             "extensions; writers emit {RUNNER_SCHEMA_VERSION_V26} when "
             "developmental children are non-default; writers emit "
             f"{RUNNER_SCHEMA_VERSION_V27} when kinship is present; "
+            f"writers emit {RUNNER_SCHEMA_VERSION_V28} when dependency_care is present; "
             "mode allowlists that top out at v26 widen to accept v27 and "
             "cognitive_budget_mode accepts {{v22,v23,v24,v25,v26,v27}}; "
             f"{RUNNER_SCHEMA_VERSION_V3} retained for V2 capability flags; "
@@ -630,6 +632,7 @@ _LOG.debug(
         "runner_v25": RUNNER_SCHEMA_VERSION_V25,
         "runner_v26": RUNNER_SCHEMA_VERSION_V26,
         "runner_v27": RUNNER_SCHEMA_VERSION_V27,
+        "runner_v28": RUNNER_SCHEMA_VERSION_V28,
         "observer_protocol": OBSERVER_PROTOCOL_VERSION,
         "research_ui_mount": RESEARCH_UI_MOUNT,
         "alembic_head": ALEMBIC_HEAD_REVISION,
