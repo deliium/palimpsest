@@ -65,6 +65,12 @@ from analysis.serialization import (
 )
 from analysis.spatial_control_metrics import compute_spatial_control
 from analysis.kinship_genealogy_metrics import compute_kinship_genealogy
+from analysis.dependency_care_metrics import (
+    compute_caregiver_diversity,
+    compute_caregiving_burden,
+    compute_dependency_survival,
+    compute_intergenerational_cooperation,
+)
 from analysis.specifications import MetricFamilyId, metric_specification
 from analysis.territorial_concentration_metrics import compute_territorial_concentration
 from analysis.transmission_metrics import (
@@ -118,6 +124,8 @@ class MetricComputationInputs:
     kinship_edge_rows: Sequence[object] | None = None
     kinship_known_agent_ids: Sequence[str] | None = None
     kinship_max_depth: int = 8
+    dependency_agent_rows: Sequence[object] | None = None
+    dependency_care_act_rows: Sequence[object] | None = None
     territorial_presence_rows: Sequence[object] | None = None
     territorial_control_rows: Sequence[object] | None = None
     belief_convergence_claims: Sequence[object] | None = None
@@ -426,8 +434,48 @@ def assemble_metric_documents(inputs: MetricComputationInputs) -> MetricBundle:
                 max_depth=depth,
             ),
         )
+    if inputs.dependency_agent_rows is not None:
+        dep_agents = inputs.dependency_agent_rows
+        _safe(
+            "dependency_survival",
+            lambda: compute_dependency_survival(
+                dep_agents,
+                run_id=run_id,
+                input_revision=revision,
+            ),
+        )
+    if inputs.dependency_care_act_rows is not None:
+        care_acts = inputs.dependency_care_act_rows
+        _safe(
+            "caregiver_diversity",
+            lambda: compute_caregiver_diversity(
+                care_acts,
+                run_id=run_id,
+                input_revision=revision,
+            ),
+        )
+        _safe(
+            "caregiving_burden",
+            lambda: compute_caregiving_burden(
+                care_acts,
+                run_id=run_id,
+                input_revision=revision,
+            ),
+        )
+        _safe(
+            "intergenerational_cooperation",
+            lambda: compute_intergenerational_cooperation(
+                care_acts,
+                run_id=run_id,
+                input_revision=revision,
+            ),
+        )
     optional_blocks = {
         "kinship_genealogy": inputs.kinship_edge_rows is not None,
+        "dependency_care": (
+            inputs.dependency_agent_rows is not None
+            or inputs.dependency_care_act_rows is not None
+        ),
         "territorial_presence": inputs.territorial_presence_rows is not None,
         "territorial_control": inputs.territorial_control_rows is not None,
         "belief_convergence": inputs.belief_convergence_claims is not None,

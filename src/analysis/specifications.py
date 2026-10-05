@@ -50,7 +50,7 @@ __all__ = [
 ]
 
 METRIC_CATALOG_VERSION: Final[str] = "metric-catalog-v1"
-METRIC_FAMILY_COUNT: Final[int] = 40
+METRIC_FAMILY_COUNT: Final[int] = 44
 
 # Align with existing memory-drift / transmission document versions.
 _ALGO_V1: Final[str] = "1"
@@ -117,6 +117,10 @@ class MetricFamilyId(StrEnum):
     BELIEF_CONVERGENCE = "belief_convergence"
     CULTURAL_SIMILARITY = "cultural_similarity"
     KINSHIP_GENEALOGY = "kinship_genealogy"
+    DEPENDENCY_SURVIVAL = "dependency_survival"
+    CAREGIVER_DIVERSITY = "caregiver_diversity"
+    CAREGIVING_BURDEN = "caregiving_burden"
+    INTERGENERATIONAL_COOPERATION = "intergenerational_cooperation"
 
 
 class DenominatorKind(StrEnum):
@@ -170,7 +174,7 @@ ACTION_VOCABULARY_V1: Final[tuple[str, ...]] = (
 )
 
 COOPERATION_ACTION_KINDS: Final[frozenset[str]] = frozenset(
-    {"help", "give", "talk", "ask", "tell"}
+    {"help", "give", "talk", "ask", "tell", "feed", "transport"}
 )
 CONFLICT_ACTION_KINDS: Final[frozenset[str]] = frozenset({"attack", "flee"})
 
@@ -1096,6 +1100,121 @@ def _spec_kinship_genealogy() -> MetricSpecification:
         ),
         empty_case="availability=absent; no_kinship_rows",
         networkx_policy="weak_components_and_outbound_depth_only",
+    )
+
+
+def _spec_dependency_survival() -> MetricSpecification:
+    return _base(
+        family_id=MetricFamilyId.DEPENDENCY_SURVIVAL,
+        evidence_inputs=frozenset({EvidenceStage.OBJECTIVE_EVENT_STATE}),
+        population="detached_dependency_agent_rows",
+        denominator="dependent_agents",
+        denominator_kind=DenominatorKind.POPULATION_SIZE,
+        cohort_window="caller-supplied lifecycle/survival rows after the run",
+        deceased_policy="include_dead_by_default",
+        zero_holding_policy="empty agent rows -> availability=absent",
+        opportunity_vs_occurrence=(
+            "DEPENDENT survival vs INDEPENDENT contrast when present"
+        ),
+        self_edge_policy="not_applicable",
+        censoring_policy="never invents biology or caregiver roles",
+        formulas={
+            "dependent_survival_rate": "survived / dependent_count",
+            "independent_survival_rate": "survived / independent_count",
+            "mean_dependent_lifespan_ticks": "mean lifespan among DEPENDENT rows",
+        },
+        value_keys=(
+            "dependent_count",
+            "dependent_survival_rate",
+            "independent_count",
+            "independent_survival_rate",
+            "mean_dependent_lifespan_ticks",
+        ),
+        empty_case="availability=absent; no_dependency_agent_rows",
+    )
+
+
+def _spec_caregiver_diversity() -> MetricSpecification:
+    return _base(
+        family_id=MetricFamilyId.CAREGIVER_DIVERSITY,
+        evidence_inputs=frozenset({EvidenceStage.OBJECTIVE_EVENT_STATE}),
+        population="detached_care_act_rows",
+        denominator="care_acts",
+        denominator_kind=DenominatorKind.OCCURRENCE,
+        cohort_window="caller-supplied care acts after the run",
+        deceased_policy="include_dead_by_default",
+        zero_holding_policy="empty care rows -> availability=absent",
+        opportunity_vs_occurrence=(
+            "unique caregivers per dependent; entropy over caregiver act shares"
+        ),
+        self_edge_policy="self_care allowed if present in rows",
+        censoring_policy="never assigns caregivers; analysis-only",
+        formulas={
+            "mean_unique_caregivers": "mean unique caregivers per dependent",
+            "caregiver_entropy": "normalized Shannon entropy of caregiver act counts",
+        },
+        value_keys=(
+            "care_act_count",
+            "caregiver_entropy",
+            "dependent_count",
+            "mean_unique_caregivers",
+            "unique_caregiver_counts",
+        ),
+        empty_case="availability=absent; no_care_act_rows",
+    )
+
+
+def _spec_caregiving_burden() -> MetricSpecification:
+    return _base(
+        family_id=MetricFamilyId.CAREGIVING_BURDEN,
+        evidence_inputs=frozenset({EvidenceStage.OBJECTIVE_EVENT_STATE}),
+        population="detached_care_act_rows",
+        denominator="care_acts",
+        denominator_kind=DenominatorKind.OCCURRENCE,
+        cohort_window="caller-supplied care acts after the run",
+        deceased_policy="include_dead_by_default",
+        zero_holding_policy="empty care rows -> availability=absent",
+        opportunity_vs_occurrence="acts and fatigue deltas attributed to caregivers",
+        self_edge_policy="not_applicable",
+        censoring_policy="analysis-only; never feeds cognition",
+        formulas={
+            "mean_fatigue_delta": "mean summed fatigue_delta per caregiver",
+            "max_care_time_share": "max caregiver act share of total care acts",
+        },
+        value_keys=(
+            "care_act_count",
+            "caregiver_count",
+            "max_care_time_share",
+            "mean_fatigue_delta",
+        ),
+        empty_case="availability=absent; no_care_act_rows",
+    )
+
+
+def _spec_intergenerational_cooperation() -> MetricSpecification:
+    return _base(
+        family_id=MetricFamilyId.INTERGENERATIONAL_COOPERATION,
+        evidence_inputs=frozenset({EvidenceStage.OBJECTIVE_EVENT_STATE}),
+        population="detached_care_act_rows",
+        denominator="care_acts",
+        denominator_kind=DenominatorKind.OCCURRENCE,
+        cohort_window="caller-supplied care acts with generation_index",
+        deceased_policy="include_dead_by_default",
+        zero_holding_policy="empty care rows -> availability=absent",
+        opportunity_vs_occurrence=(
+            "acts where caregiver_generation_index != dependent_generation_index"
+        ),
+        self_edge_policy="not_applicable",
+        censoring_policy="kinship optional; generation_index from lifecycle only",
+        formulas={
+            "cross_generation_rate": "cross_generation_act_count / care_act_count",
+        },
+        value_keys=(
+            "care_act_count",
+            "cross_generation_act_count",
+            "cross_generation_rate",
+        ),
+        empty_case="availability=absent; no_care_act_rows",
     )
 
 
@@ -2400,6 +2519,10 @@ _BUILDERS: Final[tuple[Callable[[], MetricSpecification], ...]] = (
     _spec_cultural_transmission,
     _spec_spatial_control,
     _spec_kinship_genealogy,
+    _spec_dependency_survival,
+    _spec_caregiver_diversity,
+    _spec_caregiving_burden,
+    _spec_intergenerational_cooperation,
     _spec_emergent_group_formation,
     _spec_emergent_social_norms,
     _spec_persistent_social_conventions,

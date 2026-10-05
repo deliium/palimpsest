@@ -47,6 +47,9 @@ __all__ = [
     "InspectionSurface",
     "KinshipInspectionDocument",
     "KinshipInspectionEdge",
+    "DependencyCareInspectionDocument",
+    "DependencyCareNeedRow",
+    "DependencyCareActRow",
     "MemoryKeysetCursor",
     "ObjectiveEvidenceLoader",
     "SubjectiveClaimHead",
@@ -460,6 +463,7 @@ def clamp_inspection_page_limit(
 
 SUBJECTIVE_CLAIMS_SCHEMA: Final[str] = "subjective-claims-v1"
 KINSHIP_INSPECTION_SCHEMA: Final[str] = "kinship-inspection-v1"
+DEPENDENCY_CARE_INSPECTION_SCHEMA: Final[str] = "dependency-care-inspection-v1"
 
 
 @dataclass(frozen=True, slots=True)
@@ -483,6 +487,44 @@ class KinshipInspectionDocument:
     max_query_depth: int
     edges: tuple[KinshipInspectionEdge, ...]
     # Scaffolding note for later Research UI / Godot family-tree consumers.
+    ui_scaffold_note: str = (
+        "Consume via objective_inspection; not a cognition input"
+    )
+
+
+@dataclass(frozen=True, slots=True)
+class DependencyCareNeedRow:
+    """Per-agent need-deficit summary for research inspection."""
+
+    agent_id: str
+    need_id: str
+    deficit: float
+    source: str  # "register" | "physiology_proxy"
+
+
+@dataclass(frozen=True, slots=True)
+class DependencyCareActRow:
+    """Recent objective care act for research inspection."""
+
+    tick: int
+    kind: str
+    actor_entity_id: str
+    target_entity_id: str
+    event_id: str
+
+
+@dataclass(frozen=True, slots=True)
+class DependencyCareInspectionDocument:
+    """Read-only dependency-care projection. Outside cognition / EvidenceManifest."""
+
+    schema_version: str
+    run_id: str
+    tick: int
+    channel_active: bool
+    perception_mode: str
+    caregiving_cognition_mode: str
+    need_rows: tuple[DependencyCareNeedRow, ...]
+    recent_care_acts: tuple[DependencyCareActRow, ...]
     ui_scaffold_note: str = (
         "Consume via objective_inspection; not a cognition input"
     )
@@ -579,6 +621,96 @@ class DetachedInspectionProjector:
             engine.run_id.value,
             engine.tick.value,
             len(edges),
+            active,
+            round((time.perf_counter() - started) * 1000, 3),
+        )
+        return document
+
+    def project_dependency_care(
+        self, engine: WorldEngine, *, recent_limit: int = 32
+    ) -> DependencyCareInspectionDocument:
+        """Detached dependency-need / care-act projection for research inspection."""
+        if type(engine) is not WorldEngine:
+            raise TypeError("project_dependency_care requires WorldEngine")
+        limit = require_exact_nonneg_int("recent_limit", recent_limit)
+        if limit < 1:
+            limit = 1
+        started = time.perf_counter()
+        active = engine.dependency_care_channel_active
+        spec = engine.dependency_care_spec
+        perception_mode = "none"
+        cognition_mode = "disabled"
+        if spec is not None:
+            perception_mode = str(getattr(spec, "perception_mode", "none"))
+            cognition_mode = str(
+                getattr(spec, "caregiving_cognition_mode", "disabled")
+            )
+        need_rows: list[DependencyCareNeedRow] = []
+        registers = getattr(engine, "_dependency_need_registers", {})
+        if isinstance(registers, dict):
+            for agent_id, register in sorted(
+                registers.items(),
+                key=lambda item: getattr(item[0], "value", str(item[0])),
+            ):
+                deficits = getattr(register, "deficits", {}) or {}
+                if not isinstance(deficits, dict):
+                    continue
+                agent_value = getattr(agent_id, "value", str(agent_id))
+                for need_id, deficit in sorted(deficits.items()):
+                    need_rows.append(
+                        DependencyCareNeedRow(
+                            agent_id=str(agent_value),
+                            need_id=str(need_id),
+                            deficit=float(deficit),
+                            source="register",
+                        )
+                    )
+        care_acts: list[DependencyCareActRow] = []
+        snapshot = getattr(engine, "_snapshot", None)
+        history = getattr(snapshot, "event_history", ()) if snapshot is not None else ()
+        care_kinds = frozenset({"fed", "transported", "helped", "given"})
+        for event in history:
+            details = getattr(event, "details", None)
+            kind = getattr(details, "kind", None)
+            if kind not in care_kinds:
+                continue
+            actor = getattr(details, "actor_id", None) or getattr(
+                details, "helper_id", None
+            )
+            target = getattr(details, "target_id", None) or getattr(
+                details, "helped_id", None
+            )
+            if actor is None or target is None:
+                continue
+            care_acts.append(
+                DependencyCareActRow(
+                    tick=int(getattr(event, "tick", 0)),
+                    kind=str(kind),
+                    actor_entity_id=getattr(actor, "value", str(actor)),
+                    target_entity_id=getattr(target, "value", str(target)),
+                    event_id=str(getattr(getattr(event, "event_id", None), "value", "")),
+                )
+            )
+        care_acts.sort(key=lambda row: (row.tick, row.event_id, row.kind))
+        if len(care_acts) > limit:
+            care_acts = care_acts[-limit:]
+        document = DependencyCareInspectionDocument(
+            schema_version=DEPENDENCY_CARE_INSPECTION_SCHEMA,
+            run_id=engine.run_id.value,
+            tick=engine.tick.value,
+            channel_active=active,
+            perception_mode=perception_mode,
+            caregiving_cognition_mode=cognition_mode,
+            need_rows=tuple(need_rows),
+            recent_care_acts=tuple(care_acts),
+        )
+        _LOG.info(
+            "inspection_dependency_care_projected run_id=%s tick=%s "
+            "need_row_count=%s care_act_count=%s channel_active=%s duration_ms=%s",
+            engine.run_id.value,
+            engine.tick.value,
+            len(need_rows),
+            len(care_acts),
             active,
             round((time.perf_counter() - started) * 1000, 3),
         )

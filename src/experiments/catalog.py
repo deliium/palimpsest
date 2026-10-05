@@ -2256,3 +2256,247 @@ def experiment_ah_kinship_genealogy(
             ),
         ),
     )
+
+def dependency_caregiving_profile(
+    config: SimulationRunnerConfig,
+) -> SimulationRunnerConfig:
+    """Require owned generational_population + exact dependency_care on v28.
+
+    Off the V1 gate. Optional kinship_inheritance is allowed on dual-flag arms
+    without treating kinship as caregiver assignment.
+    """
+    from simulation.runner_models import RUNNER_SCHEMA_VERSION_V28
+
+    if type(config) is not SimulationRunnerConfig:
+        raise TypeError(
+            "dependency_caregiving_profile requires SimulationRunnerConfig"
+        )
+    if type(config.v3_capability_flags) is not V3CapabilityFlags:
+        raise TypeError("v3_capability_flags must be V3CapabilityFlags")
+    if config.v3_capability_flags.generational_population is not True:
+        raise ValueError(
+            "dependency caregiving profile requires generational_population=true "
+            "(code=dependency_caregiving_profile_flag_off)"
+        )
+    if config.schema_version != RUNNER_SCHEMA_VERSION_V28:
+        raise ValueError(
+            "dependency caregiving profile requires runner-config-v28 "
+            "(code=dependency_caregiving_profile_requires_v28)"
+        )
+    if config.population_lifecycle is None:
+        raise ValueError(
+            "dependency caregiving profile requires population_lifecycle "
+            "(code=dependency_caregiving_profile_missing_lifecycle)"
+        )
+    if config.dependency_care is None:
+        raise ValueError(
+            "dependency caregiving profile requires dependency_care "
+            "(code=dependency_caregiving_profile_missing_dependency_care)"
+        )
+    allowed = {"generational_population", "kinship_inheritance"}
+    other = tuple(
+        name
+        for name in config.v3_capability_flags.enabled_names()
+        if name not in allowed
+    )
+    if other:
+        raise ValueError(
+            "dependency caregiving profile forbids unowned V3 flags "
+            f"(code=dependency_caregiving_profile_extra_flags "
+            f"flag_count={len(other)})"
+        )
+    if config.v3_capability_flags.kinship_inheritance and config.kinship is None:
+        raise ValueError(
+            "dependency caregiving dual-flag arm requires kinship object "
+            "(code=dependency_caregiving_profile_missing_kinship)"
+        )
+    _LOG.debug(
+        "dependency_caregiving_profile_ok schema_version=%s "
+        "enabled_needs=%s caregiving_cognition_mode=%s perception_mode=%s "
+        "kinship_inheritance=%s",
+        config.schema_version,
+        list(config.dependency_care.enabled_needs),
+        config.dependency_care.caregiving_cognition_mode,
+        config.dependency_care.perception_mode,
+        config.v3_capability_flags.kinship_inheritance,
+    )
+    return config
+
+
+def experiment_ai_dependency_caregiving(
+    base: SimulationRunnerConfig,
+    *,
+    seed_matrix: ExperimentSeedMatrix | None = None,
+    max_ticks: int = 10,
+) -> ExperimentDefinition:
+    """Off-gate Experiment AI proving dependency-care on runner-config-v28.
+
+    Arms cover neglect (self_satisfy denials, cognition disabled), emergent
+    non-kin care bias, shared caregiving eligibility, optional kinship-belief
+    dual-flag, and teach-learning need gating. Never hard-codes parent→caregiver.
+    """
+    from simulation.new_agent_initialization import (
+        default_new_agent_initialization_spec,
+    )
+    from simulation.runner_models import (
+        RUNNER_SCHEMA_VERSION_V28,
+        CareActionPolicySpec,
+        DependencyCareSpec,
+        KinshipBootstrapEdgeSpec,
+        KinshipSpec,
+        example_dependency_care_spec,
+        example_population_lifecycle_spec,
+    )
+
+    matrix = seed_matrix or ExperimentSeedMatrix(seeds=(base.seed,))
+    agent_ids = tuple(agent.agent_id for agent in base.agents)
+    if len(agent_ids) < 2:
+        raise ValueError(
+            "experiment AI requires at least two agents on the base roster "
+            "(code=dependency_care_ai_roster_too_small)"
+        )
+    lifecycle = example_population_lifecycle_spec(
+        lifespan_ticks=40,
+        max_population=max(4, len(agent_ids) + 1),
+        policy_id="disabled",
+    )
+    init = default_new_agent_initialization_spec()
+    control = replace(
+        base,
+        mortality_mode=MortalityMode.DISABLED,
+        stop_policy=RunnerStopPolicy(max_ticks=max_ticks),
+        v3_capability_flags=V3CapabilityFlags(),
+        population_lifecycle=None,
+        dependency_care=None,
+        kinship=None,
+        new_agent_initialization=None,
+    )
+    neglect = replace(
+        base,
+        schema_version=RUNNER_SCHEMA_VERSION_V28,
+        mortality_mode=MortalityMode.DISABLED,
+        stop_policy=RunnerStopPolicy(max_ticks=max_ticks),
+        v3_capability_flags=V3CapabilityFlags(generational_population=True),
+        population_lifecycle=lifecycle,
+        dependency_care=example_dependency_care_spec(
+            enabled_needs=("food", "water", "safety"),
+            caregiving_cognition_mode="disabled",
+            perception_mode="none",
+            allow_feed=True,
+            allow_transport=True,
+        ),
+        kinship=None,
+        new_agent_initialization=init,
+    )
+    emergent_non_kin = replace(
+        neglect,
+        dependency_care=example_dependency_care_spec(
+            enabled_needs=("food", "water", "safety"),
+            caregiving_cognition_mode="deterministic",
+            perception_mode="self_and_colocated",
+            allow_feed=True,
+            allow_transport=True,
+        ),
+    )
+    shared_care = replace(
+        emergent_non_kin,
+        dependency_care=example_dependency_care_spec(
+            enabled_needs=("food", "water", "safety", "movement"),
+            caregiving_cognition_mode="deterministic",
+            perception_mode="self_and_colocated",
+            allow_feed=True,
+            allow_transport=True,
+        ),
+    )
+    teach_learning = replace(
+        neglect,
+        dependency_care=example_dependency_care_spec(
+            enabled_needs=("learning", "safety"),
+            caregiving_cognition_mode="deterministic",
+            perception_mode="self_and_colocated",
+            allow_feed=False,
+            allow_transport=False,
+        ),
+    )
+    # Force teach_learning allow flag via replace of care_action_policy.
+    teach_spec = teach_learning.dependency_care
+    assert teach_spec is not None
+    teach_learning = replace(
+        teach_learning,
+        dependency_care=DependencyCareSpec(
+            enabled_needs=teach_spec.enabled_needs,
+            need_policies=teach_spec.need_policies,
+            care_action_policy=CareActionPolicySpec(
+                allow_feed=False,
+                allow_transport=False,
+                allow_help_safety=True,
+                allow_teach_learning=True,
+                require_colocated=True,
+            ),
+            perception_mode=teach_spec.perception_mode,
+            caregiving_cognition_mode=teach_spec.caregiving_cognition_mode,
+        ),
+    )
+    kinship_belief = replace(
+        emergent_non_kin,
+        v3_capability_flags=V3CapabilityFlags(
+            generational_population=True,
+            kinship_inheritance=True,
+        ),
+        kinship=KinshipSpec(
+            bootstrap_edges=(
+                KinshipBootstrapEdgeSpec(
+                    parent_agent_id=agent_ids[0],
+                    child_agent_id=agent_ids[1],
+                    established_tick=0,
+                ),
+            ),
+            perception_mode="none",
+        ),
+    )
+    for arm in (neglect, emergent_non_kin, shared_care, teach_learning, kinship_belief):
+        dependency_caregiving_profile(arm)
+    _LOG.info(
+        "experiment_ai_built experiment_id=experiment-ai-dependency-caregiving "
+        "schema_version=%s tick_count=%s need_arm_count=%s",
+        RUNNER_SCHEMA_VERSION_V28,
+        max_ticks,
+        5,
+    )
+    return _definition(
+        experiment_id="experiment-ai-dependency-caregiving",
+        base=base,
+        seed_matrix=matrix,
+        arms=(
+            (
+                "ai-dependency-off",
+                "dependency_care_channel_off",
+                control,
+            ),
+            (
+                "ai-neglect-self-satisfy",
+                "dependency_care_neglect_cognition_disabled",
+                neglect,
+            ),
+            (
+                "ai-emergent-non-kin",
+                "dependency_care_emergent_non_kin_bias",
+                emergent_non_kin,
+            ),
+            (
+                "ai-shared-caregiving",
+                "dependency_care_shared_caregiving_eligible",
+                shared_care,
+            ),
+            (
+                "ai-teach-learning",
+                "dependency_care_teach_learning_need",
+                teach_learning,
+            ),
+            (
+                "ai-kinship-belief-optional",
+                "dependency_care_with_kinship_no_parent_hardcode",
+                kinship_belief,
+            ),
+        ),
+    )

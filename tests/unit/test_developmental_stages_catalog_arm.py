@@ -123,7 +123,7 @@ def test_ag_arms_cover_gradual_and_skill_modes() -> None:
     # AE/AF schema pins unchanged by AG presence.
     assert RUNNER_SCHEMA_VERSION_V24 != RUNNER_SCHEMA_VERSION_V26
     assert RUNNER_SCHEMA_VERSION_V25 != RUNNER_SCHEMA_VERSION_V26
-    assert len(SEMANTIC_EVENT_TYPES) == 41
+    assert len(SEMANTIC_EVENT_TYPES) == 43
 
 
 @pytest.mark.asyncio
