@@ -78,15 +78,6 @@ from simulation.runner_models import (
     SUPPORTED_RUNNER_SCHEMA_VERSIONS,
 )
 from simulation.subjective_serialization import SUBJECTIVE_SCHEMA_VERSION
-from world.events import (
-    EVENT_SCHEMA_REPLAY_V2,
-    EVENT_SCHEMA_REPLAY_V3,
-    EVENT_SCHEMA_REPLAY_V4,
-    EVENT_SCHEMA_REPLAY_V5,
-    EVENT_SCHEMA_REPLAY_V6,
-    EVENT_SCHEMA_REPLAY_V7,
-    EVENT_SCHEMA_REPLAY_V8,
-)
 
 _LOG: Final[logging.Logger] = logging.getLogger("simulation.compatibility")
 
@@ -198,7 +189,9 @@ _MATRIX: dict[str, CompatibilityEntry] = {
             "replay-v5 when lifecycle off."
         ),
         owner_package="world.events / simulation.persistence",
-        v1_fixture_impact="Schemas 2-8 fixtures must remain restoreable; lifecycle adds replay-v9",
+        v1_fixture_impact=(
+            "Schemas 2-8 fixtures must remain restoreable; lifecycle adds replay-v9"
+        ),
     ),
     "projector": CompatibilityEntry(
         entry_id="projector",

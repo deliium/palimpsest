@@ -257,9 +257,9 @@ class WorldEngine:
         "_environmental_dynamics",
         "_last_tick_result",
         "_lifecycle_records",
+        "_new_agent_initialization",
         "_perception",
         "_population_lifecycle",
-        "_new_agent_initialization",
         "_production_catalog",
         "_registrations",
         "_run_id",
@@ -1010,7 +1010,9 @@ class WorldEngine:
             )
 
         if type(init_spec) is not NewAgentInitializationSpec:
-            raise TypeError("new_agent_initialization must be NewAgentInitializationSpec")
+            raise TypeError(
+                "new_agent_initialization must be NewAgentInitializationSpec"
+            )
         _LOGGER.debug(
             "new_agent_init_stage stage=resolve_creation_request agent_id=%s "
             "reason_code=%s",

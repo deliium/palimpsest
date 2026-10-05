@@ -10,7 +10,7 @@ from __future__ import annotations
 import hashlib
 import logging
 from collections.abc import Awaitable, Callable, Sequence
-from dataclasses import dataclass, replace
+from dataclasses import dataclass
 from enum import StrEnum
 from pathlib import Path
 from typing import Final, Protocol
@@ -129,6 +129,7 @@ from simulation.run_control import (
 )
 from simulation.runner_models import (
     _V2_CAPABILITY_FLAG_NAMES,
+    RUNNER_SCHEMA_VERSION_V25,
     AgentCognitionSpec,
     AgentRunnerSpec,
     CognitionCounters,
@@ -146,7 +147,6 @@ from simulation.runner_models import (
     RunnerAttemptStatus,
     RunnerProviderSettings,
     RunnerStopReasonCode,
-    RUNNER_SCHEMA_VERSION_V25,
     SimulationRunnerConfig,
     SimulationRunnerResult,
     SkillAudit,

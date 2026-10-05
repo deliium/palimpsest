@@ -2040,7 +2040,9 @@ def _decode_new_agent_initialization(
                 "invalid_object", f"{path}.parameter_distributions"
             )
         _require_keys(
-            dist_raw, {"distribution_id", "params"}, path=f"{path}.parameter_distributions"
+            dist_raw,
+            {"distribution_id", "params"},
+            path=f"{path}.parameter_distributions",
         )
         params_raw = dist_raw["params"]
         if not isinstance(params_raw, dict):

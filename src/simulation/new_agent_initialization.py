@@ -27,12 +27,14 @@ __all__ = [
     "ALLOWED_OBJECTIVE_INHERITANCE_KEYS",
     "BLANK_SLATE_SUBJECTIVE_STORES",
     "CREATION_REASON_CODES",
+    "NEW_AGENT_INITIALIZATION_KEYS",
+    "SPECIES_DEFAULT_V1",
+    "SUBJECTIVE_COPY_DENY_LIST",
     "BlankSlateStoreCounts",
     "CreationProvenance",
     "CreationReasonCode",
     "DependencyBindingPolicy",
     "InnateDrivePolicy",
-    "NEW_AGENT_INITIALIZATION_KEYS",
     "NewAgentInitializationSpec",
     "ObjectiveInheritancePolicy",
     "OriginRef",
@@ -40,10 +42,8 @@ __all__ = [
     "ParameterDrawResult",
     "PhysicalConditionPolicy",
     "ProvenancePolicy",
-    "SPECIES_DEFAULT_V1",
-    "SUBJECTIVE_COPY_DENY_LIST",
-    "SpeciesDefaultsPack",
     "SpawnLocationPolicy",
+    "SpeciesDefaultsPack",
     "apply_drive_delta_to_overrides",
     "assert_blank_slate_subjective_state",
     "creation_config_fingerprint",
@@ -319,7 +319,9 @@ class ParameterDistributionSpec:
                 f"unknown distribution_id {self.distribution_id!r} "
                 "(code=unknown_parameter_distribution_id)"
             )
-        if isinstance(self.params, (str, bytes)) or not isinstance(self.params, Mapping):
+        if isinstance(self.params, (str, bytes)) or not isinstance(
+            self.params, Mapping
+        ):
             raise TypeError("params must be a mapping")
         expected = _DISTRIBUTION_PARAM_KEYS[self.distribution_id]
         actual = frozenset(self.params.keys())
@@ -335,7 +337,9 @@ class ParameterDistributionSpec:
             expected=expected,
             code="parameter_distribution_params_key_set",
         )
-        frozen = dict(_freeze_str_mapping("parameter_distributions.params", self.params))
+        frozen = dict(
+            _freeze_str_mapping("parameter_distributions.params", self.params)
+        )
         if self.distribution_id == "uniform_drive_delta":
             drive_raw = frozen["drive_kind"]
             if type(drive_raw) is not str:
@@ -385,7 +389,9 @@ class InnateDrivePolicy:
                 f"unknown innate_drive_policy {self.policy_id!r} "
                 "(code=unknown_innate_drive_policy_id)"
             )
-        if isinstance(self.params, (str, bytes)) or not isinstance(self.params, Mapping):
+        if isinstance(self.params, (str, bytes)) or not isinstance(
+            self.params, Mapping
+        ):
             raise TypeError("innate_drive_policy.params must be a mapping")
         expected = _INNATE_DRIVE_PARAM_KEYS[self.policy_id]
         actual = frozenset(self.params.keys())
@@ -426,7 +432,9 @@ class PhysicalConditionPolicy:
                 f"unknown physical_condition_policy {self.policy_id!r} "
                 "(code=unknown_physical_condition_policy_id)"
             )
-        if isinstance(self.params, (str, bytes)) or not isinstance(self.params, Mapping):
+        if isinstance(self.params, (str, bytes)) or not isinstance(
+            self.params, Mapping
+        ):
             raise TypeError("physical_condition_policy.params must be a mapping")
         expected = _PHYSICAL_POLICY_PARAM_KEYS[self.policy_id]
         actual = frozenset(self.params.keys())
@@ -467,7 +475,9 @@ class SpawnLocationPolicy:
                 f"unknown spawn_location_policy {self.policy_id!r} "
                 "(code=unknown_spawn_location_policy_id)"
             )
-        if isinstance(self.params, (str, bytes)) or not isinstance(self.params, Mapping):
+        if isinstance(self.params, (str, bytes)) or not isinstance(
+            self.params, Mapping
+        ):
             raise TypeError("spawn_location_policy.params must be a mapping")
         expected = _SPAWN_POLICY_PARAM_KEYS[self.policy_id]
         actual = frozenset(self.params.keys())
@@ -565,7 +575,9 @@ class ObjectiveInheritancePolicy:
         keys = tuple(self.allowed_keys)
         for key in keys:
             if type(key) is not str:
-                raise TypeError("objective_inheritance.allowed_keys entries must be str")
+                raise TypeError(
+                    "objective_inheritance.allowed_keys entries must be str"
+                )
             if key in SUBJECTIVE_COPY_DENY_LIST:
                 raise ValueError(
                     f"objective_inheritance forbids subjective key {key!r} "
@@ -743,7 +755,7 @@ def creation_config_fingerprint(
 
 
 def default_new_agent_initialization_spec() -> NewAgentInitializationSpec:
-    """Closed synthesized default (v1–v24 lifecycle restore / AE green path)."""
+    """Closed synthesized default (v1-v24 lifecycle restore / AE green path)."""
     return NewAgentInitializationSpec(
         species_defaults_id=SPECIES_DEFAULT_V1,
         parameter_distributions=ParameterDistributionSpec(
@@ -1010,7 +1022,7 @@ def resolve_spawn_location(
         if allowlist is None or candidate_location_id.value not in allowlist:
             raise ValueError(
                 "candidate spawn location not allowed by policy "
-                f"(code=spawn_location_not_allowed)"
+                "(code=spawn_location_not_allowed)"
             )
         return candidate_location_id
     # External entry: resolve solely via policy.
