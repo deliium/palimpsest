@@ -44,6 +44,7 @@ from simulation.runner_models import (
     V3CapabilityFlags,
     WorldScenarioSpec,
     capability_flags_digest,
+    example_population_lifecycle_spec,
     v3_capability_flags_digest,
 )
 from world.values import Fatigue
@@ -1702,3 +1703,113 @@ def v2_regression_profile(config: SimulationRunnerConfig) -> SimulationRunnerCon
         profiled.schema_version,
     )
     return profiled
+
+
+def generational_population_profile(
+    config: SimulationRunnerConfig,
+) -> SimulationRunnerConfig:
+    """Require owned ``generational_population`` on runner-config-v24.
+
+    Off the V1/V2 regression gates. Returns the same config when valid.
+    """
+    from simulation.runner_models import RUNNER_SCHEMA_VERSION_V24
+
+    if type(config) is not SimulationRunnerConfig:
+        raise TypeError(
+            "generational_population_profile requires SimulationRunnerConfig"
+        )
+    if type(config.v3_capability_flags) is not V3CapabilityFlags:
+        raise TypeError("v3_capability_flags must be V3CapabilityFlags")
+    if config.v3_capability_flags.generational_population is not True:
+        raise ValueError(
+            "generational population profile requires "
+            "generational_population=true "
+            "(code=generational_population_profile_flag_off)"
+        )
+    if config.schema_version != RUNNER_SCHEMA_VERSION_V24:
+        raise ValueError(
+            "generational population profile requires runner-config-v24 "
+            "(code=generational_population_profile_requires_v24)"
+        )
+    if config.population_lifecycle is None:
+        raise ValueError(
+            "generational population profile requires population_lifecycle "
+            "(code=generational_population_profile_missing_lifecycle)"
+        )
+    other = tuple(
+        name
+        for name in config.v3_capability_flags.enabled_names()
+        if name != "generational_population"
+    )
+    if other:
+        raise ValueError(
+            "generational population profile forbids other V3 flags "
+            f"(code=generational_population_profile_extra_flags "
+            f"flag_count={len(other)})"
+        )
+    _LOG.debug(
+        "generational_population_profile_ok schema_version=%s "
+        "policy_id=%s",
+        config.schema_version,
+        config.population_lifecycle.demographic_policy_id,
+    )
+    return config
+
+
+def experiment_ae_generational_population(
+    base: SimulationRunnerConfig,
+    *,
+    seed_matrix: ExperimentSeedMatrix | None = None,
+    max_ticks: int = 12,
+) -> ExperimentDefinition:
+    """Off-gate arm proving lifecycle progression + demographic entry.
+
+    Does not claim scientific emergence. Keeps other V3 flags off.
+    """
+    from simulation.runner_models import RUNNER_SCHEMA_VERSION_V24
+
+    matrix = seed_matrix or ExperimentSeedMatrix(seeds=(base.seed,))
+    lifecycle = example_population_lifecycle_spec(
+        lifespan_ticks=40,
+        max_population=4,
+        policy_id="fixed_interval_entry",
+    )
+    control = replace(
+        base,
+        mortality_mode=MortalityMode.DISABLED,
+        stop_policy=RunnerStopPolicy(max_ticks=max_ticks),
+        v3_capability_flags=V3CapabilityFlags(),
+        population_lifecycle=None,
+    )
+    enabled = replace(
+        base,
+        schema_version=RUNNER_SCHEMA_VERSION_V24,
+        mortality_mode=MortalityMode.DISABLED,
+        stop_policy=RunnerStopPolicy(max_ticks=max_ticks),
+        v3_capability_flags=V3CapabilityFlags(generational_population=True),
+        population_lifecycle=lifecycle,
+    )
+    generational_population_profile(enabled)
+    _LOG.info(
+        "experiment_ae_built experiment_id=experiment-ae-generational-population "
+        "flag=generational_population tick_count=%s policy_id=%s",
+        max_ticks,
+        lifecycle.demographic_policy_id,
+    )
+    return _definition(
+        experiment_id="experiment-ae-generational-population",
+        base=base,
+        seed_matrix=matrix,
+        arms=(
+            (
+                "ae-generational-off",
+                "generational_population_disabled",
+                control,
+            ),
+            (
+                "ae-generational-on",
+                "generational_population_enabled",
+                enabled,
+            ),
+        ),
+    )

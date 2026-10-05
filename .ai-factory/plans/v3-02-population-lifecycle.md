@@ -322,19 +322,19 @@ Rules:
 
 ### Phase 5: Compatibility proofs, experiment seam, docs
 
-- [ ] Task 14: V2 compatibility / flags-off unchanged behavior tests.
+- [x] Task 14: V2 compatibility / flags-off unchanged behavior tests.
   - Deliverable: Add focused tests proving simulations **without** lifecycle features (V3 flags off) keep identical `exact_trajectory_hash` / objective commit chains versus baseline (extend `tests/unit/test_v2_golden_runner_configs.py` pattern and/or new `tests/unit/test_v3_population_flags_off_compat.py`). Assert no lifecycle progression/admit hooks run when channel off. Keep `test_v1_regression_gate.py` and `test_v2_scientific_invariants.py` green under flags-off. Lifecycle-on tests stay off the V1 gate.
   - Files: `tests/unit/test_v3_population_flags_off_compat.py`, updates to golden/scaffolding gates as needed.
   - Logging: Test INFO start/end with experiment_id + hash prefixes only.
   - Dependencies: Tasks 5, 12.
 
-- [ ] Task 15: Lifecycle-on determinism + replay proofs.
+- [x] Task 15: Lifecycle-on determinism + replay proofs.
   - Deliverable: Multi-seed and same-seed twin runs with `generational_population` on prove identical lifecycle event sequences, stage timelines, and restored observation parity. Include lifespan death path and demographic entry path. Replay from snapshot mid-run matches live continuation.
   - Files: `tests/unit/test_lifecycle_replay_determinism.py`.
   - Logging: DEBUG tick + event_type counts; never full event payloads.
   - Dependencies: Tasks 9, 10b, 11, 12.
 
-- [ ] Task 16: Off-gate experiment/catalog seam for demographic lifecycle.
+- [x] Task 16: Off-gate experiment/catalog seam for demographic lifecycle.
   - Deliverable: Add a small trusted catalog arm or reference helper that enables `generational_population` + v24 spec with deterministic policy (off V1 gate). Prove it constructs and runs N ticks emitting expected lifecycle event kinds. Do not claim scientific “emergence.” Keep `v3_scaffolding_profile` requiring all V3 flags off; add `generational_population_profile` (or similar) for owned-flag experiments.
   - Files: `src/experiments/catalog.py` (or sibling), `tests/unit/test_generational_population_catalog_arm.py`.
   - Logging: INFO experiment_id + flag + tick_count; DEBUG lifecycle event counts.
