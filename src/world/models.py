@@ -281,6 +281,9 @@ class PhysicalRules:
     move_fatigue: float = 5.0
     flee_fatigue: float = 10.0
     help_fatigue: float = 5.0
+    feed_hunger_relief: float = 25.0
+    feed_thirst_relief: float = 25.0
+    transport_fatigue: float = 8.0
     sleep_fatigue_recovery: float = 30.0
     eat_hunger_relief: float = 30.0
     drink_thirst_relief: float = 40.0
@@ -336,6 +339,9 @@ class PhysicalRules:
             "move_fatigue",
             "flee_fatigue",
             "help_fatigue",
+            "feed_hunger_relief",
+            "feed_thirst_relief",
+            "transport_fatigue",
             "sleep_fatigue_recovery",
             "eat_hunger_relief",
             "drink_thirst_relief",
@@ -633,6 +639,9 @@ def non_lethal_physical_rules(*, base: PhysicalRules | None = None) -> PhysicalR
         move_fatigue=template.move_fatigue,
         flee_fatigue=template.flee_fatigue,
         help_fatigue=template.help_fatigue,
+        feed_hunger_relief=template.feed_hunger_relief,
+        feed_thirst_relief=template.feed_thirst_relief,
+        transport_fatigue=template.transport_fatigue,
         sleep_fatigue_recovery=template.sleep_fatigue_recovery,
         eat_hunger_relief=template.eat_hunger_relief,
         drink_thirst_relief=template.drink_thirst_relief,
@@ -682,6 +691,9 @@ def canonical_physical_rules_bytes(rules: PhysicalRules) -> bytes:
         "flee_fatigue": rules.flee_fatigue,
         "flee_success_probability": rules.flee_success_probability,
         "help_fatigue": rules.help_fatigue,
+        "feed_hunger_relief": rules.feed_hunger_relief,
+        "feed_thirst_relief": rules.feed_thirst_relief,
+        "transport_fatigue": rules.transport_fatigue,
         "help_health_gain": rules.help_health_gain,
         "hours_per_day": rules.hours_per_day,
         "hunger_damage": rules.hunger_damage,

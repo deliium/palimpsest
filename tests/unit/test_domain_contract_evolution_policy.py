@@ -24,6 +24,7 @@ from world.actions import (
     Drop,
     Eat,
     Erase,
+    Feed,
     Flee,
     Give,
     Harvest,
@@ -38,6 +39,7 @@ from world.actions import (
     Talk,
     Tell,
     TransferArtifact,
+    Transport,
     Wait,
     require_agent_command,
 )
@@ -62,6 +64,8 @@ _CLOSED_COMMAND_TYPES: frozenset[type] = frozenset(
         Ask,
         Tell,
         Help,
+        Feed,
+        Transport,
         Attack,
         Flee,
         Wait,
@@ -112,8 +116,8 @@ _PARITY_GATE = (
 )
 
 
-def test_agent_command_set_remains_closed_at_twenty_four() -> None:
-    assert len(_CLOSED_COMMAND_TYPES) == 24
+def test_agent_command_set_remains_closed_at_twenty_six() -> None:
+    assert len(_CLOSED_COMMAND_TYPES) == 26
     from world import actions as actions_mod
 
     # Mirror the public union membership without constructing parameterized commands.
@@ -130,6 +134,8 @@ def test_agent_command_set_remains_closed_at_twenty_four() -> None:
         Ask,
         Tell,
         Help,
+        Feed,
+        Transport,
         Attack,
         Flee,
         Wait,

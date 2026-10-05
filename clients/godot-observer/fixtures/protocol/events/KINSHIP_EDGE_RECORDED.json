@@ -1,0 +1,14 @@
+{
+  "protocol_version": "observer-protocol-v1",
+  "type": "KINSHIP_EDGE_RECORDED",
+  "domain_kind": "kinship_edge_recorded",
+  "event_id": "evt-kinship-edge",
+  "tick": 3,
+  "sequence": 3,
+  "actor_id": null,
+  "target_id": "body-child",
+  "item_id": null,
+  "resource_id": null,
+  "origin_location_id": "loc-camp",
+  "destination_location_id": null
+}

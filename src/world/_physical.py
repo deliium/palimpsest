@@ -147,6 +147,10 @@ def apply_autonomous_physical_step(
     resolved: ResolvedSystemEffects | None = None,
     environmental_dynamics: EnvironmentalDynamicsSpec | None = None,
     metabolism_fatigue_by_entity: Mapping[EntityId, float] | None = None,
+    dependency_hunger_extra_by_entity: Mapping[EntityId, float] | None = None,
+    dependency_thirst_extra_by_entity: Mapping[EntityId, float] | None = None,
+    dependency_fatigue_extra_by_entity: Mapping[EntityId, float] | None = None,
+    dependency_health_damage_by_entity: Mapping[EntityId, float] | None = None,
 ) -> PendingSystemStep:
     """Apply weather, regeneration, metabolism, and exposure in canonical order.
 
@@ -374,16 +378,35 @@ def apply_autonomous_physical_step(
         location = working.locations[body.location_id]
         weather = working.weather[body.location_id]
         hunger = Hunger(
-            clamp_need(round_physical(body.hunger.value + rules.metabolism_hunger))
+            clamp_need(
+                round_physical(
+                    body.hunger.value
+                    + rules.metabolism_hunger
+                    + float(
+                        (dependency_hunger_extra_by_entity or {}).get(body.entity_id, 0.0)
+                    )
+                )
+            )
         )
         thirst = Thirst(
-            clamp_need(round_physical(body.thirst.value + rules.metabolism_thirst))
+            clamp_need(
+                round_physical(
+                    body.thirst.value
+                    + rules.metabolism_thirst
+                    + float(
+                        (dependency_thirst_extra_by_entity or {}).get(body.entity_id, 0.0)
+                    )
+                )
+            )
         )
         fatigue_gain = rules.metabolism_fatigue
         if metabolism_fatigue_by_entity is not None:
             fatigue_gain = fatigue_gain * float(
                 metabolism_fatigue_by_entity.get(body.entity_id, 1.0)
             )
+        fatigue_gain = fatigue_gain + float(
+            (dependency_fatigue_extra_by_entity or {}).get(body.entity_id, 0.0)
+        )
         fatigue = Fatigue(
             clamp_need(round_physical(body.fatigue.value + fatigue_gain))
         )
@@ -394,6 +417,9 @@ def apply_autonomous_physical_step(
             damage += rules.thirst_damage
         if fatigue.value >= 100.0:
             damage += rules.fatigue_damage
+        damage += float(
+            (dependency_health_damage_by_entity or {}).get(body.entity_id, 0.0)
+        )
         resulting_health = clamp_need(round_physical(body.health.value - damage))
         health_delta = round_physical(resulting_health - body.health.value)
         died_from_needs = resulting_health <= 0.0

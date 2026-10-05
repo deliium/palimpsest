@@ -429,6 +429,8 @@ def bind_snapshot_commit_hash(
         active_hazards=snapshot.active_hazards,
         artifacts=snapshot.artifacts,
         lifecycle_records=snapshot.lifecycle_records,
+        kinship_edges=snapshot.kinship_edges,
+        dependency_need_registers=snapshot.dependency_need_registers,
     )
     return WorldSnapshot(
         snapshot_id=draft.snapshot_id,
@@ -456,6 +458,8 @@ def bind_snapshot_commit_hash(
         active_hazards=draft.active_hazards,
         artifacts=draft.artifacts,
         lifecycle_records=draft.lifecycle_records,
+        kinship_edges=draft.kinship_edges,
+        dependency_need_registers=draft.dependency_need_registers,
     )
 
 
@@ -740,7 +744,7 @@ def _encode_world_snapshot(
             "weather": [_encode_weather(item) for item in value.weather],
             "world_id": value.world_id.value,
         }
-        if value.persistence_codec_version in {"v3", "v4", "v5", "v6", "v7", "v8"}:
+        if value.persistence_codec_version in {"v3", "v4", "v5", "v6", "v7", "v8", "v9"}:
             payload["structures"] = [
                 _encode_structure(item) for item in value.structures
             ]
@@ -750,21 +754,26 @@ def _encode_world_snapshot(
             payload["tool_marks"] = [
                 _encode_tool_mark(item) for item in value.tool_marks
             ]
-        if value.persistence_codec_version in {"v4", "v5", "v6", "v7", "v8"}:
+        if value.persistence_codec_version in {"v4", "v5", "v6", "v7", "v8", "v9"}:
             payload["active_hazards"] = [
                 _encode_active_hazard(item) for item in value.active_hazards
             ]
-        if value.persistence_codec_version in {"v5", "v6", "v7", "v8"}:
+        if value.persistence_codec_version in {"v5", "v6", "v7", "v8", "v9"}:
             payload["artifacts"] = [
                 _encode_information_artifact(item) for item in value.artifacts
             ]
-        if value.persistence_codec_version in {"v6", "v7", "v8"}:
+        if value.persistence_codec_version in {"v6", "v7", "v8", "v9"}:
             payload["lifecycle_records"] = [
                 _encode_lifecycle_record(item) for item in value.lifecycle_records
             ]
-        if value.persistence_codec_version == "v8":
+        if value.persistence_codec_version in {"v8", "v9"}:
             payload["kinship_edges"] = [
                 _encode_kinship_edge(item) for item in value.kinship_edges
+            ]
+        if value.persistence_codec_version == "v9":
+            payload["dependency_need_registers"] = [
+                _encode_dependency_need_register(item)
+                for item in value.dependency_need_registers
             ]
     except DomainSerializationError as exc:
         raise _map_domain_error(exc) from exc
@@ -796,16 +805,18 @@ def _decode_world_snapshot(data: dict[str, Any], *, path: str) -> WorldSnapshot:
         "integrity_hash",
         "predecessor_commit_hash",
     }
-    if codec in {"v3", "v4", "v5", "v6", "v7", "v8"}:
+    if codec in {"v3", "v4", "v5", "v6", "v7", "v8", "v9"}:
         keys |= {"structures", "production_jobs", "tool_marks"}
-    if codec in {"v4", "v5", "v6", "v7", "v8"}:
+    if codec in {"v4", "v5", "v6", "v7", "v8", "v9"}:
         keys.add("active_hazards")
-    if codec in {"v5", "v6", "v7", "v8"}:
+    if codec in {"v5", "v6", "v7", "v8", "v9"}:
         keys.add("artifacts")
-    if codec in {"v6", "v7", "v8"}:
+    if codec in {"v6", "v7", "v8", "v9"}:
         keys.add("lifecycle_records")
-    if codec == "v8":
+    if codec in {"v8", "v9"}:
         keys.add("kinship_edges")
+    if codec == "v9":
+        keys.add("dependency_need_registers")
     _require_keys(data, keys, path=path)
     config_raw = data["config"]
     if not isinstance(config_raw, dict):
@@ -862,47 +873,54 @@ def _decode_world_snapshot(data: dict[str, Any], *, path: str) -> WorldSnapshot:
             structures=_decode_object_list(
                 data["structures"], _decode_structure, path=f"{path}.structures"
             )
-            if codec in {"v3", "v4", "v5", "v6", "v7", "v8"}
+            if codec in {"v3", "v4", "v5", "v6", "v7", "v8", "v9"}
             else (),
             production_jobs=_decode_object_list(
                 data["production_jobs"],
                 _decode_production_job,
                 path=f"{path}.production_jobs",
             )
-            if codec in {"v3", "v4", "v5", "v6", "v7", "v8"}
+            if codec in {"v3", "v4", "v5", "v6", "v7", "v8", "v9"}
             else (),
             tool_marks=_decode_object_list(
                 data["tool_marks"], _decode_tool_mark, path=f"{path}.tool_marks"
             )
-            if codec in {"v3", "v4", "v5", "v6", "v7", "v8"}
+            if codec in {"v3", "v4", "v5", "v6", "v7", "v8", "v9"}
             else (),
             active_hazards=_decode_object_list(
                 data["active_hazards"],
                 _decode_active_hazard,
                 path=f"{path}.active_hazards",
             )
-            if codec in {"v4", "v5", "v6", "v7", "v8"}
+            if codec in {"v4", "v5", "v6", "v7", "v8", "v9"}
             else (),
             artifacts=_decode_object_list(
                 data["artifacts"],
                 _decode_information_artifact,
                 path=f"{path}.artifacts",
             )
-            if codec in {"v5", "v6", "v7", "v8"}
+            if codec in {"v5", "v6", "v7", "v8", "v9"}
             else (),
             lifecycle_records=_decode_object_list(
                 data["lifecycle_records"],
                 _decode_lifecycle_record,
                 path=f"{path}.lifecycle_records",
             )
-            if codec in {"v6", "v7", "v8"}
+            if codec in {"v6", "v7", "v8", "v9"}
             else (),
             kinship_edges=_decode_object_list(
                 data["kinship_edges"],
                 _decode_kinship_edge,
                 path=f"{path}.kinship_edges",
             )
-            if codec == "v8"
+            if codec in {"v8", "v9"}
+            else (),
+            dependency_need_registers=_decode_object_list(
+                data["dependency_need_registers"],
+                _decode_dependency_need_register,
+                path=f"{path}.dependency_need_registers",
+            )
+            if codec == "v9"
             else (),
         )
     except PersistenceSerializationError:
@@ -941,6 +959,19 @@ def _encode_kinship_edge(value: object) -> dict[str, Any]:
     }
 
 
+def _encode_dependency_need_register(value: object) -> dict[str, Any]:
+    from world.dependency_care import DependencyNeedRegister
+
+    if type(value) is not DependencyNeedRegister:
+        raise TypeError(
+            "dependency_need_registers entries must be DependencyNeedRegister"
+        )
+    return {
+        "agent_id": value.agent_id.value,
+        "deficits": dict(value.deficits),
+    }
+
+
 def _decode_kinship_edge(data: dict[str, Any], *, path: str) -> object:
     from agents.models import AgentId
     from world.kinship import KinshipEdge, stable_kinship_edge_id
@@ -972,6 +1003,29 @@ def _decode_kinship_edge(data: dict[str, Any], *, path: str) -> object:
         established_tick=tick,
         edge_id=expected,
     )
+
+
+def _decode_dependency_need_register(data: dict[str, Any], *, path: str) -> object:
+    from agents.models import AgentId
+    from world.dependency_care import DependencyNeedRegister
+
+    _require_keys(data, {"agent_id", "deficits"}, path=path)
+    agent_id = AgentId(_str_field(data, "agent_id", path=path))
+    deficits_raw = data["deficits"]
+    if not isinstance(deficits_raw, Mapping):
+        raise PersistenceSerializationError("invalid_object", f"{path}.deficits")
+    deficits: dict[str, float] = {}
+    for key, value in deficits_raw.items():
+        if type(key) is not str:
+            raise PersistenceSerializationError(
+                "invalid_string", f"{path}.deficits.key"
+            )
+        if isinstance(value, bool) or not isinstance(value, (int, float)):
+            raise PersistenceSerializationError(
+                "invalid_number", f"{path}.deficits.{key}"
+            )
+        deficits[key] = float(value)
+    return DependencyNeedRegister(agent_id=agent_id, deficits=deficits)
 
 
 def _encode_lifecycle_record(value: object) -> dict[str, Any]:

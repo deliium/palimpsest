@@ -74,6 +74,7 @@ EVENT_SCHEMA_REPLAY_V8: Final[int] = 8
 EVENT_SCHEMA_REPLAY_V9: Final[int] = 9
 EVENT_SCHEMA_REPLAY_V10: Final[int] = 10
 EVENT_SCHEMA_REPLAY_V11: Final[int] = 11
+EVENT_SCHEMA_REPLAY_V12: Final[int] = 12
 SUPPORTED_EVENT_SCHEMA_VERSIONS: Final[frozenset[int]] = frozenset(
     {
         EVENT_SCHEMA_AUDIT_V1,
@@ -87,6 +88,7 @@ SUPPORTED_EVENT_SCHEMA_VERSIONS: Final[frozenset[int]] = frozenset(
         EVENT_SCHEMA_REPLAY_V9,
         EVENT_SCHEMA_REPLAY_V10,
         EVENT_SCHEMA_REPLAY_V11,
+    EVENT_SCHEMA_REPLAY_V12,
     }
 )
 REPLAYABLE_EVENT_SCHEMA_VERSIONS: Final[frozenset[int]] = frozenset(
@@ -101,6 +103,7 @@ REPLAYABLE_EVENT_SCHEMA_VERSIONS: Final[frozenset[int]] = frozenset(
         EVENT_SCHEMA_REPLAY_V9,
         EVENT_SCHEMA_REPLAY_V10,
         EVENT_SCHEMA_REPLAY_V11,
+    EVENT_SCHEMA_REPLAY_V12,
     }
 )
 PHYSICAL_REPLAY_EVENT_SCHEMA_VERSIONS: Final[frozenset[int]] = frozenset(
@@ -114,6 +117,7 @@ PHYSICAL_REPLAY_EVENT_SCHEMA_VERSIONS: Final[frozenset[int]] = frozenset(
         EVENT_SCHEMA_REPLAY_V9,
         EVENT_SCHEMA_REPLAY_V10,
         EVENT_SCHEMA_REPLAY_V11,
+    EVENT_SCHEMA_REPLAY_V12,
     }
 )
 _PRODUCTION_EVENT_SCHEMAS: Final[frozenset[int]] = frozenset(
@@ -124,6 +128,7 @@ _PRODUCTION_EVENT_SCHEMAS: Final[frozenset[int]] = frozenset(
         EVENT_SCHEMA_REPLAY_V9,
         EVENT_SCHEMA_REPLAY_V10,
         EVENT_SCHEMA_REPLAY_V11,
+    EVENT_SCHEMA_REPLAY_V12,
     }
 )
 _ENVIRONMENT_EVENT_SCHEMAS: Final[frozenset[int]] = frozenset(
@@ -133,6 +138,7 @@ _ENVIRONMENT_EVENT_SCHEMAS: Final[frozenset[int]] = frozenset(
         EVENT_SCHEMA_REPLAY_V9,
         EVENT_SCHEMA_REPLAY_V10,
         EVENT_SCHEMA_REPLAY_V11,
+    EVENT_SCHEMA_REPLAY_V12,
     }
 )
 _ARTIFACT_EVENT_SCHEMAS: Final[frozenset[int]] = frozenset(
@@ -141,15 +147,30 @@ _ARTIFACT_EVENT_SCHEMAS: Final[frozenset[int]] = frozenset(
         EVENT_SCHEMA_REPLAY_V9,
         EVENT_SCHEMA_REPLAY_V10,
         EVENT_SCHEMA_REPLAY_V11,
+    EVENT_SCHEMA_REPLAY_V12,
     }
 )
 _LIFECYCLE_EVENT_SCHEMAS: Final[frozenset[int]] = frozenset(
-    {EVENT_SCHEMA_REPLAY_V9, EVENT_SCHEMA_REPLAY_V10, EVENT_SCHEMA_REPLAY_V11}
+    {
+        EVENT_SCHEMA_REPLAY_V9,
+        EVENT_SCHEMA_REPLAY_V10,
+        EVENT_SCHEMA_REPLAY_V11,
+        EVENT_SCHEMA_REPLAY_V12,
+    }
 )
 _NEW_AGENT_INIT_EVENT_SCHEMAS: Final[frozenset[int]] = frozenset(
-    {EVENT_SCHEMA_REPLAY_V10, EVENT_SCHEMA_REPLAY_V11}
+    {
+        EVENT_SCHEMA_REPLAY_V10,
+        EVENT_SCHEMA_REPLAY_V11,
+        EVENT_SCHEMA_REPLAY_V12,
+    }
 )
-_KINSHIP_EVENT_SCHEMAS: Final[frozenset[int]] = frozenset({EVENT_SCHEMA_REPLAY_V11})
+_KINSHIP_EVENT_SCHEMAS: Final[frozenset[int]] = frozenset(
+    {EVENT_SCHEMA_REPLAY_V11, EVENT_SCHEMA_REPLAY_V12}
+)
+_DEPENDENCY_CARE_EVENT_SCHEMAS: Final[frozenset[int]] = frozenset(
+    {EVENT_SCHEMA_REPLAY_V12}
+)
 CURRENT_PHYSICAL_EVENT_SCHEMA_VERSION: Final[int] = EVENT_SCHEMA_REPLAY_V5
 _LOG: Final[logging.Logger] = logging.getLogger("world.events")
 _FORBIDDEN_PRESENTATION_FIELDS: Final[frozenset[str]] = frozenset(
@@ -460,6 +481,53 @@ class Helped:
         _optional_finite_float("Helped.helper_fatigue_delta", self.helper_fatigue_delta)
         _optional_finite_float(
             "Helped.resulting_helper_fatigue", self.resulting_helper_fatigue
+        )
+
+
+
+@dataclass(frozen=True, slots=True)
+class Fed:
+    target_id: EntityId
+    item_id: EntityId
+    item_kind: str
+    hunger_delta: float | None = None
+    thirst_delta: float | None = None
+    resulting_target_hunger: float | None = None
+    resulting_target_thirst: float | None = None
+    kind: Literal["feed"] = field(default="feed", init=False)
+
+    def __post_init__(self) -> None:
+        if type(self.target_id) is not EntityId:
+            raise TypeError("Fed.target_id must be EntityId")
+        if type(self.item_id) is not EntityId:
+            raise TypeError("Fed.item_id must be EntityId")
+        if type(self.item_kind) is not str:
+            raise TypeError("Fed.item_kind must be str")
+        _optional_finite_float("Fed.hunger_delta", self.hunger_delta)
+        _optional_finite_float("Fed.thirst_delta", self.thirst_delta)
+        _optional_finite_float("Fed.resulting_target_hunger", self.resulting_target_hunger)
+        _optional_finite_float("Fed.resulting_target_thirst", self.resulting_target_thirst)
+
+
+@dataclass(frozen=True, slots=True)
+class Transported:
+    target_id: EntityId
+    destination_id: EntityId
+    origin_location_id: EntityId | None = None
+    helper_fatigue_delta: float | None = None
+    resulting_helper_fatigue: float | None = None
+    kind: Literal["transport"] = field(default="transport", init=False)
+
+    def __post_init__(self) -> None:
+        if type(self.target_id) is not EntityId:
+            raise TypeError("Transported.target_id must be EntityId")
+        if type(self.destination_id) is not EntityId:
+            raise TypeError("Transported.destination_id must be EntityId")
+        if self.origin_location_id is not None and type(self.origin_location_id) is not EntityId:
+            raise TypeError("Transported.origin_location_id must be EntityId or None")
+        _optional_finite_float("Transported.helper_fatigue_delta", self.helper_fatigue_delta)
+        _optional_finite_float(
+            "Transported.resulting_helper_fatigue", self.resulting_helper_fatigue
         )
 
 
@@ -1461,6 +1529,8 @@ EventDetails = (
     | Asked
     | Told
     | Helped
+    | Fed
+    | Transported
     | Attacked
     | Fled
     | Waited
@@ -1506,6 +1576,8 @@ _DETAIL_TYPES: Final[frozenset[type]] = frozenset(
         Asked,
         Told,
         Helped,
+        Fed,
+        Transported,
         Attacked,
         Fled,
         Waited,
@@ -1539,6 +1611,7 @@ _DETAIL_TYPES: Final[frozenset[type]] = frozenset(
 )
 
 _KINSHIP_DETAIL_TYPES: Final[frozenset[type]] = frozenset({KinshipEdgeRecorded})
+_DEPENDENCY_CARE_DETAIL_TYPES: Final[frozenset[type]] = frozenset({Fed, Transported})
 
 _PRODUCTION_DETAIL_TYPES: Final[frozenset[type]] = frozenset(
     {
@@ -1733,6 +1806,22 @@ def _payload_effect_complete(details: EventDetails, *, schema_version: int) -> b
                 and helped.helper_fatigue_delta is not None
                 and helped.resulting_helper_fatigue is not None
             )
+        case Fed() as fed:
+            return (
+                fed.item_kind in {"food", "water"}
+                and (
+                    (fed.item_kind == "food" and fed.hunger_delta is not None
+                     and fed.resulting_target_hunger is not None)
+                    or (fed.item_kind == "water" and fed.thirst_delta is not None
+                        and fed.resulting_target_thirst is not None)
+                )
+            )
+        case Transported() as transported:
+            return (
+                transported.origin_location_id is not None
+                and transported.helper_fatigue_delta is not None
+                and transported.resulting_helper_fatigue is not None
+            )
         case Attacked() as attacked:
             if attacked.hit is None:
                 return False
@@ -1822,7 +1911,7 @@ def target_id_for_details(details: EventDetails) -> EntityId | None:
             | Told(recipient_id=recipient_id)
         ):
             return recipient_id
-        case Helped(target_id=target_id) | Attacked(target_id=target_id):
+        case Helped(target_id=target_id) | Fed(target_id=target_id) | Transported(target_id=target_id) | Attacked(target_id=target_id):
             return target_id
         case Fled(threat_id=threat_id):
             return threat_id
@@ -2002,6 +2091,15 @@ class WorldEvent:
                 _LOG.error(
                     "invalid_event_schema_version kind=%s schema_version=%s "
                     "reason_code=kinship_requires_v11",
+                    self.details.kind,
+                    self.schema_version,
+                )
+                raise ValueError(EventValidationCode.INVALID_SCHEMA_VERSION.value)
+        if type(self.details) in _DEPENDENCY_CARE_DETAIL_TYPES:
+            if self.schema_version not in _DEPENDENCY_CARE_EVENT_SCHEMAS:
+                _LOG.error(
+                    "invalid_event_schema_version kind=%s schema_version=%s "
+                    "reason_code=dependency_care_requires_v12",
                     self.details.kind,
                     self.schema_version,
                 )
@@ -2189,7 +2287,7 @@ def build_occurrence_context(
                 affected_entity_ids=(),
                 private_recipient_ids=(recipient_id,),
             )
-        case Helped(target_id=target_id) | Attacked(target_id=target_id):
+        case Helped(target_id=target_id) | Fed(target_id=target_id) | Transported(target_id=target_id) | Attacked(target_id=target_id):
             return OccurrenceContext(
                 origin_location_id=origin_location_id,
                 destination_location_id=None,

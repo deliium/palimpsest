@@ -1,0 +1,14 @@
+{
+  "protocol_version": "observer-protocol-v1",
+  "type": "AGENT_FED",
+  "domain_kind": "feed",
+  "event_id": "evt-agent-fed",
+  "tick": 3,
+  "sequence": 3,
+  "actor_id": "body-ada",
+  "target_id": "body-bo",
+  "item_id": "item-food",
+  "resource_id": null,
+  "origin_location_id": null,
+  "destination_location_id": null
+}

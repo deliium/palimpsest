@@ -45,6 +45,7 @@ from world.events import (
     EVENT_SCHEMA_REPLAY_V9,
     EVENT_SCHEMA_REPLAY_V10,
     EVENT_SCHEMA_REPLAY_V11,
+    EVENT_SCHEMA_REPLAY_V12,
     AgentCreated,
     AgentEnteredWorld,
     AgentInitializationRecorded,
@@ -63,6 +64,7 @@ from world.events import (
     EnvironmentalHazardStarted,
     ExposureApplied,
     Fled,
+    Fed,
     Given,
     Helped,
     ItemCrafted,
@@ -84,6 +86,7 @@ from world.events import (
     Talked,
     TemperatureBandChanged,
     Told,
+    Transported,
     Waited,
     WeatherChanged,
     WorldEvent,
@@ -330,6 +333,7 @@ def _prepare_events(
             EVENT_SCHEMA_REPLAY_V9,
             EVENT_SCHEMA_REPLAY_V10,
             EVENT_SCHEMA_REPLAY_V11,
+            EVENT_SCHEMA_REPLAY_V12,
         }:
             raise ProjectionError(ProjectionErrorCode.UNSUPPORTED_SCHEMA)
     return normalized, schema_version, run_id
@@ -501,6 +505,10 @@ def _apply_event_effect(
             return _project_sleep(state, event, slept), True
         case Helped() as helped:
             return _project_help(state, event, helped), True
+        case Fed() as fed:
+            return _project_feed(state, event, fed), True
+        case Transported() as transported:
+            return _project_transport(state, event, transported), True
         case Attacked() as attacked if attacked.hit is True:
             return _project_attack_hit(state, event, attacked), True
         case Fled() as fled if fled.success is True:
@@ -885,7 +893,10 @@ def _project_kinship_edge_recorded(
 ) -> tuple[WorldState, bool]:
     """Kinship graph lives on the engine; fold is a schema-gated no-op on WorldState."""
     del details
-    if event.schema_version != EVENT_SCHEMA_REPLAY_V11:
+    if event.schema_version not in {
+        EVENT_SCHEMA_REPLAY_V11,
+        EVENT_SCHEMA_REPLAY_V12,
+    }:
         raise ProjectionError(ProjectionErrorCode.PRECONDITION_FAILED)
     return state, False
 
@@ -1181,6 +1192,72 @@ def _project_help(state: WorldState, event: WorldEvent, details: Helped) -> Worl
     )
     bodies[details.target_id] = copy_body(
         target, health=Health(details.resulting_target_health)
+    )
+    try:
+        return rebuild_world_state(state, bodies=bodies)
+    except ValueError as exc:
+        raise ProjectionError(ProjectionErrorCode.INVARIANT_FAILED) from exc
+
+
+def _project_feed(state: WorldState, event: WorldEvent, details: Fed) -> WorldState:
+    actor_id = event.actor_id
+    if actor_id is None or actor_id not in state.bodies:
+        raise ProjectionError(ProjectionErrorCode.ACTOR_MISSING)
+    if details.target_id not in state.bodies:
+        raise ProjectionError(ProjectionErrorCode.TARGET_MISSING)
+    if details.item_id not in state.items:
+        raise ProjectionError(ProjectionErrorCode.PRECONDITION_FAILED)
+    helper = state.bodies[actor_id]
+    target = state.bodies[details.target_id]
+    items = dict(state.items)
+    del items[details.item_id]
+    bodies = dict(state.bodies)
+    bodies[actor_id] = copy_body(
+        helper,
+        inventory=tuple(
+            owned for owned in helper.inventory if owned != details.item_id
+        ),
+    )
+    if details.item_kind == "food":
+        if details.resulting_target_hunger is None:
+            raise ProjectionError(ProjectionErrorCode.PRECONDITION_FAILED)
+        bodies[details.target_id] = copy_body(
+            target, hunger=Hunger(details.resulting_target_hunger)
+        )
+    elif details.item_kind == "water":
+        if details.resulting_target_thirst is None:
+            raise ProjectionError(ProjectionErrorCode.PRECONDITION_FAILED)
+        bodies[details.target_id] = copy_body(
+            target, thirst=Thirst(details.resulting_target_thirst)
+        )
+    else:
+        raise ProjectionError(ProjectionErrorCode.PRECONDITION_FAILED)
+    try:
+        return rebuild_world_state(state, items=items, bodies=bodies)
+    except ValueError as exc:
+        raise ProjectionError(ProjectionErrorCode.INVARIANT_FAILED) from exc
+
+
+def _project_transport(
+    state: WorldState, event: WorldEvent, details: Transported
+) -> WorldState:
+    actor_id = event.actor_id
+    if actor_id is None or actor_id not in state.bodies:
+        raise ProjectionError(ProjectionErrorCode.ACTOR_MISSING)
+    if details.target_id not in state.bodies:
+        raise ProjectionError(ProjectionErrorCode.TARGET_MISSING)
+    if details.resulting_helper_fatigue is None:
+        raise ProjectionError(ProjectionErrorCode.PRECONDITION_FAILED)
+    helper = state.bodies[actor_id]
+    target = state.bodies[details.target_id]
+    bodies = dict(state.bodies)
+    bodies[actor_id] = copy_body(
+        helper,
+        location_id=details.destination_id,
+        fatigue=Fatigue(details.resulting_helper_fatigue),
+    )
+    bodies[details.target_id] = copy_body(
+        target, location_id=details.destination_id
     )
     try:
         return rebuild_world_state(state, bodies=bodies)

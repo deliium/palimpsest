@@ -87,6 +87,8 @@ def test_common_agent_commands_table() -> None:
         ("AGENT_MOVED", "move"),
         ("AGENT_TALKED", "talk"),
         ("AGENT_HELPED", "help"),
+        ("AGENT_FED", "feed"),
+        ("AGENT_TRANSPORTED", "transport"),
         ("AGENT_WAITED", "wait"),
         ("RESOURCE_HARVESTED", "harvest"),
         ("ARTIFACT_CREATED", "inscribe"),

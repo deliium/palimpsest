@@ -181,6 +181,36 @@ class Help:
 
 
 @dataclass(frozen=True, slots=True)
+class Feed:
+    """Caregiver applies held food/water relief to a colocated DEPENDENT."""
+
+    target_id: EntityId
+    item_id: EntityId
+    kind: Literal["feed"] = field(default="feed", init=False)
+
+    def __post_init__(self) -> None:
+        if type(self.target_id) is not EntityId:
+            raise TypeError("Feed.target_id must be EntityId")
+        if type(self.item_id) is not EntityId:
+            raise TypeError("Feed.item_id must be EntityId")
+
+
+@dataclass(frozen=True, slots=True)
+class Transport:
+    """Caregiver relocates self and a colocated DEPENDENT together."""
+
+    target_id: EntityId
+    destination_id: EntityId
+    kind: Literal["transport"] = field(default="transport", init=False)
+
+    def __post_init__(self) -> None:
+        if type(self.target_id) is not EntityId:
+            raise TypeError("Transport.target_id must be EntityId")
+        if type(self.destination_id) is not EntityId:
+            raise TypeError("Transport.destination_id must be EntityId")
+
+
+@dataclass(frozen=True, slots=True)
 class Attack:
     target_id: EntityId
     kind: Literal["attack"] = field(default="attack", init=False)
@@ -383,6 +413,8 @@ AgentCommand = (
     | Ask
     | Tell
     | Help
+    | Feed
+    | Transport
     | Attack
     | Flee
     | Wait
@@ -411,6 +443,8 @@ _COMMAND_TYPES: Final[frozenset[type]] = frozenset(
         Ask,
         Tell,
         Help,
+        Feed,
+        Transport,
         Attack,
         Flee,
         Wait,

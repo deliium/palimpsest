@@ -102,10 +102,11 @@ def _world_event(details: object, *, sequence: int = 0) -> WorldEvent:
 
 def test_semantic_catalog_appends_four_artifact_types() -> None:
     assert OBSERVER_PROTOCOL_VERSION == "observer-protocol-v1"
-    assert len(SEMANTIC_EVENT_TYPES) == 41
-    assert SEMANTIC_EVENT_TYPES[-9:-5] == _ARTIFACT_SEMANTIC
-    assert SEMANTIC_EVENT_TYPES[-5:-1] == _LIFECYCLE_SEMANTIC
-    assert SEMANTIC_EVENT_TYPES[-1:] == _KINSHIP_SEMANTIC
+    assert len(SEMANTIC_EVENT_TYPES) == 43
+    assert SEMANTIC_EVENT_TYPES[-11:-7] == _ARTIFACT_SEMANTIC
+    assert SEMANTIC_EVENT_TYPES[-7:-3] == _LIFECYCLE_SEMANTIC
+    assert SEMANTIC_EVENT_TYPES[-3:-2] == _KINSHIP_SEMANTIC
+    assert SEMANTIC_EVENT_TYPES[-2:] == ("AGENT_FED", "AGENT_TRANSPORTED")
     assert SEMANTIC_EVENT_TYPES[:32] == (
         "AGENT_MOVED",
         "AGENT_SEARCHED",

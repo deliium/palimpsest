@@ -25,6 +25,7 @@ from world._operations import (
     _DropOp,
     _EatOp,
     _EraseOp,
+    _FeedOp,
     _FleeOp,
     _GiveOp,
     _HarvestOp,
@@ -39,6 +40,7 @@ from world._operations import (
     _TalkOp,
     _TellOp,
     _TransferArtifactOp,
+    _TransportOp,
     _WaitOp,
 )
 from world._state import WorldState, rebuild_world_state
@@ -69,6 +71,7 @@ from world.events import (
     Drunk,
     Eaten,
     EventDetails,
+    Fed,
     Fled,
     Given,
     Helped,
@@ -78,6 +81,7 @@ from world.events import (
     Taken,
     Talked,
     Told,
+    Transported,
     Waited,
 )
 from world.identifiers import EntityId
@@ -171,6 +175,9 @@ class RuleReason(StrEnum):
     ARTIFACT_HOLD_CAP = "artifact_hold_cap"
     RECIPIENT_UNAVAILABLE = "recipient_unavailable"
     NOT_AN_ITEM = "not_an_item"
+    DEPENDENCY_CARE_CHANNEL_OFF = "dependency_care_channel_off"
+    DEPENDENCY_CARE_TARGET_INVALID = "dependency_care_target_invalid"
+    DEPENDENCY_CARE_ACTION_DISABLED = "dependency_care_action_disabled"
 
 
 @dataclass(frozen=True, slots=True)
@@ -321,6 +328,26 @@ COMMAND_RULE_MATRIX: Final[dict[type, CommandRulePolicy]] = {
         requires_living_actor=True,
         notes="living colocated target; heal + helper fatigue; no revival",
     ),
+    _FeedOp: CommandRulePolicy(
+        disposition=RuleDisposition.MUTATE,
+        emits_event_when_applied=True,
+        mutates_state_when_applied=True,
+        requires_living_actor=True,
+        notes=(
+            "dependency-care Feed: held FOOD/WATER to colocated DEPENDENT; "
+            "channel + allow_feed required"
+        ),
+    ),
+    _TransportOp: CommandRulePolicy(
+        disposition=RuleDisposition.MUTATE,
+        emits_event_when_applied=True,
+        mutates_state_when_applied=True,
+        requires_living_actor=True,
+        notes=(
+            "dependency-care Transport: relocates caregiver + colocated DEPENDENT; "
+            "channel + allow_transport required"
+        ),
+    ),
     _AttackOp: CommandRulePolicy(
         disposition=RuleDisposition.MUTATE,
         emits_event_when_applied=True,
@@ -419,6 +446,8 @@ _OPERATION_KIND: Final[dict[type, str]] = {
     _AskOp: "ask",
     _TellOp: "tell",
     _HelpOp: "help",
+    _FeedOp: "feed",
+    _TransportOp: "transport",
     _AttackOp: "attack",
     _FleeOp: "flee",
     _WaitOp: "wait",
@@ -452,6 +481,7 @@ def evaluate_operation(
     resolved: ResolvedActionEffects | None = None,
     tick: int | None = None,
     effective_carry_capacity: Mapping[EntityId, int] | None = None,
+    dependency_care_context: object | None = None,
 ) -> RuleResult:
     """Evaluate a validated operation against an immutable snapshot.
 
@@ -465,6 +495,7 @@ def evaluate_operation(
     Conflict classification across a batch is handled by batch preparation.
     ``effective_carry_capacity`` is ephemeral stage scaling — stored body
     capacity is never rewritten here.
+    ``dependency_care_context`` gates Feed/Transport when the channel is on.
     """
     if type(state) is not WorldState:
         raise TypeError("evaluate_operation requires WorldState")
@@ -476,6 +507,7 @@ def evaluate_operation(
         if not isinstance(effective_carry_capacity, Mapping):
             raise TypeError("effective_carry_capacity must be a mapping")
         capacity_map = effective_carry_capacity
+    care_context = _require_dependency_care_context(dependency_care_context)
     op_type = type(operation)
     policy = COMMAND_RULE_MATRIX.get(op_type)
     if policy is None:
@@ -560,6 +592,24 @@ def evaluate_operation(
             )
         case _HelpOp(target_id=target_id):
             return _evaluate_help(state, operation.actor_id, target_id, kind)
+        case _FeedOp(target_id=target_id, item_id=item_id):
+            return _evaluate_feed(
+                state,
+                operation.actor_id,
+                target_id,
+                item_id,
+                kind,
+                care_context=care_context,
+            )
+        case _TransportOp(target_id=target_id, destination_id=destination_id):
+            return _evaluate_transport(
+                state,
+                operation.actor_id,
+                target_id,
+                destination_id,
+                kind,
+                care_context=care_context,
+            )
         case _AttackOp(target_id=target_id):
             return _evaluate_attack(
                 state,
@@ -939,6 +989,86 @@ def _evaluate_help(
         return _reject(kind, RuleReason.DEAD_TARGET)
     if target.location_id != actor.location_id:
         return _reject(kind, RuleReason.NOT_COLOCATED)
+    return RuleResult(
+        disposition=RuleDisposition.MUTATE,
+        reason=RuleReason.OCCURRENCE,
+        emits_event=True,
+        mutates_state=True,
+        action_kind=kind,
+    )
+
+
+def _evaluate_feed(
+    state: WorldState,
+    actor_id: EntityId,
+    target_id: EntityId,
+    item_id: EntityId,
+    kind: str,
+    *,
+    care_context: object | None,
+) -> RuleResult:
+    from world.dependency_care import DependencyCareRuleContext
+
+    if care_context is None:
+        return _reject(kind, RuleReason.DEPENDENCY_CARE_CHANNEL_OFF)
+    assert type(care_context) is DependencyCareRuleContext
+    if not care_context.allow_feed:
+        return _reject(kind, RuleReason.DEPENDENCY_CARE_ACTION_DISABLED)
+    actor = state.bodies[actor_id]
+    target = state.bodies[target_id]
+    if target.life_status is LifeStatus.DEAD:
+        return _reject(kind, RuleReason.DEAD_TARGET)
+    if target_id not in care_context.dependent_body_ids:
+        return _reject(kind, RuleReason.DEPENDENCY_CARE_TARGET_INVALID)
+    if care_context.require_colocated and target.location_id != actor.location_id:
+        return _reject(kind, RuleReason.NOT_COLOCATED)
+    item = state.items.get(item_id)
+    if item is None or item.holder_id != actor_id or item_id not in actor.inventory:
+        return _reject(kind, RuleReason.NOT_HELD)
+    if item.kind not in {ItemKind.FOOD, ItemKind.WATER}:
+        return _reject(kind, RuleReason.WRONG_KIND)
+    return RuleResult(
+        disposition=RuleDisposition.MUTATE,
+        reason=RuleReason.OCCURRENCE,
+        emits_event=True,
+        mutates_state=True,
+        action_kind=kind,
+    )
+
+
+def _evaluate_transport(
+    state: WorldState,
+    actor_id: EntityId,
+    target_id: EntityId,
+    destination_id: EntityId,
+    kind: str,
+    *,
+    care_context: object | None,
+) -> RuleResult:
+    from world.dependency_care import DependencyCareRuleContext
+
+    if care_context is None:
+        return _reject(kind, RuleReason.DEPENDENCY_CARE_CHANNEL_OFF)
+    assert type(care_context) is DependencyCareRuleContext
+    if not care_context.allow_transport:
+        return _reject(kind, RuleReason.DEPENDENCY_CARE_ACTION_DISABLED)
+    actor = state.bodies[actor_id]
+    target = state.bodies[target_id]
+    if target.life_status is LifeStatus.DEAD:
+        return _reject(kind, RuleReason.DEAD_TARGET)
+    if target_id not in care_context.dependent_body_ids:
+        return _reject(kind, RuleReason.DEPENDENCY_CARE_TARGET_INVALID)
+    if care_context.require_colocated and target.location_id != actor.location_id:
+        return _reject(kind, RuleReason.NOT_COLOCATED)
+    if destination_id == actor.location_id:
+        return _reject(kind, RuleReason.ALREADY_AT_DESTINATION)
+    location = state.locations[actor.location_id]
+    if destination_id not in location.adjacent:
+        return _reject(kind, RuleReason.NOT_ADJACENT)
+    destination = state.locations[destination_id]
+    # Both caregiver and dependent relocate together.
+    if _body_count(state, destination_id) + 2 > destination.body_capacity.value:
+        return _reject(kind, RuleReason.NO_BODY_CAPACITY)
     return RuleResult(
         disposition=RuleDisposition.MUTATE,
         reason=RuleReason.OCCURRENCE,
@@ -1697,6 +1827,7 @@ def apply_operation(
     skill_efficiency: object | None = None,
     witness_resource_nodes: bool = False,
     effective_carry_capacity: Mapping[EntityId, int] | None = None,
+    dependency_care_context: object | None = None,
 ) -> RuleApplication:
     """Evaluate then apply immutable physical or event-only effects.
 
@@ -1718,6 +1849,7 @@ def apply_operation(
         resolved=resolved,
         tick=tick,
         effective_carry_capacity=effective_carry_capacity,
+        dependency_care_context=dependency_care_context,
     )
     if result.disposition in {
         RuleDisposition.REJECT,
@@ -2070,6 +2202,49 @@ def _event_details_for(
                 ),
                 resulting_helper_fatigue=resulting_helper.fatigue.value,
             )
+        case _FeedOp(actor_id=actor_id, target_id=target_id, item_id=item_id):
+            prior_target = state.bodies[target_id]
+            resulting_target = (
+                next_state.bodies[target_id] if next_state is not None else prior_target
+            )
+            item = state.items[item_id]
+            hunger_delta = None
+            thirst_delta = None
+            resulting_hunger = None
+            resulting_thirst = None
+            if item.kind is ItemKind.FOOD:
+                hunger_delta = round_physical(
+                    resulting_target.hunger.value - prior_target.hunger.value
+                )
+                resulting_hunger = resulting_target.hunger.value
+            else:
+                thirst_delta = round_physical(
+                    resulting_target.thirst.value - prior_target.thirst.value
+                )
+                resulting_thirst = resulting_target.thirst.value
+            return Fed(
+                target_id,
+                item_id,
+                item.kind.value,
+                hunger_delta=hunger_delta,
+                thirst_delta=thirst_delta,
+                resulting_target_hunger=resulting_hunger,
+                resulting_target_thirst=resulting_thirst,
+            )
+        case _TransportOp(actor_id=actor_id, target_id=target_id, destination_id=destination_id):
+            prior_helper = state.bodies[actor_id]
+            resulting_helper = (
+                next_state.bodies[actor_id] if next_state is not None else prior_helper
+            )
+            return Transported(
+                target_id,
+                destination_id,
+                origin_location_id=prior_helper.location_id,
+                helper_fatigue_delta=round_physical(
+                    resulting_helper.fatigue.value - prior_helper.fatigue.value
+                ),
+                resulting_helper_fatigue=resulting_helper.fatigue.value,
+            )
         case _TalkOp(recipient_id=recipient_id, utterance=utterance):
             return Talked(recipient_id, utterance)
         case _AskOp(recipient_id=recipient_id, utterance=utterance):
@@ -2127,6 +2302,14 @@ def _apply_mutation(
                 target_id,
                 rules=rules,
                 help_health_gain=skill_efficiency.help_health_gain,
+            )
+        case _FeedOp(actor_id=actor_id, target_id=target_id, item_id=item_id):
+            return _mutate_feed(state, actor_id, target_id, item_id, rules=rules)
+        case _TransportOp(
+            actor_id=actor_id, target_id=target_id, destination_id=destination_id
+        ):
+            return _mutate_transport(
+                state, actor_id, target_id, destination_id, rules=rules
             )
         case _:
             raise TypeError(f"mutation unsupported for {type(operation).__name__}")
@@ -2288,6 +2471,62 @@ def _mutate_help(
     return rebuild_world_state(state, bodies=bodies)
 
 
+def _mutate_feed(
+    state: WorldState,
+    actor_id: EntityId,
+    target_id: EntityId,
+    item_id: EntityId,
+    *,
+    rules: PhysicalRules,
+) -> WorldState:
+    actor = state.bodies[actor_id]
+    target = state.bodies[target_id]
+    item = state.items[item_id]
+    items = dict(state.items)
+    del items[item_id]
+    bodies = dict(state.bodies)
+    bodies[actor_id] = copy_body(
+        actor,
+        inventory=tuple(owned for owned in actor.inventory if owned != item_id),
+    )
+    if item.kind is ItemKind.FOOD:
+        hunger = Hunger(
+            clamp_need(
+                round_physical(target.hunger.value - rules.feed_hunger_relief)
+            )
+        )
+        bodies[target_id] = copy_body(target, hunger=hunger)
+    else:
+        thirst = Thirst(
+            clamp_need(
+                round_physical(target.thirst.value - rules.feed_thirst_relief)
+            )
+        )
+        bodies[target_id] = copy_body(target, thirst=thirst)
+    return rebuild_world_state(state, items=items, bodies=bodies)
+
+
+def _mutate_transport(
+    state: WorldState,
+    actor_id: EntityId,
+    target_id: EntityId,
+    destination_id: EntityId,
+    *,
+    rules: PhysicalRules,
+) -> WorldState:
+    actor = state.bodies[actor_id]
+    target = state.bodies[target_id]
+    fatigue = Fatigue(
+        clamp_need(round_physical(actor.fatigue.value + rules.transport_fatigue))
+    )
+    bodies = dict(state.bodies)
+    bodies[actor_id] = copy_body(
+        actor, location_id=destination_id, fatigue=fatigue
+    )
+    bodies[target_id] = copy_body(target, location_id=destination_id)
+    return rebuild_world_state(state, bodies=bodies)
+
+
 def _mutate_flee(
     state: WorldState,
     actor_id: EntityId,
@@ -2310,6 +2549,18 @@ def _require_rules(rules: PhysicalRules | None) -> PhysicalRules:
     if type(rules) is not PhysicalRules:
         raise TypeError("rules must be PhysicalRules")
     return rules
+
+
+def _require_dependency_care_context(value: object | None) -> object | None:
+    if value is None:
+        return None
+    from world.dependency_care import DependencyCareRuleContext
+
+    if type(value) is not DependencyCareRuleContext:
+        raise TypeError(
+            "dependency_care_context must be DependencyCareRuleContext or None"
+        )
+    return value
 
 
 def _inventory_load(state: WorldState, body: AgentBody) -> int:

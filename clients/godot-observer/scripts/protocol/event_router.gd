@@ -50,6 +50,12 @@ static func route(event: Variant, policy: Dictionary, logical: Dictionary) -> Di
 				action = "birth"
 			"LIFECYCLE_STAGE_CHANGED":
 				action = "lifecycle"
+			"KINSHIP_EDGE_RECORDED":
+				action = "kinship"
+			"AGENT_FED":
+				action = "feed"
+			"AGENT_TRANSPORTED":
+				action = "transport"
 			"RESOURCE_HARVESTED":
 				action = "harvest"
 			"CRAFT_STARTED", "ITEM_CRAFTED":

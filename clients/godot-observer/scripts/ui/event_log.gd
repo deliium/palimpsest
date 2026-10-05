@@ -256,6 +256,10 @@ func _describe(
 			return "%s told" % subject
 		"AGENT_HELPED":
 			return "%s helped %s" % [actor, target]
+		"AGENT_FED":
+			return "%s fed %s" % [actor, target]
+		"AGENT_TRANSPORTED":
+			return "%s transported %s" % [actor, target]
 		"AGENT_ATTACKED":
 			return "%s attacked %s" % [actor, target]
 		"AGENT_FLED":
@@ -294,6 +298,8 @@ func _describe(
 			return "%s initialized" % subject
 		"LIFECYCLE_STAGE_CHANGED":
 			return "%s lifecycle stage changed" % subject
+		"KINSHIP_EDGE_RECORDED":
+			return "kinship edge recorded"
 		"RESOURCE_HARVESTED":
 			return "%s harvested at %s" % [subject, origin if origin != "" else "location"]
 		"CRAFT_STARTED":

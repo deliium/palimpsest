@@ -263,6 +263,8 @@ class WorldEngine:
         "_config",
         "_engine_id",
         "_environmental_dynamics",
+        "_dependency_care_spec",
+        "_dependency_need_registers",
         "_kinship_graph",
         "_kinship_spec",
         "_last_tick_result",
@@ -304,6 +306,7 @@ class WorldEngine:
         new_agent_initialization: object | None = None,
         kinship_spec: object | None = None,
         kinship_graph: object | None = None,
+        dependency_care_spec: object | None = None,
     ) -> None:
         if type(config) is not SimulationRunConfig:
             raise TypeError("WorldEngine requires SimulationRunConfig")
@@ -403,11 +406,34 @@ class WorldEngine:
                 )
         else:
             self._kinship_graph = KinshipGraph.empty()
+        from simulation.runner_models import DependencyCareSpec
+
+        if dependency_care_spec is not None and type(
+            dependency_care_spec
+        ) is not DependencyCareSpec:
+            raise TypeError("dependency_care_spec must be DependencyCareSpec or None")
+        if dependency_care_spec is not None and self._population_lifecycle is None:
+            raise ValueError(
+                "dependency_care requires population_lifecycle "
+                "(code=dependency_care_requires_lifecycle)"
+            )
+        self._dependency_care_spec = dependency_care_spec
+        self._dependency_need_registers: dict[AgentId, object] = {}
+        _LOGGER.info(
+            "dependency_care_channel dependency_care_active=%s need_count=%s",
+            self._dependency_care_spec is not None,
+            (
+                len(self._dependency_care_spec.enabled_needs)
+                if self._dependency_care_spec is not None
+                else 0
+            ),
+        )
         _LOGGER.debug(
             "%s world_id=%s revision=%s tick=%s registrations=%s "
             "artifacts_enabled=%s lifecycle_channel=%s "
             "bootstrap_lifecycle_record_count=%s new_agent_provenance=%s "
-            "kinship_channel=%s bootstrap_kinship_edge_count=%s",
+            "kinship_channel=%s bootstrap_kinship_edge_count=%s "
+            "dependency_care_active=%s",
             EngineDiagnosticCode.BOOTSTRAP_VALIDATED.value,
             bootstrap.world_id.value,
             bootstrap.revision.value,
@@ -419,6 +445,7 @@ class WorldEngine:
             "on" if self._new_agent_initialization is not None else "off",
             "on" if self._kinship_spec is not None else "off",
             len(self._kinship_graph.edges),
+            "on" if self._dependency_care_spec is not None else "off",
         )
 
     @classmethod
@@ -613,13 +640,13 @@ class WorldEngine:
         engine._artifacts_enabled = (
             artifacts_enabled
             or bool(snapshot.artifacts)
-            or snapshot.persistence_codec_version in {"v5", "v6", "v7", "v8"}
+            or snapshot.persistence_codec_version in {"v5", "v6", "v7", "v8", "v9"}
             or bool(getattr(engine._bootstrap, "artifacts", ()))
         )
-        if snapshot.persistence_codec_version in {"v6", "v7", "v8"}:
+        if snapshot.persistence_codec_version in {"v6", "v7", "v8", "v9"}:
             if population_lifecycle is None and snapshot.lifecycle_records:
                 raise ValueError(
-                    "codec v6/v7/v8 restore requires population_lifecycle "
+                    "codec v6/v7/v8/v9 restore requires population_lifecycle "
                     "(code=lifecycle_restore_missing_spec)"
                 )
             engine._population_lifecycle, engine._lifecycle_records = (
@@ -646,8 +673,8 @@ class WorldEngine:
                     )
                 engine._new_agent_initialization = new_agent_initialization
             elif (
-                snapshot.persistence_codec_version in {"v7", "v8"}
-                and snapshot.event_schema_version in {10, 11}
+                snapshot.persistence_codec_version in {"v7", "v8", "v9"}
+                and snapshot.event_schema_version in {10, 11, 12}
             ):
                 # Prefer explicit restore arg; else pull from snapshot config when v25+.
                 config_init = getattr(snapshot.config, "new_agent_initialization", None)
@@ -670,7 +697,9 @@ class WorldEngine:
 
         engine._kinship_spec = None
         engine._kinship_graph = KinshipGraph.empty()
-        if snapshot.persistence_codec_version == "v8":
+        engine._dependency_care_spec = None
+        engine._dependency_need_registers = {}
+        if snapshot.persistence_codec_version in {"v8", "v9"}:
             resolved_kinship = kinship_spec
             if resolved_kinship is None:
                 resolved_kinship = getattr(snapshot.config, "kinship", None)
@@ -728,6 +757,29 @@ class WorldEngine:
                     if type(event.details) is KinshipEdgeRecorded
                 ),
             )
+        if snapshot.persistence_codec_version == "v9":
+            from simulation.runner_models import DependencyCareSpec
+            from world.dependency_care import DependencyNeedRegister
+
+            resolved_care = getattr(snapshot.config, "dependency_care", None)
+            if resolved_care is not None and type(resolved_care) is not DependencyCareSpec:
+                raise TypeError("dependency_care must be DependencyCareSpec or None")
+            engine._dependency_care_spec = resolved_care
+            registers: dict[AgentId, object] = {}
+            for raw_register in snapshot.dependency_need_registers:
+                if type(raw_register) is not DependencyNeedRegister:
+                    raise TypeError(
+                        "dependency_need_registers entries must be DependencyNeedRegister"
+                    )
+                registers[raw_register.agent_id] = raw_register
+            engine._dependency_need_registers = registers
+            _LOGGER.debug(
+                "dependency_care_restore codec_version=%s register_count=%s "
+                "dependency_care_active=%s",
+                snapshot.persistence_codec_version,
+                len(registers),
+                "on" if engine._dependency_care_spec is not None else "off",
+            )
         engine._require_refolded_teaching_offers(
             teaching_offers=teaching_offers,
             initial_state=base_state,
@@ -776,6 +828,14 @@ class WorldEngine:
     @property
     def kinship_channel_active(self) -> bool:
         return self._kinship_spec is not None
+
+    @property
+    def dependency_care_channel_active(self) -> bool:
+        return self._dependency_care_spec is not None
+
+    @property
+    def dependency_care_spec(self) -> object | None:
+        return self._dependency_care_spec
 
     @property
     def kinship_graph(self) -> object:
@@ -855,6 +915,7 @@ class WorldEngine:
                 lifecycle_active=self.lifecycle_channel_active,
                 new_agent_provenance_active=self.new_agent_provenance_active,
                 kinship_active=True,
+                dependency_care_active=self.dependency_care_channel_active,
             )
             snap = self._snapshot
             same_tick = [
@@ -1096,6 +1157,7 @@ class WorldEngine:
             lifecycle_active=True,
             new_agent_provenance_active=self.new_agent_provenance_active,
             kinship_active=self.kinship_channel_active,
+            dependency_care_active=self.dependency_care_channel_active,
         )
         next_registrations = (*self._registrations, registration)
         self._registrations = next_registrations
@@ -2119,12 +2181,97 @@ class WorldEngine:
                 tick,
                 len(self_views),
             )
+        dependency_needs_by_body = None
+        from simulation.runner_models import DependencyCareSpec
+        from world.dependency_care import (
+            CareNeedId,
+            CareNeedPolicy,
+            DependencyNeedRegister,
+            is_need_critical,
+        )
+        from world.observations import (
+            ObservedDependencyNeed,
+            ObservedDependencyNeeds,
+        )
+
+        if (
+            type(self._dependency_care_spec) is DependencyCareSpec
+            and self._dependency_care_spec.perception_mode == "self_and_colocated"
+            and lifecycle_by_body is not None
+        ):
+            spec = self._dependency_care_spec
+            policies = spec.to_domain_policies()
+            state = self._snapshot.world.state
+            need_views: dict[EntityId, ObservedDependencyNeeds] = {}
+            for body_id, lifecycle_view in lifecycle_by_body.items():
+                body = state.bodies.get(body_id)
+                if body is None:
+                    continue
+                location = state.locations.get(body.location_id)
+                shelter = (
+                    0.0 if location is None else float(location.shelter_factor.value)
+                )
+                agent_id = None
+                for registration in self._registrations:
+                    if registration.entity_id == body_id:
+                        agent_id = registration.agent_id
+                        break
+                register = None
+                if agent_id is not None:
+                    register = self._dependency_need_registers.get(agent_id)
+                rows: list[ObservedDependencyNeed] = []
+                for need_name in spec.enabled_needs:
+                    need = CareNeedId(need_name)
+                    policy = policies.get(need)  # type: ignore[arg-type]
+                    if type(policy) is not CareNeedPolicy:
+                        continue
+                    if need is CareNeedId.FOOD:
+                        deficit = min(1.0, max(0.0, body.hunger.value / 100.0))
+                    elif need is CareNeedId.WATER:
+                        deficit = min(1.0, max(0.0, body.thirst.value / 100.0))
+                    elif need is CareNeedId.SAFETY:
+                        deficit = min(
+                            1.0, max(0.0, 1.0 - (body.health.value / 100.0))
+                        )
+                    elif need is CareNeedId.SHELTER:
+                        deficit = min(1.0, max(0.0, 1.0 - shelter))
+                    elif need is CareNeedId.LEARNING:
+                        deficit = (
+                            float(register.deficit_of(CareNeedId.LEARNING))
+                            if type(register) is DependencyNeedRegister
+                            else 0.0
+                        )
+                    elif need is CareNeedId.MOVEMENT:
+                        deficit = (
+                            float(register.deficit_of(CareNeedId.MOVEMENT))
+                            if type(register) is DependencyNeedRegister
+                            else 0.0
+                        )
+                    else:
+                        continue
+                    rows.append(
+                        ObservedDependencyNeed(
+                            need_id=need.value,
+                            deficit=deficit,
+                            critical=is_need_critical(deficit=deficit, policy=policy),
+                        )
+                    )
+                if rows:
+                    need_views[body_id] = ObservedDependencyNeeds(needs=tuple(rows))
+            dependency_needs_by_body = need_views or None
+            _LOGGER.debug(
+                "perception_dependency_need_fact_count tick=%s body_count=%s "
+                "mode=self_and_colocated",
+                tick,
+                len(need_views),
+            )
         return ObservationContext(
             tick=tick,
             physical_rules=rules,  # type: ignore[arg-type]
             lifecycle_by_body=lifecycle_by_body,
             kinship_self_by_body=kinship_self_by_body,
             kinship_agent_by_body=kinship_agent_by_body,
+            dependency_needs_by_body=dependency_needs_by_body,
         )
 
     def project_detached_observations(self) -> ObservationBatch:
@@ -2675,9 +2822,10 @@ class WorldEngine:
             effective_carry_capacity=self._lifecycle_effective_carry_capacity(
                 tick=snap.tick.value
             ),
-            denied_command_kinds_by_entity=self._lifecycle_denied_command_kinds(
+            denied_command_kinds_by_entity=self._denied_command_kinds_by_entity(
                 tick=snap.tick.value
             ),
+            dependency_care_context=self._dependency_care_rule_context(),
         )
         start_ledger = self._skill_ledger
         folded_ledger, skill_facts = self._fold_skill_ledger(
@@ -2730,6 +2878,9 @@ class WorldEngine:
             rules=physical_rules,
         )
         try:
+            dep_extras = self._dependency_care_tick_extras(
+                state=completion_state, tick=snap.tick.value
+            )
             physical = apply_autonomous_physical_step(
                 state=completion_state,
                 rules=physical_rules,
@@ -2741,6 +2892,10 @@ class WorldEngine:
                 metabolism_fatigue_by_entity=self._lifecycle_metabolism_fatigue_map(
                     tick=snap.tick.value
                 ),
+                dependency_hunger_extra_by_entity=dep_extras["hunger"],
+                dependency_thirst_extra_by_entity=dep_extras["thirst"],
+                dependency_fatigue_extra_by_entity=dep_extras["fatigue"],
+                dependency_health_damage_by_entity=dep_extras["health"],
             )
         except ValueError as exc:
             message = str(exc)
@@ -2950,6 +3105,7 @@ class WorldEngine:
             lifecycle_active=self.lifecycle_channel_active,
             new_agent_provenance_active=self.new_agent_provenance_active,
             kinship_active=self.kinship_channel_active,
+            dependency_care_active=self.dependency_care_channel_active,
         )
         prepared = finalize_pending_batch(
             merged,
@@ -3615,6 +3771,197 @@ class WorldEngine:
                 result[raw.body_id] = frozenset(effect.denied_command_kinds)
         return result or None
 
+    def _dependency_care_tick_extras(
+        self, *, state: object, tick: int
+    ) -> dict[str, dict[EntityId, float] | None]:
+        """Accumulate DEPENDENT unmet-need extras and update need registers."""
+        from simulation.runner_models import DependencyCareSpec
+        from world.dependency_care import (
+            CareNeedId,
+            DependencyNeedRegister,
+            compute_unmet_tick_effects,
+            empty_need_register,
+        )
+        from world.lifecycle import AgentLifecycleRecord, DependencyStatus
+        from world._production import shelter_factor_for
+
+        empty: dict[str, dict[EntityId, float] | None] = {
+            "hunger": None,
+            "thirst": None,
+            "fatigue": None,
+            "health": None,
+        }
+        if type(self._dependency_care_spec) is not DependencyCareSpec:
+            return empty
+        spec = self._dependency_care_spec
+        policies = spec.to_domain_policies()
+        enabled = tuple(CareNeedId(need) for need in spec.enabled_needs)
+        hunger_map: dict[EntityId, float] = {}
+        thirst_map: dict[EntityId, float] = {}
+        fatigue_map: dict[EntityId, float] = {}
+        health_map: dict[EntityId, float] = {}
+        bodies = getattr(state, "bodies", {})
+        locations = getattr(state, "locations", {})
+        for raw in self._lifecycle_records:
+            if type(raw) is not AgentLifecycleRecord:
+                continue
+            if raw.dependency_status is not DependencyStatus.DEPENDENT:
+                continue
+            body = bodies.get(raw.body_id)
+            if body is None or body.life_status.value != "alive":
+                continue
+            location = locations.get(body.location_id)
+            shelter = 1.0
+            if location is not None:
+                shelter = float(
+                    shelter_factor_for(
+                        state, body.location_id, location.shelter_factor.value
+                    )
+                )
+            agent_id = AgentId(raw.agent_id)
+            register = self._dependency_need_registers.get(agent_id)
+            if type(register) is not DependencyNeedRegister:
+                register = empty_need_register(agent_id)
+            effect = compute_unmet_tick_effects(
+                body_id=raw.body_id,
+                status=DependencyStatus.DEPENDENT,
+                enabled_needs=enabled,
+                policies=policies,  # type: ignore[arg-type]
+                hunger=float(body.hunger.value),
+                thirst=float(body.thirst.value),
+                health=float(body.health.value),
+                fatigue=float(body.fatigue.value),
+                shelter_factor=shelter,
+                learning_deficit=register.deficit_of(CareNeedId.LEARNING),
+                movement_deficit=register.deficit_of(CareNeedId.MOVEMENT),
+            )
+            if effect.hunger_extra:
+                hunger_map[raw.body_id] = effect.hunger_extra
+            if effect.thirst_extra:
+                thirst_map[raw.body_id] = effect.thirst_extra
+            if effect.fatigue_extra:
+                fatigue_map[raw.body_id] = effect.fatigue_extra
+            if effect.health_damage_extra:
+                health_map[raw.body_id] = effect.health_damage_extra
+            next_register = register
+            if effect.learning_deficit_delta:
+                next_register = next_register.with_deficit(
+                    CareNeedId.LEARNING,
+                    register.deficit_of(CareNeedId.LEARNING)
+                    + effect.learning_deficit_delta,
+                )
+            if effect.movement_deficit_delta:
+                next_register = next_register.with_deficit(
+                    CareNeedId.MOVEMENT,
+                    next_register.deficit_of(CareNeedId.MOVEMENT)
+                    + effect.movement_deficit_delta,
+                )
+            self._dependency_need_registers[agent_id] = next_register
+            _LOGGER.debug(
+                "dependency_care_unmet tick=%s agent_id=%s hunger_extra=%s "
+                "thirst_extra=%s learning_deficit=%s",
+                tick,
+                agent_id.value,
+                effect.hunger_extra,
+                effect.thirst_extra,
+                (
+                    next_register.deficit_of(CareNeedId.LEARNING)
+                    if type(next_register) is DependencyNeedRegister
+                    else 0.0
+                ),
+            )
+        return {
+            "hunger": hunger_map or None,
+            "thirst": thirst_map or None,
+            "fatigue": fatigue_map or None,
+            "health": health_map or None,
+        }
+
+    def _dependency_care_denied_command_kinds(
+        self,
+    ) -> dict[EntityId, dict[str, str]] | None:
+        """DEPENDENT self-satisfy denials (union with stage denies at admission)."""
+        from simulation.runner_models import DependencyCareSpec
+        from world.dependency_care import (
+            CareNeedId,
+            self_satisfy_denied_kinds,
+        )
+        from world.lifecycle import AgentLifecycleRecord, DependencyStatus
+
+        if type(self._dependency_care_spec) is not DependencyCareSpec:
+            return None
+        spec = self._dependency_care_spec
+        policies = spec.to_domain_policies()
+        enabled = tuple(CareNeedId(need) for need in spec.enabled_needs)
+        result: dict[EntityId, dict[str, str]] = {}
+        for raw in self._lifecycle_records:
+            if type(raw) is not AgentLifecycleRecord:
+                continue
+            if raw.dependency_status is not DependencyStatus.DEPENDENT:
+                continue
+            denied = self_satisfy_denied_kinds(
+                DependencyStatus.DEPENDENT,
+                enabled,
+                policies,  # type: ignore[arg-type]
+            )
+            if not denied:
+                continue
+            reason_map = {
+                kind: "dependency_care_self_satisfy_denied" for kind in sorted(denied)
+            }
+            result[raw.body_id] = reason_map
+            _LOGGER.debug(
+                "dependency_care_self_satisfy_denied body_id=%s kinds=%s "
+                "code=dependency_care_self_satisfy_denied",
+                raw.body_id.value,
+                sorted(denied),
+            )
+        return result or None
+
+    def _dependency_care_rule_context(self) -> object | None:
+        """Build ephemeral Feed/Transport legality context for this tick."""
+        from simulation.runner_models import DependencyCareSpec
+        from world.dependency_care import DependencyCareRuleContext
+        from world.lifecycle import AgentLifecycleRecord, DependencyStatus
+
+        if type(self._dependency_care_spec) is not DependencyCareSpec:
+            return None
+        spec = self._dependency_care_spec
+        dependent_ids: set[EntityId] = set()
+        for raw in self._lifecycle_records:
+            if type(raw) is not AgentLifecycleRecord:
+                continue
+            if raw.dependency_status is DependencyStatus.DEPENDENT:
+                dependent_ids.add(raw.body_id)
+        policy = spec.care_action_policy
+        return DependencyCareRuleContext(
+            dependent_body_ids=frozenset(dependent_ids),
+            allow_feed=policy.allow_feed,
+            allow_transport=policy.allow_transport,
+            require_colocated=policy.require_colocated,
+        )
+
+    def _denied_command_kinds_by_entity(
+        self, *, tick: int
+    ) -> dict[EntityId, dict[str, str]] | None:
+        """Union stage denials with dependency-care self-satisfy denials."""
+        lifecycle = self._lifecycle_denied_command_kinds(tick=tick)
+        dependency = self._dependency_care_denied_command_kinds()
+        if lifecycle is None and dependency is None:
+            return None
+        merged: dict[EntityId, dict[str, str]] = {}
+        if lifecycle is not None:
+            for body_id, kinds in lifecycle.items():
+                merged[body_id] = {
+                    kind: "lifecycle_stage_action_denied" for kind in sorted(kinds)
+                }
+        if dependency is not None:
+            for body_id, reason_map in dependency.items():
+                existing = merged.setdefault(body_id, {})
+                # Dependency reason wins when both deny the same kind.
+                existing.update(reason_map)
+        return merged or None
+
     def _lifecycle_fatigue_factor(self, *, entity_id: EntityId, tick: int) -> float:
         factors = self._lifecycle_continuous_factors(entity_id=entity_id, tick=tick)
         return float(factors.fatigue_accrual_factor)  # type: ignore[attr-defined]
@@ -4201,6 +4548,7 @@ def select_checkpoint_schema(
     lifecycle_active: bool = False,
     new_agent_provenance_active: bool = False,
     kinship_active: bool = False,
+    dependency_care_active: bool = False,
 ) -> tuple[int, str]:
     """Return the legal event-schema and codec pair for this run."""
     from simulation.persistence import (
@@ -4215,6 +4563,7 @@ def select_checkpoint_schema(
         EVENT_SCHEMA_REPLAY_V9,
         EVENT_SCHEMA_REPLAY_V10,
         EVENT_SCHEMA_REPLAY_V11,
+        EVENT_SCHEMA_REPLAY_V12,
     )
 
     schema_version, codec = checkpoint_schema_for_production(
@@ -4224,31 +4573,41 @@ def select_checkpoint_schema(
         lifecycle_active=lifecycle_active,
         new_agent_provenance_active=new_agent_provenance_active,
         kinship_active=kinship_active,
+        dependency_care_active=dependency_care_active,
     )
     agreed = (
-        kinship_active
+        dependency_care_active
+        and schema_version == EVENT_SCHEMA_REPLAY_V12
+        and codec == "v9"
+    ) or (
+        not dependency_care_active
+        and kinship_active
         and schema_version == EVENT_SCHEMA_REPLAY_V11
         and codec == "v8"
     ) or (
-        not kinship_active
+        not dependency_care_active
+        and not kinship_active
         and new_agent_provenance_active
         and schema_version == EVENT_SCHEMA_REPLAY_V10
         and codec == "v7"
     ) or (
-        not kinship_active
+        not dependency_care_active
+        and not kinship_active
         and not new_agent_provenance_active
         and lifecycle_active
         and schema_version == EVENT_SCHEMA_REPLAY_V9
         and codec == "v6"
     ) or (
-        not kinship_active
+        not dependency_care_active
+        and not kinship_active
         and not new_agent_provenance_active
         and not lifecycle_active
         and artifacts_active
         and schema_version == EVENT_SCHEMA_REPLAY_V8
         and codec == "v5"
     ) or (
-        not kinship_active
+        not dependency_care_active
+        and not kinship_active
         and not new_agent_provenance_active
         and not lifecycle_active
         and not artifacts_active
@@ -4256,7 +4615,8 @@ def select_checkpoint_schema(
         and schema_version == EVENT_SCHEMA_REPLAY_V7
         and codec == "v4"
     ) or (
-        not kinship_active
+        not dependency_care_active
+        and not kinship_active
         and not new_agent_provenance_active
         and not lifecycle_active
         and not artifacts_active
@@ -4265,7 +4625,8 @@ def select_checkpoint_schema(
         and schema_version == EVENT_SCHEMA_REPLAY_V6
         and codec == "v3"
     ) or (
-        not kinship_active
+        not dependency_care_active
+        and not kinship_active
         and not new_agent_provenance_active
         and not lifecycle_active
         and not artifacts_active
@@ -4285,10 +4646,11 @@ def select_checkpoint_schema(
         )
     _LOGGER.debug(
         "checkpoint_schema_selected event_schema=%s codec=%s "
-        "kinship_active=%s new_agent_provenance_active=%s lifecycle_active=%s "
-        "artifacts_active=%s",
+        "dependency_care_active=%s kinship_active=%s new_agent_provenance_active=%s "
+        "lifecycle_active=%s artifacts_active=%s",
         schema_version,
         codec,
+        dependency_care_active,
         kinship_active,
         new_agent_provenance_active,
         lifecycle_active,
@@ -4414,6 +4776,10 @@ def _map_batch_outcome(
         "no_item_capacity": ActionResolutionReason.STRUCTURAL_REJECTION,
         "no_carry_capacity": ActionResolutionReason.STRUCTURAL_REJECTION,
         "lifecycle_stage_action_denied": ActionResolutionReason.STRUCTURAL_REJECTION,
+        "dependency_care_self_satisfy_denied": ActionResolutionReason.STRUCTURAL_REJECTION,
+        "dependency_care_channel_off": ActionResolutionReason.STRUCTURAL_REJECTION,
+        "dependency_care_target_invalid": ActionResolutionReason.STRUCTURAL_REJECTION,
+        "dependency_care_action_disabled": ActionResolutionReason.STRUCTURAL_REJECTION,
         "resource_depleted": ActionResolutionReason.STRUCTURAL_REJECTION,
         "wrong_kind": ActionResolutionReason.STRUCTURAL_REJECTION,
         "missing_resolved_effect": ActionResolutionReason.STRUCTURAL_REJECTION,

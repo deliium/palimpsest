@@ -25,6 +25,7 @@ from world.actions import (
     Drop,
     Eat,
     Erase,
+    Feed,
     Flee,
     Give,
     Harvest,
@@ -39,6 +40,7 @@ from world.actions import (
     Talk,
     Tell,
     TransferArtifact,
+    Transport,
     Wait,
     require_agent_command,
 )
@@ -210,6 +212,26 @@ class _HelpOp:
 
 
 @dataclass(frozen=True, slots=True)
+class _FeedOp:
+    request_id: RequestId
+    actor_id: EntityId
+    world_id: WorldId
+    base_revision: WorldRevision
+    target_id: EntityId
+    item_id: EntityId
+
+
+@dataclass(frozen=True, slots=True)
+class _TransportOp:
+    request_id: RequestId
+    actor_id: EntityId
+    world_id: WorldId
+    base_revision: WorldRevision
+    target_id: EntityId
+    destination_id: EntityId
+
+
+@dataclass(frozen=True, slots=True)
 class _AttackOp:
     request_id: RequestId
     actor_id: EntityId
@@ -337,6 +359,8 @@ ValidatedWorldOperation = (
     | _AskOp
     | _TellOp
     | _HelpOp
+    | _FeedOp
+    | _TransportOp
     | _AttackOp
     | _FleeOp
     | _WaitOp
@@ -365,6 +389,8 @@ _OPERATION_TYPES: Final[frozenset[type]] = frozenset(
         _AskOp,
         _TellOp,
         _HelpOp,
+        _FeedOp,
+        _TransportOp,
         _AttackOp,
         _FleeOp,
         _WaitOp,
@@ -571,6 +597,36 @@ def validate_action_request(
             if rejected is not None:
                 return rejected
             return OperationAccepted(_HelpOp(*base, target_id=target_id))
+        case Feed(target_id=target_id, item_id=item_id):
+            if target_id == request.actor_id:
+                return OperationRejected(
+                    code=RejectionCode.DISTINCT_ID_VIOLATION, request_id=request_id
+                )
+            rejected = _require_body(state, target_id, request_id)
+            if rejected is not None:
+                return rejected
+            rejected = _require_item(state, item_id, request_id)
+            if rejected is not None:
+                return rejected
+            return OperationAccepted(
+                _FeedOp(*base, target_id=target_id, item_id=item_id)
+            )
+        case Transport(target_id=target_id, destination_id=destination_id):
+            if target_id == request.actor_id:
+                return OperationRejected(
+                    code=RejectionCode.DISTINCT_ID_VIOLATION, request_id=request_id
+                )
+            rejected = _require_body(state, target_id, request_id)
+            if rejected is not None:
+                return rejected
+            rejected = _require_location(state, destination_id, request_id)
+            if rejected is not None:
+                return rejected
+            return OperationAccepted(
+                _TransportOp(
+                    *base, target_id=target_id, destination_id=destination_id
+                )
+            )
         case Attack(target_id=target_id):
             if target_id == request.actor_id:
                 return OperationRejected(
@@ -847,6 +903,7 @@ def prepare_action_batch(
     witness_resource_nodes: bool = False,
     effective_carry_capacity: Mapping[EntityId, int] | None = None,
     denied_command_kinds_by_entity: Mapping[EntityId, frozenset[str]] | None = None,
+    dependency_care_context: object | None = None,
 ) -> PendingBatch:
     """Resolve ordered requests into pending effects against one evolving state.
 
@@ -903,6 +960,14 @@ def prepare_action_batch(
         if not isinstance(denied_command_kinds_by_entity, Mapping):
             raise TypeError("denied_command_kinds_by_entity must be a mapping")
         deny_map = denied_command_kinds_by_entity
+    care_context = dependency_care_context
+    if care_context is not None:
+        from world.dependency_care import DependencyCareRuleContext
+
+        if type(care_context) is not DependencyCareRuleContext:
+            raise TypeError(
+                "dependency_care_context must be DependencyCareRuleContext or None"
+            )
     request_tuple = tuple(requests)
     resolved = resolved_effects
 
@@ -921,19 +986,34 @@ def prepare_action_batch(
         kind = getattr(request.command, "kind", type(request.command).__name__)
         if deny_map is not None:
             denied = deny_map.get(request.actor_id)
-            if denied is not None and str(kind) in denied:
+            reject_reason: str | None = None
+            if isinstance(denied, Mapping):
+                raw_reason = denied.get(str(kind))
+                if type(raw_reason) is str:
+                    reject_reason = raw_reason
+            elif denied is not None and str(kind) in denied:
+                reject_reason = "lifecycle_stage_action_denied"
+            if reject_reason is not None:
                 _LOG.warning(
-                    "lifecycle_stage_action_denied actor_id=%s kind=%s "
-                    "reason_code=lifecycle_stage_action_denied",
+                    "command_kind_denied actor_id=%s kind=%s "
+                    "reason_code=%s",
                     request.actor_id.value,
                     kind,
+                    reject_reason,
                 )
+                if reject_reason == "dependency_care_self_satisfy_denied":
+                    _LOG.debug(
+                        "dependency_care_self_satisfy_denied actor_id=%s "
+                        "command_kind=%s code=dependency_care_self_satisfy_denied",
+                        request.actor_id.value,
+                        kind,
+                    )
                 outcomes.append(
                     BatchItemOutcome(
                         ordinal=ordinal,
                         request_id=request.request_id,
                         status=BatchItemStatus.REJECTED,
-                        reason="lifecycle_stage_action_denied",
+                        reason=reject_reason,
                         action_kind=str(kind),
                     )
                 )
@@ -962,8 +1042,16 @@ def prepare_action_batch(
             resolved=resolved,
             tick=tick,
             effective_carry_capacity=capacity_map,
+            dependency_care_context=care_context,
         )
         if start_rule.disposition is RuleDisposition.REJECT:
+            if start_rule.action_kind in {"feed", "transport"}:
+                _LOG.warning(
+                    "dependency_care_reject actor_id=%s kind=%s reason_code=%s",
+                    request.actor_id.value,
+                    start_rule.action_kind,
+                    start_rule.reason.value,
+                )
             outcomes.append(
                 BatchItemOutcome(
                     ordinal=ordinal,
@@ -1015,6 +1103,7 @@ def prepare_action_batch(
             skill_efficiency=actor_efficiency,
             witness_resource_nodes=witness_resource_nodes,
             effective_carry_capacity=capacity_map,
+            dependency_care_context=care_context,
         )
         if application.result.disposition is RuleDisposition.REJECT:
             outcomes.append(
@@ -1066,6 +1155,15 @@ def prepare_action_batch(
                 action_kind=application.result.action_kind,
             )
         )
+        if application.result.action_kind in {"feed", "transport"}:
+            target_id = getattr(work_validation.operation, "target_id", None)
+            _LOG.info(
+                "dependency_care_mutate actor_id=%s target_id=%s assist_kind=%s tick=%s",
+                request.actor_id.value,
+                getattr(target_id, "value", target_id),
+                application.result.action_kind,
+                tick,
+            )
 
     return PendingBatch(
         working_state=working,
