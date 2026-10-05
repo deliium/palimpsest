@@ -228,6 +228,8 @@ Skill learning is default-off (`SkillLearningMode.DISABLED`) and is not a capabi
 
 Teaching is default-off (`TeachingInteractionMode.DISABLED`) and requires skill learning on that same agent. Declarative advice is a separate store from believed competence and from the objective ledger. An explain reaches belief on the next prepare. With trust `1`, prior `1`, and a high band, support becomes `0.08` and believed level is `quantize(0.08 / 1.08)`. An inbound `request_instruction` adds `teaching_response_weight` (`0.25`) to the communicate side's float term. A nonzero integer vote still wins. The answering explain uses the owner's own band.
 
+Caregiving cognition bias is default-off and is **not** an `AgentCognitionSpec` / runner cognition-mode enum. When `dependency_care` is present on `runner-config-v28` and `caregiving_cognition_mode=deterministic`, `agents.cognition.caregiving` may boost care-shaped futures (`Feed`/`Transport`/`Help`/`Give`/teach) from owner-scoped relationships, goals, norms, subjective kinship beliefs, and optional perceived need deficits. It must not import objective `world.kinship` or force parent→caregiver; neglect remains a legal trajectory. Mode `disabled` (default) leaves deliberation unchanged while objective need physics may still run.
+
 | Mode | Schema written | Effect |
 | --- | --- | --- |
 | `DISABLED` | `runner-config-v4` (no `skill_learning_mode` key) | today's formulas and no competence model |

@@ -43,6 +43,8 @@ An observation for open tick `N` is projected from the tick-start snapshot plus 
 | Attack | Hit 0.75, damage [10, 20]; miss event-only; lethal hit emits Attacked then Died under the same action cause |
 | Flee | Success 0.80 then uniform eligible destination; +10 fatigue on success |
 | Help | Target health +10 (cap 100), helper +5 fatigue; no revival |
+| Feed | Caregiver applies held `ItemKind.FOOD`/`WATER` relief to colocated DEPENDENT (policy-gated; no dependent self-Eat/Drink required) |
+| Transport | Caregiver + colocated DEPENDENT relocate together; caregiver fatigue per `PhysicalRules` |
 | Wait / Talk / Ask / Tell | Event-only; still receive autonomous physiology |
 
 Structural impossibility is REJECTED (starting state) or CONFLICTED (earlier effect). Stochastic misses are APPLIED without mutation.
@@ -103,7 +105,7 @@ Artifacts are objective `WorldEngine` objects on `WorldState.artifacts` (default
 
 Portable kinds (`note`, `map`, `mark`) sit at exactly one of `location_id` or `holder_id`. Fixed kinds (`sign`, `record`, `memorial`) always use `location_id`. Held portable artifacts are parallel to inventory: they are not members of `AgentBody.inventory`, do not consume carry capacity, and transfer only via `TransferArtifact`. Cap is 8 held artifacts per living body (`artifact_hold_cap`). `Take` / `Drop` / `Give` reject artifact ids (`not_an_item`).
 
-Closed commands: `Inscribe(kind, content, hold=False)`, `Amend`, `Erase`, `TransferArtifact(artifact_id, mode, recipient_id=None)` with `mode` ∈ {`deposit`, `claim`, `give`}. The closed `AgentCommand` union is 24. World admission may accept these when tests or scripts submit them; cognition compiles them only when `ArtifactInterpretationMode` is `DETERMINISTIC`. Off is an empty artifacts map plus mode `DISABLED` — not a capability flag. `multi_hop_testimony_tracking` stays unowned.
+Closed commands: `Inscribe(kind, content, hold=False)`, `Amend`, `Erase`, `TransferArtifact(artifact_id, mode, recipient_id=None)` with `mode` ∈ {`deposit`, `claim`, `give`}. Dependency-care adds `Feed` / `Transport` when `dependency_care.care_action_policy` allows. The closed `AgentCommand` union is 26. World admission may accept artifact commands when tests or scripts submit them; cognition compiles them only when `ArtifactInterpretationMode` is `DETERMINISTIC`. Off is an empty artifacts map plus mode `DISABLED` — not a capability flag. `multi_hop_testimony_tracking` stays unowned.
 
 Reject reasons: `unknown_artifact`, `artifact_not_portable`, `artifact_not_held`, `artifact_not_colocated`, `artifact_content_invalid`, `invalid_artifact_kind`, `invalid_artifact_hold`, `artifact_transfer_mode_invalid`, `artifact_hold_cap`, `recipient_unavailable`, `not_an_item`. Perception exposes ground artifacts at the observer location when visibility ≥ 0.5, and always exposes artifacts held by self. Foreign held artifacts are omitted. Occurrence `public_facts` may include only `artifact_id`, `artifact_kind`, and `content_revision`.
 

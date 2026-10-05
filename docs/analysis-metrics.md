@@ -32,8 +32,13 @@ Executable formula, population, and edge-case policy for all nineteen metric fam
 | `prediction_calibration` | `prediction_calibration@1` | joined confidence / empirical outcome rows |
 | `belief_convergence` | `belief_convergence@1` | detached belief claim rows |
 | `cultural_similarity` | `cultural_similarity@1` | naming / norms / conventions / narratives rows |
+| `kinship_genealogy` | `kinship_genealogy@1` | detached kinship edge rows |
+| `dependency_survival` | `dependency_survival@1` | detached dependency agent / survival rows |
+| `caregiver_diversity` | `caregiver_diversity@1` | detached care-act rows |
+| `caregiving_burden` | `caregiving_burden@1` | detached care-act rows |
+| `intergenerational_cooperation` | `intergenerational_cooperation@1` | detached care-act + kinship rows |
 
-Catalog version: `metric-catalog-v1`. Document schema: `MetricDocument` schema `1`. Closed catalog cardinality: **39** families (`METRIC_FAMILY_COUNT`). New opt-in families assemble only when their detached inputs are present.
+Catalog version: `metric-catalog-v1`. Document schema: `MetricDocument` schema `1`. Closed catalog cardinality: **44** families (`METRIC_FAMILY_COUNT`). New opt-in families assemble only when their detached inputs are present.
 
 ### Additive analysis surfaces (off the V1 gate)
 
@@ -55,6 +60,10 @@ Catalog version: `metric-catalog-v1`. Document schema: `MetricDocument` schema `
 
 `cultural_narrative_lineage@1` values: `active_variant_count`, `mean_active_strength`, `mean_duration_ticks`, `persistence_rate`, `branch_rate`, `mean_mutation_generation`, `fingerprint_churn`, `token_add_rate`, `token_loss_rate`, `inaccuracy_vs_objective`, `source_event_drop_rate`, `origin_shift_rate`, `orphan_retell_rate`, `merge_rate`, `mean_parents_per_merge`, `competing_variant_share`, `mean_location_span`, `mean_carrier_span`, `multi_location_rate`, `social_reach_rate`. Computed from caller-supplied detached variant history rows after the run. Empty denominators are absent for that key only. Experiment AB stays off the V1 gate. The document is not an input to cognition.
 
+### Dependency / caregiving families (off the V1 gate)
+
+`dependency_survival@1`, `caregiver_diversity@1`, `caregiving_burden@1`, and `intergenerational_cooperation@1` assemble only from detached post-run rows (`analysis.dependency_care_metrics`). They never invent caregiver roles from kinship alone, never feed cognition, and stay absent when dependency-care inputs are missing. Experiment AI stays off the V1 gate.
+
 ### Supporting formulas (not a separate family)
 
 `action_resolution_rates@1` defines attempted / applied / rejected / conflicted rates **only** from `ActionResolution` evidence. Never infer rejected attempts from absent world events. Task 11 implementations reuse this shared spec beside cooperation/conflict occurrence rates.
@@ -68,7 +77,7 @@ Catalog version: `metric-catalog-v1`. Document schema: `MetricDocument` schema `
 - **Availability:** missing or unobservable evidence is `unknown`, never silent zero/false.
 - **Deceased agents:** excluded from living opportunity denominators; survival and goal death outcomes use objective death evidence; post-death no-action ticks are expected.
 - **Self-edges:** relationship self-targets forbidden; graph self-loops dropped; self-communication counted separately from dyadic cooperation.
-- **Action vocabulary (V1):** move, search, take, drop, give, eat, drink, sleep, talk, ask, tell, help, attack, flee, wait. Cooperation and conflict kinds stay disjoint.
+- **Action vocabulary (V1):** move, search, take, drop, give, eat, drink, sleep, talk, ask, tell, help, attack, flee, wait. Cooperation and conflict kinds stay disjoint. Dependency-care analysis also counts `feed` / `transport` in `COOPERATION_ACTION_KINDS` when those occurrences are present (channel-on only; never inputs to cognition).
 - **Motifs:** contiguous n-grams (n∈{2,3}), optional explicit gap policy, `min_support=2`, sorted by `(-support, motif_id)`. No culture/role labels.
 - **Adoption stages:** `world_delivery`, `receiver_trace`, `belief_candidate`, `belief_activation`, `reconstruction`, `retell`. Prefer explicit transmission roots; never invent parents from hop order.
 - **Evidence-stage dedup:** corroboration by lineage root within a stage; never collapse stages into one narrative class.

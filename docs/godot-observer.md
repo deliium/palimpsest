@@ -38,7 +38,7 @@ Every researcher overlay marker carries exactly one class: **OBJECTIVE**, **SUBJ
 
 ## V2 physical visuals
 
-The client parses `world.structures` and paints kind / integrity / stored-quantity cues at location anchors. Production semantic types (`RESOURCE_HARVESTED`, `CRAFT_STARTED`, `ITEM_CRAFTED`, `STRUCTURE_BUILT`, `STRUCTURE_REPAIRED`, `ITEM_STORED`) have dedicated effect actions and log phrases. Tool-like item kinds use local theme mapping. Season / weather / band / hazard / depleted paints come from frame refresh; scarcity outlines use objective quantity (`0` depleted; soft scarce cue for small positive quantities).
+The client parses `world.structures` and paints kind / integrity / stored-quantity cues at location anchors. Production semantic types (`RESOURCE_HARVESTED`, `CRAFT_STARTED`, `ITEM_CRAFTED`, `STRUCTURE_BUILT`, `STRUCTURE_REPAIRED`, `ITEM_STORED`) have dedicated effect actions and log phrases. Lifecycle / kinship / care types (`AGENT_CREATED`, `AGENT_ENTERED_WORLD`, `AGENT_INITIALIZED`, `LIFECYCLE_STAGE_CHANGED`, `KINSHIP_EDGE_RECORDED`, `AGENT_FED`, `AGENT_TRANSPORTED`) are recognized for log routing only — no family-care presentation chrome. Tool-like item kinds use local theme mapping. Season / weather / band / hazard / depleted paints come from frame refresh; scarcity outlines use objective quantity (`0` depleted; soft scarce cue for small positive quantities).
 
 ## Perspective limits
 
