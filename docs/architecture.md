@@ -186,28 +186,30 @@ Later V3 generational plans plug into these seams only. They must not re-open Wo
 
 | Seam | Where today | Pin / reserved against |
 | --- | --- | --- |
-| Dynamic roster / birth registration | Bootstrap `AgentRegistration` + fixed runner/engine roster | No mid-run spawn/unbind in scaffolding; per-tick ordinal = registration order |
-| Lifetimes / developmental stages | Physiology, `Died`, `LifeStatus`, `MortalityMode`, runtime `TERMINAL` | One-way death; no age/birth lifecycle yet (`generational_population`) |
+| Dynamic roster / birth registration | Bootstrap `AgentRegistration` + `WorldEngine.admit_population_entry` (channel-gated) + runner translator rebuild / mid-run `_AgentBundle` | **Owned by v3-02** when `generational_population` is on (`runner-config-v24` + `population_lifecycle`); flag-off keeps fixed bootstrap roster. Deny-list mutators (`register_agent` / `spawn_agent` / …) stay forbidden. Bootstrap agents seed lifecycle records without `AgentCreated` / `AgentEnteredWorld` |
+| Lifetimes / developmental stages | `AgentLifecycleRecord`, chronological age = `tick − entry_tick`, `LifecycleStageChanged`, `DeathCause.LIFESPAN` via existing `Died` | **Owned by v3-02**; one-way death still via WorldEngine; objective age ≠ subjective age/maturity beliefs (no auto-written age beliefs in this plan) |
 | Kinship / inheritance | Owner-scoped ledgers + teaching modes | No parent/child model; handoff is subjective-only unless a later plan proves otherwise (`kinship_inheritance`) |
 | Multi-settlement / migration | Location graph + Move + capacities | Topology bootstrap-fixed (`multi_polity_migration`) |
 | Institutional / economy | Structures, production, group/norm/convention ledgers | Beliefs ≠ world authority; no scripted institution outcomes (`institutional_economy`) |
 | Cultural-historical memory / language | Narrative/naming/memory analysis | No society-wide memory or NL authority (`cultural_historical_memory`) |
 | Long-horizon experiments | Matrix runner, branching, scale infra | Experiment/matrix extension only |
-| Run-level `V3CapabilityFlags` | `SimulationRunnerConfig` / `runner-config-v23` | Default-off = V2-equivalent wiring; flags-on fail closed at `from_config` until owned |
+| Run-level `V3CapabilityFlags` | `SimulationRunnerConfig` / `runner-config-v23`+; `generational_population` requires `runner-config-v24` | Default-off = V2-equivalent wiring; **owned** `generational_population` may enable; other V3 flags still fail closed at `from_config` |
 | LLM lifecycle composition | `api` + `llm.factory` | **Not** a runner flag; still deferred |
 
-**Runtime pins:** `prepare_parallel=False` until an owned plan changes it. New generational cognition plugs in as constructor-injected stage slots/modes — not by renumbering fixed `CognitiveLoop` ordinals. No scripted civilization/institution/kinship helpers.
+**Runtime pins:** `prepare_parallel=False` until an owned plan changes it. When `generational_population` is on, per-tick ordinal = **current registration order** (including mid-run admits); flag-off ordinal stays bootstrap-fixed. New generational cognition plugs in as constructor-injected stage slots/modes — not by renumbering fixed `CognitiveLoop` ordinals. No scripted civilization/institution/kinship helpers. No biological sex/reproduction mechanics; demographic policies are seed-derived experiment config only.
 
-**Off-limits:** WorldEngine admission, event immutability / `AUTHORITATIVE_TABLES`, Observation → authority type widening, Godot write authority, scripted emergence booleans.
+**Write-pair priority** (extends `checkpoint_schema_for_production`): lifecycle channel on → `(EVENT_SCHEMA_REPLAY_V9, "v6")`; else artifacts → `(v8, "v5")`; else dynamics → `(v7, "v4")`; else production → `(v6, "v3")`; else → `(replay-v5, "v2")`.
+
+**Off-limits:** WorldEngine admission bypass, event immutability / `AUTHORITATIVE_TABLES`, Observation → authority type widening, Godot write authority, scripted emergence booleans, new inspection HTTP for dynamic roster (deferred), Alembic `0018` by default.
 
 ### Downstream V3 plan contract
 
 Every later V3 feature plan must satisfy this checklist before merge:
 
 1. **V1/V2 invariants intact** — WorldEngine authority, Observation trust, append-only history, subjective ≠ objective fold, LLM non-authority, no silent cross-agent copy, reproducible seeds/stubs where claimed, Godot read-only / non-semantic coordinates.
-2. **V3 flags opt-in** — reserved `V3CapabilityFlags` stay default-off; enabling a flag without an owning plan fails closed at `SimulationRunner.from_config` (`capability_unimplemented`); no silent behavior when off. Wire is sibling root `v3_capability_flags` on `runner-config-v23` (= full v22 keyset ∪ flags); default write stays `runner-config-v4` when all V3 flags are off.
-3. **V1 + V2 regression green** — `tests/unit/test_v1_regression_gate.py` and `tests/unit/test_v2_scientific_invariants.py` remain passing under V3 flags off; use `v3_scaffolding_profile` / `v2_regression_profile`.
-4. **Schema bumps use accepted-set + exact key-set discipline** — never drop accepted V1/V2 versions in the same change that adds a write version; runner JSON uses versioned `_require_keys` (no silent extra fields on an existing schema id). Mode allowlists that top out at v22 include v23; budget mode accepts `{v22,v23}`.
+2. **V3 flags opt-in** — reserved `V3CapabilityFlags` stay default-off; enabling an **unowned** flag fails closed at `SimulationRunner.from_config` (`capability_unimplemented`); no silent behavior when off. Owned flag: `generational_population` (v3-02) requires `runner-config-v24` + exact `population_lifecycle` object. Wire for other flags remains sibling root `v3_capability_flags` on `runner-config-v23`+; default write stays `runner-config-v4` when all V3 flags are off.
+3. **V1 + V2 regression green** — `tests/unit/test_v1_regression_gate.py` and `tests/unit/test_v2_scientific_invariants.py` remain passing under V3 flags off; use `v3_scaffolding_profile` / `v2_regression_profile`. Lifecycle-on arms use `generational_population_profile` / Experiment AE and stay **off** the V1 gate.
+4. **Schema bumps use accepted-set + exact key-set discipline** — never drop accepted V1/V2 versions in the same change that adds a write version; runner JSON uses versioned `_require_keys` (no silent extra fields on an existing schema id). Mode allowlists that top out at v23 include v24; budget mode accepts `{v22,v23,v24}`.
 5. **No scripted emergence** — no `civilization_emerged` / `institution_formed` / `kinship_must_form` / `culture_emerged` mandates.
 6. **No LLM → world shortcuts** — validated LLM shape still requires cognition translation + normal admission.
 7. **Experiments stay reproducible** — `experiment-definition-v1`; flags ride in runner JSON; prefer deterministic fakes or recorded LLM paths.

@@ -340,7 +340,7 @@ Rules:
   - Logging: INFO experiment_id + flag + tick_count; DEBUG lifecycle event counts.
   - Dependencies: Tasks 6, 10b, 14.
 
-- [ ] Task 17: Mandatory docs checkpoint (`/aif-docs` scope).
+- [x] Task 17: Mandatory docs checkpoint (`/aif-docs` scope).
   - Deliverable: Update `docs/architecture.md` V3 extension seams row for dynamic roster/lifetimes to “owned by v3-02”; document Downstream V3 checklist compliance for this flag; note objective age vs subjective belief separation (seam only — no auto beliefs); document v24 / event v9 / codec v6 write-pair priority; document `admit_population_entry` + translator rebuild; update `docs/persistence.md`, `docs/observer.md` / `docs/godot-observer.md` for new semantic types and birth markers; update `docs/cognition-runtime.md` ordinal/roster pin; update `.ai-factory/DESCRIPTION.md` and `.ai-factory/ARCHITECTURE.md` briefly for owned `generational_population`. Explicit non-goals: sex/reproduction/kinship; no new inspection HTTP in this plan. Do not edit ROADMAP as owned artifact (coordinate via `/aif-roadmap` if milestone text should change).
   - Files: `docs/architecture.md`, `docs/persistence.md`, `docs/observer.md`, `docs/godot-observer.md`, `docs/cognition-runtime.md`, `.ai-factory/DESCRIPTION.md`, `.ai-factory/ARCHITECTURE.md`.
   - Logging: n/a (docs).
