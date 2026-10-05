@@ -232,7 +232,7 @@ Agent focus and location focus may combine in the log filter. **Follow** is mutu
 
 ## Timeline markers
 
-The bar shows the viewed event tick and the live tick from `GET .../observer/run`. Configurable category toggles (ProjectSettings / local config) paint marks for death, attack, major weather/environment, artifact creation, structure creation, birth (`AGENT_CREATED` / `AGENT_ENTERED_WORLD`), and synthetic **branch_point** ticks from lineage. Birth marks come only from those protocol types — roster presence is not invented as birth.
+The bar shows the viewed event tick and the live tick from `GET .../observer/run`. Configurable category toggles (ProjectSettings / local config) paint marks for death, attack, major weather/environment, artifact creation, structure creation, birth (`AGENT_CREATED` / `AGENT_ENTERED_WORLD` / `AGENT_INITIALIZED`), and synthetic **branch_point** ticks from lineage. Birth marks come only from those protocol types — roster presence is not invented as birth.
 
 Loading strategy: paint first from the bounded log window; optional enrichment runs at most one refresh with ≤3 sequential `event_type` pages; drawn marks cap at 64 (DEBUG when truncated). The client does not scan the whole journal. Clicking a mark seeks that event (branch points use tick-start `state?tick=`).
 

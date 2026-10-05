@@ -280,31 +280,31 @@ Add sibling detail `AgentInitializationRecorded` (system / `SystemEffectFamily.L
 
 ### Phase 3: Pipeline, events, WorldEngine integration
 
-- [ ] Task 8: Extend demographic candidates / admission facts for init blueprint + provenance.
+- [x] Task 8: Extend demographic candidates / admission facts for init blueprint + provenance.
   - Deliverable: Extend `DemographicEntryCandidate` and/or `PopulationEntryAdmission` with fields needed for `creation_reason`, `origin_refs` (optional), and init fingerprint without biology fields. Update `fixed_interval_entry` to populate `creation_reason=demographic_policy` and empty `origin_refs` by default. Keep exact demographic param key sets unless a new policy_id is added with its own exact set. Enforce spawn-location precedence rules against `spawn_location_policy`.
   - Files: `src/simulation/demographic_policy.py`, `src/simulation/engine.py`, `src/simulation/runner_models.py` (param keys if extended), `tests/unit/test_demographic_policy.py`, `tests/unit/test_mid_run_agent_entry.py`.
   - Logging: DEBUG policy_id + candidate_count + creation_reason; never free-text backstories.
   - Dependencies: Task 5.
 
-- [ ] Task 9: Implement NewAgentInitialization pre-admit orchestration.
+- [x] Task 9: Implement NewAgentInitialization pre-admit orchestration.
   - Deliverable: Ordered stages 1–6 per Design Decisions (resolve → draws → body → dependency → objective inheritance → WorldEngine admit call). Shared body/provenance builder consumed by both public `admit_population_entry` and tick-path demographic admit. Fail closed on forbidden inheritance keys, unknown/disallowed location, population cap, lifecycle channel off. Unit-test stage order with fakes. Bundle bind remains Task 7.
   - Files: `src/simulation/new_agent_initialization.py`, `src/simulation/engine.py`, `tests/unit/test_new_agent_initialization_pipeline.py`.
   - Logging: DEBUG stage name + agent_id + reason codes; INFO creation accepted with agent_id/body_id/tick/creation_reason; never observation/memory payloads.
   - Dependencies: Tasks 4, 7, 8.
 
-- [ ] Task 10: Add `AgentInitializationRecorded` + event schema v10 (keep `AgentCreated` v9 field set unchanged).
+- [x] Task 10: Add `AgentInitializationRecorded` + event schema v10 (keep `AgentCreated` v9 field set unchanged).
   - Deliverable: Add detail type `AgentInitializationRecorded` with exact provenance fields locked above. Introduce `EVENT_SCHEMA_REPLAY_V10`. Detail illegal on schemas &lt; 10; v10 union accepts lower-channel kinds. Update normalize/validate/encode paths, journal codec, and fixtures. Do **not** add provenance fields to `AgentCreated`.
   - Files: `src/world/events.py`, `src/world/__init__.py`, `src/world/_replay.py`, `src/simulation/serialization.py`, `src/simulation/journal.py`, `src/simulation/compatibility.py`, `tests/unit/test_new_agent_events_schema_v10.py`.
   - Logging: ERROR on schema/channel mismatch reason codes; DEBUG event_type + schema version only.
   - Dependencies: Tasks 8, 9.
 
-- [ ] Task 11: Extend `checkpoint_schema_for_production` with `new_agent_provenance_active`.
+- [x] Task 11: Extend `checkpoint_schema_for_production` with `new_agent_provenance_active`.
   - Deliverable: Add `new_agent_provenance_active: bool = False` parameter; priority `(10, "v7")` before lifecycle `(9, "v6")`. Wire `engine` / `service` / `runner` callers. Update `schema_projector_compatible` for schema 10. Unit-test priority matrix including lifecycle-only vs provenance-active.
   - Files: `src/simulation/persistence.py`, `src/simulation/engine.py`, `src/simulation/service.py`, `src/simulation/runner.py`, `tests/unit/test_checkpoint_schema_new_agent_provenance.py`.
   - Logging: DEBUG selected event_schema + codec + flag booleans only.
   - Dependencies: Task 10.
 
-- [ ] Task 12: WorldEngine admit paths emit provenance-bearing creation event triple.
+- [x] Task 12: WorldEngine admit paths emit provenance-bearing creation event triple.
   - Deliverable: Both `admit_population_entry` and tick-path demographic admit emit `AgentCreated` → `AgentInitializationRecorded` → `AgentEnteredWorld` under `SystemEffectFamily.LIFECYCLE` when provenance channel active; use shared body builder from Task 9. Bootstrap agents still do not emit created/entered/initialized events. Preserve append-only immutability and max_population enforcement.
   - Files: `src/simulation/engine.py`, `tests/unit/test_mid_run_agent_entry.py`, `tests/unit/test_new_agent_provenance_events.py`.
   - Logging: INFO entry accepted with agent_id/body_id/tick/creation_reason/population_count; ERROR reject reason codes.
@@ -312,19 +312,19 @@ Add sibling detail `AgentInitializationRecorded` (system / `SystemEffectFamily.L
 
 ### Phase 4: Persistence, observer, causal debugger
 
-- [ ] Task 13: Persistence codec `v7` + snapshot/projector/branch restore for init provenance.
+- [x] Task 13: Persistence codec `v7` + snapshot/projector/branch restore for init provenance.
   - Deliverable: Pair codec `"v7"` with event schema 10 when new-agent provenance channel active. Snapshots restore lifecycle records, registration order, init fingerprint, and fields needed for exact continuation. Prove research-fork restore preserves next admit identity. Legacy codecs v1–v6 remain accepted. Flag-off / lifecycle-only default write stays non-v10.
   - Files: `src/simulation/persistence.py`, projector/replay modules, `src/simulation/branch_service.py` / branching tests as needed, `tests/unit/test_new_agent_snapshot_codec_v7.py`.
   - Logging: ERROR on codec/schema mismatch; DEBUG codec version + provenance_field_count.
   - Dependencies: Tasks 11, 12.
 
-- [ ] Task 14: Observer Protocol + Godot timeline for `AGENT_INITIALIZED`.
+- [x] Task 14: Observer Protocol + Godot timeline for `AGENT_INITIALIZED`.
   - Deliverable: Append `AGENT_INITIALIZED` to Python `SEMANTIC_EVENT_TYPES` / maps and Godot `models.gd` mirrors. Update all `len(SEMANTIC_EVENT_TYPES) == 39` pins to **40**. Map `agent_initialization_recorded` → `AGENT_INITIALIZED`. Add type to Godot `birth` category alongside created/entered. Keep `observer-protocol-v1`. Extend protocol mirror tests.
   - Files: `src/observer/version.py`, `src/observer/adapt.py`, `src/observer/contracts.py` (if touched), `clients/godot-observer/scripts/protocol/models.gd`, `clients/godot-observer/scripts/ui/timeline.gd`, `clients/godot-observer/scripts/protocol/event_router.gd` (as needed), `tests/unit/test_godot_protocol_mirror.py`, `tests/unit/test_observer_contracts.py`, related observer unit tests.
   - Logging: DEBUG semantic map misses as `unknown_event_kind`; never simulation mutation from observer.
   - Dependencies: Task 10.
 
-- [ ] Task 15: Causal debugger maps for `agent_initialization_recorded`.
+- [x] Task 15: Causal debugger maps for `agent_initialization_recorded`.
   - Deliverable: Add detail-kind → semantic mapping for `agent_initialization_recorded` → `AGENT_INITIALIZED` in `simulation.causal_debugger._DETAIL_KIND_TO_SEMANTIC_TYPE` (and inverse/router tables that must stay in sync). Unit-test resolve paths.
   - Files: `src/simulation/causal_debugger.py`, causal debugger unit tests.
   - Logging: DEBUG unmapped_kind reason codes only.
@@ -332,25 +332,25 @@ Add sibling detail `AgentInitializationRecorded` (system / `SystemEffectFamily.L
 
 ### Phase 5: Compatibility proofs, experiment, docs
 
-- [ ] Task 16: V2 / v3-02 flags-off and v24 lifecycle compat tests.
+- [x] Task 16: V2 / v3-02 flags-off and v24 lifecycle compat tests.
   - Deliverable: Prove V3 flags off keep identical `exact_trajectory_hash` / objective commit chains vs baseline. Prove v24 lifecycle-on synthesized defaults still run without requiring v25 and without emitting `AgentInitializationRecorded`. Keep `test_v1_regression_gate.py` and `test_v2_scientific_invariants.py` green under flags-off. Init-on arms stay off the V1 gate.
   - Files: `tests/unit/test_v3_new_agent_flags_off_compat.py`, updates to golden/scaffolding gates as needed.
   - Logging: Test INFO start/end with experiment_id + hash prefixes only.
   - Dependencies: Tasks 6, 13.
 
-- [ ] Task 17: Blank-slate + seeded init determinism, replay, and forked-replay proofs.
+- [x] Task 17: Blank-slate + seeded init determinism, replay, and forked-replay proofs.
   - Deliverable: Same-seed twin runs with v25 init on prove identical creation event sequences (including `AgentInitializationRecorded`), provenance fields, physical draws, and empty subjective stores for new agents. Replay from snapshot mid-run matches live continuation for the next admit. Forked replay from a checkpoint reproduces subsequent agent creation exactly. Assert new agents lack map/language/norm/narrative/history/skill ledger content at entry.
   - Files: `tests/unit/test_new_agent_bootstrap_replay_determinism.py`, `tests/unit/test_new_agent_fork_replay.py`.
   - Logging: DEBUG tick + event_type counts; never full event/memory payloads.
   - Dependencies: Tasks 9, 12, 13.
 
-- [ ] Task 18: Off-gate Experiment AF for new-agent bootstrap on v25.
+- [x] Task 18: Off-gate Experiment AF for new-agent bootstrap on v25.
   - Deliverable: Add Experiment AF (`experiment-af-new-agent-bootstrap` or similar) on `runner-config-v25` with explicit `new_agent_initialization`, proving mid-run agents are blank-slate and `AgentInitializationRecorded` appears. Extend `generational_population_profile` (or add `new_agent_bootstrap_profile`) to accept v25. Keep AE on v24. Off V1 gate. Do not claim scientific emergence.
   - Files: `src/experiments/catalog.py`, `src/experiments/__init__.py`, `tests/unit/test_new_agent_bootstrap_catalog_arm.py`.
   - Logging: INFO experiment_id + schema_version + tick_count; DEBUG creation/init event counts + blank_slate assertions.
   - Dependencies: Tasks 5, 9, 16, 17.
 
-- [ ] Task 19: Mandatory docs checkpoint (`/aif-docs` scope).
+- [x] Task 19: Mandatory docs checkpoint (`/aif-docs` scope).
   - Deliverable: Update `docs/architecture.md` V3 extension seams for NewAgentInitialization / blank-slate deny-list / species defaults / spawn precedence / provenance sibling event; Downstream V3 checklist note that this plan extends owned `generational_population` (no new flag); document v25 / event v10 / codec v7 write-pair priority and `new_agent_provenance_active`; document no cultural/map/language injection at birth; update `docs/persistence.md`, `docs/observer.md` / `docs/godot-observer.md`, `docs/cognition-runtime.md`; update `.ai-factory/DESCRIPTION.md` and `.ai-factory/ARCHITECTURE.md` briefly. Explicit non-goals: kinship, culture transfer at birth, inspection HTTP, extending `AgentCreated` fields. Do not edit ROADMAP as owned artifact (coordinate via `/aif-roadmap` if milestone text should change).
   - Files: `docs/architecture.md`, `docs/persistence.md`, `docs/observer.md`, `docs/godot-observer.md`, `docs/cognition-runtime.md`, `.ai-factory/DESCRIPTION.md`, `.ai-factory/ARCHITECTURE.md`.
   - Logging: n/a (docs).
