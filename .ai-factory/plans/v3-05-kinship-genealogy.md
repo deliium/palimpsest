@@ -340,7 +340,7 @@ Hard boundary: experiment collectors / inspection / analysis outputs must not fl
 
 ### Phase 5: Regression & docs
 
-- [ ] Task 13: Flags-off / AE/AF/AG bit-identity regression
+- [x] Task 13: Flags-off / AE/AF/AG bit-identity regression
   - Prove V1 gate + `test_v2_scientific_invariants` under V3 flags off; kinship-off leaves AE/AF/AG hashes unchanged; unowned V3 flags still `capability_unimplemented`; v27 round-trip.
   - LOGGING: follow existing regression helpers.
   - Files: extend `tests/unit/test_v3_*` compat/flag tests
