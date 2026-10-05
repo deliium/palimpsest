@@ -96,15 +96,18 @@ Named cognitive architecture variants (`agents.cognition.architectures`, Experim
 
 **Goal:** Evolve completed V2 into generational civilization simulation under reserved, default-off `V3CapabilityFlags`, without reopening WorldEngine authority, Observation trust boundaries, replay identity, or Godot write authority. No scripted civilization/institution/kinship outcomes.
 
-**Scaffolding landed (2026-10-04):** `.ai-factory/plans/v3-01-generational-architecture.md` — closed `V3CapabilityFlags` (`generational_population`, `kinship_inheritance`, `multi_polity_migration`, `institutional_economy`, `cultural_historical_memory`) on accepted `runner-config-v23` (= full v22 keyset ∪ sibling `v3_capability_flags`); default write stays `runner-config-v4` when all V3 flags are off; flags-on fail closed at `SimulationRunner.from_config` with `capability_unimplemented`; Alembic head stays `0017` (flags in runner JSON only); Observer `observer-protocol-v1` / Research UI `/research/` stable; Downstream V3 plan contract + module seams documented. No demographic, kinship, institutional, migration, or language-evolution behavior in the scaffolding plan.
+**Scaffolding landed (2026-10-04):** `.ai-factory/plans/v3-01-generational-architecture.md` — closed `V3CapabilityFlags` on accepted `runner-config-v23`; default write stays `runner-config-v4` when all V3 flags are off; Alembic head stays `0017`; Downstream V3 plan contract documented.
 
-**Still unimplemented (empty V3 owned allowlist):** all five V3 flags. Enabling any still fails closed until an owning later plan lands.
+**Owned flags:**
+- **`generational_population`** (2026-10-05) — `.ai-factory/plans/v3-02-population-lifecycle.md`: `runner-config-v24` + `population_lifecycle`, `admit_population_entry`, lifecycle events (replay-v9 / codec v6), Observation `lifecycle` object, Experiment AE (off V1 gate). No biology/kinship.
 
-**Next plans (under this milestone):** own individual V3 flag slots with real generational mechanisms (population/lifetimes, kinship/inheritance, multi-polity migration, institutional economy, cultural-historical memory / language evolution), each with V1 gate + `test_v2_scientific_invariants` green under V3 flags-off and accepted-set / exact key-set discipline.
+**Still unimplemented (fail closed at `from_config`):** `kinship_inheritance`, `multi_polity_migration`, `institutional_economy`, `cultural_historical_memory`.
+
+**Next plans (under this milestone):** own remaining V3 flag slots (kinship/inheritance, multi-polity migration, institutional economy, cultural-historical memory / language evolution), each with V1 gate + `test_v2_scientific_invariants` green under V3 flags-off and accepted-set / exact key-set discipline.
 
 **Out of scope for M7 scaffolding (already true):** claiming `multi_hop_testimony_tracking` (remains M6); Alembic `0018+` without a proven inspection need; `/v2` HTTP; protocol rename; scripted emergence helpers.
 
-**Plans:** `.ai-factory/plans/v3-01-generational-architecture.md` (scaffolding only; owns no V3 flag behavior).
+**Plans:** `.ai-factory/plans/v3-01-generational-architecture.md` (scaffolding); `.ai-factory/plans/v3-02-population-lifecycle.md` (owns `generational_population`).
 
 ## V1 status
 

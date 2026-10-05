@@ -413,6 +413,7 @@ def bind_snapshot_commit_hash(
         tool_marks=snapshot.tool_marks,
         active_hazards=snapshot.active_hazards,
         artifacts=snapshot.artifacts,
+        lifecycle_records=snapshot.lifecycle_records,
     )
     return WorldSnapshot(
         snapshot_id=draft.snapshot_id,
@@ -439,6 +440,7 @@ def bind_snapshot_commit_hash(
         tool_marks=draft.tool_marks,
         active_hazards=draft.active_hazards,
         artifacts=draft.artifacts,
+        lifecycle_records=draft.lifecycle_records,
     )
 
 

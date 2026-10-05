@@ -120,3 +120,119 @@ def test_lifecycle_snapshot_round_trip_and_restore() -> None:
     assert restored.lifecycle_channel_active is True
     assert len(restored.lifecycle_records) == 1
     assert restored.lifecycle_records[0].stage.value == "infant"
+
+
+def _lifecycle_snapshot() -> tuple[WorldSnapshot, object]:
+    body = alive_body("body-1")
+    bootstrap = WorldBootstrap(
+        world_id=WorldId("world-lifecycle-fork"),
+        revision=WorldRevision(0),
+        locations=(make_location(),),
+        bodies=(body,),
+        weather=(make_weather(),),
+        registrations=(AgentRegistration(AgentId("agent-1"), body.entity_id),),
+    )
+    spec = example_population_lifecycle_spec(lifespan_ticks=20)
+    records = seed_bootstrap_lifecycle_records(
+        registrations=bootstrap.registrations, spec=spec
+    )
+    engine = WorldEngine(
+        config=SimulationRunConfig(
+            seed=19, physical_rules=non_lethal_physical_rules()
+        ),
+        bootstrap=bootstrap,
+        run_id=RunId("run-lifecycle-fork-parent"),
+        population_lifecycle=spec,
+        lifecycle_records=records,
+    )
+    draft = WorldSnapshot(
+        snapshot_id=SnapshotId("snap-lifecycle-fork"),
+        run_id=engine.run_id,
+        world_id=engine.world_id,
+        seed=19,
+        config=engine._config,
+        registrations=engine.ordered_registrations,
+        locations=tuple(engine._snapshot.world.state.locations.values()),
+        bodies=tuple(engine._snapshot.world.state.bodies.values()),
+        items=(),
+        resources=(),
+        weather=tuple(engine._snapshot.world.state.weather.values()),
+        next_tick=Tick(0),
+        revision=engine.revision,
+        event_schema_version=EVENT_SCHEMA_REPLAY_V9,
+        projector_version=PROJECTOR_VERSION,
+        persistence_codec_version="v6",
+        derivation_version="derivation-v3",
+        integrity_hash=PayloadHash("a" * 64),
+        predecessor_commit_hash=None,
+        lifecycle_records=engine.lifecycle_records,
+    )
+    snap = WorldSnapshot(
+        snapshot_id=draft.snapshot_id,
+        run_id=draft.run_id,
+        world_id=draft.world_id,
+        seed=draft.seed,
+        config=draft.config,
+        registrations=draft.registrations,
+        locations=draft.locations,
+        bodies=draft.bodies,
+        items=draft.items,
+        resources=draft.resources,
+        weather=draft.weather,
+        next_tick=draft.next_tick,
+        revision=draft.revision,
+        event_schema_version=draft.event_schema_version,
+        projector_version=draft.projector_version,
+        persistence_codec_version=draft.persistence_codec_version,
+        derivation_version=draft.derivation_version,
+        integrity_hash=hash_snapshot(draft),
+        predecessor_commit_hash=None,
+        lifecycle_records=draft.lifecycle_records,
+    )
+    return snap, spec
+
+
+def test_research_fork_rematerialize_preserves_lifecycle_records() -> None:
+    from simulation.branch_service import rematerialize_snapshot
+
+    _LOG.debug("case_id=research_fork_lifecycle_preserve")
+    parent, spec = _lifecycle_snapshot()
+    child = rematerialize_snapshot(
+        parent,
+        child_run_id=RunId("run-lifecycle-fork-child"),
+        snapshot_id=SnapshotId("snap-lifecycle-fork-child"),
+    )
+    assert child.run_id.value == "run-lifecycle-fork-child"
+    assert child.persistence_codec_version == "v6"
+    assert len(child.lifecycle_records) == len(parent.lifecycle_records)
+    assert child.lifecycle_records[0].cohort_id == parent.lifecycle_records[0].cohort_id
+    assert child.registrations == parent.registrations
+    restored = WorldEngine.restore_from_snapshot(
+        child, population_lifecycle=spec
+    )
+    assert restored.lifecycle_channel_active is True
+    assert len(restored.lifecycle_records) == 1
+    assert restored.ordered_registrations == parent.registrations
+
+
+def test_codec_v6_restore_requires_population_lifecycle_spec() -> None:
+    import pytest
+
+    _LOG.debug("case_id=restore_missing_lifecycle_spec")
+    snap, _spec = _lifecycle_snapshot()
+    with pytest.raises(ValueError, match="lifecycle_restore_missing_spec"):
+        WorldEngine.restore_from_snapshot(snap)
+
+
+def test_replay_request_carries_population_lifecycle() -> None:
+    from simulation.clock import Tick as ReplayTick
+    from simulation.persistence import ReplayRequest
+
+    _LOG.debug("case_id=replay_request_lifecycle_field")
+    _snap, spec = _lifecycle_snapshot()
+    request = ReplayRequest(
+        run_id=RunId("run-lifecycle-replay-req"),
+        target_tick=ReplayTick(0),
+        population_lifecycle=spec,
+    )
+    assert request.population_lifecycle is spec

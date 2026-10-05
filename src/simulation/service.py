@@ -141,16 +141,20 @@ class PersistentSimulationService:
             lifecycle_active=self._engine.lifecycle_channel_active,
         )
         production_rows: dict[str, tuple[object, ...]] = {}
-        if codec_version in {"v3", "v4", "v5"}:
+        if codec_version in {"v3", "v4", "v5", "v6"}:
             production_rows = {
                 "structures": tuple(state.structures.values()),
                 "production_jobs": tuple(state.production_jobs.values()),
                 "tool_marks": tuple(state.tool_marks.values()),
             }
-        if codec_version in {"v4", "v5"}:
+        if codec_version in {"v4", "v5", "v6"}:
             production_rows["active_hazards"] = tuple(state.active_hazards)
-        if codec_version == "v5":
+        if codec_version in {"v5", "v6"}:
             production_rows["artifacts"] = tuple(state.artifacts.values())
+        if codec_version == "v6":
+            production_rows["lifecycle_records"] = tuple(
+                self._engine.lifecycle_records
+            )
         draft = WorldSnapshot(
             snapshot_id=snapshot_id,
             run_id=self._engine.run_id,
@@ -198,6 +202,7 @@ class PersistentSimulationService:
             tool_marks=draft.tool_marks,
             active_hazards=draft.active_hazards,
             artifacts=draft.artifacts,
+            lifecycle_records=draft.lifecycle_records,
         )
 
     async def resolve_tick(

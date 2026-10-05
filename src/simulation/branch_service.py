@@ -401,6 +401,14 @@ def rematerialize_snapshot(
         and type(predecessor_commit_hash) is not CommitHash
     ):
         raise TypeError("predecessor_commit_hash must be CommitHash or None")
+    _LOG.debug(
+        "research_fork_rematerialize_snapshot child_run_id=%s "
+        "source_snapshot_id=%s lifecycle_record_count=%s codec=%s",
+        child_run_id.value,
+        snapshot.snapshot_id.value,
+        len(snapshot.lifecycle_records),
+        snapshot.persistence_codec_version,
+    )
     draft = WorldSnapshot(
         snapshot_id=snapshot_id,
         run_id=child_run_id,
@@ -428,6 +436,7 @@ def rematerialize_snapshot(
         tool_marks=snapshot.tool_marks,
         active_hazards=snapshot.active_hazards,
         artifacts=snapshot.artifacts,
+        lifecycle_records=snapshot.lifecycle_records,
     )
     return WorldSnapshot(
         snapshot_id=draft.snapshot_id,
@@ -454,6 +463,7 @@ def rematerialize_snapshot(
         tool_marks=draft.tool_marks,
         active_hazards=draft.active_hazards,
         artifacts=draft.artifacts,
+        lifecycle_records=draft.lifecycle_records,
     )
 
 

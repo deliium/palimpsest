@@ -925,6 +925,7 @@ class ReplayRequest:
     teaching_offers: object | None = None
     production_catalog: object | None = None
     environmental_dynamics: object | None = None
+    population_lifecycle: object | None = None
 
     def __post_init__(self) -> None:
         if type(self.run_id) is not RunId:

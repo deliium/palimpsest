@@ -574,11 +574,14 @@ class ReplayService:
 
         _LOGGER.debug(
             "[simulation.replay] seek_snapshot_selected run_id=%s target_tick=%s "
-            "snapshot_next_tick=%s fold_event_count=%s",
+            "snapshot_next_tick=%s fold_event_count=%s "
+            "lifecycle_record_count=%s population_lifecycle=%s",
             run_id.value,
             target_tick.value,
             snapshot.next_tick.value,
             len(events),
+            len(snapshot.lifecycle_records),
+            "on" if request.population_lifecycle is not None else "off",
         )
 
         committed_through = to_commit_tick
@@ -596,6 +599,7 @@ class ReplayService:
                 teaching_offers=request.teaching_offers,
                 production_catalog=request.production_catalog,
                 environmental_dynamics=request.environmental_dynamics,
+                population_lifecycle=request.population_lifecycle,
             )
         except Exception as exc:
             _LOGGER.error(
