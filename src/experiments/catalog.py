@@ -1952,3 +1952,105 @@ def experiment_af_new_agent_bootstrap(
             ),
         ),
     )
+
+
+def experiment_ag_developmental_stages(
+    base: SimulationRunnerConfig,
+    *,
+    seed_matrix: ExperimentSeedMatrix | None = None,
+    max_ticks: int = 28,
+) -> ExperimentDefinition:
+    """Off-gate arm proving developmental stages on runner-config-v26.
+
+    Stage ids are configurable opaque labels (example: dependent/learning/
+    independent/elder). Does not claim social authority or scientific emergence.
+    AE stays on v24; AF stays on v25.
+    """
+    from simulation.new_agent_initialization import (
+        default_new_agent_initialization_spec,
+    )
+    from simulation.runner_models import (
+        RUNNER_SCHEMA_VERSION_V26,
+        example_developmental_lifecycle_spec,
+    )
+
+    matrix = seed_matrix or ExperimentSeedMatrix(seeds=(base.seed,))
+    init = default_new_agent_initialization_spec()
+    control = replace(
+        base,
+        mortality_mode=MortalityMode.DISABLED,
+        stop_policy=RunnerStopPolicy(max_ticks=max_ticks),
+        v3_capability_flags=V3CapabilityFlags(),
+        population_lifecycle=None,
+        new_agent_initialization=None,
+    )
+    gradual_off = replace(
+        base,
+        schema_version=RUNNER_SCHEMA_VERSION_V26,
+        mortality_mode=MortalityMode.DISABLED,
+        stop_policy=RunnerStopPolicy(max_ticks=max_ticks),
+        v3_capability_flags=V3CapabilityFlags(generational_population=True),
+        population_lifecycle=example_developmental_lifecycle_spec(
+            lifespan_ticks=24,
+            max_population=4,
+            policy_id="disabled",
+            intra_stage_interpolation=False,
+        ),
+        new_agent_initialization=init,
+    )
+    gradual_on = replace(
+        gradual_off,
+        population_lifecycle=example_developmental_lifecycle_spec(
+            lifespan_ticks=24,
+            max_population=4,
+            policy_id="disabled",
+            intra_stage_interpolation=True,
+        ),
+    )
+    skill_agents = tuple(
+        replace(
+            agent,
+            cognition=replace(
+                agent.cognition,
+                skill_learning_mode=SkillLearningMode.DETERMINISTIC,
+            ),
+        )
+        for agent in gradual_off.agents
+    )
+    skill_on = replace(gradual_off, agents=skill_agents)
+    for arm in (gradual_off, gradual_on, skill_on):
+        developmental_stages_profile(arm)
+    _LOG.info(
+        "experiment_ag_built experiment_id=experiment-ag-developmental-stages "
+        "schema_version=%s tick_count=%s arm_count=%s",
+        RUNNER_SCHEMA_VERSION_V26,
+        max_ticks,
+        4,
+    )
+    return _definition(
+        experiment_id="experiment-ag-developmental-stages",
+        base=base,
+        seed_matrix=matrix,
+        arms=(
+            (
+                "ag-developmental-off",
+                "developmental_stages_disabled",
+                control,
+            ),
+            (
+                "ag-gradual-aging-off",
+                "developmental_stages_gradual_off",
+                gradual_off,
+            ),
+            (
+                "ag-gradual-aging-on",
+                "developmental_stages_gradual_on",
+                gradual_on,
+            ),
+            (
+                "ag-skill-learning-on",
+                "developmental_stages_skill_on",
+                skill_on,
+            ),
+        ),
+    )

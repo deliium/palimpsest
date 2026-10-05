@@ -2287,6 +2287,8 @@ class WorldEngine:
             tick=snap.tick.value,
             skill_efficiency=self._skill_efficiency_map(rules=physical_rules),
             witness_resource_nodes=self._environmental_dynamics is not None,
+            # Developmental effects are objective/ephemeral only — never write
+            # stage/age into SelfModel, identity, or relationship authority.
             effective_carry_capacity=self._lifecycle_effective_carry_capacity(
                 tick=snap.tick.value
             ),
@@ -3158,8 +3160,10 @@ class WorldEngine:
         if record is None:
             return PASSTHROUGH_CONTINUOUS_FACTORS
         age = chronological_age(entry_tick=record.entry_tick, current_tick=tick)
+        # Effects cover ages through assigned_lifespan-1 (EOL age is outside).
+        stage_age = min(age, max(record.assigned_lifespan_ticks - 1, 0))
         return interpolate_continuous_factors(
-            age,
+            stage_age,
             self._population_lifecycle.stage_thresholds,
             self._population_lifecycle.stage_capability_effects,
             enabled=(

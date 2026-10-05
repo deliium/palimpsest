@@ -1352,6 +1352,116 @@ def example_population_lifecycle_spec(
     )
 
 
+def example_developmental_lifecycle_spec(
+    *,
+    lifespan_ticks: int = 24,
+    max_population: int = 4,
+    policy_id: str = "disabled",
+    intra_stage_interpolation: bool = False,
+    min_assigned_ticks: int = 16,
+) -> PopulationLifecycleSpec:
+    """Reference v26 developmental stages (opaque example ids, no authority).
+
+    Stage ids ``dependent`` / ``learning`` / ``independent`` / ``elder`` are
+    configurable labels only — ELDER grants no social authority.
+    """
+    if min_assigned_ticks > lifespan_ticks:
+        raise ValueError("min_assigned_ticks must be <= lifespan_ticks")
+    # Build demographic params from a lifespan that fits the infant/juvenile/adult
+    # reference thresholds, then replace with developmental stages.
+    base = example_population_lifecycle_spec(
+        lifespan_ticks=max(lifespan_ticks, 20),
+        max_population=max_population,
+        policy_id=policy_id,
+    )
+    final_max = max(lifespan_ticks - 1, 3)
+    if lifespan_ticks >= 20:
+        caps = (2, 5, 12, final_max)
+    else:
+        caps = (
+            max(final_max // 4, 0),
+            max(final_max // 2, 1),
+            max((3 * final_max) // 4, 2),
+            final_max,
+        )
+    fixed_caps: list[int] = []
+    previous = -1
+    for cap in caps:
+        value = max(int(cap), previous + 1)
+        fixed_caps.append(value)
+        previous = value
+    if fixed_caps[-1] < final_max:
+        fixed_caps[-1] = final_max
+    if fixed_caps[-1] <= fixed_caps[-2]:
+        # Extremely short lifespan: collapse to three progressive edges then final.
+        fixed_caps = [0, 1, 2, final_max]
+        previous = -1
+        rebuilt: list[int] = []
+        for cap in fixed_caps:
+            value = max(cap, previous + 1)
+            rebuilt.append(value)
+            previous = value
+        if rebuilt[-1] < final_max:
+            rebuilt[-1] = final_max
+        fixed_caps = rebuilt
+    thresholds = (
+        LifecycleStageThreshold(LifecycleStageId("dependent"), fixed_caps[0]),
+        LifecycleStageThreshold(LifecycleStageId("learning"), fixed_caps[1]),
+        LifecycleStageThreshold(LifecycleStageId("independent"), fixed_caps[2]),
+        LifecycleStageThreshold(LifecycleStageId("elder"), fixed_caps[3]),
+    )
+    effects = (
+        StageCapabilityEffect(
+            stage_id=LifecycleStageId("dependent"),
+            physical_capacity_factor=0.5,
+            learning_rate_factor=0.8,
+            fatigue_accrual_factor=1.2,
+            denied_command_kinds=("attack", "harvest"),
+        ),
+        StageCapabilityEffect(
+            stage_id=LifecycleStageId("learning"),
+            physical_capacity_factor=0.8,
+            learning_rate_factor=1.2,
+            fatigue_accrual_factor=1.0,
+            denied_command_kinds=(),
+        ),
+        StageCapabilityEffect(
+            stage_id=LifecycleStageId("independent"),
+            physical_capacity_factor=1.0,
+            learning_rate_factor=1.0,
+            fatigue_accrual_factor=1.0,
+            denied_command_kinds=(),
+        ),
+        StageCapabilityEffect(
+            stage_id=LifecycleStageId("elder"),
+            physical_capacity_factor=0.7,
+            learning_rate_factor=0.9,
+            fatigue_accrual_factor=1.1,
+            denied_command_kinds=(),
+        ),
+    )
+    return PopulationLifecycleSpec(
+        lifespan_ticks=lifespan_ticks,
+        stage_thresholds=thresholds,
+        dependent_until_stage=LifecycleStageId("learning"),
+        demographic_policy_id=base.demographic_policy_id,
+        demographic_policy_params=dict(base.demographic_policy_params),
+        max_population=base.max_population,
+        natural_death_on_lifespan=True,
+        stage_capability_effects=effects,
+        gradual_aging=GradualAgingSpec(
+            intra_stage_interpolation=intra_stage_interpolation
+        ),
+        lifespan_distribution=LifespanDistributionSpec(
+            distribution_id="uniform_int",
+            params={
+                "min_ticks": min_assigned_ticks,
+                "max_ticks": lifespan_ticks,
+            },
+        ),
+    )
+
+
 BOOTSTRAP_LIFECYCLE_COHORT_ID: Final[str] = "cohort-bootstrap"
 BOOTSTRAP_LIFECYCLE_GENERATION_INDEX: Final[int] = 0
 
