@@ -73,6 +73,7 @@ EVENT_SCHEMA_REPLAY_V7: Final[int] = 7
 EVENT_SCHEMA_REPLAY_V8: Final[int] = 8
 EVENT_SCHEMA_REPLAY_V9: Final[int] = 9
 EVENT_SCHEMA_REPLAY_V10: Final[int] = 10
+EVENT_SCHEMA_REPLAY_V11: Final[int] = 11
 SUPPORTED_EVENT_SCHEMA_VERSIONS: Final[frozenset[int]] = frozenset(
     {
         EVENT_SCHEMA_AUDIT_V1,
@@ -85,6 +86,7 @@ SUPPORTED_EVENT_SCHEMA_VERSIONS: Final[frozenset[int]] = frozenset(
         EVENT_SCHEMA_REPLAY_V8,
         EVENT_SCHEMA_REPLAY_V9,
         EVENT_SCHEMA_REPLAY_V10,
+        EVENT_SCHEMA_REPLAY_V11,
     }
 )
 REPLAYABLE_EVENT_SCHEMA_VERSIONS: Final[frozenset[int]] = frozenset(
@@ -98,6 +100,7 @@ REPLAYABLE_EVENT_SCHEMA_VERSIONS: Final[frozenset[int]] = frozenset(
         EVENT_SCHEMA_REPLAY_V8,
         EVENT_SCHEMA_REPLAY_V9,
         EVENT_SCHEMA_REPLAY_V10,
+        EVENT_SCHEMA_REPLAY_V11,
     }
 )
 PHYSICAL_REPLAY_EVENT_SCHEMA_VERSIONS: Final[frozenset[int]] = frozenset(
@@ -110,6 +113,7 @@ PHYSICAL_REPLAY_EVENT_SCHEMA_VERSIONS: Final[frozenset[int]] = frozenset(
         EVENT_SCHEMA_REPLAY_V8,
         EVENT_SCHEMA_REPLAY_V9,
         EVENT_SCHEMA_REPLAY_V10,
+        EVENT_SCHEMA_REPLAY_V11,
     }
 )
 _PRODUCTION_EVENT_SCHEMAS: Final[frozenset[int]] = frozenset(
@@ -119,6 +123,7 @@ _PRODUCTION_EVENT_SCHEMAS: Final[frozenset[int]] = frozenset(
         EVENT_SCHEMA_REPLAY_V8,
         EVENT_SCHEMA_REPLAY_V9,
         EVENT_SCHEMA_REPLAY_V10,
+        EVENT_SCHEMA_REPLAY_V11,
     }
 )
 _ENVIRONMENT_EVENT_SCHEMAS: Final[frozenset[int]] = frozenset(
@@ -127,6 +132,7 @@ _ENVIRONMENT_EVENT_SCHEMAS: Final[frozenset[int]] = frozenset(
         EVENT_SCHEMA_REPLAY_V8,
         EVENT_SCHEMA_REPLAY_V9,
         EVENT_SCHEMA_REPLAY_V10,
+        EVENT_SCHEMA_REPLAY_V11,
     }
 )
 _ARTIFACT_EVENT_SCHEMAS: Final[frozenset[int]] = frozenset(
@@ -134,14 +140,16 @@ _ARTIFACT_EVENT_SCHEMAS: Final[frozenset[int]] = frozenset(
         EVENT_SCHEMA_REPLAY_V8,
         EVENT_SCHEMA_REPLAY_V9,
         EVENT_SCHEMA_REPLAY_V10,
+        EVENT_SCHEMA_REPLAY_V11,
     }
 )
 _LIFECYCLE_EVENT_SCHEMAS: Final[frozenset[int]] = frozenset(
-    {EVENT_SCHEMA_REPLAY_V9, EVENT_SCHEMA_REPLAY_V10}
+    {EVENT_SCHEMA_REPLAY_V9, EVENT_SCHEMA_REPLAY_V10, EVENT_SCHEMA_REPLAY_V11}
 )
 _NEW_AGENT_INIT_EVENT_SCHEMAS: Final[frozenset[int]] = frozenset(
-    {EVENT_SCHEMA_REPLAY_V10}
+    {EVENT_SCHEMA_REPLAY_V10, EVENT_SCHEMA_REPLAY_V11}
 )
+_KINSHIP_EVENT_SCHEMAS: Final[frozenset[int]] = frozenset({EVENT_SCHEMA_REPLAY_V11})
 CURRENT_PHYSICAL_EVENT_SCHEMA_VERSION: Final[int] = EVENT_SCHEMA_REPLAY_V5
 _LOG: Final[logging.Logger] = logging.getLogger("world.events")
 _FORBIDDEN_PRESENTATION_FIELDS: Final[frozenset[str]] = frozenset(
@@ -1389,6 +1397,57 @@ class LifecycleStageChanged:
         _reject_presentation_fields(self.kind, self.__slots__)
 
 
+@dataclass(frozen=True, slots=True)
+class KinshipEdgeRecorded:
+    """Objective parent→child kinship edge recorded for replay."""
+
+    parent_agent_id: str
+    child_agent_id: str
+    established_tick: int
+    edge_id: str
+    success: bool = True
+    kind: Literal["kinship_edge_recorded"] = field(
+        default="kinship_edge_recorded", init=False
+    )
+
+    def __post_init__(self) -> None:
+        object.__setattr__(
+            self,
+            "parent_agent_id",
+            require_stable_id(
+                "KinshipEdgeRecorded.parent_agent_id", self.parent_agent_id
+            ),
+        )
+        object.__setattr__(
+            self,
+            "child_agent_id",
+            require_stable_id(
+                "KinshipEdgeRecorded.child_agent_id", self.child_agent_id
+            ),
+        )
+        if self.parent_agent_id == self.child_agent_id:
+            raise ValueError(
+                "parent and child must differ (code=kinship_self_parent)"
+            )
+        object.__setattr__(
+            self,
+            "established_tick",
+            require_exact_nonneg_int(
+                "KinshipEdgeRecorded.established_tick", self.established_tick
+            ),
+        )
+        object.__setattr__(
+            self,
+            "edge_id",
+            require_stable_id("KinshipEdgeRecorded.edge_id", self.edge_id),
+        )
+        if _require_success("KinshipEdgeRecorded.success", self.success) is not True:
+            raise ValueError(
+                "KinshipEdgeRecorded does not emit a failure detail"
+            )
+        _reject_presentation_fields(self.kind, self.__slots__)
+
+
 EventDetails = (
     Moved
     | Searched
@@ -1430,6 +1489,7 @@ EventDetails = (
     | AgentEnteredWorld
     | AgentInitializationRecorded
     | LifecycleStageChanged
+    | KinshipEdgeRecorded
 )
 
 _DETAIL_TYPES: Final[frozenset[type]] = frozenset(
@@ -1474,8 +1534,11 @@ _DETAIL_TYPES: Final[frozenset[type]] = frozenset(
         AgentEnteredWorld,
         AgentInitializationRecorded,
         LifecycleStageChanged,
+        KinshipEdgeRecorded,
     }
 )
+
+_KINSHIP_DETAIL_TYPES: Final[frozenset[type]] = frozenset({KinshipEdgeRecorded})
 
 _PRODUCTION_DETAIL_TYPES: Final[frozenset[type]] = frozenset(
     {
@@ -1606,6 +1669,8 @@ def _artifact_effect_complete(details: EventDetails) -> bool:
 
 
 def _payload_effect_complete(details: EventDetails, *, schema_version: int) -> bool:
+    if type(details) in _KINSHIP_DETAIL_TYPES:
+        return schema_version in _KINSHIP_EVENT_SCHEMAS
     if type(details) in _NEW_AGENT_INIT_DETAIL_TYPES:
         return schema_version in _NEW_AGENT_INIT_EVENT_SCHEMAS
     if type(details) in _LIFECYCLE_DETAIL_TYPES:
@@ -1810,6 +1875,8 @@ def target_id_for_details(details: EventDetails) -> EntityId | None:
             | LifecycleStageChanged(body_id=body_id)
         ):
             return body_id
+        case KinshipEdgeRecorded():
+            return None
         case _:
             raise TypeError(
                 f"{EventValidationCode.UNKNOWN_EVENT_TYPE.value}: "
@@ -1926,6 +1993,15 @@ class WorldEvent:
                 _LOG.error(
                     "invalid_event_schema_version kind=%s schema_version=%s "
                     "reason_code=lifecycle_requires_v9",
+                    self.details.kind,
+                    self.schema_version,
+                )
+                raise ValueError(EventValidationCode.INVALID_SCHEMA_VERSION.value)
+        if type(self.details) in _KINSHIP_DETAIL_TYPES:
+            if self.schema_version not in _KINSHIP_EVENT_SCHEMAS:
+                _LOG.error(
+                    "invalid_event_schema_version kind=%s schema_version=%s "
+                    "reason_code=kinship_requires_v11",
                     self.details.kind,
                     self.schema_version,
                 )

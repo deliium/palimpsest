@@ -49,6 +49,7 @@ SEMANTIC_EVENT_TYPES: Final[tuple[str, ...]] = (
     "AGENT_ENTERED_WORLD",
     "AGENT_INITIALIZED",
     "LIFECYCLE_STAGE_CHANGED",
+    "KINSHIP_EDGE_RECORDED",
 )
 
 SEMANTIC_TYPE_BY_KIND: Final[dict[str, str]] = {
@@ -92,6 +93,7 @@ SEMANTIC_TYPE_BY_KIND: Final[dict[str, str]] = {
     "agent_entered_world": "AGENT_ENTERED_WORLD",
     "agent_initialization_recorded": "AGENT_INITIALIZED",
     "lifecycle_stage_changed": "LIFECYCLE_STAGE_CHANGED",
+    "kinship_edge_recorded": "KINSHIP_EDGE_RECORDED",
 }
 
 RELATIONSHIP_DIMENSION_CODES: Final[tuple[str, ...]] = (

@@ -105,6 +105,7 @@ RUNNER_SCHEMA_VERSION_V23: Final[str] = "runner-config-v23"
 RUNNER_SCHEMA_VERSION_V24: Final[str] = "runner-config-v24"
 RUNNER_SCHEMA_VERSION_V25: Final[str] = "runner-config-v25"
 RUNNER_SCHEMA_VERSION_V26: Final[str] = "runner-config-v26"
+RUNNER_SCHEMA_VERSION_V27: Final[str] = "runner-config-v27"
 RUNNER_SCHEMA_VERSION: Final[str] = RUNNER_SCHEMA_VERSION_V4
 SUPPORTED_RUNNER_SCHEMA_VERSIONS: Final[frozenset[str]] = frozenset(
     {
@@ -134,6 +135,7 @@ SUPPORTED_RUNNER_SCHEMA_VERSIONS: Final[frozenset[str]] = frozenset(
         RUNNER_SCHEMA_VERSION_V24,
         RUNNER_SCHEMA_VERSION_V25,
         RUNNER_SCHEMA_VERSION_V26,
+            RUNNER_SCHEMA_VERSION_V27,
     }
 )
 RESULT_SCHEMA_VERSION_V1: Final[str] = "runner-result-v1"
@@ -175,7 +177,7 @@ _V3_CAPABILITY_FLAG_NAMES: Final[tuple[str, ...]] = (
 
 # Owned by v3-02 population lifecycle; other V3 flags remain fail-closed.
 _V3_OWNED_CAPABILITY_FLAGS: Final[frozenset[str]] = frozenset(
-    {"generational_population"}
+    {"generational_population", "kinship_inheritance"}
 )
 
 _OVERRIDEABLE_DRIVE_KINDS: Final[frozenset[DriveKind]] = frozenset(
@@ -662,6 +664,7 @@ _SKILL_SCHEMAS: Final[frozenset[str]] = frozenset(
         RUNNER_SCHEMA_VERSION_V24,
         RUNNER_SCHEMA_VERSION_V25,
         RUNNER_SCHEMA_VERSION_V26,
+            RUNNER_SCHEMA_VERSION_V27,
     }
 )
 
@@ -1318,6 +1321,167 @@ class PopulationLifecycleSpec:
         return payload
 
 
+_KINSHIP_PERCEPTION_MODES: Final[frozenset[str]] = frozenset(
+    {"none", "self_incident_public"}
+)
+_KINSHIP_FORBIDDEN_CONFIG_KEYS: Final[frozenset[str]] = frozenset(
+    {
+        "affection",
+        "trust",
+        "loyalty",
+        "obligation",
+        "inheritance_rights",
+        "group_id",
+        "clan",
+        "dynasty",
+        "spouse",
+        "mate",
+        "sex",
+        "fertility",
+        "pregnancy",
+    }
+)
+_KINSHIP_MAX_QUERY_DEPTH_CEILING: Final[int] = 32
+_KINSHIP_MAX_PARENTS_CEILING: Final[int] = 4
+
+
+@dataclass(frozen=True, slots=True)
+class KinshipBootstrapEdgeSpec:
+    """One bootstrap parent→child edge among registered agents."""
+
+    parent_agent_id: AgentId
+    child_agent_id: AgentId
+    established_tick: int = 0
+
+    def __post_init__(self) -> None:
+        if type(self.parent_agent_id) is not AgentId:
+            raise TypeError("parent_agent_id must be AgentId")
+        if type(self.child_agent_id) is not AgentId:
+            raise TypeError("child_agent_id must be AgentId")
+        if self.parent_agent_id == self.child_agent_id:
+            raise ValueError(
+                "parent and child must differ (code=kinship_self_parent)"
+            )
+        object.__setattr__(
+            self,
+            "established_tick",
+            require_exact_nonneg_int(
+                "KinshipBootstrapEdgeSpec.established_tick",
+                self.established_tick,
+            ),
+        )
+
+
+@dataclass(frozen=True, slots=True)
+class KinshipAdmitLinkPolicy:
+    """Mid-run admit parent link policy (requires generational_population)."""
+
+    allow_parent_links_on_admit: bool = False
+    require_living_parent: bool = False
+
+    def __post_init__(self) -> None:
+        if type(self.allow_parent_links_on_admit) is not bool:
+            raise TypeError("allow_parent_links_on_admit must be bool")
+        if type(self.require_living_parent) is not bool:
+            raise TypeError("require_living_parent must be bool")
+
+
+@dataclass(frozen=True, slots=True)
+class KinshipSpec:
+    """Objective kinship configuration (runner-config-v27 sibling)."""
+
+    bootstrap_edges: tuple[KinshipBootstrapEdgeSpec, ...] = ()
+    max_query_depth: int = 8
+    max_parents_per_child: int = 2
+    perception_mode: str = "none"
+    admit_link_policy: KinshipAdmitLinkPolicy = field(
+        default_factory=KinshipAdmitLinkPolicy
+    )
+
+    def __post_init__(self) -> None:
+        if isinstance(self.bootstrap_edges, (str, bytes)) or not isinstance(
+            self.bootstrap_edges, Sequence
+        ):
+            raise TypeError("bootstrap_edges must be a sequence")
+        edges = tuple(self.bootstrap_edges)
+        for edge in edges:
+            if type(edge) is not KinshipBootstrapEdgeSpec:
+                raise TypeError(
+                    "bootstrap_edges entries must be KinshipBootstrapEdgeSpec"
+                )
+        object.__setattr__(self, "bootstrap_edges", edges)
+        depth = require_exact_nonneg_int(
+            "KinshipSpec.max_query_depth", self.max_query_depth
+        )
+        if depth < 1 or depth > _KINSHIP_MAX_QUERY_DEPTH_CEILING:
+            raise ValueError(
+                "max_query_depth out of range "
+                f"(code=kinship_max_query_depth_invalid)"
+            )
+        object.__setattr__(self, "max_query_depth", depth)
+        max_parents = require_exact_nonneg_int(
+            "KinshipSpec.max_parents_per_child", self.max_parents_per_child
+        )
+        if max_parents < 1 or max_parents > _KINSHIP_MAX_PARENTS_CEILING:
+            raise ValueError(
+                "max_parents_per_child out of range "
+                "(code=kinship_max_parents_invalid)"
+            )
+        object.__setattr__(self, "max_parents_per_child", max_parents)
+        mode = require_stable_id("KinshipSpec.perception_mode", self.perception_mode)
+        if mode not in _KINSHIP_PERCEPTION_MODES:
+            raise ValueError(
+                f"unknown perception_mode {mode!r} (code=kinship_perception_mode)"
+            )
+        object.__setattr__(self, "perception_mode", mode)
+        if type(self.admit_link_policy) is not KinshipAdmitLinkPolicy:
+            raise TypeError("admit_link_policy must be KinshipAdmitLinkPolicy")
+
+    def canonical_payload(self) -> dict[str, object]:
+        return {
+            "admit_link_policy": {
+                "allow_parent_links_on_admit": (
+                    self.admit_link_policy.allow_parent_links_on_admit
+                ),
+                "require_living_parent": (
+                    self.admit_link_policy.require_living_parent
+                ),
+            },
+            "bootstrap_edges": [
+                {
+                    "child_agent_id": edge.child_agent_id.value,
+                    "established_tick": edge.established_tick,
+                    "parent_agent_id": edge.parent_agent_id.value,
+                }
+                for edge in self.bootstrap_edges
+            ],
+            "max_parents_per_child": self.max_parents_per_child,
+            "max_query_depth": self.max_query_depth,
+            "perception_mode": self.perception_mode,
+        }
+
+
+def default_kinship_spec() -> KinshipSpec:
+    return KinshipSpec()
+
+
+def example_kinship_spec(
+    *,
+    parent_agent_id: str = "agent-1",
+    child_agent_id: str = "agent-2",
+) -> KinshipSpec:
+    """Reference kinship spec with one bootstrap edge."""
+    return KinshipSpec(
+        bootstrap_edges=(
+            KinshipBootstrapEdgeSpec(
+                parent_agent_id=AgentId(parent_agent_id),
+                child_agent_id=AgentId(child_agent_id),
+                established_tick=0,
+            ),
+        ),
+    )
+
+
 def example_population_lifecycle_spec(
     *,
     lifespan_ticks: int = 20,
@@ -1524,6 +1688,43 @@ def seed_bootstrap_lifecycle_records(
         spec.lifespan_distribution.distribution_id,
     )
     return tuple(records)
+
+
+def seed_bootstrap_kinship_graph(
+    *,
+    spec: KinshipSpec,
+    registered_agent_ids: Sequence[AgentId],
+) -> object:
+    """Seed objective kinship graph from bootstrap edges (no edge events)."""
+    from world.kinship import KinshipEdge, KinshipGraph, validate_bootstrap_edges
+    from world.kinship import stable_kinship_edge_id
+
+    if type(spec) is not KinshipSpec:
+        raise TypeError("spec must be KinshipSpec")
+    edges = tuple(
+        KinshipEdge(
+            parent_agent_id=edge.parent_agent_id,
+            child_agent_id=edge.child_agent_id,
+            established_tick=edge.established_tick,
+            edge_id=stable_kinship_edge_id(
+                parent_agent_id=edge.parent_agent_id,
+                child_agent_id=edge.child_agent_id,
+                established_tick=edge.established_tick,
+            ),
+        )
+        for edge in spec.bootstrap_edges
+    )
+    graph = validate_bootstrap_edges(
+        edges,
+        registered_agent_ids=registered_agent_ids,
+        max_parents_per_child=spec.max_parents_per_child,
+    )
+    _LOGGER.info(
+        "bootstrap_kinship_graph_seeded edge_count=%s perception_mode=%s",
+        len(graph.edges),
+        spec.perception_mode,
+    )
+    return graph
 
 
 class CognitionTraceDetail(StrEnum):
@@ -2877,6 +3078,7 @@ class SimulationRunnerConfig:
     artifacts_enabled: bool = False
     population_lifecycle: PopulationLifecycleSpec | None = None
     new_agent_initialization: object | None = None
+    kinship: KinshipSpec | None = None
 
     def __post_init__(self) -> None:
         # Late import avoids circular import with new_agent_initialization.
@@ -2906,6 +3108,8 @@ class SimulationRunnerConfig:
             raise TypeError(
                 "new_agent_initialization must be NewAgentInitializationSpec or None"
             )
+        if self.kinship is not None and type(self.kinship) is not KinshipSpec:
+            raise TypeError("kinship must be KinshipSpec or None")
         if type(self.scenario) is not WorldScenarioSpec:
             raise TypeError("scenario must be WorldScenarioSpec")
         agents = _copy_ordered(
@@ -2926,6 +3130,29 @@ class SimulationRunnerConfig:
         if set(entity_ids) != body_ids:
             raise ValueError("agents must cover scenario bodies exactly")
         object.__setattr__(self, "agents", agents)
+        if self.kinship is not None:
+            registered = {agent.agent_id for agent in agents}
+            for edge in self.kinship.bootstrap_edges:
+                if edge.parent_agent_id not in registered:
+                    _LOGGER.error(
+                        "kinship_bootstrap_unknown_agent role=parent agent=%s "
+                        "reason_code=kinship_unknown_agent",
+                        edge.parent_agent_id.value,
+                    )
+                    raise ValueError(
+                        "kinship bootstrap parent unknown "
+                        "(code=kinship_unknown_agent)"
+                    )
+                if edge.child_agent_id not in registered:
+                    _LOGGER.error(
+                        "kinship_bootstrap_unknown_agent role=child agent=%s "
+                        "reason_code=kinship_unknown_agent",
+                        edge.child_agent_id.value,
+                    )
+                    raise ValueError(
+                        "kinship bootstrap child unknown "
+                        "(code=kinship_unknown_agent)"
+                    )
         if type(self.stop_policy) is not RunnerStopPolicy:
             raise TypeError("stop_policy must be RunnerStopPolicy")
         if type(self.mortality_mode) is not MortalityMode:
@@ -2970,6 +3197,7 @@ class SimulationRunnerConfig:
             RUNNER_SCHEMA_VERSION_V24,
             RUNNER_SCHEMA_VERSION_V25,
             RUNNER_SCHEMA_VERSION_V26,
+            RUNNER_SCHEMA_VERSION_V27,
         }
         if (
             self.v3_capability_flags.generational_population
@@ -2982,19 +3210,50 @@ class SimulationRunnerConfig:
             )
             raise ValueError(
                 "generational_population requires runner-config-v24, "
-                "runner-config-v25, or runner-config-v26 "
+                "runner-config-v25, runner-config-v26, or runner-config-v27 "
                 "(code=generational_population_requires_v24)"
+            )
+        if self.v3_capability_flags.kinship_inheritance:
+            if self.schema_version != RUNNER_SCHEMA_VERSION_V27:
+                _LOGGER.error(
+                    "kinship_requires_v27 schema_version=%s reason_code=kinship_requires_v27",
+                    self.schema_version,
+                )
+                raise ValueError(
+                    "kinship_inheritance requires runner-config-v27 "
+                    "(code=kinship_requires_v27)"
+                )
+            if self.kinship is None:
+                _LOGGER.error(
+                    "kinship_config_required schema_version=%s "
+                    "reason_code=kinship_config_required",
+                    self.schema_version,
+                )
+                raise ValueError(
+                    "kinship_inheritance requires kinship config "
+                    "(code=kinship_config_required)"
+                )
+        elif self.kinship is not None:
+            _LOGGER.error(
+                "kinship_config_without_flag schema_version=%s "
+                "reason_code=kinship_config_without_flag",
+                self.schema_version,
+            )
+            raise ValueError(
+                "kinship config requires kinship_inheritance flag "
+                "(code=kinship_config_without_flag)"
             )
         other_v3_enabled = tuple(
             name
             for name in self.v3_capability_flags.enabled_names()
-            if name != "generational_population"
+            if name not in {"generational_population", "kinship_inheritance"}
         )
         if other_v3_enabled and self.schema_version not in {
             RUNNER_SCHEMA_VERSION_V23,
             RUNNER_SCHEMA_VERSION_V24,
             RUNNER_SCHEMA_VERSION_V25,
             RUNNER_SCHEMA_VERSION_V26,
+            RUNNER_SCHEMA_VERSION_V27,
         }:
             _LOGGER.error(
                 "v3_capability_requires_v23 schema_version=%s "
@@ -3006,9 +3265,41 @@ class SimulationRunnerConfig:
                 "V3 capability flags require runner-config-v23+ "
                 "(code=v3_capability_requires_v23)"
             )
+        _v27_kinship_only = (
+            self.schema_version == RUNNER_SCHEMA_VERSION_V27
+            and self.v3_capability_flags.kinship_inheritance
+            and not self.v3_capability_flags.generational_population
+        )
+        if _v27_kinship_only:
+            if self.population_lifecycle is not None:
+                _LOGGER.error(
+                    "kinship_only_forbids_lifecycle_spec schema_version=%s "
+                    "reason_code=kinship_only_forbids_lifecycle_spec",
+                    self.schema_version,
+                )
+                raise ValueError(
+                    "kinship-only v27 forbids population_lifecycle "
+                    "(code=kinship_only_forbids_lifecycle_spec)"
+                )
+            if self.new_agent_initialization is not None:
+                _LOGGER.error(
+                    "kinship_only_forbids_new_agent_init schema_version=%s "
+                    "reason_code=kinship_only_forbids_new_agent_init",
+                    self.schema_version,
+                )
+                raise ValueError(
+                    "kinship-only v27 forbids new_agent_initialization "
+                    "(code=kinship_only_forbids_new_agent_init)"
+                )
         if self.schema_version in _lifecycle_schemas:
-            if self.population_lifecycle is None:
-                if self.schema_version == RUNNER_SCHEMA_VERSION_V26:
+            requires_lifecycle = (
+                self.schema_version != RUNNER_SCHEMA_VERSION_V27
+                or self.v3_capability_flags.generational_population
+            )
+            if requires_lifecycle and self.population_lifecycle is None:
+                if self.schema_version == RUNNER_SCHEMA_VERSION_V27:
+                    code = "v27_requires_population_lifecycle"
+                elif self.schema_version == RUNNER_SCHEMA_VERSION_V26:
                     code = "v26_requires_population_lifecycle"
                 elif self.schema_version == RUNNER_SCHEMA_VERSION_V25:
                     code = "v25_requires_population_lifecycle"
@@ -3032,7 +3323,7 @@ class SimulationRunnerConfig:
             )
             raise ValueError(
                 "population_lifecycle requires runner-config-v24, "
-                "runner-config-v25, or runner-config-v26 "
+                "runner-config-v25, runner-config-v26, or runner-config-v27 "
                 "(code=population_lifecycle_requires_v24)"
             )
         if (
@@ -3046,7 +3337,8 @@ class SimulationRunnerConfig:
         if (
             self.population_lifecycle is not None
             and self.population_lifecycle.has_developmental_extensions()
-            and self.schema_version != RUNNER_SCHEMA_VERSION_V26
+            and self.schema_version
+            not in {RUNNER_SCHEMA_VERSION_V26, RUNNER_SCHEMA_VERSION_V27}
         ):
             _LOGGER.error(
                 "developmental_stages_require_v26 schema_version=%s "
@@ -3055,18 +3347,24 @@ class SimulationRunnerConfig:
             )
             raise ValueError(
                 "developmental stage extensions require runner-config-v26 "
+                "or runner-config-v27 "
                 "(code=developmental_stages_require_v26)"
             )
-        if self.schema_version in {
+        _requires_new_agent_init = self.schema_version in {
             RUNNER_SCHEMA_VERSION_V25,
             RUNNER_SCHEMA_VERSION_V26,
-        }:
+        } or (
+            self.schema_version == RUNNER_SCHEMA_VERSION_V27
+            and self.v3_capability_flags.generational_population
+        )
+        if _requires_new_agent_init:
             if self.new_agent_initialization is None:
-                code = (
-                    "v26_requires_new_agent_initialization"
-                    if self.schema_version == RUNNER_SCHEMA_VERSION_V26
-                    else "v25_requires_new_agent_initialization"
-                )
+                if self.schema_version == RUNNER_SCHEMA_VERSION_V27:
+                    code = "v27_requires_new_agent_initialization"
+                elif self.schema_version == RUNNER_SCHEMA_VERSION_V26:
+                    code = "v26_requires_new_agent_initialization"
+                else:
+                    code = "v25_requires_new_agent_initialization"
                 _LOGGER.error(
                     "%s schema_version=%s reason_code=%s",
                     code,
@@ -3176,6 +3474,7 @@ class SimulationRunnerConfig:
             RUNNER_SCHEMA_VERSION_V24,
             RUNNER_SCHEMA_VERSION_V25,
             RUNNER_SCHEMA_VERSION_V26,
+            RUNNER_SCHEMA_VERSION_V27,
         }
         if non_disabled and self.schema_version not in consolidation_schemas:
             _LOGGER.error(
@@ -3228,6 +3527,7 @@ class SimulationRunnerConfig:
             RUNNER_SCHEMA_VERSION_V24,
             RUNNER_SCHEMA_VERSION_V25,
             RUNNER_SCHEMA_VERSION_V26,
+            RUNNER_SCHEMA_VERSION_V27,
         }
         if reflecting and self.schema_version not in reflection_schemas:
             _LOGGER.error(
@@ -3280,6 +3580,7 @@ class SimulationRunnerConfig:
             RUNNER_SCHEMA_VERSION_V24,
             RUNNER_SCHEMA_VERSION_V25,
             RUNNER_SCHEMA_VERSION_V26,
+            RUNNER_SCHEMA_VERSION_V27,
         }
         if planning and self.schema_version not in prospective_schemas:
             _LOGGER.error(
@@ -3331,6 +3632,7 @@ class SimulationRunnerConfig:
             RUNNER_SCHEMA_VERSION_V24,
             RUNNER_SCHEMA_VERSION_V25,
             RUNNER_SCHEMA_VERSION_V26,
+            RUNNER_SCHEMA_VERSION_V27,
         }
         if considering and self.schema_version not in counterfactual_schemas:
             _LOGGER.error(
@@ -3381,6 +3683,7 @@ class SimulationRunnerConfig:
             RUNNER_SCHEMA_VERSION_V24,
             RUNNER_SCHEMA_VERSION_V25,
             RUNNER_SCHEMA_VERSION_V26,
+            RUNNER_SCHEMA_VERSION_V27,
         }:
             _LOGGER.error(
                 "invalid_fields path=agents.cognition.communication_strategy_mode "
@@ -3429,6 +3732,7 @@ class SimulationRunnerConfig:
             RUNNER_SCHEMA_VERSION_V24,
             RUNNER_SCHEMA_VERSION_V25,
             RUNNER_SCHEMA_VERSION_V26,
+            RUNNER_SCHEMA_VERSION_V27,
         }:
             _LOGGER.error(
                 "invalid_fields path=agents.cognition.reputation_mode "
@@ -3519,6 +3823,7 @@ class SimulationRunnerConfig:
             RUNNER_SCHEMA_VERSION_V24,
             RUNNER_SCHEMA_VERSION_V25,
             RUNNER_SCHEMA_VERSION_V26,
+            RUNNER_SCHEMA_VERSION_V27,
         }:
             _LOGGER.error(
                 "invalid_fields path=agents.cognition.teaching_interaction_mode "
@@ -3558,6 +3863,7 @@ class SimulationRunnerConfig:
             RUNNER_SCHEMA_VERSION_V24,
             RUNNER_SCHEMA_VERSION_V25,
             RUNNER_SCHEMA_VERSION_V26,
+            RUNNER_SCHEMA_VERSION_V27,
         }
         if (dynamics is not None and self.schema_version not in dynamics_schemas) or (
             self.schema_version == RUNNER_SCHEMA_VERSION_V14 and dynamics is None
@@ -3592,6 +3898,7 @@ class SimulationRunnerConfig:
             RUNNER_SCHEMA_VERSION_V24,
             RUNNER_SCHEMA_VERSION_V25,
             RUNNER_SCHEMA_VERSION_V26,
+            RUNNER_SCHEMA_VERSION_V27,
         }:
             _LOGGER.error(
                 "invalid_fields path=agents.cognition.territorial_claim_mode "
@@ -3632,6 +3939,7 @@ class SimulationRunnerConfig:
             RUNNER_SCHEMA_VERSION_V24,
             RUNNER_SCHEMA_VERSION_V25,
             RUNNER_SCHEMA_VERSION_V26,
+            RUNNER_SCHEMA_VERSION_V27,
         }:
             _LOGGER.error(
                 "invalid_fields path=agents.cognition.group_formation_mode "
@@ -3666,6 +3974,7 @@ class SimulationRunnerConfig:
             RUNNER_SCHEMA_VERSION_V24,
             RUNNER_SCHEMA_VERSION_V25,
             RUNNER_SCHEMA_VERSION_V26,
+            RUNNER_SCHEMA_VERSION_V27,
         }:
             _LOGGER.error(
                 "invalid_fields path=agents.cognition.social_norm_mode "
@@ -3703,6 +4012,7 @@ class SimulationRunnerConfig:
             RUNNER_SCHEMA_VERSION_V24,
             RUNNER_SCHEMA_VERSION_V25,
             RUNNER_SCHEMA_VERSION_V26,
+            RUNNER_SCHEMA_VERSION_V27,
         }
         if conventions_on and self.schema_version not in convention_schemas:
             _LOGGER.error(
@@ -3745,6 +4055,7 @@ class SimulationRunnerConfig:
             RUNNER_SCHEMA_VERSION_V24,
             RUNNER_SCHEMA_VERSION_V25,
             RUNNER_SCHEMA_VERSION_V26,
+            RUNNER_SCHEMA_VERSION_V27,
         }
         if artifacts_on and self.schema_version not in artifact_schemas:
             runner_log.error(
@@ -3783,6 +4094,7 @@ class SimulationRunnerConfig:
             RUNNER_SCHEMA_VERSION_V24,
             RUNNER_SCHEMA_VERSION_V25,
             RUNNER_SCHEMA_VERSION_V26,
+            RUNNER_SCHEMA_VERSION_V27,
         }
         if naming_on and self.schema_version not in naming_schemas:
             runner_log.error(
@@ -3818,6 +4130,7 @@ class SimulationRunnerConfig:
             RUNNER_SCHEMA_VERSION_V24,
             RUNNER_SCHEMA_VERSION_V25,
             RUNNER_SCHEMA_VERSION_V26,
+            RUNNER_SCHEMA_VERSION_V27,
         }
         budget_modes = tuple(
             agent.cognition.cognitive_budget_mode for agent in self.agents
@@ -3829,6 +4142,7 @@ class SimulationRunnerConfig:
             RUNNER_SCHEMA_VERSION_V24,
             RUNNER_SCHEMA_VERSION_V25,
             RUNNER_SCHEMA_VERSION_V26,
+            RUNNER_SCHEMA_VERSION_V27,
         }
         if budgets_on and self.schema_version not in budget_schemas:
             runner_log.error(
@@ -3938,6 +4252,7 @@ class SimulationRunnerConfig:
             RUNNER_SCHEMA_VERSION_V24,
             RUNNER_SCHEMA_VERSION_V25,
             RUNNER_SCHEMA_VERSION_V26,
+            RUNNER_SCHEMA_VERSION_V27,
         }:
             _LOGGER.error(
                 "invalid_fields path=agents.cognition.production_knowledge_mode "
@@ -3965,6 +4280,7 @@ class SimulationRunnerConfig:
             RUNNER_SCHEMA_VERSION_V24,
             RUNNER_SCHEMA_VERSION_V25,
             RUNNER_SCHEMA_VERSION_V26,
+            RUNNER_SCHEMA_VERSION_V27,
         }:
             from world.production import production_catalog_digest
 
@@ -4032,6 +4348,7 @@ class SimulationRunnerConfig:
             RUNNER_SCHEMA_VERSION_V24,
             RUNNER_SCHEMA_VERSION_V25,
             RUNNER_SCHEMA_VERSION_V26,
+            RUNNER_SCHEMA_VERSION_V27,
         }:
             shared_teaching = teaching_weight_tuple(self.agents[0].cognition)
             if any(

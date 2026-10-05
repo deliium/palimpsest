@@ -73,7 +73,6 @@ def test_v3_scaffolding_and_v2_regression_profiles_on_base() -> None:
 @pytest.mark.parametrize(
     "flag_name",
     (
-        "kinship_inheritance",
         "multi_polity_migration",
         "institutional_economy",
         "cultural_historical_memory",

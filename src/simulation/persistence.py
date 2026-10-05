@@ -48,6 +48,7 @@ from world.events import (
     EVENT_SCHEMA_REPLAY_V8,
     EVENT_SCHEMA_REPLAY_V9,
     EVENT_SCHEMA_REPLAY_V10,
+    EVENT_SCHEMA_REPLAY_V11,
     WorldEvent,
     normalize_events,
 )
@@ -80,11 +81,12 @@ ACCEPTED_EVENT_SCHEMA_VERSIONS: Final[frozenset[int]] = frozenset(
         EVENT_SCHEMA_REPLAY_V8,
         EVENT_SCHEMA_REPLAY_V9,
         EVENT_SCHEMA_REPLAY_V10,
+        EVENT_SCHEMA_REPLAY_V11,
     }
 )
 ACCEPTED_PROJECTOR_VERSIONS: Final[frozenset[str]] = frozenset({"v1", "v2"})
 ACCEPTED_PERSISTENCE_CODEC_VERSIONS: Final[frozenset[str]] = frozenset(
-    {"v1", "v2", "v3", "v4", "v5", "v6", "v7"}
+    {"v1", "v2", "v3", "v4", "v5", "v6", "v7", "v8"}
 )
 
 _SHA256_HEX_RE: Final[re.Pattern[str]] = re.compile(r"^[0-9a-f]{64}$")
@@ -179,14 +181,18 @@ def checkpoint_schema_for_production(
     artifacts_active: bool = False,
     lifecycle_active: bool = False,
     new_agent_provenance_active: bool = False,
+    kinship_active: bool = False,
 ) -> tuple[int, str]:
     """Choose the checkpoint schema for this run.
 
-    Priority: new-agent provenance → ``(v10, v7)``; else lifecycle →
-    ``(v9, v6)``; else artifacts → ``(v8, v5)``; else dynamics →
-    ``(v7, v4)``; else production → ``(v6, v3)``; else replay-v5 / codec ``v2``.
+    Priority: kinship → ``(v11, v8)``; else new-agent provenance →
+    ``(v10, v7)``; else lifecycle → ``(v9, v6)``; else artifacts →
+    ``(v8, v5)``; else dynamics → ``(v7, v4)``; else production →
+    ``(v6, v3)``; else replay-v5 / codec ``v2``.
     """
-    if new_agent_provenance_active:
+    if kinship_active:
+        pair = EVENT_SCHEMA_REPLAY_V11, "v8"
+    elif new_agent_provenance_active:
         pair = EVENT_SCHEMA_REPLAY_V10, "v7"
     elif lifecycle_active:
         pair = EVENT_SCHEMA_REPLAY_V9, "v6"
@@ -200,10 +206,11 @@ def checkpoint_schema_for_production(
         pair = EVENT_SCHEMA_VERSION, PERSISTENCE_CODEC_VERSION
     _LOG.debug(
         "checkpoint_schema_selected event_schema=%s codec=%s "
-        "new_agent_provenance_active=%s lifecycle_active=%s "
+        "kinship_active=%s new_agent_provenance_active=%s lifecycle_active=%s "
         "artifacts_active=%s",
         pair[0],
         pair[1],
+        kinship_active,
         new_agent_provenance_active,
         lifecycle_active,
         artifacts_active,
@@ -271,6 +278,7 @@ def schema_projector_compatible(
         EVENT_SCHEMA_REPLAY_V8,
         EVENT_SCHEMA_REPLAY_V9,
         EVENT_SCHEMA_REPLAY_V10,
+        EVENT_SCHEMA_REPLAY_V11,
     }:
         return projector_version == "v2"
     return False
@@ -443,6 +451,7 @@ class WorldSnapshot:
     active_hazards: Sequence[ActiveHazard] = ()
     artifacts: Sequence[InformationArtifact] = ()
     lifecycle_records: Sequence[object] = ()
+    kinship_edges: Sequence[object] = ()
 
     def __post_init__(self) -> None:
         if type(self.snapshot_id) is not SnapshotId:
@@ -569,6 +578,12 @@ class WorldSnapshot:
                     "codec_schema_mismatch reason_code=codec_v7_requires_schema_10"
                 )
                 raise ValueError("codec v7 requires event schema 10")
+        elif self.persistence_codec_version == "v8":
+            if self.event_schema_version != EVENT_SCHEMA_REPLAY_V11:
+                _LOG.error(
+                    "codec_schema_mismatch reason_code=codec_v8_requires_schema_11"
+                )
+                raise ValueError("codec v8 requires event schema 11")
         elif self.structures or self.production_jobs or self.tool_marks:
             raise ValueError("production checkpoint fields require codec v3")
         if (
@@ -594,16 +609,31 @@ class WorldSnapshot:
                 )
             records.append(raw)
         object.__setattr__(self, "lifecycle_records", tuple(records))
-        if self.persistence_codec_version not in {"v6", "v7"} and records:
+        if self.persistence_codec_version not in {"v6", "v7", "v8"} and records:
             _LOG.error(
                 "codec_schema_mismatch reason_code=lifecycle_records_require_codec_v6"
             )
-            raise ValueError("lifecycle_records require codec v6 or v7")
-        if self.persistence_codec_version in {"v6", "v7"}:
+            raise ValueError("lifecycle_records require codec v6, v7, or v8")
+        from world.kinship import KinshipEdge
+
+        kinship_rows: list[KinshipEdge] = []
+        for raw in self.kinship_edges:
+            if type(raw) is not KinshipEdge:
+                raise TypeError("kinship_edges entries must be KinshipEdge")
+            kinship_rows.append(raw)
+        object.__setattr__(self, "kinship_edges", tuple(kinship_rows))
+        if self.persistence_codec_version != "v8" and kinship_rows:
+            _LOG.error(
+                "codec_schema_mismatch reason_code=kinship_edges_require_codec_v8"
+            )
+            raise ValueError("kinship_edges require codec v8")
+        if self.persistence_codec_version in {"v6", "v7", "v8"}:
             _LOG.debug(
-                "lifecycle_snapshot_codec codec_version=%s lifecycle_record_count=%s",
+                "lifecycle_snapshot_codec codec_version=%s lifecycle_record_count=%s "
+                "kinship_edge_count=%s",
                 self.persistence_codec_version,
                 len(records),
+                len(kinship_rows),
             )
 
 

@@ -131,6 +131,7 @@ from simulation.runner_models import (
     _V2_CAPABILITY_FLAG_NAMES,
     RUNNER_SCHEMA_VERSION_V25,
     RUNNER_SCHEMA_VERSION_V26,
+    RUNNER_SCHEMA_VERSION_V27,
     AgentCognitionSpec,
     AgentRunnerSpec,
     CognitionCounters,
@@ -1367,6 +1368,10 @@ class SimulationRunner:
                 config.v3_capability_flags.generational_population
                 and config.population_lifecycle is not None
             )
+            kinship_channel = (
+                config.v3_capability_flags.kinship_inheritance
+                and config.kinship is not None
+            )
             lifecycle_records = ()
             if lifecycle_channel:
                 from simulation.runner_models import seed_bootstrap_lifecycle_records
@@ -1397,11 +1402,13 @@ class SimulationRunner:
                         in {
                             RUNNER_SCHEMA_VERSION_V25,
                             RUNNER_SCHEMA_VERSION_V26,
+                            RUNNER_SCHEMA_VERSION_V27,
                         }
                         and config.new_agent_initialization is not None
                     )
                     else None
                 ),
+                kinship_spec=config.kinship if kinship_channel else None,
                 **skill_kwargs,
                 **teaching_kwargs,
             )
@@ -3157,21 +3164,28 @@ def _bootstrap_snapshot(engine: WorldEngine) -> WorldSnapshot:
         artifacts_active=engine._artifacts_enabled,
         lifecycle_active=engine.lifecycle_channel_active,
         new_agent_provenance_active=engine.new_agent_provenance_active,
+        kinship_active=engine.kinship_channel_active,
     )
     state = engine._snapshot.world.state
     production_rows: dict[str, tuple[object, ...]] = {}
-    if codec_version in {"v3", "v4", "v5", "v6", "v7"}:
+    if codec_version in {"v3", "v4", "v5", "v6", "v7", "v8"}:
         production_rows = {
             "structures": tuple(state.structures.values()),
             "production_jobs": tuple(state.production_jobs.values()),
             "tool_marks": tuple(state.tool_marks.values()),
         }
-    if codec_version in {"v4", "v5", "v6", "v7"}:
+    if codec_version in {"v4", "v5", "v6", "v7", "v8"}:
         production_rows["active_hazards"] = tuple(state.active_hazards)
-    if codec_version in {"v5", "v6", "v7"}:
+    if codec_version in {"v5", "v6", "v7", "v8"}:
         production_rows["artifacts"] = tuple(state.artifacts.values())
-    if codec_version in {"v6", "v7"}:
+    if codec_version in {"v6", "v7", "v8"}:
         production_rows["lifecycle_records"] = tuple(engine.lifecycle_records)
+    if codec_version == "v8":
+        kinship_graph = engine.kinship_graph
+        from world.kinship import KinshipGraph
+
+        if type(kinship_graph) is KinshipGraph:
+            production_rows["kinship_edges"] = kinship_graph.edges
     draft = WorldSnapshot(
         snapshot_id=SnapshotId(f"bootstrap-{engine.run_id.value}"),
         run_id=engine.run_id,
@@ -3220,6 +3234,7 @@ def _bootstrap_snapshot(engine: WorldEngine) -> WorldSnapshot:
         active_hazards=draft.active_hazards,
         artifacts=draft.artifacts,
         lifecycle_records=draft.lifecycle_records,
+        kinship_edges=getattr(draft, "kinship_edges", ()),
     )
 
 

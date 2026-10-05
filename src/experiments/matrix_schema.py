@@ -22,6 +22,7 @@ from simulation.runner_models import (
     RUNNER_SCHEMA_VERSION_V24,
     RUNNER_SCHEMA_VERSION_V25,
     RUNNER_SCHEMA_VERSION_V26,
+    RUNNER_SCHEMA_VERSION_V27,
     ArtifactInterpretationMode,
     CognitiveBudgetMode,
     CulturalNarrativeMode,
@@ -66,11 +67,19 @@ def finalize_matrix_cell_config(
         for agent in agents
     )
 
+    kinship_on = (
+        config.v3_capability_flags.kinship_inheritance and config.kinship is not None
+    )
     developmental_on = (
         config.population_lifecycle is not None
         and config.population_lifecycle.has_developmental_extensions()
     )
-    if developmental_on:
+    if kinship_on:
+        schema_version, rule = (
+            RUNNER_SCHEMA_VERSION_V27,
+            "kinship_inheritance_on",
+        )
+    elif developmental_on:
         schema_version, rule = (
             RUNNER_SCHEMA_VERSION_V26,
             "developmental_stages_on",
@@ -107,16 +116,24 @@ def finalize_matrix_cell_config(
 
     payload = {field.name: getattr(config, field.name) for field in fields(config)}
     payload["schema_version"] = schema_version
-    if schema_version in {
+    needs_lifecycle = schema_version in {
         RUNNER_SCHEMA_VERSION_V24,
         RUNNER_SCHEMA_VERSION_V25,
         RUNNER_SCHEMA_VERSION_V26,
-    } and payload.get("population_lifecycle") is None:
+    } or (
+        schema_version == RUNNER_SCHEMA_VERSION_V27
+        and config.v3_capability_flags.generational_population
+    )
+    if needs_lifecycle and payload.get("population_lifecycle") is None:
         payload["population_lifecycle"] = example_population_lifecycle_spec()
-    if schema_version in {
+    needs_init = schema_version in {
         RUNNER_SCHEMA_VERSION_V25,
         RUNNER_SCHEMA_VERSION_V26,
-    } and payload.get("new_agent_initialization") is None:
+    } or (
+        schema_version == RUNNER_SCHEMA_VERSION_V27
+        and config.v3_capability_flags.generational_population
+    )
+    if needs_init and payload.get("new_agent_initialization") is None:
         payload["new_agent_initialization"] = default_new_agent_initialization_spec()
     try:
         finalized = SimulationRunnerConfig(**payload)

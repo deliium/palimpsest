@@ -255,6 +255,8 @@ class WorldEngine:
         "_config",
         "_engine_id",
         "_environmental_dynamics",
+        "_kinship_graph",
+        "_kinship_spec",
         "_last_tick_result",
         "_lifecycle_records",
         "_new_agent_initialization",
@@ -292,6 +294,8 @@ class WorldEngine:
         population_lifecycle: object | None = None,
         lifecycle_records: Sequence[object] | None = None,
         new_agent_initialization: object | None = None,
+        kinship_spec: object | None = None,
+        kinship_graph: object | None = None,
     ) -> None:
         if type(config) is not SimulationRunConfig:
             raise TypeError("WorldEngine requires SimulationRunConfig")
@@ -366,10 +370,36 @@ class WorldEngine:
                     "(code=new_agent_init_requires_lifecycle)"
                 )
         self._new_agent_initialization = new_agent_initialization
+        from simulation.runner_models import KinshipSpec
+        from world.kinship import KinshipGraph
+
+        if kinship_spec is not None and type(kinship_spec) is not KinshipSpec:
+            raise TypeError("kinship_spec must be KinshipSpec or None")
+        self._kinship_spec = kinship_spec
+        if kinship_graph is not None:
+            if type(kinship_graph) is not KinshipGraph:
+                raise TypeError("kinship_graph must be KinshipGraph or None")
+            self._kinship_graph = kinship_graph
+        elif kinship_spec is not None:
+            self._kinship_graph = KinshipGraph.empty(
+                max_parents_per_child=kinship_spec.max_parents_per_child
+            )
+            if kinship_spec.bootstrap_edges:
+                from simulation.runner_models import seed_bootstrap_kinship_graph
+
+                self._kinship_graph = seed_bootstrap_kinship_graph(  # type: ignore[assignment]
+                    spec=kinship_spec,
+                    registered_agent_ids=tuple(
+                        registration.agent_id for registration in self._registrations
+                    ),
+                )
+        else:
+            self._kinship_graph = KinshipGraph.empty()
         _LOGGER.debug(
             "%s world_id=%s revision=%s tick=%s registrations=%s "
             "artifacts_enabled=%s lifecycle_channel=%s "
-            "bootstrap_lifecycle_record_count=%s new_agent_provenance=%s",
+            "bootstrap_lifecycle_record_count=%s new_agent_provenance=%s "
+            "kinship_channel=%s bootstrap_kinship_edge_count=%s",
             EngineDiagnosticCode.BOOTSTRAP_VALIDATED.value,
             bootstrap.world_id.value,
             bootstrap.revision.value,
@@ -379,6 +409,8 @@ class WorldEngine:
             "on" if self._population_lifecycle is not None else "off",
             len(self._lifecycle_records),
             "on" if self._new_agent_initialization is not None else "off",
+            "on" if self._kinship_spec is not None else "off",
+            len(self._kinship_graph.edges),
         )
 
     @classmethod
@@ -670,6 +702,14 @@ class WorldEngine:
         return self._population_lifecycle is not None
 
     @property
+    def kinship_channel_active(self) -> bool:
+        return self._kinship_spec is not None
+
+    @property
+    def kinship_graph(self) -> object:
+        return self._kinship_graph
+
+    @property
     def lifecycle_records(self) -> tuple[object, ...]:
         return self._lifecycle_records
 
@@ -850,6 +890,7 @@ class WorldEngine:
             artifacts_active=self._artifacts_enabled,
             lifecycle_active=True,
             new_agent_provenance_active=self.new_agent_provenance_active,
+            kinship_active=self.kinship_channel_active,
         )
         detail_seq = self._population_entry_detail_sequence(
             candidate=candidate,
@@ -2566,6 +2607,7 @@ class WorldEngine:
             artifacts_active=self._artifacts_enabled,
             lifecycle_active=self.lifecycle_channel_active,
             new_agent_provenance_active=self.new_agent_provenance_active,
+            kinship_active=self.kinship_channel_active,
         )
         prepared = finalize_pending_batch(
             merged,
@@ -3816,6 +3858,7 @@ def select_checkpoint_schema(
     artifacts_active: bool = False,
     lifecycle_active: bool = False,
     new_agent_provenance_active: bool = False,
+    kinship_active: bool = False,
 ) -> tuple[int, str]:
     """Return the legal event-schema and codec pair for this run."""
     from simulation.persistence import (
@@ -3829,6 +3872,7 @@ def select_checkpoint_schema(
         EVENT_SCHEMA_REPLAY_V8,
         EVENT_SCHEMA_REPLAY_V9,
         EVENT_SCHEMA_REPLAY_V10,
+        EVENT_SCHEMA_REPLAY_V11,
     )
 
     schema_version, codec = checkpoint_schema_for_production(
@@ -3837,31 +3881,41 @@ def select_checkpoint_schema(
         artifacts_active=artifacts_active,
         lifecycle_active=lifecycle_active,
         new_agent_provenance_active=new_agent_provenance_active,
+        kinship_active=kinship_active,
     )
     agreed = (
-        new_agent_provenance_active
+        kinship_active
+        and schema_version == EVENT_SCHEMA_REPLAY_V11
+        and codec == "v8"
+    ) or (
+        not kinship_active
+        and new_agent_provenance_active
         and schema_version == EVENT_SCHEMA_REPLAY_V10
         and codec == "v7"
     ) or (
-        not new_agent_provenance_active
+        not kinship_active
+        and not new_agent_provenance_active
         and lifecycle_active
         and schema_version == EVENT_SCHEMA_REPLAY_V9
         and codec == "v6"
     ) or (
-        not new_agent_provenance_active
+        not kinship_active
+        and not new_agent_provenance_active
         and not lifecycle_active
         and artifacts_active
         and schema_version == EVENT_SCHEMA_REPLAY_V8
         and codec == "v5"
     ) or (
-        not new_agent_provenance_active
+        not kinship_active
+        and not new_agent_provenance_active
         and not lifecycle_active
         and not artifacts_active
         and dynamics_active
         and schema_version == EVENT_SCHEMA_REPLAY_V7
         and codec == "v4"
     ) or (
-        not new_agent_provenance_active
+        not kinship_active
+        and not new_agent_provenance_active
         and not lifecycle_active
         and not artifacts_active
         and not dynamics_active
@@ -3869,7 +3923,8 @@ def select_checkpoint_schema(
         and schema_version == EVENT_SCHEMA_REPLAY_V6
         and codec == "v3"
     ) or (
-        not new_agent_provenance_active
+        not kinship_active
+        and not new_agent_provenance_active
         and not lifecycle_active
         and not artifacts_active
         and not dynamics_active
@@ -3888,9 +3943,11 @@ def select_checkpoint_schema(
         )
     _LOGGER.debug(
         "checkpoint_schema_selected event_schema=%s codec=%s "
-        "new_agent_provenance_active=%s lifecycle_active=%s artifacts_active=%s",
+        "kinship_active=%s new_agent_provenance_active=%s lifecycle_active=%s "
+        "artifacts_active=%s",
         schema_version,
         codec,
+        kinship_active,
         new_agent_provenance_active,
         lifecycle_active,
         artifacts_active,
