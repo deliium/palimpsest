@@ -298,21 +298,21 @@ Apply effects **only** inside WorldEngine / private world rules — never in `Se
 
 ### Phase 4: Integration, experiment, separation gates
 
-- [ ] Task 10: Checkpoint / replay / observation parity for assigned lifespan + effects
+- [x] Task 10: Checkpoint / replay / observation parity for assigned lifespan + effects
   - Live vs restored engines at the same tick emit equal observations and continue identical trajectories under developmental configs.
   - Keep Observation and `LifecycleStageChanged` unchanged; rely on Task 6 dual-key decode (no v11).
   - LOGGING: DEBUG on restore lifecycle record counts; parity assertions in tests.
   - Files: serialization/checkpoint/replay under `src/simulation/`, `src/world/_replay.py`, `tests/unit/test_lifecycle_developmental_replay.py`, extend checkpoint restoration siblings
   - Depends on: Task 6, Task 9
 
-- [ ] Task 11: Experiment AG + catalog profile
+- [x] Task 11: Experiment AG + catalog profile
   - Add `experiment-ag-developmental-stages` / wire `developmental_stages_profile` on v26 with locked example stages, effect table, lifespan distribution, gradual-aging on/off arms, skill-mode on/off arms; off V1 gate.
   - Ensure AE/AF unchanged; matrix allowlist includes AG without enabling on default batches; Observer SEMANTIC count stays 40.
   - LOGGING: experiment coordinator metadata-only (ids, arm names, tick counts).
   - Files: `src/experiments/catalog.py`, `tests/unit/test_developmental_stages_catalog_arm.py`
   - Depends on: Task 4, Task 10
 
-- [ ] Task 12: SelfModel / social-authority separation architecture gates
+- [x] Task 12: SelfModel / social-authority separation architecture gates
   - Architecture/unit tests: no auto identity/self-belief writes on `LifecycleStageChanged`; no elder→leader mapping; cognition identity / self-model / CompetenceSelfModel writers do not import lifecycle effect applicators; forbidden authority keys rejected on effect config.
   - One short invariant comment near effect application (not essays).
   - LOGGING: N/A for architecture tests; production paths must not log subjective belief content.
@@ -321,7 +321,7 @@ Apply effects **only** inside WorldEngine / private world rules — never in `Se
 
 ### Phase 5: Long-run proofs and docs
 
-- [ ] Task 13: Long-running aging + deterministic twin-run replay tests
+- [x] Task 13: Long-running aging + deterministic twin-run replay tests
   - Run enough ticks to cross all example stage boundaries and hit assigned-lifespan EOL for ≥1 agent; assert ordered `LifecycleStageChanged` sequence and final `Died(LIFESPAN)`.
   - Twin-run same seed ⇒ identical projected world/lifecycle hashes; different seed ⇒ divergent assigned lifespans when distribution is non-fixed.
   - Gradual aging on/off: continuous factors differ where expected; stage-id event equality at thresholds preserved.
@@ -329,7 +329,7 @@ Apply effects **only** inside WorldEngine / private world rules — never in `Se
   - Files: `tests/unit/test_lifecycle_long_run_aging.py`, `tests/unit/test_lifecycle_developmental_replay_determinism.py`
   - Depends on: Task 10, Task 11
 
-- [ ] Task 14: Flags-off / effects-off / AE/AF bit-identity regression
+- [x] Task 14: Flags-off / effects-off / AE/AF bit-identity regression
   - Prove V1 gate + `test_v2_scientific_invariants` under V3 flags off.
   - Explicit synthesis proofs: decode v24/v25 → passthrough developmental defaults; fixed/absent distribution ⇒ `assigned_lifespan_ticks == lifespan_ticks`; effects-off ⇒ factors `1.0` / empty denies; AE/AF `exact_trajectory_hash` unchanged without catalog schema bumps.
   - v26 all-off / passthrough round-trips.
@@ -337,7 +337,7 @@ Apply effects **only** inside WorldEngine / private world rules — never in `Se
   - Files: extend `tests/unit/test_v3_*_flags_off_compat.py`, golden runner config tests, AE/AF determinism tests
   - Depends on: Task 11
 
-- [ ] Task 15: Documentation checkpoint (`/aif-docs`)
+- [x] Task 15: Documentation checkpoint (`/aif-docs`)
   - Update `docs/architecture.md` V3 seams: developmental stage effects, lifespan distributions, gradual aging, SelfModel separation, ELDER≠leader, Experiment AG, `runner-config-v26` exact keys; correct stale write-pair text to include v10/v7 provenance priority already shipped by v3-03.
   - Cross-link configuration / physical simulation docs as needed; keep README lean; note no Godot elder-authority chrome.
   - LOGGING: N/A (docs only).
