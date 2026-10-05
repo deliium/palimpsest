@@ -585,6 +585,7 @@ class WorldEngine:
                 _optional_population_lifecycle(
                     population_lifecycle,
                     lifecycle_records=snapshot.lifecycle_records,
+                    synthesize_assigned_lifespan=True,
                 )
             )
             engine._new_agent_initialization = None
@@ -801,6 +802,16 @@ class WorldEngine:
         spawn_location = prepared.location_id
         assert type(entrant_body) is AgentBody
 
+        from simulation.lifespan_distribution import assign_lifespan_ticks
+
+        assigned = assign_lifespan_ticks(
+            spec=spec,
+            run_config=self._config,
+            run_id=self._run_id.value,
+            world_id=self.world_id.value,
+            agent_id=candidate.agent_id.value,
+            entry_tick=entry_tick,
+        )
         lifecycle_record = AgentLifecycleRecord(
             body_id=candidate.body_id,
             agent_id=candidate.agent_id.value,
@@ -810,6 +821,7 @@ class WorldEngine:
             generation_index=candidate.generation_index,
             cohort_id=candidate.cohort_id,
             provenance=candidate.provenance,
+            assigned_lifespan_ticks=assigned,
         )
         registration = AgentRegistration(
             agent_id=candidate.agent_id,
@@ -1221,9 +1233,10 @@ class WorldEngine:
                 continue
             age = chronological_age(entry_tick=record.entry_tick, current_tick=tick)
             stage_age = age
-            if spec.natural_death_on_lifespan and age >= spec.lifespan_ticks:
-                # Thresholds cover [0, lifespan_ticks-1]; death age is outside.
-                stage_age = max(spec.lifespan_ticks - 1, 0)
+            assigned_lifespan = record.assigned_lifespan_ticks
+            if spec.natural_death_on_lifespan and age >= assigned_lifespan:
+                # Thresholds cover [0, assigned_lifespan-1]; death age is outside.
+                stage_age = max(assigned_lifespan - 1, 0)
             stage = resolve_lifecycle_stage(stage_age, spec.stage_thresholds)
             dependency = resolve_dependency_status(
                 stage,
@@ -1245,6 +1258,15 @@ class WorldEngine:
                     new_stage=stage.value,
                     chronological_age=age,
                     dependency_status=dependency.value,
+                )
+                _LOGGER.info(
+                    "lifecycle_stage_transition body_id=%s age=%s "
+                    "previous_stage=%s new_stage=%s assigned_lifespan_ticks=%s",
+                    record.body_id.value,
+                    age,
+                    previous_stage,
+                    stage.value,
+                    assigned_lifespan,
                 )
                 cause_id = derive_system_cause_id(
                     self._config,
@@ -1272,13 +1294,21 @@ class WorldEngine:
                 family_ordinal += 1
                 stage_changed_count += 1
 
-            if spec.natural_death_on_lifespan and age >= spec.lifespan_ticks:
+            if spec.natural_death_on_lifespan and age >= assigned_lifespan:
                 bodies[registration.entity_id] = copy_body(
                     body,
                     health=Health(0.0),
                     life_status=LifeStatus.DEAD,
                 )
                 semantic_mutation = True
+                _LOGGER.info(
+                    "lifecycle_lifespan_death body_id=%s age=%s stage=%s "
+                    "assigned_lifespan_ticks=%s",
+                    registration.entity_id.value,
+                    age,
+                    record.stage.value,
+                    assigned_lifespan,
+                )
                 details = Died(
                     body_id=registration.entity_id,
                     death_cause=DeathCause.LIFESPAN,
@@ -1430,6 +1460,16 @@ class WorldEngine:
                 )
                 continue
             semantic_mutation = True
+            from simulation.lifespan_distribution import assign_lifespan_ticks
+
+            assigned = assign_lifespan_ticks(
+                spec=spec,
+                run_config=self._config,
+                run_id=self._run_id.value,
+                world_id=self.world_id.value,
+                agent_id=candidate.agent_id.value,
+                entry_tick=tick,
+            )
             lifecycle_record = AgentLifecycleRecord(
                 body_id=candidate.body_id,
                 agent_id=candidate.agent_id.value,
@@ -1439,6 +1479,7 @@ class WorldEngine:
                 generation_index=candidate.generation_index,
                 cohort_id=candidate.cohort_id,
                 provenance=candidate.provenance,
+                assigned_lifespan_ticks=assigned,
             )
             registration = AgentRegistration(
                 agent_id=candidate.agent_id,
@@ -2246,6 +2287,12 @@ class WorldEngine:
             tick=snap.tick.value,
             skill_efficiency=self._skill_efficiency_map(rules=physical_rules),
             witness_resource_nodes=self._environmental_dynamics is not None,
+            effective_carry_capacity=self._lifecycle_effective_carry_capacity(
+                tick=snap.tick.value
+            ),
+            denied_command_kinds_by_entity=self._lifecycle_denied_command_kinds(
+                tick=snap.tick.value
+            ),
         )
         start_ledger = self._skill_ledger
         folded_ledger, skill_facts = self._fold_skill_ledger(
@@ -2306,6 +2353,9 @@ class WorldEngine:
                 day_phase=physical_rules.day_phase_for_tick(snap.tick.value),
                 resolved=system_effects,
                 environmental_dynamics=self._environmental_dynamics,
+                metabolism_fatigue_by_entity=self._lifecycle_metabolism_fatigue_map(
+                    tick=snap.tick.value
+                ),
             )
         except ValueError as exc:
             message = str(exc)
@@ -2695,6 +2745,9 @@ class WorldEngine:
             world_state=snap.world.state,
             tick=snap.tick.value,
             rules=rules,
+            learning_rate_by_entity=self._lifecycle_learning_rate_map(
+                tick=snap.tick.value
+            ),
         )
         return folded, tuple(facts)
 
@@ -3085,9 +3138,180 @@ class WorldEngine:
             )
             raise ValueError("missing_domain") from None
 
+    def _lifecycle_continuous_factors(
+        self, *, entity_id: EntityId, tick: int
+    ) -> object:
+        """Resolve continuous developmental factors for one body (passthrough=1.0)."""
+        from world.lifecycle import AgentLifecycleRecord, chronological_age
+        from world.lifecycle_effects import (
+            PASSTHROUGH_CONTINUOUS_FACTORS,
+            interpolate_continuous_factors,
+        )
+
+        if self._population_lifecycle is None:
+            return PASSTHROUGH_CONTINUOUS_FACTORS
+        record = None
+        for raw in self._lifecycle_records:
+            if type(raw) is AgentLifecycleRecord and raw.body_id == entity_id:
+                record = raw
+                break
+        if record is None:
+            return PASSTHROUGH_CONTINUOUS_FACTORS
+        age = chronological_age(entry_tick=record.entry_tick, current_tick=tick)
+        return interpolate_continuous_factors(
+            age,
+            self._population_lifecycle.stage_thresholds,
+            self._population_lifecycle.stage_capability_effects,
+            enabled=(
+                self._population_lifecycle.gradual_aging.intra_stage_interpolation
+            ),
+        )
+
+    def _lifecycle_effective_carry_capacity(
+        self, *, tick: int
+    ) -> dict[EntityId, int] | None:
+        """Ephemeral capacity map; None when lifecycle channel off (bit-identical)."""
+        if self._population_lifecycle is None:
+            return None
+        if not self._population_lifecycle.has_developmental_extensions():
+            # Passthrough factors: omit map so capacity checks use stored values.
+            if len(self._population_lifecycle.stage_capability_effects) == 0:
+                return None
+        from world.lifecycle import AgentLifecycleRecord
+
+        result: dict[EntityId, int] = {}
+        bodies = self._snapshot.world.state.bodies
+        for raw in self._lifecycle_records:
+            if type(raw) is not AgentLifecycleRecord:
+                continue
+            body = bodies.get(raw.body_id)
+            if body is None:
+                continue
+            factors = self._lifecycle_continuous_factors(
+                entity_id=raw.body_id, tick=tick
+            )
+            factor = float(factors.physical_capacity_factor)  # type: ignore[attr-defined]
+            if factor == 1.0:
+                continue
+            effective = max(0, int(round(body.carry_capacity.value * factor)))
+            result[raw.body_id] = effective
+            _LOGGER.debug(
+                "lifecycle_capacity_factor body_id=%s stage=%s factor=%s "
+                "effective_capacity=%s reason_code=ephemeral_capacity",
+                raw.body_id.value,
+                raw.stage.value,
+                factor,
+                effective,
+            )
+        return result or None
+
+    def _lifecycle_denied_command_kinds(
+        self, *, tick: int
+    ) -> dict[EntityId, frozenset[str]] | None:
+        if self._population_lifecycle is None:
+            return None
+        if len(self._population_lifecycle.stage_capability_effects) == 0:
+            return None
+        from world.lifecycle import AgentLifecycleRecord, chronological_age
+        from world.lifecycle_effects import resolve_stage_effect
+
+        del tick  # denies stay discrete by current stage on the record
+        result: dict[EntityId, frozenset[str]] = {}
+        for raw in self._lifecycle_records:
+            if type(raw) is not AgentLifecycleRecord:
+                continue
+            effect = resolve_stage_effect(
+                raw.stage, self._population_lifecycle.stage_capability_effects
+            )
+            if effect.denied_command_kinds:
+                result[raw.body_id] = frozenset(effect.denied_command_kinds)
+        return result or None
+
+    def _lifecycle_fatigue_factor(self, *, entity_id: EntityId, tick: int) -> float:
+        factors = self._lifecycle_continuous_factors(entity_id=entity_id, tick=tick)
+        return float(factors.fatigue_accrual_factor)  # type: ignore[attr-defined]
+
+    def _lifecycle_metabolism_fatigue_map(
+        self, *, tick: int
+    ) -> dict[EntityId, float] | None:
+        if self._population_lifecycle is None:
+            return None
+        if not self._population_lifecycle.has_developmental_extensions():
+            return None
+        from world.lifecycle import AgentLifecycleRecord
+
+        result: dict[EntityId, float] = {}
+        for raw in self._lifecycle_records:
+            if type(raw) is not AgentLifecycleRecord:
+                continue
+            factor = self._lifecycle_fatigue_factor(entity_id=raw.body_id, tick=tick)
+            if factor != 1.0:
+                result[raw.body_id] = factor
+        return result or None
+
+    def _lifecycle_learning_rate_map(
+        self, *, tick: int
+    ) -> dict[EntityId, float] | None:
+        if self._population_lifecycle is None:
+            return None
+        if not self._population_lifecycle.has_developmental_extensions():
+            return None
+        from world.lifecycle import AgentLifecycleRecord
+
+        result: dict[EntityId, float] = {}
+        for raw in self._lifecycle_records:
+            if type(raw) is not AgentLifecycleRecord:
+                continue
+            factors = self._lifecycle_continuous_factors(
+                entity_id=raw.body_id, tick=tick
+            )
+            factor = float(factors.learning_rate_factor)  # type: ignore[attr-defined]
+            if factor != 1.0:
+                result[raw.body_id] = factor
+                _LOGGER.debug(
+                    "lifecycle_learning_rate entity_id=%s stage=%s "
+                    "learning_rate_factor=%s",
+                    raw.body_id.value,
+                    raw.stage.value,
+                    factor,
+                )
+        return result or None
+
     def _skill_efficiency_map(self, *, rules: object) -> dict[object, object] | None:
         if self._skill_policy is None or self._skill_ledger is None:
-            return None
+            # Lifecycle fatigue still applies when skill mode is off: synthesize
+            # overrides from base rules × lifecycle factor when needed.
+            if self._population_lifecycle is None:
+                return None
+            if not self._population_lifecycle.has_developmental_extensions():
+                return None
+            from world._skills import SkillEfficiencyOverride
+            from world.lifecycle import AgentLifecycleRecord
+            from world.models import PhysicalRules
+
+            assert type(rules) is PhysicalRules
+            overrides: dict[object, object] = {}
+            tick = self._snapshot.tick.value
+            for raw in self._lifecycle_records:
+                if type(raw) is not AgentLifecycleRecord:
+                    continue
+                factor = self._lifecycle_fatigue_factor(
+                    entity_id=raw.body_id, tick=tick
+                )
+                if factor == 1.0:
+                    continue
+                overrides[raw.body_id] = SkillEfficiencyOverride(
+                    move_fatigue=factor * rules.move_fatigue,
+                    flee_fatigue=factor * rules.flee_fatigue,
+                    help_health_gain=rules.help_health_gain,
+                )
+                _LOGGER.debug(
+                    "lifecycle_fatigue_factor body_id=%s factor=%s "
+                    "reason_code=fatigue_accrual",
+                    raw.body_id.value,
+                    factor,
+                )
+            return overrides or None
         from world._skills import (
             SkillDomain,
             SkillEfficiencyOverride,
@@ -3099,6 +3323,7 @@ class WorldEngine:
 
         assert type(rules) is PhysicalRules
         overrides: dict[object, object] = {}
+        tick = self._snapshot.tick.value
         for entity_id in self._skill_entity_ids:
             navigation = self._skill_level(
                 entity_id,
@@ -3112,11 +3337,17 @@ class WorldEngine:
                 ledger=self._skill_ledger,
                 tick=self._snapshot.tick,
             )
+            lifecycle_factor = self._lifecycle_fatigue_factor(
+                entity_id=entity_id, tick=tick
+            )
+            # Skill divides cost; lifecycle multiplies accrual — compose explicitly.
             overrides[entity_id] = SkillEfficiencyOverride(
-                move_fatigue=adjusted_move_fatigue(
+                move_fatigue=lifecycle_factor
+                * adjusted_move_fatigue(
                     rules.move_fatigue, navigation, self._skill_policy
                 ),
-                flee_fatigue=adjusted_flee_fatigue(
+                flee_fatigue=lifecycle_factor
+                * adjusted_flee_fatigue(
                     rules.flee_fatigue, navigation, self._skill_policy
                 ),
                 help_health_gain=adjusted_help_gain(
@@ -3685,6 +3916,7 @@ def _optional_population_lifecycle(
     value: object | None,
     *,
     lifecycle_records: Sequence[object] | None,
+    synthesize_assigned_lifespan: bool = False,
 ) -> tuple[object | None, tuple[object, ...]]:
     if value is None:
         if lifecycle_records:
@@ -3693,6 +3925,9 @@ def _optional_population_lifecycle(
                 "(code=lifecycle_channel_off)"
             )
         return None, ()
+    from dataclasses import replace
+
+    from simulation.journal import consume_pending_assigned_lifespan_synthesis
     from simulation.runner_models import PopulationLifecycleSpec
     from world.lifecycle import AgentLifecycleRecord
 
@@ -3700,6 +3935,11 @@ def _optional_population_lifecycle(
         raise TypeError(
             "population_lifecycle must be PopulationLifecycleSpec or None"
         )
+    pending_synthesis = (
+        consume_pending_assigned_lifespan_synthesis()
+        if synthesize_assigned_lifespan
+        else frozenset()
+    )
     records_raw = () if lifecycle_records is None else tuple(lifecycle_records)
     frozen: list[AgentLifecycleRecord] = []
     seen_bodies: set[str] = set()
@@ -3712,6 +3952,16 @@ def _optional_population_lifecycle(
                 "(code=lifecycle_record_duplicate)"
             )
         seen_bodies.add(record.body_id.value)
+        if record.body_id.value in pending_synthesis:
+            record = replace(
+                record, assigned_lifespan_ticks=value.lifespan_ticks
+            )
+            _LOGGER.debug(
+                "lifecycle_assigned_lifespan_synthesized body_id=%s "
+                "assigned_lifespan_ticks=%s",
+                record.body_id.value,
+                record.assigned_lifespan_ticks,
+            )
         frozen.append(record)
     return value, tuple(frozen)
 
@@ -3760,6 +4010,7 @@ def _map_batch_outcome(
         "no_body_capacity": ActionResolutionReason.STRUCTURAL_REJECTION,
         "no_item_capacity": ActionResolutionReason.STRUCTURAL_REJECTION,
         "no_carry_capacity": ActionResolutionReason.STRUCTURAL_REJECTION,
+        "lifecycle_stage_action_denied": ActionResolutionReason.STRUCTURAL_REJECTION,
         "resource_depleted": ActionResolutionReason.STRUCTURAL_REJECTION,
         "wrong_kind": ActionResolutionReason.STRUCTURAL_REJECTION,
         "missing_resolved_effect": ActionResolutionReason.STRUCTURAL_REJECTION,

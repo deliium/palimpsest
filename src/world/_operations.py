@@ -845,6 +845,8 @@ def prepare_action_batch(
     tick: int | None = None,
     skill_efficiency: object | None = None,
     witness_resource_nodes: bool = False,
+    effective_carry_capacity: Mapping[EntityId, int] | None = None,
+    denied_command_kinds_by_entity: Mapping[EntityId, frozenset[str]] | None = None,
 ) -> PendingBatch:
     """Resolve ordered requests into pending effects against one evolving state.
 
@@ -891,6 +893,16 @@ def prepare_action_batch(
                     "skill_efficiency values must be SkillEfficiencyOverride"
                 )
             efficiency_map[entity_id] = override
+    capacity_map = None
+    if effective_carry_capacity is not None:
+        if not isinstance(effective_carry_capacity, Mapping):
+            raise TypeError("effective_carry_capacity must be a mapping")
+        capacity_map = effective_carry_capacity
+    deny_map = None
+    if denied_command_kinds_by_entity is not None:
+        if not isinstance(denied_command_kinds_by_entity, Mapping):
+            raise TypeError("denied_command_kinds_by_entity must be a mapping")
+        deny_map = denied_command_kinds_by_entity
     request_tuple = tuple(requests)
     resolved = resolved_effects
 
@@ -907,6 +919,25 @@ def prepare_action_batch(
         if request.revision != starting_state.revision:
             raise BatchPreparationError("request revision must match starting state")
         kind = getattr(request.command, "kind", type(request.command).__name__)
+        if deny_map is not None:
+            denied = deny_map.get(request.actor_id)
+            if denied is not None and str(kind) in denied:
+                _LOG.warning(
+                    "lifecycle_stage_action_denied actor_id=%s kind=%s "
+                    "reason_code=lifecycle_stage_action_denied",
+                    request.actor_id.value,
+                    kind,
+                )
+                outcomes.append(
+                    BatchItemOutcome(
+                        ordinal=ordinal,
+                        request_id=request.request_id,
+                        status=BatchItemStatus.REJECTED,
+                        reason="lifecycle_stage_action_denied",
+                        action_kind=str(kind),
+                    )
+                )
+                continue
 
         start_validation = validate_action_request(
             world_id=world_id, state=starting_state, request=request
@@ -930,6 +961,7 @@ def prepare_action_batch(
             rules=physical_rules,
             resolved=resolved,
             tick=tick,
+            effective_carry_capacity=capacity_map,
         )
         if start_rule.disposition is RuleDisposition.REJECT:
             outcomes.append(
@@ -982,6 +1014,7 @@ def prepare_action_batch(
             tick=tick,
             skill_efficiency=actor_efficiency,
             witness_resource_nodes=witness_resource_nodes,
+            effective_carry_capacity=capacity_map,
         )
         if application.result.disposition is RuleDisposition.REJECT:
             outcomes.append(

@@ -419,11 +419,13 @@ def fold_skill_growth(
     world_state: object,
     tick: int,
     rules: object,
+    learning_rate_by_entity: Mapping[EntityId, float] | None = None,
 ) -> ObjectiveSkillLedger:
     """Sum this tick's channels from the start-of-tick state, then quantize once.
 
     Same-tick moves do not change the witness set. ``crafting`` and ``building``
     grow only through instruction. Attack adds nothing.
+    ``learning_rate_by_entity`` multiplies growth deltas when provided (lifecycle).
     """
     from world.models import PhysicalRules
 
@@ -440,6 +442,11 @@ def fold_skill_growth(
         applied_actions, Sequence
     ):
         raise TypeError("applied_actions must be an ordered sequence")
+    rate_map: Mapping[EntityId, float] | None = None
+    if learning_rate_by_entity is not None:
+        if not isinstance(learning_rate_by_entity, Mapping):
+            raise TypeError("learning_rate_by_entity must be a mapping")
+        rate_map = learning_rate_by_entity
     sums: dict[EntityId, dict[SkillDomain, float]] = {}
     for action in applied_actions:
         if type(action) is not SkillGrowthInput:
@@ -453,6 +460,22 @@ def fold_skill_growth(
             rules=rules,
             sums=sums,
         )
+    if rate_map is not None:
+        scaled: dict[EntityId, dict[SkillDomain, float]] = {}
+        for entity_id, domains in sums.items():
+            factor = float(rate_map.get(entity_id, 1.0))
+            if factor == 1.0:
+                scaled[entity_id] = domains
+                continue
+            _LOG.debug(
+                "lifecycle_learning_rate entity_id=%s learning_rate_factor=%s",
+                entity_id.value,
+                factor,
+            )
+            scaled[entity_id] = {
+                domain: delta * factor for domain, delta in domains.items()
+            }
+        sums = scaled
     return ledger.apply_summed_deltas(sums)
 
 

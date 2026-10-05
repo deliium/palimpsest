@@ -7,9 +7,11 @@ dependency status are derived from run-level thresholds owned by WorldEngine.
 
 from __future__ import annotations
 
+import logging
 from collections.abc import Sequence
 from dataclasses import dataclass
 from enum import StrEnum
+from typing import Final
 
 from world.identifiers import (
     EntityId,
@@ -26,6 +28,8 @@ from world.values import (
     Thirst,
 )
 
+_LOGGER: Final[logging.Logger] = logging.getLogger("world.lifecycle")
+
 __all__ = [
     "AgentLifecycleRecord",
     "DependencyStatus",
@@ -34,9 +38,11 @@ __all__ = [
     "OriginProvenance",
     "chronological_age",
     "default_entrant_body",
+    "require_assigned_lifespan_ticks",
     "require_lifecycle_stage_id",
     "resolve_dependency_status",
     "resolve_lifecycle_stage",
+    "validate_assigned_lifespan_stage_coverage",
 ]
 
 
@@ -99,11 +105,63 @@ class LifecycleStageThreshold:
         )
 
 
+def require_assigned_lifespan_ticks(name: str, value: object) -> int:
+    """Require a positive assigned lifespan in ticks."""
+    if isinstance(value, bool) or type(value) is not int or value < 1:
+        _LOGGER.error(
+            "assigned_lifespan_invalid code=lifecycle_assigned_lifespan_invalid "
+            "name=%s",
+            name,
+        )
+        raise ValueError(
+            f"{name} must be a positive integer "
+            "(code=lifecycle_assigned_lifespan_invalid)"
+        )
+    return value
+
+
+def validate_assigned_lifespan_stage_coverage(
+    assigned_lifespan_ticks: int,
+    stage_thresholds: Sequence[LifecycleStageThreshold],
+) -> None:
+    """Fail closed when stages do not cover ages through ``assigned - 1``."""
+    assigned = require_assigned_lifespan_ticks(
+        "assigned_lifespan_ticks", assigned_lifespan_ticks
+    )
+    if isinstance(stage_thresholds, (str, bytes)) or not isinstance(
+        stage_thresholds, Sequence
+    ):
+        raise TypeError("stage_thresholds must be a sequence")
+    if len(stage_thresholds) == 0:
+        raise ValueError(
+            "stage_thresholds must be non-empty "
+            "(code=lifecycle_stage_thresholds_empty)"
+        )
+    # Reuse ordering validation via age-0 resolve, then check coverage.
+    resolve_lifecycle_stage(0, stage_thresholds)
+    final_max = stage_thresholds[-1].inclusive_max_age
+    if type(final_max) is not int:
+        raise TypeError("inclusive_max_age must be int")
+    if assigned - 1 > final_max:
+        _LOGGER.error(
+            "assigned_lifespan_uncovered code=lifecycle_stage_uncovered_lifespan "
+            "assigned_lifespan_ticks=%s final_max=%s",
+            assigned,
+            final_max,
+        )
+        raise ValueError(
+            "stage_thresholds must cover ages through "
+            "assigned_lifespan_ticks-1 "
+            "(code=lifecycle_stage_uncovered_lifespan)"
+        )
+
+
 @dataclass(frozen=True, slots=True)
 class AgentLifecycleRecord:
     """World-owned objective lifecycle binding for one registered body.
 
     Chronological age is not stored; callers use ``chronological_age``.
+    ``assigned_lifespan_ticks`` is drawn once at entry and never re-drawn.
     Forbidden fields: sex, fertility, mating, pregnancy, parentage, kinship.
     """
 
@@ -115,6 +173,7 @@ class AgentLifecycleRecord:
     generation_index: int
     cohort_id: str
     provenance: OriginProvenance
+    assigned_lifespan_ticks: int
 
     def __post_init__(self) -> None:
         if type(self.body_id) is not EntityId:
@@ -154,6 +213,14 @@ class AgentLifecycleRecord:
             raise TypeError(
                 "AgentLifecycleRecord.provenance must be OriginProvenance"
             )
+        object.__setattr__(
+            self,
+            "assigned_lifespan_ticks",
+            require_assigned_lifespan_ticks(
+                "AgentLifecycleRecord.assigned_lifespan_ticks",
+                self.assigned_lifespan_ticks,
+            ),
+        )
 
 
 def chronological_age(*, entry_tick: int, current_tick: int) -> int:

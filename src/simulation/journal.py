@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import logging
 from collections.abc import Mapping, Sequence
 from typing import Any, Final
 
@@ -73,10 +74,16 @@ from world.identifiers import (
 from world.models import PhysicalRules, physical_rules_fingerprint
 from world.production import ProductionJob, Structure, StructureKind, ToolMark, ToolRole
 
+_LOGGER: Final[logging.Logger] = logging.getLogger("simulation.journal")
+
 _TYPE_RUN_MANIFEST: Final[str] = "run_manifest"
 _TYPE_WORLD_SNAPSHOT: Final[str] = "world_snapshot"
 _TYPE_TICK_COMMIT: Final[str] = "tick_commit"
 _TYPE_WORLD_EVENT: Final[str] = "world_event"
+
+# Body ids whose assigned_lifespan_ticks were synthesized as a provisional
+# placeholder during dual-key decode; restore remaps them to run lifespan.
+_PENDING_ASSIGNED_LIFESPAN_SYNTHESIS: set[str] = set()
 
 _TYPE_TAGS: Final[frozenset[str]] = frozenset(
     {
@@ -102,6 +109,7 @@ __all__ = [
     "PersistenceSerializationError",
     "bind_snapshot_commit_hash",
     "compute_commit_hash",
+    "consume_pending_assigned_lifespan_synthesis",
     "decode_persistence",
     "encode_persistence",
     "hash_snapshot",
@@ -112,6 +120,13 @@ __all__ = [
     "verify_commit_chain",
     "verify_tick_events",
 ]
+
+
+def consume_pending_assigned_lifespan_synthesis() -> frozenset[str]:
+    """Return and clear body ids needing assigned-lifespan synthesis on restore."""
+    pending = frozenset(_PENDING_ASSIGNED_LIFESPAN_SYNTHESIS)
+    _PENDING_ASSIGNED_LIFESPAN_SYNTHESIS.clear()
+    return pending
 
 
 class PersistenceSerializationError(ValueError):
@@ -883,6 +898,23 @@ def _decode_world_snapshot(data: dict[str, Any], *, path: str) -> WorldSnapshot:
         raise PersistenceSerializationError("malformed_id", path) from exc
 
 
+_LIFECYCLE_RECORD_KEYS_BASE: Final[frozenset[str]] = frozenset(
+    {
+        "agent_id",
+        "body_id",
+        "cohort_id",
+        "dependency_status",
+        "entry_tick",
+        "generation_index",
+        "provenance",
+        "stage",
+    }
+)
+_LIFECYCLE_RECORD_KEYS_WITH_ASSIGNED: Final[frozenset[str]] = (
+    _LIFECYCLE_RECORD_KEYS_BASE | frozenset({"assigned_lifespan_ticks"})
+)
+
+
 def _encode_lifecycle_record(value: object) -> dict[str, Any]:
     from world.lifecycle import AgentLifecycleRecord
 
@@ -890,6 +922,7 @@ def _encode_lifecycle_record(value: object) -> dict[str, Any]:
         raise TypeError("lifecycle_records entries must be AgentLifecycleRecord")
     return {
         "agent_id": value.agent_id,
+        "assigned_lifespan_ticks": value.assigned_lifespan_ticks,
         "body_id": value.body_id.value,
         "cohort_id": value.cohort_id,
         "dependency_status": value.dependency_status.value,
@@ -908,23 +941,49 @@ def _decode_lifecycle_record(data: dict[str, Any], *, path: str) -> object:
         OriginProvenance,
     )
 
-    _require_keys(
-        data,
-        {
-            "agent_id",
-            "body_id",
-            "cohort_id",
-            "dependency_status",
-            "entry_tick",
-            "generation_index",
-            "provenance",
-            "stage",
-        },
-        path=path,
-    )
+    actual = frozenset(data.keys())
+    if actual == _LIFECYCLE_RECORD_KEYS_WITH_ASSIGNED:
+        has_assigned = True
+    elif actual == _LIFECYCLE_RECORD_KEYS_BASE:
+        has_assigned = False
+    else:
+        _LOGGER.error(
+            "lifecycle_record_key_set_invalid path=%s actual=%s",
+            path,
+            sorted(actual),
+        )
+        raise PersistenceSerializationError("unexpected_keys", path)
     try:
+        body_id = _str_field(data, "body_id", path=path)
+        if has_assigned:
+            raw_assigned = data["assigned_lifespan_ticks"]
+            if (
+                isinstance(raw_assigned, bool)
+                or type(raw_assigned) is not int
+                or raw_assigned < 1
+            ):
+                raise PersistenceSerializationError(
+                    "invalid_int", f"{path}.assigned_lifespan_ticks"
+                )
+            assigned = raw_assigned
+            _LOGGER.debug(
+                "lifecycle_record_decode path=%s has_assigned_lifespan=true "
+                "synthesized=false",
+                path,
+            )
+        else:
+            # Provisional placeholder; restore remaps via pending synthesis set
+            # to run-level lifespan_ticks (fixed equivalence).
+            assigned = 1
+            _PENDING_ASSIGNED_LIFESPAN_SYNTHESIS.add(body_id)
+            _LOGGER.debug(
+                "lifecycle_record_decode path=%s has_assigned_lifespan=false "
+                "synthesized=pending body_id=%s",
+                path,
+                body_id,
+            )
         return AgentLifecycleRecord(
-            body_id=EntityId(_str_field(data, "body_id", path=path)),
+            body_id=EntityId(body_id),
             agent_id=_str_field(data, "agent_id", path=path),
             entry_tick=_nonneg_int_field(data, "entry_tick", path=path),
             stage=LifecycleStageId(_str_field(data, "stage", path=path)),
@@ -934,6 +993,7 @@ def _decode_lifecycle_record(data: dict[str, Any], *, path: str) -> object:
             generation_index=_nonneg_int_field(data, "generation_index", path=path),
             cohort_id=_str_field(data, "cohort_id", path=path),
             provenance=OriginProvenance(_str_field(data, "provenance", path=path)),
+            assigned_lifespan_ticks=assigned,
         )
     except (TypeError, ValueError) as exc:
         raise PersistenceSerializationError("invalid_model", path) from exc

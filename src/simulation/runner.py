@@ -130,6 +130,7 @@ from simulation.run_control import (
 from simulation.runner_models import (
     _V2_CAPABILITY_FLAG_NAMES,
     RUNNER_SCHEMA_VERSION_V25,
+    RUNNER_SCHEMA_VERSION_V26,
     AgentCognitionSpec,
     AgentRunnerSpec,
     CognitionCounters,
@@ -1373,6 +1374,9 @@ class SimulationRunner:
                 lifecycle_records = seed_bootstrap_lifecycle_records(
                     registrations=registrations,
                     spec=config.population_lifecycle,
+                    run_config=run_config,
+                    run_id=resolved_run_id.value,
+                    world_id=config.scenario.world_id.value,
                 )
             engine = WorldEngine(
                 config=run_config,
@@ -1389,7 +1393,11 @@ class SimulationRunner:
                     config.new_agent_initialization
                     if (
                         lifecycle_channel
-                        and config.schema_version == RUNNER_SCHEMA_VERSION_V25
+                        and config.schema_version
+                        in {
+                            RUNNER_SCHEMA_VERSION_V25,
+                            RUNNER_SCHEMA_VERSION_V26,
+                        }
                         and config.new_agent_initialization is not None
                     )
                     else None

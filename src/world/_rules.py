@@ -9,6 +9,7 @@ this module owns dispositions, reason codes, and precedence.
 from __future__ import annotations
 
 import logging
+from collections.abc import Mapping
 from dataclasses import dataclass, replace
 from enum import StrEnum
 from typing import Final
@@ -450,6 +451,7 @@ def evaluate_operation(
     rules: PhysicalRules | None = None,
     resolved: ResolvedActionEffects | None = None,
     tick: int | None = None,
+    effective_carry_capacity: Mapping[EntityId, int] | None = None,
 ) -> RuleResult:
     """Evaluate a validated operation against an immutable snapshot.
 
@@ -461,12 +463,19 @@ def evaluate_operation(
 
     One-action slot consumption is enforced by the engine, not by rules.
     Conflict classification across a batch is handled by batch preparation.
+    ``effective_carry_capacity`` is ephemeral stage scaling — stored body
+    capacity is never rewritten here.
     """
     if type(state) is not WorldState:
         raise TypeError("evaluate_operation requires WorldState")
     physical_rules = _require_rules(rules)
     if resolved is not None and type(resolved) is not ResolvedActionEffects:
         raise TypeError("evaluate_operation resolved must be ResolvedActionEffects")
+    capacity_map: Mapping[EntityId, int] | None = None
+    if effective_carry_capacity is not None:
+        if not isinstance(effective_carry_capacity, Mapping):
+            raise TypeError("effective_carry_capacity must be a mapping")
+        capacity_map = effective_carry_capacity
     op_type = type(operation)
     policy = COMMAND_RULE_MATRIX.get(op_type)
     if policy is None:
@@ -517,12 +526,23 @@ def evaluate_operation(
                 resolved=resolved,
             )
         case _TakeOp(item_id=item_id):
-            return _evaluate_take(state, operation.actor_id, item_id, kind)
+            return _evaluate_take(
+                state,
+                operation.actor_id,
+                item_id,
+                kind,
+                effective_carry_capacity=capacity_map,
+            )
         case _DropOp(item_id=item_id):
             return _evaluate_drop(state, operation.actor_id, item_id, kind)
         case _GiveOp(recipient_id=recipient_id, item_id=item_id):
             return _evaluate_give(
-                state, operation.actor_id, recipient_id, item_id, kind
+                state,
+                operation.actor_id,
+                recipient_id,
+                item_id,
+                kind,
+                effective_carry_capacity=capacity_map,
             )
         case _EatOp(item_id=item_id):
             return _evaluate_eat(state, operation.actor_id, item_id, kind)
@@ -770,7 +790,12 @@ def _resource_search_eligible(
 
 
 def _evaluate_take(
-    state: WorldState, actor_id: EntityId, item_id: EntityId, kind: str
+    state: WorldState,
+    actor_id: EntityId,
+    item_id: EntityId,
+    kind: str,
+    *,
+    effective_carry_capacity: Mapping[EntityId, int] | None = None,
 ) -> RuleResult:
     actor = state.bodies[actor_id]
     item = state.items[item_id]
@@ -778,7 +803,10 @@ def _evaluate_take(
         return _reject(kind, RuleReason.NOT_AT_LOCATION)
     if item.location_id != actor.location_id:
         return _reject(kind, RuleReason.NOT_AT_LOCATION)
-    if _inventory_load(state, actor) + item.load.value > actor.carry_capacity.value:
+    capacity = actor.carry_capacity.value
+    if effective_carry_capacity is not None and actor_id in effective_carry_capacity:
+        capacity = effective_carry_capacity[actor_id]
+    if _inventory_load(state, actor) + item.load.value > capacity:
         return _reject(kind, RuleReason.NO_CARRY_CAPACITY)
     return RuleResult(
         disposition=RuleDisposition.MUTATE,
@@ -814,6 +842,8 @@ def _evaluate_give(
     recipient_id: EntityId,
     item_id: EntityId,
     kind: str,
+    *,
+    effective_carry_capacity: Mapping[EntityId, int] | None = None,
 ) -> RuleResult:
     actor = state.bodies[actor_id]
     recipient = state.bodies[recipient_id]
@@ -824,10 +854,13 @@ def _evaluate_give(
         return _reject(kind, RuleReason.NOT_HELD)
     if recipient.location_id != actor.location_id:
         return _reject(kind, RuleReason.NOT_COLOCATED)
+    capacity = recipient.carry_capacity.value
     if (
-        _inventory_load(state, recipient) + item.load.value
-        > recipient.carry_capacity.value
+        effective_carry_capacity is not None
+        and recipient_id in effective_carry_capacity
     ):
+        capacity = effective_carry_capacity[recipient_id]
+    if _inventory_load(state, recipient) + item.load.value > capacity:
         return _reject(kind, RuleReason.NO_CARRY_CAPACITY)
     return RuleResult(
         disposition=RuleDisposition.MUTATE,
@@ -1663,6 +1696,7 @@ def apply_operation(
     tick: int | None = None,
     skill_efficiency: object | None = None,
     witness_resource_nodes: bool = False,
+    effective_carry_capacity: Mapping[EntityId, int] | None = None,
 ) -> RuleApplication:
     """Evaluate then apply immutable physical or event-only effects.
 
@@ -1683,6 +1717,7 @@ def apply_operation(
         rules=physical_rules,
         resolved=resolved,
         tick=tick,
+        effective_carry_capacity=effective_carry_capacity,
     )
     if result.disposition in {
         RuleDisposition.REJECT,

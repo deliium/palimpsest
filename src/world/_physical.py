@@ -6,6 +6,7 @@ deterministic system cause IDs before finalization.
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from dataclasses import dataclass
 
 from world._production import shelter_factor_for
@@ -145,6 +146,7 @@ def apply_autonomous_physical_step(
     day_phase: DayPhase,
     resolved: ResolvedSystemEffects | None = None,
     environmental_dynamics: EnvironmentalDynamicsSpec | None = None,
+    metabolism_fatigue_by_entity: Mapping[EntityId, float] | None = None,
 ) -> PendingSystemStep:
     """Apply weather, regeneration, metabolism, and exposure in canonical order.
 
@@ -377,8 +379,13 @@ def apply_autonomous_physical_step(
         thirst = Thirst(
             clamp_need(round_physical(body.thirst.value + rules.metabolism_thirst))
         )
+        fatigue_gain = rules.metabolism_fatigue
+        if metabolism_fatigue_by_entity is not None:
+            fatigue_gain = fatigue_gain * float(
+                metabolism_fatigue_by_entity.get(body.entity_id, 1.0)
+            )
         fatigue = Fatigue(
-            clamp_need(round_physical(body.fatigue.value + rules.metabolism_fatigue))
+            clamp_need(round_physical(body.fatigue.value + fatigue_gain))
         )
         damage = 0.0
         if hunger.value >= 100.0:

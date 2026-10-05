@@ -47,10 +47,12 @@ def test_agent_lifecycle_record_construction() -> None:
         generation_index=0,
         cohort_id="cohort-bootstrap",
         provenance=OriginProvenance.BOOTSTRAP,
+        assigned_lifespan_ticks=20,
     )
     assert record.body_id == EntityId("body-1")
     assert record.entry_tick == 0
     assert record.generation_index == 0
+    assert record.assigned_lifespan_ticks == 20
     assert not hasattr(record, "sex")
     assert not hasattr(record, "parent_id")
     assert "chronological_age" not in record.__dataclass_fields__
@@ -97,6 +99,7 @@ def test_agent_lifecycle_record_rejects_invalid_fields() -> None:
             generation_index=0,
             cohort_id="cohort-a",
             provenance=OriginProvenance.BOOTSTRAP,
+            assigned_lifespan_ticks=20,
         )
     with pytest.raises(ValueError, match="entry_tick"):
         AgentLifecycleRecord(
@@ -108,4 +111,17 @@ def test_agent_lifecycle_record_rejects_invalid_fields() -> None:
             generation_index=0,
             cohort_id="cohort-a",
             provenance=OriginProvenance.BOOTSTRAP,
+            assigned_lifespan_ticks=20,
+        )
+    with pytest.raises(ValueError, match="lifecycle_assigned_lifespan_invalid"):
+        AgentLifecycleRecord(
+            body_id=EntityId("body-1"),
+            agent_id="agent-1",
+            entry_tick=0,
+            stage=LifecycleStageId("infant"),
+            dependency_status=DependencyStatus.DEPENDENT,
+            generation_index=0,
+            cohort_id="cohort-a",
+            provenance=OriginProvenance.BOOTSTRAP,
+            assigned_lifespan_ticks=0,
         )

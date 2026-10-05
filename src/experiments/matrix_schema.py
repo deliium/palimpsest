@@ -21,6 +21,7 @@ from simulation.runner_models import (
     RUNNER_SCHEMA_VERSION_V23,
     RUNNER_SCHEMA_VERSION_V24,
     RUNNER_SCHEMA_VERSION_V25,
+    RUNNER_SCHEMA_VERSION_V26,
     ArtifactInterpretationMode,
     CognitiveBudgetMode,
     CulturalNarrativeMode,
@@ -65,7 +66,16 @@ def finalize_matrix_cell_config(
         for agent in agents
     )
 
-    if config.new_agent_initialization is not None:
+    developmental_on = (
+        config.population_lifecycle is not None
+        and config.population_lifecycle.has_developmental_extensions()
+    )
+    if developmental_on:
+        schema_version, rule = (
+            RUNNER_SCHEMA_VERSION_V26,
+            "developmental_stages_on",
+        )
+    elif config.new_agent_initialization is not None:
         schema_version, rule = (
             RUNNER_SCHEMA_VERSION_V25,
             "new_agent_initialization_on",
@@ -100,11 +110,13 @@ def finalize_matrix_cell_config(
     if schema_version in {
         RUNNER_SCHEMA_VERSION_V24,
         RUNNER_SCHEMA_VERSION_V25,
+        RUNNER_SCHEMA_VERSION_V26,
     } and payload.get("population_lifecycle") is None:
         payload["population_lifecycle"] = example_population_lifecycle_spec()
-    if schema_version == RUNNER_SCHEMA_VERSION_V25 and payload.get(
-        "new_agent_initialization"
-    ) is None:
+    if schema_version in {
+        RUNNER_SCHEMA_VERSION_V25,
+        RUNNER_SCHEMA_VERSION_V26,
+    } and payload.get("new_agent_initialization") is None:
         payload["new_agent_initialization"] = default_new_agent_initialization_spec()
     try:
         finalized = SimulationRunnerConfig(**payload)
@@ -124,6 +136,7 @@ def finalize_matrix_cell_config(
             "experiment": {
                 "schema_version": schema_version,
                 "winning_rule": rule,
+                "reason": rule,
             }
         },
     )

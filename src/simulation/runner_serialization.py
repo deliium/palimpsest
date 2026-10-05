@@ -49,6 +49,7 @@ from simulation.runner_models import (
     RUNNER_SCHEMA_VERSION_V23,
     RUNNER_SCHEMA_VERSION_V24,
     RUNNER_SCHEMA_VERSION_V25,
+    RUNNER_SCHEMA_VERSION_V26,
     SUPPORTED_RUNNER_SCHEMA_VERSIONS,
     AgentCognitionSpec,
     AgentRunnerSpec,
@@ -405,6 +406,7 @@ _SKILL_SCHEMA_VERSIONS: Final[frozenset[str]] = frozenset(
         RUNNER_SCHEMA_VERSION_V23,
         RUNNER_SCHEMA_VERSION_V24,
         RUNNER_SCHEMA_VERSION_V25,
+        RUNNER_SCHEMA_VERSION_V26,
     }
 )
 _COGNITION_SCHEMA_CONSOLIDATION: Final[frozenset[str]] = frozenset(
@@ -430,6 +432,7 @@ _COGNITION_SCHEMA_CONSOLIDATION: Final[frozenset[str]] = frozenset(
         RUNNER_SCHEMA_VERSION_V23,
         RUNNER_SCHEMA_VERSION_V24,
         RUNNER_SCHEMA_VERSION_V25,
+        RUNNER_SCHEMA_VERSION_V26,
     }
 )
 _COGNITION_SCHEMA_REFLECTION: Final[frozenset[str]] = frozenset(
@@ -454,6 +457,7 @@ _COGNITION_SCHEMA_REFLECTION: Final[frozenset[str]] = frozenset(
         RUNNER_SCHEMA_VERSION_V23,
         RUNNER_SCHEMA_VERSION_V24,
         RUNNER_SCHEMA_VERSION_V25,
+        RUNNER_SCHEMA_VERSION_V26,
     }
 )
 _COGNITION_SCHEMA_PROSPECTIVE: Final[frozenset[str]] = frozenset(
@@ -477,6 +481,7 @@ _COGNITION_SCHEMA_PROSPECTIVE: Final[frozenset[str]] = frozenset(
         RUNNER_SCHEMA_VERSION_V23,
         RUNNER_SCHEMA_VERSION_V24,
         RUNNER_SCHEMA_VERSION_V25,
+        RUNNER_SCHEMA_VERSION_V26,
     }
 )
 _COGNITION_SCHEMA_COUNTERFACTUAL: Final[frozenset[str]] = frozenset(
@@ -499,6 +504,7 @@ _COGNITION_SCHEMA_COUNTERFACTUAL: Final[frozenset[str]] = frozenset(
         RUNNER_SCHEMA_VERSION_V23,
         RUNNER_SCHEMA_VERSION_V24,
         RUNNER_SCHEMA_VERSION_V25,
+        RUNNER_SCHEMA_VERSION_V26,
     }
 )
 _COGNITION_SCHEMA_STRATEGY: Final[frozenset[str]] = frozenset(
@@ -520,6 +526,7 @@ _COGNITION_SCHEMA_STRATEGY: Final[frozenset[str]] = frozenset(
         RUNNER_SCHEMA_VERSION_V23,
         RUNNER_SCHEMA_VERSION_V24,
         RUNNER_SCHEMA_VERSION_V25,
+        RUNNER_SCHEMA_VERSION_V26,
     }
 )
 _COGNITION_SCHEMA_REPUTATION: Final[frozenset[str]] = frozenset(
@@ -540,6 +547,7 @@ _COGNITION_SCHEMA_REPUTATION: Final[frozenset[str]] = frozenset(
         RUNNER_SCHEMA_VERSION_V23,
         RUNNER_SCHEMA_VERSION_V24,
         RUNNER_SCHEMA_VERSION_V25,
+        RUNNER_SCHEMA_VERSION_V26,
     }
 )
 
@@ -825,6 +833,7 @@ def _encode_cognition(
         RUNNER_SCHEMA_VERSION_V23,
         RUNNER_SCHEMA_VERSION_V24,
         RUNNER_SCHEMA_VERSION_V25,
+        RUNNER_SCHEMA_VERSION_V26,
     }:
         payload["teaching_interaction_mode"] = value.teaching_interaction_mode.value
         for name in _TEACHING_WEIGHT_KEYS:
@@ -843,6 +852,7 @@ def _encode_cognition(
         RUNNER_SCHEMA_VERSION_V23,
         RUNNER_SCHEMA_VERSION_V24,
         RUNNER_SCHEMA_VERSION_V25,
+        RUNNER_SCHEMA_VERSION_V26,
     }:
         payload["production_knowledge_mode"] = value.production_knowledge_mode.value
         payload["production_catalog"] = _encode_production_catalog(
@@ -860,6 +870,7 @@ def _encode_cognition(
         RUNNER_SCHEMA_VERSION_V23,
         RUNNER_SCHEMA_VERSION_V24,
         RUNNER_SCHEMA_VERSION_V25,
+        RUNNER_SCHEMA_VERSION_V26,
     }:
         payload["territorial_claim_mode"] = value.territorial_claim_mode.value
     if schema_version in {
@@ -873,6 +884,7 @@ def _encode_cognition(
         RUNNER_SCHEMA_VERSION_V23,
         RUNNER_SCHEMA_VERSION_V24,
         RUNNER_SCHEMA_VERSION_V25,
+        RUNNER_SCHEMA_VERSION_V26,
     }:
         payload["group_formation_mode"] = value.group_formation_mode.value
     if schema_version in {
@@ -885,6 +897,7 @@ def _encode_cognition(
         RUNNER_SCHEMA_VERSION_V23,
         RUNNER_SCHEMA_VERSION_V24,
         RUNNER_SCHEMA_VERSION_V25,
+        RUNNER_SCHEMA_VERSION_V26,
     }:
         payload["social_norm_mode"] = value.social_norm_mode.value
     if schema_version in {
@@ -896,6 +909,7 @@ def _encode_cognition(
         RUNNER_SCHEMA_VERSION_V23,
         RUNNER_SCHEMA_VERSION_V24,
         RUNNER_SCHEMA_VERSION_V25,
+        RUNNER_SCHEMA_VERSION_V26,
     }:
         payload["social_convention_mode"] = value.social_convention_mode.value
     if schema_version in {
@@ -906,6 +920,7 @@ def _encode_cognition(
         RUNNER_SCHEMA_VERSION_V23,
         RUNNER_SCHEMA_VERSION_V24,
         RUNNER_SCHEMA_VERSION_V25,
+        RUNNER_SCHEMA_VERSION_V26,
     }:
         payload["artifact_interpretation_mode"] = (
             value.artifact_interpretation_mode.value
@@ -917,6 +932,7 @@ def _encode_cognition(
         RUNNER_SCHEMA_VERSION_V23,
         RUNNER_SCHEMA_VERSION_V24,
         RUNNER_SCHEMA_VERSION_V25,
+        RUNNER_SCHEMA_VERSION_V26,
     }:
         payload["semantic_naming_mode"] = value.semantic_naming_mode.value
     if schema_version in {
@@ -925,6 +941,7 @@ def _encode_cognition(
         RUNNER_SCHEMA_VERSION_V23,
         RUNNER_SCHEMA_VERSION_V24,
         RUNNER_SCHEMA_VERSION_V25,
+        RUNNER_SCHEMA_VERSION_V26,
     }:
         payload["cultural_narrative_mode"] = value.cultural_narrative_mode.value
     if schema_version in {
@@ -932,6 +949,7 @@ def _encode_cognition(
         RUNNER_SCHEMA_VERSION_V23,
         RUNNER_SCHEMA_VERSION_V24,
         RUNNER_SCHEMA_VERSION_V25,
+        RUNNER_SCHEMA_VERSION_V26,
     }:
         payload["cognitive_budget_mode"] = value.cognitive_budget_mode.value
         limits = value.cognitive_budget_limits
@@ -952,6 +970,7 @@ def _encode_cognition(
             RUNNER_SCHEMA_VERSION_V23,
             RUNNER_SCHEMA_VERSION_V24,
             RUNNER_SCHEMA_VERSION_V25,
+            RUNNER_SCHEMA_VERSION_V26,
         }:
             # Full v22 keyset on v23/v24; DISABLED budgets encode null limit keys.
             for key in _BUDGET_LIMIT_KEYS:
@@ -980,6 +999,7 @@ def _decode_cognition(
         RUNNER_SCHEMA_VERSION_V23,
         RUNNER_SCHEMA_VERSION_V24,
         RUNNER_SCHEMA_VERSION_V25,
+        RUNNER_SCHEMA_VERSION_V26,
     }:
         _require_keys(data, _COGNITION_KEYS_V22, path=path)
     elif schema_version == RUNNER_SCHEMA_VERSION_V21:
@@ -1128,6 +1148,7 @@ def _decode_cognition(
         RUNNER_SCHEMA_VERSION_V23,
         RUNNER_SCHEMA_VERSION_V24,
         RUNNER_SCHEMA_VERSION_V25,
+        RUNNER_SCHEMA_VERSION_V26,
     }:
         try:
             teaching_interaction_mode = TeachingInteractionMode(
@@ -1158,6 +1179,7 @@ def _decode_cognition(
         RUNNER_SCHEMA_VERSION_V23,
         RUNNER_SCHEMA_VERSION_V24,
         RUNNER_SCHEMA_VERSION_V25,
+        RUNNER_SCHEMA_VERSION_V26,
     }:
         try:
             production_knowledge_mode = ProductionKnowledgeMode(
@@ -1189,6 +1211,7 @@ def _decode_cognition(
         RUNNER_SCHEMA_VERSION_V23,
         RUNNER_SCHEMA_VERSION_V24,
         RUNNER_SCHEMA_VERSION_V25,
+        RUNNER_SCHEMA_VERSION_V26,
     }:
         try:
             territorial_claim_mode = TerritorialClaimMode(
@@ -1211,6 +1234,7 @@ def _decode_cognition(
         RUNNER_SCHEMA_VERSION_V23,
         RUNNER_SCHEMA_VERSION_V24,
         RUNNER_SCHEMA_VERSION_V25,
+        RUNNER_SCHEMA_VERSION_V26,
     }:
         try:
             group_formation_mode = GroupFormationMode(
@@ -1232,6 +1256,7 @@ def _decode_cognition(
         RUNNER_SCHEMA_VERSION_V23,
         RUNNER_SCHEMA_VERSION_V24,
         RUNNER_SCHEMA_VERSION_V25,
+        RUNNER_SCHEMA_VERSION_V26,
     }:
         try:
             social_norm_mode = SocialNormMode(
@@ -1252,6 +1277,7 @@ def _decode_cognition(
         RUNNER_SCHEMA_VERSION_V23,
         RUNNER_SCHEMA_VERSION_V24,
         RUNNER_SCHEMA_VERSION_V25,
+        RUNNER_SCHEMA_VERSION_V26,
     }:
         try:
             social_convention_mode = SocialConventionMode(
@@ -1271,6 +1297,7 @@ def _decode_cognition(
         RUNNER_SCHEMA_VERSION_V23,
         RUNNER_SCHEMA_VERSION_V24,
         RUNNER_SCHEMA_VERSION_V25,
+        RUNNER_SCHEMA_VERSION_V26,
     }:
         try:
             artifact_interpretation_mode = ArtifactInterpretationMode(
@@ -1290,6 +1317,7 @@ def _decode_cognition(
         RUNNER_SCHEMA_VERSION_V23,
         RUNNER_SCHEMA_VERSION_V24,
         RUNNER_SCHEMA_VERSION_V25,
+        RUNNER_SCHEMA_VERSION_V26,
     }:
         try:
             semantic_naming_mode = SemanticNamingMode(
@@ -1307,6 +1335,7 @@ def _decode_cognition(
         RUNNER_SCHEMA_VERSION_V23,
         RUNNER_SCHEMA_VERSION_V24,
         RUNNER_SCHEMA_VERSION_V25,
+        RUNNER_SCHEMA_VERSION_V26,
     }:
         try:
             cultural_narrative_mode = CulturalNarrativeMode(
@@ -1325,6 +1354,7 @@ def _decode_cognition(
         RUNNER_SCHEMA_VERSION_V23,
         RUNNER_SCHEMA_VERSION_V24,
         RUNNER_SCHEMA_VERSION_V25,
+        RUNNER_SCHEMA_VERSION_V26,
     }:
         try:
             cognitive_budget_mode = CognitiveBudgetMode(
@@ -1342,6 +1372,7 @@ def _decode_cognition(
                 RUNNER_SCHEMA_VERSION_V23,
                 RUNNER_SCHEMA_VERSION_V24,
                 RUNNER_SCHEMA_VERSION_V25,
+                RUNNER_SCHEMA_VERSION_V26,
             }
             and cognitive_budget_mode is CognitiveBudgetMode.DISABLED
         ):
@@ -1494,6 +1525,7 @@ def _encode_agent(value: AgentRunnerSpec, *, schema_version: str) -> dict[str, A
         RUNNER_SCHEMA_VERSION_V23,
         RUNNER_SCHEMA_VERSION_V24,
         RUNNER_SCHEMA_VERSION_V25,
+        RUNNER_SCHEMA_VERSION_V26,
     }:
         assert value.name is not None
         payload["name"] = value.name
@@ -1838,6 +1870,10 @@ _RUNNER_ROOT_KEYS_V25_WITH_DYNAMICS: Final[set[str]] = {
     *_RUNNER_ROOT_KEYS_V24_WITH_DYNAMICS,
     "new_agent_initialization",
 }
+_RUNNER_ROOT_KEYS_V26: Final[set[str]] = set(_RUNNER_ROOT_KEYS_V25)
+_RUNNER_ROOT_KEYS_V26_WITH_DYNAMICS: Final[set[str]] = set(
+    _RUNNER_ROOT_KEYS_V25_WITH_DYNAMICS
+)
 _POPULATION_LIFECYCLE_KEYS: Final[set[str]] = {
     "lifespan_ticks",
     "stage_thresholds",
@@ -1846,6 +1882,21 @@ _POPULATION_LIFECYCLE_KEYS: Final[set[str]] = {
     "demographic_policy_params",
     "max_population",
     "natural_death_on_lifespan",
+}
+_POPULATION_LIFECYCLE_KEYS_V26: Final[set[str]] = {
+    *_POPULATION_LIFECYCLE_KEYS,
+    "stage_capability_effects",
+    "gradual_aging",
+    "lifespan_distribution",
+}
+_GRADUAL_AGING_KEYS: Final[set[str]] = {"intra_stage_interpolation"}
+_LIFESPAN_DISTRIBUTION_KEYS: Final[set[str]] = {"distribution_id", "params"}
+_STAGE_CAPABILITY_EFFECT_KEYS: Final[set[str]] = {
+    "stage_id",
+    "physical_capacity_factor",
+    "learning_rate_factor",
+    "fatigue_accrual_factor",
+    "denied_command_kinds",
 }
 _STAGE_THRESHOLD_KEYS: Final[set[str]] = {
     "stage_id",
@@ -1949,18 +2000,126 @@ def _decode_v3_capability_flags(
         raise RunnerSerializationError("invalid_model", path) from exc
 
 
-def _encode_population_lifecycle(spec: PopulationLifecycleSpec) -> dict[str, Any]:
-    return spec.canonical_payload()
+def _encode_population_lifecycle(
+    spec: PopulationLifecycleSpec, *, schema_version: str
+) -> dict[str, Any]:
+    include_developmental = schema_version == RUNNER_SCHEMA_VERSION_V26
+    return spec.canonical_payload(include_developmental=include_developmental)
+
+
+def _decode_gradual_aging(data: Mapping[str, Any], *, path: str) -> object:
+    from simulation.runner_models import GradualAgingSpec
+
+    if not isinstance(data, dict):
+        raise RunnerSerializationError("invalid_object", path)
+    _require_keys(data, _GRADUAL_AGING_KEYS, path=path)
+    try:
+        return GradualAgingSpec(
+            intra_stage_interpolation=_bool_field(
+                data, "intra_stage_interpolation", path=path
+            )
+        )
+    except (TypeError, ValueError) as exc:
+        raise RunnerSerializationError("invalid_model", path) from exc
+
+
+def _decode_lifespan_distribution(data: Mapping[str, Any], *, path: str) -> object:
+    from simulation.runner_models import LifespanDistributionSpec
+
+    if not isinstance(data, dict):
+        raise RunnerSerializationError("invalid_object", path)
+    _require_keys(data, _LIFESPAN_DISTRIBUTION_KEYS, path=path)
+    params_raw = data["params"]
+    if not isinstance(params_raw, dict):
+        raise RunnerSerializationError("invalid_object", f"{path}.params")
+    try:
+        return LifespanDistributionSpec(
+            distribution_id=_str_field(data, "distribution_id", path=path),
+            params=dict(params_raw),
+        )
+    except (TypeError, ValueError) as exc:
+        raise RunnerSerializationError("invalid_model", path) from exc
+
+
+def _decode_stage_capability_effects(
+    raw: object, *, path: str
+) -> tuple[object, ...]:
+    from world.lifecycle import LifecycleStageId
+    from world.lifecycle_effects import StageCapabilityEffect
+
+    if raw is None:
+        return ()
+    if not isinstance(raw, list):
+        raise RunnerSerializationError("invalid_array", path)
+    effects: list[StageCapabilityEffect] = []
+    for index, item in enumerate(raw):
+        item_path = f"{path}[{index}]"
+        if not isinstance(item, dict):
+            raise RunnerSerializationError("invalid_object", item_path)
+        forbidden = set(item) & {
+            "authority",
+            "leader",
+            "social_rank",
+            "respect",
+            "role",
+            "parent_id",
+            "parent_ids",
+            "child_id",
+            "child_ids",
+            "kinship",
+            "heavy_labor",
+            "long_travel",
+            "teach",
+            "combat_initiate",
+        }
+        if forbidden:
+            raise RunnerSerializationError("unknown_field", item_path)
+        _require_keys(item, _STAGE_CAPABILITY_EFFECT_KEYS, path=item_path)
+        kinds_raw = item["denied_command_kinds"]
+        if not isinstance(kinds_raw, list):
+            raise RunnerSerializationError(
+                "invalid_array", f"{item_path}.denied_command_kinds"
+            )
+        try:
+            effects.append(
+                StageCapabilityEffect(
+                    stage_id=LifecycleStageId(
+                        _str_field(item, "stage_id", path=item_path)
+                    ),
+                    physical_capacity_factor=_required_float(
+                        item, "physical_capacity_factor", path=item_path
+                    ),
+                    learning_rate_factor=_required_float(
+                        item, "learning_rate_factor", path=item_path
+                    ),
+                    fatigue_accrual_factor=_required_float(
+                        item, "fatigue_accrual_factor", path=item_path
+                    ),
+                    denied_command_kinds=tuple(kinds_raw),
+                )
+            )
+        except (TypeError, ValueError) as exc:
+            raise RunnerSerializationError("invalid_model", item_path) from exc
+    return tuple(effects)
 
 
 def _decode_population_lifecycle(
-    data: Mapping[str, Any], *, path: str
+    data: Mapping[str, Any], *, path: str, schema_version: str
 ) -> PopulationLifecycleSpec:
+    from simulation.runner_models import (
+        GradualAgingSpec,
+        LifespanDistributionSpec,
+        default_gradual_aging_spec,
+        default_lifespan_distribution_spec,
+    )
     from world.lifecycle import LifecycleStageId, LifecycleStageThreshold
 
     if not isinstance(data, dict):
         raise RunnerSerializationError("invalid_object", path)
-    _require_keys(data, _POPULATION_LIFECYCLE_KEYS, path=path)
+    if schema_version == RUNNER_SCHEMA_VERSION_V26:
+        _require_keys(data, _POPULATION_LIFECYCLE_KEYS_V26, path=path)
+    else:
+        _require_keys(data, _POPULATION_LIFECYCLE_KEYS, path=path)
     thresholds_raw = data["stage_thresholds"]
     if not isinstance(thresholds_raw, list):
         raise RunnerSerializationError("invalid_array", f"{path}.stage_thresholds")
@@ -1984,7 +2143,35 @@ def _decode_population_lifecycle(
         raise RunnerSerializationError(
             "invalid_object", f"{path}.demographic_policy_params"
         )
+    if schema_version == RUNNER_SCHEMA_VERSION_V26:
+        gradual_aging = _decode_gradual_aging(
+            data["gradual_aging"], path=f"{path}.gradual_aging"
+        )
+        lifespan_distribution = _decode_lifespan_distribution(
+            data["lifespan_distribution"], path=f"{path}.lifespan_distribution"
+        )
+        effects = _decode_stage_capability_effects(
+            data["stage_capability_effects"],
+            path=f"{path}.stage_capability_effects",
+        )
+        _LOG.debug(
+            "population_lifecycle_developmental_decoded effect_count=%s "
+            "distribution_id=%s interpolation=%s",
+            len(effects),
+            getattr(lifespan_distribution, "distribution_id", None),
+            getattr(gradual_aging, "intra_stage_interpolation", None),
+        )
+    else:
+        gradual_aging = default_gradual_aging_spec()
+        lifespan_distribution = default_lifespan_distribution_spec()
+        effects = ()
+        _LOG.debug(
+            "population_lifecycle_developmental_synthesized schema_version=%s",
+            schema_version,
+        )
     try:
+        assert type(gradual_aging) is GradualAgingSpec
+        assert type(lifespan_distribution) is LifespanDistributionSpec
         return PopulationLifecycleSpec(
             lifespan_ticks=_nonneg_int_field(data, "lifespan_ticks", path=path),
             stage_thresholds=tuple(thresholds),
@@ -1999,6 +2186,9 @@ def _decode_population_lifecycle(
             natural_death_on_lifespan=_bool_field(
                 data, "natural_death_on_lifespan", path=path
             ),
+            stage_capability_effects=effects,  # type: ignore[arg-type]
+            gradual_aging=gradual_aging,
+            lifespan_distribution=lifespan_distribution,
         )
     except RunnerSerializationError:
         raise
@@ -2287,6 +2477,7 @@ def _encode_runner_document(config: SimulationRunnerConfig) -> dict[str, Any]:
         RUNNER_SCHEMA_VERSION_V23,
         RUNNER_SCHEMA_VERSION_V24,
         RUNNER_SCHEMA_VERSION_V25,
+        RUNNER_SCHEMA_VERSION_V26,
     }:
         document["capability_flags"] = _encode_capability_flags(config.capability_flags)
     if config.schema_version in {
@@ -2312,6 +2503,7 @@ def _encode_runner_document(config: SimulationRunnerConfig) -> dict[str, Any]:
         RUNNER_SCHEMA_VERSION_V23,
         RUNNER_SCHEMA_VERSION_V24,
         RUNNER_SCHEMA_VERSION_V25,
+        RUNNER_SCHEMA_VERSION_V26,
     }:
         document["cognition_trace"] = _encode_cognition_trace(config.cognition_trace)
     if config.schema_version == RUNNER_SCHEMA_VERSION_V14 or (
@@ -2328,6 +2520,7 @@ def _encode_runner_document(config: SimulationRunnerConfig) -> dict[str, Any]:
             RUNNER_SCHEMA_VERSION_V23,
             RUNNER_SCHEMA_VERSION_V24,
             RUNNER_SCHEMA_VERSION_V25,
+            RUNNER_SCHEMA_VERSION_V26,
         }
         and config.environmental_dynamics is not None
     ):
@@ -2341,6 +2534,7 @@ def _encode_runner_document(config: SimulationRunnerConfig) -> dict[str, Any]:
         RUNNER_SCHEMA_VERSION_V23,
         RUNNER_SCHEMA_VERSION_V24,
         RUNNER_SCHEMA_VERSION_V25,
+        RUNNER_SCHEMA_VERSION_V26,
     }:
         document["v3_capability_flags"] = _encode_v3_capability_flags(
             config.v3_capability_flags
@@ -2353,6 +2547,7 @@ def _encode_runner_document(config: SimulationRunnerConfig) -> dict[str, Any]:
     if config.schema_version in {
         RUNNER_SCHEMA_VERSION_V24,
         RUNNER_SCHEMA_VERSION_V25,
+        RUNNER_SCHEMA_VERSION_V26,
     }:
         lifecycle = config.population_lifecycle
         if type(lifecycle) is not PopulationLifecycleSpec:
@@ -2360,15 +2555,26 @@ def _encode_runner_document(config: SimulationRunnerConfig) -> dict[str, Any]:
                 "population_lifecycle must be PopulationLifecycleSpec on "
                 f"{config.schema_version}"
             )
-        document["population_lifecycle"] = _encode_population_lifecycle(lifecycle)
-        _LOG.debug(
-            "runner_config_encode_population_lifecycle schema_version=%s "
-            "policy_id=%s key_count=%s",
-            config.schema_version,
-            lifecycle.demographic_policy_id,
-            len(_POPULATION_LIFECYCLE_KEYS),
+        document["population_lifecycle"] = _encode_population_lifecycle(
+            lifecycle, schema_version=config.schema_version
         )
-    if config.schema_version == RUNNER_SCHEMA_VERSION_V25:
+        _LOG.info(
+            "runner_config_encode_population_lifecycle schema_version=%s "
+            "generational_population=%s developmental_extensions=%s",
+            config.schema_version,
+            config.v3_capability_flags.generational_population,
+            lifecycle.has_developmental_extensions(),
+        )
+        _LOG.debug(
+            "runner_config_encode_population_lifecycle policy_id=%s "
+            "effect_count=%s",
+            lifecycle.demographic_policy_id,
+            len(lifecycle.stage_capability_effects),
+        )
+    if config.schema_version in {
+        RUNNER_SCHEMA_VERSION_V25,
+        RUNNER_SCHEMA_VERSION_V26,
+    }:
         init_spec = config.new_agent_initialization
         document["new_agent_initialization"] = _encode_new_agent_initialization(
             init_spec
@@ -2487,7 +2693,13 @@ def decode_runner_config(payload: bytes) -> SimulationRunnerConfig:
         raise RunnerSerializationError("invalid_string", "$.schema_version")
     if schema_version not in SUPPORTED_RUNNER_SCHEMA_VERSIONS:
         raise RunnerSerializationError("unsupported_version", "$.schema_version")
-    if schema_version == RUNNER_SCHEMA_VERSION_V25:
+    if schema_version == RUNNER_SCHEMA_VERSION_V26:
+        root_keys = (
+            _RUNNER_ROOT_KEYS_V26_WITH_DYNAMICS
+            if "environmental_dynamics" in data
+            else _RUNNER_ROOT_KEYS_V26
+        )
+    elif schema_version == RUNNER_SCHEMA_VERSION_V25:
         root_keys = (
             _RUNNER_ROOT_KEYS_V25_WITH_DYNAMICS
             if "environmental_dynamics" in data
@@ -2637,6 +2849,7 @@ def decode_runner_config(payload: bytes) -> SimulationRunnerConfig:
         RUNNER_SCHEMA_VERSION_V23,
         RUNNER_SCHEMA_VERSION_V24,
         RUNNER_SCHEMA_VERSION_V25,
+        RUNNER_SCHEMA_VERSION_V26,
     }:
         capability_flags = _decode_capability_flags(
             data["capability_flags"], path="$.capability_flags"
@@ -2648,6 +2861,7 @@ def decode_runner_config(payload: bytes) -> SimulationRunnerConfig:
         RUNNER_SCHEMA_VERSION_V23,
         RUNNER_SCHEMA_VERSION_V24,
         RUNNER_SCHEMA_VERSION_V25,
+        RUNNER_SCHEMA_VERSION_V26,
     }:
         v3_capability_flags = _decode_v3_capability_flags(
             data["v3_capability_flags"], path="$.v3_capability_flags"
@@ -2667,19 +2881,23 @@ def decode_runner_config(payload: bytes) -> SimulationRunnerConfig:
     if schema_version in {
         RUNNER_SCHEMA_VERSION_V24,
         RUNNER_SCHEMA_VERSION_V25,
+        RUNNER_SCHEMA_VERSION_V26,
     }:
         population_lifecycle = _decode_population_lifecycle(
-            data["population_lifecycle"], path="$.population_lifecycle"
+            data["population_lifecycle"],
+            path="$.population_lifecycle",
+            schema_version=schema_version,
         )
         _LOG.debug(
             "runner_config_decode_population_lifecycle schema_version=%s "
-            "policy_id=%s",
+            "policy_id=%s developmental_extensions=%s",
             schema_version,
             population_lifecycle.demographic_policy_id,
+            population_lifecycle.has_developmental_extensions(),
         )
     else:
         population_lifecycle = None
-    if schema_version == RUNNER_SCHEMA_VERSION_V25:
+    if schema_version in {RUNNER_SCHEMA_VERSION_V25, RUNNER_SCHEMA_VERSION_V26}:
         new_agent_initialization = _decode_new_agent_initialization(
             data["new_agent_initialization"], path="$.new_agent_initialization"
         )
@@ -2725,6 +2943,7 @@ def decode_runner_config(payload: bytes) -> SimulationRunnerConfig:
         RUNNER_SCHEMA_VERSION_V23,
         RUNNER_SCHEMA_VERSION_V24,
         RUNNER_SCHEMA_VERSION_V25,
+        RUNNER_SCHEMA_VERSION_V26,
     }:
         cognition_trace = _decode_cognition_trace(
             data["cognition_trace"], path="$.cognition_trace"
@@ -2810,6 +3029,7 @@ def decode_runner_config(payload: bytes) -> SimulationRunnerConfig:
                         RUNNER_SCHEMA_VERSION_V23,
                         RUNNER_SCHEMA_VERSION_V24,
                         RUNNER_SCHEMA_VERSION_V25,
+                        RUNNER_SCHEMA_VERSION_V26,
                     }
                     and "environmental_dynamics" in data
                 )

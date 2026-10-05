@@ -1708,13 +1708,14 @@ def v2_regression_profile(config: SimulationRunnerConfig) -> SimulationRunnerCon
 def generational_population_profile(
     config: SimulationRunnerConfig,
 ) -> SimulationRunnerConfig:
-    """Require owned ``generational_population`` on runner-config-v24|v25.
+    """Require owned ``generational_population`` on runner-config-v24|v25|v26.
 
     Off the V1/V2 regression gates. Returns the same config when valid.
     """
     from simulation.runner_models import (
         RUNNER_SCHEMA_VERSION_V24,
         RUNNER_SCHEMA_VERSION_V25,
+        RUNNER_SCHEMA_VERSION_V26,
     )
 
     if type(config) is not SimulationRunnerConfig:
@@ -1732,9 +1733,11 @@ def generational_population_profile(
     if config.schema_version not in {
         RUNNER_SCHEMA_VERSION_V24,
         RUNNER_SCHEMA_VERSION_V25,
+        RUNNER_SCHEMA_VERSION_V26,
     }:
         raise ValueError(
-            "generational population profile requires runner-config-v24|v25 "
+            "generational population profile requires "
+            "runner-config-v24|v25|v26 "
             "(code=generational_population_profile_requires_v24)"
         )
     if config.population_lifecycle is None:
@@ -1783,6 +1786,45 @@ def new_agent_bootstrap_profile(
         "new_agent_bootstrap_profile_ok schema_version=%s species_defaults_id=%s",
         profiled.schema_version,
         profiled.new_agent_initialization.species_defaults_id,
+    )
+    return profiled
+
+
+def developmental_stages_profile(
+    config: SimulationRunnerConfig,
+) -> SimulationRunnerConfig:
+    """Require v26 developmental extensions on owned generational_population.
+
+    Stage names are configurable opaque ids (example: dependent/learning/
+    independent/elder). Does not grant social authority.
+    """
+    from simulation.runner_models import RUNNER_SCHEMA_VERSION_V26
+
+    profiled = generational_population_profile(config)
+    if profiled.schema_version != RUNNER_SCHEMA_VERSION_V26:
+        raise ValueError(
+            "developmental stages profile requires runner-config-v26 "
+            "(code=developmental_stages_profile_requires_v26)"
+        )
+    assert profiled.population_lifecycle is not None
+    if not profiled.population_lifecycle.has_developmental_extensions():
+        raise ValueError(
+            "developmental stages profile requires non-default "
+            "developmental children "
+            "(code=developmental_stages_profile_missing_extensions)"
+        )
+    if profiled.new_agent_initialization is None:
+        raise ValueError(
+            "developmental stages profile requires new_agent_initialization "
+            "(code=developmental_stages_profile_missing_init)"
+        )
+    _LOG.debug(
+        "developmental_stages_profile_ok schema_version=%s "
+        "effect_count=%s distribution_id=%s interpolation=%s",
+        profiled.schema_version,
+        len(profiled.population_lifecycle.stage_capability_effects),
+        profiled.population_lifecycle.lifespan_distribution.distribution_id,
+        profiled.population_lifecycle.gradual_aging.intra_stage_interpolation,
     )
     return profiled
 
