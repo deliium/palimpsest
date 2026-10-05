@@ -146,10 +146,21 @@ class _CandidateSeed:
 class ImaginationEngine:
     """Deterministic V1 imagination over typed observation affordances."""
 
-    __slots__ = ("_prospective_audit",)
+    __slots__ = (
+        "_prospective_audit",
+        "_caregiving_cognition_mode",
+        "_care_action_policy",
+    )
 
-    def __init__(self) -> None:
+    def __init__(
+        self,
+        *,
+        caregiving_cognition_mode: str | None = None,
+        care_action_policy: object | None = None,
+    ) -> None:
         self._prospective_audit: object | None = None
+        self._caregiving_cognition_mode = caregiving_cognition_mode
+        self._care_action_policy = care_action_policy
 
     def last_prospective_audit(self) -> object | None:
         return self._prospective_audit
@@ -257,6 +268,8 @@ class ImaginationEngine:
                     observation=loop_input.observation,
                     situation=situation,
                     loop_input=loop_input,
+                    caregiving_cognition_mode=self._caregiving_cognition_mode,
+                    care_action_policy=self._care_action_policy,
                 )
                 if not seeds:
                     fallback = True
@@ -800,6 +813,8 @@ def _affordances(
     observation: Observation,
     situation: SituationModel,
     loop_input: CognitiveLoopInput,
+    caregiving_cognition_mode: str | None = None,
+    care_action_policy: object | None = None,
 ) -> tuple[_CandidateSeed, ...]:
     seeds: list[_CandidateSeed] = []
     self_body = observation.self_body
@@ -912,6 +927,42 @@ def _affordances(
                 target_agent_id=agent_id,
             )
         )
+
+    if caregiving_cognition_mode == "deterministic":
+        allow_feed = True
+        allow_transport = True
+        if care_action_policy is not None:
+            allow_feed = bool(getattr(care_action_policy, "allow_feed", True))
+            allow_transport = bool(getattr(care_action_policy, "allow_transport", True))
+        held = {item.value for item in self_body.inventory}
+        held_care_item = any(
+            item.entity_id.value in held
+            and item.kind in {ItemKind.FOOD, ItemKind.WATER}
+            for item in observation.items
+        )
+        for index, (entity_id, agent_id) in enumerate(
+            social_targets[:_MAX_SOCIAL_TARGETS]
+        ):
+            if allow_feed and held_care_item:
+                seeds.append(
+                    _CandidateSeed(
+                        future_id=f"feed-{index}",
+                        direction=ActionDirection.FEED,
+                        claim_codes=(SituationClaimCode.SOCIAL_SIGNAL,),
+                        target_entity_id=entity_id,
+                        target_agent_id=agent_id,
+                    )
+                )
+            if allow_transport and exits:
+                seeds.append(
+                    _CandidateSeed(
+                        future_id=f"transport-{index}",
+                        direction=ActionDirection.TRANSPORT,
+                        claim_codes=(SituationClaimCode.SOCIAL_SIGNAL,),
+                        target_entity_id=entity_id,
+                        target_agent_id=agent_id,
+                    )
+                )
 
     # Stable order by future_id then direction.
     seeds.sort(key=lambda seed: (seed.future_id, seed.direction.value))
@@ -1058,6 +1109,11 @@ def _build_future(
             0.45 + 0.30 * safety_bias - 0.15 * danger_bias
         )
         confidence = _quantize_unit(0.40 + 0.30 * safety_bias)
+    elif seed.direction in {ActionDirection.FEED, ActionDirection.TRANSPORT}:
+        subjective_probability = _quantize_unit(
+            0.40 + 0.30 * safety_bias - 0.15 * danger_bias
+        )
+        confidence = _quantize_unit(0.35 + 0.30 * safety_bias)
     elif seed.direction is ActionDirection.SLEEP:
         subjective_probability = _quantize_unit(0.60 - 0.40 * danger_bias)
         confidence = _quantize_unit(0.55 - 0.30 * danger_bias)
@@ -1153,6 +1209,11 @@ def _direction_drive_effects(
         add(DriveKind.STATUS, 0.3)
         add(DriveKind.COMPETENCE, 0.2)
         add(DriveKind.SAFETY, -0.1 * danger)
+    elif direction in {ActionDirection.FEED, ActionDirection.TRANSPORT}:
+        add(DriveKind.BELONGING, 0.45)
+        add(DriveKind.STATUS, 0.25)
+        add(DriveKind.COMPETENCE, 0.15)
+        add(DriveKind.SAFETY, -0.1 * danger)
     elif direction is ActionDirection.WAIT:
         add(DriveKind.PREDICTABILITY, 0.3)
         add(DriveKind.SAFETY, 0.05 * safety - 0.15 * danger)
@@ -1210,6 +1271,8 @@ def _direction_goal_effects(
         elif outcome.kind is GoalOutcomeKind.RELATE_TO_AGENT and direction in {
             ActionDirection.COMMUNICATE,
             ActionDirection.HELP,
+            ActionDirection.FEED,
+            ActionDirection.TRANSPORT,
         }:
             delta = 0.35
         elif (
@@ -1234,9 +1297,16 @@ def _direction_social_effects(
     target_agent_id: AgentId | None,
     relationships: tuple[DirectedRelationshipProfile, ...],
 ) -> tuple[SocialEffect, ...]:
-    if direction not in {ActionDirection.COMMUNICATE, ActionDirection.HELP}:
+    if direction not in {
+        ActionDirection.COMMUNICATE,
+        ActionDirection.HELP,
+        ActionDirection.FEED,
+        ActionDirection.TRANSPORT,
+    }:
         return ()
     affinity = 0.2 if direction is ActionDirection.COMMUNICATE else 0.35
+    if direction in {ActionDirection.FEED, ActionDirection.TRANSPORT}:
+        affinity = 0.40
     if target_agent_id is not None:
         for profile in relationships:
             if profile.target_id == target_agent_id:

@@ -983,6 +983,8 @@ def build_cognitive_loop(
     reflection_selector: object | None = None,
     identity_history: object | None = None,
     world_model_provider: object | None = None,
+    caregiving_cognition_mode: str | None = None,
+    care_action_policy: object | None = None,
 ) -> CognitiveLoop:
     """Assemble a ``CognitiveLoop`` from explicit policies.
 
@@ -1031,7 +1033,10 @@ def build_cognitive_loop(
         if resolved.imagination_mode is CognitionImaginationMode.DISABLED:
             futures = PresentStateImagination()
         else:
-            futures = ImaginationEngine()
+            futures = ImaginationEngine(
+                caregiving_cognition_mode=caregiving_cognition_mode,
+                care_action_policy=care_action_policy,
+            )
     if motivation is None:
         motivation = MotivationAppraisal(
             mortality_appraisal_enabled=(
@@ -1147,6 +1152,8 @@ def build_cognitive_loop(
         competence_belief_policy=resolved.competence_belief_policy,
         teaching_interaction_mode=resolved.teaching_interaction_mode,
         teaching_claim_policy=resolved.teaching_claim_policy,
+        caregiving_cognition_mode=caregiving_cognition_mode,
+        care_action_policy=care_action_policy,
         territorial_claim_mode=resolved.territorial_claim_mode,
         territorial_claim_policy=resolved.territorial_claim_policy,
         group_formation_mode=resolved.group_formation_mode,

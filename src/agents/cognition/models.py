@@ -309,6 +309,8 @@ class IntentionCode(StrEnum):
     SLEEP = "sleep"
     FLEE = "flee"
     HELP = "help"
+    FEED = "feed"
+    TRANSPORT = "transport"
     ATTACK = "attack"
 
 
@@ -324,6 +326,8 @@ class ActionDirection(StrEnum):
     FLEE = "flee"
     COMMUNICATE = "communicate"
     HELP = "help"
+    FEED = "feed"
+    TRANSPORT = "transport"
     ATTACK = "attack"
 
 
@@ -445,6 +449,8 @@ _DIRECTION_FOR_INTENTION: Final[Mapping[IntentionCode, ActionDirection]] = {
     IntentionCode.SLEEP: ActionDirection.SLEEP,
     IntentionCode.FLEE: ActionDirection.FLEE,
     IntentionCode.HELP: ActionDirection.HELP,
+    IntentionCode.FEED: ActionDirection.FEED,
+    IntentionCode.TRANSPORT: ActionDirection.TRANSPORT,
     IntentionCode.ATTACK: ActionDirection.ATTACK,
 }
 
@@ -458,6 +464,8 @@ _INTENTION_FOR_DIRECTION: Final[Mapping[ActionDirection, IntentionCode]] = {
     ActionDirection.FLEE: IntentionCode.FLEE,
     ActionDirection.COMMUNICATE: IntentionCode.COMMUNICATE,
     ActionDirection.HELP: IntentionCode.HELP,
+    ActionDirection.FEED: IntentionCode.FEED,
+    ActionDirection.TRANSPORT: IntentionCode.TRANSPORT,
     ActionDirection.ATTACK: IntentionCode.ATTACK,
 }
 

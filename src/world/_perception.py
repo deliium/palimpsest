@@ -230,6 +230,7 @@ def _project_one(
             copy_body(body),
             lifecycle=_lifecycle_for(context, observer_id),
             kinship_visible=_kinship_self_for(context, observer_id),
+            dependency_needs=_dependency_needs_for(context, observer_id),
         ),
         locations=_sorted_locations(state, location_id),
         items=_sorted_items(
@@ -519,6 +520,7 @@ def _sorted_visible_bodies(
                 kinship_visible=_kinship_other_for(
                     context, observer_id=observer_id, other_body_id=body_id
                 ),
+                dependency_needs=_dependency_needs_for(context, body_id),
             )
         )
     return tuple(selected)
@@ -529,6 +531,18 @@ def _lifecycle_for(
 ) -> object | None:
     views = context.lifecycle_by_body
     if views is None:
+        return None
+    return views.get(body_id)
+
+
+def _dependency_needs_for(
+    context: ObservationContext, body_id: EntityId
+) -> object | None:
+    views = context.dependency_needs_by_body
+    if views is None:
+        return None
+    # Only expose need summaries for bodies that already have lifecycle facts.
+    if _lifecycle_for(context, body_id) is None:
         return None
     return views.get(body_id)
 

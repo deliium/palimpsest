@@ -39,6 +39,7 @@ from world.actions import (
     Ask,
     Drink,
     Eat,
+    Feed,
     Flee,
     Help,
     Inscribe,
@@ -47,6 +48,7 @@ from world.actions import (
     Sleep,
     Talk,
     Tell,
+    Transport,
     Wait,
 )
 from world.communications import (
@@ -84,11 +86,13 @@ _DIRECTION_TIE_RANK: Final[Mapping[ActionDirection, int]] = {
     ActionDirection.EAT: 2,
     ActionDirection.SLEEP: 3,
     ActionDirection.HELP: 4,
-    ActionDirection.COMMUNICATE: 5,
-    ActionDirection.MOVE: 6,
-    ActionDirection.SEARCH: 7,
-    ActionDirection.WAIT: 8,
-    ActionDirection.ATTACK: 9,
+    ActionDirection.FEED: 5,
+    ActionDirection.TRANSPORT: 6,
+    ActionDirection.COMMUNICATE: 7,
+    ActionDirection.MOVE: 8,
+    ActionDirection.SEARCH: 9,
+    ActionDirection.WAIT: 10,
+    ActionDirection.ATTACK: 11,
 }
 
 _TIE_BREAK_DIRECTION: Final[str] = "direction_rank"
@@ -143,6 +147,8 @@ class MultiCriteriaIntentionSelector:
         cultural_narratives: object | None = None,
         cultural_narrative_mode: object | None = None,
         narrative_penalties: Mapping[str, float] | None = None,
+        caregiving_cognition_mode: str | None = None,
+        care_action_policy: object | None = None,
     ) -> SelectedIntention:
         owner = loop_input.agent_id
         tick = loop_input.observation.tick
@@ -414,6 +420,37 @@ class MultiCriteriaIntentionSelector:
                 "narrative_penalty_applied future_count=%s",
                 len(narrative_penalties),
             )
+        from agents.cognition.caregiving import caregiving_future_biases
+
+        allow_feed = True
+        allow_transport = True
+        allow_help_safety = True
+        allow_teach_learning = True
+        if care_action_policy is not None:
+            allow_feed = bool(getattr(care_action_policy, "allow_feed", True))
+            allow_transport = bool(getattr(care_action_policy, "allow_transport", True))
+            allow_help_safety = bool(
+                getattr(care_action_policy, "allow_help_safety", True)
+            )
+            allow_teach_learning = bool(
+                getattr(care_action_policy, "allow_teach_learning", True)
+            )
+        caregiving_bias = caregiving_future_biases(
+            owner_id=owner,
+            mode=caregiving_cognition_mode,
+            futures=tuple(
+                futures_by_id[item.future_id]
+                for item in undominated
+                if item.future_id in futures_by_id
+            ),
+            relationships=() if snapshot is None else snapshot.relationships,
+            observation=loop_input.observation,
+            active_drive_kinds=motivation.active_drive_kinds,
+            allow_feed=allow_feed,
+            allow_transport=allow_transport,
+            allow_help_safety=allow_help_safety,
+            allow_teach_learning=allow_teach_learning,
+        )
         winner, tie_break = _pairwise_select(
             undominated,
             futures_by_id,
@@ -432,6 +469,7 @@ class MultiCriteriaIntentionSelector:
             artifact_penalties,
             naming_penalties,
             narrative_penalties,
+            caregiving_bias or None,
         )
         future = futures_by_id.get(winner.future_id)
         direction = ActionDirection.WAIT if future is None else future.direction
@@ -999,9 +1037,36 @@ def _is_feasible(
         return _has_communication_target(observation, target_entity_id)
     if direction is ActionDirection.HELP:
         return _has_social_target(observation, target_entity_id)
+    if direction is ActionDirection.FEED:
+        return _has_feed_affordance(observation, target_entity_id)
+    if direction is ActionDirection.TRANSPORT:
+        return _has_transport_affordance(observation, target_entity_id)
     if direction is ActionDirection.ATTACK:
         return _has_social_target(observation, target_entity_id)
     return False
+
+
+def _has_feed_affordance(
+    observation: Observation, target_entity_id: str | None
+) -> bool:
+    if not _has_social_target(observation, target_entity_id):
+        return False
+    self_body = observation.self_body
+    if self_body is None:
+        return False
+    held = set(item.value for item in self_body.inventory)
+    return any(
+        item.entity_id.value in held and item.kind in {ItemKind.FOOD, ItemKind.WATER}
+        for item in observation.items
+    )
+
+
+def _has_transport_affordance(
+    observation: Observation, target_entity_id: str | None
+) -> bool:
+    if not _has_social_target(observation, target_entity_id):
+        return False
+    return bool(observation.exits)
 
 
 def _has_water(observation: Observation, target_entity_id: str | None) -> bool:
@@ -1433,6 +1498,7 @@ def _pairwise_select(
     artifact_penalties: Mapping[str, float] | None = None,
     naming_penalties: Mapping[str, float] | None = None,
     narrative_penalties: Mapping[str, float] | None = None,
+    caregiving_bias: Mapping[str, float] | None = None,
 ) -> tuple[FutureAppraisal, str]:
     if len(appraisals) == 1:
         return appraisals[0], _TIE_BREAK_NONE
@@ -1459,6 +1525,7 @@ def _pairwise_select(
                 artifact_penalties,
                 naming_penalties,
                 narrative_penalties,
+                caregiving_bias,
             )
             if cmp > 0:
                 scores[left.future_id] += 1
@@ -1505,6 +1572,7 @@ def _pairwise_compare(
     artifact_penalties: Mapping[str, float] | None = None,
     naming_penalties: Mapping[str, float] | None = None,
     narrative_penalties: Mapping[str, float] | None = None,
+    caregiving_bias: Mapping[str, float] | None = None,
 ) -> int:
     """Return positive if left preferred, negative if right preferred, else 0."""
     active_drives = set(motivation.active_drive_kinds)
@@ -1668,6 +1736,9 @@ def _pairwise_compare(
     if narrative_penalties is not None:
         total -= narrative_penalties.get(left.future_id, 0.0)
         total += narrative_penalties.get(right.future_id, 0.0)
+    if caregiving_bias is not None:
+        total += caregiving_bias.get(left.future_id, 0.0)
+        total -= caregiving_bias.get(right.future_id, 0.0)
     if total > 0:
         return 1
     if total < 0:
@@ -1698,6 +1769,8 @@ def _motive_for_direction(direction: ActionDirection) -> MotivationCode:
         ActionDirection.MOVE: MotivationCode.EXPLORE,
         ActionDirection.COMMUNICATE: MotivationCode.SOCIALIZE,
         ActionDirection.HELP: MotivationCode.SOCIALIZE,
+        ActionDirection.FEED: MotivationCode.SOCIALIZE,
+        ActionDirection.TRANSPORT: MotivationCode.SOCIALIZE,
         ActionDirection.FLEE: MotivationCode.SURVIVE,
         ActionDirection.DRINK: MotivationCode.SURVIVE,
         ActionDirection.EAT: MotivationCode.SURVIVE,
@@ -1963,7 +2036,47 @@ def _compile_command(
         if helped is None:
             return None
         return Help(target_id=helped)
+    if direction is ActionDirection.FEED:
+        fed = _resolve_social_entity(target, observation)
+        if fed is None:
+            return None
+        item_id = _resolve_held_care_item(observation)
+        if item_id is None:
+            return None
+        return Feed(target_id=fed, item_id=item_id)
+    if direction is ActionDirection.TRANSPORT:
+        carried = _resolve_social_entity(target, observation)
+        if carried is None:
+            return None
+        destination = _resolve_first_exit(observation)
+        if destination is None:
+            return None
+        return Transport(target_id=carried, destination_id=destination)
     return None
+
+
+def _resolve_held_care_item(observation: Observation) -> EntityId | None:
+    self_body = observation.self_body
+    if self_body is None:
+        return None
+    held = {item.value for item in self_body.inventory}
+    candidates = sorted(
+        (
+            item.entity_id
+            for item in observation.items
+            if item.entity_id.value in held
+            and item.kind in {ItemKind.FOOD, ItemKind.WATER}
+        ),
+        key=lambda entity: entity.value,
+    )
+    return candidates[0] if candidates else None
+
+
+def _resolve_first_exit(observation: Observation) -> EntityId | None:
+    exits = sorted(observation.exits, key=lambda item: item.destination_id.value)
+    if not exits:
+        return None
+    return exits[0].destination_id
 
 
 def _with_teaching_act(

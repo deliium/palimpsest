@@ -84,8 +84,12 @@ __all__ = [
     "ObservationSourceKind",
     "ObservedArtifact",
     "ObservedCommunication",
+    "ObservedDependencyNeed",
+    "ObservedDependencyNeeds",
     "ObservedItem",
     "ObservedItemPlacement",
+    "ObservedKinshipVisible",
+    "ObservedLifecycle",
     "ObservedLocation",
     "ObservedOccurrence",
     "ObservedResource",
@@ -281,6 +285,7 @@ class VisibleBody:
     coarse_health: CoarseHealth
     lifecycle: ObservedLifecycle | None = None
     kinship_visible: ObservedKinshipVisible | None = None
+    dependency_needs: ObservedDependencyNeeds | None = None
 
     def __post_init__(self) -> None:
         if type(self.entity_id) is not EntityId:
@@ -297,6 +302,13 @@ class VisibleBody:
         ):
             raise TypeError(
                 "VisibleBody.kinship_visible must be ObservedKinshipVisible or None"
+            )
+        if (
+            self.dependency_needs is not None
+            and type(self.dependency_needs) is not ObservedDependencyNeeds
+        ):
+            raise TypeError(
+                "VisibleBody.dependency_needs must be ObservedDependencyNeeds or None"
             )
         if (
             self.life_status is LifeStatus.DEAD
@@ -391,6 +403,59 @@ class ObservedKinshipVisible:
             raise ValueError("ObservedKinshipVisible.children must be unique")
         object.__setattr__(self, "parents", parents)
         object.__setattr__(self, "children", children)
+
+
+@dataclass(frozen=True, slots=True)
+class ObservedDependencyNeed:
+    """Closed need-deficit summary for dependency-care perception."""
+
+    need_id: str
+    deficit: float
+    critical: bool
+
+    def __post_init__(self) -> None:
+        from world.dependency_care import CARE_NEED_IDS
+
+        if type(self.need_id) is not str:
+            raise TypeError("ObservedDependencyNeed.need_id must be str")
+        if self.need_id not in CARE_NEED_IDS:
+            raise ValueError(
+                f"ObservedDependencyNeed.need_id must be closed CareNeedId "
+                f"(got {self.need_id!r})"
+            )
+        if isinstance(self.deficit, bool) or not isinstance(self.deficit, (int, float)):
+            raise TypeError("ObservedDependencyNeed.deficit must be a number")
+        deficit = float(self.deficit)
+        if deficit < 0.0 or deficit > 1.0:
+            raise ValueError("ObservedDependencyNeed.deficit must be in [0, 1]")
+        object.__setattr__(self, "deficit", deficit)
+        if type(self.critical) is not bool:
+            raise TypeError("ObservedDependencyNeed.critical must be bool")
+
+
+@dataclass(frozen=True, slots=True)
+class ObservedDependencyNeeds:
+    """Ordered need-deficit summaries (sibling of lifecycle — not inside it)."""
+
+    needs: tuple[ObservedDependencyNeed, ...] = ()
+
+    def __post_init__(self) -> None:
+        if isinstance(self.needs, (str, bytes)) or not isinstance(self.needs, tuple):
+            raise TypeError("ObservedDependencyNeeds.needs must be a tuple")
+        cleaned: list[ObservedDependencyNeed] = []
+        seen: set[str] = set()
+        for item in self.needs:
+            if type(item) is not ObservedDependencyNeed:
+                raise TypeError(
+                    "ObservedDependencyNeeds.needs entries must be "
+                    "ObservedDependencyNeed"
+                )
+            if item.need_id in seen:
+                raise ValueError("ObservedDependencyNeeds.needs must be unique by need_id")
+            seen.add(item.need_id)
+            cleaned.append(item)
+        ordered = tuple(sorted(cleaned, key=lambda row: row.need_id))
+        object.__setattr__(self, "needs", ordered)
 
 
 @dataclass(frozen=True, slots=True)
@@ -547,6 +612,7 @@ class ObservedSelf:
     carry_capacity: CarryCapacity
     lifecycle: ObservedLifecycle | None = None
     kinship_visible: ObservedKinshipVisible | None = None
+    dependency_needs: ObservedDependencyNeeds | None = None
 
     def __post_init__(self) -> None:
         if type(self.entity_id) is not EntityId:
@@ -576,6 +642,13 @@ class ObservedSelf:
             raise TypeError(
                 "ObservedSelf.kinship_visible must be ObservedKinshipVisible or None"
             )
+        if (
+            self.dependency_needs is not None
+            and type(self.dependency_needs) is not ObservedDependencyNeeds
+        ):
+            raise TypeError(
+                "ObservedSelf.dependency_needs must be ObservedDependencyNeeds or None"
+            )
         if isinstance(self.inventory, (set, frozenset, Mapping)):
             raise TypeError("ObservedSelf.inventory must be an ordered sequence")
         if isinstance(self.inventory, (str, bytes, bytearray)) or not isinstance(
@@ -602,6 +675,7 @@ def observed_self_from_body(
     *,
     lifecycle: ObservedLifecycle | None = None,
     kinship_visible: ObservedKinshipVisible | None = None,
+    dependency_needs: ObservedDependencyNeeds | None = None,
 ) -> ObservedSelf:
     """Project an authoritative body into the explicit self observation DTO."""
     if type(body) is not AgentBody:
@@ -619,6 +693,7 @@ def observed_self_from_body(
         carry_capacity=body.carry_capacity,
         lifecycle=lifecycle,
         kinship_visible=kinship_visible,
+        dependency_needs=dependency_needs,
     )
 
 
@@ -729,6 +804,7 @@ class ObservationContext:
     lifecycle_by_body: Mapping[EntityId, ObservedLifecycle] | None = None
     kinship_self_by_body: Mapping[EntityId, ObservedKinshipVisible] | None = None
     kinship_agent_by_body: Mapping[EntityId, str] | None = None
+    dependency_needs_by_body: Mapping[EntityId, ObservedDependencyNeeds] | None = None
 
     def __post_init__(self) -> None:
         object.__setattr__(
@@ -802,6 +878,30 @@ class ObservationContext:
                 agents[body_id] = agent_id
             object.__setattr__(
                 self, "kinship_agent_by_body", MappingProxyType(agents)
+            )
+        if self.dependency_needs_by_body is not None:
+            if isinstance(self.dependency_needs_by_body, (str, bytes)) or not isinstance(
+                self.dependency_needs_by_body, Mapping
+            ):
+                raise TypeError(
+                    "ObservationContext.dependency_needs_by_body must be a mapping "
+                    "or None"
+                )
+            need_frozen: dict[EntityId, ObservedDependencyNeeds] = {}
+            for body_id, view in self.dependency_needs_by_body.items():
+                if type(body_id) is not EntityId:
+                    raise TypeError(
+                        "ObservationContext.dependency_needs_by_body keys must be "
+                        "EntityId"
+                    )
+                if type(view) is not ObservedDependencyNeeds:
+                    raise TypeError(
+                        "ObservationContext.dependency_needs_by_body values must be "
+                        "ObservedDependencyNeeds"
+                    )
+                need_frozen[body_id] = view
+            object.__setattr__(
+                self, "dependency_needs_by_body", MappingProxyType(need_frozen)
             )
 
     @property

@@ -73,6 +73,8 @@ _DIRECTION_MOTIVE: Final[dict[ActionDirection, MotivationCode]] = {
     ActionDirection.MOVE: MotivationCode.EXPLORE,
     ActionDirection.COMMUNICATE: MotivationCode.SOCIALIZE,
     ActionDirection.HELP: MotivationCode.SOCIALIZE,
+    ActionDirection.FEED: MotivationCode.SOCIALIZE,
+    ActionDirection.TRANSPORT: MotivationCode.SOCIALIZE,
     ActionDirection.FLEE: MotivationCode.SURVIVE,
     ActionDirection.DRINK: MotivationCode.SURVIVE,
     ActionDirection.EAT: MotivationCode.SURVIVE,
@@ -531,7 +533,11 @@ def _subjective_death_probability(future: ImaginedFuture) -> float:
         return _quantize_unit(0.15 * harm + 0.85 * harm + 0.2 * foreclosure)
     if future.direction is ActionDirection.FLEE:
         return _quantize_unit(0.35 * harm)
-    if future.direction is ActionDirection.HELP:
+    if future.direction in {
+        ActionDirection.HELP,
+        ActionDirection.FEED,
+        ActionDirection.TRANSPORT,
+    }:
         return _quantize_unit(0.55 * harm)
     return _quantize_unit(0.45 * harm + 0.1 * foreclosure)
 
@@ -576,7 +582,12 @@ def _attachment_loss(
         if trust is not None:
             value += max(0.0, trust.value) * trust.confidence.confidence * 0.4
         # Social actions retain attachments; flee/wait under threat risk them.
-        if future.direction in {ActionDirection.COMMUNICATE, ActionDirection.HELP}:
+        if future.direction in {
+            ActionDirection.COMMUNICATE,
+            ActionDirection.HELP,
+            ActionDirection.FEED,
+            ActionDirection.TRANSPORT,
+        }:
             value *= 0.4
         elif future.direction is ActionDirection.FLEE:
             value *= 0.7

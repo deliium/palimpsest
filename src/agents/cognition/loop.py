@@ -220,6 +220,8 @@ class CognitiveLoop:
         "_social_norm_policy",
         "_teaching_mode",
         "_teaching_policy",
+        "_caregiving_cognition_mode",
+        "_care_action_policy",
         "_territorial_claim_mode",
         "_territorial_claim_policy",
         "_theory_of_mind_mode",
@@ -268,6 +270,8 @@ class CognitiveLoop:
         competence_belief_policy: object | None = None,
         teaching_interaction_mode: object | None = None,
         teaching_claim_policy: object | None = None,
+        caregiving_cognition_mode: str | None = None,
+        care_action_policy: object | None = None,
         territorial_claim_mode: object | None = None,
         territorial_claim_policy: object | None = None,
         group_formation_mode: object | None = None,
@@ -677,6 +681,23 @@ class CognitiveLoop:
             teaching_policy = teaching_claim_policy
         self._teaching_mode = teaching_mode
         self._teaching_policy = teaching_policy
+        if caregiving_cognition_mode is None:
+            self._caregiving_cognition_mode = None
+            self._care_action_policy = None
+        elif type(caregiving_cognition_mode) is not str:
+            raise TypeError("caregiving_cognition_mode must be str or None")
+        elif caregiving_cognition_mode not in {"disabled", "deterministic"}:
+            raise ValueError(
+                f"unknown caregiving_cognition_mode {caregiving_cognition_mode!r}"
+            )
+        else:
+            self._caregiving_cognition_mode = caregiving_cognition_mode
+            self._care_action_policy = care_action_policy
+            if caregiving_cognition_mode == "deterministic":
+                _LOG.info(
+                    "caregiving_cognition_bind mode=deterministic policy_version=%s",
+                    "caregiving-bias.v1",
+                )
         from agents.cognition.production import ProductionKnowledgeMode
 
         production_mode = (
@@ -1997,6 +2018,8 @@ class CognitiveLoop:
                     cultural_narratives=cultural_narratives,
                     cultural_narrative_mode=self._cultural_narrative_mode,
                     narrative_penalties=narrative_penalty_map,
+                    caregiving_cognition_mode=self._caregiving_cognition_mode,
+                    care_action_policy=self._care_action_policy,
                 ),
             ),
             expected_type=SelectedIntention,
