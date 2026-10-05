@@ -72,6 +72,7 @@ from simulation.runner_models import (
     RUNNER_SCHEMA_VERSION_V21,
     RUNNER_SCHEMA_VERSION_V22,
     RUNNER_SCHEMA_VERSION_V23,
+    RUNNER_SCHEMA_VERSION_V24,
     SUPPORTED_RESULT_SCHEMA_VERSIONS,
     SUPPORTED_RUNNER_SCHEMA_VERSIONS,
 )
@@ -105,7 +106,11 @@ RESEARCH_UI_MOUNT: Final[str] = "/research/"
 # Accepted runner schema for V3 capability flags (encode/decode in Task 4).
 # Alias kept for matrix wording from Task 2; prefer RUNNER_SCHEMA_VERSION_V23.
 PLANNED_RUNNER_SCHEMA_VERSION_V23: Final[str] = RUNNER_SCHEMA_VERSION_V23
+RUNNER_SCHEMA_VERSION_POPULATION_LIFECYCLE: Final[str] = RUNNER_SCHEMA_VERSION_V24
 V3_CAPABILITY_FLAGS_WIRE_KEY: Final[str] = "v3_capability_flags"
+V3_OWNED_CAPABILITY_FLAGS: Final[frozenset[str]] = frozenset(
+    {"generational_population"}
+)
 V3_CAPABILITY_FLAG_NAMES: Final[tuple[str, ...]] = (
     "generational_population",
     "kinship_inheritance",
@@ -127,6 +132,7 @@ __all__ = [
     "OBSERVER_PROTOCOL_VERSION",
     "PLANNED_RUNNER_SCHEMA_VERSION_V23",
     "RESEARCH_UI_MOUNT",
+    "RUNNER_SCHEMA_VERSION_POPULATION_LIFECYCLE",
     "RUNNER_SCHEMA_VERSION_V3",
     "RUNNER_SCHEMA_VERSION_V4",
     "RUNNER_SCHEMA_VERSION_V5",
@@ -148,9 +154,11 @@ __all__ = [
     "RUNNER_SCHEMA_VERSION_V21",
     "RUNNER_SCHEMA_VERSION_V22",
     "RUNNER_SCHEMA_VERSION_V23",
+    "RUNNER_SCHEMA_VERSION_V24",
     "STREAM_ENVELOPE_VERSION",
     "V3_CAPABILITY_FLAGS_WIRE_KEY",
     "V3_CAPABILITY_FLAG_NAMES",
+    "V3_OWNED_CAPABILITY_FLAGS",
     "WS_PROTOCOL_VERSION",
     "CompatibilityEntry",
     "compatibility_entry",
@@ -330,11 +338,17 @@ _MATRIX: dict[str, CompatibilityEntry] = {
             f"{RUNNER_SCHEMA_VERSION_V22}; "
             f"planned {PLANNED_RUNNER_SCHEMA_VERSION_V23} = full v22 keyset "
             f"plus sibling root {V3_CAPABILITY_FLAGS_WIRE_KEY} (exact child "
-            "keys = five reserved V3 flag names); default write stays "
+            "keys = five reserved V3 flag names); "
+            f"{RUNNER_SCHEMA_VERSION_V24} = full v23 keyset plus root "
+            "population_lifecycle (owned generational_population requires v24); "
+            "default write stays "
             f"{RUNNER_SCHEMA_VERSION_V4} when all V3 flags are off; "
-            f"writers emit {PLANNED_RUNNER_SCHEMA_VERSION_V23} only when some "
-            "V3 flag is true; mode allowlists that top out at v22 widen to "
-            "accept v23 and cognitive_budget_mode accepts {{v22,v23}}; "
+            f"writers emit {PLANNED_RUNNER_SCHEMA_VERSION_V23} when some "
+            "unowned V3 flag is true without generational_population; "
+            f"writers emit {RUNNER_SCHEMA_VERSION_V24} when "
+            "generational_population is true; mode allowlists that top out at "
+            "v23 widen to accept v24 and cognitive_budget_mode accepts "
+            "{{v22,v23,v24}}; "
             f"{RUNNER_SCHEMA_VERSION_V3} retained for V2 capability flags; "
             "v1-v4 omit consolidation_mode, reflection_mode, prospective_mode, "
             "counterfactual_mode, communication_strategy_mode, and "
@@ -548,14 +562,17 @@ _MATRIX: dict[str, CompatibilityEntry] = {
         bump_trigger=(
             "Closed reserved V3 flag set on SimulationRunnerConfig; wire key "
             f"{V3_CAPABILITY_FLAGS_WIRE_KEY} is a sibling of V2 capability_flags; "
-            f"requires {PLANNED_RUNNER_SCHEMA_VERSION_V23}; enabling any flag "
-            "before an owning plan fails closed at SimulationRunner.from_config "
-            "with capability_unimplemented; empty owned allowlist in scaffolding"
+            f"generational_population is owned and requires "
+            f"{RUNNER_SCHEMA_VERSION_V24} with exact population_lifecycle; "
+            f"other flags still require at least {PLANNED_RUNNER_SCHEMA_VERSION_V23} "
+            "and fail closed at SimulationRunner.from_config with "
+            "capability_unimplemented until owned"
         ),
         owner_package="simulation.runner_models / simulation.runner",
         v1_fixture_impact=(
             "All five flags default off; decode of runner-config-v1..v22 "
-            "synthesizes defaults; V1/V2 trajectory identity unchanged when off"
+            "synthesizes defaults; V1/V2 trajectory identity unchanged when off; "
+            "owned generational_population may enable on v24"
         ),
     ),
 }
@@ -591,6 +608,7 @@ _LOG.debug(
         "runner_v21": RUNNER_SCHEMA_VERSION_V21,
         "runner_v22": RUNNER_SCHEMA_VERSION_V22,
         "planned_runner_v23": PLANNED_RUNNER_SCHEMA_VERSION_V23,
+        "runner_v24": RUNNER_SCHEMA_VERSION_V24,
         "observer_protocol": OBSERVER_PROTOCOL_VERSION,
         "research_ui_mount": RESEARCH_UI_MOUNT,
         "alembic_head": ALEMBIC_HEAD_REVISION,

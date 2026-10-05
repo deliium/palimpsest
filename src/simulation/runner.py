@@ -1355,6 +1355,18 @@ class SimulationRunner:
             catalog = config.agents[0].cognition.production_catalog
             production_catalog = catalog if catalog.recipe_count > 0 else None
             artifacts_active = bool(bootstrap.artifacts) or config.artifacts_enabled
+            lifecycle_channel = (
+                config.v3_capability_flags.generational_population
+                and config.population_lifecycle is not None
+            )
+            lifecycle_records = ()
+            if lifecycle_channel:
+                from simulation.runner_models import seed_bootstrap_lifecycle_records
+
+                lifecycle_records = seed_bootstrap_lifecycle_records(
+                    registrations=registrations,
+                    spec=config.population_lifecycle,
+                )
             engine = WorldEngine(
                 config=run_config,
                 bootstrap=bootstrap,
@@ -1362,6 +1374,10 @@ class SimulationRunner:
                 production_catalog=production_catalog,
                 environmental_dynamics=config.environmental_dynamics,
                 artifacts_enabled=artifacts_active,
+                population_lifecycle=(
+                    config.population_lifecycle if lifecycle_channel else None
+                ),
+                lifecycle_records=lifecycle_records if lifecycle_channel else None,
                 **skill_kwargs,
                 **teaching_kwargs,
             )
@@ -1371,6 +1387,13 @@ class SimulationRunner:
                 artifacts_active,
                 len(bootstrap.artifacts),
                 config.artifacts_enabled,
+            )
+            _LOG.debug(
+                "runner_construction_lifecycle_channel lifecycle_channel=%s "
+                "bootstrap_lifecycle_record_count=%s owned_v3_flags=%s",
+                "on" if lifecycle_channel else "off",
+                len(lifecycle_records),
+                ",".join(config.v3_capability_flags.owned_enabled_names()),
             )
 
             stage = "agents"

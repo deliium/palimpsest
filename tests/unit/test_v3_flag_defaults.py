@@ -58,7 +58,7 @@ def test_v3_scaffolding_profile_rejects_enabled_flag() -> None:
     flagged = replace(
         _base(),
         schema_version=RUNNER_SCHEMA_VERSION_V23,
-        v3_capability_flags=V3CapabilityFlags(generational_population=True),
+        v3_capability_flags=V3CapabilityFlags(kinship_inheritance=True),
     )
     with pytest.raises(ValueError, match="v3_scaffolding_flags_enabled"):
         v3_scaffolding_profile(flagged)

@@ -244,19 +244,19 @@ Rules:
 
 ### Phase 2: Own the flag and runner wiring
 
-- [ ] Task 4: Own `generational_population` and introduce `PopulationLifecycleSpec` + `runner-config-v24`.
+- [x] Task 4: Own `generational_population` and introduce `PopulationLifecycleSpec` + `runner-config-v24`.
   - Deliverable: Add `"generational_population"` to `_V3_OWNED_CAPABILITY_FLAGS`. Introduce frozen `PopulationLifecycleSpec` with the exact child keys locked above (including per-`demographic_policy_id` exact param key sets). Add `RUNNER_SCHEMA_VERSION_V24`, exact `_require_keys` set = v23 ∪ `population_lifecycle`, encode/decode, fingerprint inclusion when present. Rewrite schema gates: `generational_population=True` requires `v24`; other-only V3 flags still require ≥ `v23`; reject `v24` without exact `population_lifecycle`; allow all-off `v24` round-trips. Widen **every** mode allowlist / budget set currently capped at `v23` to include `v24`. Default write stays v4 when flags off. Update `simulation.compatibility` matrix row for v24 + owned flag policy. Update matrix schema allowlist. Scaffolding gate: owned flag may enable; other V3 flags still fail closed.
   - Files: `src/simulation/runner_models.py`, `src/simulation/runner_serialization.py`, `src/simulation/compatibility.py`, `src/simulation/__init__.py`, `src/experiments/matrix_schema.py`, `tests/unit/test_runner_config_v24_population_lifecycle.py`, `tests/unit/test_compatibility_matrix.py`, `tests/unit/test_v3_flag_defaults.py`, `tests/unit/test_v3_scaffolding_gate.py`.
   - Logging: DEBUG encode/decode schema_version + flag names + key counts; ERROR on `generational_population_requires_v24` / key-set violations; never log policy param payloads.
   - Dependencies: Task 1.
 
-- [ ] Task 5: Wire `SimulationRunner.from_config` for owned flag, lifecycle channel, and bootstrap lifecycle seeding.
+- [x] Task 5: Wire `SimulationRunner.from_config` for owned flag, lifecycle channel, and bootstrap lifecycle seeding.
   - Deliverable: When `generational_population` enabled and owned, construct runner with lifecycle channel active (pass `PopulationLifecycleSpec` into engine/bootstrap context). Seed bootstrap `AgentLifecycleRecord`s (`entry_tick=0`, `OriginProvenance.BOOTSTRAP`, stage/dependency from age-0 resolution, default generation/cohort). Do not emit created/entered events for bootstrap. Keep fail-closed for other V3 unimplemented flags. Flag-off path must not allocate lifecycle progression hooks or lifecycle records. Log construction with flag ownership counts as today.
   - Files: `src/simulation/runner.py`, `src/simulation/runner_models.py` (helpers if needed), `src/simulation/engine.py` / bootstrap wiring as needed, `tests/unit/test_simulation_runner_construction.py` (or sibling).
   - Logging: Keep existing `runner_construction_*` DEBUG/ERROR patterns; add `lifecycle_channel=on|off` and `bootstrap_lifecycle_record_count=` fields only.
   - Dependencies: Tasks 3, 4.
 
-- [ ] Task 6: Demographic policy port (experiment-compatible, non-biological).
+- [x] Task 6: Demographic policy port (experiment-compatible, non-biological).
   - Deliverable: Define a closed policy protocol/registry keyed by `demographic_policy_id` that, given seed-derived RNG stream + exact params + current population snapshot, returns deterministic entry candidates (body blueprint + generation/cohort/provenance + **agent blueprint**: cognition template, goals/drives, bounded name, spawn location). Ship at least one deterministic policy suitable for tests (e.g. `fixed_interval_entry` or `seeded_quota_entry`) and a `disabled`/no-op path. Each policy_id has an exact `demographic_policy_params` key set. Policies must not encode sex/reproduction. Fail closed on unknown policy ids. Document schedule: consulted once per tick after autonomous physical/lifecycle progression when channel on; admit 0..N under `max_population` with deterministic sort.
   - Files: `src/simulation/` (e.g. `demographic_policy.py`), `src/experiments/` helper if catalog needs it, `tests/unit/test_demographic_policy.py`.
   - Logging: DEBUG policy_id + candidate_count + reject reason codes; never names/backstories as free text dumps beyond existing bounded name rules.

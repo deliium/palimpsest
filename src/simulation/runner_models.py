@@ -14,6 +14,7 @@ import math
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
 from enum import StrEnum
+from types import MappingProxyType
 from typing import Any, Final
 
 from agents.models import (
@@ -55,6 +56,14 @@ from world.identifiers import (
     require_bounded_text,
     require_stable_id,
 )
+from world.lifecycle import (
+    AgentLifecycleRecord,
+    LifecycleStageId,
+    LifecycleStageThreshold,
+    OriginProvenance,
+    resolve_dependency_status,
+    resolve_lifecycle_stage,
+)
 from world.models import (
     AgentBody,
     Item,
@@ -92,6 +101,7 @@ RUNNER_SCHEMA_VERSION_V20: Final[str] = "runner-config-v20"
 RUNNER_SCHEMA_VERSION_V21: Final[str] = "runner-config-v21"
 RUNNER_SCHEMA_VERSION_V22: Final[str] = "runner-config-v22"
 RUNNER_SCHEMA_VERSION_V23: Final[str] = "runner-config-v23"
+RUNNER_SCHEMA_VERSION_V24: Final[str] = "runner-config-v24"
 RUNNER_SCHEMA_VERSION: Final[str] = RUNNER_SCHEMA_VERSION_V4
 SUPPORTED_RUNNER_SCHEMA_VERSIONS: Final[frozenset[str]] = frozenset(
     {
@@ -118,6 +128,7 @@ SUPPORTED_RUNNER_SCHEMA_VERSIONS: Final[frozenset[str]] = frozenset(
         RUNNER_SCHEMA_VERSION_V21,
         RUNNER_SCHEMA_VERSION_V22,
         RUNNER_SCHEMA_VERSION_V23,
+        RUNNER_SCHEMA_VERSION_V24,
     }
 )
 RESULT_SCHEMA_VERSION_V1: Final[str] = "runner-result-v1"
@@ -157,8 +168,10 @@ _V3_CAPABILITY_FLAG_NAMES: Final[tuple[str, ...]] = (
     "cultural_historical_memory",
 )
 
-# Empty until later V3 plans own individual flags.
-_V3_OWNED_CAPABILITY_FLAGS: Final[frozenset[str]] = frozenset()
+# Owned by v3-02 population lifecycle; other V3 flags remain fail-closed.
+_V3_OWNED_CAPABILITY_FLAGS: Final[frozenset[str]] = frozenset(
+    {"generational_population"}
+)
 
 _OVERRIDEABLE_DRIVE_KINDS: Final[frozenset[DriveKind]] = frozenset(
     {
@@ -641,6 +654,7 @@ _SKILL_SCHEMAS: Final[frozenset[str]] = frozenset(
         RUNNER_SCHEMA_VERSION_V21,
         RUNNER_SCHEMA_VERSION_V22,
         RUNNER_SCHEMA_VERSION_V23,
+        RUNNER_SCHEMA_VERSION_V24,
     }
 )
 
@@ -783,10 +797,11 @@ CapabilityProfile = V2CapabilityFlags
 class V3CapabilityFlags:
     """Run-level reserved V3 capability identifiers (configuration only).
 
-    Defaults are all off (V2-equivalent wiring). Enabling any flag fails closed
+    Defaults are all off (V2-equivalent wiring). ``generational_population`` is
+    owned and may enable on ``runner-config-v24``. Other flags still fail closed
     at ``SimulationRunner.from_config`` with ``capability_unimplemented`` until
-    a later plan owns it. Wire key ``v3_capability_flags`` is a sibling of V2
-    ``capability_flags`` and requires ``runner-config-v23``.
+    an owning plan lands. Wire key ``v3_capability_flags`` is a sibling of V2
+    ``capability_flags``.
     """
 
     generational_population: bool = False
@@ -820,6 +835,288 @@ class V3CapabilityFlags:
         return tuple(
             name for name in self.enabled_names() if name in _V3_OWNED_CAPABILITY_FLAGS
         )
+
+
+_DEMOGRAPHIC_POLICY_PARAM_KEYS: Final[Mapping[str, frozenset[str]]] = {
+    "disabled": frozenset(),
+    "fixed_interval_entry": frozenset(
+        {
+            "interval_ticks",
+            "entries_per_interval",
+            "name_prefix",
+            "cohort_id_prefix",
+            "generation_index",
+            "spawn_location_id",
+        }
+    ),
+}
+
+_POPULATION_LIFECYCLE_KEYS: Final[frozenset[str]] = frozenset(
+    {
+        "lifespan_ticks",
+        "stage_thresholds",
+        "dependent_until_stage",
+        "demographic_policy_id",
+        "demographic_policy_params",
+        "max_population",
+        "natural_death_on_lifespan",
+    }
+)
+
+_FORBIDDEN_LIFECYCLE_PARAM_KEYS: Final[frozenset[str]] = frozenset(
+    {
+        "sex",
+        "fertility",
+        "mating",
+        "pregnancy",
+        "gestation",
+        "parent_id",
+        "parent_ids",
+        "child_id",
+        "child_ids",
+        "kinship",
+    }
+)
+
+
+def _exact_positive_int(name: str, value: object) -> int:
+    if isinstance(value, bool) or type(value) is not int or value < 1:
+        raise ValueError(f"{name} must be a positive integer")
+    return value
+
+
+@dataclass(frozen=True, slots=True)
+class PopulationLifecycleSpec:
+    """Closed run-level population/lifecycle configuration (runner-config-v24).
+
+    Forbidden biology fields (sex, fertility, mating, pregnancy, parentage,
+    kinship) are rejected at construction. Demographic policies are experimental
+    entry schedules — not reproductive mechanics.
+    """
+
+    lifespan_ticks: int
+    stage_thresholds: tuple[LifecycleStageThreshold, ...]
+    dependent_until_stage: LifecycleStageId
+    demographic_policy_id: str
+    demographic_policy_params: Mapping[str, object]
+    max_population: int
+    natural_death_on_lifespan: bool
+
+    def __post_init__(self) -> None:
+        object.__setattr__(
+            self,
+            "lifespan_ticks",
+            _exact_positive_int("lifespan_ticks", self.lifespan_ticks),
+        )
+        object.__setattr__(
+            self,
+            "max_population",
+            _exact_positive_int("max_population", self.max_population),
+        )
+        if type(self.natural_death_on_lifespan) is not bool:
+            raise TypeError("natural_death_on_lifespan must be bool")
+        if type(self.dependent_until_stage) is not LifecycleStageId:
+            raise TypeError("dependent_until_stage must be LifecycleStageId")
+        object.__setattr__(
+            self,
+            "demographic_policy_id",
+            require_stable_id(
+                "demographic_policy_id", self.demographic_policy_id
+            ),
+        )
+        if self.demographic_policy_id not in _DEMOGRAPHIC_POLICY_PARAM_KEYS:
+            raise ValueError(
+                "unknown demographic_policy_id "
+                f"{self.demographic_policy_id!r} "
+                "(code=unknown_demographic_policy_id)"
+            )
+        if isinstance(self.stage_thresholds, (str, bytes)) or not isinstance(
+            self.stage_thresholds, Sequence
+        ):
+            raise TypeError("stage_thresholds must be a sequence")
+        if len(self.stage_thresholds) == 0:
+            raise ValueError(
+                "stage_thresholds must be non-empty "
+                "(code=lifecycle_stage_thresholds_empty)"
+            )
+        thresholds = tuple(self.stage_thresholds)
+        for threshold in thresholds:
+            if type(threshold) is not LifecycleStageThreshold:
+                raise TypeError(
+                    "stage_thresholds entries must be LifecycleStageThreshold"
+                )
+        # Validate ordering / uniqueness via pure resolver (age 0 always covered).
+        resolve_lifecycle_stage(0, thresholds)
+        object.__setattr__(self, "stage_thresholds", thresholds)
+        stage_order = tuple(item.stage_id for item in thresholds)
+        resolve_dependency_status(
+            stage_order[0],
+            self.dependent_until_stage,
+            stage_order=stage_order,
+        )
+        if isinstance(self.demographic_policy_params, (str, bytes)) or not isinstance(
+            self.demographic_policy_params, Mapping
+        ):
+            raise TypeError("demographic_policy_params must be a mapping")
+        expected = _DEMOGRAPHIC_POLICY_PARAM_KEYS[self.demographic_policy_id]
+        actual = frozenset(self.demographic_policy_params.keys())
+        forbidden = actual & _FORBIDDEN_LIFECYCLE_PARAM_KEYS
+        if forbidden:
+            raise ValueError(
+                "demographic_policy_params forbid biology keys "
+                f"{sorted(forbidden)!r} (code=lifecycle_biology_forbidden)"
+            )
+        if actual != expected:
+            raise ValueError(
+                "demographic_policy_params exact key set mismatch "
+                f"policy_id={self.demographic_policy_id!r} "
+                f"expected={sorted(expected)!r} actual={sorted(actual)!r} "
+                "(code=demographic_policy_params_key_set)"
+            )
+        frozen_params: dict[str, object] = {}
+        for key, value in self.demographic_policy_params.items():
+            if type(key) is not str:
+                raise TypeError("demographic_policy_params keys must be str")
+            frozen_params[key] = value
+        if self.demographic_policy_id == "fixed_interval_entry":
+            frozen_params["interval_ticks"] = _exact_positive_int(
+                "demographic_policy_params.interval_ticks",
+                frozen_params["interval_ticks"],
+            )
+            frozen_params["entries_per_interval"] = require_exact_nonneg_int(
+                "demographic_policy_params.entries_per_interval",
+                frozen_params["entries_per_interval"],
+            )
+            frozen_params["name_prefix"] = require_stable_id(
+                "demographic_policy_params.name_prefix",
+                frozen_params["name_prefix"],
+            )
+            frozen_params["cohort_id_prefix"] = require_stable_id(
+                "demographic_policy_params.cohort_id_prefix",
+                frozen_params["cohort_id_prefix"],
+            )
+            frozen_params["generation_index"] = require_exact_nonneg_int(
+                "demographic_policy_params.generation_index",
+                frozen_params["generation_index"],
+            )
+            frozen_params["spawn_location_id"] = require_stable_id(
+                "demographic_policy_params.spawn_location_id",
+                frozen_params["spawn_location_id"],
+            )
+        object.__setattr__(
+            self, "demographic_policy_params", MappingProxyType(frozen_params)
+        )
+        final_max = thresholds[-1].inclusive_max_age
+        if self.lifespan_ticks - 1 > final_max:
+            raise ValueError(
+                "stage_thresholds must cover ages through lifespan_ticks-1 "
+                "(code=lifecycle_stage_uncovered_lifespan)"
+            )
+
+    @property
+    def stage_order(self) -> tuple[LifecycleStageId, ...]:
+        return tuple(item.stage_id for item in self.stage_thresholds)
+
+    def canonical_payload(self) -> dict[str, object]:
+        """Exact wire object for runner-config-v24 ``population_lifecycle``."""
+        return {
+            "demographic_policy_id": self.demographic_policy_id,
+            "demographic_policy_params": {
+                key: self.demographic_policy_params[key]
+                for key in sorted(self.demographic_policy_params)
+            },
+            "dependent_until_stage": self.dependent_until_stage.value,
+            "lifespan_ticks": self.lifespan_ticks,
+            "max_population": self.max_population,
+            "natural_death_on_lifespan": self.natural_death_on_lifespan,
+            "stage_thresholds": [
+                {
+                    "inclusive_max_age": item.inclusive_max_age,
+                    "stage_id": item.stage_id.value,
+                }
+                for item in self.stage_thresholds
+            ],
+        }
+
+
+def example_population_lifecycle_spec(
+    *,
+    lifespan_ticks: int = 20,
+    max_population: int = 8,
+    policy_id: str = "disabled",
+) -> PopulationLifecycleSpec:
+    """Deterministic reference spec for tests and catalog arms."""
+    thresholds = (
+        LifecycleStageThreshold(LifecycleStageId("infant"), 2),
+        LifecycleStageThreshold(LifecycleStageId("juvenile"), 5),
+        LifecycleStageThreshold(LifecycleStageId("adult"), max(lifespan_ticks - 1, 5)),
+    )
+    if policy_id == "disabled":
+        params: Mapping[str, object] = {}
+    elif policy_id == "fixed_interval_entry":
+        params = {
+            "interval_ticks": 5,
+            "entries_per_interval": 1,
+            "name_prefix": "entrant",
+            "cohort_id_prefix": "cohort",
+            "generation_index": 1,
+            "spawn_location_id": "loc-1",
+        }
+    else:
+        raise ValueError(f"unknown policy_id {policy_id!r}")
+    return PopulationLifecycleSpec(
+        lifespan_ticks=lifespan_ticks,
+        stage_thresholds=thresholds,
+        dependent_until_stage=LifecycleStageId("juvenile"),
+        demographic_policy_id=policy_id,
+        demographic_policy_params=params,
+        max_population=max_population,
+        natural_death_on_lifespan=True,
+    )
+
+
+BOOTSTRAP_LIFECYCLE_COHORT_ID: Final[str] = "cohort-bootstrap"
+BOOTSTRAP_LIFECYCLE_GENERATION_INDEX: Final[int] = 0
+
+
+def seed_bootstrap_lifecycle_records(
+    *,
+    registrations: Sequence[AgentRegistration],
+    spec: PopulationLifecycleSpec,
+) -> tuple[AgentLifecycleRecord, ...]:
+    """Seed lifecycle records for bootstrap roster (no created/entered events)."""
+    if type(spec) is not PopulationLifecycleSpec:
+        raise TypeError("spec must be PopulationLifecycleSpec")
+    stage = resolve_lifecycle_stage(0, spec.stage_thresholds)
+    dependency = resolve_dependency_status(
+        stage,
+        spec.dependent_until_stage,
+        stage_order=spec.stage_order,
+    )
+    records: list[AgentLifecycleRecord] = []
+    for registration in registrations:
+        if type(registration) is not AgentRegistration:
+            raise TypeError("registrations entries must be AgentRegistration")
+        records.append(
+            AgentLifecycleRecord(
+                body_id=registration.entity_id,
+                agent_id=registration.agent_id.value,
+                entry_tick=0,
+                stage=stage,
+                dependency_status=dependency,
+                generation_index=BOOTSTRAP_LIFECYCLE_GENERATION_INDEX,
+                cohort_id=BOOTSTRAP_LIFECYCLE_COHORT_ID,
+                provenance=OriginProvenance.BOOTSTRAP,
+            )
+        )
+    _LOGGER.debug(
+        "bootstrap_lifecycle_records_seeded record_count=%s stage=%s "
+        "dependency_status=%s",
+        len(records),
+        stage.value,
+        dependency.value,
+    )
+    return tuple(records)
 
 
 class CognitionTraceDetail(StrEnum):
@@ -2171,6 +2468,7 @@ class SimulationRunnerConfig:
     mortality_policy_version: str = MORTALITY_POLICY_VERSION
     environmental_dynamics: EnvironmentalDynamicsSpec | None = None
     artifacts_enabled: bool = False
+    population_lifecycle: PopulationLifecycleSpec | None = None
 
     def __post_init__(self) -> None:
         object.__setattr__(self, "seed", require_seed(self.seed))
@@ -2181,6 +2479,13 @@ class SimulationRunnerConfig:
         )
         if type(self.artifacts_enabled) is not bool:
             raise TypeError("artifacts_enabled must be bool")
+        if (
+            self.population_lifecycle is not None
+            and type(self.population_lifecycle) is not PopulationLifecycleSpec
+        ):
+            raise TypeError(
+                "population_lifecycle must be PopulationLifecycleSpec or None"
+            )
         if type(self.scenario) is not WorldScenarioSpec:
             raise TypeError("scenario must be WorldScenarioSpec")
         agents = _copy_ordered(
@@ -2242,18 +2547,65 @@ class SimulationRunnerConfig:
                 "(code=capability_requires_v3)"
             )
         if (
-            self.v3_capability_flags.any_enabled()
-            and self.schema_version != RUNNER_SCHEMA_VERSION_V23
+            self.v3_capability_flags.generational_population
+            and self.schema_version != RUNNER_SCHEMA_VERSION_V24
         ):
+            _LOGGER.error(
+                "generational_population_requires_v24 schema_version=%s "
+                "reason_code=generational_population_requires_v24",
+                self.schema_version,
+            )
+            raise ValueError(
+                "generational_population requires runner-config-v24 "
+                "(code=generational_population_requires_v24)"
+            )
+        other_v3_enabled = tuple(
+            name
+            for name in self.v3_capability_flags.enabled_names()
+            if name != "generational_population"
+        )
+        if other_v3_enabled and self.schema_version not in {
+            RUNNER_SCHEMA_VERSION_V23,
+            RUNNER_SCHEMA_VERSION_V24,
+        }:
             _LOGGER.error(
                 "v3_capability_requires_v23 schema_version=%s "
                 "flag_count=%s reason_code=v3_capability_requires_v23",
                 self.schema_version,
-                len(self.v3_capability_flags.enabled_names()),
+                len(other_v3_enabled),
             )
             raise ValueError(
-                "V3 capability flags require runner-config-v23 "
+                "V3 capability flags require runner-config-v23+ "
                 "(code=v3_capability_requires_v23)"
+            )
+        if self.schema_version == RUNNER_SCHEMA_VERSION_V24:
+            if self.population_lifecycle is None:
+                _LOGGER.error(
+                    "v24_requires_population_lifecycle schema_version=%s "
+                    "reason_code=v24_requires_population_lifecycle",
+                    self.schema_version,
+                )
+                raise ValueError(
+                    "runner-config-v24 requires population_lifecycle "
+                    "(code=v24_requires_population_lifecycle)"
+                )
+        elif self.population_lifecycle is not None:
+            _LOGGER.error(
+                "population_lifecycle_requires_v24 schema_version=%s "
+                "reason_code=population_lifecycle_requires_v24",
+                self.schema_version,
+            )
+            raise ValueError(
+                "population_lifecycle requires runner-config-v24 "
+                "(code=population_lifecycle_requires_v24)"
+            )
+        if (
+            self.v3_capability_flags.generational_population
+            and self.population_lifecycle is None
+        ):
+            raise ValueError(
+                "generational_population requires population_lifecycle "
+                "(code=generational_population_requires_lifecycle_spec)"
             )
         if (
             self.schema_version
@@ -2334,6 +2686,7 @@ class SimulationRunnerConfig:
             RUNNER_SCHEMA_VERSION_V21,
             RUNNER_SCHEMA_VERSION_V22,
             RUNNER_SCHEMA_VERSION_V23,
+            RUNNER_SCHEMA_VERSION_V24,
         }
         if non_disabled and self.schema_version not in consolidation_schemas:
             _LOGGER.error(
@@ -2383,6 +2736,7 @@ class SimulationRunnerConfig:
             RUNNER_SCHEMA_VERSION_V21,
             RUNNER_SCHEMA_VERSION_V22,
             RUNNER_SCHEMA_VERSION_V23,
+            RUNNER_SCHEMA_VERSION_V24,
         }
         if reflecting and self.schema_version not in reflection_schemas:
             _LOGGER.error(
@@ -2432,6 +2786,7 @@ class SimulationRunnerConfig:
             RUNNER_SCHEMA_VERSION_V21,
             RUNNER_SCHEMA_VERSION_V22,
             RUNNER_SCHEMA_VERSION_V23,
+            RUNNER_SCHEMA_VERSION_V24,
         }
         if planning and self.schema_version not in prospective_schemas:
             _LOGGER.error(
@@ -2480,6 +2835,7 @@ class SimulationRunnerConfig:
             RUNNER_SCHEMA_VERSION_V21,
             RUNNER_SCHEMA_VERSION_V22,
             RUNNER_SCHEMA_VERSION_V23,
+            RUNNER_SCHEMA_VERSION_V24,
         }
         if considering and self.schema_version not in counterfactual_schemas:
             _LOGGER.error(
@@ -2527,6 +2883,7 @@ class SimulationRunnerConfig:
             RUNNER_SCHEMA_VERSION_V21,
             RUNNER_SCHEMA_VERSION_V22,
             RUNNER_SCHEMA_VERSION_V23,
+            RUNNER_SCHEMA_VERSION_V24,
         }:
             _LOGGER.error(
                 "invalid_fields path=agents.cognition.communication_strategy_mode "
@@ -2572,6 +2929,7 @@ class SimulationRunnerConfig:
             RUNNER_SCHEMA_VERSION_V21,
             RUNNER_SCHEMA_VERSION_V22,
             RUNNER_SCHEMA_VERSION_V23,
+            RUNNER_SCHEMA_VERSION_V24,
         }:
             _LOGGER.error(
                 "invalid_fields path=agents.cognition.reputation_mode "
@@ -2659,6 +3017,7 @@ class SimulationRunnerConfig:
             RUNNER_SCHEMA_VERSION_V21,
             RUNNER_SCHEMA_VERSION_V22,
             RUNNER_SCHEMA_VERSION_V23,
+            RUNNER_SCHEMA_VERSION_V24,
         }:
             _LOGGER.error(
                 "invalid_fields path=agents.cognition.teaching_interaction_mode "
@@ -2695,6 +3054,7 @@ class SimulationRunnerConfig:
             RUNNER_SCHEMA_VERSION_V21,
             RUNNER_SCHEMA_VERSION_V22,
             RUNNER_SCHEMA_VERSION_V23,
+            RUNNER_SCHEMA_VERSION_V24,
         }
         if (dynamics is not None and self.schema_version not in dynamics_schemas) or (
             self.schema_version == RUNNER_SCHEMA_VERSION_V14 and dynamics is None
@@ -2726,6 +3086,7 @@ class SimulationRunnerConfig:
             RUNNER_SCHEMA_VERSION_V21,
             RUNNER_SCHEMA_VERSION_V22,
             RUNNER_SCHEMA_VERSION_V23,
+            RUNNER_SCHEMA_VERSION_V24,
         }:
             _LOGGER.error(
                 "invalid_fields path=agents.cognition.territorial_claim_mode "
@@ -2763,6 +3124,7 @@ class SimulationRunnerConfig:
             RUNNER_SCHEMA_VERSION_V21,
             RUNNER_SCHEMA_VERSION_V22,
             RUNNER_SCHEMA_VERSION_V23,
+            RUNNER_SCHEMA_VERSION_V24,
         }:
             _LOGGER.error(
                 "invalid_fields path=agents.cognition.group_formation_mode "
@@ -2794,6 +3156,7 @@ class SimulationRunnerConfig:
             RUNNER_SCHEMA_VERSION_V21,
             RUNNER_SCHEMA_VERSION_V22,
             RUNNER_SCHEMA_VERSION_V23,
+            RUNNER_SCHEMA_VERSION_V24,
         }:
             _LOGGER.error(
                 "invalid_fields path=agents.cognition.social_norm_mode "
@@ -2828,6 +3191,7 @@ class SimulationRunnerConfig:
             RUNNER_SCHEMA_VERSION_V21,
             RUNNER_SCHEMA_VERSION_V22,
             RUNNER_SCHEMA_VERSION_V23,
+            RUNNER_SCHEMA_VERSION_V24,
         }
         if conventions_on and self.schema_version not in convention_schemas:
             _LOGGER.error(
@@ -2867,6 +3231,7 @@ class SimulationRunnerConfig:
             RUNNER_SCHEMA_VERSION_V21,
             RUNNER_SCHEMA_VERSION_V22,
             RUNNER_SCHEMA_VERSION_V23,
+            RUNNER_SCHEMA_VERSION_V24,
         }
         if artifacts_on and self.schema_version not in artifact_schemas:
             runner_log.error(
@@ -2902,6 +3267,7 @@ class SimulationRunnerConfig:
             RUNNER_SCHEMA_VERSION_V21,
             RUNNER_SCHEMA_VERSION_V22,
             RUNNER_SCHEMA_VERSION_V23,
+            RUNNER_SCHEMA_VERSION_V24,
         }
         if naming_on and self.schema_version not in naming_schemas:
             runner_log.error(
@@ -2934,6 +3300,7 @@ class SimulationRunnerConfig:
             RUNNER_SCHEMA_VERSION_V21,
             RUNNER_SCHEMA_VERSION_V22,
             RUNNER_SCHEMA_VERSION_V23,
+            RUNNER_SCHEMA_VERSION_V24,
         }
         budget_modes = tuple(
             agent.cognition.cognitive_budget_mode for agent in self.agents
@@ -2942,6 +3309,7 @@ class SimulationRunnerConfig:
         budget_schemas = {
             RUNNER_SCHEMA_VERSION_V22,
             RUNNER_SCHEMA_VERSION_V23,
+            RUNNER_SCHEMA_VERSION_V24,
         }
         if budgets_on and self.schema_version not in budget_schemas:
             runner_log.error(
@@ -3048,6 +3416,7 @@ class SimulationRunnerConfig:
             RUNNER_SCHEMA_VERSION_V21,
             RUNNER_SCHEMA_VERSION_V22,
             RUNNER_SCHEMA_VERSION_V23,
+            RUNNER_SCHEMA_VERSION_V24,
         }:
             _LOGGER.error(
                 "invalid_fields path=agents.cognition.production_knowledge_mode "
@@ -3072,6 +3441,7 @@ class SimulationRunnerConfig:
             RUNNER_SCHEMA_VERSION_V21,
             RUNNER_SCHEMA_VERSION_V22,
             RUNNER_SCHEMA_VERSION_V23,
+            RUNNER_SCHEMA_VERSION_V24,
         }:
             from world.production import production_catalog_digest
 
@@ -3136,6 +3506,7 @@ class SimulationRunnerConfig:
             RUNNER_SCHEMA_VERSION_V21,
             RUNNER_SCHEMA_VERSION_V22,
             RUNNER_SCHEMA_VERSION_V23,
+            RUNNER_SCHEMA_VERSION_V24,
         }:
             shared_teaching = teaching_weight_tuple(self.agents[0].cognition)
             if any(

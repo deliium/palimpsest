@@ -16,12 +16,14 @@ from simulation.runner_models import (
     RUNNER_SCHEMA_VERSION_V21,
     RUNNER_SCHEMA_VERSION_V22,
     RUNNER_SCHEMA_VERSION_V23,
+    RUNNER_SCHEMA_VERSION_V24,
     ArtifactInterpretationMode,
     CognitiveBudgetMode,
     CulturalNarrativeMode,
     ReflectionMode,
     SemanticNamingMode,
     SimulationRunnerConfig,
+    example_population_lifecycle_spec,
 )
 
 _LOG: Final[logging.Logger] = logging.getLogger("experiments.matrix_schema")
@@ -59,7 +61,12 @@ def finalize_matrix_cell_config(
         for agent in agents
     )
 
-    if v3_flags_on:
+    if config.v3_capability_flags.generational_population:
+        schema_version, rule = (
+            RUNNER_SCHEMA_VERSION_V24,
+            "generational_population_on",
+        )
+    elif v3_flags_on:
         schema_version, rule = RUNNER_SCHEMA_VERSION_V23, "v3_capability_flags_on"
     elif budget_on:
         schema_version, rule = RUNNER_SCHEMA_VERSION_V22, "cognitive_budget_enforced"
@@ -81,6 +88,10 @@ def finalize_matrix_cell_config(
 
     payload = {field.name: getattr(config, field.name) for field in fields(config)}
     payload["schema_version"] = schema_version
+    if schema_version == RUNNER_SCHEMA_VERSION_V24 and payload.get(
+        "population_lifecycle"
+    ) is None:
+        payload["population_lifecycle"] = example_population_lifecycle_spec()
     try:
         finalized = SimulationRunnerConfig(**payload)
     except ValueError as exc:

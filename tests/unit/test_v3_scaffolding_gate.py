@@ -73,14 +73,13 @@ def test_v3_scaffolding_and_v2_regression_profiles_on_base() -> None:
 @pytest.mark.parametrize(
     "flag_name",
     (
-        "generational_population",
         "kinship_inheritance",
         "multi_polity_migration",
         "institutional_economy",
         "cultural_historical_memory",
     ),
 )
-async def test_any_v3_flag_fails_closed_at_from_config_while_encode_decode_ok(
+async def test_unowned_v3_flag_fails_closed_at_from_config_while_encode_decode_ok(
     flag_name: str,
 ) -> None:
     base = _base_config()

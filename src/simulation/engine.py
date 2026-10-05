@@ -207,7 +207,9 @@ class WorldEngine:
         "_engine_id",
         "_environmental_dynamics",
         "_last_tick_result",
+        "_lifecycle_records",
         "_perception",
+        "_population_lifecycle",
         "_production_catalog",
         "_registrations",
         "_run_id",
@@ -237,6 +239,8 @@ class WorldEngine:
         production_catalog: object | None = None,
         environmental_dynamics: object | None = None,
         artifacts_enabled: bool = False,
+        population_lifecycle: object | None = None,
+        lifecycle_records: Sequence[object] | None = None,
     ) -> None:
         if type(config) is not SimulationRunConfig:
             raise TypeError("WorldEngine requires SimulationRunConfig")
@@ -292,15 +296,23 @@ class WorldEngine:
         # Seeds alone activate artifact admission; explicit flag covers
         # empty-seed tests.
         self._artifacts_enabled = artifacts_enabled or bool(bootstrap.artifacts)
+        self._population_lifecycle, self._lifecycle_records = (
+            _optional_population_lifecycle(
+                population_lifecycle, lifecycle_records=lifecycle_records
+            )
+        )
         _LOGGER.debug(
             "%s world_id=%s revision=%s tick=%s registrations=%s "
-            "artifacts_enabled=%s",
+            "artifacts_enabled=%s lifecycle_channel=%s "
+            "bootstrap_lifecycle_record_count=%s",
             EngineDiagnosticCode.BOOTSTRAP_VALIDATED.value,
             bootstrap.world_id.value,
             bootstrap.revision.value,
             tick.value,
             len(self._registrations),
             self._artifacts_enabled,
+            "on" if self._population_lifecycle is not None else "off",
+            len(self._lifecycle_records),
         )
 
     @classmethod
@@ -495,6 +507,9 @@ class WorldEngine:
             or snapshot.persistence_codec_version == "v5"
             or bool(getattr(engine._bootstrap, "artifacts", ()))
         )
+        # Lifecycle restore lands with persistence codec v6 (Task 12).
+        engine._population_lifecycle = None
+        engine._lifecycle_records = ()
         engine._require_refolded_teaching_offers(
             teaching_offers=teaching_offers,
             initial_state=base_state,
@@ -535,6 +550,18 @@ class WorldEngine:
     @property
     def run_id(self) -> RunId:
         return self._run_id
+
+    @property
+    def lifecycle_channel_active(self) -> bool:
+        return self._population_lifecycle is not None
+
+    @property
+    def lifecycle_records(self) -> tuple[object, ...]:
+        return self._lifecycle_records
+
+    @property
+    def population_lifecycle(self) -> object | None:
+        return self._population_lifecycle
 
     @property
     def last_tick_result(self) -> TickResult | None:
@@ -2586,6 +2613,41 @@ def _optional_environmental_dynamics(value: object | None) -> object | None:
             "environmental_dynamics must be EnvironmentalDynamicsSpec or None"
         )
     return value
+
+
+def _optional_population_lifecycle(
+    value: object | None,
+    *,
+    lifecycle_records: Sequence[object] | None,
+) -> tuple[object | None, tuple[object, ...]]:
+    if value is None:
+        if lifecycle_records:
+            raise ValueError(
+                "lifecycle_records require population_lifecycle "
+                "(code=lifecycle_channel_off)"
+            )
+        return None, ()
+    from simulation.runner_models import PopulationLifecycleSpec
+    from world.lifecycle import AgentLifecycleRecord
+
+    if type(value) is not PopulationLifecycleSpec:
+        raise TypeError(
+            "population_lifecycle must be PopulationLifecycleSpec or None"
+        )
+    records_raw = () if lifecycle_records is None else tuple(lifecycle_records)
+    frozen: list[AgentLifecycleRecord] = []
+    seen_bodies: set[str] = set()
+    for record in records_raw:
+        if type(record) is not AgentLifecycleRecord:
+            raise TypeError("lifecycle_records entries must be AgentLifecycleRecord")
+        if record.body_id.value in seen_bodies:
+            raise ValueError(
+                "lifecycle_records body_id must be unique "
+                "(code=lifecycle_record_duplicate)"
+            )
+        seen_bodies.add(record.body_id.value)
+        frozen.append(record)
+    return value, tuple(frozen)
 
 
 def _optional_production_catalog(value: object | None) -> object | None:
