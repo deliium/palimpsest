@@ -3093,16 +3093,18 @@ def _bootstrap_snapshot(engine: WorldEngine) -> WorldSnapshot:
     )
     state = engine._snapshot.world.state
     production_rows: dict[str, tuple[object, ...]] = {}
-    if codec_version in {"v3", "v4", "v5"}:
+    if codec_version in {"v3", "v4", "v5", "v6"}:
         production_rows = {
             "structures": tuple(state.structures.values()),
             "production_jobs": tuple(state.production_jobs.values()),
             "tool_marks": tuple(state.tool_marks.values()),
         }
-    if codec_version in {"v4", "v5"}:
+    if codec_version in {"v4", "v5", "v6"}:
         production_rows["active_hazards"] = tuple(state.active_hazards)
-    if codec_version == "v5":
+    if codec_version in {"v5", "v6"}:
         production_rows["artifacts"] = tuple(state.artifacts.values())
+    if codec_version == "v6":
+        production_rows["lifecycle_records"] = tuple(engine.lifecycle_records)
     draft = WorldSnapshot(
         snapshot_id=SnapshotId(f"bootstrap-{engine.run_id.value}"),
         run_id=engine.run_id,
@@ -3150,6 +3152,7 @@ def _bootstrap_snapshot(engine: WorldEngine) -> WorldSnapshot:
         tool_marks=draft.tool_marks,
         active_hazards=draft.active_hazards,
         artifacts=draft.artifacts,
+        lifecycle_records=draft.lifecycle_records,
     )
 
 

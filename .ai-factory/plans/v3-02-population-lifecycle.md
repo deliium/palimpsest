@@ -296,25 +296,25 @@ Rules:
 
 ### Phase 4: Observation, persistence, observer
 
-- [ ] Task 11: Observation lifecycle-visible facts + live/restored parity (flag-on only).
+- [x] Task 11: Observation lifecycle-visible facts + live/restored parity (flag-on only).
   - Deliverable: Channel-off Observation wire unchanged (no new keys). Channel-on: additive closed `lifecycle` object on `ObservedSelf` / `VisibleBody` with exact fields `chronological_age`, `stage`, `dependency_status` only. Add live/restored observation parity tests for lifecycle-on runs. Do not auto-create subjective age beliefs. Update domain-contract evolution tests accordingly.
   - Files: `src/world/observations.py`, `src/world/_perception.py`, `src/simulation/serialization.py` (encode/decode), `tests/unit/test_lifecycle_observation_parity.py`, `tests/unit/test_domain_contract_evolution_policy.py` as needed.
   - Logging: DEBUG perception lifecycle_field_count only; never dump ages beyond ints/enums.
   - Dependencies: Tasks 8, 9.
 
-- [ ] Task 12: Persistence codec `v6` + snapshot/projector/branch restore for lifecycle state.
+- [x] Task 12: Persistence codec `v6` + snapshot/projector/branch restore for lifecycle state.
   - Deliverable: Pair persistence codec `"v6"` with event schema 9 when lifecycle channel active (priority from Task 7). Snapshots restore lifecycle records, registration order, translator order, and stage state. Update replay projector to fold v9 lifecycle details. Prove research-fork restore of a lifecycle-on checkpoint preserves roster + lifecycle records. Legacy codecs v1–v5 remain accepted for restore. Flag-off default write stays current non-lifecycle codec.
   - Files: `src/simulation/persistence.py`, projector/replay modules, `src/simulation/branch_service.py` / branching tests as needed, `tests/unit/test_lifecycle_snapshot_codec_v6.py`.
   - Logging: ERROR on codec/schema mismatch reason codes; DEBUG codec version + lifecycle_record_count.
   - Dependencies: Tasks 7, 8, 9.
 
-- [ ] Task 13: Observer Protocol + Godot birth category wiring.
+- [x] Task 13: Observer Protocol + Godot birth category wiring.
   - Deliverable: Append `AGENT_CREATED`, `AGENT_ENTERED_WORLD`, `LIFECYCLE_STAGE_CHANGED` to Python `SEMANTIC_EVENT_TYPES` / maps and Godot `models.gd` mirrors. Update all `len(SEMANTIC_EVENT_TYPES) == 36` (and suffix/prefix) pins to **39**. Map domain kinds → semantic types in adapt/router. Fill Godot timeline `birth` category with created/entered types (still must not invent births from roster alone). Keep `observer-protocol-v1`. Extend protocol mirror tests.
   - Files: `src/observer/version.py`, `src/observer/adapt.py`, `src/observer/contracts.py` (if touched), `clients/godot-observer/scripts/protocol/models.gd`, `clients/godot-observer/scripts/ui/timeline.gd`, `clients/godot-observer/scripts/protocol/event_router.gd` (as needed), `tests/unit/test_godot_protocol_mirror.py`, `tests/unit/test_observer_contracts.py`, `tests/unit/test_artifact_observer.py`, `tests/unit/test_environmental_dynamics_observer.py`, Godot tests if present.
   - Logging: DEBUG semantic map misses as `unknown_event_kind`; never simulation mutation from observer.
   - Dependencies: Task 7.
 
-- [ ] Task 13b: Causal debugger maps for lifecycle semantics.
+- [x] Task 13b: Causal debugger maps for lifecycle semantics.
   - Deliverable: Add detail-kind → semantic mappings for `agent_created`, `agent_entered_world`, and `lifecycle_stage_changed` in `simulation.causal_debugger._DETAIL_KIND_TO_SEMANTIC_TYPE` (and any inverse/router tables that must stay in sync). Lifespan death remains `AGENT_DIED` / `died` with `DeathCause.LIFESPAN` (no new death semantic). Unit-test resolve paths for the new types.
   - Files: `src/simulation/causal_debugger.py`, `tests/unit/test_causal_debugger_command_map.py` / resolve tests as appropriate.
   - Logging: DEBUG unmapped_kind reason codes only.

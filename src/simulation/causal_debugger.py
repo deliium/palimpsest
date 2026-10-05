@@ -125,6 +125,9 @@ _DETAIL_KIND_TO_SEMANTIC_TYPE: Final[Mapping[str, str]] = {
     "artifact_modified": "ARTIFACT_MODIFIED",
     "artifact_moved": "ARTIFACT_MOVED",
     "artifact_destroyed": "ARTIFACT_DESTROYED",
+    "agent_created": "AGENT_CREATED",
+    "agent_entered_world": "AGENT_ENTERED_WORLD",
+    "lifecycle_stage_changed": "LIFECYCLE_STAGE_CHANGED",
 }
 
 # Semantic observer types / detail type names → cognition-trace command_kind.
@@ -229,6 +232,9 @@ _NOT_APPLICABLE_SEMANTICS: Final[frozenset[str]] = frozenset(
         "RESOURCE_NODE_RECOVERED",
         "ENVIRONMENTAL_HAZARD_STARTED",
         "ENVIRONMENTAL_HAZARD_ENDED",
+        "AGENT_CREATED",
+        "AGENT_ENTERED_WORLD",
+        "LIFECYCLE_STAGE_CHANGED",
     }
 )
 
@@ -245,6 +251,9 @@ _NOT_APPLICABLE_DETAIL_KINDS: Final[frozenset[str]] = frozenset(
         "resource_node_recovered",
         "environmental_hazard_started",
         "environmental_hazard_ended",
+        "agent_created",
+        "agent_entered_world",
+        "lifecycle_stage_changed",
     }
 )
 
@@ -261,6 +270,9 @@ _NOT_APPLICABLE_DETAIL_TYPE_NAMES: Final[frozenset[str]] = frozenset(
         "ResourceNodeRecovered",
         "EnvironmentalHazardStarted",
         "EnvironmentalHazardEnded",
+        "AgentCreated",
+        "AgentEnteredWorld",
+        "LifecycleStageChanged",
     }
 )
 

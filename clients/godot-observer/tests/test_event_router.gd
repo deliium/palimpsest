@@ -21,6 +21,12 @@ const _ARTIFACT_TYPES: Array[String] = [
 	"ARTIFACT_DESTROYED",
 ]
 
+const _LIFECYCLE_TYPES: Array[String] = [
+	"AGENT_CREATED",
+	"AGENT_ENTERED_WORLD",
+	"LIFECYCLE_STAGE_CHANGED",
+]
+
 
 func run() -> Array:
 	var failures: Array = []
@@ -32,7 +38,7 @@ func run() -> Array:
 	var play: Dictionary = Playback.policy(1.0, 0)
 	var last_location := str(world.agents[0].location_id)
 	for type_name in Protocol.KNOWN_TYPES:
-		if type_name in _ENVIRONMENT_TYPES or type_name in _ARTIFACT_TYPES:
+		if type_name in _ENVIRONMENT_TYPES or type_name in _ARTIFACT_TYPES or type_name in _LIFECYCLE_TYPES:
 			continue
 		var text := FileAccess.get_file_as_string("res://fixtures/protocol/events/%s.json" % type_name)
 		var parsed = Protocol.parse_text("event", text)
@@ -76,6 +82,23 @@ func run() -> Array:
 		var artifact_command: Dictionary = Router.route(parsed_artifact.value, play, artifact_logical)
 		if artifact_command["action"] != "artifact":
 			failures.append("artifact type should route as artifact %s" % type_name)
+	for type_name in _LIFECYCLE_TYPES:
+		var parsed_lifecycle = Protocol.parse_event({
+			"protocol_version": Protocol.PROTOCOL_VERSION,
+			"type": type_name,
+			"event_id": "evt-%s" % type_name,
+			"tick": 9,
+			"sequence": 0,
+			"target_id": "body-1",
+		})
+		if not parsed_lifecycle.ok or not parsed_lifecycle.value.known:
+			failures.append("lifecycle type should be known %s" % type_name)
+			continue
+		var lifecycle_logical: Dictionary = reducer.apply_event(world, parsed_lifecycle.value)
+		var lifecycle_command: Dictionary = Router.route(parsed_lifecycle.value, play, lifecycle_logical)
+		var expected_action := "lifecycle" if type_name == "LIFECYCLE_STAGE_CHANGED" else "birth"
+		if lifecycle_command["action"] != expected_action:
+			failures.append("lifecycle type should route as %s %s" % [expected_action, type_name])
 	var production_actions := {
 		"RESOURCE_HARVESTED": "harvest",
 		"CRAFT_STARTED": "craft",

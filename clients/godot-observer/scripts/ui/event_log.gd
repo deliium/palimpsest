@@ -286,6 +286,12 @@ func _describe(
 			return "%s moved artifact %s -> %s" % [subject, origin, destination]
 		"ARTIFACT_DESTROYED":
 			return "%s erased artifact" % subject
+		"AGENT_CREATED":
+			return "%s created" % subject
+		"AGENT_ENTERED_WORLD":
+			return "%s entered %s" % [subject, origin if origin != "" else "world"]
+		"LIFECYCLE_STAGE_CHANGED":
+			return "%s lifecycle stage changed" % subject
 		"RESOURCE_HARVESTED":
 			return "%s harvested at %s" % [subject, origin if origin != "" else "location"]
 		"CRAFT_STARTED":

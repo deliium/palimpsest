@@ -37,6 +37,7 @@ from __future__ import annotations
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
 from enum import StrEnum
+from types import MappingProxyType
 from typing import Literal
 
 from world._freeze import freeze_mapping, require_non_empty
@@ -278,6 +279,7 @@ class VisibleBody:
     entity_id: EntityId
     life_status: LifeStatus
     coarse_health: CoarseHealth
+    lifecycle: ObservedLifecycle | None = None
 
     def __post_init__(self) -> None:
         if type(self.entity_id) is not EntityId:
@@ -286,6 +288,8 @@ class VisibleBody:
             raise TypeError("VisibleBody.life_status must be LifeStatus")
         if type(self.coarse_health) is not CoarseHealth:
             raise TypeError("VisibleBody.coarse_health must be CoarseHealth")
+        if self.lifecycle is not None and type(self.lifecycle) is not ObservedLifecycle:
+            raise TypeError("VisibleBody.lifecycle must be ObservedLifecycle or None")
         if (
             self.life_status is LifeStatus.DEAD
             and self.coarse_health is not CoarseHealth.DEAD
@@ -296,6 +300,47 @@ class VisibleBody:
             and self.coarse_health is CoarseHealth.DEAD
         ):
             raise ValueError("living VisibleBody cannot be CoarseHealth.DEAD")
+
+
+@dataclass(frozen=True, slots=True)
+class ObservedLifecycle:
+    """Closed objective lifecycle facts visible when the channel is on.
+
+    Exact fields only. Generation/cohort/provenance stay out of perception.
+    """
+
+    chronological_age: int
+    stage: str
+    dependency_status: str
+
+    def __post_init__(self) -> None:
+        from world.identifiers import require_exact_nonneg_int, require_stable_id
+        from world.lifecycle import DependencyStatus
+
+        object.__setattr__(
+            self,
+            "chronological_age",
+            require_exact_nonneg_int(
+                "ObservedLifecycle.chronological_age", self.chronological_age
+            ),
+        )
+        object.__setattr__(
+            self,
+            "stage",
+            require_stable_id("ObservedLifecycle.stage", self.stage),
+        )
+        object.__setattr__(
+            self,
+            "dependency_status",
+            require_stable_id(
+                "ObservedLifecycle.dependency_status", self.dependency_status
+            ),
+        )
+        if self.dependency_status not in {item.value for item in DependencyStatus}:
+            raise ValueError(
+                "ObservedLifecycle.dependency_status must be a closed "
+                "DependencyStatus"
+            )
 
 
 @dataclass(frozen=True, slots=True)
@@ -450,6 +495,7 @@ class ObservedSelf:
     inventory: Sequence[EntityId]
     life_status: LifeStatus
     carry_capacity: CarryCapacity
+    lifecycle: ObservedLifecycle | None = None
 
     def __post_init__(self) -> None:
         if type(self.entity_id) is not EntityId:
@@ -470,6 +516,8 @@ class ObservedSelf:
                 )
         if type(self.life_status) is not LifeStatus:
             raise TypeError("ObservedSelf.life_status must be LifeStatus")
+        if self.lifecycle is not None and type(self.lifecycle) is not ObservedLifecycle:
+            raise TypeError("ObservedSelf.lifecycle must be ObservedLifecycle or None")
         if isinstance(self.inventory, (set, frozenset, Mapping)):
             raise TypeError("ObservedSelf.inventory must be an ordered sequence")
         if isinstance(self.inventory, (str, bytes, bytearray)) or not isinstance(
@@ -491,7 +539,11 @@ class ObservedSelf:
             raise ValueError("LifeStatus.DEAD requires zero health")
 
 
-def observed_self_from_body(body: AgentBody) -> ObservedSelf:
+def observed_self_from_body(
+    body: AgentBody,
+    *,
+    lifecycle: ObservedLifecycle | None = None,
+) -> ObservedSelf:
     """Project an authoritative body into the explicit self observation DTO."""
     if type(body) is not AgentBody:
         raise TypeError("observed_self_from_body requires AgentBody")
@@ -506,6 +558,7 @@ def observed_self_from_body(body: AgentBody) -> ObservedSelf:
         inventory=body.inventory,
         life_status=body.life_status,
         carry_capacity=body.carry_capacity,
+        lifecycle=lifecycle,
     )
 
 
@@ -613,6 +666,7 @@ class ObservationContext:
 
     tick: int
     physical_rules: PhysicalRules = field(default_factory=default_physical_rules)
+    lifecycle_by_body: Mapping[EntityId, ObservedLifecycle] | None = None
 
     def __post_init__(self) -> None:
         object.__setattr__(
@@ -622,6 +676,28 @@ class ObservationContext:
         )
         if type(self.physical_rules) is not PhysicalRules:
             raise TypeError("ObservationContext.physical_rules must be PhysicalRules")
+        if self.lifecycle_by_body is not None:
+            if isinstance(self.lifecycle_by_body, (str, bytes)) or not isinstance(
+                self.lifecycle_by_body, Mapping
+            ):
+                raise TypeError(
+                    "ObservationContext.lifecycle_by_body must be a mapping or None"
+                )
+            frozen: dict[EntityId, ObservedLifecycle] = {}
+            for body_id, view in self.lifecycle_by_body.items():
+                if type(body_id) is not EntityId:
+                    raise TypeError(
+                        "ObservationContext.lifecycle_by_body keys must be EntityId"
+                    )
+                if type(view) is not ObservedLifecycle:
+                    raise TypeError(
+                        "ObservationContext.lifecycle_by_body values must be "
+                        "ObservedLifecycle"
+                    )
+                frozen[body_id] = view
+            object.__setattr__(
+                self, "lifecycle_by_body", MappingProxyType(frozen)
+            )
 
     @property
     def hour(self) -> int:

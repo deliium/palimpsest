@@ -204,12 +204,11 @@ def test_require_agent_command_rejects_non_commands() -> None:
 
 
 def test_v3_scaffolding_adds_no_roster_birth_or_kinship_observation_fields() -> None:
-    """Observation birth/roster/kinship widenings require versioned seams.
+    """Observation root stays frozen; lifecycle lives on self/visible body seams.
 
-    Scaffolding freeze remains: no silent Observation keys. Generational
-    population admits may later add a closed optional ``lifecycle`` object only
-    when co-landed with event schema / codec / live-restored parity (v3-02
-    Task 11), never sex/parentage/kinship fields.
+    Generational population adds optional ``ObservedSelf.lifecycle`` /
+    ``VisibleBody.lifecycle`` only when the channel is on — never sex/parentage
+    or Observation-root birth/roster keys.
     """
     fields = {f.name for f in Observation.__dataclass_fields__.values()}
     forbidden_widenings = {
@@ -227,11 +226,14 @@ def test_v3_scaffolding_adds_no_roster_birth_or_kinship_observation_fields() -> 
         "fertility",
         "pregnancy",
         "parent_ids",
+        "lifecycle",
     }
     assert fields & forbidden_widenings == set()
     assert fields == _FROZEN_OBSERVATION_FIELDS
-    # Versioned seam reserved name is still absent until Observation write bumps.
-    assert "lifecycle" not in fields
+    from world.observations import ObservedSelf, VisibleBody
+
+    assert "lifecycle" in ObservedSelf.__dataclass_fields__
+    assert "lifecycle" in VisibleBody.__dataclass_fields__
 
 
 def test_v3_domain_bump_policy_documents_parity_gate() -> None:

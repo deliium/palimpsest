@@ -137,7 +137,11 @@ from world.lifecycle import (
     resolve_lifecycle_stage,
 )
 from world.models import AgentBody, LifeStatus, copy_body, default_physical_rules
-from world.observations import Observation, ObservationContext
+from world.observations import (
+    Observation,
+    ObservationContext,
+    ObservedLifecycle,
+)
 from world.values import Health, WeatherCondition, clamp_unit_interval
 
 if TYPE_CHECKING:
@@ -373,6 +377,7 @@ class WorldEngine:
         production_catalog: object | None = None,
         environmental_dynamics: object | None = None,
         artifacts_enabled: bool = False,
+        population_lifecycle: object | None = None,
     ) -> WorldEngine:
         """Restore an engine at ``AWAITING_OBSERVATION`` from a checkpoint.
 
@@ -545,12 +550,30 @@ class WorldEngine:
         engine._artifacts_enabled = (
             artifacts_enabled
             or bool(snapshot.artifacts)
-            or snapshot.persistence_codec_version == "v5"
+            or snapshot.persistence_codec_version in {"v5", "v6"}
             or bool(getattr(engine._bootstrap, "artifacts", ()))
         )
-        # Lifecycle restore lands with persistence codec v6 (Task 12).
-        engine._population_lifecycle = None
-        engine._lifecycle_records = ()
+        if snapshot.persistence_codec_version == "v6":
+            if population_lifecycle is None and snapshot.lifecycle_records:
+                raise ValueError(
+                    "codec v6 restore requires population_lifecycle "
+                    "(code=lifecycle_restore_missing_spec)"
+                )
+            engine._population_lifecycle, engine._lifecycle_records = (
+                _optional_population_lifecycle(
+                    population_lifecycle,
+                    lifecycle_records=snapshot.lifecycle_records,
+                )
+            )
+            _LOGGER.debug(
+                "lifecycle_restore codec_version=v6 lifecycle_record_count=%s "
+                "lifecycle_channel=%s",
+                len(engine._lifecycle_records),
+                "on" if engine._population_lifecycle is not None else "off",
+            )
+        else:
+            engine._population_lifecycle = None
+            engine._lifecycle_records = ()
         engine._require_refolded_teaching_offers(
             teaching_offers=teaching_offers,
             initial_state=base_state,
@@ -1399,6 +1422,36 @@ class WorldEngine:
             bodies=self.detached_bodies(),
         )
 
+    def _observation_context(self, *, tick: int, rules: object) -> ObservationContext:
+        lifecycle_by_body = None
+        if self._population_lifecycle is not None and self._lifecycle_records:
+            from world.lifecycle import AgentLifecycleRecord, chronological_age
+
+            views: dict[EntityId, ObservedLifecycle] = {}
+            for raw in self._lifecycle_records:
+                if type(raw) is not AgentLifecycleRecord:
+                    raise TypeError(
+                        "lifecycle_records entries must be AgentLifecycleRecord"
+                    )
+                views[raw.body_id] = ObservedLifecycle(
+                    chronological_age=chronological_age(
+                        entry_tick=raw.entry_tick, current_tick=tick
+                    ),
+                    stage=raw.stage.value,
+                    dependency_status=raw.dependency_status.value,
+                )
+            lifecycle_by_body = views
+            _LOGGER.debug(
+                "perception_lifecycle_field_count tick=%s count=%s",
+                tick,
+                len(views),
+            )
+        return ObservationContext(
+            tick=tick,
+            physical_rules=rules,  # type: ignore[arg-type]
+            lifecycle_by_body=lifecycle_by_body,
+        )
+
     def project_detached_observations(self) -> ObservationBatch:
         """Project agent-visible observations without mutating engine phase.
 
@@ -1437,7 +1490,7 @@ class WorldEngine:
         rules = self._config.physical_rules
         if rules is None:
             rules = default_physical_rules()
-        context = ObservationContext(tick=snap.tick.value, physical_rules=rules)
+        context = self._observation_context(tick=snap.tick.value, rules=rules)
         prior_events = snap.prior_event_window
         try:
             observations = self._perception.project(
@@ -1546,7 +1599,7 @@ class WorldEngine:
         rules = self._config.physical_rules
         if rules is None:
             rules = default_physical_rules()
-        context = ObservationContext(tick=snap.tick.value, physical_rules=rules)
+        context = self._observation_context(tick=snap.tick.value, rules=rules)
         prior_events = snap.prior_event_window
         try:
             observations = self._perception.project(

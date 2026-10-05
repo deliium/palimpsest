@@ -45,6 +45,9 @@ SEMANTIC_EVENT_TYPES: Final[tuple[str, ...]] = (
     "ARTIFACT_MODIFIED",
     "ARTIFACT_MOVED",
     "ARTIFACT_DESTROYED",
+    "AGENT_CREATED",
+    "AGENT_ENTERED_WORLD",
+    "LIFECYCLE_STAGE_CHANGED",
 )
 
 SEMANTIC_TYPE_BY_KIND: Final[dict[str, str]] = {
@@ -84,6 +87,9 @@ SEMANTIC_TYPE_BY_KIND: Final[dict[str, str]] = {
     "artifact_modified": "ARTIFACT_MODIFIED",
     "artifact_moved": "ARTIFACT_MOVED",
     "artifact_destroyed": "ARTIFACT_DESTROYED",
+    "agent_created": "AGENT_CREATED",
+    "agent_entered_world": "AGENT_ENTERED_WORLD",
+    "lifecycle_stage_changed": "LIFECYCLE_STAGE_CHANGED",
 }
 
 RELATIONSHIP_DIMENSION_CODES: Final[tuple[str, ...]] = (

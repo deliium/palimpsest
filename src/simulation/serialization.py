@@ -2925,7 +2925,7 @@ def _decode_observed_resource(data: dict[str, Any], *, path: str) -> ObservedRes
 
 
 def _encode_observed_self(value: ObservedSelf) -> dict[str, Any]:
-    return {
+    payload: dict[str, Any] = {
         "carry_capacity": value.carry_capacity.value,
         "entity_id": value.entity_id.value,
         "fatigue": value.fatigue.value,
@@ -2937,6 +2937,9 @@ def _encode_observed_self(value: ObservedSelf) -> dict[str, Any]:
         "temperature": value.temperature.value,
         "thirst": value.thirst.value,
     }
+    if value.lifecycle is not None:
+        payload["lifecycle"] = _encode_observed_lifecycle(value.lifecycle)
+    return payload
 
 
 def _decode_observed_self(data: dict[str, Any], *, path: str) -> ObservedSelf:
@@ -2955,6 +2958,7 @@ def _decode_observed_self(data: dict[str, Any], *, path: str) -> ObservedSelf:
             "carry_capacity",
         },
         path=path,
+        optional={"lifecycle"},
     )
     inventory_raw = data["inventory"]
     if not isinstance(inventory_raw, list):
@@ -2968,6 +2972,15 @@ def _decode_observed_self(data: dict[str, Any], *, path: str) -> ObservedSelf:
                 )
             inventory_items.append(EntityId(item))
         inventory = tuple(inventory_items)
+        lifecycle = None
+        if "lifecycle" in data and data["lifecycle"] is not None:
+            if not isinstance(data["lifecycle"], dict):
+                raise DomainSerializationError(
+                    "invalid_object", f"{path}.lifecycle"
+                )
+            lifecycle = _decode_observed_lifecycle(
+                data["lifecycle"], path=f"{path}.lifecycle"
+            )
         return ObservedSelf(
             entity_id=EntityId(_str_field(data, "entity_id", path=path)),
             location_id=EntityId(_str_field(data, "location_id", path=path)),
@@ -2981,9 +2994,40 @@ def _decode_observed_self(data: dict[str, Any], *, path: str) -> ObservedSelf:
             inventory=inventory,
             life_status=LifeStatus(_str_field(data, "life_status", path=path)),
             carry_capacity=CarryCapacity(_int_field(data, "carry_capacity", path=path)),
+            lifecycle=lifecycle,
         )
     except DomainSerializationError:
         raise
+    except (TypeError, ValueError) as exc:
+        raise DomainSerializationError("invalid_model", path) from exc
+
+
+def _encode_observed_lifecycle(value: object) -> dict[str, Any]:
+    from world.observations import ObservedLifecycle
+
+    if type(value) is not ObservedLifecycle:
+        raise TypeError("lifecycle must be ObservedLifecycle")
+    return {
+        "chronological_age": value.chronological_age,
+        "dependency_status": value.dependency_status,
+        "stage": value.stage,
+    }
+
+
+def _decode_observed_lifecycle(data: dict[str, Any], *, path: str) -> object:
+    from world.observations import ObservedLifecycle
+
+    _require_keys(
+        data,
+        {"chronological_age", "stage", "dependency_status"},
+        path=path,
+    )
+    try:
+        return ObservedLifecycle(
+            chronological_age=_int_field(data, "chronological_age", path=path),
+            stage=_str_field(data, "stage", path=path),
+            dependency_status=_str_field(data, "dependency_status", path=path),
+        )
     except (TypeError, ValueError) as exc:
         raise DomainSerializationError("invalid_model", path) from exc
 
@@ -3004,21 +3048,41 @@ def _decode_visible_exit(data: dict[str, Any], *, path: str) -> VisibleExit:
 
 
 def _encode_visible_body(value: VisibleBody) -> dict[str, Any]:
-    return {
+    payload: dict[str, Any] = {
         "coarse_health": value.coarse_health.value,
         "entity_id": value.entity_id.value,
         "life_status": value.life_status.value,
     }
+    if value.lifecycle is not None:
+        payload["lifecycle"] = _encode_observed_lifecycle(value.lifecycle)
+    return payload
 
 
 def _decode_visible_body(data: dict[str, Any], *, path: str) -> VisibleBody:
-    _require_keys(data, {"entity_id", "life_status", "coarse_health"}, path=path)
+    _require_keys(
+        data,
+        {"entity_id", "life_status", "coarse_health"},
+        path=path,
+        optional={"lifecycle"},
+    )
     try:
+        lifecycle = None
+        if "lifecycle" in data and data["lifecycle"] is not None:
+            if not isinstance(data["lifecycle"], dict):
+                raise DomainSerializationError(
+                    "invalid_object", f"{path}.lifecycle"
+                )
+            lifecycle = _decode_observed_lifecycle(
+                data["lifecycle"], path=f"{path}.lifecycle"
+            )
         return VisibleBody(
             entity_id=EntityId(_str_field(data, "entity_id", path=path)),
             life_status=LifeStatus(_str_field(data, "life_status", path=path)),
             coarse_health=CoarseHealth(_str_field(data, "coarse_health", path=path)),
+            lifecycle=lifecycle,  # type: ignore[arg-type]
         )
+    except DomainSerializationError:
+        raise
     except (TypeError, ValueError) as exc:
         raise DomainSerializationError("invalid_model", path) from exc
 

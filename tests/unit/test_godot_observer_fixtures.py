@@ -72,6 +72,13 @@ _ARTIFACT_EVENT_NAMES = frozenset(
         "ARTIFACT_DESTROYED",
     }
 )
+_LIFECYCLE_EVENT_NAMES = frozenset(
+    {
+        "AGENT_CREATED",
+        "AGENT_ENTERED_WORLD",
+        "LIFECYCLE_STAGE_CHANGED",
+    }
+)
 
 
 def test_event_fixtures_cover_closed_semantic_types() -> None:
@@ -79,15 +86,18 @@ def test_event_fixtures_cover_closed_semantic_types() -> None:
     expected = tuple(
         name
         for name in sorted(SEMANTIC_EVENT_TYPES)
-        if name not in _ENVIRONMENT_EVENT_NAMES | _ARTIFACT_EVENT_NAMES
+        if name
+        not in _ENVIRONMENT_EVENT_NAMES | _ARTIFACT_EVENT_NAMES | _LIFECYCLE_EVENT_NAMES
     )
     assert names == expected
     assert len(names) == 26
     assert _PRODUCTION_EVENT_NAMES < set(names)
     assert set(names) < set(SEMANTIC_EVENT_TYPES)
     assert _ARTIFACT_EVENT_NAMES < set(SEMANTIC_EVENT_TYPES)
+    assert _LIFECYCLE_EVENT_NAMES < set(SEMANTIC_EVENT_TYPES)
     assert set(names).isdisjoint(_ARTIFACT_EVENT_NAMES)
     assert set(names).isdisjoint(_ENVIRONMENT_EVENT_NAMES)
+    assert set(names).isdisjoint(_LIFECYCLE_EVENT_NAMES)
 
 
 def test_event_fixtures_construct_observer_events() -> None:

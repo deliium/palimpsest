@@ -723,7 +723,7 @@ def _encode_world_snapshot(
             "weather": [_encode_weather(item) for item in value.weather],
             "world_id": value.world_id.value,
         }
-        if value.persistence_codec_version in {"v3", "v4", "v5"}:
+        if value.persistence_codec_version in {"v3", "v4", "v5", "v6"}:
             payload["structures"] = [
                 _encode_structure(item) for item in value.structures
             ]
@@ -733,13 +733,17 @@ def _encode_world_snapshot(
             payload["tool_marks"] = [
                 _encode_tool_mark(item) for item in value.tool_marks
             ]
-        if value.persistence_codec_version in {"v4", "v5"}:
+        if value.persistence_codec_version in {"v4", "v5", "v6"}:
             payload["active_hazards"] = [
                 _encode_active_hazard(item) for item in value.active_hazards
             ]
-        if value.persistence_codec_version == "v5":
+        if value.persistence_codec_version in {"v5", "v6"}:
             payload["artifacts"] = [
                 _encode_information_artifact(item) for item in value.artifacts
+            ]
+        if value.persistence_codec_version == "v6":
+            payload["lifecycle_records"] = [
+                _encode_lifecycle_record(item) for item in value.lifecycle_records
             ]
     except DomainSerializationError as exc:
         raise _map_domain_error(exc) from exc
@@ -771,12 +775,14 @@ def _decode_world_snapshot(data: dict[str, Any], *, path: str) -> WorldSnapshot:
         "integrity_hash",
         "predecessor_commit_hash",
     }
-    if codec in {"v3", "v4", "v5"}:
+    if codec in {"v3", "v4", "v5", "v6"}:
         keys |= {"structures", "production_jobs", "tool_marks"}
-    if codec in {"v4", "v5"}:
+    if codec in {"v4", "v5", "v6"}:
         keys.add("active_hazards")
-    if codec == "v5":
+    if codec in {"v5", "v6"}:
         keys.add("artifacts")
+    if codec == "v6":
+        keys.add("lifecycle_records")
     _require_keys(data, keys, path=path)
     config_raw = data["config"]
     if not isinstance(config_raw, dict):
@@ -833,39 +839,102 @@ def _decode_world_snapshot(data: dict[str, Any], *, path: str) -> WorldSnapshot:
             structures=_decode_object_list(
                 data["structures"], _decode_structure, path=f"{path}.structures"
             )
-            if codec in {"v3", "v4", "v5"}
+            if codec in {"v3", "v4", "v5", "v6"}
             else (),
             production_jobs=_decode_object_list(
                 data["production_jobs"],
                 _decode_production_job,
                 path=f"{path}.production_jobs",
             )
-            if codec in {"v3", "v4", "v5"}
+            if codec in {"v3", "v4", "v5", "v6"}
             else (),
             tool_marks=_decode_object_list(
                 data["tool_marks"], _decode_tool_mark, path=f"{path}.tool_marks"
             )
-            if codec in {"v3", "v4", "v5"}
+            if codec in {"v3", "v4", "v5", "v6"}
             else (),
             active_hazards=_decode_object_list(
                 data["active_hazards"],
                 _decode_active_hazard,
                 path=f"{path}.active_hazards",
             )
-            if codec in {"v4", "v5"}
+            if codec in {"v4", "v5", "v6"}
             else (),
             artifacts=_decode_object_list(
                 data["artifacts"],
                 _decode_information_artifact,
                 path=f"{path}.artifacts",
             )
-            if codec == "v5"
+            if codec in {"v5", "v6"}
+            else (),
+            lifecycle_records=_decode_object_list(
+                data["lifecycle_records"],
+                _decode_lifecycle_record,
+                path=f"{path}.lifecycle_records",
+            )
+            if codec == "v6"
             else (),
         )
     except PersistenceSerializationError:
         raise
     except (TypeError, ValueError) as exc:
         raise PersistenceSerializationError("malformed_id", path) from exc
+
+
+def _encode_lifecycle_record(value: object) -> dict[str, Any]:
+    from world.lifecycle import AgentLifecycleRecord
+
+    if type(value) is not AgentLifecycleRecord:
+        raise TypeError("lifecycle_records entries must be AgentLifecycleRecord")
+    return {
+        "agent_id": value.agent_id,
+        "body_id": value.body_id.value,
+        "cohort_id": value.cohort_id,
+        "dependency_status": value.dependency_status.value,
+        "entry_tick": value.entry_tick,
+        "generation_index": value.generation_index,
+        "provenance": value.provenance.value,
+        "stage": value.stage.value,
+    }
+
+
+def _decode_lifecycle_record(data: dict[str, Any], *, path: str) -> object:
+    from world.lifecycle import (
+        AgentLifecycleRecord,
+        DependencyStatus,
+        LifecycleStageId,
+        OriginProvenance,
+    )
+
+    _require_keys(
+        data,
+        {
+            "agent_id",
+            "body_id",
+            "cohort_id",
+            "dependency_status",
+            "entry_tick",
+            "generation_index",
+            "provenance",
+            "stage",
+        },
+        path=path,
+    )
+    try:
+        return AgentLifecycleRecord(
+            body_id=EntityId(_str_field(data, "body_id", path=path)),
+            agent_id=_str_field(data, "agent_id", path=path),
+            entry_tick=_nonneg_int_field(data, "entry_tick", path=path),
+            stage=LifecycleStageId(_str_field(data, "stage", path=path)),
+            dependency_status=DependencyStatus(
+                _str_field(data, "dependency_status", path=path)
+            ),
+            generation_index=_nonneg_int_field(data, "generation_index", path=path),
+            cohort_id=_str_field(data, "cohort_id", path=path),
+            provenance=OriginProvenance(_str_field(data, "provenance", path=path)),
+        )
+    except (TypeError, ValueError) as exc:
+        raise PersistenceSerializationError("invalid_model", path) from exc
 
 
 def _encode_information_artifact(value: InformationArtifact) -> dict[str, Any]:

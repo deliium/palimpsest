@@ -19,6 +19,12 @@ const _ARTIFACT_TYPES: Array[String] = [
 	"ARTIFACT_DESTROYED",
 ]
 
+const _LIFECYCLE_TYPES: Array[String] = [
+	"AGENT_CREATED",
+	"AGENT_ENTERED_WORLD",
+	"LIFECYCLE_STAGE_CHANGED",
+]
+
 
 func run() -> Array:
 	var failures: Array = []
@@ -128,7 +134,7 @@ func _manifest_branch_lineage_optional() -> String:
 
 func _every_semantic_fixture() -> String:
 	for type_name in Protocol.KNOWN_TYPES:
-		if type_name in _ENVIRONMENT_TYPES or type_name in _ARTIFACT_TYPES:
+		if type_name in _ENVIRONMENT_TYPES or type_name in _ARTIFACT_TYPES or type_name in _LIFECYCLE_TYPES:
 			continue
 		var path := "res://fixtures/protocol/events/%s.json" % type_name
 		var parsed = Protocol.parse_text("event", FileAccess.get_file_as_string(path))
@@ -149,6 +155,17 @@ func _every_semantic_fixture() -> String:
 		})
 		if not parsed_artifact.ok or not parsed_artifact.value.known:
 			return "artifact type should be known %s" % type_name
+	for type_name in _LIFECYCLE_TYPES:
+		var parsed_lifecycle = Protocol.parse_event({
+			"protocol_version": Protocol.PROTOCOL_VERSION,
+			"type": type_name,
+			"event_id": "evt-%s" % type_name,
+			"tick": 1,
+			"sequence": 0,
+			"target_id": "body-1",
+		})
+		if not parsed_lifecycle.ok or not parsed_lifecycle.value.known:
+			return "lifecycle type should be known %s" % type_name
 	return ""
 
 

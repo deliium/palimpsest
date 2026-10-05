@@ -226,7 +226,10 @@ def _project_one(
         observer_id=observer_id,
         revision=state.revision,
         tick=context.tick,
-        self_body=observed_self_from_body(copy_body(body)),
+        self_body=observed_self_from_body(
+            copy_body(body),
+            lifecycle=_lifecycle_for(context, observer_id),
+        ),
         locations=_sorted_locations(state, location_id),
         items=_sorted_items(
             state,
@@ -239,7 +242,7 @@ def _project_one(
         artifacts=artifacts,
         exits=_sorted_exits(state, location_id),
         visible_bodies=(
-            _sorted_visible_bodies(state, location_id, observer_id)
+            _sorted_visible_bodies(state, location_id, observer_id, context=context)
             if content_visible
             else ()
         ),
@@ -496,6 +499,8 @@ def _sorted_visible_bodies(
     state: WorldState,
     location_id: EntityId,
     observer_id: EntityId,
+    *,
+    context: ObservationContext,
 ) -> tuple[VisibleBody, ...]:
     selected: list[VisibleBody] = []
     for body_id in sorted(state.bodies, key=lambda entity: entity.value):
@@ -509,9 +514,19 @@ def _sorted_visible_bodies(
                 entity_id=body_id,
                 life_status=body.life_status,
                 coarse_health=coarse_health_for(body),
+                lifecycle=_lifecycle_for(context, body_id),
             )
         )
     return tuple(selected)
+
+
+def _lifecycle_for(
+    context: ObservationContext, body_id: EntityId
+) -> object | None:
+    views = context.lifecycle_by_body
+    if views is None:
+        return None
+    return views.get(body_id)
 
 
 def _project_event_window(

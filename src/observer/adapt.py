@@ -9,6 +9,8 @@ from observer.contracts import ObserverEvent
 from observer.version import OBSERVER_PROTOCOL_VERSION, SEMANTIC_TYPE_BY_KIND
 from world.communications import confidence_band
 from world.events import (
+    AgentCreated,
+    AgentEnteredWorld,
     ArtifactCreated,
     ArtifactDestroyed,
     ArtifactModified,
@@ -26,6 +28,7 @@ from world.events import (
     Given,
     ItemCrafted,
     ItemStored,
+    LifecycleStageChanged,
     Moved,
     NeedsApplied,
     ResourceHarvested,
@@ -113,6 +116,11 @@ def adapt_event(event: WorldEvent) -> ObserverEvent:
         resource_id = _text(details.resource_id)
     elif isinstance(details, (NeedsApplied, ExposureApplied, Died)):
         target_id = _text(details.body_id)
+    elif isinstance(details, (AgentCreated, LifecycleStageChanged)):
+        target_id = _text(details.body_id)
+    elif isinstance(details, AgentEnteredWorld):
+        target_id = _text(details.body_id)
+        origin = _text(details.location_id)
     elif isinstance(details, ResourceHarvested):
         recipe_id = details.recipe_id.value
         resource_id = _text(details.resource_id)

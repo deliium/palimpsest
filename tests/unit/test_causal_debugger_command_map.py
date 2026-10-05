@@ -49,6 +49,34 @@ def test_unknown_semantic_warns_unmapped() -> None:
     assert mapped.reason_code == "unmapped_semantic_type"
 
 
+def test_lifecycle_semantics_not_applicable() -> None:
+    cases = (
+        ("AGENT_CREATED", "agent_created", "AgentCreated"),
+        ("AGENT_ENTERED_WORLD", "agent_entered_world", "AgentEnteredWorld"),
+        ("LIFECYCLE_STAGE_CHANGED", "lifecycle_stage_changed", "LifecycleStageChanged"),
+    )
+    for semantic, kind, type_name in cases:
+        mapped = map_event_to_command_kind(
+            semantic_type=semantic,
+            detail_kind=kind,
+            detail_type_name=type_name,
+        )
+        assert mapped.status is CommandKindMappingStatus.NOT_APPLICABLE, semantic
+        assert mapped.command_kind is None
+        assert mapped.reason_code == "causal_trace_not_applicable"
+
+
+def test_lifespan_death_remains_secondary_attack_mapping() -> None:
+    mapped = map_event_to_command_kind(
+        semantic_type="AGENT_DIED",
+        detail_kind="died",
+        detail_type_name="Died",
+    )
+    assert mapped.status is CommandKindMappingStatus.SECONDARY_ATTACK
+    assert mapped.command_kind == "attack"
+    assert mapped.reason_code == "secondary_consequence_died"
+
+
 def test_common_agent_commands_table() -> None:
     cases = (
         ("AGENT_MOVED", "move"),
