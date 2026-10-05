@@ -29,7 +29,7 @@ counterparty semantics and is never treated as an occurrence location.
 from __future__ import annotations
 
 import logging
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
 from enum import StrEnum
 from typing import Final, Literal
@@ -72,6 +72,7 @@ EVENT_SCHEMA_REPLAY_V6: Final[int] = 6
 EVENT_SCHEMA_REPLAY_V7: Final[int] = 7
 EVENT_SCHEMA_REPLAY_V8: Final[int] = 8
 EVENT_SCHEMA_REPLAY_V9: Final[int] = 9
+EVENT_SCHEMA_REPLAY_V10: Final[int] = 10
 SUPPORTED_EVENT_SCHEMA_VERSIONS: Final[frozenset[int]] = frozenset(
     {
         EVENT_SCHEMA_AUDIT_V1,
@@ -83,6 +84,7 @@ SUPPORTED_EVENT_SCHEMA_VERSIONS: Final[frozenset[int]] = frozenset(
         EVENT_SCHEMA_REPLAY_V7,
         EVENT_SCHEMA_REPLAY_V8,
         EVENT_SCHEMA_REPLAY_V9,
+        EVENT_SCHEMA_REPLAY_V10,
     }
 )
 REPLAYABLE_EVENT_SCHEMA_VERSIONS: Final[frozenset[int]] = frozenset(
@@ -95,6 +97,7 @@ REPLAYABLE_EVENT_SCHEMA_VERSIONS: Final[frozenset[int]] = frozenset(
         EVENT_SCHEMA_REPLAY_V7,
         EVENT_SCHEMA_REPLAY_V8,
         EVENT_SCHEMA_REPLAY_V9,
+        EVENT_SCHEMA_REPLAY_V10,
     }
 )
 PHYSICAL_REPLAY_EVENT_SCHEMA_VERSIONS: Final[frozenset[int]] = frozenset(
@@ -106,6 +109,7 @@ PHYSICAL_REPLAY_EVENT_SCHEMA_VERSIONS: Final[frozenset[int]] = frozenset(
         EVENT_SCHEMA_REPLAY_V7,
         EVENT_SCHEMA_REPLAY_V8,
         EVENT_SCHEMA_REPLAY_V9,
+        EVENT_SCHEMA_REPLAY_V10,
     }
 )
 _PRODUCTION_EVENT_SCHEMAS: Final[frozenset[int]] = frozenset(
@@ -114,15 +118,30 @@ _PRODUCTION_EVENT_SCHEMAS: Final[frozenset[int]] = frozenset(
         EVENT_SCHEMA_REPLAY_V7,
         EVENT_SCHEMA_REPLAY_V8,
         EVENT_SCHEMA_REPLAY_V9,
+        EVENT_SCHEMA_REPLAY_V10,
     }
 )
 _ENVIRONMENT_EVENT_SCHEMAS: Final[frozenset[int]] = frozenset(
-    {EVENT_SCHEMA_REPLAY_V7, EVENT_SCHEMA_REPLAY_V8, EVENT_SCHEMA_REPLAY_V9}
+    {
+        EVENT_SCHEMA_REPLAY_V7,
+        EVENT_SCHEMA_REPLAY_V8,
+        EVENT_SCHEMA_REPLAY_V9,
+        EVENT_SCHEMA_REPLAY_V10,
+    }
 )
 _ARTIFACT_EVENT_SCHEMAS: Final[frozenset[int]] = frozenset(
-    {EVENT_SCHEMA_REPLAY_V8, EVENT_SCHEMA_REPLAY_V9}
+    {
+        EVENT_SCHEMA_REPLAY_V8,
+        EVENT_SCHEMA_REPLAY_V9,
+        EVENT_SCHEMA_REPLAY_V10,
+    }
 )
-_LIFECYCLE_EVENT_SCHEMAS: Final[frozenset[int]] = frozenset({EVENT_SCHEMA_REPLAY_V9})
+_LIFECYCLE_EVENT_SCHEMAS: Final[frozenset[int]] = frozenset(
+    {EVENT_SCHEMA_REPLAY_V9, EVENT_SCHEMA_REPLAY_V10}
+)
+_NEW_AGENT_INIT_EVENT_SCHEMAS: Final[frozenset[int]] = frozenset(
+    {EVENT_SCHEMA_REPLAY_V10}
+)
 CURRENT_PHYSICAL_EVENT_SCHEMA_VERSION: Final[int] = EVENT_SCHEMA_REPLAY_V5
 _LOG: Final[logging.Logger] = logging.getLogger("world.events")
 _FORBIDDEN_PRESENTATION_FIELDS: Final[frozenset[str]] = frozenset(
@@ -1220,6 +1239,94 @@ class AgentEnteredWorld:
 
 
 @dataclass(frozen=True, slots=True)
+class AgentInitializationRecorded:
+    """Sibling provenance detail after AgentCreated (schema v10+)."""
+
+    body_id: EntityId
+    agent_id: str
+    creation_reason: str
+    origin_refs: tuple[Mapping[str, object], ...]
+    initial_conditions: Mapping[str, object]
+    creation_config_id: str
+    success: bool = True
+    kind: Literal["agent_initialization_recorded"] = field(
+        default="agent_initialization_recorded", init=False
+    )
+
+    def __post_init__(self) -> None:
+        from types import MappingProxyType
+
+        from world.identifiers import require_stable_id
+
+        if type(self.body_id) is not EntityId:
+            raise TypeError("AgentInitializationRecorded.body_id must be EntityId")
+        object.__setattr__(
+            self,
+            "agent_id",
+            require_stable_id("AgentInitializationRecorded.agent_id", self.agent_id),
+        )
+        object.__setattr__(
+            self,
+            "creation_reason",
+            require_stable_id(
+                "AgentInitializationRecorded.creation_reason", self.creation_reason
+            ),
+        )
+        object.__setattr__(
+            self,
+            "creation_config_id",
+            require_stable_id(
+                "AgentInitializationRecorded.creation_config_id",
+                self.creation_config_id,
+            ),
+        )
+        if isinstance(self.origin_refs, (str, bytes)) or not isinstance(
+            self.origin_refs, Sequence
+        ):
+            raise TypeError("origin_refs must be a sequence")
+        frozen_refs: list[Mapping[str, object]] = []
+        for ref in self.origin_refs:
+            if not isinstance(ref, Mapping):
+                raise TypeError("origin_refs entries must be mappings")
+            frozen_refs.append(MappingProxyType(dict(ref)))
+        object.__setattr__(self, "origin_refs", tuple(frozen_refs))
+        if not isinstance(self.initial_conditions, Mapping):
+            raise TypeError("initial_conditions must be a mapping")
+        expected = frozenset(
+            {
+                "location_id",
+                "dependency_status",
+                "stage",
+                "health",
+                "hunger",
+                "thirst",
+                "fatigue",
+                "temperature",
+                "carry_capacity",
+            }
+        )
+        actual = frozenset(self.initial_conditions.keys())
+        if actual != expected:
+            raise ValueError(
+                "initial_conditions exact key set mismatch "
+                f"expected={sorted(expected)!r} actual={sorted(actual)!r} "
+                "(code=initial_conditions_key_set)"
+            )
+        object.__setattr__(
+            self,
+            "initial_conditions",
+            MappingProxyType(dict(self.initial_conditions)),
+        )
+        if _require_success(
+            "AgentInitializationRecorded.success", self.success
+        ) is not True:
+            raise ValueError(
+                "AgentInitializationRecorded does not emit a failure detail"
+            )
+        _reject_presentation_fields(self.kind, self.__slots__)
+
+
+@dataclass(frozen=True, slots=True)
 class LifecycleStageChanged:
     """Objective lifecycle stage transition for one body."""
 
@@ -1321,6 +1428,7 @@ EventDetails = (
     | ArtifactDestroyed
     | AgentCreated
     | AgentEnteredWorld
+    | AgentInitializationRecorded
     | LifecycleStageChanged
 )
 
@@ -1364,6 +1472,7 @@ _DETAIL_TYPES: Final[frozenset[type]] = frozenset(
         ArtifactDestroyed,
         AgentCreated,
         AgentEnteredWorld,
+        AgentInitializationRecorded,
         LifecycleStageChanged,
     }
 )
@@ -1405,6 +1514,9 @@ _LIFECYCLE_DETAIL_TYPES: Final[frozenset[type]] = frozenset(
         AgentEnteredWorld,
         LifecycleStageChanged,
     }
+)
+_NEW_AGENT_INIT_DETAIL_TYPES: Final[frozenset[type]] = frozenset(
+    {AgentInitializationRecorded}
 )
 
 
@@ -1494,6 +1606,8 @@ def _artifact_effect_complete(details: EventDetails) -> bool:
 
 
 def _payload_effect_complete(details: EventDetails, *, schema_version: int) -> bool:
+    if type(details) in _NEW_AGENT_INIT_DETAIL_TYPES:
+        return schema_version in _NEW_AGENT_INIT_EVENT_SCHEMAS
     if type(details) in _LIFECYCLE_DETAIL_TYPES:
         return schema_version in _LIFECYCLE_EVENT_SCHEMAS
     if type(details) in _ARTIFACT_DETAIL_TYPES:
@@ -1692,6 +1806,7 @@ def target_id_for_details(details: EventDetails) -> EntityId | None:
         case (
             AgentCreated(body_id=body_id)
             | AgentEnteredWorld(body_id=body_id)
+            | AgentInitializationRecorded(body_id=body_id)
             | LifecycleStageChanged(body_id=body_id)
         ):
             return body_id
@@ -1793,6 +1908,15 @@ class WorldEvent:
             if self.schema_version not in _ARTIFACT_EVENT_SCHEMAS:
                 _LOG.error(
                     "invalid_event_schema_version kind=%s schema_version=%s",
+                    self.details.kind,
+                    self.schema_version,
+                )
+                raise ValueError(EventValidationCode.INVALID_SCHEMA_VERSION.value)
+        if type(self.details) in _NEW_AGENT_INIT_DETAIL_TYPES:
+            if self.schema_version not in _NEW_AGENT_INIT_EVENT_SCHEMAS:
+                _LOG.error(
+                    "invalid_event_schema_version kind=%s schema_version=%s "
+                    "reason_code=new_agent_init_requires_v10",
                     self.details.kind,
                     self.schema_version,
                 )
@@ -2001,6 +2125,7 @@ def build_occurrence_context(
             | NeedsApplied(body_id=body_id)
             | ExposureApplied(body_id=body_id)
             | AgentCreated(body_id=body_id)
+            | AgentInitializationRecorded(body_id=body_id)
             | LifecycleStageChanged(body_id=body_id)
         ):
             return OccurrenceContext(

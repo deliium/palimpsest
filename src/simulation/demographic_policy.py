@@ -40,8 +40,16 @@ class DemographicEntryCandidate:
     provenance: OriginProvenance
     name_prefix: str
     sort_key: tuple[str, str]
+    creation_reason: str = "demographic_policy"
+    origin_refs: tuple[object, ...] = ()
+    creation_config_id: str | None = None
 
     def __post_init__(self) -> None:
+        from simulation.new_agent_initialization import (
+            CREATION_REASON_CODES,
+            OriginRef,
+        )
+
         if type(self.agent_id) is not AgentId:
             raise TypeError("agent_id must be AgentId")
         if type(self.body_id) is not EntityId:
@@ -60,6 +68,29 @@ class DemographicEntryCandidate:
             "name_prefix",
             require_stable_id("name_prefix", self.name_prefix),
         )
+        object.__setattr__(
+            self,
+            "creation_reason",
+            require_stable_id("creation_reason", self.creation_reason),
+        )
+        if self.creation_reason not in CREATION_REASON_CODES:
+            raise ValueError(
+                f"unknown creation_reason {self.creation_reason!r} "
+                "(code=unknown_creation_reason_code)"
+            )
+        if isinstance(self.origin_refs, (str, bytes)) or not isinstance(
+            self.origin_refs, tuple
+        ):
+            raise TypeError("origin_refs must be a tuple")
+        for ref in self.origin_refs:
+            if type(ref) is not OriginRef:
+                raise TypeError("origin_refs entries must be OriginRef")
+        if self.creation_config_id is not None:
+            object.__setattr__(
+                self,
+                "creation_config_id",
+                require_stable_id("creation_config_id", self.creation_config_id),
+            )
 
 
 @dataclass(frozen=True, slots=True)
@@ -171,12 +202,14 @@ class FixedIntervalEntryPolicy:
                     provenance=OriginProvenance.DEMOGRAPHIC_POLICY,
                     name_prefix=name_prefix,
                     sort_key=(agent_value, body_value),
+                    creation_reason="demographic_policy",
+                    origin_refs=(),
                 )
             )
         ordered = tuple(sorted(candidates, key=lambda item: item.sort_key))
         _LOG.debug(
             "demographic_policy_consult policy_id=fixed_interval_entry "
-            "candidate_count=%s tick=%s living=%s",
+            "candidate_count=%s tick=%s living=%s creation_reason=demographic_policy",
             len(ordered),
             snapshot.tick,
             snapshot.living_population,

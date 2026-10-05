@@ -146,6 +146,7 @@ from simulation.runner_models import (
     RunnerAttemptStatus,
     RunnerProviderSettings,
     RunnerStopReasonCode,
+    RUNNER_SCHEMA_VERSION_V25,
     SimulationRunnerConfig,
     SimulationRunnerResult,
     SkillAudit,
@@ -1384,6 +1385,15 @@ class SimulationRunner:
                     config.population_lifecycle if lifecycle_channel else None
                 ),
                 lifecycle_records=lifecycle_records if lifecycle_channel else None,
+                new_agent_initialization=(
+                    config.new_agent_initialization
+                    if (
+                        lifecycle_channel
+                        and config.schema_version == RUNNER_SCHEMA_VERSION_V25
+                        and config.new_agent_initialization is not None
+                    )
+                    else None
+                ),
                 **skill_kwargs,
                 **teaching_kwargs,
             )
@@ -3138,20 +3148,21 @@ def _bootstrap_snapshot(engine: WorldEngine) -> WorldSnapshot:
         dynamics_active=engine._environmental_dynamics is not None,
         artifacts_active=engine._artifacts_enabled,
         lifecycle_active=engine.lifecycle_channel_active,
+        new_agent_provenance_active=engine.new_agent_provenance_active,
     )
     state = engine._snapshot.world.state
     production_rows: dict[str, tuple[object, ...]] = {}
-    if codec_version in {"v3", "v4", "v5", "v6"}:
+    if codec_version in {"v3", "v4", "v5", "v6", "v7"}:
         production_rows = {
             "structures": tuple(state.structures.values()),
             "production_jobs": tuple(state.production_jobs.values()),
             "tool_marks": tuple(state.tool_marks.values()),
         }
-    if codec_version in {"v4", "v5", "v6"}:
+    if codec_version in {"v4", "v5", "v6", "v7"}:
         production_rows["active_hazards"] = tuple(state.active_hazards)
-    if codec_version in {"v5", "v6"}:
+    if codec_version in {"v5", "v6", "v7"}:
         production_rows["artifacts"] = tuple(state.artifacts.values())
-    if codec_version == "v6":
+    if codec_version in {"v6", "v7"}:
         production_rows["lifecycle_records"] = tuple(engine.lifecycle_records)
     draft = WorldSnapshot(
         snapshot_id=SnapshotId(f"bootstrap-{engine.run_id.value}"),

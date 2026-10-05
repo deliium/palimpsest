@@ -139,19 +139,20 @@ class PersistentSimulationService:
             dynamics_active=self._engine._environmental_dynamics is not None,
             artifacts_active=self._engine._artifacts_enabled,
             lifecycle_active=self._engine.lifecycle_channel_active,
+            new_agent_provenance_active=self._engine.new_agent_provenance_active,
         )
         production_rows: dict[str, tuple[object, ...]] = {}
-        if codec_version in {"v3", "v4", "v5", "v6"}:
+        if codec_version in {"v3", "v4", "v5", "v6", "v7"}:
             production_rows = {
                 "structures": tuple(state.structures.values()),
                 "production_jobs": tuple(state.production_jobs.values()),
                 "tool_marks": tuple(state.tool_marks.values()),
             }
-        if codec_version in {"v4", "v5", "v6"}:
+        if codec_version in {"v4", "v5", "v6", "v7"}:
             production_rows["active_hazards"] = tuple(state.active_hazards)
-        if codec_version in {"v5", "v6"}:
+        if codec_version in {"v5", "v6", "v7"}:
             production_rows["artifacts"] = tuple(state.artifacts.values())
-        if codec_version == "v6":
+        if codec_version in {"v6", "v7"}:
             production_rows["lifecycle_records"] = tuple(
                 self._engine.lifecycle_records
             )

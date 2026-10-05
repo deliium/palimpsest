@@ -43,8 +43,10 @@ from world.events import (
     EVENT_SCHEMA_REPLAY_V7,
     EVENT_SCHEMA_REPLAY_V8,
     EVENT_SCHEMA_REPLAY_V9,
+    EVENT_SCHEMA_REPLAY_V10,
     AgentCreated,
     AgentEnteredWorld,
+    AgentInitializationRecorded,
     ArtifactCreated,
     ArtifactDestroyed,
     ArtifactModified,
@@ -324,6 +326,7 @@ def _prepare_events(
             EVENT_SCHEMA_REPLAY_V7,
             EVENT_SCHEMA_REPLAY_V8,
             EVENT_SCHEMA_REPLAY_V9,
+            EVENT_SCHEMA_REPLAY_V10,
         }:
             raise ProjectionError(ProjectionErrorCode.UNSUPPORTED_SCHEMA)
     return normalized, schema_version, run_id
@@ -554,6 +557,8 @@ def _apply_event_effect(
             return _project_artifact_destroyed(state, event, destroyed), True
         case AgentCreated() as created:
             return _project_agent_created(state, event, created)
+        case AgentInitializationRecorded() as recorded:
+            return _project_agent_initialization_recorded(state, event, recorded)
         case AgentEnteredWorld() as entered:
             return _project_agent_entered(state, event, entered), True
         case LifecycleStageChanged() as stage_changed:
@@ -821,6 +826,16 @@ def _project_agent_created(
         raise ProjectionError(ProjectionErrorCode.PRECONDITION_FAILED)
     if event.actor_id is not None and event.actor_id not in state.bodies:
         raise ProjectionError(ProjectionErrorCode.ACTOR_MISSING)
+    return state, False
+
+
+def _project_agent_initialization_recorded(
+    state: WorldState,
+    event: WorldEvent,
+    details: AgentInitializationRecorded,
+) -> tuple[WorldState, bool]:
+    """Provenance witness only — body placement stays on AgentEnteredWorld."""
+    del event, details
     return state, False
 
 

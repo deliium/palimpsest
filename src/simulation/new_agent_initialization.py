@@ -1044,3 +1044,159 @@ def resolve_spawn_location(
 # Re-export helper key set for serialization (exact child keys).
 NEW_AGENT_INITIALIZATION_KEYS: Final[frozenset[str]] = _NEW_AGENT_INIT_KEYS
 PROVENANCE_POLICY_KEYS: Final[frozenset[str]] = _PROVENANCE_POLICY_KEYS
+
+
+@dataclass(frozen=True, slots=True)
+class InitialConditionsSummary:
+    """Exact structured summary recorded on AgentInitializationRecorded."""
+
+    location_id: str
+    dependency_status: str
+    stage: str
+    health: float
+    hunger: float
+    thirst: float
+    fatigue: float
+    temperature: float
+    carry_capacity: float
+
+    def canonical_payload(self) -> dict[str, object]:
+        return {
+            "carry_capacity": self.carry_capacity,
+            "dependency_status": self.dependency_status,
+            "fatigue": self.fatigue,
+            "health": self.health,
+            "hunger": self.hunger,
+            "location_id": self.location_id,
+            "stage": self.stage,
+            "temperature": self.temperature,
+            "thirst": self.thirst,
+        }
+
+
+@dataclass(frozen=True, slots=True)
+class PreparedEntrantBody:
+    """Shared pre-admit objective body + provenance facts."""
+
+    body: object
+    location_id: EntityId
+    creation_reason: str
+    origin_refs: tuple[OriginRef, ...]
+    creation_config_id: str
+    initial_conditions: InitialConditionsSummary
+    stage: object
+    dependency_status: object
+
+
+def build_entrant_body_from_init(
+    *,
+    init_spec: NewAgentInitializationSpec,
+    body_id: EntityId,
+    location_id: EntityId,
+    stage: object,
+    dependency_status: object,
+    creation_reason: str,
+    origin_refs: tuple[OriginRef, ...] = (),
+    creation_config_id: str,
+    origin_body: object | None = None,
+) -> PreparedEntrantBody:
+    """Build objective entrant body using physical policy + objective inheritance.
+
+    Shared by ``admit_population_entry`` and tick-path demographic admit.
+    """
+    from world.lifecycle import default_entrant_body
+    from world.models import AgentBody, CarryCapacity
+    from world.values import (
+        Fatigue,
+        Health,
+        Hunger,
+        TemperatureCelsius,
+        Thirst,
+    )
+
+    if type(init_spec) is not NewAgentInitializationSpec:
+        raise TypeError("init_spec must be NewAgentInitializationSpec")
+    if creation_reason not in CREATION_REASON_CODES:
+        raise ValueError(
+            f"unknown creation_reason {creation_reason!r} "
+            "(code=unknown_creation_reason_code)"
+        )
+    _LOG.debug(
+        "new_agent_init_stage stage=build_objective_body agent_id=- "
+        "reason_code=%s",
+        creation_reason,
+    )
+    if init_spec.physical_condition_policy.policy_id != "default_entrant":
+        raise ValueError(
+            "unsupported physical_condition_policy "
+            f"{init_spec.physical_condition_policy.policy_id!r}"
+        )
+    body = default_entrant_body(body_id=body_id, location_id=location_id)
+    # Objective inheritance: only allowlisted keys from origin body.
+    allowed = frozenset(init_spec.objective_inheritance.allowed_keys)
+    if allowed:
+        if origin_body is None:
+            raise ValueError(
+                "objective_inheritance requires origin_body "
+                "(code=objective_inheritance_origin_required)"
+            )
+        if type(origin_body) is not AgentBody:
+            raise TypeError("origin_body must be AgentBody")
+        for key in allowed:
+            if key != "carry_capacity":
+                raise ValueError(
+                    f"objective_inheritance key {key!r} forbidden "
+                    "(code=objective_inheritance_key_forbidden)"
+                )
+        body = AgentBody(
+            entity_id=body.entity_id,
+            location_id=body.location_id,
+            health=body.health,
+            hunger=body.hunger,
+            thirst=body.thirst,
+            fatigue=body.fatigue,
+            temperature=body.temperature,
+            inventory=body.inventory,
+            life_status=body.life_status,
+            carry_capacity=CarryCapacity(origin_body.carry_capacity.value),
+        )
+    assert type(body) is AgentBody
+    summary = InitialConditionsSummary(
+        location_id=location_id.value,
+        dependency_status=str(
+            getattr(dependency_status, "value", dependency_status)
+        ),
+        stage=str(getattr(stage, "value", stage)),
+        health=float(body.health.value),
+        hunger=float(body.hunger.value),
+        thirst=float(body.thirst.value),
+        fatigue=float(body.fatigue.value),
+        temperature=float(body.temperature.value),
+        carry_capacity=float(body.carry_capacity.value),
+    )
+    # Silence unused imports if values types are only used via body fields.
+    _ = (Health, Hunger, Thirst, Fatigue, TemperatureCelsius)
+    return PreparedEntrantBody(
+        body=body,
+        location_id=location_id,
+        creation_reason=creation_reason,
+        origin_refs=origin_refs,
+        creation_config_id=creation_config_id,
+        initial_conditions=summary,
+        stage=stage,
+        dependency_status=dependency_status,
+    )
+
+
+def enforce_spawn_location_for_candidate(
+    *,
+    init_spec: NewAgentInitializationSpec,
+    candidate_location_id: EntityId,
+    provenance_is_demographic: bool,
+) -> EntityId:
+    """Apply spawn-location precedence; fail closed on disallow."""
+    return resolve_spawn_location(
+        policy=init_spec.spawn_location_policy,
+        candidate_location_id=candidate_location_id,
+        provenance_is_demographic=provenance_is_demographic,
+    )

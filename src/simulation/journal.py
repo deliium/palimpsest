@@ -725,7 +725,7 @@ def _encode_world_snapshot(
             "weather": [_encode_weather(item) for item in value.weather],
             "world_id": value.world_id.value,
         }
-        if value.persistence_codec_version in {"v3", "v4", "v5", "v6"}:
+        if value.persistence_codec_version in {"v3", "v4", "v5", "v6", "v7"}:
             payload["structures"] = [
                 _encode_structure(item) for item in value.structures
             ]
@@ -735,15 +735,15 @@ def _encode_world_snapshot(
             payload["tool_marks"] = [
                 _encode_tool_mark(item) for item in value.tool_marks
             ]
-        if value.persistence_codec_version in {"v4", "v5", "v6"}:
+        if value.persistence_codec_version in {"v4", "v5", "v6", "v7"}:
             payload["active_hazards"] = [
                 _encode_active_hazard(item) for item in value.active_hazards
             ]
-        if value.persistence_codec_version in {"v5", "v6"}:
+        if value.persistence_codec_version in {"v5", "v6", "v7"}:
             payload["artifacts"] = [
                 _encode_information_artifact(item) for item in value.artifacts
             ]
-        if value.persistence_codec_version == "v6":
+        if value.persistence_codec_version in {"v6", "v7"}:
             payload["lifecycle_records"] = [
                 _encode_lifecycle_record(item) for item in value.lifecycle_records
             ]
@@ -777,13 +777,13 @@ def _decode_world_snapshot(data: dict[str, Any], *, path: str) -> WorldSnapshot:
         "integrity_hash",
         "predecessor_commit_hash",
     }
-    if codec in {"v3", "v4", "v5", "v6"}:
+    if codec in {"v3", "v4", "v5", "v6", "v7"}:
         keys |= {"structures", "production_jobs", "tool_marks"}
-    if codec in {"v4", "v5", "v6"}:
+    if codec in {"v4", "v5", "v6", "v7"}:
         keys.add("active_hazards")
-    if codec in {"v5", "v6"}:
+    if codec in {"v5", "v6", "v7"}:
         keys.add("artifacts")
-    if codec == "v6":
+    if codec in {"v6", "v7"}:
         keys.add("lifecycle_records")
     _require_keys(data, keys, path=path)
     config_raw = data["config"]
@@ -841,40 +841,40 @@ def _decode_world_snapshot(data: dict[str, Any], *, path: str) -> WorldSnapshot:
             structures=_decode_object_list(
                 data["structures"], _decode_structure, path=f"{path}.structures"
             )
-            if codec in {"v3", "v4", "v5", "v6"}
+            if codec in {"v3", "v4", "v5", "v6", "v7"}
             else (),
             production_jobs=_decode_object_list(
                 data["production_jobs"],
                 _decode_production_job,
                 path=f"{path}.production_jobs",
             )
-            if codec in {"v3", "v4", "v5", "v6"}
+            if codec in {"v3", "v4", "v5", "v6", "v7"}
             else (),
             tool_marks=_decode_object_list(
                 data["tool_marks"], _decode_tool_mark, path=f"{path}.tool_marks"
             )
-            if codec in {"v3", "v4", "v5", "v6"}
+            if codec in {"v3", "v4", "v5", "v6", "v7"}
             else (),
             active_hazards=_decode_object_list(
                 data["active_hazards"],
                 _decode_active_hazard,
                 path=f"{path}.active_hazards",
             )
-            if codec in {"v4", "v5", "v6"}
+            if codec in {"v4", "v5", "v6", "v7"}
             else (),
             artifacts=_decode_object_list(
                 data["artifacts"],
                 _decode_information_artifact,
                 path=f"{path}.artifacts",
             )
-            if codec in {"v5", "v6"}
+            if codec in {"v5", "v6", "v7"}
             else (),
             lifecycle_records=_decode_object_list(
                 data["lifecycle_records"],
                 _decode_lifecycle_record,
                 path=f"{path}.lifecycle_records",
             )
-            if codec == "v6"
+            if codec in {"v6", "v7"}
             else (),
         )
     except PersistenceSerializationError:

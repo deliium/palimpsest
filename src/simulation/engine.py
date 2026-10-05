@@ -120,6 +120,7 @@ from world.effects import (
 from world.events import (
     AgentCreated,
     AgentEnteredWorld,
+    AgentInitializationRecorded,
     Died,
     LifecycleStageChanged,
     WorldEvent,
@@ -209,6 +210,9 @@ class PopulationEntryAdmission:
     registration: AgentRegistration
     lifecycle_record: AgentLifecycleRecord
     events: tuple[WorldEvent, ...]
+    creation_reason: str = "demographic_policy"
+    origin_refs: tuple[object, ...] = ()
+    creation_config_id: str | None = None
 
 
 def _request_id_set(value: object | None) -> set[str]:
@@ -255,6 +259,7 @@ class WorldEngine:
         "_lifecycle_records",
         "_perception",
         "_population_lifecycle",
+        "_new_agent_initialization",
         "_production_catalog",
         "_registrations",
         "_run_id",
@@ -286,6 +291,7 @@ class WorldEngine:
         artifacts_enabled: bool = False,
         population_lifecycle: object | None = None,
         lifecycle_records: Sequence[object] | None = None,
+        new_agent_initialization: object | None = None,
     ) -> None:
         if type(config) is not SimulationRunConfig:
             raise TypeError("WorldEngine requires SimulationRunConfig")
@@ -346,10 +352,24 @@ class WorldEngine:
                 population_lifecycle, lifecycle_records=lifecycle_records
             )
         )
+        if new_agent_initialization is not None:
+            from simulation.new_agent_initialization import NewAgentInitializationSpec
+
+            if type(new_agent_initialization) is not NewAgentInitializationSpec:
+                raise TypeError(
+                    "new_agent_initialization must be NewAgentInitializationSpec "
+                    "or None"
+                )
+            if self._population_lifecycle is None:
+                raise ValueError(
+                    "new_agent_initialization requires population_lifecycle "
+                    "(code=new_agent_init_requires_lifecycle)"
+                )
+        self._new_agent_initialization = new_agent_initialization
         _LOGGER.debug(
             "%s world_id=%s revision=%s tick=%s registrations=%s "
             "artifacts_enabled=%s lifecycle_channel=%s "
-            "bootstrap_lifecycle_record_count=%s",
+            "bootstrap_lifecycle_record_count=%s new_agent_provenance=%s",
             EngineDiagnosticCode.BOOTSTRAP_VALIDATED.value,
             bootstrap.world_id.value,
             bootstrap.revision.value,
@@ -358,6 +378,7 @@ class WorldEngine:
             self._artifacts_enabled,
             "on" if self._population_lifecycle is not None else "off",
             len(self._lifecycle_records),
+            "on" if self._new_agent_initialization is not None else "off",
         )
 
     @classmethod
@@ -378,6 +399,7 @@ class WorldEngine:
         environmental_dynamics: object | None = None,
         artifacts_enabled: bool = False,
         population_lifecycle: object | None = None,
+        new_agent_initialization: object | None = None,
     ) -> WorldEngine:
         """Restore an engine at ``AWAITING_OBSERVATION`` from a checkpoint.
 
@@ -550,13 +572,13 @@ class WorldEngine:
         engine._artifacts_enabled = (
             artifacts_enabled
             or bool(snapshot.artifacts)
-            or snapshot.persistence_codec_version in {"v5", "v6"}
+            or snapshot.persistence_codec_version in {"v5", "v6", "v7"}
             or bool(getattr(engine._bootstrap, "artifacts", ()))
         )
-        if snapshot.persistence_codec_version == "v6":
+        if snapshot.persistence_codec_version in {"v6", "v7"}:
             if population_lifecycle is None and snapshot.lifecycle_records:
                 raise ValueError(
-                    "codec v6 restore requires population_lifecycle "
+                    "codec v6/v7 restore requires population_lifecycle "
                     "(code=lifecycle_restore_missing_spec)"
                 )
             engine._population_lifecycle, engine._lifecycle_records = (
@@ -565,15 +587,42 @@ class WorldEngine:
                     lifecycle_records=snapshot.lifecycle_records,
                 )
             )
+            engine._new_agent_initialization = None
+            if new_agent_initialization is not None:
+                from simulation.new_agent_initialization import (
+                    NewAgentInitializationSpec,
+                )
+
+                if type(new_agent_initialization) is not NewAgentInitializationSpec:
+                    raise TypeError(
+                        "new_agent_initialization must be NewAgentInitializationSpec"
+                    )
+                if engine._population_lifecycle is None:
+                    raise ValueError(
+                        "new_agent_initialization requires population_lifecycle "
+                        "(code=lifecycle_channel_off)"
+                    )
+                engine._new_agent_initialization = new_agent_initialization
+            elif (
+                snapshot.persistence_codec_version == "v7"
+                and snapshot.event_schema_version == 10
+            ):
+                # Prefer explicit restore arg; else pull from snapshot config when v25.
+                config_init = getattr(snapshot.config, "new_agent_initialization", None)
+                if config_init is not None:
+                    engine._new_agent_initialization = config_init
             _LOGGER.debug(
-                "lifecycle_restore codec_version=v6 lifecycle_record_count=%s "
-                "lifecycle_channel=%s",
+                "lifecycle_restore codec_version=%s lifecycle_record_count=%s "
+                "lifecycle_channel=%s new_agent_provenance=%s",
+                snapshot.persistence_codec_version,
                 len(engine._lifecycle_records),
                 "on" if engine._population_lifecycle is not None else "off",
+                "on" if engine._new_agent_initialization is not None else "off",
             )
         else:
             engine._population_lifecycle = None
             engine._lifecycle_records = ()
+            engine._new_agent_initialization = None
         engine._require_refolded_teaching_offers(
             teaching_offers=teaching_offers,
             initial_state=base_state,
@@ -628,6 +677,14 @@ class WorldEngine:
         return self._population_lifecycle
 
     @property
+    def new_agent_provenance_active(self) -> bool:
+        return self._new_agent_initialization is not None
+
+    @property
+    def new_agent_initialization(self) -> object | None:
+        return self._new_agent_initialization
+
+    @property
     def registration_translator(self) -> RegistrationTranslator:
         """Current ordered registration translator (rebuilds on mid-run admit)."""
         return self._translator
@@ -650,7 +707,6 @@ class WorldEngine:
         """
         from simulation.demographic_policy import DemographicEntryCandidate
         from simulation.runner_models import PopulationLifecycleSpec
-        from world.events import EVENT_SCHEMA_REPLAY_V9
 
         if self._population_lifecycle is None:
             _LOGGER.error(
@@ -727,31 +783,24 @@ class WorldEngine:
             )
 
         entry_tick = snap.tick.value
-        entrant_body = body
-        if entrant_body is None:
-            entrant_body = default_entrant_body(
-                body_id=candidate.body_id,
-                location_id=candidate.spawn_location_id,
-            )
-        elif type(entrant_body) is not AgentBody:
-            raise TypeError("body must be AgentBody or None")
-        elif entrant_body.entity_id != candidate.body_id:
-            raise ValueError(
-                "body.entity_id must match candidate.body_id "
-                "(code=lifecycle_body_id_mismatch)"
-            )
-        elif entrant_body.location_id != candidate.spawn_location_id:
-            raise ValueError(
-                "body.location_id must match candidate.spawn_location_id "
-                "(code=lifecycle_spawn_mismatch)"
-            )
-
         stage = resolve_lifecycle_stage(0, spec.stage_thresholds)
         dependency = resolve_dependency_status(
             stage,
             spec.dependent_until_stage,
             stage_order=spec.stage_order,
         )
+        prepared = self._prepare_mid_run_entrant(
+            candidate=candidate,
+            stage=stage,
+            dependency=dependency,
+            demographic_policy_id=spec.demographic_policy_id,
+            explicit_body=body,
+            origin_body=None,
+        )
+        entrant_body = prepared.body
+        spawn_location = prepared.location_id
+        assert type(entrant_body) is AgentBody
+
         lifecycle_record = AgentLifecycleRecord(
             body_id=candidate.body_id,
             agent_id=candidate.agent_id.value,
@@ -783,102 +832,66 @@ class WorldEngine:
                 f"population entry world invariant failed (code=world_invariant): {exc}"
             ) from exc
 
-        created_details = AgentCreated(
-            body_id=candidate.body_id,
-            agent_id=candidate.agent_id.value,
-            generation_index=candidate.generation_index,
-            cohort_id=candidate.cohort_id,
-            provenance=candidate.provenance.value,
+        event_schema, _codec = select_checkpoint_schema(
+            production_active=self._production_catalog is not None,
+            dynamics_active=self._environmental_dynamics is not None,
+            artifacts_active=self._artifacts_enabled,
+            lifecycle_active=True,
+            new_agent_provenance_active=self.new_agent_provenance_active,
         )
-        entered_details = AgentEnteredWorld(
-            body_id=candidate.body_id,
-            agent_id=candidate.agent_id.value,
-            location_id=candidate.spawn_location_id,
+        detail_seq = self._population_entry_detail_sequence(
+            candidate=candidate,
             entry_tick=entry_tick,
-        )
-        created_cause_id = derive_system_cause_id(
-            self._config,
-            run_id=self._run_id,
-            world_id=self.world_id,
-            tick=entry_tick,
-            effect_family=SystemEffectFamily.LIFECYCLE.value,
-            entity_id=candidate.body_id,
-            family_ordinal=0,
-        )
-        entered_cause_id = derive_system_cause_id(
-            self._config,
-            run_id=self._run_id,
-            world_id=self.world_id,
-            tick=entry_tick,
-            effect_family=SystemEffectFamily.LIFECYCLE.value,
-            entity_id=candidate.body_id,
-            family_ordinal=1,
+            spawn_location=spawn_location,
+            prepared=prepared,
         )
         same_tick = [event for event in snap.event_history if event.tick == entry_tick]
         sequence_start = len(same_tick)
-        created_event = make_physical_replayable_event(
-            event_id=derive_event_id(
+        events_list: list[WorldEvent] = []
+        for ordinal, details in enumerate(detail_seq):
+            cause_id = derive_system_cause_id(
                 self._config,
-                *canonical_system_effect_keys(
-                    run_id=self._run_id,
+                run_id=self._run_id,
+                world_id=self.world_id,
+                tick=entry_tick,
+                effect_family=SystemEffectFamily.LIFECYCLE.value,
+                entity_id=candidate.body_id,
+                family_ordinal=ordinal,
+            )
+            events_list.append(
+                make_physical_replayable_event(
+                    event_id=derive_event_id(
+                        self._config,
+                        *canonical_system_effect_keys(
+                            run_id=self._run_id,
+                            world_id=self.world_id,
+                            tick=Tick(entry_tick),
+                            effect_family=SystemEffectFamily.LIFECYCLE.value,
+                            entity_id=candidate.body_id,
+                            family_ordinal=ordinal,
+                            sequence=0,
+                        ),
+                    ),
+                    run_id=run_id_for_event(self._run_id),
                     world_id=self.world_id,
-                    tick=Tick(entry_tick),
-                    effect_family=SystemEffectFamily.LIFECYCLE.value,
-                    entity_id=candidate.body_id,
-                    family_ordinal=0,
-                    sequence=0,
-                ),
-            ),
-            run_id=run_id_for_event(self._run_id),
-            world_id=self.world_id,
-            tick=entry_tick,
-            sequence=sequence_start,
-            cause=SystemCause(
-                created_cause_id,
-                SystemEffectFamily.LIFECYCLE,
-                candidate.body_id,
-                0,
-            ),
-            resulting_revision=resulting_revision,
-            details=created_details,
-            occurrence=build_occurrence_context(
-                created_details,
-                origin_location_id=candidate.spawn_location_id,
-            ),
-            schema_version=EVENT_SCHEMA_REPLAY_V9,
-        )
-        entered_event = make_physical_replayable_event(
-            event_id=derive_event_id(
-                self._config,
-                *canonical_system_effect_keys(
-                    run_id=self._run_id,
-                    world_id=self.world_id,
-                    tick=Tick(entry_tick),
-                    effect_family=SystemEffectFamily.LIFECYCLE.value,
-                    entity_id=candidate.body_id,
-                    family_ordinal=1,
-                    sequence=0,
-                ),
-            ),
-            run_id=run_id_for_event(self._run_id),
-            world_id=self.world_id,
-            tick=entry_tick,
-            sequence=sequence_start + 1,
-            cause=SystemCause(
-                entered_cause_id,
-                SystemEffectFamily.LIFECYCLE,
-                candidate.body_id,
-                1,
-            ),
-            resulting_revision=resulting_revision,
-            details=entered_details,
-            occurrence=build_occurrence_context(
-                entered_details,
-                origin_location_id=candidate.spawn_location_id,
-            ),
-            schema_version=EVENT_SCHEMA_REPLAY_V9,
-        )
-        events = (created_event, entered_event)
+                    tick=entry_tick,
+                    sequence=sequence_start + ordinal,
+                    cause=SystemCause(
+                        cause_id,
+                        SystemEffectFamily.LIFECYCLE,
+                        candidate.body_id,
+                        ordinal,
+                    ),
+                    resulting_revision=resulting_revision,
+                    details=details,
+                    occurrence=build_occurrence_context(
+                        details,
+                        origin_location_id=spawn_location,
+                    ),
+                    schema_version=event_schema,
+                )
+            )
+        events = tuple(events_list)
         next_registrations = (*self._registrations, registration)
         self._registrations = next_registrations
         self._translator = _translator_from_registrations(next_registrations)
@@ -895,23 +908,26 @@ class WorldEngine:
         )
         _LOGGER.info(
             "population_entry_admitted agent_id=%s body_id=%s tick=%s "
-            "population_count=%s provenance=%s",
+            "population_count=%s provenance=%s creation_reason=%s",
             candidate.agent_id.value,
             candidate.body_id.value,
             entry_tick,
             living + 1,
             candidate.provenance.value,
+            prepared.creation_reason,
         )
         _LOGGER.debug(
-            "population_entry_events created=1 entered=1 revision=%s "
-            "registration_count=%s",
+            "population_entry_events event_count=%s provenance_active=%s "
+            "revision=%s registration_count=%s",
+            len(events),
+            self.new_agent_provenance_active,
             resulting_revision.value,
             len(next_registrations),
         )
         return PopulationEntryAdmission(
             agent_id=candidate.agent_id,
             body_id=candidate.body_id,
-            location_id=candidate.spawn_location_id,
+            location_id=spawn_location,
             entry_tick=entry_tick,
             generation_index=candidate.generation_index,
             cohort_id=candidate.cohort_id,
@@ -920,7 +936,221 @@ class WorldEngine:
             registration=registration,
             lifecycle_record=lifecycle_record,
             events=events,
+            creation_reason=prepared.creation_reason,
+            origin_refs=prepared.origin_refs,
+            creation_config_id=prepared.creation_config_id,
         )
+
+    def _prepare_mid_run_entrant(
+        self,
+        *,
+        candidate: object,
+        stage: object,
+        dependency: object,
+        demographic_policy_id: str,
+        explicit_body: AgentBody | None,
+        origin_body: AgentBody | None,
+    ) -> object:
+        """Resolve spawn location, body, and provenance facts for one admit."""
+        from simulation.demographic_policy import DemographicEntryCandidate
+        from simulation.new_agent_initialization import (
+            InitialConditionsSummary,
+            NewAgentInitializationSpec,
+            OriginRef,
+            PreparedEntrantBody,
+            build_entrant_body_from_init,
+            creation_config_fingerprint,
+            enforce_spawn_location_for_candidate,
+        )
+
+        if type(candidate) is not DemographicEntryCandidate:
+            raise TypeError("candidate must be DemographicEntryCandidate")
+        init_spec = self._new_agent_initialization
+        if init_spec is None:
+            spawn_location = candidate.spawn_location_id
+            entrant_body = explicit_body
+            if entrant_body is None:
+                entrant_body = default_entrant_body(
+                    body_id=candidate.body_id,
+                    location_id=spawn_location,
+                )
+            elif type(entrant_body) is not AgentBody:
+                raise TypeError("body must be AgentBody or None")
+            elif entrant_body.entity_id != candidate.body_id:
+                raise ValueError(
+                    "body.entity_id must match candidate.body_id "
+                    "(code=lifecycle_body_id_mismatch)"
+                )
+            elif entrant_body.location_id != spawn_location:
+                raise ValueError(
+                    "body.location_id must match candidate.spawn_location_id "
+                    "(code=lifecycle_spawn_mismatch)"
+                )
+            assert type(entrant_body) is AgentBody
+            summary = InitialConditionsSummary(
+                location_id=spawn_location.value,
+                dependency_status=str(getattr(dependency, "value", dependency)),
+                stage=str(getattr(stage, "value", stage)),
+                health=float(entrant_body.health.value),
+                hunger=float(entrant_body.hunger.value),
+                thirst=float(entrant_body.thirst.value),
+                fatigue=float(entrant_body.fatigue.value),
+                temperature=float(entrant_body.temperature.value),
+                carry_capacity=float(entrant_body.carry_capacity.value),
+            )
+            return PreparedEntrantBody(
+                body=entrant_body,
+                location_id=spawn_location,
+                creation_reason=candidate.creation_reason,
+                origin_refs=tuple(candidate.origin_refs),
+                creation_config_id=candidate.creation_config_id or "lifecycle-default",
+                initial_conditions=summary,
+                stage=stage,
+                dependency_status=dependency,
+            )
+
+        if type(init_spec) is not NewAgentInitializationSpec:
+            raise TypeError("new_agent_initialization must be NewAgentInitializationSpec")
+        _LOGGER.debug(
+            "new_agent_init_stage stage=resolve_creation_request agent_id=%s "
+            "reason_code=%s",
+            candidate.agent_id.value,
+            candidate.creation_reason,
+        )
+        spawn_location = enforce_spawn_location_for_candidate(
+            init_spec=init_spec,
+            candidate_location_id=candidate.spawn_location_id,
+            provenance_is_demographic=(
+                candidate.provenance is OriginProvenance.DEMOGRAPHIC_POLICY
+            ),
+        )
+        if explicit_body is not None:
+            if type(explicit_body) is not AgentBody:
+                raise TypeError("body must be AgentBody or None")
+            if explicit_body.entity_id != candidate.body_id:
+                raise ValueError(
+                    "body.entity_id must match candidate.body_id "
+                    "(code=lifecycle_body_id_mismatch)"
+                )
+            if explicit_body.location_id != spawn_location:
+                raise ValueError(
+                    "body.location_id must match resolved spawn location "
+                    "(code=lifecycle_spawn_mismatch)"
+                )
+        config_id = candidate.creation_config_id
+        if config_id is None:
+            config_id = creation_config_fingerprint(
+                init_spec, demographic_policy_id=demographic_policy_id
+            )
+        origin_refs = tuple(candidate.origin_refs)
+        if not init_spec.provenance_policy.record_origin_refs:
+            origin_refs = ()
+        else:
+            allowed = frozenset(init_spec.provenance_policy.allowed_roles)
+            filtered: list[OriginRef] = []
+            for ref in origin_refs:
+                if type(ref) is not OriginRef:
+                    raise TypeError("origin_refs entries must be OriginRef")
+                if ref.role not in allowed:
+                    _LOGGER.error(
+                        "population_entry_rejected "
+                        "reason_code=origin_ref_role_not_allowed role=%s",
+                        ref.role,
+                    )
+                    raise ValueError(
+                        f"origin_ref role {ref.role!r} not allowed "
+                        "(code=origin_ref_role_not_allowed)"
+                    )
+                filtered.append(ref)
+            origin_refs = tuple(filtered)
+        _LOGGER.debug(
+            "new_agent_init_stage stage=build_objective_body agent_id=%s "
+            "reason_code=%s",
+            candidate.agent_id.value,
+            candidate.creation_reason,
+        )
+        if explicit_body is not None:
+            assert type(explicit_body) is AgentBody
+            summary = InitialConditionsSummary(
+                location_id=spawn_location.value,
+                dependency_status=str(getattr(dependency, "value", dependency)),
+                stage=str(getattr(stage, "value", stage)),
+                health=float(explicit_body.health.value),
+                hunger=float(explicit_body.hunger.value),
+                thirst=float(explicit_body.thirst.value),
+                fatigue=float(explicit_body.fatigue.value),
+                temperature=float(explicit_body.temperature.value),
+                carry_capacity=float(explicit_body.carry_capacity.value),
+            )
+            return PreparedEntrantBody(
+                body=explicit_body,
+                location_id=spawn_location,
+                creation_reason=candidate.creation_reason,
+                origin_refs=origin_refs,
+                creation_config_id=config_id,
+                initial_conditions=summary,
+                stage=stage,
+                dependency_status=dependency,
+            )
+        return build_entrant_body_from_init(
+            init_spec=init_spec,
+            body_id=candidate.body_id,
+            location_id=spawn_location,
+            stage=stage,
+            dependency_status=dependency,
+            creation_reason=candidate.creation_reason,
+            origin_refs=origin_refs,
+            creation_config_id=config_id,
+            origin_body=origin_body,
+        )
+
+    def _population_entry_detail_sequence(
+        self,
+        *,
+        candidate: object,
+        entry_tick: int,
+        spawn_location: EntityId,
+        prepared: object,
+    ) -> tuple[object, ...]:
+        """AgentCreated → optional AgentInitializationRecorded → AgentEnteredWorld."""
+        from simulation.demographic_policy import DemographicEntryCandidate
+        from simulation.new_agent_initialization import (
+            OriginRef,
+            PreparedEntrantBody,
+        )
+
+        if type(candidate) is not DemographicEntryCandidate:
+            raise TypeError("candidate must be DemographicEntryCandidate")
+        if type(prepared) is not PreparedEntrantBody:
+            raise TypeError("prepared must be PreparedEntrantBody")
+        created = AgentCreated(
+            body_id=candidate.body_id,
+            agent_id=candidate.agent_id.value,
+            generation_index=candidate.generation_index,
+            cohort_id=candidate.cohort_id,
+            provenance=candidate.provenance.value,
+        )
+        entered = AgentEnteredWorld(
+            body_id=candidate.body_id,
+            agent_id=candidate.agent_id.value,
+            location_id=spawn_location,
+            entry_tick=entry_tick,
+        )
+        if not self.new_agent_provenance_active:
+            return (created, entered)
+        origin_payload = tuple(
+            ref.canonical_payload() if type(ref) is OriginRef else dict(ref)
+            for ref in prepared.origin_refs
+        )
+        recorded = AgentInitializationRecorded(
+            body_id=candidate.body_id,
+            agent_id=candidate.agent_id.value,
+            creation_reason=prepared.creation_reason,
+            origin_refs=origin_payload,
+            initial_conditions=prepared.initial_conditions.canonical_payload(),
+            creation_config_id=prepared.creation_config_id,
+        )
+        return (created, recorded, entered)
 
     def _living_registered_population(self) -> int:
         state = self._snapshot.world.state
@@ -1151,10 +1381,41 @@ class WorldEngine:
             if candidate.provenance is OriginProvenance.BOOTSTRAP:
                 continue
 
-            entrant = default_entrant_body(
-                body_id=candidate.body_id,
-                location_id=candidate.spawn_location_id,
+            stage = resolve_lifecycle_stage(0, spec.stage_thresholds)
+            dependency = resolve_dependency_status(
+                stage,
+                spec.dependent_until_stage,
+                stage_order=spec.stage_order,
             )
+            try:
+                prepared = self._prepare_mid_run_entrant(
+                    candidate=candidate,
+                    stage=stage,
+                    dependency=dependency,
+                    demographic_policy_id=spec.demographic_policy_id,
+                    explicit_body=None,
+                    origin_body=None,
+                )
+            except ValueError as exc:
+                _LOGGER.error(
+                    "population_entry_rejected reason_code=init_prepare_failed "
+                    "detail=%s",
+                    type(exc).__name__,
+                )
+                continue
+            from simulation.new_agent_initialization import PreparedEntrantBody
+
+            assert type(prepared) is PreparedEntrantBody
+            entrant = prepared.body
+            spawn_location = prepared.location_id
+            assert type(entrant) is AgentBody
+            if spawn_location not in working_state.locations:
+                _LOGGER.error(
+                    "population_entry_rejected reason_code=unknown_spawn_location "
+                    "location_id=%s",
+                    spawn_location.value,
+                )
+                continue
             bodies = dict(working_state.bodies)
             bodies[candidate.body_id] = entrant
             try:
@@ -1167,12 +1428,6 @@ class WorldEngine:
                 )
                 continue
             semantic_mutation = True
-            stage = resolve_lifecycle_stage(0, spec.stage_thresholds)
-            dependency = resolve_dependency_status(
-                stage,
-                spec.dependent_until_stage,
-                stage_order=spec.stage_order,
-            )
             lifecycle_record = AgentLifecycleRecord(
                 body_id=candidate.body_id,
                 agent_id=candidate.agent_id.value,
@@ -1187,20 +1442,13 @@ class WorldEngine:
                 agent_id=candidate.agent_id,
                 entity_id=candidate.body_id,
             )
-            created = AgentCreated(
-                body_id=candidate.body_id,
-                agent_id=candidate.agent_id.value,
-                generation_index=candidate.generation_index,
-                cohort_id=candidate.cohort_id,
-                provenance=candidate.provenance.value,
-            )
-            entered = AgentEnteredWorld(
-                body_id=candidate.body_id,
-                agent_id=candidate.agent_id.value,
-                location_id=candidate.spawn_location_id,
+            detail_seq = self._population_entry_detail_sequence(
+                candidate=candidate,
                 entry_tick=tick,
+                spawn_location=spawn_location,
+                prepared=prepared,
             )
-            for details, ordinal_offset in ((created, 0), (entered, 1)):
+            for ordinal_offset, details in enumerate(detail_seq):
                 ordinal = family_ordinal + ordinal_offset
                 cause_id = derive_system_cause_id(
                     self._config,
@@ -1222,11 +1470,11 @@ class WorldEngine:
                         details=details,
                         occurrence=build_occurrence_context(
                             details,
-                            origin_location_id=candidate.spawn_location_id,
+                            origin_location_id=spawn_location,
                         ),
                     )
                 )
-            family_ordinal += 2
+            family_ordinal += len(detail_seq)
             next_registrations.append(registration)
             next_lifecycle.append(lifecycle_record)
             known_agent_ids = frozenset({*known_agent_ids, candidate.agent_id.value})
@@ -1235,12 +1483,13 @@ class WorldEngine:
             demographic_admit_count += 1
             _LOGGER.info(
                 "population_entry_admitted agent_id=%s body_id=%s tick=%s "
-                "population_count=%s provenance=%s",
+                "population_count=%s provenance=%s creation_reason=%s",
                 candidate.agent_id.value,
                 candidate.body_id.value,
                 tick,
                 living,
                 candidate.provenance.value,
+                prepared.creation_reason,
             )
 
         regs_tuple = tuple(next_registrations)
@@ -2262,6 +2511,7 @@ class WorldEngine:
             dynamics_active=self._environmental_dynamics is not None,
             artifacts_active=self._artifacts_enabled,
             lifecycle_active=self.lifecycle_channel_active,
+            new_agent_provenance_active=self.new_agent_provenance_active,
         )
         prepared = finalize_pending_batch(
             merged,
@@ -3328,6 +3578,7 @@ def select_checkpoint_schema(
     dynamics_active: bool,
     artifacts_active: bool = False,
     lifecycle_active: bool = False,
+    new_agent_provenance_active: bool = False,
 ) -> tuple[int, str]:
     """Return the legal event-schema and codec pair for this run."""
     from simulation.persistence import (
@@ -3340,6 +3591,7 @@ def select_checkpoint_schema(
         EVENT_SCHEMA_REPLAY_V7,
         EVENT_SCHEMA_REPLAY_V8,
         EVENT_SCHEMA_REPLAY_V9,
+        EVENT_SCHEMA_REPLAY_V10,
     )
 
     schema_version, codec = checkpoint_schema_for_production(
@@ -3347,31 +3599,41 @@ def select_checkpoint_schema(
         dynamics_active=dynamics_active,
         artifacts_active=artifacts_active,
         lifecycle_active=lifecycle_active,
+        new_agent_provenance_active=new_agent_provenance_active,
     )
     agreed = (
-        lifecycle_active
+        new_agent_provenance_active
+        and schema_version == EVENT_SCHEMA_REPLAY_V10
+        and codec == "v7"
+    ) or (
+        not new_agent_provenance_active
+        and lifecycle_active
         and schema_version == EVENT_SCHEMA_REPLAY_V9
         and codec == "v6"
     ) or (
-        not lifecycle_active
+        not new_agent_provenance_active
+        and not lifecycle_active
         and artifacts_active
         and schema_version == EVENT_SCHEMA_REPLAY_V8
         and codec == "v5"
     ) or (
-        not lifecycle_active
+        not new_agent_provenance_active
+        and not lifecycle_active
         and not artifacts_active
         and dynamics_active
         and schema_version == EVENT_SCHEMA_REPLAY_V7
         and codec == "v4"
     ) or (
-        not lifecycle_active
+        not new_agent_provenance_active
+        and not lifecycle_active
         and not artifacts_active
         and not dynamics_active
         and production_active
         and schema_version == EVENT_SCHEMA_REPLAY_V6
         and codec == "v3"
     ) or (
-        not lifecycle_active
+        not new_agent_provenance_active
+        and not lifecycle_active
         and not artifacts_active
         and not dynamics_active
         and not production_active
@@ -3384,12 +3646,15 @@ def select_checkpoint_schema(
             schema_version,
             codec,
         )
-        raise ValueError("unsupported_schema_version")
+        raise ValueError(
+            f"unsupported checkpoint schema pair schema={schema_version} codec={codec}"
+        )
     _LOGGER.debug(
         "checkpoint_schema_selected event_schema=%s codec=%s "
-        "lifecycle_active=%s artifacts_active=%s",
+        "new_agent_provenance_active=%s lifecycle_active=%s artifacts_active=%s",
         schema_version,
         codec,
+        new_agent_provenance_active,
         lifecycle_active,
         artifacts_active,
     )

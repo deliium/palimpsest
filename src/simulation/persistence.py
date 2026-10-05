@@ -47,6 +47,7 @@ from world.events import (
     EVENT_SCHEMA_REPLAY_V7,
     EVENT_SCHEMA_REPLAY_V8,
     EVENT_SCHEMA_REPLAY_V9,
+    EVENT_SCHEMA_REPLAY_V10,
     WorldEvent,
     normalize_events,
 )
@@ -78,11 +79,12 @@ ACCEPTED_EVENT_SCHEMA_VERSIONS: Final[frozenset[int]] = frozenset(
         EVENT_SCHEMA_REPLAY_V7,
         EVENT_SCHEMA_REPLAY_V8,
         EVENT_SCHEMA_REPLAY_V9,
+        EVENT_SCHEMA_REPLAY_V10,
     }
 )
 ACCEPTED_PROJECTOR_VERSIONS: Final[frozenset[str]] = frozenset({"v1", "v2"})
 ACCEPTED_PERSISTENCE_CODEC_VERSIONS: Final[frozenset[str]] = frozenset(
-    {"v1", "v2", "v3", "v4", "v5", "v6"}
+    {"v1", "v2", "v3", "v4", "v5", "v6", "v7"}
 )
 
 _SHA256_HEX_RE: Final[re.Pattern[str]] = re.compile(r"^[0-9a-f]{64}$")
@@ -176,14 +178,17 @@ def checkpoint_schema_for_production(
     dynamics_active: bool = False,
     artifacts_active: bool = False,
     lifecycle_active: bool = False,
+    new_agent_provenance_active: bool = False,
 ) -> tuple[int, str]:
     """Choose the checkpoint schema for this run.
 
-    Priority at run start: lifecycle → ``(v9, v6)``; else artifacts →
-    ``(v8, v5)``; else dynamics → ``(v7, v4)``; else production →
-    ``(v6, v3)``; else replay-v5 / codec ``v2``.
+    Priority: new-agent provenance → ``(v10, v7)``; else lifecycle →
+    ``(v9, v6)``; else artifacts → ``(v8, v5)``; else dynamics →
+    ``(v7, v4)``; else production → ``(v6, v3)``; else replay-v5 / codec ``v2``.
     """
-    if lifecycle_active:
+    if new_agent_provenance_active:
+        pair = EVENT_SCHEMA_REPLAY_V10, "v7"
+    elif lifecycle_active:
         pair = EVENT_SCHEMA_REPLAY_V9, "v6"
     elif artifacts_active:
         pair = EVENT_SCHEMA_REPLAY_V8, "v5"
@@ -195,9 +200,11 @@ def checkpoint_schema_for_production(
         pair = EVENT_SCHEMA_VERSION, PERSISTENCE_CODEC_VERSION
     _LOG.debug(
         "checkpoint_schema_selected event_schema=%s codec=%s "
-        "lifecycle_active=%s artifacts_active=%s",
+        "new_agent_provenance_active=%s lifecycle_active=%s "
+        "artifacts_active=%s",
         pair[0],
         pair[1],
+        new_agent_provenance_active,
         lifecycle_active,
         artifacts_active,
     )
@@ -263,6 +270,7 @@ def schema_projector_compatible(
         EVENT_SCHEMA_REPLAY_V7,
         EVENT_SCHEMA_REPLAY_V8,
         EVENT_SCHEMA_REPLAY_V9,
+        EVENT_SCHEMA_REPLAY_V10,
     }:
         return projector_version == "v2"
     return False
@@ -555,15 +563,21 @@ class WorldSnapshot:
                     "codec_schema_mismatch reason_code=codec_v6_requires_schema_9"
                 )
                 raise ValueError("codec v6 requires event schema 9")
+        elif self.persistence_codec_version == "v7":
+            if self.event_schema_version != EVENT_SCHEMA_REPLAY_V10:
+                _LOG.error(
+                    "codec_schema_mismatch reason_code=codec_v7_requires_schema_10"
+                )
+                raise ValueError("codec v7 requires event schema 10")
         elif self.structures or self.production_jobs or self.tool_marks:
             raise ValueError("production checkpoint fields require codec v3")
         if (
-            self.persistence_codec_version not in {"v4", "v5", "v6"}
+            self.persistence_codec_version not in {"v4", "v5", "v6", "v7"}
             and self.active_hazards
         ):
             raise ValueError("active_hazards require codec v4")
         if (
-            self.persistence_codec_version not in {"v5", "v6"}
+            self.persistence_codec_version not in {"v5", "v6", "v7"}
             and self.artifacts
         ):
             _LOG.error(
@@ -580,14 +594,15 @@ class WorldSnapshot:
                 )
             records.append(raw)
         object.__setattr__(self, "lifecycle_records", tuple(records))
-        if self.persistence_codec_version != "v6" and records:
+        if self.persistence_codec_version not in {"v6", "v7"} and records:
             _LOG.error(
                 "codec_schema_mismatch reason_code=lifecycle_records_require_codec_v6"
             )
-            raise ValueError("lifecycle_records require codec v6")
-        if self.persistence_codec_version == "v6":
+            raise ValueError("lifecycle_records require codec v6 or v7")
+        if self.persistence_codec_version in {"v6", "v7"}:
             _LOG.debug(
-                "lifecycle_snapshot_codec codec_version=v6 lifecycle_record_count=%s",
+                "lifecycle_snapshot_codec codec_version=%s lifecycle_record_count=%s",
+                self.persistence_codec_version,
                 len(records),
             )
 
@@ -697,11 +712,17 @@ class RunCreateRequest:
             self.event_schema_version == EVENT_SCHEMA_REPLAY_V9
             and self.persistence_codec_version == "v6"
         )
+        new_agent_checkpoint = (
+            self.event_schema_version == EVENT_SCHEMA_REPLAY_V10
+            and self.persistence_codec_version == "v7"
+        )
         object.__setattr__(
             self,
             "event_schema_version",
             (
-                EVENT_SCHEMA_REPLAY_V9
+                EVENT_SCHEMA_REPLAY_V10
+                if new_agent_checkpoint
+                else EVENT_SCHEMA_REPLAY_V9
                 if lifecycle_checkpoint
                 else EVENT_SCHEMA_REPLAY_V8
                 if artifacts_checkpoint
@@ -725,7 +746,9 @@ class RunCreateRequest:
             self,
             "persistence_codec_version",
             (
-                "v6"
+                "v7"
+                if new_agent_checkpoint
+                else "v6"
                 if lifecycle_checkpoint
                 else "v5"
                 if artifacts_checkpoint
