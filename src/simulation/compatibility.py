@@ -73,6 +73,7 @@ from simulation.runner_models import (
     RUNNER_SCHEMA_VERSION_V22,
     RUNNER_SCHEMA_VERSION_V23,
     RUNNER_SCHEMA_VERSION_V24,
+    RUNNER_SCHEMA_VERSION_V25,
     SUPPORTED_RESULT_SCHEMA_VERSIONS,
     SUPPORTED_RUNNER_SCHEMA_VERSIONS,
 )
@@ -107,6 +108,7 @@ RESEARCH_UI_MOUNT: Final[str] = "/research/"
 # Alias kept for matrix wording from Task 2; prefer RUNNER_SCHEMA_VERSION_V23.
 PLANNED_RUNNER_SCHEMA_VERSION_V23: Final[str] = RUNNER_SCHEMA_VERSION_V23
 RUNNER_SCHEMA_VERSION_POPULATION_LIFECYCLE: Final[str] = RUNNER_SCHEMA_VERSION_V24
+RUNNER_SCHEMA_VERSION_NEW_AGENT_INITIALIZATION: Final[str] = RUNNER_SCHEMA_VERSION_V25
 V3_CAPABILITY_FLAGS_WIRE_KEY: Final[str] = "v3_capability_flags"
 V3_OWNED_CAPABILITY_FLAGS: Final[frozenset[str]] = frozenset(
     {"generational_population"}
@@ -132,6 +134,7 @@ __all__ = [
     "OBSERVER_PROTOCOL_VERSION",
     "PLANNED_RUNNER_SCHEMA_VERSION_V23",
     "RESEARCH_UI_MOUNT",
+    "RUNNER_SCHEMA_VERSION_NEW_AGENT_INITIALIZATION",
     "RUNNER_SCHEMA_VERSION_POPULATION_LIFECYCLE",
     "RUNNER_SCHEMA_VERSION_V3",
     "RUNNER_SCHEMA_VERSION_V4",
@@ -155,6 +158,7 @@ __all__ = [
     "RUNNER_SCHEMA_VERSION_V22",
     "RUNNER_SCHEMA_VERSION_V23",
     "RUNNER_SCHEMA_VERSION_V24",
+    "RUNNER_SCHEMA_VERSION_V25",
     "STREAM_ENVELOPE_VERSION",
     "V3_CAPABILITY_FLAGS_WIRE_KEY",
     "V3_CAPABILITY_FLAG_NAMES",
@@ -186,22 +190,15 @@ _MATRIX: dict[str, CompatibilityEntry] = {
     "event_schema": CompatibilityEntry(
         entry_id="event_schema",
         write_version=str(EVENT_SCHEMA_VERSION),
-        accepted_restore=_versions(
-            EVENT_SCHEMA_REPLAY_V2,
-            EVENT_SCHEMA_REPLAY_V3,
-            EVENT_SCHEMA_REPLAY_V4,
-            EVENT_SCHEMA_REPLAY_V5,
-            EVENT_SCHEMA_REPLAY_V6,
-            EVENT_SCHEMA_REPLAY_V7,
-            EVENT_SCHEMA_REPLAY_V8,
-        ),
+        accepted_restore=_versions(*sorted(ACCEPTED_EVENT_SCHEMA_VERSIONS)),
         bump_trigger=(
             "Wire shape change for WorldEvent / occurrence details; "
             "requires new ACCEPTED_* member and replay fixtures. "
-            "V3 scaffolding: stay at replay-v5 write (accepted set 2-8 unchanged)."
+            "Lifecycle channel writes replay-v9; scaffolding write stays "
+            "replay-v5 when lifecycle off."
         ),
         owner_package="world.events / simulation.persistence",
-        v1_fixture_impact="Schemas 2-8 fixtures must remain restoreable",
+        v1_fixture_impact="Schemas 2-8 fixtures must remain restoreable; lifecycle adds replay-v9",
     ),
     "projector": CompatibilityEntry(
         entry_id="projector",
@@ -340,15 +337,20 @@ _MATRIX: dict[str, CompatibilityEntry] = {
             f"plus sibling root {V3_CAPABILITY_FLAGS_WIRE_KEY} (exact child "
             "keys = five reserved V3 flag names); "
             f"{RUNNER_SCHEMA_VERSION_V24} = full v23 keyset plus root "
-            "population_lifecycle (owned generational_population requires v24); "
+            "population_lifecycle (owned generational_population requires "
+            f"v24|v25); {RUNNER_SCHEMA_VERSION_V25} = full v24 keyset plus "
+            "root new_agent_initialization (explicit init requires v25; "
+            "v24 decode synthesizes default init); "
             "default write stays "
             f"{RUNNER_SCHEMA_VERSION_V4} when all V3 flags are off; "
             f"writers emit {PLANNED_RUNNER_SCHEMA_VERSION_V23} when some "
             "unowned V3 flag is true without generational_population; "
             f"writers emit {RUNNER_SCHEMA_VERSION_V24} when "
-            "generational_population is true; mode allowlists that top out at "
-            "v23 widen to accept v24 and cognitive_budget_mode accepts "
-            "{{v22,v23,v24}}; "
+            "generational_population is true without explicit init; "
+            f"writers emit {RUNNER_SCHEMA_VERSION_V25} when "
+            "new_agent_initialization is explicit; mode allowlists that top "
+            "out at v24 widen to accept v25 and cognitive_budget_mode accepts "
+            "{{v22,v23,v24,v25}}; "
             f"{RUNNER_SCHEMA_VERSION_V3} retained for V2 capability flags; "
             "v1-v4 omit consolidation_mode, reflection_mode, prospective_mode, "
             "counterfactual_mode, communication_strategy_mode, and "
@@ -563,7 +565,9 @@ _MATRIX: dict[str, CompatibilityEntry] = {
             "Closed reserved V3 flag set on SimulationRunnerConfig; wire key "
             f"{V3_CAPABILITY_FLAGS_WIRE_KEY} is a sibling of V2 capability_flags; "
             f"generational_population is owned and requires "
-            f"{RUNNER_SCHEMA_VERSION_V24} with exact population_lifecycle; "
+            f"{RUNNER_SCHEMA_VERSION_V24}|{RUNNER_SCHEMA_VERSION_V25} with "
+            "exact population_lifecycle; explicit new_agent_initialization "
+            f"requires {RUNNER_SCHEMA_VERSION_V25}; "
             f"other flags still require at least {PLANNED_RUNNER_SCHEMA_VERSION_V23} "
             "and fail closed at SimulationRunner.from_config with "
             "capability_unimplemented until owned"
@@ -572,7 +576,8 @@ _MATRIX: dict[str, CompatibilityEntry] = {
         v1_fixture_impact=(
             "All five flags default off; decode of runner-config-v1..v22 "
             "synthesizes defaults; V1/V2 trajectory identity unchanged when off; "
-            "owned generational_population may enable on v24"
+            "owned generational_population may enable on v24|v25; v24 decode "
+            "synthesizes default new_agent_initialization"
         ),
     ),
 }
@@ -609,6 +614,7 @@ _LOG.debug(
         "runner_v22": RUNNER_SCHEMA_VERSION_V22,
         "planned_runner_v23": PLANNED_RUNNER_SCHEMA_VERSION_V23,
         "runner_v24": RUNNER_SCHEMA_VERSION_V24,
+        "runner_v25": RUNNER_SCHEMA_VERSION_V25,
         "observer_protocol": OBSERVER_PROTOCOL_VERSION,
         "research_ui_mount": RESEARCH_UI_MOUNT,
         "alembic_head": ALEMBIC_HEAD_REVISION,

@@ -1401,6 +1401,36 @@ class SimulationRunner:
                 len(lifecycle_records),
                 ",".join(config.v3_capability_flags.owned_enabled_names()),
             )
+            from simulation.new_agent_initialization import (
+                default_new_agent_initialization_spec,
+            )
+
+            if not lifecycle_channel:
+                new_agent_init_mode = "off"
+                species_defaults_id = "-"
+            elif config.new_agent_initialization is None:
+                new_agent_init_mode = "default"
+                species_defaults_id = (
+                    default_new_agent_initialization_spec().species_defaults_id
+                )
+            else:
+                default_payload = (
+                    default_new_agent_initialization_spec().canonical_payload()
+                )
+                explicit = config.new_agent_initialization.canonical_payload()
+                new_agent_init_mode = (
+                    "default" if explicit == default_payload else "on"
+                )
+                species_defaults_id = (
+                    config.new_agent_initialization.species_defaults_id
+                )
+            _LOG.info(
+                "runner_construction_new_agent_init new_agent_init=%s "
+                "species_defaults_id=%s schema_version=%s",
+                new_agent_init_mode,
+                species_defaults_id,
+                config.schema_version,
+            )
 
             stage = "agents"
             memory_run_id = MemoryRunId(resolved_run_id.value)
@@ -2746,7 +2776,16 @@ class SimulationRunner:
         ]
         if not new_registrations:
             return
-        template = self._config.agents[0]
+        from simulation.new_agent_initialization import (
+            BlankSlateStoreCounts,
+            assert_blank_slate_subjective_state,
+            default_new_agent_initialization_spec,
+            species_defaults_for,
+        )
+
+        init_spec = self._config.new_agent_initialization
+        if init_spec is None:
+            init_spec = default_new_agent_initialization_spec()
         allow_provider = _llm_assisted_provider_bound(self._config.provider)
         scoring_policy = _default_scoring_policy()
         reconstruction_policy = _default_reconstruction_policy(
@@ -2765,9 +2804,10 @@ class SimulationRunner:
         agents = list(self._agents)
         runtimes = list(self._runtimes)
         for registration in new_registrations:
-            cognition = replace(
-                template.cognition, agent_id=registration.agent_id
+            pack = species_defaults_for(
+                init_spec.species_defaults_id, agent_id=registration.agent_id
             )
+            cognition = pack.cognition
             agent_spec = AgentRunnerSpec(
                 agent_id=registration.agent_id,
                 entity_id=registration.entity_id,
@@ -2825,7 +2865,7 @@ class SimulationRunner:
                 agent_id=owner,
                 name=agent_spec.name if agent_spec.name is not None else owner.value,
                 goals=agent_spec.initial_goals,
-                drives=agent_spec.cognition.resolve_drive_profile(),
+                drives=pack.drive_profile,
             )
             runtime = AgentRuntime(
                 agent=agent,
@@ -2846,6 +2886,7 @@ class SimulationRunner:
             )
             if self._started and runtime.status is AgentRuntimeStatus.CREATED:
                 runtime.start()
+            assert_blank_slate_subjective_state(owner, BlankSlateStoreCounts())
             bundle = _AgentBundle(
                 runtime=runtime,
                 bundle=owner_bundle,
@@ -2857,6 +2898,13 @@ class SimulationRunner:
             )
             agents.append(bundle)
             runtimes.append(runtime)
+            _LOG.debug(
+                "new_agent_bundle_constructed agent_id=%s ordinal=%s "
+                "species_defaults_id=%s",
+                owner.value,
+                len(runtimes) - 1,
+                init_spec.species_defaults_id,
+            )
             _LOG.info(
                 "runner_mid_run_agent_bound agent_id=%s body_id=%s "
                 "registration_ordinal=%s",

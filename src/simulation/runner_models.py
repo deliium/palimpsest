@@ -102,6 +102,7 @@ RUNNER_SCHEMA_VERSION_V21: Final[str] = "runner-config-v21"
 RUNNER_SCHEMA_VERSION_V22: Final[str] = "runner-config-v22"
 RUNNER_SCHEMA_VERSION_V23: Final[str] = "runner-config-v23"
 RUNNER_SCHEMA_VERSION_V24: Final[str] = "runner-config-v24"
+RUNNER_SCHEMA_VERSION_V25: Final[str] = "runner-config-v25"
 RUNNER_SCHEMA_VERSION: Final[str] = RUNNER_SCHEMA_VERSION_V4
 SUPPORTED_RUNNER_SCHEMA_VERSIONS: Final[frozenset[str]] = frozenset(
     {
@@ -129,6 +130,7 @@ SUPPORTED_RUNNER_SCHEMA_VERSIONS: Final[frozenset[str]] = frozenset(
         RUNNER_SCHEMA_VERSION_V22,
         RUNNER_SCHEMA_VERSION_V23,
         RUNNER_SCHEMA_VERSION_V24,
+        RUNNER_SCHEMA_VERSION_V25,
     }
 )
 RESULT_SCHEMA_VERSION_V1: Final[str] = "runner-result-v1"
@@ -655,6 +657,7 @@ _SKILL_SCHEMAS: Final[frozenset[str]] = frozenset(
         RUNNER_SCHEMA_VERSION_V22,
         RUNNER_SCHEMA_VERSION_V23,
         RUNNER_SCHEMA_VERSION_V24,
+        RUNNER_SCHEMA_VERSION_V25,
     }
 )
 
@@ -798,10 +801,10 @@ class V3CapabilityFlags:
     """Run-level reserved V3 capability identifiers (configuration only).
 
     Defaults are all off (V2-equivalent wiring). ``generational_population`` is
-    owned and may enable on ``runner-config-v24``. Other flags still fail closed
-    at ``SimulationRunner.from_config`` with ``capability_unimplemented`` until
-    an owning plan lands. Wire key ``v3_capability_flags`` is a sibling of V2
-    ``capability_flags``.
+    owned and may enable on ``runner-config-v24`` or ``runner-config-v25``.
+    Other flags still fail closed at ``SimulationRunner.from_config`` with
+    ``capability_unimplemented`` until an owning plan lands. Wire key
+    ``v3_capability_flags`` is a sibling of V2 ``capability_flags``.
     """
 
     generational_population: bool = False
@@ -2469,8 +2472,15 @@ class SimulationRunnerConfig:
     environmental_dynamics: EnvironmentalDynamicsSpec | None = None
     artifacts_enabled: bool = False
     population_lifecycle: PopulationLifecycleSpec | None = None
+    new_agent_initialization: object | None = None
 
     def __post_init__(self) -> None:
+        # Late import avoids circular import with new_agent_initialization.
+        from simulation.new_agent_initialization import (
+            NewAgentInitializationSpec,
+            default_new_agent_initialization_spec,
+        )
+
         object.__setattr__(self, "seed", require_seed(self.seed))
         object.__setattr__(
             self,
@@ -2485,6 +2495,12 @@ class SimulationRunnerConfig:
         ):
             raise TypeError(
                 "population_lifecycle must be PopulationLifecycleSpec or None"
+            )
+        if self.new_agent_initialization is not None and type(
+            self.new_agent_initialization
+        ) is not NewAgentInitializationSpec:
+            raise TypeError(
+                "new_agent_initialization must be NewAgentInitializationSpec or None"
             )
         if type(self.scenario) is not WorldScenarioSpec:
             raise TypeError("scenario must be WorldScenarioSpec")
@@ -2546,9 +2562,13 @@ class SimulationRunnerConfig:
                 "capability flags require runner-config-v3+ "
                 "(code=capability_requires_v3)"
             )
+        _lifecycle_schemas = {
+            RUNNER_SCHEMA_VERSION_V24,
+            RUNNER_SCHEMA_VERSION_V25,
+        }
         if (
             self.v3_capability_flags.generational_population
-            and self.schema_version != RUNNER_SCHEMA_VERSION_V24
+            and self.schema_version not in _lifecycle_schemas
         ):
             _LOGGER.error(
                 "generational_population_requires_v24 schema_version=%s "
@@ -2556,8 +2576,8 @@ class SimulationRunnerConfig:
                 self.schema_version,
             )
             raise ValueError(
-                "generational_population requires runner-config-v24 "
-                "(code=generational_population_requires_v24)"
+                "generational_population requires runner-config-v24 or "
+                "runner-config-v25 (code=generational_population_requires_v24)"
             )
         other_v3_enabled = tuple(
             name
@@ -2567,6 +2587,7 @@ class SimulationRunnerConfig:
         if other_v3_enabled and self.schema_version not in {
             RUNNER_SCHEMA_VERSION_V23,
             RUNNER_SCHEMA_VERSION_V24,
+            RUNNER_SCHEMA_VERSION_V25,
         }:
             _LOGGER.error(
                 "v3_capability_requires_v23 schema_version=%s "
@@ -2578,16 +2599,22 @@ class SimulationRunnerConfig:
                 "V3 capability flags require runner-config-v23+ "
                 "(code=v3_capability_requires_v23)"
             )
-        if self.schema_version == RUNNER_SCHEMA_VERSION_V24:
+        if self.schema_version in _lifecycle_schemas:
             if self.population_lifecycle is None:
+                code = (
+                    "v25_requires_population_lifecycle"
+                    if self.schema_version == RUNNER_SCHEMA_VERSION_V25
+                    else "v24_requires_population_lifecycle"
+                )
                 _LOGGER.error(
-                    "v24_requires_population_lifecycle schema_version=%s "
-                    "reason_code=v24_requires_population_lifecycle",
+                    "%s schema_version=%s reason_code=%s",
+                    code,
                     self.schema_version,
+                    code,
                 )
                 raise ValueError(
-                    "runner-config-v24 requires population_lifecycle "
-                    "(code=v24_requires_population_lifecycle)"
+                    f"{self.schema_version} requires population_lifecycle "
+                    f"(code={code})"
                 )
         elif self.population_lifecycle is not None:
             _LOGGER.error(
@@ -2596,8 +2623,8 @@ class SimulationRunnerConfig:
                 self.schema_version,
             )
             raise ValueError(
-                "population_lifecycle requires runner-config-v24 "
-                "(code=population_lifecycle_requires_v24)"
+                "population_lifecycle requires runner-config-v24 or "
+                "runner-config-v25 (code=population_lifecycle_requires_v24)"
             )
         if (
             self.v3_capability_flags.generational_population
@@ -2607,6 +2634,34 @@ class SimulationRunnerConfig:
                 "generational_population requires population_lifecycle "
                 "(code=generational_population_requires_lifecycle_spec)"
             )
+        if self.schema_version == RUNNER_SCHEMA_VERSION_V25:
+            if self.new_agent_initialization is None:
+                _LOGGER.error(
+                    "v25_requires_new_agent_initialization schema_version=%s "
+                    "reason_code=v25_requires_new_agent_initialization",
+                    self.schema_version,
+                )
+                raise ValueError(
+                    "runner-config-v25 requires new_agent_initialization "
+                    "(code=v25_requires_new_agent_initialization)"
+                )
+        elif self.new_agent_initialization is not None:
+            default_init = default_new_agent_initialization_spec()
+            is_default = (
+                type(self.new_agent_initialization) is NewAgentInitializationSpec
+                and self.new_agent_initialization.canonical_payload()
+                == default_init.canonical_payload()
+            )
+            if self.schema_version != RUNNER_SCHEMA_VERSION_V24 or not is_default:
+                _LOGGER.error(
+                    "new_agent_initialization_requires_v25 schema_version=%s "
+                    "reason_code=new_agent_initialization_requires_v25",
+                    self.schema_version,
+                )
+                raise ValueError(
+                    "new_agent_initialization requires runner-config-v25 "
+                    "(code=new_agent_initialization_requires_v25)"
+                )
         if (
             self.schema_version
             in {
@@ -2687,6 +2742,7 @@ class SimulationRunnerConfig:
             RUNNER_SCHEMA_VERSION_V22,
             RUNNER_SCHEMA_VERSION_V23,
             RUNNER_SCHEMA_VERSION_V24,
+            RUNNER_SCHEMA_VERSION_V25,
         }
         if non_disabled and self.schema_version not in consolidation_schemas:
             _LOGGER.error(
@@ -2737,6 +2793,7 @@ class SimulationRunnerConfig:
             RUNNER_SCHEMA_VERSION_V22,
             RUNNER_SCHEMA_VERSION_V23,
             RUNNER_SCHEMA_VERSION_V24,
+            RUNNER_SCHEMA_VERSION_V25,
         }
         if reflecting and self.schema_version not in reflection_schemas:
             _LOGGER.error(
@@ -2787,6 +2844,7 @@ class SimulationRunnerConfig:
             RUNNER_SCHEMA_VERSION_V22,
             RUNNER_SCHEMA_VERSION_V23,
             RUNNER_SCHEMA_VERSION_V24,
+            RUNNER_SCHEMA_VERSION_V25,
         }
         if planning and self.schema_version not in prospective_schemas:
             _LOGGER.error(
@@ -2836,6 +2894,7 @@ class SimulationRunnerConfig:
             RUNNER_SCHEMA_VERSION_V22,
             RUNNER_SCHEMA_VERSION_V23,
             RUNNER_SCHEMA_VERSION_V24,
+            RUNNER_SCHEMA_VERSION_V25,
         }
         if considering and self.schema_version not in counterfactual_schemas:
             _LOGGER.error(
@@ -2884,6 +2943,7 @@ class SimulationRunnerConfig:
             RUNNER_SCHEMA_VERSION_V22,
             RUNNER_SCHEMA_VERSION_V23,
             RUNNER_SCHEMA_VERSION_V24,
+            RUNNER_SCHEMA_VERSION_V25,
         }:
             _LOGGER.error(
                 "invalid_fields path=agents.cognition.communication_strategy_mode "
@@ -2930,6 +2990,7 @@ class SimulationRunnerConfig:
             RUNNER_SCHEMA_VERSION_V22,
             RUNNER_SCHEMA_VERSION_V23,
             RUNNER_SCHEMA_VERSION_V24,
+            RUNNER_SCHEMA_VERSION_V25,
         }:
             _LOGGER.error(
                 "invalid_fields path=agents.cognition.reputation_mode "
@@ -3018,6 +3079,7 @@ class SimulationRunnerConfig:
             RUNNER_SCHEMA_VERSION_V22,
             RUNNER_SCHEMA_VERSION_V23,
             RUNNER_SCHEMA_VERSION_V24,
+            RUNNER_SCHEMA_VERSION_V25,
         }:
             _LOGGER.error(
                 "invalid_fields path=agents.cognition.teaching_interaction_mode "
@@ -3055,6 +3117,7 @@ class SimulationRunnerConfig:
             RUNNER_SCHEMA_VERSION_V22,
             RUNNER_SCHEMA_VERSION_V23,
             RUNNER_SCHEMA_VERSION_V24,
+            RUNNER_SCHEMA_VERSION_V25,
         }
         if (dynamics is not None and self.schema_version not in dynamics_schemas) or (
             self.schema_version == RUNNER_SCHEMA_VERSION_V14 and dynamics is None
@@ -3087,6 +3150,7 @@ class SimulationRunnerConfig:
             RUNNER_SCHEMA_VERSION_V22,
             RUNNER_SCHEMA_VERSION_V23,
             RUNNER_SCHEMA_VERSION_V24,
+            RUNNER_SCHEMA_VERSION_V25,
         }:
             _LOGGER.error(
                 "invalid_fields path=agents.cognition.territorial_claim_mode "
@@ -3125,6 +3189,7 @@ class SimulationRunnerConfig:
             RUNNER_SCHEMA_VERSION_V22,
             RUNNER_SCHEMA_VERSION_V23,
             RUNNER_SCHEMA_VERSION_V24,
+            RUNNER_SCHEMA_VERSION_V25,
         }:
             _LOGGER.error(
                 "invalid_fields path=agents.cognition.group_formation_mode "
@@ -3157,6 +3222,7 @@ class SimulationRunnerConfig:
             RUNNER_SCHEMA_VERSION_V22,
             RUNNER_SCHEMA_VERSION_V23,
             RUNNER_SCHEMA_VERSION_V24,
+            RUNNER_SCHEMA_VERSION_V25,
         }:
             _LOGGER.error(
                 "invalid_fields path=agents.cognition.social_norm_mode "
@@ -3192,6 +3258,7 @@ class SimulationRunnerConfig:
             RUNNER_SCHEMA_VERSION_V22,
             RUNNER_SCHEMA_VERSION_V23,
             RUNNER_SCHEMA_VERSION_V24,
+            RUNNER_SCHEMA_VERSION_V25,
         }
         if conventions_on and self.schema_version not in convention_schemas:
             _LOGGER.error(
@@ -3232,6 +3299,7 @@ class SimulationRunnerConfig:
             RUNNER_SCHEMA_VERSION_V22,
             RUNNER_SCHEMA_VERSION_V23,
             RUNNER_SCHEMA_VERSION_V24,
+            RUNNER_SCHEMA_VERSION_V25,
         }
         if artifacts_on and self.schema_version not in artifact_schemas:
             runner_log.error(
@@ -3268,6 +3336,7 @@ class SimulationRunnerConfig:
             RUNNER_SCHEMA_VERSION_V22,
             RUNNER_SCHEMA_VERSION_V23,
             RUNNER_SCHEMA_VERSION_V24,
+            RUNNER_SCHEMA_VERSION_V25,
         }
         if naming_on and self.schema_version not in naming_schemas:
             runner_log.error(
@@ -3301,6 +3370,7 @@ class SimulationRunnerConfig:
             RUNNER_SCHEMA_VERSION_V22,
             RUNNER_SCHEMA_VERSION_V23,
             RUNNER_SCHEMA_VERSION_V24,
+            RUNNER_SCHEMA_VERSION_V25,
         }
         budget_modes = tuple(
             agent.cognition.cognitive_budget_mode for agent in self.agents
@@ -3310,6 +3380,7 @@ class SimulationRunnerConfig:
             RUNNER_SCHEMA_VERSION_V22,
             RUNNER_SCHEMA_VERSION_V23,
             RUNNER_SCHEMA_VERSION_V24,
+            RUNNER_SCHEMA_VERSION_V25,
         }
         if budgets_on and self.schema_version not in budget_schemas:
             runner_log.error(
@@ -3417,6 +3488,7 @@ class SimulationRunnerConfig:
             RUNNER_SCHEMA_VERSION_V22,
             RUNNER_SCHEMA_VERSION_V23,
             RUNNER_SCHEMA_VERSION_V24,
+            RUNNER_SCHEMA_VERSION_V25,
         }:
             _LOGGER.error(
                 "invalid_fields path=agents.cognition.production_knowledge_mode "
@@ -3442,6 +3514,7 @@ class SimulationRunnerConfig:
             RUNNER_SCHEMA_VERSION_V22,
             RUNNER_SCHEMA_VERSION_V23,
             RUNNER_SCHEMA_VERSION_V24,
+            RUNNER_SCHEMA_VERSION_V25,
         }:
             from world.production import production_catalog_digest
 
@@ -3507,6 +3580,7 @@ class SimulationRunnerConfig:
             RUNNER_SCHEMA_VERSION_V22,
             RUNNER_SCHEMA_VERSION_V23,
             RUNNER_SCHEMA_VERSION_V24,
+            RUNNER_SCHEMA_VERSION_V25,
         }:
             shared_teaching = teaching_weight_tuple(self.agents[0].cognition)
             if any(
