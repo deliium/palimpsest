@@ -229,6 +229,7 @@ def _project_one(
         self_body=observed_self_from_body(
             copy_body(body),
             lifecycle=_lifecycle_for(context, observer_id),
+            kinship_visible=_kinship_self_for(context, observer_id),
         ),
         locations=_sorted_locations(state, location_id),
         items=_sorted_items(
@@ -515,6 +516,9 @@ def _sorted_visible_bodies(
                 life_status=body.life_status,
                 coarse_health=coarse_health_for(body),
                 lifecycle=_lifecycle_for(context, body_id),
+                kinship_visible=_kinship_other_for(
+                    context, observer_id=observer_id, other_body_id=body_id
+                ),
             )
         )
     return tuple(selected)
@@ -527,6 +531,40 @@ def _lifecycle_for(
     if views is None:
         return None
     return views.get(body_id)
+
+
+def _kinship_self_for(
+    context: ObservationContext, body_id: EntityId
+) -> object | None:
+    views = context.kinship_self_by_body
+    if views is None:
+        return None
+    return views.get(body_id)
+
+
+def _kinship_other_for(
+    context: ObservationContext,
+    *,
+    observer_id: EntityId,
+    other_body_id: EntityId,
+) -> object | None:
+    """Expose only self-incident kin facts about a visible other body."""
+    from world.observations import ObservedKinshipVisible
+
+    self_view = _kinship_self_for(context, observer_id)
+    if type(self_view) is not ObservedKinshipVisible:
+        return None
+    agents = context.kinship_agent_by_body
+    if agents is None:
+        return None
+    other_agent = agents.get(other_body_id)
+    if other_agent is None:
+        return None
+    if other_agent in self_view.parents:
+        return ObservedKinshipVisible(parents=(other_agent,), children=())
+    if other_agent in self_view.children:
+        return ObservedKinshipVisible(parents=(), children=(other_agent,))
+    return None
 
 
 def _project_event_window(

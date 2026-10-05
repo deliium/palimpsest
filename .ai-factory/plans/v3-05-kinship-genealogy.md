@@ -299,20 +299,20 @@ Hard boundary: experiment collectors / inspection / analysis outputs must not fl
 
 ### Phase 3: Perception isolation, death, cognition gates
 
-- [ ] Task 7: Perception modes — default none; optional self-incident public
+- [x] Task 7: Perception modes — default none; optional self-incident public
   - Implement `perception_mode=none` (no Observation change) and `self_incident_public` closed optional visibility object with live/restored parity tests.
   - Perception must not form memories/beliefs; never project full graph.
   - LOGGING: DEBUG on visible kin fact counts; never log claimed social meaning.
   - Files: `src/world/_perception.py`, observation contracts, `tests/unit/test_kinship_perception_parity.py`
   - Depends on: Task 4, Task 5
 
-- [ ] Task 8: Death persistence + checkpoint/replay proofs
+- [x] Task 8: Death persistence + checkpoint/replay proofs
   - Prove edges survive `Died`; restored engines answer the same ancestor/descendant queries including dead nodes; twin-run determinism with kinship on.
   - LOGGING: DEBUG on restore edge counts.
   - Files: checkpoint/replay tests `tests/unit/test_kinship_death_persistence.py`, `tests/unit/test_kinship_replay_determinism.py`
   - Depends on: Task 4, Task 5
 
-- [ ] Task 9: Architecture gates — no auto social/SelfModel/belief writes
+- [x] Task 9: Architecture gates — no auto social/SelfModel/belief writes
   - Tests asserting kinship establish does not revise relationship dimensions; forbidding kinship→social/identity imports; asserting related≠trust/affection/loyalty/obligation/inheritance/group identity in engine policy comments + tests.
   - LOGGING: N/A for architecture tests; production paths metadata-only.
   - Files: `tests/architecture/test_v3_kinship_isolation.py`, possibly extend scaffolding invariants

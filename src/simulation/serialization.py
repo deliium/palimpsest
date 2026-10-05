@@ -2943,6 +2943,10 @@ def _encode_observed_self(value: ObservedSelf) -> dict[str, Any]:
     }
     if value.lifecycle is not None:
         payload["lifecycle"] = _encode_observed_lifecycle(value.lifecycle)
+    if value.kinship_visible is not None:
+        payload["kinship_visible"] = _encode_observed_kinship_visible(
+            value.kinship_visible
+        )
     return payload
 
 
@@ -2962,7 +2966,7 @@ def _decode_observed_self(data: dict[str, Any], *, path: str) -> ObservedSelf:
             "carry_capacity",
         },
         path=path,
-        optional={"lifecycle"},
+        optional={"lifecycle", "kinship_visible"},
     )
     inventory_raw = data["inventory"]
     if not isinstance(inventory_raw, list):
@@ -2985,6 +2989,15 @@ def _decode_observed_self(data: dict[str, Any], *, path: str) -> ObservedSelf:
             lifecycle = _decode_observed_lifecycle(
                 data["lifecycle"], path=f"{path}.lifecycle"
             )
+        kinship_visible = None
+        if "kinship_visible" in data and data["kinship_visible"] is not None:
+            if not isinstance(data["kinship_visible"], dict):
+                raise DomainSerializationError(
+                    "invalid_object", f"{path}.kinship_visible"
+                )
+            kinship_visible = _decode_observed_kinship_visible(
+                data["kinship_visible"], path=f"{path}.kinship_visible"
+            )
         return ObservedSelf(
             entity_id=EntityId(_str_field(data, "entity_id", path=path)),
             location_id=EntityId(_str_field(data, "location_id", path=path)),
@@ -2999,6 +3012,7 @@ def _decode_observed_self(data: dict[str, Any], *, path: str) -> ObservedSelf:
             life_status=LifeStatus(_str_field(data, "life_status", path=path)),
             carry_capacity=CarryCapacity(_int_field(data, "carry_capacity", path=path)),
             lifecycle=lifecycle,
+            kinship_visible=kinship_visible,  # type: ignore[arg-type]
         )
     except DomainSerializationError:
         raise
@@ -3036,6 +3050,51 @@ def _decode_observed_lifecycle(data: dict[str, Any], *, path: str) -> object:
         raise DomainSerializationError("invalid_model", path) from exc
 
 
+def _encode_observed_kinship_visible(value: object) -> dict[str, Any]:
+    from world.observations import ObservedKinshipVisible
+
+    if type(value) is not ObservedKinshipVisible:
+        raise TypeError("kinship_visible must be ObservedKinshipVisible")
+    return {
+        "children": list(value.children),
+        "parents": list(value.parents),
+    }
+
+
+def _decode_observed_kinship_visible(data: dict[str, Any], *, path: str) -> object:
+    from world.observations import ObservedKinshipVisible
+
+    _require_keys(data, {"parents", "children"}, path=path)
+    parents_raw = data["parents"]
+    children_raw = data["children"]
+    if not isinstance(parents_raw, list):
+        raise DomainSerializationError("invalid_array", f"{path}.parents")
+    if not isinstance(children_raw, list):
+        raise DomainSerializationError("invalid_array", f"{path}.children")
+    try:
+        parents_list: list[str] = []
+        for index, item in enumerate(parents_raw):
+            if not isinstance(item, str):
+                raise DomainSerializationError(
+                    "invalid_string", f"{path}.parents[{index}]"
+                )
+            parents_list.append(item)
+        children_list: list[str] = []
+        for index, item in enumerate(children_raw):
+            if not isinstance(item, str):
+                raise DomainSerializationError(
+                    "invalid_string", f"{path}.children[{index}]"
+                )
+            children_list.append(item)
+        return ObservedKinshipVisible(
+            parents=tuple(parents_list), children=tuple(children_list)
+        )
+    except DomainSerializationError:
+        raise
+    except (TypeError, ValueError) as exc:
+        raise DomainSerializationError("invalid_model", path) from exc
+
+
 def _encode_visible_exit(value: VisibleExit) -> dict[str, Any]:
     return {"destination_id": value.destination_id.value, "name": value.name}
 
@@ -3059,6 +3118,10 @@ def _encode_visible_body(value: VisibleBody) -> dict[str, Any]:
     }
     if value.lifecycle is not None:
         payload["lifecycle"] = _encode_observed_lifecycle(value.lifecycle)
+    if value.kinship_visible is not None:
+        payload["kinship_visible"] = _encode_observed_kinship_visible(
+            value.kinship_visible
+        )
     return payload
 
 
@@ -3067,7 +3130,7 @@ def _decode_visible_body(data: dict[str, Any], *, path: str) -> VisibleBody:
         data,
         {"entity_id", "life_status", "coarse_health"},
         path=path,
-        optional={"lifecycle"},
+        optional={"lifecycle", "kinship_visible"},
     )
     try:
         lifecycle = None
@@ -3079,11 +3142,21 @@ def _decode_visible_body(data: dict[str, Any], *, path: str) -> VisibleBody:
             lifecycle = _decode_observed_lifecycle(
                 data["lifecycle"], path=f"{path}.lifecycle"
             )
+        kinship_visible = None
+        if "kinship_visible" in data and data["kinship_visible"] is not None:
+            if not isinstance(data["kinship_visible"], dict):
+                raise DomainSerializationError(
+                    "invalid_object", f"{path}.kinship_visible"
+                )
+            kinship_visible = _decode_observed_kinship_visible(
+                data["kinship_visible"], path=f"{path}.kinship_visible"
+            )
         return VisibleBody(
             entity_id=EntityId(_str_field(data, "entity_id", path=path)),
             life_status=LifeStatus(_str_field(data, "life_status", path=path)),
             coarse_health=CoarseHealth(_str_field(data, "coarse_health", path=path)),
             lifecycle=lifecycle,  # type: ignore[arg-type]
+            kinship_visible=kinship_visible,  # type: ignore[arg-type]
         )
     except DomainSerializationError:
         raise

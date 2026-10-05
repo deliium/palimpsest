@@ -280,6 +280,7 @@ class VisibleBody:
     life_status: LifeStatus
     coarse_health: CoarseHealth
     lifecycle: ObservedLifecycle | None = None
+    kinship_visible: ObservedKinshipVisible | None = None
 
     def __post_init__(self) -> None:
         if type(self.entity_id) is not EntityId:
@@ -290,6 +291,13 @@ class VisibleBody:
             raise TypeError("VisibleBody.coarse_health must be CoarseHealth")
         if self.lifecycle is not None and type(self.lifecycle) is not ObservedLifecycle:
             raise TypeError("VisibleBody.lifecycle must be ObservedLifecycle or None")
+        if (
+            self.kinship_visible is not None
+            and type(self.kinship_visible) is not ObservedKinshipVisible
+        ):
+            raise TypeError(
+                "VisibleBody.kinship_visible must be ObservedKinshipVisible or None"
+            )
         if (
             self.life_status is LifeStatus.DEAD
             and self.coarse_health is not CoarseHealth.DEAD
@@ -341,6 +349,48 @@ class ObservedLifecycle:
                 "ObservedLifecycle.dependency_status must be a closed "
                 "DependencyStatus"
             )
+
+
+@dataclass(frozen=True, slots=True)
+class ObservedKinshipVisible:
+    """Closed self-incident kinship facts when perception_mode allows.
+
+    Agent-id strings only. Never ancestors/descendants dumps. Relatedness
+    never implies trust, affection, loyalty, obligation, or inheritance.
+    """
+
+    parents: tuple[str, ...] = ()
+    children: tuple[str, ...] = ()
+
+    def __post_init__(self) -> None:
+        from world.identifiers import require_stable_id
+
+        if isinstance(self.parents, (str, bytes)) or not isinstance(
+            self.parents, tuple
+        ):
+            raise TypeError("ObservedKinshipVisible.parents must be a tuple")
+        if isinstance(self.children, (str, bytes)) or not isinstance(
+            self.children, tuple
+        ):
+            raise TypeError("ObservedKinshipVisible.children must be a tuple")
+        parents = tuple(
+            require_stable_id("ObservedKinshipVisible.parents", item)
+            for item in self.parents
+        )
+        children = tuple(
+            require_stable_id("ObservedKinshipVisible.children", item)
+            for item in self.children
+        )
+        if parents != tuple(sorted(parents)):
+            raise ValueError("ObservedKinshipVisible.parents must be sorted")
+        if children != tuple(sorted(children)):
+            raise ValueError("ObservedKinshipVisible.children must be sorted")
+        if len(set(parents)) != len(parents):
+            raise ValueError("ObservedKinshipVisible.parents must be unique")
+        if len(set(children)) != len(children):
+            raise ValueError("ObservedKinshipVisible.children must be unique")
+        object.__setattr__(self, "parents", parents)
+        object.__setattr__(self, "children", children)
 
 
 @dataclass(frozen=True, slots=True)
@@ -496,6 +546,7 @@ class ObservedSelf:
     life_status: LifeStatus
     carry_capacity: CarryCapacity
     lifecycle: ObservedLifecycle | None = None
+    kinship_visible: ObservedKinshipVisible | None = None
 
     def __post_init__(self) -> None:
         if type(self.entity_id) is not EntityId:
@@ -518,6 +569,13 @@ class ObservedSelf:
             raise TypeError("ObservedSelf.life_status must be LifeStatus")
         if self.lifecycle is not None and type(self.lifecycle) is not ObservedLifecycle:
             raise TypeError("ObservedSelf.lifecycle must be ObservedLifecycle or None")
+        if (
+            self.kinship_visible is not None
+            and type(self.kinship_visible) is not ObservedKinshipVisible
+        ):
+            raise TypeError(
+                "ObservedSelf.kinship_visible must be ObservedKinshipVisible or None"
+            )
         if isinstance(self.inventory, (set, frozenset, Mapping)):
             raise TypeError("ObservedSelf.inventory must be an ordered sequence")
         if isinstance(self.inventory, (str, bytes, bytearray)) or not isinstance(
@@ -543,6 +601,7 @@ def observed_self_from_body(
     body: AgentBody,
     *,
     lifecycle: ObservedLifecycle | None = None,
+    kinship_visible: ObservedKinshipVisible | None = None,
 ) -> ObservedSelf:
     """Project an authoritative body into the explicit self observation DTO."""
     if type(body) is not AgentBody:
@@ -559,6 +618,7 @@ def observed_self_from_body(
         life_status=body.life_status,
         carry_capacity=body.carry_capacity,
         lifecycle=lifecycle,
+        kinship_visible=kinship_visible,
     )
 
 
@@ -667,6 +727,8 @@ class ObservationContext:
     tick: int
     physical_rules: PhysicalRules = field(default_factory=default_physical_rules)
     lifecycle_by_body: Mapping[EntityId, ObservedLifecycle] | None = None
+    kinship_self_by_body: Mapping[EntityId, ObservedKinshipVisible] | None = None
+    kinship_agent_by_body: Mapping[EntityId, str] | None = None
 
     def __post_init__(self) -> None:
         object.__setattr__(
@@ -697,6 +759,49 @@ class ObservationContext:
                 frozen[body_id] = view
             object.__setattr__(
                 self, "lifecycle_by_body", MappingProxyType(frozen)
+            )
+        if self.kinship_self_by_body is not None:
+            if isinstance(self.kinship_self_by_body, (str, bytes)) or not isinstance(
+                self.kinship_self_by_body, Mapping
+            ):
+                raise TypeError(
+                    "ObservationContext.kinship_self_by_body must be a mapping or None"
+                )
+            kin_frozen: dict[EntityId, ObservedKinshipVisible] = {}
+            for body_id, view in self.kinship_self_by_body.items():
+                if type(body_id) is not EntityId:
+                    raise TypeError(
+                        "ObservationContext.kinship_self_by_body keys must be EntityId"
+                    )
+                if type(view) is not ObservedKinshipVisible:
+                    raise TypeError(
+                        "ObservationContext.kinship_self_by_body values must be "
+                        "ObservedKinshipVisible"
+                    )
+                kin_frozen[body_id] = view
+            object.__setattr__(
+                self, "kinship_self_by_body", MappingProxyType(kin_frozen)
+            )
+        if self.kinship_agent_by_body is not None:
+            if isinstance(self.kinship_agent_by_body, (str, bytes)) or not isinstance(
+                self.kinship_agent_by_body, Mapping
+            ):
+                raise TypeError(
+                    "ObservationContext.kinship_agent_by_body must be a mapping or None"
+                )
+            agents: dict[EntityId, str] = {}
+            for body_id, agent_id in self.kinship_agent_by_body.items():
+                if type(body_id) is not EntityId:
+                    raise TypeError(
+                        "ObservationContext.kinship_agent_by_body keys must be EntityId"
+                    )
+                if not isinstance(agent_id, str):
+                    raise TypeError(
+                        "ObservationContext.kinship_agent_by_body values must be str"
+                    )
+                agents[body_id] = agent_id
+            object.__setattr__(
+                self, "kinship_agent_by_body", MappingProxyType(agents)
             )
 
     @property

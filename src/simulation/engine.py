@@ -2064,10 +2064,67 @@ class WorldEngine:
                 tick,
                 len(views),
             )
+        kinship_self_by_body = None
+        kinship_agent_by_body = None
+        from simulation.runner_models import KinshipSpec
+        from world.kinship import KinshipGraph, children_of, parents_of
+        from world.observations import ObservedKinshipVisible
+
+        if (
+            type(self._kinship_spec) is KinshipSpec
+            and self._kinship_spec.perception_mode == "self_incident_public"
+            and type(self._kinship_graph) is KinshipGraph
+        ):
+            agent_by_body = {
+                registration.entity_id: registration.agent_id.value
+                for registration in self._registrations
+            }
+            body_by_agent = {
+                registration.agent_id: registration.entity_id
+                for registration in self._registrations
+            }
+            self_views: dict[EntityId, ObservedKinshipVisible] = {}
+            for registration in self._registrations:
+                parent_ids = parents_of(
+                    self._kinship_graph, registration.agent_id
+                )
+                child_ids = children_of(
+                    self._kinship_graph, registration.agent_id
+                )
+                # Only include agents still addressable in the registration map.
+                parents = tuple(
+                    sorted(
+                        agent.value
+                        for agent in parent_ids
+                        if agent in body_by_agent
+                    )
+                )
+                children = tuple(
+                    sorted(
+                        agent.value
+                        for agent in child_ids
+                        if agent in body_by_agent
+                    )
+                )
+                if parents or children:
+                    self_views[registration.entity_id] = ObservedKinshipVisible(
+                        parents=parents,
+                        children=children,
+                    )
+            kinship_self_by_body = self_views
+            kinship_agent_by_body = agent_by_body
+            _LOGGER.debug(
+                "perception_kinship_visible_count tick=%s observer_count=%s "
+                "mode=self_incident_public",
+                tick,
+                len(self_views),
+            )
         return ObservationContext(
             tick=tick,
             physical_rules=rules,  # type: ignore[arg-type]
             lifecycle_by_body=lifecycle_by_body,
+            kinship_self_by_body=kinship_self_by_body,
+            kinship_agent_by_body=kinship_agent_by_body,
         )
 
     def project_detached_observations(self) -> ObservationBatch:
