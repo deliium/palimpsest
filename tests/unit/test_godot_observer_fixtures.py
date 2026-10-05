@@ -76,6 +76,7 @@ _LIFECYCLE_EVENT_NAMES = frozenset(
     {
         "AGENT_CREATED",
         "AGENT_ENTERED_WORLD",
+        "AGENT_INITIALIZED",
         "LIFECYCLE_STAGE_CHANGED",
     }
 )

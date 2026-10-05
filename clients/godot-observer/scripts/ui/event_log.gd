@@ -290,6 +290,8 @@ func _describe(
 			return "%s created" % subject
 		"AGENT_ENTERED_WORLD":
 			return "%s entered %s" % [subject, origin if origin != "" else "world"]
+		"AGENT_INITIALIZED":
+			return "%s initialized" % subject
 		"LIFECYCLE_STAGE_CHANGED":
 			return "%s lifecycle stage changed" % subject
 		"RESOURCE_HARVESTED":

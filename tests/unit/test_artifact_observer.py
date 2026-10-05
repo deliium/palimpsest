@@ -59,6 +59,7 @@ _ARTIFACT_SEMANTIC = (
 _LIFECYCLE_SEMANTIC = (
     "AGENT_CREATED",
     "AGENT_ENTERED_WORLD",
+    "AGENT_INITIALIZED",
     "LIFECYCLE_STAGE_CHANGED",
 )
 
@@ -100,9 +101,9 @@ def _world_event(details: object, *, sequence: int = 0) -> WorldEvent:
 
 def test_semantic_catalog_appends_four_artifact_types() -> None:
     assert OBSERVER_PROTOCOL_VERSION == "observer-protocol-v1"
-    assert len(SEMANTIC_EVENT_TYPES) == 39
-    assert SEMANTIC_EVENT_TYPES[-7:-3] == _ARTIFACT_SEMANTIC
-    assert SEMANTIC_EVENT_TYPES[-3:] == _LIFECYCLE_SEMANTIC
+    assert len(SEMANTIC_EVENT_TYPES) == 40
+    assert SEMANTIC_EVENT_TYPES[-8:-4] == _ARTIFACT_SEMANTIC
+    assert SEMANTIC_EVENT_TYPES[-4:] == _LIFECYCLE_SEMANTIC
     assert SEMANTIC_EVENT_TYPES[:32] == (
         "AGENT_MOVED",
         "AGENT_SEARCHED",

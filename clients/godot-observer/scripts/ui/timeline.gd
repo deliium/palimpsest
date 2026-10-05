@@ -8,7 +8,7 @@ signal category_toggled(category: String, enabled: bool)
 
 const MARK_CAP := 64
 const CATEGORY_TYPES := {
-	"birth": ["AGENT_CREATED", "AGENT_ENTERED_WORLD"],
+	"birth": ["AGENT_CREATED", "AGENT_ENTERED_WORLD", "AGENT_INITIALIZED"],
 	"death": ["AGENT_DIED"],
 	"attack": ["AGENT_ATTACKED"],
 	"weather_environment": [

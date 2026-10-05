@@ -74,7 +74,7 @@ _FORBIDDEN = frozenset(
 
 def test_semantic_catalog_gains_six_environment_types() -> None:
     assert OBSERVER_PROTOCOL_VERSION == "observer-protocol-v1"
-    assert len(SEMANTIC_EVENT_TYPES) == 39
+    assert len(SEMANTIC_EVENT_TYPES) == 40
     assert SEMANTIC_EVENT_TYPES[26:32] == (
         "SEASON_CHANGED",
         "TEMPERATURE_BAND_CHANGED",

@@ -46,7 +46,7 @@ static func route(event: Variant, policy: Dictionary, logical: Dictionary) -> Di
 				action = "hazard"
 			"ARTIFACT_CREATED", "ARTIFACT_MODIFIED", "ARTIFACT_MOVED", "ARTIFACT_DESTROYED":
 				action = "artifact"
-			"AGENT_CREATED", "AGENT_ENTERED_WORLD":
+			"AGENT_CREATED", "AGENT_ENTERED_WORLD", "AGENT_INITIALIZED":
 				action = "birth"
 			"LIFECYCLE_STAGE_CHANGED":
 				action = "lifecycle"

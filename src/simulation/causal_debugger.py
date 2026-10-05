@@ -127,6 +127,7 @@ _DETAIL_KIND_TO_SEMANTIC_TYPE: Final[Mapping[str, str]] = {
     "artifact_destroyed": "ARTIFACT_DESTROYED",
     "agent_created": "AGENT_CREATED",
     "agent_entered_world": "AGENT_ENTERED_WORLD",
+    "agent_initialization_recorded": "AGENT_INITIALIZED",
     "lifecycle_stage_changed": "LIFECYCLE_STAGE_CHANGED",
 }
 
@@ -234,6 +235,7 @@ _NOT_APPLICABLE_SEMANTICS: Final[frozenset[str]] = frozenset(
         "ENVIRONMENTAL_HAZARD_ENDED",
         "AGENT_CREATED",
         "AGENT_ENTERED_WORLD",
+        "AGENT_INITIALIZED",
         "LIFECYCLE_STAGE_CHANGED",
     }
 )
@@ -253,6 +255,7 @@ _NOT_APPLICABLE_DETAIL_KINDS: Final[frozenset[str]] = frozenset(
         "environmental_hazard_ended",
         "agent_created",
         "agent_entered_world",
+        "agent_initialization_recorded",
         "lifecycle_stage_changed",
     }
 )

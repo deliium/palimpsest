@@ -47,6 +47,7 @@ SEMANTIC_EVENT_TYPES: Final[tuple[str, ...]] = (
     "ARTIFACT_DESTROYED",
     "AGENT_CREATED",
     "AGENT_ENTERED_WORLD",
+    "AGENT_INITIALIZED",
     "LIFECYCLE_STAGE_CHANGED",
 )
 
@@ -89,6 +90,7 @@ SEMANTIC_TYPE_BY_KIND: Final[dict[str, str]] = {
     "artifact_destroyed": "ARTIFACT_DESTROYED",
     "agent_created": "AGENT_CREATED",
     "agent_entered_world": "AGENT_ENTERED_WORLD",
+    "agent_initialization_recorded": "AGENT_INITIALIZED",
     "lifecycle_stage_changed": "LIFECYCLE_STAGE_CHANGED",
 }
 

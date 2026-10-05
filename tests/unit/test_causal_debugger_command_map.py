@@ -53,6 +53,11 @@ def test_lifecycle_semantics_not_applicable() -> None:
     cases = (
         ("AGENT_CREATED", "agent_created", "AgentCreated"),
         ("AGENT_ENTERED_WORLD", "agent_entered_world", "AgentEnteredWorld"),
+        (
+            "AGENT_INITIALIZED",
+            "agent_initialization_recorded",
+            "AgentInitializationRecorded",
+        ),
         ("LIFECYCLE_STAGE_CHANGED", "lifecycle_stage_changed", "LifecycleStageChanged"),
     )
     for semantic, kind, type_name in cases:
