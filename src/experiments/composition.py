@@ -50,6 +50,7 @@ __all__ = [
     "convention_habit_rows_from_ledgers",
     "cultural_channel_rows_from_convention_habits",
     "cultural_channel_rows_from_norm_beliefs",
+    "historical_memory_harvest_from_run",
     "map_consolidation_audits_to_report",
     "map_recall_audits_to_dynamics_report",
     "map_snapshot_to_analysis_sources",
@@ -1034,3 +1035,255 @@ def _id_text_or_none(value: object) -> str | None:
     if not isinstance(raw, str) or not raw:
         return None
     return raw
+
+
+def _event_details(event: object) -> object:
+    details = getattr(event, "details", None)
+    if details is None:
+        return event
+    return details
+
+
+def _event_kind_name(event: object) -> str:
+    details = _event_details(event)
+    kind = getattr(details, "kind", None)
+    if isinstance(kind, str) and kind:
+        return kind
+    name = type(details).__name__
+    return name
+
+
+def _death_ticks_from_events(events: Sequence[object]) -> dict[str, int]:
+    deaths: dict[str, int] = {}
+    for event in events:
+        details = _event_details(event)
+        name = type(details).__name__
+        kind = getattr(details, "kind", None)
+        if name not in {"Died", "DiedEvent"} and kind != "Died":
+            if getattr(event, "kind", None) != "Died":
+                continue
+        agent = _id_text_or_none(
+            getattr(details, "agent_id", None)
+            or getattr(details, "body_id", None)
+            or getattr(event, "agent_id", None)
+        )
+        tick = getattr(event, "tick", getattr(details, "tick", None))
+        if agent is None or isinstance(tick, bool) or type(tick) is not int:
+            continue
+        if agent not in deaths or tick < deaths[agent]:
+            deaths[agent] = tick
+    return deaths
+
+
+def _communication_edges_from_events(
+    events: Sequence[object],
+) -> tuple[object, ...]:
+    from types import SimpleNamespace
+
+    rows: list[object] = []
+    for event in events:
+        details = _event_details(event)
+        kind = _event_kind_name(event).lower()
+        if kind not in {"talk", "talked", "tell", "told", "ask", "asked"}:
+            continue
+        speaker = _id_text_or_none(
+            getattr(event, "actor_id", None)
+            or getattr(details, "speaker_id", None)
+            or getattr(details, "sender_id", None)
+        )
+        listener = _id_text_or_none(
+            getattr(details, "recipient_id", None)
+            or getattr(details, "listener_id", None)
+        )
+        tick = getattr(event, "tick", None)
+        if speaker is None or listener is None:
+            continue
+        rows.append(
+            SimpleNamespace(
+                speaker_id=speaker,
+                listener_id=listener,
+                at_tick=tick if type(tick) is int else None,
+            )
+        )
+    return tuple(rows)
+
+
+def _teaching_edges_from_audits(
+    teaching_audits: Sequence[object] | None,
+) -> tuple[object, ...]:
+    from types import SimpleNamespace
+
+    if not teaching_audits:
+        return ()
+    rows: list[object] = []
+    for row in teaching_audits:
+        teacher = _id_text_or_none(
+            getattr(row, "teacher_id", None) or getattr(row, "mentor_id", None)
+        )
+        learner = _id_text_or_none(
+            getattr(row, "learner_id", None) or getattr(row, "mentee_id", None)
+        )
+        tick = getattr(row, "tick", getattr(row, "at_tick", None))
+        if teacher is None or learner is None:
+            continue
+        rows.append(
+            SimpleNamespace(
+                teacher_id=teacher,
+                learner_id=learner,
+                at_tick=tick if type(tick) is int else None,
+            )
+        )
+    return tuple(rows)
+
+
+def historical_memory_harvest_from_run(
+    *,
+    layers_spec: object | None,
+    as_of_tick: int,
+    cultural_feature_audits: Sequence[object] | None = None,
+    events: Sequence[object] | None = None,
+    witness_rows: Sequence[object] | None = None,
+    narrative_rows: Sequence[object] | None = None,
+    artifact_rows: Sequence[object] | None = None,
+    teaching_audits: Sequence[object] | None = None,
+    communication_edges: Sequence[object] | None = None,
+    teaching_edges: Sequence[object] | None = None,
+    death_ticks: Mapping[str, int] | None = None,
+    generation_index_by_agent: Mapping[str, int] | None = None,
+    sources: Sequence[object] | None = None,
+    living_roster: Sequence[str] | None = None,
+    transition_ticks: Sequence[int] | None = None,
+    generation_boundary_ticks: Sequence[int] | None = None,
+) -> object | None:
+    """Build a duck-typed HistoricalMemoryHarvest when layers_spec is present.
+
+    Returns None when layers are off. Never imports subjective ledger classes.
+    """
+    from analysis.historical_memory import (
+        HistoricalMemoryHarvest,
+        HistoricalSourceRef,
+    )
+
+    if layers_spec is None:
+        _LOG.debug(
+            "historical_memory_harvest_skip reason_code=layers_absent"
+        )
+        return None
+    if isinstance(as_of_tick, bool) or type(as_of_tick) is not int or as_of_tick < 0:
+        raise ValueError("as_of_tick: out_of_range")
+
+    audits = tuple(cultural_feature_audits or ())
+    include_cultural = bool(
+        getattr(layers_spec, "include_cultural_features", True)
+    )
+    if include_cultural and not audits:
+        _LOG.warning(
+            "historical_memory_harvest_empty_audits "
+            "reason_code=layers_enabled_cultural_audits_empty"
+        )
+
+    event_rows = tuple(events or ())
+    deaths = dict(death_ticks or {})
+    if event_rows and not deaths:
+        deaths = _death_ticks_from_events(event_rows)
+
+    comm = tuple(communication_edges or ())
+    if not comm and event_rows:
+        comm = _communication_edges_from_events(event_rows)
+    teach = tuple(teaching_edges or ())
+    if not teach:
+        teach = _teaching_edges_from_audits(teaching_audits)
+
+    witnesses = tuple(witness_rows or ())
+    narratives = tuple(narrative_rows or ())
+    artifacts = tuple(artifact_rows or ())
+
+    source_refs: list[HistoricalSourceRef] = []
+    seen: set[str] = set()
+
+    def _add_source(
+        source_event_id: str,
+        *,
+        cultural_digest_token: str | None = None,
+        transmission_root_id: str | None = None,
+        content_key: str | None = None,
+    ) -> None:
+        if source_event_id in seen:
+            return
+        seen.add(source_event_id)
+        source_refs.append(
+            HistoricalSourceRef(
+                source_event_id=source_event_id,
+                content_key=content_key,
+                transmission_root_id=transmission_root_id,
+                cultural_digest_token=cultural_digest_token,
+            )
+        )
+
+    if sources is not None:
+        for raw in sources:
+            token = _id_text_or_none(getattr(raw, "source_event_id", raw))
+            if token is not None:
+                _add_source(token)
+    for row in witnesses:
+        token = _id_text_or_none(getattr(row, "source_event_id", None))
+        if token is not None:
+            _add_source(token)
+    for row in narratives:
+        token = _id_text_or_none(getattr(row, "source_event_id", None))
+        if token is not None:
+            _add_source(
+                token,
+                transmission_root_id=_id_text_or_none(
+                    getattr(row, "transmission_root_id", None)
+                ),
+            )
+    for row in artifacts:
+        token = _id_text_or_none(getattr(row, "source_event_id", None))
+        if token is not None:
+            _add_source(token)
+    for row in audits:
+        digest = _id_text_or_none(getattr(row, "digest_id_token", None))
+        source_id = _id_text_or_none(getattr(row, "source_event_id", None))
+        if source_id is not None:
+            _add_source(source_id, cultural_digest_token=digest)
+        elif digest is not None:
+            _add_source(digest, cultural_digest_token=digest)
+
+    ticks = tuple(transition_ticks) if transition_ticks is not None else (
+        *sorted(set(deaths.values())),
+        as_of_tick,
+    )
+    harvest = HistoricalMemoryHarvest(
+        as_of_tick=as_of_tick,
+        sources=tuple(source_refs),
+        witness_rows=witnesses,
+        communication_edges=comm,
+        teaching_edges=teach,
+        death_ticks=deaths or None,
+        died_events=event_rows,
+        generation_index_by_agent=generation_index_by_agent,
+        narrative_rows=narratives,
+        cultural_feature_audits=audits,
+        artifact_rows=artifacts,
+        layers_spec=layers_spec,
+        transition_ticks=ticks,
+        generation_boundary_ticks=tuple(generation_boundary_ticks or ()),
+        living_roster=tuple(living_roster) if living_roster is not None else None,
+    )
+    _LOG.debug(
+        "historical_memory_harvest_built source_count=%s "
+        "witness_count=%s communication_count=%s teaching_count=%s "
+        "cultural_audit_count=%s narrative_count=%s artifact_count=%s "
+        "death_count=%s as_of_tick=%s",
+        len(harvest.sources),
+        len(harvest.witness_rows),
+        len(harvest.communication_edges),
+        len(harvest.teaching_edges),
+        len(harvest.cultural_feature_audits),
+        len(harvest.narrative_rows),
+        len(harvest.artifact_rows),
+        len(harvest.death_ticks or {}),
+        as_of_tick,
+    )
+    return harvest

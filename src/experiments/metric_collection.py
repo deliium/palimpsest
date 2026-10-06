@@ -235,6 +235,9 @@ def inputs_with_opt_in_metric_rows(
     reputation_neighborhoods: Mapping[str, str] | None = None,
     reputation_target_id: str | None = None,
     survival_cohort_map: Mapping[str, Sequence[str]] | None = None,
+    historical_memory_harvest: object | None = None,
+    cultural_feature_audits: Sequence[object] | None = None,
+    cultural_feature_generation_index: Mapping[str, int] | None = None,
 ) -> MetricComputationInputs:
     """Attach opt-in family inputs from harvested evidence when present.
 
@@ -327,6 +330,19 @@ def inputs_with_opt_in_metric_rows(
     if survival_cohort_map is not None:
         attached["survival_cohort"] = len(survival_cohort_map)
         updated = replace(updated, survival_cohort_map=survival_cohort_map)
+    if cultural_feature_audits is not None:
+        attached["cultural_features"] = len(cultural_feature_audits)
+        updated = replace(
+            updated,
+            cultural_feature_audits=cultural_feature_audits,
+            cultural_feature_generation_index=cultural_feature_generation_index,
+        )
+    if historical_memory_harvest is not None:
+        source_count = len(getattr(historical_memory_harvest, "sources", ()) or ())
+        attached["historical_memory"] = source_count
+        updated = replace(
+            updated, historical_memory_harvest=historical_memory_harvest
+        )
 
     _LOG.debug(
         "opt_in_metric_rows_attached",
@@ -364,7 +380,7 @@ def compare_compatible_bundles(
 class MetricCollectionService:
     """Assemble + optionally persist run-level metrics for experiment arms."""
 
-    __slots__ = ("_sets", "_documents")
+    __slots__ = ("_documents", "_sets")
 
     def __init__(
         self,
@@ -393,8 +409,9 @@ class MetricCollectionService:
         if again.fingerprints != bundle.fingerprints:
             raise ValueError("metric_nondeterministic")
         if self._sets is None or self._documents is None:
+            ephemeral_id = f"ephemeral-{manifest.manifest_hash[:16]}"
             return MetricCollectionResult(
-                metric_set_id=metric_set_id or f"ephemeral-{manifest.manifest_hash[:16]}",
+                metric_set_id=metric_set_id or ephemeral_id,
                 lifecycle_state=MetricSetLifecycle.COMPLETE,
                 bundle=bundle,
                 persisted_families=(),
@@ -432,5 +449,10 @@ def collector_fields_from_documents(
                 metric_document_fingerprint(document)[:12],
             )
         )
-        fields.append((f"{document.metric_family}_availability", document.availability.value))
+        fields.append(
+            (
+                f"{document.metric_family}_availability",
+                document.availability.value,
+            )
+        )
     return tuple(fields)

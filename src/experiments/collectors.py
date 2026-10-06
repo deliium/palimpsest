@@ -84,6 +84,7 @@ def assemble_arm_metric_bundle(
         convention_habit_rows_from_ledgers,
         cultural_channel_rows_from_convention_habits,
         cultural_channel_rows_from_norm_beliefs,
+        historical_memory_harvest_from_run,
         norm_belief_rows_from_ledgers,
     )
 
@@ -155,6 +156,32 @@ def assemble_arm_metric_bundle(
     reputation_target_id = getattr(arm, "reputation_target_id", None)
     survival_cohort_map = getattr(arm, "survival_cohort_map", None)
 
+    layers_spec = getattr(
+        arm.assignment.runner_config, "historical_memory_layers", None
+    )
+    cultural_audits = getattr(arm.runner_result, "cultural_feature_audits", None)
+    if cultural_audits is not None and len(cultural_audits) == 0:
+        cultural_audits = None
+    teaching_audits = getattr(arm.runner_result, "teaching_audits", None)
+    witness_rows = getattr(arm, "historical_memory_witness_rows", None)
+    narrative_rows = getattr(arm, "historical_memory_narrative_rows", None)
+    artifact_rows = getattr(arm, "historical_memory_artifact_rows", None)
+    generation_index = getattr(arm, "generation_index_by_owner", None)
+    if generation_index is None:
+        generation_index = getattr(arm, "generation_index_by_agent", None)
+    hm_harvest = historical_memory_harvest_from_run(
+        layers_spec=layers_spec,
+        as_of_tick=max(ticks - 1, 0),
+        cultural_feature_audits=cultural_audits,
+        events=events,
+        witness_rows=witness_rows,
+        narrative_rows=narrative_rows,
+        artifact_rows=artifact_rows,
+        teaching_audits=teaching_audits,
+        generation_index_by_agent=generation_index,
+        living_roster=agent_ids,
+    )
+
     inputs = inputs_with_opt_in_metric_rows(
         inputs,
         events=events,
@@ -170,6 +197,9 @@ def assemble_arm_metric_bundle(
         reputation_neighborhoods=reputation_neighborhoods,
         reputation_target_id=reputation_target_id,
         survival_cohort_map=survival_cohort_map,
+        historical_memory_harvest=hm_harvest,
+        cultural_feature_audits=cultural_audits,
+        cultural_feature_generation_index=generation_index,
     )
     return assemble_metric_documents(inputs)
 

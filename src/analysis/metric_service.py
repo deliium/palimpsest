@@ -38,6 +38,11 @@ from analysis.developmental_learning_metrics import (
     compute_developmental_divergence,
     compute_developmental_source_mix,
 )
+from analysis.historical_memory_metrics import (
+    compute_historical_memory_layers,
+    compute_historical_memory_queries,
+    compute_historical_memory_transitions,
+)
 from analysis.kinship_genealogy_metrics import compute_kinship_genealogy
 from analysis.memory_drift import compute_memory_drift
 from analysis.memory_dynamics_metrics import compute_memory_dynamics
@@ -147,6 +152,7 @@ class MetricComputationInputs:
     mentorship_ledgers: Sequence[object] | None = None
     cultural_feature_audits: Sequence[object] | None = None
     cultural_feature_generation_index: Mapping[str, int] | None = None
+    historical_memory_harvest: object | None = None
     territorial_presence_rows: Sequence[object] | None = None
     territorial_control_rows: Sequence[object] | None = None
     belief_convergence_claims: Sequence[object] | None = None
@@ -584,6 +590,32 @@ def assemble_metric_documents(inputs: MetricComputationInputs) -> MetricBundle:
                 input_revision=revision,
             ),
         )
+    if inputs.historical_memory_harvest is not None:
+        hm_harvest = inputs.historical_memory_harvest
+        _safe(
+            "historical_memory_layers",
+            lambda: compute_historical_memory_layers(
+                hm_harvest,
+                run_id=run_id,
+                input_revision=revision,
+            ),
+        )
+        _safe(
+            "historical_memory_transitions",
+            lambda: compute_historical_memory_transitions(
+                hm_harvest,
+                run_id=run_id,
+                input_revision=revision,
+            ),
+        )
+        _safe(
+            "historical_memory_queries",
+            lambda: compute_historical_memory_queries(
+                hm_harvest,
+                run_id=run_id,
+                input_revision=revision,
+            ),
+        )
     optional_blocks = {
         "kinship_genealogy": inputs.kinship_edge_rows is not None,
         "dependency_care": (
@@ -599,6 +631,7 @@ def assemble_metric_documents(inputs: MetricComputationInputs) -> MetricBundle:
             or inputs.mentorship_ledgers is not None
         ),
         "cultural_features": inputs.cultural_feature_audits is not None,
+        "historical_memory": inputs.historical_memory_harvest is not None,
         "territorial_presence": inputs.territorial_presence_rows is not None,
         "territorial_control": inputs.territorial_control_rows is not None,
         "belief_convergence": inputs.belief_convergence_claims is not None,

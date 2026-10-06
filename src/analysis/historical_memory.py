@@ -17,8 +17,12 @@ from typing import Final
 from world.identifiers import require_stable_id
 
 __all__ = [
+    "HistoricalMemoryHarvest",
     "HistoricalMemoryLayerAssignment",
     "HistoricalMemoryLayerId",
+    "HistoricalMemoryQueryAnswer",
+    "HistoricalMemoryQueryId",
+    "HistoricalMemoryQueryReport",
     "HistoricalMemoryTransition",
     "HistoricalMemoryTransitionCause",
     "HistoricalProvenanceEdge",
@@ -27,9 +31,11 @@ __all__ = [
     "HistoricalProvenanceNode",
     "HistoricalProvenanceNodeKind",
     "HistoricalSourceRef",
+    "answer_historical_memory_queries",
     "build_historical_provenance_graph",
     "classify_historical_memory_layer",
     "is_agent_living_at",
+    "materialize_historical_memory_from_harvest",
     "track_historical_memory_transitions",
 ]
 
@@ -85,7 +91,19 @@ class HistoricalMemoryTransitionCause(StrEnum):
     RECLASSIFICATION = "reclassification"
 
 
+class HistoricalMemoryQueryId(StrEnum):
+    ANY_DIRECT_WITNESSES_ALIVE = "any_direct_witnesses_alive"
+    ANYONE_REMEMBERS_SPEAKING_TO_WITNESS = (
+        "anyone_remembers_speaking_to_witness"
+    )
+    EVENT_KNOWN_ONLY_FROM_STORIES_OR_ARTIFACTS = (
+        "event_known_only_from_stories_or_artifacts"
+    )
 
+
+_SPEAKING_EDGE_KINDS: Final[frozenset[str]] = frozenset(
+    {"communicated", "taught"}
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -247,6 +265,117 @@ class HistoricalMemoryLayerAssignment:
         if type(self.witness_chain_broken) is not bool:
             raise TypeError("witness_chain_broken must be bool")
 
+
+@dataclass(frozen=True, slots=True)
+class HistoricalMemoryQueryAnswer:
+    """One researcher query answer for one source at one as-of tick."""
+
+    query_id: HistoricalMemoryQueryId
+    source_ref: HistoricalSourceRef
+    as_of_tick: int
+    answer: bool
+    layer: HistoricalMemoryLayerId | None
+    witness_ids: tuple[str, ...]
+    carrier_ids: tuple[str, ...]
+    path_hop_bands: tuple[str, ...] | None
+    reason_code: str
+
+    def __post_init__(self) -> None:
+        if type(self.query_id) is not HistoricalMemoryQueryId:
+            raise TypeError("query_id must be HistoricalMemoryQueryId")
+        if type(self.source_ref) is not HistoricalSourceRef:
+            raise TypeError("source_ref must be HistoricalSourceRef")
+        if type(self.answer) is not bool:
+            raise TypeError("answer must be bool")
+        if self.layer is not None and type(self.layer) is not (
+            HistoricalMemoryLayerId
+        ):
+            raise TypeError("layer must be HistoricalMemoryLayerId or None")
+        object.__setattr__(
+            self, "reason_code", require_stable_id("reason_code", self.reason_code)
+        )
+
+
+@dataclass(frozen=True, slots=True)
+class HistoricalMemoryQueryReport:
+    """Batch researcher query answers for tracked sources at one as-of tick."""
+
+    answers: tuple[HistoricalMemoryQueryAnswer, ...]
+    as_of_tick: int
+    source_count: int
+    true_counts_by_query_id: Mapping[str, int]
+
+    def __post_init__(self) -> None:
+        if isinstance(self.as_of_tick, bool) or type(self.as_of_tick) is not int:
+            raise TypeError("as_of_tick must be int")
+        if self.as_of_tick < 0:
+            raise ValueError("as_of_tick: out_of_range")
+        if isinstance(self.source_count, bool) or type(self.source_count) is not int:
+            raise TypeError("source_count must be int")
+        if self.source_count < 0:
+            raise ValueError("source_count: out_of_range")
+        object.__setattr__(
+            self,
+            "true_counts_by_query_id",
+            dict(self.true_counts_by_query_id),
+        )
+
+
+@dataclass(frozen=True, slots=True)
+class HistoricalMemoryHarvest:
+    """Duck-typed harvest bundle for analysis-only historical memory metrics."""
+
+    as_of_tick: int
+    sources: tuple[object, ...]
+    witness_rows: tuple[object, ...] = ()
+    communication_edges: tuple[object, ...] = ()
+    teaching_edges: tuple[object, ...] = ()
+    death_ticks: Mapping[str, int] | None = None
+    died_events: tuple[object, ...] = ()
+    generation_index_by_agent: Mapping[str, int] | None = None
+    narrative_rows: tuple[object, ...] = ()
+    cultural_feature_audits: tuple[object, ...] = ()
+    artifact_rows: tuple[object, ...] = ()
+    layers_spec: object | None = None
+    transition_ticks: tuple[int, ...] = ()
+    generation_boundary_ticks: tuple[int, ...] = ()
+    living_roster: tuple[str, ...] | None = None
+
+    def __post_init__(self) -> None:
+        if isinstance(self.as_of_tick, bool) or type(self.as_of_tick) is not int:
+            raise TypeError("as_of_tick must be int")
+        if self.as_of_tick < 0:
+            raise ValueError("as_of_tick: out_of_range")
+        object.__setattr__(self, "sources", tuple(self.sources))
+        object.__setattr__(self, "witness_rows", tuple(self.witness_rows))
+        object.__setattr__(
+            self, "communication_edges", tuple(self.communication_edges)
+        )
+        object.__setattr__(self, "teaching_edges", tuple(self.teaching_edges))
+        object.__setattr__(self, "died_events", tuple(self.died_events))
+        object.__setattr__(self, "narrative_rows", tuple(self.narrative_rows))
+        object.__setattr__(
+            self, "cultural_feature_audits", tuple(self.cultural_feature_audits)
+        )
+        object.__setattr__(self, "artifact_rows", tuple(self.artifact_rows))
+        object.__setattr__(
+            self, "transition_ticks", tuple(self.transition_ticks)
+        )
+        object.__setattr__(
+            self,
+            "generation_boundary_ticks",
+            tuple(self.generation_boundary_ticks),
+        )
+        if self.death_ticks is not None:
+            object.__setattr__(self, "death_ticks", dict(self.death_ticks))
+        if self.generation_index_by_agent is not None:
+            object.__setattr__(
+                self,
+                "generation_index_by_agent",
+                dict(self.generation_index_by_agent),
+            )
+        if self.living_roster is not None:
+            object.__setattr__(self, "living_roster", tuple(self.living_roster))
 
 
 @dataclass(frozen=True, slots=True)
@@ -1331,3 +1460,296 @@ def track_historical_memory_transitions(
             )
 
     return tuple(transitions)
+
+
+def _living_agents_at(
+    graph: HistoricalProvenanceGraph,
+    as_of_tick: int,
+    death_ticks: Mapping[str, int],
+    living_roster: Sequence[str] | None,
+) -> tuple[str, ...]:
+    if living_roster is not None:
+        return tuple(
+            sorted(
+                {
+                    str(agent)
+                    for agent in living_roster
+                    if is_agent_living_at(str(agent), as_of_tick, death_ticks)
+                }
+            )
+        )
+    return tuple(
+        sorted(
+            {
+                node.ref_token
+                for node in graph.nodes
+                if node.kind is HistoricalProvenanceNodeKind.AGENT
+                and is_agent_living_at(node.ref_token, as_of_tick, death_ticks)
+            }
+        )
+    )
+
+
+def _hop_band(hops: int | None) -> tuple[str, ...] | None:
+    if hops is None:
+        return None
+    if hops <= 0:
+        return ("0",)
+    if hops == 1:
+        return ("1",)
+    return (f"1-{hops}",)
+
+
+def _has_story_artifact_attestation(
+    graph: HistoricalProvenanceGraph, source_event_id: str
+) -> bool:
+    return bool(_cultural_carriers_for_source(graph, source_event_id))
+
+
+def _answer_one_source(
+    graph: HistoricalProvenanceGraph,
+    source: object,
+    as_of_tick: int,
+    layers_spec: object | None,
+    *,
+    death_ticks: Mapping[str, int],
+    living_roster: Sequence[str] | None,
+) -> tuple[HistoricalMemoryQueryAnswer, ...]:
+    ref = _source_ref(source)
+    hops = _spec_int(layers_spec, "max_communicative_hops", 2)
+    if hops < 1:
+        hops = 1
+    assignment = classify_historical_memory_layer(
+        graph,
+        ref,
+        as_of_tick=as_of_tick,
+        layers_spec=layers_spec,
+        death_ticks=death_ticks,
+        living_roster=living_roster,
+        max_communicative_hops=hops,
+    )
+    layer = None if assignment is None else assignment.layer
+    witnesses = set(_direct_witnesses(graph, ref.source_event_id))
+    living_witnesses = tuple(
+        sorted(w for w in witnesses if is_agent_living_at(w, as_of_tick, death_ticks))
+    )
+    living_agents = _living_agents_at(
+        graph, as_of_tick, death_ticks, living_roster
+    )
+
+    # Query 1: any direct witnesses alive
+    q1_true = bool(living_witnesses)
+    q1 = HistoricalMemoryQueryAnswer(
+        query_id=HistoricalMemoryQueryId.ANY_DIRECT_WITNESSES_ALIVE,
+        source_ref=ref,
+        as_of_tick=as_of_tick,
+        answer=q1_true,
+        layer=layer,
+        witness_ids=living_witnesses,
+        carrier_ids=(),
+        path_hop_bands=("0",) if q1_true else None,
+        reason_code=(
+            "any_direct_witnesses_alive_true"
+            if q1_true
+            else "any_direct_witnesses_alive_false"
+        ),
+    )
+
+    # Query 2: anyone remembers speaking to a witness
+    adj_comm = _agent_adjacency(graph, allowed_kinds=_COMMUNICATIVE_EDGE_KINDS)
+    carriers_comm, best_comm = _bfs_paths_to_witnesses(
+        start_agents=living_agents,
+        witnesses=witnesses,
+        adjacency=adj_comm,
+        max_hops=hops,
+    )
+    adj_speak = _agent_adjacency(graph, allowed_kinds=_SPEAKING_EDGE_KINDS)
+    carriers_speak, best_speak = _bfs_paths_to_witnesses(
+        start_agents=living_agents,
+        witnesses=witnesses,
+        adjacency=adj_speak,
+        max_hops=hops,
+    )
+    carriers2 = tuple(sorted(set(carriers_comm) | set(carriers_speak)))
+    best2 = best_comm
+    if best_speak is not None and (best2 is None or best_speak < best2):
+        best2 = best_speak
+    q2_true = bool(carriers2)
+    q2 = HistoricalMemoryQueryAnswer(
+        query_id=HistoricalMemoryQueryId.ANYONE_REMEMBERS_SPEAKING_TO_WITNESS,
+        source_ref=ref,
+        as_of_tick=as_of_tick,
+        answer=q2_true,
+        layer=layer,
+        witness_ids=tuple(sorted(witnesses)),
+        carrier_ids=carriers2,
+        path_hop_bands=_hop_band(best2) if q2_true else None,
+        reason_code=(
+            "anyone_remembers_speaking_to_witness_true"
+            if q2_true
+            else "anyone_remembers_speaking_to_witness_false"
+        ),
+    )
+
+    # Query 3: known only from stories/artifacts
+    has_any_witness_path = bool(
+        _bfs_paths_to_witnesses(
+            start_agents=living_agents,
+            witnesses=witnesses,
+            adjacency=adj_comm,
+            max_hops=10_000,
+        )[0]
+    )
+    stories_only = (
+        layer is HistoricalMemoryLayerId.CULTURAL
+        and not living_witnesses
+        and not has_any_witness_path
+        and _has_story_artifact_attestation(graph, ref.source_event_id)
+    )
+    cultural_carriers = (
+        assignment.cultural_carrier_ids if assignment is not None else ()
+    )
+    q3 = HistoricalMemoryQueryAnswer(
+        query_id=(
+            HistoricalMemoryQueryId.EVENT_KNOWN_ONLY_FROM_STORIES_OR_ARTIFACTS
+        ),
+        source_ref=ref,
+        as_of_tick=as_of_tick,
+        answer=stories_only,
+        layer=layer,
+        witness_ids=(),
+        carrier_ids=cultural_carriers if stories_only else (),
+        path_hop_bands=None,
+        reason_code=(
+            "event_known_only_from_stories_or_artifacts_true"
+            if stories_only
+            else "event_known_only_from_stories_or_artifacts_false"
+        ),
+    )
+
+    for answer in (q1, q2, q3):
+        _LOG.debug(
+            "historical_memory_query_answered query_id=%s answer=%s "
+            "source_token=%s layer=%s carrier_count=%s witness_count=%s",
+            answer.query_id.value,
+            answer.answer,
+            ref.source_event_id,
+            None if answer.layer is None else answer.layer.value,
+            len(answer.carrier_ids),
+            len(answer.witness_ids),
+        )
+    return (q1, q2, q3)
+
+
+def answer_historical_memory_queries(
+    graph: HistoricalProvenanceGraph,
+    sources: Sequence[object],
+    as_of_tick: int | None = None,
+    layers_spec: object | None = None,
+    *,
+    death_ticks: Mapping[str, int] | None = None,
+    living_roster: Sequence[str] | None = None,
+) -> HistoricalMemoryQueryReport:
+    """Answer the three locked researcher queries for each tracked source."""
+    tick = graph.as_of_tick if as_of_tick is None else as_of_tick
+    if isinstance(tick, bool) or type(tick) is not int or tick < 0:
+        raise ValueError("as_of_tick: out_of_range")
+    deaths = dict(death_ticks or {})
+    answers: list[HistoricalMemoryQueryAnswer] = []
+    refs = [_source_ref(source) for source in sources]
+    for ref in refs:
+        answers.extend(
+            _answer_one_source(
+                graph,
+                ref,
+                tick,
+                layers_spec,
+                death_ticks=deaths,
+                living_roster=living_roster,
+            )
+        )
+    true_counts: dict[str, int] = {
+        query_id.value: 0 for query_id in HistoricalMemoryQueryId
+    }
+    for answer in answers:
+        if answer.answer:
+            true_counts[answer.query_id.value] = (
+                true_counts.get(answer.query_id.value, 0) + 1
+            )
+    report = HistoricalMemoryQueryReport(
+        answers=tuple(answers),
+        as_of_tick=tick,
+        source_count=len(refs),
+        true_counts_by_query_id=true_counts,
+    )
+    _LOG.info(
+        "historical_memory_query_report query_count=%s source_count=%s "
+        "as_of_tick=%s true_counts=%s",
+        len(answers),
+        len(refs),
+        tick,
+        true_counts,
+    )
+    return report
+
+
+def materialize_historical_memory_from_harvest(
+    harvest: HistoricalMemoryHarvest,
+) -> tuple[
+    HistoricalProvenanceGraph,
+    tuple[HistoricalMemoryLayerAssignment, ...],
+    tuple[HistoricalMemoryTransition, ...],
+    HistoricalMemoryQueryReport,
+]:
+    """Build graph, assignments, transitions, and query report from a harvest."""
+    if type(harvest) is not HistoricalMemoryHarvest:
+        raise TypeError("harvest must be HistoricalMemoryHarvest")
+    deaths = dict(harvest.death_ticks or {})
+
+    def _builder(as_of: int) -> HistoricalProvenanceGraph:
+        return build_historical_provenance_graph(
+            as_of_tick=as_of,
+            sources=harvest.sources,
+            witness_rows=harvest.witness_rows,
+            communication_edges=harvest.communication_edges,
+            teaching_edges=harvest.teaching_edges,
+            death_ticks=deaths,
+            died_events=harvest.died_events,
+            generation_index_by_agent=harvest.generation_index_by_agent,
+            narrative_rows=harvest.narrative_rows or None,
+            cultural_feature_audits=harvest.cultural_feature_audits or None,
+            artifact_rows=harvest.artifact_rows or None,
+            layers_spec=harvest.layers_spec,
+        )
+
+    graph = _builder(harvest.as_of_tick)
+    assignments: list[HistoricalMemoryLayerAssignment] = []
+    for source in harvest.sources:
+        assignment = classify_historical_memory_layer(
+            graph,
+            source,
+            as_of_tick=harvest.as_of_tick,
+            layers_spec=harvest.layers_spec,
+            death_ticks=deaths,
+            living_roster=harvest.living_roster,
+        )
+        if assignment is not None:
+            assignments.append(assignment)
+    ticks = harvest.transition_ticks or (harvest.as_of_tick,)
+    transitions = track_historical_memory_transitions(
+        sources=harvest.sources,
+        ticks=ticks,
+        graph_builder=_builder,
+        layers_spec=harvest.layers_spec,
+        death_ticks=deaths,
+        generation_boundary_ticks=harvest.generation_boundary_ticks,
+    )
+    report = answer_historical_memory_queries(
+        graph,
+        harvest.sources,
+        as_of_tick=harvest.as_of_tick,
+        layers_spec=harvest.layers_spec,
+        death_ticks=deaths,
+        living_roster=harvest.living_roster,
+    )
+    return graph, tuple(assignments), transitions, report

@@ -50,7 +50,7 @@ __all__ = [
 ]
 
 METRIC_CATALOG_VERSION: Final[str] = "metric-catalog-v1"
-METRIC_FAMILY_COUNT: Final[int] = 53
+METRIC_FAMILY_COUNT: Final[int] = 56
 
 # Align with existing memory-drift / transmission document versions.
 _ALGO_V1: Final[str] = "1"
@@ -130,6 +130,9 @@ class MetricFamilyId(StrEnum):
     CULTURAL_FEATURE_PROVENANCE = "cultural_feature_provenance"
     CULTURAL_TRAIT_DIFFUSION = "cultural_trait_diffusion"
     CULTURAL_FEATURE_MUTATION = "cultural_feature_mutation"
+    HISTORICAL_MEMORY_LAYERS = "historical_memory_layers"
+    HISTORICAL_MEMORY_TRANSITIONS = "historical_memory_transitions"
+    HISTORICAL_MEMORY_QUERIES = "historical_memory_queries"
 
 
 class DenominatorKind(StrEnum):
@@ -1408,6 +1411,134 @@ def _spec_cultural_feature_mutation() -> MetricSpecification:
             "recombination_rate",
         ),
         empty_case="availability=absent; no_cultural_feature_audits",
+    )
+
+
+def _spec_historical_memory_layers() -> MetricSpecification:
+    return _base(
+        family_id=MetricFamilyId.HISTORICAL_MEMORY_LAYERS,
+        evidence_inputs=frozenset({EvidenceStage.AGENT_VISIBLE_PROJECTION}),
+        population="historical_memory_sources",
+        denominator="tracked_source_count",
+        denominator_kind=DenominatorKind.OCCURRENCE,
+        cohort_window="as_of tick after harvest",
+        deceased_policy=(
+            "death-exclusive living; post-death agents excluded from living"
+        ),
+        zero_holding_policy="no sources -> availability=absent",
+        opportunity_vs_occurrence="layer histogram over tracked sources",
+        self_edge_policy="not_applicable",
+        censoring_policy=(
+            "analysis-only historical memory; never cognition"
+        ),
+        formulas={
+            "mean_living_witness_count": (
+                "sum living_witness_ids / source_count"
+            ),
+            "communicative_carrier_share": (
+                "communicative_carriers / "
+                "(communicative_carriers + cultural_carriers)"
+            ),
+            "cultural_carrier_share": (
+                "cultural_carriers / "
+                "(communicative_carriers + cultural_carriers)"
+            ),
+        },
+        value_keys=(
+            "assignment_count",
+            "communicative_carrier_share",
+            "communicative_count",
+            "cultural_carrier_share",
+            "cultural_count",
+            "living_count",
+            "mean_living_witness_count",
+            "source_count",
+            "unattested_count",
+        ),
+        empty_case="availability=absent; no_historical_memory_sources",
+    )
+
+
+def _spec_historical_memory_transitions() -> MetricSpecification:
+    return _base(
+        family_id=MetricFamilyId.HISTORICAL_MEMORY_TRANSITIONS,
+        evidence_inputs=frozenset({EvidenceStage.AGENT_VISIBLE_PROJECTION}),
+        population="historical_memory_transitions",
+        denominator="transition_count",
+        denominator_kind=DenominatorKind.OCCURRENCE,
+        cohort_window="sampled ticks under transition_tick_resolution",
+        deceased_policy=(
+            "death-linked causes when last witness dies or chain expires"
+        ),
+        zero_holding_policy="no transitions -> availability=absent",
+        opportunity_vs_occurrence="transition rates by cause and from->to",
+        self_edge_policy="not_applicable",
+        censoring_policy=(
+            "analysis-only historical memory; never cognition"
+        ),
+        formulas={
+            "living_to_communicative_rate": (
+                "count(living->communicative) / transition_count"
+            ),
+            "communicative_to_cultural_rate": (
+                "count(communicative->cultural) / transition_count"
+            ),
+            "death_linked_share": (
+                "count(death-linked causes) / transition_count"
+            ),
+        },
+        value_keys=(
+            "communicative_to_cultural_count",
+            "communicative_to_cultural_rate",
+            "death_linked_share",
+            "living_to_communicative_count",
+            "living_to_communicative_rate",
+            "transition_count",
+        ),
+        empty_case="availability=absent; no_historical_memory_transitions",
+    )
+
+
+def _spec_historical_memory_queries() -> MetricSpecification:
+    return _base(
+        family_id=MetricFamilyId.HISTORICAL_MEMORY_QUERIES,
+        evidence_inputs=frozenset({EvidenceStage.AGENT_VISIBLE_PROJECTION}),
+        population="historical_memory_query_answers",
+        denominator="tracked_source_count",
+        denominator_kind=DenominatorKind.OCCURRENCE,
+        cohort_window="as_of tick query report",
+        deceased_policy=(
+            "death-exclusive living witnesses; dead witnesses excluded"
+        ),
+        zero_holding_policy="no sources -> availability=absent",
+        opportunity_vs_occurrence="true-counts for three locked queries",
+        self_edge_policy="not_applicable",
+        censoring_policy=(
+            "analysis-only historical memory; never cognition"
+        ),
+        formulas={
+            "true_share_any_direct_witnesses_alive": (
+                "true_count / source_count"
+            ),
+            "true_share_anyone_remembers_speaking_to_witness": (
+                "true_count / source_count"
+            ),
+            "true_share_event_known_only_from_stories_or_artifacts": (
+                "true_count / source_count"
+            ),
+        },
+        value_keys=(
+            "answer_count",
+            "as_of_tick",
+            "source_count",
+            "true_count_any_direct_witnesses_alive",
+            "true_count_anyone_remembers_speaking_to_witness",
+            "true_count_event_known_only_from_stories_or_artifacts",
+            "true_share_any_direct_witnesses_alive",
+            "true_share_anyone_remembers_speaking_to_witness",
+            "true_share_event_known_only_from_stories_or_artifacts",
+        ),
+        empty_case="availability=absent; no_historical_memory_sources",
     )
 
 
@@ -2812,6 +2943,9 @@ _BUILDERS: Final[tuple[Callable[[], MetricSpecification], ...]] = (
     _spec_cultural_feature_provenance,
     _spec_cultural_trait_diffusion,
     _spec_cultural_feature_mutation,
+    _spec_historical_memory_layers,
+    _spec_historical_memory_transitions,
+    _spec_historical_memory_queries,
     _spec_emergent_group_formation,
     _spec_emergent_social_norms,
     _spec_persistent_social_conventions,

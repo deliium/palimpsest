@@ -106,6 +106,14 @@ from analysis.group_formation_metrics import (
     compute_emergent_group_candidates,
     compute_group_persistence,
 )
+from analysis.historical_memory_metrics import (
+    HISTORICAL_MEMORY_LAYERS_METRIC_VERSION,
+    HISTORICAL_MEMORY_QUERIES_METRIC_VERSION,
+    HISTORICAL_MEMORY_TRANSITIONS_METRIC_VERSION,
+    compute_historical_memory_layers,
+    compute_historical_memory_queries,
+    compute_historical_memory_transitions,
+)
 from analysis.identity_dynamics_metrics import (
     IDENTITY_DYNAMICS_METRIC_VERSION,
     build_identity_audit,
@@ -387,6 +395,9 @@ __all__ = [
     "EVIDENCE_STAGE_SCHEMA_VERSION",
     "EXTERNAL_ARTIFACT_MEMORY_METRIC_VERSION",
     "GRAPH_NODE_ORDER_POLICY",
+    "HISTORICAL_MEMORY_LAYERS_METRIC_VERSION",
+    "HISTORICAL_MEMORY_QUERIES_METRIC_VERSION",
+    "HISTORICAL_MEMORY_TRANSITIONS_METRIC_VERSION",
     "IDENTITY_DYNAMICS_METRIC_VERSION",
     "INTERGENERATIONAL_COOPERATION_METRIC_VERSION",
     "INTERMEDIATE_DTYPE",
@@ -540,6 +551,9 @@ __all__ = [
     "compute_goal_completion",
     "compute_group_community_structure",
     "compute_group_persistence",
+    "compute_historical_memory_layers",
+    "compute_historical_memory_queries",
+    "compute_historical_memory_transitions",
     "compute_identity_dynamics",
     "compute_intergenerational_cooperation",
     "compute_kinship_genealogy",
