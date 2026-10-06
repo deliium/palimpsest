@@ -151,21 +151,33 @@ def test_social_transmission_service_holds_both_ports() -> None:
 
 
 def test_cognition_never_imports_truth_or_metric_symbols() -> None:
-    forbidden = (
-        "ClaimTruthSpec",
-        "StoryTruthSpec",
-        "MetricDocument",
-        "assemble_metric_documents",
-        "EvidenceCompositionService",
-        "MemoryDriftAnalysisService",
-        "MemoryDriftReport",
-        "SocialTransmissionAnalysisService",
-        "SocialTransmissionReport",
+    """Cognition must not import analysis truth/metric symbols.
+
+    Deny-list string tokens (e.g. ``"MetricDocument"`` in
+    ``_FORBIDDEN_TYPES``) are intentional and are not imports — scan AST
+    imports only so fail-closed type-name sets do not false-positive.
+    """
+    forbidden_names = frozenset(
+        {
+            "ClaimTruthSpec",
+            "StoryTruthSpec",
+            "MetricDocument",
+            "assemble_metric_documents",
+            "EvidenceCompositionService",
+            "MemoryDriftAnalysisService",
+            "MemoryDriftReport",
+            "SocialTransmissionAnalysisService",
+            "SocialTransmissionReport",
+        }
     )
+    hits: list[str] = []
     for path in (SRC / "agents" / "cognition").rglob("*.py"):
-        text = path.read_text(encoding="utf-8")
-        for symbol in forbidden:
-            assert symbol not in text, f"{path}: {symbol}"
+        hits.extend(_module_imports_forbidden(path, ("analysis",)))
+        _modules, names = _imported_modules_and_names(path)
+        for name in names:
+            if name in forbidden_names:
+                hits.append(f"{path.relative_to(SRC)}:{name}")
+    assert hits == []
 
 
 def test_live_subjective_packages_forbid_analysis_feedback_symbols() -> None:
