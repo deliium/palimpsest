@@ -9,6 +9,15 @@ describe('epistemic mapping', () => {
   it('maps analytical overlays to research_inference', () => {
     expect(epistemicFromOverlayKind('emergent_group_formation')).toBe('research_inference')
     expect(epistemicFromOverlayKind('spatial_control')).toBe('research_inference')
+    expect(epistemicFromOverlayKind('historical_memory_layers')).toBe(
+      'research_inference',
+    )
+    expect(epistemicFromOverlayKind('historical_memory_transitions')).toBe(
+      'research_inference',
+    )
+    expect(epistemicFromOverlayKind('historical_memory_queries')).toBe(
+      'research_inference',
+    )
     expect(epistemicFromEvidenceClass('ANALYTICAL_INFERRED')).toBe('research_inference')
   })
 

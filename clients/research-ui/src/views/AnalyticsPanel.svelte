@@ -26,7 +26,16 @@
     'emergent_social_norms',
     'persistent_social_conventions',
     'cultural_narrative_lineage',
+    'historical_memory_layers',
+    'historical_memory_transitions',
+    'historical_memory_queries',
   ] as const
+
+  const HISTORICAL_MEMORY_FAMILIES = new Set([
+    'historical_memory_layers',
+    'historical_memory_transitions',
+    'historical_memory_queries',
+  ])
 
   type MetricCard = {
     family: string
@@ -86,19 +95,47 @@
       return []
     }
     const out: Array<{ key: string; value: string }> = []
-    for (const [key, raw] of Object.entries(values as Record<string, unknown>)) {
+    const preferredKeys = [
+      'living_count',
+      'communicative_count',
+      'cultural_count',
+      'unattested_count',
+      'source_count',
+      'transition_count',
+      'living_to_communicative_count',
+      'communicative_to_cultural_count',
+      'true_count_any_direct_witnesses_alive',
+      'true_count_anyone_remembers_speaking_to_witness',
+      'true_count_event_known_only_from_stories_or_artifacts',
+    ]
+    const entries = Object.entries(values as Record<string, unknown>)
+    for (const key of preferredKeys) {
+      const raw = (values as Record<string, unknown>)[key]
+      if (typeof raw === 'number' || typeof raw === 'string') {
+        out.push({ key, value: String(raw) })
+      }
+      if (out.length >= 8) {
+        return out
+      }
+    }
+    for (const [key, raw] of entries) {
+      if (out.some((item) => item.key === key)) {
+        continue
+      }
       const lowered = key.toLowerCase()
       if (
         lowered.includes('emerged') ||
         lowered === 'detected' ||
-        lowered === 'society_formed'
+        lowered === 'society_formed' ||
+        lowered === 'layer' ||
+        lowered === 'censoring_policy'
       ) {
         continue
       }
       if (typeof raw === 'number' || typeof raw === 'string') {
         out.push({ key, value: String(raw) })
       }
-      if (out.length >= 6) {
+      if (out.length >= 8) {
         break
       }
     }
@@ -161,10 +198,22 @@
       const preferred = PRIORITY_FAMILIES.flatMap((family) =>
         catalog.items.filter((item) => item.metric_family === family),
       )
+      const historical = catalog.items.filter((item) =>
+        HISTORICAL_MEMORY_FAMILIES.has(item.metric_family),
+      )
       const phenomenon = catalog.items.filter((item) =>
         item.metric_family.includes('phenomenon'),
       )
-      const selected = [...preferred, ...phenomenon].slice(0, 12)
+      const selected = [...preferred, ...historical, ...phenomenon]
+        .filter(
+          (item, index, all) =>
+            all.findIndex(
+              (other) =>
+                other.metric_family === item.metric_family &&
+                other.metric_set_id === item.metric_set_id,
+            ) === index,
+        )
+        .slice(0, 14)
       cards = await Promise.all(selected.map((item) => loadMetricCard(item)))
 
       if (agentId) {
@@ -215,6 +264,8 @@
   </header>
   <p class="lede">
     Metric documents and phenomenon panels are analytical results — never world facts.
+    Historical memory layers / transitions / queries are researcher constructs
+    (<code>research_inference</code>), not agent knowledge.
   </p>
 
   {#if loading}
