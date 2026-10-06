@@ -366,19 +366,19 @@ Follow `skill_learning@1` registration via harvested audits. Do **not** overload
 
 ### Phase 4: Audits, metrics, experiment, docs
 
-- [ ] Task 12: Harvest metadata-only `DevelopmentalAcquisitionAudit`
+- [x] Task 12: Harvest metadata-only `DevelopmentalAcquisitionAudit`
   - Define frozen audit type + append path at acquisition attempt/finalize (mirror skill/teaching audits). Never include concept text/payloads. Expose ordered harvest on run result / experiment collector for analysis.
   - LOGGING: DEBUG audit append `{owner_id, domain, source, acquired, reason_code}`; never log concept keys as free text if they encode payload (digest-only ok).
   - Files: `src/agents/cognition/developmental_learning.py`, runner/experiment harvest site, `tests/unit/test_developmental_acquisition_audit.py`
   - Depends on: Task 5, Task 9
 
-- [ ] Task 13: Register analysis metrics from audits
+- [x] Task 13: Register analysis metrics from audits
   - Add `developmental_acquisition@1`, `developmental_source_mix@1`, `developmental_divergence@1` with `MetricFamilyId` (+3), specifications, compute module consuming **audits/ledgers only**, metric_service wiring, unit tests. Cognition must not import these modules. Do not overload `knowledge_diffusion` / `cultural_transmission`.
   - LOGGING: INFO on metric compute `{run_id, family_id, agent_count}`; metadata only.
   - Files: `src/analysis/developmental_learning_metrics.py`, `src/analysis/specifications.py`, `src/analysis/__init__.py`, metric service wiring, `tests/unit/test_developmental_learning_metrics.py`
   - Depends on: Task 8, Task 11, Task 12
 
-- [ ] Task 14: Experiment AJ catalog arm + profile
+- [x] Task 14: Experiment AJ catalog arm + profile
   - Add `experiment-aj-developmental-learning` / `developmental_learning_profile` on v29 with locked arm matrices (isolated / socialized / artifact / optional budget-stress / channel-off); pin `species_default_developmental_v1` for learners; enable teacher mode bundles per Design Decisions; off V1 gate; matrix allowlist only.
   - LOGGING: INFO `experiment_aj_built` with schema/flag/domain/source/species summary.
   - Files: `src/experiments/catalog.py`, `tests/unit/test_developmental_learning_catalog_arm.py`

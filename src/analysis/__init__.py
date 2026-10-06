@@ -96,6 +96,14 @@ from analysis.dependency_care_metrics import (
     compute_dependency_survival,
     compute_intergenerational_cooperation,
 )
+from analysis.developmental_learning_metrics import (
+    DEVELOPMENTAL_ACQUISITION_METRIC_VERSION,
+    DEVELOPMENTAL_DIVERGENCE_METRIC_VERSION,
+    DEVELOPMENTAL_SOURCE_MIX_METRIC_VERSION,
+    compute_developmental_acquisition,
+    compute_developmental_divergence,
+    compute_developmental_source_mix,
+)
 from analysis.matrix_metric_summary import (
     MATRIX_METRIC_SUMMARY_SCHEMA_VERSION,
     MatrixMetricCellRef,
@@ -357,6 +365,9 @@ __all__ = [
     "CAREGIVER_DIVERSITY_METRIC_VERSION",
     "CAREGIVING_BURDEN_METRIC_VERSION",
     "INTERGENERATIONAL_COOPERATION_METRIC_VERSION",
+    "DEVELOPMENTAL_ACQUISITION_METRIC_VERSION",
+    "DEVELOPMENTAL_DIVERGENCE_METRIC_VERSION",
+    "DEVELOPMENTAL_SOURCE_MIX_METRIC_VERSION",
     "MATRIX_METRIC_SUMMARY_SCHEMA_VERSION",
     "MEMORY_DYNAMICS_METRIC_VERSION",
     "METRIC_CATALOG_VERSION",
@@ -493,6 +504,9 @@ __all__ = [
     "compute_identity_dynamics",
     "compute_kinship_genealogy",
     "compute_dependency_survival",
+    "compute_developmental_acquisition",
+    "compute_developmental_divergence",
+    "compute_developmental_source_mix",
     "compute_caregiver_diversity",
     "compute_caregiving_burden",
     "compute_intergenerational_cooperation",

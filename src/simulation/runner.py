@@ -2344,6 +2344,9 @@ class SimulationRunner:
             cognitive_budget_audits=self.export_cognitive_budget_audits(),
             skill_audits=self.export_skill_audits(),
             teaching_audits=self.export_teaching_audits(),
+            developmental_acquisition_audits=(
+                self.export_developmental_acquisition_audits()
+            ),
         )
         _LOG.info(
             "runner_finished run_id=%s ticks_committed=%s stop_reason=%s "
@@ -2482,6 +2485,30 @@ class SimulationRunner:
                 collected.append(audit)
         _LOG.debug(
             "communication_intent_audit_export run_id=%s audit_count=%s",
+            self._run_id.value,
+            len(collected),
+        )
+        return tuple(collected)
+
+    def export_developmental_acquisition_audits(self) -> tuple[object, ...]:
+        """Harvest metadata-only developmental acquisition audits."""
+        from agents.cognition.developmental_learning import DevelopmentalAcquisitionAudit
+
+        collected: list[DevelopmentalAcquisitionAudit] = []
+        for runtime in self._runtimes:
+            export = getattr(
+                runtime, "export_developmental_acquisition_audits", None
+            )
+            if export is None:
+                continue
+            for audit in export():
+                if type(audit) is not DevelopmentalAcquisitionAudit:
+                    raise TypeError(
+                        "developmental_acquisition_audits: invalid_item"
+                    )
+                collected.append(audit)
+        _LOG.debug(
+            "developmental_acquisition_audit_export run_id=%s audit_count=%s",
             self._run_id.value,
             len(collected),
         )

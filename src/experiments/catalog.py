@@ -2500,3 +2500,226 @@ def experiment_ai_dependency_caregiving(
             ),
         ),
     )
+
+
+def developmental_learning_profile(
+    config: SimulationRunnerConfig,
+) -> SimulationRunnerConfig:
+    """Require lifecycle + exact developmental_learning on runner-config-v29."""
+    from simulation.runner_models import RUNNER_SCHEMA_VERSION_V29
+
+    if config.schema_version != RUNNER_SCHEMA_VERSION_V29:
+        raise ValueError(
+            "developmental learning profile requires runner-config-v29 "
+            f"(code=developmental_learning_profile_schema got={config.schema_version!r})"
+        )
+    if not config.v3_capability_flags.generational_population:
+        raise ValueError(
+            "developmental learning profile requires generational_population "
+            "(code=developmental_learning_profile_lifecycle_flag)"
+        )
+    if config.population_lifecycle is None:
+        raise ValueError(
+            "developmental learning profile requires population_lifecycle "
+            "(code=developmental_learning_profile_missing_lifecycle)"
+        )
+    if config.developmental_learning is None:
+        raise ValueError(
+            "developmental learning profile requires developmental_learning "
+            "(code=developmental_learning_profile_missing_channel)"
+        )
+    if config.new_agent_initialization is None:
+        raise ValueError(
+            "developmental learning profile requires new_agent_initialization "
+            "(code=developmental_learning_profile_missing_init)"
+        )
+    from simulation.new_agent_initialization import SPECIES_DEFAULT_DEVELOPMENTAL_V1
+
+    if (
+        config.new_agent_initialization.species_defaults_id
+        != SPECIES_DEFAULT_DEVELOPMENTAL_V1
+    ):
+        raise ValueError(
+            "developmental learning profile requires "
+            "species_default_developmental_v1 "
+            "(code=developmental_learning_profile_species)"
+        )
+    allowed = {"generational_population", "kinship_inheritance"}
+    other = tuple(
+        name
+        for name in config.v3_capability_flags.enabled_names()
+        if name not in allowed
+    )
+    if other:
+        raise ValueError(
+            "developmental learning profile forbids unowned V3 flags "
+            f"(code=developmental_learning_profile_extra_flags "
+            f"flag_count={len(other)})"
+        )
+    _LOG.debug(
+        "developmental_learning_profile_ok schema_version=%s "
+        "enabled_domains=%s enabled_sources=%s species_defaults_id=%s",
+        config.schema_version,
+        list(config.developmental_learning.enabled_domains),
+        list(config.developmental_learning.enabled_sources),
+        config.new_agent_initialization.species_defaults_id,
+    )
+    return config
+
+
+def experiment_aj_developmental_learning(
+    base: SimulationRunnerConfig,
+    *,
+    seed_matrix: ExperimentSeedMatrix | None = None,
+    max_ticks: int = 10,
+) -> ExperimentDefinition:
+    """Off-gate Experiment AJ proving developmental learning on runner-config-v29."""
+    from simulation.new_agent_initialization import (
+        SPECIES_DEFAULT_DEVELOPMENTAL_V1,
+        default_new_agent_initialization_spec,
+    )
+    from simulation.runner_models import (
+        RUNNER_SCHEMA_VERSION_V29,
+        ArtifactInterpretationMode,
+        CulturalNarrativeMode,
+        SemanticNamingMode,
+        SocialConventionMode,
+        SocialNormMode,
+        example_developmental_learning_spec,
+        example_population_lifecycle_spec,
+    )
+
+    matrix = seed_matrix or ExperimentSeedMatrix(seeds=(base.seed,))
+    agent_ids = tuple(agent.agent_id for agent in base.agents)
+    if len(agent_ids) < 2:
+        raise ValueError(
+            "experiment AJ requires at least two agents on the base roster "
+            "(code=developmental_learning_aj_roster_too_small)"
+        )
+    lifecycle = example_population_lifecycle_spec(
+        lifespan_ticks=40,
+        max_population=max(4, len(agent_ids) + 1),
+        policy_id="disabled",
+    )
+    init = replace(
+        default_new_agent_initialization_spec(),
+        species_defaults_id=SPECIES_DEFAULT_DEVELOPMENTAL_V1,
+    )
+    from simulation.runner_models import RUNNER_SCHEMA_VERSION_V25
+
+    channel_off = replace(
+        base,
+        schema_version=RUNNER_SCHEMA_VERSION_V25,
+        mortality_mode=MortalityMode.DISABLED,
+        stop_policy=RunnerStopPolicy(max_ticks=max_ticks),
+        v3_capability_flags=V3CapabilityFlags(generational_population=True),
+        population_lifecycle=lifecycle,
+        developmental_learning=None,
+        new_agent_initialization=default_new_agent_initialization_spec(),
+        dependency_care=None,
+        kinship=None,
+    )
+
+    def _learner_modes(cfg: SimulationRunnerConfig) -> SimulationRunnerConfig:
+        agents: list[AgentRunnerSpec] = []
+        for agent in cfg.agents:
+            cognition = replace(
+                agent.cognition,
+                skill_learning_mode=SkillLearningMode.DETERMINISTIC,
+                teaching_interaction_mode=TeachingInteractionMode.DETERMINISTIC,
+                semantic_naming_mode=SemanticNamingMode.DETERMINISTIC,
+                social_norm_mode=SocialNormMode.DETERMINISTIC,
+                social_convention_mode=SocialConventionMode.DETERMINISTIC,
+                cultural_narrative_mode=CulturalNarrativeMode.DETERMINISTIC,
+                artifact_interpretation_mode=ArtifactInterpretationMode.DETERMINISTIC,
+            )
+            agents.append(replace(agent, cognition=cognition))
+        return replace(cfg, agents=tuple(agents))
+
+    isolated = _learner_modes(
+        replace(
+            base,
+            schema_version=RUNNER_SCHEMA_VERSION_V29,
+            mortality_mode=MortalityMode.DISABLED,
+            stop_policy=RunnerStopPolicy(max_ticks=max_ticks),
+            v3_capability_flags=V3CapabilityFlags(generational_population=True),
+            population_lifecycle=lifecycle,
+            new_agent_initialization=init,
+            developmental_learning=example_developmental_learning_spec(
+                enabled_domains=("locations", "resources", "hazards", "skills"),
+                enabled_sources=("observation", "experimentation"),
+            ),
+            dependency_care=None,
+            kinship=None,
+        )
+    )
+    socialized = _learner_modes(
+        replace(
+            isolated,
+            developmental_learning=example_developmental_learning_spec(
+                enabled_domains=(
+                    "locations",
+                    "resources",
+                    "hazards",
+                    "skills",
+                    "social_actors",
+                    "vocabulary",
+                    "norms",
+                    "stories",
+                    "practices",
+                ),
+                enabled_sources=(
+                    "observation",
+                    "experimentation",
+                    "instruction",
+                    "imitation",
+                    "communication",
+                ),
+            ),
+        )
+    )
+    artifact = _learner_modes(
+        replace(
+            isolated,
+            developmental_learning=example_developmental_learning_spec(
+                enabled_domains=("vocabulary", "practices", "locations"),
+                enabled_sources=("observation", "artifact", "experimentation"),
+            ),
+        )
+    )
+    for arm in (isolated, socialized, artifact):
+        developmental_learning_profile(arm)
+    _LOG.info(
+        "experiment_aj_built experiment_id=experiment-aj-developmental-learning "
+        "schema_version=%s tick_count=%s domain_arm_count=%s",
+        RUNNER_SCHEMA_VERSION_V29,
+        max_ticks,
+        3,
+    )
+    return _definition(
+        experiment_id="experiment-aj-developmental-learning",
+        base=base,
+        seed_matrix=matrix,
+        arms=(
+            (
+                "aj-channel-off",
+                "developmental_learning_channel_off",
+                channel_off,
+            ),
+            (
+                "aj-isolated",
+                "developmental_learning_isolated_observation",
+                isolated,
+            ),
+            (
+                "aj-socialized",
+                "developmental_learning_socialized_sources",
+                socialized,
+            ),
+            (
+                "aj-artifact",
+                "developmental_learning_artifact_assisted",
+                artifact,
+            ),
+        ),
+    )

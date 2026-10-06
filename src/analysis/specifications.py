@@ -50,7 +50,7 @@ __all__ = [
 ]
 
 METRIC_CATALOG_VERSION: Final[str] = "metric-catalog-v1"
-METRIC_FAMILY_COUNT: Final[int] = 44
+METRIC_FAMILY_COUNT: Final[int] = 47
 
 # Align with existing memory-drift / transmission document versions.
 _ALGO_V1: Final[str] = "1"
@@ -121,6 +121,9 @@ class MetricFamilyId(StrEnum):
     CAREGIVER_DIVERSITY = "caregiver_diversity"
     CAREGIVING_BURDEN = "caregiving_burden"
     INTERGENERATIONAL_COOPERATION = "intergenerational_cooperation"
+    DEVELOPMENTAL_ACQUISITION = "developmental_acquisition"
+    DEVELOPMENTAL_SOURCE_MIX = "developmental_source_mix"
+    DEVELOPMENTAL_DIVERGENCE = "developmental_divergence"
 
 
 class DenominatorKind(StrEnum):
@@ -1215,6 +1218,90 @@ def _spec_intergenerational_cooperation() -> MetricSpecification:
             "cross_generation_rate",
         ),
         empty_case="availability=absent; no_care_act_rows",
+    )
+
+
+def _spec_developmental_acquisition() -> MetricSpecification:
+    return _base(
+        family_id=MetricFamilyId.DEVELOPMENTAL_ACQUISITION,
+        evidence_inputs=frozenset({EvidenceStage.AGENT_VISIBLE_PROJECTION}),
+        population="developmental_acquisition_audits",
+        denominator="acquired_audit_rows",
+        denominator_kind=DenominatorKind.OCCURRENCE,
+        cohort_window="audits harvested after the run",
+        deceased_policy="not_applicable",
+        zero_holding_policy="no audits -> availability=absent",
+        opportunity_vs_occurrence="acquired rows only; skips do not inflate coverage",
+        self_edge_policy="not_applicable",
+        censoring_policy="metadata-only; never concept payloads",
+        formulas={
+            "mean_domain_coverage": "mean unique domains acquired per agent",
+            "mean_confidence_mass": "mean confidence-band mass over acquired rows",
+            "mean_time_to_first_entry": "mean tick of first acquired row per agent",
+        },
+        value_keys=(
+            "acquired_count",
+            "agent_count",
+            "mean_confidence_mass",
+            "mean_domain_coverage",
+            "mean_time_to_first_entry",
+        ),
+        empty_case="availability=absent; no_developmental_audits",
+    )
+
+
+def _spec_developmental_source_mix() -> MetricSpecification:
+    return _base(
+        family_id=MetricFamilyId.DEVELOPMENTAL_SOURCE_MIX,
+        evidence_inputs=frozenset({EvidenceStage.AGENT_VISIBLE_PROJECTION}),
+        population="developmental_acquisition_audits",
+        denominator="acquired_audit_rows",
+        denominator_kind=DenominatorKind.OCCURRENCE,
+        cohort_window="audits harvested after the run",
+        deceased_policy="not_applicable",
+        zero_holding_policy="no acquired rows -> availability=absent",
+        opportunity_vs_occurrence="source share among acquired rows",
+        self_edge_policy="not_applicable",
+        censoring_policy="teacher ids metadata-only; never overloads cultural_transmission",
+        formulas={
+            "share_<source>": "count(source) / acquired_count",
+            "dominant_source_share": "max source share",
+            "teacher_entropy": "normalized Shannon entropy over teacher ids",
+        },
+        value_keys=(
+            "acquired_count",
+            "dominant_source_share",
+            "source_kind_count",
+            "teacher_entropy",
+            "teacher_present_count",
+        ),
+        empty_case="availability=absent; no_acquired_audits",
+    )
+
+
+def _spec_developmental_divergence() -> MetricSpecification:
+    return _base(
+        family_id=MetricFamilyId.DEVELOPMENTAL_DIVERGENCE,
+        evidence_inputs=frozenset({EvidenceStage.AGENT_VISIBLE_PROJECTION}),
+        population="developmental_knowledge_ledgers",
+        denominator="owner_ledger_pairs",
+        denominator_kind=DenominatorKind.OCCURRENCE,
+        cohort_window="caller-supplied owner ledgers after the run",
+        deceased_policy="not_applicable",
+        zero_holding_policy="fewer than two ledgers -> availability=absent",
+        opportunity_vs_occurrence="pairwise Jaccard distance of concept keys",
+        self_edge_policy="self_pairs_excluded",
+        censoring_policy="never imports knowledge_diffusion; analysis-only",
+        formulas={
+            "mean_pairwise_distance": "mean 1 - |A∩B|/|A∪B| over pairs",
+            "max_pairwise_distance": "max pairwise Jaccard distance",
+        },
+        value_keys=(
+            "max_pairwise_distance",
+            "mean_pairwise_distance",
+            "pair_count",
+        ),
+        empty_case="availability=absent; insufficient_agents",
     )
 
 
@@ -2523,6 +2610,9 @@ _BUILDERS: Final[tuple[Callable[[], MetricSpecification], ...]] = (
     _spec_caregiver_diversity,
     _spec_caregiving_burden,
     _spec_intergenerational_cooperation,
+    _spec_developmental_acquisition,
+    _spec_developmental_source_mix,
+    _spec_developmental_divergence,
     _spec_emergent_group_formation,
     _spec_emergent_social_norms,
     _spec_persistent_social_conventions,

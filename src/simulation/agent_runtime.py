@@ -458,6 +458,7 @@ class AgentRuntime:
         "_theory_of_mind",
         "_translator",
         "_world_model_audits",
+        "_developmental_audits",
     )
 
     def __init__(
@@ -516,6 +517,7 @@ class AgentRuntime:
         self._offline_consolidation_audits: list[object] = []
         self._reflection_audits: list[object] = []
         self._world_model_audits: list[object] = []
+        self._developmental_audits: list[object] = []
         self._mind_audits: list[object] = []
         self._prospective_audits: list[object] = []
         self._cognitive_budget_audits: list[object] = []
@@ -984,6 +986,22 @@ class AgentRuntime:
                 agent_id=owner.value,
             )
         self._developmental_knowledge = ledger
+        from agents.cognition.developmental_learning import DevelopmentalAcquisitionAudit
+
+        pending_audits = getattr(self._loop, "_last_developmental_audits", ())
+        for audit in pending_audits:
+            if type(audit) is DevelopmentalAcquisitionAudit:
+                self._developmental_audits.append(audit)
+                _LOG.debug(
+                    "developmental_audit_append owner_id=%s domain=%s source=%s "
+                    "acquired=%s reason_code=%s",
+                    owner.value,
+                    audit.domain_id.value,
+                    audit.source_id.value,
+                    audit.acquired,
+                    audit.reason_code,
+                )
+        self._loop._last_developmental_audits = ()
         _LOG.debug(
             "developmental_knowledge_carried owner_id=%s entry_count=%s tick=%s",
             owner.value,
@@ -3065,6 +3083,10 @@ class AgentRuntime:
 
     def export_world_model_audits(self) -> tuple[object, ...]:
         return tuple(self._world_model_audits)
+
+    def export_developmental_acquisition_audits(self) -> tuple[object, ...]:
+        """Harvest metadata-only developmental acquisition audits."""
+        return tuple(self._developmental_audits)
 
     def export_mind_audits(self) -> tuple[object, ...]:
         return tuple(self._mind_audits)

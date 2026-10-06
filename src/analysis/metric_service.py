@@ -71,6 +71,11 @@ from analysis.dependency_care_metrics import (
     compute_dependency_survival,
     compute_intergenerational_cooperation,
 )
+from analysis.developmental_learning_metrics import (
+    compute_developmental_acquisition,
+    compute_developmental_divergence,
+    compute_developmental_source_mix,
+)
 from analysis.specifications import MetricFamilyId, metric_specification
 from analysis.territorial_concentration_metrics import compute_territorial_concentration
 from analysis.transmission_metrics import (
@@ -126,6 +131,8 @@ class MetricComputationInputs:
     kinship_max_depth: int = 8
     dependency_agent_rows: Sequence[object] | None = None
     dependency_care_act_rows: Sequence[object] | None = None
+    developmental_acquisition_audits: Sequence[object] | None = None
+    developmental_knowledge_ledgers: Sequence[object] | None = None
     territorial_presence_rows: Sequence[object] | None = None
     territorial_control_rows: Sequence[object] | None = None
     belief_convergence_claims: Sequence[object] | None = None
@@ -470,11 +477,43 @@ def assemble_metric_documents(inputs: MetricComputationInputs) -> MetricBundle:
                 input_revision=revision,
             ),
         )
+    if inputs.developmental_acquisition_audits is not None:
+        dev_audits = inputs.developmental_acquisition_audits
+        _safe(
+            "developmental_acquisition",
+            lambda: compute_developmental_acquisition(
+                dev_audits,
+                run_id=run_id,
+                input_revision=revision,
+            ),
+        )
+        _safe(
+            "developmental_source_mix",
+            lambda: compute_developmental_source_mix(
+                dev_audits,
+                run_id=run_id,
+                input_revision=revision,
+            ),
+        )
+    if inputs.developmental_knowledge_ledgers is not None:
+        ledgers = inputs.developmental_knowledge_ledgers
+        _safe(
+            "developmental_divergence",
+            lambda: compute_developmental_divergence(
+                ledgers,
+                run_id=run_id,
+                input_revision=revision,
+            ),
+        )
     optional_blocks = {
         "kinship_genealogy": inputs.kinship_edge_rows is not None,
         "dependency_care": (
             inputs.dependency_agent_rows is not None
             or inputs.dependency_care_act_rows is not None
+        ),
+        "developmental_learning": (
+            inputs.developmental_acquisition_audits is not None
+            or inputs.developmental_knowledge_ledgers is not None
         ),
         "territorial_presence": inputs.territorial_presence_rows is not None,
         "territorial_control": inputs.territorial_control_rows is not None,

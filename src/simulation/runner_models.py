@@ -2799,6 +2799,7 @@ class SimulationRunnerResult:
     cognitive_budget_audits: tuple[object, ...] = ()
     skill_audits: tuple[object, ...] = ()
     teaching_audits: tuple[object, ...] = ()
+    developmental_acquisition_audits: tuple[object, ...] = ()
 
     def __post_init__(self) -> None:
         from simulation.models import RunId
@@ -2927,6 +2928,17 @@ class SimulationRunnerResult:
             if type(row) is not TeachingAudit:
                 raise TypeError("teaching_audits: invalid_item")
         object.__setattr__(self, "teaching_audits", teaching_rows)
+        if isinstance(self.developmental_acquisition_audits, (set, frozenset)):
+            raise TypeError("developmental_acquisition_audits must be ordered")
+        from agents.cognition.developmental_learning import DevelopmentalAcquisitionAudit
+
+        developmental_rows = tuple(self.developmental_acquisition_audits)
+        for row in developmental_rows:
+            if type(row) is not DevelopmentalAcquisitionAudit:
+                raise TypeError("developmental_acquisition_audits: invalid_item")
+        object.__setattr__(
+            self, "developmental_acquisition_audits", developmental_rows
+        )
 
 
 class CognitionFailurePolicy(StrEnum):
