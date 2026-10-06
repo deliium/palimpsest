@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import logging
 import math
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from enum import StrEnum
 from typing import Final
@@ -49,6 +49,9 @@ _TEACHER_ALLOWED_SOURCES: Final[frozenset[str]] = frozenset(
 
 __all__ = [
     "DEVELOPMENTAL_LEARNING_POLICY_VERSION",
+    "DevelopmentalAcquisitionAudit",
+    "DevelopmentalAcquisitionContext",
+    "DevelopmentalAcquisitionResult",
     "DevelopmentalBudgetDecision",
     "DevelopmentalDomainId",
     "DevelopmentalDomainRate",
@@ -56,9 +59,12 @@ __all__ = [
     "DevelopmentalKnowledgeLedger",
     "DevelopmentalSourceId",
     "DevelopmentalStageCompose",
+    "apply_developmental_acquisition",
     "apply_developmental_budget_coupling",
     "compose_developmental_effective_rate",
     "empty_developmental_knowledge_ledger",
+    "parse_developmental_domain_id",
+    "parse_developmental_source_id",
     "require_owner_developmental_knowledge",
     "upsert_developmental_entry",
 ]
@@ -607,3 +613,626 @@ def apply_developmental_budget_coupling(
         decision.proceed,
     )
     return decision
+
+
+def _confidence_band(confidence: float) -> str:
+    if confidence <= 0.0:
+        return "none"
+    if confidence < 0.34:
+        return "low"
+    if confidence < 0.67:
+        return "mid"
+    return "high"
+
+
+@dataclass(frozen=True, slots=True)
+class DevelopmentalAcquisitionAudit:
+    """Metadata-only acquisition attempt record (no concept payloads)."""
+
+    owner_id: AgentId
+    domain_id: DevelopmentalDomainId
+    source_id: DevelopmentalSourceId
+    tick: int
+    acquired: bool
+    confidence_band: str
+    reason_code: str
+    teacher_present: bool
+    teacher_agent_id: AgentId | None = None
+
+    def __post_init__(self) -> None:
+        if type(self.owner_id) is not AgentId:
+            raise _fail("owner_id", "invalid_type")
+        object.__setattr__(
+            self, "domain_id", parse_developmental_domain_id(self.domain_id)
+        )
+        object.__setattr__(
+            self, "source_id", parse_developmental_source_id(self.source_id)
+        )
+        object.__setattr__(
+            self, "tick", require_exact_nonneg_int("tick", self.tick)
+        )
+        if type(self.acquired) is not bool:
+            raise _fail("acquired", "invalid_type")
+        band = require_stable_id("confidence_band", self.confidence_band)
+        if band not in {"none", "low", "mid", "high"}:
+            raise _fail("confidence_band", "unknown_band")
+        object.__setattr__(self, "confidence_band", band)
+        object.__setattr__(
+            self, "reason_code", require_stable_id("reason_code", self.reason_code)
+        )
+        if type(self.teacher_present) is not bool:
+            raise _fail("teacher_present", "invalid_type")
+        teacher = self.teacher_agent_id
+        if teacher is not None and type(teacher) is not AgentId:
+            raise _fail("teacher_agent_id", "invalid_type")
+        if teacher is not None and not self.teacher_present:
+            raise _fail("teacher_present", "teacher_mismatch")
+
+
+@dataclass(frozen=True, slots=True)
+class DevelopmentalAcquisitionContext:
+    """Per-tick knobs for acquisition (modes, rates, budgets). Duck-typed inputs."""
+
+    lifecycle_factor: float = 1.0
+    learning_rate_zero: bool = False
+    budget_enforced: bool = False
+    budget_ledger: object | None = None
+    predictive_world_model: bool = False
+    skill_learning_on: bool = False
+    teaching_on: bool = False
+    semantic_naming_on: bool = False
+    social_norm_on: bool = False
+    social_convention_on: bool = False
+    cultural_narrative_on: bool = False
+    artifact_interpretation_on: bool = False
+    advice_delta: tuple[object, ...] = ()
+
+
+@dataclass(frozen=True, slots=True)
+class DevelopmentalAcquisitionResult:
+    """Updated ledger plus metadata audits from one acquisition pass."""
+
+    ledger: DevelopmentalKnowledgeLedger
+    audits: tuple[DevelopmentalAcquisitionAudit, ...]
+    world_model_uplift: bool
+
+
+@dataclass(frozen=True, slots=True)
+class _AcquisitionCandidate:
+    domain: DevelopmentalDomainId
+    source: DevelopmentalSourceId
+    concept_key: str
+    evidence_ref: str
+    teacher_agent_id: AgentId | None = None
+
+
+_DOMAIN_MODE_GATES: Final[Mapping[str, str]] = {
+    DevelopmentalDomainId.SKILLS.value: "skill_learning_on",
+    DevelopmentalDomainId.VOCABULARY.value: "semantic_naming_on",
+    DevelopmentalDomainId.NORMS.value: "social_norm_on",
+    DevelopmentalDomainId.STORIES.value: "cultural_narrative_on",
+    DevelopmentalDomainId.PRACTICES.value: "social_convention_on",
+}
+
+
+def _mode_allows(
+    domain: DevelopmentalDomainId, context: DevelopmentalAcquisitionContext
+) -> bool:
+    gate = _DOMAIN_MODE_GATES.get(domain.value)
+    if gate is None:
+        return True
+    return bool(getattr(context, gate, False))
+
+
+def _collect_observation_candidates(
+    observation: object,
+    *,
+    enabled_domains: frozenset[str],
+    enabled_sources: frozenset[str],
+) -> list[_AcquisitionCandidate]:
+    from world.observations import Observation
+
+    if type(observation) is not Observation:
+        return []
+    tick = observation.tick
+    out: list[_AcquisitionCandidate] = []
+    if DevelopmentalSourceId.OBSERVATION.value in enabled_sources:
+        if DevelopmentalDomainId.LOCATIONS.value in enabled_domains:
+            for loc in observation.locations:
+                out.append(
+                    _AcquisitionCandidate(
+                        domain=DevelopmentalDomainId.LOCATIONS,
+                        source=DevelopmentalSourceId.OBSERVATION,
+                        concept_key=f"loc:{loc.entity_id.value}",
+                        evidence_ref=f"obs:{tick}:loc:{loc.entity_id.value}",
+                    )
+                )
+            self_body = observation.self_body
+            if self_body is not None:
+                out.append(
+                    _AcquisitionCandidate(
+                        domain=DevelopmentalDomainId.LOCATIONS,
+                        source=DevelopmentalSourceId.OBSERVATION,
+                        concept_key=f"loc:{self_body.location_id.value}",
+                        evidence_ref=f"obs:{tick}:self_loc:{self_body.location_id.value}",
+                    )
+                )
+        if DevelopmentalDomainId.RESOURCES.value in enabled_domains:
+            for resource in observation.resources:
+                out.append(
+                    _AcquisitionCandidate(
+                        domain=DevelopmentalDomainId.RESOURCES,
+                        source=DevelopmentalSourceId.OBSERVATION,
+                        concept_key=f"res:{resource.entity_id.value}",
+                        evidence_ref=f"obs:{tick}:res:{resource.entity_id.value}",
+                    )
+                )
+        if DevelopmentalDomainId.HAZARDS.value in enabled_domains:
+            hazards = observation.hazard_kinds or ()
+            for hazard in hazards:
+                kind = getattr(hazard, "value", str(hazard))
+                out.append(
+                    _AcquisitionCandidate(
+                        domain=DevelopmentalDomainId.HAZARDS,
+                        source=DevelopmentalSourceId.OBSERVATION,
+                        concept_key=f"haz:{kind}",
+                        evidence_ref=f"obs:{tick}:haz:{kind}",
+                    )
+                )
+        if DevelopmentalDomainId.SOCIAL_ACTORS.value in enabled_domains:
+            for body in observation.visible_bodies:
+                out.append(
+                    _AcquisitionCandidate(
+                        domain=DevelopmentalDomainId.SOCIAL_ACTORS,
+                        source=DevelopmentalSourceId.OBSERVATION,
+                        concept_key=f"actor:{body.entity_id.value}",
+                        evidence_ref=f"obs:{tick}:actor:{body.entity_id.value}",
+                    )
+                )
+    if DevelopmentalSourceId.EXPERIMENTATION.value in enabled_sources:
+        for occurrence in observation.occurrences:
+            kind = str(getattr(occurrence, "kind", "")).lower()
+            if "fail" not in kind and "success" not in kind and "trial" not in kind:
+                continue
+            event_id = getattr(occurrence.provenance, "event_id", None)
+            evidence = (
+                f"evt:{event_id.value}"
+                if event_id is not None and hasattr(event_id, "value")
+                else f"occ:{tick}:{kind}"
+            )
+            if DevelopmentalDomainId.SKILLS.value in enabled_domains:
+                out.append(
+                    _AcquisitionCandidate(
+                        domain=DevelopmentalDomainId.SKILLS,
+                        source=DevelopmentalSourceId.EXPERIMENTATION,
+                        concept_key=f"skill:trial:{kind}",
+                        evidence_ref=evidence,
+                    )
+                )
+            if DevelopmentalDomainId.PRACTICES.value in enabled_domains:
+                out.append(
+                    _AcquisitionCandidate(
+                        domain=DevelopmentalDomainId.PRACTICES,
+                        source=DevelopmentalSourceId.EXPERIMENTATION,
+                        concept_key=f"practice:trial:{kind}",
+                        evidence_ref=evidence,
+                    )
+                )
+    if DevelopmentalSourceId.COMMUNICATION.value in enabled_sources:
+        for comm in observation.communications:
+            speaker = getattr(comm, "speaker_id", None) or getattr(
+                comm, "source_id", None
+            )
+            teacher = None
+            if speaker is not None:
+                token = getattr(speaker, "value", str(speaker))
+                teacher = AgentId(token) if token else None
+            action = getattr(comm, "action_kind", "talk")
+            domains_for_comm = (
+                DevelopmentalDomainId.VOCABULARY,
+                DevelopmentalDomainId.SOCIAL_ACTORS,
+                DevelopmentalDomainId.STORIES,
+            )
+            for domain in domains_for_comm:
+                if domain.value not in enabled_domains:
+                    continue
+                out.append(
+                    _AcquisitionCandidate(
+                        domain=domain,
+                        source=DevelopmentalSourceId.COMMUNICATION,
+                        concept_key=f"comm:{action}:{tick}",
+                        evidence_ref=f"comm:{tick}:{action}",
+                        teacher_agent_id=teacher,
+                    )
+                )
+    if DevelopmentalSourceId.IMITATION.value in enabled_sources:
+        for occurrence in observation.occurrences:
+            other = getattr(occurrence, "other_entity_id", None)
+            if other is None:
+                continue
+            kind = str(getattr(occurrence, "kind", "act")).lower()
+            if "success" not in kind and "complete" not in kind:
+                continue
+            teacher = AgentId(other.value) if hasattr(other, "value") else AgentId(str(other))
+            if DevelopmentalDomainId.PRACTICES.value in enabled_domains:
+                out.append(
+                    _AcquisitionCandidate(
+                        domain=DevelopmentalDomainId.PRACTICES,
+                        source=DevelopmentalSourceId.IMITATION,
+                        concept_key=f"practice:imit:{kind}",
+                        evidence_ref=f"imit:{tick}:{other.value if hasattr(other, 'value') else other}",
+                        teacher_agent_id=teacher,
+                    )
+                )
+            if DevelopmentalDomainId.SKILLS.value in enabled_domains:
+                out.append(
+                    _AcquisitionCandidate(
+                        domain=DevelopmentalDomainId.SKILLS,
+                        source=DevelopmentalSourceId.IMITATION,
+                        concept_key=f"skill:imit:{kind}",
+                        evidence_ref=f"imit:{tick}:skill:{kind}",
+                        teacher_agent_id=teacher,
+                    )
+                )
+    if DevelopmentalSourceId.ARTIFACT.value in enabled_sources:
+        for artifact in observation.artifacts:
+            aid = artifact.entity_id.value
+            if DevelopmentalDomainId.VOCABULARY.value in enabled_domains:
+                out.append(
+                    _AcquisitionCandidate(
+                        domain=DevelopmentalDomainId.VOCABULARY,
+                        source=DevelopmentalSourceId.ARTIFACT,
+                        concept_key=f"vocab:art:{aid}",
+                        evidence_ref=f"art:{aid}",
+                    )
+                )
+            if DevelopmentalDomainId.PRACTICES.value in enabled_domains:
+                out.append(
+                    _AcquisitionCandidate(
+                        domain=DevelopmentalDomainId.PRACTICES,
+                        source=DevelopmentalSourceId.ARTIFACT,
+                        concept_key=f"practice:art:{aid}",
+                        evidence_ref=f"art:{aid}",
+                    )
+                )
+            if DevelopmentalDomainId.LOCATIONS.value in enabled_domains:
+                out.append(
+                    _AcquisitionCandidate(
+                        domain=DevelopmentalDomainId.LOCATIONS,
+                        source=DevelopmentalSourceId.ARTIFACT,
+                        concept_key=f"loc:art:{aid}",
+                        evidence_ref=f"art:{aid}",
+                    )
+                )
+    return out
+
+
+def _collect_instruction_candidates(
+    advice_delta: Sequence[object],
+    *,
+    enabled_domains: frozenset[str],
+    enabled_sources: frozenset[str],
+) -> list[_AcquisitionCandidate]:
+    if DevelopmentalSourceId.INSTRUCTION.value not in enabled_sources:
+        return []
+    out: list[_AcquisitionCandidate] = []
+    for row in advice_delta:
+        teacher = getattr(row, "source_agent_id", None)
+        if type(teacher) is not AgentId:
+            teacher = None
+        domain_token = getattr(getattr(row, "domain", None), "value", None) or str(
+            getattr(row, "domain", "skill")
+        )
+        occurrence = getattr(row, "occurrence_id", "teach")
+        mapped = DevelopmentalDomainId.SKILLS
+        if "norm" in domain_token.lower():
+            mapped = DevelopmentalDomainId.NORMS
+        elif "practice" in domain_token.lower() or "convention" in domain_token.lower():
+            mapped = DevelopmentalDomainId.PRACTICES
+        elif "vocab" in domain_token.lower() or "name" in domain_token.lower():
+            mapped = DevelopmentalDomainId.VOCABULARY
+        elif "stor" in domain_token.lower() or "narrative" in domain_token.lower():
+            mapped = DevelopmentalDomainId.STORIES
+        if mapped.value not in enabled_domains:
+            continue
+        out.append(
+            _AcquisitionCandidate(
+                domain=mapped,
+                source=DevelopmentalSourceId.INSTRUCTION,
+                concept_key=f"instr:{domain_token}:{occurrence}",
+                evidence_ref=f"teach:{occurrence}",
+                teacher_agent_id=teacher,
+            )
+        )
+    return out
+
+
+def apply_developmental_acquisition(
+    ledger: DevelopmentalKnowledgeLedger,
+    *,
+    spec: object,
+    observation: object,
+    context: DevelopmentalAcquisitionContext | None = None,
+) -> DevelopmentalAcquisitionResult:
+    """Apply enabled domain/source adapters; never copy peer subjective stores.
+
+    CausalWorldModel uplift is reported as eligible only when
+    ``context.predictive_world_model`` is true; this function does not mutate
+    world-model state (existing loop path owns that).
+    """
+    if type(ledger) is not DevelopmentalKnowledgeLedger:
+        raise _fail("ledger", "invalid_type")
+    ctx = context if context is not None else DevelopmentalAcquisitionContext()
+    mode = getattr(spec, "developmental_learning_mode", None)
+    if mode != "deterministic":
+        _LOG.debug(
+            "developmental_acquisition_skip owner_id=%s reason_code=%s",
+            ledger.owner_id.value,
+            "channel_mode_off",
+        )
+        return DevelopmentalAcquisitionResult(
+            ledger=ledger, audits=(), world_model_uplift=False
+        )
+
+    enabled_domains = frozenset(str(d) for d in getattr(spec, "enabled_domains", ()))
+    enabled_sources = frozenset(str(s) for s in getattr(spec, "enabled_sources", ()))
+    domain_rates = getattr(spec, "domain_rates", {})
+    source_weights = getattr(spec, "source_weights", {})
+    coupling = getattr(spec, "cognitive_budget_coupling", None)
+    coupling_mode = getattr(coupling, "mode", "ignore") if coupling else "ignore"
+    degrade_policy = (
+        getattr(coupling, "degrade_policy", "skip_acquisition")
+        if coupling
+        else "skip_acquisition"
+    )
+    acquisition_cost = (
+        int(getattr(coupling, "acquisition_cost_units", 0)) if coupling else 0
+    )
+
+    candidates = _collect_observation_candidates(
+        observation,
+        enabled_domains=enabled_domains,
+        enabled_sources=enabled_sources,
+    )
+    candidates.extend(
+        _collect_instruction_candidates(
+            ctx.advice_delta,
+            enabled_domains=enabled_domains,
+            enabled_sources=enabled_sources,
+        )
+    )
+
+    # Deterministic order: domain, source, concept_key.
+    candidates.sort(
+        key=lambda c: (c.domain.value, c.source.value, c.concept_key, c.evidence_ref)
+    )
+
+    tick = int(getattr(observation, "tick", 0))
+    audits: list[DevelopmentalAcquisitionAudit] = []
+    current = ledger
+    world_model_uplift = False
+    spatial_domains = {
+        DevelopmentalDomainId.LOCATIONS,
+        DevelopmentalDomainId.RESOURCES,
+        DevelopmentalDomainId.HAZARDS,
+    }
+
+    for candidate in candidates:
+        if candidate.domain.value not in enabled_domains:
+            continue
+        if candidate.source.value not in enabled_sources:
+            continue
+        if not _mode_allows(candidate.domain, ctx):
+            if (
+                candidate.source is DevelopmentalSourceId.ARTIFACT
+                and not ctx.artifact_interpretation_on
+            ):
+                reason = "artifact_mode_off"
+            else:
+                reason = "required_mode_off"
+            _LOG.debug(
+                "developmental_acquisition_skip owner_id=%s domain=%s source=%s "
+                "reason_code=%s",
+                ledger.owner_id.value,
+                candidate.domain.value,
+                candidate.source.value,
+                reason,
+            )
+            audits.append(
+                DevelopmentalAcquisitionAudit(
+                    owner_id=ledger.owner_id,
+                    domain_id=candidate.domain,
+                    source_id=candidate.source,
+                    tick=tick,
+                    acquired=False,
+                    confidence_band="none",
+                    reason_code=reason,
+                    teacher_present=candidate.teacher_agent_id is not None,
+                    teacher_agent_id=candidate.teacher_agent_id,
+                )
+            )
+            continue
+        if (
+            candidate.source is DevelopmentalSourceId.ARTIFACT
+            and not ctx.artifact_interpretation_on
+        ):
+            _LOG.debug(
+                "developmental_acquisition_skip owner_id=%s domain=%s source=%s "
+                "reason_code=%s",
+                ledger.owner_id.value,
+                candidate.domain.value,
+                candidate.source.value,
+                "artifact_mode_off",
+            )
+            audits.append(
+                DevelopmentalAcquisitionAudit(
+                    owner_id=ledger.owner_id,
+                    domain_id=candidate.domain,
+                    source_id=candidate.source,
+                    tick=tick,
+                    acquired=False,
+                    confidence_band="none",
+                    reason_code="artifact_mode_off",
+                    teacher_present=False,
+                )
+            )
+            continue
+
+        rate_obj = domain_rates.get(candidate.domain.value)
+        if rate_obj is None:
+            continue
+        base_rate = float(getattr(rate_obj, "base_rate", 0.0))
+        stage_compose = getattr(
+            rate_obj,
+            "stage_compose",
+            DevelopmentalStageCompose.MULTIPLY_LIFECYCLE_LEARNING_RATE,
+        )
+        min_exposures = int(getattr(rate_obj, "min_exposures", 0))
+        confidence_floor = float(getattr(rate_obj, "confidence_floor", 0.0))
+        source_weight = float(source_weights.get(candidate.source.value, 0.0))
+        if source_weight <= 0.0:
+            continue
+
+        already = any(
+            row.domain_id is candidate.domain and row.concept_key == candidate.concept_key
+            for row in current.entries
+        )
+        exposure_count = min_exposures if already else 1
+        effective = compose_developmental_effective_rate(
+            owner_id=ledger.owner_id,
+            domain=candidate.domain,
+            base_rate=base_rate,
+            source_weight=source_weight,
+            stage_compose=stage_compose,
+            lifecycle_factor=ctx.lifecycle_factor,
+            learning_rate_zero=ctx.learning_rate_zero,
+            exposure_count=exposure_count,
+            min_exposures=min_exposures,
+        )
+        if effective <= 0.0:
+            audits.append(
+                DevelopmentalAcquisitionAudit(
+                    owner_id=ledger.owner_id,
+                    domain_id=candidate.domain,
+                    source_id=candidate.source,
+                    tick=tick,
+                    acquired=False,
+                    confidence_band="none",
+                    reason_code="rate_zero",
+                    teacher_present=candidate.teacher_agent_id is not None,
+                    teacher_agent_id=candidate.teacher_agent_id,
+                )
+            )
+            continue
+
+        budget = apply_developmental_budget_coupling(
+            owner_id=ledger.owner_id,
+            effective_rate=effective,
+            coupling_mode=str(coupling_mode),
+            degrade_policy=str(degrade_policy),
+            acquisition_cost_units=acquisition_cost,
+            budget_enforced=ctx.budget_enforced,
+            budget_ledger=ctx.budget_ledger,
+        )
+        if not budget.proceed:
+            audits.append(
+                DevelopmentalAcquisitionAudit(
+                    owner_id=ledger.owner_id,
+                    domain_id=candidate.domain,
+                    source_id=candidate.source,
+                    tick=tick,
+                    acquired=False,
+                    confidence_band="none",
+                    reason_code=budget.reason_code,
+                    teacher_present=candidate.teacher_agent_id is not None,
+                    teacher_agent_id=candidate.teacher_agent_id,
+                )
+            )
+            continue
+
+        confidence = max(confidence_floor, budget.effective_rate)
+        if confidence <= 0.0:
+            audits.append(
+                DevelopmentalAcquisitionAudit(
+                    owner_id=ledger.owner_id,
+                    domain_id=candidate.domain,
+                    source_id=candidate.source,
+                    tick=tick,
+                    acquired=False,
+                    confidence_band="none",
+                    reason_code="confidence_floor_blocked",
+                    teacher_present=candidate.teacher_agent_id is not None,
+                    teacher_agent_id=candidate.teacher_agent_id,
+                )
+            )
+            continue
+
+        entry = DevelopmentalKnowledgeEntry(
+            domain_id=candidate.domain,
+            concept_key=candidate.concept_key,
+            source_id=candidate.source,
+            confidence=confidence,
+            acquired_tick=tick,
+            evidence_refs=(candidate.evidence_ref,),
+            teacher_agent_id=candidate.teacher_agent_id,
+        )
+        current = upsert_developmental_entry(current, entry)
+        uplift = (
+            candidate.domain in spatial_domains
+            and candidate.source
+            in {
+                DevelopmentalSourceId.OBSERVATION,
+                DevelopmentalSourceId.EXPERIMENTATION,
+            }
+            and ctx.predictive_world_model
+        )
+        if candidate.domain in spatial_domains and not ctx.predictive_world_model:
+            _LOG.debug(
+                "developmental_acquisition owner_id=%s domain=%s source=%s "
+                "ledger_touch=%s world_model_uplift=%s",
+                ledger.owner_id.value,
+                candidate.domain.value,
+                candidate.source.value,
+                True,
+                False,
+            )
+        else:
+            _LOG.debug(
+                "developmental_acquisition owner_id=%s domain=%s source=%s "
+                "ledger_touch=%s world_model_uplift=%s",
+                ledger.owner_id.value,
+                candidate.domain.value,
+                candidate.source.value,
+                True,
+                uplift,
+            )
+        if uplift:
+            world_model_uplift = True
+        if candidate.source is DevelopmentalSourceId.INSTRUCTION:
+            _LOG.info(
+                "developmental_instruction_acquired owner_id=%s domain=%s "
+                "teacher_id=%s source=%s",
+                ledger.owner_id.value,
+                candidate.domain.value,
+                None if candidate.teacher_agent_id is None else candidate.teacher_agent_id.value,
+                candidate.source.value,
+            )
+        audits.append(
+            DevelopmentalAcquisitionAudit(
+                owner_id=ledger.owner_id,
+                domain_id=candidate.domain,
+                source_id=candidate.source,
+                tick=tick,
+                acquired=True,
+                confidence_band=_confidence_band(confidence),
+                reason_code="acquired",
+                teacher_present=candidate.teacher_agent_id is not None,
+                teacher_agent_id=candidate.teacher_agent_id,
+            )
+        )
+
+    return DevelopmentalAcquisitionResult(
+        ledger=current,
+        audits=tuple(audits),
+        world_model_uplift=world_model_uplift,
+    )

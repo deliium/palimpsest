@@ -196,6 +196,7 @@ class CognitiveLoop:
         "_intention",
         "_last_cognitive_budget_audit",
         "_last_counterfactual_scenarios",
+        "_last_developmental_audits",
         "_memory",
         "_memory_updates",
         "_motivation",
@@ -751,6 +752,7 @@ class CognitiveLoop:
             else False
         )
         self._deferred_dissonance: tuple[object, ...] = ()
+        self._last_developmental_audits: tuple[object, ...] = ()
 
     def _prepare_reputation(self, loop_input: CognitiveLoopInput) -> object | None:
         from agents.cognition.configuration import CognitionReputationMode
@@ -1096,11 +1098,27 @@ class CognitiveLoop:
         return updated
 
     def _prepare_developmental_knowledge(
-        self, loop_input: CognitiveLoopInput
+        self,
+        loop_input: CognitiveLoopInput,
+        *,
+        advice_delta: tuple[object, ...] = (),
     ) -> object | None:
-        """Carry owner developmental ledger when the channel is active."""
+        """Carry and update owner developmental ledger when the channel is active."""
+        from agents.cognition.artifacts import ArtifactInterpretationMode
+        from agents.cognition.configuration import (
+            CognitionBudgetMode,
+            CognitionCulturalNarrativeMode,
+            CognitionSemanticNamingMode,
+            CognitionSkillLearningMode,
+            CognitionSocialConventionMode,
+            CognitionSocialNormMode,
+            CognitionTeachingInteractionMode,
+            CognitionWorldModelMode,
+        )
         from agents.cognition.developmental_learning import (
+            DevelopmentalAcquisitionContext,
             DevelopmentalKnowledgeLedger,
+            apply_developmental_acquisition,
             empty_developmental_knowledge_ledger,
         )
 
@@ -1112,24 +1130,63 @@ class CognitiveLoop:
             if carried.owner_id != loop_input.agent_id:
                 _LOG.warning("developmental_carry_rejected reason=%s", "owner_mismatch")
                 return None
-            _LOG.debug(
-                "developmental_knowledge_carried owner_id=%s entry_count=%s",
-                loop_input.agent_id.value,
-                len(carried.entries),
+            ledger = carried
+        else:
+            max_entries = int(
+                getattr(self._developmental_learning_spec, "max_entries_per_domain", 256)
             )
-            return carried
-        max_entries = int(
-            getattr(self._developmental_learning_spec, "max_entries_per_domain", 256)
-        )
-        ledger = empty_developmental_knowledge_ledger(
-            loop_input.agent_id, max_entries_per_domain=max_entries
-        )
+            ledger = empty_developmental_knowledge_ledger(
+                loop_input.agent_id, max_entries_per_domain=max_entries
+            )
         _LOG.debug(
             "developmental_knowledge_carried owner_id=%s entry_count=%s",
             loop_input.agent_id.value,
-            0,
+            len(ledger.entries),
         )
-        return ledger
+        budget_enforced = self._cognitive_budget_mode is CognitionBudgetMode.ENFORCED
+        context = DevelopmentalAcquisitionContext(
+            lifecycle_factor=1.0,
+            learning_rate_zero=False,
+            budget_enforced=budget_enforced,
+            budget_ledger=self._tick_budget_ledger if budget_enforced else None,
+            predictive_world_model=(
+                self._world_model_mode is CognitionWorldModelMode.ENABLED
+            ),
+            skill_learning_on=(
+                self._skill_learning_mode is CognitionSkillLearningMode.DETERMINISTIC
+            ),
+            teaching_on=(
+                self._teaching_mode is CognitionTeachingInteractionMode.DETERMINISTIC
+            ),
+            semantic_naming_on=(
+                self._semantic_naming_mode is CognitionSemanticNamingMode.DETERMINISTIC
+            ),
+            social_norm_on=(
+                self._social_norm_mode is CognitionSocialNormMode.DETERMINISTIC
+            ),
+            social_convention_on=(
+                self._social_convention_mode
+                is CognitionSocialConventionMode.DETERMINISTIC
+            ),
+            cultural_narrative_on=(
+                self._cultural_narrative_mode
+                is CognitionCulturalNarrativeMode.DETERMINISTIC
+            ),
+            artifact_interpretation_on=(
+                self._artifact_interpretation_mode
+                is ArtifactInterpretationMode.DETERMINISTIC
+            ),
+            advice_delta=advice_delta,
+        )
+        result = apply_developmental_acquisition(
+            ledger,
+            spec=self._developmental_learning_spec,
+            observation=loop_input.observation,
+            context=context,
+        )
+        # Audits harvested later (Task 12); keep result ledger for carry.
+        self._last_developmental_audits = result.audits
+        return result.ledger
 
     def _prepare_cultural_narratives(
         self,
@@ -1930,9 +1987,27 @@ class CognitiveLoop:
             artifact_interpretations=artifact_interpretations,
             retrieve_context=memory,
         )
-        developmental_knowledge = self._prepare_developmental_knowledge(loop_input)
         competence = self._prepare_competence(loop_input, memory)
         competence, advice = self._prepare_teaching(loop_input, competence)
+        advice_delta: tuple[object, ...] = ()
+        if advice is not None:
+            prior_advice = (
+                None
+                if loop_input.snapshot is None
+                else loop_input.snapshot.declarative_advice
+            )
+            prior_ids = {
+                getattr(row, "occurrence_id", None)
+                for row in getattr(prior_advice, "rows", ())
+            }
+            advice_delta = tuple(
+                row
+                for row in getattr(advice, "rows", ())
+                if getattr(row, "occurrence_id", None) not in prior_ids
+            )
+        developmental_knowledge = self._prepare_developmental_knowledge(
+            loop_input, advice_delta=advice_delta
+        )
         recipe_beliefs = self._prepare_recipe_beliefs(loop_input)
         production_recipe_id = None
         if recipe_beliefs is not None and self._production_allow_provider:

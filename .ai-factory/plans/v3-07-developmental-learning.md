@@ -346,19 +346,19 @@ Follow `skill_learning@1` registration via harvested audits. Do **not** overload
 
 ### Phase 3: Domain acquisition adapters
 
-- [ ] Task 9: Observation + experimentation adapters (locations/resources/hazards)
+- [x] Task 9: Observation + experimentation adapters (locations/resources/hazards)
   - Always eligible to write developmental ledger rows with provenance `observation` / `experimentation` when rates allow. CausalWorldModel / hypothesis uplift **only** when run `predictive_world_model=True`; when flag off, skip uplift with stable DEBUG reason (ledger still may grow). No silent encyclopedia. Requires learner pack modes/capacity from Task 2 for applicable agents.
   - LOGGING: DEBUG `{owner_id, domain, source, ledger_touch, world_model_uplift}`.
   - Files: `src/agents/cognition/developmental_learning.py`, `loop.py` / world_model hooks, unit tests
   - Depends on: Task 2, Task 6, Task 7
 
-- [ ] Task 10: Social source adapters (instruction/imitation/communication)
+- [x] Task 10: Social source adapters (instruction/imitation/communication)
   - Gate teaching / imitation / communicated-memory uplift for enabled social domains through developmental rates; provenance must capture optional `teacher_agent_id`. Never copy sender stores — fresh owner entries only. Skip domain if required mode off.
   - LOGGING: INFO on successful instructed acquisition `{owner_id, domain, teacher_id, source}` (ids only); DEBUG on discount/reject.
   - Files: `src/agents/cognition/developmental_learning.py`, hooks near `teaching.py` / communication finalize, unit tests
   - Depends on: Task 9
 
-- [ ] Task 11: Artifact-assisted adapter + cross-agent divergence proof
+- [x] Task 11: Artifact-assisted adapter + cross-agent divergence proof
   - When `artifact` source enabled and `ArtifactInterpretationMode.DETERMINISTIC`, allow mark-derived acquisitions with provenance `artifact` + artifact id evidence. Fixture: two blank-slate learners, different teachers or artifact exposures, matched seeds otherwise → ledger inequality (feeds later divergence metric). Prove isolated arm cannot acquire teacher-only concepts.
   - LOGGING: DEBUG artifact acquisition metadata; INFO divergence proof summary counts only.
   - Files: artifact interpretation hook, `tests/unit/test_developmental_divergence.py`
