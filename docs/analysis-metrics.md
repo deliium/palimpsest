@@ -38,7 +38,7 @@ Executable formula, population, and edge-case policy for all nineteen metric fam
 | `caregiving_burden` | `caregiving_burden@1` | detached care-act rows |
 | `intergenerational_cooperation` | `intergenerational_cooperation@1` | detached care-act + kinship rows |
 
-Catalog version: `metric-catalog-v1`. Document schema: `MetricDocument` schema `1`. Closed catalog cardinality: **53** families (`METRIC_FAMILY_COUNT`). New opt-in families assemble only when their detached inputs are present.
+Catalog version: `metric-catalog-v1`. Document schema: `MetricDocument` schema `1`. Closed catalog cardinality: **56** families (`METRIC_FAMILY_COUNT`). New opt-in families assemble only when their detached inputs are present.
 
 ### Additive analysis surfaces (off the V1 gate)
 
@@ -75,6 +75,10 @@ Catalog version: `metric-catalog-v1`. Document schema: `MetricDocument` schema `
 ### Cultural feature provenance families (off the V1 gate)
 
 `cultural_feature_provenance@1`, `cultural_trait_diffusion@1`, and `cultural_feature_mutation@1` assemble from harvested `CulturalFeatureAudit` rows and optional `AnalyticalCulturalTrait` clusters (`analysis.cultural_feature_metrics` / `analysis.cultural_traits`). They never overload V2 Experiment S / `cultural_transmission@1`, never promote analytical traits into agent stores, and never feed live cognition. Experiment AL stays off the V1 gate.
+
+### Historical memory layer families (off the V1 gate)
+
+`historical_memory_layers@1`, `historical_memory_transitions@1`, and `historical_memory_queries@1` assemble from analysis-only Assmann layer harvests (`analysis.historical_memory` / `analysis.historical_memory_metrics`) when `HistoricalMemoryLayersSpec` is present on `runner-config-v32`. Layer histograms, transition counts, and the locked researcher query report (`any_direct_witnesses_alive`, `anyone_remembers_speaking_to_witness`, `event_known_only_from_stories_or_artifacts`) are researcher constructs only. They never write layer labels into Observation, SelfModel, or subjective ledgers, never overload cultural-feature or narrative families, and never feed cognition. Experiment AM stays off the V1 gate.
 
 ### Supporting formulas (not a separate family)
 
