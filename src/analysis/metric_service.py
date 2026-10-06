@@ -21,9 +21,31 @@ from analysis.belief_metrics import (
     compute_belief_accuracy,
     compute_false_belief_persistence,
 )
+from analysis.cultural_feature_metrics import (
+    compute_cultural_feature_mutation,
+    compute_cultural_feature_provenance,
+    compute_cultural_trait_diffusion,
+)
 from analysis.cultural_similarity_metrics import compute_cultural_similarity
+from analysis.dependency_care_metrics import (
+    compute_caregiver_diversity,
+    compute_caregiving_burden,
+    compute_dependency_survival,
+    compute_intergenerational_cooperation,
+)
+from analysis.developmental_learning_metrics import (
+    compute_developmental_acquisition,
+    compute_developmental_divergence,
+    compute_developmental_source_mix,
+)
+from analysis.kinship_genealogy_metrics import compute_kinship_genealogy
 from analysis.memory_drift import compute_memory_drift
 from analysis.memory_dynamics_metrics import compute_memory_dynamics
+from analysis.mentorship_metrics import (
+    compute_mentorship_bonds,
+    compute_mentorship_fidelity,
+    compute_mentorship_mutation,
+)
 from analysis.models import (
     ActionResolutionRow,
     AppliedActionRow,
@@ -51,48 +73,31 @@ from analysis.objective_metrics import (
     compute_survival,
     compute_survival_cohort_contrast,
 )
-from analysis.prediction_calibration_metrics import compute_prediction_calibration
-from analysis.reputation_metrics import compute_distributed_reputation
 from analysis.offline_consolidation_metrics import (
     OfflineConsolidationReport,
     compute_offline_consolidation,
 )
+from analysis.prediction_calibration_metrics import compute_prediction_calibration
 from analysis.reflection_metrics import ReflectionReport, compute_reflection
 from analysis.relationship_metrics import compute_relationship_stability
+from analysis.reputation_metrics import compute_distributed_reputation
 from analysis.serialization import (
     encode_metric_document,
     metric_document_fingerprint,
 )
 from analysis.spatial_control_metrics import compute_spatial_control
-from analysis.kinship_genealogy_metrics import compute_kinship_genealogy
-from analysis.dependency_care_metrics import (
-    compute_caregiver_diversity,
-    compute_caregiving_burden,
-    compute_dependency_survival,
-    compute_intergenerational_cooperation,
-)
-from analysis.developmental_learning_metrics import (
-    compute_developmental_acquisition,
-    compute_developmental_divergence,
-    compute_developmental_source_mix,
-)
-from analysis.mentorship_metrics import (
-    compute_mentorship_bonds,
-    compute_mentorship_fidelity,
-    compute_mentorship_mutation,
-)
 from analysis.specifications import MetricFamilyId, metric_specification
 from analysis.territorial_concentration_metrics import compute_territorial_concentration
 from analysis.transmission_metrics import (
     compute_knowledge_diffusion,
     compute_rumor_distortion,
 )
+from analysis.truth import ClaimTruthSpec
+from world.identifiers import require_exact_nonneg_int, require_stable_id
 
 _NON_CATALOG_FAMILIES: Final[frozenset[str]] = frozenset(
     {"action_resolution_rates", "survival_cohort_contrast"}
 )
-from analysis.truth import ClaimTruthSpec
-from world.identifiers import require_exact_nonneg_int, require_stable_id
 
 __all__ = [
     "MetricBundle",
@@ -140,6 +145,8 @@ class MetricComputationInputs:
     developmental_knowledge_ledgers: Sequence[object] | None = None
     mentorship_audits: Sequence[object] | None = None
     mentorship_ledgers: Sequence[object] | None = None
+    cultural_feature_audits: Sequence[object] | None = None
+    cultural_feature_generation_index: Mapping[str, int] | None = None
     territorial_presence_rows: Sequence[object] | None = None
     territorial_control_rows: Sequence[object] | None = None
     belief_convergence_claims: Sequence[object] | None = None
@@ -549,6 +556,34 @@ def assemble_metric_documents(inputs: MetricComputationInputs) -> MetricBundle:
                 ledgers=inputs.mentorship_ledgers,
             ),
         )
+    if inputs.cultural_feature_audits is not None:
+        cultural_rows = inputs.cultural_feature_audits
+        gen_map = inputs.cultural_feature_generation_index
+        _safe(
+            "cultural_feature_provenance",
+            lambda: compute_cultural_feature_provenance(
+                cultural_rows,
+                run_id=run_id,
+                input_revision=revision,
+            ),
+        )
+        _safe(
+            "cultural_trait_diffusion",
+            lambda: compute_cultural_trait_diffusion(
+                cultural_rows,
+                run_id=run_id,
+                input_revision=revision,
+                generation_index_by_owner=gen_map,
+            ),
+        )
+        _safe(
+            "cultural_feature_mutation",
+            lambda: compute_cultural_feature_mutation(
+                cultural_rows,
+                run_id=run_id,
+                input_revision=revision,
+            ),
+        )
     optional_blocks = {
         "kinship_genealogy": inputs.kinship_edge_rows is not None,
         "dependency_care": (
@@ -563,6 +598,7 @@ def assemble_metric_documents(inputs: MetricComputationInputs) -> MetricBundle:
             inputs.mentorship_audits is not None
             or inputs.mentorship_ledgers is not None
         ),
+        "cultural_features": inputs.cultural_feature_audits is not None,
         "territorial_presence": inputs.territorial_presence_rows is not None,
         "territorial_control": inputs.territorial_control_rows is not None,
         "belief_convergence": inputs.belief_convergence_claims is not None,

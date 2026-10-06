@@ -2576,6 +2576,61 @@ def intergenerational_mentorship_profile(
     return config
 
 
+def cultural_transmission_provenance_profile(
+    config: SimulationRunnerConfig,
+) -> SimulationRunnerConfig:
+    """Require cultural_historical_memory + exact cultural_feature_provenance on v31.
+
+    Catalog arms for Experiment AL are wired in a later task; this stub
+    validates the profile gate early.
+    """
+    from simulation.runner_models import RUNNER_SCHEMA_VERSION_V31
+
+    if config.schema_version != RUNNER_SCHEMA_VERSION_V31:
+        raise ValueError(
+            "cultural transmission provenance profile requires runner-config-v31 "
+            "(code=cultural_feature_profile_schema "
+            f"got={config.schema_version!r})"
+        )
+    if not config.v3_capability_flags.cultural_historical_memory:
+        raise ValueError(
+            "cultural transmission provenance profile requires "
+            "cultural_historical_memory "
+            "(code=cultural_feature_profile_flag)"
+        )
+    if config.cultural_feature_provenance is None:
+        raise ValueError(
+            "cultural transmission provenance profile requires "
+            "cultural_feature_provenance "
+            "(code=cultural_feature_profile_missing_channel)"
+        )
+    allowed = {
+        "generational_population",
+        "kinship_inheritance",
+        "cultural_historical_memory",
+    }
+    other = tuple(
+        name
+        for name in config.v3_capability_flags.enabled_names()
+        if name not in allowed
+    )
+    if other:
+        raise ValueError(
+            "cultural transmission provenance profile forbids unowned V3 flags "
+            f"(code=cultural_feature_profile_extra_flags flag_count={len(other)})"
+        )
+    _LOG.debug(
+        "cultural_transmission_provenance_profile_ok schema_version=%s "
+        "feature_kinds=%s channels=%s cultural_feature_mode=%s applicability=%s",
+        config.schema_version,
+        list(config.cultural_feature_provenance.enabled_feature_kinds),
+        list(config.cultural_feature_provenance.enabled_provenance_channels),
+        config.cultural_feature_provenance.cultural_feature_mode,
+        config.cultural_feature_provenance.applicability,
+    )
+    return config
+
+
 def developmental_learning_profile(
     config: SimulationRunnerConfig,
 ) -> SimulationRunnerConfig:
@@ -2970,6 +3025,178 @@ def experiment_ak_intergenerational_mentorship(
                 "ak-false-teaching",
                 "mentorship_false_teaching_legal",
                 false_teaching,
+            ),
+        ),
+    )
+
+
+def experiment_al_cultural_transmission_provenance(
+    base: SimulationRunnerConfig,
+    *,
+    seed_matrix: ExperimentSeedMatrix | None = None,
+    max_ticks: int = 10,
+) -> ExperimentDefinition:
+    """Off-gate Experiment AL for cultural feature provenance on runner-config-v31."""
+    from simulation.runner_models import (
+        RUNNER_SCHEMA_VERSION_V4,
+        RUNNER_SCHEMA_VERSION_V31,
+        CulturalFeatureMutationPolicy,
+        CulturalFeatureProvenanceSpec,
+        CulturalFeatureRecombinationPolicy,
+        CulturalFeatureUptakeCompose,
+        example_cultural_feature_provenance_spec,
+    )
+
+    matrix = seed_matrix or ExperimentSeedMatrix(seeds=(base.seed,))
+    if len(base.agents) < 2:
+        raise ValueError(
+            "experiment AL requires at least two agents on the base roster "
+            "(code=cultural_feature_al_roster_too_small)"
+        )
+
+    def _teacher_modes(cfg: SimulationRunnerConfig) -> SimulationRunnerConfig:
+        agents: list[AgentRunnerSpec] = []
+        for agent in cfg.agents:
+            cognition = replace(
+                agent.cognition,
+                skill_learning_mode=SkillLearningMode.DETERMINISTIC,
+                teaching_interaction_mode=TeachingInteractionMode.DETERMINISTIC,
+            )
+            agents.append(replace(agent, cognition=cognition))
+        return replace(cfg, agents=tuple(agents))
+
+    def _with_cultural(spec: CulturalFeatureProvenanceSpec) -> SimulationRunnerConfig:
+        return replace(
+            base,
+            schema_version=RUNNER_SCHEMA_VERSION_V31,
+            mortality_mode=MortalityMode.DISABLED,
+            stop_policy=RunnerStopPolicy(max_ticks=max_ticks),
+            v3_capability_flags=V3CapabilityFlags(cultural_historical_memory=True),
+            cultural_feature_provenance=spec,
+            mentorship=None,
+            population_lifecycle=None,
+            developmental_learning=None,
+            dependency_care=None,
+            kinship=None,
+            new_agent_initialization=None,
+        )
+
+    channel_off = replace(
+        base,
+        schema_version=RUNNER_SCHEMA_VERSION_V4,
+        mortality_mode=MortalityMode.DISABLED,
+        stop_policy=RunnerStopPolicy(max_ticks=max_ticks),
+        v3_capability_flags=V3CapabilityFlags(),
+        cultural_feature_provenance=None,
+    )
+    flags_off = replace(
+        channel_off,
+        schema_version=RUNNER_SCHEMA_VERSION_V4,
+        v3_capability_flags=V3CapabilityFlags(),
+    )
+    belief_only = _with_cultural(
+        example_cultural_feature_provenance_spec(
+            enabled_feature_kinds=(
+                "practice",
+                "term",
+                "narrative_element",
+                "social_expectation",
+            ),
+            enabled_provenance_channels=("observation", "communication"),
+        )
+    )
+    multi = _teacher_modes(
+        _with_cultural(
+            replace(
+                example_cultural_feature_provenance_spec(
+                    enabled_feature_kinds=(
+                        "practice",
+                        "term",
+                        "narrative_element",
+                        "production_technique",
+                    ),
+                    enabled_provenance_channels=(
+                        "observation",
+                        "communication",
+                        "teaching",
+                        "artifact",
+                    ),
+                ),
+                uptake_compose=CulturalFeatureUptakeCompose(teaching=True),
+            )
+        )
+    )
+    mutation = _with_cultural(
+        replace(
+            example_cultural_feature_provenance_spec(
+                enabled_provenance_channels=(
+                    "observation",
+                    "communication",
+                    "imitation",
+                ),
+            ),
+            mutation_policy=CulturalFeatureMutationPolicy(allow_mutation=True),
+        )
+    )
+    recombination = _with_cultural(
+        replace(
+            example_cultural_feature_provenance_spec(),
+            recombination_policy=CulturalFeatureRecombinationPolicy(
+                allow_recombination=True,
+                max_parents=2,
+            ),
+        )
+    )
+    analytical = belief_only
+    for arm in (belief_only, multi, mutation, recombination, analytical):
+        cultural_transmission_provenance_profile(arm)
+    _LOG.info(
+        "experiment_al_built "
+        "experiment_id=experiment-al-cultural-transmission-provenance "
+        "schema_version=%s tick_count=%s arm_count=%s",
+        RUNNER_SCHEMA_VERSION_V31,
+        max_ticks,
+        7,
+    )
+    return _definition(
+        experiment_id="experiment-al-cultural-transmission-provenance",
+        base=base,
+        seed_matrix=matrix,
+        arms=(
+            (
+                "al-channel-off",
+                "cultural_feature_channel_off",
+                channel_off,
+            ),
+            (
+                "al-belief-only",
+                "cultural_feature_belief_only",
+                belief_only,
+            ),
+            (
+                "al-multi-channel",
+                "cultural_feature_multi_channel",
+                multi,
+            ),
+            (
+                "al-mutation",
+                "cultural_feature_mutation",
+                mutation,
+            ),
+            (
+                "al-recombination",
+                "cultural_feature_recombination",
+                recombination,
+            ),
+            (
+                "al-analytical",
+                "cultural_feature_analytical_traits",
+                analytical,
+            ),
+            (
+                "al-flags-off",
+                "cultural_feature_v3_flags_off",
+                flags_off,
             ),
         ),
     )

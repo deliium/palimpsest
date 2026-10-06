@@ -50,7 +50,7 @@ __all__ = [
 ]
 
 METRIC_CATALOG_VERSION: Final[str] = "metric-catalog-v1"
-METRIC_FAMILY_COUNT: Final[int] = 50
+METRIC_FAMILY_COUNT: Final[int] = 53
 
 # Align with existing memory-drift / transmission document versions.
 _ALGO_V1: Final[str] = "1"
@@ -127,6 +127,9 @@ class MetricFamilyId(StrEnum):
     MENTORSHIP_FIDELITY = "mentorship_fidelity"
     MENTORSHIP_MUTATION = "mentorship_mutation"
     MENTORSHIP_BONDS = "mentorship_bonds"
+    CULTURAL_FEATURE_PROVENANCE = "cultural_feature_provenance"
+    CULTURAL_TRAIT_DIFFUSION = "cultural_trait_diffusion"
+    CULTURAL_FEATURE_MUTATION = "cultural_feature_mutation"
 
 
 class DenominatorKind(StrEnum):
@@ -1086,12 +1089,16 @@ def _spec_kinship_genealogy() -> MetricSpecification:
         denominator_kind=DenominatorKind.POPULATION_SIZE,
         cohort_window="caller-supplied kinship edges after the run",
         deceased_policy="include_dead_by_default",
-        zero_holding_policy="empty edge rows with no known agents -> availability=absent",
+        zero_holding_policy=(
+            "empty edge rows with no known agents -> availability=absent"
+        ),
         opportunity_vs_occurrence=(
             "parent→child edges only; sibling/ancestor/descendant are derived elsewhere"
         ),
         self_edge_policy="self_parent rejected",
-        censoring_policy="relatedness never implies social valence or inheritance rights",
+        censoring_policy=(
+            "relatedness never implies social valence or inheritance rights"
+        ),
         formulas={
             "edge_count": "number of directed parent→child edges",
             "component_sizes": "weakly connected component sizes (desc)",
@@ -1269,7 +1276,9 @@ def _spec_developmental_source_mix() -> MetricSpecification:
         zero_holding_policy="no acquired rows -> availability=absent",
         opportunity_vs_occurrence="source share among acquired rows",
         self_edge_policy="not_applicable",
-        censoring_policy="teacher ids metadata-only; never overloads cultural_transmission",
+        censoring_policy=(
+            "teacher ids metadata-only; never overloads cultural_transmission"
+        ),
         formulas={
             "share_<source>": "count(source) / acquired_count",
             "dominant_source_share": "max source share",
@@ -1300,7 +1309,7 @@ def _spec_developmental_divergence() -> MetricSpecification:
         self_edge_policy="self_pairs_excluded",
         censoring_policy="never imports knowledge_diffusion; analysis-only",
         formulas={
-            "mean_pairwise_distance": "mean 1 - |A∩B|/|A∪B| over pairs",
+            "mean_pairwise_distance": "mean 1 - |A cap B|/|A cup B| over pairs",
             "max_pairwise_distance": "max pairwise Jaccard distance",
         },
         value_keys=(
@@ -1309,6 +1318,96 @@ def _spec_developmental_divergence() -> MetricSpecification:
             "pair_count",
         ),
         empty_case="availability=absent; insufficient_agents",
+    )
+
+
+def _spec_cultural_feature_provenance() -> MetricSpecification:
+    return _base(
+        family_id=MetricFamilyId.CULTURAL_FEATURE_PROVENANCE,
+        evidence_inputs=frozenset({EvidenceStage.AGENT_VISIBLE_PROJECTION}),
+        population="cultural_feature_audits",
+        denominator="cultural_feature_audit_rows",
+        denominator_kind=DenominatorKind.OCCURRENCE,
+        cohort_window="audits harvested after the run",
+        deceased_policy="not_applicable",
+        zero_holding_policy="no audits -> availability=absent",
+        opportunity_vs_occurrence="channel/kind histogram over audit rows",
+        self_edge_policy="not_applicable",
+        censoring_policy="metadata-only; never overloads cultural_transmission@1",
+        formulas={
+            "independent_rediscovery_share": (
+                "count(independent_rediscovery) / audit_count"
+            ),
+            "evidence_coverage_share": "rows with provenance / audit_count",
+        },
+        value_keys=(
+            "audit_count",
+            "channel_count",
+            "dominant_channel",
+            "evidence_coverage_share",
+            "feature_kind_count",
+            "independent_rediscovery_share",
+        ),
+        empty_case="availability=absent; no_cultural_feature_audits",
+    )
+
+
+def _spec_cultural_trait_diffusion() -> MetricSpecification:
+    return _base(
+        family_id=MetricFamilyId.CULTURAL_TRAIT_DIFFUSION,
+        evidence_inputs=frozenset({EvidenceStage.AGENT_VISIBLE_PROJECTION}),
+        population="analytical_cultural_traits",
+        denominator="trait_clusters",
+        denominator_kind=DenominatorKind.OCCURRENCE,
+        cohort_window="traits derived from harvested audits",
+        deceased_policy="not_applicable",
+        zero_holding_policy="no traits -> availability=absent",
+        opportunity_vs_occurrence="carrier counts per analytical trait cluster",
+        self_edge_policy="not_applicable",
+        censoring_policy="analysis-only AnalyticalCulturalTrait; never cognition",
+        formulas={
+            "mean_carrier_count": "mean carrier_count over traits",
+            "mean_hop_index": "mean hop over traits",
+        },
+        value_keys=(
+            "max_carrier_count",
+            "mean_carrier_count",
+            "mean_generation_spread",
+            "mean_hop_index",
+            "trait_count",
+        ),
+        empty_case="availability=absent; no_analytical_traits",
+    )
+
+
+def _spec_cultural_feature_mutation() -> MetricSpecification:
+    return _base(
+        family_id=MetricFamilyId.CULTURAL_FEATURE_MUTATION,
+        evidence_inputs=frozenset({EvidenceStage.AGENT_VISIBLE_PROJECTION}),
+        population="cultural_feature_audits",
+        denominator="cultural_feature_audit_rows",
+        denominator_kind=DenominatorKind.OCCURRENCE,
+        cohort_window="audits harvested after the run",
+        deceased_policy="not_applicable",
+        zero_holding_policy="no audits -> availability=absent",
+        opportunity_vs_occurrence="mutation/recombination rates over audit rows",
+        self_edge_policy="not_applicable",
+        censoring_policy="metadata-only fingerprint digests; never payloads",
+        formulas={
+            "mutation_rate": "count(mutated) / audit_count",
+            "recombination_rate": "count(recombined) / audit_count",
+            "mean_parent_count": "mean parent_count over audits",
+        },
+        value_keys=(
+            "audit_count",
+            "mean_parent_count",
+            "mean_recombined_parent_count",
+            "mutated_count",
+            "mutation_rate",
+            "recombined_count",
+            "recombination_rate",
+        ),
+        empty_case="availability=absent; no_cultural_feature_audits",
     )
 
 
@@ -2521,7 +2620,9 @@ def _spec_territorial_concentration() -> MetricSpecification:
             "missing channels stay absent"
         ),
         self_edge_policy="not_applicable",
-        censoring_policy="empty both channels -> availability=absent; never invent zeros",
+        censoring_policy=(
+            "empty both channels -> availability=absent; never invent zeros"
+        ),
         formulas={
             "presence_hhi": "sum of squared presence location shares",
             "presence_top1_share": "largest presence location share",
@@ -2568,7 +2669,9 @@ def _spec_prediction_calibration() -> MetricSpecification:
         self_edge_policy="not_applicable",
         censoring_policy="unjoined hypotheses omitted by caller before compute",
         formulas={
-            "brier_score": "mean squared error of predicted_confidence vs empirical_outcome",
+            "brier_score": (
+                "mean squared error of predicted_confidence vs empirical_outcome"
+            ),
             "mean_absolute_calibration_error": (
                 "mean over nonempty fixed bins of "
                 "|mean(pred)-mean(outcome)|; bin edges "
@@ -2706,6 +2809,9 @@ _BUILDERS: Final[tuple[Callable[[], MetricSpecification], ...]] = (
     _spec_mentorship_fidelity,
     _spec_mentorship_mutation,
     _spec_mentorship_bonds,
+    _spec_cultural_feature_provenance,
+    _spec_cultural_trait_diffusion,
+    _spec_cultural_feature_mutation,
     _spec_emergent_group_formation,
     _spec_emergent_social_norms,
     _spec_persistent_social_conventions,
