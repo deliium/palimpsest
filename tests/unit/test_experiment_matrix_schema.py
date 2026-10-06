@@ -15,6 +15,7 @@ from simulation.runner_models import (
     RUNNER_SCHEMA_VERSION_V14,
     RUNNER_SCHEMA_VERSION_V22,
     RUNNER_SCHEMA_VERSION_V23,
+    RUNNER_SCHEMA_VERSION_V24,
     V3CapabilityFlags,
 )
 
@@ -62,15 +63,15 @@ def test_reflection_plus_budget_finalize_to_v22() -> None:
 
 def test_v3_flags_finalize_keeps_v23_as_highest_wins() -> None:
     base = matrix_reference_fixture_base()
-    # Config must already be schema-valid: flags-on requires v23 before finalize.
+    # Unowned V3 scaffolding flag keeps finalize on v23.
     flagged = replace(
         base,
         schema_version=RUNNER_SCHEMA_VERSION_V23,
-        v3_capability_flags=V3CapabilityFlags(generational_population=True),
+        v3_capability_flags=V3CapabilityFlags(multi_polity_migration=True),
     )
     finalized = finalize_matrix_cell_config(flagged)
     assert finalized.schema_version == RUNNER_SCHEMA_VERSION_V23
-    assert finalized.v3_capability_flags.generational_population is True
+    assert finalized.v3_capability_flags.multi_polity_migration is True
 
     with_budget = apply_factor_levels(
         flagged,
@@ -78,3 +79,66 @@ def test_v3_flags_finalize_keeps_v23_as_highest_wins() -> None:
     )
     finalized_budget = finalize_matrix_cell_config(with_budget)
     assert finalized_budget.schema_version == RUNNER_SCHEMA_VERSION_V23
+
+
+def test_generational_flag_finalize_to_v24() -> None:
+    from simulation.runner_models import example_population_lifecycle_spec
+
+    base = matrix_reference_fixture_base()
+    flagged = replace(
+        base,
+        schema_version=RUNNER_SCHEMA_VERSION_V24,
+        v3_capability_flags=V3CapabilityFlags(generational_population=True),
+        population_lifecycle=example_population_lifecycle_spec(),
+    )
+    finalized = finalize_matrix_cell_config(flagged)
+    assert finalized.schema_version == RUNNER_SCHEMA_VERSION_V24
+    assert finalized.v3_capability_flags.generational_population is True
+
+
+def test_historical_memory_finalize_beats_cultural_feature() -> None:
+    from simulation.new_agent_initialization import (
+        default_new_agent_initialization_spec,
+    )
+    from simulation.runner_models import (
+        RUNNER_SCHEMA_VERSION_V31,
+        RUNNER_SCHEMA_VERSION_V32,
+        example_cultural_feature_provenance_spec,
+        example_historical_memory_layers_spec,
+        example_population_lifecycle_spec,
+    )
+
+    base = matrix_reference_fixture_base()
+    cultural = replace(
+        base,
+        schema_version=RUNNER_SCHEMA_VERSION_V31,
+        v3_capability_flags=V3CapabilityFlags(cultural_historical_memory=True),
+        cultural_feature_provenance=example_cultural_feature_provenance_spec(),
+        historical_memory_layers=None,
+    )
+    assert (
+        finalize_matrix_cell_config(cultural).schema_version
+        == RUNNER_SCHEMA_VERSION_V31
+    )
+
+    layers = replace(
+        cultural,
+        schema_version=RUNNER_SCHEMA_VERSION_V32,
+        historical_memory_layers=example_historical_memory_layers_spec(),
+    )
+    finalized = finalize_matrix_cell_config(layers)
+    assert finalized.schema_version == RUNNER_SCHEMA_VERSION_V32
+
+    with_lifecycle = replace(
+        layers,
+        v3_capability_flags=V3CapabilityFlags(
+            cultural_historical_memory=True,
+            generational_population=True,
+        ),
+        population_lifecycle=example_population_lifecycle_spec(),
+        new_agent_initialization=default_new_agent_initialization_spec(),
+    )
+    filled = finalize_matrix_cell_config(with_lifecycle)
+    assert filled.schema_version == RUNNER_SCHEMA_VERSION_V32
+    assert filled.population_lifecycle is not None
+    assert filled.new_agent_initialization is not None

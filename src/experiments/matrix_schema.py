@@ -27,6 +27,7 @@ from simulation.runner_models import (
     RUNNER_SCHEMA_VERSION_V29,
     RUNNER_SCHEMA_VERSION_V30,
     RUNNER_SCHEMA_VERSION_V31,
+    RUNNER_SCHEMA_VERSION_V32,
     ArtifactInterpretationMode,
     CognitiveBudgetMode,
     CulturalNarrativeMode,
@@ -72,6 +73,7 @@ def finalize_matrix_cell_config(
     )
 
     cultural_feature_on = config.cultural_feature_provenance is not None
+    historical_memory_on = config.historical_memory_layers is not None
     mentorship_on = config.mentorship is not None
     developmental_learning_on = config.developmental_learning is not None
     dependency_care_on = config.dependency_care is not None
@@ -82,7 +84,12 @@ def finalize_matrix_cell_config(
         config.population_lifecycle is not None
         and config.population_lifecycle.has_developmental_extensions()
     )
-    if cultural_feature_on:
+    if historical_memory_on:
+        schema_version, rule = (
+            RUNNER_SCHEMA_VERSION_V32,
+            "historical_memory_on",
+        )
+    elif cultural_feature_on:
         schema_version, rule = (
             RUNNER_SCHEMA_VERSION_V31,
             "cultural_feature_on",
@@ -156,6 +163,7 @@ def finalize_matrix_cell_config(
             RUNNER_SCHEMA_VERSION_V29,
             RUNNER_SCHEMA_VERSION_V30,
             RUNNER_SCHEMA_VERSION_V31,
+            RUNNER_SCHEMA_VERSION_V32,
         }
         and config.v3_capability_flags.generational_population
     )
@@ -172,6 +180,7 @@ def finalize_matrix_cell_config(
             RUNNER_SCHEMA_VERSION_V29,
             RUNNER_SCHEMA_VERSION_V30,
             RUNNER_SCHEMA_VERSION_V31,
+            RUNNER_SCHEMA_VERSION_V32,
         }
         and config.v3_capability_flags.generational_population
     )
@@ -199,7 +208,11 @@ def finalize_matrix_cell_config(
             }
         },
     )
-    if rule in {"cultural_feature_on", "mentorship_on"}:
+    if rule in {
+        "historical_memory_on",
+        "cultural_feature_on",
+        "mentorship_on",
+    }:
         _LOG.debug(
             "matrix_schema_finalize_choice schema=%s reason=%s",
             schema_version,

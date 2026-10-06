@@ -2631,6 +2631,77 @@ def cultural_transmission_provenance_profile(
     return config
 
 
+def historical_memory_layers_profile(
+    config: SimulationRunnerConfig,
+) -> SimulationRunnerConfig:
+    """Require cultural_historical_memory + provenance + layers on v32.
+
+    Off-gate Experiment AM profile. Rejects unowned V3 flags.
+    """
+    from simulation.runner_models import RUNNER_SCHEMA_VERSION_V32
+
+    if config.schema_version != RUNNER_SCHEMA_VERSION_V32:
+        raise ValueError(
+            "historical memory layers profile requires runner-config-v32 "
+            "(code=historical_memory_profile_schema "
+            f"got={config.schema_version!r})"
+        )
+    if not config.v3_capability_flags.cultural_historical_memory:
+        raise ValueError(
+            "historical memory layers profile requires "
+            "cultural_historical_memory "
+            "(code=historical_memory_profile_flag)"
+        )
+    if config.cultural_feature_provenance is None:
+        raise ValueError(
+            "historical memory layers profile requires "
+            "cultural_feature_provenance "
+            "(code=historical_memory_profile_missing_provenance)"
+        )
+    if config.historical_memory_layers is None:
+        raise ValueError(
+            "historical memory layers profile requires "
+            "historical_memory_layers "
+            "(code=historical_memory_profile_missing_layers)"
+        )
+    allowed = {
+        "generational_population",
+        "kinship_inheritance",
+        "cultural_historical_memory",
+    }
+    other = tuple(
+        name
+        for name in config.v3_capability_flags.enabled_names()
+        if name not in allowed
+    )
+    if other:
+        raise ValueError(
+            "historical memory layers profile forbids unowned V3 flags "
+            f"(code=historical_memory_profile_extra_flags flag_count={len(other)})"
+        )
+    _LOG.debug(
+        "historical_memory_layers_profile_ok schema_version=%s "
+        "max_communicative_hops=%s witness_definition=%s "
+        "cultural_flag=%s provenance_present=%s layers_present=%s",
+        config.schema_version,
+        config.historical_memory_layers.max_communicative_hops,
+        config.historical_memory_layers.witness_definition,
+        config.v3_capability_flags.cultural_historical_memory,
+        config.cultural_feature_provenance is not None,
+        config.historical_memory_layers is not None,
+    )
+    return config
+
+
+# Off-gate V3 experiments eligible for matrix use; never on default V1 batches.
+OFF_GATE_MATRIX_EXPERIMENT_IDS: Final[frozenset[str]] = frozenset(
+    {
+        "experiment-al-cultural-transmission-provenance",
+        "experiment-am-historical-memory-layers",
+    }
+)
+
+
 def developmental_learning_profile(
     config: SimulationRunnerConfig,
 ) -> SimulationRunnerConfig:
@@ -3199,4 +3270,182 @@ def experiment_al_cultural_transmission_provenance(
                 flags_off,
             ),
         ),
+    )
+
+
+def experiment_am_historical_memory_layers(
+    base: SimulationRunnerConfig,
+    *,
+    seed_matrix: ExperimentSeedMatrix | None = None,
+    max_ticks: int = 10,
+) -> ExperimentDefinition:
+    """Off-gate Experiment AM for historical memory layers on runner-config-v32."""
+    from simulation.new_agent_initialization import (
+        default_new_agent_initialization_spec,
+    )
+    from simulation.runner_models import (
+        RUNNER_SCHEMA_VERSION_V4,
+        RUNNER_SCHEMA_VERSION_V31,
+        RUNNER_SCHEMA_VERSION_V32,
+        CulturalNarrativeMode,
+        example_cultural_feature_provenance_spec,
+        example_historical_memory_layers_spec,
+        example_population_lifecycle_spec,
+    )
+
+    matrix = seed_matrix or ExperimentSeedMatrix(seeds=(base.seed,))
+    if len(base.agents) < 2:
+        raise ValueError(
+            "experiment AM requires at least two agents on the base roster "
+            "(code=historical_memory_am_roster_too_small)"
+        )
+
+    provenance = example_cultural_feature_provenance_spec()
+    layers = example_historical_memory_layers_spec()
+    lifecycle = example_population_lifecycle_spec(
+        lifespan_ticks=40,
+        max_population=max(4, len(base.agents) + 1),
+        policy_id="disabled",
+    )
+    init = default_new_agent_initialization_spec()
+
+    def _clear_v3_siblings(cfg: SimulationRunnerConfig) -> SimulationRunnerConfig:
+        return replace(
+            cfg,
+            mentorship=None,
+            developmental_learning=None,
+            dependency_care=None,
+            kinship=None,
+        )
+
+    layers_off = _clear_v3_siblings(
+        replace(
+            base,
+            schema_version=RUNNER_SCHEMA_VERSION_V31,
+            mortality_mode=MortalityMode.DISABLED,
+            stop_policy=RunnerStopPolicy(max_ticks=max_ticks),
+            v3_capability_flags=V3CapabilityFlags(cultural_historical_memory=True),
+            cultural_feature_provenance=provenance,
+            historical_memory_layers=None,
+            population_lifecycle=None,
+            new_agent_initialization=None,
+        )
+    )
+    cultural_transmission_provenance_profile(layers_off)
+
+    def _v32_layers(
+        *,
+        with_lifecycle: bool,
+        layers_spec: object | None = None,
+        narrative_on: bool = False,
+    ) -> SimulationRunnerConfig:
+        flags = V3CapabilityFlags(
+            cultural_historical_memory=True,
+            generational_population=with_lifecycle,
+        )
+        agents = base.agents
+        if narrative_on:
+            rebuilt: list[AgentRunnerSpec] = []
+            for agent in agents:
+                cognition = replace(
+                    agent.cognition,
+                    cultural_narrative_mode=CulturalNarrativeMode.DETERMINISTIC,
+                )
+                rebuilt.append(replace(agent, cognition=cognition))
+            agents = tuple(rebuilt)
+        cfg = replace(
+            base,
+            schema_version=RUNNER_SCHEMA_VERSION_V32,
+            mortality_mode=MortalityMode.DISABLED,
+            stop_policy=RunnerStopPolicy(max_ticks=max_ticks),
+            agents=agents,
+            v3_capability_flags=flags,
+            cultural_feature_provenance=provenance,
+            historical_memory_layers=layers_spec or layers,
+            population_lifecycle=lifecycle if with_lifecycle else None,
+            new_agent_initialization=init if with_lifecycle else None,
+            mentorship=None,
+            developmental_learning=None,
+            dependency_care=None,
+            kinship=None,
+        )
+        return historical_memory_layers_profile(cfg)
+
+    living = _v32_layers(with_lifecycle=False)
+    witness_death = _v32_layers(with_lifecycle=True)
+    communicative = _v32_layers(with_lifecycle=False)
+    cultural_only = _v32_layers(with_lifecycle=True)
+    narrative_join = _v32_layers(
+        with_lifecycle=False,
+        layers_spec=replace(layers, include_narrative_lineage=True),
+        narrative_on=True,
+    )
+    flags_off = _clear_v3_siblings(
+        replace(
+            base,
+            schema_version=RUNNER_SCHEMA_VERSION_V4,
+            mortality_mode=MortalityMode.DISABLED,
+            stop_policy=RunnerStopPolicy(max_ticks=max_ticks),
+            v3_capability_flags=V3CapabilityFlags(),
+            cultural_feature_provenance=None,
+            historical_memory_layers=None,
+            population_lifecycle=None,
+            new_agent_initialization=None,
+        )
+    )
+
+    arms = (
+        (
+            "am-layers-off",
+            "historical_memory_layers_off",
+            layers_off,
+        ),
+        (
+            "am-living",
+            "historical_memory_living",
+            living,
+        ),
+        (
+            "am-witness-death",
+            "historical_memory_witness_death",
+            witness_death,
+        ),
+        (
+            "am-communicative",
+            "historical_memory_communicative",
+            communicative,
+        ),
+        (
+            "am-cultural-only",
+            "historical_memory_cultural_only",
+            cultural_only,
+        ),
+        (
+            "am-narrative-join",
+            "historical_memory_narrative_join",
+            narrative_join,
+        ),
+        (
+            "am-flags-off",
+            "historical_memory_v3_flags_off",
+            flags_off,
+        ),
+    )
+    for arm_id, _label, config in arms:
+        _LOG.info(
+            "experiment_am_built experiment_id=experiment-am-historical-memory-layers "
+            "arm_id=%s schema_version=%s cultural_flag=%s layers_present=%s "
+            "provenance_present=%s lifecycle_present=%s",
+            arm_id,
+            config.schema_version,
+            config.v3_capability_flags.cultural_historical_memory,
+            config.historical_memory_layers is not None,
+            config.cultural_feature_provenance is not None,
+            config.population_lifecycle is not None,
+        )
+    return _definition(
+        experiment_id="experiment-am-historical-memory-layers",
+        base=base,
+        seed_matrix=matrix,
+        arms=arms,
     )
