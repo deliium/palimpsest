@@ -38,7 +38,7 @@ Executable formula, population, and edge-case policy for all nineteen metric fam
 | `caregiving_burden` | `caregiving_burden@1` | detached care-act rows |
 | `intergenerational_cooperation` | `intergenerational_cooperation@1` | detached care-act + kinship rows |
 
-Catalog version: `metric-catalog-v1`. Document schema: `MetricDocument` schema `1`. Closed catalog cardinality: **44** families (`METRIC_FAMILY_COUNT`). New opt-in families assemble only when their detached inputs are present.
+Catalog version: `metric-catalog-v1`. Document schema: `MetricDocument` schema `1`. Closed catalog cardinality: **50** families (`METRIC_FAMILY_COUNT`). New opt-in families assemble only when their detached inputs are present.
 
 ### Additive analysis surfaces (off the V1 gate)
 
@@ -67,6 +67,10 @@ Catalog version: `metric-catalog-v1`. Document schema: `MetricDocument` schema `
 ### Developmental learning families (off the V1 gate)
 
 `developmental_acquisition@1`, `developmental_source_mix@1`, and `developmental_divergence@1` assemble from harvested `DevelopmentalAcquisitionAudit` rows and/or owner `DevelopmentalKnowledgeLedger` snapshots (`analysis.developmental_learning_metrics`). They never overload `knowledge_diffusion` / `cultural_transmission`, never include concept payloads, and never feed cognition. Experiment AJ stays off the V1 gate.
+
+### Mentorship families (off the V1 gate)
+
+`mentorship_fidelity@1`, `mentorship_mutation@1`, and `mentorship_bonds@1` assemble from harvested `MentorshipAudit` rows and optional owner `MentorshipLedger` snapshots (`analysis.mentorship_metrics`). They never overload `cultural_transmission@1`, never include content fingerprints as payloads, and never feed cognition. Experiment AK stays off the V1 gate.
 
 ### Supporting formulas (not a separate family)
 
