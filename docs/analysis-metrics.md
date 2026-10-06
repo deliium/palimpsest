@@ -38,7 +38,7 @@ Executable formula, population, and edge-case policy for all nineteen metric fam
 | `caregiving_burden` | `caregiving_burden@1` | detached care-act rows |
 | `intergenerational_cooperation` | `intergenerational_cooperation@1` | detached care-act + kinship rows |
 
-Catalog version: `metric-catalog-v1`. Document schema: `MetricDocument` schema `1`. Closed catalog cardinality: **50** families (`METRIC_FAMILY_COUNT`). New opt-in families assemble only when their detached inputs are present.
+Catalog version: `metric-catalog-v1`. Document schema: `MetricDocument` schema `1`. Closed catalog cardinality: **53** families (`METRIC_FAMILY_COUNT`). New opt-in families assemble only when their detached inputs are present.
 
 ### Additive analysis surfaces (off the V1 gate)
 
@@ -71,6 +71,10 @@ Catalog version: `metric-catalog-v1`. Document schema: `MetricDocument` schema `
 ### Mentorship families (off the V1 gate)
 
 `mentorship_fidelity@1`, `mentorship_mutation@1`, and `mentorship_bonds@1` assemble from harvested `MentorshipAudit` rows and optional owner `MentorshipLedger` snapshots (`analysis.mentorship_metrics`). They never overload `cultural_transmission@1`, never include content fingerprints as payloads, and never feed cognition. Experiment AK stays off the V1 gate.
+
+### Cultural feature provenance families (off the V1 gate)
+
+`cultural_feature_provenance@1`, `cultural_trait_diffusion@1`, and `cultural_feature_mutation@1` assemble from harvested `CulturalFeatureAudit` rows and optional `AnalyticalCulturalTrait` clusters (`analysis.cultural_feature_metrics` / `analysis.cultural_traits`). They never overload V2 Experiment S / `cultural_transmission@1`, never promote analytical traits into agent stores, and never feed live cognition. Experiment AL stays off the V1 gate.
 
 ### Supporting formulas (not a separate family)
 
