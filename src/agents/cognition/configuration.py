@@ -985,6 +985,7 @@ def build_cognitive_loop(
     world_model_provider: object | None = None,
     caregiving_cognition_mode: str | None = None,
     care_action_policy: object | None = None,
+    developmental_learning_spec: object | None = None,
 ) -> CognitiveLoop:
     """Assemble a ``CognitiveLoop`` from explicit policies.
 
@@ -1154,6 +1155,7 @@ def build_cognitive_loop(
         teaching_claim_policy=resolved.teaching_claim_policy,
         caregiving_cognition_mode=caregiving_cognition_mode,
         care_action_policy=care_action_policy,
+        developmental_learning_spec=developmental_learning_spec,
         territorial_claim_mode=resolved.territorial_claim_mode,
         territorial_claim_policy=resolved.territorial_claim_policy,
         group_formation_mode=resolved.group_formation_mode,

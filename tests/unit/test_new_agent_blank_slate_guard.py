@@ -32,6 +32,11 @@ def test_deny_list_covers_locked_stores() -> None:
         "social_norms",
         "social_conventions",
         "skill_ledger",
+        "developmental_knowledge",
+        "society_download",
+        "culture_pack",
+        "encyclopedia",
+        "language_pack",
     }
     assert required.issubset(SUBJECTIVE_COPY_DENY_LIST)
     assert tuple(BLANK_SLATE_SUBJECTIVE_STORES) == (
@@ -47,6 +52,7 @@ def test_deny_list_covers_locked_stores() -> None:
         "social_norms",
         "social_conventions",
         "skill_ledger",
+        "developmental_knowledge",
     )
 
 

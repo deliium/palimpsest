@@ -222,6 +222,7 @@ class CognitiveLoop:
         "_teaching_policy",
         "_caregiving_cognition_mode",
         "_care_action_policy",
+        "_developmental_learning_spec",
         "_territorial_claim_mode",
         "_territorial_claim_policy",
         "_theory_of_mind_mode",
@@ -272,6 +273,7 @@ class CognitiveLoop:
         teaching_claim_policy: object | None = None,
         caregiving_cognition_mode: str | None = None,
         care_action_policy: object | None = None,
+        developmental_learning_spec: object | None = None,
         territorial_claim_mode: object | None = None,
         territorial_claim_policy: object | None = None,
         group_formation_mode: object | None = None,
@@ -698,6 +700,39 @@ class CognitiveLoop:
                     "caregiving_cognition_bind mode=deterministic policy_version=%s",
                     "caregiving-bias.v1",
                 )
+        if developmental_learning_spec is None:
+            self._developmental_learning_spec = None
+            _LOG.info(
+                "developmental_learning_bind developmental_learning_active=%s "
+                "domain_count=%s source_count=%s",
+                False,
+                0,
+                0,
+            )
+        else:
+            # Duck-type bind: avoid cognition→simulation import.
+            domains = getattr(developmental_learning_spec, "enabled_domains", None)
+            sources = getattr(developmental_learning_spec, "enabled_sources", None)
+            mode = getattr(
+                developmental_learning_spec, "developmental_learning_mode", None
+            )
+            if (
+                not isinstance(domains, tuple)
+                or not isinstance(sources, tuple)
+                or mode != "deterministic"
+            ):
+                raise TypeError(
+                    "developmental_learning_spec must expose enabled_domains, "
+                    "enabled_sources, and developmental_learning_mode=deterministic"
+                )
+            self._developmental_learning_spec = developmental_learning_spec
+            _LOG.info(
+                "developmental_learning_bind developmental_learning_active=%s "
+                "domain_count=%s source_count=%s",
+                True,
+                len(domains),
+                len(sources),
+            )
         from agents.cognition.production import ProductionKnowledgeMode
 
         production_mode = (

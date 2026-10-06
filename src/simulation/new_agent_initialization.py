@@ -20,7 +20,17 @@ from typing import Final
 from agents.models import AgentId, DriveKind, DriveProfile
 from simulation.models import SimulationRunConfig
 from simulation.randomness import StreamScope, create_named_stream
-from simulation.runner_models import AgentCognitionSpec, DriveOverrideSpec
+from simulation.runner_models import (
+    AgentCognitionSpec,
+    ArtifactInterpretationMode,
+    CulturalNarrativeMode,
+    DriveOverrideSpec,
+    SemanticNamingMode,
+    SkillLearningMode,
+    SocialConventionMode,
+    SocialNormMode,
+    TeachingInteractionMode,
+)
 from world.identifiers import EntityId, require_stable_id
 
 __all__ = [
@@ -28,6 +38,7 @@ __all__ = [
     "BLANK_SLATE_SUBJECTIVE_STORES",
     "CREATION_REASON_CODES",
     "NEW_AGENT_INITIALIZATION_KEYS",
+    "SPECIES_DEFAULT_DEVELOPMENTAL_V1",
     "SPECIES_DEFAULT_V1",
     "SUBJECTIVE_COPY_DENY_LIST",
     "BlankSlateStoreCounts",
@@ -57,6 +68,7 @@ __all__ = [
 _LOG = logging.getLogger("simulation.new_agent_initialization")
 
 SPECIES_DEFAULT_V1: Final[str] = "species_default_v1"
+SPECIES_DEFAULT_DEVELOPMENTAL_V1: Final[str] = "species_default_developmental_v1"
 
 _NEW_AGENT_INIT_KEYS: Final[frozenset[str]] = frozenset(
     {
@@ -114,6 +126,10 @@ SUBJECTIVE_COPY_DENY_LIST: Final[frozenset[str]] = frozenset(
         "kinship",
         "child_id",
         "child_ids",
+        "developmental_knowledge",
+        "society_download",
+        "culture_pack",
+        "encyclopedia",
     }
 )
 
@@ -130,6 +146,7 @@ BLANK_SLATE_SUBJECTIVE_STORES: Final[tuple[str, ...]] = (
     "social_norms",
     "social_conventions",
     "skill_ledger",
+    "developmental_knowledge",
 )
 
 CREATION_REASON_CODES: Final[frozenset[str]] = frozenset(
@@ -172,7 +189,9 @@ _PROVENANCE_POLICY_KEYS: Final[frozenset[str]] = frozenset(
     {"record_origin_refs", "allowed_roles"}
 )
 
-_KNOWN_SPECIES_DEFAULT_IDS: Final[frozenset[str]] = frozenset({SPECIES_DEFAULT_V1})
+_KNOWN_SPECIES_DEFAULT_IDS: Final[frozenset[str]] = frozenset(
+    {SPECIES_DEFAULT_V1, SPECIES_DEFAULT_DEVELOPMENTAL_V1}
+)
 
 
 class CreationReasonCode(StrEnum):
@@ -793,6 +812,7 @@ class BlankSlateStoreCounts:
     social_norms: int = 0
     social_conventions: int = 0
     skill_ledger: int = 0
+    developmental_knowledge: int = 0
 
 
 def assert_blank_slate_subjective_state(
@@ -863,8 +883,29 @@ def _species_default_v1(agent_id: AgentId) -> SpeciesDefaultsPack:
     )
 
 
+def _species_default_developmental_v1(agent_id: AgentId) -> SpeciesDefaultsPack:
+    """Learner pack: modes on / content empty. Does not invent run-level V2 flags."""
+    cognition = AgentCognitionSpec(
+        agent_id=agent_id,
+        skill_learning_mode=SkillLearningMode.DETERMINISTIC,
+        teaching_interaction_mode=TeachingInteractionMode.DETERMINISTIC,
+        semantic_naming_mode=SemanticNamingMode.DETERMINISTIC,
+        social_norm_mode=SocialNormMode.DETERMINISTIC,
+        social_convention_mode=SocialConventionMode.DETERMINISTIC,
+        cultural_narrative_mode=CulturalNarrativeMode.DETERMINISTIC,
+        artifact_interpretation_mode=ArtifactInterpretationMode.DETERMINISTIC,
+    )
+    drive_profile = cognition.resolve_drive_profile()
+    return SpeciesDefaultsPack(
+        species_defaults_id=SPECIES_DEFAULT_DEVELOPMENTAL_V1,
+        cognition=cognition,
+        drive_profile=drive_profile,
+    )
+
+
 _SPECIES_DEFAULTS: Final[Mapping[str, object]] = {
     SPECIES_DEFAULT_V1: _species_default_v1,
+    SPECIES_DEFAULT_DEVELOPMENTAL_V1: _species_default_developmental_v1,
 }
 
 

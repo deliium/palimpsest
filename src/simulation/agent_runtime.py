@@ -420,6 +420,7 @@ class AgentRuntime:
         "_counterfactual_state",
         "_cultural_narratives",
         "_decision_journal",
+        "_developmental_knowledge",
         "_emotional_state",
         "_finalized_hashes",
         "_goal_revision_counters",
@@ -557,6 +558,7 @@ class AgentRuntime:
         self._artifact_interpretations: object | None = None
         self._semantic_naming: object | None = None
         self._cultural_narratives: object | None = None
+        self._developmental_knowledge: object | None = None
         self._competence: object | None = None
         self._recipe_beliefs: object | None = None
         self._advice: object | None = None

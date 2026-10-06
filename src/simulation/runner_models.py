@@ -107,6 +107,7 @@ RUNNER_SCHEMA_VERSION_V25: Final[str] = "runner-config-v25"
 RUNNER_SCHEMA_VERSION_V26: Final[str] = "runner-config-v26"
 RUNNER_SCHEMA_VERSION_V27: Final[str] = "runner-config-v27"
 RUNNER_SCHEMA_VERSION_V28: Final[str] = "runner-config-v28"
+RUNNER_SCHEMA_VERSION_V29: Final[str] = "runner-config-v29"
 RUNNER_SCHEMA_VERSION: Final[str] = RUNNER_SCHEMA_VERSION_V4
 SUPPORTED_RUNNER_SCHEMA_VERSIONS: Final[frozenset[str]] = frozenset(
     {
@@ -138,6 +139,7 @@ SUPPORTED_RUNNER_SCHEMA_VERSIONS: Final[frozenset[str]] = frozenset(
         RUNNER_SCHEMA_VERSION_V26,
         RUNNER_SCHEMA_VERSION_V27,
         RUNNER_SCHEMA_VERSION_V28,
+        RUNNER_SCHEMA_VERSION_V29,
     }
 )
 RESULT_SCHEMA_VERSION_V1: Final[str] = "runner-result-v1"
@@ -668,6 +670,7 @@ _SKILL_SCHEMAS: Final[frozenset[str]] = frozenset(
         RUNNER_SCHEMA_VERSION_V26,
             RUNNER_SCHEMA_VERSION_V27,
     RUNNER_SCHEMA_VERSION_V28,
+    RUNNER_SCHEMA_VERSION_V29,
     }
 )
 
@@ -1740,6 +1743,359 @@ def example_dependency_care_spec(
         ),
         perception_mode=perception_mode,
         caregiving_cognition_mode=caregiving_cognition_mode,
+    )
+
+
+_DEVELOPMENTAL_LEARNING_APPLICABILITY: Final[frozenset[str]] = frozenset(
+    {
+        "mid_run_new_agents",
+        "lifecycle_learning_stage",
+        "all_live_agents",
+    }
+)
+_DEVELOPMENTAL_LEARNING_MODE: Final[frozenset[str]] = frozenset({"deterministic"})
+_DEVELOPMENTAL_BUDGET_COUPLING_MODES: Final[frozenset[str]] = frozenset(
+    {"ignore", "respect_enforced"}
+)
+_DEVELOPMENTAL_BUDGET_DEGRADE: Final[frozenset[str]] = frozenset(
+    {"skip_acquisition", "reduce_rate"}
+)
+_DEVELOPMENTAL_DIVERGENCE_SALT: Final[frozenset[str]] = frozenset({"owner_stream"})
+_DEVELOPMENTAL_DOMAIN_RATE_KEYS: Final[frozenset[str]] = frozenset(
+    {"base_rate", "stage_compose", "min_exposures", "confidence_floor"}
+)
+_DEVELOPMENTAL_BUDGET_KEYS: Final[frozenset[str]] = frozenset(
+    {"mode", "acquisition_cost_units", "degrade_policy"}
+)
+_DEVELOPMENTAL_LEARNING_KEYS: Final[frozenset[str]] = frozenset(
+    {
+        "enabled_domains",
+        "enabled_sources",
+        "domain_rates",
+        "source_weights",
+        "applicability",
+        "cognitive_budget_coupling",
+        "developmental_learning_mode",
+        "learner_species_defaults_id",
+        "max_entries_per_domain",
+        "divergence_salt_policy",
+    }
+)
+
+
+@dataclass(frozen=True, slots=True)
+class DevelopmentalCognitiveBudgetCoupling:
+    """Exact cognitive_budget_coupling object under developmental_learning."""
+
+    mode: str = "respect_enforced"
+    acquisition_cost_units: int = 0
+    degrade_policy: str = "skip_acquisition"
+
+    def __post_init__(self) -> None:
+        mode = require_stable_id(
+            "DevelopmentalCognitiveBudgetCoupling.mode", self.mode
+        )
+        if mode not in _DEVELOPMENTAL_BUDGET_COUPLING_MODES:
+            raise ValueError(
+                f"unknown cognitive_budget_coupling.mode {mode!r} "
+                "(code=developmental_budget_mode_invalid)"
+            )
+        object.__setattr__(self, "mode", mode)
+        units = require_exact_nonneg_int(
+            "acquisition_cost_units", self.acquisition_cost_units
+        )
+        object.__setattr__(self, "acquisition_cost_units", units)
+        policy = require_stable_id(
+            "DevelopmentalCognitiveBudgetCoupling.degrade_policy",
+            self.degrade_policy,
+        )
+        if policy not in _DEVELOPMENTAL_BUDGET_DEGRADE:
+            raise ValueError(
+                f"unknown degrade_policy {policy!r} "
+                "(code=developmental_budget_degrade_invalid)"
+            )
+        object.__setattr__(self, "degrade_policy", policy)
+
+
+@dataclass(frozen=True, slots=True)
+class DevelopmentalLearningSpec:
+    """Opt-in developmental learning channel (runner-config-v29 sibling).
+
+    Deepens owned ``generational_population`` — not a new V3 flag and not an
+    ``AgentCognitionSpec`` enum. Absent object means channel off.
+    """
+
+    enabled_domains: tuple[str, ...]
+    enabled_sources: tuple[str, ...]
+    domain_rates: Mapping[str, object]
+    source_weights: Mapping[str, float]
+    applicability: str = "mid_run_new_agents"
+    cognitive_budget_coupling: DevelopmentalCognitiveBudgetCoupling = field(
+        default_factory=DevelopmentalCognitiveBudgetCoupling
+    )
+    developmental_learning_mode: str = "deterministic"
+    learner_species_defaults_id: str = "species_default_developmental_v1"
+    max_entries_per_domain: int = 256
+    divergence_salt_policy: str = "owner_stream"
+
+    def __post_init__(self) -> None:
+        from agents.cognition.developmental_learning import (
+            DevelopmentalDomainId,
+            DevelopmentalDomainRate,
+            DevelopmentalSourceId,
+            DevelopmentalStageCompose,
+            parse_developmental_domain_id,
+            parse_developmental_source_id,
+        )
+        from simulation.new_agent_initialization import (
+            SPECIES_DEFAULT_DEVELOPMENTAL_V1,
+            SPECIES_DEFAULT_V1,
+        )
+
+        mode = require_stable_id(
+            "DevelopmentalLearningSpec.developmental_learning_mode",
+            self.developmental_learning_mode,
+        )
+        if mode == "disabled":
+            raise ValueError(
+                "developmental_learning_mode=disabled is rejected; omit the "
+                "object for off (code=developmental_learning_mode_invalid)"
+            )
+        if mode not in _DEVELOPMENTAL_LEARNING_MODE:
+            raise ValueError(
+                f"unknown developmental_learning_mode {mode!r} "
+                "(code=developmental_learning_mode_invalid)"
+            )
+        object.__setattr__(self, "developmental_learning_mode", mode)
+
+        if isinstance(self.enabled_domains, (str, bytes)) or not isinstance(
+            self.enabled_domains, Sequence
+        ):
+            raise TypeError("enabled_domains must be a sequence")
+        if not self.enabled_domains:
+            raise ValueError(
+                "enabled_domains must be non-empty when developmental_learning "
+                "present (code=developmental_enabled_domains_empty)"
+            )
+        domains: list[str] = []
+        seen_domains: set[str] = set()
+        for raw in self.enabled_domains:
+            domain = parse_developmental_domain_id(raw)
+            if domain.value in seen_domains:
+                raise ValueError(
+                    f"duplicate enabled domain {domain.value!r} "
+                    "(code=developmental_domain_duplicate)"
+                )
+            seen_domains.add(domain.value)
+            domains.append(domain.value)
+        object.__setattr__(self, "enabled_domains", tuple(domains))
+
+        if isinstance(self.enabled_sources, (str, bytes)) or not isinstance(
+            self.enabled_sources, Sequence
+        ):
+            raise TypeError("enabled_sources must be a sequence")
+        if not self.enabled_sources:
+            raise ValueError(
+                "enabled_sources must be non-empty when developmental_learning "
+                "present (code=developmental_enabled_sources_empty)"
+            )
+        sources: list[str] = []
+        seen_sources: set[str] = set()
+        for raw in self.enabled_sources:
+            source = parse_developmental_source_id(raw)
+            if source.value in seen_sources:
+                raise ValueError(
+                    f"duplicate enabled source {source.value!r} "
+                    "(code=developmental_source_duplicate)"
+                )
+            seen_sources.add(source.value)
+            sources.append(source.value)
+        object.__setattr__(self, "enabled_sources", tuple(sources))
+
+        if isinstance(self.domain_rates, (str, bytes)) or not isinstance(
+            self.domain_rates, Mapping
+        ):
+            raise TypeError("domain_rates must be a mapping")
+        if set(self.domain_rates) != set(domains):
+            raise ValueError(
+                "domain_rates must cover enabled_domains exactly once "
+                "(code=developmental_domain_rates_mismatch)"
+            )
+        cleaned_rates: dict[str, DevelopmentalDomainRate] = {}
+        for domain_id in domains:
+            raw_rate = self.domain_rates[domain_id]
+            if type(raw_rate) is DevelopmentalDomainRate:
+                rate = raw_rate
+            elif isinstance(raw_rate, Mapping):
+                if set(raw_rate) != _DEVELOPMENTAL_DOMAIN_RATE_KEYS:
+                    raise ValueError(
+                        "domain_rates entry exact keys mismatch "
+                        "(code=developmental_domain_rate_keys)"
+                    )
+                compose_raw = raw_rate["stage_compose"]
+                if type(compose_raw) is DevelopmentalStageCompose:
+                    compose = compose_raw
+                else:
+                    try:
+                        compose = DevelopmentalStageCompose(str(compose_raw))
+                    except ValueError as exc:
+                        raise ValueError(
+                            f"unknown stage_compose {compose_raw!r} "
+                            "(code=developmental_stage_compose_invalid)"
+                        ) from exc
+                rate = DevelopmentalDomainRate(
+                    base_rate=raw_rate["base_rate"],  # type: ignore[arg-type]
+                    stage_compose=compose,
+                    min_exposures=raw_rate["min_exposures"],  # type: ignore[arg-type]
+                    confidence_floor=raw_rate["confidence_floor"],  # type: ignore[arg-type]
+                )
+            else:
+                raise TypeError(
+                    "domain_rates values must be DevelopmentalDomainRate or mapping"
+                )
+            cleaned_rates[domain_id] = rate
+        object.__setattr__(self, "domain_rates", dict(cleaned_rates))
+
+        if isinstance(self.source_weights, (str, bytes)) or not isinstance(
+            self.source_weights, Mapping
+        ):
+            raise TypeError("source_weights must be a mapping")
+        if set(self.source_weights) != set(sources):
+            raise ValueError(
+                "source_weights must cover enabled_sources exactly once "
+                "(code=developmental_source_weights_mismatch)"
+            )
+        cleaned_weights: dict[str, float] = {}
+        for source_id in sources:
+            weight = self.source_weights[source_id]
+            if isinstance(weight, bool) or not isinstance(weight, (int, float)):
+                raise ValueError(
+                    f"source_weights[{source_id!r}] must be float in (0, 1] "
+                    "(code=developmental_source_weight_invalid)"
+                )
+            number = float(weight)
+            if not math.isfinite(number) or number <= 0.0 or number > 1.0:
+                raise ValueError(
+                    f"source_weights[{source_id!r}] must be float in (0, 1] "
+                    "(code=developmental_source_weight_invalid)"
+                )
+            cleaned_weights[source_id] = number
+        object.__setattr__(self, "source_weights", dict(cleaned_weights))
+
+        applicability = require_stable_id(
+            "DevelopmentalLearningSpec.applicability", self.applicability
+        )
+        if applicability not in _DEVELOPMENTAL_LEARNING_APPLICABILITY:
+            raise ValueError(
+                f"unknown applicability {applicability!r} "
+                "(code=developmental_applicability_invalid)"
+            )
+        object.__setattr__(self, "applicability", applicability)
+
+        if type(self.cognitive_budget_coupling) is not DevelopmentalCognitiveBudgetCoupling:
+            raise TypeError(
+                "cognitive_budget_coupling must be DevelopmentalCognitiveBudgetCoupling"
+            )
+
+        species_id = require_stable_id(
+            "DevelopmentalLearningSpec.learner_species_defaults_id",
+            self.learner_species_defaults_id,
+        )
+        if species_id not in {SPECIES_DEFAULT_V1, SPECIES_DEFAULT_DEVELOPMENTAL_V1}:
+            raise ValueError(
+                f"unknown learner_species_defaults_id {species_id!r} "
+                "(code=unknown_species_defaults_id)"
+            )
+        object.__setattr__(self, "learner_species_defaults_id", species_id)
+        if species_id != SPECIES_DEFAULT_DEVELOPMENTAL_V1:
+            _LOGGER.debug(
+                "developmental_learner_species_defaults_id=%s "
+                "(not species_default_developmental_v1)",
+                species_id,
+            )
+
+        cap = require_exact_nonneg_int(
+            "max_entries_per_domain", self.max_entries_per_domain
+        )
+        if cap < 1:
+            raise ValueError(
+                "max_entries_per_domain must be >= 1 "
+                "(code=developmental_max_entries_invalid)"
+            )
+        object.__setattr__(self, "max_entries_per_domain", cap)
+
+        salt = require_stable_id(
+            "DevelopmentalLearningSpec.divergence_salt_policy",
+            self.divergence_salt_policy,
+        )
+        if salt not in _DEVELOPMENTAL_DIVERGENCE_SALT:
+            raise ValueError(
+                f"unknown divergence_salt_policy {salt!r} "
+                "(code=developmental_divergence_salt_invalid)"
+            )
+        object.__setattr__(self, "divergence_salt_policy", salt)
+        # Silence unused import lint for enum membership documentation.
+        _ = (DevelopmentalDomainId, DevelopmentalSourceId)
+
+    def canonical_payload(self) -> dict[str, object]:
+        return {
+            "applicability": self.applicability,
+            "cognitive_budget_coupling": {
+                "acquisition_cost_units": (
+                    self.cognitive_budget_coupling.acquisition_cost_units
+                ),
+                "degrade_policy": self.cognitive_budget_coupling.degrade_policy,
+                "mode": self.cognitive_budget_coupling.mode,
+            },
+            "developmental_learning_mode": self.developmental_learning_mode,
+            "divergence_salt_policy": self.divergence_salt_policy,
+            "domain_rates": {
+                domain_id: {
+                    "base_rate": rate.base_rate,
+                    "confidence_floor": rate.confidence_floor,
+                    "min_exposures": rate.min_exposures,
+                    "stage_compose": rate.stage_compose.value,
+                }
+                for domain_id, rate in self.domain_rates.items()
+            },
+            "enabled_domains": list(self.enabled_domains),
+            "enabled_sources": list(self.enabled_sources),
+            "learner_species_defaults_id": self.learner_species_defaults_id,
+            "max_entries_per_domain": self.max_entries_per_domain,
+            "source_weights": {
+                source_id: self.source_weights[source_id] for source_id in self.enabled_sources
+            },
+        }
+
+
+def example_developmental_learning_spec(
+    *,
+    enabled_domains: tuple[str, ...] = ("locations", "resources", "hazards", "skills"),
+    enabled_sources: tuple[str, ...] = ("observation", "experimentation"),
+    applicability: str = "mid_run_new_agents",
+) -> DevelopmentalLearningSpec:
+    """Reference developmental-learning spec for tests and Experiment AJ."""
+    from agents.cognition.developmental_learning import (
+        DevelopmentalDomainRate,
+        DevelopmentalStageCompose,
+    )
+
+    rates = {
+        domain: DevelopmentalDomainRate(
+            base_rate=1.0,
+            stage_compose=DevelopmentalStageCompose.MULTIPLY_LIFECYCLE_LEARNING_RATE,
+            min_exposures=0,
+            confidence_floor=0.1,
+        )
+        for domain in enabled_domains
+    }
+    weights = {source: 1.0 for source in enabled_sources}
+    return DevelopmentalLearningSpec(
+        enabled_domains=enabled_domains,
+        enabled_sources=enabled_sources,
+        domain_rates=rates,
+        source_weights=weights,
+        applicability=applicability,
     )
 
 
@@ -3341,6 +3697,7 @@ class SimulationRunnerConfig:
     new_agent_initialization: object | None = None
     kinship: KinshipSpec | None = None
     dependency_care: DependencyCareSpec | None = None
+    developmental_learning: DevelopmentalLearningSpec | None = None
 
     def __post_init__(self) -> None:
         # Late import avoids circular import with new_agent_initialization.
@@ -3377,6 +3734,13 @@ class SimulationRunnerConfig:
             and type(self.dependency_care) is not DependencyCareSpec
         ):
             raise TypeError("dependency_care must be DependencyCareSpec or None")
+        if (
+            self.developmental_learning is not None
+            and type(self.developmental_learning) is not DevelopmentalLearningSpec
+        ):
+            raise TypeError(
+                "developmental_learning must be DevelopmentalLearningSpec or None"
+            )
         if type(self.scenario) is not WorldScenarioSpec:
             raise TypeError("scenario must be WorldScenarioSpec")
         agents = _copy_ordered(
@@ -3466,6 +3830,7 @@ class SimulationRunnerConfig:
             RUNNER_SCHEMA_VERSION_V26,
             RUNNER_SCHEMA_VERSION_V27,
             RUNNER_SCHEMA_VERSION_V28,
+            RUNNER_SCHEMA_VERSION_V29,
         }
         if (
             self.v3_capability_flags.generational_population
@@ -3479,12 +3844,13 @@ class SimulationRunnerConfig:
             raise ValueError(
                 "generational_population requires runner-config-v24, "
                 "runner-config-v25, runner-config-v26, runner-config-v27, "
-                "or runner-config-v28 "
+                "runner-config-v28, or runner-config-v29 "
                 "(code=generational_population_requires_v24)"
             )
         _kinship_schemas = {
             RUNNER_SCHEMA_VERSION_V27,
             RUNNER_SCHEMA_VERSION_V28,
+            RUNNER_SCHEMA_VERSION_V29,
         }
         if self.v3_capability_flags.kinship_inheritance:
             if self.schema_version not in _kinship_schemas:
@@ -3493,8 +3859,8 @@ class SimulationRunnerConfig:
                     self.schema_version,
                 )
                 raise ValueError(
-                    "kinship_inheritance requires runner-config-v27 or "
-                    "runner-config-v28 "
+                    "kinship_inheritance requires runner-config-v27, "
+                    "runner-config-v28, or runner-config-v29 "
                     "(code=kinship_requires_v27)"
                 )
             if self.kinship is None:
@@ -3518,14 +3884,18 @@ class SimulationRunnerConfig:
                 "(code=kinship_config_without_flag)"
             )
         if self.dependency_care is not None:
-            if self.schema_version != RUNNER_SCHEMA_VERSION_V28:
+            if self.schema_version not in {
+                RUNNER_SCHEMA_VERSION_V28,
+                RUNNER_SCHEMA_VERSION_V29,
+            }:
                 _LOGGER.error(
                     "dependency_care_requires_v28 schema_version=%s "
                     "reason_code=dependency_care_requires_v28",
                     self.schema_version,
                 )
                 raise ValueError(
-                    "dependency_care requires runner-config-v28 "
+                    "dependency_care requires runner-config-v28 or "
+                    "runner-config-v29 "
                     "(code=dependency_care_requires_v28)"
                 )
             if not self.v3_capability_flags.generational_population:
@@ -3558,6 +3928,61 @@ class SimulationRunnerConfig:
                 self.dependency_care.caregiving_cognition_mode,
                 self.dependency_care.perception_mode,
             )
+        if self.developmental_learning is not None:
+            if self.schema_version != RUNNER_SCHEMA_VERSION_V29:
+                _LOGGER.error(
+                    "developmental_learning_requires_v29 schema_version=%s "
+                    "reason_code=developmental_learning_requires_v29",
+                    self.schema_version,
+                )
+                raise ValueError(
+                    "developmental_learning requires runner-config-v29 "
+                    "(code=developmental_learning_requires_v29)"
+                )
+            if not self.v3_capability_flags.generational_population:
+                _LOGGER.error(
+                    "developmental_learning_without_lifecycle_flag "
+                    "schema_version=%s "
+                    "reason_code=developmental_learning_without_lifecycle_flag",
+                    self.schema_version,
+                )
+                raise ValueError(
+                    "developmental_learning requires generational_population "
+                    "(code=developmental_learning_without_lifecycle_flag)"
+                )
+            if self.population_lifecycle is None:
+                _LOGGER.error(
+                    "developmental_learning_requires_lifecycle schema_version=%s "
+                    "reason_code=developmental_learning_requires_lifecycle",
+                    self.schema_version,
+                )
+                raise ValueError(
+                    "developmental_learning requires population_lifecycle "
+                    "(code=developmental_learning_requires_lifecycle)"
+                )
+            _LOGGER.info(
+                "developmental_learning_schema_select schema_version=%s "
+                "generational_population=%s enabled_domains=%s "
+                "enabled_sources=%s developmental_learning_mode=%s "
+                "applicability=%s learner_species_defaults_id=%s",
+                self.schema_version,
+                self.v3_capability_flags.generational_population,
+                list(self.developmental_learning.enabled_domains),
+                list(self.developmental_learning.enabled_sources),
+                self.developmental_learning.developmental_learning_mode,
+                self.developmental_learning.applicability,
+                self.developmental_learning.learner_species_defaults_id,
+            )
+        elif self.schema_version == RUNNER_SCHEMA_VERSION_V29:
+            _LOGGER.error(
+                "v29_requires_developmental_learning schema_version=%s "
+                "reason_code=v29_requires_developmental_learning",
+                self.schema_version,
+            )
+            raise ValueError(
+                "runner-config-v29 requires developmental_learning "
+                "(code=v29_requires_developmental_learning)"
+            )
         other_v3_enabled = tuple(
             name
             for name in self.v3_capability_flags.enabled_names()
@@ -3570,6 +3995,7 @@ class SimulationRunnerConfig:
             RUNNER_SCHEMA_VERSION_V26,
             RUNNER_SCHEMA_VERSION_V27,
             RUNNER_SCHEMA_VERSION_V28,
+            RUNNER_SCHEMA_VERSION_V29,
         }:
             _LOGGER.error(
                 "v3_capability_requires_v23 schema_version=%s "
@@ -3612,14 +4038,21 @@ class SimulationRunnerConfig:
                     "dependency_care requires generational_population "
                     "(code=dependency_care_without_lifecycle_flag)"
                 )
+            if self.developmental_learning is not None:
+                raise ValueError(
+                    "developmental_learning requires generational_population "
+                    "(code=developmental_learning_without_lifecycle_flag)"
+                )
         if self.schema_version in _lifecycle_schemas:
             requires_lifecycle = (
                 self.schema_version
-                not in {RUNNER_SCHEMA_VERSION_V27, RUNNER_SCHEMA_VERSION_V28}
+                not in {RUNNER_SCHEMA_VERSION_V27, RUNNER_SCHEMA_VERSION_V28, RUNNER_SCHEMA_VERSION_V29}
                 or self.v3_capability_flags.generational_population
             )
             if requires_lifecycle and self.population_lifecycle is None:
-                if self.schema_version == RUNNER_SCHEMA_VERSION_V28:
+                if self.schema_version == RUNNER_SCHEMA_VERSION_V29:
+                    code = "v29_requires_population_lifecycle"
+                elif self.schema_version == RUNNER_SCHEMA_VERSION_V28:
                     code = "v28_requires_population_lifecycle"
                 elif self.schema_version == RUNNER_SCHEMA_VERSION_V27:
                     code = "v27_requires_population_lifecycle"
@@ -3665,6 +4098,7 @@ class SimulationRunnerConfig:
                 RUNNER_SCHEMA_VERSION_V26,
                 RUNNER_SCHEMA_VERSION_V27,
                 RUNNER_SCHEMA_VERSION_V28,
+                RUNNER_SCHEMA_VERSION_V29,
             }
         ):
             _LOGGER.error(
@@ -3681,12 +4115,14 @@ class SimulationRunnerConfig:
             RUNNER_SCHEMA_VERSION_V26,
         } or (
             self.schema_version
-            in {RUNNER_SCHEMA_VERSION_V27, RUNNER_SCHEMA_VERSION_V28}
+            in {RUNNER_SCHEMA_VERSION_V27, RUNNER_SCHEMA_VERSION_V28, RUNNER_SCHEMA_VERSION_V29}
             and self.v3_capability_flags.generational_population
         )
         if _requires_new_agent_init:
             if self.new_agent_initialization is None:
-                if self.schema_version == RUNNER_SCHEMA_VERSION_V28:
+                if self.schema_version == RUNNER_SCHEMA_VERSION_V29:
+                    code = "v29_requires_new_agent_initialization"
+                elif self.schema_version == RUNNER_SCHEMA_VERSION_V28:
                     code = "v28_requires_new_agent_initialization"
                 elif self.schema_version == RUNNER_SCHEMA_VERSION_V27:
                     code = "v27_requires_new_agent_initialization"
@@ -3805,6 +4241,7 @@ class SimulationRunnerConfig:
             RUNNER_SCHEMA_VERSION_V26,
             RUNNER_SCHEMA_VERSION_V27,
         RUNNER_SCHEMA_VERSION_V28,
+        RUNNER_SCHEMA_VERSION_V29,
         }
         if non_disabled and self.schema_version not in consolidation_schemas:
             _LOGGER.error(
@@ -3859,6 +4296,7 @@ class SimulationRunnerConfig:
             RUNNER_SCHEMA_VERSION_V26,
             RUNNER_SCHEMA_VERSION_V27,
         RUNNER_SCHEMA_VERSION_V28,
+        RUNNER_SCHEMA_VERSION_V29,
         }
         if reflecting and self.schema_version not in reflection_schemas:
             _LOGGER.error(
@@ -3913,6 +4351,7 @@ class SimulationRunnerConfig:
             RUNNER_SCHEMA_VERSION_V26,
             RUNNER_SCHEMA_VERSION_V27,
         RUNNER_SCHEMA_VERSION_V28,
+        RUNNER_SCHEMA_VERSION_V29,
         }
         if planning and self.schema_version not in prospective_schemas:
             _LOGGER.error(
@@ -3966,6 +4405,7 @@ class SimulationRunnerConfig:
             RUNNER_SCHEMA_VERSION_V26,
             RUNNER_SCHEMA_VERSION_V27,
         RUNNER_SCHEMA_VERSION_V28,
+        RUNNER_SCHEMA_VERSION_V29,
         }
         if considering and self.schema_version not in counterfactual_schemas:
             _LOGGER.error(
@@ -4018,6 +4458,7 @@ class SimulationRunnerConfig:
             RUNNER_SCHEMA_VERSION_V26,
             RUNNER_SCHEMA_VERSION_V27,
         RUNNER_SCHEMA_VERSION_V28,
+        RUNNER_SCHEMA_VERSION_V29,
         }:
             _LOGGER.error(
                 "invalid_fields path=agents.cognition.communication_strategy_mode "
@@ -4068,6 +4509,7 @@ class SimulationRunnerConfig:
             RUNNER_SCHEMA_VERSION_V26,
             RUNNER_SCHEMA_VERSION_V27,
         RUNNER_SCHEMA_VERSION_V28,
+        RUNNER_SCHEMA_VERSION_V29,
         }:
             _LOGGER.error(
                 "invalid_fields path=agents.cognition.reputation_mode "
@@ -4160,6 +4602,7 @@ class SimulationRunnerConfig:
             RUNNER_SCHEMA_VERSION_V26,
             RUNNER_SCHEMA_VERSION_V27,
         RUNNER_SCHEMA_VERSION_V28,
+        RUNNER_SCHEMA_VERSION_V29,
         }:
             _LOGGER.error(
                 "invalid_fields path=agents.cognition.teaching_interaction_mode "
@@ -4201,6 +4644,7 @@ class SimulationRunnerConfig:
             RUNNER_SCHEMA_VERSION_V26,
             RUNNER_SCHEMA_VERSION_V27,
         RUNNER_SCHEMA_VERSION_V28,
+        RUNNER_SCHEMA_VERSION_V29,
         }
         if (dynamics is not None and self.schema_version not in dynamics_schemas) or (
             self.schema_version == RUNNER_SCHEMA_VERSION_V14 and dynamics is None
@@ -4237,6 +4681,7 @@ class SimulationRunnerConfig:
             RUNNER_SCHEMA_VERSION_V26,
             RUNNER_SCHEMA_VERSION_V27,
         RUNNER_SCHEMA_VERSION_V28,
+        RUNNER_SCHEMA_VERSION_V29,
         }:
             _LOGGER.error(
                 "invalid_fields path=agents.cognition.territorial_claim_mode "
@@ -4279,6 +4724,7 @@ class SimulationRunnerConfig:
             RUNNER_SCHEMA_VERSION_V26,
             RUNNER_SCHEMA_VERSION_V27,
         RUNNER_SCHEMA_VERSION_V28,
+        RUNNER_SCHEMA_VERSION_V29,
         }:
             _LOGGER.error(
                 "invalid_fields path=agents.cognition.group_formation_mode "
@@ -4315,6 +4761,7 @@ class SimulationRunnerConfig:
             RUNNER_SCHEMA_VERSION_V26,
             RUNNER_SCHEMA_VERSION_V27,
         RUNNER_SCHEMA_VERSION_V28,
+        RUNNER_SCHEMA_VERSION_V29,
         }:
             _LOGGER.error(
                 "invalid_fields path=agents.cognition.social_norm_mode "
@@ -4354,6 +4801,7 @@ class SimulationRunnerConfig:
             RUNNER_SCHEMA_VERSION_V26,
             RUNNER_SCHEMA_VERSION_V27,
         RUNNER_SCHEMA_VERSION_V28,
+        RUNNER_SCHEMA_VERSION_V29,
         }
         if conventions_on and self.schema_version not in convention_schemas:
             _LOGGER.error(
@@ -4398,6 +4846,7 @@ class SimulationRunnerConfig:
             RUNNER_SCHEMA_VERSION_V26,
             RUNNER_SCHEMA_VERSION_V27,
         RUNNER_SCHEMA_VERSION_V28,
+        RUNNER_SCHEMA_VERSION_V29,
         }
         if artifacts_on and self.schema_version not in artifact_schemas:
             runner_log.error(
@@ -4438,6 +4887,7 @@ class SimulationRunnerConfig:
             RUNNER_SCHEMA_VERSION_V26,
             RUNNER_SCHEMA_VERSION_V27,
         RUNNER_SCHEMA_VERSION_V28,
+        RUNNER_SCHEMA_VERSION_V29,
         }
         if naming_on and self.schema_version not in naming_schemas:
             runner_log.error(
@@ -4475,6 +4925,7 @@ class SimulationRunnerConfig:
             RUNNER_SCHEMA_VERSION_V26,
             RUNNER_SCHEMA_VERSION_V27,
         RUNNER_SCHEMA_VERSION_V28,
+        RUNNER_SCHEMA_VERSION_V29,
         }
         budget_modes = tuple(
             agent.cognition.cognitive_budget_mode for agent in self.agents
@@ -4488,6 +4939,7 @@ class SimulationRunnerConfig:
             RUNNER_SCHEMA_VERSION_V26,
             RUNNER_SCHEMA_VERSION_V27,
         RUNNER_SCHEMA_VERSION_V28,
+        RUNNER_SCHEMA_VERSION_V29,
         }
         if budgets_on and self.schema_version not in budget_schemas:
             runner_log.error(
@@ -4599,6 +5051,7 @@ class SimulationRunnerConfig:
             RUNNER_SCHEMA_VERSION_V26,
             RUNNER_SCHEMA_VERSION_V27,
         RUNNER_SCHEMA_VERSION_V28,
+        RUNNER_SCHEMA_VERSION_V29,
         }:
             _LOGGER.error(
                 "invalid_fields path=agents.cognition.production_knowledge_mode "
@@ -4628,6 +5081,7 @@ class SimulationRunnerConfig:
             RUNNER_SCHEMA_VERSION_V26,
             RUNNER_SCHEMA_VERSION_V27,
         RUNNER_SCHEMA_VERSION_V28,
+        RUNNER_SCHEMA_VERSION_V29,
         }:
             from world.production import production_catalog_digest
 
@@ -4697,6 +5151,7 @@ class SimulationRunnerConfig:
             RUNNER_SCHEMA_VERSION_V26,
             RUNNER_SCHEMA_VERSION_V27,
         RUNNER_SCHEMA_VERSION_V28,
+        RUNNER_SCHEMA_VERSION_V29,
         }:
             shared_teaching = teaching_weight_tuple(self.agents[0].cognition)
             if any(

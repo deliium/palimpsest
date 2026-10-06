@@ -24,6 +24,7 @@ from simulation.runner_models import (
     RUNNER_SCHEMA_VERSION_V26,
     RUNNER_SCHEMA_VERSION_V27,
     RUNNER_SCHEMA_VERSION_V28,
+    RUNNER_SCHEMA_VERSION_V29,
     ArtifactInterpretationMode,
     CognitiveBudgetMode,
     CulturalNarrativeMode,
@@ -68,6 +69,7 @@ def finalize_matrix_cell_config(
         for agent in agents
     )
 
+    developmental_learning_on = config.developmental_learning is not None
     dependency_care_on = config.dependency_care is not None
     kinship_on = (
         config.v3_capability_flags.kinship_inheritance and config.kinship is not None
@@ -76,7 +78,12 @@ def finalize_matrix_cell_config(
         config.population_lifecycle is not None
         and config.population_lifecycle.has_developmental_extensions()
     )
-    if dependency_care_on:
+    if developmental_learning_on:
+        schema_version, rule = (
+            RUNNER_SCHEMA_VERSION_V29,
+            "developmental_learning_on",
+        )
+    elif dependency_care_on:
         schema_version, rule = (
             RUNNER_SCHEMA_VERSION_V28,
             "dependency_care_on",
@@ -129,7 +136,7 @@ def finalize_matrix_cell_config(
         RUNNER_SCHEMA_VERSION_V26,
     } or (
         schema_version
-        in {RUNNER_SCHEMA_VERSION_V27, RUNNER_SCHEMA_VERSION_V28}
+        in {RUNNER_SCHEMA_VERSION_V27, RUNNER_SCHEMA_VERSION_V28, RUNNER_SCHEMA_VERSION_V29}
         and config.v3_capability_flags.generational_population
     )
     if needs_lifecycle and payload.get("population_lifecycle") is None:
@@ -139,7 +146,7 @@ def finalize_matrix_cell_config(
         RUNNER_SCHEMA_VERSION_V26,
     } or (
         schema_version
-        in {RUNNER_SCHEMA_VERSION_V27, RUNNER_SCHEMA_VERSION_V28}
+        in {RUNNER_SCHEMA_VERSION_V27, RUNNER_SCHEMA_VERSION_V28, RUNNER_SCHEMA_VERSION_V29}
         and config.v3_capability_flags.generational_population
     )
     if needs_init and payload.get("new_agent_initialization") is None:

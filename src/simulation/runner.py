@@ -133,6 +133,7 @@ from simulation.runner_models import (
     RUNNER_SCHEMA_VERSION_V26,
     RUNNER_SCHEMA_VERSION_V27,
     RUNNER_SCHEMA_VERSION_V28,
+    RUNNER_SCHEMA_VERSION_V29,
     AgentCognitionSpec,
     AgentRunnerSpec,
     CognitionCounters,
@@ -541,6 +542,15 @@ def _caregiving_loop_kwargs(config: object) -> dict[str, object]:
         "caregiving_cognition_mode": mode,
         "care_action_policy": getattr(care, "care_action_policy", None),
     }
+
+
+def _developmental_learning_loop_kwargs(config: object) -> dict[str, object]:
+    """Bind developmental_learning channel (no AgentCognitionSpec enum)."""
+    spec = getattr(config, "developmental_learning", None)
+    if spec is None:
+        return {}
+    return {"developmental_learning_spec": spec}
+
 
 def _cognition_config_for(
     spec: AgentCognitionSpec,
@@ -1418,6 +1428,7 @@ class SimulationRunner:
                             RUNNER_SCHEMA_VERSION_V26,
                             RUNNER_SCHEMA_VERSION_V27,
                             RUNNER_SCHEMA_VERSION_V28,
+                            RUNNER_SCHEMA_VERSION_V29,
                         }
                         and config.new_agent_initialization is not None
                     )
@@ -1474,6 +1485,24 @@ class SimulationRunner:
                 species_defaults_id,
                 config.schema_version,
             )
+            developmental_learning_active = config.developmental_learning is not None
+            if developmental_learning_active:
+                assert config.developmental_learning is not None
+                _LOG.info(
+                    "runner_construction_developmental_learning "
+                    "developmental_learning_active=%s domain_count=%s source_count=%s",
+                    True,
+                    len(config.developmental_learning.enabled_domains),
+                    len(config.developmental_learning.enabled_sources),
+                )
+            else:
+                _LOG.info(
+                    "runner_construction_developmental_learning "
+                    "developmental_learning_active=%s domain_count=%s source_count=%s",
+                    False,
+                    0,
+                    0,
+                )
 
             stage = "agents"
             memory_run_id = MemoryRunId(resolved_run_id.value)
@@ -1554,6 +1583,7 @@ class SimulationRunner:
                         loop_config.reflection_mode,
                     ),
                     **_caregiving_loop_kwargs(config),
+                    **_developmental_learning_loop_kwargs(config),
                 )
                 agent = Agent(
                     agent_id=owner,
@@ -2905,6 +2935,7 @@ class SimulationRunner:
                     loop_config.reflection_mode,
                 ),
                 **_caregiving_loop_kwargs(self._config),
+                **_developmental_learning_loop_kwargs(self._config),
             )
             agent = Agent(
                 agent_id=owner,
