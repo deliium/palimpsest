@@ -169,6 +169,8 @@ class CognitiveLoop:
 
     __slots__ = (
         "_artifact_interpretation_mode",
+        "_care_action_policy",
+        "_caregiving_cognition_mode",
         "_cognitive_budget_mode",
         "_cognitive_budget_policy",
         "_communication_strategy_mode",
@@ -186,6 +188,10 @@ class CognitiveLoop:
         "_cultural_narrative_mode",
         "_cultural_narrative_policy",
         "_deferred_dissonance",
+        "_developmental_entity_learning_rates",
+        "_developmental_learning_spec",
+        "_developmental_mid_run_admit",
+        "_developmental_stage_learning_rates",
         "_emotional_state",
         "_epistemic_policy",
         "_futures",
@@ -221,9 +227,6 @@ class CognitiveLoop:
         "_social_norm_policy",
         "_teaching_mode",
         "_teaching_policy",
-        "_caregiving_cognition_mode",
-        "_care_action_policy",
-        "_developmental_learning_spec",
         "_territorial_claim_mode",
         "_territorial_claim_policy",
         "_theory_of_mind_mode",
@@ -275,6 +278,7 @@ class CognitiveLoop:
         caregiving_cognition_mode: str | None = None,
         care_action_policy: object | None = None,
         developmental_learning_spec: object | None = None,
+        developmental_stage_learning_rates: object | None = None,
         territorial_claim_mode: object | None = None,
         territorial_claim_policy: object | None = None,
         group_formation_mode: object | None = None,
@@ -701,6 +705,19 @@ class CognitiveLoop:
                     "caregiving_cognition_bind mode=deterministic policy_version=%s",
                     "caregiving-bias.v1",
                 )
+        self._developmental_mid_run_admit = False
+        self._developmental_entity_learning_rates: dict[str, float] = {}
+        if developmental_stage_learning_rates is None:
+            self._developmental_stage_learning_rates = {}
+        elif isinstance(developmental_stage_learning_rates, dict):
+            self._developmental_stage_learning_rates = {
+                str(stage): float(rate)
+                for stage, rate in developmental_stage_learning_rates.items()
+            }
+        else:
+            raise TypeError(
+                "developmental_stage_learning_rates must be a dict or None"
+            )
         if developmental_learning_spec is None:
             self._developmental_learning_spec = None
             _LOG.info(
@@ -1097,6 +1114,34 @@ class CognitiveLoop:
         )
         return updated
 
+    def mark_developmental_mid_run_admit(self) -> None:
+        """Mark this loop as belonging to a mid-run admitted owner."""
+        self._developmental_mid_run_admit = True
+        _LOG.info(
+            "developmental_mid_run_admit marked=%s",
+            True,
+        )
+
+    def bind_developmental_entity_learning_rates(
+        self, rates_by_entity: object | None
+    ) -> None:
+        """Bind tick-scoped objective learning_rate_by_entity (entity_id → factor)."""
+        if rates_by_entity is None:
+            self._developmental_entity_learning_rates = {}
+            return
+        if not isinstance(rates_by_entity, dict):
+            raise TypeError(
+                "rates_by_entity must be a dict[str, float] or None"
+            )
+        cleaned: dict[str, float] = {}
+        for key, value in rates_by_entity.items():
+            cleaned[str(key)] = float(value)
+        self._developmental_entity_learning_rates = cleaned
+        _LOG.debug(
+            "developmental_entity_learning_rates_bound entity_count=%s",
+            len(cleaned),
+        )
+
     def _prepare_developmental_knowledge(
         self,
         loop_input: CognitiveLoopInput,
@@ -1120,6 +1165,8 @@ class CognitiveLoop:
             DevelopmentalKnowledgeLedger,
             apply_developmental_acquisition,
             empty_developmental_knowledge_ledger,
+            resolve_developmental_applicability,
+            resolve_developmental_rate_hints,
         )
 
         if self._developmental_learning_spec is None:
@@ -1133,7 +1180,11 @@ class CognitiveLoop:
             ledger = carried
         else:
             max_entries = int(
-                getattr(self._developmental_learning_spec, "max_entries_per_domain", 256)
+                getattr(
+                    self._developmental_learning_spec,
+                    "max_entries_per_domain",
+                    256,
+                )
             )
             ledger = empty_developmental_knowledge_ledger(
                 loop_input.agent_id, max_entries_per_domain=max_entries
@@ -1143,10 +1194,33 @@ class CognitiveLoop:
             loop_input.agent_id.value,
             len(ledger.entries),
         )
+        entity_rate: float | None = None
+        body = getattr(loop_input.observation, "self_body", None)
+        entity = getattr(body, "entity_id", None) if body is not None else None
+        entity_token = getattr(entity, "value", None) if entity is not None else None
+        if isinstance(entity_token, str):
+            entity_rate = self._developmental_entity_learning_rates.get(entity_token)
+        lifecycle_factor, learning_rate_zero = resolve_developmental_rate_hints(
+            loop_input.observation,
+            stage_learning_rates=self._developmental_stage_learning_rates,
+            entity_learning_rate=entity_rate,
+        )
+        applicability = str(
+            getattr(
+                self._developmental_learning_spec,
+                "applicability",
+                "mid_run_new_agents",
+            )
+        )
+        applicable = resolve_developmental_applicability(
+            applicability=applicability,
+            observation=loop_input.observation,
+            mid_run_admit=self._developmental_mid_run_admit,
+        )
         budget_enforced = self._cognitive_budget_mode is CognitionBudgetMode.ENFORCED
         context = DevelopmentalAcquisitionContext(
-            lifecycle_factor=1.0,
-            learning_rate_zero=False,
+            lifecycle_factor=lifecycle_factor,
+            learning_rate_zero=learning_rate_zero,
             budget_enforced=budget_enforced,
             budget_ledger=self._tick_budget_ledger if budget_enforced else None,
             predictive_world_model=(
@@ -1177,6 +1251,7 @@ class CognitiveLoop:
                 is ArtifactInterpretationMode.DETERMINISTIC
             ),
             advice_delta=advice_delta,
+            applicable=applicable,
         )
         result = apply_developmental_acquisition(
             ledger,

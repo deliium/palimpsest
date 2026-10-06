@@ -420,6 +420,7 @@ class AgentRuntime:
         "_counterfactual_state",
         "_cultural_narratives",
         "_decision_journal",
+        "_developmental_audits",
         "_developmental_knowledge",
         "_emotional_state",
         "_finalized_hashes",
@@ -458,7 +459,6 @@ class AgentRuntime:
         "_theory_of_mind",
         "_translator",
         "_world_model_audits",
-        "_developmental_audits",
     )
 
     def __init__(
@@ -979,14 +979,18 @@ class AgentRuntime:
                 self._developmental_knowledge = None
             return
         if type(ledger) is not DevelopmentalKnowledgeLedger:
-            raise TypeError("developmental_knowledge must be DevelopmentalKnowledgeLedger")
+            raise TypeError(
+                "developmental_knowledge must be DevelopmentalKnowledgeLedger"
+            )
         if ledger.owner_id != owner:
             raise AgentRuntimeError(
                 AgentRuntimeErrorCode.OWNERSHIP,
                 agent_id=owner.value,
             )
         self._developmental_knowledge = ledger
-        from agents.cognition.developmental_learning import DevelopmentalAcquisitionAudit
+        from agents.cognition.developmental_learning import (
+            DevelopmentalAcquisitionAudit,
+        )
 
         pending_audits = getattr(self._loop, "_last_developmental_audits", ())
         for audit in pending_audits:
@@ -3083,6 +3087,16 @@ class AgentRuntime:
 
     def export_world_model_audits(self) -> tuple[object, ...]:
         return tuple(self._world_model_audits)
+
+    def bind_developmental_entity_learning_rates(
+        self, rates_by_entity: object | None
+    ) -> None:
+        """Forward tick-scoped objective learning rates into the cognitive loop."""
+        binder = getattr(
+            self._loop, "bind_developmental_entity_learning_rates", None
+        )
+        if callable(binder):
+            binder(rates_by_entity)
 
     def export_developmental_acquisition_audits(self) -> tuple[object, ...]:
         """Harvest metadata-only developmental acquisition audits."""

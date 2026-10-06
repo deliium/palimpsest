@@ -544,12 +544,35 @@ def _caregiving_loop_kwargs(config: object) -> dict[str, object]:
     }
 
 
+def _developmental_stage_learning_rates(config: object) -> dict[str, float]:
+    """Extract stage_id → learning_rate_factor from population_lifecycle effects."""
+    lifecycle = getattr(config, "population_lifecycle", None)
+    if lifecycle is None:
+        return {}
+    effects = getattr(lifecycle, "stage_capability_effects", ()) or ()
+    rates: dict[str, float] = {}
+    for effect in effects:
+        stage = getattr(effect, "stage_id", None)
+        factor = getattr(effect, "learning_rate_factor", None)
+        if stage is None or factor is None:
+            continue
+        stage_key = getattr(stage, "value", stage)
+        if isinstance(stage_key, str):
+            rates[stage_key] = float(factor)
+    return rates
+
+
 def _developmental_learning_loop_kwargs(config: object) -> dict[str, object]:
     """Bind developmental_learning channel (no AgentCognitionSpec enum)."""
     spec = getattr(config, "developmental_learning", None)
     if spec is None:
         return {}
-    return {"developmental_learning_spec": spec}
+    return {
+        "developmental_learning_spec": spec,
+        "developmental_stage_learning_rates": _developmental_stage_learning_rates(
+            config
+        ),
+    }
 
 
 def _cognition_config_for(
@@ -1790,6 +1813,28 @@ class SimulationRunner:
             len(self._runtimes),
         )
 
+    def _bind_developmental_entity_learning_rates(self, tick: int) -> None:
+        """Publish objective learning_rate_by_entity into each cognitive loop."""
+        if getattr(self._config, "developmental_learning", None) is None:
+            return
+        raw = self._engine.learning_rate_by_entity(tick=tick)
+        rates = {
+            entity_id.value: float(factor) for entity_id, factor in raw.items()
+        }
+        for runtime in self._runtimes:
+            binder = getattr(
+                runtime, "bind_developmental_entity_learning_rates", None
+            )
+            if callable(binder):
+                binder(rates)
+        _LOG.debug(
+            "developmental_entity_learning_rates_published run_id=%s tick=%s "
+            "entity_count=%s",
+            self._run_id.value,
+            tick,
+            len(rates),
+        )
+
     async def run_tick(self) -> RunnerAttemptReceipt:
         """Observe, prepare, bind, commit, and finalize one tick."""
         if self._closed:
@@ -1815,6 +1860,7 @@ class SimulationRunner:
             tick_value,
             len(self._runtimes),
         )
+        self._bind_developmental_entity_learning_rates(tick_value)
 
         pendings: list[PendingRuntimeFinalization] = []
         commands: list[FinalizationCommand] = []
@@ -2492,7 +2538,9 @@ class SimulationRunner:
 
     def export_developmental_acquisition_audits(self) -> tuple[object, ...]:
         """Harvest metadata-only developmental acquisition audits."""
-        from agents.cognition.developmental_learning import DevelopmentalAcquisitionAudit
+        from agents.cognition.developmental_learning import (
+            DevelopmentalAcquisitionAudit,
+        )
 
         collected: list[DevelopmentalAcquisitionAudit] = []
         for runtime in self._runtimes:
@@ -2989,6 +3037,11 @@ class SimulationRunner:
             )
             if self._started and runtime.status is AgentRuntimeStatus.CREATED:
                 runtime.start()
+            mark_admit = getattr(
+                cognitive_loop, "mark_developmental_mid_run_admit", None
+            )
+            if callable(mark_admit):
+                mark_admit()
             assert_blank_slate_subjective_state(owner, BlankSlateStoreCounts())
             bundle = _AgentBundle(
                 runtime=runtime,

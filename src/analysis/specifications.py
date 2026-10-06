@@ -1238,12 +1238,16 @@ def _spec_developmental_acquisition() -> MetricSpecification:
             "mean_domain_coverage": "mean unique domains acquired per agent",
             "mean_confidence_mass": "mean confidence-band mass over acquired rows",
             "mean_time_to_first_entry": "mean tick of first acquired row per agent",
+            "mean_exposures_to_acquisition": (
+                "mean exposures_to_acquisition over first-write acquired rows"
+            ),
         },
         value_keys=(
             "acquired_count",
             "agent_count",
             "mean_confidence_mass",
             "mean_domain_coverage",
+            "mean_exposures_to_acquisition",
             "mean_time_to_first_entry",
         ),
         empty_case="availability=absent; no_developmental_audits",

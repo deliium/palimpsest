@@ -825,6 +825,17 @@ class WorldEngine:
     def lifecycle_channel_active(self) -> bool:
         return self._population_lifecycle is not None
 
+    def learning_rate_by_entity(self, *, tick: int) -> dict[EntityId, float]:
+        """Objective continuous learning-rate factors (entity_id → factor).
+
+        Empty when lifecycle developmental extensions are off or every factor
+        is the passthrough ``1.0``. Same map used for skill growth compose.
+        """
+        raw = self._lifecycle_learning_rate_map(tick=tick)
+        if not raw:
+            return {}
+        return dict(raw)
+
     @property
     def kinship_channel_active(self) -> bool:
         return self._kinship_spec is not None

@@ -2511,7 +2511,8 @@ def developmental_learning_profile(
     if config.schema_version != RUNNER_SCHEMA_VERSION_V29:
         raise ValueError(
             "developmental learning profile requires runner-config-v29 "
-            f"(code=developmental_learning_profile_schema got={config.schema_version!r})"
+            "(code=developmental_learning_profile_schema "
+            f"got={config.schema_version!r})"
         )
     if not config.v3_capability_flags.generational_population:
         raise ValueError(
@@ -2648,6 +2649,7 @@ def experiment_aj_developmental_learning(
             developmental_learning=example_developmental_learning_spec(
                 enabled_domains=("locations", "resources", "hazards", "skills"),
                 enabled_sources=("observation", "experimentation"),
+                applicability="all_live_agents",
             ),
             dependency_care=None,
             kinship=None,
@@ -2675,6 +2677,7 @@ def experiment_aj_developmental_learning(
                     "imitation",
                     "communication",
                 ),
+                applicability="all_live_agents",
             ),
         )
     )
@@ -2684,6 +2687,7 @@ def experiment_aj_developmental_learning(
             developmental_learning=example_developmental_learning_spec(
                 enabled_domains=("vocabulary", "practices", "locations"),
                 enabled_sources=("observation", "artifact", "experimentation"),
+                applicability="all_live_agents",
             ),
         )
     )

@@ -158,6 +158,16 @@ def compute_developmental_acquisition(
         if not first_tick
         else sum(first_tick.values()) / len(first_tick)
     )
+    exposure_samples = [
+        int(row.exposures_to_acquisition)
+        for row in acquired
+        if getattr(row, "exposures_to_acquisition", None) is not None
+    ]
+    mean_exposures = (
+        0.0
+        if not exposure_samples
+        else sum(exposure_samples) / len(exposure_samples)
+    )
     values: dict[str, object] = {
         "layer": _LAYER,
         "agent_count": len(agents),
@@ -165,6 +175,7 @@ def compute_developmental_acquisition(
         "mean_domain_coverage": quantize_float(coverage),
         "mean_confidence_mass": quantize_float(mean_conf),
         "mean_time_to_first_entry": quantize_float(mean_ttf),
+        "mean_exposures_to_acquisition": quantize_float(mean_exposures),
     }
     return _document(
         spec,

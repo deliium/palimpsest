@@ -66,6 +66,8 @@ __all__ = [
     "parse_developmental_domain_id",
     "parse_developmental_source_id",
     "require_owner_developmental_knowledge",
+    "resolve_developmental_applicability",
+    "resolve_developmental_rate_hints",
     "upsert_developmental_entry",
 ]
 
@@ -257,6 +259,8 @@ class DevelopmentalKnowledgeLedger:
     entries: tuple[DevelopmentalKnowledgeEntry, ...] = ()
     policy_version: str = DEVELOPMENTAL_LEARNING_POLICY_VERSION
     max_entries_per_domain: int = 256
+    # (domain_id, concept_key, exposure_count) — metadata only, no payloads.
+    exposure_tallies: tuple[tuple[str, str, int], ...] = ()
 
     def __post_init__(self) -> None:
         if type(self.owner_id) is not AgentId:
@@ -286,6 +290,22 @@ class DevelopmentalKnowledgeLedger:
                 raise _fail("entries", "cap_exceeded")
             checked.append(item)
         object.__setattr__(self, "entries", tuple(checked))
+        raw_tallies = _require_tuple("exposure_tallies", self.exposure_tallies)
+        tallies: list[tuple[str, str, int]] = []
+        tally_seen: set[tuple[str, str]] = set()
+        for item in raw_tallies:
+            if not isinstance(item, tuple) or len(item) != 3:
+                raise _fail("exposure_tallies", "invalid_type")
+            domain_t = require_stable_id("exposure_tallies", item[0])
+            concept_t = require_stable_id("exposure_tallies", item[1])
+            count_t = require_exact_nonneg_int("exposure_tallies", item[2])
+            key_t = (domain_t, concept_t)
+            if key_t in tally_seen:
+                raise _fail("exposure_tallies", "duplicate_concept")
+            tally_seen.add(key_t)
+            tallies.append((domain_t, concept_t, count_t))
+        tallies.sort(key=lambda row: (row[0], row[1]))
+        object.__setattr__(self, "exposure_tallies", tuple(tallies))
         _LOG.debug(
             "developmental_ledger_constructed owner_id=%s domain_count=%s "
             "entry_count=%s",
@@ -397,6 +417,7 @@ def upsert_developmental_entry(
         entries=tuple(kept),
         policy_version=ledger.policy_version,
         max_entries_per_domain=ledger.max_entries_per_domain,
+        exposure_tallies=ledger.exposure_tallies,
     )
     _LOG.debug(
         "developmental_write owner_id=%s domain=%s source=%s teacher_present=%s "
@@ -426,7 +447,7 @@ def compose_developmental_effective_rate(
 
     1. dependency ``learning_rate_zero`` → 0
     2. ``stage_compose`` multiply by lifecycle factor (or ignore)
-    3. ``base_rate`` × source weight
+    3. ``base_rate`` x source weight
     """
     if type(owner_id) is not AgentId:
         raise _fail("owner_id", "invalid_type")
@@ -638,6 +659,7 @@ class DevelopmentalAcquisitionAudit:
     reason_code: str
     teacher_present: bool
     teacher_agent_id: AgentId | None = None
+    exposures_to_acquisition: int | None = None
 
     def __post_init__(self) -> None:
         if type(self.owner_id) is not AgentId:
@@ -648,9 +670,7 @@ class DevelopmentalAcquisitionAudit:
         object.__setattr__(
             self, "source_id", parse_developmental_source_id(self.source_id)
         )
-        object.__setattr__(
-            self, "tick", require_exact_nonneg_int("tick", self.tick)
-        )
+        object.__setattr__(self, "tick", require_exact_nonneg_int("tick", self.tick))
         if type(self.acquired) is not bool:
             raise _fail("acquired", "invalid_type")
         band = require_stable_id("confidence_band", self.confidence_band)
@@ -667,6 +687,13 @@ class DevelopmentalAcquisitionAudit:
             raise _fail("teacher_agent_id", "invalid_type")
         if teacher is not None and not self.teacher_present:
             raise _fail("teacher_present", "teacher_mismatch")
+        exposures = self.exposures_to_acquisition
+        if exposures is not None:
+            object.__setattr__(
+                self,
+                "exposures_to_acquisition",
+                require_exact_nonneg_int("exposures_to_acquisition", exposures),
+            )
 
 
 @dataclass(frozen=True, slots=True)
@@ -686,6 +713,76 @@ class DevelopmentalAcquisitionContext:
     cultural_narrative_on: bool = False
     artifact_interpretation_on: bool = False
     advice_delta: tuple[object, ...] = ()
+    applicable: bool = True
+
+
+def resolve_developmental_rate_hints(
+    observation: object,
+    *,
+    stage_learning_rates: Mapping[str, float] | None = None,
+    entity_learning_rate: float | None = None,
+) -> tuple[float, bool]:
+    """Derive lifecycle factor and learning_rate_zero from Observation + rates.
+
+    ``learning_rate_zero`` follows a critical ``learning`` dependency need on
+    ``self_body`` (same signal as objective dependency-care consequence).
+
+    ``lifecycle_factor`` prefers objective ``entity_learning_rate`` (engine
+    continuous / ``learning_rate_by_entity``) when present — that already embeds
+    stage + gradual-aging. Otherwise falls back to the stage→rate table from
+    ``population_lifecycle.stage_capability_effects``.
+    """
+    learning_rate_zero = False
+    stage: str | None = None
+    body = getattr(observation, "self_body", None)
+    if body is not None:
+        lifecycle = getattr(body, "lifecycle", None)
+        if lifecycle is not None:
+            raw_stage = getattr(lifecycle, "stage", None)
+            if isinstance(raw_stage, str):
+                stage = raw_stage
+        needs = getattr(body, "dependency_needs", None)
+        rows = getattr(needs, "needs", ()) if needs is not None else ()
+        for row in rows:
+            if (
+                getattr(row, "need_id", None) == "learning"
+                and bool(getattr(row, "critical", False))
+            ):
+                learning_rate_zero = True
+                break
+    if entity_learning_rate is not None:
+        factor = _finite("entity_learning_rate", float(entity_learning_rate))
+        if factor < 0.0:
+            raise _fail("entity_learning_rate", "out_of_range")
+        return factor, learning_rate_zero
+    factor = 1.0
+    if stage is not None and stage_learning_rates:
+        raw = stage_learning_rates.get(stage)
+        if raw is not None:
+            factor = _finite("lifecycle_factor", float(raw))
+            if factor < 0.0:
+                raise _fail("lifecycle_factor", "out_of_range")
+    return factor, learning_rate_zero
+
+
+def resolve_developmental_applicability(
+    *,
+    applicability: str,
+    observation: object,
+    mid_run_admit: bool,
+) -> bool:
+    """Return whether this owner should run developmental acquisition this tick."""
+    mode = require_stable_id("applicability", applicability)
+    if mode == "all_live_agents":
+        return True
+    if mode == "mid_run_new_agents":
+        return bool(mid_run_admit)
+    if mode == "lifecycle_learning_stage":
+        body = getattr(observation, "self_body", None)
+        lifecycle = getattr(body, "lifecycle", None) if body is not None else None
+        stage = getattr(lifecycle, "stage", None) if lifecycle is not None else None
+        return stage == "learning"
+    raise _fail("applicability", "unknown_applicability")
 
 
 @dataclass(frozen=True, slots=True)
@@ -853,14 +950,15 @@ def _collect_observation_candidates(
             kind = str(getattr(occurrence, "kind", "act")).lower()
             if "success" not in kind and "complete" not in kind:
                 continue
-            teacher = AgentId(other.value) if hasattr(other, "value") else AgentId(str(other))
+            other_token = other.value if hasattr(other, "value") else str(other)
+            teacher = AgentId(other_token)
             if DevelopmentalDomainId.PRACTICES.value in enabled_domains:
                 out.append(
                     _AcquisitionCandidate(
                         domain=DevelopmentalDomainId.PRACTICES,
                         source=DevelopmentalSourceId.IMITATION,
                         concept_key=f"practice:imit:{kind}",
-                        evidence_ref=f"imit:{tick}:{other.value if hasattr(other, 'value') else other}",
+                        evidence_ref=f"imit:{tick}:{other_token}",
                         teacher_agent_id=teacher,
                     )
                 )
@@ -947,6 +1045,33 @@ def _collect_instruction_candidates(
     return out
 
 
+def _bump_exposure_tally(
+    ledger: DevelopmentalKnowledgeLedger,
+    *,
+    domain: DevelopmentalDomainId,
+    concept_key: str,
+) -> tuple[DevelopmentalKnowledgeLedger, int]:
+    """Increment owner/domain/concept exposure count; return (ledger, count)."""
+    tallies: dict[tuple[str, str], int] = {
+        (domain_id, concept): count
+        for domain_id, concept, count in ledger.exposure_tallies
+    }
+    key = (domain.value, concept_key)
+    count = tallies.get(key, 0) + 1
+    tallies[key] = count
+    updated = DevelopmentalKnowledgeLedger(
+        owner_id=ledger.owner_id,
+        entries=ledger.entries,
+        policy_version=ledger.policy_version,
+        max_entries_per_domain=ledger.max_entries_per_domain,
+        exposure_tallies=tuple(
+            (domain_id, concept, n)
+            for (domain_id, concept), n in sorted(tallies.items())
+        ),
+    )
+    return updated, count
+
+
 def apply_developmental_acquisition(
     ledger: DevelopmentalKnowledgeLedger,
     *,
@@ -969,6 +1094,15 @@ def apply_developmental_acquisition(
             "developmental_acquisition_skip owner_id=%s reason_code=%s",
             ledger.owner_id.value,
             "channel_mode_off",
+        )
+        return DevelopmentalAcquisitionResult(
+            ledger=ledger, audits=(), world_model_uplift=False
+        )
+    if not ctx.applicable:
+        _LOG.debug(
+            "developmental_acquisition_skip owner_id=%s reason_code=%s",
+            ledger.owner_id.value,
+            "applicability_filtered",
         )
         return DevelopmentalAcquisitionResult(
             ledger=ledger, audits=(), world_model_uplift=False
@@ -1022,6 +1156,11 @@ def apply_developmental_acquisition(
             continue
         if candidate.source.value not in enabled_sources:
             continue
+        current, exposure_count = _bump_exposure_tally(
+            current,
+            domain=candidate.domain,
+            concept_key=candidate.concept_key,
+        )
         if not _mode_allows(candidate.domain, ctx):
             if (
                 candidate.source is DevelopmentalSourceId.ARTIFACT
@@ -1094,10 +1233,10 @@ def apply_developmental_acquisition(
             continue
 
         already = any(
-            row.domain_id is candidate.domain and row.concept_key == candidate.concept_key
+            row.domain_id is candidate.domain
+            and row.concept_key == candidate.concept_key
             for row in current.entries
         )
-        exposure_count = min_exposures if already else 1
         effective = compose_developmental_effective_rate(
             owner_id=ledger.owner_id,
             domain=candidate.domain,
@@ -1214,7 +1353,9 @@ def apply_developmental_acquisition(
                 "teacher_id=%s source=%s",
                 ledger.owner_id.value,
                 candidate.domain.value,
-                None if candidate.teacher_agent_id is None else candidate.teacher_agent_id.value,
+                None
+                if candidate.teacher_agent_id is None
+                else candidate.teacher_agent_id.value,
                 candidate.source.value,
             )
         audits.append(
@@ -1228,6 +1369,7 @@ def apply_developmental_acquisition(
                 reason_code="acquired",
                 teacher_present=candidate.teacher_agent_id is not None,
                 teacher_agent_id=candidate.teacher_agent_id,
+                exposures_to_acquisition=None if already else exposure_count,
             )
         )
 

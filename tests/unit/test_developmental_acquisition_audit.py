@@ -81,3 +81,9 @@ def test_acquisition_emits_metadata_audits_without_concept_payloads() -> None:
         assert row.source_id is DevelopmentalSourceId.OBSERVATION
         assert row.reason_code == "acquired"
         assert not hasattr(row, "concept_key")
+    first_writes = [
+        row for row in acquired if row.exposures_to_acquisition is not None
+    ]
+    assert first_writes
+    assert all(row.exposures_to_acquisition == 1 for row in first_writes)
+    assert result.ledger.exposure_tallies

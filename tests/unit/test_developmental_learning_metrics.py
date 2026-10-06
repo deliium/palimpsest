@@ -46,6 +46,7 @@ def _audit(
     tick: int,
     acquired: bool = True,
     teacher: AgentId | None = None,
+    exposures_to_acquisition: int | None = None,
 ) -> DevelopmentalAcquisitionAudit:
     return DevelopmentalAcquisitionAudit(
         owner_id=AgentId(owner),
@@ -57,6 +58,7 @@ def _audit(
         reason_code="acquired" if acquired else "rate_zero",
         teacher_present=teacher is not None,
         teacher_agent_id=teacher,
+        exposures_to_acquisition=exposures_to_acquisition,
     )
 
 
@@ -67,6 +69,7 @@ def test_compute_acquisition_and_source_mix() -> None:
             domain=DevelopmentalDomainId.LOCATIONS,
             source=DevelopmentalSourceId.OBSERVATION,
             tick=1,
+            exposures_to_acquisition=2,
         ),
         _audit(
             owner="a",
@@ -74,12 +77,14 @@ def test_compute_acquisition_and_source_mix() -> None:
             source=DevelopmentalSourceId.INSTRUCTION,
             tick=2,
             teacher=AgentId("teacher"),
+            exposures_to_acquisition=4,
         ),
         _audit(
             owner="b",
             domain=DevelopmentalDomainId.RESOURCES,
             source=DevelopmentalSourceId.OBSERVATION,
             tick=1,
+            exposures_to_acquisition=3,
         ),
     )
     acq = compute_developmental_acquisition(
@@ -90,6 +95,7 @@ def test_compute_acquisition_and_source_mix() -> None:
     assert acq.metric_family == "developmental_acquisition"
     assert DEVELOPMENTAL_ACQUISITION_METRIC_VERSION == "developmental_acquisition@1"
     assert acq.values["agent_count"] == 2
+    assert acq.values["mean_exposures_to_acquisition"] == 3.0
     mix = compute_developmental_source_mix(
         audits, run_id="run-dev-1", input_revision="rev-1"
     )
