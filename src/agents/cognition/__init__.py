@@ -1091,6 +1091,8 @@ __all__ = [
     "norm_evidence_id",
     "norm_response_penalties",
     "orchestrate_offline_consolidation",
+    "parse_developmental_domain_id",
+    "parse_developmental_source_id",
     "parse_identity_predicate",
     "path_value",
     "policy_from_limits",

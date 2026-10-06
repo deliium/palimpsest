@@ -66,3 +66,26 @@ def test_no_cultural_historical_memory_ownership_claim() -> None:
     source = _DEV_MOD.read_text(encoding="utf-8")
     assert "cultural_historical_memory" not in source
     assert "CausalProvenanceKind" not in source
+
+
+def test_analysis_metrics_do_not_import_cognition_private_stores() -> None:
+    metrics = _ROOT / "src" / "analysis" / "developmental_learning_metrics.py"
+    tree = ast.parse(metrics.read_text(encoding="utf-8"))
+    for node in ast.walk(tree):
+        if isinstance(node, ast.ImportFrom) and node.module:
+            assert not node.module.startswith("agents.cognition")
+            assert not node.module.startswith("world.kinship")
+
+
+def test_agent_command_count_unchanged() -> None:
+    import typing
+
+    from world.actions import AgentCommand
+
+    assert len(typing.get_args(AgentCommand)) == 26
+
+
+def test_alembic_head_stays_0017() -> None:
+    versions = _ROOT / "alembic" / "versions"
+    assert (versions / "0017_memory_embedding_hnsw.py").is_file()
+    assert not any(versions.glob("*0018*"))

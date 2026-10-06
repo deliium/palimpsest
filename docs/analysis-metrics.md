@@ -64,6 +64,10 @@ Catalog version: `metric-catalog-v1`. Document schema: `MetricDocument` schema `
 
 `dependency_survival@1`, `caregiver_diversity@1`, `caregiving_burden@1`, and `intergenerational_cooperation@1` assemble only from detached post-run rows (`analysis.dependency_care_metrics`). They never invent caregiver roles from kinship alone, never feed cognition, and stay absent when dependency-care inputs are missing. Experiment AI stays off the V1 gate.
 
+### Developmental learning families (off the V1 gate)
+
+`developmental_acquisition@1`, `developmental_source_mix@1`, and `developmental_divergence@1` assemble from harvested `DevelopmentalAcquisitionAudit` rows and/or owner `DevelopmentalKnowledgeLedger` snapshots (`analysis.developmental_learning_metrics`). They never overload `knowledge_diffusion` / `cultural_transmission`, never include concept payloads, and never feed cognition. Experiment AJ stays off the V1 gate.
+
 ### Supporting formulas (not a separate family)
 
 `action_resolution_rates@1` defines attempted / applied / rejected / conflicted rates **only** from `ActionResolution` evidence. Never infer rejected attempts from absent world events. Task 11 implementations reuse this shared spec beside cooperation/conflict occurrence rates.

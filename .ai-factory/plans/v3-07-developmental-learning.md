@@ -384,19 +384,19 @@ Follow `skill_learning@1` registration via harvested audits. Do **not** overload
   - Files: `src/experiments/catalog.py`, `tests/unit/test_developmental_learning_catalog_arm.py`
   - Depends on: Task 2, Task 3, Task 11, Task 13
 
-- [ ] Task 15: Flags-off / channel-off regression proofs
+- [x] Task 15: Flags-off / channel-off regression proofs
   - Explicit proofs: V3 flags-off trajectory hashes unchanged; lifecycle-on without `developmental_learning` preserves AE–AI hashes; V1 gate + `test_v2_scientific_invariants` green; SEMANTIC count stays 43.
   - LOGGING: INFO on hash compare pass/fail codes only.
   - Files: `tests/unit/test_v3_developmental_learning_regression.py`, extend scaffolding gates
   - Depends on: Task 14
 
-- [ ] Task 16: Docs checkpoint via `/aif-docs`
+- [x] Task 16: Docs checkpoint via `/aif-docs`
   - Update `docs/architecture.md` V3 seams: developmental learning channel, species pack, provenance, audit harvest, no society injection, Experiment AJ, `runner-config-v29` exact keys, composition with skill/teaching/naming/norm/convention/narrative/artifact/world-model/budget; `docs/cognition-runtime.md` runtime carry; DESCRIPTION V3 blurb as needed.
   - LOGGING: n/a for docs prose; keep operational log examples metadata-only.
   - Files: `docs/architecture.md`, `docs/cognition-runtime.md`, `.ai-factory/DESCRIPTION.md` as needed
   - Depends on: Task 15
 
-- [ ] Task 17: Architecture invariant tests for anti-injection
+- [x] Task 17: Architecture invariant tests for anti-injection
   - AST/import or unit gates: developmental learning modules must not import analysis; init pipeline must not reference peer subjective stores; forbidden source/domain ids rejected; no `cultural_historical_memory` ownership claim; no `CausalProvenanceKind` widen required by this channel.
   - LOGGING: ERROR with stable codes on violations.
   - Files: `tests/architecture/test_v3_developmental_learning_invariants.py`
