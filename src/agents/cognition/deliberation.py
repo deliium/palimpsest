@@ -150,6 +150,7 @@ class MultiCriteriaIntentionSelector:
         caregiving_cognition_mode: str | None = None,
         care_action_policy: object | None = None,
         mentorship_spec: object | None = None,
+        cultural_features_spec: object | None = None,
     ) -> SelectedIntention:
         owner = loop_input.agent_id
         tick = loop_input.observation.tick
@@ -467,6 +468,25 @@ class MultiCriteriaIntentionSelector:
                 if item.future_id in futures_by_id
             ),
         )
+        from agents.cognition.cultural_features import cultural_feature_bias_futures
+
+        cultural_bias = cultural_feature_bias_futures(
+            ledger=(
+                None
+                if snapshot is None
+                else getattr(snapshot, "cultural_features", None)
+            ),
+            bias_policy=(
+                None
+                if cultural_features_spec is None
+                else getattr(cultural_features_spec, "bias_policy", None)
+            ),
+            futures=tuple(
+                futures_by_id[item.future_id]
+                for item in undominated
+                if item.future_id in futures_by_id
+            ),
+        )
         winner, tie_break = _pairwise_select(
             undominated,
             futures_by_id,
@@ -487,6 +507,7 @@ class MultiCriteriaIntentionSelector:
             narrative_penalties,
             caregiving_bias or None,
             mentorship_bias or None,
+            cultural_bias or None,
         )
         future = futures_by_id.get(winner.future_id)
         direction = ActionDirection.WAIT if future is None else future.direction
@@ -1517,6 +1538,7 @@ def _pairwise_select(
     narrative_penalties: Mapping[str, float] | None = None,
     caregiving_bias: Mapping[str, float] | None = None,
     mentorship_bias: Mapping[str, float] | None = None,
+    cultural_feature_bias: Mapping[str, float] | None = None,
 ) -> tuple[FutureAppraisal, str]:
     if len(appraisals) == 1:
         return appraisals[0], _TIE_BREAK_NONE
@@ -1545,6 +1567,7 @@ def _pairwise_select(
                 narrative_penalties,
                 caregiving_bias,
                 mentorship_bias,
+                cultural_feature_bias,
             )
             if cmp > 0:
                 scores[left.future_id] += 1
@@ -1593,6 +1616,7 @@ def _pairwise_compare(
     narrative_penalties: Mapping[str, float] | None = None,
     caregiving_bias: Mapping[str, float] | None = None,
     mentorship_bias: Mapping[str, float] | None = None,
+    cultural_feature_bias: Mapping[str, float] | None = None,
 ) -> int:
     """Return positive if left preferred, negative if right preferred, else 0."""
     active_drives = set(motivation.active_drive_kinds)
@@ -1762,6 +1786,9 @@ def _pairwise_compare(
     if mentorship_bias is not None:
         total += mentorship_bias.get(left.future_id, 0.0)
         total -= mentorship_bias.get(right.future_id, 0.0)
+    if cultural_feature_bias is not None:
+        total += cultural_feature_bias.get(left.future_id, 0.0)
+        total -= cultural_feature_bias.get(right.future_id, 0.0)
     if total > 0:
         return 1
     if total < 0:

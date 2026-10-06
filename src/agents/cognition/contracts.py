@@ -161,6 +161,7 @@ class Perspective:
     cultural_narratives: object | None = None
     developmental_knowledge: object | None = None
     mentorship: object | None = None
+    cultural_features: object | None = None
     competence_model: object | None = None
     declarative_advice: object | None = None
     recipe_beliefs: object | None = None
@@ -366,6 +367,13 @@ class Perspective:
             self.agent_id,
             field_name="Perspective.mentorship",
         )
+        from agents.cognition.cultural_features import require_owner_cultural_features
+
+        require_owner_cultural_features(
+            self.cultural_features,
+            self.agent_id,
+            field_name="Perspective.cultural_features",
+        )
         from agents.cognition.competence import require_owner_competence
 
         require_owner_competence(
@@ -419,6 +427,7 @@ class Perspective:
             cultural_narratives=self.cultural_narratives,
             developmental_knowledge=self.developmental_knowledge,
             mentorship=self.mentorship,
+            cultural_features=self.cultural_features,
             competence_model=self.competence_model,
             declarative_advice=self.declarative_advice,
             recipe_beliefs=self.recipe_beliefs,

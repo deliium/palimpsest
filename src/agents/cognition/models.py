@@ -727,6 +727,7 @@ class SubjectiveSnapshot:
     cultural_narratives: object | None = None
     developmental_knowledge: object | None = None
     mentorship: object | None = None
+    cultural_features: object | None = None
     competence_model: object | None = None
     declarative_advice: object | None = None
     recipe_beliefs: object | None = None
@@ -940,6 +941,13 @@ class SubjectiveSnapshot:
             self.mentorship,
             self.owner_id,
             field_name="SubjectiveSnapshot.mentorship",
+        )
+        from agents.cognition.cultural_features import require_owner_cultural_features
+
+        require_owner_cultural_features(
+            self.cultural_features,
+            self.owner_id,
+            field_name="SubjectiveSnapshot.cultural_features",
         )
         from agents.cognition.competence import require_owner_competence
 
@@ -3736,6 +3744,7 @@ class CognitiveLoopProposal:
     cultural_narratives: object | None = None
     developmental_knowledge: object | None = None
     mentorship: object | None = None
+    cultural_features: object | None = None
     competence_model: object | None = None
     declarative_advice: object | None = None
     recipe_beliefs: object | None = None
@@ -3860,6 +3869,13 @@ class CognitiveLoopProposal:
             self.agent_id,
             field_name="CognitiveLoopProposal.mentorship",
         )
+        from agents.cognition.cultural_features import require_owner_cultural_features
+
+        require_owner_cultural_features(
+            self.cultural_features,
+            self.agent_id,
+            field_name="CognitiveLoopProposal.cultural_features",
+        )
         from agents.cognition.competence import require_owner_competence
 
         require_owner_competence(
@@ -3957,6 +3973,7 @@ class CognitiveLoopResult:
     cultural_narratives: object | None = None
     developmental_knowledge: object | None = None
     mentorship: object | None = None
+    cultural_features: object | None = None
     competence_model: object | None = None
     declarative_advice: object | None = None
     recipe_beliefs: object | None = None
@@ -4057,6 +4074,13 @@ class CognitiveLoopResult:
             self.mentorship,
             self.agent_id,
             field_name="CognitiveLoopResult.mentorship",
+        )
+        from agents.cognition.cultural_features import require_owner_cultural_features
+
+        require_owner_cultural_features(
+            self.cultural_features,
+            self.agent_id,
+            field_name="CognitiveLoopResult.cultural_features",
         )
         if self.territorial_audits is not None:
             from agents.cognition.territorial import TerritorialClaimAudit

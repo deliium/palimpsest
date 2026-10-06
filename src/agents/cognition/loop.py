@@ -185,6 +185,7 @@ class CognitiveLoop:
         "_counterfactual_policy",
         "_counterfactual_skipped",
         "_counterfactual_state",
+        "_cultural_features_spec",
         "_cultural_narrative_mode",
         "_cultural_narrative_policy",
         "_deferred_dissonance",
@@ -192,8 +193,6 @@ class CognitiveLoop:
         "_developmental_learning_spec",
         "_developmental_mid_run_admit",
         "_developmental_stage_learning_rates",
-        "_last_mentorship_audits",
-        "_mentorship_spec",
         "_emotional_state",
         "_epistemic_policy",
         "_futures",
@@ -204,9 +203,12 @@ class CognitiveLoop:
         "_intention",
         "_last_cognitive_budget_audit",
         "_last_counterfactual_scenarios",
+        "_last_cultural_feature_audits",
         "_last_developmental_audits",
+        "_last_mentorship_audits",
         "_memory",
         "_memory_updates",
+        "_mentorship_spec",
         "_motivation",
         "_perception",
         "_planner",
@@ -282,6 +284,7 @@ class CognitiveLoop:
         developmental_learning_spec: object | None = None,
         developmental_stage_learning_rates: object | None = None,
         mentorship_spec: object | None = None,
+        cultural_features_spec: object | None = None,
         territorial_claim_mode: object | None = None,
         territorial_claim_policy: object | None = None,
         group_formation_mode: object | None = None,
@@ -775,6 +778,29 @@ class CognitiveLoop:
                 True,
                 len(kinds),
             )
+        if cultural_features_spec is None:
+            self._cultural_features_spec = None
+            _LOG.info(
+                "cultural_features_bind cultural_features_active=%s "
+                "feature_kind_count=%s",
+                False,
+                0,
+            )
+        else:
+            kinds = getattr(cultural_features_spec, "enabled_feature_kinds", None)
+            mode = getattr(cultural_features_spec, "cultural_feature_mode", None)
+            if not isinstance(kinds, tuple) or mode != "deterministic":
+                raise TypeError(
+                    "cultural_features_spec must expose enabled_feature_kinds and "
+                    "cultural_feature_mode=deterministic"
+                )
+            self._cultural_features_spec = cultural_features_spec
+            _LOG.info(
+                "cultural_features_bind cultural_features_active=%s "
+                "feature_kind_count=%s",
+                True,
+                len(kinds),
+            )
         from agents.cognition.production import ProductionKnowledgeMode
 
         production_mode = (
@@ -795,6 +821,7 @@ class CognitiveLoop:
         self._deferred_dissonance: tuple[object, ...] = ()
         self._last_developmental_audits: tuple[object, ...] = ()
         self._last_mentorship_audits: tuple[object, ...] = ()
+        self._last_cultural_feature_audits: tuple[object, ...] = ()
 
     def _prepare_reputation(self, loop_input: CognitiveLoopInput) -> object | None:
         from agents.cognition.configuration import CognitionReputationMode
@@ -1423,7 +1450,11 @@ class CognitiveLoop:
             lineage_policy=lineage_policy,
         )
         audits.extend(adapter_audits)
-        decay = float(getattr(bond_policy, "decay_per_tick", 0.0)) if bond_policy else 0.0
+        decay = (
+            float(getattr(bond_policy, "decay_per_tick", 0.0))
+            if bond_policy
+            else 0.0
+        )
         if decay > 0.0:
             ledger = decay_mentorship_bonds(
                 ledger, tick=tick, decay_per_tick=decay
@@ -1434,6 +1465,181 @@ class CognitiveLoop:
             getattr(owner_id, "value", owner_id),
             len(ledger.bonds),
             len(ledger.lineage),
+        )
+        return ledger
+
+    def _prepare_cultural_features(
+        self,
+        loop_input: object,
+        *,
+        advice_delta: tuple[object, ...] = (),
+        semantic_naming: object | None = None,
+        social_conventions: object | None = None,
+        cultural_narratives: object | None = None,
+        social_norms: object | None = None,
+        artifact_interpretations: object | None = None,
+    ) -> object | None:
+        """Carry or mint cultural beliefs from public evidence when channel is on."""
+        from agents.cognition.artifacts import ArtifactInterpretationMode
+        from agents.cognition.configuration import (
+            CognitionCulturalNarrativeMode,
+            CognitionSemanticNamingMode,
+            CognitionSocialConventionMode,
+            CognitionSocialNormMode,
+            CognitionTeachingInteractionMode,
+        )
+        from agents.cognition.cultural_features import (
+            CulturalFeatureLedger,
+            apply_cultural_feature_channel_uptake,
+            apply_cultural_feature_compose_adapters,
+            apply_cultural_feature_from_teaching,
+            collect_cultural_feature_compose_keys,
+            collect_cultural_feature_public_cues,
+            empty_cultural_feature_ledger,
+            log_unsatisfiable_feature_kinds,
+            require_owner_cultural_features,
+        )
+        from agents.cognition.developmental_learning import (
+            resolve_developmental_applicability,
+        )
+        from agents.models import AgentId
+
+        if self._cultural_features_spec is None:
+            self._last_cultural_feature_audits = ()
+            return None
+        snapshot = getattr(loop_input, "snapshot", None)
+        carried = (
+            None if snapshot is None else getattr(snapshot, "cultural_features", None)
+        )
+        owner_id = getattr(loop_input, "agent_id", None)
+        if type(owner_id) is not AgentId:
+            raise TypeError("loop_input.agent_id must be AgentId")
+        if carried is None:
+            max_beliefs = int(
+                getattr(self._cultural_features_spec, "max_beliefs_per_owner", 64)
+            )
+            max_refs = int(
+                getattr(self._cultural_features_spec, "max_evidence_refs", 16)
+            )
+            ledger = empty_cultural_feature_ledger(
+                owner_id, max_beliefs=max_beliefs, max_evidence_refs=max_refs
+            )
+        else:
+            require_owner_cultural_features(
+                carried,
+                owner_id,
+                field_name="loop_input.snapshot.cultural_features",
+            )
+            if type(carried) is not CulturalFeatureLedger:
+                raise TypeError("cultural_features must be CulturalFeatureLedger")
+            ledger = carried
+        observation = getattr(loop_input, "observation", None)
+        applicability = str(
+            getattr(self._cultural_features_spec, "applicability", "all_live_agents")
+        )
+        mid_run = bool(getattr(self, "_developmental_mid_run_admit", False))
+        applicable = resolve_developmental_applicability(
+            applicability=applicability,
+            observation=observation,
+            mid_run_admit=mid_run,
+        )
+        if not applicable:
+            self._last_cultural_feature_audits = ()
+            return ledger
+        spec = self._cultural_features_spec
+        enabled_kinds = tuple(getattr(spec, "enabled_feature_kinds", ()))
+        enabled_channels = tuple(getattr(spec, "enabled_provenance_channels", ()))
+        uptake_compose = getattr(spec, "uptake_compose", None)
+        tick = int(getattr(observation, "tick", 0))
+        naming_on = (
+            self._semantic_naming_mode is CognitionSemanticNamingMode.DETERMINISTIC
+        )
+        convention_on = (
+            self._social_convention_mode
+            is CognitionSocialConventionMode.DETERMINISTIC
+        )
+        narrative_on = (
+            self._cultural_narrative_mode
+            is CognitionCulturalNarrativeMode.DETERMINISTIC
+        )
+        norms_on = self._social_norm_mode is CognitionSocialNormMode.DETERMINISTIC
+        artifacts_on = (
+            self._artifact_interpretation_mode
+            is ArtifactInterpretationMode.DETERMINISTIC
+        )
+        teaching_on = (
+            self._teaching_mode is CognitionTeachingInteractionMode.DETERMINISTIC
+        )
+        mentorship_on = self._mentorship_spec is not None
+        if uptake_compose is not None:
+            log_unsatisfiable_feature_kinds(
+                enabled_feature_kinds=enabled_kinds,
+                enabled_provenance_channels=enabled_channels,
+                uptake_compose=uptake_compose,
+                naming_mode_on=naming_on,
+                narrative_mode_on=narrative_on,
+                norms_mode_on=norms_on,
+                conventions_mode_on=convention_on,
+                artifacts_mode_on=artifacts_on,
+                teaching_mode_on=teaching_on,
+                mentorship_channel_on=mentorship_on,
+            )
+        audits: list[object] = []
+        cues = collect_cultural_feature_public_cues(observation)
+        ledger, channel_audits = apply_cultural_feature_channel_uptake(
+            ledger,
+            enabled_feature_kinds=enabled_kinds,
+            enabled_provenance_channels=enabled_channels,
+            cues=cues,
+            tick=tick,
+        )
+        audits.extend(channel_audits)
+        if uptake_compose is not None:
+            ledger, teaching_audits = apply_cultural_feature_from_teaching(
+                ledger,
+                enabled_feature_kinds=enabled_kinds,
+                enabled_provenance_channels=enabled_channels,
+                advice_delta=advice_delta,
+                tick=tick,
+                teaching_compose_on=bool(getattr(uptake_compose, "teaching", False)),
+                teaching_mode_on=teaching_on,
+                mentorship_compose_on=bool(
+                    getattr(uptake_compose, "mentorship", False)
+                ),
+                mentorship_channel_on=mentorship_on,
+            )
+            audits.extend(teaching_audits)
+            compose_keys = collect_cultural_feature_compose_keys(
+                semantic_naming=semantic_naming,
+                cultural_narratives=cultural_narratives,
+                social_norms=social_norms,
+                social_conventions=social_conventions,
+                artifact_interpretations=artifact_interpretations,
+            )
+            ledger, adapter_audits = apply_cultural_feature_compose_adapters(
+                ledger,
+                enabled_feature_kinds=enabled_kinds,
+                enabled_provenance_channels=enabled_channels,
+                tick=tick,
+                uptake_compose=uptake_compose,
+                naming_mode_on=naming_on,
+                narrative_mode_on=narrative_on,
+                norms_mode_on=norms_on,
+                conventions_mode_on=convention_on,
+                artifacts_mode_on=artifacts_on,
+                naming_keys=compose_keys["naming_keys"],
+                narrative_keys=compose_keys["narrative_keys"],
+                norm_keys=compose_keys["norm_keys"],
+                convention_keys=compose_keys["convention_keys"],
+                artifact_keys=compose_keys["artifact_keys"],
+            )
+            audits.extend(adapter_audits)
+        self._last_cultural_feature_audits = tuple(audits)
+        _LOG.debug(
+            "cultural_features_carried owner_id=%s belief_count=%s audit_count=%s",
+            owner_id.value,
+            len(ledger.beliefs),
+            len(audits),
         )
         return ledger
 
@@ -2264,6 +2470,15 @@ class CognitiveLoop:
             social_conventions=social_conventions,
             cultural_narratives=cultural_narratives,
         )
+        cultural_features = self._prepare_cultural_features(
+            loop_input,
+            advice_delta=advice_delta,
+            semantic_naming=semantic_naming,
+            social_conventions=social_conventions,
+            cultural_narratives=cultural_narratives,
+            social_norms=social_norms,
+            artifact_interpretations=artifact_interpretations,
+        )
         recipe_beliefs = self._prepare_recipe_beliefs(loop_input)
         production_recipe_id = None
         if recipe_beliefs is not None and self._production_allow_provider:
@@ -2424,6 +2639,7 @@ class CognitiveLoop:
                     caregiving_cognition_mode=self._caregiving_cognition_mode,
                     care_action_policy=self._care_action_policy,
                     mentorship_spec=self._mentorship_spec,
+                    cultural_features_spec=self._cultural_features_spec,
                 ),
             ),
             expected_type=SelectedIntention,
@@ -2511,6 +2727,7 @@ class CognitiveLoop:
             cultural_narratives=cultural_narratives,
             developmental_knowledge=developmental_knowledge,
             mentorship=mentorship,
+            cultural_features=cultural_features,
             competence_model=competence,
             declarative_advice=advice,
             recipe_beliefs=recipe_beliefs,
@@ -2677,6 +2894,7 @@ class CognitiveLoop:
             cultural_narratives=proposal.cultural_narratives,
             developmental_knowledge=proposal.developmental_knowledge,
             mentorship=proposal.mentorship,
+            cultural_features=proposal.cultural_features,
             competence_model=proposal.competence_model,
             declarative_advice=proposal.declarative_advice,
             recipe_beliefs=proposal.recipe_beliefs,
