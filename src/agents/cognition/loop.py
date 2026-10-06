@@ -192,6 +192,8 @@ class CognitiveLoop:
         "_developmental_learning_spec",
         "_developmental_mid_run_admit",
         "_developmental_stage_learning_rates",
+        "_last_mentorship_audits",
+        "_mentorship_spec",
         "_emotional_state",
         "_epistemic_policy",
         "_futures",
@@ -279,6 +281,7 @@ class CognitiveLoop:
         care_action_policy: object | None = None,
         developmental_learning_spec: object | None = None,
         developmental_stage_learning_rates: object | None = None,
+        mentorship_spec: object | None = None,
         territorial_claim_mode: object | None = None,
         territorial_claim_policy: object | None = None,
         group_formation_mode: object | None = None,
@@ -751,6 +754,27 @@ class CognitiveLoop:
                 len(domains),
                 len(sources),
             )
+        if mentorship_spec is None:
+            self._mentorship_spec = None
+            _LOG.info(
+                "mentorship_bind mentorship_active=%s content_kind_count=%s",
+                False,
+                0,
+            )
+        else:
+            kinds = getattr(mentorship_spec, "enabled_content_kinds", None)
+            mode = getattr(mentorship_spec, "mentorship_mode", None)
+            if not isinstance(kinds, tuple) or mode != "deterministic":
+                raise TypeError(
+                    "mentorship_spec must expose enabled_content_kinds and "
+                    "mentorship_mode=deterministic"
+                )
+            self._mentorship_spec = mentorship_spec
+            _LOG.info(
+                "mentorship_bind mentorship_active=%s content_kind_count=%s",
+                True,
+                len(kinds),
+            )
         from agents.cognition.production import ProductionKnowledgeMode
 
         production_mode = (
@@ -770,6 +794,7 @@ class CognitiveLoop:
         )
         self._deferred_dissonance: tuple[object, ...] = ()
         self._last_developmental_audits: tuple[object, ...] = ()
+        self._last_mentorship_audits: tuple[object, ...] = ()
 
     def _prepare_reputation(self, loop_input: CognitiveLoopInput) -> object | None:
         from agents.cognition.configuration import CognitionReputationMode
@@ -1262,6 +1287,155 @@ class CognitiveLoop:
         # Audits harvested later (Task 12); keep result ledger for carry.
         self._last_developmental_audits = result.audits
         return result.ledger
+
+    def _prepare_mentorship(
+        self,
+        loop_input: object,
+        *,
+        advice_delta: tuple[object, ...] = (),
+        semantic_naming: object | None = None,
+        social_conventions: object | None = None,
+        cultural_narratives: object | None = None,
+    ) -> object | None:
+        """Carry or mint an owner-scoped mentorship ledger when channel is on."""
+        from agents.cognition.configuration import (
+            CognitionCulturalNarrativeMode,
+            CognitionSemanticNamingMode,
+            CognitionSocialConventionMode,
+            CognitionWorldModelMode,
+        )
+        from agents.cognition.developmental_learning import (
+            resolve_developmental_applicability,
+        )
+        from agents.cognition.mentorship import (
+            MentorshipLedger,
+            apply_mentorship_content_kind_adapters,
+            apply_mentorship_from_teaching,
+            collect_mentorship_adapter_keys,
+            decay_mentorship_bonds,
+            empty_mentorship_ledger,
+            require_owner_mentorship,
+        )
+
+        if self._mentorship_spec is None:
+            self._last_mentorship_audits = ()
+            return None
+        snapshot = getattr(loop_input, "snapshot", None)
+        carried = None if snapshot is None else getattr(snapshot, "mentorship", None)
+        owner_id = getattr(loop_input, "agent_id", None)
+        if owner_id is None:
+            observation = getattr(loop_input, "observation", None)
+            owner_id = getattr(observation, "agent_id", None)
+        if carried is None:
+            max_bonds = int(getattr(self._mentorship_spec, "max_bonds_per_owner", 64))
+            max_lineage = int(
+                getattr(self._mentorship_spec, "max_lineage_entries_per_owner", 256)
+            )
+            ledger = empty_mentorship_ledger(
+                owner_id, max_bonds=max_bonds, max_lineage_entries=max_lineage
+            )
+        else:
+            require_owner_mentorship(
+                carried, owner_id, field_name="loop_input.snapshot.mentorship"
+            )
+            if type(carried) is not MentorshipLedger:
+                raise TypeError("mentorship must be MentorshipLedger")
+            ledger = carried
+        observation = getattr(loop_input, "observation", None)
+        applicability = str(
+            getattr(self._mentorship_spec, "applicability", "all_live_agents")
+        )
+        mid_run = bool(getattr(self, "_developmental_mid_run_admit", False))
+        applicable = resolve_developmental_applicability(
+            applicability=applicability,
+            observation=observation,
+            mid_run_admit=mid_run,
+        )
+        developmental_on = self._developmental_learning_spec is not None
+        teacher_present = any(
+            getattr(row, "source_agent_id", None) is not None for row in advice_delta
+        )
+        _LOG.debug(
+            "mentorship_developmental_compose developmental_on=%s mentorship_on=%s "
+            "teacher_present=%s",
+            developmental_on,
+            True,
+            teacher_present,
+        )
+        if not applicable:
+            self._last_mentorship_audits = ()
+            _LOG.debug(
+                "mentorship_applicability_skip owner_id=%s reason_code=%s",
+                getattr(owner_id, "value", owner_id),
+                "not_applicable",
+            )
+            return ledger
+        tick = int(getattr(observation, "tick", 0))
+        bond_policy = getattr(self._mentorship_spec, "bond_policy", None)
+        lineage_policy = getattr(self._mentorship_spec, "lineage_policy", None)
+        enabled = tuple(
+            getattr(self._mentorship_spec, "enabled_content_kinds", ())
+        )
+        audits: list[object] = []
+        if advice_delta and bond_policy is not None and lineage_policy is not None:
+            ledger, teaching_audits = apply_mentorship_from_teaching(
+                ledger,
+                enabled_content_kinds=enabled,
+                advice_delta=advice_delta,
+                tick=tick,
+                bond_policy=bond_policy,
+                lineage_policy=lineage_policy,
+            )
+            audits.extend(teaching_audits)
+        naming_on = (
+            self._semantic_naming_mode is CognitionSemanticNamingMode.DETERMINISTIC
+        )
+        convention_on = (
+            self._social_convention_mode
+            is CognitionSocialConventionMode.DETERMINISTIC
+        )
+        narrative_on = (
+            self._cultural_narrative_mode
+            is CognitionCulturalNarrativeMode.DETERMINISTIC
+        )
+        predictive_on = self._world_model_mode is CognitionWorldModelMode.ENABLED
+        adapter_keys = collect_mentorship_adapter_keys(
+            observation=observation,
+            advice_delta=advice_delta,
+            semantic_naming=semantic_naming,
+            social_conventions=social_conventions,
+            cultural_narratives=cultural_narratives,
+        )
+        ledger, adapter_audits = apply_mentorship_content_kind_adapters(
+            ledger,
+            enabled_content_kinds=enabled,
+            tick=tick,
+            semantic_naming_on=naming_on,
+            social_convention_on=convention_on,
+            cultural_narrative_on=narrative_on,
+            predictive_world_model=predictive_on,
+            belief_claim_keys=adapter_keys["belief_claim_keys"],
+            causal_claim_keys=adapter_keys["causal_claim_keys"],
+            naming_keys=adapter_keys["naming_keys"],
+            convention_keys=adapter_keys["convention_keys"],
+            story_keys=adapter_keys["story_keys"],
+            bond_policy=bond_policy,
+            lineage_policy=lineage_policy,
+        )
+        audits.extend(adapter_audits)
+        decay = float(getattr(bond_policy, "decay_per_tick", 0.0)) if bond_policy else 0.0
+        if decay > 0.0:
+            ledger = decay_mentorship_bonds(
+                ledger, tick=tick, decay_per_tick=decay
+            )
+        self._last_mentorship_audits = tuple(audits)
+        _LOG.debug(
+            "mentorship_carried owner_id=%s bond_count=%s lineage_count=%s",
+            getattr(owner_id, "value", owner_id),
+            len(ledger.bonds),
+            len(ledger.lineage),
+        )
+        return ledger
 
     def _prepare_cultural_narratives(
         self,
@@ -2083,6 +2257,13 @@ class CognitiveLoop:
         developmental_knowledge = self._prepare_developmental_knowledge(
             loop_input, advice_delta=advice_delta
         )
+        mentorship = self._prepare_mentorship(
+            loop_input,
+            advice_delta=advice_delta,
+            semantic_naming=semantic_naming,
+            social_conventions=social_conventions,
+            cultural_narratives=cultural_narratives,
+        )
         recipe_beliefs = self._prepare_recipe_beliefs(loop_input)
         production_recipe_id = None
         if recipe_beliefs is not None and self._production_allow_provider:
@@ -2242,6 +2423,7 @@ class CognitiveLoop:
                     narrative_penalties=narrative_penalty_map,
                     caregiving_cognition_mode=self._caregiving_cognition_mode,
                     care_action_policy=self._care_action_policy,
+                    mentorship_spec=self._mentorship_spec,
                 ),
             ),
             expected_type=SelectedIntention,
@@ -2328,6 +2510,7 @@ class CognitiveLoop:
             semantic_naming=semantic_naming,
             cultural_narratives=cultural_narratives,
             developmental_knowledge=developmental_knowledge,
+            mentorship=mentorship,
             competence_model=competence,
             declarative_advice=advice,
             recipe_beliefs=recipe_beliefs,
@@ -2493,6 +2676,7 @@ class CognitiveLoop:
             semantic_naming=proposal.semantic_naming,
             cultural_narratives=proposal.cultural_narratives,
             developmental_knowledge=proposal.developmental_knowledge,
+            mentorship=proposal.mentorship,
             competence_model=proposal.competence_model,
             declarative_advice=proposal.declarative_advice,
             recipe_beliefs=proposal.recipe_beliefs,

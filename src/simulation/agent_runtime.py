@@ -421,7 +421,9 @@ class AgentRuntime:
         "_cultural_narratives",
         "_decision_journal",
         "_developmental_audits",
+        "_mentorship_audits",
         "_developmental_knowledge",
+        "_mentorship",
         "_emotional_state",
         "_finalized_hashes",
         "_goal_revision_counters",
@@ -518,6 +520,7 @@ class AgentRuntime:
         self._reflection_audits: list[object] = []
         self._world_model_audits: list[object] = []
         self._developmental_audits: list[object] = []
+        self._mentorship_audits: list[object] = []
         self._mind_audits: list[object] = []
         self._prospective_audits: list[object] = []
         self._cognitive_budget_audits: list[object] = []
@@ -561,6 +564,7 @@ class AgentRuntime:
         self._semantic_naming: object | None = None
         self._cultural_narratives: object | None = None
         self._developmental_knowledge: object | None = None
+        self._mentorship: object | None = None
         self._competence: object | None = None
         self._recipe_beliefs: object | None = None
         self._advice: object | None = None
@@ -1010,6 +1014,52 @@ class AgentRuntime:
             "developmental_knowledge_carried owner_id=%s entry_count=%s tick=%s",
             owner.value,
             len(ledger.entries),
+            tick,
+        )
+
+    def _commit_mentorship(self, ledger: object | None, tick: int) -> None:
+        from agents.cognition.mentorship import MentorshipLedger
+
+        owner = self._agent.agent_id
+        channel = getattr(self._loop, "_mentorship_spec", None)
+        if channel is None or ledger is None:
+            if channel is None:
+                self._mentorship = None
+            return
+        if type(ledger) is not MentorshipLedger:
+            _LOG.warning(
+                "mentorship_checkpoint_shape_mismatch reason_code=%s",
+                "invalid_type",
+            )
+            raise TypeError("mentorship must be MentorshipLedger")
+        if ledger.owner_id != owner:
+            raise AgentRuntimeError(
+                AgentRuntimeErrorCode.OWNERSHIP,
+                agent_id=owner.value,
+            )
+        self._mentorship = ledger
+        from agents.cognition.mentorship import MentorshipAudit
+
+        pending_audits = getattr(self._loop, "_last_mentorship_audits", ())
+        for audit in pending_audits:
+            if type(audit) is MentorshipAudit:
+                self._mentorship_audits.append(audit)
+                _LOG.debug(
+                    "mentorship_audit_append owner_id=%s partner_id=%s "
+                    "content_kind=%s hop_index=%s mutated=%s reason_code=%s",
+                    owner.value,
+                    audit.partner_agent_id.value,
+                    audit.content_kind.value,
+                    audit.hop_index,
+                    audit.mutated,
+                    audit.reason_code,
+                )
+        self._loop._last_mentorship_audits = ()
+        _LOG.debug(
+            "mentorship_commit owner_id=%s bond_count=%s lineage_count=%s tick=%s",
+            owner.value,
+            len(ledger.bonds),
+            len(ledger.lineage),
             tick,
         )
 
@@ -1580,6 +1630,7 @@ class AgentRuntime:
                 semantic_naming=self._semantic_naming,
                 cultural_narratives=self._cultural_narratives,
                 developmental_knowledge=self._developmental_knowledge,
+                mentorship=self._mentorship,
                 competence_model=self._competence,
                 declarative_advice=self._advice,
                 recipe_beliefs=self._recipe_beliefs,
@@ -2017,6 +2068,9 @@ class AgentRuntime:
         self._commit_developmental_knowledge(
             getattr(pending.loop_result, "developmental_knowledge", None), pending.tick
         )
+        self._commit_mentorship(
+            getattr(pending.loop_result, "mentorship", None), pending.tick
+        )
         self._commit_competence(
             getattr(pending.loop_result, "competence_model", None), pending.tick
         )
@@ -2432,6 +2486,7 @@ class AgentRuntime:
         self._developmental_knowledge = getattr(
             checkpoint, "developmental_knowledge", None
         )
+        self._mentorship = getattr(checkpoint, "mentorship", None)
         self._competence = checkpoint.competence_model
         self._recipe_beliefs = getattr(checkpoint, "recipe_beliefs", None)
         self._advice = checkpoint.declarative_advice
@@ -2498,6 +2553,7 @@ class AgentRuntime:
             semantic_naming=self._semantic_naming,
             cultural_narratives=self._cultural_narratives,
             developmental_knowledge=self._developmental_knowledge,
+            mentorship=self._mentorship,
             competence_model=self._competence,
             declarative_advice=self._advice,
             recipe_beliefs=self._recipe_beliefs,
@@ -3101,6 +3157,10 @@ class AgentRuntime:
     def export_developmental_acquisition_audits(self) -> tuple[object, ...]:
         """Harvest metadata-only developmental acquisition audits."""
         return tuple(self._developmental_audits)
+
+    def export_mentorship_audits(self) -> tuple[object, ...]:
+        """Harvest metadata-only mentorship audits."""
+        return tuple(self._mentorship_audits)
 
     def export_mind_audits(self) -> tuple[object, ...]:
         return tuple(self._mind_audits)

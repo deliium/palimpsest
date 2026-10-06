@@ -135,6 +135,7 @@ def build_perspective(
     semantic_naming: object | None = None,
     cultural_narratives: object | None = None,
     developmental_knowledge: object | None = None,
+    mentorship: object | None = None,
     competence_model: object | None = None,
     declarative_advice: object | None = None,
     recipe_beliefs: object | None = None,
@@ -326,6 +327,7 @@ def build_perspective(
         semantic_naming=semantic_naming,
         cultural_narratives=cultural_narratives,
         developmental_knowledge=developmental_knowledge,
+        mentorship=mentorship,
         competence_model=competence_model,
         declarative_advice=declarative_advice,
         recipe_beliefs=recipe_beliefs,
@@ -336,12 +338,19 @@ def build_perspective(
         if perspective.emotional_state is None
         else len(perspective.emotional_state.intensities)  # type: ignore[union-attr]
     )
+    mentorship_bond_count = 0
+    mentorship_lineage_count = 0
+    if perspective.mentorship is not None:
+        mentorship_bond_count = len(getattr(perspective.mentorship, "bonds", ()) or ())
+        mentorship_lineage_count = len(
+            getattr(perspective.mentorship, "lineage", ()) or ()
+        )
     _LOGGER.debug(
         "perspective_built agent=%s entity=%s tick=%s revision=%s "
         "memories=%s beliefs=%s semantic_beliefs=%s relationships=%s "
         "goals=%s drives=%s inbox=%s counterparts=%s "
         "communications=%s occurrences=%s snapshot_revision=%s "
-        "emotional_kinds=%s",
+        "emotional_kinds=%s mentorship_bonds=%s mentorship_lineage=%s",
         agent_id.value,
         expected_entity_id.value,
         observation.tick,
@@ -358,5 +367,7 @@ def build_perspective(
         len(observation.occurrences),
         perspective.snapshot_revision,
         emotion_kind_count,
+        mentorship_bond_count,
+        mentorship_lineage_count,
     )
     return perspective

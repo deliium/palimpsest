@@ -134,6 +134,7 @@ from simulation.runner_models import (
     RUNNER_SCHEMA_VERSION_V27,
     RUNNER_SCHEMA_VERSION_V28,
     RUNNER_SCHEMA_VERSION_V29,
+    RUNNER_SCHEMA_VERSION_V30,
     AgentCognitionSpec,
     AgentRunnerSpec,
     CognitionCounters,
@@ -573,6 +574,14 @@ def _developmental_learning_loop_kwargs(config: object) -> dict[str, object]:
             config
         ),
     }
+
+
+def _mentorship_loop_kwargs(config: object) -> dict[str, object]:
+    """Bind mentorship channel (no AgentCognitionSpec enum)."""
+    spec = getattr(config, "mentorship", None)
+    if spec is None:
+        return {}
+    return {"mentorship_spec": spec}
 
 
 def _cognition_config_for(
@@ -1452,6 +1461,7 @@ class SimulationRunner:
                             RUNNER_SCHEMA_VERSION_V27,
                             RUNNER_SCHEMA_VERSION_V28,
                             RUNNER_SCHEMA_VERSION_V29,
+                            RUNNER_SCHEMA_VERSION_V30,
                         }
                         and config.new_agent_initialization is not None
                     )
@@ -1607,6 +1617,7 @@ class SimulationRunner:
                     ),
                     **_caregiving_loop_kwargs(config),
                     **_developmental_learning_loop_kwargs(config),
+                    **_mentorship_loop_kwargs(config),
                 )
                 agent = Agent(
                     agent_id=owner,
@@ -2393,11 +2404,14 @@ class SimulationRunner:
             developmental_acquisition_audits=(
                 self.export_developmental_acquisition_audits()
             ),
+            mentorship_audits=self.export_mentorship_audits(),
         )
+        mentorship_audit_count = len(result.mentorship_audits)
         _LOG.info(
             "runner_finished run_id=%s ticks_committed=%s stop_reason=%s "
             "attempt_count=%s finalized_tick_count=%s goal_transition_count=%s "
-            "objective_hash_prefix=%s memory_dynamics_audit_count=%s",
+            "objective_hash_prefix=%s memory_dynamics_audit_count=%s "
+            "mentorship_audit_count=%s",
             self._run_id.value,
             self._ticks_committed,
             stop_reason.value,
@@ -2406,7 +2420,14 @@ class SimulationRunner:
             len(self._goal_transition_receipts),
             objective_hash[:12],
             len(audits),
+            mentorship_audit_count,
         )
+        if mentorship_audit_count:
+            _LOG.info(
+                "mentorship_audit_harvest run_id=%s audit_count=%s",
+                self._run_id.value,
+                mentorship_audit_count,
+            )
         return result
 
     def export_memory_dynamics_audits(self) -> tuple[object, ...]:
@@ -2558,6 +2579,25 @@ class SimulationRunner:
         _LOG.debug(
             "developmental_acquisition_audit_export run_id=%s audit_count=%s",
             self._run_id.value,
+            len(collected),
+        )
+        return tuple(collected)
+
+    def export_mentorship_audits(self) -> tuple[object, ...]:
+        """Harvest metadata-only mentorship audits (not on result document schema)."""
+        from agents.cognition.mentorship import MentorshipAudit
+
+        collected: list[MentorshipAudit] = []
+        for runtime in self._runtimes:
+            export = getattr(runtime, "export_mentorship_audits", None)
+            if export is None:
+                continue
+            for audit in export():
+                if type(audit) is not MentorshipAudit:
+                    raise TypeError("mentorship_audits: invalid_item")
+                collected.append(audit)
+        _LOG.info(
+            "mentorship_audit_harvest audit_count=%s",
             len(collected),
         )
         return tuple(collected)
@@ -3011,6 +3051,7 @@ class SimulationRunner:
                 ),
                 **_caregiving_loop_kwargs(self._config),
                 **_developmental_learning_loop_kwargs(self._config),
+                **_mentorship_loop_kwargs(self._config),
             )
             agent = Agent(
                 agent_id=owner,

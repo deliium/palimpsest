@@ -603,6 +603,7 @@ class AgentRuntimeCheckpoint:
     semantic_naming: object | None = None
     cultural_narratives: object | None = None
     developmental_knowledge: object | None = None
+    mentorship: object | None = None
     competence_model: object | None = None
     declarative_advice: object | None = None
     recipe_beliefs: object | None = None
@@ -720,6 +721,13 @@ class AgentRuntimeCheckpoint:
             self.developmental_knowledge,
             self.agent_id,
             field_name="developmental_knowledge",
+        )
+        from agents.cognition.mentorship import require_owner_mentorship
+
+        require_owner_mentorship(
+            self.mentorship,
+            self.agent_id,
+            field_name="mentorship",
         )
         from agents.cognition.competence import require_owner_competence
 
