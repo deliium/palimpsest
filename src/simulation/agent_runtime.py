@@ -965,6 +965,32 @@ class AgentRuntime:
             tick,
         )
 
+    def _commit_developmental_knowledge(
+        self, ledger: object | None, tick: int
+    ) -> None:
+        from agents.cognition.developmental_learning import DevelopmentalKnowledgeLedger
+
+        owner = self._agent.agent_id
+        channel = getattr(self._loop, "_developmental_learning_spec", None)
+        if channel is None or ledger is None:
+            if channel is None:
+                self._developmental_knowledge = None
+            return
+        if type(ledger) is not DevelopmentalKnowledgeLedger:
+            raise TypeError("developmental_knowledge must be DevelopmentalKnowledgeLedger")
+        if ledger.owner_id != owner:
+            raise AgentRuntimeError(
+                AgentRuntimeErrorCode.OWNERSHIP,
+                agent_id=owner.value,
+            )
+        self._developmental_knowledge = ledger
+        _LOG.debug(
+            "developmental_knowledge_carried owner_id=%s entry_count=%s tick=%s",
+            owner.value,
+            len(ledger.entries),
+            tick,
+        )
+
     def _commit_competence(self, model: object | None, tick: int) -> None:
         from agents.cognition.competence import CompetenceSelfModel
         from agents.cognition.configuration import CognitionSkillLearningMode
@@ -1531,6 +1557,7 @@ class AgentRuntime:
                 artifact_interpretations=self._artifact_interpretations,
                 semantic_naming=self._semantic_naming,
                 cultural_narratives=self._cultural_narratives,
+                developmental_knowledge=self._developmental_knowledge,
                 competence_model=self._competence,
                 declarative_advice=self._advice,
                 recipe_beliefs=self._recipe_beliefs,
@@ -1965,6 +1992,9 @@ class AgentRuntime:
         self._commit_cultural_narratives(
             getattr(pending.loop_result, "cultural_narratives", None), pending.tick
         )
+        self._commit_developmental_knowledge(
+            getattr(pending.loop_result, "developmental_knowledge", None), pending.tick
+        )
         self._commit_competence(
             getattr(pending.loop_result, "competence_model", None), pending.tick
         )
@@ -2377,6 +2407,9 @@ class AgentRuntime:
         )
         self._semantic_naming = getattr(checkpoint, "semantic_naming", None)
         self._cultural_narratives = getattr(checkpoint, "cultural_narratives", None)
+        self._developmental_knowledge = getattr(
+            checkpoint, "developmental_knowledge", None
+        )
         self._competence = checkpoint.competence_model
         self._recipe_beliefs = getattr(checkpoint, "recipe_beliefs", None)
         self._advice = checkpoint.declarative_advice
@@ -2442,6 +2475,7 @@ class AgentRuntime:
             artifact_interpretations=self._artifact_interpretations,
             semantic_naming=self._semantic_naming,
             cultural_narratives=self._cultural_narratives,
+            developmental_knowledge=self._developmental_knowledge,
             competence_model=self._competence,
             declarative_advice=self._advice,
             recipe_beliefs=self._recipe_beliefs,

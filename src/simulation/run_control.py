@@ -602,6 +602,7 @@ class AgentRuntimeCheckpoint:
     artifact_interpretations: object | None = None
     semantic_naming: object | None = None
     cultural_narratives: object | None = None
+    developmental_knowledge: object | None = None
     competence_model: object | None = None
     declarative_advice: object | None = None
     recipe_beliefs: object | None = None
@@ -710,6 +711,15 @@ class AgentRuntimeCheckpoint:
             self.cultural_narratives,
             self.agent_id,
             field_name="cultural_narratives",
+        )
+        from agents.cognition.developmental_learning import (
+            require_owner_developmental_knowledge,
+        )
+
+        require_owner_developmental_knowledge(
+            self.developmental_knowledge,
+            self.agent_id,
+            field_name="developmental_knowledge",
         )
         from agents.cognition.competence import require_owner_competence
 

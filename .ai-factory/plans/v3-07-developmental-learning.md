@@ -320,25 +320,25 @@ Follow `skill_learning@1` registration via harvested audits. Do **not** overload
 
 ### Phase 2: Ledger, rates, budgets
 
-- [ ] Task 5: Implement provenance-enforcing ledger writes + runtime checkpoint carry
+- [x] Task 5: Implement provenance-enforcing ledger writes + runtime checkpoint carry
   - Deliverable: Append/update API rejecting missing `source_id` / evidence refs; enforce `max_entries_per_domain` with deterministic eviction. **Carry path (locked):** `CognitiveLoopResult.developmental_knowledge` → `AgentRuntime._commit_developmental_knowledge` → `_developmental_knowledge` → checkpoint restore (mirror `_commit_cultural_narratives`); plumb `CognitiveLoopProposal` / `SubjectiveSnapshot` fields if sibling ledgers require them. Twin-run bit-identity for ledger bytes under fixed seeds.
   - LOGGING: DEBUG on write `{owner_id, domain, source, teacher_present, confidence}` (metadata only); WARN on eviction; ERROR on provenance violations; DEBUG carry `{owner_id, entry_count, tick}`.
   - Files: `src/agents/cognition/developmental_learning.py`, `src/agents/cognition/models.py`, `src/simulation/agent_runtime.py`, checkpoint restore sites, `tests/unit/test_developmental_ledger_provenance.py`
   - Depends on: Task 1, Task 4
 
-- [ ] Task 6: Rate composition with lifecycle + dependency-care zeros
+- [x] Task 6: Rate composition with lifecycle + dependency-care zeros
   - Pure helpers implementing the locked composition order: dependency `learning_rate_zero` → lifecycle `learning_rate_factor` / `learning_rate_by_entity` → `base_rate` × source weight; honor `stage_compose` and `min_exposures`. Unit-test matrix including v3-06 learning-blocked case.
   - LOGGING: DEBUG `{owner_id, domain, base_rate, lifecycle_factor, source_weight, learning_rate_zero, effective_rate}`.
   - Files: `src/agents/cognition/developmental_learning.py`, `tests/unit/test_developmental_rate_compose.py`
   - Depends on: Task 5
 
-- [ ] Task 7: Cognitive budget coupling
+- [x] Task 7: Cognitive budget coupling
   - When `cognitive_budget_coupling.mode=respect_enforced` and agent `CognitiveBudgetMode.ENFORCED`, charge `acquisition_cost_units` and apply `degrade_policy` without skipping the closed command. `ignore` leaves budgets untouched. Unit-test skip_acquisition vs reduce_rate.
   - LOGGING: DEBUG on budget decision `{owner_id, remaining, cost, policy, acquired}`; never log prompts/payloads.
   - Files: `src/agents/cognition/developmental_learning.py`, budget ledger integration site, `tests/unit/test_developmental_budget_coupling.py`
   - Depends on: Task 5, Task 6
 
-- [ ] Task 8: Blank-slate admit gate remains hard under developmental pack
+- [x] Task 8: Blank-slate admit gate remains hard under developmental pack
   - Mid-run admit with channel on + `species_default_developmental_v1` still asserts empty developmental ledger + existing deny-list stores; modes may be enabled. Prove no society pack / peer ledger clone path exists in init pipeline.
   - LOGGING: keep blank-slate ERROR `subjective_copy_forbidden`; DEBUG assert success includes `developmental_knowledge`.
   - Files: `tests/architecture/test_v3_developmental_learning_invariants.py`, extend blank-slate / new-agent unit tests

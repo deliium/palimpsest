@@ -1095,6 +1095,42 @@ class CognitiveLoop:
         )
         return updated
 
+    def _prepare_developmental_knowledge(
+        self, loop_input: CognitiveLoopInput
+    ) -> object | None:
+        """Carry owner developmental ledger when the channel is active."""
+        from agents.cognition.developmental_learning import (
+            DevelopmentalKnowledgeLedger,
+            empty_developmental_knowledge_ledger,
+        )
+
+        if self._developmental_learning_spec is None:
+            return None
+        snapshot = loop_input.snapshot
+        carried = None if snapshot is None else snapshot.developmental_knowledge
+        if type(carried) is DevelopmentalKnowledgeLedger:
+            if carried.owner_id != loop_input.agent_id:
+                _LOG.warning("developmental_carry_rejected reason=%s", "owner_mismatch")
+                return None
+            _LOG.debug(
+                "developmental_knowledge_carried owner_id=%s entry_count=%s",
+                loop_input.agent_id.value,
+                len(carried.entries),
+            )
+            return carried
+        max_entries = int(
+            getattr(self._developmental_learning_spec, "max_entries_per_domain", 256)
+        )
+        ledger = empty_developmental_knowledge_ledger(
+            loop_input.agent_id, max_entries_per_domain=max_entries
+        )
+        _LOG.debug(
+            "developmental_knowledge_carried owner_id=%s entry_count=%s",
+            loop_input.agent_id.value,
+            0,
+        )
+        return ledger
+
     def _prepare_cultural_narratives(
         self,
         loop_input: CognitiveLoopInput,
@@ -1894,6 +1930,7 @@ class CognitiveLoop:
             artifact_interpretations=artifact_interpretations,
             retrieve_context=memory,
         )
+        developmental_knowledge = self._prepare_developmental_knowledge(loop_input)
         competence = self._prepare_competence(loop_input, memory)
         competence, advice = self._prepare_teaching(loop_input, competence)
         recipe_beliefs = self._prepare_recipe_beliefs(loop_input)
@@ -2140,6 +2177,7 @@ class CognitiveLoop:
             artifact_interpretations=artifact_interpretations,
             semantic_naming=semantic_naming,
             cultural_narratives=cultural_narratives,
+            developmental_knowledge=developmental_knowledge,
             competence_model=competence,
             declarative_advice=advice,
             recipe_beliefs=recipe_beliefs,
@@ -2304,6 +2342,7 @@ class CognitiveLoop:
             artifact_interpretations=proposal.artifact_interpretations,
             semantic_naming=proposal.semantic_naming,
             cultural_narratives=proposal.cultural_narratives,
+            developmental_knowledge=proposal.developmental_knowledge,
             competence_model=proposal.competence_model,
             declarative_advice=proposal.declarative_advice,
             recipe_beliefs=proposal.recipe_beliefs,

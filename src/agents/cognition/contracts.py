@@ -159,6 +159,7 @@ class Perspective:
     artifact_interpretations: object | None = None
     semantic_naming: object | None = None
     cultural_narratives: object | None = None
+    developmental_knowledge: object | None = None
     competence_model: object | None = None
     declarative_advice: object | None = None
     recipe_beliefs: object | None = None
@@ -348,6 +349,15 @@ class Perspective:
             self.agent_id,
             field_name="Perspective.cultural_narratives",
         )
+        from agents.cognition.developmental_learning import (
+            require_owner_developmental_knowledge,
+        )
+
+        require_owner_developmental_knowledge(
+            self.developmental_knowledge,
+            self.agent_id,
+            field_name="Perspective.developmental_knowledge",
+        )
         from agents.cognition.competence import require_owner_competence
 
         require_owner_competence(
@@ -399,6 +409,7 @@ class Perspective:
             artifact_interpretations=self.artifact_interpretations,
             semantic_naming=self.semantic_naming,
             cultural_narratives=self.cultural_narratives,
+            developmental_knowledge=self.developmental_knowledge,
             competence_model=self.competence_model,
             declarative_advice=self.declarative_advice,
             recipe_beliefs=self.recipe_beliefs,

@@ -49,12 +49,15 @@ _TEACHER_ALLOWED_SOURCES: Final[frozenset[str]] = frozenset(
 
 __all__ = [
     "DEVELOPMENTAL_LEARNING_POLICY_VERSION",
+    "DevelopmentalBudgetDecision",
     "DevelopmentalDomainId",
     "DevelopmentalDomainRate",
     "DevelopmentalKnowledgeEntry",
     "DevelopmentalKnowledgeLedger",
     "DevelopmentalSourceId",
     "DevelopmentalStageCompose",
+    "apply_developmental_budget_coupling",
+    "compose_developmental_effective_rate",
     "empty_developmental_knowledge_ledger",
     "require_owner_developmental_knowledge",
     "upsert_developmental_entry",
@@ -399,3 +402,208 @@ def upsert_developmental_entry(
         entry.confidence,
     )
     return result
+
+
+def compose_developmental_effective_rate(
+    *,
+    owner_id: AgentId,
+    domain: DevelopmentalDomainId | str,
+    base_rate: float,
+    source_weight: float,
+    stage_compose: DevelopmentalStageCompose | str,
+    lifecycle_factor: float = 1.0,
+    learning_rate_zero: bool = False,
+    exposure_count: int = 0,
+    min_exposures: int = 0,
+) -> float:
+    """Compose effective acquisition rate (locked order).
+
+    1. dependency ``learning_rate_zero`` → 0
+    2. ``stage_compose`` multiply by lifecycle factor (or ignore)
+    3. ``base_rate`` × source weight
+    """
+    if type(owner_id) is not AgentId:
+        raise _fail("owner_id", "invalid_type")
+    domain_id = parse_developmental_domain_id(domain)
+    base = _positive_unit("base_rate", base_rate)
+    weight = _positive_unit("source_weight", source_weight)
+    if type(stage_compose) is not DevelopmentalStageCompose:
+        try:
+            compose = DevelopmentalStageCompose(str(stage_compose))
+        except ValueError as exc:
+            raise _fail("stage_compose", "unknown_stage_compose") from exc
+    else:
+        compose = stage_compose
+    exposures = require_exact_nonneg_int("exposure_count", exposure_count)
+    min_exp = require_exact_nonneg_int("min_exposures", min_exposures)
+    if type(learning_rate_zero) is not bool:
+        raise _fail("learning_rate_zero", "invalid_type")
+    factor = _finite("lifecycle_factor", lifecycle_factor)
+    if factor < 0.0:
+        raise _fail("lifecycle_factor", "out_of_range")
+
+    if learning_rate_zero:
+        effective = 0.0
+    elif exposures < min_exp:
+        effective = 0.0
+    else:
+        lifecycle = (
+            factor
+            if compose is DevelopmentalStageCompose.MULTIPLY_LIFECYCLE_LEARNING_RATE
+            else 1.0
+        )
+        effective = base * weight * lifecycle
+        if effective < 0.0:
+            effective = 0.0
+        if effective > 1.0:
+            effective = 1.0
+    _LOG.debug(
+        "developmental_rate_compose owner_id=%s domain=%s base_rate=%s "
+        "lifecycle_factor=%s source_weight=%s learning_rate_zero=%s "
+        "effective_rate=%s",
+        owner_id.value,
+        domain_id.value,
+        base,
+        factor,
+        weight,
+        learning_rate_zero,
+        effective,
+    )
+    return effective
+
+
+@dataclass(frozen=True, slots=True)
+class DevelopmentalBudgetDecision:
+    """Outcome of cognitive-budget coupling for one acquisition attempt."""
+
+    proceed: bool
+    effective_rate: float
+    reason_code: str
+    remaining: int
+    cost: int
+    policy: str
+
+
+def apply_developmental_budget_coupling(
+    *,
+    owner_id: AgentId,
+    effective_rate: float,
+    coupling_mode: str,
+    degrade_policy: str,
+    acquisition_cost_units: int,
+    budget_enforced: bool,
+    budget_ledger: object | None = None,
+) -> DevelopmentalBudgetDecision:
+    """Apply cognitive-budget coupling without skipping the closed command.
+
+    ``ignore`` leaves rate untouched. ``respect_enforced`` charges the ledger
+    when ``CognitiveBudgetMode.ENFORCED`` and applies ``skip_acquisition`` or
+    ``reduce_rate``.
+    """
+    if type(owner_id) is not AgentId:
+        raise _fail("owner_id", "invalid_type")
+    rate = _unit_interval("effective_rate", effective_rate)
+    mode = require_stable_id("coupling_mode", coupling_mode)
+    policy = require_stable_id("degrade_policy", degrade_policy)
+    cost = require_exact_nonneg_int("acquisition_cost_units", acquisition_cost_units)
+    if type(budget_enforced) is not bool:
+        raise _fail("budget_enforced", "invalid_type")
+    if mode not in {"ignore", "respect_enforced"}:
+        raise _fail("coupling_mode", "unknown_mode")
+    if policy not in {"skip_acquisition", "reduce_rate"}:
+        raise _fail("degrade_policy", "unknown_policy")
+
+    remaining = -1
+    if mode == "ignore" or not budget_enforced or cost == 0:
+        decision = DevelopmentalBudgetDecision(
+            proceed=True,
+            effective_rate=rate,
+            reason_code="budget_passthrough",
+            remaining=remaining,
+            cost=cost,
+            policy=policy,
+        )
+        _LOG.debug(
+            "developmental_budget owner_id=%s remaining=%s cost=%s policy=%s "
+            "acquired=%s",
+            owner_id.value,
+            remaining,
+            cost,
+            policy,
+            True,
+        )
+        return decision
+
+    from agents.cognition.budget import BudgetDimension, TickBudgetLedger
+
+    if budget_ledger is None or type(budget_ledger) is not TickBudgetLedger:
+        decision = DevelopmentalBudgetDecision(
+            proceed=False,
+            effective_rate=0.0,
+            reason_code="budget_ledger_missing",
+            remaining=0,
+            cost=cost,
+            policy=policy,
+        )
+        _LOG.debug(
+            "developmental_budget owner_id=%s remaining=%s cost=%s policy=%s "
+            "acquired=%s",
+            owner_id.value,
+            0,
+            cost,
+            policy,
+            False,
+        )
+        return decision
+
+    remaining = int(budget_ledger.remaining(BudgetDimension.MEMORIES))
+    charged = budget_ledger.try_consume(BudgetDimension.MEMORIES, cost)
+    if charged:
+        decision = DevelopmentalBudgetDecision(
+            proceed=True,
+            effective_rate=rate,
+            reason_code="budget_charged",
+            remaining=int(budget_ledger.remaining(BudgetDimension.MEMORIES)),
+            cost=cost,
+            policy=policy,
+        )
+        _LOG.debug(
+            "developmental_budget owner_id=%s remaining=%s cost=%s policy=%s "
+            "acquired=%s",
+            owner_id.value,
+            decision.remaining,
+            cost,
+            policy,
+            True,
+        )
+        return decision
+
+    if policy == "skip_acquisition":
+        decision = DevelopmentalBudgetDecision(
+            proceed=False,
+            effective_rate=0.0,
+            reason_code="budget_skip_acquisition",
+            remaining=remaining,
+            cost=cost,
+            policy=policy,
+        )
+    else:
+        reduced = rate * 0.5
+        decision = DevelopmentalBudgetDecision(
+            proceed=True,
+            effective_rate=reduced,
+            reason_code="budget_reduce_rate",
+            remaining=remaining,
+            cost=cost,
+            policy=policy,
+        )
+    _LOG.debug(
+        "developmental_budget owner_id=%s remaining=%s cost=%s policy=%s "
+        "acquired=%s",
+        owner_id.value,
+        decision.remaining,
+        cost,
+        policy,
+        decision.proceed,
+    )
+    return decision
