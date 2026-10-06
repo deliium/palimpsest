@@ -109,6 +109,7 @@ RUNNER_SCHEMA_VERSION_V27: Final[str] = "runner-config-v27"
 RUNNER_SCHEMA_VERSION_V28: Final[str] = "runner-config-v28"
 RUNNER_SCHEMA_VERSION_V29: Final[str] = "runner-config-v29"
 RUNNER_SCHEMA_VERSION_V30: Final[str] = "runner-config-v30"
+RUNNER_SCHEMA_VERSION_V31: Final[str] = "runner-config-v31"
 RUNNER_SCHEMA_VERSION: Final[str] = RUNNER_SCHEMA_VERSION_V4
 SUPPORTED_RUNNER_SCHEMA_VERSIONS: Final[frozenset[str]] = frozenset(
     {
@@ -142,6 +143,7 @@ SUPPORTED_RUNNER_SCHEMA_VERSIONS: Final[frozenset[str]] = frozenset(
         RUNNER_SCHEMA_VERSION_V28,
         RUNNER_SCHEMA_VERSION_V29,
         RUNNER_SCHEMA_VERSION_V30,
+        RUNNER_SCHEMA_VERSION_V31,
     }
 )
 RESULT_SCHEMA_VERSION_V1: Final[str] = "runner-result-v1"
@@ -181,9 +183,13 @@ _V3_CAPABILITY_FLAG_NAMES: Final[tuple[str, ...]] = (
     "cultural_historical_memory",
 )
 
-# Owned by v3-02 population lifecycle; other V3 flags remain fail-closed.
+# Owned by v3-02/v3-05/v3-09; other V3 flags remain fail-closed.
 _V3_OWNED_CAPABILITY_FLAGS: Final[frozenset[str]] = frozenset(
-    {"generational_population", "kinship_inheritance"}
+    {
+        "generational_population",
+        "kinship_inheritance",
+        "cultural_historical_memory",
+    }
 )
 
 _OVERRIDEABLE_DRIVE_KINDS: Final[frozenset[DriveKind]] = frozenset(
@@ -674,6 +680,7 @@ _SKILL_SCHEMAS: Final[frozenset[str]] = frozenset(
     RUNNER_SCHEMA_VERSION_V28,
     RUNNER_SCHEMA_VERSION_V29,
     RUNNER_SCHEMA_VERSION_V30,
+    RUNNER_SCHEMA_VERSION_V31,
     }
 )
 
@@ -1425,7 +1432,7 @@ class KinshipSpec:
         if depth < 1 or depth > _KINSHIP_MAX_QUERY_DEPTH_CEILING:
             raise ValueError(
                 "max_query_depth out of range "
-                f"(code=kinship_max_query_depth_invalid)"
+                "(code=kinship_max_query_depth_invalid)"
             )
         object.__setattr__(self, "max_query_depth", depth)
         max_parents = require_exact_nonneg_int(
@@ -1995,9 +2002,13 @@ class DevelopmentalLearningSpec:
             )
         object.__setattr__(self, "applicability", applicability)
 
-        if type(self.cognitive_budget_coupling) is not DevelopmentalCognitiveBudgetCoupling:
+        if (
+            type(self.cognitive_budget_coupling)
+            is not DevelopmentalCognitiveBudgetCoupling
+        ):
             raise TypeError(
-                "cognitive_budget_coupling must be DevelopmentalCognitiveBudgetCoupling"
+                "cognitive_budget_coupling must be "
+                "DevelopmentalCognitiveBudgetCoupling"
             )
 
         species_id = require_stable_id(
@@ -2066,7 +2077,8 @@ class DevelopmentalLearningSpec:
             "learner_species_defaults_id": self.learner_species_defaults_id,
             "max_entries_per_domain": self.max_entries_per_domain,
             "source_weights": {
-                source_id: self.source_weights[source_id] for source_id in self.enabled_sources
+                source_id: self.source_weights[source_id]
+                for source_id in self.enabled_sources
             },
         }
 
@@ -2407,6 +2419,348 @@ def example_mentorship_spec(
     )
 
 
+_CULTURAL_FEATURE_MODE: Final[frozenset[str]] = frozenset({"deterministic"})
+_CULTURAL_FEATURE_APPLICABILITY: Final[frozenset[str]] = frozenset(
+    {"all_live_agents", "mid_run_new_agents"}
+)
+_CULTURAL_FEATURE_BIAS_MODES: Final[frozenset[str]] = frozenset(
+    {"ignore", "prefer_aligned_features"}
+)
+_CULTURAL_FEATURE_MUTATION_POLICY_KEYS: Final[frozenset[str]] = frozenset(
+    {
+        "allow_mutation",
+        "mutation_requires_evidence",
+        "max_token_edits",
+        "rng_namespace",
+    }
+)
+_CULTURAL_FEATURE_RECOMBINATION_POLICY_KEYS: Final[frozenset[str]] = frozenset(
+    {"allow_recombination", "max_parents", "min_token_overlap"}
+)
+_CULTURAL_FEATURE_UPTAKE_COMPOSE_KEYS: Final[frozenset[str]] = frozenset(
+    {
+        "naming",
+        "narrative",
+        "norms",
+        "conventions",
+        "teaching",
+        "artifacts",
+        "mentorship",
+    }
+)
+_CULTURAL_FEATURE_BIAS_POLICY_KEYS: Final[frozenset[str]] = frozenset(
+    {"mode", "communicate_weight", "content_affinity"}
+)
+_CULTURAL_FEATURE_PROVENANCE_KEYS: Final[frozenset[str]] = frozenset(
+    {
+        "enabled_feature_kinds",
+        "enabled_provenance_channels",
+        "mutation_policy",
+        "recombination_policy",
+        "uptake_compose",
+        "bias_policy",
+        "cultural_feature_mode",
+        "max_beliefs_per_owner",
+        "max_evidence_refs",
+        "applicability",
+    }
+)
+
+
+@dataclass(frozen=True, slots=True)
+class CulturalFeatureMutationPolicy:
+    """Exact mutation_policy object under cultural_feature_provenance."""
+
+    allow_mutation: bool = True
+    mutation_requires_evidence: bool = True
+    max_token_edits: int = 1
+    rng_namespace: str = "cultural_features"
+
+    def __post_init__(self) -> None:
+        if type(self.allow_mutation) is not bool:
+            raise TypeError("allow_mutation must be bool")
+        if type(self.mutation_requires_evidence) is not bool:
+            raise TypeError("mutation_requires_evidence must be bool")
+        edits = require_exact_nonneg_int("max_token_edits", self.max_token_edits)
+        if edits > 8:
+            raise ValueError(
+                "max_token_edits must be in [0, 8] "
+                "(code=cultural_feature_max_token_edits_invalid)"
+            )
+        object.__setattr__(self, "max_token_edits", edits)
+        namespace = require_stable_id(
+            "CulturalFeatureMutationPolicy.rng_namespace", self.rng_namespace
+        )
+        object.__setattr__(self, "rng_namespace", namespace)
+
+
+@dataclass(frozen=True, slots=True)
+class CulturalFeatureRecombinationPolicy:
+    """Exact recombination_policy object under cultural_feature_provenance."""
+
+    allow_recombination: bool = True
+    max_parents: int = 2
+    min_token_overlap: float = 0.5
+
+    def __post_init__(self) -> None:
+        if type(self.allow_recombination) is not bool:
+            raise TypeError("allow_recombination must be bool")
+        parents = require_exact_nonneg_int("max_parents", self.max_parents)
+        if parents < 2 or parents > 4:
+            raise ValueError(
+                "max_parents must be in [2, 4] "
+                "(code=cultural_feature_max_parents_invalid)"
+            )
+        object.__setattr__(self, "max_parents", parents)
+        overlap = float(self.min_token_overlap)
+        if isinstance(self.min_token_overlap, bool) or not isinstance(
+            self.min_token_overlap, (int, float)
+        ):
+            raise ValueError("min_token_overlap: not_finite")
+        if not math.isfinite(overlap) or overlap < 0.0 or overlap > 1.0:
+            raise ValueError("min_token_overlap: out_of_range")
+        object.__setattr__(self, "min_token_overlap", overlap)
+
+
+@dataclass(frozen=True, slots=True)
+class CulturalFeatureUptakeCompose:
+    """Exact uptake_compose object under cultural_feature_provenance."""
+
+    naming: bool = False
+    narrative: bool = False
+    norms: bool = False
+    conventions: bool = False
+    teaching: bool = False
+    artifacts: bool = False
+    mentorship: bool = False
+
+    def __post_init__(self) -> None:
+        for name in _CULTURAL_FEATURE_UPTAKE_COMPOSE_KEYS:
+            if type(getattr(self, name)) is not bool:
+                raise TypeError(f"{name} must be bool")
+
+
+@dataclass(frozen=True, slots=True)
+class CulturalFeatureBiasPolicy:
+    """Exact bias_policy object under cultural_feature_provenance."""
+
+    mode: str = "ignore"
+    communicate_weight: float = 0.0
+    content_affinity: bool = False
+
+    def __post_init__(self) -> None:
+        mode = require_stable_id("CulturalFeatureBiasPolicy.mode", self.mode)
+        if mode not in _CULTURAL_FEATURE_BIAS_MODES:
+            raise ValueError(
+                f"unknown bias_policy.mode {mode!r} "
+                "(code=cultural_feature_bias_mode_invalid)"
+            )
+        object.__setattr__(self, "mode", mode)
+        weight = float(self.communicate_weight)
+        if isinstance(self.communicate_weight, bool) or not isinstance(
+            self.communicate_weight, (int, float)
+        ):
+            raise ValueError("communicate_weight: not_finite")
+        if not math.isfinite(weight) or weight < 0.0 or weight > 1.0:
+            raise ValueError("communicate_weight: out_of_range")
+        object.__setattr__(self, "communicate_weight", weight)
+        if type(self.content_affinity) is not bool:
+            raise TypeError("content_affinity must be bool")
+
+
+@dataclass(frozen=True, slots=True)
+class CulturalFeatureProvenanceSpec:
+    """Opt-in cultural feature provenance channel (runner-config-v31 sibling).
+
+    Owns reserved ``cultural_historical_memory``. Absent object means channel
+    off. Not an ``AgentCognitionSpec`` enum.
+    """
+
+    enabled_feature_kinds: tuple[str, ...]
+    enabled_provenance_channels: tuple[str, ...]
+    mutation_policy: CulturalFeatureMutationPolicy = field(
+        default_factory=CulturalFeatureMutationPolicy
+    )
+    recombination_policy: CulturalFeatureRecombinationPolicy = field(
+        default_factory=CulturalFeatureRecombinationPolicy
+    )
+    uptake_compose: CulturalFeatureUptakeCompose = field(
+        default_factory=CulturalFeatureUptakeCompose
+    )
+    bias_policy: CulturalFeatureBiasPolicy = field(
+        default_factory=CulturalFeatureBiasPolicy
+    )
+    cultural_feature_mode: str = "deterministic"
+    max_beliefs_per_owner: int = 64
+    max_evidence_refs: int = 16
+    applicability: str = "all_live_agents"
+
+    def __post_init__(self) -> None:
+        from agents.cognition.cultural_features import (
+            parse_cultural_feature_kind,
+            parse_cultural_transmission_channel,
+        )
+
+        mode = require_stable_id(
+            "CulturalFeatureProvenanceSpec.cultural_feature_mode",
+            self.cultural_feature_mode,
+        )
+        if mode == "disabled":
+            raise ValueError(
+                "cultural_feature_mode=disabled is rejected; omit the object "
+                "for off (code=cultural_feature_mode_invalid)"
+            )
+        if mode not in _CULTURAL_FEATURE_MODE:
+            raise ValueError(
+                f"unknown cultural_feature_mode {mode!r} "
+                "(code=cultural_feature_mode_invalid)"
+            )
+        object.__setattr__(self, "cultural_feature_mode", mode)
+
+        if isinstance(self.enabled_feature_kinds, (str, bytes)) or not isinstance(
+            self.enabled_feature_kinds, Sequence
+        ):
+            raise TypeError("enabled_feature_kinds must be a sequence")
+        if not self.enabled_feature_kinds:
+            raise ValueError(
+                "enabled_feature_kinds must be non-empty when cultural "
+                "feature provenance present "
+                "(code=cultural_feature_kinds_empty)"
+            )
+        kinds: list[str] = []
+        seen_kinds: set[str] = set()
+        for raw in self.enabled_feature_kinds:
+            kind = parse_cultural_feature_kind(raw)
+            if kind.value in seen_kinds:
+                raise ValueError(
+                    f"duplicate enabled feature kind {kind.value!r} "
+                    "(code=cultural_feature_kind_duplicate)"
+                )
+            seen_kinds.add(kind.value)
+            kinds.append(kind.value)
+        object.__setattr__(self, "enabled_feature_kinds", tuple(kinds))
+
+        if isinstance(
+            self.enabled_provenance_channels, (str, bytes)
+        ) or not isinstance(self.enabled_provenance_channels, Sequence):
+            raise TypeError("enabled_provenance_channels must be a sequence")
+        if not self.enabled_provenance_channels:
+            raise ValueError(
+                "enabled_provenance_channels must be non-empty when cultural "
+                "feature provenance present "
+                "(code=cultural_feature_channels_empty)"
+            )
+        channels: list[str] = []
+        seen_channels: set[str] = set()
+        for raw in self.enabled_provenance_channels:
+            channel = parse_cultural_transmission_channel(raw)
+            if channel.value in seen_channels:
+                raise ValueError(
+                    f"duplicate enabled provenance channel {channel.value!r} "
+                    "(code=cultural_feature_channel_duplicate)"
+                )
+            seen_channels.add(channel.value)
+            channels.append(channel.value)
+        object.__setattr__(self, "enabled_provenance_channels", tuple(channels))
+
+        if type(self.mutation_policy) is not CulturalFeatureMutationPolicy:
+            raise TypeError("mutation_policy must be CulturalFeatureMutationPolicy")
+        if type(self.recombination_policy) is not CulturalFeatureRecombinationPolicy:
+            raise TypeError(
+                "recombination_policy must be CulturalFeatureRecombinationPolicy"
+            )
+        if type(self.uptake_compose) is not CulturalFeatureUptakeCompose:
+            raise TypeError("uptake_compose must be CulturalFeatureUptakeCompose")
+        if type(self.bias_policy) is not CulturalFeatureBiasPolicy:
+            raise TypeError("bias_policy must be CulturalFeatureBiasPolicy")
+
+        max_beliefs = require_exact_nonneg_int(
+            "max_beliefs_per_owner", self.max_beliefs_per_owner
+        )
+        if max_beliefs < 1:
+            raise ValueError(
+                "max_beliefs_per_owner must be >= 1 "
+                "(code=cultural_feature_max_beliefs_invalid)"
+            )
+        object.__setattr__(self, "max_beliefs_per_owner", max_beliefs)
+        max_refs = require_exact_nonneg_int("max_evidence_refs", self.max_evidence_refs)
+        if max_refs < 1:
+            raise ValueError(
+                "max_evidence_refs must be >= 1 "
+                "(code=cultural_feature_max_evidence_refs_invalid)"
+            )
+        object.__setattr__(self, "max_evidence_refs", max_refs)
+
+        applicability = require_stable_id(
+            "CulturalFeatureProvenanceSpec.applicability", self.applicability
+        )
+        if applicability not in _CULTURAL_FEATURE_APPLICABILITY:
+            raise ValueError(
+                f"unknown applicability {applicability!r} "
+                "(code=cultural_feature_applicability_invalid)"
+            )
+        object.__setattr__(self, "applicability", applicability)
+
+    def canonical_payload(self) -> dict[str, object]:
+        return {
+            "applicability": self.applicability,
+            "bias_policy": {
+                "communicate_weight": self.bias_policy.communicate_weight,
+                "content_affinity": self.bias_policy.content_affinity,
+                "mode": self.bias_policy.mode,
+            },
+            "cultural_feature_mode": self.cultural_feature_mode,
+            "enabled_feature_kinds": list(self.enabled_feature_kinds),
+            "enabled_provenance_channels": list(self.enabled_provenance_channels),
+            "max_beliefs_per_owner": self.max_beliefs_per_owner,
+            "max_evidence_refs": self.max_evidence_refs,
+            "mutation_policy": {
+                "allow_mutation": self.mutation_policy.allow_mutation,
+                "max_token_edits": self.mutation_policy.max_token_edits,
+                "mutation_requires_evidence": (
+                    self.mutation_policy.mutation_requires_evidence
+                ),
+                "rng_namespace": self.mutation_policy.rng_namespace,
+            },
+            "recombination_policy": {
+                "allow_recombination": self.recombination_policy.allow_recombination,
+                "max_parents": self.recombination_policy.max_parents,
+                "min_token_overlap": self.recombination_policy.min_token_overlap,
+            },
+            "uptake_compose": {
+                "artifacts": self.uptake_compose.artifacts,
+                "conventions": self.uptake_compose.conventions,
+                "mentorship": self.uptake_compose.mentorship,
+                "naming": self.uptake_compose.naming,
+                "narrative": self.uptake_compose.narrative,
+                "norms": self.uptake_compose.norms,
+                "teaching": self.uptake_compose.teaching,
+            },
+        }
+
+
+def example_cultural_feature_provenance_spec(
+    *,
+    enabled_feature_kinds: tuple[str, ...] = (
+        "practice",
+        "term",
+        "narrative_element",
+    ),
+    enabled_provenance_channels: tuple[str, ...] = (
+        "observation",
+        "teaching",
+        "communication",
+    ),
+    applicability: str = "all_live_agents",
+) -> CulturalFeatureProvenanceSpec:
+    """Reference cultural feature provenance spec for tests and Experiment AL."""
+    return CulturalFeatureProvenanceSpec(
+        enabled_feature_kinds=enabled_feature_kinds,
+        enabled_provenance_channels=enabled_provenance_channels,
+        applicability=applicability,
+    )
+
+
 def example_population_lifecycle_spec(
     *,
     lifespan_ticks: int = 20,
@@ -2621,8 +2975,11 @@ def seed_bootstrap_kinship_graph(
     registered_agent_ids: Sequence[AgentId],
 ) -> object:
     """Seed objective kinship graph from bootstrap edges (no edge events)."""
-    from world.kinship import KinshipEdge, KinshipGraph, validate_bootstrap_edges
-    from world.kinship import stable_kinship_edge_id
+    from world.kinship import (
+        KinshipEdge,
+        stable_kinship_edge_id,
+        validate_bootstrap_edges,
+    )
 
     if type(spec) is not KinshipSpec:
         raise TypeError("spec must be KinshipSpec")
@@ -3109,6 +3466,7 @@ class SimulationRunnerResult:
     teaching_audits: tuple[object, ...] = ()
     developmental_acquisition_audits: tuple[object, ...] = ()
     mentorship_audits: tuple[object, ...] = ()
+    cultural_feature_audits: tuple[object, ...] = ()
 
     def __post_init__(self) -> None:
         from simulation.models import RunId
@@ -3239,7 +3597,9 @@ class SimulationRunnerResult:
         object.__setattr__(self, "teaching_audits", teaching_rows)
         if isinstance(self.developmental_acquisition_audits, (set, frozenset)):
             raise TypeError("developmental_acquisition_audits must be ordered")
-        from agents.cognition.developmental_learning import DevelopmentalAcquisitionAudit
+        from agents.cognition.developmental_learning import (
+            DevelopmentalAcquisitionAudit,
+        )
 
         developmental_rows = tuple(self.developmental_acquisition_audits)
         for row in developmental_rows:
@@ -3257,6 +3617,15 @@ class SimulationRunnerResult:
             if type(row) is not MentorshipAudit:
                 raise TypeError("mentorship_audits: invalid_item")
         object.__setattr__(self, "mentorship_audits", mentorship_rows)
+        if isinstance(self.cultural_feature_audits, (set, frozenset)):
+            raise TypeError("cultural_feature_audits must be ordered")
+        from agents.cognition.cultural_features import CulturalFeatureAudit
+
+        cultural_rows = tuple(self.cultural_feature_audits)
+        for row in cultural_rows:
+            if type(row) is not CulturalFeatureAudit:
+                raise TypeError("cultural_feature_audits: invalid_item")
+        object.__setattr__(self, "cultural_feature_audits", cultural_rows)
 
 
 class CognitionFailurePolicy(StrEnum):
@@ -4029,6 +4398,7 @@ class SimulationRunnerConfig:
     dependency_care: DependencyCareSpec | None = None
     developmental_learning: DevelopmentalLearningSpec | None = None
     mentorship: MentorshipSpec | None = None
+    cultural_feature_provenance: CulturalFeatureProvenanceSpec | None = None
 
     def __post_init__(self) -> None:
         # Late import avoids circular import with new_agent_initialization.
@@ -4074,6 +4444,15 @@ class SimulationRunnerConfig:
             )
         if self.mentorship is not None and type(self.mentorship) is not MentorshipSpec:
             raise TypeError("mentorship must be MentorshipSpec or None")
+        if (
+            self.cultural_feature_provenance is not None
+            and type(self.cultural_feature_provenance)
+            is not CulturalFeatureProvenanceSpec
+        ):
+            raise TypeError(
+                "cultural_feature_provenance must be "
+                "CulturalFeatureProvenanceSpec or None"
+            )
         if type(self.scenario) is not WorldScenarioSpec:
             raise TypeError("scenario must be WorldScenarioSpec")
         agents = _copy_ordered(
@@ -4165,6 +4544,7 @@ class SimulationRunnerConfig:
             RUNNER_SCHEMA_VERSION_V28,
             RUNNER_SCHEMA_VERSION_V29,
             RUNNER_SCHEMA_VERSION_V30,
+            RUNNER_SCHEMA_VERSION_V31,
         }
         if (
             self.v3_capability_flags.generational_population
@@ -4178,7 +4558,8 @@ class SimulationRunnerConfig:
             raise ValueError(
                 "generational_population requires runner-config-v24, "
                 "runner-config-v25, runner-config-v26, runner-config-v27, "
-                "runner-config-v28, runner-config-v29, or runner-config-v30 "
+                "runner-config-v28, runner-config-v29, runner-config-v30, "
+                "or runner-config-v31 "
                 "(code=generational_population_requires_v24)"
             )
         _kinship_schemas = {
@@ -4186,16 +4567,19 @@ class SimulationRunnerConfig:
             RUNNER_SCHEMA_VERSION_V28,
             RUNNER_SCHEMA_VERSION_V29,
             RUNNER_SCHEMA_VERSION_V30,
+            RUNNER_SCHEMA_VERSION_V31,
         }
         if self.v3_capability_flags.kinship_inheritance:
             if self.schema_version not in _kinship_schemas:
                 _LOGGER.error(
-                    "kinship_requires_v27 schema_version=%s reason_code=kinship_requires_v27",
+                    "kinship_requires_v27 schema_version=%s "
+                    "reason_code=kinship_requires_v27",
                     self.schema_version,
                 )
                 raise ValueError(
                     "kinship_inheritance requires runner-config-v27, "
-                    "runner-config-v28, runner-config-v29, or runner-config-v30 "
+                    "runner-config-v28, runner-config-v29, runner-config-v30, "
+                    "or runner-config-v31 "
                     "(code=kinship_requires_v27)"
                 )
             if self.kinship is None:
@@ -4223,6 +4607,7 @@ class SimulationRunnerConfig:
                 RUNNER_SCHEMA_VERSION_V28,
                 RUNNER_SCHEMA_VERSION_V29,
                 RUNNER_SCHEMA_VERSION_V30,
+                RUNNER_SCHEMA_VERSION_V31,
             }:
                 _LOGGER.error(
                     "dependency_care_requires_v28 schema_version=%s "
@@ -4231,7 +4616,7 @@ class SimulationRunnerConfig:
                 )
                 raise ValueError(
                     "dependency_care requires runner-config-v28, "
-                    "runner-config-v29, or runner-config-v30 "
+                    "runner-config-v29, runner-config-v30, or runner-config-v31 "
                     "(code=dependency_care_requires_v28)"
                 )
             if not self.v3_capability_flags.generational_population:
@@ -4268,6 +4653,7 @@ class SimulationRunnerConfig:
             if self.schema_version not in {
                 RUNNER_SCHEMA_VERSION_V29,
                 RUNNER_SCHEMA_VERSION_V30,
+                RUNNER_SCHEMA_VERSION_V31,
             }:
                 _LOGGER.error(
                     "developmental_learning_requires_v29 schema_version=%s "
@@ -4275,8 +4661,8 @@ class SimulationRunnerConfig:
                     self.schema_version,
                 )
                 raise ValueError(
-                    "developmental_learning requires runner-config-v29 or "
-                    "runner-config-v30 "
+                    "developmental_learning requires runner-config-v29, "
+                    "runner-config-v30, or runner-config-v31 "
                     "(code=developmental_learning_requires_v29)"
                 )
             if not self.v3_capability_flags.generational_population:
@@ -4324,14 +4710,17 @@ class SimulationRunnerConfig:
                 "(code=v29_requires_developmental_learning)"
             )
         if self.mentorship is not None:
-            if self.schema_version != RUNNER_SCHEMA_VERSION_V30:
+            if self.schema_version not in {
+                RUNNER_SCHEMA_VERSION_V30,
+                RUNNER_SCHEMA_VERSION_V31,
+            }:
                 _LOGGER.error(
                     "mentorship_requires_v30 schema_version=%s "
                     "reason_code=mentorship_requires_v30",
                     self.schema_version,
                 )
                 raise ValueError(
-                    "mentorship requires runner-config-v30 "
+                    "mentorship requires runner-config-v30 or runner-config-v31 "
                     "(code=mentorship_requires_v30)"
                 )
             if not self.v3_capability_flags.generational_population:
@@ -4369,7 +4758,7 @@ class SimulationRunnerConfig:
                     )
                     raise ValueError(
                         "mentorship requires TeachingInteractionMode.DETERMINISTIC "
-                        f"on participants (code=mentorship_requires_teaching)"
+                        "on participants (code=mentorship_requires_teaching)"
                     )
             _LOGGER.info(
                 "mentorship_schema_select schema_version=%s "
@@ -4394,10 +4783,63 @@ class SimulationRunnerConfig:
                 "runner-config-v30 requires mentorship "
                 "(code=v30_requires_mentorship)"
             )
+        if self.cultural_feature_provenance is not None:
+            if self.schema_version != RUNNER_SCHEMA_VERSION_V31:
+                _LOGGER.error(
+                    "cultural_feature_requires_v31 schema_version=%s "
+                    "reason_code=cultural_feature_requires_v31",
+                    self.schema_version,
+                )
+                raise ValueError(
+                    "cultural_feature_provenance requires runner-config-v31 "
+                    "(code=cultural_feature_requires_v31)"
+                )
+            if not self.v3_capability_flags.cultural_historical_memory:
+                _LOGGER.error(
+                    "cultural_feature_without_flag schema_version=%s "
+                    "reason_code=cultural_feature_without_flag",
+                    self.schema_version,
+                )
+                raise ValueError(
+                    "cultural_feature_provenance requires "
+                    "cultural_historical_memory "
+                    "(code=cultural_feature_without_flag)"
+                )
+            _LOGGER.info(
+                "cultural_feature_schema_select schema_version=%s "
+                "feature_kind_count=%s channel_count=%s mutation_allowed=%s "
+                "recombination_allowed=%s applicability=%s",
+                self.schema_version,
+                len(self.cultural_feature_provenance.enabled_feature_kinds),
+                len(self.cultural_feature_provenance.enabled_provenance_channels),
+                self.cultural_feature_provenance.mutation_policy.allow_mutation,
+                self.cultural_feature_provenance.recombination_policy.allow_recombination,
+                self.cultural_feature_provenance.applicability,
+            )
+        elif self.schema_version == RUNNER_SCHEMA_VERSION_V31:
+            _LOGGER.error(
+                "v31_requires_cultural_feature_provenance schema_version=%s "
+                "reason_code=v31_requires_cultural_feature_provenance",
+                self.schema_version,
+            )
+            raise ValueError(
+                "runner-config-v31 requires cultural_feature_provenance "
+                "(code=v31_requires_cultural_feature_provenance)"
+            )
+        elif self.v3_capability_flags.cultural_historical_memory:
+            _LOGGER.error(
+                "cultural_feature_requires_flag schema_version=%s "
+                "reason_code=cultural_feature_requires_flag",
+                self.schema_version,
+            )
+            raise ValueError(
+                "cultural_historical_memory requires cultural_feature_provenance "
+                "(code=cultural_feature_requires_flag)"
+            )
         other_v3_enabled = tuple(
             name
             for name in self.v3_capability_flags.enabled_names()
-            if name not in {"generational_population", "kinship_inheritance"}
+            if name not in _V3_OWNED_CAPABILITY_FLAGS
         )
         if other_v3_enabled and self.schema_version not in {
             RUNNER_SCHEMA_VERSION_V23,
@@ -4408,6 +4850,7 @@ class SimulationRunnerConfig:
             RUNNER_SCHEMA_VERSION_V28,
             RUNNER_SCHEMA_VERSION_V29,
             RUNNER_SCHEMA_VERSION_V30,
+            RUNNER_SCHEMA_VERSION_V31,
         }:
             _LOGGER.error(
                 "v3_capability_requires_v23 schema_version=%s "
@@ -4460,14 +4903,63 @@ class SimulationRunnerConfig:
                     "mentorship requires generational_population "
                     "(code=mentorship_without_lifecycle_flag)"
                 )
+        _cultural_only = (
+            self.schema_version == RUNNER_SCHEMA_VERSION_V31
+            and self.v3_capability_flags.cultural_historical_memory
+            and not self.v3_capability_flags.generational_population
+        )
+        if _cultural_only:
+            if self.population_lifecycle is not None:
+                _LOGGER.error(
+                    "cultural_only_forbids_lifecycle_spec schema_version=%s "
+                    "reason_code=cultural_only_forbids_lifecycle_spec",
+                    self.schema_version,
+                )
+                raise ValueError(
+                    "cultural-only v31 forbids population_lifecycle "
+                    "(code=cultural_only_forbids_lifecycle_spec)"
+                )
+            if self.new_agent_initialization is not None:
+                _LOGGER.error(
+                    "cultural_only_forbids_new_agent_init schema_version=%s "
+                    "reason_code=cultural_only_forbids_new_agent_init",
+                    self.schema_version,
+                )
+                raise ValueError(
+                    "cultural-only v31 forbids new_agent_initialization "
+                    "(code=cultural_only_forbids_new_agent_init)"
+                )
+            if self.dependency_care is not None:
+                raise ValueError(
+                    "dependency_care requires generational_population "
+                    "(code=dependency_care_without_lifecycle_flag)"
+                )
+            if self.developmental_learning is not None:
+                raise ValueError(
+                    "developmental_learning requires generational_population "
+                    "(code=developmental_learning_without_lifecycle_flag)"
+                )
+            if self.mentorship is not None:
+                raise ValueError(
+                    "mentorship requires generational_population "
+                    "(code=mentorship_without_lifecycle_flag)"
+                )
         if self.schema_version in _lifecycle_schemas:
             requires_lifecycle = (
                 self.schema_version
-                not in {RUNNER_SCHEMA_VERSION_V27, RUNNER_SCHEMA_VERSION_V28, RUNNER_SCHEMA_VERSION_V29, RUNNER_SCHEMA_VERSION_V30}
+                not in {
+                    RUNNER_SCHEMA_VERSION_V27,
+                    RUNNER_SCHEMA_VERSION_V28,
+                    RUNNER_SCHEMA_VERSION_V29,
+                    RUNNER_SCHEMA_VERSION_V30,
+                    RUNNER_SCHEMA_VERSION_V31,
+                }
                 or self.v3_capability_flags.generational_population
             )
             if requires_lifecycle and self.population_lifecycle is None:
-                if self.schema_version == RUNNER_SCHEMA_VERSION_V30:
+                if self.schema_version == RUNNER_SCHEMA_VERSION_V31:
+                    code = "v31_requires_population_lifecycle"
+                elif self.schema_version == RUNNER_SCHEMA_VERSION_V30:
                     code = "v30_requires_population_lifecycle"
                 elif self.schema_version == RUNNER_SCHEMA_VERSION_V29:
                     code = "v29_requires_population_lifecycle"
@@ -4519,6 +5011,7 @@ class SimulationRunnerConfig:
                 RUNNER_SCHEMA_VERSION_V28,
                 RUNNER_SCHEMA_VERSION_V29,
                 RUNNER_SCHEMA_VERSION_V30,
+                RUNNER_SCHEMA_VERSION_V31,
             }
         ):
             _LOGGER.error(
@@ -4535,12 +5028,20 @@ class SimulationRunnerConfig:
             RUNNER_SCHEMA_VERSION_V26,
         } or (
             self.schema_version
-            in {RUNNER_SCHEMA_VERSION_V27, RUNNER_SCHEMA_VERSION_V28, RUNNER_SCHEMA_VERSION_V29, RUNNER_SCHEMA_VERSION_V30}
+            in {
+                RUNNER_SCHEMA_VERSION_V27,
+                RUNNER_SCHEMA_VERSION_V28,
+                RUNNER_SCHEMA_VERSION_V29,
+                RUNNER_SCHEMA_VERSION_V30,
+                RUNNER_SCHEMA_VERSION_V31,
+            }
             and self.v3_capability_flags.generational_population
         )
         if _requires_new_agent_init:
             if self.new_agent_initialization is None:
-                if self.schema_version == RUNNER_SCHEMA_VERSION_V30:
+                if self.schema_version == RUNNER_SCHEMA_VERSION_V31:
+                    code = "v31_requires_new_agent_initialization"
+                elif self.schema_version == RUNNER_SCHEMA_VERSION_V30:
                     code = "v30_requires_new_agent_initialization"
                 elif self.schema_version == RUNNER_SCHEMA_VERSION_V29:
                     code = "v29_requires_new_agent_initialization"
@@ -4665,6 +5166,7 @@ class SimulationRunnerConfig:
         RUNNER_SCHEMA_VERSION_V28,
         RUNNER_SCHEMA_VERSION_V29,
         RUNNER_SCHEMA_VERSION_V30,
+        RUNNER_SCHEMA_VERSION_V31,
         }
         if non_disabled and self.schema_version not in consolidation_schemas:
             _LOGGER.error(
@@ -4721,6 +5223,7 @@ class SimulationRunnerConfig:
         RUNNER_SCHEMA_VERSION_V28,
         RUNNER_SCHEMA_VERSION_V29,
         RUNNER_SCHEMA_VERSION_V30,
+        RUNNER_SCHEMA_VERSION_V31,
         }
         if reflecting and self.schema_version not in reflection_schemas:
             _LOGGER.error(
@@ -4777,6 +5280,7 @@ class SimulationRunnerConfig:
         RUNNER_SCHEMA_VERSION_V28,
         RUNNER_SCHEMA_VERSION_V29,
         RUNNER_SCHEMA_VERSION_V30,
+        RUNNER_SCHEMA_VERSION_V31,
         }
         if planning and self.schema_version not in prospective_schemas:
             _LOGGER.error(
@@ -4832,6 +5336,7 @@ class SimulationRunnerConfig:
         RUNNER_SCHEMA_VERSION_V28,
         RUNNER_SCHEMA_VERSION_V29,
         RUNNER_SCHEMA_VERSION_V30,
+        RUNNER_SCHEMA_VERSION_V31,
         }
         if considering and self.schema_version not in counterfactual_schemas:
             _LOGGER.error(
@@ -4886,6 +5391,7 @@ class SimulationRunnerConfig:
         RUNNER_SCHEMA_VERSION_V28,
         RUNNER_SCHEMA_VERSION_V29,
         RUNNER_SCHEMA_VERSION_V30,
+        RUNNER_SCHEMA_VERSION_V31,
         }:
             _LOGGER.error(
                 "invalid_fields path=agents.cognition.communication_strategy_mode "
@@ -4938,6 +5444,7 @@ class SimulationRunnerConfig:
         RUNNER_SCHEMA_VERSION_V28,
         RUNNER_SCHEMA_VERSION_V29,
         RUNNER_SCHEMA_VERSION_V30,
+        RUNNER_SCHEMA_VERSION_V31,
         }:
             _LOGGER.error(
                 "invalid_fields path=agents.cognition.reputation_mode "
@@ -5032,6 +5539,7 @@ class SimulationRunnerConfig:
         RUNNER_SCHEMA_VERSION_V28,
         RUNNER_SCHEMA_VERSION_V29,
         RUNNER_SCHEMA_VERSION_V30,
+        RUNNER_SCHEMA_VERSION_V31,
         }:
             _LOGGER.error(
                 "invalid_fields path=agents.cognition.teaching_interaction_mode "
@@ -5075,6 +5583,7 @@ class SimulationRunnerConfig:
         RUNNER_SCHEMA_VERSION_V28,
         RUNNER_SCHEMA_VERSION_V29,
         RUNNER_SCHEMA_VERSION_V30,
+        RUNNER_SCHEMA_VERSION_V31,
         }
         if (dynamics is not None and self.schema_version not in dynamics_schemas) or (
             self.schema_version == RUNNER_SCHEMA_VERSION_V14 and dynamics is None
@@ -5113,6 +5622,7 @@ class SimulationRunnerConfig:
         RUNNER_SCHEMA_VERSION_V28,
         RUNNER_SCHEMA_VERSION_V29,
         RUNNER_SCHEMA_VERSION_V30,
+        RUNNER_SCHEMA_VERSION_V31,
         }:
             _LOGGER.error(
                 "invalid_fields path=agents.cognition.territorial_claim_mode "
@@ -5157,6 +5667,7 @@ class SimulationRunnerConfig:
         RUNNER_SCHEMA_VERSION_V28,
         RUNNER_SCHEMA_VERSION_V29,
         RUNNER_SCHEMA_VERSION_V30,
+        RUNNER_SCHEMA_VERSION_V31,
         }:
             _LOGGER.error(
                 "invalid_fields path=agents.cognition.group_formation_mode "
@@ -5195,6 +5706,7 @@ class SimulationRunnerConfig:
         RUNNER_SCHEMA_VERSION_V28,
         RUNNER_SCHEMA_VERSION_V29,
         RUNNER_SCHEMA_VERSION_V30,
+        RUNNER_SCHEMA_VERSION_V31,
         }:
             _LOGGER.error(
                 "invalid_fields path=agents.cognition.social_norm_mode "
@@ -5236,6 +5748,7 @@ class SimulationRunnerConfig:
         RUNNER_SCHEMA_VERSION_V28,
         RUNNER_SCHEMA_VERSION_V29,
         RUNNER_SCHEMA_VERSION_V30,
+        RUNNER_SCHEMA_VERSION_V31,
         }
         if conventions_on and self.schema_version not in convention_schemas:
             _LOGGER.error(
@@ -5282,6 +5795,7 @@ class SimulationRunnerConfig:
         RUNNER_SCHEMA_VERSION_V28,
         RUNNER_SCHEMA_VERSION_V29,
         RUNNER_SCHEMA_VERSION_V30,
+        RUNNER_SCHEMA_VERSION_V31,
         }
         if artifacts_on and self.schema_version not in artifact_schemas:
             runner_log.error(
@@ -5324,6 +5838,7 @@ class SimulationRunnerConfig:
         RUNNER_SCHEMA_VERSION_V28,
         RUNNER_SCHEMA_VERSION_V29,
         RUNNER_SCHEMA_VERSION_V30,
+        RUNNER_SCHEMA_VERSION_V31,
         }
         if naming_on and self.schema_version not in naming_schemas:
             runner_log.error(
@@ -5363,6 +5878,7 @@ class SimulationRunnerConfig:
         RUNNER_SCHEMA_VERSION_V28,
         RUNNER_SCHEMA_VERSION_V29,
         RUNNER_SCHEMA_VERSION_V30,
+        RUNNER_SCHEMA_VERSION_V31,
         }
         budget_modes = tuple(
             agent.cognition.cognitive_budget_mode for agent in self.agents
@@ -5378,6 +5894,7 @@ class SimulationRunnerConfig:
         RUNNER_SCHEMA_VERSION_V28,
         RUNNER_SCHEMA_VERSION_V29,
         RUNNER_SCHEMA_VERSION_V30,
+        RUNNER_SCHEMA_VERSION_V31,
         }
         if budgets_on and self.schema_version not in budget_schemas:
             runner_log.error(
@@ -5491,6 +6008,7 @@ class SimulationRunnerConfig:
         RUNNER_SCHEMA_VERSION_V28,
         RUNNER_SCHEMA_VERSION_V29,
         RUNNER_SCHEMA_VERSION_V30,
+        RUNNER_SCHEMA_VERSION_V31,
         }:
             _LOGGER.error(
                 "invalid_fields path=agents.cognition.production_knowledge_mode "
@@ -5522,6 +6040,7 @@ class SimulationRunnerConfig:
         RUNNER_SCHEMA_VERSION_V28,
         RUNNER_SCHEMA_VERSION_V29,
         RUNNER_SCHEMA_VERSION_V30,
+        RUNNER_SCHEMA_VERSION_V31,
         }:
             from world.production import production_catalog_digest
 
@@ -5593,6 +6112,7 @@ class SimulationRunnerConfig:
         RUNNER_SCHEMA_VERSION_V28,
         RUNNER_SCHEMA_VERSION_V29,
         RUNNER_SCHEMA_VERSION_V30,
+        RUNNER_SCHEMA_VERSION_V31,
         }:
             shared_teaching = teaching_weight_tuple(self.agents[0].cognition)
             if any(

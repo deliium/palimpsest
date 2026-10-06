@@ -79,6 +79,7 @@ from simulation.runner_models import (
     RUNNER_SCHEMA_VERSION_V28,
     RUNNER_SCHEMA_VERSION_V29,
     RUNNER_SCHEMA_VERSION_V30,
+    RUNNER_SCHEMA_VERSION_V31,
     SUPPORTED_RESULT_SCHEMA_VERSIONS,
     SUPPORTED_RUNNER_SCHEMA_VERSIONS,
 )
@@ -107,7 +108,11 @@ RUNNER_SCHEMA_VERSION_POPULATION_LIFECYCLE: Final[str] = RUNNER_SCHEMA_VERSION_V
 RUNNER_SCHEMA_VERSION_NEW_AGENT_INITIALIZATION: Final[str] = RUNNER_SCHEMA_VERSION_V25
 V3_CAPABILITY_FLAGS_WIRE_KEY: Final[str] = "v3_capability_flags"
 V3_OWNED_CAPABILITY_FLAGS: Final[frozenset[str]] = frozenset(
-    {"generational_population"}
+    {
+        "generational_population",
+        "kinship_inheritance",
+        "cultural_historical_memory",
+    }
 )
 V3_CAPABILITY_FLAG_NAMES: Final[tuple[str, ...]] = (
     "generational_population",
@@ -364,7 +369,12 @@ _MATRIX: dict[str, CompatibilityEntry] = {
             "dependency_care/kinship with lifecycle); writers emit "
             f"{RUNNER_SCHEMA_VERSION_V30} when mentorship is present (may also carry "
             "developmental_learning/dependency_care/kinship with lifecycle); "
-            "mode allowlists that top out at v29 widen to accept v30; "
+            f"writers emit {RUNNER_SCHEMA_VERSION_V31} when "
+            "cultural_feature_provenance is present "
+            "(owns cultural_historical_memory; may also carry mentorship/"
+            "developmental_learning/dependency_care/kinship with lifecycle, or "
+            "cultural-only / kinship+cultural without lifecycle); "
+            "mode allowlists that top out at v30 widen to accept v31; "
             f"{RUNNER_SCHEMA_VERSION_V3} retained for V2 capability flags; "
             "v1-v4 omit consolidation_mode, reflection_mode, prospective_mode, "
             "counterfactual_mode, communication_strategy_mode, and "
@@ -641,6 +651,7 @@ _LOG.debug(
         "runner_v28": RUNNER_SCHEMA_VERSION_V28,
         "runner_v29": RUNNER_SCHEMA_VERSION_V29,
         "runner_v30": RUNNER_SCHEMA_VERSION_V30,
+        "runner_v31": RUNNER_SCHEMA_VERSION_V31,
         "observer_protocol": OBSERVER_PROTOCOL_VERSION,
         "research_ui_mount": RESEARCH_UI_MOUNT,
         "alembic_head": ALEMBIC_HEAD_REVISION,

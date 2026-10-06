@@ -75,7 +75,6 @@ def test_v3_scaffolding_and_v2_regression_profiles_on_base() -> None:
     (
         "multi_polity_migration",
         "institutional_economy",
-        "cultural_historical_memory",
     ),
 )
 async def test_unowned_v3_flag_fails_closed_at_from_config_while_encode_decode_ok(
