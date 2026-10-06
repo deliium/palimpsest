@@ -78,6 +78,7 @@ from simulation.runner_models import (
     RUNNER_SCHEMA_VERSION_V27,
     RUNNER_SCHEMA_VERSION_V28,
     RUNNER_SCHEMA_VERSION_V29,
+    RUNNER_SCHEMA_VERSION_V30,
     SUPPORTED_RESULT_SCHEMA_VERSIONS,
     SUPPORTED_RUNNER_SCHEMA_VERSIONS,
 )
@@ -359,9 +360,11 @@ _MATRIX: dict[str, CompatibilityEntry] = {
             f"{RUNNER_SCHEMA_VERSION_V27} when kinship is present; "
             f"writers emit {RUNNER_SCHEMA_VERSION_V28} when dependency_care is present "
             f"without developmental_learning; writers emit {RUNNER_SCHEMA_VERSION_V29} "
-            "when developmental_learning is present (may also carry dependency_care/"
-            "kinship with lifecycle); "
-            "mode allowlists that top out at v28 widen to accept v29; "
+            "when developmental_learning is present without mentorship (may also carry "
+            "dependency_care/kinship with lifecycle); writers emit "
+            f"{RUNNER_SCHEMA_VERSION_V30} when mentorship is present (may also carry "
+            "developmental_learning/dependency_care/kinship with lifecycle); "
+            "mode allowlists that top out at v29 widen to accept v30; "
             f"{RUNNER_SCHEMA_VERSION_V3} retained for V2 capability flags; "
             "v1-v4 omit consolidation_mode, reflection_mode, prospective_mode, "
             "counterfactual_mode, communication_strategy_mode, and "
@@ -637,6 +640,7 @@ _LOG.debug(
         "runner_v27": RUNNER_SCHEMA_VERSION_V27,
         "runner_v28": RUNNER_SCHEMA_VERSION_V28,
         "runner_v29": RUNNER_SCHEMA_VERSION_V29,
+        "runner_v30": RUNNER_SCHEMA_VERSION_V30,
         "observer_protocol": OBSERVER_PROTOCOL_VERSION,
         "research_ui_mount": RESEARCH_UI_MOUNT,
         "alembic_head": ALEMBIC_HEAD_REVISION,

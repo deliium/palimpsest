@@ -25,6 +25,7 @@ from simulation.runner_models import (
     RUNNER_SCHEMA_VERSION_V27,
     RUNNER_SCHEMA_VERSION_V28,
     RUNNER_SCHEMA_VERSION_V29,
+    RUNNER_SCHEMA_VERSION_V30,
     ArtifactInterpretationMode,
     CognitiveBudgetMode,
     CulturalNarrativeMode,
@@ -69,6 +70,7 @@ def finalize_matrix_cell_config(
         for agent in agents
     )
 
+    mentorship_on = config.mentorship is not None
     developmental_learning_on = config.developmental_learning is not None
     dependency_care_on = config.dependency_care is not None
     kinship_on = (
@@ -78,7 +80,12 @@ def finalize_matrix_cell_config(
         config.population_lifecycle is not None
         and config.population_lifecycle.has_developmental_extensions()
     )
-    if developmental_learning_on:
+    if mentorship_on:
+        schema_version, rule = (
+            RUNNER_SCHEMA_VERSION_V30,
+            "mentorship_on",
+        )
+    elif developmental_learning_on:
         schema_version, rule = (
             RUNNER_SCHEMA_VERSION_V29,
             "developmental_learning_on",
@@ -136,7 +143,7 @@ def finalize_matrix_cell_config(
         RUNNER_SCHEMA_VERSION_V26,
     } or (
         schema_version
-        in {RUNNER_SCHEMA_VERSION_V27, RUNNER_SCHEMA_VERSION_V28, RUNNER_SCHEMA_VERSION_V29}
+        in {RUNNER_SCHEMA_VERSION_V27, RUNNER_SCHEMA_VERSION_V28, RUNNER_SCHEMA_VERSION_V29, RUNNER_SCHEMA_VERSION_V30}
         and config.v3_capability_flags.generational_population
     )
     if needs_lifecycle and payload.get("population_lifecycle") is None:
@@ -146,7 +153,7 @@ def finalize_matrix_cell_config(
         RUNNER_SCHEMA_VERSION_V26,
     } or (
         schema_version
-        in {RUNNER_SCHEMA_VERSION_V27, RUNNER_SCHEMA_VERSION_V28, RUNNER_SCHEMA_VERSION_V29}
+        in {RUNNER_SCHEMA_VERSION_V27, RUNNER_SCHEMA_VERSION_V28, RUNNER_SCHEMA_VERSION_V29, RUNNER_SCHEMA_VERSION_V30}
         and config.v3_capability_flags.generational_population
     )
     if needs_init and payload.get("new_agent_initialization") is None:
@@ -173,6 +180,12 @@ def finalize_matrix_cell_config(
             }
         },
     )
+    if rule == "mentorship_on":
+        _LOG.debug(
+            "matrix_schema_finalize_choice schema=%s reason=%s",
+            schema_version,
+            rule,
+        )
     return finalized
 
 

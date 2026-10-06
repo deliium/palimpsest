@@ -108,6 +108,7 @@ RUNNER_SCHEMA_VERSION_V26: Final[str] = "runner-config-v26"
 RUNNER_SCHEMA_VERSION_V27: Final[str] = "runner-config-v27"
 RUNNER_SCHEMA_VERSION_V28: Final[str] = "runner-config-v28"
 RUNNER_SCHEMA_VERSION_V29: Final[str] = "runner-config-v29"
+RUNNER_SCHEMA_VERSION_V30: Final[str] = "runner-config-v30"
 RUNNER_SCHEMA_VERSION: Final[str] = RUNNER_SCHEMA_VERSION_V4
 SUPPORTED_RUNNER_SCHEMA_VERSIONS: Final[frozenset[str]] = frozenset(
     {
@@ -140,6 +141,7 @@ SUPPORTED_RUNNER_SCHEMA_VERSIONS: Final[frozenset[str]] = frozenset(
         RUNNER_SCHEMA_VERSION_V27,
         RUNNER_SCHEMA_VERSION_V28,
         RUNNER_SCHEMA_VERSION_V29,
+        RUNNER_SCHEMA_VERSION_V30,
     }
 )
 RESULT_SCHEMA_VERSION_V1: Final[str] = "runner-result-v1"
@@ -671,6 +673,7 @@ _SKILL_SCHEMAS: Final[frozenset[str]] = frozenset(
             RUNNER_SCHEMA_VERSION_V27,
     RUNNER_SCHEMA_VERSION_V28,
     RUNNER_SCHEMA_VERSION_V29,
+    RUNNER_SCHEMA_VERSION_V30,
     }
 )
 
@@ -2099,6 +2102,311 @@ def example_developmental_learning_spec(
     )
 
 
+_MENTORSHIP_MODE: Final[frozenset[str]] = frozenset({"deterministic"})
+_MENTORSHIP_APPLICABILITY: Final[frozenset[str]] = frozenset(
+    {"all_live_agents", "mid_run_new_agents", "lifecycle_learning_stage"}
+)
+_MENTORSHIP_PARTNER_BIAS_MODES: Final[frozenset[str]] = frozenset(
+    {"ignore", "prefer_bonded"}
+)
+_MENTORSHIP_CONFIDENCE_INHERIT: Final[frozenset[str]] = frozenset(
+    {"learner_trust_scaled", "fresh_floor"}
+)
+_MENTORSHIP_BOND_POLICY_KEYS: Final[frozenset[str]] = frozenset(
+    {
+        "form_after_successful_acts",
+        "min_trust",
+        "reinforce_on_learning_evidence",
+        "decay_per_tick",
+        "offer_window_extend",
+        "symmetric",
+    }
+)
+_MENTORSHIP_LINEAGE_POLICY_KEYS: Final[frozenset[str]] = frozenset(
+    {
+        "max_hop_depth",
+        "record_attempts",
+        "allow_learner_mutation",
+        "mutation_requires_evidence",
+        "confidence_inherit_mode",
+    }
+)
+_MENTORSHIP_PARTNER_BIAS_KEYS: Final[frozenset[str]] = frozenset(
+    {"mode", "communicate_weight", "content_kind_affinity"}
+)
+_MENTORSHIP_KEYS: Final[frozenset[str]] = frozenset(
+    {
+        "enabled_content_kinds",
+        "bond_policy",
+        "lineage_policy",
+        "partner_bias",
+        "mentorship_mode",
+        "requires_teaching_interaction",
+        "max_bonds_per_owner",
+        "max_lineage_entries_per_owner",
+        "applicability",
+    }
+)
+
+
+@dataclass(frozen=True, slots=True)
+class MentorshipBondPolicy:
+    """Exact bond_policy object under mentorship."""
+
+    form_after_successful_acts: int = 2
+    min_trust: float = 0.2
+    reinforce_on_learning_evidence: bool = True
+    decay_per_tick: float = 0.0
+    offer_window_extend: int = 0
+    symmetric: bool = False
+
+    def __post_init__(self) -> None:
+        acts = require_exact_nonneg_int(
+            "form_after_successful_acts", self.form_after_successful_acts
+        )
+        object.__setattr__(self, "form_after_successful_acts", acts)
+        trust = float(self.min_trust)
+        if isinstance(self.min_trust, bool) or not isinstance(
+            self.min_trust, (int, float)
+        ):
+            raise ValueError("min_trust: not_finite")
+        if not math.isfinite(trust) or trust < 0.0 or trust > 1.0:
+            raise ValueError("min_trust: out_of_range")
+        object.__setattr__(self, "min_trust", trust)
+        if type(self.reinforce_on_learning_evidence) is not bool:
+            raise TypeError("reinforce_on_learning_evidence must be bool")
+        decay = float(self.decay_per_tick)
+        if isinstance(self.decay_per_tick, bool) or not isinstance(
+            self.decay_per_tick, (int, float)
+        ):
+            raise ValueError("decay_per_tick: not_finite")
+        if not math.isfinite(decay) or decay < 0.0 or decay > 1.0:
+            raise ValueError("decay_per_tick: out_of_range")
+        object.__setattr__(self, "decay_per_tick", decay)
+        extend = require_exact_nonneg_int(
+            "offer_window_extend", self.offer_window_extend
+        )
+        object.__setattr__(self, "offer_window_extend", extend)
+        if type(self.symmetric) is not bool:
+            raise TypeError("symmetric must be bool")
+
+
+@dataclass(frozen=True, slots=True)
+class MentorshipLineagePolicy:
+    """Exact lineage_policy object under mentorship."""
+
+    max_hop_depth: int = 4
+    record_attempts: bool = True
+    allow_learner_mutation: bool = True
+    mutation_requires_evidence: bool = True
+    confidence_inherit_mode: str = "learner_trust_scaled"
+
+    def __post_init__(self) -> None:
+        depth = require_exact_nonneg_int("max_hop_depth", self.max_hop_depth)
+        if depth < 1 or depth > 8:
+            raise ValueError(
+                "max_hop_depth must be in [1, 8] (code=mentorship_max_hop_invalid)"
+            )
+        object.__setattr__(self, "max_hop_depth", depth)
+        for name in (
+            "record_attempts",
+            "allow_learner_mutation",
+            "mutation_requires_evidence",
+        ):
+            if type(getattr(self, name)) is not bool:
+                raise TypeError(f"{name} must be bool")
+        mode = require_stable_id(
+            "MentorshipLineagePolicy.confidence_inherit_mode",
+            self.confidence_inherit_mode,
+        )
+        if mode not in _MENTORSHIP_CONFIDENCE_INHERIT:
+            raise ValueError(
+                f"unknown confidence_inherit_mode {mode!r} "
+                "(code=mentorship_confidence_inherit_invalid)"
+            )
+        object.__setattr__(self, "confidence_inherit_mode", mode)
+
+
+@dataclass(frozen=True, slots=True)
+class MentorshipPartnerBias:
+    """Exact partner_bias object under mentorship."""
+
+    mode: str = "prefer_bonded"
+    communicate_weight: float = 0.15
+    content_kind_affinity: bool = True
+
+    def __post_init__(self) -> None:
+        mode = require_stable_id("MentorshipPartnerBias.mode", self.mode)
+        if mode not in _MENTORSHIP_PARTNER_BIAS_MODES:
+            raise ValueError(
+                f"unknown partner_bias.mode {mode!r} "
+                "(code=mentorship_partner_bias_mode_invalid)"
+            )
+        object.__setattr__(self, "mode", mode)
+        weight = float(self.communicate_weight)
+        if isinstance(self.communicate_weight, bool) or not isinstance(
+            self.communicate_weight, (int, float)
+        ):
+            raise ValueError("communicate_weight: not_finite")
+        if not math.isfinite(weight) or weight < 0.0 or weight > 1.0:
+            raise ValueError("communicate_weight: out_of_range")
+        object.__setattr__(self, "communicate_weight", weight)
+        if type(self.content_kind_affinity) is not bool:
+            raise TypeError("content_kind_affinity must be bool")
+
+
+@dataclass(frozen=True, slots=True)
+class MentorshipSpec:
+    """Opt-in mentorship channel (runner-config-v30 sibling).
+
+    Deepens owned ``generational_population`` — not a new V3 flag and not an
+    ``AgentCognitionSpec`` enum. Absent object means channel off.
+    """
+
+    enabled_content_kinds: tuple[str, ...]
+    bond_policy: MentorshipBondPolicy = field(default_factory=MentorshipBondPolicy)
+    lineage_policy: MentorshipLineagePolicy = field(
+        default_factory=MentorshipLineagePolicy
+    )
+    partner_bias: MentorshipPartnerBias = field(default_factory=MentorshipPartnerBias)
+    mentorship_mode: str = "deterministic"
+    requires_teaching_interaction: bool = True
+    max_bonds_per_owner: int = 16
+    max_lineage_entries_per_owner: int = 256
+    applicability: str = "all_live_agents"
+
+    def __post_init__(self) -> None:
+        from agents.cognition.mentorship import parse_mentorship_content_kind
+
+        mode = require_stable_id(
+            "MentorshipSpec.mentorship_mode", self.mentorship_mode
+        )
+        if mode == "disabled":
+            raise ValueError(
+                "mentorship_mode=disabled is rejected; omit the object for off "
+                "(code=mentorship_mode_invalid)"
+            )
+        if mode not in _MENTORSHIP_MODE:
+            raise ValueError(
+                f"unknown mentorship_mode {mode!r} (code=mentorship_mode_invalid)"
+            )
+        object.__setattr__(self, "mentorship_mode", mode)
+
+        if isinstance(self.enabled_content_kinds, (str, bytes)) or not isinstance(
+            self.enabled_content_kinds, Sequence
+        ):
+            raise TypeError("enabled_content_kinds must be a sequence")
+        if not self.enabled_content_kinds:
+            raise ValueError(
+                "enabled_content_kinds must be non-empty when mentorship present "
+                "(code=mentorship_enabled_content_kinds_empty)"
+            )
+        kinds: list[str] = []
+        seen: set[str] = set()
+        for raw in self.enabled_content_kinds:
+            kind = parse_mentorship_content_kind(raw)
+            if kind.value in seen:
+                raise ValueError(
+                    f"duplicate enabled content kind {kind.value!r} "
+                    "(code=mentorship_content_kind_duplicate)"
+                )
+            seen.add(kind.value)
+            kinds.append(kind.value)
+        object.__setattr__(self, "enabled_content_kinds", tuple(kinds))
+
+        if type(self.bond_policy) is not MentorshipBondPolicy:
+            raise TypeError("bond_policy must be MentorshipBondPolicy")
+        if type(self.lineage_policy) is not MentorshipLineagePolicy:
+            raise TypeError("lineage_policy must be MentorshipLineagePolicy")
+        if type(self.partner_bias) is not MentorshipPartnerBias:
+            raise TypeError("partner_bias must be MentorshipPartnerBias")
+        if type(self.requires_teaching_interaction) is not bool:
+            raise TypeError("requires_teaching_interaction must be bool")
+
+        max_bonds = require_exact_nonneg_int(
+            "max_bonds_per_owner", self.max_bonds_per_owner
+        )
+        if max_bonds < 1:
+            raise ValueError(
+                "max_bonds_per_owner must be >= 1 "
+                "(code=mentorship_max_bonds_invalid)"
+            )
+        object.__setattr__(self, "max_bonds_per_owner", max_bonds)
+        max_lineage = require_exact_nonneg_int(
+            "max_lineage_entries_per_owner", self.max_lineage_entries_per_owner
+        )
+        if max_lineage < 1:
+            raise ValueError(
+                "max_lineage_entries_per_owner must be >= 1 "
+                "(code=mentorship_max_lineage_invalid)"
+            )
+        object.__setattr__(self, "max_lineage_entries_per_owner", max_lineage)
+
+        applicability = require_stable_id(
+            "MentorshipSpec.applicability", self.applicability
+        )
+        if applicability not in _MENTORSHIP_APPLICABILITY:
+            raise ValueError(
+                f"unknown applicability {applicability!r} "
+                "(code=mentorship_applicability_invalid)"
+            )
+        object.__setattr__(self, "applicability", applicability)
+
+    def canonical_payload(self) -> dict[str, object]:
+        return {
+            "applicability": self.applicability,
+            "bond_policy": {
+                "decay_per_tick": self.bond_policy.decay_per_tick,
+                "form_after_successful_acts": (
+                    self.bond_policy.form_after_successful_acts
+                ),
+                "min_trust": self.bond_policy.min_trust,
+                "offer_window_extend": self.bond_policy.offer_window_extend,
+                "reinforce_on_learning_evidence": (
+                    self.bond_policy.reinforce_on_learning_evidence
+                ),
+                "symmetric": self.bond_policy.symmetric,
+            },
+            "enabled_content_kinds": list(self.enabled_content_kinds),
+            "lineage_policy": {
+                "allow_learner_mutation": self.lineage_policy.allow_learner_mutation,
+                "confidence_inherit_mode": self.lineage_policy.confidence_inherit_mode,
+                "max_hop_depth": self.lineage_policy.max_hop_depth,
+                "mutation_requires_evidence": (
+                    self.lineage_policy.mutation_requires_evidence
+                ),
+                "record_attempts": self.lineage_policy.record_attempts,
+            },
+            "max_bonds_per_owner": self.max_bonds_per_owner,
+            "max_lineage_entries_per_owner": self.max_lineage_entries_per_owner,
+            "mentorship_mode": self.mentorship_mode,
+            "partner_bias": {
+                "communicate_weight": self.partner_bias.communicate_weight,
+                "content_kind_affinity": self.partner_bias.content_kind_affinity,
+                "mode": self.partner_bias.mode,
+            },
+            "requires_teaching_interaction": self.requires_teaching_interaction,
+        }
+
+
+def example_mentorship_spec(
+    *,
+    enabled_content_kinds: tuple[str, ...] = (
+        "practical_skills",
+        "factual_beliefs",
+        "warnings",
+    ),
+    applicability: str = "all_live_agents",
+    max_hop_depth: int = 4,
+) -> MentorshipSpec:
+    """Reference mentorship spec for tests and Experiment AK."""
+    return MentorshipSpec(
+        enabled_content_kinds=enabled_content_kinds,
+        applicability=applicability,
+        lineage_policy=MentorshipLineagePolicy(max_hop_depth=max_hop_depth),
+    )
+
+
 def example_population_lifecycle_spec(
     *,
     lifespan_ticks: int = 20,
@@ -2800,6 +3108,7 @@ class SimulationRunnerResult:
     skill_audits: tuple[object, ...] = ()
     teaching_audits: tuple[object, ...] = ()
     developmental_acquisition_audits: tuple[object, ...] = ()
+    mentorship_audits: tuple[object, ...] = ()
 
     def __post_init__(self) -> None:
         from simulation.models import RunId
@@ -2939,6 +3248,15 @@ class SimulationRunnerResult:
         object.__setattr__(
             self, "developmental_acquisition_audits", developmental_rows
         )
+        if isinstance(self.mentorship_audits, (set, frozenset)):
+            raise TypeError("mentorship_audits must be ordered")
+        from agents.cognition.mentorship import MentorshipAudit
+
+        mentorship_rows = tuple(self.mentorship_audits)
+        for row in mentorship_rows:
+            if type(row) is not MentorshipAudit:
+                raise TypeError("mentorship_audits: invalid_item")
+        object.__setattr__(self, "mentorship_audits", mentorship_rows)
 
 
 class CognitionFailurePolicy(StrEnum):
@@ -3710,6 +4028,7 @@ class SimulationRunnerConfig:
     kinship: KinshipSpec | None = None
     dependency_care: DependencyCareSpec | None = None
     developmental_learning: DevelopmentalLearningSpec | None = None
+    mentorship: MentorshipSpec | None = None
 
     def __post_init__(self) -> None:
         # Late import avoids circular import with new_agent_initialization.
@@ -3753,6 +4072,8 @@ class SimulationRunnerConfig:
             raise TypeError(
                 "developmental_learning must be DevelopmentalLearningSpec or None"
             )
+        if self.mentorship is not None and type(self.mentorship) is not MentorshipSpec:
+            raise TypeError("mentorship must be MentorshipSpec or None")
         if type(self.scenario) is not WorldScenarioSpec:
             raise TypeError("scenario must be WorldScenarioSpec")
         agents = _copy_ordered(
@@ -3843,6 +4164,7 @@ class SimulationRunnerConfig:
             RUNNER_SCHEMA_VERSION_V27,
             RUNNER_SCHEMA_VERSION_V28,
             RUNNER_SCHEMA_VERSION_V29,
+            RUNNER_SCHEMA_VERSION_V30,
         }
         if (
             self.v3_capability_flags.generational_population
@@ -3856,13 +4178,14 @@ class SimulationRunnerConfig:
             raise ValueError(
                 "generational_population requires runner-config-v24, "
                 "runner-config-v25, runner-config-v26, runner-config-v27, "
-                "runner-config-v28, or runner-config-v29 "
+                "runner-config-v28, runner-config-v29, or runner-config-v30 "
                 "(code=generational_population_requires_v24)"
             )
         _kinship_schemas = {
             RUNNER_SCHEMA_VERSION_V27,
             RUNNER_SCHEMA_VERSION_V28,
             RUNNER_SCHEMA_VERSION_V29,
+            RUNNER_SCHEMA_VERSION_V30,
         }
         if self.v3_capability_flags.kinship_inheritance:
             if self.schema_version not in _kinship_schemas:
@@ -3872,7 +4195,7 @@ class SimulationRunnerConfig:
                 )
                 raise ValueError(
                     "kinship_inheritance requires runner-config-v27, "
-                    "runner-config-v28, or runner-config-v29 "
+                    "runner-config-v28, runner-config-v29, or runner-config-v30 "
                     "(code=kinship_requires_v27)"
                 )
             if self.kinship is None:
@@ -3899,6 +4222,7 @@ class SimulationRunnerConfig:
             if self.schema_version not in {
                 RUNNER_SCHEMA_VERSION_V28,
                 RUNNER_SCHEMA_VERSION_V29,
+                RUNNER_SCHEMA_VERSION_V30,
             }:
                 _LOGGER.error(
                     "dependency_care_requires_v28 schema_version=%s "
@@ -3906,8 +4230,8 @@ class SimulationRunnerConfig:
                     self.schema_version,
                 )
                 raise ValueError(
-                    "dependency_care requires runner-config-v28 or "
-                    "runner-config-v29 "
+                    "dependency_care requires runner-config-v28, "
+                    "runner-config-v29, or runner-config-v30 "
                     "(code=dependency_care_requires_v28)"
                 )
             if not self.v3_capability_flags.generational_population:
@@ -3941,14 +4265,18 @@ class SimulationRunnerConfig:
                 self.dependency_care.perception_mode,
             )
         if self.developmental_learning is not None:
-            if self.schema_version != RUNNER_SCHEMA_VERSION_V29:
+            if self.schema_version not in {
+                RUNNER_SCHEMA_VERSION_V29,
+                RUNNER_SCHEMA_VERSION_V30,
+            }:
                 _LOGGER.error(
                     "developmental_learning_requires_v29 schema_version=%s "
                     "reason_code=developmental_learning_requires_v29",
                     self.schema_version,
                 )
                 raise ValueError(
-                    "developmental_learning requires runner-config-v29 "
+                    "developmental_learning requires runner-config-v29 or "
+                    "runner-config-v30 "
                     "(code=developmental_learning_requires_v29)"
                 )
             if not self.v3_capability_flags.generational_population:
@@ -3995,6 +4323,77 @@ class SimulationRunnerConfig:
                 "runner-config-v29 requires developmental_learning "
                 "(code=v29_requires_developmental_learning)"
             )
+        if self.mentorship is not None:
+            if self.schema_version != RUNNER_SCHEMA_VERSION_V30:
+                _LOGGER.error(
+                    "mentorship_requires_v30 schema_version=%s "
+                    "reason_code=mentorship_requires_v30",
+                    self.schema_version,
+                )
+                raise ValueError(
+                    "mentorship requires runner-config-v30 "
+                    "(code=mentorship_requires_v30)"
+                )
+            if not self.v3_capability_flags.generational_population:
+                _LOGGER.error(
+                    "mentorship_without_lifecycle_flag schema_version=%s "
+                    "reason_code=mentorship_without_lifecycle_flag",
+                    self.schema_version,
+                )
+                raise ValueError(
+                    "mentorship requires generational_population "
+                    "(code=mentorship_without_lifecycle_flag)"
+                )
+            if self.population_lifecycle is None:
+                _LOGGER.error(
+                    "mentorship_requires_lifecycle schema_version=%s "
+                    "reason_code=mentorship_requires_lifecycle",
+                    self.schema_version,
+                )
+                raise ValueError(
+                    "mentorship requires population_lifecycle "
+                    "(code=mentorship_requires_lifecycle)"
+                )
+            if self.mentorship.requires_teaching_interaction:
+                missing = [
+                    agent.agent_id.value
+                    for agent in self.agents
+                    if agent.cognition.teaching_interaction_mode
+                    is not TeachingInteractionMode.DETERMINISTIC
+                ]
+                if missing:
+                    _LOGGER.error(
+                        "mentorship_requires_teaching agent_count=%s "
+                        "reason_code=mentorship_requires_teaching",
+                        len(missing),
+                    )
+                    raise ValueError(
+                        "mentorship requires TeachingInteractionMode.DETERMINISTIC "
+                        f"on participants (code=mentorship_requires_teaching)"
+                    )
+            _LOGGER.info(
+                "mentorship_schema_select schema_version=%s "
+                "generational_population=%s content_kind_count=%s "
+                "bond_policy_form_after=%s max_hop_depth=%s "
+                "mentorship_mode=%s applicability=%s",
+                self.schema_version,
+                self.v3_capability_flags.generational_population,
+                len(self.mentorship.enabled_content_kinds),
+                self.mentorship.bond_policy.form_after_successful_acts,
+                self.mentorship.lineage_policy.max_hop_depth,
+                self.mentorship.mentorship_mode,
+                self.mentorship.applicability,
+            )
+        elif self.schema_version == RUNNER_SCHEMA_VERSION_V30:
+            _LOGGER.error(
+                "v30_requires_mentorship schema_version=%s "
+                "reason_code=v30_requires_mentorship",
+                self.schema_version,
+            )
+            raise ValueError(
+                "runner-config-v30 requires mentorship "
+                "(code=v30_requires_mentorship)"
+            )
         other_v3_enabled = tuple(
             name
             for name in self.v3_capability_flags.enabled_names()
@@ -4008,6 +4407,7 @@ class SimulationRunnerConfig:
             RUNNER_SCHEMA_VERSION_V27,
             RUNNER_SCHEMA_VERSION_V28,
             RUNNER_SCHEMA_VERSION_V29,
+            RUNNER_SCHEMA_VERSION_V30,
         }:
             _LOGGER.error(
                 "v3_capability_requires_v23 schema_version=%s "
@@ -4055,14 +4455,21 @@ class SimulationRunnerConfig:
                     "developmental_learning requires generational_population "
                     "(code=developmental_learning_without_lifecycle_flag)"
                 )
+            if self.mentorship is not None:
+                raise ValueError(
+                    "mentorship requires generational_population "
+                    "(code=mentorship_without_lifecycle_flag)"
+                )
         if self.schema_version in _lifecycle_schemas:
             requires_lifecycle = (
                 self.schema_version
-                not in {RUNNER_SCHEMA_VERSION_V27, RUNNER_SCHEMA_VERSION_V28, RUNNER_SCHEMA_VERSION_V29}
+                not in {RUNNER_SCHEMA_VERSION_V27, RUNNER_SCHEMA_VERSION_V28, RUNNER_SCHEMA_VERSION_V29, RUNNER_SCHEMA_VERSION_V30}
                 or self.v3_capability_flags.generational_population
             )
             if requires_lifecycle and self.population_lifecycle is None:
-                if self.schema_version == RUNNER_SCHEMA_VERSION_V29:
+                if self.schema_version == RUNNER_SCHEMA_VERSION_V30:
+                    code = "v30_requires_population_lifecycle"
+                elif self.schema_version == RUNNER_SCHEMA_VERSION_V29:
                     code = "v29_requires_population_lifecycle"
                 elif self.schema_version == RUNNER_SCHEMA_VERSION_V28:
                     code = "v28_requires_population_lifecycle"
@@ -4111,6 +4518,7 @@ class SimulationRunnerConfig:
                 RUNNER_SCHEMA_VERSION_V27,
                 RUNNER_SCHEMA_VERSION_V28,
                 RUNNER_SCHEMA_VERSION_V29,
+                RUNNER_SCHEMA_VERSION_V30,
             }
         ):
             _LOGGER.error(
@@ -4127,12 +4535,14 @@ class SimulationRunnerConfig:
             RUNNER_SCHEMA_VERSION_V26,
         } or (
             self.schema_version
-            in {RUNNER_SCHEMA_VERSION_V27, RUNNER_SCHEMA_VERSION_V28, RUNNER_SCHEMA_VERSION_V29}
+            in {RUNNER_SCHEMA_VERSION_V27, RUNNER_SCHEMA_VERSION_V28, RUNNER_SCHEMA_VERSION_V29, RUNNER_SCHEMA_VERSION_V30}
             and self.v3_capability_flags.generational_population
         )
         if _requires_new_agent_init:
             if self.new_agent_initialization is None:
-                if self.schema_version == RUNNER_SCHEMA_VERSION_V29:
+                if self.schema_version == RUNNER_SCHEMA_VERSION_V30:
+                    code = "v30_requires_new_agent_initialization"
+                elif self.schema_version == RUNNER_SCHEMA_VERSION_V29:
                     code = "v29_requires_new_agent_initialization"
                 elif self.schema_version == RUNNER_SCHEMA_VERSION_V28:
                     code = "v28_requires_new_agent_initialization"
@@ -4254,6 +4664,7 @@ class SimulationRunnerConfig:
             RUNNER_SCHEMA_VERSION_V27,
         RUNNER_SCHEMA_VERSION_V28,
         RUNNER_SCHEMA_VERSION_V29,
+        RUNNER_SCHEMA_VERSION_V30,
         }
         if non_disabled and self.schema_version not in consolidation_schemas:
             _LOGGER.error(
@@ -4309,6 +4720,7 @@ class SimulationRunnerConfig:
             RUNNER_SCHEMA_VERSION_V27,
         RUNNER_SCHEMA_VERSION_V28,
         RUNNER_SCHEMA_VERSION_V29,
+        RUNNER_SCHEMA_VERSION_V30,
         }
         if reflecting and self.schema_version not in reflection_schemas:
             _LOGGER.error(
@@ -4364,6 +4776,7 @@ class SimulationRunnerConfig:
             RUNNER_SCHEMA_VERSION_V27,
         RUNNER_SCHEMA_VERSION_V28,
         RUNNER_SCHEMA_VERSION_V29,
+        RUNNER_SCHEMA_VERSION_V30,
         }
         if planning and self.schema_version not in prospective_schemas:
             _LOGGER.error(
@@ -4418,6 +4831,7 @@ class SimulationRunnerConfig:
             RUNNER_SCHEMA_VERSION_V27,
         RUNNER_SCHEMA_VERSION_V28,
         RUNNER_SCHEMA_VERSION_V29,
+        RUNNER_SCHEMA_VERSION_V30,
         }
         if considering and self.schema_version not in counterfactual_schemas:
             _LOGGER.error(
@@ -4471,6 +4885,7 @@ class SimulationRunnerConfig:
             RUNNER_SCHEMA_VERSION_V27,
         RUNNER_SCHEMA_VERSION_V28,
         RUNNER_SCHEMA_VERSION_V29,
+        RUNNER_SCHEMA_VERSION_V30,
         }:
             _LOGGER.error(
                 "invalid_fields path=agents.cognition.communication_strategy_mode "
@@ -4522,6 +4937,7 @@ class SimulationRunnerConfig:
             RUNNER_SCHEMA_VERSION_V27,
         RUNNER_SCHEMA_VERSION_V28,
         RUNNER_SCHEMA_VERSION_V29,
+        RUNNER_SCHEMA_VERSION_V30,
         }:
             _LOGGER.error(
                 "invalid_fields path=agents.cognition.reputation_mode "
@@ -4615,6 +5031,7 @@ class SimulationRunnerConfig:
             RUNNER_SCHEMA_VERSION_V27,
         RUNNER_SCHEMA_VERSION_V28,
         RUNNER_SCHEMA_VERSION_V29,
+        RUNNER_SCHEMA_VERSION_V30,
         }:
             _LOGGER.error(
                 "invalid_fields path=agents.cognition.teaching_interaction_mode "
@@ -4657,6 +5074,7 @@ class SimulationRunnerConfig:
             RUNNER_SCHEMA_VERSION_V27,
         RUNNER_SCHEMA_VERSION_V28,
         RUNNER_SCHEMA_VERSION_V29,
+        RUNNER_SCHEMA_VERSION_V30,
         }
         if (dynamics is not None and self.schema_version not in dynamics_schemas) or (
             self.schema_version == RUNNER_SCHEMA_VERSION_V14 and dynamics is None
@@ -4694,6 +5112,7 @@ class SimulationRunnerConfig:
             RUNNER_SCHEMA_VERSION_V27,
         RUNNER_SCHEMA_VERSION_V28,
         RUNNER_SCHEMA_VERSION_V29,
+        RUNNER_SCHEMA_VERSION_V30,
         }:
             _LOGGER.error(
                 "invalid_fields path=agents.cognition.territorial_claim_mode "
@@ -4737,6 +5156,7 @@ class SimulationRunnerConfig:
             RUNNER_SCHEMA_VERSION_V27,
         RUNNER_SCHEMA_VERSION_V28,
         RUNNER_SCHEMA_VERSION_V29,
+        RUNNER_SCHEMA_VERSION_V30,
         }:
             _LOGGER.error(
                 "invalid_fields path=agents.cognition.group_formation_mode "
@@ -4774,6 +5194,7 @@ class SimulationRunnerConfig:
             RUNNER_SCHEMA_VERSION_V27,
         RUNNER_SCHEMA_VERSION_V28,
         RUNNER_SCHEMA_VERSION_V29,
+        RUNNER_SCHEMA_VERSION_V30,
         }:
             _LOGGER.error(
                 "invalid_fields path=agents.cognition.social_norm_mode "
@@ -4814,6 +5235,7 @@ class SimulationRunnerConfig:
             RUNNER_SCHEMA_VERSION_V27,
         RUNNER_SCHEMA_VERSION_V28,
         RUNNER_SCHEMA_VERSION_V29,
+        RUNNER_SCHEMA_VERSION_V30,
         }
         if conventions_on and self.schema_version not in convention_schemas:
             _LOGGER.error(
@@ -4859,6 +5281,7 @@ class SimulationRunnerConfig:
             RUNNER_SCHEMA_VERSION_V27,
         RUNNER_SCHEMA_VERSION_V28,
         RUNNER_SCHEMA_VERSION_V29,
+        RUNNER_SCHEMA_VERSION_V30,
         }
         if artifacts_on and self.schema_version not in artifact_schemas:
             runner_log.error(
@@ -4900,6 +5323,7 @@ class SimulationRunnerConfig:
             RUNNER_SCHEMA_VERSION_V27,
         RUNNER_SCHEMA_VERSION_V28,
         RUNNER_SCHEMA_VERSION_V29,
+        RUNNER_SCHEMA_VERSION_V30,
         }
         if naming_on and self.schema_version not in naming_schemas:
             runner_log.error(
@@ -4938,6 +5362,7 @@ class SimulationRunnerConfig:
             RUNNER_SCHEMA_VERSION_V27,
         RUNNER_SCHEMA_VERSION_V28,
         RUNNER_SCHEMA_VERSION_V29,
+        RUNNER_SCHEMA_VERSION_V30,
         }
         budget_modes = tuple(
             agent.cognition.cognitive_budget_mode for agent in self.agents
@@ -4952,6 +5377,7 @@ class SimulationRunnerConfig:
             RUNNER_SCHEMA_VERSION_V27,
         RUNNER_SCHEMA_VERSION_V28,
         RUNNER_SCHEMA_VERSION_V29,
+        RUNNER_SCHEMA_VERSION_V30,
         }
         if budgets_on and self.schema_version not in budget_schemas:
             runner_log.error(
@@ -5064,6 +5490,7 @@ class SimulationRunnerConfig:
             RUNNER_SCHEMA_VERSION_V27,
         RUNNER_SCHEMA_VERSION_V28,
         RUNNER_SCHEMA_VERSION_V29,
+        RUNNER_SCHEMA_VERSION_V30,
         }:
             _LOGGER.error(
                 "invalid_fields path=agents.cognition.production_knowledge_mode "
@@ -5094,6 +5521,7 @@ class SimulationRunnerConfig:
             RUNNER_SCHEMA_VERSION_V27,
         RUNNER_SCHEMA_VERSION_V28,
         RUNNER_SCHEMA_VERSION_V29,
+        RUNNER_SCHEMA_VERSION_V30,
         }:
             from world.production import production_catalog_digest
 
@@ -5164,6 +5592,7 @@ class SimulationRunnerConfig:
             RUNNER_SCHEMA_VERSION_V27,
         RUNNER_SCHEMA_VERSION_V28,
         RUNNER_SCHEMA_VERSION_V29,
+        RUNNER_SCHEMA_VERSION_V30,
         }:
             shared_teaching = teaching_weight_tuple(self.agents[0].cognition)
             if any(
