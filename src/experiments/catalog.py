@@ -2502,6 +2502,80 @@ def experiment_ai_dependency_caregiving(
     )
 
 
+def intergenerational_mentorship_profile(
+    config: SimulationRunnerConfig,
+) -> SimulationRunnerConfig:
+    """Require lifecycle + exact mentorship on runner-config-v30.
+
+    Catalog arms for Experiment AK are wired in a later task; this stub
+    validates the profile gate early.
+    """
+    from simulation.runner_models import (
+        RUNNER_SCHEMA_VERSION_V30,
+        TeachingInteractionMode,
+    )
+
+    if config.schema_version != RUNNER_SCHEMA_VERSION_V30:
+        raise ValueError(
+            "intergenerational mentorship profile requires runner-config-v30 "
+            "(code=mentorship_profile_schema "
+            f"got={config.schema_version!r})"
+        )
+    if not config.v3_capability_flags.generational_population:
+        raise ValueError(
+            "intergenerational mentorship profile requires generational_population "
+            "(code=mentorship_profile_lifecycle_flag)"
+        )
+    if config.population_lifecycle is None:
+        raise ValueError(
+            "intergenerational mentorship profile requires population_lifecycle "
+            "(code=mentorship_profile_missing_lifecycle)"
+        )
+    if config.mentorship is None:
+        raise ValueError(
+            "intergenerational mentorship profile requires mentorship "
+            "(code=mentorship_profile_missing_channel)"
+        )
+    if config.new_agent_initialization is None:
+        raise ValueError(
+            "intergenerational mentorship profile requires new_agent_initialization "
+            "(code=mentorship_profile_missing_init)"
+        )
+    if config.mentorship.requires_teaching_interaction:
+        missing = [
+            agent.agent_id.value
+            for agent in config.agents
+            if agent.cognition.teaching_interaction_mode
+            is not TeachingInteractionMode.DETERMINISTIC
+        ]
+        if missing:
+            raise ValueError(
+                "intergenerational mentorship profile requires "
+                "TeachingInteractionMode.DETERMINISTIC on participants "
+                "(code=mentorship_profile_requires_teaching)"
+            )
+    allowed = {"generational_population", "kinship_inheritance"}
+    other = tuple(
+        name
+        for name in config.v3_capability_flags.enabled_names()
+        if name not in allowed
+    )
+    if other:
+        raise ValueError(
+            "intergenerational mentorship profile forbids unowned V3 flags "
+            f"(code=mentorship_profile_extra_flags flag_count={len(other)})"
+        )
+    _LOG.debug(
+        "intergenerational_mentorship_profile_ok schema_version=%s "
+        "content_kinds=%s mentorship_mode=%s applicability=%s",
+        config.schema_version,
+        list(config.mentorship.enabled_content_kinds),
+        config.mentorship.mentorship_mode,
+        config.mentorship.applicability,
+    )
+    return config
+
+
 def developmental_learning_profile(
     config: SimulationRunnerConfig,
 ) -> SimulationRunnerConfig:
@@ -2724,6 +2798,178 @@ def experiment_aj_developmental_learning(
                 "aj-artifact",
                 "developmental_learning_artifact_assisted",
                 artifact,
+            ),
+        ),
+    )
+
+
+def experiment_ak_intergenerational_mentorship(
+    base: SimulationRunnerConfig,
+    *,
+    seed_matrix: ExperimentSeedMatrix | None = None,
+    max_ticks: int = 10,
+) -> ExperimentDefinition:
+    """Off-gate Experiment AK proving persistent mentorship on runner-config-v30."""
+    from simulation.new_agent_initialization import (
+        default_new_agent_initialization_spec,
+    )
+    from simulation.runner_models import (
+        RUNNER_SCHEMA_VERSION_V25,
+        RUNNER_SCHEMA_VERSION_V30,
+        MentorshipLineagePolicy,
+        example_mentorship_spec,
+        example_population_lifecycle_spec,
+    )
+
+    matrix = seed_matrix or ExperimentSeedMatrix(seeds=(base.seed,))
+    agent_ids = tuple(agent.agent_id for agent in base.agents)
+    if len(agent_ids) < 2:
+        raise ValueError(
+            "experiment AK requires at least two agents on the base roster "
+            "(code=mentorship_ak_roster_too_small)"
+        )
+    lifecycle = example_population_lifecycle_spec(
+        lifespan_ticks=40,
+        max_population=max(4, len(agent_ids) + 1),
+        policy_id="disabled",
+    )
+    init = default_new_agent_initialization_spec()
+
+    def _teacher_modes(cfg: SimulationRunnerConfig) -> SimulationRunnerConfig:
+        agents: list[AgentRunnerSpec] = []
+        for agent in cfg.agents:
+            cognition = replace(
+                agent.cognition,
+                skill_learning_mode=SkillLearningMode.DETERMINISTIC,
+                teaching_interaction_mode=TeachingInteractionMode.DETERMINISTIC,
+            )
+            agents.append(replace(agent, cognition=cognition))
+        return replace(cfg, agents=tuple(agents))
+
+    channel_off = replace(
+        base,
+        schema_version=RUNNER_SCHEMA_VERSION_V25,
+        mortality_mode=MortalityMode.DISABLED,
+        stop_policy=RunnerStopPolicy(max_ticks=max_ticks),
+        v3_capability_flags=V3CapabilityFlags(generational_population=True),
+        population_lifecycle=lifecycle,
+        mentorship=None,
+        developmental_learning=None,
+        new_agent_initialization=init,
+        dependency_care=None,
+        kinship=None,
+    )
+    ephemeral = _teacher_modes(
+        replace(
+            channel_off,
+            schema_version=RUNNER_SCHEMA_VERSION_V25,
+            mentorship=None,
+        )
+    )
+    teaching_base = _teacher_modes(
+        replace(
+            base,
+            schema_version=RUNNER_SCHEMA_VERSION_V25,
+            mortality_mode=MortalityMode.DISABLED,
+            stop_policy=RunnerStopPolicy(max_ticks=max_ticks),
+            v3_capability_flags=V3CapabilityFlags(generational_population=True),
+            population_lifecycle=lifecycle,
+            new_agent_initialization=init,
+            mentorship=None,
+            developmental_learning=None,
+            dependency_care=None,
+            kinship=None,
+        )
+    )
+
+    def _with_mentorship(spec: object) -> SimulationRunnerConfig:
+        return replace(
+            teaching_base,
+            schema_version=RUNNER_SCHEMA_VERSION_V30,
+            mentorship=spec,
+        )
+
+    bonded = _with_mentorship(
+        example_mentorship_spec(
+            enabled_content_kinds=("practical_skills", "warnings"),
+            applicability="all_live_agents",
+            max_hop_depth=4,
+        )
+    )
+    chain = _with_mentorship(
+        example_mentorship_spec(
+            enabled_content_kinds=(
+                "practical_skills",
+                "production_recipes",
+                "warnings",
+                "factual_beliefs",
+            ),
+            applicability="all_live_agents",
+            max_hop_depth=8,
+        )
+    )
+    mutation = _with_mentorship(
+        replace(
+            example_mentorship_spec(
+                enabled_content_kinds=("practical_skills", "stories"),
+                max_hop_depth=6,
+            ),
+            lineage_policy=MentorshipLineagePolicy(
+                max_hop_depth=6,
+                allow_learner_mutation=True,
+                mutation_requires_evidence=True,
+            ),
+        )
+    )
+    false_teaching = _with_mentorship(
+        example_mentorship_spec(
+            enabled_content_kinds=("practical_skills", "warnings", "factual_beliefs"),
+            max_hop_depth=4,
+        )
+    )
+    for arm in (bonded, chain, mutation, false_teaching):
+        intergenerational_mentorship_profile(arm)
+    _LOG.info(
+        "experiment_ak_built experiment_id=experiment-ak-intergenerational-mentorship "
+        "schema_version=%s tick_count=%s arm_count=%s",
+        RUNNER_SCHEMA_VERSION_V30,
+        max_ticks,
+        6,
+    )
+    return _definition(
+        experiment_id="experiment-ak-intergenerational-mentorship",
+        base=base,
+        seed_matrix=matrix,
+        arms=(
+            (
+                "ak-channel-off",
+                "mentorship_channel_off",
+                channel_off,
+            ),
+            (
+                "ak-ephemeral",
+                "mentorship_ephemeral_teaching",
+                ephemeral,
+            ),
+            (
+                "ak-bonded",
+                "mentorship_persistent_bonds",
+                bonded,
+            ),
+            (
+                "ak-chain",
+                "mentorship_multi_hop_chain",
+                chain,
+            ),
+            (
+                "ak-mutation",
+                "mentorship_learner_mutation",
+                mutation,
+            ),
+            (
+                "ak-false-teaching",
+                "mentorship_false_teaching_legal",
+                false_teaching,
             ),
         ),
     )

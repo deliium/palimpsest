@@ -76,6 +76,11 @@ from analysis.developmental_learning_metrics import (
     compute_developmental_divergence,
     compute_developmental_source_mix,
 )
+from analysis.mentorship_metrics import (
+    compute_mentorship_bonds,
+    compute_mentorship_fidelity,
+    compute_mentorship_mutation,
+)
 from analysis.specifications import MetricFamilyId, metric_specification
 from analysis.territorial_concentration_metrics import compute_territorial_concentration
 from analysis.transmission_metrics import (
@@ -133,6 +138,8 @@ class MetricComputationInputs:
     dependency_care_act_rows: Sequence[object] | None = None
     developmental_acquisition_audits: Sequence[object] | None = None
     developmental_knowledge_ledgers: Sequence[object] | None = None
+    mentorship_audits: Sequence[object] | None = None
+    mentorship_ledgers: Sequence[object] | None = None
     territorial_presence_rows: Sequence[object] | None = None
     territorial_control_rows: Sequence[object] | None = None
     belief_convergence_claims: Sequence[object] | None = None
@@ -505,6 +512,43 @@ def assemble_metric_documents(inputs: MetricComputationInputs) -> MetricBundle:
                 input_revision=revision,
             ),
         )
+    if inputs.mentorship_audits is not None:
+        mentorship_rows = inputs.mentorship_audits
+        _safe(
+            "mentorship_fidelity",
+            lambda: compute_mentorship_fidelity(
+                mentorship_rows,
+                run_id=run_id,
+                input_revision=revision,
+            ),
+        )
+        _safe(
+            "mentorship_mutation",
+            lambda: compute_mentorship_mutation(
+                mentorship_rows,
+                run_id=run_id,
+                input_revision=revision,
+            ),
+        )
+        _safe(
+            "mentorship_bonds",
+            lambda: compute_mentorship_bonds(
+                mentorship_rows,
+                run_id=run_id,
+                input_revision=revision,
+                ledgers=inputs.mentorship_ledgers,
+            ),
+        )
+    elif inputs.mentorship_ledgers is not None:
+        _safe(
+            "mentorship_bonds",
+            lambda: compute_mentorship_bonds(
+                (),
+                run_id=run_id,
+                input_revision=revision,
+                ledgers=inputs.mentorship_ledgers,
+            ),
+        )
     optional_blocks = {
         "kinship_genealogy": inputs.kinship_edge_rows is not None,
         "dependency_care": (
@@ -514,6 +558,10 @@ def assemble_metric_documents(inputs: MetricComputationInputs) -> MetricBundle:
         "developmental_learning": (
             inputs.developmental_acquisition_audits is not None
             or inputs.developmental_knowledge_ledgers is not None
+        ),
+        "mentorship": (
+            inputs.mentorship_audits is not None
+            or inputs.mentorship_ledgers is not None
         ),
         "territorial_presence": inputs.territorial_presence_rows is not None,
         "territorial_control": inputs.territorial_control_rows is not None,

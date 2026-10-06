@@ -50,7 +50,7 @@ __all__ = [
 ]
 
 METRIC_CATALOG_VERSION: Final[str] = "metric-catalog-v1"
-METRIC_FAMILY_COUNT: Final[int] = 47
+METRIC_FAMILY_COUNT: Final[int] = 50
 
 # Align with existing memory-drift / transmission document versions.
 _ALGO_V1: Final[str] = "1"
@@ -124,6 +124,9 @@ class MetricFamilyId(StrEnum):
     DEVELOPMENTAL_ACQUISITION = "developmental_acquisition"
     DEVELOPMENTAL_SOURCE_MIX = "developmental_source_mix"
     DEVELOPMENTAL_DIVERGENCE = "developmental_divergence"
+    MENTORSHIP_FIDELITY = "mentorship_fidelity"
+    MENTORSHIP_MUTATION = "mentorship_mutation"
+    MENTORSHIP_BONDS = "mentorship_bonds"
 
 
 class DenominatorKind(StrEnum):
@@ -1306,6 +1309,89 @@ def _spec_developmental_divergence() -> MetricSpecification:
             "pair_count",
         ),
         empty_case="availability=absent; insufficient_agents",
+    )
+
+
+def _spec_mentorship_fidelity() -> MetricSpecification:
+    return _base(
+        family_id=MetricFamilyId.MENTORSHIP_FIDELITY,
+        evidence_inputs=frozenset({EvidenceStage.AGENT_VISIBLE_PROJECTION}),
+        population="mentorship_audits",
+        denominator="mentorship_audit_rows",
+        denominator_kind=DenominatorKind.OCCURRENCE,
+        cohort_window="audits harvested after the run",
+        deceased_policy="not_applicable",
+        zero_holding_policy="no audits -> availability=absent",
+        opportunity_vs_occurrence="faithful share among mentorship audit rows",
+        self_edge_policy="not_applicable",
+        censoring_policy="metadata-only; never overloads cultural_transmission",
+        formulas={
+            "faithful_share": "count(not mutated) / audit_count",
+            "mean_hop_index": "mean hop_index over audits",
+            "max_hop_index": "max hop_index over audits",
+        },
+        value_keys=(
+            "audit_count",
+            "faithful_share",
+            "max_hop_index",
+            "mean_hop_index",
+        ),
+        empty_case="availability=absent; no_mentorship_audits",
+    )
+
+
+def _spec_mentorship_mutation() -> MetricSpecification:
+    return _base(
+        family_id=MetricFamilyId.MENTORSHIP_MUTATION,
+        evidence_inputs=frozenset({EvidenceStage.AGENT_VISIBLE_PROJECTION}),
+        population="mentorship_audits",
+        denominator="mentorship_audit_rows",
+        denominator_kind=DenominatorKind.OCCURRENCE,
+        cohort_window="audits harvested after the run",
+        deceased_policy="not_applicable",
+        zero_holding_policy="no audits -> availability=absent",
+        opportunity_vs_occurrence="mutation rate among mentorship audit rows",
+        self_edge_policy="not_applicable",
+        censoring_policy="metadata-only; never content fingerprints as payloads",
+        formulas={
+            "mutation_rate": "count(mutated) / audit_count",
+            "mean_mutated_hop_index": "mean hop_index over mutated rows",
+        },
+        value_keys=(
+            "audit_count",
+            "mean_mutated_hop_index",
+            "mutated_count",
+            "mutation_rate",
+        ),
+        empty_case="availability=absent; no_mentorship_audits",
+    )
+
+
+def _spec_mentorship_bonds() -> MetricSpecification:
+    return _base(
+        family_id=MetricFamilyId.MENTORSHIP_BONDS,
+        evidence_inputs=frozenset({EvidenceStage.AGENT_VISIBLE_PROJECTION}),
+        population="mentorship_audits_or_ledgers",
+        denominator="directed_bond_pairs",
+        denominator_kind=DenominatorKind.OCCURRENCE,
+        cohort_window="audits/ledgers harvested after the run",
+        deceased_policy="not_applicable",
+        zero_holding_policy="no bonds -> availability=absent",
+        opportunity_vs_occurrence="directed owner→partner pairs from audits/ledgers",
+        self_edge_policy="self_pairs_excluded",
+        censoring_policy="never WorldEngine mentor role labels",
+        formulas={
+            "active_bond_count": "ledger bonds or unique directed pairs",
+            "mean_bond_strength": "mean strength when ledgers supplied",
+        },
+        value_keys=(
+            "active_bond_count",
+            "apprentice_audit_count",
+            "directed_pair_count",
+            "mean_bond_strength",
+            "mentor_audit_count",
+        ),
+        empty_case="availability=absent; no_mentorship_bonds",
     )
 
 
@@ -2617,6 +2703,9 @@ _BUILDERS: Final[tuple[Callable[[], MetricSpecification], ...]] = (
     _spec_developmental_acquisition,
     _spec_developmental_source_mix,
     _spec_developmental_divergence,
+    _spec_mentorship_fidelity,
+    _spec_mentorship_mutation,
+    _spec_mentorship_bonds,
     _spec_emergent_group_formation,
     _spec_emergent_social_norms,
     _spec_persistent_social_conventions,

@@ -104,6 +104,14 @@ from analysis.developmental_learning_metrics import (
     compute_developmental_divergence,
     compute_developmental_source_mix,
 )
+from analysis.mentorship_metrics import (
+    MENTORSHIP_BONDS_METRIC_VERSION,
+    MENTORSHIP_FIDELITY_METRIC_VERSION,
+    MENTORSHIP_MUTATION_METRIC_VERSION,
+    compute_mentorship_bonds,
+    compute_mentorship_fidelity,
+    compute_mentorship_mutation,
+)
 from analysis.matrix_metric_summary import (
     MATRIX_METRIC_SUMMARY_SCHEMA_VERSION,
     MatrixMetricCellRef,
@@ -507,6 +515,12 @@ __all__ = [
     "compute_developmental_acquisition",
     "compute_developmental_divergence",
     "compute_developmental_source_mix",
+    "MENTORSHIP_BONDS_METRIC_VERSION",
+    "MENTORSHIP_FIDELITY_METRIC_VERSION",
+    "MENTORSHIP_MUTATION_METRIC_VERSION",
+    "compute_mentorship_bonds",
+    "compute_mentorship_fidelity",
+    "compute_mentorship_mutation",
     "compute_caregiver_diversity",
     "compute_caregiving_burden",
     "compute_intergenerational_cooperation",
