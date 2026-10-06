@@ -136,6 +136,7 @@ from simulation.runner_models import (
     RUNNER_SCHEMA_VERSION_V29,
     RUNNER_SCHEMA_VERSION_V30,
     RUNNER_SCHEMA_VERSION_V31,
+    RUNNER_SCHEMA_VERSION_V32,
     AgentCognitionSpec,
     AgentRunnerSpec,
     CognitionCounters,
@@ -1472,6 +1473,7 @@ class SimulationRunner:
                             RUNNER_SCHEMA_VERSION_V29,
                             RUNNER_SCHEMA_VERSION_V30,
                             RUNNER_SCHEMA_VERSION_V31,
+                            RUNNER_SCHEMA_VERSION_V32,
                         }
                         and config.new_agent_initialization is not None
                     )
@@ -1545,6 +1547,21 @@ class SimulationRunner:
                     False,
                     0,
                     0,
+                )
+            if config.historical_memory_layers is not None:
+                _LOG.info(
+                    "historical_memory_layers_enabled schema_version=%s "
+                    "max_communicative_hops=%s witness_definition=%s",
+                    config.schema_version,
+                    config.historical_memory_layers.max_communicative_hops,
+                    config.historical_memory_layers.witness_definition,
+                )
+            else:
+                _LOG.debug(
+                    "historical_memory_layers_skip schema_version=%s "
+                    "historical_memory_layers_present=%s",
+                    config.schema_version,
+                    False,
                 )
 
             stage = "agents"

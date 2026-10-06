@@ -110,6 +110,7 @@ RUNNER_SCHEMA_VERSION_V28: Final[str] = "runner-config-v28"
 RUNNER_SCHEMA_VERSION_V29: Final[str] = "runner-config-v29"
 RUNNER_SCHEMA_VERSION_V30: Final[str] = "runner-config-v30"
 RUNNER_SCHEMA_VERSION_V31: Final[str] = "runner-config-v31"
+RUNNER_SCHEMA_VERSION_V32: Final[str] = "runner-config-v32"
 RUNNER_SCHEMA_VERSION: Final[str] = RUNNER_SCHEMA_VERSION_V4
 SUPPORTED_RUNNER_SCHEMA_VERSIONS: Final[frozenset[str]] = frozenset(
     {
@@ -144,6 +145,7 @@ SUPPORTED_RUNNER_SCHEMA_VERSIONS: Final[frozenset[str]] = frozenset(
         RUNNER_SCHEMA_VERSION_V29,
         RUNNER_SCHEMA_VERSION_V30,
         RUNNER_SCHEMA_VERSION_V31,
+        RUNNER_SCHEMA_VERSION_V32,
     }
 )
 RESULT_SCHEMA_VERSION_V1: Final[str] = "runner-result-v1"
@@ -681,6 +683,7 @@ _SKILL_SCHEMAS: Final[frozenset[str]] = frozenset(
     RUNNER_SCHEMA_VERSION_V29,
     RUNNER_SCHEMA_VERSION_V30,
     RUNNER_SCHEMA_VERSION_V31,
+    RUNNER_SCHEMA_VERSION_V32,
     }
 )
 
@@ -2761,6 +2764,184 @@ def example_cultural_feature_provenance_spec(
     )
 
 
+_HISTORICAL_MEMORY_MODE: Final[frozenset[str]] = frozenset({"deterministic"})
+_HISTORICAL_MEMORY_WITNESS_DEFINITIONS: Final[frozenset[str]] = frozenset(
+    {
+        "occurrence_participants",
+        "occurrence_participants_plus_colocated_observers",
+    }
+)
+_HISTORICAL_MEMORY_QUERY_SELECTORS: Final[frozenset[str]] = frozenset(
+    {"all_tracked_sources", "experiment_marked_only"}
+)
+_HISTORICAL_MEMORY_TRANSITION_RESOLUTIONS: Final[frozenset[str]] = frozenset(
+    {"on_death_and_generation_boundary", "every_tick"}
+)
+_HISTORICAL_MEMORY_APPLICABILITY: Final[frozenset[str]] = frozenset(
+    {"all_tracked_sources"}
+)
+_HISTORICAL_MEMORY_FORBIDDEN_ALIASES: Final[frozenset[str]] = frozenset(
+    {
+        "inject_into_agents",
+        "label_agent_memories",
+        "assmann_cognition_mode",
+        "auto_layer_beliefs",
+        "assmann_label_for_agent",
+        "agent_memory_class",
+        "self_knowledge_layer",
+        "lived_experience_flag",
+        "living_memory",
+        "communicative_memory",
+        "cultural_memory",
+        "society_memory_tier",
+    }
+)
+_HISTORICAL_MEMORY_CULTURAL_SCHEMAS: Final[frozenset[str]] = frozenset(
+    {RUNNER_SCHEMA_VERSION_V31, RUNNER_SCHEMA_VERSION_V32}
+)
+
+
+@dataclass(frozen=True, slots=True)
+class HistoricalMemoryLayersSpec:
+    """Opt-in analysis-only historical memory layers (runner-config-v32).
+
+    Researcher harvest/query config only. Never an AgentCognitionSpec mode.
+    Absent object means analysis layers off.
+    """
+
+    mode: str = "deterministic"
+    max_communicative_hops: int = 2
+    witness_definition: str = "occurrence_participants"
+    include_narrative_lineage: bool = True
+    include_cultural_features: bool = True
+    include_artifact_edges: bool = True
+    include_teaching_edges: bool = True
+    generation_distance_weight: float = 0.0
+    query_event_selector: str = "all_tracked_sources"
+    transition_tick_resolution: str = "on_death_and_generation_boundary"
+    applicability: str = "all_tracked_sources"
+
+    def __post_init__(self) -> None:
+        mode = require_stable_id("HistoricalMemoryLayersSpec.mode", self.mode)
+        if mode == "disabled":
+            raise ValueError(
+                "historical_memory mode=disabled is rejected; omit the object "
+                "for off (code=historical_memory_mode_invalid)"
+            )
+        if mode not in _HISTORICAL_MEMORY_MODE:
+            raise ValueError(
+                f"unknown historical_memory mode {mode!r} "
+                "(code=historical_memory_mode_invalid)"
+            )
+        object.__setattr__(self, "mode", mode)
+
+        hops = require_exact_nonneg_int(
+            "max_communicative_hops", self.max_communicative_hops
+        )
+        if hops < 1 or hops > 8:
+            raise ValueError(
+                "max_communicative_hops must be in [1, 8] "
+                "(code=historical_memory_max_hops_invalid)"
+            )
+        object.__setattr__(self, "max_communicative_hops", hops)
+
+        witness = require_stable_id(
+            "HistoricalMemoryLayersSpec.witness_definition",
+            self.witness_definition,
+        )
+        if witness not in _HISTORICAL_MEMORY_WITNESS_DEFINITIONS:
+            raise ValueError(
+                f"unknown witness_definition {witness!r} "
+                "(code=historical_memory_witness_definition_invalid)"
+            )
+        object.__setattr__(self, "witness_definition", witness)
+
+        if type(self.include_narrative_lineage) is not bool:
+            raise TypeError("include_narrative_lineage must be bool")
+        if type(self.include_cultural_features) is not bool:
+            raise TypeError("include_cultural_features must be bool")
+        if type(self.include_artifact_edges) is not bool:
+            raise TypeError("include_artifact_edges must be bool")
+        if type(self.include_teaching_edges) is not bool:
+            raise TypeError("include_teaching_edges must be bool")
+
+        if isinstance(self.generation_distance_weight, bool) or not isinstance(
+            self.generation_distance_weight, (int, float)
+        ):
+            raise ValueError(
+                "generation_distance_weight must be a finite float "
+                "(code=historical_memory_generation_weight_invalid)"
+            )
+        weight = float(self.generation_distance_weight)
+        if not math.isfinite(weight) or weight < 0.0 or weight > 1.0:
+            raise ValueError(
+                "generation_distance_weight must be in [0, 1] "
+                "(code=historical_memory_generation_weight_invalid)"
+            )
+        object.__setattr__(self, "generation_distance_weight", weight)
+
+        selector = require_stable_id(
+            "HistoricalMemoryLayersSpec.query_event_selector",
+            self.query_event_selector,
+        )
+        if selector not in _HISTORICAL_MEMORY_QUERY_SELECTORS:
+            raise ValueError(
+                f"unknown query_event_selector {selector!r} "
+                "(code=historical_memory_query_selector_invalid)"
+            )
+        object.__setattr__(self, "query_event_selector", selector)
+
+        resolution = require_stable_id(
+            "HistoricalMemoryLayersSpec.transition_tick_resolution",
+            self.transition_tick_resolution,
+        )
+        if resolution not in _HISTORICAL_MEMORY_TRANSITION_RESOLUTIONS:
+            raise ValueError(
+                f"unknown transition_tick_resolution {resolution!r} "
+                "(code=historical_memory_transition_resolution_invalid)"
+            )
+        object.__setattr__(self, "transition_tick_resolution", resolution)
+
+        applicability = require_stable_id(
+            "HistoricalMemoryLayersSpec.applicability", self.applicability
+        )
+        if applicability not in _HISTORICAL_MEMORY_APPLICABILITY:
+            raise ValueError(
+                f"unknown applicability {applicability!r} "
+                "(code=historical_memory_applicability_invalid)"
+            )
+        object.__setattr__(self, "applicability", applicability)
+
+    def canonical_payload(self) -> dict[str, object]:
+        return {
+            "applicability": self.applicability,
+            "generation_distance_weight": self.generation_distance_weight,
+            "include_artifact_edges": self.include_artifact_edges,
+            "include_cultural_features": self.include_cultural_features,
+            "include_narrative_lineage": self.include_narrative_lineage,
+            "include_teaching_edges": self.include_teaching_edges,
+            "max_communicative_hops": self.max_communicative_hops,
+            "mode": self.mode,
+            "query_event_selector": self.query_event_selector,
+            "transition_tick_resolution": self.transition_tick_resolution,
+            "witness_definition": self.witness_definition,
+        }
+
+
+def example_historical_memory_layers_spec(
+    *,
+    max_communicative_hops: int = 2,
+    witness_definition: str = "occurrence_participants",
+    applicability: str = "all_tracked_sources",
+) -> HistoricalMemoryLayersSpec:
+    """Reference historical memory layers spec for tests and Experiment AM."""
+    return HistoricalMemoryLayersSpec(
+        max_communicative_hops=max_communicative_hops,
+        witness_definition=witness_definition,
+        applicability=applicability,
+    )
+
+
 def example_population_lifecycle_spec(
     *,
     lifespan_ticks: int = 20,
@@ -4399,6 +4580,7 @@ class SimulationRunnerConfig:
     developmental_learning: DevelopmentalLearningSpec | None = None
     mentorship: MentorshipSpec | None = None
     cultural_feature_provenance: CulturalFeatureProvenanceSpec | None = None
+    historical_memory_layers: HistoricalMemoryLayersSpec | None = None
 
     def __post_init__(self) -> None:
         # Late import avoids circular import with new_agent_initialization.
@@ -4452,6 +4634,14 @@ class SimulationRunnerConfig:
             raise TypeError(
                 "cultural_feature_provenance must be "
                 "CulturalFeatureProvenanceSpec or None"
+            )
+        if (
+            self.historical_memory_layers is not None
+            and type(self.historical_memory_layers) is not HistoricalMemoryLayersSpec
+        ):
+            raise TypeError(
+                "historical_memory_layers must be "
+                "HistoricalMemoryLayersSpec or None"
             )
         if type(self.scenario) is not WorldScenarioSpec:
             raise TypeError("scenario must be WorldScenarioSpec")
@@ -4545,6 +4735,7 @@ class SimulationRunnerConfig:
             RUNNER_SCHEMA_VERSION_V29,
             RUNNER_SCHEMA_VERSION_V30,
             RUNNER_SCHEMA_VERSION_V31,
+            RUNNER_SCHEMA_VERSION_V32,
         }
         if (
             self.v3_capability_flags.generational_population
@@ -4559,7 +4750,7 @@ class SimulationRunnerConfig:
                 "generational_population requires runner-config-v24, "
                 "runner-config-v25, runner-config-v26, runner-config-v27, "
                 "runner-config-v28, runner-config-v29, runner-config-v30, "
-                "or runner-config-v31 "
+                "runner-config-v31, or runner-config-v32 "
                 "(code=generational_population_requires_v24)"
             )
         _kinship_schemas = {
@@ -4568,6 +4759,7 @@ class SimulationRunnerConfig:
             RUNNER_SCHEMA_VERSION_V29,
             RUNNER_SCHEMA_VERSION_V30,
             RUNNER_SCHEMA_VERSION_V31,
+            RUNNER_SCHEMA_VERSION_V32,
         }
         if self.v3_capability_flags.kinship_inheritance:
             if self.schema_version not in _kinship_schemas:
@@ -4579,7 +4771,7 @@ class SimulationRunnerConfig:
                 raise ValueError(
                     "kinship_inheritance requires runner-config-v27, "
                     "runner-config-v28, runner-config-v29, runner-config-v30, "
-                    "or runner-config-v31 "
+                    "runner-config-v31, or runner-config-v32 "
                     "(code=kinship_requires_v27)"
                 )
             if self.kinship is None:
@@ -4608,6 +4800,7 @@ class SimulationRunnerConfig:
                 RUNNER_SCHEMA_VERSION_V29,
                 RUNNER_SCHEMA_VERSION_V30,
                 RUNNER_SCHEMA_VERSION_V31,
+                RUNNER_SCHEMA_VERSION_V32,
             }:
                 _LOGGER.error(
                     "dependency_care_requires_v28 schema_version=%s "
@@ -4616,7 +4809,8 @@ class SimulationRunnerConfig:
                 )
                 raise ValueError(
                     "dependency_care requires runner-config-v28, "
-                    "runner-config-v29, runner-config-v30, or runner-config-v31 "
+                    "runner-config-v29, runner-config-v30, runner-config-v31, "
+                    "or runner-config-v32 "
                     "(code=dependency_care_requires_v28)"
                 )
             if not self.v3_capability_flags.generational_population:
@@ -4654,6 +4848,7 @@ class SimulationRunnerConfig:
                 RUNNER_SCHEMA_VERSION_V29,
                 RUNNER_SCHEMA_VERSION_V30,
                 RUNNER_SCHEMA_VERSION_V31,
+                RUNNER_SCHEMA_VERSION_V32,
             }:
                 _LOGGER.error(
                     "developmental_learning_requires_v29 schema_version=%s "
@@ -4662,7 +4857,7 @@ class SimulationRunnerConfig:
                 )
                 raise ValueError(
                     "developmental_learning requires runner-config-v29, "
-                    "runner-config-v30, or runner-config-v31 "
+                    "runner-config-v30, runner-config-v31, or runner-config-v32 "
                     "(code=developmental_learning_requires_v29)"
                 )
             if not self.v3_capability_flags.generational_population:
@@ -4713,6 +4908,7 @@ class SimulationRunnerConfig:
             if self.schema_version not in {
                 RUNNER_SCHEMA_VERSION_V30,
                 RUNNER_SCHEMA_VERSION_V31,
+                RUNNER_SCHEMA_VERSION_V32,
             }:
                 _LOGGER.error(
                     "mentorship_requires_v30 schema_version=%s "
@@ -4720,7 +4916,8 @@ class SimulationRunnerConfig:
                     self.schema_version,
                 )
                 raise ValueError(
-                    "mentorship requires runner-config-v30 or runner-config-v31 "
+                    "mentorship requires runner-config-v30, runner-config-v31, "
+                    "or runner-config-v32 "
                     "(code=mentorship_requires_v30)"
                 )
             if not self.v3_capability_flags.generational_population:
@@ -4784,7 +4981,7 @@ class SimulationRunnerConfig:
                 "(code=v30_requires_mentorship)"
             )
         if self.cultural_feature_provenance is not None:
-            if self.schema_version != RUNNER_SCHEMA_VERSION_V31:
+            if self.schema_version not in _HISTORICAL_MEMORY_CULTURAL_SCHEMAS:
                 _LOGGER.error(
                     "cultural_feature_requires_v31 schema_version=%s "
                     "reason_code=cultural_feature_requires_v31",
@@ -4792,6 +4989,7 @@ class SimulationRunnerConfig:
                 )
                 raise ValueError(
                     "cultural_feature_provenance requires runner-config-v31 "
+                    "or runner-config-v32 "
                     "(code=cultural_feature_requires_v31)"
                 )
             if not self.v3_capability_flags.cultural_historical_memory:
@@ -4826,7 +5024,10 @@ class SimulationRunnerConfig:
                 "runner-config-v31 requires cultural_feature_provenance "
                 "(code=v31_requires_cultural_feature_provenance)"
             )
-        elif self.v3_capability_flags.cultural_historical_memory:
+        elif (
+            self.schema_version != RUNNER_SCHEMA_VERSION_V32
+            and self.v3_capability_flags.cultural_historical_memory
+        ):
             _LOGGER.error(
                 "cultural_feature_requires_flag schema_version=%s "
                 "reason_code=cultural_feature_requires_flag",
@@ -4835,6 +5036,62 @@ class SimulationRunnerConfig:
             raise ValueError(
                 "cultural_historical_memory requires cultural_feature_provenance "
                 "(code=cultural_feature_requires_flag)"
+            )
+        if self.historical_memory_layers is not None:
+            if self.schema_version != RUNNER_SCHEMA_VERSION_V32:
+                _LOGGER.error(
+                    "historical_memory_requires_v32 schema_version=%s "
+                    "reason_code=historical_memory_requires_v32",
+                    self.schema_version,
+                )
+                raise ValueError(
+                    "historical_memory_layers requires runner-config-v32 "
+                    "(code=historical_memory_requires_v32)"
+                )
+            if not self.v3_capability_flags.cultural_historical_memory:
+                _LOGGER.error(
+                    "historical_memory_without_cultural_flag schema_version=%s "
+                    "reason_code=historical_memory_without_cultural_flag",
+                    self.schema_version,
+                )
+                raise ValueError(
+                    "historical_memory_layers requires "
+                    "cultural_historical_memory "
+                    "(code=historical_memory_without_cultural_flag)"
+                )
+            if self.cultural_feature_provenance is None:
+                _LOGGER.error(
+                    "historical_memory_requires_cultural_provenance "
+                    "schema_version=%s "
+                    "reason_code=historical_memory_requires_cultural_provenance",
+                    self.schema_version,
+                )
+                raise ValueError(
+                    "historical_memory_layers requires "
+                    "cultural_feature_provenance "
+                    "(code=historical_memory_requires_cultural_provenance)"
+                )
+            _LOGGER.info(
+                "historical_memory_schema_select schema_version=%s "
+                "max_communicative_hops=%s witness_definition=%s "
+                "query_event_selector=%s transition_tick_resolution=%s "
+                "applicability=%s",
+                self.schema_version,
+                self.historical_memory_layers.max_communicative_hops,
+                self.historical_memory_layers.witness_definition,
+                self.historical_memory_layers.query_event_selector,
+                self.historical_memory_layers.transition_tick_resolution,
+                self.historical_memory_layers.applicability,
+            )
+        elif self.schema_version == RUNNER_SCHEMA_VERSION_V32:
+            _LOGGER.error(
+                "v32_requires_historical_memory_layers schema_version=%s "
+                "reason_code=v32_requires_historical_memory_layers",
+                self.schema_version,
+            )
+            raise ValueError(
+                "runner-config-v32 requires historical_memory_layers "
+                "(code=v32_requires_historical_memory_layers)"
             )
         other_v3_enabled = tuple(
             name
@@ -4851,6 +5108,7 @@ class SimulationRunnerConfig:
             RUNNER_SCHEMA_VERSION_V29,
             RUNNER_SCHEMA_VERSION_V30,
             RUNNER_SCHEMA_VERSION_V31,
+            RUNNER_SCHEMA_VERSION_V32,
         }:
             _LOGGER.error(
                 "v3_capability_requires_v23 schema_version=%s "
@@ -4904,7 +5162,7 @@ class SimulationRunnerConfig:
                     "(code=mentorship_without_lifecycle_flag)"
                 )
         _cultural_only = (
-            self.schema_version == RUNNER_SCHEMA_VERSION_V31
+            self.schema_version in _HISTORICAL_MEMORY_CULTURAL_SCHEMAS
             and self.v3_capability_flags.cultural_historical_memory
             and not self.v3_capability_flags.generational_population
         )
@@ -4916,7 +5174,7 @@ class SimulationRunnerConfig:
                     self.schema_version,
                 )
                 raise ValueError(
-                    "cultural-only v31 forbids population_lifecycle "
+                    "cultural-only v31/v32 forbids population_lifecycle "
                     "(code=cultural_only_forbids_lifecycle_spec)"
                 )
             if self.new_agent_initialization is not None:
@@ -4926,7 +5184,7 @@ class SimulationRunnerConfig:
                     self.schema_version,
                 )
                 raise ValueError(
-                    "cultural-only v31 forbids new_agent_initialization "
+                    "cultural-only v31/v32 forbids new_agent_initialization "
                     "(code=cultural_only_forbids_new_agent_init)"
                 )
             if self.dependency_care is not None:
@@ -4953,11 +5211,14 @@ class SimulationRunnerConfig:
                     RUNNER_SCHEMA_VERSION_V29,
                     RUNNER_SCHEMA_VERSION_V30,
                     RUNNER_SCHEMA_VERSION_V31,
+                    RUNNER_SCHEMA_VERSION_V32,
                 }
                 or self.v3_capability_flags.generational_population
             )
             if requires_lifecycle and self.population_lifecycle is None:
-                if self.schema_version == RUNNER_SCHEMA_VERSION_V31:
+                if self.schema_version == RUNNER_SCHEMA_VERSION_V32:
+                    code = "v32_requires_population_lifecycle"
+                elif self.schema_version == RUNNER_SCHEMA_VERSION_V31:
                     code = "v31_requires_population_lifecycle"
                 elif self.schema_version == RUNNER_SCHEMA_VERSION_V30:
                     code = "v30_requires_population_lifecycle"
@@ -5012,6 +5273,7 @@ class SimulationRunnerConfig:
                 RUNNER_SCHEMA_VERSION_V29,
                 RUNNER_SCHEMA_VERSION_V30,
                 RUNNER_SCHEMA_VERSION_V31,
+                RUNNER_SCHEMA_VERSION_V32,
             }
         ):
             _LOGGER.error(
@@ -5034,12 +5296,15 @@ class SimulationRunnerConfig:
                 RUNNER_SCHEMA_VERSION_V29,
                 RUNNER_SCHEMA_VERSION_V30,
                 RUNNER_SCHEMA_VERSION_V31,
+                RUNNER_SCHEMA_VERSION_V32,
             }
             and self.v3_capability_flags.generational_population
         )
         if _requires_new_agent_init:
             if self.new_agent_initialization is None:
-                if self.schema_version == RUNNER_SCHEMA_VERSION_V31:
+                if self.schema_version == RUNNER_SCHEMA_VERSION_V32:
+                    code = "v32_requires_new_agent_initialization"
+                elif self.schema_version == RUNNER_SCHEMA_VERSION_V31:
                     code = "v31_requires_new_agent_initialization"
                 elif self.schema_version == RUNNER_SCHEMA_VERSION_V30:
                     code = "v30_requires_new_agent_initialization"
@@ -5167,6 +5432,7 @@ class SimulationRunnerConfig:
         RUNNER_SCHEMA_VERSION_V29,
         RUNNER_SCHEMA_VERSION_V30,
         RUNNER_SCHEMA_VERSION_V31,
+        RUNNER_SCHEMA_VERSION_V32,
         }
         if non_disabled and self.schema_version not in consolidation_schemas:
             _LOGGER.error(
@@ -5224,6 +5490,7 @@ class SimulationRunnerConfig:
         RUNNER_SCHEMA_VERSION_V29,
         RUNNER_SCHEMA_VERSION_V30,
         RUNNER_SCHEMA_VERSION_V31,
+        RUNNER_SCHEMA_VERSION_V32,
         }
         if reflecting and self.schema_version not in reflection_schemas:
             _LOGGER.error(
@@ -5281,6 +5548,7 @@ class SimulationRunnerConfig:
         RUNNER_SCHEMA_VERSION_V29,
         RUNNER_SCHEMA_VERSION_V30,
         RUNNER_SCHEMA_VERSION_V31,
+        RUNNER_SCHEMA_VERSION_V32,
         }
         if planning and self.schema_version not in prospective_schemas:
             _LOGGER.error(
@@ -5337,6 +5605,7 @@ class SimulationRunnerConfig:
         RUNNER_SCHEMA_VERSION_V29,
         RUNNER_SCHEMA_VERSION_V30,
         RUNNER_SCHEMA_VERSION_V31,
+        RUNNER_SCHEMA_VERSION_V32,
         }
         if considering and self.schema_version not in counterfactual_schemas:
             _LOGGER.error(
@@ -5392,6 +5661,7 @@ class SimulationRunnerConfig:
         RUNNER_SCHEMA_VERSION_V29,
         RUNNER_SCHEMA_VERSION_V30,
         RUNNER_SCHEMA_VERSION_V31,
+        RUNNER_SCHEMA_VERSION_V32,
         }:
             _LOGGER.error(
                 "invalid_fields path=agents.cognition.communication_strategy_mode "
@@ -5445,6 +5715,7 @@ class SimulationRunnerConfig:
         RUNNER_SCHEMA_VERSION_V29,
         RUNNER_SCHEMA_VERSION_V30,
         RUNNER_SCHEMA_VERSION_V31,
+        RUNNER_SCHEMA_VERSION_V32,
         }:
             _LOGGER.error(
                 "invalid_fields path=agents.cognition.reputation_mode "
@@ -5540,6 +5811,7 @@ class SimulationRunnerConfig:
         RUNNER_SCHEMA_VERSION_V29,
         RUNNER_SCHEMA_VERSION_V30,
         RUNNER_SCHEMA_VERSION_V31,
+        RUNNER_SCHEMA_VERSION_V32,
         }:
             _LOGGER.error(
                 "invalid_fields path=agents.cognition.teaching_interaction_mode "
@@ -5584,6 +5856,7 @@ class SimulationRunnerConfig:
         RUNNER_SCHEMA_VERSION_V29,
         RUNNER_SCHEMA_VERSION_V30,
         RUNNER_SCHEMA_VERSION_V31,
+        RUNNER_SCHEMA_VERSION_V32,
         }
         if (dynamics is not None and self.schema_version not in dynamics_schemas) or (
             self.schema_version == RUNNER_SCHEMA_VERSION_V14 and dynamics is None
@@ -5623,6 +5896,7 @@ class SimulationRunnerConfig:
         RUNNER_SCHEMA_VERSION_V29,
         RUNNER_SCHEMA_VERSION_V30,
         RUNNER_SCHEMA_VERSION_V31,
+        RUNNER_SCHEMA_VERSION_V32,
         }:
             _LOGGER.error(
                 "invalid_fields path=agents.cognition.territorial_claim_mode "
@@ -5668,6 +5942,7 @@ class SimulationRunnerConfig:
         RUNNER_SCHEMA_VERSION_V29,
         RUNNER_SCHEMA_VERSION_V30,
         RUNNER_SCHEMA_VERSION_V31,
+        RUNNER_SCHEMA_VERSION_V32,
         }:
             _LOGGER.error(
                 "invalid_fields path=agents.cognition.group_formation_mode "
@@ -5707,6 +5982,7 @@ class SimulationRunnerConfig:
         RUNNER_SCHEMA_VERSION_V29,
         RUNNER_SCHEMA_VERSION_V30,
         RUNNER_SCHEMA_VERSION_V31,
+        RUNNER_SCHEMA_VERSION_V32,
         }:
             _LOGGER.error(
                 "invalid_fields path=agents.cognition.social_norm_mode "
@@ -5749,6 +6025,7 @@ class SimulationRunnerConfig:
         RUNNER_SCHEMA_VERSION_V29,
         RUNNER_SCHEMA_VERSION_V30,
         RUNNER_SCHEMA_VERSION_V31,
+        RUNNER_SCHEMA_VERSION_V32,
         }
         if conventions_on and self.schema_version not in convention_schemas:
             _LOGGER.error(
@@ -5796,6 +6073,7 @@ class SimulationRunnerConfig:
         RUNNER_SCHEMA_VERSION_V29,
         RUNNER_SCHEMA_VERSION_V30,
         RUNNER_SCHEMA_VERSION_V31,
+        RUNNER_SCHEMA_VERSION_V32,
         }
         if artifacts_on and self.schema_version not in artifact_schemas:
             runner_log.error(
@@ -5839,6 +6117,7 @@ class SimulationRunnerConfig:
         RUNNER_SCHEMA_VERSION_V29,
         RUNNER_SCHEMA_VERSION_V30,
         RUNNER_SCHEMA_VERSION_V31,
+        RUNNER_SCHEMA_VERSION_V32,
         }
         if naming_on and self.schema_version not in naming_schemas:
             runner_log.error(
@@ -5879,6 +6158,7 @@ class SimulationRunnerConfig:
         RUNNER_SCHEMA_VERSION_V29,
         RUNNER_SCHEMA_VERSION_V30,
         RUNNER_SCHEMA_VERSION_V31,
+        RUNNER_SCHEMA_VERSION_V32,
         }
         budget_modes = tuple(
             agent.cognition.cognitive_budget_mode for agent in self.agents
@@ -5895,6 +6175,7 @@ class SimulationRunnerConfig:
         RUNNER_SCHEMA_VERSION_V29,
         RUNNER_SCHEMA_VERSION_V30,
         RUNNER_SCHEMA_VERSION_V31,
+        RUNNER_SCHEMA_VERSION_V32,
         }
         if budgets_on and self.schema_version not in budget_schemas:
             runner_log.error(
@@ -6009,6 +6290,7 @@ class SimulationRunnerConfig:
         RUNNER_SCHEMA_VERSION_V29,
         RUNNER_SCHEMA_VERSION_V30,
         RUNNER_SCHEMA_VERSION_V31,
+        RUNNER_SCHEMA_VERSION_V32,
         }:
             _LOGGER.error(
                 "invalid_fields path=agents.cognition.production_knowledge_mode "
@@ -6041,6 +6323,7 @@ class SimulationRunnerConfig:
         RUNNER_SCHEMA_VERSION_V29,
         RUNNER_SCHEMA_VERSION_V30,
         RUNNER_SCHEMA_VERSION_V31,
+        RUNNER_SCHEMA_VERSION_V32,
         }:
             from world.production import production_catalog_digest
 
@@ -6113,6 +6396,7 @@ class SimulationRunnerConfig:
         RUNNER_SCHEMA_VERSION_V29,
         RUNNER_SCHEMA_VERSION_V30,
         RUNNER_SCHEMA_VERSION_V31,
+        RUNNER_SCHEMA_VERSION_V32,
         }:
             shared_teaching = teaching_weight_tuple(self.agents[0].cognition)
             if any(
