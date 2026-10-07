@@ -3178,6 +3178,15 @@ class WorldEngine:
                 demographic_admit_count,
             )
 
+        repository_pending: list[PendingEvent] = []
+        if self.knowledge_repositories_channel_active:
+            working_state, repository_pending, repo_mutation = (
+                self._apply_repository_neglect_channel(
+                    snap=snap, working_state=working_state
+                )
+            )
+            semantic_mutation = semantic_mutation or repo_mutation
+
         merged = PendingBatch(
             working_state=working_state,
             semantic_mutation=semantic_mutation,
@@ -3187,6 +3196,7 @@ class WorldEngine:
                 + tuple(production_pending)
                 + tuple(system_pending)
                 + tuple(lifecycle_pending)
+                + tuple(repository_pending)
             ),
         )
 
@@ -4250,6 +4260,231 @@ class WorldEngine:
             max_entries_per_index_op=spec.index_policy.max_entries_per_index_op,
             allow_corrupt_entries=spec.index_policy.allow_corrupt_entries,
         )
+
+    def mark_repository_inaccessible(
+        self,
+        repository_id: EntityId,
+        *,
+        reason_code: str = "repository_location_sealed",
+    ) -> None:
+        """Experiment helper: seal a repository as inaccessible (channel-on only)."""
+        from simulation.runner_models import KnowledgeRepositoriesSpec
+        from world.repositories import KnowledgeRepository, RepositoryStatus
+
+        if type(self._knowledge_repositories_spec) is not KnowledgeRepositoriesSpec:
+            raise ValueError(
+                "knowledge_repositories_inactive "
+                "(code=knowledge_repositories_inactive)"
+            )
+        if type(repository_id) is not EntityId:
+            raise TypeError("repository_id must be EntityId")
+        if type(reason_code) is not str or not reason_code:
+            raise ValueError("reason_code must be a non-empty str")
+        snap = self._snapshot
+        repository = snap.world.state.repositories.get(repository_id)
+        if repository is None:
+            raise ValueError(
+                f"unknown repository {repository_id.value!r} "
+                "(code=unknown_repository)"
+            )
+        if repository.status is RepositoryStatus.DESTROYED:
+            raise ValueError(
+                f"repository {repository_id.value!r} destroyed "
+                "(code=repository_destroyed)"
+            )
+        updated = KnowledgeRepository(
+            repository_id=repository.repository_id,
+            location_id=repository.location_id,
+            founder_ids=repository.founder_ids,
+            established_tick=repository.established_tick,
+            access_mode=repository.access_mode,
+            status=RepositoryStatus.INACCESSIBLE,
+            structure_id=repository.structure_id,
+            member_artifact_ids=repository.member_artifact_ids,
+            index_entries=repository.index_entries,
+            last_maintained_tick=repository.last_maintained_tick,
+            neglect_streak=repository.neglect_streak,
+        )
+        repositories = dict(snap.world.state.repositories)
+        repositories[repository_id] = updated
+        next_state = rebuild_world_state(snap.world.state, repositories=repositories)
+        self._snapshot = _EngineSnapshot(
+            world=World(self.world_id, next_state),
+            tick=snap.tick,
+            phase=snap.phase,
+            token=snap.token,
+            observation_batch=snap.observation_batch,
+            resolution_history=snap.resolution_history,
+            event_history=snap.event_history,
+            prior_event_window=snap.prior_event_window,
+        )
+        _LOGGER.info(
+            "repository_marked_inaccessible repository_id=%s status=%s "
+            "reason_code=%s",
+            repository_id.value,
+            RepositoryStatus.INACCESSIBLE.value,
+            reason_code,
+        )
+
+    def clear_repository_inaccessible(self, repository_id: EntityId) -> None:
+        """Experiment helper: clear inaccessible status back to intact."""
+        from simulation.runner_models import KnowledgeRepositoriesSpec
+        from world.repositories import KnowledgeRepository, RepositoryStatus
+
+        if type(self._knowledge_repositories_spec) is not KnowledgeRepositoriesSpec:
+            raise ValueError(
+                "knowledge_repositories_inactive "
+                "(code=knowledge_repositories_inactive)"
+            )
+        if type(repository_id) is not EntityId:
+            raise TypeError("repository_id must be EntityId")
+        snap = self._snapshot
+        repository = snap.world.state.repositories.get(repository_id)
+        if repository is None:
+            raise ValueError(
+                f"unknown repository {repository_id.value!r} "
+                "(code=unknown_repository)"
+            )
+        if repository.status is not RepositoryStatus.INACCESSIBLE:
+            raise ValueError(
+                f"repository {repository_id.value!r} not inaccessible "
+                "(code=repository_not_inaccessible)"
+            )
+        updated = KnowledgeRepository(
+            repository_id=repository.repository_id,
+            location_id=repository.location_id,
+            founder_ids=repository.founder_ids,
+            established_tick=repository.established_tick,
+            access_mode=repository.access_mode,
+            status=RepositoryStatus.INTACT,
+            structure_id=repository.structure_id,
+            member_artifact_ids=repository.member_artifact_ids,
+            index_entries=repository.index_entries,
+            last_maintained_tick=repository.last_maintained_tick,
+            neglect_streak=repository.neglect_streak,
+        )
+        repositories = dict(snap.world.state.repositories)
+        repositories[repository_id] = updated
+        next_state = rebuild_world_state(snap.world.state, repositories=repositories)
+        self._snapshot = _EngineSnapshot(
+            world=World(self.world_id, next_state),
+            tick=snap.tick,
+            phase=snap.phase,
+            token=snap.token,
+            observation_batch=snap.observation_batch,
+            resolution_history=snap.resolution_history,
+            event_history=snap.event_history,
+            prior_event_window=snap.prior_event_window,
+        )
+        _LOGGER.info(
+            "repository_inaccessible_cleared repository_id=%s status=%s",
+            repository_id.value,
+            RepositoryStatus.INTACT.value,
+        )
+
+    def _apply_repository_neglect_channel(
+        self,
+        *,
+        snap: _EngineSnapshot,
+        working_state: object,
+    ) -> tuple[object, list[PendingEvent], bool]:
+        """Advance neglect timers and emit RepositoryNeglected system events."""
+        from simulation.runner_models import KnowledgeRepositoriesSpec
+        from world._state import WorldState
+        from world.events import RepositoryNeglected, build_occurrence_context
+        from world.repositories import advance_repository_neglect
+
+        if type(working_state) is not WorldState:
+            raise TypeError("working_state must be WorldState")
+        if type(self._knowledge_repositories_spec) is not KnowledgeRepositoriesSpec:
+            return working_state, [], False
+        spec = self._knowledge_repositories_spec
+        tick = snap.tick.value
+        pending: list[PendingEvent] = []
+        repositories = dict(working_state.repositories)
+        semantic_mutation = False
+        family_ordinal = 0
+        for repository_id in sorted(
+            repositories.keys(), key=lambda value: value.value
+        ):
+            repository = repositories[repository_id]
+            drop_entry_index: int | None = None
+            # Corrupt index only on neglect onset (intact → neglected).
+            if (
+                spec.maintenance_policy.neglect_corrupts_index
+                and repository.index_entries
+                and repository.status.value == "intact"
+            ):
+                rng = create_named_stream(
+                    self._config,
+                    StreamScope(
+                        namespace=spec.rng_namespace,
+                        names=(
+                            self._run_id.value,
+                            self.world_id.value,
+                            f"tick:{tick}",
+                            repository_id.value,
+                            "index_drop",
+                        ),
+                    ),
+                )
+                drop_entry_index = int(rng.randrange(len(repository.index_entries)))
+            transition = advance_repository_neglect(
+                repository,
+                tick=tick,
+                neglect_ticks=spec.maintenance_policy.neglect_ticks,
+                neglect_corrupts_index=spec.maintenance_policy.neglect_corrupts_index,
+                drop_entry_index=drop_entry_index,
+            )
+            if transition is None:
+                continue
+            repositories[repository_id] = transition.next_repository
+            semantic_mutation = True
+            if transition.prior_status is not transition.next_status:
+                _LOGGER.info(
+                    "repository_status_transition repository_id=%s "
+                    "prior_status=%s next_status=%s neglect_streak=%s",
+                    repository_id.value,
+                    transition.prior_status.value,
+                    transition.next_status.value,
+                    transition.neglect_streak,
+                )
+            details = RepositoryNeglected(
+                repository_id=repository_id,
+                neglect_streak=transition.neglect_streak,
+                prior_status=transition.prior_status.value,
+                next_status=transition.next_status.value,
+                index_entries_dropped=transition.index_entries_dropped,
+            )
+            cause_id = derive_system_cause_id(
+                self._config,
+                run_id=self._run_id,
+                world_id=self.world_id,
+                tick=tick,
+                effect_family=SystemEffectFamily.KNOWLEDGE_REPOSITORY.value,
+                entity_id=repository_id,
+                family_ordinal=family_ordinal,
+            )
+            pending.append(
+                PendingEvent(
+                    cause=SystemCause(
+                        cause_id,
+                        SystemEffectFamily.KNOWLEDGE_REPOSITORY,
+                        repository_id,
+                        family_ordinal,
+                    ),
+                    details=details,
+                    occurrence=build_occurrence_context(
+                        details,
+                        origin_location_id=transition.next_repository.location_id,
+                    ),
+                )
+            )
+            family_ordinal += 1
+        if not semantic_mutation:
+            return working_state, pending, False
+        next_state = rebuild_world_state(working_state, repositories=repositories)
+        return next_state, pending, True
 
     def _resolve_repository_establish_effect(
         self,

@@ -23,7 +23,9 @@ __all__ = [
     "KnowledgeRepository",
     "RepositoryAccessMode",
     "RepositoryIndexEntry",
+    "RepositoryNeglectTransition",
     "RepositoryStatus",
+    "advance_repository_neglect",
     "index_repositories",
     "require_repository_access_mode",
     "require_repository_status",
@@ -292,6 +294,117 @@ def index_repositories(
             )
         indexed[repository.repository_id] = repository
     return MappingProxyType(indexed)
+
+
+@dataclass(frozen=True, slots=True)
+class RepositoryNeglectTransition:
+    """Deterministic neglect step result for one repository (analysis-facing)."""
+
+    repository_id: EntityId
+    prior_status: RepositoryStatus
+    next_status: RepositoryStatus
+    neglect_streak: int
+    index_entries_dropped: int
+    next_repository: KnowledgeRepository
+
+    def __post_init__(self) -> None:
+        if type(self.repository_id) is not EntityId:
+            raise TypeError("repository_id must be EntityId")
+        if type(self.prior_status) is not RepositoryStatus:
+            raise TypeError("prior_status must be RepositoryStatus")
+        if type(self.next_status) is not RepositoryStatus:
+            raise TypeError("next_status must be RepositoryStatus")
+        object.__setattr__(
+            self,
+            "neglect_streak",
+            require_exact_nonneg_int("neglect_streak", self.neglect_streak),
+        )
+        object.__setattr__(
+            self,
+            "index_entries_dropped",
+            require_exact_nonneg_int(
+                "index_entries_dropped", self.index_entries_dropped
+            ),
+        )
+        if type(self.next_repository) is not KnowledgeRepository:
+            raise TypeError("next_repository must be KnowledgeRepository")
+
+
+def advance_repository_neglect(
+    repository: KnowledgeRepository,
+    *,
+    tick: int,
+    neglect_ticks: int,
+    neglect_corrupts_index: bool,
+    drop_entry_index: int | None,
+) -> RepositoryNeglectTransition | None:
+    """Advance neglect for one repository at ``tick``.
+
+    Returns a transition when the repository is subject to neglect cadence
+    (ticks since last maintain ≥ ``neglect_ticks``). Destroyed / inaccessible
+    repositories are skipped. When ``neglect_corrupts_index`` and
+    ``drop_entry_index`` is set, drops that index among entry_id-sorted entries.
+    """
+    tick_value = require_exact_nonneg_int("tick", tick)
+    threshold = require_exact_nonneg_int("neglect_ticks", neglect_ticks)
+    if type(neglect_corrupts_index) is not bool:
+        raise TypeError("neglect_corrupts_index must be bool")
+    if drop_entry_index is not None:
+        drop_entry_index = require_exact_nonneg_int(
+            "drop_entry_index", drop_entry_index
+        )
+    if type(repository) is not KnowledgeRepository:
+        raise TypeError("repository must be KnowledgeRepository")
+    if repository.status in {
+        RepositoryStatus.DESTROYED,
+        RepositoryStatus.INACCESSIBLE,
+    }:
+        return None
+    if tick_value < repository.last_maintained_tick:
+        return None
+    elapsed = tick_value - repository.last_maintained_tick
+    if elapsed < threshold:
+        return None
+    prior_status = repository.status
+    next_status = RepositoryStatus.NEGLECTED
+    streak = repository.neglect_streak + 1
+    entries = repository.index_entries
+    dropped = 0
+    if neglect_corrupts_index and drop_entry_index is not None and entries:
+        ordered = tuple(sorted(entries, key=lambda item: item.entry_id))
+        index = drop_entry_index % len(ordered)
+        entries = ordered[:index] + ordered[index + 1 :]
+        dropped = 1
+    next_repository = KnowledgeRepository(
+        repository_id=repository.repository_id,
+        location_id=repository.location_id,
+        founder_ids=repository.founder_ids,
+        established_tick=repository.established_tick,
+        access_mode=repository.access_mode,
+        status=next_status,
+        structure_id=repository.structure_id,
+        member_artifact_ids=repository.member_artifact_ids,
+        index_entries=entries,
+        last_maintained_tick=repository.last_maintained_tick,
+        neglect_streak=streak,
+    )
+    _LOG.debug(
+        "repository_neglect_tick repository_id=%s streak=%s prior_status=%s "
+        "next_status=%s index_entries_dropped=%s",
+        repository.repository_id.value,
+        streak,
+        prior_status.value,
+        next_status.value,
+        dropped,
+    )
+    return RepositoryNeglectTransition(
+        repository_id=repository.repository_id,
+        prior_status=prior_status,
+        next_status=next_status,
+        neglect_streak=streak,
+        index_entries_dropped=dropped,
+        next_repository=next_repository,
+    )
 
 
 @dataclass(frozen=True, slots=True)

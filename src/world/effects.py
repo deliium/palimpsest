@@ -66,6 +66,7 @@ class SystemEffectFamily(StrEnum):
     HAZARD = "hazard"
     RESOURCE_NODE = "resource_node"
     LIFECYCLE = "lifecycle"
+    KNOWLEDGE_REPOSITORY = "knowledge_repository"
 
 
 @dataclass(frozen=True, slots=True)

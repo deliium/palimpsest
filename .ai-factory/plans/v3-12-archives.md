@@ -483,7 +483,7 @@ Update (no “optional” hedges):
 
 ### Phase 3: Decay, index, events, replay
 
-- [ ] Task 6: Implement neglect tick progression and optional index corruption using seed-derived `StreamScope` from `rng_namespace`. Implement **`WorldEngine.mark_repository_inaccessible`** (+ optional clear) for Experiment AO arms. Destroy path clears custody, retains repository tombstone row + history.
+- [x] Task 6: Implement neglect tick progression and optional index corruption using seed-derived `StreamScope` from `rng_namespace`. Implement **`WorldEngine.mark_repository_inaccessible`** (+ optional clear) for Experiment AO arms. Destroy path clears custody, retains repository tombstone row + history.
   - Deliverable: Unit tests: neglect after N ticks; maintain resets; destroy orphans members at location; inaccessible blocks access; same seed ⇒ same index drops.
   - Files: `src/world/repositories.py`, `src/world/_operations.py`, `src/simulation/engine.py`, `tests/unit/test_knowledge_repository_decay.py`
   - Logging: DEBUG `repository_neglect_tick` streak; INFO status transitions; never log index tokens
