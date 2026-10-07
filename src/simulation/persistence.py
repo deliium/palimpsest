@@ -51,6 +51,7 @@ from world.events import (
     EVENT_SCHEMA_REPLAY_V11,
     EVENT_SCHEMA_REPLAY_V12,
     EVENT_SCHEMA_REPLAY_V13,
+    EVENT_SCHEMA_REPLAY_V14,
     WorldEvent,
     normalize_events,
 )
@@ -86,11 +87,12 @@ ACCEPTED_EVENT_SCHEMA_VERSIONS: Final[frozenset[int]] = frozenset(
         EVENT_SCHEMA_REPLAY_V11,
         EVENT_SCHEMA_REPLAY_V12,
         EVENT_SCHEMA_REPLAY_V13,
+        EVENT_SCHEMA_REPLAY_V14,
     }
 )
 ACCEPTED_PROJECTOR_VERSIONS: Final[frozenset[str]] = frozenset({"v1", "v2"})
 ACCEPTED_PERSISTENCE_CODEC_VERSIONS: Final[frozenset[str]] = frozenset(
-    {"v1", "v2", "v3", "v4", "v5", "v6", "v7", "v8", "v9", "v10"}
+    {"v1", "v2", "v3", "v4", "v5", "v6", "v7", "v8", "v9", "v10", "v11"}
 )
 
 _SHA256_HEX_RE: Final[re.Pattern[str]] = re.compile(r"^[0-9a-f]{64}$")
@@ -199,11 +201,8 @@ def checkpoint_schema_for_production(
     else dynamics → ``(v7, v4)``; else production → ``(v6, v3)``; else
     replay-v5 / codec ``v2``.
     """
-    # Task 2 wires the flag; Task 7 co-lands V14/v11 selection + agreed-or.
-    # Until then repository-on falls through to durable V13/v10 (durable required).
     if knowledge_repositories_active and durable_records_active:
-        # Placeholder: keep durable write-pair until Task 7 lands V14/v11.
-        pair = EVENT_SCHEMA_REPLAY_V13, "v10"
+        pair = EVENT_SCHEMA_REPLAY_V14, "v11"
     elif durable_records_active:
         pair = EVENT_SCHEMA_REPLAY_V13, "v10"
     elif dependency_care_active:
@@ -620,17 +619,23 @@ class WorldSnapshot:
                     "codec_schema_mismatch reason_code=codec_v10_requires_schema_13"
                 )
                 raise ValueError("codec v10 requires event schema 13")
+        elif self.persistence_codec_version == "v11":
+            if self.event_schema_version != EVENT_SCHEMA_REPLAY_V14:
+                _LOG.error(
+                    "codec_schema_mismatch reason_code=codec_v11_requires_schema_14"
+                )
+                raise ValueError("codec v11 requires event schema 14")
         elif self.structures or self.production_jobs or self.tool_marks:
             raise ValueError("production checkpoint fields require codec v3")
         if (
             self.persistence_codec_version
-            not in {"v4", "v5", "v6", "v7", "v8", "v9", "v10"}
+            not in {"v4", "v5", "v6", "v7", "v8", "v9", "v10", "v11"}
             and self.active_hazards
         ):
             raise ValueError("active_hazards require codec v4")
         if (
             self.persistence_codec_version
-            not in {"v5", "v6", "v7", "v8", "v9", "v10"}
+            not in {"v5", "v6", "v7", "v8", "v9", "v10", "v11"}
             and self.artifacts
         ):
             _LOG.error(
@@ -648,7 +653,7 @@ class WorldSnapshot:
             records.append(raw)
         object.__setattr__(self, "lifecycle_records", tuple(records))
         if (
-            self.persistence_codec_version not in {"v6", "v7", "v8", "v9", "v10"}
+            self.persistence_codec_version not in {"v6", "v7", "v8", "v9", "v10", "v11"}
             and records
         ):
             _LOG.error(
@@ -666,7 +671,7 @@ class WorldSnapshot:
             kinship_rows.append(raw)
         object.__setattr__(self, "kinship_edges", tuple(kinship_rows))
         if (
-            self.persistence_codec_version not in {"v8", "v9", "v10"}
+            self.persistence_codec_version not in {"v8", "v9", "v10", "v11"}
             and kinship_rows
         ):
             _LOG.error(
@@ -683,13 +688,13 @@ class WorldSnapshot:
                 )
             need_rows.append(raw)
         object.__setattr__(self, "dependency_need_registers", tuple(need_rows))
-        if self.persistence_codec_version not in {"v9", "v10"} and need_rows:
+        if self.persistence_codec_version not in {"v9", "v10", "v11"} and need_rows:
             _LOG.error(
                 "codec_schema_mismatch "
                 "reason_code=dependency_need_registers_require_codec_v9"
             )
             raise ValueError("dependency_need_registers require codec v9 or v10")
-        if self.persistence_codec_version in {"v6", "v7", "v8", "v9", "v10"}:
+        if self.persistence_codec_version in {"v6", "v7", "v8", "v9", "v10", "v11"}:
             _LOG.debug(
                 "lifecycle_snapshot_codec codec_version=%s lifecycle_record_count=%s "
                 "kinship_edge_count=%s dependency_need_register_count=%s",

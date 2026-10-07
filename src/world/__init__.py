@@ -66,6 +66,7 @@ from world.artifacts import (
 )
 from world.repositories import (
     FORBIDDEN_REPOSITORY_FIELD_NAMES,
+    KnowledgeRepositoriesRuleContext,
     KnowledgeRepository,
     RepositoryAccessMode,
     RepositoryIndexEntry,
@@ -398,6 +399,7 @@ __all__ = [
     "InformationArtifact",
     "Inscribe",
     "FORBIDDEN_REPOSITORY_FIELD_NAMES",
+    "KnowledgeRepositoriesRuleContext",
     "KnowledgeRepository",
     "RecordIntegrity",
     "RepositoryAccessMode",

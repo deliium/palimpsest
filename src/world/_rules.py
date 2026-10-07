@@ -24,18 +24,23 @@ from world._operations import (
     _CopyRecordOp,
     _CraftOp,
     _DamageRecordOp,
+    _DepositRecordOp,
     _DrinkOp,
     _DropOp,
     _EatOp,
     _EraseOp,
+    _EstablishRepositoryOp,
     _FeedOp,
     _FleeOp,
     _GiveOp,
     _HarvestOp,
     _HelpOp,
+    _IndexRepositoryOp,
     _InscribeOp,
+    _MaintainRepositoryOp,
     _MoveOp,
     _RepairOp,
+    _RetrieveRecordOp,
     _SearchOp,
     _SleepOp,
     _StoreOp,
@@ -58,6 +63,14 @@ from world.artifacts import (
     artifact_kind_is_durable_capable,
     artifact_kind_is_portable,
 )
+from world.repositories import (
+    KnowledgeRepositoriesRuleContext,
+    KnowledgeRepository,
+    RepositoryAccessMode,
+    RepositoryIndexEntry,
+    RepositoryStatus,
+    require_repository_access_mode,
+)
 from world.communications import StructuredUtterance
 from world.effects import (
     DeathCause,
@@ -67,6 +80,7 @@ from world.effects import (
     ResolvedAttackEffect,
     ResolvedFleeEffect,
     ResolvedProductionEffect,
+    ResolvedRepositoryEstablishEffect,
     ResolvedSearchEffect,
 )
 from world.events import (
@@ -90,6 +104,11 @@ from world.events import (
     Given,
     Helped,
     Moved,
+    RepositoryEstablished,
+    RepositoryIndexed,
+    RepositoryMaintained,
+    RepositoryMemberDeposited,
+    RepositoryMemberRetrieved,
     Searched,
     Slept,
     Taken,
@@ -201,6 +220,20 @@ class RuleReason(StrEnum):
     DURABLE_INTEGRITY_DESTROYED = "durable_integrity_destroyed"
     DURABLE_DAMAGE_DISABLED = "durable_damage_disabled"
     DURABLE_PARTIAL_LOSS_DISABLED = "durable_partial_loss_disabled"
+    KNOWLEDGE_REPOSITORIES_INACTIVE = "knowledge_repositories_inactive"
+    REPOSITORY_CAPACITY = "repository_capacity"
+    REPOSITORY_ACCESS_DENIED = "repository_access_denied"
+    REPOSITORY_INACCESSIBLE = "repository_inaccessible"
+    REPOSITORY_DESTROYED = "repository_destroyed"
+    REPOSITORY_NOT_MEMBER = "repository_not_member"
+    REPOSITORY_ALREADY_MEMBER = "repository_already_member"
+    REPOSITORY_INDEX_CAP = "repository_index_cap"
+    REPOSITORY_NOT_COLOCATED = "repository_not_colocated"
+    REPOSITORY_CUSTODY_BLOCKS_TRANSFER = "repository_custody_blocks_transfer"
+    REPOSITORY_CUSTODY_BLOCKS_ERASE = "repository_custody_blocks_erase"
+    REPOSITORY_MEMBER_DESTROYED = "repository_member_destroyed"
+    REPOSITORY_RETRIEVE_HOLD_INVALID = "repository_retrieve_hold_invalid"
+    UNKNOWN_REPOSITORY = "unknown_repository"
 
 
 @dataclass(frozen=True, slots=True)
@@ -475,6 +508,41 @@ COMMAND_RULE_MATRIX: Final[dict[type, CommandRulePolicy]] = {
         requires_living_actor=True,
         notes="damage / partial_loss / destroy (tombstone optional)",
     ),
+    _EstablishRepositoryOp: CommandRulePolicy(
+        disposition=RuleDisposition.MUTATE,
+        emits_event_when_applied=True,
+        mutates_state_when_applied=True,
+        requires_living_actor=True,
+        notes="create knowledge repository container at location",
+    ),
+    _DepositRecordOp: CommandRulePolicy(
+        disposition=RuleDisposition.MUTATE,
+        emits_event_when_applied=True,
+        mutates_state_when_applied=True,
+        requires_living_actor=True,
+        notes="move durable artifact into repository custody",
+    ),
+    _RetrieveRecordOp: CommandRulePolicy(
+        disposition=RuleDisposition.MUTATE,
+        emits_event_when_applied=True,
+        mutates_state_when_applied=True,
+        requires_living_actor=True,
+        notes="remove durable artifact from repository custody",
+    ),
+    _MaintainRepositoryOp: CommandRulePolicy(
+        disposition=RuleDisposition.MUTATE,
+        emits_event_when_applied=True,
+        mutates_state_when_applied=True,
+        requires_living_actor=True,
+        notes="maintain or destroy repository (mode maintain|destroy)",
+    ),
+    _IndexRepositoryOp: CommandRulePolicy(
+        disposition=RuleDisposition.MUTATE,
+        emits_event_when_applied=True,
+        mutates_state_when_applied=True,
+        requires_living_actor=True,
+        notes="append/replace imperfect index entries",
+    ),
 }
 
 _OPERATION_KIND: Final[dict[type, str]] = {
@@ -507,6 +575,11 @@ _OPERATION_KIND: Final[dict[type, str]] = {
     _CopyRecordOp: "copy_record",
     _AnnotateRecordOp: "annotate_record",
     _DamageRecordOp: "damage_record",
+    _EstablishRepositoryOp: "establish_repository",
+    _DepositRecordOp: "deposit_record",
+    _RetrieveRecordOp: "retrieve_record",
+    _MaintainRepositoryOp: "maintain_repository",
+    _IndexRepositoryOp: "index_repository",
 }
 
 _SEARCH_RESOURCE_KINDS: Final[frozenset[ResourceKind]] = frozenset(
@@ -530,6 +603,7 @@ def evaluate_operation(
     effective_carry_capacity: Mapping[EntityId, int] | None = None,
     dependency_care_context: object | None = None,
     durable_records_context: object | None = None,
+    knowledge_repositories_context: object | None = None,
 ) -> RuleResult:
     """Evaluate a validated operation against an immutable snapshot.
 
@@ -545,6 +619,7 @@ def evaluate_operation(
     capacity is never rewritten here.
     ``dependency_care_context`` gates Feed/Transport when the channel is on.
     ``durable_records_context`` gates Copy/Annotate/Damage and durable Inscribe.
+    ``knowledge_repositories_context`` gates repository commands and custody.
     """
     if type(state) is not WorldState:
         raise TypeError("evaluate_operation requires WorldState")
@@ -558,6 +633,9 @@ def evaluate_operation(
         capacity_map = effective_carry_capacity
     care_context = _require_dependency_care_context(dependency_care_context)
     durable_context = _require_durable_records_context(durable_records_context)
+    repository_context = _require_knowledge_repositories_context(
+        knowledge_repositories_context
+    )
     op_type = type(operation)
     policy = COMMAND_RULE_MATRIX.get(op_type)
     if policy is None:
@@ -720,14 +798,24 @@ def evaluate_operation(
             )
         case _AmendOp():
             return _evaluate_amend(
-                state, operation, kind, durable_context=durable_context
+                state,
+                operation,
+                kind,
+                durable_context=durable_context,
+                repository_context=repository_context,
             )
         case _EraseOp():
             return _evaluate_erase(
-                state, operation, kind, durable_context=durable_context
+                state,
+                operation,
+                kind,
+                durable_context=durable_context,
+                repository_context=repository_context,
             )
         case _TransferArtifactOp():
-            return _evaluate_transfer_artifact(state, operation, kind)
+            return _evaluate_transfer_artifact(
+                state, operation, kind, repository_context=repository_context
+            )
         case _CopyRecordOp():
             return _evaluate_copy_record(
                 state,
@@ -735,14 +823,52 @@ def evaluate_operation(
                 kind,
                 resolved=resolved,
                 durable_context=durable_context,
+                repository_context=repository_context,
             )
         case _AnnotateRecordOp():
             return _evaluate_annotate_record(
-                state, operation, kind, durable_context=durable_context
+                state,
+                operation,
+                kind,
+                durable_context=durable_context,
+                repository_context=repository_context,
             )
         case _DamageRecordOp():
             return _evaluate_damage_record(
-                state, operation, kind, durable_context=durable_context
+                state,
+                operation,
+                kind,
+                durable_context=durable_context,
+                repository_context=repository_context,
+            )
+        case _EstablishRepositoryOp():
+            return _evaluate_establish_repository(
+                state,
+                operation,
+                kind,
+                resolved=resolved,
+                tick=tick,
+                repository_context=repository_context,
+            )
+        case _DepositRecordOp():
+            return _evaluate_deposit_record(
+                state, operation, kind, repository_context=repository_context
+            )
+        case _RetrieveRecordOp():
+            return _evaluate_retrieve_record(
+                state, operation, kind, repository_context=repository_context
+            )
+        case _MaintainRepositoryOp():
+            return _evaluate_maintain_repository(
+                state,
+                operation,
+                kind,
+                tick=tick,
+                repository_context=repository_context,
+            )
+        case _IndexRepositoryOp():
+            return _evaluate_index_repository(
+                state, operation, kind, repository_context=repository_context
             )
         case _WaitOp():
             return RuleResult(
@@ -1480,12 +1606,23 @@ def _evaluate_amend(
     kind: str,
     *,
     durable_context: DurableRecordsRuleContext | None,
+    repository_context: KnowledgeRepositoriesRuleContext | None = None,
 ) -> RuleResult:
     access = _artifact_access_reject(
         state, operation.actor_id, operation.artifact_id, kind
     )
     if access is not None:
         return access
+    custody = _repository_member_access_gate(
+        state,
+        operation.actor_id,
+        operation.artifact_id,
+        kind,
+        repository_context=repository_context,
+        op="amend",
+    )
+    if custody is not None:
+        return custody
     if durable_context is not None:
         artifact = state.artifacts[operation.artifact_id]
         if artifact.integrity is RecordIntegrity.DESTROYED:
@@ -1505,7 +1642,13 @@ def _evaluate_erase(
     kind: str,
     *,
     durable_context: DurableRecordsRuleContext | None,
+    repository_context: KnowledgeRepositoriesRuleContext | None = None,
 ) -> RuleResult:
+    blocked = _custody_blocks_erase(
+        state, operation.artifact_id, kind, operation.actor_id
+    )
+    if blocked is not None:
+        return blocked
     access = _artifact_access_reject(
         state, operation.actor_id, operation.artifact_id, kind
     )
@@ -1531,6 +1674,7 @@ def _evaluate_copy_record(
     *,
     resolved: ResolvedActionEffects | None,
     durable_context: DurableRecordsRuleContext | None,
+    repository_context: KnowledgeRepositoriesRuleContext | None = None,
 ) -> RuleResult:
     if durable_context is None:
         return _artifact_reject(
@@ -1565,6 +1709,16 @@ def _evaluate_copy_record(
             )
             if access is not None:
                 return access
+    custody = _repository_member_access_gate(
+        state,
+        operation.actor_id,
+        operation.artifact_id,
+        kind,
+        repository_context=repository_context,
+        op="copy_record",
+    )
+    if custody is not None:
+        return custody
     if parent.record_genre is None or not artifact_kind_is_durable_capable(parent.kind):
         return _artifact_reject(
             kind,
@@ -1638,6 +1792,7 @@ def _evaluate_annotate_record(
     kind: str,
     *,
     durable_context: DurableRecordsRuleContext | None,
+    repository_context: KnowledgeRepositoriesRuleContext | None = None,
 ) -> RuleResult:
     if durable_context is None:
         return _artifact_reject(
@@ -1652,6 +1807,16 @@ def _evaluate_annotate_record(
     )
     if access is not None:
         return access
+    custody = _repository_member_access_gate(
+        state,
+        operation.actor_id,
+        operation.artifact_id,
+        kind,
+        repository_context=repository_context,
+        op="annotate_record",
+    )
+    if custody is not None:
+        return custody
     artifact = state.artifacts[operation.artifact_id]
     if artifact.integrity is RecordIntegrity.DESTROYED:
         return _artifact_reject(
@@ -1703,6 +1868,7 @@ def _evaluate_damage_record(
     kind: str,
     *,
     durable_context: DurableRecordsRuleContext | None,
+    repository_context: KnowledgeRepositoriesRuleContext | None = None,
 ) -> RuleResult:
     if durable_context is None:
         return _artifact_reject(
@@ -1717,6 +1883,16 @@ def _evaluate_damage_record(
     )
     if access is not None:
         return access
+    custody = _repository_member_access_gate(
+        state,
+        operation.actor_id,
+        operation.artifact_id,
+        kind,
+        repository_context=repository_context,
+        op="damage_record",
+    )
+    if custody is not None:
+        return custody
     artifact = state.artifacts[operation.artifact_id]
     if artifact.integrity is RecordIntegrity.DESTROYED:
         return _artifact_reject(
@@ -1758,8 +1934,22 @@ def _evaluate_damage_record(
 
 
 def _evaluate_transfer_artifact(
-    state: WorldState, operation: _TransferArtifactOp, kind: str
+    state: WorldState,
+    operation: _TransferArtifactOp,
+    kind: str,
+    *,
+    repository_context: KnowledgeRepositoriesRuleContext | None = None,
 ) -> RuleResult:
+    _ = repository_context
+    blocked = _custody_blocks_transfer(
+        state,
+        operation.artifact_id,
+        kind,
+        operation.actor_id,
+        op="transfer_artifact",
+    )
+    if blocked is not None:
+        return blocked
     artifact = state.artifacts.get(operation.artifact_id)
     if artifact is None:
         return _artifact_reject(
@@ -2463,6 +2653,7 @@ def apply_operation(
     effective_carry_capacity: Mapping[EntityId, int] | None = None,
     dependency_care_context: object | None = None,
     durable_records_context: object | None = None,
+    knowledge_repositories_context: object | None = None,
 ) -> RuleApplication:
     """Evaluate then apply immutable physical or event-only effects.
 
@@ -2478,6 +2669,9 @@ def apply_operation(
     if resolved is not None and type(resolved) is not ResolvedActionEffects:
         raise TypeError("apply_operation resolved must be ResolvedActionEffects")
     durable_context = _require_durable_records_context(durable_records_context)
+    repository_context = _require_knowledge_repositories_context(
+        knowledge_repositories_context
+    )
     result = evaluate_operation(
         state,
         operation,
@@ -2487,6 +2681,7 @@ def apply_operation(
         effective_carry_capacity=effective_carry_capacity,
         dependency_care_context=dependency_care_context,
         durable_records_context=durable_context,
+        knowledge_repositories_context=repository_context,
     )
     if result.disposition in {
         RuleDisposition.REJECT,
@@ -2552,6 +2747,31 @@ def apply_operation(
             result=result,
             durable_context=durable_context,
         )
+    if type(operation) is _EstablishRepositoryOp:
+        assert repository_context is not None
+        return _apply_establish_repository(
+            state,
+            operation,
+            result=result,
+            resolved=resolved,
+            tick=0 if tick is None else tick,
+            repository_context=repository_context,
+        )
+    if type(operation) is _DepositRecordOp:
+        return _apply_deposit_record(state, operation, result=result)
+    if type(operation) is _RetrieveRecordOp:
+        return _apply_retrieve_record(state, operation, result=result)
+    if type(operation) is _MaintainRepositoryOp:
+        assert repository_context is not None
+        return _apply_maintain_repository(
+            state,
+            operation,
+            result=result,
+            tick=0 if tick is None else tick,
+            repository_context=repository_context,
+        )
+    if type(operation) is _IndexRepositoryOp:
+        return _apply_index_repository(state, operation, result=result)
     if type(operation) is _FleeOp:
         return _apply_flee(
             state,
@@ -3222,6 +3442,928 @@ def _require_dependency_care_context(value: object | None) -> object | None:
         )
     return value
 
+
+def _repository_reject(
+    kind: str,
+    reason: RuleReason,
+    actor_id: EntityId,
+    repository_id: EntityId | None,
+    *,
+    op: str | None = None,
+) -> RuleResult:
+    _OPS_LOG.warning(
+        "knowledge_repository_rejected actor_id=%s repository_id=%s reason_code=%s",
+        actor_id.value,
+        None if repository_id is None else repository_id.value,
+        reason.value,
+    )
+    _OPS_LOG.debug(
+        "knowledge_repository_resolved kind=%s op=%s reason_code=%s",
+        kind,
+        op or kind,
+        reason.value,
+    )
+    return _reject(kind, reason)
+
+
+def _repository_success(kind: str, *, op: str) -> RuleResult:
+    _OPS_LOG.debug(
+        "knowledge_repository_resolved kind=%s op=%s reason_code=%s",
+        kind,
+        op,
+        RuleReason.OCCURRENCE.value,
+    )
+    return RuleResult(
+        disposition=RuleDisposition.MUTATE,
+        reason=RuleReason.OCCURRENCE,
+        emits_event=True,
+        mutates_state=True,
+        action_kind=kind,
+    )
+
+
+def _require_knowledge_repositories_context(
+    value: object | None,
+) -> KnowledgeRepositoriesRuleContext | None:
+    if value is None:
+        return None
+    if type(value) is not KnowledgeRepositoriesRuleContext:
+        raise TypeError(
+            "knowledge_repositories_context must be "
+            "KnowledgeRepositoriesRuleContext or None"
+        )
+    return value
+
+
+def _custody_blocks_transfer(
+    state: WorldState,
+    artifact_id: EntityId,
+    kind: str,
+    actor_id: EntityId,
+    *,
+    op: str,
+) -> RuleResult | None:
+    artifact = state.artifacts.get(artifact_id)
+    if artifact is None or artifact.custodian_repository_id is None:
+        return None
+    return _artifact_reject(
+        kind,
+        RuleReason.REPOSITORY_CUSTODY_BLOCKS_TRANSFER,
+        actor_id,
+        artifact_id,
+        op=op,
+    )
+
+
+def _custody_blocks_erase(
+    state: WorldState,
+    artifact_id: EntityId,
+    kind: str,
+    actor_id: EntityId,
+) -> RuleResult | None:
+    artifact = state.artifacts.get(artifact_id)
+    if artifact is None or artifact.custodian_repository_id is None:
+        return None
+    return _artifact_reject(
+        kind,
+        RuleReason.REPOSITORY_CUSTODY_BLOCKS_ERASE,
+        actor_id,
+        artifact_id,
+        op="erase",
+    )
+
+
+def _repository_member_access_gate(
+    state: WorldState,
+    actor_id: EntityId,
+    artifact_id: EntityId,
+    kind: str,
+    *,
+    repository_context: KnowledgeRepositoriesRuleContext | None,
+    op: str,
+) -> RuleResult | None:
+    """When artifact is in custody, require deposit access + colocation."""
+    artifact = state.artifacts.get(artifact_id)
+    if artifact is None or artifact.custodian_repository_id is None:
+        return None
+    if repository_context is None:
+        return _repository_reject(
+            kind,
+            RuleReason.KNOWLEDGE_REPOSITORIES_INACTIVE,
+            actor_id,
+            artifact.custodian_repository_id,
+            op=op,
+        )
+    repository = state.repositories.get(artifact.custodian_repository_id)
+    if repository is None:
+        return _repository_reject(
+            kind,
+            RuleReason.UNKNOWN_REPOSITORY,
+            actor_id,
+            artifact.custodian_repository_id,
+            op=op,
+        )
+    return _repository_access_check(
+        state,
+        actor_id,
+        repository,
+        kind,
+        repository_context=repository_context,
+        require_colocation=True,
+        op=op,
+    )
+
+
+def _repository_access_check(
+    state: WorldState,
+    actor_id: EntityId,
+    repository: KnowledgeRepository,
+    kind: str,
+    *,
+    repository_context: KnowledgeRepositoriesRuleContext,
+    require_colocation: bool,
+    op: str,
+) -> RuleResult | None:
+    if repository.status is RepositoryStatus.DESTROYED:
+        return _repository_reject(
+            kind,
+            RuleReason.REPOSITORY_DESTROYED,
+            actor_id,
+            repository.repository_id,
+            op=op,
+        )
+    if (
+        repository.status is RepositoryStatus.INACCESSIBLE
+        and repository_context.inaccessible_blocks_access
+    ):
+        return _repository_reject(
+            kind,
+            RuleReason.REPOSITORY_INACCESSIBLE,
+            actor_id,
+            repository.repository_id,
+            op=op,
+        )
+    actor = state.bodies[actor_id]
+    colocated = actor.location_id == repository.location_id
+    mode = repository.access_mode
+    if mode is RepositoryAccessMode.FOUNDER_LIST:
+        # Dead founders remain on founder_ids when founder_list_survives_death
+        # (list is never auto-pruned). Living non-founders are denied.
+        if actor_id not in repository.founder_ids:
+            return _repository_reject(
+                kind,
+                RuleReason.REPOSITORY_ACCESS_DENIED,
+                actor_id,
+                repository.repository_id,
+                op=op,
+            )
+        _ = repository_context.founder_list_survives_death
+    elif mode is RepositoryAccessMode.COLOCATED_ONLY:
+        if not colocated:
+            return _repository_reject(
+                kind,
+                RuleReason.REPOSITORY_ACCESS_DENIED,
+                actor_id,
+                repository.repository_id,
+                op=op,
+            )
+    # open: no founder restriction
+    if require_colocation and not colocated:
+        return _repository_reject(
+            kind,
+            RuleReason.REPOSITORY_NOT_COLOCATED,
+            actor_id,
+            repository.repository_id,
+            op=op,
+        )
+    return None
+
+
+def _evaluate_establish_repository(
+    state: WorldState,
+    operation: _EstablishRepositoryOp,
+    kind: str,
+    *,
+    resolved: ResolvedActionEffects | None,
+    tick: int | None,
+    repository_context: KnowledgeRepositoriesRuleContext | None,
+) -> RuleResult:
+    if repository_context is None:
+        return _repository_reject(
+            kind,
+            RuleReason.KNOWLEDGE_REPOSITORIES_INACTIVE,
+            operation.actor_id,
+            None,
+            op="establish_repository",
+        )
+    if len(state.repositories) >= repository_context.max_repositories:
+        return _repository_reject(
+            kind,
+            RuleReason.REPOSITORY_CAPACITY,
+            operation.actor_id,
+            None,
+            op="establish_repository",
+        )
+    if operation.location_id not in state.locations:
+        return _repository_reject(
+            kind,
+            RuleReason.NOT_AT_LOCATION,
+            operation.actor_id,
+            None,
+            op="establish_repository",
+        )
+    actor = state.bodies[operation.actor_id]
+    if actor.location_id != operation.location_id:
+        return _repository_reject(
+            kind,
+            RuleReason.REPOSITORY_NOT_COLOCATED,
+            operation.actor_id,
+            None,
+            op="establish_repository",
+        )
+    if operation.structure_id is not None:
+        structure = state.structures.get(operation.structure_id)
+        if structure is None:
+            return _repository_reject(
+                kind,
+                RuleReason.WRONG_KIND,
+                operation.actor_id,
+                None,
+                op="establish_repository",
+            )
+        if structure.location_id != operation.location_id:
+            return _repository_reject(
+                kind,
+                RuleReason.REPOSITORY_NOT_COLOCATED,
+                operation.actor_id,
+                None,
+                op="establish_repository",
+            )
+    if operation.access_mode is not None:
+        try:
+            require_repository_access_mode(operation.access_mode)
+        except (TypeError, ValueError):
+            return _repository_reject(
+                kind,
+                RuleReason.REPOSITORY_ACCESS_DENIED,
+                operation.actor_id,
+                None,
+                op="establish_repository",
+            )
+    if resolved is None:
+        return _repository_reject(
+            kind,
+            RuleReason.MISSING_RESOLVED_EFFECT,
+            operation.actor_id,
+            None,
+            op="establish_repository",
+        )
+    try:
+        effect = resolved.require(
+            operation.request_id, ResolvedRepositoryEstablishEffect
+        )
+    except (TypeError, ValueError):
+        return _repository_reject(
+            kind,
+            RuleReason.MISSING_RESOLVED_EFFECT,
+            operation.actor_id,
+            None,
+            op="establish_repository",
+        )
+    assert type(effect) is ResolvedRepositoryEstablishEffect
+    if effect.created_repository_id in state.repositories:
+        return _repository_reject(
+            kind,
+            RuleReason.REPOSITORY_CAPACITY,
+            operation.actor_id,
+            effect.created_repository_id,
+            op="establish_repository",
+        )
+    _ = tick
+    return _repository_success(kind, op="establish_repository")
+
+
+def _evaluate_deposit_record(
+    state: WorldState,
+    operation: _DepositRecordOp,
+    kind: str,
+    *,
+    repository_context: KnowledgeRepositoriesRuleContext | None,
+) -> RuleResult:
+    if repository_context is None:
+        return _repository_reject(
+            kind,
+            RuleReason.KNOWLEDGE_REPOSITORIES_INACTIVE,
+            operation.actor_id,
+            operation.repository_id,
+            op="deposit_record",
+        )
+    repository = state.repositories.get(operation.repository_id)
+    if repository is None:
+        return _repository_reject(
+            kind,
+            RuleReason.UNKNOWN_REPOSITORY,
+            operation.actor_id,
+            operation.repository_id,
+            op="deposit_record",
+        )
+    denied = _repository_access_check(
+        state,
+        operation.actor_id,
+        repository,
+        kind,
+        repository_context=repository_context,
+        require_colocation=repository_context.deposit_requires_colocation,
+        op="deposit_record",
+    )
+    if denied is not None:
+        return denied
+    artifact = state.artifacts.get(operation.artifact_id)
+    if artifact is None:
+        return _artifact_reject(
+            kind,
+            RuleReason.UNKNOWN_ARTIFACT,
+            operation.actor_id,
+            operation.artifact_id,
+            op="deposit_record",
+        )
+    if artifact.record_genre is None or not artifact_kind_is_durable_capable(
+        artifact.kind
+    ):
+        return _artifact_reject(
+            kind,
+            RuleReason.DURABLE_GENRE_REQUIRED,
+            operation.actor_id,
+            operation.artifact_id,
+            op="deposit_record",
+        )
+    if artifact.integrity is RecordIntegrity.DESTROYED:
+        return _repository_reject(
+            kind,
+            RuleReason.REPOSITORY_MEMBER_DESTROYED,
+            operation.actor_id,
+            operation.repository_id,
+            op="deposit_record",
+        )
+    if artifact.custodian_repository_id is not None:
+        return _repository_reject(
+            kind,
+            RuleReason.REPOSITORY_ALREADY_MEMBER,
+            operation.actor_id,
+            operation.repository_id,
+            op="deposit_record",
+        )
+    if operation.artifact_id in repository.member_artifact_ids:
+        return _repository_reject(
+            kind,
+            RuleReason.REPOSITORY_ALREADY_MEMBER,
+            operation.actor_id,
+            operation.repository_id,
+            op="deposit_record",
+        )
+    if len(repository.member_artifact_ids) >= repository_context.max_members_per_repository:
+        return _repository_reject(
+            kind,
+            RuleReason.REPOSITORY_CAPACITY,
+            operation.actor_id,
+            operation.repository_id,
+            op="deposit_record",
+        )
+    actor = state.bodies[operation.actor_id]
+    held = artifact.holder_id == operation.actor_id
+    colocated_floor = (
+        artifact.location_id == actor.location_id and artifact.holder_id is None
+    )
+    if not held and not colocated_floor:
+        return _artifact_reject(
+            kind,
+            RuleReason.ARTIFACT_NOT_COLOCATED,
+            operation.actor_id,
+            operation.artifact_id,
+            op="deposit_record",
+        )
+    return _repository_success(kind, op="deposit_record")
+
+
+def _evaluate_retrieve_record(
+    state: WorldState,
+    operation: _RetrieveRecordOp,
+    kind: str,
+    *,
+    repository_context: KnowledgeRepositoriesRuleContext | None,
+) -> RuleResult:
+    if repository_context is None:
+        return _repository_reject(
+            kind,
+            RuleReason.KNOWLEDGE_REPOSITORIES_INACTIVE,
+            operation.actor_id,
+            operation.repository_id,
+            op="retrieve_record",
+        )
+    repository = state.repositories.get(operation.repository_id)
+    if repository is None:
+        return _repository_reject(
+            kind,
+            RuleReason.UNKNOWN_REPOSITORY,
+            operation.actor_id,
+            operation.repository_id,
+            op="retrieve_record",
+        )
+    denied = _repository_access_check(
+        state,
+        operation.actor_id,
+        repository,
+        kind,
+        repository_context=repository_context,
+        require_colocation=repository_context.retrieve_requires_colocation,
+        op="retrieve_record",
+    )
+    if denied is not None:
+        return denied
+    if operation.artifact_id not in repository.member_artifact_ids:
+        return _repository_reject(
+            kind,
+            RuleReason.REPOSITORY_NOT_MEMBER,
+            operation.actor_id,
+            operation.repository_id,
+            op="retrieve_record",
+        )
+    artifact = state.artifacts.get(operation.artifact_id)
+    if artifact is None:
+        return _artifact_reject(
+            kind,
+            RuleReason.UNKNOWN_ARTIFACT,
+            operation.actor_id,
+            operation.artifact_id,
+            op="retrieve_record",
+        )
+    if operation.hold:
+        if not artifact_kind_is_portable(artifact.kind):
+            return _repository_reject(
+                kind,
+                RuleReason.REPOSITORY_RETRIEVE_HOLD_INVALID,
+                operation.actor_id,
+                operation.repository_id,
+                op="retrieve_record",
+            )
+        if (
+            _held_artifact_count(state, operation.actor_id)
+            >= MAX_HELD_ARTIFACTS_PER_BODY
+        ):
+            return _artifact_reject(
+                kind,
+                RuleReason.ARTIFACT_HOLD_CAP,
+                operation.actor_id,
+                operation.artifact_id,
+                op="retrieve_record",
+            )
+    return _repository_success(kind, op="retrieve_record")
+
+
+def _evaluate_maintain_repository(
+    state: WorldState,
+    operation: _MaintainRepositoryOp,
+    kind: str,
+    *,
+    tick: int | None,
+    repository_context: KnowledgeRepositoriesRuleContext | None,
+) -> RuleResult:
+    if repository_context is None:
+        return _repository_reject(
+            kind,
+            RuleReason.KNOWLEDGE_REPOSITORIES_INACTIVE,
+            operation.actor_id,
+            operation.repository_id,
+            op="maintain_repository",
+        )
+    repository = state.repositories.get(operation.repository_id)
+    if repository is None:
+        return _repository_reject(
+            kind,
+            RuleReason.UNKNOWN_REPOSITORY,
+            operation.actor_id,
+            operation.repository_id,
+            op="maintain_repository",
+        )
+    if operation.mode == "destroy":
+        if not repository_context.allow_destruction:
+            return _repository_reject(
+                kind,
+                RuleReason.REPOSITORY_ACCESS_DENIED,
+                operation.actor_id,
+                operation.repository_id,
+                op="maintain_repository",
+            )
+        if repository.status is RepositoryStatus.DESTROYED:
+            return _repository_reject(
+                kind,
+                RuleReason.REPOSITORY_DESTROYED,
+                operation.actor_id,
+                operation.repository_id,
+                op="maintain_repository",
+            )
+    else:
+        if repository.status is RepositoryStatus.DESTROYED:
+            return _repository_reject(
+                kind,
+                RuleReason.REPOSITORY_DESTROYED,
+                operation.actor_id,
+                operation.repository_id,
+                op="maintain_repository",
+            )
+        if repository.status is RepositoryStatus.INACCESSIBLE:
+            return _repository_reject(
+                kind,
+                RuleReason.REPOSITORY_INACCESSIBLE,
+                operation.actor_id,
+                operation.repository_id,
+                op="maintain_repository",
+            )
+    denied = _repository_access_check(
+        state,
+        operation.actor_id,
+        repository,
+        kind,
+        repository_context=repository_context,
+        require_colocation=True,
+        op="maintain_repository",
+    )
+    if denied is not None:
+        return denied
+    _ = tick
+    return _repository_success(kind, op="maintain_repository")
+
+
+def _evaluate_index_repository(
+    state: WorldState,
+    operation: _IndexRepositoryOp,
+    kind: str,
+    *,
+    repository_context: KnowledgeRepositoriesRuleContext | None,
+) -> RuleResult:
+    if repository_context is None:
+        return _repository_reject(
+            kind,
+            RuleReason.KNOWLEDGE_REPOSITORIES_INACTIVE,
+            operation.actor_id,
+            operation.repository_id,
+            op="index_repository",
+        )
+    repository = state.repositories.get(operation.repository_id)
+    if repository is None:
+        return _repository_reject(
+            kind,
+            RuleReason.UNKNOWN_REPOSITORY,
+            operation.actor_id,
+            operation.repository_id,
+            op="index_repository",
+        )
+    denied = _repository_access_check(
+        state,
+        operation.actor_id,
+        repository,
+        kind,
+        repository_context=repository_context,
+        require_colocation=repository_context.deposit_requires_colocation,
+        op="index_repository",
+    )
+    if denied is not None:
+        return denied
+    if len(operation.entries) > repository_context.max_entries_per_index_op:
+        return _repository_reject(
+            kind,
+            RuleReason.REPOSITORY_INDEX_CAP,
+            operation.actor_id,
+            operation.repository_id,
+            op="index_repository",
+        )
+    # Pre-check merge capacity
+    existing_ids = {entry.entry_id for entry in repository.index_entries}
+    incoming_ids: set[str] = set()
+    for raw in operation.entries:
+        entry_id = raw.get("entry_id")
+        if type(entry_id) is not str or not entry_id:
+            return _repository_reject(
+                kind,
+                RuleReason.REPOSITORY_INDEX_CAP,
+                operation.actor_id,
+                operation.repository_id,
+                op="index_repository",
+            )
+        incoming_ids.add(entry_id)
+        if not repository_context.allow_corrupt_entries:
+            artifact_raw = raw.get("artifact_id")
+            if artifact_raw is not None:
+                if type(artifact_raw) is str:
+                    aid = EntityId(artifact_raw)
+                elif type(artifact_raw) is EntityId:
+                    aid = artifact_raw
+                else:
+                    return _repository_reject(
+                        kind,
+                        RuleReason.REPOSITORY_INDEX_CAP,
+                        operation.actor_id,
+                        operation.repository_id,
+                        op="index_repository",
+                    )
+                if aid not in repository.member_artifact_ids:
+                    return _repository_reject(
+                        kind,
+                        RuleReason.REPOSITORY_NOT_MEMBER,
+                        operation.actor_id,
+                        operation.repository_id,
+                        op="index_repository",
+                    )
+    new_count = len(existing_ids | incoming_ids)
+    if new_count > repository_context.max_index_entries:
+        return _repository_reject(
+            kind,
+            RuleReason.REPOSITORY_INDEX_CAP,
+            operation.actor_id,
+            operation.repository_id,
+            op="index_repository",
+        )
+    return _repository_success(kind, op="index_repository")
+
+
+def _apply_establish_repository(
+    state: WorldState,
+    operation: _EstablishRepositoryOp,
+    *,
+    result: RuleResult,
+    resolved: ResolvedActionEffects | None,
+    tick: int,
+    repository_context: KnowledgeRepositoriesRuleContext,
+) -> RuleApplication:
+    if resolved is None:
+        return RuleApplication(
+            result=_repository_reject(
+                result.action_kind,
+                RuleReason.MISSING_RESOLVED_EFFECT,
+                operation.actor_id,
+                None,
+                op="establish_repository",
+            ),
+            next_state=state,
+            event_details=None,
+        )
+    effect = resolved.require(
+        operation.request_id, ResolvedRepositoryEstablishEffect
+    )
+    assert type(effect) is ResolvedRepositoryEstablishEffect
+    access_mode = (
+        require_repository_access_mode(operation.access_mode)
+        if operation.access_mode is not None
+        else require_repository_access_mode(repository_context.default_access_mode)
+    )
+    created = KnowledgeRepository(
+        repository_id=effect.created_repository_id,
+        location_id=operation.location_id,
+        founder_ids=(operation.actor_id,),
+        established_tick=tick,
+        access_mode=access_mode,
+        status=RepositoryStatus.INTACT,
+        structure_id=operation.structure_id,
+        last_maintained_tick=tick,
+        neglect_streak=0,
+    )
+    repositories = dict(state.repositories)
+    repositories[effect.created_repository_id] = created
+    next_state = rebuild_world_state(state, repositories=repositories)
+    _OPS_LOG.info(
+        "repository_established repository_id=%s status=%s member_count=%s",
+        effect.created_repository_id.value,
+        created.status.value,
+        0,
+    )
+    return RuleApplication(
+        result=result,
+        next_state=next_state,
+        event_details=RepositoryEstablished(
+            repository_id=effect.created_repository_id,
+            location_id=operation.location_id,
+            structure_id=operation.structure_id,
+            founder_ids=(operation.actor_id,),
+            access_mode=access_mode.value,
+            established_tick=tick,
+        ),
+    )
+
+
+def _apply_deposit_record(
+    state: WorldState,
+    operation: _DepositRecordOp,
+    *,
+    result: RuleResult,
+) -> RuleApplication:
+    repository = state.repositories[operation.repository_id]
+    artifact = state.artifacts[operation.artifact_id]
+    updated_artifact = replace(
+        artifact,
+        holder_id=None,
+        location_id=repository.location_id,
+        custodian_repository_id=repository.repository_id,
+    )
+    members = repository.member_artifact_ids + (operation.artifact_id,)
+    updated_repo = replace(repository, member_artifact_ids=members)
+    artifacts = dict(state.artifacts)
+    artifacts[operation.artifact_id] = updated_artifact
+    repositories = dict(state.repositories)
+    repositories[operation.repository_id] = updated_repo
+    next_state = rebuild_world_state(
+        state, artifacts=artifacts, repositories=repositories
+    )
+    _OPS_LOG.info(
+        "repository_member_deposited repository_id=%s status=%s member_count=%s",
+        repository.repository_id.value,
+        updated_repo.status.value,
+        len(members),
+    )
+    return RuleApplication(
+        result=result,
+        next_state=next_state,
+        event_details=RepositoryMemberDeposited(
+            repository_id=operation.repository_id,
+            artifact_id=operation.artifact_id,
+            member_count=len(members),
+            actor_id=operation.actor_id,
+        ),
+    )
+
+
+def _apply_retrieve_record(
+    state: WorldState,
+    operation: _RetrieveRecordOp,
+    *,
+    result: RuleResult,
+) -> RuleApplication:
+    repository = state.repositories[operation.repository_id]
+    artifact = state.artifacts[operation.artifact_id]
+    members = tuple(
+        mid for mid in repository.member_artifact_ids if mid != operation.artifact_id
+    )
+    updated_repo = replace(repository, member_artifact_ids=members)
+    if operation.hold:
+        updated_artifact = replace(
+            artifact,
+            holder_id=operation.actor_id,
+            location_id=None,
+            custodian_repository_id=None,
+        )
+    else:
+        updated_artifact = replace(
+            artifact,
+            holder_id=None,
+            location_id=repository.location_id,
+            custodian_repository_id=None,
+        )
+    artifacts = dict(state.artifacts)
+    artifacts[operation.artifact_id] = updated_artifact
+    repositories = dict(state.repositories)
+    repositories[operation.repository_id] = updated_repo
+    next_state = rebuild_world_state(
+        state, artifacts=artifacts, repositories=repositories
+    )
+    _OPS_LOG.info(
+        "repository_member_retrieved repository_id=%s status=%s member_count=%s",
+        repository.repository_id.value,
+        updated_repo.status.value,
+        len(members),
+    )
+    return RuleApplication(
+        result=result,
+        next_state=next_state,
+        event_details=RepositoryMemberRetrieved(
+            repository_id=operation.repository_id,
+            artifact_id=operation.artifact_id,
+            member_count=len(members),
+            actor_id=operation.actor_id,
+            hold=operation.hold,
+        ),
+    )
+
+
+def _apply_maintain_repository(
+    state: WorldState,
+    operation: _MaintainRepositoryOp,
+    *,
+    result: RuleResult,
+    tick: int,
+    repository_context: KnowledgeRepositoriesRuleContext,
+) -> RuleApplication:
+    repository = state.repositories[operation.repository_id]
+    prior_status = repository.status
+    artifacts = dict(state.artifacts)
+    if operation.mode == "destroy":
+        for member_id in repository.member_artifact_ids:
+            member = artifacts[member_id]
+            artifacts[member_id] = replace(
+                member,
+                custodian_repository_id=None,
+                holder_id=None,
+                location_id=repository.location_id,
+            )
+        updated = replace(
+            repository,
+            status=RepositoryStatus.DESTROYED,
+            member_artifact_ids=(),
+            last_maintained_tick=tick,
+            neglect_streak=0,
+        )
+    else:
+        next_status = (
+            RepositoryStatus.INTACT
+            if prior_status is RepositoryStatus.NEGLECTED
+            else prior_status
+        )
+        updated = replace(
+            repository,
+            status=next_status,
+            last_maintained_tick=tick,
+            neglect_streak=0,
+        )
+    repositories = dict(state.repositories)
+    repositories[operation.repository_id] = updated
+    next_state = rebuild_world_state(
+        state, artifacts=artifacts, repositories=repositories
+    )
+    _OPS_LOG.info(
+        "repository_maintained repository_id=%s status=%s member_count=%s mode=%s",
+        updated.repository_id.value,
+        updated.status.value,
+        len(updated.member_artifact_ids),
+        operation.mode,
+    )
+    _ = repository_context
+    return RuleApplication(
+        result=result,
+        next_state=next_state,
+        event_details=RepositoryMaintained(
+            repository_id=operation.repository_id,
+            mode=operation.mode,
+            prior_status=prior_status.value,
+            next_status=updated.status.value,
+            last_maintained_tick=tick,
+        ),
+    )
+
+
+def _apply_index_repository(
+    state: WorldState,
+    operation: _IndexRepositoryOp,
+    *,
+    result: RuleResult,
+) -> RuleApplication:
+    repository = state.repositories[operation.repository_id]
+    by_id = {entry.entry_id: entry for entry in repository.index_entries}
+    for raw in operation.entries:
+        entry_id = str(raw["entry_id"])
+        artifact_raw = raw.get("artifact_id")
+        artifact_id: EntityId | None
+        if artifact_raw is None:
+            artifact_id = None
+        elif type(artifact_raw) is EntityId:
+            artifact_id = artifact_raw
+        else:
+            artifact_id = EntityId(str(artifact_raw))
+        tokens_raw = raw.get("label_tokens", ())
+        if isinstance(tokens_raw, (str, bytes)):
+            tokens: tuple[str, ...] = ()
+        elif isinstance(tokens_raw, (list, tuple)):
+            tokens = tuple(str(token) for token in tokens_raw)
+        else:
+            tokens = ()
+        prior = by_id.get(entry_id)
+        revision = 0 if prior is None else prior.revision + 1
+        rev_raw = raw.get("revision")
+        if type(rev_raw) is int and not isinstance(rev_raw, bool) and rev_raw >= 0:
+            revision = rev_raw
+        by_id[entry_id] = RepositoryIndexEntry(
+            entry_id=entry_id,
+            artifact_id=artifact_id,
+            label_tokens=tokens,
+            revision=revision,
+        )
+    entries = tuple(sorted(by_id.values(), key=lambda item: item.entry_id))
+    updated = replace(repository, index_entries=entries)
+    repositories = dict(state.repositories)
+    repositories[operation.repository_id] = updated
+    next_state = rebuild_world_state(state, repositories=repositories)
+    _OPS_LOG.info(
+        "repository_indexed repository_id=%s status=%s member_count=%s",
+        updated.repository_id.value,
+        updated.status.value,
+        len(updated.member_artifact_ids),
+    )
+    return RuleApplication(
+        result=result,
+        next_state=next_state,
+        event_details=RepositoryIndexed(
+            repository_id=operation.repository_id,
+            index_entry_count=len(entries),
+            revision_bump=1,
+        ),
+    )
 
 def _require_durable_records_context(
     value: object | None,

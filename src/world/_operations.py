@@ -24,18 +24,23 @@ from world.actions import (
     CopyRecord,
     Craft,
     DamageRecord,
+    DepositRecord,
     Drink,
     Drop,
     Eat,
     Erase,
+    EstablishRepository,
     Feed,
     Flee,
     Give,
     Harvest,
     Help,
+    IndexRepository,
     Inscribe,
+    MaintainRepository,
     Move,
     Repair,
+    RetrieveRecord,
     Search,
     Sleep,
     Store,
@@ -385,6 +390,58 @@ class _DamageRecordOp:
     mode: Literal["damage", "partial_loss", "destroy"]
 
 
+@dataclass(frozen=True, slots=True)
+class _EstablishRepositoryOp:
+    request_id: RequestId
+    actor_id: EntityId
+    world_id: WorldId
+    base_revision: WorldRevision
+    location_id: EntityId
+    access_mode: str | None
+    structure_id: EntityId | None
+
+
+@dataclass(frozen=True, slots=True)
+class _DepositRecordOp:
+    request_id: RequestId
+    actor_id: EntityId
+    world_id: WorldId
+    base_revision: WorldRevision
+    repository_id: EntityId
+    artifact_id: EntityId
+
+
+@dataclass(frozen=True, slots=True)
+class _RetrieveRecordOp:
+    request_id: RequestId
+    actor_id: EntityId
+    world_id: WorldId
+    base_revision: WorldRevision
+    repository_id: EntityId
+    artifact_id: EntityId
+    hold: bool
+
+
+@dataclass(frozen=True, slots=True)
+class _MaintainRepositoryOp:
+    request_id: RequestId
+    actor_id: EntityId
+    world_id: WorldId
+    base_revision: WorldRevision
+    repository_id: EntityId
+    mode: Literal["maintain", "destroy"]
+
+
+@dataclass(frozen=True, slots=True)
+class _IndexRepositoryOp:
+    request_id: RequestId
+    actor_id: EntityId
+    world_id: WorldId
+    base_revision: WorldRevision
+    repository_id: EntityId
+    entries: tuple[Mapping[str, object], ...]
+
+
 ValidatedWorldOperation = (
     _MoveOp
     | _SearchOp
@@ -415,6 +472,11 @@ ValidatedWorldOperation = (
     | _CopyRecordOp
     | _AnnotateRecordOp
     | _DamageRecordOp
+    | _EstablishRepositoryOp
+    | _DepositRecordOp
+    | _RetrieveRecordOp
+    | _MaintainRepositoryOp
+    | _IndexRepositoryOp
 )
 
 _OPERATION_TYPES: Final[frozenset[type]] = frozenset(
@@ -448,6 +510,11 @@ _OPERATION_TYPES: Final[frozenset[type]] = frozenset(
         _CopyRecordOp,
         _AnnotateRecordOp,
         _DamageRecordOp,
+        _EstablishRepositoryOp,
+        _DepositRecordOp,
+        _RetrieveRecordOp,
+        _MaintainRepositoryOp,
+        _IndexRepositoryOp,
     }
 )
 
@@ -772,6 +839,57 @@ def validate_action_request(
             return OperationAccepted(
                 _DamageRecordOp(*base, artifact_id=artifact_id, mode=mode)
             )
+        case EstablishRepository(
+            location_id=location_id,
+            access_mode=access_mode,
+            structure_id=structure_id,
+        ):
+            rejected = _require_location(state, location_id, request_id)
+            if rejected is not None:
+                return rejected
+            if structure_id is not None:
+                rejected = _require_structure(state, structure_id, request_id)
+                if rejected is not None:
+                    return rejected
+            return OperationAccepted(
+                _EstablishRepositoryOp(
+                    *base,
+                    location_id=location_id,
+                    access_mode=access_mode,
+                    structure_id=structure_id,
+                )
+            )
+        case DepositRecord(repository_id=repository_id, artifact_id=artifact_id):
+            return OperationAccepted(
+                _DepositRecordOp(
+                    *base,
+                    repository_id=repository_id,
+                    artifact_id=artifact_id,
+                )
+            )
+        case RetrieveRecord(
+            repository_id=repository_id, artifact_id=artifact_id, hold=hold
+        ):
+            return OperationAccepted(
+                _RetrieveRecordOp(
+                    *base,
+                    repository_id=repository_id,
+                    artifact_id=artifact_id,
+                    hold=hold,
+                )
+            )
+        case MaintainRepository(repository_id=repository_id, mode=mode):
+            return OperationAccepted(
+                _MaintainRepositoryOp(
+                    *base, repository_id=repository_id, mode=mode
+                )
+            )
+        case IndexRepository(repository_id=repository_id, entries=entries):
+            return OperationAccepted(
+                _IndexRepositoryOp(
+                    *base, repository_id=repository_id, entries=entries
+                )
+            )
         case _:
             return OperationRejected(
                 code=RejectionCode.MALFORMED_ENVELOPE, request_id=request_id
@@ -977,6 +1095,7 @@ def prepare_action_batch(
     denied_command_kinds_by_entity: Mapping[EntityId, frozenset[str]] | None = None,
     dependency_care_context: object | None = None,
     durable_records_context: object | None = None,
+    knowledge_repositories_context: object | None = None,
 ) -> PendingBatch:
     """Resolve ordered requests into pending effects against one evolving state.
 
@@ -1048,6 +1167,15 @@ def prepare_action_batch(
         if type(durable_context) is not DurableRecordsRuleContext:
             raise TypeError(
                 "durable_records_context must be DurableRecordsRuleContext or None"
+            )
+    repository_context = knowledge_repositories_context
+    if repository_context is not None:
+        from world.repositories import KnowledgeRepositoriesRuleContext
+
+        if type(repository_context) is not KnowledgeRepositoriesRuleContext:
+            raise TypeError(
+                "knowledge_repositories_context must be "
+                "KnowledgeRepositoriesRuleContext or None"
             )
     request_tuple = tuple(requests)
     resolved = resolved_effects
@@ -1125,6 +1253,7 @@ def prepare_action_batch(
             effective_carry_capacity=capacity_map,
             dependency_care_context=care_context,
             durable_records_context=durable_context,
+            knowledge_repositories_context=repository_context,
         )
         if start_rule.disposition is RuleDisposition.REJECT:
             if start_rule.action_kind in {"feed", "transport"}:
@@ -1141,6 +1270,19 @@ def prepare_action_batch(
             }:
                 _LOG.warning(
                     "durable_record_reject actor_id=%s kind=%s reason_code=%s",
+                    request.actor_id.value,
+                    start_rule.action_kind,
+                    start_rule.reason.value,
+                )
+            if start_rule.action_kind in {
+                "establish_repository",
+                "deposit_record",
+                "retrieve_record",
+                "maintain_repository",
+                "index_repository",
+            }:
+                _LOG.warning(
+                    "knowledge_repository_reject actor_id=%s kind=%s reason_code=%s",
                     request.actor_id.value,
                     start_rule.action_kind,
                     start_rule.reason.value,
@@ -1198,6 +1340,7 @@ def prepare_action_batch(
             effective_carry_capacity=capacity_map,
             dependency_care_context=care_context,
             durable_records_context=durable_context,
+            knowledge_repositories_context=repository_context,
         )
         if application.result.disposition is RuleDisposition.REJECT:
             outcomes.append(

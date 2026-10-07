@@ -76,7 +76,7 @@ EVENT_SCHEMA_REPLAY_V10: Final[int] = 10
 EVENT_SCHEMA_REPLAY_V11: Final[int] = 11
 EVENT_SCHEMA_REPLAY_V12: Final[int] = 12
 EVENT_SCHEMA_REPLAY_V13: Final[int] = 13
-EVENT_SCHEMA_REPLAY_V14: Final[int] = 14  # knowledge repositories write-pair (Task 7 activates)
+EVENT_SCHEMA_REPLAY_V14: Final[int] = 14
 SUPPORTED_EVENT_SCHEMA_VERSIONS: Final[frozenset[int]] = frozenset(
     {
         EVENT_SCHEMA_AUDIT_V1,
@@ -92,6 +92,7 @@ SUPPORTED_EVENT_SCHEMA_VERSIONS: Final[frozenset[int]] = frozenset(
         EVENT_SCHEMA_REPLAY_V11,
     EVENT_SCHEMA_REPLAY_V12,
         EVENT_SCHEMA_REPLAY_V13,
+        EVENT_SCHEMA_REPLAY_V14,
     }
 )
 REPLAYABLE_EVENT_SCHEMA_VERSIONS: Final[frozenset[int]] = frozenset(
@@ -108,6 +109,7 @@ REPLAYABLE_EVENT_SCHEMA_VERSIONS: Final[frozenset[int]] = frozenset(
         EVENT_SCHEMA_REPLAY_V11,
     EVENT_SCHEMA_REPLAY_V12,
         EVENT_SCHEMA_REPLAY_V13,
+        EVENT_SCHEMA_REPLAY_V14,
     }
 )
 PHYSICAL_REPLAY_EVENT_SCHEMA_VERSIONS: Final[frozenset[int]] = frozenset(
@@ -123,6 +125,7 @@ PHYSICAL_REPLAY_EVENT_SCHEMA_VERSIONS: Final[frozenset[int]] = frozenset(
         EVENT_SCHEMA_REPLAY_V11,
     EVENT_SCHEMA_REPLAY_V12,
         EVENT_SCHEMA_REPLAY_V13,
+        EVENT_SCHEMA_REPLAY_V14,
     }
 )
 _PRODUCTION_EVENT_SCHEMAS: Final[frozenset[int]] = frozenset(
@@ -135,6 +138,7 @@ _PRODUCTION_EVENT_SCHEMAS: Final[frozenset[int]] = frozenset(
         EVENT_SCHEMA_REPLAY_V11,
     EVENT_SCHEMA_REPLAY_V12,
         EVENT_SCHEMA_REPLAY_V13,
+        EVENT_SCHEMA_REPLAY_V14,
     }
 )
 _ENVIRONMENT_EVENT_SCHEMAS: Final[frozenset[int]] = frozenset(
@@ -146,6 +150,7 @@ _ENVIRONMENT_EVENT_SCHEMAS: Final[frozenset[int]] = frozenset(
         EVENT_SCHEMA_REPLAY_V11,
     EVENT_SCHEMA_REPLAY_V12,
         EVENT_SCHEMA_REPLAY_V13,
+        EVENT_SCHEMA_REPLAY_V14,
     }
 )
 _ARTIFACT_EVENT_SCHEMAS: Final[frozenset[int]] = frozenset(
@@ -156,6 +161,7 @@ _ARTIFACT_EVENT_SCHEMAS: Final[frozenset[int]] = frozenset(
         EVENT_SCHEMA_REPLAY_V11,
     EVENT_SCHEMA_REPLAY_V12,
         EVENT_SCHEMA_REPLAY_V13,
+        EVENT_SCHEMA_REPLAY_V14,
     }
 )
 _LIFECYCLE_EVENT_SCHEMAS: Final[frozenset[int]] = frozenset(
@@ -165,6 +171,7 @@ _LIFECYCLE_EVENT_SCHEMAS: Final[frozenset[int]] = frozenset(
         EVENT_SCHEMA_REPLAY_V11,
         EVENT_SCHEMA_REPLAY_V12,
         EVENT_SCHEMA_REPLAY_V13,
+        EVENT_SCHEMA_REPLAY_V14,
     }
 )
 _NEW_AGENT_INIT_EVENT_SCHEMAS: Final[frozenset[int]] = frozenset(
@@ -173,13 +180,14 @@ _NEW_AGENT_INIT_EVENT_SCHEMAS: Final[frozenset[int]] = frozenset(
         EVENT_SCHEMA_REPLAY_V11,
         EVENT_SCHEMA_REPLAY_V12,
         EVENT_SCHEMA_REPLAY_V13,
+        EVENT_SCHEMA_REPLAY_V14,
     }
 )
 _KINSHIP_EVENT_SCHEMAS: Final[frozenset[int]] = frozenset(
-    {EVENT_SCHEMA_REPLAY_V11, EVENT_SCHEMA_REPLAY_V12, EVENT_SCHEMA_REPLAY_V13}
+    {EVENT_SCHEMA_REPLAY_V11, EVENT_SCHEMA_REPLAY_V12, EVENT_SCHEMA_REPLAY_V13, EVENT_SCHEMA_REPLAY_V14}
 )
 _DEPENDENCY_CARE_EVENT_SCHEMAS: Final[frozenset[int]] = frozenset(
-    {EVENT_SCHEMA_REPLAY_V12, EVENT_SCHEMA_REPLAY_V13}
+    {EVENT_SCHEMA_REPLAY_V12, EVENT_SCHEMA_REPLAY_V13, EVENT_SCHEMA_REPLAY_V14}
 )
 CURRENT_PHYSICAL_EVENT_SCHEMA_VERSION: Final[int] = EVENT_SCHEMA_REPLAY_V5
 _LOG: Final[logging.Logger] = logging.getLogger("world.events")
@@ -1700,6 +1708,217 @@ class KinshipEdgeRecorded:
         _reject_presentation_fields(self.kind, self.__slots__)
 
 
+@dataclass(frozen=True, slots=True)
+class RepositoryEstablished:
+    repository_id: EntityId
+    location_id: EntityId
+    structure_id: EntityId | None
+    founder_ids: tuple[EntityId, ...]
+    access_mode: str
+    established_tick: int
+    success: bool = True
+    kind: Literal["repository_established"] = field(
+        default="repository_established", init=False
+    )
+
+    def __post_init__(self) -> None:
+        if type(self.repository_id) is not EntityId:
+            raise TypeError("RepositoryEstablished.repository_id must be EntityId")
+        if type(self.location_id) is not EntityId:
+            raise TypeError("RepositoryEstablished.location_id must be EntityId")
+        if self.structure_id is not None and type(self.structure_id) is not EntityId:
+            raise TypeError(
+                "RepositoryEstablished.structure_id must be EntityId or None"
+            )
+        if isinstance(self.founder_ids, (str, bytes)) or not isinstance(
+            self.founder_ids, tuple
+        ):
+            raise TypeError("RepositoryEstablished.founder_ids must be a tuple")
+        for founder in self.founder_ids:
+            if type(founder) is not EntityId:
+                raise TypeError("RepositoryEstablished.founder_ids entries must be EntityId")
+        if type(self.access_mode) is not str or not self.access_mode:
+            raise TypeError("RepositoryEstablished.access_mode must be a non-empty str")
+        object.__setattr__(
+            self,
+            "established_tick",
+            require_exact_nonneg_int(
+                "RepositoryEstablished.established_tick", self.established_tick
+            ),
+        )
+        if _require_success("RepositoryEstablished.success", self.success) is not True:
+            raise ValueError("RepositoryEstablished does not emit a failure detail")
+        _reject_presentation_fields(self.kind, self.__slots__)
+
+
+@dataclass(frozen=True, slots=True)
+class RepositoryMemberDeposited:
+    repository_id: EntityId
+    artifact_id: EntityId
+    member_count: int
+    actor_id: EntityId
+    success: bool = True
+    kind: Literal["repository_member_deposited"] = field(
+        default="repository_member_deposited", init=False
+    )
+
+    def __post_init__(self) -> None:
+        for name in ("repository_id", "artifact_id", "actor_id"):
+            if type(getattr(self, name)) is not EntityId:
+                raise TypeError(f"RepositoryMemberDeposited.{name} must be EntityId")
+        object.__setattr__(
+            self,
+            "member_count",
+            require_exact_nonneg_int(
+                "RepositoryMemberDeposited.member_count", self.member_count
+            ),
+        )
+        if _require_success(
+            "RepositoryMemberDeposited.success", self.success
+        ) is not True:
+            raise ValueError(
+                "RepositoryMemberDeposited does not emit a failure detail"
+            )
+        _reject_presentation_fields(self.kind, self.__slots__)
+
+
+@dataclass(frozen=True, slots=True)
+class RepositoryMemberRetrieved:
+    repository_id: EntityId
+    artifact_id: EntityId
+    member_count: int
+    actor_id: EntityId
+    hold: bool
+    success: bool = True
+    kind: Literal["repository_member_retrieved"] = field(
+        default="repository_member_retrieved", init=False
+    )
+
+    def __post_init__(self) -> None:
+        for name in ("repository_id", "artifact_id", "actor_id"):
+            if type(getattr(self, name)) is not EntityId:
+                raise TypeError(f"RepositoryMemberRetrieved.{name} must be EntityId")
+        object.__setattr__(
+            self,
+            "member_count",
+            require_exact_nonneg_int(
+                "RepositoryMemberRetrieved.member_count", self.member_count
+            ),
+        )
+        if type(self.hold) is not bool:
+            raise TypeError("RepositoryMemberRetrieved.hold must be bool")
+        if _require_success(
+            "RepositoryMemberRetrieved.success", self.success
+        ) is not True:
+            raise ValueError(
+                "RepositoryMemberRetrieved does not emit a failure detail"
+            )
+        _reject_presentation_fields(self.kind, self.__slots__)
+
+
+@dataclass(frozen=True, slots=True)
+class RepositoryMaintained:
+    repository_id: EntityId
+    mode: str
+    prior_status: str
+    next_status: str
+    last_maintained_tick: int
+    success: bool = True
+    kind: Literal["repository_maintained"] = field(
+        default="repository_maintained", init=False
+    )
+
+    def __post_init__(self) -> None:
+        if type(self.repository_id) is not EntityId:
+            raise TypeError("RepositoryMaintained.repository_id must be EntityId")
+        for name in ("mode", "prior_status", "next_status"):
+            value = getattr(self, name)
+            if type(value) is not str or not value:
+                raise TypeError(f"RepositoryMaintained.{name} must be a non-empty str")
+        object.__setattr__(
+            self,
+            "last_maintained_tick",
+            require_exact_nonneg_int(
+                "RepositoryMaintained.last_maintained_tick",
+                self.last_maintained_tick,
+            ),
+        )
+        if _require_success("RepositoryMaintained.success", self.success) is not True:
+            raise ValueError("RepositoryMaintained does not emit a failure detail")
+        _reject_presentation_fields(self.kind, self.__slots__)
+
+
+@dataclass(frozen=True, slots=True)
+class RepositoryIndexed:
+    repository_id: EntityId
+    index_entry_count: int
+    revision_bump: int
+    success: bool = True
+    kind: Literal["repository_indexed"] = field(
+        default="repository_indexed", init=False
+    )
+
+    def __post_init__(self) -> None:
+        if type(self.repository_id) is not EntityId:
+            raise TypeError("RepositoryIndexed.repository_id must be EntityId")
+        object.__setattr__(
+            self,
+            "index_entry_count",
+            require_exact_nonneg_int(
+                "RepositoryIndexed.index_entry_count", self.index_entry_count
+            ),
+        )
+        object.__setattr__(
+            self,
+            "revision_bump",
+            require_exact_nonneg_int(
+                "RepositoryIndexed.revision_bump", self.revision_bump
+            ),
+        )
+        if _require_success("RepositoryIndexed.success", self.success) is not True:
+            raise ValueError("RepositoryIndexed does not emit a failure detail")
+        _reject_presentation_fields(self.kind, self.__slots__)
+
+
+@dataclass(frozen=True, slots=True)
+class RepositoryNeglected:
+    repository_id: EntityId
+    neglect_streak: int
+    prior_status: str
+    next_status: str
+    index_entries_dropped: int
+    success: bool = True
+    kind: Literal["repository_neglected"] = field(
+        default="repository_neglected", init=False
+    )
+
+    def __post_init__(self) -> None:
+        if type(self.repository_id) is not EntityId:
+            raise TypeError("RepositoryNeglected.repository_id must be EntityId")
+        object.__setattr__(
+            self,
+            "neglect_streak",
+            require_exact_nonneg_int(
+                "RepositoryNeglected.neglect_streak", self.neglect_streak
+            ),
+        )
+        for name in ("prior_status", "next_status"):
+            value = getattr(self, name)
+            if type(value) is not str or not value:
+                raise TypeError(f"RepositoryNeglected.{name} must be a non-empty str")
+        object.__setattr__(
+            self,
+            "index_entries_dropped",
+            require_exact_nonneg_int(
+                "RepositoryNeglected.index_entries_dropped",
+                self.index_entries_dropped,
+            ),
+        )
+        if _require_success("RepositoryNeglected.success", self.success) is not True:
+            raise ValueError("RepositoryNeglected does not emit a failure detail")
+        _reject_presentation_fields(self.kind, self.__slots__)
+
+
 EventDetails = (
     Moved
     | Searched
@@ -1748,6 +1967,12 @@ EventDetails = (
     | AgentInitializationRecorded
     | LifecycleStageChanged
     | KinshipEdgeRecorded
+    | RepositoryEstablished
+    | RepositoryMemberDeposited
+    | RepositoryMemberRetrieved
+    | RepositoryMaintained
+    | RepositoryIndexed
+    | RepositoryNeglected
 )
 
 _DETAIL_TYPES: Final[frozenset[type]] = frozenset(
@@ -1799,11 +2024,30 @@ _DETAIL_TYPES: Final[frozenset[type]] = frozenset(
         AgentInitializationRecorded,
         LifecycleStageChanged,
         KinshipEdgeRecorded,
+        RepositoryEstablished,
+        RepositoryMemberDeposited,
+        RepositoryMemberRetrieved,
+        RepositoryMaintained,
+        RepositoryIndexed,
+        RepositoryNeglected,
     }
 )
 
 _KINSHIP_DETAIL_TYPES: Final[frozenset[type]] = frozenset({KinshipEdgeRecorded})
 _DEPENDENCY_CARE_DETAIL_TYPES: Final[frozenset[type]] = frozenset({Fed, Transported})
+_KNOWLEDGE_REPOSITORY_DETAIL_TYPES: Final[frozenset[type]] = frozenset(
+    {
+        RepositoryEstablished,
+        RepositoryMemberDeposited,
+        RepositoryMemberRetrieved,
+        RepositoryMaintained,
+        RepositoryIndexed,
+        RepositoryNeglected,
+    }
+)
+_KNOWLEDGE_REPOSITORY_EVENT_SCHEMAS: Final[frozenset[int]] = frozenset(
+    {EVENT_SCHEMA_REPLAY_V14}
+)
 
 _PRODUCTION_DETAIL_TYPES: Final[frozenset[type]] = frozenset(
     {
@@ -1850,7 +2094,7 @@ _DURABLE_RECORD_DETAIL_TYPES: Final[frozenset[type]] = frozenset(
 )
 
 _DURABLE_RECORD_EVENT_SCHEMAS: Final[frozenset[int]] = frozenset(
-    {EVENT_SCHEMA_REPLAY_V13}
+    {EVENT_SCHEMA_REPLAY_V13, EVENT_SCHEMA_REPLAY_V14}
 )
 
 _LIFECYCLE_DETAIL_TYPES: Final[frozenset[type]] = frozenset(
@@ -1958,6 +2202,8 @@ def _artifact_effect_complete(details: EventDetails) -> bool:
 
 
 def _payload_effect_complete(details: EventDetails, *, schema_version: int) -> bool:
+    if type(details) in _KNOWLEDGE_REPOSITORY_DETAIL_TYPES:
+        return schema_version in _KNOWLEDGE_REPOSITORY_EVENT_SCHEMAS
     if type(details) in _KINSHIP_DETAIL_TYPES:
         return schema_version in _KINSHIP_EVENT_SCHEMAS
     if type(details) in _NEW_AGENT_INIT_DETAIL_TYPES:
@@ -2196,6 +2442,15 @@ def target_id_for_details(details: EventDetails) -> EntityId | None:
             return body_id
         case KinshipEdgeRecorded():
             return None
+        case (
+            RepositoryEstablished(repository_id=repository_id)
+            | RepositoryMemberDeposited(repository_id=repository_id)
+            | RepositoryMemberRetrieved(repository_id=repository_id)
+            | RepositoryMaintained(repository_id=repository_id)
+            | RepositoryIndexed(repository_id=repository_id)
+            | RepositoryNeglected(repository_id=repository_id)
+        ):
+            return repository_id
         case _:
             raise TypeError(
                 f"{EventValidationCode.UNKNOWN_EVENT_TYPE.value}: "
@@ -2350,6 +2605,15 @@ class WorldEvent:
                 _LOG.error(
                     "invalid_event_schema_version kind=%s schema_version=%s "
                     "reason_code=dependency_care_requires_v12",
+                    self.details.kind,
+                    self.schema_version,
+                )
+                raise ValueError(EventValidationCode.INVALID_SCHEMA_VERSION.value)
+        if type(self.details) in _KNOWLEDGE_REPOSITORY_DETAIL_TYPES:
+            if self.schema_version not in _KNOWLEDGE_REPOSITORY_EVENT_SCHEMAS:
+                _LOG.error(
+                    "invalid_event_schema_version kind=%s schema_version=%s "
+                    "reason_code=knowledge_repositories_requires_v14",
                     self.details.kind,
                     self.schema_version,
                 )

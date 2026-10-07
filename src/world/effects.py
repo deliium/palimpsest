@@ -30,6 +30,7 @@ __all__ = [
     "ResolvedActionEffects",
     "ResolvedArtifactCopyEffect",
     "ResolvedArtifactInscribeEffect",
+    "ResolvedRepositoryEstablishEffect",
     "ResolvedAttackEffect",
     "ResolvedFleeEffect",
     "ResolvedProductionEffect",
@@ -322,6 +323,29 @@ class ResolvedArtifactCopyEffect:
             raise TypeError("relation_edit_count must be a non-negative int")
 
 
+
+
+@dataclass(frozen=True, slots=True)
+class ResolvedRepositoryEstablishEffect:
+    """Pre-derived repository identity for a successful EstablishRepository."""
+
+    request_id: RequestId
+    created_repository_id: EntityId
+    kind: Literal["repository_establish"] = field(
+        default="repository_establish", init=False
+    )
+
+    def __post_init__(self) -> None:
+        if type(self.request_id) is not RequestId:
+            raise TypeError(
+                "ResolvedRepositoryEstablishEffect.request_id must be RequestId"
+            )
+        if type(self.created_repository_id) is not EntityId:
+            raise TypeError(
+                "ResolvedRepositoryEstablishEffect.created_repository_id "
+                "must be EntityId"
+            )
+
 ResolvedActionEffect = (
     ResolvedSearchEffect
     | ResolvedAttackEffect
@@ -329,6 +353,7 @@ ResolvedActionEffect = (
     | ResolvedProductionEffect
     | ResolvedArtifactInscribeEffect
     | ResolvedArtifactCopyEffect
+    | ResolvedRepositoryEstablishEffect
 )
 
 _ACTION_EFFECT_TYPES: Final[frozenset[type]] = frozenset(
@@ -339,6 +364,7 @@ _ACTION_EFFECT_TYPES: Final[frozenset[type]] = frozenset(
         ResolvedProductionEffect,
         ResolvedArtifactInscribeEffect,
         ResolvedArtifactCopyEffect,
+        ResolvedRepositoryEstablishEffect,
     }
 )
 

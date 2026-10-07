@@ -94,6 +94,7 @@ from world.actions import (
     Build,
     CopyRecord,
     Craft,
+    EstablishRepository,
     Flee,
     Harvest,
     Help,
@@ -113,6 +114,7 @@ from world.effects import (
     ResolvedAttackEffect,
     ResolvedFleeEffect,
     ResolvedProductionEffect,
+    ResolvedRepositoryEstablishEffect,
     ResolvedSearchEffect,
     ResolvedSystemEffects,
     ResolvedWeatherEffect,
@@ -2974,6 +2976,7 @@ class WorldEngine:
             ),
             dependency_care_context=self._dependency_care_rule_context(),
             durable_records_context=self._durable_records_rule_context(),
+            knowledge_repositories_context=self._knowledge_repositories_rule_context(),
         )
         start_ledger = self._skill_ledger
         folded_ledger, skill_facts = self._fold_skill_ledger(
@@ -3588,6 +3591,13 @@ class WorldEngine:
                 by_request[request.request_id] = self._resolve_artifact_copy_effect(
                     snap=snap,
                     request=request,
+                )
+            elif type(command) is EstablishRepository:
+                by_request[request.request_id] = (
+                    self._resolve_repository_establish_effect(
+                        snap=snap,
+                        request=request,
+                    )
                 )
         return ResolvedActionEffects(by_request=by_request)
 
@@ -4206,6 +4216,64 @@ class WorldEngine:
             destroyed_parent_blocks_copy=(
                 spec.lineage_policy.destroyed_parent_blocks_copy
             ),
+        )
+
+    def _knowledge_repositories_rule_context(self) -> object | None:
+        """Build ephemeral knowledge-repository legality context for this tick."""
+        from simulation.runner_models import KnowledgeRepositoriesSpec
+        from world.repositories import KnowledgeRepositoriesRuleContext
+
+        if type(self._knowledge_repositories_spec) is not KnowledgeRepositoriesSpec:
+            return None
+        spec = self._knowledge_repositories_spec
+        return KnowledgeRepositoriesRuleContext(
+            default_access_mode=spec.access_policy.default_access_mode,
+            deposit_requires_colocation=spec.access_policy.deposit_requires_colocation,
+            retrieve_requires_colocation=(
+                spec.access_policy.retrieve_requires_colocation
+            ),
+            founder_list_survives_death=(
+                spec.access_policy.founder_list_survives_death
+            ),
+            max_repositories=spec.capacity_policy.max_repositories,
+            max_members_per_repository=(
+                spec.capacity_policy.max_members_per_repository
+            ),
+            max_index_entries=spec.capacity_policy.max_index_entries,
+            neglect_ticks=spec.maintenance_policy.neglect_ticks,
+            allow_destruction=spec.maintenance_policy.allow_destruction,
+            inaccessible_blocks_access=(
+                spec.maintenance_policy.inaccessible_blocks_access
+            ),
+            neglect_corrupts_index=spec.maintenance_policy.neglect_corrupts_index,
+            index_optional=spec.index_policy.index_optional,
+            max_entries_per_index_op=spec.index_policy.max_entries_per_index_op,
+            allow_corrupt_entries=spec.index_policy.allow_corrupt_entries,
+        )
+
+    def _resolve_repository_establish_effect(
+        self,
+        *,
+        snap: _EngineSnapshot,
+        request: ActionRequest,
+    ) -> ResolvedRepositoryEstablishEffect:
+        created_repository_id = derive_entity_id(
+            self._config,
+            "knowledge-repository",
+            self._run_id.value,
+            self.world_id.value,
+            f"tick:{snap.tick.value}",
+            request.request_id.value,
+        )
+        _LOGGER.debug(
+            "repository_establish_id tick=%s request_id=%s repository_id=%s",
+            snap.tick.value,
+            request.request_id.value,
+            created_repository_id.value,
+        )
+        return ResolvedRepositoryEstablishEffect(
+            request_id=request.request_id,
+            created_repository_id=created_repository_id,
         )
 
     def _denied_command_kinds_by_entity(
@@ -4834,6 +4902,7 @@ def select_checkpoint_schema(
         EVENT_SCHEMA_REPLAY_V11,
         EVENT_SCHEMA_REPLAY_V12,
         EVENT_SCHEMA_REPLAY_V13,
+        EVENT_SCHEMA_REPLAY_V14,
     )
 
     schema_version, codec = checkpoint_schema_for_production(
@@ -4848,11 +4917,18 @@ def select_checkpoint_schema(
         knowledge_repositories_active=knowledge_repositories_active,
     )
     agreed = (
-        durable_records_active
+        knowledge_repositories_active
+        and durable_records_active
+        and schema_version == EVENT_SCHEMA_REPLAY_V14
+        and codec == "v11"
+    ) or (
+        not knowledge_repositories_active
+        and durable_records_active
         and schema_version == EVENT_SCHEMA_REPLAY_V13
         and codec == "v10"
     ) or (
-        not durable_records_active
+        not knowledge_repositories_active
+        and not durable_records_active
         and dependency_care_active
         and schema_version == EVENT_SCHEMA_REPLAY_V12
         and codec == "v9"

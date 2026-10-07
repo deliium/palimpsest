@@ -19,10 +19,12 @@ _LOG: Final[logging.Logger] = logging.getLogger("world.repositories")
 
 __all__ = [
     "FORBIDDEN_REPOSITORY_FIELD_NAMES",
+    "KnowledgeRepositoriesRuleContext",
     "KnowledgeRepository",
     "RepositoryAccessMode",
     "RepositoryIndexEntry",
     "RepositoryStatus",
+    "index_repositories",
     "require_repository_access_mode",
     "require_repository_status",
 ]
@@ -290,3 +292,57 @@ def index_repositories(
             )
         indexed[repository.repository_id] = repository
     return MappingProxyType(indexed)
+
+
+@dataclass(frozen=True, slots=True)
+class KnowledgeRepositoriesRuleContext:
+    """Ephemeral repository gates for evaluate/apply (not checkpointed).
+
+    Built by WorldEngine from KnowledgeRepositoriesSpec. Absent context means
+    the knowledge-repositories channel is off.
+    """
+
+    default_access_mode: str
+    deposit_requires_colocation: bool
+    retrieve_requires_colocation: bool
+    founder_list_survives_death: bool
+    max_repositories: int
+    max_members_per_repository: int
+    max_index_entries: int
+    neglect_ticks: int
+    allow_destruction: bool
+    inaccessible_blocks_access: bool
+    neglect_corrupts_index: bool
+    index_optional: bool
+    max_entries_per_index_op: int
+    allow_corrupt_entries: bool
+
+    def __post_init__(self) -> None:
+        mode = require_repository_access_mode(
+            self.default_access_mode, field_name="default_access_mode"
+        )
+        object.__setattr__(self, "default_access_mode", mode.value)
+        for name in (
+            "deposit_requires_colocation",
+            "retrieve_requires_colocation",
+            "founder_list_survives_death",
+            "allow_destruction",
+            "inaccessible_blocks_access",
+            "neglect_corrupts_index",
+            "index_optional",
+            "allow_corrupt_entries",
+        ):
+            if type(getattr(self, name)) is not bool:
+                raise TypeError(f"{name} must be bool")
+        for name in (
+            "max_repositories",
+            "max_members_per_repository",
+            "max_index_entries",
+            "neglect_ticks",
+            "max_entries_per_index_op",
+        ):
+            object.__setattr__(
+                self,
+                name,
+                require_exact_nonneg_int(name, getattr(self, name)),
+            )
