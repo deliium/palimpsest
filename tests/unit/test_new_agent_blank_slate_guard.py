@@ -37,6 +37,16 @@ def test_deny_list_covers_locked_stores() -> None:
         "culture_pack",
         "encyclopedia",
         "language_pack",
+        "mentorship_bonds",
+        "taught_content_lineage",
+        "mentorship",
+        "cultural_features",
+        "practical_knowledge",
+        "knowledge_ledger",
+        "technique_pack",
+        "knowledge_pack",
+        "parent_technique_copy",
+        "knowledge_genealogy",
     }
     assert required.issubset(SUBJECTIVE_COPY_DENY_LIST)
     assert tuple(BLANK_SLATE_SUBJECTIVE_STORES) == (
@@ -53,6 +63,10 @@ def test_deny_list_covers_locked_stores() -> None:
         "social_conventions",
         "skill_ledger",
         "developmental_knowledge",
+        "mentorship_bonds",
+        "taught_content_lineage",
+        "cultural_features",
+        "practical_knowledge",
     )
 
 
@@ -74,4 +88,9 @@ def test_assert_blank_slate_fails_on_content() -> None:
         assert_blank_slate_subjective_state(
             AgentId("entrant-1"),
             BlankSlateStoreCounts(skill_ledger=2, relationships=1),
+        )
+    with pytest.raises(ValueError, match="subjective_copy_forbidden"):
+        assert_blank_slate_subjective_state(
+            AgentId("entrant-1"),
+            BlankSlateStoreCounts(practical_knowledge=1),
         )

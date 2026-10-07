@@ -461,19 +461,19 @@ No `docs/observer.md` / `docs/physical-simulation.md` changes required (SEMANTIC
 
 ### Phase 2: Subjective ledger and lineage DAG
 
-- [ ] Task 3: Add enums, `SubjectivePracticalKnowledge`, `PracticalKnowledgeLedger`, `PracticalKnowledgeAudit`, `empty_practical_knowledge_ledger`, `require_owner_practical_knowledge`, `entry_to_audit`, locked invariants (independent/combination/hop/parent caps/eviction/owner-local cycle), and `content_key=tech:{token}` helpers. Update blank-slate deny-list / `BLANK_SLATE_SUBJECTIVE_STORES` / `BlankSlateStoreCounts` in `new_agent_initialization.py`; fix stale blank-slate unit pin and add architecture text checks. Export via `agents.cognition` facade.
+- [x] Task 3: Add enums, `SubjectivePracticalKnowledge`, `PracticalKnowledgeLedger`, `PracticalKnowledgeAudit`, `empty_practical_knowledge_ledger`, `require_owner_practical_knowledge`, `entry_to_audit`, locked invariants (independent/combination/hop/parent caps/eviction/owner-local cycle), and `content_key=tech:{token}` helpers. Update blank-slate deny-list / `BLANK_SLATE_SUBJECTIVE_STORES` / `BlankSlateStoreCounts` in `new_agent_initialization.py`; fix stale blank-slate unit pin and add architecture text checks. Export via `agents.cognition` facade.
   - Deliverable: Unit tests for legal/illegal constructions; hop resolution + parent_hop fallback; multi-parent combination; eviction order; blank-slate pins include `practical_knowledge`.
   - Files: `src/agents/cognition/practical_knowledge.py` (new), `src/agents/cognition/__init__.py`, `src/simulation/new_agent_initialization.py`, `tests/unit/test_practical_knowledge_model.py`, `tests/unit/test_new_agent_blank_slate_guard.py`, `tests/architecture/test_v3_new_agent_blank_slate.py`
   - Logging: DEBUG `practical_knowledge_constructed` kind + hop + parent_count + origin (no fingerprint dumps)
   - Depends on: 1
 
-- [ ] Task 4: Implement `form_or_reinforce_practical_knowledge`, `mutate_practical_knowledge` (**new child**), `combine_practical_knowledge`, `supersede_practical_knowledge` with seed-material mutation (`sha256` namespace recipe). Fail closed with stable reason codes: `knowledge_genealogy_inactive`, `knowledge_genealogy_hop_cap`, `knowledge_genealogy_parent_cap`, `knowledge_genealogy_combination_requires_parents`, `knowledge_genealogy_cycle`, `knowledge_genealogy_mutation_disabled`, `knowledge_genealogy_combination_disabled`. Document library-level mutation/combination (no live loop trigger required).
+- [x] Task 4: Implement `form_or_reinforce_practical_knowledge`, `mutate_practical_knowledge` (**new child**), `combine_practical_knowledge`, `supersede_practical_knowledge` with seed-material mutation (`sha256` namespace recipe). Fail closed with stable reason codes: `knowledge_genealogy_inactive`, `knowledge_genealogy_hop_cap`, `knowledge_genealogy_parent_cap`, `knowledge_genealogy_combination_requires_parents`, `knowledge_genealogy_cycle`, `knowledge_genealogy_mutation_disabled`, `knowledge_genealogy_combination_disabled`. Document library-level mutation/combination (no live loop trigger required).
   - Deliverable: Mutation distance tests; combination ≥2 parents; supersede sets active=False without DELETE; child-entry hop+1.
   - Files: `src/agents/cognition/practical_knowledge.py`, `tests/unit/test_practical_knowledge_lineage.py`
   - Logging: INFO success with entry_id + origin + hop_index + mutated; WARN/DEBUG rejects with reason_code only
   - Depends on: 3
 
-- [ ] Task 5: Capability-anchor string-parity map (kind → optional skill-domain token) without importing `world._skills`; parity test against `SkillDomain` values. Architecture isolation tests (analysis ↛ cognition; cognition ↛ analysis.knowledge_genealogy*; api ↛ analysis; no GlobalTechniqueRegistry under `src/world`).
+- [x] Task 5: Capability-anchor string-parity map (kind → optional skill-domain token) without importing `world._skills`; parity test against `SkillDomain` values. Architecture isolation tests (analysis ↛ cognition; cognition ↛ analysis.knowledge_genealogy*; api ↛ analysis; no GlobalTechniqueRegistry under `src/world`).
   - Deliverable: Anchor map unit test; architecture isolation green.
   - Files: `src/agents/cognition/practical_knowledge.py`, `tests/architecture/test_v3_knowledge_genealogy_isolation.py`, `tests/unit/test_practical_knowledge_capability_anchor.py`
   - Logging: DEBUG anchor resolved/absent
