@@ -57,6 +57,7 @@ from simulation.runner_models import (
     RUNNER_SCHEMA_VERSION_V31,
     RUNNER_SCHEMA_VERSION_V32,
     RUNNER_SCHEMA_VERSION_V33,
+    RUNNER_SCHEMA_VERSION_V34,
     SUPPORTED_RUNNER_SCHEMA_VERSIONS,
     AgentCognitionSpec,
     AgentRunnerSpec,
@@ -90,6 +91,11 @@ from simulation.runner_models import (
     DurableIntegrityPolicy,
     DurableLineagePolicy,
     DurableRecordsSpec,
+    KnowledgeRepositoriesSpec,
+    KnowledgeRepositoryAccessPolicy,
+    KnowledgeRepositoryCapacityPolicy,
+    KnowledgeRepositoryIndexPolicy,
+    KnowledgeRepositoryMaintenancePolicy,
     ImaginationMode,
     KinshipSpec,
     MemoryMode,
@@ -440,6 +446,7 @@ _SKILL_SCHEMA_VERSIONS: Final[frozenset[str]] = frozenset(
     RUNNER_SCHEMA_VERSION_V31,
     RUNNER_SCHEMA_VERSION_V32,
     RUNNER_SCHEMA_VERSION_V33,
+    RUNNER_SCHEMA_VERSION_V34,
     }
 )
 _COGNITION_SCHEMA_CONSOLIDATION: Final[frozenset[str]] = frozenset(
@@ -473,6 +480,7 @@ _COGNITION_SCHEMA_CONSOLIDATION: Final[frozenset[str]] = frozenset(
     RUNNER_SCHEMA_VERSION_V31,
     RUNNER_SCHEMA_VERSION_V32,
     RUNNER_SCHEMA_VERSION_V33,
+    RUNNER_SCHEMA_VERSION_V34,
     }
 )
 _COGNITION_SCHEMA_REFLECTION: Final[frozenset[str]] = frozenset(
@@ -505,6 +513,7 @@ _COGNITION_SCHEMA_REFLECTION: Final[frozenset[str]] = frozenset(
     RUNNER_SCHEMA_VERSION_V31,
     RUNNER_SCHEMA_VERSION_V32,
     RUNNER_SCHEMA_VERSION_V33,
+    RUNNER_SCHEMA_VERSION_V34,
     }
 )
 _COGNITION_SCHEMA_PROSPECTIVE: Final[frozenset[str]] = frozenset(
@@ -536,6 +545,7 @@ _COGNITION_SCHEMA_PROSPECTIVE: Final[frozenset[str]] = frozenset(
     RUNNER_SCHEMA_VERSION_V31,
     RUNNER_SCHEMA_VERSION_V32,
     RUNNER_SCHEMA_VERSION_V33,
+    RUNNER_SCHEMA_VERSION_V34,
     }
 )
 _COGNITION_SCHEMA_COUNTERFACTUAL: Final[frozenset[str]] = frozenset(
@@ -566,6 +576,7 @@ _COGNITION_SCHEMA_COUNTERFACTUAL: Final[frozenset[str]] = frozenset(
     RUNNER_SCHEMA_VERSION_V31,
     RUNNER_SCHEMA_VERSION_V32,
     RUNNER_SCHEMA_VERSION_V33,
+    RUNNER_SCHEMA_VERSION_V34,
     }
 )
 _COGNITION_SCHEMA_STRATEGY: Final[frozenset[str]] = frozenset(
@@ -595,6 +606,7 @@ _COGNITION_SCHEMA_STRATEGY: Final[frozenset[str]] = frozenset(
     RUNNER_SCHEMA_VERSION_V31,
     RUNNER_SCHEMA_VERSION_V32,
     RUNNER_SCHEMA_VERSION_V33,
+    RUNNER_SCHEMA_VERSION_V34,
     }
 )
 _COGNITION_SCHEMA_REPUTATION: Final[frozenset[str]] = frozenset(
@@ -623,6 +635,7 @@ _COGNITION_SCHEMA_REPUTATION: Final[frozenset[str]] = frozenset(
     RUNNER_SCHEMA_VERSION_V31,
     RUNNER_SCHEMA_VERSION_V32,
     RUNNER_SCHEMA_VERSION_V33,
+    RUNNER_SCHEMA_VERSION_V34,
     }
 )
 
@@ -916,6 +929,7 @@ def _encode_cognition(
     RUNNER_SCHEMA_VERSION_V31,
     RUNNER_SCHEMA_VERSION_V32,
     RUNNER_SCHEMA_VERSION_V33,
+    RUNNER_SCHEMA_VERSION_V34,
     }:
         payload["teaching_interaction_mode"] = value.teaching_interaction_mode.value
         for name in _TEACHING_WEIGHT_KEYS:
@@ -942,6 +956,7 @@ def _encode_cognition(
     RUNNER_SCHEMA_VERSION_V31,
     RUNNER_SCHEMA_VERSION_V32,
     RUNNER_SCHEMA_VERSION_V33,
+    RUNNER_SCHEMA_VERSION_V34,
     }:
         payload["production_knowledge_mode"] = value.production_knowledge_mode.value
         payload["production_catalog"] = _encode_production_catalog(
@@ -967,6 +982,7 @@ def _encode_cognition(
     RUNNER_SCHEMA_VERSION_V31,
     RUNNER_SCHEMA_VERSION_V32,
     RUNNER_SCHEMA_VERSION_V33,
+    RUNNER_SCHEMA_VERSION_V34,
     }:
         payload["territorial_claim_mode"] = value.territorial_claim_mode.value
     if schema_version in {
@@ -988,6 +1004,7 @@ def _encode_cognition(
     RUNNER_SCHEMA_VERSION_V31,
     RUNNER_SCHEMA_VERSION_V32,
     RUNNER_SCHEMA_VERSION_V33,
+    RUNNER_SCHEMA_VERSION_V34,
     }:
         payload["group_formation_mode"] = value.group_formation_mode.value
     if schema_version in {
@@ -1008,6 +1025,7 @@ def _encode_cognition(
     RUNNER_SCHEMA_VERSION_V31,
     RUNNER_SCHEMA_VERSION_V32,
     RUNNER_SCHEMA_VERSION_V33,
+    RUNNER_SCHEMA_VERSION_V34,
     }:
         payload["social_norm_mode"] = value.social_norm_mode.value
     if schema_version in {
@@ -1027,6 +1045,7 @@ def _encode_cognition(
     RUNNER_SCHEMA_VERSION_V31,
     RUNNER_SCHEMA_VERSION_V32,
     RUNNER_SCHEMA_VERSION_V33,
+    RUNNER_SCHEMA_VERSION_V34,
     }:
         payload["social_convention_mode"] = value.social_convention_mode.value
     if schema_version in {
@@ -1045,6 +1064,7 @@ def _encode_cognition(
     RUNNER_SCHEMA_VERSION_V31,
     RUNNER_SCHEMA_VERSION_V32,
     RUNNER_SCHEMA_VERSION_V33,
+    RUNNER_SCHEMA_VERSION_V34,
     }:
         payload["artifact_interpretation_mode"] = (
             value.artifact_interpretation_mode.value
@@ -1064,6 +1084,7 @@ def _encode_cognition(
     RUNNER_SCHEMA_VERSION_V31,
     RUNNER_SCHEMA_VERSION_V32,
     RUNNER_SCHEMA_VERSION_V33,
+    RUNNER_SCHEMA_VERSION_V34,
     }:
         payload["semantic_naming_mode"] = value.semantic_naming_mode.value
     if schema_version in {
@@ -1080,6 +1101,7 @@ def _encode_cognition(
     RUNNER_SCHEMA_VERSION_V31,
     RUNNER_SCHEMA_VERSION_V32,
     RUNNER_SCHEMA_VERSION_V33,
+    RUNNER_SCHEMA_VERSION_V34,
     }:
         payload["cultural_narrative_mode"] = value.cultural_narrative_mode.value
     if schema_version in {
@@ -1095,6 +1117,7 @@ def _encode_cognition(
     RUNNER_SCHEMA_VERSION_V31,
     RUNNER_SCHEMA_VERSION_V32,
     RUNNER_SCHEMA_VERSION_V33,
+    RUNNER_SCHEMA_VERSION_V34,
     }:
         payload["cognitive_budget_mode"] = value.cognitive_budget_mode.value
         limits = value.cognitive_budget_limits
@@ -1123,6 +1146,7 @@ def _encode_cognition(
         RUNNER_SCHEMA_VERSION_V31,
         RUNNER_SCHEMA_VERSION_V32,
         RUNNER_SCHEMA_VERSION_V33,
+        RUNNER_SCHEMA_VERSION_V34,
         }:
             # Full v22 keyset on v23+; DISABLED budgets encode null limit keys.
             for key in _BUDGET_LIMIT_KEYS:
@@ -1159,6 +1183,7 @@ def _decode_cognition(
     RUNNER_SCHEMA_VERSION_V31,
     RUNNER_SCHEMA_VERSION_V32,
     RUNNER_SCHEMA_VERSION_V33,
+    RUNNER_SCHEMA_VERSION_V34,
     }:
         _require_keys(data, _COGNITION_KEYS_V22, path=path)
     elif schema_version == RUNNER_SCHEMA_VERSION_V21:
@@ -1315,6 +1340,7 @@ def _decode_cognition(
     RUNNER_SCHEMA_VERSION_V31,
     RUNNER_SCHEMA_VERSION_V32,
     RUNNER_SCHEMA_VERSION_V33,
+    RUNNER_SCHEMA_VERSION_V34,
     }:
         try:
             teaching_interaction_mode = TeachingInteractionMode(
@@ -1353,6 +1379,7 @@ def _decode_cognition(
     RUNNER_SCHEMA_VERSION_V31,
     RUNNER_SCHEMA_VERSION_V32,
     RUNNER_SCHEMA_VERSION_V33,
+    RUNNER_SCHEMA_VERSION_V34,
     }:
         try:
             production_knowledge_mode = ProductionKnowledgeMode(
@@ -1392,6 +1419,7 @@ def _decode_cognition(
     RUNNER_SCHEMA_VERSION_V31,
     RUNNER_SCHEMA_VERSION_V32,
     RUNNER_SCHEMA_VERSION_V33,
+    RUNNER_SCHEMA_VERSION_V34,
     }:
         try:
             territorial_claim_mode = TerritorialClaimMode(
@@ -1422,6 +1450,7 @@ def _decode_cognition(
     RUNNER_SCHEMA_VERSION_V31,
     RUNNER_SCHEMA_VERSION_V32,
     RUNNER_SCHEMA_VERSION_V33,
+    RUNNER_SCHEMA_VERSION_V34,
     }:
         try:
             group_formation_mode = GroupFormationMode(
@@ -1451,6 +1480,7 @@ def _decode_cognition(
     RUNNER_SCHEMA_VERSION_V31,
     RUNNER_SCHEMA_VERSION_V32,
     RUNNER_SCHEMA_VERSION_V33,
+    RUNNER_SCHEMA_VERSION_V34,
     }:
         try:
             social_norm_mode = SocialNormMode(
@@ -1479,6 +1509,7 @@ def _decode_cognition(
     RUNNER_SCHEMA_VERSION_V31,
     RUNNER_SCHEMA_VERSION_V32,
     RUNNER_SCHEMA_VERSION_V33,
+    RUNNER_SCHEMA_VERSION_V34,
     }:
         try:
             social_convention_mode = SocialConventionMode(
@@ -1506,6 +1537,7 @@ def _decode_cognition(
     RUNNER_SCHEMA_VERSION_V31,
     RUNNER_SCHEMA_VERSION_V32,
     RUNNER_SCHEMA_VERSION_V33,
+    RUNNER_SCHEMA_VERSION_V34,
     }:
         try:
             artifact_interpretation_mode = ArtifactInterpretationMode(
@@ -1533,6 +1565,7 @@ def _decode_cognition(
     RUNNER_SCHEMA_VERSION_V31,
     RUNNER_SCHEMA_VERSION_V32,
     RUNNER_SCHEMA_VERSION_V33,
+    RUNNER_SCHEMA_VERSION_V34,
     }:
         try:
             semantic_naming_mode = SemanticNamingMode(
@@ -1558,6 +1591,7 @@ def _decode_cognition(
     RUNNER_SCHEMA_VERSION_V31,
     RUNNER_SCHEMA_VERSION_V32,
     RUNNER_SCHEMA_VERSION_V33,
+    RUNNER_SCHEMA_VERSION_V34,
     }:
         try:
             cultural_narrative_mode = CulturalNarrativeMode(
@@ -1584,6 +1618,7 @@ def _decode_cognition(
     RUNNER_SCHEMA_VERSION_V31,
     RUNNER_SCHEMA_VERSION_V32,
     RUNNER_SCHEMA_VERSION_V33,
+    RUNNER_SCHEMA_VERSION_V34,
     }:
         try:
             cognitive_budget_mode = CognitiveBudgetMode(
@@ -1609,6 +1644,7 @@ def _decode_cognition(
             RUNNER_SCHEMA_VERSION_V31,
             RUNNER_SCHEMA_VERSION_V32,
             RUNNER_SCHEMA_VERSION_V33,
+            RUNNER_SCHEMA_VERSION_V34,
             }
             and cognitive_budget_mode is CognitiveBudgetMode.DISABLED
         ):
@@ -1769,6 +1805,7 @@ def _encode_agent(value: AgentRunnerSpec, *, schema_version: str) -> dict[str, A
     RUNNER_SCHEMA_VERSION_V31,
     RUNNER_SCHEMA_VERSION_V32,
     RUNNER_SCHEMA_VERSION_V33,
+    RUNNER_SCHEMA_VERSION_V34,
     }:
         assert value.name is not None
         payload["name"] = value.name
@@ -2876,6 +2913,347 @@ _RUNNER_ROOT_KEYS_V33_NO_LAYERS_CULTURAL_KINSHIP_ONLY_WITH_DYNAMICS: Final[set[s
     *_RUNNER_ROOT_KEYS_V31_CULTURAL_KINSHIP_ONLY_WITH_DYNAMICS,
     "durable_records",
 }
+# v34 = v33 accepted roots U knowledge_repositories
+# v34 no-layers = v33 no-layers accepted roots U knowledge_repositories
+_RUNNER_ROOT_KEYS_V34_WITH_LIFECYCLE: Final[set[str]] = {
+    *_RUNNER_ROOT_KEYS_V33_WITH_LIFECYCLE,
+    "knowledge_repositories",
+}
+_RUNNER_ROOT_KEYS_V34_NO_LAYERS_WITH_LIFECYCLE: Final[set[str]] = {
+    *_RUNNER_ROOT_KEYS_V33_NO_LAYERS_WITH_LIFECYCLE,
+    "knowledge_repositories",
+}
+_RUNNER_ROOT_KEYS_V34_WITH_LIFECYCLE_AND_DYNAMICS: Final[set[str]] = {
+    *_RUNNER_ROOT_KEYS_V33_WITH_LIFECYCLE_AND_DYNAMICS,
+    "knowledge_repositories",
+}
+_RUNNER_ROOT_KEYS_V34_NO_LAYERS_WITH_LIFECYCLE_AND_DYNAMICS: Final[set[str]] = {
+    *_RUNNER_ROOT_KEYS_V33_NO_LAYERS_WITH_LIFECYCLE_AND_DYNAMICS,
+    "knowledge_repositories",
+}
+_RUNNER_ROOT_KEYS_V34_WITH_LIFECYCLE_NO_KINSHIP: Final[set[str]] = {
+    *_RUNNER_ROOT_KEYS_V33_WITH_LIFECYCLE_NO_KINSHIP,
+    "knowledge_repositories",
+}
+_RUNNER_ROOT_KEYS_V34_NO_LAYERS_WITH_LIFECYCLE_NO_KINSHIP: Final[set[str]] = {
+    *_RUNNER_ROOT_KEYS_V33_NO_LAYERS_WITH_LIFECYCLE_NO_KINSHIP,
+    "knowledge_repositories",
+}
+_RUNNER_ROOT_KEYS_V34_WITH_LIFECYCLE_NO_KINSHIP_AND_DYNAMICS: Final[set[str]] = {
+    *_RUNNER_ROOT_KEYS_V33_WITH_LIFECYCLE_NO_KINSHIP_AND_DYNAMICS,
+    "knowledge_repositories",
+}
+_RUNNER_ROOT_KEYS_V34_NO_LAYERS_WITH_LIFECYCLE_NO_KINSHIP_AND_DYNAMICS: Final[set[str]] = {
+    *_RUNNER_ROOT_KEYS_V33_NO_LAYERS_WITH_LIFECYCLE_NO_KINSHIP_AND_DYNAMICS,
+    "knowledge_repositories",
+}
+_RUNNER_ROOT_KEYS_V34_NO_DEPENDENCY_CARE: Final[set[str]] = {
+    *_RUNNER_ROOT_KEYS_V33_NO_DEPENDENCY_CARE,
+    "knowledge_repositories",
+}
+_RUNNER_ROOT_KEYS_V34_NO_LAYERS_NO_DEPENDENCY_CARE: Final[set[str]] = {
+    *_RUNNER_ROOT_KEYS_V33_NO_LAYERS_NO_DEPENDENCY_CARE,
+    "knowledge_repositories",
+}
+_RUNNER_ROOT_KEYS_V34_NO_DEPENDENCY_CARE_AND_DYNAMICS: Final[set[str]] = {
+    *_RUNNER_ROOT_KEYS_V33_NO_DEPENDENCY_CARE_AND_DYNAMICS,
+    "knowledge_repositories",
+}
+_RUNNER_ROOT_KEYS_V34_NO_LAYERS_NO_DEPENDENCY_CARE_AND_DYNAMICS: Final[set[str]] = {
+    *_RUNNER_ROOT_KEYS_V33_NO_LAYERS_NO_DEPENDENCY_CARE_AND_DYNAMICS,
+    "knowledge_repositories",
+}
+_RUNNER_ROOT_KEYS_V34_NO_DEPENDENCY_CARE_NO_KINSHIP: Final[set[str]] = {
+    *_RUNNER_ROOT_KEYS_V33_NO_DEPENDENCY_CARE_NO_KINSHIP,
+    "knowledge_repositories",
+}
+_RUNNER_ROOT_KEYS_V34_NO_LAYERS_NO_DEPENDENCY_CARE_NO_KINSHIP: Final[set[str]] = {
+    *_RUNNER_ROOT_KEYS_V33_NO_LAYERS_NO_DEPENDENCY_CARE_NO_KINSHIP,
+    "knowledge_repositories",
+}
+_RUNNER_ROOT_KEYS_V34_NO_DEPENDENCY_CARE_NO_KINSHIP_AND_DYNAMICS: Final[set[str]] = {
+    *_RUNNER_ROOT_KEYS_V33_NO_DEPENDENCY_CARE_NO_KINSHIP_AND_DYNAMICS,
+    "knowledge_repositories",
+}
+_RUNNER_ROOT_KEYS_V34_NO_LAYERS_NO_DEPENDENCY_CARE_NO_KINSHIP_AND_DYNAMICS: Final[set[str]] = {
+    *_RUNNER_ROOT_KEYS_V33_NO_LAYERS_NO_DEPENDENCY_CARE_NO_KINSHIP_AND_DYNAMICS,
+    "knowledge_repositories",
+}
+_RUNNER_ROOT_KEYS_V34_NO_DEV_WITH_LIFECYCLE: Final[set[str]] = {
+    *_RUNNER_ROOT_KEYS_V33_NO_DEV_WITH_LIFECYCLE,
+    "knowledge_repositories",
+}
+_RUNNER_ROOT_KEYS_V34_NO_LAYERS_NO_DEV_WITH_LIFECYCLE: Final[set[str]] = {
+    *_RUNNER_ROOT_KEYS_V33_NO_LAYERS_NO_DEV_WITH_LIFECYCLE,
+    "knowledge_repositories",
+}
+_RUNNER_ROOT_KEYS_V34_NO_DEV_WITH_LIFECYCLE_AND_DYNAMICS: Final[set[str]] = {
+    *_RUNNER_ROOT_KEYS_V33_NO_DEV_WITH_LIFECYCLE_AND_DYNAMICS,
+    "knowledge_repositories",
+}
+_RUNNER_ROOT_KEYS_V34_NO_LAYERS_NO_DEV_WITH_LIFECYCLE_AND_DYNAMICS: Final[set[str]] = {
+    *_RUNNER_ROOT_KEYS_V33_NO_LAYERS_NO_DEV_WITH_LIFECYCLE_AND_DYNAMICS,
+    "knowledge_repositories",
+}
+_RUNNER_ROOT_KEYS_V34_NO_DEV_WITH_LIFECYCLE_NO_KINSHIP: Final[set[str]] = {
+    *_RUNNER_ROOT_KEYS_V33_NO_DEV_WITH_LIFECYCLE_NO_KINSHIP,
+    "knowledge_repositories",
+}
+_RUNNER_ROOT_KEYS_V34_NO_LAYERS_NO_DEV_WITH_LIFECYCLE_NO_KINSHIP: Final[set[str]] = {
+    *_RUNNER_ROOT_KEYS_V33_NO_LAYERS_NO_DEV_WITH_LIFECYCLE_NO_KINSHIP,
+    "knowledge_repositories",
+}
+_RUNNER_ROOT_KEYS_V34_NO_DEV_WITH_LIFECYCLE_NO_KINSHIP_AND_DYNAMICS: Final[set[str]] = {
+    *_RUNNER_ROOT_KEYS_V33_NO_DEV_WITH_LIFECYCLE_NO_KINSHIP_AND_DYNAMICS,
+    "knowledge_repositories",
+}
+_RUNNER_ROOT_KEYS_V34_NO_LAYERS_NO_DEV_WITH_LIFECYCLE_NO_KINSHIP_AND_DYNAMICS: Final[set[str]] = {
+    *_RUNNER_ROOT_KEYS_V33_NO_LAYERS_NO_DEV_WITH_LIFECYCLE_NO_KINSHIP_AND_DYNAMICS,
+    "knowledge_repositories",
+}
+_RUNNER_ROOT_KEYS_V34_NO_DEV_NO_DEPENDENCY_CARE: Final[set[str]] = {
+    *_RUNNER_ROOT_KEYS_V33_NO_DEV_NO_DEPENDENCY_CARE,
+    "knowledge_repositories",
+}
+_RUNNER_ROOT_KEYS_V34_NO_LAYERS_NO_DEV_NO_DEPENDENCY_CARE: Final[set[str]] = {
+    *_RUNNER_ROOT_KEYS_V33_NO_LAYERS_NO_DEV_NO_DEPENDENCY_CARE,
+    "knowledge_repositories",
+}
+_RUNNER_ROOT_KEYS_V34_NO_DEV_NO_DEPENDENCY_CARE_AND_DYNAMICS: Final[set[str]] = {
+    *_RUNNER_ROOT_KEYS_V33_NO_DEV_NO_DEPENDENCY_CARE_AND_DYNAMICS,
+    "knowledge_repositories",
+}
+_RUNNER_ROOT_KEYS_V34_NO_LAYERS_NO_DEV_NO_DEPENDENCY_CARE_AND_DYNAMICS: Final[set[str]] = {
+    *_RUNNER_ROOT_KEYS_V33_NO_LAYERS_NO_DEV_NO_DEPENDENCY_CARE_AND_DYNAMICS,
+    "knowledge_repositories",
+}
+_RUNNER_ROOT_KEYS_V34_NO_DEV_NO_DEPENDENCY_CARE_NO_KINSHIP: Final[set[str]] = {
+    *_RUNNER_ROOT_KEYS_V33_NO_DEV_NO_DEPENDENCY_CARE_NO_KINSHIP,
+    "knowledge_repositories",
+}
+_RUNNER_ROOT_KEYS_V34_NO_LAYERS_NO_DEV_NO_DEPENDENCY_CARE_NO_KINSHIP: Final[set[str]] = {
+    *_RUNNER_ROOT_KEYS_V33_NO_LAYERS_NO_DEV_NO_DEPENDENCY_CARE_NO_KINSHIP,
+    "knowledge_repositories",
+}
+_RUNNER_ROOT_KEYS_V34_NO_DEV_NO_DEPENDENCY_CARE_NO_KINSHIP_AND_DYNAMICS: Final[set[str]] = {
+    *_RUNNER_ROOT_KEYS_V33_NO_DEV_NO_DEPENDENCY_CARE_NO_KINSHIP_AND_DYNAMICS,
+    "knowledge_repositories",
+}
+_RUNNER_ROOT_KEYS_V34_NO_LAYERS_NO_DEV_NO_DEPENDENCY_CARE_NO_KINSHIP_AND_DYNAMICS: Final[set[str]] = {
+    *_RUNNER_ROOT_KEYS_V33_NO_LAYERS_NO_DEV_NO_DEPENDENCY_CARE_NO_KINSHIP_AND_DYNAMICS,
+    "knowledge_repositories",
+}
+_RUNNER_ROOT_KEYS_V34_NO_MENTORSHIP_WITH_LIFECYCLE: Final[set[str]] = {
+    *_RUNNER_ROOT_KEYS_V33_NO_MENTORSHIP_WITH_LIFECYCLE,
+    "knowledge_repositories",
+}
+_RUNNER_ROOT_KEYS_V34_NO_LAYERS_NO_MENTORSHIP_WITH_LIFECYCLE: Final[set[str]] = {
+    *_RUNNER_ROOT_KEYS_V33_NO_LAYERS_NO_MENTORSHIP_WITH_LIFECYCLE,
+    "knowledge_repositories",
+}
+_RUNNER_ROOT_KEYS_V34_NO_MENTORSHIP_WITH_LIFECYCLE_AND_DYNAMICS: Final[set[str]] = {
+    *_RUNNER_ROOT_KEYS_V33_NO_MENTORSHIP_WITH_LIFECYCLE_AND_DYNAMICS,
+    "knowledge_repositories",
+}
+_RUNNER_ROOT_KEYS_V34_NO_LAYERS_NO_MENTORSHIP_WITH_LIFECYCLE_AND_DYNAMICS: Final[set[str]] = {
+    *_RUNNER_ROOT_KEYS_V33_NO_LAYERS_NO_MENTORSHIP_WITH_LIFECYCLE_AND_DYNAMICS,
+    "knowledge_repositories",
+}
+_RUNNER_ROOT_KEYS_V34_NO_MENTORSHIP_WITH_LIFECYCLE_NO_KINSHIP: Final[set[str]] = {
+    *_RUNNER_ROOT_KEYS_V33_NO_MENTORSHIP_WITH_LIFECYCLE_NO_KINSHIP,
+    "knowledge_repositories",
+}
+_RUNNER_ROOT_KEYS_V34_NO_LAYERS_NO_MENTORSHIP_WITH_LIFECYCLE_NO_KINSHIP: Final[set[str]] = {
+    *_RUNNER_ROOT_KEYS_V33_NO_LAYERS_NO_MENTORSHIP_WITH_LIFECYCLE_NO_KINSHIP,
+    "knowledge_repositories",
+}
+_RUNNER_ROOT_KEYS_V34_NO_MENTORSHIP_WITH_LIFECYCLE_NO_KINSHIP_AND_DYNAMICS: Final[set[str]] = {
+    *_RUNNER_ROOT_KEYS_V33_NO_MENTORSHIP_WITH_LIFECYCLE_NO_KINSHIP_AND_DYNAMICS,
+    "knowledge_repositories",
+}
+_RUNNER_ROOT_KEYS_V34_NO_LAYERS_NO_MENTORSHIP_WITH_LIFECYCLE_NO_KINSHIP_AND_DYNAMICS: Final[set[str]] = {
+    *_RUNNER_ROOT_KEYS_V33_NO_LAYERS_NO_MENTORSHIP_WITH_LIFECYCLE_NO_KINSHIP_AND_DYNAMICS,
+    "knowledge_repositories",
+}
+_RUNNER_ROOT_KEYS_V34_NO_MENTORSHIP_NO_DEPENDENCY_CARE: Final[set[str]] = {
+    *_RUNNER_ROOT_KEYS_V33_NO_MENTORSHIP_NO_DEPENDENCY_CARE,
+    "knowledge_repositories",
+}
+_RUNNER_ROOT_KEYS_V34_NO_LAYERS_NO_MENTORSHIP_NO_DEPENDENCY_CARE: Final[set[str]] = {
+    *_RUNNER_ROOT_KEYS_V33_NO_LAYERS_NO_MENTORSHIP_NO_DEPENDENCY_CARE,
+    "knowledge_repositories",
+}
+_RUNNER_ROOT_KEYS_V34_NO_MENTORSHIP_NO_DEPENDENCY_CARE_AND_DYNAMICS: Final[set[str]] = {
+    *_RUNNER_ROOT_KEYS_V33_NO_MENTORSHIP_NO_DEPENDENCY_CARE_AND_DYNAMICS,
+    "knowledge_repositories",
+}
+_RUNNER_ROOT_KEYS_V34_NO_LAYERS_NO_MENTORSHIP_NO_DEPENDENCY_CARE_AND_DYNAMICS: Final[set[str]] = {
+    *_RUNNER_ROOT_KEYS_V33_NO_LAYERS_NO_MENTORSHIP_NO_DEPENDENCY_CARE_AND_DYNAMICS,
+    "knowledge_repositories",
+}
+_RUNNER_ROOT_KEYS_V34_NO_MENTORSHIP_NO_DEPENDENCY_CARE_NO_KINSHIP: Final[set[str]] = {
+    *_RUNNER_ROOT_KEYS_V33_NO_MENTORSHIP_NO_DEPENDENCY_CARE_NO_KINSHIP,
+    "knowledge_repositories",
+}
+_RUNNER_ROOT_KEYS_V34_NO_LAYERS_NO_MENTORSHIP_NO_DEPENDENCY_CARE_NO_KINSHIP: Final[set[str]] = {
+    *_RUNNER_ROOT_KEYS_V33_NO_LAYERS_NO_MENTORSHIP_NO_DEPENDENCY_CARE_NO_KINSHIP,
+    "knowledge_repositories",
+}
+_RUNNER_ROOT_KEYS_V34_NO_MENTORSHIP_NO_DEPENDENCY_CARE_NO_KINSHIP_AND_DYNAMICS: Final[set[str]] = {
+    *_RUNNER_ROOT_KEYS_V33_NO_MENTORSHIP_NO_DEPENDENCY_CARE_NO_KINSHIP_AND_DYNAMICS,
+    "knowledge_repositories",
+}
+_RUNNER_ROOT_KEYS_V34_NO_LAYERS_NO_MENTORSHIP_NO_DEPENDENCY_CARE_NO_KINSHIP_AND_DYNAMICS: Final[set[str]] = {
+    *_RUNNER_ROOT_KEYS_V33_NO_LAYERS_NO_MENTORSHIP_NO_DEPENDENCY_CARE_NO_KINSHIP_AND_DYNAMICS,
+    "knowledge_repositories",
+}
+_RUNNER_ROOT_KEYS_V34_NO_MENTORSHIP_NO_DEV_WITH_LIFECYCLE: Final[set[str]] = {
+    *_RUNNER_ROOT_KEYS_V33_NO_MENTORSHIP_NO_DEV_WITH_LIFECYCLE,
+    "knowledge_repositories",
+}
+_RUNNER_ROOT_KEYS_V34_NO_LAYERS_NO_MENTORSHIP_NO_DEV_WITH_LIFECYCLE: Final[set[str]] = {
+    *_RUNNER_ROOT_KEYS_V33_NO_LAYERS_NO_MENTORSHIP_NO_DEV_WITH_LIFECYCLE,
+    "knowledge_repositories",
+}
+_RUNNER_ROOT_KEYS_V34_NO_MENTORSHIP_NO_DEV_WITH_LIFECYCLE_AND_DYNAMICS: Final[set[str]] = {
+    *_RUNNER_ROOT_KEYS_V33_NO_MENTORSHIP_NO_DEV_WITH_LIFECYCLE_AND_DYNAMICS,
+    "knowledge_repositories",
+}
+_RUNNER_ROOT_KEYS_V34_NO_LAYERS_NO_MENTORSHIP_NO_DEV_WITH_LIFECYCLE_AND_DYNAMICS: Final[set[str]] = {
+    *_RUNNER_ROOT_KEYS_V33_NO_LAYERS_NO_MENTORSHIP_NO_DEV_WITH_LIFECYCLE_AND_DYNAMICS,
+    "knowledge_repositories",
+}
+_RUNNER_ROOT_KEYS_V34_NO_MENTORSHIP_NO_DEV_WITH_LIFECYCLE_NO_KINSHIP: Final[set[str]] = {
+    *_RUNNER_ROOT_KEYS_V33_NO_MENTORSHIP_NO_DEV_WITH_LIFECYCLE_NO_KINSHIP,
+    "knowledge_repositories",
+}
+_RUNNER_ROOT_KEYS_V34_NO_LAYERS_NO_MENTORSHIP_NO_DEV_WITH_LIFECYCLE_NO_KINSHIP: Final[set[str]] = {
+    *_RUNNER_ROOT_KEYS_V33_NO_LAYERS_NO_MENTORSHIP_NO_DEV_WITH_LIFECYCLE_NO_KINSHIP,
+    "knowledge_repositories",
+}
+_RUNNER_ROOT_KEYS_V34_NO_MENTORSHIP_NO_DEV_WITH_LIFECYCLE_NO_KINSHIP_AND_DYNAMICS: Final[set[str]] = {
+    *_RUNNER_ROOT_KEYS_V33_NO_MENTORSHIP_NO_DEV_WITH_LIFECYCLE_NO_KINSHIP_AND_DYNAMICS,
+    "knowledge_repositories",
+}
+_RUNNER_ROOT_KEYS_V34_NO_LAYERS_NO_MENTORSHIP_NO_DEV_WITH_LIFECYCLE_NO_KINSHIP_AND_DYNAMICS: Final[set[str]] = {
+    *_RUNNER_ROOT_KEYS_V33_NO_LAYERS_NO_MENTORSHIP_NO_DEV_WITH_LIFECYCLE_NO_KINSHIP_AND_DYNAMICS,
+    "knowledge_repositories",
+}
+_RUNNER_ROOT_KEYS_V34_NO_MENTORSHIP_NO_DEV_NO_DEPENDENCY_CARE: Final[set[str]] = {
+    *_RUNNER_ROOT_KEYS_V33_NO_MENTORSHIP_NO_DEV_NO_DEPENDENCY_CARE,
+    "knowledge_repositories",
+}
+_RUNNER_ROOT_KEYS_V34_NO_LAYERS_NO_MENTORSHIP_NO_DEV_NO_DEPENDENCY_CARE: Final[set[str]] = {
+    *_RUNNER_ROOT_KEYS_V33_NO_LAYERS_NO_MENTORSHIP_NO_DEV_NO_DEPENDENCY_CARE,
+    "knowledge_repositories",
+}
+_RUNNER_ROOT_KEYS_V34_NO_MENTORSHIP_NO_DEV_NO_DEPENDENCY_CARE_AND_DYNAMICS: Final[set[str]] = {
+    *_RUNNER_ROOT_KEYS_V33_NO_MENTORSHIP_NO_DEV_NO_DEPENDENCY_CARE_AND_DYNAMICS,
+    "knowledge_repositories",
+}
+_RUNNER_ROOT_KEYS_V34_NO_LAYERS_NO_MENTORSHIP_NO_DEV_NO_DEPENDENCY_CARE_AND_DYNAMICS: Final[set[str]] = {
+    *_RUNNER_ROOT_KEYS_V33_NO_LAYERS_NO_MENTORSHIP_NO_DEV_NO_DEPENDENCY_CARE_AND_DYNAMICS,
+    "knowledge_repositories",
+}
+_RUNNER_ROOT_KEYS_V34_NO_MENTORSHIP_NO_DEV_NO_DEPENDENCY_CARE_NO_KINSHIP: Final[set[str]] = {
+    *_RUNNER_ROOT_KEYS_V33_NO_MENTORSHIP_NO_DEV_NO_DEPENDENCY_CARE_NO_KINSHIP,
+    "knowledge_repositories",
+}
+_RUNNER_ROOT_KEYS_V34_NO_LAYERS_NO_MENTORSHIP_NO_DEV_NO_DEPENDENCY_CARE_NO_KINSHIP: Final[set[str]] = {
+    *_RUNNER_ROOT_KEYS_V33_NO_LAYERS_NO_MENTORSHIP_NO_DEV_NO_DEPENDENCY_CARE_NO_KINSHIP,
+    "knowledge_repositories",
+}
+_RUNNER_ROOT_KEYS_V34_NO_MENTORSHIP_NO_DEV_NO_DEPENDENCY_CARE_NO_KINSHIP_AND_DYNAMICS: Final[set[str]] = {
+    *_RUNNER_ROOT_KEYS_V33_NO_MENTORSHIP_NO_DEV_NO_DEPENDENCY_CARE_NO_KINSHIP_AND_DYNAMICS,
+    "knowledge_repositories",
+}
+_RUNNER_ROOT_KEYS_V34_NO_LAYERS_NO_MENTORSHIP_NO_DEV_NO_DEPENDENCY_CARE_NO_KINSHIP_AND_DYNAMICS: Final[set[str]] = {
+    *_RUNNER_ROOT_KEYS_V33_NO_LAYERS_NO_MENTORSHIP_NO_DEV_NO_DEPENDENCY_CARE_NO_KINSHIP_AND_DYNAMICS,
+    "knowledge_repositories",
+}
+_RUNNER_ROOT_KEYS_V34_CULTURAL_ONLY: Final[set[str]] = {
+    *_RUNNER_ROOT_KEYS_V33_CULTURAL_ONLY,
+    "knowledge_repositories",
+}
+_RUNNER_ROOT_KEYS_V34_NO_LAYERS_CULTURAL_ONLY: Final[set[str]] = {
+    *_RUNNER_ROOT_KEYS_V33_NO_LAYERS_CULTURAL_ONLY,
+    "knowledge_repositories",
+}
+_RUNNER_ROOT_KEYS_V34_CULTURAL_ONLY_WITH_DYNAMICS: Final[set[str]] = {
+    *_RUNNER_ROOT_KEYS_V33_CULTURAL_ONLY_WITH_DYNAMICS,
+    "knowledge_repositories",
+}
+_RUNNER_ROOT_KEYS_V34_NO_LAYERS_CULTURAL_ONLY_WITH_DYNAMICS: Final[set[str]] = {
+    *_RUNNER_ROOT_KEYS_V33_NO_LAYERS_CULTURAL_ONLY_WITH_DYNAMICS,
+    "knowledge_repositories",
+}
+_RUNNER_ROOT_KEYS_V34_CULTURAL_KINSHIP_ONLY: Final[set[str]] = {
+    *_RUNNER_ROOT_KEYS_V33_CULTURAL_KINSHIP_ONLY,
+    "knowledge_repositories",
+}
+_RUNNER_ROOT_KEYS_V34_NO_LAYERS_CULTURAL_KINSHIP_ONLY: Final[set[str]] = {
+    *_RUNNER_ROOT_KEYS_V33_NO_LAYERS_CULTURAL_KINSHIP_ONLY,
+    "knowledge_repositories",
+}
+_RUNNER_ROOT_KEYS_V34_CULTURAL_KINSHIP_ONLY_WITH_DYNAMICS: Final[set[str]] = {
+    *_RUNNER_ROOT_KEYS_V33_CULTURAL_KINSHIP_ONLY_WITH_DYNAMICS,
+    "knowledge_repositories",
+}
+_RUNNER_ROOT_KEYS_V34_NO_LAYERS_CULTURAL_KINSHIP_ONLY_WITH_DYNAMICS: Final[set[str]] = {
+    *_RUNNER_ROOT_KEYS_V33_NO_LAYERS_CULTURAL_KINSHIP_ONLY_WITH_DYNAMICS,
+    "knowledge_repositories",
+}
+
+
+_KNOWLEDGE_REPOSITORIES_KEYS: Final[set[str]] = {
+    "knowledge_repositories_mode",
+    "access_policy",
+    "capacity_policy",
+    "maintenance_policy",
+    "index_policy",
+    "perception_mode",
+    "rng_namespace",
+}
+_KNOWLEDGE_REPOSITORIES_ACCESS_KEYS: Final[set[str]] = {
+    "default_access_mode",
+    "deposit_requires_colocation",
+    "retrieve_requires_colocation",
+    "founder_list_survives_death",
+}
+_KNOWLEDGE_REPOSITORIES_CAPACITY_KEYS: Final[set[str]] = {
+    "max_repositories",
+    "max_members_per_repository",
+    "max_index_entries",
+}
+_KNOWLEDGE_REPOSITORIES_MAINTENANCE_KEYS: Final[set[str]] = {
+    "neglect_ticks",
+    "allow_destruction",
+    "inaccessible_blocks_access",
+    "neglect_corrupts_index",
+}
+_KNOWLEDGE_REPOSITORIES_INDEX_KEYS: Final[set[str]] = {
+    "index_optional",
+    "max_entries_per_index_op",
+    "allow_corrupt_entries",
+}
+_KNOWLEDGE_REPOSITORIES_FORBIDDEN_ALIASES: Final[set[str]] = {
+    "library_institution",
+    "global_archive",
+    "society_library",
+    "canonical_catalog",
+    "true_history_index",
+    "library",
+    "archive",
+    "sacred",
+    "family_records",
+    "trade_ledger",
+    "librarian",
+    "archivist",
+    "library_must_form",
+    "archive_must_persist",
+    "true_catalog_restored",
+}
+
 _DURABLE_RECORDS_KEYS: Final[set[str]] = {
     "durable_records_mode",
     "enabled_genres",
@@ -3955,6 +4333,137 @@ def _decode_durable_records(
         raise RunnerSerializationError("invalid_model", path) from exc
 
 
+
+def _encode_knowledge_repositories(spec: KnowledgeRepositoriesSpec) -> dict[str, Any]:
+    return spec.canonical_payload()
+
+
+def _decode_knowledge_repositories(
+    data: Mapping[str, Any], *, path: str
+) -> KnowledgeRepositoriesSpec:
+    if not isinstance(data, dict):
+        raise RunnerSerializationError("invalid_object", path)
+    forbidden = set(data) & _KNOWLEDGE_REPOSITORIES_FORBIDDEN_ALIASES
+    if forbidden:
+        _LOG.error(
+            "knowledge_repositories_forbidden_alias path=%s "
+            "reason_code=knowledge_repositories_forbidden_alias",
+            path,
+        )
+        raise RunnerSerializationError(
+            "knowledge_repositories_forbidden_alias", path
+        )
+    _require_keys(data, _KNOWLEDGE_REPOSITORIES_KEYS, path=path)
+    access_raw = data["access_policy"]
+    capacity_raw = data["capacity_policy"]
+    maintenance_raw = data["maintenance_policy"]
+    index_raw = data["index_policy"]
+    if not isinstance(access_raw, dict):
+        raise RunnerSerializationError("invalid_object", f"{path}.access_policy")
+    if not isinstance(capacity_raw, dict):
+        raise RunnerSerializationError("invalid_object", f"{path}.capacity_policy")
+    if not isinstance(maintenance_raw, dict):
+        raise RunnerSerializationError(
+            "invalid_object", f"{path}.maintenance_policy"
+        )
+    if not isinstance(index_raw, dict):
+        raise RunnerSerializationError("invalid_object", f"{path}.index_policy")
+    _require_keys(
+        access_raw, _KNOWLEDGE_REPOSITORIES_ACCESS_KEYS, path=f"{path}.access_policy"
+    )
+    _require_keys(
+        capacity_raw,
+        _KNOWLEDGE_REPOSITORIES_CAPACITY_KEYS,
+        path=f"{path}.capacity_policy",
+    )
+    _require_keys(
+        maintenance_raw,
+        _KNOWLEDGE_REPOSITORIES_MAINTENANCE_KEYS,
+        path=f"{path}.maintenance_policy",
+    )
+    _require_keys(
+        index_raw, _KNOWLEDGE_REPOSITORIES_INDEX_KEYS, path=f"{path}.index_policy"
+    )
+    try:
+        return KnowledgeRepositoriesSpec(
+            knowledge_repositories_mode=_str_field(
+                data, "knowledge_repositories_mode", path=path
+            ),
+            access_policy=KnowledgeRepositoryAccessPolicy(
+                default_access_mode=_str_field(
+                    access_raw, "default_access_mode", path=f"{path}.access_policy"
+                ),
+                deposit_requires_colocation=_bool_field(
+                    access_raw,
+                    "deposit_requires_colocation",
+                    path=f"{path}.access_policy",
+                ),
+                retrieve_requires_colocation=_bool_field(
+                    access_raw,
+                    "retrieve_requires_colocation",
+                    path=f"{path}.access_policy",
+                ),
+                founder_list_survives_death=_bool_field(
+                    access_raw,
+                    "founder_list_survives_death",
+                    path=f"{path}.access_policy",
+                ),
+            ),
+            capacity_policy=KnowledgeRepositoryCapacityPolicy(
+                max_repositories=_nonneg_int_field(
+                    capacity_raw, "max_repositories", path=f"{path}.capacity_policy"
+                ),
+                max_members_per_repository=_nonneg_int_field(
+                    capacity_raw,
+                    "max_members_per_repository",
+                    path=f"{path}.capacity_policy",
+                ),
+                max_index_entries=_nonneg_int_field(
+                    capacity_raw, "max_index_entries", path=f"{path}.capacity_policy"
+                ),
+            ),
+            maintenance_policy=KnowledgeRepositoryMaintenancePolicy(
+                neglect_ticks=_nonneg_int_field(
+                    maintenance_raw,
+                    "neglect_ticks",
+                    path=f"{path}.maintenance_policy",
+                ),
+                allow_destruction=_bool_field(
+                    maintenance_raw,
+                    "allow_destruction",
+                    path=f"{path}.maintenance_policy",
+                ),
+                inaccessible_blocks_access=_bool_field(
+                    maintenance_raw,
+                    "inaccessible_blocks_access",
+                    path=f"{path}.maintenance_policy",
+                ),
+                neglect_corrupts_index=_bool_field(
+                    maintenance_raw,
+                    "neglect_corrupts_index",
+                    path=f"{path}.maintenance_policy",
+                ),
+            ),
+            index_policy=KnowledgeRepositoryIndexPolicy(
+                index_optional=_bool_field(
+                    index_raw, "index_optional", path=f"{path}.index_policy"
+                ),
+                max_entries_per_index_op=_nonneg_int_field(
+                    index_raw,
+                    "max_entries_per_index_op",
+                    path=f"{path}.index_policy",
+                ),
+                allow_corrupt_entries=_bool_field(
+                    index_raw, "allow_corrupt_entries", path=f"{path}.index_policy"
+                ),
+            ),
+            perception_mode=_str_field(data, "perception_mode", path=path),
+            rng_namespace=_str_field(data, "rng_namespace", path=path),
+        )
+    except (TypeError, ValueError) as exc:
+        raise RunnerSerializationError("invalid_model", path) from exc
+
+
 def _encode_population_lifecycle(
     spec: PopulationLifecycleSpec, *, schema_version: str
 ) -> dict[str, Any]:
@@ -4440,6 +4949,7 @@ def _encode_runner_document(config: SimulationRunnerConfig) -> dict[str, Any]:
         RUNNER_SCHEMA_VERSION_V31,
         RUNNER_SCHEMA_VERSION_V32,
         RUNNER_SCHEMA_VERSION_V33,
+        RUNNER_SCHEMA_VERSION_V34,
     }:
         document["capability_flags"] = _encode_capability_flags(config.capability_flags)
     if config.schema_version in {
@@ -4473,6 +4983,7 @@ def _encode_runner_document(config: SimulationRunnerConfig) -> dict[str, Any]:
         RUNNER_SCHEMA_VERSION_V31,
         RUNNER_SCHEMA_VERSION_V32,
         RUNNER_SCHEMA_VERSION_V33,
+        RUNNER_SCHEMA_VERSION_V34,
     }:
         document["cognition_trace"] = _encode_cognition_trace(config.cognition_trace)
     if config.schema_version == RUNNER_SCHEMA_VERSION_V14 or (
@@ -4497,6 +5008,7 @@ def _encode_runner_document(config: SimulationRunnerConfig) -> dict[str, Any]:
         RUNNER_SCHEMA_VERSION_V31,
         RUNNER_SCHEMA_VERSION_V32,
         RUNNER_SCHEMA_VERSION_V33,
+        RUNNER_SCHEMA_VERSION_V34,
         }
         and config.environmental_dynamics is not None
     ):
@@ -4518,6 +5030,7 @@ def _encode_runner_document(config: SimulationRunnerConfig) -> dict[str, Any]:
     RUNNER_SCHEMA_VERSION_V31,
     RUNNER_SCHEMA_VERSION_V32,
     RUNNER_SCHEMA_VERSION_V33,
+    RUNNER_SCHEMA_VERSION_V34,
     }:
         document["v3_capability_flags"] = _encode_v3_capability_flags(
             config.v3_capability_flags
@@ -4541,6 +5054,7 @@ def _encode_runner_document(config: SimulationRunnerConfig) -> dict[str, Any]:
             RUNNER_SCHEMA_VERSION_V31,
             RUNNER_SCHEMA_VERSION_V32,
             RUNNER_SCHEMA_VERSION_V33,
+            RUNNER_SCHEMA_VERSION_V34,
         }
         and config.v3_capability_flags.generational_population
     ):
@@ -4563,6 +5077,7 @@ def _encode_runner_document(config: SimulationRunnerConfig) -> dict[str, Any]:
                     RUNNER_SCHEMA_VERSION_V31,
                     RUNNER_SCHEMA_VERSION_V32,
                     RUNNER_SCHEMA_VERSION_V33,
+                    RUNNER_SCHEMA_VERSION_V34,
                 }
                 else RUNNER_SCHEMA_VERSION_V26
             ),
@@ -4593,6 +5108,7 @@ def _encode_runner_document(config: SimulationRunnerConfig) -> dict[str, Any]:
             RUNNER_SCHEMA_VERSION_V31,
             RUNNER_SCHEMA_VERSION_V32,
             RUNNER_SCHEMA_VERSION_V33,
+            RUNNER_SCHEMA_VERSION_V34,
         }
         and config.v3_capability_flags.generational_population
     ):
@@ -4614,6 +5130,7 @@ def _encode_runner_document(config: SimulationRunnerConfig) -> dict[str, Any]:
         RUNNER_SCHEMA_VERSION_V31,
         RUNNER_SCHEMA_VERSION_V32,
         RUNNER_SCHEMA_VERSION_V33,
+        RUNNER_SCHEMA_VERSION_V34,
     }:
         if config.v3_capability_flags.kinship_inheritance:
             if config.kinship is None:
@@ -4972,6 +5489,118 @@ def _encode_runner_document(config: SimulationRunnerConfig) -> dict[str, Any]:
                 config.historical_memory_layers.transition_tick_resolution,
                 config.historical_memory_layers.applicability,
             )
+    if config.schema_version == RUNNER_SCHEMA_VERSION_V34:
+        if config.cultural_feature_provenance is None:
+            raise TypeError(
+                "cultural_feature_provenance must be CulturalFeatureProvenanceSpec "
+                "on runner-config-v34"
+            )
+        if config.durable_records is None:
+            raise TypeError(
+                "durable_records must be DurableRecordsSpec on runner-config-v34"
+            )
+        document["cultural_feature_provenance"] = _encode_cultural_feature_provenance(
+            config.cultural_feature_provenance
+        )
+        document["durable_records"] = _encode_durable_records(config.durable_records)
+        if config.knowledge_repositories is None:
+            raise TypeError(
+                "knowledge_repositories must be KnowledgeRepositoriesSpec "
+                "on runner-config-v34"
+            )
+        document["knowledge_repositories"] = _encode_knowledge_repositories(
+            config.knowledge_repositories
+        )
+        if config.historical_memory_layers is not None:
+            document["historical_memory_layers"] = _encode_historical_memory_layers(
+                config.historical_memory_layers
+            )
+        if config.mentorship is not None:
+            document["mentorship"] = _encode_mentorship(config.mentorship)
+            _LOG.info(
+                "runner_config_encode_mentorship schema_version=%s "
+                "content_kind_count=%s bond_policy_form_after=%s max_hop_depth=%s "
+                "mentorship_mode=%s applicability=%s",
+                config.schema_version,
+                len(config.mentorship.enabled_content_kinds),
+                config.mentorship.bond_policy.form_after_successful_acts,
+                config.mentorship.lineage_policy.max_hop_depth,
+                config.mentorship.mentorship_mode,
+                config.mentorship.applicability,
+            )
+        if config.developmental_learning is not None:
+            document["developmental_learning"] = _encode_developmental_learning(
+                config.developmental_learning
+            )
+            _LOG.info(
+                "runner_config_encode_developmental_learning schema_version=%s "
+                "enabled_domains=%s enabled_sources=%s "
+                "developmental_learning_mode=%s applicability=%s "
+                "learner_species_defaults_id=%s",
+                config.schema_version,
+                list(config.developmental_learning.enabled_domains),
+                list(config.developmental_learning.enabled_sources),
+                config.developmental_learning.developmental_learning_mode,
+                config.developmental_learning.applicability,
+                config.developmental_learning.learner_species_defaults_id,
+            )
+        if config.dependency_care is not None:
+            document["dependency_care"] = _encode_dependency_care(
+                config.dependency_care
+            )
+            _LOG.info(
+                "runner_config_encode_dependency_care schema_version=%s "
+                "enabled_needs=%s caregiving_cognition_mode=%s perception_mode=%s",
+                config.schema_version,
+                list(config.dependency_care.enabled_needs),
+                config.dependency_care.caregiving_cognition_mode,
+                config.dependency_care.perception_mode,
+            )
+        _LOG.info(
+            "runner_config_encode_cultural_feature_provenance schema_version=%s "
+            "feature_kind_count=%s channel_count=%s mutation_allowed=%s "
+            "recombination_allowed=%s applicability=%s",
+            config.schema_version,
+            len(config.cultural_feature_provenance.enabled_feature_kinds),
+            len(config.cultural_feature_provenance.enabled_provenance_channels),
+            config.cultural_feature_provenance.mutation_policy.allow_mutation,
+            config.cultural_feature_provenance.recombination_policy.allow_recombination,
+            config.cultural_feature_provenance.applicability,
+        )
+        _LOG.info(
+            "runner_config_encode_durable_records schema_version=%s "
+            "genre_count=%s default_fidelity=%s tombstone_on_destroy=%s "
+            "perception_mode=%s layers_present=%s",
+            config.schema_version,
+            len(config.durable_records.enabled_genres),
+            config.durable_records.copy_fidelity_policy.default_fidelity,
+            config.durable_records.integrity_policy.tombstone_on_destroy,
+            config.durable_records.perception_mode,
+            config.historical_memory_layers is not None,
+        )
+        _LOG.info(
+            "runner_config_encode_knowledge_repositories schema_version=%s "
+            "default_access_mode=%s max_repositories=%s neglect_ticks=%s "
+            "perception_mode=%s",
+            config.schema_version,
+            config.knowledge_repositories.access_policy.default_access_mode,
+            config.knowledge_repositories.capacity_policy.max_repositories,
+            config.knowledge_repositories.maintenance_policy.neglect_ticks,
+            config.knowledge_repositories.perception_mode,
+        )
+        if config.historical_memory_layers is not None:
+            _LOG.info(
+                "runner_config_encode_historical_memory_layers schema_version=%s "
+                "max_communicative_hops=%s witness_definition=%s "
+                "query_event_selector=%s transition_tick_resolution=%s "
+                "applicability=%s",
+                config.schema_version,
+                config.historical_memory_layers.max_communicative_hops,
+                config.historical_memory_layers.witness_definition,
+                config.historical_memory_layers.query_event_selector,
+                config.historical_memory_layers.transition_tick_resolution,
+                config.historical_memory_layers.applicability,
+            )
     if config.experiment is not None:
         document["experiment"] = {
             "condition_id": config.experiment.condition_id,
@@ -5203,6 +5832,130 @@ def decode_runner_config(payload: bytes) -> SimulationRunnerConfig:
                 (_RUNNER_ROOT_KEYS_V33_CULTURAL_ONLY_WITH_DYNAMICS if has_layers else _RUNNER_ROOT_KEYS_V33_NO_LAYERS_CULTURAL_ONLY_WITH_DYNAMICS)
                 if has_dynamics
                 else (_RUNNER_ROOT_KEYS_V33_CULTURAL_ONLY if has_layers else _RUNNER_ROOT_KEYS_V33_NO_LAYERS_CULTURAL_ONLY)
+            )
+    elif schema_version == RUNNER_SCHEMA_VERSION_V34:
+        has_lifecycle = "population_lifecycle" in data
+        has_kinship = "kinship" in data
+        has_dynamics = "environmental_dynamics" in data
+        has_dependency_care = "dependency_care" in data
+        has_developmental = "developmental_learning" in data
+        has_mentorship = "mentorship" in data
+        has_layers = "historical_memory_layers" in data
+        if has_lifecycle:
+            if has_mentorship:
+                if has_developmental:
+                    if has_dependency_care:
+                        if has_kinship:
+                            root_keys = (
+                                (_RUNNER_ROOT_KEYS_V34_WITH_LIFECYCLE_AND_DYNAMICS if has_layers else _RUNNER_ROOT_KEYS_V34_NO_LAYERS_WITH_LIFECYCLE_AND_DYNAMICS)
+                                if has_dynamics
+                                else (_RUNNER_ROOT_KEYS_V34_WITH_LIFECYCLE if has_layers else _RUNNER_ROOT_KEYS_V34_NO_LAYERS_WITH_LIFECYCLE)
+                            )
+                        else:
+                            root_keys = (
+                                (_RUNNER_ROOT_KEYS_V34_WITH_LIFECYCLE_NO_KINSHIP_AND_DYNAMICS if has_layers else _RUNNER_ROOT_KEYS_V34_NO_LAYERS_WITH_LIFECYCLE_NO_KINSHIP_AND_DYNAMICS)
+                                if has_dynamics
+                                else (_RUNNER_ROOT_KEYS_V34_WITH_LIFECYCLE_NO_KINSHIP if has_layers else _RUNNER_ROOT_KEYS_V34_NO_LAYERS_WITH_LIFECYCLE_NO_KINSHIP)
+                            )
+                    elif has_kinship:
+                        root_keys = (
+                            (_RUNNER_ROOT_KEYS_V34_NO_DEPENDENCY_CARE_AND_DYNAMICS if has_layers else _RUNNER_ROOT_KEYS_V34_NO_LAYERS_NO_DEPENDENCY_CARE_AND_DYNAMICS)
+                            if has_dynamics
+                            else (_RUNNER_ROOT_KEYS_V34_NO_DEPENDENCY_CARE if has_layers else _RUNNER_ROOT_KEYS_V34_NO_LAYERS_NO_DEPENDENCY_CARE)
+                        )
+                    else:
+                        root_keys = (
+                            (_RUNNER_ROOT_KEYS_V34_NO_DEPENDENCY_CARE_NO_KINSHIP_AND_DYNAMICS if has_layers else _RUNNER_ROOT_KEYS_V34_NO_LAYERS_NO_DEPENDENCY_CARE_NO_KINSHIP_AND_DYNAMICS)
+                            if has_dynamics
+                            else (_RUNNER_ROOT_KEYS_V34_NO_DEPENDENCY_CARE_NO_KINSHIP if has_layers else _RUNNER_ROOT_KEYS_V34_NO_LAYERS_NO_DEPENDENCY_CARE_NO_KINSHIP)
+                        )
+                elif has_dependency_care:
+                    if has_kinship:
+                        root_keys = (
+                            (_RUNNER_ROOT_KEYS_V34_NO_DEV_WITH_LIFECYCLE_AND_DYNAMICS if has_layers else _RUNNER_ROOT_KEYS_V34_NO_LAYERS_NO_DEV_WITH_LIFECYCLE_AND_DYNAMICS)
+                            if has_dynamics
+                            else (_RUNNER_ROOT_KEYS_V34_NO_DEV_WITH_LIFECYCLE if has_layers else _RUNNER_ROOT_KEYS_V34_NO_LAYERS_NO_DEV_WITH_LIFECYCLE)
+                        )
+                    else:
+                        root_keys = (
+                            (_RUNNER_ROOT_KEYS_V34_NO_DEV_WITH_LIFECYCLE_NO_KINSHIP_AND_DYNAMICS if has_layers else _RUNNER_ROOT_KEYS_V34_NO_LAYERS_NO_DEV_WITH_LIFECYCLE_NO_KINSHIP_AND_DYNAMICS)
+                            if has_dynamics
+                            else (_RUNNER_ROOT_KEYS_V34_NO_DEV_WITH_LIFECYCLE_NO_KINSHIP if has_layers else _RUNNER_ROOT_KEYS_V34_NO_LAYERS_NO_DEV_WITH_LIFECYCLE_NO_KINSHIP)
+                        )
+                elif has_kinship:
+                    root_keys = (
+                        (_RUNNER_ROOT_KEYS_V34_NO_DEV_NO_DEPENDENCY_CARE_AND_DYNAMICS if has_layers else _RUNNER_ROOT_KEYS_V34_NO_LAYERS_NO_DEV_NO_DEPENDENCY_CARE_AND_DYNAMICS)
+                        if has_dynamics
+                        else (_RUNNER_ROOT_KEYS_V34_NO_DEV_NO_DEPENDENCY_CARE if has_layers else _RUNNER_ROOT_KEYS_V34_NO_LAYERS_NO_DEV_NO_DEPENDENCY_CARE)
+                    )
+                else:
+                    root_keys = (
+                        (_RUNNER_ROOT_KEYS_V34_NO_DEV_NO_DEPENDENCY_CARE_NO_KINSHIP_AND_DYNAMICS if has_layers else _RUNNER_ROOT_KEYS_V34_NO_LAYERS_NO_DEV_NO_DEPENDENCY_CARE_NO_KINSHIP_AND_DYNAMICS)
+                        if has_dynamics
+                        else (_RUNNER_ROOT_KEYS_V34_NO_DEV_NO_DEPENDENCY_CARE_NO_KINSHIP if has_layers else _RUNNER_ROOT_KEYS_V34_NO_LAYERS_NO_DEV_NO_DEPENDENCY_CARE_NO_KINSHIP)
+                    )
+            elif has_developmental:
+                if has_dependency_care:
+                    if has_kinship:
+                        root_keys = (
+                            (_RUNNER_ROOT_KEYS_V34_NO_MENTORSHIP_WITH_LIFECYCLE_AND_DYNAMICS if has_layers else _RUNNER_ROOT_KEYS_V34_NO_LAYERS_NO_MENTORSHIP_WITH_LIFECYCLE_AND_DYNAMICS)
+                            if has_dynamics
+                            else (_RUNNER_ROOT_KEYS_V34_NO_MENTORSHIP_WITH_LIFECYCLE if has_layers else _RUNNER_ROOT_KEYS_V34_NO_LAYERS_NO_MENTORSHIP_WITH_LIFECYCLE)
+                        )
+                    else:
+                        root_keys = (
+                            (_RUNNER_ROOT_KEYS_V34_NO_MENTORSHIP_WITH_LIFECYCLE_NO_KINSHIP_AND_DYNAMICS if has_layers else _RUNNER_ROOT_KEYS_V34_NO_LAYERS_NO_MENTORSHIP_WITH_LIFECYCLE_NO_KINSHIP_AND_DYNAMICS)
+                            if has_dynamics
+                            else (_RUNNER_ROOT_KEYS_V34_NO_MENTORSHIP_WITH_LIFECYCLE_NO_KINSHIP if has_layers else _RUNNER_ROOT_KEYS_V34_NO_LAYERS_NO_MENTORSHIP_WITH_LIFECYCLE_NO_KINSHIP)  # noqa: E501
+                        )
+                elif has_kinship:
+                    root_keys = (
+                        (_RUNNER_ROOT_KEYS_V34_NO_MENTORSHIP_NO_DEPENDENCY_CARE_AND_DYNAMICS if has_layers else _RUNNER_ROOT_KEYS_V34_NO_LAYERS_NO_MENTORSHIP_NO_DEPENDENCY_CARE_AND_DYNAMICS)
+                        if has_dynamics
+                        else (_RUNNER_ROOT_KEYS_V34_NO_MENTORSHIP_NO_DEPENDENCY_CARE if has_layers else _RUNNER_ROOT_KEYS_V34_NO_LAYERS_NO_MENTORSHIP_NO_DEPENDENCY_CARE)
+                    )
+                else:
+                    root_keys = (
+                        (_RUNNER_ROOT_KEYS_V34_NO_MENTORSHIP_NO_DEPENDENCY_CARE_NO_KINSHIP_AND_DYNAMICS if has_layers else _RUNNER_ROOT_KEYS_V34_NO_LAYERS_NO_MENTORSHIP_NO_DEPENDENCY_CARE_NO_KINSHIP_AND_DYNAMICS)
+                        if has_dynamics
+                        else (_RUNNER_ROOT_KEYS_V34_NO_MENTORSHIP_NO_DEPENDENCY_CARE_NO_KINSHIP if has_layers else _RUNNER_ROOT_KEYS_V34_NO_LAYERS_NO_MENTORSHIP_NO_DEPENDENCY_CARE_NO_KINSHIP)  # noqa: E501
+                    )
+            elif has_dependency_care:
+                if has_kinship:
+                    root_keys = (
+                        (_RUNNER_ROOT_KEYS_V34_NO_MENTORSHIP_NO_DEV_WITH_LIFECYCLE_AND_DYNAMICS if has_layers else _RUNNER_ROOT_KEYS_V34_NO_LAYERS_NO_MENTORSHIP_NO_DEV_WITH_LIFECYCLE_AND_DYNAMICS)
+                        if has_dynamics
+                        else (_RUNNER_ROOT_KEYS_V34_NO_MENTORSHIP_NO_DEV_WITH_LIFECYCLE if has_layers else _RUNNER_ROOT_KEYS_V34_NO_LAYERS_NO_MENTORSHIP_NO_DEV_WITH_LIFECYCLE)
+                    )
+                else:
+                    root_keys = (
+                        (_RUNNER_ROOT_KEYS_V34_NO_MENTORSHIP_NO_DEV_WITH_LIFECYCLE_NO_KINSHIP_AND_DYNAMICS if has_layers else _RUNNER_ROOT_KEYS_V34_NO_LAYERS_NO_MENTORSHIP_NO_DEV_WITH_LIFECYCLE_NO_KINSHIP_AND_DYNAMICS)
+                        if has_dynamics
+                        else (_RUNNER_ROOT_KEYS_V34_NO_MENTORSHIP_NO_DEV_WITH_LIFECYCLE_NO_KINSHIP if has_layers else _RUNNER_ROOT_KEYS_V34_NO_LAYERS_NO_MENTORSHIP_NO_DEV_WITH_LIFECYCLE_NO_KINSHIP)  # noqa: E501
+                    )
+            elif has_kinship:
+                root_keys = (
+                    (_RUNNER_ROOT_KEYS_V34_NO_MENTORSHIP_NO_DEV_NO_DEPENDENCY_CARE_AND_DYNAMICS if has_layers else _RUNNER_ROOT_KEYS_V34_NO_LAYERS_NO_MENTORSHIP_NO_DEV_NO_DEPENDENCY_CARE_AND_DYNAMICS)
+                    if has_dynamics
+                    else (_RUNNER_ROOT_KEYS_V34_NO_MENTORSHIP_NO_DEV_NO_DEPENDENCY_CARE if has_layers else _RUNNER_ROOT_KEYS_V34_NO_LAYERS_NO_MENTORSHIP_NO_DEV_NO_DEPENDENCY_CARE)
+                )
+            else:
+                root_keys = (
+                    (_RUNNER_ROOT_KEYS_V34_NO_MENTORSHIP_NO_DEV_NO_DEPENDENCY_CARE_NO_KINSHIP_AND_DYNAMICS if has_layers else _RUNNER_ROOT_KEYS_V34_NO_LAYERS_NO_MENTORSHIP_NO_DEV_NO_DEPENDENCY_CARE_NO_KINSHIP_AND_DYNAMICS)
+                    if has_dynamics
+                    else (_RUNNER_ROOT_KEYS_V34_NO_MENTORSHIP_NO_DEV_NO_DEPENDENCY_CARE_NO_KINSHIP if has_layers else _RUNNER_ROOT_KEYS_V34_NO_LAYERS_NO_MENTORSHIP_NO_DEV_NO_DEPENDENCY_CARE_NO_KINSHIP)  # noqa: E501
+                )
+        elif has_kinship:
+            root_keys = (
+                (_RUNNER_ROOT_KEYS_V34_CULTURAL_KINSHIP_ONLY_WITH_DYNAMICS if has_layers else _RUNNER_ROOT_KEYS_V34_NO_LAYERS_CULTURAL_KINSHIP_ONLY_WITH_DYNAMICS)
+                if has_dynamics
+                else (_RUNNER_ROOT_KEYS_V34_CULTURAL_KINSHIP_ONLY if has_layers else _RUNNER_ROOT_KEYS_V34_NO_LAYERS_CULTURAL_KINSHIP_ONLY)
+            )
+        else:
+            root_keys = (
+                (_RUNNER_ROOT_KEYS_V34_CULTURAL_ONLY_WITH_DYNAMICS if has_layers else _RUNNER_ROOT_KEYS_V34_NO_LAYERS_CULTURAL_ONLY_WITH_DYNAMICS)
+                if has_dynamics
+                else (_RUNNER_ROOT_KEYS_V34_CULTURAL_ONLY if has_layers else _RUNNER_ROOT_KEYS_V34_NO_LAYERS_CULTURAL_ONLY)
             )
     elif schema_version == RUNNER_SCHEMA_VERSION_V32:
         has_lifecycle = "population_lifecycle" in data
@@ -5728,6 +6481,7 @@ def decode_runner_config(payload: bytes) -> SimulationRunnerConfig:
         RUNNER_SCHEMA_VERSION_V31,
         RUNNER_SCHEMA_VERSION_V32,
         RUNNER_SCHEMA_VERSION_V33,
+        RUNNER_SCHEMA_VERSION_V34,
     }:
         capability_flags = _decode_capability_flags(
             data["capability_flags"], path="$.capability_flags"
@@ -5747,6 +6501,7 @@ def decode_runner_config(payload: bytes) -> SimulationRunnerConfig:
         RUNNER_SCHEMA_VERSION_V31,
         RUNNER_SCHEMA_VERSION_V32,
         RUNNER_SCHEMA_VERSION_V33,
+        RUNNER_SCHEMA_VERSION_V34,
     }:
         v3_capability_flags = _decode_v3_capability_flags(
             data["v3_capability_flags"], path="$.v3_capability_flags"
@@ -5772,6 +6527,7 @@ def decode_runner_config(payload: bytes) -> SimulationRunnerConfig:
             RUNNER_SCHEMA_VERSION_V31,
             RUNNER_SCHEMA_VERSION_V32,
             RUNNER_SCHEMA_VERSION_V33,
+            RUNNER_SCHEMA_VERSION_V34,
         }
         and "kinship" in data
     ):
@@ -5794,6 +6550,7 @@ def decode_runner_config(payload: bytes) -> SimulationRunnerConfig:
             RUNNER_SCHEMA_VERSION_V31,
             RUNNER_SCHEMA_VERSION_V32,
             RUNNER_SCHEMA_VERSION_V33,
+            RUNNER_SCHEMA_VERSION_V34,
         }
         and "dependency_care" in data
     ):
@@ -5817,6 +6574,7 @@ def decode_runner_config(payload: bytes) -> SimulationRunnerConfig:
             RUNNER_SCHEMA_VERSION_V31,
             RUNNER_SCHEMA_VERSION_V32,
             RUNNER_SCHEMA_VERSION_V33,
+            RUNNER_SCHEMA_VERSION_V34,
         }
         and "developmental_learning" in data
     ):
@@ -5856,6 +6614,7 @@ def decode_runner_config(payload: bytes) -> SimulationRunnerConfig:
             RUNNER_SCHEMA_VERSION_V31,
             RUNNER_SCHEMA_VERSION_V32,
             RUNNER_SCHEMA_VERSION_V33,
+            RUNNER_SCHEMA_VERSION_V34,
         }
         and "mentorship" in data
     ):
@@ -5883,6 +6642,7 @@ def decode_runner_config(payload: bytes) -> SimulationRunnerConfig:
         RUNNER_SCHEMA_VERSION_V31,
         RUNNER_SCHEMA_VERSION_V32,
         RUNNER_SCHEMA_VERSION_V33,
+        RUNNER_SCHEMA_VERSION_V34,
     }:
         cultural_feature_provenance = _decode_cultural_feature_provenance(
             data["cultural_feature_provenance"],
@@ -5908,7 +6668,8 @@ def decode_runner_config(payload: bytes) -> SimulationRunnerConfig:
             False,
         )
     if schema_version == RUNNER_SCHEMA_VERSION_V32 or (
-        schema_version == RUNNER_SCHEMA_VERSION_V33
+        schema_version
+        in {RUNNER_SCHEMA_VERSION_V33, RUNNER_SCHEMA_VERSION_V34}
         and "historical_memory_layers" in data
     ):
         historical_memory_layers = _decode_historical_memory_layers(
@@ -5932,7 +6693,10 @@ def decode_runner_config(payload: bytes) -> SimulationRunnerConfig:
             schema_version,
             False,
         )
-    if schema_version == RUNNER_SCHEMA_VERSION_V33:
+    if schema_version in {
+        RUNNER_SCHEMA_VERSION_V33,
+        RUNNER_SCHEMA_VERSION_V34,
+    }:
         durable_records = _decode_durable_records(
             data["durable_records"],
             path="$.durable_records",
@@ -5953,6 +6717,28 @@ def decode_runner_config(payload: bytes) -> SimulationRunnerConfig:
             schema_version,
             False,
         )
+    if schema_version == RUNNER_SCHEMA_VERSION_V34:
+        knowledge_repositories = _decode_knowledge_repositories(
+            data["knowledge_repositories"],
+            path="$.knowledge_repositories",
+        )
+        _LOG.debug(
+            "runner_config_decode_knowledge_repositories schema_version=%s "
+            "knowledge_repositories_present=%s default_access_mode=%s "
+            "perception_mode=%s",
+            schema_version,
+            True,
+            knowledge_repositories.access_policy.default_access_mode,
+            knowledge_repositories.perception_mode,
+        )
+    else:
+        knowledge_repositories = None
+        _LOG.debug(
+            "runner_config_decode_knowledge_repositories_absent "
+            "schema_version=%s knowledge_repositories_present=%s",
+            schema_version,
+            False,
+        )
     if schema_version in {
         RUNNER_SCHEMA_VERSION_V24,
         RUNNER_SCHEMA_VERSION_V25,
@@ -5964,6 +6750,7 @@ def decode_runner_config(payload: bytes) -> SimulationRunnerConfig:
         RUNNER_SCHEMA_VERSION_V31,
         RUNNER_SCHEMA_VERSION_V32,
         RUNNER_SCHEMA_VERSION_V33,
+        RUNNER_SCHEMA_VERSION_V34,
     } and (
         schema_version
         not in {
@@ -5974,6 +6761,7 @@ def decode_runner_config(payload: bytes) -> SimulationRunnerConfig:
             RUNNER_SCHEMA_VERSION_V31,
             RUNNER_SCHEMA_VERSION_V32,
             RUNNER_SCHEMA_VERSION_V33,
+            RUNNER_SCHEMA_VERSION_V34,
         }
         or v3_capability_flags.generational_population
     ):
@@ -5991,6 +6779,7 @@ def decode_runner_config(payload: bytes) -> SimulationRunnerConfig:
                     RUNNER_SCHEMA_VERSION_V31,
                     RUNNER_SCHEMA_VERSION_V32,
                     RUNNER_SCHEMA_VERSION_V33,
+                    RUNNER_SCHEMA_VERSION_V34,
                 }
                 else RUNNER_SCHEMA_VERSION_V26
             ),
@@ -6017,6 +6806,7 @@ def decode_runner_config(payload: bytes) -> SimulationRunnerConfig:
             RUNNER_SCHEMA_VERSION_V31,
             RUNNER_SCHEMA_VERSION_V32,
             RUNNER_SCHEMA_VERSION_V33,
+            RUNNER_SCHEMA_VERSION_V34,
         }
         and v3_capability_flags.generational_population
     ):
@@ -6073,6 +6863,7 @@ def decode_runner_config(payload: bytes) -> SimulationRunnerConfig:
     RUNNER_SCHEMA_VERSION_V31,
     RUNNER_SCHEMA_VERSION_V32,
     RUNNER_SCHEMA_VERSION_V33,
+    RUNNER_SCHEMA_VERSION_V34,
     }:
         cognition_trace = _decode_cognition_trace(
             data["cognition_trace"], path="$.cognition_trace"
@@ -6166,6 +6957,7 @@ def decode_runner_config(payload: bytes) -> SimulationRunnerConfig:
                     RUNNER_SCHEMA_VERSION_V31,
                     RUNNER_SCHEMA_VERSION_V32,
                     RUNNER_SCHEMA_VERSION_V33,
+                    RUNNER_SCHEMA_VERSION_V34,
                     }
                     and "environmental_dynamics" in data
                 )
@@ -6180,6 +6972,7 @@ def decode_runner_config(payload: bytes) -> SimulationRunnerConfig:
             cultural_feature_provenance=cultural_feature_provenance,
             historical_memory_layers=historical_memory_layers,
             durable_records=durable_records,
+            knowledge_repositories=knowledge_repositories,
         )
     except RunnerSerializationError:
         raise

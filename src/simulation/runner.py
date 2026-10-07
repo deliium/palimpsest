@@ -138,6 +138,7 @@ from simulation.runner_models import (
     RUNNER_SCHEMA_VERSION_V31,
     RUNNER_SCHEMA_VERSION_V32,
     RUNNER_SCHEMA_VERSION_V33,
+    RUNNER_SCHEMA_VERSION_V34,
     AgentCognitionSpec,
     AgentRunnerSpec,
     CognitionCounters,
@@ -1435,10 +1436,14 @@ class SimulationRunner:
             catalog = config.agents[0].cognition.production_catalog
             production_catalog = catalog if catalog.recipe_count > 0 else None
             durable_records_active = config.durable_records is not None
+            knowledge_repositories_active = (
+                config.knowledge_repositories is not None
+            )
             artifacts_active = (
                 bool(bootstrap.artifacts)
                 or config.artifacts_enabled
                 or durable_records_active
+                or knowledge_repositories_active
             )
             if durable_records_active and not (
                 bool(bootstrap.artifacts) or config.artifacts_enabled
@@ -1446,6 +1451,15 @@ class SimulationRunner:
                 _LOG.debug(
                     "durable_artifacts_enabled_for_channel "
                     "durable_records_active=%s artifacts_enabled=%s",
+                    True,
+                    True,
+                )
+            if knowledge_repositories_active and not (
+                bool(bootstrap.artifacts) or config.artifacts_enabled
+            ):
+                _LOG.debug(
+                    "repository_artifacts_enabled_for_channel "
+                    "knowledge_repositories_active=%s artifacts_enabled=%s",
                     True,
                     True,
                 )
@@ -1495,6 +1509,7 @@ class SimulationRunner:
                             RUNNER_SCHEMA_VERSION_V31,
                             RUNNER_SCHEMA_VERSION_V32,
                             RUNNER_SCHEMA_VERSION_V33,
+                            RUNNER_SCHEMA_VERSION_V34,
                         }
                         and config.new_agent_initialization is not None
                     )
@@ -1506,6 +1521,11 @@ class SimulationRunner:
                 ),
                 durable_records_spec=(
                     config.durable_records if durable_records_active else None
+                ),
+                knowledge_repositories_spec=(
+                    config.knowledge_repositories
+                    if knowledge_repositories_active
+                    else None
                 ),
                 **skill_kwargs,
                 **teaching_kwargs,
@@ -1601,6 +1621,23 @@ class SimulationRunner:
                 _LOG.debug(
                     "durable_records_skip schema_version=%s "
                     "durable_records_present=%s",
+                    config.schema_version,
+                    False,
+                )
+            if knowledge_repositories_active:
+                assert config.knowledge_repositories is not None
+                _LOG.info(
+                    "knowledge_repositories_enabled schema_version=%s "
+                    "max_repositories=%s neglect_ticks=%s default_access_mode=%s",
+                    config.schema_version,
+                    config.knowledge_repositories.capacity_policy.max_repositories,
+                    config.knowledge_repositories.maintenance_policy.neglect_ticks,
+                    config.knowledge_repositories.access_policy.default_access_mode,
+                )
+            else:
+                _LOG.debug(
+                    "knowledge_repositories_skip schema_version=%s "
+                    "knowledge_repositories_present=%s",
                     config.schema_version,
                     False,
                 )
@@ -3439,6 +3476,7 @@ def _bootstrap_snapshot(engine: WorldEngine) -> WorldSnapshot:
         kinship_active=engine.kinship_channel_active,
         dependency_care_active=engine.dependency_care_channel_active,
         durable_records_active=engine.durable_records_channel_active,
+        knowledge_repositories_active=engine.knowledge_repositories_channel_active,
     )
     state = engine._snapshot.world.state
     production_rows: dict[str, tuple[object, ...]] = {}

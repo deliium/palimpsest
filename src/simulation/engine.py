@@ -268,6 +268,7 @@ class WorldEngine:
         "_dependency_care_spec",
         "_dependency_need_registers",
         "_durable_records_spec",
+        "_knowledge_repositories_spec",
         "_kinship_graph",
         "_kinship_spec",
         "_last_tick_result",
@@ -311,6 +312,7 @@ class WorldEngine:
         kinship_graph: object | None = None,
         dependency_care_spec: object | None = None,
         durable_records_spec: object | None = None,
+        knowledge_repositories_spec: object | None = None,
     ) -> None:
         if type(config) is not SimulationRunConfig:
             raise TypeError("WorldEngine requires SimulationRunConfig")
@@ -475,12 +477,56 @@ class WorldEngine:
                 else False
             ),
         )
+        from simulation.runner_models import KnowledgeRepositoriesSpec
+
+        if knowledge_repositories_spec is not None and type(
+            knowledge_repositories_spec
+        ) is not KnowledgeRepositoriesSpec:
+            raise TypeError(
+                "knowledge_repositories_spec must be "
+                "KnowledgeRepositoriesSpec or None"
+            )
+        if knowledge_repositories_spec is not None and self._durable_records_spec is None:
+            raise ValueError(
+                "knowledge_repositories requires durable_records "
+                "(code=knowledge_repositories_requires_durable_records)"
+            )
+        self._knowledge_repositories_spec = knowledge_repositories_spec
+        if self._knowledge_repositories_spec is not None and not self._artifacts_enabled:
+            self._artifacts_enabled = True
+            _LOGGER.debug(
+                "repository_artifacts_enabled_for_channel "
+                "knowledge_repositories_active=%s artifacts_enabled=%s",
+                True,
+                True,
+            )
+        _LOGGER.info(
+            "knowledge_repositories_channel knowledge_repositories_active=%s "
+            "max_repositories=%s neglect_ticks=%s default_access_mode=%s",
+            self._knowledge_repositories_spec is not None,
+            (
+                self._knowledge_repositories_spec.capacity_policy.max_repositories
+                if self._knowledge_repositories_spec is not None
+                else 0
+            ),
+            (
+                self._knowledge_repositories_spec.maintenance_policy.neglect_ticks
+                if self._knowledge_repositories_spec is not None
+                else 0
+            ),
+            (
+                self._knowledge_repositories_spec.access_policy.default_access_mode
+                if self._knowledge_repositories_spec is not None
+                else "-"
+            ),
+        )
         _LOGGER.debug(
             "%s world_id=%s revision=%s tick=%s registrations=%s "
             "artifacts_enabled=%s lifecycle_channel=%s "
             "bootstrap_lifecycle_record_count=%s new_agent_provenance=%s "
             "kinship_channel=%s bootstrap_kinship_edge_count=%s "
-            "dependency_care_active=%s durable_records_active=%s",
+            "dependency_care_active=%s durable_records_active=%s "
+            "knowledge_repositories_active=%s",
             EngineDiagnosticCode.BOOTSTRAP_VALIDATED.value,
             bootstrap.world_id.value,
             bootstrap.revision.value,
@@ -494,6 +540,7 @@ class WorldEngine:
             len(self._kinship_graph.edges),
             "on" if self._dependency_care_spec is not None else "off",
             "on" if self._durable_records_spec is not None else "off",
+            "on" if self._knowledge_repositories_spec is not None else "off",
         )
 
     @classmethod
@@ -748,6 +795,7 @@ class WorldEngine:
         engine._kinship_graph = KinshipGraph.empty()
         engine._dependency_care_spec = None
         engine._durable_records_spec = None
+        engine._knowledge_repositories_spec = None
         engine._dependency_need_registers = {}
         if snapshot.persistence_codec_version == "v10":
             from simulation.runner_models import DurableRecordsSpec
@@ -925,6 +973,14 @@ class WorldEngine:
         return self._durable_records_spec
 
     @property
+    def knowledge_repositories_channel_active(self) -> bool:
+        return self._knowledge_repositories_spec is not None
+
+    @property
+    def knowledge_repositories_spec(self) -> object | None:
+        return self._knowledge_repositories_spec
+
+    @property
     def kinship_graph(self) -> object:
         return self._kinship_graph
 
@@ -1004,6 +1060,7 @@ class WorldEngine:
                 kinship_active=True,
                 dependency_care_active=self.dependency_care_channel_active,
             durable_records_active=self.durable_records_channel_active,
+            knowledge_repositories_active=self.knowledge_repositories_channel_active,
             )
             snap = self._snapshot
             same_tick = [
@@ -1247,6 +1304,7 @@ class WorldEngine:
             kinship_active=self.kinship_channel_active,
             dependency_care_active=self.dependency_care_channel_active,
             durable_records_active=self.durable_records_channel_active,
+            knowledge_repositories_active=self.knowledge_repositories_channel_active,
         )
         next_registrations = (*self._registrations, registration)
         self._registrations = next_registrations
@@ -3197,6 +3255,7 @@ class WorldEngine:
             kinship_active=self.kinship_channel_active,
             dependency_care_active=self.dependency_care_channel_active,
             durable_records_active=self.durable_records_channel_active,
+            knowledge_repositories_active=self.knowledge_repositories_channel_active,
         )
         prepared = finalize_pending_batch(
             merged,
@@ -4758,6 +4817,7 @@ def select_checkpoint_schema(
     kinship_active: bool = False,
     dependency_care_active: bool = False,
     durable_records_active: bool = False,
+    knowledge_repositories_active: bool = False,
 ) -> tuple[int, str]:
     """Return the legal event-schema and codec pair for this run."""
     from simulation.persistence import (
@@ -4785,6 +4845,7 @@ def select_checkpoint_schema(
         kinship_active=kinship_active,
         dependency_care_active=dependency_care_active,
         durable_records_active=durable_records_active,
+        knowledge_repositories_active=knowledge_repositories_active,
     )
     agreed = (
         durable_records_active

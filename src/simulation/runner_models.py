@@ -112,6 +112,7 @@ RUNNER_SCHEMA_VERSION_V30: Final[str] = "runner-config-v30"
 RUNNER_SCHEMA_VERSION_V31: Final[str] = "runner-config-v31"
 RUNNER_SCHEMA_VERSION_V32: Final[str] = "runner-config-v32"
 RUNNER_SCHEMA_VERSION_V33: Final[str] = "runner-config-v33"
+RUNNER_SCHEMA_VERSION_V34: Final[str] = "runner-config-v34"
 RUNNER_SCHEMA_VERSION: Final[str] = RUNNER_SCHEMA_VERSION_V4
 SUPPORTED_RUNNER_SCHEMA_VERSIONS: Final[frozenset[str]] = frozenset(
     {
@@ -148,6 +149,7 @@ SUPPORTED_RUNNER_SCHEMA_VERSIONS: Final[frozenset[str]] = frozenset(
         RUNNER_SCHEMA_VERSION_V31,
         RUNNER_SCHEMA_VERSION_V32,
         RUNNER_SCHEMA_VERSION_V33,
+        RUNNER_SCHEMA_VERSION_V34,
     }
 )
 RESULT_SCHEMA_VERSION_V1: Final[str] = "runner-result-v1"
@@ -687,6 +689,7 @@ _SKILL_SCHEMAS: Final[frozenset[str]] = frozenset(
     RUNNER_SCHEMA_VERSION_V31,
     RUNNER_SCHEMA_VERSION_V32,
     RUNNER_SCHEMA_VERSION_V33,
+    RUNNER_SCHEMA_VERSION_V34,
     }
 )
 
@@ -2804,13 +2807,21 @@ _HISTORICAL_MEMORY_CULTURAL_SCHEMAS: Final[frozenset[str]] = frozenset(
         RUNNER_SCHEMA_VERSION_V31,
         RUNNER_SCHEMA_VERSION_V32,
         RUNNER_SCHEMA_VERSION_V33,
+        RUNNER_SCHEMA_VERSION_V34,
     }
 )
 _DURABLE_RECORDS_SCHEMAS: Final[frozenset[str]] = frozenset(
-    {RUNNER_SCHEMA_VERSION_V33}
+    {RUNNER_SCHEMA_VERSION_V33, RUNNER_SCHEMA_VERSION_V34}
 )
 _HISTORICAL_MEMORY_LAYER_SCHEMAS: Final[frozenset[str]] = frozenset(
-    {RUNNER_SCHEMA_VERSION_V32, RUNNER_SCHEMA_VERSION_V33}
+    {
+        RUNNER_SCHEMA_VERSION_V32,
+        RUNNER_SCHEMA_VERSION_V33,
+        RUNNER_SCHEMA_VERSION_V34,
+    }
+)
+_KNOWLEDGE_REPOSITORIES_SCHEMAS: Final[frozenset[str]] = frozenset(
+    {RUNNER_SCHEMA_VERSION_V34}
 )
 
 
@@ -3245,6 +3256,279 @@ def example_durable_records_spec(
         enabled_genres=tuple(sorted(_DURABLE_RECORD_GENRES)),
         copy_fidelity_policy=DurableCopyFidelityPolicy(
             default_fidelity=default_fidelity
+        ),
+        perception_mode=perception_mode,
+    )
+
+
+
+
+_KNOWLEDGE_REPOSITORIES_MODE: Final[frozenset[str]] = frozenset({"deterministic"})
+_KNOWLEDGE_REPOSITORIES_ACCESS_MODES: Final[frozenset[str]] = frozenset(
+    {"open", "colocated_only", "founder_list"}
+)
+_KNOWLEDGE_REPOSITORIES_PERCEPTION_MODES: Final[frozenset[str]] = frozenset(
+    {"container_and_meta", "container_only"}
+)
+_KNOWLEDGE_REPOSITORIES_FORBIDDEN_ALIASES: Final[frozenset[str]] = frozenset(
+    {
+        "library_institution",
+        "global_archive",
+        "society_library",
+        "canonical_catalog",
+        "true_history_index",
+        "library",
+        "archive",
+        "sacred",
+        "family_records",
+        "trade_ledger",
+        "librarian",
+        "archivist",
+        "library_must_form",
+        "archive_must_persist",
+        "true_catalog_restored",
+    }
+)
+
+
+@dataclass(frozen=True, slots=True)
+class KnowledgeRepositoryAccessPolicy:
+    """Exact access_policy object under knowledge_repositories."""
+
+    default_access_mode: str = "open"
+    deposit_requires_colocation: bool = True
+    retrieve_requires_colocation: bool = True
+    founder_list_survives_death: bool = True
+
+    def __post_init__(self) -> None:
+        mode = require_stable_id(
+            "KnowledgeRepositoryAccessPolicy.default_access_mode",
+            self.default_access_mode,
+        )
+        if mode not in _KNOWLEDGE_REPOSITORIES_ACCESS_MODES:
+            raise ValueError(
+                f"unknown default_access_mode {mode!r} "
+                "(code=knowledge_repositories_access_mode_invalid)"
+            )
+        object.__setattr__(self, "default_access_mode", mode)
+        if type(self.deposit_requires_colocation) is not bool:
+            raise TypeError("deposit_requires_colocation must be bool")
+        if type(self.retrieve_requires_colocation) is not bool:
+            raise TypeError("retrieve_requires_colocation must be bool")
+        if type(self.founder_list_survives_death) is not bool:
+            raise TypeError("founder_list_survives_death must be bool")
+
+
+@dataclass(frozen=True, slots=True)
+class KnowledgeRepositoryCapacityPolicy:
+    """Exact capacity_policy object under knowledge_repositories."""
+
+    max_repositories: int = 8
+    max_members_per_repository: int = 32
+    max_index_entries: int = 64
+
+    def __post_init__(self) -> None:
+        max_repos = require_exact_nonneg_int(
+            "max_repositories", self.max_repositories
+        )
+        if max_repos < 1:
+            raise ValueError(
+                "max_repositories must be >= 1 "
+                "(code=knowledge_repositories_capacity_invalid)"
+            )
+        object.__setattr__(self, "max_repositories", max_repos)
+        max_members = require_exact_nonneg_int(
+            "max_members_per_repository", self.max_members_per_repository
+        )
+        if max_members < 1:
+            raise ValueError(
+                "max_members_per_repository must be >= 1 "
+                "(code=knowledge_repositories_capacity_invalid)"
+            )
+        object.__setattr__(self, "max_members_per_repository", max_members)
+        max_index = require_exact_nonneg_int(
+            "max_index_entries", self.max_index_entries
+        )
+        object.__setattr__(self, "max_index_entries", max_index)
+
+
+@dataclass(frozen=True, slots=True)
+class KnowledgeRepositoryMaintenancePolicy:
+    """Exact maintenance_policy object under knowledge_repositories."""
+
+    neglect_ticks: int = 24
+    allow_destruction: bool = True
+    inaccessible_blocks_access: bool = True
+    neglect_corrupts_index: bool = True
+
+    def __post_init__(self) -> None:
+        neglect = require_exact_nonneg_int("neglect_ticks", self.neglect_ticks)
+        if neglect < 1:
+            raise ValueError(
+                "neglect_ticks must be >= 1 "
+                "(code=knowledge_repositories_neglect_ticks_invalid)"
+            )
+        object.__setattr__(self, "neglect_ticks", neglect)
+        if type(self.allow_destruction) is not bool:
+            raise TypeError("allow_destruction must be bool")
+        if type(self.inaccessible_blocks_access) is not bool:
+            raise TypeError("inaccessible_blocks_access must be bool")
+        if type(self.neglect_corrupts_index) is not bool:
+            raise TypeError("neglect_corrupts_index must be bool")
+
+
+@dataclass(frozen=True, slots=True)
+class KnowledgeRepositoryIndexPolicy:
+    """Exact index_policy object under knowledge_repositories."""
+
+    index_optional: bool = True
+    max_entries_per_index_op: int = 4
+    allow_corrupt_entries: bool = True
+
+    def __post_init__(self) -> None:
+        if type(self.index_optional) is not bool:
+            raise TypeError("index_optional must be bool")
+        max_op = require_exact_nonneg_int(
+            "max_entries_per_index_op", self.max_entries_per_index_op
+        )
+        if max_op < 1:
+            raise ValueError(
+                "max_entries_per_index_op must be >= 1 "
+                "(code=knowledge_repositories_index_op_invalid)"
+            )
+        object.__setattr__(self, "max_entries_per_index_op", max_op)
+        if type(self.allow_corrupt_entries) is not bool:
+            raise TypeError("allow_corrupt_entries must be bool")
+
+
+@dataclass(frozen=True, slots=True)
+class KnowledgeRepositoriesSpec:
+    """Opt-in knowledge repositories channel (runner-config-v34 sibling).
+
+    Deepens owned ``cultural_historical_memory``. Absent object means repository
+    channel off. Not an ``AgentCognitionSpec`` enum. Requires durable_records.
+    """
+
+    access_policy: KnowledgeRepositoryAccessPolicy = field(
+        default_factory=KnowledgeRepositoryAccessPolicy
+    )
+    capacity_policy: KnowledgeRepositoryCapacityPolicy = field(
+        default_factory=KnowledgeRepositoryCapacityPolicy
+    )
+    maintenance_policy: KnowledgeRepositoryMaintenancePolicy = field(
+        default_factory=KnowledgeRepositoryMaintenancePolicy
+    )
+    index_policy: KnowledgeRepositoryIndexPolicy = field(
+        default_factory=KnowledgeRepositoryIndexPolicy
+    )
+    knowledge_repositories_mode: str = "deterministic"
+    perception_mode: str = "container_and_meta"
+    rng_namespace: str = "knowledge_repositories"
+
+    def __post_init__(self) -> None:
+        mode = require_stable_id(
+            "KnowledgeRepositoriesSpec.knowledge_repositories_mode",
+            self.knowledge_repositories_mode,
+        )
+        if mode == "disabled":
+            raise ValueError(
+                "knowledge_repositories_mode=disabled is rejected; omit the "
+                "object for off (code=knowledge_repositories_mode_invalid)"
+            )
+        if mode not in _KNOWLEDGE_REPOSITORIES_MODE:
+            raise ValueError(
+                f"unknown knowledge_repositories_mode {mode!r} "
+                "(code=knowledge_repositories_mode_invalid)"
+            )
+        object.__setattr__(self, "knowledge_repositories_mode", mode)
+        if type(self.access_policy) is not KnowledgeRepositoryAccessPolicy:
+            raise TypeError(
+                "access_policy must be KnowledgeRepositoryAccessPolicy"
+            )
+        if type(self.capacity_policy) is not KnowledgeRepositoryCapacityPolicy:
+            raise TypeError(
+                "capacity_policy must be KnowledgeRepositoryCapacityPolicy"
+            )
+        if (
+            type(self.maintenance_policy)
+            is not KnowledgeRepositoryMaintenancePolicy
+        ):
+            raise TypeError(
+                "maintenance_policy must be KnowledgeRepositoryMaintenancePolicy"
+            )
+        if type(self.index_policy) is not KnowledgeRepositoryIndexPolicy:
+            raise TypeError("index_policy must be KnowledgeRepositoryIndexPolicy")
+        perception = require_stable_id(
+            "KnowledgeRepositoriesSpec.perception_mode", self.perception_mode
+        )
+        if perception not in _KNOWLEDGE_REPOSITORIES_PERCEPTION_MODES:
+            raise ValueError(
+                f"unknown perception_mode {perception!r} "
+                "(code=knowledge_repositories_perception_mode_invalid)"
+            )
+        object.__setattr__(self, "perception_mode", perception)
+        namespace = require_stable_id(
+            "KnowledgeRepositoriesSpec.rng_namespace", self.rng_namespace
+        )
+        object.__setattr__(self, "rng_namespace", namespace)
+
+    def canonical_payload(self) -> dict[str, object]:
+        return {
+            "access_policy": {
+                "default_access_mode": self.access_policy.default_access_mode,
+                "deposit_requires_colocation": (
+                    self.access_policy.deposit_requires_colocation
+                ),
+                "founder_list_survives_death": (
+                    self.access_policy.founder_list_survives_death
+                ),
+                "retrieve_requires_colocation": (
+                    self.access_policy.retrieve_requires_colocation
+                ),
+            },
+            "capacity_policy": {
+                "max_index_entries": self.capacity_policy.max_index_entries,
+                "max_members_per_repository": (
+                    self.capacity_policy.max_members_per_repository
+                ),
+                "max_repositories": self.capacity_policy.max_repositories,
+            },
+            "index_policy": {
+                "allow_corrupt_entries": self.index_policy.allow_corrupt_entries,
+                "index_optional": self.index_policy.index_optional,
+                "max_entries_per_index_op": (
+                    self.index_policy.max_entries_per_index_op
+                ),
+            },
+            "knowledge_repositories_mode": self.knowledge_repositories_mode,
+            "maintenance_policy": {
+                "allow_destruction": self.maintenance_policy.allow_destruction,
+                "inaccessible_blocks_access": (
+                    self.maintenance_policy.inaccessible_blocks_access
+                ),
+                "neglect_corrupts_index": (
+                    self.maintenance_policy.neglect_corrupts_index
+                ),
+                "neglect_ticks": self.maintenance_policy.neglect_ticks,
+            },
+            "perception_mode": self.perception_mode,
+            "rng_namespace": self.rng_namespace,
+        }
+
+
+def example_knowledge_repositories_spec(
+    *,
+    default_access_mode: str = "open",
+    perception_mode: str = "container_and_meta",
+    neglect_ticks: int = 24,
+) -> KnowledgeRepositoriesSpec:
+    """Reference knowledge repositories spec for tests and Experiment AO."""
+    return KnowledgeRepositoriesSpec(
+        access_policy=KnowledgeRepositoryAccessPolicy(
+            default_access_mode=default_access_mode
+        ),
+        maintenance_policy=KnowledgeRepositoryMaintenancePolicy(
+            neglect_ticks=neglect_ticks
         ),
         perception_mode=perception_mode,
     )
@@ -4890,6 +5174,7 @@ class SimulationRunnerConfig:
     cultural_feature_provenance: CulturalFeatureProvenanceSpec | None = None
     historical_memory_layers: HistoricalMemoryLayersSpec | None = None
     durable_records: DurableRecordsSpec | None = None
+    knowledge_repositories: KnowledgeRepositoriesSpec | None = None
 
     def __post_init__(self) -> None:
         # Late import avoids circular import with new_agent_initialization.
@@ -4958,6 +5243,13 @@ class SimulationRunnerConfig:
         ):
             raise TypeError(
                 "durable_records must be DurableRecordsSpec or None"
+            )
+        if (
+            self.knowledge_repositories is not None
+            and type(self.knowledge_repositories) is not KnowledgeRepositoriesSpec
+        ):
+            raise TypeError(
+                "knowledge_repositories must be KnowledgeRepositoriesSpec or None"
             )
         if type(self.scenario) is not WorldScenarioSpec:
             raise TypeError("scenario must be WorldScenarioSpec")
@@ -5053,6 +5345,7 @@ class SimulationRunnerConfig:
             RUNNER_SCHEMA_VERSION_V31,
             RUNNER_SCHEMA_VERSION_V32,
             RUNNER_SCHEMA_VERSION_V33,
+            RUNNER_SCHEMA_VERSION_V34,
         }
         if (
             self.v3_capability_flags.generational_population
@@ -5078,6 +5371,7 @@ class SimulationRunnerConfig:
             RUNNER_SCHEMA_VERSION_V31,
             RUNNER_SCHEMA_VERSION_V32,
             RUNNER_SCHEMA_VERSION_V33,
+            RUNNER_SCHEMA_VERSION_V34,
         }
         if self.v3_capability_flags.kinship_inheritance:
             if self.schema_version not in _kinship_schemas:
@@ -5120,6 +5414,7 @@ class SimulationRunnerConfig:
                 RUNNER_SCHEMA_VERSION_V31,
                 RUNNER_SCHEMA_VERSION_V32,
                 RUNNER_SCHEMA_VERSION_V33,
+                RUNNER_SCHEMA_VERSION_V34,
             }:
                 _LOGGER.error(
                     "dependency_care_requires_v28 schema_version=%s "
@@ -5169,6 +5464,7 @@ class SimulationRunnerConfig:
                 RUNNER_SCHEMA_VERSION_V31,
                 RUNNER_SCHEMA_VERSION_V32,
                 RUNNER_SCHEMA_VERSION_V33,
+                RUNNER_SCHEMA_VERSION_V34,
             }:
                 _LOGGER.error(
                     "developmental_learning_requires_v29 schema_version=%s "
@@ -5230,6 +5526,7 @@ class SimulationRunnerConfig:
                 RUNNER_SCHEMA_VERSION_V31,
                 RUNNER_SCHEMA_VERSION_V32,
                 RUNNER_SCHEMA_VERSION_V33,
+                RUNNER_SCHEMA_VERSION_V34,
             }:
                 _LOGGER.error(
                     "mentorship_requires_v30 schema_version=%s "
@@ -5310,7 +5607,8 @@ class SimulationRunnerConfig:
                 )
                 raise ValueError(
                     "cultural_feature_provenance requires runner-config-v31, "
-                    "runner-config-v32, or runner-config-v33 "
+                    "runner-config-v32, runner-config-v33, or "
+                    "runner-config-v34 "
                     "(code=cultural_feature_requires_v31)"
                 )
             if not self.v3_capability_flags.cultural_historical_memory:
@@ -5347,7 +5645,11 @@ class SimulationRunnerConfig:
             )
         elif (
             self.schema_version
-            not in {RUNNER_SCHEMA_VERSION_V32, RUNNER_SCHEMA_VERSION_V33}
+            not in {
+                RUNNER_SCHEMA_VERSION_V32,
+                RUNNER_SCHEMA_VERSION_V33,
+                RUNNER_SCHEMA_VERSION_V34,
+            }
             and self.v3_capability_flags.cultural_historical_memory
         ):
             _LOGGER.error(
@@ -5367,8 +5669,8 @@ class SimulationRunnerConfig:
                     self.schema_version,
                 )
                 raise ValueError(
-                    "historical_memory_layers requires runner-config-v32 "
-                    "or runner-config-v33 "
+                    "historical_memory_layers requires runner-config-v32, "
+                    "runner-config-v33, or runner-config-v34 "
                     "(code=historical_memory_requires_v32)"
                 )
             if not self.v3_capability_flags.cultural_historical_memory:
@@ -5416,6 +5718,62 @@ class SimulationRunnerConfig:
                 "runner-config-v32 requires historical_memory_layers "
                 "(code=v32_requires_historical_memory_layers)"
             )
+        if self.knowledge_repositories is not None:
+            if self.schema_version not in _KNOWLEDGE_REPOSITORIES_SCHEMAS:
+                _LOGGER.error(
+                    "knowledge_repositories_requires_v34 schema_version=%s "
+                    "reason_code=knowledge_repositories_requires_v34",
+                    self.schema_version,
+                )
+                raise ValueError(
+                    "knowledge_repositories requires runner-config-v34 "
+                    "(code=knowledge_repositories_requires_v34)"
+                )
+            if not self.v3_capability_flags.cultural_historical_memory:
+                _LOGGER.error(
+                    "knowledge_repositories_without_cultural_flag "
+                    "schema_version=%s "
+                    "reason_code=knowledge_repositories_without_cultural_flag",
+                    self.schema_version,
+                )
+                raise ValueError(
+                    "knowledge_repositories requires "
+                    "cultural_historical_memory "
+                    "(code=knowledge_repositories_without_cultural_flag)"
+                )
+            if self.cultural_feature_provenance is None:
+                _LOGGER.error(
+                    "knowledge_repositories_requires_cultural_provenance "
+                    "schema_version=%s "
+                    "reason_code=knowledge_repositories_requires_cultural_provenance",
+                    self.schema_version,
+                )
+                raise ValueError(
+                    "knowledge_repositories requires "
+                    "cultural_feature_provenance "
+                    "(code=knowledge_repositories_requires_cultural_provenance)"
+                )
+            if self.durable_records is None:
+                _LOGGER.error(
+                    "knowledge_repositories_requires_durable_records "
+                    "schema_version=%s "
+                    "reason_code=knowledge_repositories_requires_durable_records",
+                    self.schema_version,
+                )
+                raise ValueError(
+                    "knowledge_repositories requires durable_records "
+                    "(code=knowledge_repositories_requires_durable_records)"
+                )
+            _LOGGER.info(
+                "knowledge_repositories_schema_select schema_version=%s "
+                "default_access_mode=%s max_repositories=%s "
+                "neglect_ticks=%s perception_mode=%s",
+                self.schema_version,
+                self.knowledge_repositories.access_policy.default_access_mode,
+                self.knowledge_repositories.capacity_policy.max_repositories,
+                self.knowledge_repositories.maintenance_policy.neglect_ticks,
+                self.knowledge_repositories.perception_mode,
+            )
         if self.durable_records is not None:
             if self.schema_version not in _DURABLE_RECORDS_SCHEMAS:
                 _LOGGER.error(
@@ -5424,7 +5782,8 @@ class SimulationRunnerConfig:
                     self.schema_version,
                 )
                 raise ValueError(
-                    "durable_records requires runner-config-v33 "
+                    "durable_records requires runner-config-v33 or "
+                    "runner-config-v34 "
                     "(code=durable_records_requires_v33)"
                 )
             if not self.v3_capability_flags.cultural_historical_memory:
@@ -5468,6 +5827,27 @@ class SimulationRunnerConfig:
                 "runner-config-v33 requires durable_records "
                 "(code=v33_requires_durable_records)"
             )
+        if self.schema_version == RUNNER_SCHEMA_VERSION_V34:
+            if self.durable_records is None:
+                _LOGGER.error(
+                    "v34_requires_durable_records schema_version=%s "
+                    "reason_code=v34_requires_durable_records",
+                    self.schema_version,
+                )
+                raise ValueError(
+                    "runner-config-v34 requires durable_records "
+                    "(code=v34_requires_durable_records)"
+                )
+            if self.knowledge_repositories is None:
+                _LOGGER.error(
+                    "v34_requires_knowledge_repositories schema_version=%s "
+                    "reason_code=v34_requires_knowledge_repositories",
+                    self.schema_version,
+                )
+                raise ValueError(
+                    "runner-config-v34 requires knowledge_repositories "
+                    "(code=v34_requires_knowledge_repositories)"
+                )
         other_v3_enabled = tuple(
             name
             for name in self.v3_capability_flags.enabled_names()
@@ -5485,6 +5865,7 @@ class SimulationRunnerConfig:
             RUNNER_SCHEMA_VERSION_V31,
             RUNNER_SCHEMA_VERSION_V32,
             RUNNER_SCHEMA_VERSION_V33,
+            RUNNER_SCHEMA_VERSION_V34,
         }:
             _LOGGER.error(
                 "v3_capability_requires_v23 schema_version=%s "
@@ -5550,7 +5931,7 @@ class SimulationRunnerConfig:
                     self.schema_version,
                 )
                 raise ValueError(
-                    "cultural-only v31/v32/v33 forbids population_lifecycle "
+                    "cultural-only v31/v32/v33/v34 forbids population_lifecycle "
                     "(code=cultural_only_forbids_lifecycle_spec)"
                 )
             if self.new_agent_initialization is not None:
@@ -5560,7 +5941,7 @@ class SimulationRunnerConfig:
                     self.schema_version,
                 )
                 raise ValueError(
-                    "cultural-only v31/v32/v33 forbids new_agent_initialization "
+                    "cultural-only v31/v32/v33/v34 forbids new_agent_initialization "
                     "(code=cultural_only_forbids_new_agent_init)"
                 )
             if self.dependency_care is not None:
@@ -5589,6 +5970,7 @@ class SimulationRunnerConfig:
                     RUNNER_SCHEMA_VERSION_V31,
                     RUNNER_SCHEMA_VERSION_V32,
                     RUNNER_SCHEMA_VERSION_V33,
+                    RUNNER_SCHEMA_VERSION_V34,
                 }
                 or self.v3_capability_flags.generational_population
             )
@@ -5654,6 +6036,7 @@ class SimulationRunnerConfig:
                 RUNNER_SCHEMA_VERSION_V31,
                 RUNNER_SCHEMA_VERSION_V32,
                 RUNNER_SCHEMA_VERSION_V33,
+                RUNNER_SCHEMA_VERSION_V34,
             }
         ):
             _LOGGER.error(
@@ -5678,6 +6061,7 @@ class SimulationRunnerConfig:
                 RUNNER_SCHEMA_VERSION_V31,
                 RUNNER_SCHEMA_VERSION_V32,
                 RUNNER_SCHEMA_VERSION_V33,
+                RUNNER_SCHEMA_VERSION_V34,
             }
             and self.v3_capability_flags.generational_population
         )
@@ -5817,6 +6201,7 @@ class SimulationRunnerConfig:
         RUNNER_SCHEMA_VERSION_V31,
         RUNNER_SCHEMA_VERSION_V32,
         RUNNER_SCHEMA_VERSION_V33,
+        RUNNER_SCHEMA_VERSION_V34,
         }
         if non_disabled and self.schema_version not in consolidation_schemas:
             _LOGGER.error(
@@ -5876,6 +6261,7 @@ class SimulationRunnerConfig:
         RUNNER_SCHEMA_VERSION_V31,
         RUNNER_SCHEMA_VERSION_V32,
         RUNNER_SCHEMA_VERSION_V33,
+        RUNNER_SCHEMA_VERSION_V34,
         }
         if reflecting and self.schema_version not in reflection_schemas:
             _LOGGER.error(
@@ -5935,6 +6321,7 @@ class SimulationRunnerConfig:
         RUNNER_SCHEMA_VERSION_V31,
         RUNNER_SCHEMA_VERSION_V32,
         RUNNER_SCHEMA_VERSION_V33,
+        RUNNER_SCHEMA_VERSION_V34,
         }
         if planning and self.schema_version not in prospective_schemas:
             _LOGGER.error(
@@ -5993,6 +6380,7 @@ class SimulationRunnerConfig:
         RUNNER_SCHEMA_VERSION_V31,
         RUNNER_SCHEMA_VERSION_V32,
         RUNNER_SCHEMA_VERSION_V33,
+        RUNNER_SCHEMA_VERSION_V34,
         }
         if considering and self.schema_version not in counterfactual_schemas:
             _LOGGER.error(
@@ -6050,6 +6438,7 @@ class SimulationRunnerConfig:
         RUNNER_SCHEMA_VERSION_V31,
         RUNNER_SCHEMA_VERSION_V32,
         RUNNER_SCHEMA_VERSION_V33,
+        RUNNER_SCHEMA_VERSION_V34,
         }:
             _LOGGER.error(
                 "invalid_fields path=agents.cognition.communication_strategy_mode "
@@ -6105,6 +6494,7 @@ class SimulationRunnerConfig:
         RUNNER_SCHEMA_VERSION_V31,
         RUNNER_SCHEMA_VERSION_V32,
         RUNNER_SCHEMA_VERSION_V33,
+        RUNNER_SCHEMA_VERSION_V34,
         }:
             _LOGGER.error(
                 "invalid_fields path=agents.cognition.reputation_mode "
@@ -6202,6 +6592,7 @@ class SimulationRunnerConfig:
         RUNNER_SCHEMA_VERSION_V31,
         RUNNER_SCHEMA_VERSION_V32,
         RUNNER_SCHEMA_VERSION_V33,
+        RUNNER_SCHEMA_VERSION_V34,
         }:
             _LOGGER.error(
                 "invalid_fields path=agents.cognition.teaching_interaction_mode "
@@ -6248,6 +6639,7 @@ class SimulationRunnerConfig:
         RUNNER_SCHEMA_VERSION_V31,
         RUNNER_SCHEMA_VERSION_V32,
         RUNNER_SCHEMA_VERSION_V33,
+        RUNNER_SCHEMA_VERSION_V34,
         }
         if (dynamics is not None and self.schema_version not in dynamics_schemas) or (
             self.schema_version == RUNNER_SCHEMA_VERSION_V14 and dynamics is None
@@ -6289,6 +6681,7 @@ class SimulationRunnerConfig:
         RUNNER_SCHEMA_VERSION_V31,
         RUNNER_SCHEMA_VERSION_V32,
         RUNNER_SCHEMA_VERSION_V33,
+        RUNNER_SCHEMA_VERSION_V34,
         }:
             _LOGGER.error(
                 "invalid_fields path=agents.cognition.territorial_claim_mode "
@@ -6336,6 +6729,7 @@ class SimulationRunnerConfig:
         RUNNER_SCHEMA_VERSION_V31,
         RUNNER_SCHEMA_VERSION_V32,
         RUNNER_SCHEMA_VERSION_V33,
+        RUNNER_SCHEMA_VERSION_V34,
         }:
             _LOGGER.error(
                 "invalid_fields path=agents.cognition.group_formation_mode "
@@ -6377,6 +6771,7 @@ class SimulationRunnerConfig:
         RUNNER_SCHEMA_VERSION_V31,
         RUNNER_SCHEMA_VERSION_V32,
         RUNNER_SCHEMA_VERSION_V33,
+        RUNNER_SCHEMA_VERSION_V34,
         }:
             _LOGGER.error(
                 "invalid_fields path=agents.cognition.social_norm_mode "
@@ -6421,6 +6816,7 @@ class SimulationRunnerConfig:
         RUNNER_SCHEMA_VERSION_V31,
         RUNNER_SCHEMA_VERSION_V32,
         RUNNER_SCHEMA_VERSION_V33,
+        RUNNER_SCHEMA_VERSION_V34,
         }
         if conventions_on and self.schema_version not in convention_schemas:
             _LOGGER.error(
@@ -6470,6 +6866,7 @@ class SimulationRunnerConfig:
         RUNNER_SCHEMA_VERSION_V31,
         RUNNER_SCHEMA_VERSION_V32,
         RUNNER_SCHEMA_VERSION_V33,
+        RUNNER_SCHEMA_VERSION_V34,
         }
         if artifacts_on and self.schema_version not in artifact_schemas:
             runner_log.error(
@@ -6515,6 +6912,7 @@ class SimulationRunnerConfig:
         RUNNER_SCHEMA_VERSION_V31,
         RUNNER_SCHEMA_VERSION_V32,
         RUNNER_SCHEMA_VERSION_V33,
+        RUNNER_SCHEMA_VERSION_V34,
         }
         if naming_on and self.schema_version not in naming_schemas:
             runner_log.error(
@@ -6557,6 +6955,7 @@ class SimulationRunnerConfig:
         RUNNER_SCHEMA_VERSION_V31,
         RUNNER_SCHEMA_VERSION_V32,
         RUNNER_SCHEMA_VERSION_V33,
+        RUNNER_SCHEMA_VERSION_V34,
         }
         budget_modes = tuple(
             agent.cognition.cognitive_budget_mode for agent in self.agents
@@ -6575,6 +6974,7 @@ class SimulationRunnerConfig:
         RUNNER_SCHEMA_VERSION_V31,
         RUNNER_SCHEMA_VERSION_V32,
         RUNNER_SCHEMA_VERSION_V33,
+        RUNNER_SCHEMA_VERSION_V34,
         }
         if budgets_on and self.schema_version not in budget_schemas:
             runner_log.error(
@@ -6691,6 +7091,7 @@ class SimulationRunnerConfig:
         RUNNER_SCHEMA_VERSION_V31,
         RUNNER_SCHEMA_VERSION_V32,
         RUNNER_SCHEMA_VERSION_V33,
+        RUNNER_SCHEMA_VERSION_V34,
         }:
             _LOGGER.error(
                 "invalid_fields path=agents.cognition.production_knowledge_mode "
@@ -6725,6 +7126,7 @@ class SimulationRunnerConfig:
         RUNNER_SCHEMA_VERSION_V31,
         RUNNER_SCHEMA_VERSION_V32,
         RUNNER_SCHEMA_VERSION_V33,
+        RUNNER_SCHEMA_VERSION_V34,
         }:
             from world.production import production_catalog_digest
 
@@ -6799,6 +7201,7 @@ class SimulationRunnerConfig:
         RUNNER_SCHEMA_VERSION_V31,
         RUNNER_SCHEMA_VERSION_V32,
         RUNNER_SCHEMA_VERSION_V33,
+        RUNNER_SCHEMA_VERSION_V34,
         }:
             shared_teaching = teaching_weight_tuple(self.agents[0].cognition)
             if any(

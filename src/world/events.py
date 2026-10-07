@@ -76,6 +76,7 @@ EVENT_SCHEMA_REPLAY_V10: Final[int] = 10
 EVENT_SCHEMA_REPLAY_V11: Final[int] = 11
 EVENT_SCHEMA_REPLAY_V12: Final[int] = 12
 EVENT_SCHEMA_REPLAY_V13: Final[int] = 13
+EVENT_SCHEMA_REPLAY_V14: Final[int] = 14  # knowledge repositories write-pair (Task 7 activates)
 SUPPORTED_EVENT_SCHEMA_VERSIONS: Final[frozenset[int]] = frozenset(
     {
         EVENT_SCHEMA_AUDIT_V1,

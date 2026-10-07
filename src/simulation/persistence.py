@@ -188,16 +188,23 @@ def checkpoint_schema_for_production(
     kinship_active: bool = False,
     dependency_care_active: bool = False,
     durable_records_active: bool = False,
+    knowledge_repositories_active: bool = False,
 ) -> tuple[int, str]:
     """Choose the checkpoint schema for this run.
 
-    Priority: durable_records → ``(v13, v10)``; else dependency_care →
+    Priority: knowledge_repositories → ``(v14, v11)`` (Task 7 activates);
+    else durable_records → ``(v13, v10)``; else dependency_care →
     ``(v12, v9)``; else kinship → ``(v11, v8)``; else new-agent provenance →
     ``(v10, v7)``; else lifecycle → ``(v9, v6)``; else artifacts → ``(v8, v5)``;
     else dynamics → ``(v7, v4)``; else production → ``(v6, v3)``; else
     replay-v5 / codec ``v2``.
     """
-    if durable_records_active:
+    # Task 2 wires the flag; Task 7 co-lands V14/v11 selection + agreed-or.
+    # Until then repository-on falls through to durable V13/v10 (durable required).
+    if knowledge_repositories_active and durable_records_active:
+        # Placeholder: keep durable write-pair until Task 7 lands V14/v11.
+        pair = EVENT_SCHEMA_REPLAY_V13, "v10"
+    elif durable_records_active:
         pair = EVENT_SCHEMA_REPLAY_V13, "v10"
     elif dependency_care_active:
         pair = EVENT_SCHEMA_REPLAY_V12, "v9"
@@ -217,10 +224,12 @@ def checkpoint_schema_for_production(
         pair = EVENT_SCHEMA_VERSION, PERSISTENCE_CODEC_VERSION
     _LOG.debug(
         "checkpoint_schema_selected event_schema=%s codec=%s "
-        "durable_records_active=%s dependency_care_active=%s kinship_active=%s "
+        "knowledge_repositories_active=%s durable_records_active=%s "
+        "dependency_care_active=%s kinship_active=%s "
         "new_agent_provenance_active=%s lifecycle_active=%s artifacts_active=%s",
         pair[0],
         pair[1],
+        knowledge_repositories_active,
         durable_records_active,
         dependency_care_active,
         kinship_active,
