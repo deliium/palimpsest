@@ -530,22 +530,22 @@ Update (no “optional” hedges):
 
 ### Phase 7: Research UI + docs + regression pins
 
-- [ ] Task 18: Research UI epistemic overlays + AnalyticsPanel discovery for `durable_record_lineage`, `durable_record_fidelity`, `durable_record_survival` (`research_inference` badge only — no subjective ledger fields). Mirror Experiment AM overlay pattern.
+- [x] Task 18: Research UI epistemic overlays + AnalyticsPanel discovery for `durable_record_lineage`, `durable_record_fidelity`, `durable_record_survival` (`research_inference` badge only — no subjective ledger fields). Mirror Experiment AM overlay pattern.
   - Files: `clients/research-ui/src/epistemic.ts`, `clients/research-ui/src/epistemic.test.ts`, `clients/research-ui/src/views/AnalyticsPanel.svelte`, related client tests
   - Logging: N/A in SPA
   - Depends on: 13
 
-- [ ] Task 19: Mandatory docs via `/aif-docs` — architecture V3 seams + Downstream contract (v33 deepen, cultural `{v31,v32,v33}`, write-pair V13/v10, no new flag), physical-simulation durable commands/integrity/copy, analysis-metrics families, cognition-runtime note (marks ≠ truth; author-death persistence), observer semantic types, DESCRIPTION + ARCHITECTURE artifacts.
+- [x] Task 19: Mandatory docs via `/aif-docs` — architecture V3 seams + Downstream contract (v33 deepen, cultural `{v31,v32,v33}`, write-pair V13/v10, no new flag), physical-simulation durable commands/integrity/copy, analysis-metrics families, cognition-runtime note (marks ≠ truth; author-death persistence), observer semantic types, DESCRIPTION + ARCHITECTURE artifacts.
   - Files: `docs/architecture.md`, `docs/physical-simulation.md`, `docs/analysis-metrics.md`, `docs/cognition-runtime.md`, `docs/observer.md`, `.ai-factory/DESCRIPTION.md`, `.ai-factory/ARCHITECTURE.md`
   - Logging: N/A
   - Depends on: 1, 7, 13, 15, 18
 
-- [ ] Task 20: Final regression — V1 gate + `test_v2_scientific_invariants` under V3 flags-off; architecture isolation (`tests/architecture/test_v3_durable_records_isolation.py` mirroring v3-10 dual-rep walls); `METRIC_FAMILY_COUNT=59`; command count 29; SEMANTIC 47; Alembic head `0017`; Experiment Z unchanged when durable absent; durable+dependency_care write-pair V13; append-only DELETE still rejected.
+- [x] Task 20: Final regression — V1 gate + `test_v2_scientific_invariants` under V3 flags-off; architecture isolation (`tests/architecture/test_v3_durable_records_isolation.py` mirroring v3-10 dual-rep walls); `METRIC_FAMILY_COUNT=59`; command count 29; SEMANTIC 47; Alembic head `0017`; Experiment Z unchanged when durable absent; durable+dependency_care write-pair V13; append-only DELETE still rejected.
   - Files: existing gate tests; `tests/unit/test_v3_durable_records_regression.py` (SEMANTIC/command pins)
   - Logging: pytest output only
   - Depends on: 7, 10, 11, 13, 16, 17, 19
 
-- [ ] Task 21: Close plan verification pins — ensure checkbox-ready for `/aif-verify`; keep the Verification pins table below accurate (implementer updates pins only — no new scope).
+- [x] Task 21: Close plan verification pins — ensure checkbox-ready for `/aif-verify`; keep the Verification pins table below accurate (implementer updates pins only — no new scope).
   - Files: this plan file (pins only), optionally `docs/architecture.md`
   - Logging: N/A
   - Depends on: 20

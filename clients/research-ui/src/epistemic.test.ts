@@ -18,6 +18,15 @@ describe('epistemic mapping', () => {
     expect(epistemicFromOverlayKind('historical_memory_queries')).toBe(
       'research_inference',
     )
+    expect(epistemicFromOverlayKind('durable_record_lineage')).toBe(
+      'research_inference',
+    )
+    expect(epistemicFromOverlayKind('durable_record_fidelity')).toBe(
+      'research_inference',
+    )
+    expect(epistemicFromOverlayKind('durable_record_survival')).toBe(
+      'research_inference',
+    )
     expect(epistemicFromEvidenceClass('ANALYTICAL_INFERRED')).toBe('research_inference')
   })
 

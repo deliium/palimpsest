@@ -29,12 +29,21 @@
     'historical_memory_layers',
     'historical_memory_transitions',
     'historical_memory_queries',
+    'durable_record_lineage',
+    'durable_record_fidelity',
+    'durable_record_survival',
   ] as const
 
   const HISTORICAL_MEMORY_FAMILIES = new Set([
     'historical_memory_layers',
     'historical_memory_transitions',
     'historical_memory_queries',
+  ])
+
+  const DURABLE_RECORD_FAMILIES = new Set([
+    'durable_record_lineage',
+    'durable_record_fidelity',
+    'durable_record_survival',
   ])
 
   type MetricCard = {
@@ -201,10 +210,13 @@
       const historical = catalog.items.filter((item) =>
         HISTORICAL_MEMORY_FAMILIES.has(item.metric_family),
       )
+      const durable = catalog.items.filter((item) =>
+        DURABLE_RECORD_FAMILIES.has(item.metric_family),
+      )
       const phenomenon = catalog.items.filter((item) =>
         item.metric_family.includes('phenomenon'),
       )
-      const selected = [...preferred, ...historical, ...phenomenon]
+      const selected = [...preferred, ...historical, ...durable, ...phenomenon]
         .filter(
           (item, index, all) =>
             all.findIndex(
@@ -264,8 +276,8 @@
   </header>
   <p class="lede">
     Metric documents and phenomenon panels are analytical results — never world facts.
-    Historical memory layers / transitions / queries are researcher constructs
-    (<code>research_inference</code>), not agent knowledge.
+    Historical memory and durable-record lineage / fidelity / survival families are
+    researcher constructs (<code>research_inference</code>), not agent knowledge.
   </p>
 
   {#if loading}

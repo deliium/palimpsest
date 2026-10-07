@@ -38,7 +38,7 @@ Executable formula, population, and edge-case policy for all nineteen metric fam
 | `caregiving_burden` | `caregiving_burden@1` | detached care-act rows |
 | `intergenerational_cooperation` | `intergenerational_cooperation@1` | detached care-act + kinship rows |
 
-Catalog version: `metric-catalog-v1`. Document schema: `MetricDocument` schema `1`. Closed catalog cardinality: **56** families (`METRIC_FAMILY_COUNT`). New opt-in families assemble only when their detached inputs are present.
+Catalog version: `metric-catalog-v1`. Document schema: `MetricDocument` schema `1`. Closed catalog cardinality: **59** families (`METRIC_FAMILY_COUNT`). New opt-in families assemble only when their detached inputs are present.
 
 ### Additive analysis surfaces (off the V1 gate)
 
@@ -78,7 +78,9 @@ Catalog version: `metric-catalog-v1`. Document schema: `MetricDocument` schema `
 
 ### Historical memory layer families (off the V1 gate)
 
-`historical_memory_layers@1`, `historical_memory_transitions@1`, and `historical_memory_queries@1` assemble from analysis-only Assmann layer harvests (`analysis.historical_memory` / `analysis.historical_memory_metrics`) when `HistoricalMemoryLayersSpec` is present on `runner-config-v32`. Layer histograms, transition counts, and the locked researcher query report (`any_direct_witnesses_alive`, `anyone_remembers_speaking_to_witness`, `event_known_only_from_stories_or_artifacts`) are researcher constructs only. They never write layer labels into Observation, SelfModel, or subjective ledgers, never overload cultural-feature or narrative families, and never feed cognition. Experiment AM stays off the V1 gate.
+`historical_memory_layers@1`, `historical_memory_transitions@1`, and `historical_memory_queries@1` assemble from analysis-only Assmann layer harvests (`analysis.historical_memory` / `analysis.historical_memory_metrics`) when `HistoricalMemoryLayersSpec` is present on `runner-config-v32` (or optional layers on `v33`). Layer histograms, transition counts, and the locked researcher query report (`any_direct_witnesses_alive`, `anyone_remembers_speaking_to_witness`, `event_known_only_from_stories_or_artifacts`) are researcher constructs only. They never write layer labels into Observation, SelfModel, or subjective ledgers, never overload cultural-feature or narrative families, and never feed cognition. Experiment AM stays off the V1 gate.
+
+`durable_record_lineage@1`, `durable_record_fidelity@1`, and `durable_record_survival@1` assemble from duck-typed durable harvest rows when `DurableRecordsSpec` is present on `runner-config-v33` (deepens owned `cultural_historical_memory`; no new V3 flag). Signals are copy-tree depth / generation histograms, perfect-vs-mutated-vs-lossy rates with mark/relation edit distances, and integrity / author-death / false-record persistence counts — never mark payloads, never cognition feed, and never overloads of `external_artifact_memory@1` or historical-memory families. Experiment AN stays off the V1 gate.
 
 ### Supporting formulas (not a separate family)
 
