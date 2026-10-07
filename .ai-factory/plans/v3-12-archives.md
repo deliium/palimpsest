@@ -489,7 +489,7 @@ Update (no “optional” hedges):
   - Logging: DEBUG `repository_neglect_tick` streak; INFO status transitions; never log index tokens
   - Depends on: 5
 
-- [ ] Task 7: Land `EVENT_SCHEMA_REPLAY_V14`, detail types with exact payload tables above, serialization encode/decode, full ACCEPTED frozenset co-land, and agreed write-pair selection in **both** `checkpoint_schema_for_production` and `engine.select_checkpoint_schema` (`knowledge_repositories_active` → V14/v11 ahead of durable), including agreed-or chain update.
+- [x] Task 7: Land `EVENT_SCHEMA_REPLAY_V14`, detail types with exact payload tables above, serialization encode/decode, full ACCEPTED frozenset co-land, and agreed write-pair selection in **both** `checkpoint_schema_for_production` and `engine.select_checkpoint_schema` (`knowledge_repositories_active` → V14/v11 ahead of durable), including agreed-or chain update.
   - Deliverable: Encode/decode + replay round-trip tests; combined durable+repository write-pair regression stub.
   - Files: `src/world/events.py`, `src/world/_replay.py`, `src/simulation/serialization.py`, `src/simulation/compatibility.py`, `src/simulation/engine.py`, `src/simulation/persistence.py`, `src/simulation/service.py`, `tests/unit/test_repository_events_replay_v14.py`, `tests/unit/test_repository_write_pair.py`
   - Logging: DEBUG schema selected V14/v11; never log payloads

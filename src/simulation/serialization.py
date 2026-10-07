@@ -153,6 +153,7 @@ from world.events import (
     EVENT_SCHEMA_REPLAY_V11,
     EVENT_SCHEMA_REPLAY_V12,
     EVENT_SCHEMA_REPLAY_V13,
+    EVENT_SCHEMA_REPLAY_V14,
     AgentCreated,
     AgentEnteredWorld,
     AgentInitializationRecorded,
@@ -183,6 +184,12 @@ from world.events import (
     KinshipEdgeRecorded,
     LifecycleStageChanged,
     Moved,
+    RepositoryEstablished,
+    RepositoryIndexed,
+    RepositoryMaintained,
+    RepositoryMemberDeposited,
+    RepositoryMemberRetrieved,
+    RepositoryNeglected,
     NeedsApplied,
     OccurrenceContext,
     ResourceHarvested,
@@ -4698,6 +4705,105 @@ def _encode_event_details(value: object) -> dict[str, Any]:
                 "parent_agent_id": parent_agent_id,
                 "success": success,
             }
+
+        case RepositoryEstablished(
+            repository_id=repository_id,
+            location_id=location_id,
+            structure_id=structure_id,
+            founder_ids=founder_ids,
+            access_mode=access_mode,
+            established_tick=established_tick,
+            success=success,
+        ):
+            return {
+                "access_mode": access_mode,
+                "established_tick": established_tick,
+                "founder_ids": [founder.value for founder in founder_ids],
+                "kind": "repository_established",
+                "location_id": location_id.value,
+                "repository_id": repository_id.value,
+                "structure_id": None if structure_id is None else structure_id.value,
+                "success": success,
+            }
+        case RepositoryMemberDeposited(
+            repository_id=repository_id,
+            artifact_id=artifact_id,
+            member_count=member_count,
+            actor_id=actor_id,
+            success=success,
+        ):
+            return {
+                "actor_id": actor_id.value,
+                "artifact_id": artifact_id.value,
+                "kind": "repository_member_deposited",
+                "member_count": member_count,
+                "repository_id": repository_id.value,
+                "success": success,
+            }
+        case RepositoryMemberRetrieved(
+            repository_id=repository_id,
+            artifact_id=artifact_id,
+            member_count=member_count,
+            actor_id=actor_id,
+            hold=hold,
+            success=success,
+        ):
+            return {
+                "actor_id": actor_id.value,
+                "artifact_id": artifact_id.value,
+                "hold": hold,
+                "kind": "repository_member_retrieved",
+                "member_count": member_count,
+                "repository_id": repository_id.value,
+                "success": success,
+            }
+        case RepositoryMaintained(
+            repository_id=repository_id,
+            mode=mode,
+            prior_status=prior_status,
+            next_status=next_status,
+            last_maintained_tick=last_maintained_tick,
+            success=success,
+        ):
+            return {
+                "kind": "repository_maintained",
+                "last_maintained_tick": last_maintained_tick,
+                "mode": mode,
+                "next_status": next_status,
+                "prior_status": prior_status,
+                "repository_id": repository_id.value,
+                "success": success,
+            }
+        case RepositoryIndexed(
+            repository_id=repository_id,
+            index_entry_count=index_entry_count,
+            revision_bump=revision_bump,
+            success=success,
+        ):
+            return {
+                "index_entry_count": index_entry_count,
+                "kind": "repository_indexed",
+                "repository_id": repository_id.value,
+                "revision_bump": revision_bump,
+                "success": success,
+            }
+        case RepositoryNeglected(
+            repository_id=repository_id,
+            neglect_streak=neglect_streak,
+            prior_status=prior_status,
+            next_status=next_status,
+            index_entries_dropped=index_entries_dropped,
+            success=success,
+        ):
+            return {
+                "index_entries_dropped": index_entries_dropped,
+                "kind": "repository_neglected",
+                "neglect_streak": neglect_streak,
+                "next_status": next_status,
+                "prior_status": prior_status,
+                "repository_id": repository_id.value,
+                "success": success,
+            }
         case _:
             raise DomainSerializationError("unsupported_type", "$")
 
@@ -5657,6 +5763,7 @@ def _decode_event_details(
                 EVENT_SCHEMA_REPLAY_V11,
                 EVENT_SCHEMA_REPLAY_V12,
                 EVENT_SCHEMA_REPLAY_V13,
+                EVENT_SCHEMA_REPLAY_V14,
             }:
                 raise DomainSerializationError("invalid_event_schema_version", path)
             return _decode_production_details(kind, fields, path=path)
@@ -5676,6 +5783,7 @@ def _decode_event_details(
                 EVENT_SCHEMA_REPLAY_V11,
                 EVENT_SCHEMA_REPLAY_V12,
                 EVENT_SCHEMA_REPLAY_V13,
+                EVENT_SCHEMA_REPLAY_V14,
             }:
                 raise DomainSerializationError("invalid_event_schema_version", path)
             return _decode_environment_details(kind, fields, path=path)
@@ -5696,6 +5804,7 @@ def _decode_event_details(
                 EVENT_SCHEMA_REPLAY_V11,
                 EVENT_SCHEMA_REPLAY_V12,
                 EVENT_SCHEMA_REPLAY_V13,
+                EVENT_SCHEMA_REPLAY_V14,
             }:
                 raise DomainSerializationError("invalid_event_schema_version", path)
             if kind in {
@@ -5703,7 +5812,7 @@ def _decode_event_details(
                 "artifact_annotated",
                 "artifact_damaged",
                 "artifact_partially_lost",
-            } and schema_version != EVENT_SCHEMA_REPLAY_V13:
+            } and schema_version not in {EVENT_SCHEMA_REPLAY_V13, EVENT_SCHEMA_REPLAY_V14}:
                 raise DomainSerializationError("invalid_event_schema_version", path)
             return _decode_artifact_details(kind, fields, path=path)
         if kind in {
@@ -5717,6 +5826,7 @@ def _decode_event_details(
                 EVENT_SCHEMA_REPLAY_V11,
                 EVENT_SCHEMA_REPLAY_V12,
                 EVENT_SCHEMA_REPLAY_V13,
+                EVENT_SCHEMA_REPLAY_V14,
             }:
                 raise DomainSerializationError("invalid_event_schema_version", path)
             return _decode_lifecycle_details(kind, fields, path=path)
@@ -5726,9 +5836,22 @@ def _decode_event_details(
                 EVENT_SCHEMA_REPLAY_V11,
                 EVENT_SCHEMA_REPLAY_V12,
                 EVENT_SCHEMA_REPLAY_V13,
+                EVENT_SCHEMA_REPLAY_V14,
             }:
                 raise DomainSerializationError("invalid_event_schema_version", path)
             return _decode_lifecycle_details(kind, fields, path=path)
+
+        if kind in {
+            "repository_established",
+            "repository_member_deposited",
+            "repository_member_retrieved",
+            "repository_maintained",
+            "repository_indexed",
+            "repository_neglected",
+        }:
+            if schema_version != EVENT_SCHEMA_REPLAY_V14:
+                raise DomainSerializationError("invalid_event_schema_version", path)
+            return _decode_repository_details(kind, fields, path=path)
         if kind == "kinship_edge_recorded":
             if schema_version != EVENT_SCHEMA_REPLAY_V11:
                 raise DomainSerializationError("invalid_event_schema_version", path)
@@ -5737,6 +5860,147 @@ def _decode_event_details(
         raise
     except (TypeError, ValueError) as exc:
         raise DomainSerializationError("invalid_model", path) from exc
+    raise DomainSerializationError("unknown_type", f"{path}.kind")
+
+
+
+def _decode_repository_details(
+    kind: str, fields: dict[str, Any], *, path: str
+) -> object:
+    success = fields.get("success")
+    if type(success) is not bool:
+        raise DomainSerializationError("invalid_bool", f"{path}.success")
+    if kind == "repository_established":
+        _require_keys(
+            fields,
+            {
+                "repository_id",
+                "location_id",
+                "structure_id",
+                "founder_ids",
+                "access_mode",
+                "established_tick",
+                "success",
+            },
+            path=path,
+        )
+        structure_raw = fields["structure_id"]
+        structure_id = None if structure_raw is None else EntityId(str(structure_raw))
+        founders_raw = fields["founder_ids"]
+        if not isinstance(founders_raw, list):
+            raise DomainSerializationError("invalid_fields", path)
+        founder_ids = tuple(EntityId(str(item)) for item in founders_raw)
+        return RepositoryEstablished(
+            EntityId(_str_field(fields, "repository_id", path=path)),
+            EntityId(_str_field(fields, "location_id", path=path)),
+            structure_id,
+            founder_ids,
+            _str_field(fields, "access_mode", path=path),
+            _int_field(fields, "established_tick", path=path),
+            success,
+        )
+    if kind == "repository_member_deposited":
+        _require_keys(
+            fields,
+            {
+                "repository_id",
+                "artifact_id",
+                "member_count",
+                "actor_id",
+                "success",
+            },
+            path=path,
+        )
+        return RepositoryMemberDeposited(
+            EntityId(_str_field(fields, "repository_id", path=path)),
+            EntityId(_str_field(fields, "artifact_id", path=path)),
+            _int_field(fields, "member_count", path=path),
+            EntityId(_str_field(fields, "actor_id", path=path)),
+            success,
+        )
+    if kind == "repository_member_retrieved":
+        _require_keys(
+            fields,
+            {
+                "repository_id",
+                "artifact_id",
+                "member_count",
+                "actor_id",
+                "hold",
+                "success",
+            },
+            path=path,
+        )
+        hold = fields["hold"]
+        if type(hold) is not bool:
+            raise DomainSerializationError("invalid_bool", f"{path}.hold")
+        return RepositoryMemberRetrieved(
+            EntityId(_str_field(fields, "repository_id", path=path)),
+            EntityId(_str_field(fields, "artifact_id", path=path)),
+            _int_field(fields, "member_count", path=path),
+            EntityId(_str_field(fields, "actor_id", path=path)),
+            hold,
+            success,
+        )
+    if kind == "repository_maintained":
+        _require_keys(
+            fields,
+            {
+                "repository_id",
+                "mode",
+                "prior_status",
+                "next_status",
+                "last_maintained_tick",
+                "success",
+            },
+            path=path,
+        )
+        return RepositoryMaintained(
+            EntityId(_str_field(fields, "repository_id", path=path)),
+            _str_field(fields, "mode", path=path),
+            _str_field(fields, "prior_status", path=path),
+            _str_field(fields, "next_status", path=path),
+            _int_field(fields, "last_maintained_tick", path=path),
+            success,
+        )
+    if kind == "repository_indexed":
+        _require_keys(
+            fields,
+            {
+                "repository_id",
+                "index_entry_count",
+                "revision_bump",
+                "success",
+            },
+            path=path,
+        )
+        return RepositoryIndexed(
+            EntityId(_str_field(fields, "repository_id", path=path)),
+            _int_field(fields, "index_entry_count", path=path),
+            _int_field(fields, "revision_bump", path=path),
+            success,
+        )
+    if kind == "repository_neglected":
+        _require_keys(
+            fields,
+            {
+                "repository_id",
+                "neglect_streak",
+                "prior_status",
+                "next_status",
+                "index_entries_dropped",
+                "success",
+            },
+            path=path,
+        )
+        return RepositoryNeglected(
+            EntityId(_str_field(fields, "repository_id", path=path)),
+            _int_field(fields, "neglect_streak", path=path),
+            _str_field(fields, "prior_status", path=path),
+            _str_field(fields, "next_status", path=path),
+            _int_field(fields, "index_entries_dropped", path=path),
+            success,
+        )
     raise DomainSerializationError("unknown_type", f"{path}.kind")
 
 
@@ -5757,6 +6021,7 @@ def _encode_world_event(value: WorldEvent) -> dict[str, Any]:
         EVENT_SCHEMA_REPLAY_V11,
                 EVENT_SCHEMA_REPLAY_V12,
                 EVENT_SCHEMA_REPLAY_V13,
+                EVENT_SCHEMA_REPLAY_V14,
     }:
         raise DomainSerializationError(
             "invalid_event_schema_version",
@@ -5778,6 +6043,7 @@ def _encode_world_event(value: WorldEvent) -> dict[str, Any]:
         EVENT_SCHEMA_REPLAY_V11,
                 EVENT_SCHEMA_REPLAY_V12,
                 EVENT_SCHEMA_REPLAY_V13,
+                EVENT_SCHEMA_REPLAY_V14,
     }:
         raise DomainSerializationError(
             "invalid_event_schema_version",
@@ -5799,6 +6065,7 @@ def _encode_world_event(value: WorldEvent) -> dict[str, Any]:
         EVENT_SCHEMA_REPLAY_V11,
         EVENT_SCHEMA_REPLAY_V12,
         EVENT_SCHEMA_REPLAY_V13,
+                EVENT_SCHEMA_REPLAY_V14,
     }:
         raise DomainSerializationError(
             "invalid_event_schema_version",
@@ -5809,7 +6076,10 @@ def _encode_world_event(value: WorldEvent) -> dict[str, Any]:
         "artifact_annotated",
         "artifact_damaged",
         "artifact_partially_lost",
-    } and value.schema_version != EVENT_SCHEMA_REPLAY_V13:
+    } and value.schema_version not in {
+        EVENT_SCHEMA_REPLAY_V13,
+        EVENT_SCHEMA_REPLAY_V14,
+    }:
         raise DomainSerializationError(
             "invalid_event_schema_version",
             "$.schema_version",
@@ -5824,6 +6094,7 @@ def _encode_world_event(value: WorldEvent) -> dict[str, Any]:
         EVENT_SCHEMA_REPLAY_V11,
                 EVENT_SCHEMA_REPLAY_V12,
                 EVENT_SCHEMA_REPLAY_V13,
+                EVENT_SCHEMA_REPLAY_V14,
     }:
         raise DomainSerializationError(
             "invalid_event_schema_version",
@@ -5834,7 +6105,21 @@ def _encode_world_event(value: WorldEvent) -> dict[str, Any]:
         EVENT_SCHEMA_REPLAY_V11,
                 EVENT_SCHEMA_REPLAY_V12,
                 EVENT_SCHEMA_REPLAY_V13,
+                EVENT_SCHEMA_REPLAY_V14,
     }:
+        raise DomainSerializationError(
+            "invalid_event_schema_version",
+            "$.schema_version",
+        )
+
+    if details_kind in {
+        "repository_established",
+        "repository_member_deposited",
+        "repository_member_retrieved",
+        "repository_maintained",
+        "repository_indexed",
+        "repository_neglected",
+    } and value.schema_version != EVENT_SCHEMA_REPLAY_V14:
         raise DomainSerializationError(
             "invalid_event_schema_version",
             "$.schema_version",
@@ -6012,6 +6297,7 @@ def _decode_world_event(data: dict[str, Any], *, path: str) -> WorldEvent:
             EVENT_SCHEMA_REPLAY_V11,
                 EVENT_SCHEMA_REPLAY_V12,
                 EVENT_SCHEMA_REPLAY_V13,
+                EVENT_SCHEMA_REPLAY_V14,
         }:
             raise DomainSerializationError("unsupported_schema_version", path)
         actor_raw = data["actor_id"]
