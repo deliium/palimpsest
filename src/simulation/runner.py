@@ -139,6 +139,7 @@ from simulation.runner_models import (
     RUNNER_SCHEMA_VERSION_V32,
     RUNNER_SCHEMA_VERSION_V33,
     RUNNER_SCHEMA_VERSION_V34,
+    RUNNER_SCHEMA_VERSION_V35,
     AgentCognitionSpec,
     AgentRunnerSpec,
     CognitionCounters,
@@ -606,6 +607,17 @@ def _knowledge_repositories_loop_kwargs(config: object) -> dict[str, object]:
     return {
         "knowledge_repositories_active": getattr(config, "knowledge_repositories", None)
         is not None
+    }
+
+
+def _knowledge_genealogy_loop_kwargs(config: object) -> dict[str, object]:
+    """Bind knowledge_genealogy channel (spec object + seed material)."""
+    spec = getattr(config, "knowledge_genealogy", None)
+    if spec is None:
+        return {}
+    return {
+        "knowledge_genealogy_spec": spec,
+        "knowledge_genealogy_seed_material": getattr(config, "seed", None),
     }
 
 
@@ -1447,6 +1459,7 @@ class SimulationRunner:
             knowledge_repositories_active = (
                 config.knowledge_repositories is not None
             )
+            knowledge_genealogy_active = config.knowledge_genealogy is not None
             artifacts_active = (
                 bool(bootstrap.artifacts)
                 or config.artifacts_enabled
@@ -1518,6 +1531,7 @@ class SimulationRunner:
                             RUNNER_SCHEMA_VERSION_V32,
                             RUNNER_SCHEMA_VERSION_V33,
                             RUNNER_SCHEMA_VERSION_V34,
+                            RUNNER_SCHEMA_VERSION_V35,
                         }
                         and config.new_agent_initialization is not None
                     )
@@ -1649,6 +1663,32 @@ class SimulationRunner:
                     config.schema_version,
                     False,
                 )
+            if knowledge_genealogy_active:
+                assert config.knowledge_genealogy is not None
+                compose = config.knowledge_genealogy.uptake_compose
+                _LOG.info(
+                    "knowledge_genealogy_enabled schema_version=%s "
+                    "max_entries=%s max_hop_depth=%s "
+                    "compose_teaching=%s compose_imitation=%s "
+                    "compose_written_record=%s compose_reconstruction=%s "
+                    "compose_developmental=%s compose_independent_discovery=%s",
+                    config.schema_version,
+                    config.knowledge_genealogy.lineage_policy.max_entries_per_owner,
+                    config.knowledge_genealogy.lineage_policy.max_hop_depth,
+                    compose.teaching,
+                    compose.imitation,
+                    compose.written_record,
+                    compose.reconstruction,
+                    compose.developmental,
+                    compose.independent_discovery,
+                )
+            else:
+                _LOG.debug(
+                    "knowledge_genealogy_skip schema_version=%s "
+                    "knowledge_genealogy_present=%s",
+                    config.schema_version,
+                    False,
+                )
 
             stage = "agents"
             memory_run_id = MemoryRunId(resolved_run_id.value)
@@ -1734,6 +1774,7 @@ class SimulationRunner:
                     **_cultural_features_loop_kwargs(config),
                     **_durable_records_loop_kwargs(config),
                     **_knowledge_repositories_loop_kwargs(config),
+                    **_knowledge_genealogy_loop_kwargs(config),
                 )
                 agent = Agent(
                     agent_id=owner,
@@ -3199,6 +3240,7 @@ class SimulationRunner:
                 **_cultural_features_loop_kwargs(self._config),
                 **_durable_records_loop_kwargs(self._config),
                 **_knowledge_repositories_loop_kwargs(self._config),
+                **_knowledge_genealogy_loop_kwargs(self._config),
             )
             agent = Agent(
                 agent_id=owner,

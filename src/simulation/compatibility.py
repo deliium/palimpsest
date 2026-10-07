@@ -83,6 +83,7 @@ from simulation.runner_models import (
     RUNNER_SCHEMA_VERSION_V32,
     RUNNER_SCHEMA_VERSION_V33,
     RUNNER_SCHEMA_VERSION_V34,
+    RUNNER_SCHEMA_VERSION_V35,
     SUPPORTED_RESULT_SCHEMA_VERSIONS,
     SUPPORTED_RUNNER_SCHEMA_VERSIONS,
 )
@@ -403,9 +404,19 @@ _MATRIX: dict[str, CompatibilityEntry] = {
             "may also carry mentorship/developmental_learning/dependency_care/"
             "kinship with lifecycle, or cultural-only / kinship+cultural "
             "without lifecycle); "
-            "mode allowlists that top out at v33 widen to accept v34; "
-            "cultural_historical_memory accepts {v31,v32,v33,v34}; "
-            "durable_records accepts {v33,v34}; "
+            f"writers emit {RUNNER_SCHEMA_VERSION_V35} when "
+            "knowledge_genealogy is present "
+            "(requires cultural_feature_provenance + "
+            "cultural_historical_memory; optional durable_records / "
+            "knowledge_repositories / historical_memory_layers; "
+            "genealogy-only does not change write-pair priority; "
+            "may also carry mentorship/developmental_learning/dependency_care/"
+            "kinship with lifecycle, or cultural-only / kinship+cultural "
+            "without lifecycle); "
+            "mode allowlists that top out at v34 widen to accept v35; "
+            "cultural_historical_memory accepts {v31,v32,v33,v34,v35}; "
+            "durable_records accepts {v33,v34,v35}; "
+            "knowledge_repositories accepts {v34,v35}; "
             f"{RUNNER_SCHEMA_VERSION_V3} retained for V2 capability flags; "
             "v1-v4 omit consolidation_mode, reflection_mode, prospective_mode, "
             "counterfactual_mode, communication_strategy_mode, and "
@@ -686,6 +697,7 @@ _LOG.debug(
         "runner_v32": RUNNER_SCHEMA_VERSION_V32,
         "runner_v33": RUNNER_SCHEMA_VERSION_V33,
         "runner_v34": RUNNER_SCHEMA_VERSION_V34,
+        "runner_v35": RUNNER_SCHEMA_VERSION_V35,
         "observer_protocol": OBSERVER_PROTOCOL_VERSION,
         "research_ui_mount": RESEARCH_UI_MOUNT,
         "alembic_head": ALEMBIC_HEAD_REVISION,

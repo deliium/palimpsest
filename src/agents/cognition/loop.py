@@ -194,6 +194,8 @@ class CognitiveLoop:
         "_developmental_mid_run_admit",
         "_developmental_stage_learning_rates",
         "_durable_records_active",
+        "_knowledge_genealogy_seed_material",
+        "_knowledge_genealogy_spec",
         "_knowledge_repositories_active",
         "_emotional_state",
         "_epistemic_policy",
@@ -289,6 +291,8 @@ class CognitiveLoop:
         cultural_features_spec: object | None = None,
         durable_records_active: bool = False,
         knowledge_repositories_active: bool = False,
+        knowledge_genealogy_spec: object | None = None,
+        knowledge_genealogy_seed_material: object | None = None,
         territorial_claim_mode: object | None = None,
         territorial_claim_policy: object | None = None,
         group_formation_mode: object | None = None,
@@ -819,6 +823,40 @@ class CognitiveLoop:
             "knowledge_repositories_bind knowledge_repositories_active=%s",
             self._knowledge_repositories_active,
         )
+        if knowledge_genealogy_spec is None:
+            self._knowledge_genealogy_spec = None
+            self._knowledge_genealogy_seed_material = None
+            _LOG.debug(
+                "knowledge_genealogy_bind knowledge_genealogy_active=%s",
+                False,
+            )
+        else:
+            kinds = getattr(knowledge_genealogy_spec, "enabled_kinds", None)
+            mode = getattr(
+                knowledge_genealogy_spec, "knowledge_genealogy_mode", None
+            )
+            lineage = getattr(knowledge_genealogy_spec, "lineage_policy", None)
+            if (
+                not isinstance(kinds, tuple)
+                or mode != "deterministic"
+                or lineage is None
+            ):
+                raise TypeError(
+                    "knowledge_genealogy_spec must expose enabled_kinds, "
+                    "knowledge_genealogy_mode=deterministic, and lineage_policy"
+                )
+            self._knowledge_genealogy_spec = knowledge_genealogy_spec
+            self._knowledge_genealogy_seed_material = (
+                knowledge_genealogy_seed_material
+            )
+            _LOG.info(
+                "knowledge_genealogy_bind knowledge_genealogy_active=%s "
+                "kind_count=%s max_entries=%s max_hop_depth=%s",
+                True,
+                len(kinds),
+                getattr(lineage, "max_entries_per_owner", None),
+                getattr(lineage, "max_hop_depth", None),
+            )
         from agents.cognition.production import ProductionKnowledgeMode
 
         production_mode = (

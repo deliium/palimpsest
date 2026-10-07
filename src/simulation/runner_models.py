@@ -113,6 +113,7 @@ RUNNER_SCHEMA_VERSION_V31: Final[str] = "runner-config-v31"
 RUNNER_SCHEMA_VERSION_V32: Final[str] = "runner-config-v32"
 RUNNER_SCHEMA_VERSION_V33: Final[str] = "runner-config-v33"
 RUNNER_SCHEMA_VERSION_V34: Final[str] = "runner-config-v34"
+RUNNER_SCHEMA_VERSION_V35: Final[str] = "runner-config-v35"
 RUNNER_SCHEMA_VERSION: Final[str] = RUNNER_SCHEMA_VERSION_V4
 SUPPORTED_RUNNER_SCHEMA_VERSIONS: Final[frozenset[str]] = frozenset(
     {
@@ -150,6 +151,7 @@ SUPPORTED_RUNNER_SCHEMA_VERSIONS: Final[frozenset[str]] = frozenset(
         RUNNER_SCHEMA_VERSION_V32,
         RUNNER_SCHEMA_VERSION_V33,
         RUNNER_SCHEMA_VERSION_V34,
+        RUNNER_SCHEMA_VERSION_V35,
     }
 )
 RESULT_SCHEMA_VERSION_V1: Final[str] = "runner-result-v1"
@@ -690,6 +692,7 @@ _SKILL_SCHEMAS: Final[frozenset[str]] = frozenset(
     RUNNER_SCHEMA_VERSION_V32,
     RUNNER_SCHEMA_VERSION_V33,
     RUNNER_SCHEMA_VERSION_V34,
+    RUNNER_SCHEMA_VERSION_V35,
     }
 )
 
@@ -2811,20 +2814,29 @@ _HISTORICAL_MEMORY_CULTURAL_SCHEMAS: Final[frozenset[str]] = frozenset(
         RUNNER_SCHEMA_VERSION_V32,
         RUNNER_SCHEMA_VERSION_V33,
         RUNNER_SCHEMA_VERSION_V34,
+        RUNNER_SCHEMA_VERSION_V35,
     }
 )
 _DURABLE_RECORDS_SCHEMAS: Final[frozenset[str]] = frozenset(
-    {RUNNER_SCHEMA_VERSION_V33, RUNNER_SCHEMA_VERSION_V34}
+    {
+        RUNNER_SCHEMA_VERSION_V33,
+        RUNNER_SCHEMA_VERSION_V34,
+        RUNNER_SCHEMA_VERSION_V35,
+    }
 )
 _HISTORICAL_MEMORY_LAYER_SCHEMAS: Final[frozenset[str]] = frozenset(
     {
         RUNNER_SCHEMA_VERSION_V32,
         RUNNER_SCHEMA_VERSION_V33,
         RUNNER_SCHEMA_VERSION_V34,
+        RUNNER_SCHEMA_VERSION_V35,
     }
 )
 _KNOWLEDGE_REPOSITORIES_SCHEMAS: Final[frozenset[str]] = frozenset(
-    {RUNNER_SCHEMA_VERSION_V34}
+    {RUNNER_SCHEMA_VERSION_V34, RUNNER_SCHEMA_VERSION_V35}
+)
+_KNOWLEDGE_GENEALOGY_SCHEMAS: Final[frozenset[str]] = frozenset(
+    {RUNNER_SCHEMA_VERSION_V35}
 )
 
 
@@ -3534,6 +3546,408 @@ def example_knowledge_repositories_spec(
             neglect_ticks=neglect_ticks
         ),
         perception_mode=perception_mode,
+    )
+
+
+_KNOWLEDGE_GENEALOGY_MODE: Final[frozenset[str]] = frozenset({"deterministic"})
+_KNOWLEDGE_GENEALOGY_APPLICABILITY: Final[frozenset[str]] = frozenset(
+    {"all_live_agents", "mid_run_new_agents", "lifecycle_learning_stage"}
+)
+_KNOWLEDGE_GENEALOGY_KINDS: Final[frozenset[str]] = frozenset(
+    {
+        "foraging_method",
+        "healing_technique",
+        "crafting_process",
+        "navigation_knowledge",
+        "building_method",
+    }
+)
+_KNOWLEDGE_GENEALOGY_INDEPENDENT_ROOT_MATCH: Final[frozenset[str]] = frozenset(
+    {"content_key", "content_key_and_kind"}
+)
+_KNOWLEDGE_GENEALOGY_MAX_HOP_DEPTH_CEILING: Final[int] = 32
+_KNOWLEDGE_GENEALOGY_LINEAGE_POLICY_KEYS: Final[frozenset[str]] = frozenset(
+    {
+        "max_entries_per_owner",
+        "max_parent_ids",
+        "max_hop_depth",
+        "allow_multi_parent",
+    }
+)
+_KNOWLEDGE_GENEALOGY_MUTATION_POLICY_KEYS: Final[frozenset[str]] = frozenset(
+    {
+        "allow_mutation",
+        "allow_combination",
+        "mutation_distance_threshold",
+        "max_token_edits",
+        "mutation_requires_evidence",
+        "min_token_overlap",
+        "require_combination_distinct_roots",
+    }
+)
+_KNOWLEDGE_GENEALOGY_UPTAKE_COMPOSE_KEYS: Final[frozenset[str]] = frozenset(
+    {
+        "teaching",
+        "imitation",
+        "written_record",
+        "reconstruction",
+        "developmental",
+        "independent_discovery",
+    }
+)
+_KNOWLEDGE_GENEALOGY_QUERY_POLICY_KEYS: Final[frozenset[str]] = frozenset(
+    {
+        "max_query_depth",
+        "include_dead_holders",
+        "independent_root_match",
+    }
+)
+_KNOWLEDGE_GENEALOGY_KEYS: Final[frozenset[str]] = frozenset(
+    {
+        "knowledge_genealogy_mode",
+        "lineage_policy",
+        "mutation_policy",
+        "uptake_compose",
+        "query_policy",
+        "enabled_kinds",
+        "applicability",
+        "max_evidence_refs",
+        "rng_namespace",
+    }
+)
+_KNOWLEDGE_GENEALOGY_FORBIDDEN_ALIASES: Final[frozenset[str]] = frozenset(
+    {
+        "global_technique_registry",
+        "society_encyclopedia",
+        "true_method_catalog",
+        "knowledge_pack",
+        "parent_technique_copy",
+        "technique_pack",
+        "GlobalTechniqueRegistry",
+        "GlobalKnowledge",
+        "TechniqueRegistry",
+        "technique_must_spread",
+        "true_method_restored",
+        "independent_discovery_forced",
+    }
+)
+
+
+@dataclass(frozen=True, slots=True)
+class KnowledgeGenealogyLineagePolicy:
+    """Exact lineage_policy object under knowledge_genealogy."""
+
+    max_entries_per_owner: int = 64
+    max_parent_ids: int = 4
+    max_hop_depth: int = 16
+    allow_multi_parent: bool = True
+
+    def __post_init__(self) -> None:
+        max_entries = require_exact_nonneg_int(
+            "max_entries_per_owner", self.max_entries_per_owner
+        )
+        if max_entries < 1:
+            raise ValueError(
+                "max_entries_per_owner must be >= 1 "
+                "(code=knowledge_genealogy_max_entries_invalid)"
+            )
+        object.__setattr__(self, "max_entries_per_owner", max_entries)
+        max_parents = require_exact_nonneg_int("max_parent_ids", self.max_parent_ids)
+        if max_parents < 1:
+            raise ValueError(
+                "max_parent_ids must be >= 1 "
+                "(code=knowledge_genealogy_max_parent_ids_invalid)"
+            )
+        object.__setattr__(self, "max_parent_ids", max_parents)
+        depth = require_exact_nonneg_int("max_hop_depth", self.max_hop_depth)
+        if depth < 1 or depth > _KNOWLEDGE_GENEALOGY_MAX_HOP_DEPTH_CEILING:
+            raise ValueError(
+                "max_hop_depth must be in "
+                f"[1, {_KNOWLEDGE_GENEALOGY_MAX_HOP_DEPTH_CEILING}] "
+                "(code=knowledge_genealogy_max_hop_invalid)"
+            )
+        object.__setattr__(self, "max_hop_depth", depth)
+        if type(self.allow_multi_parent) is not bool:
+            raise TypeError("allow_multi_parent must be bool")
+
+
+@dataclass(frozen=True, slots=True)
+class KnowledgeGenealogyMutationPolicy:
+    """Exact mutation_policy object under knowledge_genealogy."""
+
+    allow_mutation: bool = True
+    allow_combination: bool = True
+    mutation_distance_threshold: float = 0.15
+    max_token_edits: int = 2
+    mutation_requires_evidence: bool = True
+    min_token_overlap: float = 0.25
+    require_combination_distinct_roots: bool = False
+
+    def __post_init__(self) -> None:
+        if type(self.allow_mutation) is not bool:
+            raise TypeError("allow_mutation must be bool")
+        if type(self.allow_combination) is not bool:
+            raise TypeError("allow_combination must be bool")
+        if type(self.mutation_requires_evidence) is not bool:
+            raise TypeError("mutation_requires_evidence must be bool")
+        if type(self.require_combination_distinct_roots) is not bool:
+            raise TypeError("require_combination_distinct_roots must be bool")
+        threshold = float(self.mutation_distance_threshold)
+        if isinstance(self.mutation_distance_threshold, bool) or not isinstance(
+            self.mutation_distance_threshold, (int, float)
+        ):
+            raise ValueError("mutation_distance_threshold: not_finite")
+        if not math.isfinite(threshold) or threshold <= 0.0 or threshold > 1.0:
+            raise ValueError(
+                "mutation_distance_threshold must be in (0, 1] "
+                "(code=knowledge_genealogy_mutation_threshold_invalid)"
+            )
+        object.__setattr__(self, "mutation_distance_threshold", threshold)
+        edits = require_exact_nonneg_int("max_token_edits", self.max_token_edits)
+        if edits > 8:
+            raise ValueError(
+                "max_token_edits must be in [0, 8] "
+                "(code=knowledge_genealogy_max_token_edits_invalid)"
+            )
+        object.__setattr__(self, "max_token_edits", edits)
+        overlap = float(self.min_token_overlap)
+        if isinstance(self.min_token_overlap, bool) or not isinstance(
+            self.min_token_overlap, (int, float)
+        ):
+            raise ValueError("min_token_overlap: not_finite")
+        if not math.isfinite(overlap) or overlap < 0.0 or overlap > 1.0:
+            raise ValueError(
+                "min_token_overlap must be in [0, 1] "
+                "(code=knowledge_genealogy_min_token_overlap_invalid)"
+            )
+        object.__setattr__(self, "min_token_overlap", overlap)
+
+
+@dataclass(frozen=True, slots=True)
+class KnowledgeGenealogyUptakeCompose:
+    """Exact uptake_compose object under knowledge_genealogy."""
+
+    teaching: bool = False
+    imitation: bool = False
+    written_record: bool = False
+    reconstruction: bool = False
+    developmental: bool = False
+    independent_discovery: bool = False
+
+    def __post_init__(self) -> None:
+        for name in _KNOWLEDGE_GENEALOGY_UPTAKE_COMPOSE_KEYS:
+            if type(getattr(self, name)) is not bool:
+                raise TypeError(f"{name} must be bool")
+
+
+@dataclass(frozen=True, slots=True)
+class KnowledgeGenealogyQueryPolicy:
+    """Exact query_policy object under knowledge_genealogy."""
+
+    max_query_depth: int = 32
+    include_dead_holders: bool = True
+    independent_root_match: str = "content_key"
+
+    def __post_init__(self) -> None:
+        depth = require_exact_nonneg_int("max_query_depth", self.max_query_depth)
+        if depth < 1 or depth > _KINSHIP_MAX_QUERY_DEPTH_CEILING:
+            raise ValueError(
+                "max_query_depth must be in "
+                f"[1, {_KINSHIP_MAX_QUERY_DEPTH_CEILING}] "
+                "(code=knowledge_genealogy_max_query_depth_invalid)"
+            )
+        object.__setattr__(self, "max_query_depth", depth)
+        if type(self.include_dead_holders) is not bool:
+            raise TypeError("include_dead_holders must be bool")
+        match = require_stable_id(
+            "KnowledgeGenealogyQueryPolicy.independent_root_match",
+            self.independent_root_match,
+        )
+        if match not in _KNOWLEDGE_GENEALOGY_INDEPENDENT_ROOT_MATCH:
+            raise ValueError(
+                f"unknown independent_root_match {match!r} "
+                "(code=knowledge_genealogy_independent_root_match_invalid)"
+            )
+        object.__setattr__(self, "independent_root_match", match)
+
+
+@dataclass(frozen=True, slots=True)
+class KnowledgeGenealogySpec:
+    """Opt-in knowledge genealogy channel (runner-config-v35 sibling).
+
+    Deepens owned ``cultural_historical_memory``. Absent object means genealogy
+    channel off. Not an ``AgentCognitionSpec`` enum. Requires cultural
+    feature provenance; durable/repository remain optional compose sources.
+    """
+
+    enabled_kinds: tuple[str, ...]
+    lineage_policy: KnowledgeGenealogyLineagePolicy = field(
+        default_factory=KnowledgeGenealogyLineagePolicy
+    )
+    mutation_policy: KnowledgeGenealogyMutationPolicy = field(
+        default_factory=KnowledgeGenealogyMutationPolicy
+    )
+    uptake_compose: KnowledgeGenealogyUptakeCompose = field(
+        default_factory=KnowledgeGenealogyUptakeCompose
+    )
+    query_policy: KnowledgeGenealogyQueryPolicy = field(
+        default_factory=KnowledgeGenealogyQueryPolicy
+    )
+    knowledge_genealogy_mode: str = "deterministic"
+    applicability: str = "all_live_agents"
+    max_evidence_refs: int = 8
+    rng_namespace: str = "knowledge_genealogy"
+
+    def __post_init__(self) -> None:
+        mode = require_stable_id(
+            "KnowledgeGenealogySpec.knowledge_genealogy_mode",
+            self.knowledge_genealogy_mode,
+        )
+        if mode == "disabled":
+            raise ValueError(
+                "knowledge_genealogy_mode=disabled is rejected; omit the "
+                "object for off (code=knowledge_genealogy_mode_invalid)"
+            )
+        if mode not in _KNOWLEDGE_GENEALOGY_MODE:
+            raise ValueError(
+                f"unknown knowledge_genealogy_mode {mode!r} "
+                "(code=knowledge_genealogy_mode_invalid)"
+            )
+        object.__setattr__(self, "knowledge_genealogy_mode", mode)
+
+        if isinstance(self.enabled_kinds, (str, bytes)) or not isinstance(
+            self.enabled_kinds, Sequence
+        ):
+            raise TypeError("enabled_kinds must be a sequence")
+        if not self.enabled_kinds:
+            raise ValueError(
+                "enabled_kinds must be non-empty when knowledge genealogy "
+                "present (code=knowledge_genealogy_kinds_empty)"
+            )
+        kinds: list[str] = []
+        seen_kinds: set[str] = set()
+        for raw in self.enabled_kinds:
+            kind = require_stable_id("KnowledgeGenealogySpec.enabled_kinds", raw)
+            if kind not in _KNOWLEDGE_GENEALOGY_KINDS:
+                raise ValueError(
+                    f"unknown enabled kind {kind!r} "
+                    "(code=knowledge_genealogy_kind_invalid)"
+                )
+            if kind in seen_kinds:
+                raise ValueError(
+                    f"duplicate enabled kind {kind!r} "
+                    "(code=knowledge_genealogy_kind_duplicate)"
+                )
+            seen_kinds.add(kind)
+            kinds.append(kind)
+        object.__setattr__(self, "enabled_kinds", tuple(kinds))
+
+        if type(self.lineage_policy) is not KnowledgeGenealogyLineagePolicy:
+            raise TypeError(
+                "lineage_policy must be KnowledgeGenealogyLineagePolicy"
+            )
+        if type(self.mutation_policy) is not KnowledgeGenealogyMutationPolicy:
+            raise TypeError(
+                "mutation_policy must be KnowledgeGenealogyMutationPolicy"
+            )
+        if type(self.uptake_compose) is not KnowledgeGenealogyUptakeCompose:
+            raise TypeError(
+                "uptake_compose must be KnowledgeGenealogyUptakeCompose"
+            )
+        if type(self.query_policy) is not KnowledgeGenealogyQueryPolicy:
+            raise TypeError("query_policy must be KnowledgeGenealogyQueryPolicy")
+
+        max_refs = require_exact_nonneg_int(
+            "max_evidence_refs", self.max_evidence_refs
+        )
+        if max_refs < 1:
+            raise ValueError(
+                "max_evidence_refs must be >= 1 "
+                "(code=knowledge_genealogy_max_evidence_refs_invalid)"
+            )
+        object.__setattr__(self, "max_evidence_refs", max_refs)
+
+        applicability = require_stable_id(
+            "KnowledgeGenealogySpec.applicability", self.applicability
+        )
+        if applicability not in _KNOWLEDGE_GENEALOGY_APPLICABILITY:
+            raise ValueError(
+                f"unknown applicability {applicability!r} "
+                "(code=knowledge_genealogy_applicability_invalid)"
+            )
+        object.__setattr__(self, "applicability", applicability)
+        namespace = require_stable_id(
+            "KnowledgeGenealogySpec.rng_namespace", self.rng_namespace
+        )
+        object.__setattr__(self, "rng_namespace", namespace)
+
+    def canonical_payload(self) -> dict[str, object]:
+        return {
+            "applicability": self.applicability,
+            "enabled_kinds": list(self.enabled_kinds),
+            "knowledge_genealogy_mode": self.knowledge_genealogy_mode,
+            "lineage_policy": {
+                "allow_multi_parent": self.lineage_policy.allow_multi_parent,
+                "max_entries_per_owner": self.lineage_policy.max_entries_per_owner,
+                "max_hop_depth": self.lineage_policy.max_hop_depth,
+                "max_parent_ids": self.lineage_policy.max_parent_ids,
+            },
+            "max_evidence_refs": self.max_evidence_refs,
+            "mutation_policy": {
+                "allow_combination": self.mutation_policy.allow_combination,
+                "allow_mutation": self.mutation_policy.allow_mutation,
+                "max_token_edits": self.mutation_policy.max_token_edits,
+                "min_token_overlap": self.mutation_policy.min_token_overlap,
+                "mutation_distance_threshold": (
+                    self.mutation_policy.mutation_distance_threshold
+                ),
+                "mutation_requires_evidence": (
+                    self.mutation_policy.mutation_requires_evidence
+                ),
+                "require_combination_distinct_roots": (
+                    self.mutation_policy.require_combination_distinct_roots
+                ),
+            },
+            "query_policy": {
+                "include_dead_holders": self.query_policy.include_dead_holders,
+                "independent_root_match": self.query_policy.independent_root_match,
+                "max_query_depth": self.query_policy.max_query_depth,
+            },
+            "rng_namespace": self.rng_namespace,
+            "uptake_compose": {
+                "developmental": self.uptake_compose.developmental,
+                "imitation": self.uptake_compose.imitation,
+                "independent_discovery": self.uptake_compose.independent_discovery,
+                "reconstruction": self.uptake_compose.reconstruction,
+                "teaching": self.uptake_compose.teaching,
+                "written_record": self.uptake_compose.written_record,
+            },
+        }
+
+
+def example_knowledge_genealogy_spec(
+    *,
+    enabled_kinds: tuple[str, ...] = (
+        "foraging_method",
+        "healing_technique",
+        "crafting_process",
+        "navigation_knowledge",
+        "building_method",
+    ),
+    applicability: str = "all_live_agents",
+    max_hop_depth: int = 16,
+    independent_discovery: bool = False,
+    teaching: bool = False,
+) -> KnowledgeGenealogySpec:
+    """Reference knowledge genealogy spec for tests and Experiment AP."""
+    return KnowledgeGenealogySpec(
+        enabled_kinds=enabled_kinds,
+        applicability=applicability,
+        lineage_policy=KnowledgeGenealogyLineagePolicy(max_hop_depth=max_hop_depth),
+        uptake_compose=KnowledgeGenealogyUptakeCompose(
+            independent_discovery=independent_discovery,
+            teaching=teaching,
+        ),
     )
 
 
@@ -5178,6 +5592,7 @@ class SimulationRunnerConfig:
     historical_memory_layers: HistoricalMemoryLayersSpec | None = None
     durable_records: DurableRecordsSpec | None = None
     knowledge_repositories: KnowledgeRepositoriesSpec | None = None
+    knowledge_genealogy: KnowledgeGenealogySpec | None = None
 
     def __post_init__(self) -> None:
         # Late import avoids circular import with new_agent_initialization.
@@ -5253,6 +5668,13 @@ class SimulationRunnerConfig:
         ):
             raise TypeError(
                 "knowledge_repositories must be KnowledgeRepositoriesSpec or None"
+            )
+        if (
+            self.knowledge_genealogy is not None
+            and type(self.knowledge_genealogy) is not KnowledgeGenealogySpec
+        ):
+            raise TypeError(
+                "knowledge_genealogy must be KnowledgeGenealogySpec or None"
             )
         if type(self.scenario) is not WorldScenarioSpec:
             raise TypeError("scenario must be WorldScenarioSpec")
@@ -5349,6 +5771,7 @@ class SimulationRunnerConfig:
             RUNNER_SCHEMA_VERSION_V32,
             RUNNER_SCHEMA_VERSION_V33,
             RUNNER_SCHEMA_VERSION_V34,
+            RUNNER_SCHEMA_VERSION_V35,
         }
         if (
             self.v3_capability_flags.generational_population
@@ -5375,6 +5798,7 @@ class SimulationRunnerConfig:
             RUNNER_SCHEMA_VERSION_V32,
             RUNNER_SCHEMA_VERSION_V33,
             RUNNER_SCHEMA_VERSION_V34,
+            RUNNER_SCHEMA_VERSION_V35,
         }
         if self.v3_capability_flags.kinship_inheritance:
             if self.schema_version not in _kinship_schemas:
@@ -5418,6 +5842,7 @@ class SimulationRunnerConfig:
                 RUNNER_SCHEMA_VERSION_V32,
                 RUNNER_SCHEMA_VERSION_V33,
                 RUNNER_SCHEMA_VERSION_V34,
+                RUNNER_SCHEMA_VERSION_V35,
             }:
                 _LOGGER.error(
                     "dependency_care_requires_v28 schema_version=%s "
@@ -5468,6 +5893,7 @@ class SimulationRunnerConfig:
                 RUNNER_SCHEMA_VERSION_V32,
                 RUNNER_SCHEMA_VERSION_V33,
                 RUNNER_SCHEMA_VERSION_V34,
+                RUNNER_SCHEMA_VERSION_V35,
             }:
                 _LOGGER.error(
                     "developmental_learning_requires_v29 schema_version=%s "
@@ -5530,6 +5956,7 @@ class SimulationRunnerConfig:
                 RUNNER_SCHEMA_VERSION_V32,
                 RUNNER_SCHEMA_VERSION_V33,
                 RUNNER_SCHEMA_VERSION_V34,
+                RUNNER_SCHEMA_VERSION_V35,
             }:
                 _LOGGER.error(
                     "mentorship_requires_v30 schema_version=%s "
@@ -5610,8 +6037,8 @@ class SimulationRunnerConfig:
                 )
                 raise ValueError(
                     "cultural_feature_provenance requires runner-config-v31, "
-                    "runner-config-v32, runner-config-v33, or "
-                    "runner-config-v34 "
+                    "runner-config-v32, runner-config-v33, "
+                    "runner-config-v34, or runner-config-v35 "
                     "(code=cultural_feature_requires_v31)"
                 )
             if not self.v3_capability_flags.cultural_historical_memory:
@@ -5652,6 +6079,7 @@ class SimulationRunnerConfig:
                 RUNNER_SCHEMA_VERSION_V32,
                 RUNNER_SCHEMA_VERSION_V33,
                 RUNNER_SCHEMA_VERSION_V34,
+                RUNNER_SCHEMA_VERSION_V35,
             }
             and self.v3_capability_flags.cultural_historical_memory
         ):
@@ -5673,7 +6101,8 @@ class SimulationRunnerConfig:
                 )
                 raise ValueError(
                     "historical_memory_layers requires runner-config-v32, "
-                    "runner-config-v33, or runner-config-v34 "
+                    "runner-config-v33, runner-config-v34, or "
+                    "runner-config-v35 "
                     "(code=historical_memory_requires_v32)"
                 )
             if not self.v3_capability_flags.cultural_historical_memory:
@@ -5729,7 +6158,8 @@ class SimulationRunnerConfig:
                     self.schema_version,
                 )
                 raise ValueError(
-                    "knowledge_repositories requires runner-config-v34 "
+                    "knowledge_repositories requires runner-config-v34 or "
+                    "runner-config-v35 "
                     "(code=knowledge_repositories_requires_v34)"
                 )
             if not self.v3_capability_flags.cultural_historical_memory:
@@ -5785,8 +6215,8 @@ class SimulationRunnerConfig:
                     self.schema_version,
                 )
                 raise ValueError(
-                    "durable_records requires runner-config-v33 or "
-                    "runner-config-v34 "
+                    "durable_records requires runner-config-v33, "
+                    "runner-config-v34, or runner-config-v35 "
                     "(code=durable_records_requires_v33)"
                 )
             if not self.v3_capability_flags.cultural_historical_memory:
@@ -5851,6 +6281,74 @@ class SimulationRunnerConfig:
                     "runner-config-v34 requires knowledge_repositories "
                     "(code=v34_requires_knowledge_repositories)"
                 )
+        if self.knowledge_genealogy is not None:
+            if self.schema_version not in _KNOWLEDGE_GENEALOGY_SCHEMAS:
+                _LOGGER.error(
+                    "knowledge_genealogy_requires_v35 schema_version=%s "
+                    "reason_code=knowledge_genealogy_requires_v35",
+                    self.schema_version,
+                )
+                raise ValueError(
+                    "knowledge_genealogy requires runner-config-v35 "
+                    "(code=knowledge_genealogy_requires_v35)"
+                )
+            if not self.v3_capability_flags.cultural_historical_memory:
+                _LOGGER.error(
+                    "knowledge_genealogy_without_cultural_flag "
+                    "schema_version=%s "
+                    "reason_code=knowledge_genealogy_without_cultural_flag",
+                    self.schema_version,
+                )
+                raise ValueError(
+                    "knowledge_genealogy requires "
+                    "cultural_historical_memory "
+                    "(code=knowledge_genealogy_without_cultural_flag)"
+                )
+            if self.cultural_feature_provenance is None:
+                _LOGGER.error(
+                    "knowledge_genealogy_requires_cultural_provenance "
+                    "schema_version=%s "
+                    "reason_code=knowledge_genealogy_requires_cultural_provenance",
+                    self.schema_version,
+                )
+                raise ValueError(
+                    "knowledge_genealogy requires "
+                    "cultural_feature_provenance "
+                    "(code=knowledge_genealogy_requires_cultural_provenance)"
+                )
+            _LOGGER.info(
+                "knowledge_genealogy_schema_select schema_version=%s "
+                "kind_count=%s max_entries=%s max_hop_depth=%s "
+                "allow_mutation=%s allow_combination=%s applicability=%s",
+                self.schema_version,
+                len(self.knowledge_genealogy.enabled_kinds),
+                self.knowledge_genealogy.lineage_policy.max_entries_per_owner,
+                self.knowledge_genealogy.lineage_policy.max_hop_depth,
+                self.knowledge_genealogy.mutation_policy.allow_mutation,
+                self.knowledge_genealogy.mutation_policy.allow_combination,
+                self.knowledge_genealogy.applicability,
+            )
+        if self.schema_version == RUNNER_SCHEMA_VERSION_V35:
+            if self.cultural_feature_provenance is None:
+                _LOGGER.error(
+                    "v35_requires_cultural_provenance schema_version=%s "
+                    "reason_code=v35_requires_cultural_provenance",
+                    self.schema_version,
+                )
+                raise ValueError(
+                    "runner-config-v35 requires cultural_feature_provenance "
+                    "(code=v35_requires_cultural_provenance)"
+                )
+            if self.knowledge_genealogy is None:
+                _LOGGER.error(
+                    "v35_requires_knowledge_genealogy schema_version=%s "
+                    "reason_code=v35_requires_knowledge_genealogy",
+                    self.schema_version,
+                )
+                raise ValueError(
+                    "runner-config-v35 requires knowledge_genealogy "
+                    "(code=v35_requires_knowledge_genealogy)"
+                )
         other_v3_enabled = tuple(
             name
             for name in self.v3_capability_flags.enabled_names()
@@ -5869,6 +6367,7 @@ class SimulationRunnerConfig:
             RUNNER_SCHEMA_VERSION_V32,
             RUNNER_SCHEMA_VERSION_V33,
             RUNNER_SCHEMA_VERSION_V34,
+            RUNNER_SCHEMA_VERSION_V35,
         }:
             _LOGGER.error(
                 "v3_capability_requires_v23 schema_version=%s "
@@ -5934,7 +6433,8 @@ class SimulationRunnerConfig:
                     self.schema_version,
                 )
                 raise ValueError(
-                    "cultural-only v31/v32/v33/v34 forbids population_lifecycle "
+                    "cultural-only v31/v32/v33/v34/v35 forbids "
+                    "population_lifecycle "
                     "(code=cultural_only_forbids_lifecycle_spec)"
                 )
             if self.new_agent_initialization is not None:
@@ -5944,7 +6444,8 @@ class SimulationRunnerConfig:
                     self.schema_version,
                 )
                 raise ValueError(
-                    "cultural-only v31/v32/v33/v34 forbids new_agent_initialization "
+                    "cultural-only v31/v32/v33/v34/v35 forbids "
+                    "new_agent_initialization "
                     "(code=cultural_only_forbids_new_agent_init)"
                 )
             if self.dependency_care is not None:
@@ -5974,6 +6475,7 @@ class SimulationRunnerConfig:
                     RUNNER_SCHEMA_VERSION_V32,
                     RUNNER_SCHEMA_VERSION_V33,
                     RUNNER_SCHEMA_VERSION_V34,
+                    RUNNER_SCHEMA_VERSION_V35,
                 }
                 or self.v3_capability_flags.generational_population
             )
@@ -6040,6 +6542,7 @@ class SimulationRunnerConfig:
                 RUNNER_SCHEMA_VERSION_V32,
                 RUNNER_SCHEMA_VERSION_V33,
                 RUNNER_SCHEMA_VERSION_V34,
+                RUNNER_SCHEMA_VERSION_V35,
             }
         ):
             _LOGGER.error(
@@ -6065,6 +6568,7 @@ class SimulationRunnerConfig:
                 RUNNER_SCHEMA_VERSION_V32,
                 RUNNER_SCHEMA_VERSION_V33,
                 RUNNER_SCHEMA_VERSION_V34,
+                RUNNER_SCHEMA_VERSION_V35,
             }
             and self.v3_capability_flags.generational_population
         )
@@ -6205,6 +6709,7 @@ class SimulationRunnerConfig:
         RUNNER_SCHEMA_VERSION_V32,
         RUNNER_SCHEMA_VERSION_V33,
         RUNNER_SCHEMA_VERSION_V34,
+        RUNNER_SCHEMA_VERSION_V35,
         }
         if non_disabled and self.schema_version not in consolidation_schemas:
             _LOGGER.error(
@@ -6265,6 +6770,7 @@ class SimulationRunnerConfig:
         RUNNER_SCHEMA_VERSION_V32,
         RUNNER_SCHEMA_VERSION_V33,
         RUNNER_SCHEMA_VERSION_V34,
+        RUNNER_SCHEMA_VERSION_V35,
         }
         if reflecting and self.schema_version not in reflection_schemas:
             _LOGGER.error(
@@ -6325,6 +6831,7 @@ class SimulationRunnerConfig:
         RUNNER_SCHEMA_VERSION_V32,
         RUNNER_SCHEMA_VERSION_V33,
         RUNNER_SCHEMA_VERSION_V34,
+        RUNNER_SCHEMA_VERSION_V35,
         }
         if planning and self.schema_version not in prospective_schemas:
             _LOGGER.error(
@@ -6384,6 +6891,7 @@ class SimulationRunnerConfig:
         RUNNER_SCHEMA_VERSION_V32,
         RUNNER_SCHEMA_VERSION_V33,
         RUNNER_SCHEMA_VERSION_V34,
+        RUNNER_SCHEMA_VERSION_V35,
         }
         if considering and self.schema_version not in counterfactual_schemas:
             _LOGGER.error(
@@ -6442,6 +6950,7 @@ class SimulationRunnerConfig:
         RUNNER_SCHEMA_VERSION_V32,
         RUNNER_SCHEMA_VERSION_V33,
         RUNNER_SCHEMA_VERSION_V34,
+        RUNNER_SCHEMA_VERSION_V35,
         }:
             _LOGGER.error(
                 "invalid_fields path=agents.cognition.communication_strategy_mode "
@@ -6498,6 +7007,7 @@ class SimulationRunnerConfig:
         RUNNER_SCHEMA_VERSION_V32,
         RUNNER_SCHEMA_VERSION_V33,
         RUNNER_SCHEMA_VERSION_V34,
+        RUNNER_SCHEMA_VERSION_V35,
         }:
             _LOGGER.error(
                 "invalid_fields path=agents.cognition.reputation_mode "
@@ -6596,6 +7106,7 @@ class SimulationRunnerConfig:
         RUNNER_SCHEMA_VERSION_V32,
         RUNNER_SCHEMA_VERSION_V33,
         RUNNER_SCHEMA_VERSION_V34,
+        RUNNER_SCHEMA_VERSION_V35,
         }:
             _LOGGER.error(
                 "invalid_fields path=agents.cognition.teaching_interaction_mode "
@@ -6643,6 +7154,7 @@ class SimulationRunnerConfig:
         RUNNER_SCHEMA_VERSION_V32,
         RUNNER_SCHEMA_VERSION_V33,
         RUNNER_SCHEMA_VERSION_V34,
+        RUNNER_SCHEMA_VERSION_V35,
         }
         if (dynamics is not None and self.schema_version not in dynamics_schemas) or (
             self.schema_version == RUNNER_SCHEMA_VERSION_V14 and dynamics is None
@@ -6685,6 +7197,7 @@ class SimulationRunnerConfig:
         RUNNER_SCHEMA_VERSION_V32,
         RUNNER_SCHEMA_VERSION_V33,
         RUNNER_SCHEMA_VERSION_V34,
+        RUNNER_SCHEMA_VERSION_V35,
         }:
             _LOGGER.error(
                 "invalid_fields path=agents.cognition.territorial_claim_mode "
@@ -6733,6 +7246,7 @@ class SimulationRunnerConfig:
         RUNNER_SCHEMA_VERSION_V32,
         RUNNER_SCHEMA_VERSION_V33,
         RUNNER_SCHEMA_VERSION_V34,
+        RUNNER_SCHEMA_VERSION_V35,
         }:
             _LOGGER.error(
                 "invalid_fields path=agents.cognition.group_formation_mode "
@@ -6775,6 +7289,7 @@ class SimulationRunnerConfig:
         RUNNER_SCHEMA_VERSION_V32,
         RUNNER_SCHEMA_VERSION_V33,
         RUNNER_SCHEMA_VERSION_V34,
+        RUNNER_SCHEMA_VERSION_V35,
         }:
             _LOGGER.error(
                 "invalid_fields path=agents.cognition.social_norm_mode "
@@ -6820,6 +7335,7 @@ class SimulationRunnerConfig:
         RUNNER_SCHEMA_VERSION_V32,
         RUNNER_SCHEMA_VERSION_V33,
         RUNNER_SCHEMA_VERSION_V34,
+        RUNNER_SCHEMA_VERSION_V35,
         }
         if conventions_on and self.schema_version not in convention_schemas:
             _LOGGER.error(
@@ -6870,6 +7386,7 @@ class SimulationRunnerConfig:
         RUNNER_SCHEMA_VERSION_V32,
         RUNNER_SCHEMA_VERSION_V33,
         RUNNER_SCHEMA_VERSION_V34,
+        RUNNER_SCHEMA_VERSION_V35,
         }
         if artifacts_on and self.schema_version not in artifact_schemas:
             runner_log.error(
@@ -6916,6 +7433,7 @@ class SimulationRunnerConfig:
         RUNNER_SCHEMA_VERSION_V32,
         RUNNER_SCHEMA_VERSION_V33,
         RUNNER_SCHEMA_VERSION_V34,
+        RUNNER_SCHEMA_VERSION_V35,
         }
         if naming_on and self.schema_version not in naming_schemas:
             runner_log.error(
@@ -6959,6 +7477,7 @@ class SimulationRunnerConfig:
         RUNNER_SCHEMA_VERSION_V32,
         RUNNER_SCHEMA_VERSION_V33,
         RUNNER_SCHEMA_VERSION_V34,
+        RUNNER_SCHEMA_VERSION_V35,
         }
         budget_modes = tuple(
             agent.cognition.cognitive_budget_mode for agent in self.agents
@@ -6978,6 +7497,7 @@ class SimulationRunnerConfig:
         RUNNER_SCHEMA_VERSION_V32,
         RUNNER_SCHEMA_VERSION_V33,
         RUNNER_SCHEMA_VERSION_V34,
+        RUNNER_SCHEMA_VERSION_V35,
         }
         if budgets_on and self.schema_version not in budget_schemas:
             runner_log.error(
@@ -7095,6 +7615,7 @@ class SimulationRunnerConfig:
         RUNNER_SCHEMA_VERSION_V32,
         RUNNER_SCHEMA_VERSION_V33,
         RUNNER_SCHEMA_VERSION_V34,
+        RUNNER_SCHEMA_VERSION_V35,
         }:
             _LOGGER.error(
                 "invalid_fields path=agents.cognition.production_knowledge_mode "
@@ -7130,6 +7651,7 @@ class SimulationRunnerConfig:
         RUNNER_SCHEMA_VERSION_V32,
         RUNNER_SCHEMA_VERSION_V33,
         RUNNER_SCHEMA_VERSION_V34,
+        RUNNER_SCHEMA_VERSION_V35,
         }:
             from world.production import production_catalog_digest
 
@@ -7205,6 +7727,7 @@ class SimulationRunnerConfig:
         RUNNER_SCHEMA_VERSION_V32,
         RUNNER_SCHEMA_VERSION_V33,
         RUNNER_SCHEMA_VERSION_V34,
+        RUNNER_SCHEMA_VERSION_V35,
         }:
             shared_teaching = teaching_weight_tuple(self.agents[0].cognition)
             if any(

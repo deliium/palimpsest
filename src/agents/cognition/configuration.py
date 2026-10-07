@@ -991,6 +991,8 @@ def build_cognitive_loop(
     cultural_features_spec: object | None = None,
     durable_records_active: bool = False,
     knowledge_repositories_active: bool = False,
+    knowledge_genealogy_spec: object | None = None,
+    knowledge_genealogy_seed_material: object | None = None,
 ) -> CognitiveLoop:
     """Assemble a ``CognitiveLoop`` from explicit policies.
 
@@ -1166,6 +1168,8 @@ def build_cognitive_loop(
         cultural_features_spec=cultural_features_spec,
         durable_records_active=durable_records_active,
         knowledge_repositories_active=knowledge_repositories_active,
+        knowledge_genealogy_spec=knowledge_genealogy_spec,
+        knowledge_genealogy_seed_material=knowledge_genealogy_seed_material,
         territorial_claim_mode=resolved.territorial_claim_mode,
         territorial_claim_policy=resolved.territorial_claim_policy,
         group_formation_mode=resolved.group_formation_mode,
