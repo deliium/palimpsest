@@ -2759,6 +2759,7 @@ OFF_GATE_MATRIX_EXPERIMENT_IDS: Final[frozenset[str]] = frozenset(
         "experiment-am-historical-memory-layers",
         "experiment-an-durable-records",
         "experiment-ao-knowledge-repositories",
+        "experiment-ap-knowledge-genealogy",
     }
 )
 
@@ -2828,6 +2829,68 @@ def knowledge_repositories_profile(
     )
     return config
 
+
+
+
+def knowledge_genealogy_profile(
+    config: SimulationRunnerConfig,
+) -> SimulationRunnerConfig:
+    """Require cultural + provenance + genealogy on runner-config-v35.
+
+    Off-gate Experiment AP profile. Rejects unowned V3 flags.
+    """
+    from simulation.runner_models import RUNNER_SCHEMA_VERSION_V35
+
+    if config.schema_version != RUNNER_SCHEMA_VERSION_V35:
+        raise ValueError(
+            "knowledge genealogy profile requires runner-config-v35 "
+            "(code=knowledge_genealogy_profile_schema "
+            f"got={config.schema_version!r})"
+        )
+    if not config.v3_capability_flags.cultural_historical_memory:
+        raise ValueError(
+            "knowledge genealogy profile requires cultural_historical_memory "
+            "(code=knowledge_genealogy_profile_flag)"
+        )
+    if config.cultural_feature_provenance is None:
+        raise ValueError(
+            "knowledge genealogy profile requires cultural_feature_provenance "
+            "(code=knowledge_genealogy_profile_missing_provenance)"
+        )
+    if config.knowledge_genealogy is None:
+        raise ValueError(
+            "knowledge genealogy profile requires knowledge_genealogy "
+            "(code=knowledge_genealogy_profile_missing_genealogy)"
+        )
+    allowed = {
+        "generational_population",
+        "kinship_inheritance",
+        "cultural_historical_memory",
+    }
+    other = tuple(
+        name
+        for name in config.v3_capability_flags.enabled_names()
+        if name not in allowed
+    )
+    if other:
+        raise ValueError(
+            "knowledge genealogy profile forbids unowned V3 flags "
+            "(code=knowledge_genealogy_profile_extra_flags "
+            f"flag_count={len(other)})"
+        )
+    _LOG.debug(
+        "knowledge_genealogy_profile_ok schema_version=%s "
+        "kind_count=%s cultural_flag=%s provenance_present=%s "
+        "genealogy_present=%s durable_present=%s repository_present=%s",
+        config.schema_version,
+        len(config.knowledge_genealogy.enabled_kinds),
+        config.v3_capability_flags.cultural_historical_memory,
+        config.cultural_feature_provenance is not None,
+        config.knowledge_genealogy is not None,
+        config.durable_records is not None,
+        config.knowledge_repositories is not None,
+    )
+    return config
 
 def developmental_learning_profile(
     config: SimulationRunnerConfig,
@@ -4005,3 +4068,250 @@ def experiment_ao_knowledge_repositories(
         seed_matrix=matrix,
         arms=arms,
     )
+
+
+def experiment_ap_knowledge_genealogy(
+    base: SimulationRunnerConfig,
+    *,
+    seed_matrix: ExperimentSeedMatrix | None = None,
+    max_ticks: int = 12,
+) -> ExperimentDefinition:
+    """Off-gate Experiment AP for knowledge genealogy on runner-config-v35."""
+    from simulation.new_agent_initialization import (
+        default_new_agent_initialization_spec,
+    )
+    from simulation.runner_models import (
+        RUNNER_SCHEMA_VERSION_V4,
+        RUNNER_SCHEMA_VERSION_V34,
+        RUNNER_SCHEMA_VERSION_V35,
+        ArtifactInterpretationMode,
+        KnowledgeGenealogyUptakeCompose,
+        example_cultural_feature_provenance_spec,
+        example_durable_records_spec,
+        example_knowledge_genealogy_spec,
+        example_knowledge_repositories_spec,
+        example_population_lifecycle_spec,
+    )
+
+    matrix = seed_matrix or ExperimentSeedMatrix(seeds=(base.seed,))
+    if len(base.agents) < 2:
+        raise ValueError(
+            "experiment AP requires at least two agents on the base roster "
+            "(code=knowledge_genealogy_ap_roster_too_small)"
+        )
+
+    provenance = example_cultural_feature_provenance_spec()
+    lifecycle = example_population_lifecycle_spec(
+        lifespan_ticks=40,
+        max_population=max(4, len(base.agents) + 1),
+        policy_id="disabled",
+    )
+    init = default_new_agent_initialization_spec()
+    durable = example_durable_records_spec(default_fidelity="perfect")
+    repos = example_knowledge_repositories_spec()
+
+    def _clear_v3_siblings(cfg: SimulationRunnerConfig) -> SimulationRunnerConfig:
+        return replace(
+            cfg,
+            mentorship=None,
+            developmental_learning=None,
+            dependency_care=None,
+            kinship=None,
+            historical_memory_layers=None,
+        )
+
+    def _with_modes(
+        cfg: SimulationRunnerConfig,
+        *,
+        teaching: bool = False,
+        skill_learning: bool = False,
+        artifacts: bool = True,
+        memory_mode: MemoryMode | None = None,
+    ) -> SimulationRunnerConfig:
+        art_mode = (
+            ArtifactInterpretationMode.DETERMINISTIC
+            if artifacts
+            else ArtifactInterpretationMode.DISABLED
+        )
+        rebuilt = tuple(
+            replace(
+                agent,
+                cognition=replace(
+                    agent.cognition,
+                    artifact_interpretation_mode=art_mode,
+                    teaching_interaction_mode=(
+                        TeachingInteractionMode.DETERMINISTIC
+                        if teaching
+                        else TeachingInteractionMode.DISABLED
+                    ),
+                    skill_learning_mode=(
+                        SkillLearningMode.DETERMINISTIC
+                        if skill_learning
+                        else SkillLearningMode.DISABLED
+                    ),
+                    memory_mode=(
+                        memory_mode
+                        if memory_mode is not None
+                        else agent.cognition.memory_mode
+                    ),
+                ),
+            )
+            for agent in cfg.agents
+        )
+        return replace(cfg, agents=rebuilt, artifacts_enabled=artifacts)
+
+    def _genealogy(
+        *,
+        uptake: KnowledgeGenealogyUptakeCompose | None = None,
+        with_lifecycle: bool = False,
+        with_durable: bool = False,
+        with_repos: bool = False,
+        teaching: bool = False,
+        skill_learning: bool = False,
+        memory_mode: MemoryMode | None = None,
+    ) -> SimulationRunnerConfig:
+        compose = uptake or KnowledgeGenealogyUptakeCompose()
+        genealogy = replace(
+            example_knowledge_genealogy_spec(),
+            uptake_compose=compose,
+        )
+        flags = V3CapabilityFlags(
+            cultural_historical_memory=True,
+            generational_population=with_lifecycle,
+        )
+        cfg = replace(
+            base,
+            schema_version=RUNNER_SCHEMA_VERSION_V35,
+            mortality_mode=MortalityMode.DISABLED,
+            stop_policy=RunnerStopPolicy(max_ticks=max_ticks),
+            v3_capability_flags=flags,
+            cultural_feature_provenance=provenance,
+            knowledge_genealogy=genealogy,
+            durable_records=durable if with_durable else None,
+            knowledge_repositories=repos if with_repos else None,
+            population_lifecycle=lifecycle if with_lifecycle else None,
+            new_agent_initialization=init if with_lifecycle else None,
+            mentorship=None,
+            developmental_learning=None,
+            dependency_care=None,
+            kinship=None,
+            historical_memory_layers=None,
+            artifacts_enabled=True,
+        )
+        cfg = _with_modes(
+            cfg,
+            teaching=teaching,
+            skill_learning=skill_learning,
+            artifacts=True,
+            memory_mode=memory_mode,
+        )
+        return knowledge_genealogy_profile(cfg)
+
+    # Channel-off: v34 AO baseline (repositories on, genealogy absent).
+    channel_off = _clear_v3_siblings(
+        replace(
+            base,
+            schema_version=RUNNER_SCHEMA_VERSION_V34,
+            mortality_mode=MortalityMode.DISABLED,
+            stop_policy=RunnerStopPolicy(max_ticks=max_ticks),
+            v3_capability_flags=V3CapabilityFlags(cultural_historical_memory=True),
+            cultural_feature_provenance=provenance,
+            durable_records=durable,
+            knowledge_repositories=repos,
+            knowledge_genealogy=None,
+            population_lifecycle=None,
+            new_agent_initialization=None,
+            artifacts_enabled=True,
+        )
+    )
+    knowledge_repositories_profile(channel_off)
+
+    independent = _genealogy(
+        uptake=KnowledgeGenealogyUptakeCompose(independent_discovery=True),
+    )
+    teaching = _genealogy(
+        uptake=KnowledgeGenealogyUptakeCompose(teaching=True),
+        teaching=True,
+        skill_learning=True,
+    )
+    multi_parent = _genealogy()
+    mutation = _genealogy()
+    dual = _genealogy(
+        uptake=KnowledgeGenealogyUptakeCompose(independent_discovery=True),
+    )
+    written = _genealogy(
+        uptake=KnowledgeGenealogyUptakeCompose(written_record=True),
+        with_durable=True,
+    )
+    reconstruction = _genealogy(
+        uptake=KnowledgeGenealogyUptakeCompose(reconstruction=True),
+        memory_mode=MemoryMode.RECONSTRUCTIVE,
+    )
+    lifecycle_survival = _genealogy(
+        uptake=KnowledgeGenealogyUptakeCompose(teaching=True),
+        with_lifecycle=True,
+        teaching=True,
+        skill_learning=True,
+    )
+    capability_join = _genealogy(
+        uptake=KnowledgeGenealogyUptakeCompose(independent_discovery=True),
+        skill_learning=True,
+    )
+    flags_off = _clear_v3_siblings(
+        replace(
+            base,
+            schema_version=RUNNER_SCHEMA_VERSION_V4,
+            mortality_mode=MortalityMode.DISABLED,
+            stop_policy=RunnerStopPolicy(max_ticks=max_ticks),
+            v3_capability_flags=V3CapabilityFlags(),
+            cultural_feature_provenance=None,
+            durable_records=None,
+            knowledge_repositories=None,
+            knowledge_genealogy=None,
+            population_lifecycle=None,
+            new_agent_initialization=None,
+            historical_memory_layers=None,
+        )
+    )
+
+    arms = (
+        ("ap-channel-off", "knowledge_genealogy_channel_off", channel_off),
+        (
+            "ap-independent-discovery",
+            "knowledge_genealogy_independent_discovery",
+            independent,
+        ),
+        ("ap-teaching-lineage", "knowledge_genealogy_teaching_lineage", teaching),
+        ("ap-multi-parent-dag", "knowledge_genealogy_multi_parent_dag", multi_parent),
+        ("ap-mutation-hop", "knowledge_genealogy_mutation_hop", mutation),
+        ("ap-dual-emergence", "knowledge_genealogy_dual_emergence", dual),
+        ("ap-written-record", "knowledge_genealogy_written_record", written),
+        ("ap-reconstruction", "knowledge_genealogy_reconstruction", reconstruction),
+        (
+            "ap-lifecycle-survival",
+            "knowledge_genealogy_lifecycle_survival",
+            lifecycle_survival,
+        ),
+        ("ap-capability-join", "knowledge_genealogy_capability_join", capability_join),
+        ("ap-flags-off", "knowledge_genealogy_v3_flags_off", flags_off),
+    )
+    for arm_id, _label, config in arms:
+        _LOG.info(
+            "experiment_ap_built experiment_id=experiment-ap-knowledge-genealogy "
+            "arm_id=%s schema_version=%s cultural_flag=%s genealogy_present=%s "
+            "provenance_present=%s durable_present=%s lifecycle_present=%s",
+            arm_id,
+            config.schema_version,
+            config.v3_capability_flags.cultural_historical_memory,
+            config.knowledge_genealogy is not None,
+            config.cultural_feature_provenance is not None,
+            config.durable_records is not None,
+            config.population_lifecycle is not None,
+        )
+    return _definition(
+        experiment_id="experiment-ap-knowledge-genealogy",
+        base=base,
+        seed_matrix=matrix,
+        arms=arms,
+    )
+

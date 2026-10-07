@@ -30,6 +30,7 @@ from simulation.runner_models import (
     RUNNER_SCHEMA_VERSION_V32,
     RUNNER_SCHEMA_VERSION_V33,
     RUNNER_SCHEMA_VERSION_V34,
+    RUNNER_SCHEMA_VERSION_V35,
     ArtifactInterpretationMode,
     CognitiveBudgetMode,
     CulturalNarrativeMode,
@@ -78,6 +79,7 @@ def finalize_matrix_cell_config(
     historical_memory_on = config.historical_memory_layers is not None
     durable_records_on = config.durable_records is not None
     knowledge_repositories_on = config.knowledge_repositories is not None
+    knowledge_genealogy_on = config.knowledge_genealogy is not None
     mentorship_on = config.mentorship is not None
     developmental_learning_on = config.developmental_learning is not None
     dependency_care_on = config.dependency_care is not None
@@ -88,7 +90,12 @@ def finalize_matrix_cell_config(
         config.population_lifecycle is not None
         and config.population_lifecycle.has_developmental_extensions()
     )
-    if knowledge_repositories_on:
+    if knowledge_genealogy_on:
+        schema_version, rule = (
+            RUNNER_SCHEMA_VERSION_V35,
+            "knowledge_genealogy_on",
+        )
+    elif knowledge_repositories_on:
         schema_version, rule = (
             RUNNER_SCHEMA_VERSION_V34,
             "knowledge_repositories_on",
@@ -180,6 +187,7 @@ def finalize_matrix_cell_config(
             RUNNER_SCHEMA_VERSION_V32,
             RUNNER_SCHEMA_VERSION_V33,
             RUNNER_SCHEMA_VERSION_V34,
+            RUNNER_SCHEMA_VERSION_V35,
         }
         and config.v3_capability_flags.generational_population
     )
@@ -199,6 +207,7 @@ def finalize_matrix_cell_config(
             RUNNER_SCHEMA_VERSION_V32,
             RUNNER_SCHEMA_VERSION_V33,
             RUNNER_SCHEMA_VERSION_V34,
+            RUNNER_SCHEMA_VERSION_V35,
         }
         and config.v3_capability_flags.generational_population
     )
@@ -227,6 +236,7 @@ def finalize_matrix_cell_config(
         },
     )
     if rule in {
+        "knowledge_genealogy_on",
         "knowledge_repositories_on",
         "durable_records_on",
         "historical_memory_on",

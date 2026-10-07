@@ -533,19 +533,19 @@ No `docs/observer.md` / `docs/physical-simulation.md` changes required (SEMANTIC
 
 ### Phase 5: Experiment AP + matrix
 
-- [ ] Task 13: Add `knowledge_genealogy_profile` and `experiment_ap_knowledge_genealogy` catalog entry (off V1 gate) with locked arm matrix **including `ap-lifecycle-survival`**; export from `experiments/__init__.py`; add `experiment-ap-knowledge-genealogy` to `OFF_GATE_MATRIX_EXPERIMENT_IDS`. Pin schema v35 + objects + flag on on-arms.
+- [x] Task 13: Add `knowledge_genealogy_profile` and `experiment_ap_knowledge_genealogy` catalog entry (off V1 gate) with locked arm matrix **including `ap-lifecycle-survival`**; export from `experiments/__init__.py`; add `experiment-ap-knowledge-genealogy` to `OFF_GATE_MATRIX_EXPERIMENT_IDS`. Pin schema v35 + objects + flag on on-arms.
   - Deliverable: Catalog construction tests; arm ids stable; allowlist pin.
   - Files: `src/experiments/catalog.py`, `src/experiments/__init__.py`, scenario helpers as needed, `tests/unit/test_experiment_ap_knowledge_genealogy.py`
   - Logging: INFO `experiment_ap_built` experiment_id + arm_id + schema_version; DEBUG flag/object presence
   - Depends on: 2, 12
 
-- [ ] Task 14: Arm assertions — independent discovery, teaching lineage, multi-parent DAG (direct ledger), mutation hop (direct ledger), dual emergence, written-record, reconstruction, lifecycle-survival, capability-join unmatched, channel-off, flags-off hash stability.
+- [x] Task 14: Arm assertions — independent discovery, teaching lineage, multi-parent DAG (direct ledger), mutation hop (direct ledger), dual emergence, written-record, reconstruction, lifecycle-survival, capability-join unmatched, channel-off, flags-off hash stability.
   - Deliverable: Executable arm proofs with stable failure messages citing arm_id.
   - Files: `tests/unit/test_experiment_ap_*.py`, flags-off hash stability extensions
   - Logging: test logs only
   - Depends on: 13, 7, 9, 11, 12
 
-- [ ] Task 15: Matrix finalize only — insert `knowledge_genealogy_on` **before** `knowledge_repositories_on`; accept v35; widen lifecycle/init needs sets with `V35` (cultural-only v35 must not synthesize lifecycle); extend finalize debug rule-name set; keep AO on v34 when genealogy absent. Do **not** re-own catalog allowlist (Task 13).
+- [x] Task 15: Matrix finalize only — insert `knowledge_genealogy_on` **before** `knowledge_repositories_on`; accept v35; widen lifecycle/init needs sets with `V35` (cultural-only v35 must not synthesize lifecycle); extend finalize debug rule-name set; keep AO on v34 when genealogy absent. Do **not** re-own catalog allowlist (Task 13).
   - Deliverable: Finalize priority tests (`knowledge_genealogy_on` beats `knowledge_repositories_on`); durable+repository+genealogy → v35.
   - Files: `src/experiments/matrix_schema.py`, `tests/unit/test_matrix_schema_v35*.py`
   - Logging: DEBUG finalize selected schema_version reason (`knowledge_genealogy_on` / …)
