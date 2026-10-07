@@ -246,6 +246,8 @@ def inputs_with_opt_in_metric_rows(
     repository_event_rows: Sequence[object] | None = None,
     founder_death_ticks: Mapping[str, int] | None = None,
     inaccessible_expectations: Sequence[object] | None = None,
+    practical_knowledge_audits: Sequence[object] | None = None,
+    death_ticks: Mapping[str, int] | None = None,
 ) -> MetricComputationInputs:
     """Attach opt-in family inputs from harvested evidence when present.
 
@@ -381,6 +383,17 @@ def inputs_with_opt_in_metric_rows(
             repository_event_rows=repository_event_rows,
             founder_death_ticks=founder_death_ticks,
             inaccessible_expectations=inaccessible_expectations,
+        )
+    if practical_knowledge_audits is not None:
+        attached["knowledge_genealogy"] = len(practical_knowledge_audits)
+        updated = replace(
+            updated,
+            practical_knowledge_audits=practical_knowledge_audits,
+            death_ticks=(
+                dict(death_ticks)
+                if death_ticks is not None
+                else updated.death_ticks
+            ),
         )
 
     _LOG.debug(

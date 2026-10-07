@@ -54,6 +54,7 @@ __all__ = [
     "durable_record_event_rows_from_events",
     "durable_record_harvest_from_run",
     "historical_memory_harvest_from_run",
+    "knowledge_genealogy_harvest_from_run",
     "knowledge_repository_harvest_from_run",
     "repository_event_rows_from_events",
     "repository_event_rows_from_resolutions",
@@ -1224,6 +1225,56 @@ def repository_event_rows_from_resolutions(
     )
     return tuple(rows)
 
+
+
+def knowledge_genealogy_harvest_from_run(
+    *,
+    knowledge_genealogy_spec: object | None,
+    practical_knowledge_audits: Sequence[object] | None = None,
+    events: Sequence[object] | None = None,
+    death_ticks: Mapping[str, int] | None = None,
+) -> dict[str, object] | None:
+    """Build genealogy harvest when knowledge_genealogy channel is on.
+
+    Derives death_ticks from events when layers/durable absent. Returns None
+    when the genealogy object is absent.
+    """
+    if knowledge_genealogy_spec is None:
+        _LOG.debug(
+            "knowledge_genealogy_harvest_skip reason_code=genealogy_absent"
+        )
+        return None
+    audits = () if practical_knowledge_audits is None else tuple(practical_knowledge_audits)
+    deaths = dict(death_ticks or {})
+    if events is not None:
+        derived = _death_ticks_from_events(events)
+        for agent, tick in derived.items():
+            if agent not in deaths or tick < deaths[agent]:
+                deaths[agent] = tick
+    if not audits:
+        _LOG.warning(
+            "knowledge_genealogy_harvest_empty "
+            "reason_code=genealogy_enabled_rows_empty audit_count=%s",
+            0,
+        )
+    origin_counts: dict[str, int] = {}
+    for row in audits:
+        origin = getattr(row, "origin", None)
+        token = getattr(origin, "value", origin)
+        if type(token) is str:
+            origin_counts[token] = origin_counts.get(token, 0) + 1
+    _LOG.debug(
+        "knowledge_genealogy_harvest_built audit_count=%s death_count=%s "
+        "origin_counts=%s source_kind=knowledge_genealogy",
+        len(audits),
+        len(deaths),
+        origin_counts,
+    )
+    return {
+        "practical_knowledge_audits": audits,
+        "death_ticks": deaths,
+        "origin_counts": origin_counts,
+    }
 
 def knowledge_repository_harvest_from_run(
     *,

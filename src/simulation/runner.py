@@ -2563,9 +2563,11 @@ class SimulationRunner:
             ),
             mentorship_audits=self.export_mentorship_audits(),
             cultural_feature_audits=self.export_cultural_feature_audits(),
+            practical_knowledge_audits=self.export_practical_knowledge_audits(),
         )
         mentorship_audit_count = len(result.mentorship_audits)
         cultural_audit_count = len(result.cultural_feature_audits)
+        practical_knowledge_audit_count = len(result.practical_knowledge_audits)
         _LOG.info(
             "runner_finished run_id=%s ticks_committed=%s stop_reason=%s "
             "attempt_count=%s finalized_tick_count=%s goal_transition_count=%s "
@@ -2587,6 +2589,12 @@ class SimulationRunner:
                 "mentorship_audit_harvest run_id=%s audit_count=%s",
                 self._run_id.value,
                 mentorship_audit_count,
+            )
+        if practical_knowledge_audit_count:
+            _LOG.info(
+                "practical_knowledge_audit_harvest run_id=%s audit_count=%s",
+                self._run_id.value,
+                practical_knowledge_audit_count,
             )
         if cultural_audit_count:
             _LOG.info(
@@ -2783,6 +2791,25 @@ class SimulationRunner:
                 collected.append(audit)
         _LOG.info(
             "cultural_feature_audit_harvest audit_count=%s",
+            len(collected),
+        )
+        return tuple(collected)
+
+    def export_practical_knowledge_audits(self) -> tuple[object, ...]:
+        """Harvest metadata-only practical-knowledge audits (not on result schema)."""
+        from agents.cognition.practical_knowledge import PracticalKnowledgeAudit
+
+        collected: list[PracticalKnowledgeAudit] = []
+        for runtime in self._runtimes:
+            export = getattr(runtime, "export_practical_knowledge_audits", None)
+            if export is None:
+                continue
+            for audit in export():
+                if type(audit) is not PracticalKnowledgeAudit:
+                    raise TypeError("practical_knowledge_audits: invalid_item")
+                collected.append(audit)
+        _LOG.info(
+            "practical_knowledge_audit_harvest audit_count=%s",
             len(collected),
         )
         return tuple(collected)

@@ -16,7 +16,7 @@ from analysis.specifications import (
 
 def test_family_registered_and_version_locked() -> None:
     assert CULTURAL_NARRATIVE_LINEAGE_METRIC_VERSION == "cultural_narrative_lineage@1"
-    assert METRIC_FAMILY_COUNT == 62
+    assert METRIC_FAMILY_COUNT == 65
     spec = metric_specification(MetricFamilyId.CULTURAL_NARRATIVE_LINEAGE)
     assert spec.family_id is MetricFamilyId.CULTURAL_NARRATIVE_LINEAGE
     assert "persistence_rate" in spec.value_keys

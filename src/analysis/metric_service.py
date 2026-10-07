@@ -48,6 +48,11 @@ from analysis.knowledge_repository_metrics import (
     compute_knowledge_repository_organization,
     compute_knowledge_repository_survival,
 )
+from analysis.knowledge_genealogy_metrics import (
+    compute_knowledge_genealogy_holders,
+    compute_knowledge_genealogy_lineage,
+    compute_knowledge_genealogy_mutation,
+)
 from analysis.historical_memory_metrics import (
     compute_historical_memory_layers,
     compute_historical_memory_queries,
@@ -171,6 +176,7 @@ class MetricComputationInputs:
     repository_event_rows: Sequence[object] | None = None
     founder_death_ticks: Mapping[str, int] | None = None
     inaccessible_expectations: Sequence[object] | None = None
+    practical_knowledge_audits: Sequence[object] | None = None
     territorial_presence_rows: Sequence[object] | None = None
     territorial_control_rows: Sequence[object] | None = None
     belief_convergence_claims: Sequence[object] | None = None
@@ -730,6 +736,48 @@ def assemble_metric_documents(inputs: MetricComputationInputs) -> MetricBundle:
                 event_rows=repository_events,
             ),
         )
+    if inputs.practical_knowledge_audits is not None:
+        pk_audits = tuple(inputs.practical_knowledge_audits)
+        _LOG.debug(
+            "metric_assemble family_id=knowledge_genealogy_holders source_count=%s",
+            len(pk_audits),
+        )
+        _safe(
+            "knowledge_genealogy_holders",
+            lambda: compute_knowledge_genealogy_holders(
+                pk_audits,
+                run_id=run_id,
+                input_revision=revision,
+                as_of_tick=inputs.window_end,
+                death_ticks=inputs.death_ticks,
+            ),
+        )
+        _LOG.debug(
+            "metric_assemble family_id=knowledge_genealogy_lineage source_count=%s",
+            len(pk_audits),
+        )
+        _safe(
+            "knowledge_genealogy_lineage",
+            lambda: compute_knowledge_genealogy_lineage(
+                pk_audits,
+                run_id=run_id,
+                input_revision=revision,
+                as_of_tick=inputs.window_end,
+                death_ticks=inputs.death_ticks,
+            ),
+        )
+        _LOG.debug(
+            "metric_assemble family_id=knowledge_genealogy_mutation source_count=%s",
+            len(pk_audits),
+        )
+        _safe(
+            "knowledge_genealogy_mutation",
+            lambda: compute_knowledge_genealogy_mutation(
+                pk_audits,
+                run_id=run_id,
+                input_revision=revision,
+            ),
+        )
     optional_blocks = {
         "kinship_genealogy": inputs.kinship_edge_rows is not None,
         "dependency_care": (
@@ -754,6 +802,7 @@ def assemble_metric_documents(inputs: MetricComputationInputs) -> MetricBundle:
             inputs.repository_objective_rows is not None
             or inputs.repository_event_rows is not None
         ),
+        "knowledge_genealogy": inputs.practical_knowledge_audits is not None,
         "territorial_presence": inputs.territorial_presence_rows is not None,
         "territorial_control": inputs.territorial_control_rows is not None,
         "belief_convergence": inputs.belief_convergence_claims is not None,

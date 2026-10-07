@@ -39,7 +39,7 @@ def _audit(*, mutated: bool = False, recombined: bool = False) -> CulturalFeatur
 
 def test_metric_family_count_includes_cultural_features() -> None:
     specs = all_metric_specifications()
-    assert len(specs) == METRIC_FAMILY_COUNT == 62
+    assert len(specs) == METRIC_FAMILY_COUNT == 65
     ids = {spec.family_id.value for spec in specs}
     assert {
         "cultural_feature_provenance",

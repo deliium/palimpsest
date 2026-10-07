@@ -4657,6 +4657,7 @@ class SimulationRunnerResult:
     developmental_acquisition_audits: tuple[object, ...] = ()
     mentorship_audits: tuple[object, ...] = ()
     cultural_feature_audits: tuple[object, ...] = ()
+    practical_knowledge_audits: tuple[object, ...] = ()
 
     def __post_init__(self) -> None:
         from simulation.models import RunId
@@ -4816,6 +4817,15 @@ class SimulationRunnerResult:
             if type(row) is not CulturalFeatureAudit:
                 raise TypeError("cultural_feature_audits: invalid_item")
         object.__setattr__(self, "cultural_feature_audits", cultural_rows)
+        if isinstance(self.practical_knowledge_audits, (set, frozenset)):
+            raise TypeError("practical_knowledge_audits must be ordered")
+        from agents.cognition.practical_knowledge import PracticalKnowledgeAudit
+
+        pk_rows = tuple(self.practical_knowledge_audits)
+        for row in pk_rows:
+            if type(row) is not PracticalKnowledgeAudit:
+                raise TypeError("practical_knowledge_audits: invalid_item")
+        object.__setattr__(self, "practical_knowledge_audits", pk_rows)
 
 
 class CognitionFailurePolicy(StrEnum):

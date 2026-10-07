@@ -86,6 +86,7 @@ def assemble_arm_metric_bundle(
         cultural_channel_rows_from_norm_beliefs,
         durable_record_harvest_from_run,
         historical_memory_harvest_from_run,
+        knowledge_genealogy_harvest_from_run,
         knowledge_repository_harvest_from_run,
         norm_belief_rows_from_ledgers,
     )
@@ -215,6 +216,14 @@ def assemble_arm_metric_bundle(
         inaccessible_expectations=inaccessible_expectations,
     )
 
+    genealogy_spec = getattr(arm.assignment.runner_config, "knowledge_genealogy", None)
+    pk_audits = getattr(arm.runner_result, "practical_knowledge_audits", None)
+    genealogy_harvest = knowledge_genealogy_harvest_from_run(
+        knowledge_genealogy_spec=genealogy_spec,
+        practical_knowledge_audits=pk_audits,
+        events=events,
+    )
+
     inputs = inputs_with_opt_in_metric_rows(
         inputs,
         events=events,
@@ -274,6 +283,16 @@ def assemble_arm_metric_bundle(
             if repository_harvest is None
             or "inaccessible_expectations" not in repository_harvest
             else tuple(repository_harvest["inaccessible_expectations"])  # type: ignore[arg-type]
+        ),
+        practical_knowledge_audits=(
+            None
+            if genealogy_harvest is None
+            else tuple(genealogy_harvest["practical_knowledge_audits"])  # type: ignore[arg-type]
+        ),
+        death_ticks=(
+            None
+            if genealogy_harvest is None
+            else dict(genealogy_harvest["death_ticks"])  # type: ignore[arg-type]
         ),
     )
     return assemble_metric_documents(inputs)

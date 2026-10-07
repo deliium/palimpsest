@@ -50,7 +50,7 @@ __all__ = [
 ]
 
 METRIC_CATALOG_VERSION: Final[str] = "metric-catalog-v1"
-METRIC_FAMILY_COUNT: Final[int] = 62
+METRIC_FAMILY_COUNT: Final[int] = 65
 
 # Align with existing memory-drift / transmission document versions.
 _ALGO_V1: Final[str] = "1"
@@ -139,6 +139,9 @@ class MetricFamilyId(StrEnum):
     KNOWLEDGE_REPOSITORY_SURVIVAL = "knowledge_repository_survival"
     KNOWLEDGE_REPOSITORY_ACCESS = "knowledge_repository_access"
     KNOWLEDGE_REPOSITORY_ORGANIZATION = "knowledge_repository_organization"
+    KNOWLEDGE_GENEALOGY_HOLDERS = "knowledge_genealogy_holders"
+    KNOWLEDGE_GENEALOGY_LINEAGE = "knowledge_genealogy_lineage"
+    KNOWLEDGE_GENEALOGY_MUTATION = "knowledge_genealogy_mutation"
 
 
 class DenominatorKind(StrEnum):
@@ -1710,6 +1713,99 @@ def _spec_knowledge_repository_organization() -> MetricSpecification:
     )
 
 
+def _spec_knowledge_genealogy_holders() -> MetricSpecification:
+    return _base(
+        family_id=MetricFamilyId.KNOWLEDGE_GENEALOGY_HOLDERS,
+        evidence_inputs=frozenset({EvidenceStage.AGENT_VISIBLE_PROJECTION}),
+        population="practical_knowledge_audit_rows",
+        denominator="active_technique_holders",
+        denominator_kind=DenominatorKind.OCCURRENCE,
+        cohort_window="caller-supplied practical-knowledge audits + death_ticks",
+        deceased_policy="dead holders counted separately; who_currently_knows filters living",
+        zero_holding_policy="no practical-knowledge audits -> availability=absent",
+        opportunity_vs_occurrence="active holders living vs dead; mean hop; teacher coverage",
+        self_edge_policy="not_applicable",
+        censoring_policy="analysis-only knowledge genealogy; never cognition",
+        formulas={
+            "living_holder_count": "active entries whose owner is living at as_of_tick",
+            "dead_holder_count": "active entries whose owner is dead at as_of_tick",
+            "mean_hop_index": "mean hop_index over active entries",
+            "teacher_coverage_share": "audits with teacher/source id / audit_count",
+        },
+        value_keys=(
+            "active_entry_count",
+            "dead_holder_count",
+            "living_holder_count",
+            "mean_hop_index",
+            "teacher_coverage_share",
+            "technique_count",
+        ),
+        empty_case="availability=absent; no_practical_knowledge_audits",
+    )
+
+
+def _spec_knowledge_genealogy_lineage() -> MetricSpecification:
+    return _base(
+        family_id=MetricFamilyId.KNOWLEDGE_GENEALOGY_LINEAGE,
+        evidence_inputs=frozenset({EvidenceStage.AGENT_VISIBLE_PROJECTION}),
+        population="practical_knowledge_audit_rows",
+        denominator="practical_knowledge_audits",
+        denominator_kind=DenominatorKind.OCCURRENCE,
+        cohort_window="caller-supplied practical-knowledge audits",
+        deceased_policy="death_ticks used for surviving-root queries only",
+        zero_holding_policy="no practical-knowledge audits -> availability=absent",
+        opportunity_vs_occurrence="root counts, multi-parent share, dual emergence, unresolved joins",
+        self_edge_policy="not_applicable",
+        censoring_policy="analysis-only knowledge genealogy; never cognition",
+        formulas={
+            "multi_parent_share": "rows with >=2 parent_entry_ids / audit_count",
+            "combination_rate": "origin=combination / audit_count",
+            "dual_independent_emergence_rate": (
+                "techniques with >=2 independent roots / technique_count"
+            ),
+            "unresolved_transmission_count": "analysis peer joins without source entry",
+        },
+        value_keys=(
+            "combination_rate",
+            "dual_independent_emergence_rate",
+            "independent_root_count",
+            "max_analysis_dag_depth",
+            "max_owner_local_hop",
+            "multi_parent_share",
+            "unresolved_transmission_count",
+        ),
+        empty_case="availability=absent; no_practical_knowledge_audits",
+    )
+
+
+def _spec_knowledge_genealogy_mutation() -> MetricSpecification:
+    return _base(
+        family_id=MetricFamilyId.KNOWLEDGE_GENEALOGY_MUTATION,
+        evidence_inputs=frozenset({EvidenceStage.AGENT_VISIBLE_PROJECTION}),
+        population="practical_knowledge_audit_rows",
+        denominator="practical_knowledge_audits",
+        denominator_kind=DenominatorKind.OCCURRENCE,
+        cohort_window="caller-supplied practical-knowledge audits",
+        deceased_policy="not_applicable",
+        zero_holding_policy="no practical-knowledge audits -> availability=absent",
+        opportunity_vs_occurrence="mutated share and mean fingerprint_distance_q",
+        self_edge_policy="not_applicable",
+        censoring_policy="analysis-only knowledge genealogy; never cognition",
+        formulas={
+            "mutated_hop_share": "mutated audits / audit_count",
+            "mean_fingerprint_distance_q": "mean fingerprint_distance_q over audits",
+        },
+        value_keys=(
+            "audit_count",
+            "mean_fingerprint_distance_q",
+            "mutated_count",
+            "mutated_hop_share",
+        ),
+        empty_case="availability=absent; no_practical_knowledge_audits",
+    )
+
+
+
 def _spec_historical_memory_queries() -> MetricSpecification:
     return _base(
         family_id=MetricFamilyId.HISTORICAL_MEMORY_QUERIES,
@@ -3163,6 +3259,9 @@ _BUILDERS: Final[tuple[Callable[[], MetricSpecification], ...]] = (
     _spec_knowledge_repository_survival,
     _spec_knowledge_repository_access,
     _spec_knowledge_repository_organization,
+    _spec_knowledge_genealogy_holders,
+    _spec_knowledge_genealogy_lineage,
+    _spec_knowledge_genealogy_mutation,
     _spec_emergent_group_formation,
     _spec_emergent_social_norms,
     _spec_persistent_social_conventions,

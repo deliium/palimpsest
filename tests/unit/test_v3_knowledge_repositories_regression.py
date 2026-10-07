@@ -1,4 +1,4 @@
-"""Knowledge-repositories regression pins: SEMANTIC 53, commands 34, metrics 62."""
+"""Knowledge-repositories regression pins: SEMANTIC 53, commands 34, metrics 65."""
 
 from __future__ import annotations
 
@@ -46,7 +46,7 @@ def test_agent_command_count_is_34() -> None:
 
 
 def test_metric_family_count_is_62() -> None:
-    assert METRIC_FAMILY_COUNT == 62
+    assert METRIC_FAMILY_COUNT == 65
     assert MetricFamilyId.KNOWLEDGE_REPOSITORY_SURVIVAL.value == (
         "knowledge_repository_survival"
     )

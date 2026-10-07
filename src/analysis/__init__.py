@@ -120,6 +120,20 @@ from analysis.durable_record_metrics import (
     summarize_durable_record_lineage,
     summarize_record_survival,
 )
+from analysis.knowledge_genealogy import (
+    KnowledgeGenealogyGraph,
+    KnowledgeGenealogyQueryId,
+    build_knowledge_genealogy_graph,
+    run_knowledge_genealogy_query,
+)
+from analysis.knowledge_genealogy_metrics import (
+    KNOWLEDGE_GENEALOGY_HOLDERS_METRIC_VERSION,
+    KNOWLEDGE_GENEALOGY_LINEAGE_METRIC_VERSION,
+    KNOWLEDGE_GENEALOGY_MUTATION_METRIC_VERSION,
+    compute_knowledge_genealogy_holders,
+    compute_knowledge_genealogy_lineage,
+    compute_knowledge_genealogy_mutation,
+)
 from analysis.knowledge_repository_metrics import (
     KNOWLEDGE_REPOSITORY_ACCESS_METRIC_VERSION,
     KNOWLEDGE_REPOSITORY_ORGANIZATION_METRIC_VERSION,
@@ -586,6 +600,16 @@ __all__ = [
     "compute_durable_record_fidelity",
     "compute_durable_record_lineage",
     "compute_durable_record_survival",
+    "KNOWLEDGE_GENEALOGY_HOLDERS_METRIC_VERSION",
+    "KNOWLEDGE_GENEALOGY_LINEAGE_METRIC_VERSION",
+    "KNOWLEDGE_GENEALOGY_MUTATION_METRIC_VERSION",
+    "KnowledgeGenealogyGraph",
+    "KnowledgeGenealogyQueryId",
+    "build_knowledge_genealogy_graph",
+    "compute_knowledge_genealogy_holders",
+    "compute_knowledge_genealogy_lineage",
+    "compute_knowledge_genealogy_mutation",
+    "run_knowledge_genealogy_query",
     "compute_knowledge_repository_access",
     "compute_knowledge_repository_organization",
     "compute_knowledge_repository_survival",

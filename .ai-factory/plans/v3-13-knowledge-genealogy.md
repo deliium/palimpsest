@@ -505,25 +505,25 @@ No `docs/observer.md` / `docs/physical-simulation.md` changes required (SEMANTIC
 
 ### Phase 4: Analysis DAG, queries, metrics, harvest
 
-- [ ] Task 9: Implement `KnowledgeGenealogyGraph` builder + four locked queries with deterministic sort, depth clamp, `death_ticks`/`as_of_tick` living filter, analysis peer `transmitted_from` join + unresolved counts. Optional `generation_index_by_agent` join.
+- [x] Task 9: Implement `KnowledgeGenealogyGraph` builder + four locked queries with deterministic sort, depth clamp, `death_ticks`/`as_of_tick` living filter, analysis peer `transmitted_from` join + unresolved counts. Optional `generation_index_by_agent` join.
   - Deliverable: Unit tests for each query; dual-emergence; living filter; unresolved edges; empty → ABSENT-friendly shapes.
   - Files: `src/analysis/knowledge_genealogy.py` (new), `tests/unit/test_knowledge_genealogy_queries.py`
   - Logging: DEBUG query_id + result_count; censoring_policy states analysis-only / never cognition
   - Depends on: 3, 6
 
-- [ ] Task 10: Implement holders / lineage / mutation metric computors with exact DTO summaries (counts/histograms only; living vs dead via `death_ticks`; mean `fingerprint_distance_q`).
+- [x] Task 10: Implement holders / lineage / mutation metric computors with exact DTO summaries (counts/histograms only; living vs dead via `death_ticks`; mean `fingerprint_distance_q`).
   - Deliverable: Unit tests for each family empty/non-empty shapes.
   - Files: `src/analysis/knowledge_genealogy_metrics.py` (new), `tests/unit/test_knowledge_genealogy_metrics.py`
   - Logging: DEBUG family computed counts
   - Depends on: 9
 
-- [ ] Task 11: Register three metric families end-to-end (`MetricFamilyId`, `_spec_*`, builders, `MetricComputationInputs`, assemble/`_safe`, exports). Bump `METRIC_FAMILY_COUNT` 62→65 and update **all** hard-pinned count assertions in: `test_metric_specifications`, `test_cultural_feature_metrics`, `test_cultural_narrative_metrics`, `test_dependency_care_metrics`, `test_developmental_learning_metrics`, `test_historical_memory_metrics`, `test_mentorship_metrics`, `test_v3_durable_records_regression`, `test_v3_knowledge_repositories_regression` (docstring + count tests). Do not overload listed sibling families.
+- [x] Task 11: Register three metric families end-to-end (`MetricFamilyId`, `_spec_*`, builders, `MetricComputationInputs`, assemble/`_safe`, exports). Bump `METRIC_FAMILY_COUNT` 62→65 and update **all** hard-pinned count assertions in: `test_metric_specifications`, `test_cultural_feature_metrics`, `test_cultural_narrative_metrics`, `test_dependency_care_metrics`, `test_developmental_learning_metrics`, `test_historical_memory_metrics`, `test_mentorship_metrics`, `test_v3_durable_records_regression`, `test_v3_knowledge_repositories_regression` (docstring + count tests). Do not overload listed sibling families.
   - Deliverable: Specification + assemble tests; all count pins green in this commit.
   - Files: `src/analysis/specifications.py`, `src/analysis/metric_service.py`, `src/analysis/__init__.py`, listed test modules
   - Logging: DEBUG metric assemble family_id + source_count
   - Depends on: 10
 
-- [ ] Task 12: Harvest wiring end-to-end — `SimulationRunnerResultDocument.practical_knowledge_audits` + `__post_init__` validation; `runner.py` export + result construction; `agent_runtime.export_practical_knowledge_audits`; `composition.knowledge_genealogy_harvest_from_run` (derive `death_ticks` from events when layers/durable absent); collectors + `metric_collection.inputs_with_opt_in_metric_rows`; prove collectors attach rows when genealogy enabled.
+- [x] Task 12: Harvest wiring end-to-end — `SimulationRunnerResultDocument.practical_knowledge_audits` + `__post_init__` validation; `runner.py` export + result construction; `agent_runtime.export_practical_knowledge_audits`; `composition.knowledge_genealogy_harvest_from_run` (derive `death_ticks` from events when layers/durable absent); collectors + `metric_collection.inputs_with_opt_in_metric_rows`; prove collectors attach rows when genealogy enabled.
   - Deliverable: Harvest unit tests; no `api`↔`analysis` import violations.
   - Files: `src/simulation/runner_models.py`, `src/simulation/runner.py`, `src/simulation/agent_runtime.py`, `src/experiments/composition.py`, `src/experiments/metric_collection.py`, `src/experiments/collectors.py`, `tests/unit/test_knowledge_genealogy_harvest.py`
   - Logging: DEBUG harvest counts by origin; WARN when genealogy enabled but rows empty
