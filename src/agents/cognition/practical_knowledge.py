@@ -64,6 +64,13 @@ __all__ = [
     "combine_practical_knowledge",
     "supersede_practical_knowledge",
     "fingerprint_jaccard_distance",
+    "apply_practical_knowledge_compose",
+    "apply_practical_knowledge_from_teaching",
+    "apply_practical_knowledge_from_imitation",
+    "apply_practical_knowledge_from_written_record",
+    "apply_practical_knowledge_from_reconstruction",
+    "apply_practical_knowledge_from_developmental",
+    "apply_practical_knowledge_from_independent_discovery",
 ]
 
 
@@ -1203,3 +1210,616 @@ def supersede_practical_knowledge(
     )
     return result
 
+
+_ADVICE_DOMAIN_TO_KIND: Final[dict[str, PracticalKnowledgeKind]] = {
+    "foraging": PracticalKnowledgeKind.FORAGING_METHOD,
+    "healing": PracticalKnowledgeKind.HEALING_TECHNIQUE,
+    "crafting": PracticalKnowledgeKind.CRAFTING_PROCESS,
+    "navigation": PracticalKnowledgeKind.NAVIGATION_KNOWLEDGE,
+    "building": PracticalKnowledgeKind.BUILDING_METHOD,
+}
+_SKIP_ADVICE_DOMAINS: Final[frozenset[str]] = frozenset(
+    {"resource_detection", "communication", "teaching"}
+)
+_MENTORSHIP_CONTENT_TO_KIND: Final[dict[str, PracticalKnowledgeKind]] = {
+    "production_recipes": PracticalKnowledgeKind.CRAFTING_PROCESS,
+}
+_OCCURRENCE_KIND_HINTS: Final[tuple[tuple[str, PracticalKnowledgeKind], ...]] = (
+    ("forag", PracticalKnowledgeKind.FORAGING_METHOD),
+    ("heal", PracticalKnowledgeKind.HEALING_TECHNIQUE),
+    ("craft", PracticalKnowledgeKind.CRAFTING_PROCESS),
+    ("navig", PracticalKnowledgeKind.NAVIGATION_KNOWLEDGE),
+    ("build", PracticalKnowledgeKind.BUILDING_METHOD),
+)
+_WRITTEN_GENRE_TO_KIND: Final[dict[str, PracticalKnowledgeKind]] = {
+    "instruction": PracticalKnowledgeKind.CRAFTING_PROCESS,
+    "inventory": PracticalKnowledgeKind.FORAGING_METHOD,
+    "recipe": PracticalKnowledgeKind.CRAFTING_PROCESS,
+}
+
+
+def _technique_token(raw: str) -> str:
+    cleaned = "".join(
+        ch if (ch.isalnum() or ch in "-_") else "-" for ch in str(raw).lower()
+    ).strip("-_")
+    if not cleaned:
+        cleaned = "technique"
+    # Collapse runs of dashes for stable-id friendliness.
+    while "--" in cleaned:
+        cleaned = cleaned.replace("--", "-")
+    return require_stable_id("technique_token", cleaned[:64])
+
+
+def _kind_from_occurrence(kind_raw: str) -> PracticalKnowledgeKind | None:
+    lowered = str(kind_raw).lower()
+    for hint, kind in _OCCURRENCE_KIND_HINTS:
+        if hint in lowered:
+            return kind
+    return None
+
+
+def _agent_id_or_none(value: object) -> AgentId | None:
+    if type(value) is AgentId:
+        return value
+    token = getattr(value, "value", None)
+    if isinstance(token, str):
+        try:
+            return AgentId(token)
+        except (TypeError, ValueError):
+            return None
+    return None
+
+
+def _try_form(
+    ledger: PracticalKnowledgeLedger,
+    *,
+    kind: PracticalKnowledgeKind,
+    technique_token: str,
+    fingerprint: Sequence[str],
+    origin: KnowledgeTransmissionOrigin,
+    tick: int,
+    enabled_kinds: Sequence[str],
+    evidence_refs: Sequence[str] = (),
+    source_agent_id: AgentId | None = None,
+    teacher_agent_id: AgentId | None = None,
+) -> tuple[PracticalKnowledgeLedger, PracticalKnowledgeAudit | None]:
+    content_key = practical_knowledge_content_key(technique_token)
+    prior = _active_by_content_key(ledger, content_key)
+    try:
+        updated = form_or_reinforce_practical_knowledge(
+            ledger,
+            kind=kind,
+            content_key=content_key,
+            content_fingerprint=fingerprint,
+            origin=origin,
+            tick=tick,
+            enabled_kinds=enabled_kinds,
+            evidence_refs=evidence_refs,
+            capability_anchor=resolve_capability_anchor(kind),
+            source_agent_id=source_agent_id,
+            teacher_agent_id=teacher_agent_id,
+        )
+    except ValueError as exc:
+        message = str(exc)
+        if "knowledge_genealogy_hop_cap" in message or "kind_not_enabled" in message:
+            _LOG.debug(
+                "practical_knowledge_compose origin=%s skip_reason=%s",
+                origin.value,
+                "hop_cap" if "hop_cap" in message else "kind_not_enabled",
+            )
+            return ledger, None
+        raise
+    entry = _active_by_content_key(updated, content_key)
+    if entry is None:
+        return updated, None
+    reason = "reinforced" if prior is not None else "formed"
+    return updated, entry_to_audit(entry, tick=tick, reason_code=reason)
+
+
+def apply_practical_knowledge_from_teaching(
+    ledger: PracticalKnowledgeLedger,
+    *,
+    enabled_kinds: Sequence[str],
+    advice_delta: Sequence[object],
+    tick: int,
+    teaching_compose_on: bool,
+    teaching_mode_on: bool,
+    mentorship_channel_on: bool = False,
+) -> tuple[PracticalKnowledgeLedger, tuple[PracticalKnowledgeAudit, ...]]:
+    """Map teaching/mentorship public advice onto technique entries (no peer copy)."""
+    if type(ledger) is not PracticalKnowledgeLedger:
+        raise _fail("ledger", "invalid_type")
+    if not teaching_compose_on:
+        return ledger, ()
+    if not teaching_mode_on and not mentorship_channel_on:
+        _LOG.debug(
+            "practical_knowledge_compose origin=%s skip_reason=%s",
+            KnowledgeTransmissionOrigin.TEACHING.value,
+            "teaching_mode_off",
+        )
+        return ledger, ()
+    if not advice_delta:
+        return ledger, ()
+    current = ledger
+    audits: list[PracticalKnowledgeAudit] = []
+    for row in advice_delta:
+        teacher = _agent_id_or_none(getattr(row, "source_agent_id", None))
+        domain = getattr(getattr(row, "domain", None), "value", None)
+        if not isinstance(domain, str):
+            domain = None
+        content_kind = getattr(getattr(row, "content_kind", None), "value", None)
+        if not isinstance(content_kind, str):
+            content_kind = None
+        if domain in _SKIP_ADVICE_DOMAINS:
+            _LOG.debug(
+                "practical_knowledge_compose origin=%s skip_reason=%s",
+                KnowledgeTransmissionOrigin.TEACHING.value,
+                f"domain_skipped:{domain}",
+            )
+            continue
+        kind = None
+        token = None
+        if domain is not None:
+            kind = _ADVICE_DOMAIN_TO_KIND.get(domain)
+            token = domain
+        if kind is None and content_kind is not None:
+            kind = _MENTORSHIP_CONTENT_TO_KIND.get(content_kind)
+            token = content_kind
+        if kind is None or token is None:
+            _LOG.debug(
+                "practical_knowledge_compose origin=%s skip_reason=%s",
+                KnowledgeTransmissionOrigin.TEACHING.value,
+                "unmapped_teaching_domain",
+            )
+            continue
+        occurrence = getattr(row, "occurrence_id", None) or "teach"
+        evidence = [f"teach:{occurrence}"]
+        if mentorship_channel_on and teacher is not None:
+            evidence.append(f"mentor:{teacher.value}")
+        band = getattr(getattr(row, "band", None), "value", "unspecified")
+        current, audit = _try_form(
+            current,
+            kind=kind,
+            technique_token=_technique_token(token),
+            fingerprint=(f"cue:teach:{token}", f"band:{band}"),
+            origin=KnowledgeTransmissionOrigin.TEACHING,
+            tick=tick,
+            enabled_kinds=enabled_kinds,
+            evidence_refs=tuple(evidence),
+            source_agent_id=teacher,
+            teacher_agent_id=teacher,
+        )
+        if audit is not None:
+            audits.append(audit)
+            _LOG.debug(
+                "practical_knowledge_compose origin=%s skip_reason=%s",
+                KnowledgeTransmissionOrigin.TEACHING.value,
+                "ok",
+            )
+    return current, tuple(audits)
+
+
+def apply_practical_knowledge_from_imitation(
+    ledger: PracticalKnowledgeLedger,
+    *,
+    enabled_kinds: Sequence[str],
+    observation: object | None,
+    tick: int,
+    imitation_compose_on: bool,
+) -> tuple[PracticalKnowledgeLedger, tuple[PracticalKnowledgeAudit, ...]]:
+    """Uptake from colocated successful practice (never embeds peer id in content_key)."""
+    if type(ledger) is not PracticalKnowledgeLedger:
+        raise _fail("ledger", "invalid_type")
+    if not imitation_compose_on:
+        return ledger, ()
+    if observation is None:
+        _LOG.debug(
+            "practical_knowledge_compose origin=%s skip_reason=%s",
+            KnowledgeTransmissionOrigin.IMITATION.value,
+            "observation_absent",
+        )
+        return ledger, ()
+    current = ledger
+    audits: list[PracticalKnowledgeAudit] = []
+    for occurrence in getattr(observation, "occurrences", ()) or ():
+        kind_raw = str(getattr(occurrence, "kind", "")).lower()
+        other = getattr(occurrence, "other_entity_id", None)
+        success = getattr(occurrence, "success", None)
+        if other is None:
+            continue
+        if success is not True and "success" not in kind_raw and "complete" not in kind_raw:
+            continue
+        kind = _kind_from_occurrence(kind_raw)
+        if kind is None:
+            continue
+        other_token = other.value if hasattr(other, "value") else str(other)
+        event_id = getattr(getattr(occurrence, "provenance", None), "event_id", None)
+        evidence_token = (
+            f"evt:{event_id.value}"
+            if event_id is not None and hasattr(event_id, "value")
+            else f"occ:{tick}:{kind_raw}"
+        )
+        # content_key must not embed peer id — technique token from occurrence kind only.
+        current, audit = _try_form(
+            current,
+            kind=kind,
+            technique_token=_technique_token(kind_raw),
+            fingerprint=(f"cue:imit:{kind_raw}",),
+            origin=KnowledgeTransmissionOrigin.IMITATION,
+            tick=tick,
+            enabled_kinds=enabled_kinds,
+            evidence_refs=(evidence_token, f"actor:{other_token}"),
+            source_agent_id=None,
+        )
+        if audit is not None:
+            audits.append(audit)
+    return current, tuple(audits)
+
+
+def apply_practical_knowledge_from_written_record(
+    ledger: PracticalKnowledgeLedger,
+    *,
+    enabled_kinds: Sequence[str],
+    observation: object | None,
+    artifact_interpretations: object | None,
+    tick: int,
+    written_compose_on: bool,
+    artifacts_on: bool,
+    durable_on: bool,
+    repositories_on: bool,
+) -> tuple[PracticalKnowledgeLedger, tuple[PracticalKnowledgeAudit, ...]]:
+    """Uptake from durable artifact / repository perception cues (marks ≠ truth)."""
+    if type(ledger) is not PracticalKnowledgeLedger:
+        raise _fail("ledger", "invalid_type")
+    if not written_compose_on:
+        return ledger, ()
+    if not artifacts_on and not durable_on and not repositories_on:
+        _LOG.debug(
+            "practical_knowledge_compose origin=%s skip_reason=%s",
+            KnowledgeTransmissionOrigin.WRITTEN_RECORD.value,
+            "artifacts_off",
+        )
+        return ledger, ()
+    current = ledger
+    audits: list[PracticalKnowledgeAudit] = []
+
+    if artifacts_on or durable_on:
+        entries = ()
+        if artifact_interpretations is not None:
+            entries = (
+                getattr(artifact_interpretations, "interpretations", None)
+                or getattr(artifact_interpretations, "entries", None)
+                or ()
+            )
+        for entry in entries:
+            artifact_id = (
+                getattr(entry, "artifact_id", None)
+                or getattr(entry, "mark_id", None)
+                or getattr(entry, "entity_id", None)
+            )
+            aid = getattr(artifact_id, "value", artifact_id)
+            if not isinstance(aid, str):
+                continue
+            genre = getattr(entry, "record_genre", None)
+            genre_token = getattr(genre, "value", genre)
+            if not isinstance(genre_token, str):
+                genre_token = "instruction"
+            kind = _WRITTEN_GENRE_TO_KIND.get(genre_token, PracticalKnowledgeKind.CRAFTING_PROCESS)
+            author = _agent_id_or_none(
+                getattr(entry, "author_id", None)
+                or getattr(entry, "source_agent_id", None)
+            )
+            current, audit = _try_form(
+                current,
+                kind=kind,
+                technique_token=_technique_token(f"mark-{aid}"),
+                fingerprint=(f"cue:mark:{aid}", f"genre:{genre_token}"),
+                origin=KnowledgeTransmissionOrigin.WRITTEN_RECORD,
+                tick=tick,
+                enabled_kinds=enabled_kinds,
+                evidence_refs=(f"artifact:{aid}",),
+                source_agent_id=author,
+            )
+            if audit is not None:
+                audits.append(audit)
+
+        for artifact in getattr(observation, "artifacts", ()) or () if observation else ():
+            genre = getattr(artifact, "record_genre", None)
+            genre_token = getattr(genre, "value", None)
+            if not isinstance(genre_token, str):
+                continue
+            kind = _WRITTEN_GENRE_TO_KIND.get(genre_token)
+            if kind is None:
+                continue
+            aid = getattr(getattr(artifact, "artifact_id", None), "value", None) or getattr(
+                getattr(artifact, "entity_id", None), "value", None
+            )
+            if not isinstance(aid, str):
+                aid = f"art-{tick}-{genre_token}"
+            author = _agent_id_or_none(getattr(artifact, "author_id", None))
+            current, audit = _try_form(
+                current,
+                kind=kind,
+                technique_token=_technique_token(f"durable-{aid}"),
+                fingerprint=(f"cue:durable:{aid}", f"genre:{genre_token}"),
+                origin=KnowledgeTransmissionOrigin.WRITTEN_RECORD,
+                tick=tick,
+                enabled_kinds=enabled_kinds,
+                evidence_refs=(f"durable:{aid}",),
+                source_agent_id=author,
+            )
+            if audit is not None:
+                audits.append(audit)
+
+    if repositories_on and observation is not None:
+        for repository in getattr(observation, "repositories", ()) or ():
+            repo_id = getattr(repository, "repository_id", None)
+            repo_token = getattr(repo_id, "value", None)
+            if not isinstance(repo_token, str):
+                continue
+            access = getattr(repository, "access", "retrieve")
+            current, audit = _try_form(
+                current,
+                kind=PracticalKnowledgeKind.CRAFTING_PROCESS,
+                technique_token=_technique_token(f"repo-{repo_token}"),
+                fingerprint=(f"cue:repo:{repo_token}", f"access:{access}"),
+                origin=KnowledgeTransmissionOrigin.WRITTEN_RECORD,
+                tick=tick,
+                enabled_kinds=enabled_kinds,
+                evidence_refs=(f"repo:{repo_token}",),
+            )
+            if audit is not None:
+                audits.append(audit)
+    return current, tuple(audits)
+
+
+def apply_practical_knowledge_from_reconstruction(
+    ledger: PracticalKnowledgeLedger,
+    *,
+    enabled_kinds: Sequence[str],
+    observation: object | None,
+    tick: int,
+    reconstruction_compose_on: bool,
+    reconstructive_memory_on: bool,
+) -> tuple[PracticalKnowledgeLedger, tuple[PracticalKnowledgeAudit, ...]]:
+    """Rebuild incomplete technique cues when reconstructive memory path is on."""
+    if type(ledger) is not PracticalKnowledgeLedger:
+        raise _fail("ledger", "invalid_type")
+    if not reconstruction_compose_on:
+        return ledger, ()
+    if not reconstructive_memory_on:
+        _LOG.debug(
+            "practical_knowledge_compose origin=%s skip_reason=%s",
+            KnowledgeTransmissionOrigin.RECONSTRUCTION.value,
+            "reconstructive_memory_off",
+        )
+        return ledger, ()
+    if observation is None:
+        return ledger, ()
+    current = ledger
+    audits: list[PracticalKnowledgeAudit] = []
+    for occurrence in getattr(observation, "occurrences", ()) or ():
+        kind_raw = str(getattr(occurrence, "kind", "")).lower()
+        if "recall" not in kind_raw and "reconstruct" not in kind_raw and "partial" not in kind_raw:
+            continue
+        kind = _kind_from_occurrence(kind_raw) or PracticalKnowledgeKind.FORAGING_METHOD
+        current, audit = _try_form(
+            current,
+            kind=kind,
+            technique_token=_technique_token(f"recon-{kind_raw}"),
+            fingerprint=(f"cue:recon:{kind_raw}", "incomplete"),
+            origin=KnowledgeTransmissionOrigin.RECONSTRUCTION,
+            tick=tick,
+            enabled_kinds=enabled_kinds,
+            evidence_refs=(f"recon:{tick}:{kind_raw}",),
+        )
+        if audit is not None:
+            audits.append(audit)
+    return current, tuple(audits)
+
+
+def apply_practical_knowledge_from_developmental(
+    ledger: PracticalKnowledgeLedger,
+    *,
+    enabled_kinds: Sequence[str],
+    developmental_audits: Sequence[object],
+    tick: int,
+    developmental_compose_on: bool,
+    developmental_channel_on: bool,
+) -> tuple[PracticalKnowledgeLedger, tuple[PracticalKnowledgeAudit, ...]]:
+    """Compose from developmental SKILLS / PRACTICES acquisition audits."""
+    if type(ledger) is not PracticalKnowledgeLedger:
+        raise _fail("ledger", "invalid_type")
+    if not developmental_compose_on:
+        return ledger, ()
+    if not developmental_channel_on:
+        _LOG.debug(
+            "practical_knowledge_compose origin=%s skip_reason=%s",
+            "developmental",
+            "developmental_channel_off",
+        )
+        return ledger, ()
+    current = ledger
+    audits: list[PracticalKnowledgeAudit] = []
+    for row in developmental_audits:
+        domain = getattr(row, "domain_id", None) or getattr(row, "domain", None)
+        domain_token = getattr(domain, "value", domain)
+        if domain_token not in {"skills", "practices"}:
+            continue
+        concept = getattr(row, "concept_key", None)
+        if not isinstance(concept, str):
+            continue
+        kind = _kind_from_occurrence(concept) or PracticalKnowledgeKind.FORAGING_METHOD
+        teacher = _agent_id_or_none(getattr(row, "teacher_agent_id", None))
+        evidence = getattr(row, "evidence_ref", None) or f"dev:{concept}"
+        # Developmental compose uses teaching origin when a teacher is present,
+        # otherwise independent_discovery-style root via reconstruction-adjacent
+        # developmental path recorded as imitation-free independent when no teacher.
+        origin = (
+            KnowledgeTransmissionOrigin.TEACHING
+            if teacher is not None
+            else KnowledgeTransmissionOrigin.INDEPENDENT_DISCOVERY
+        )
+        # Plan lists developmental as compose flag; origin stays independent when
+        # self-acquired, teaching when instructed — never combination/mutation here.
+        if teacher is None:
+            origin = KnowledgeTransmissionOrigin.INDEPENDENT_DISCOVERY
+        current, audit = _try_form(
+            current,
+            kind=kind,
+            technique_token=_technique_token(concept.replace(":", "-")),
+            fingerprint=(f"cue:dev:{concept}",),
+            origin=origin,
+            tick=tick,
+            enabled_kinds=enabled_kinds,
+            evidence_refs=(str(evidence),),
+            source_agent_id=teacher,
+            teacher_agent_id=teacher,
+        )
+        if audit is not None:
+            audits.append(audit)
+    return current, tuple(audits)
+
+
+def apply_practical_knowledge_from_independent_discovery(
+    ledger: PracticalKnowledgeLedger,
+    *,
+    enabled_kinds: Sequence[str],
+    observation: object | None,
+    tick: int,
+    independent_compose_on: bool,
+) -> tuple[PracticalKnowledgeLedger, tuple[PracticalKnowledgeAudit, ...]]:
+    """Mint independent roots from own successful practice / experimentation."""
+    if type(ledger) is not PracticalKnowledgeLedger:
+        raise _fail("ledger", "invalid_type")
+    if not independent_compose_on:
+        return ledger, ()
+    if observation is None:
+        return ledger, ()
+    current = ledger
+    audits: list[PracticalKnowledgeAudit] = []
+    for occurrence in getattr(observation, "occurrences", ()) or ():
+        kind_raw = str(getattr(occurrence, "kind", "")).lower()
+        other = getattr(occurrence, "other_entity_id", None)
+        success = getattr(occurrence, "success", None)
+        if other is not None:
+            continue
+        if success is not True and "experiment" not in kind_raw and "discover" not in kind_raw:
+            continue
+        kind = _kind_from_occurrence(kind_raw)
+        if kind is None:
+            continue
+        event_id = getattr(getattr(occurrence, "provenance", None), "event_id", None)
+        evidence_token = (
+            f"evt:{event_id.value}"
+            if event_id is not None and hasattr(event_id, "value")
+            else f"occ:{tick}:{kind_raw}"
+        )
+        current, audit = _try_form(
+            current,
+            kind=kind,
+            technique_token=_technique_token(kind_raw),
+            fingerprint=(f"cue:discover:{kind_raw}",),
+            origin=KnowledgeTransmissionOrigin.INDEPENDENT_DISCOVERY,
+            tick=tick,
+            enabled_kinds=enabled_kinds,
+            evidence_refs=(evidence_token,),
+        )
+        if audit is not None:
+            audits.append(audit)
+    return current, tuple(audits)
+
+
+def apply_practical_knowledge_compose(
+    ledger: PracticalKnowledgeLedger,
+    *,
+    enabled_kinds: Sequence[str],
+    tick: int,
+    uptake_compose: object,
+    observation: object | None = None,
+    advice_delta: Sequence[object] = (),
+    artifact_interpretations: object | None = None,
+    developmental_audits: Sequence[object] = (),
+    teaching_mode_on: bool = False,
+    mentorship_channel_on: bool = False,
+    artifacts_on: bool = False,
+    durable_on: bool = False,
+    repositories_on: bool = False,
+    reconstructive_memory_on: bool = False,
+    developmental_channel_on: bool = False,
+) -> tuple[PracticalKnowledgeLedger, tuple[PracticalKnowledgeAudit, ...]]:
+    """Run all uptake compose adapters gated by ``uptake_compose`` flags."""
+    if type(ledger) is not PracticalKnowledgeLedger:
+        raise _fail("ledger", "invalid_type")
+    if uptake_compose is None:
+        return ledger, ()
+    current = ledger
+    audits: list[PracticalKnowledgeAudit] = []
+
+    current, rows = apply_practical_knowledge_from_teaching(
+        current,
+        enabled_kinds=enabled_kinds,
+        advice_delta=advice_delta,
+        tick=tick,
+        teaching_compose_on=bool(getattr(uptake_compose, "teaching", False)),
+        teaching_mode_on=teaching_mode_on,
+        mentorship_channel_on=mentorship_channel_on,
+    )
+    audits.extend(rows)
+
+    current, rows = apply_practical_knowledge_from_imitation(
+        current,
+        enabled_kinds=enabled_kinds,
+        observation=observation,
+        tick=tick,
+        imitation_compose_on=bool(getattr(uptake_compose, "imitation", False)),
+    )
+    audits.extend(rows)
+
+    current, rows = apply_practical_knowledge_from_written_record(
+        current,
+        enabled_kinds=enabled_kinds,
+        observation=observation,
+        artifact_interpretations=artifact_interpretations,
+        tick=tick,
+        written_compose_on=bool(getattr(uptake_compose, "written_record", False)),
+        artifacts_on=artifacts_on,
+        durable_on=durable_on,
+        repositories_on=repositories_on,
+    )
+    audits.extend(rows)
+
+    current, rows = apply_practical_knowledge_from_reconstruction(
+        current,
+        enabled_kinds=enabled_kinds,
+        observation=observation,
+        tick=tick,
+        reconstruction_compose_on=bool(
+            getattr(uptake_compose, "reconstruction", False)
+        ),
+        reconstructive_memory_on=reconstructive_memory_on,
+    )
+    audits.extend(rows)
+
+    current, rows = apply_practical_knowledge_from_developmental(
+        current,
+        enabled_kinds=enabled_kinds,
+        developmental_audits=developmental_audits,
+        tick=tick,
+        developmental_compose_on=bool(getattr(uptake_compose, "developmental", False)),
+        developmental_channel_on=developmental_channel_on,
+    )
+    audits.extend(rows)
+
+    current, rows = apply_practical_knowledge_from_independent_discovery(
+        current,
+        enabled_kinds=enabled_kinds,
+        observation=observation,
+        tick=tick,
+        independent_compose_on=bool(
+            getattr(uptake_compose, "independent_discovery", False)
+        ),
+    )
+    audits.extend(rows)
+
+    return current, tuple(audits)

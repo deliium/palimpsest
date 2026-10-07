@@ -210,6 +210,7 @@ class CognitiveLoop:
         "_last_cultural_feature_audits",
         "_last_developmental_audits",
         "_last_mentorship_audits",
+        "_last_practical_knowledge_audits",
         "_memory",
         "_memory_updates",
         "_mentorship_spec",
@@ -878,6 +879,7 @@ class CognitiveLoop:
         self._last_developmental_audits: tuple[object, ...] = ()
         self._last_mentorship_audits: tuple[object, ...] = ()
         self._last_cultural_feature_audits: tuple[object, ...] = ()
+        self._last_practical_knowledge_audits: tuple[object, ...] = ()
 
     def _prepare_reputation(self, loop_input: CognitiveLoopInput) -> object | None:
         from agents.cognition.configuration import CognitionReputationMode
@@ -1702,6 +1704,137 @@ class CognitiveLoop:
             "cultural_features_carried owner_id=%s belief_count=%s audit_count=%s",
             owner_id.value,
             len(ledger.beliefs),
+            len(audits),
+        )
+        return ledger
+
+
+    def _prepare_practical_knowledge(
+        self,
+        loop_input: object,
+        *,
+        advice_delta: tuple[object, ...] = (),
+        artifact_interpretations: object | None = None,
+    ) -> object | None:
+        """Carry or mint practical-knowledge ledger when genealogy channel is on."""
+        from agents.cognition.artifacts import ArtifactInterpretationMode
+        from agents.cognition.configuration import CognitionTeachingInteractionMode
+        from agents.cognition.developmental_learning import (
+            resolve_developmental_applicability,
+        )
+        from agents.cognition.practical_knowledge import (
+            PracticalKnowledgeLedger,
+            apply_practical_knowledge_compose,
+            empty_practical_knowledge_ledger,
+            require_owner_practical_knowledge,
+        )
+        from agents.models import AgentId
+
+        if self._knowledge_genealogy_spec is None:
+            self._last_practical_knowledge_audits = ()
+            return None
+        snapshot = getattr(loop_input, "snapshot", None)
+        carried = (
+            None
+            if snapshot is None
+            else getattr(snapshot, "practical_knowledge", None)
+        )
+        owner_id = getattr(loop_input, "agent_id", None)
+        if type(owner_id) is not AgentId:
+            raise TypeError("loop_input.agent_id must be AgentId")
+        lineage = getattr(self._knowledge_genealogy_spec, "lineage_policy", None)
+        if lineage is None:
+            raise TypeError("knowledge_genealogy_spec.lineage_policy required")
+        max_entries = int(getattr(lineage, "max_entries_per_owner", 64))
+        max_parent_ids = int(getattr(lineage, "max_parent_ids", 4))
+        max_hop_depth = int(getattr(lineage, "max_hop_depth", 16))
+        max_refs = int(
+            getattr(self._knowledge_genealogy_spec, "max_evidence_refs", 8)
+        )
+        if carried is None:
+            ledger = empty_practical_knowledge_ledger(
+                owner_id,
+                max_entries=max_entries,
+                max_parent_ids=max_parent_ids,
+                max_hop_depth=max_hop_depth,
+                max_evidence_refs=max_refs,
+            )
+            _LOG.debug(
+                "practical_knowledge_prepare owner_id=%s entry_count=%s "
+                "reason=empty_synthesize",
+                owner_id.value,
+                0,
+            )
+        else:
+            require_owner_practical_knowledge(
+                carried,
+                owner_id,
+                field_name="loop_input.snapshot.practical_knowledge",
+            )
+            if type(carried) is not PracticalKnowledgeLedger:
+                raise TypeError("practical_knowledge must be PracticalKnowledgeLedger")
+            ledger = carried
+            _LOG.debug(
+                "practical_knowledge_prepare owner_id=%s entry_count=%s "
+                "reason=carry",
+                owner_id.value,
+                len(ledger.entries),
+            )
+        observation = getattr(loop_input, "observation", None)
+        applicability = str(
+            getattr(self._knowledge_genealogy_spec, "applicability", "all_live_agents")
+        )
+        mid_run = bool(getattr(self, "_developmental_mid_run_admit", False))
+        applicable = resolve_developmental_applicability(
+            applicability=applicability,
+            observation=observation,
+            mid_run_admit=mid_run,
+        )
+        if not applicable:
+            self._last_practical_knowledge_audits = ()
+            return ledger
+        uptake = getattr(self._knowledge_genealogy_spec, "uptake_compose", None)
+        enabled_kinds = tuple(
+            getattr(self._knowledge_genealogy_spec, "enabled_kinds", ())
+        )
+        tick = int(getattr(observation, "tick", 0))
+        teaching_on = (
+            self._teaching_mode is CognitionTeachingInteractionMode.DETERMINISTIC
+        )
+        mentorship_on = self._mentorship_spec is not None
+        artifacts_on = (
+            self._artifact_interpretation_mode
+            is ArtifactInterpretationMode.DETERMINISTIC
+        )
+        durable_on = bool(self._durable_records_active)
+        repositories_on = artifacts_on and bool(self._knowledge_repositories_active)
+        developmental_on = self._developmental_learning_spec is not None
+        memory_token = (
+            f"{type(self._memory).__module__}.{type(self._memory).__name__}".lower()
+        )
+        reconstructive_on = "reconstruc" in memory_token
+        ledger, audits = apply_practical_knowledge_compose(
+            ledger,
+            enabled_kinds=enabled_kinds,
+            tick=tick,
+            uptake_compose=uptake,
+            observation=observation,
+            advice_delta=advice_delta,
+            artifact_interpretations=artifact_interpretations,
+            developmental_audits=tuple(self._last_developmental_audits),
+            teaching_mode_on=teaching_on,
+            mentorship_channel_on=mentorship_on,
+            artifacts_on=artifacts_on,
+            durable_on=durable_on,
+            repositories_on=repositories_on,
+            reconstructive_memory_on=reconstructive_on,
+            developmental_channel_on=developmental_on,
+        )
+        self._last_practical_knowledge_audits = tuple(audits)
+        _LOG.debug(
+            "practical_knowledge_carried owner_id=%s entry_count=%s audit_count=%s",
+            owner_id.value,
+            len(ledger.entries),
             len(audits),
         )
         return ledger
@@ -2542,6 +2675,11 @@ class CognitiveLoop:
             social_norms=social_norms,
             artifact_interpretations=artifact_interpretations,
         )
+        practical_knowledge = self._prepare_practical_knowledge(
+            loop_input,
+            advice_delta=advice_delta,
+            artifact_interpretations=artifact_interpretations,
+        )
         recipe_beliefs = self._prepare_recipe_beliefs(loop_input)
         production_recipe_id = None
         if recipe_beliefs is not None and self._production_allow_provider:
@@ -2793,6 +2931,7 @@ class CognitiveLoop:
             developmental_knowledge=developmental_knowledge,
             mentorship=mentorship,
             cultural_features=cultural_features,
+            practical_knowledge=practical_knowledge,
             competence_model=competence,
             declarative_advice=advice,
             recipe_beliefs=recipe_beliefs,
@@ -2960,6 +3099,7 @@ class CognitiveLoop:
             developmental_knowledge=proposal.developmental_knowledge,
             mentorship=proposal.mentorship,
             cultural_features=proposal.cultural_features,
+            practical_knowledge=proposal.practical_knowledge,
             competence_model=proposal.competence_model,
             declarative_advice=proposal.declarative_advice,
             recipe_beliefs=proposal.recipe_beliefs,

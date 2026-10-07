@@ -188,6 +188,20 @@ def test_observation_fields_frozen_for_scaffolding_plan() -> None:
     )
     assert "WorldState" not in field_types
     assert "WorldEvent" not in field_types
+    # v3-13 knowledge genealogy must not widen Observation roots.
+    assert fields.isdisjoint(
+        {
+            "practical_knowledge",
+            "knowledge_genealogy",
+            "technique_catalog",
+            "technique_pack",
+            "knowledge_pack",
+            "global_technique_registry",
+            "society_encyclopedia",
+            "true_method_catalog",
+            "genealogy_dag",
+        }
+    )
 
 
 def test_communications_schema_unchanged_and_event_only() -> None:

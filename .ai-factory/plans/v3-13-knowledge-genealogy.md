@@ -483,19 +483,19 @@ No `docs/observer.md` / `docs/physical-simulation.md` changes required (SEMANTIC
 
 ### Phase 3: Compose, carry, audits, isolation
 
-- [ ] Task 6: Wire runtime subjective carry / checkpoint restore + audit emission + channel-off empty synthesize. Touch the full cultural/mentorship path set: `agents/cognition/models.py` (`SubjectiveSnapshot`, `CognitiveLoopProposal`, `CognitiveLoopResult` + `require_owner_*`); `loop.py` (`__slots__`, `__init__` kwarg bind, `_prepare_practical_knowledge`, proposal/result copy, `_last_*_audits`); `configuration.py` `build_cognitive_loop` pass-through; `run_control.py` `AgentRuntimeCheckpoint` field + `__post_init__`; `agent_runtime.py` slots/init/`_commit_practical_knowledge`/snapshot kwargs/commit call/`restore_runtime_checkpoint`/`export_runtime_checkpoint`/`export_practical_knowledge_audits`; prove channel-off skips ledger writes.
+- [x] Task 6: Wire runtime subjective carry / checkpoint restore + audit emission + channel-off empty synthesize. Touch the full cultural/mentorship path set: `agents/cognition/models.py` (`SubjectiveSnapshot`, `CognitiveLoopProposal`, `CognitiveLoopResult` + `require_owner_*`); `loop.py` (`__slots__`, `__init__` kwarg bind, `_prepare_practical_knowledge`, proposal/result copy, `_last_*_audits`); `configuration.py` `build_cognitive_loop` pass-through; `run_control.py` `AgentRuntimeCheckpoint` field + `__post_init__`; `agent_runtime.py` slots/init/`_commit_practical_knowledge`/snapshot kwargs/commit call/`restore_runtime_checkpoint`/`export_runtime_checkpoint`/`export_practical_knowledge_audits`; prove channel-off skips ledger writes.
   - Deliverable: Carry/restore parity tests; audit duck-typing stable; mid-run admission blank ledger.
   - Files: listed above + `tests/unit/test_practical_knowledge_carry.py`
   - Logging: DEBUG entry_count on carry encode/decode
   - Depends on: 2, 4
 
-- [ ] Task 7: Implement uptake compose adapters for teaching (fold mentorship), imitation, written_record (fold durable+repositories), reconstruction, developmental, independent_discovery per flags + mode gates. DEBUG skip when source off. Never copy peer ledgers / peer entry_ids. Set `source_agent_id` from public cues only.
+- [x] Task 7: Implement uptake compose adapters for teaching (fold mentorship), imitation, written_record (fold durable+repositories), reconstruction, developmental, independent_discovery per flags + mode gates. DEBUG skip when source off. Never copy peer ledgers / peer entry_ids. Set `source_agent_id` from public cues only.
   - Deliverable: Compose unit tests per origin; skip-when-off tests; teaching sets teacher/source ids from public cue only.
   - Files: `src/agents/cognition/practical_knowledge.py`, `src/agents/cognition/loop.py`, `tests/unit/test_practical_knowledge_compose.py`
   - Logging: DEBUG `practical_knowledge_compose` origin + skip_reason; never log technique prose
   - Depends on: 4, 6
 
-- [ ] Task 8: Prove Observation / Perspective field sets never include technique catalogs or genealogy DAGs (pin via domain-contract / observation field-set tests — **do not** edit `_perception.py` or add inspection projections). Optional Perspective plumb test only if Perspective is extended (default: do not extend).
+- [x] Task 8: Prove Observation / Perspective field sets never include technique catalogs or genealogy DAGs (pin via domain-contract / observation field-set tests — **do not** edit `_perception.py` or add inspection projections). Optional Perspective plumb test only if Perspective is extended (default: do not extend).
   - Deliverable: Negative field-set tests green.
   - Files: `tests/unit/test_practical_knowledge_observation_isolation.py`, `tests/unit/test_domain_contract_evolution_policy.py` (assert unchanged Observation keys)
   - Logging: none beyond existing

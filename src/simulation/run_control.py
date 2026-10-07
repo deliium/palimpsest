@@ -605,6 +605,7 @@ class AgentRuntimeCheckpoint:
     developmental_knowledge: object | None = None
     mentorship: object | None = None
     cultural_features: object | None = None
+    practical_knowledge: object | None = None
     competence_model: object | None = None
     declarative_advice: object | None = None
     recipe_beliefs: object | None = None
@@ -736,6 +737,13 @@ class AgentRuntimeCheckpoint:
             self.cultural_features,
             self.agent_id,
             field_name="cultural_features",
+        )
+        from agents.cognition.practical_knowledge import require_owner_practical_knowledge
+
+        require_owner_practical_knowledge(
+            self.practical_knowledge,
+            self.agent_id,
+            field_name="practical_knowledge",
         )
         from agents.cognition.competence import require_owner_competence
 

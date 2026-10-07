@@ -729,6 +729,7 @@ class SubjectiveSnapshot:
     mentorship: object | None = None
     cultural_features: object | None = None
     competence_model: object | None = None
+    practical_knowledge: object | None = None
     declarative_advice: object | None = None
     recipe_beliefs: object | None = None
 
@@ -948,6 +949,13 @@ class SubjectiveSnapshot:
             self.cultural_features,
             self.owner_id,
             field_name="SubjectiveSnapshot.cultural_features",
+        )
+        from agents.cognition.practical_knowledge import require_owner_practical_knowledge
+
+        require_owner_practical_knowledge(
+            self.practical_knowledge,
+            self.owner_id,
+            field_name="SubjectiveSnapshot.practical_knowledge",
         )
         from agents.cognition.competence import require_owner_competence
 
@@ -3745,6 +3753,7 @@ class CognitiveLoopProposal:
     developmental_knowledge: object | None = None
     mentorship: object | None = None
     cultural_features: object | None = None
+    practical_knowledge: object | None = None
     competence_model: object | None = None
     declarative_advice: object | None = None
     recipe_beliefs: object | None = None
@@ -3876,6 +3885,13 @@ class CognitiveLoopProposal:
             self.agent_id,
             field_name="CognitiveLoopProposal.cultural_features",
         )
+        from agents.cognition.practical_knowledge import require_owner_practical_knowledge
+
+        require_owner_practical_knowledge(
+            self.practical_knowledge,
+            self.agent_id,
+            field_name="CognitiveLoopProposal.practical_knowledge",
+        )
         from agents.cognition.competence import require_owner_competence
 
         require_owner_competence(
@@ -3974,6 +3990,7 @@ class CognitiveLoopResult:
     developmental_knowledge: object | None = None
     mentorship: object | None = None
     cultural_features: object | None = None
+    practical_knowledge: object | None = None
     competence_model: object | None = None
     declarative_advice: object | None = None
     recipe_beliefs: object | None = None
@@ -4081,6 +4098,13 @@ class CognitiveLoopResult:
             self.cultural_features,
             self.agent_id,
             field_name="CognitiveLoopResult.cultural_features",
+        )
+        from agents.cognition.practical_knowledge import require_owner_practical_knowledge
+
+        require_owner_practical_knowledge(
+            self.practical_knowledge,
+            self.agent_id,
+            field_name="CognitiveLoopResult.practical_knowledge",
         )
         if self.territorial_audits is not None:
             from agents.cognition.territorial import TerritorialClaimAudit

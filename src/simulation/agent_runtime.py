@@ -442,6 +442,8 @@ class AgentRuntime:
         "_mind_audits",
         "_offline_consolidation_audits",
         "_pending",
+        "_practical_knowledge",
+        "_practical_knowledge_audits",
         "_processed_invocations",
         "_prospective_audits",
         "_recipe_beliefs",
@@ -524,6 +526,7 @@ class AgentRuntime:
         self._developmental_audits: list[object] = []
         self._mentorship_audits: list[object] = []
         self._cultural_feature_audits: list[object] = []
+        self._practical_knowledge_audits: list[object] = []
         self._mind_audits: list[object] = []
         self._prospective_audits: list[object] = []
         self._cognitive_budget_audits: list[object] = []
@@ -569,6 +572,7 @@ class AgentRuntime:
         self._developmental_knowledge: object | None = None
         self._mentorship: object | None = None
         self._cultural_features: object | None = None
+        self._practical_knowledge: object | None = None
         self._competence: object | None = None
         self._recipe_beliefs: object | None = None
         self._advice: object | None = None
@@ -1099,6 +1103,42 @@ class AgentRuntime:
             "cultural_features_commit owner_id=%s belief_count=%s tick=%s",
             owner.value,
             len(ledger.beliefs),
+            tick,
+        )
+
+
+    def _commit_practical_knowledge(self, ledger: object | None, tick: int) -> None:
+        from agents.cognition.practical_knowledge import PracticalKnowledgeLedger
+
+        owner = self._agent.agent_id
+        channel = getattr(self._loop, "_knowledge_genealogy_spec", None)
+        if channel is None or ledger is None:
+            if channel is None:
+                self._practical_knowledge = None
+            return
+        if type(ledger) is not PracticalKnowledgeLedger:
+            _LOG.warning(
+                "practical_knowledge_checkpoint_shape_mismatch reason_code=%s",
+                "invalid_type",
+            )
+            raise TypeError("practical_knowledge must be PracticalKnowledgeLedger")
+        if ledger.owner_id != owner:
+            raise AgentRuntimeError(
+                AgentRuntimeErrorCode.OWNERSHIP,
+                agent_id=owner.value,
+            )
+        self._practical_knowledge = ledger
+        from agents.cognition.practical_knowledge import PracticalKnowledgeAudit
+
+        pending_audits = getattr(self._loop, "_last_practical_knowledge_audits", ())
+        for audit in pending_audits:
+            if type(audit) is PracticalKnowledgeAudit:
+                self._practical_knowledge_audits.append(audit)
+        self._loop._last_practical_knowledge_audits = ()
+        _LOG.debug(
+            "practical_knowledge_commit owner_id=%s entry_count=%s tick=%s",
+            owner.value,
+            len(ledger.entries),
             tick,
         )
 
@@ -1671,6 +1711,7 @@ class AgentRuntime:
                 developmental_knowledge=self._developmental_knowledge,
                 mentorship=self._mentorship,
                 cultural_features=self._cultural_features,
+                practical_knowledge=self._practical_knowledge,
                 competence_model=self._competence,
                 declarative_advice=self._advice,
                 recipe_beliefs=self._recipe_beliefs,
@@ -2114,6 +2155,9 @@ class AgentRuntime:
         self._commit_cultural_features(
             getattr(pending.loop_result, "cultural_features", None), pending.tick
         )
+        self._commit_practical_knowledge(
+            getattr(pending.loop_result, "practical_knowledge", None), pending.tick
+        )
         self._commit_competence(
             getattr(pending.loop_result, "competence_model", None), pending.tick
         )
@@ -2531,6 +2575,7 @@ class AgentRuntime:
         )
         self._mentorship = getattr(checkpoint, "mentorship", None)
         self._cultural_features = getattr(checkpoint, "cultural_features", None)
+        self._practical_knowledge = getattr(checkpoint, "practical_knowledge", None)
         self._competence = checkpoint.competence_model
         self._recipe_beliefs = getattr(checkpoint, "recipe_beliefs", None)
         self._advice = checkpoint.declarative_advice
@@ -2599,6 +2644,7 @@ class AgentRuntime:
             developmental_knowledge=self._developmental_knowledge,
             mentorship=self._mentorship,
             cultural_features=self._cultural_features,
+            practical_knowledge=self._practical_knowledge,
             competence_model=self._competence,
             declarative_advice=self._advice,
             recipe_beliefs=self._recipe_beliefs,
@@ -3210,6 +3256,10 @@ class AgentRuntime:
     def export_cultural_feature_audits(self) -> tuple[object, ...]:
         """Harvest metadata-only cultural feature audits."""
         return tuple(self._cultural_feature_audits)
+
+    def export_practical_knowledge_audits(self) -> tuple[object, ...]:
+        """Harvest metadata-only practical-knowledge audits."""
+        return tuple(self._practical_knowledge_audits)
 
     def export_mind_audits(self) -> tuple[object, ...]:
         return tuple(self._mind_audits)
