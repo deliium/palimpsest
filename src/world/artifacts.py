@@ -39,6 +39,15 @@ _FORBIDDEN_CONTENT_FIELD_NAMES: Final[frozenset[str]] = frozenset(
         "truth",
         "verified",
         "canonical_history",
+        "library",
+        "archive",
+        "sacred",
+        "family_records",
+        "trade_ledger",
+        "library_institution",
+        "global_archive",
+        "canonical_catalog",
+        "true_history_index",
     }
 )
 
@@ -325,6 +334,7 @@ class InformationArtifact:
     integrity: RecordIntegrity = RecordIntegrity.INTACT
     annotation_revisions: int = 0
     lost_mark_count: int = 0
+    custodian_repository_id: EntityId | None = None
 
     def __post_init__(self) -> None:
         if type(self.artifact_id) is not EntityId:
@@ -436,6 +446,24 @@ class InformationArtifact:
             raise _fail(
                 "InformationArtifact.lost_mark_count", "durable_lost_mark_count_invalid"
             )
+        if (
+            self.custodian_repository_id is not None
+            and type(self.custodian_repository_id) is not EntityId
+        ):
+            raise _fail(
+                "InformationArtifact.custodian_repository_id",
+                "repository_custody_invalid",
+            )
+        if self.custodian_repository_id is not None and has_holder:
+            raise _fail(
+                "InformationArtifact.custodian_repository_id",
+                "repository_custody_blocks_hold",
+            )
+        if self.custodian_repository_id is not None and not has_location:
+            raise _fail(
+                "InformationArtifact.custodian_repository_id",
+                "repository_custody_requires_location",
+            )
 
         if self.parent_artifact_id is None:
             if self.copy_generation != 0:
@@ -488,13 +516,18 @@ class InformationArtifact:
             _LOG.debug(
                 "durable_artifact_constructed genre=%s integrity=%s "
                 "copy_generation=%s mark_count=%s annotation_revisions=%s "
-                "lost_mark_count=%s",
+                "lost_mark_count=%s custodian_repository_id=%s",
                 self.record_genre.value if self.record_genre is not None else "-",
                 self.integrity.value,
                 self.copy_generation,
                 len(self.content.marks),
                 self.annotation_revisions,
                 self.lost_mark_count,
+                (
+                    self.custodian_repository_id.value
+                    if self.custodian_repository_id is not None
+                    else "-"
+                ),
             )
 
 

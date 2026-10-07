@@ -325,6 +325,9 @@ class Store:
 _COPY_FIDELITY_OVERRIDES: Final[frozenset[str]] = frozenset(
     {"perfect", "deterministic_mutation", "lossy"}
 )
+_MAINTAIN_REPOSITORY_MODES: Final[frozenset[str]] = frozenset(
+    {"maintain", "destroy"}
+)
 _DAMAGE_RECORD_MODES: Final[frozenset[str]] = frozenset(
     {"damage", "partial_loss", "destroy"}
 )
@@ -506,6 +509,139 @@ class DamageRecord:
         )
 
 
+@dataclass(frozen=True, slots=True)
+class EstablishRepository:
+    """Create a knowledge repository container at a location."""
+
+    location_id: EntityId
+    access_mode: str | None = None
+    structure_id: EntityId | None = None
+    kind: Literal["establish_repository"] = field(
+        default="establish_repository", init=False
+    )
+
+    def __post_init__(self) -> None:
+        if type(self.location_id) is not EntityId:
+            raise TypeError("EstablishRepository.location_id must be EntityId")
+        if self.structure_id is not None and type(self.structure_id) is not EntityId:
+            raise TypeError(
+                "EstablishRepository.structure_id must be EntityId or None"
+            )
+        if self.access_mode is not None:
+            if type(self.access_mode) is not str or self.access_mode not in {
+                "open",
+                "colocated_only",
+                "founder_list",
+            }:
+                _ARTIFACT_LOG.error(
+                    "artifact_validation_failed field=%s reason_code=%s",
+                    "EstablishRepository.access_mode",
+                    "repository_access_mode_invalid",
+                )
+                raise ValueError(
+                    "EstablishRepository.access_mode: repository_access_mode_invalid"
+                )
+        _ARTIFACT_LOG.debug(
+            "command_constructed tag=establish_repository access_mode=%s",
+            self.access_mode if self.access_mode is not None else "default",
+        )
+
+
+@dataclass(frozen=True, slots=True)
+class DepositRecord:
+    """Move a durable artifact into repository custody."""
+
+    repository_id: EntityId
+    artifact_id: EntityId
+    kind: Literal["deposit_record"] = field(default="deposit_record", init=False)
+
+    def __post_init__(self) -> None:
+        if type(self.repository_id) is not EntityId:
+            raise TypeError("DepositRecord.repository_id must be EntityId")
+        if type(self.artifact_id) is not EntityId:
+            raise TypeError("DepositRecord.artifact_id must be EntityId")
+        _ARTIFACT_LOG.debug(
+            "command_constructed tag=deposit_record repository_id=%s",
+            self.repository_id.value,
+        )
+
+
+@dataclass(frozen=True, slots=True)
+class RetrieveRecord:
+    """Remove a durable artifact from repository custody."""
+
+    repository_id: EntityId
+    artifact_id: EntityId
+    hold: bool = True
+    kind: Literal["retrieve_record"] = field(default="retrieve_record", init=False)
+
+    def __post_init__(self) -> None:
+        if type(self.repository_id) is not EntityId:
+            raise TypeError("RetrieveRecord.repository_id must be EntityId")
+        if type(self.artifact_id) is not EntityId:
+            raise TypeError("RetrieveRecord.artifact_id must be EntityId")
+        if type(self.hold) is not bool:
+            raise ValueError("RetrieveRecord.hold: invalid_artifact_hold")
+        _ARTIFACT_LOG.debug(
+            "command_constructed tag=retrieve_record hold=%s",
+            self.hold,
+        )
+
+
+@dataclass(frozen=True, slots=True)
+class MaintainRepository:
+    """Maintain or destroy a knowledge repository."""
+
+    repository_id: EntityId
+    mode: Literal["maintain", "destroy"] = "maintain"
+    kind: Literal["maintain_repository"] = field(
+        default="maintain_repository", init=False
+    )
+
+    def __post_init__(self) -> None:
+        if type(self.repository_id) is not EntityId:
+            raise TypeError("MaintainRepository.repository_id must be EntityId")
+        if self.mode not in _MAINTAIN_REPOSITORY_MODES:
+            _ARTIFACT_LOG.error(
+                "artifact_validation_failed field=%s reason_code=%s",
+                "MaintainRepository.mode",
+                "repository_maintain_mode_invalid",
+            )
+            raise ValueError(
+                "MaintainRepository.mode: repository_maintain_mode_invalid"
+            )
+        _ARTIFACT_LOG.debug(
+            "command_constructed tag=maintain_repository mode=%s",
+            self.mode,
+        )
+
+
+@dataclass(frozen=True, slots=True)
+class IndexRepository:
+    """Append or replace imperfect organization index entries."""
+
+    repository_id: EntityId
+    entries: tuple[Mapping[str, object], ...]
+    kind: Literal["index_repository"] = field(default="index_repository", init=False)
+
+    def __post_init__(self) -> None:
+        if type(self.repository_id) is not EntityId:
+            raise TypeError("IndexRepository.repository_id must be EntityId")
+        if isinstance(self.entries, (str, bytes)) or not isinstance(
+            self.entries, tuple
+        ):
+            raise TypeError("IndexRepository.entries must be a tuple")
+        for index, entry in enumerate(self.entries):
+            if not isinstance(entry, Mapping):
+                raise TypeError(
+                    f"IndexRepository.entries[{index}] must be a mapping"
+                )
+        _ARTIFACT_LOG.debug(
+            "command_constructed tag=index_repository entry_count=%s",
+            len(self.entries),
+        )
+
+
 AgentCommand = (
     Move
     | Search
@@ -536,6 +672,11 @@ AgentCommand = (
     | CopyRecord
     | AnnotateRecord
     | DamageRecord
+    | EstablishRepository
+    | DepositRecord
+    | RetrieveRecord
+    | MaintainRepository
+    | IndexRepository
 )
 
 _COMMAND_TYPES: Final[frozenset[type]] = frozenset(
@@ -569,6 +710,11 @@ _COMMAND_TYPES: Final[frozenset[type]] = frozenset(
         CopyRecord,
         AnnotateRecord,
         DamageRecord,
+        EstablishRepository,
+        DepositRecord,
+        RetrieveRecord,
+        MaintainRepository,
+        IndexRepository,
     }
 )
 

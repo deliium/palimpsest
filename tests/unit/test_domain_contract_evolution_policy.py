@@ -23,7 +23,12 @@ from world.actions import (
     CopyRecord,
     Craft,
     DamageRecord,
+    DepositRecord,
     Drink,
+    EstablishRepository,
+    IndexRepository,
+    MaintainRepository,
+    RetrieveRecord,
     Drop,
     Eat,
     Erase,
@@ -52,7 +57,7 @@ from world.observations import Observation
 ROOT = Path(__file__).resolve().parents[2]
 SRC = ROOT / "src"
 
-# Closed command surface. Durable records deepen artifacts to 29 commands.
+# Closed command surface. Knowledge repositories deepen to 34 commands.
 _CLOSED_COMMAND_TYPES: frozenset[type] = frozenset(
     {
         Move,
@@ -84,6 +89,11 @@ _CLOSED_COMMAND_TYPES: frozenset[type] = frozenset(
         CopyRecord,
         AnnotateRecord,
         DamageRecord,
+        EstablishRepository,
+        DepositRecord,
+        RetrieveRecord,
+        MaintainRepository,
+        IndexRepository,
     }
 )
 
@@ -122,8 +132,8 @@ _PARITY_GATE = (
 )
 
 
-def test_agent_command_set_remains_closed_at_twenty_nine() -> None:
-    assert len(_CLOSED_COMMAND_TYPES) == 29
+def test_agent_command_set_remains_closed_at_thirty_four() -> None:
+    assert len(_CLOSED_COMMAND_TYPES) == 34
     from world import actions as actions_mod
 
     # Mirror the public union membership without constructing parameterized commands.
@@ -157,6 +167,11 @@ def test_agent_command_set_remains_closed_at_twenty_nine() -> None:
         CopyRecord,
         AnnotateRecord,
         DamageRecord,
+        EstablishRepository,
+        DepositRecord,
+        RetrieveRecord,
+        MaintainRepository,
+        IndexRepository,
     }
     assert asserted == _CLOSED_COMMAND_TYPES
     assert hasattr(actions_mod, "AgentCommand")

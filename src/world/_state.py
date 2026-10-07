@@ -18,6 +18,7 @@ from world.identifiers import (
 )
 from world.models import AgentBody, Item, LifeStatus, Location, Resource, Weather
 from world.production import ProductionJob, Structure, ToolMark
+from world.repositories import KnowledgeRepository, index_repositories
 
 __all__: list[str] = ["ActiveHazard", "World", "WorldState", "rebuild_world_state"]
 
@@ -36,6 +37,7 @@ def rebuild_world_state(
     tool_marks: Mapping[EntityId, ToolMark] | None = None,
     active_hazards: Sequence[ActiveHazard] | None = None,
     artifacts: Mapping[EntityId, InformationArtifact] | None = None,
+    repositories: Mapping[EntityId, KnowledgeRepository] | None = None,
 ) -> WorldState:
     """Build a new immutable snapshot with deterministic EntityId ordering."""
     if type(state) is not WorldState:
@@ -52,6 +54,7 @@ def rebuild_world_state(
     mark_src = state.tool_marks if tool_marks is None else tool_marks
     hazard_src = state.active_hazards if active_hazards is None else active_hazards
     artifact_src = state.artifacts if artifacts is None else artifacts
+    repository_src = state.repositories if repositories is None else repositories
     return WorldState(
         state.revision if revision is None else revision,
         locations=tuple(
@@ -85,6 +88,12 @@ def rebuild_world_state(
         artifacts=tuple(
             sorted(artifact_src.values(), key=lambda value: value.artifact_id.value)
         ),
+        repositories=tuple(
+            sorted(
+                repository_src.values(),
+                key=lambda value: value.repository_id.value,
+            )
+        ),
     )
 
 
@@ -117,6 +126,7 @@ class WorldState:
         "_items",
         "_locations",
         "_production_jobs",
+        "_repositories",
         "_resources",
         "_revision",
         "_structures",
@@ -138,6 +148,7 @@ class WorldState:
         tool_marks: Sequence[ToolMark] = (),
         active_hazards: Sequence[ActiveHazard] = (),
         artifacts: Sequence[InformationArtifact] = (),
+        repositories: Sequence[object] = (),
     ) -> None:
         if type(revision) is not WorldRevision:
             raise TypeError("WorldState.revision must be WorldRevision")
@@ -153,6 +164,7 @@ class WorldState:
             "structures", structures, model_type=Structure
         )
         artifact_index = _index_artifacts(artifacts)
+        repository_index = dict(index_repositories(tuple(repositories)))
         _reject_global_id_collisions(
             location_index,
             item_index,
@@ -170,6 +182,12 @@ class WorldState:
             artifact_index,
             location_index=location_index,
             body_index=body_index,
+        )
+        _validate_repositories(
+            repository_index,
+            location_index=location_index,
+            structure_index=structure_index,
+            artifact_index=artifact_index,
         )
         job_index = _index_jobs(production_jobs)
         mark_index = _index_tool_marks(tool_marks)
@@ -199,6 +217,7 @@ class WorldState:
         self._tool_marks = MappingProxyType(mark_index)
         self._active_hazards = hazard_index
         self._artifacts = MappingProxyType(artifact_index)
+        self._repositories = MappingProxyType(repository_index)
 
     @property
     def revision(self) -> WorldRevision:
@@ -243,6 +262,10 @@ class WorldState:
     @property
     def artifacts(self) -> Mapping[EntityId, InformationArtifact]:
         return self._artifacts
+
+    @property
+    def repositories(self) -> Mapping[EntityId, KnowledgeRepository]:
+        return self._repositories
 
 
 class World:
@@ -418,6 +441,70 @@ def _validate_artifacts(
         if count > MAX_HELD_ARTIFACTS_PER_BODY:
             raise ValueError(
                 f"body {holder_id.value!r}: artifact_hold_cap"
+            )
+
+
+def _validate_repositories(
+    repositories: Mapping[EntityId, KnowledgeRepository],
+    *,
+    location_index: Mapping[EntityId, Location],
+    structure_index: Mapping[EntityId, Structure],
+    artifact_index: Mapping[EntityId, InformationArtifact],
+) -> None:
+    for repository in repositories.values():
+        if repository.location_id not in location_index:
+            raise ValueError(
+                f"repository {repository.repository_id.value!r} references "
+                f"unknown location {repository.location_id.value!r}"
+            )
+        if repository.structure_id is not None:
+            structure = structure_index.get(repository.structure_id)
+            if structure is None:
+                raise ValueError(
+                    f"repository {repository.repository_id.value!r} references "
+                    f"unknown structure {repository.structure_id.value!r}"
+                )
+            if structure.location_id != repository.location_id:
+                raise ValueError(
+                    f"repository {repository.repository_id.value!r} structure "
+                    f"location mismatch"
+                )
+        for member_id in repository.member_artifact_ids:
+            artifact = artifact_index.get(member_id)
+            if artifact is None:
+                raise ValueError(
+                    f"repository {repository.repository_id.value!r} member "
+                    f"{member_id.value!r} missing from artifacts"
+                )
+            if artifact.custodian_repository_id != repository.repository_id:
+                raise ValueError(
+                    f"artifact {member_id.value!r} custodian_repository_id "
+                    f"mismatch for repository {repository.repository_id.value!r}"
+                )
+            if artifact.location_id != repository.location_id:
+                raise ValueError(
+                    f"artifact {member_id.value!r} location must match "
+                    f"repository {repository.repository_id.value!r}"
+                )
+            if artifact.holder_id is not None:
+                raise ValueError(
+                    f"artifact {member_id.value!r} in repository custody "
+                    f"must not have holder_id"
+                )
+    for artifact in artifact_index.values():
+        if artifact.custodian_repository_id is None:
+            continue
+        repository = repositories.get(artifact.custodian_repository_id)
+        if repository is None:
+            raise ValueError(
+                f"artifact {artifact.artifact_id.value!r} references unknown "
+                f"custodian_repository_id {artifact.custodian_repository_id.value!r}"
+            )
+        if artifact.artifact_id not in repository.member_artifact_ids:
+            raise ValueError(
+                f"artifact {artifact.artifact_id.value!r} custodian set but "
+                f"not a member of repository "
+                f"{artifact.custodian_repository_id.value!r}"
             )
 
 

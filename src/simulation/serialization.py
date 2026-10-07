@@ -88,18 +88,23 @@ from world.actions import (
     CopyRecord,
     Craft,
     DamageRecord,
+    DepositRecord,
     Drink,
     Drop,
     Eat,
     Erase,
+    EstablishRepository,
     Feed,
     Flee,
     Give,
     Harvest,
     Help,
+    IndexRepository,
     Inscribe,
+    MaintainRepository,
     Move,
     Repair,
+    RetrieveRecord,
     Search,
     Sleep,
     Store,
@@ -2459,6 +2464,43 @@ def _encode_command(value: object) -> dict[str, Any]:
                 "artifact_id": artifact_id.value,
                 "mode": mode,
             }
+        case EstablishRepository(
+            location_id=location_id,
+            access_mode=access_mode,
+            structure_id=structure_id,
+        ):
+            return {
+                "access_mode": access_mode,
+                "location_id": location_id.value,
+                "structure_id": (
+                    None if structure_id is None else structure_id.value
+                ),
+            }
+        case DepositRecord(repository_id=repository_id, artifact_id=artifact_id):
+            return {
+                "artifact_id": artifact_id.value,
+                "repository_id": repository_id.value,
+            }
+        case RetrieveRecord(
+            repository_id=repository_id,
+            artifact_id=artifact_id,
+            hold=hold,
+        ):
+            return {
+                "artifact_id": artifact_id.value,
+                "hold": hold,
+                "repository_id": repository_id.value,
+            }
+        case MaintainRepository(repository_id=repository_id, mode=mode):
+            return {
+                "mode": mode,
+                "repository_id": repository_id.value,
+            }
+        case IndexRepository(repository_id=repository_id, entries=entries):
+            return {
+                "entries": [dict(entry) for entry in entries],
+                "repository_id": repository_id.value,
+            }
         case _:
             raise DomainSerializationError("unsupported_type", "$")
 
@@ -2672,6 +2714,63 @@ def _decode_command(tag: str, data: dict[str, Any], *, path: str) -> object:
             return DamageRecord(
                 EntityId(_str_field(data, "artifact_id", path=path)),
                 _str_field(data, "mode", path=path),  # type: ignore[arg-type]
+            )
+        if tag == "establish_repository":
+            _require_keys(
+                data, {"location_id", "access_mode", "structure_id"}, path=path
+            )
+            structure = data["structure_id"]
+            if structure is not None and type(structure) is not str:
+                raise DomainSerializationError(
+                    "invalid_string", f"{path}.structure_id"
+                )
+            access = data["access_mode"]
+            if access is not None and type(access) is not str:
+                raise DomainSerializationError(
+                    "invalid_string", f"{path}.access_mode"
+                )
+            return EstablishRepository(
+                EntityId(_str_field(data, "location_id", path=path)),
+                access,
+                None if structure is None else EntityId(structure),
+            )
+        if tag == "deposit_record":
+            _require_keys(data, {"repository_id", "artifact_id"}, path=path)
+            return DepositRecord(
+                EntityId(_str_field(data, "repository_id", path=path)),
+                EntityId(_str_field(data, "artifact_id", path=path)),
+            )
+        if tag == "retrieve_record":
+            _require_keys(data, {"repository_id", "artifact_id", "hold"}, path=path)
+            hold = data["hold"]
+            if type(hold) is not bool:
+                raise DomainSerializationError("invalid_bool", f"{path}.hold")
+            return RetrieveRecord(
+                EntityId(_str_field(data, "repository_id", path=path)),
+                EntityId(_str_field(data, "artifact_id", path=path)),
+                hold,
+            )
+        if tag == "maintain_repository":
+            _require_keys(data, {"repository_id", "mode"}, path=path)
+            return MaintainRepository(
+                EntityId(_str_field(data, "repository_id", path=path)),
+                _str_field(data, "mode", path=path),  # type: ignore[arg-type]
+            )
+        if tag == "index_repository":
+            _require_keys(data, {"repository_id", "entries"}, path=path)
+            entries_raw = data["entries"]
+            if not isinstance(entries_raw, list):
+                raise DomainSerializationError("invalid_array", f"{path}.entries")
+            entries: list[dict[str, object]] = []
+            for index, item in enumerate(entries_raw):
+                if not isinstance(item, dict):
+                    raise DomainSerializationError(
+                        "invalid_object", f"{path}.entries[{index}]"
+                    )
+                entries.append(dict(item))
+            return IndexRepository(
+                EntityId(_str_field(data, "repository_id", path=path)),
+                tuple(entries),
             )
     except DomainSerializationError:
         raise
