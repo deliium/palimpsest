@@ -238,6 +238,10 @@ def inputs_with_opt_in_metric_rows(
     historical_memory_harvest: object | None = None,
     cultural_feature_audits: Sequence[object] | None = None,
     cultural_feature_generation_index: Mapping[str, int] | None = None,
+    durable_record_rows: Sequence[object] | None = None,
+    durable_record_event_rows: Sequence[object] | None = None,
+    death_ticks_by_body: Mapping[str, int] | None = None,
+    false_record_expectations: Sequence[object] | None = None,
 ) -> MetricComputationInputs:
     """Attach opt-in family inputs from harvested evidence when present.
 
@@ -342,6 +346,19 @@ def inputs_with_opt_in_metric_rows(
         attached["historical_memory"] = source_count
         updated = replace(
             updated, historical_memory_harvest=historical_memory_harvest
+        )
+    if durable_record_rows is not None or durable_record_event_rows is not None:
+        record_count = 0 if durable_record_rows is None else len(durable_record_rows)
+        event_count = (
+            0 if durable_record_event_rows is None else len(durable_record_event_rows)
+        )
+        attached["durable_records"] = record_count + event_count
+        updated = replace(
+            updated,
+            durable_record_rows=durable_record_rows,
+            durable_record_event_rows=durable_record_event_rows,
+            death_ticks_by_body=death_ticks_by_body,
+            false_record_expectations=false_record_expectations,
         )
 
     _LOG.debug(

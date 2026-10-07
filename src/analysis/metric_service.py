@@ -38,6 +38,11 @@ from analysis.developmental_learning_metrics import (
     compute_developmental_divergence,
     compute_developmental_source_mix,
 )
+from analysis.durable_record_metrics import (
+    compute_durable_record_fidelity,
+    compute_durable_record_lineage,
+    compute_durable_record_survival,
+)
 from analysis.historical_memory_metrics import (
     compute_historical_memory_layers,
     compute_historical_memory_queries,
@@ -153,6 +158,10 @@ class MetricComputationInputs:
     cultural_feature_audits: Sequence[object] | None = None
     cultural_feature_generation_index: Mapping[str, int] | None = None
     historical_memory_harvest: object | None = None
+    durable_record_rows: Sequence[object] | None = None
+    durable_record_event_rows: Sequence[object] | None = None
+    death_ticks_by_body: Mapping[str, int] | None = None
+    false_record_expectations: Sequence[object] | None = None
     territorial_presence_rows: Sequence[object] | None = None
     territorial_control_rows: Sequence[object] | None = None
     belief_convergence_claims: Sequence[object] | None = None
@@ -616,6 +625,53 @@ def assemble_metric_documents(inputs: MetricComputationInputs) -> MetricBundle:
                 input_revision=revision,
             ),
         )
+    if (
+        inputs.durable_record_rows is not None
+        or inputs.durable_record_event_rows is not None
+    ):
+        durable_rows = tuple(inputs.durable_record_rows or ())
+        durable_events = tuple(inputs.durable_record_event_rows or ())
+        death_by_body = dict(inputs.death_ticks_by_body or deaths)
+        false_expectations = tuple(inputs.false_record_expectations or ())
+        _LOG.debug(
+            "metric_assemble family_id=durable_record_lineage source_count=%s",
+            len(durable_rows),
+        )
+        _safe(
+            "durable_record_lineage",
+            lambda: compute_durable_record_lineage(
+                durable_rows,
+                run_id=run_id,
+                input_revision=revision,
+            ),
+        )
+        _LOG.debug(
+            "metric_assemble family_id=durable_record_fidelity source_count=%s",
+            len(durable_events),
+        )
+        _safe(
+            "durable_record_fidelity",
+            lambda: compute_durable_record_fidelity(
+                durable_events,
+                run_id=run_id,
+                input_revision=revision,
+                record_rows=durable_rows,
+            ),
+        )
+        _LOG.debug(
+            "metric_assemble family_id=durable_record_survival source_count=%s",
+            len(durable_rows),
+        )
+        _safe(
+            "durable_record_survival",
+            lambda: compute_durable_record_survival(
+                durable_rows,
+                run_id=run_id,
+                input_revision=revision,
+                death_ticks_by_body=death_by_body,
+                false_record_expectations=false_expectations,
+            ),
+        )
     optional_blocks = {
         "kinship_genealogy": inputs.kinship_edge_rows is not None,
         "dependency_care": (
@@ -632,6 +688,10 @@ def assemble_metric_documents(inputs: MetricComputationInputs) -> MetricBundle:
         ),
         "cultural_features": inputs.cultural_feature_audits is not None,
         "historical_memory": inputs.historical_memory_harvest is not None,
+        "durable_records": (
+            inputs.durable_record_rows is not None
+            or inputs.durable_record_event_rows is not None
+        ),
         "territorial_presence": inputs.territorial_presence_rows is not None,
         "territorial_control": inputs.territorial_control_rows is not None,
         "belief_convergence": inputs.belief_convergence_claims is not None,

@@ -50,7 +50,7 @@ __all__ = [
 ]
 
 METRIC_CATALOG_VERSION: Final[str] = "metric-catalog-v1"
-METRIC_FAMILY_COUNT: Final[int] = 56
+METRIC_FAMILY_COUNT: Final[int] = 59
 
 # Align with existing memory-drift / transmission document versions.
 _ALGO_V1: Final[str] = "1"
@@ -133,6 +133,9 @@ class MetricFamilyId(StrEnum):
     HISTORICAL_MEMORY_LAYERS = "historical_memory_layers"
     HISTORICAL_MEMORY_TRANSITIONS = "historical_memory_transitions"
     HISTORICAL_MEMORY_QUERIES = "historical_memory_queries"
+    DURABLE_RECORD_LINEAGE = "durable_record_lineage"
+    DURABLE_RECORD_FIDELITY = "durable_record_fidelity"
+    DURABLE_RECORD_SURVIVAL = "durable_record_survival"
 
 
 class DenominatorKind(StrEnum):
@@ -1496,6 +1499,109 @@ def _spec_historical_memory_transitions() -> MetricSpecification:
             "transition_count",
         ),
         empty_case="availability=absent; no_historical_memory_transitions",
+    )
+
+
+def _spec_durable_record_lineage() -> MetricSpecification:
+    return _base(
+        family_id=MetricFamilyId.DURABLE_RECORD_LINEAGE,
+        evidence_inputs=frozenset({EvidenceStage.OBJECTIVE_EVENT_STATE}),
+        population="durable_record_harvest_rows",
+        denominator="durable_records_or_copy_events",
+        denominator_kind=DenominatorKind.OCCURRENCE,
+        cohort_window="caller-supplied durable harvest rows",
+        deceased_policy="author death does not remove records from lineage",
+        zero_holding_policy="no durable rows -> availability=absent",
+        opportunity_vs_occurrence="copy-tree depth and generation histogram",
+        self_edge_policy="not_applicable",
+        censoring_policy="analysis-only durable records; never cognition",
+        formulas={
+            "max_copy_generation": "max copy_generation among rows",
+            "mean_copy_generation": "mean copy_generation among rows",
+            "parent_coverage": "rows with parent_artifact_id / record_count",
+            "source_coverage": "rows with source_artifact_id / record_count",
+            "tombstone_share": "destroyed/tombstone rows / record_count",
+        },
+        value_keys=(
+            "max_copy_generation",
+            "mean_copy_generation",
+            "parent_coverage",
+            "record_count",
+            "source_coverage",
+            "tombstone_count",
+            "tombstone_share",
+        ),
+        empty_case="availability=absent; no_durable_record_rows",
+    )
+
+
+def _spec_durable_record_fidelity() -> MetricSpecification:
+    return _base(
+        family_id=MetricFamilyId.DURABLE_RECORD_FIDELITY,
+        evidence_inputs=frozenset({EvidenceStage.OBJECTIVE_EVENT_STATE}),
+        population="durable_record_copy_events",
+        denominator="durable_records_or_copy_events",
+        denominator_kind=DenominatorKind.OCCURRENCE,
+        cohort_window="caller-supplied copy event rows",
+        deceased_policy="not_applicable",
+        zero_holding_policy="no copy events -> availability=absent",
+        opportunity_vs_occurrence="perfect/mutation/lossy rates over copies",
+        self_edge_policy="not_applicable",
+        censoring_policy="analysis-only durable records; never cognition",
+        formulas={
+            "perfect_rate": "perfect copies / copy_event_count",
+            "deterministic_mutation_rate": (
+                "deterministic_mutation copies / copy_event_count"
+            ),
+            "lossy_rate": "lossy copies / copy_event_count",
+            "mean_mark_edit_distance": "mean parent→child mark L1 distance",
+            "mean_relation_edit_distance": (
+                "mean parent→child relation L1 distance"
+            ),
+        },
+        value_keys=(
+            "copy_event_count",
+            "deterministic_mutation_rate",
+            "lossy_rate",
+            "mean_mark_edit_distance",
+            "mean_relation_edit_distance",
+            "perfect_rate",
+        ),
+        empty_case="availability=absent; no_copy_events",
+    )
+
+
+def _spec_durable_record_survival() -> MetricSpecification:
+    return _base(
+        family_id=MetricFamilyId.DURABLE_RECORD_SURVIVAL,
+        evidence_inputs=frozenset({EvidenceStage.OBJECTIVE_EVENT_STATE}),
+        population="durable_record_harvest_rows",
+        denominator="durable_records_or_copy_events",
+        denominator_kind=DenominatorKind.OCCURRENCE,
+        cohort_window="caller-supplied durable harvest + death ticks",
+        deceased_policy="author death measured; records may remain intact",
+        zero_holding_policy="no durable rows -> availability=absent",
+        opportunity_vs_occurrence="integrity and false-record persistence rates",
+        self_edge_policy="not_applicable",
+        censoring_policy="analysis-only durable records; never cognition",
+        formulas={
+            "intact_after_author_death_count": (
+                "intact rows whose author_id has a death tick >= created_tick"
+            ),
+            "false_record_persistence_rate": (
+                "seeded false records still present / expectations"
+            ),
+        },
+        value_keys=(
+            "damaged_count",
+            "destroyed_count",
+            "false_record_persistence_rate",
+            "intact_after_author_death_count",
+            "intact_count",
+            "partially_lost_count",
+            "record_count",
+        ),
+        empty_case="availability=absent; no_durable_record_rows",
     )
 
 
@@ -2946,6 +3052,9 @@ _BUILDERS: Final[tuple[Callable[[], MetricSpecification], ...]] = (
     _spec_historical_memory_layers,
     _spec_historical_memory_transitions,
     _spec_historical_memory_queries,
+    _spec_durable_record_lineage,
+    _spec_durable_record_fidelity,
+    _spec_durable_record_survival,
     _spec_emergent_group_formation,
     _spec_emergent_social_norms,
     _spec_persistent_social_conventions,

@@ -84,6 +84,7 @@ def assemble_arm_metric_bundle(
         convention_habit_rows_from_ledgers,
         cultural_channel_rows_from_convention_habits,
         cultural_channel_rows_from_norm_beliefs,
+        durable_record_harvest_from_run,
         historical_memory_harvest_from_run,
         norm_belief_rows_from_ledgers,
     )
@@ -182,6 +183,19 @@ def assemble_arm_metric_bundle(
         living_roster=agent_ids,
     )
 
+    durable_spec = getattr(arm.assignment.runner_config, "durable_records", None)
+    final_artifacts = getattr(arm, "final_artifacts", None)
+    if final_artifacts is None:
+        final_artifacts = getattr(arm.runner_result, "final_artifacts", None)
+    false_expectations = getattr(arm, "false_record_expectations", None)
+    durable_harvest = durable_record_harvest_from_run(
+        durable_records_spec=durable_spec,
+        artifacts=final_artifacts,
+        events=events,
+        tick=max(ticks - 1, 0),
+        false_record_expectations=false_expectations,
+    )
+
     inputs = inputs_with_opt_in_metric_rows(
         inputs,
         events=events,
@@ -200,6 +214,27 @@ def assemble_arm_metric_bundle(
         historical_memory_harvest=hm_harvest,
         cultural_feature_audits=cultural_audits,
         cultural_feature_generation_index=generation_index,
+        durable_record_rows=(
+            None
+            if durable_harvest is None
+            else tuple(durable_harvest["durable_record_rows"])  # type: ignore[arg-type]
+        ),
+        durable_record_event_rows=(
+            None
+            if durable_harvest is None
+            else tuple(durable_harvest["durable_record_event_rows"])  # type: ignore[arg-type]
+        ),
+        death_ticks_by_body=(
+            None
+            if durable_harvest is None
+            else dict(durable_harvest["death_ticks_by_body"])  # type: ignore[arg-type]
+        ),
+        false_record_expectations=(
+            None
+            if durable_harvest is None
+            or "false_record_expectations" not in durable_harvest
+            else tuple(durable_harvest["false_record_expectations"])  # type: ignore[arg-type]
+        ),
     )
     return assemble_metric_documents(inputs)
 

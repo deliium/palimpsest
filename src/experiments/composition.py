@@ -50,6 +50,9 @@ __all__ = [
     "convention_habit_rows_from_ledgers",
     "cultural_channel_rows_from_convention_habits",
     "cultural_channel_rows_from_norm_beliefs",
+    "death_ticks_by_body_from_events",
+    "durable_record_event_rows_from_events",
+    "durable_record_harvest_from_run",
     "historical_memory_harvest_from_run",
     "map_consolidation_audits_to_report",
     "map_recall_audits_to_dynamics_report",
@@ -829,18 +832,83 @@ def artifact_objective_rows_from_artifacts(
             for mark in getattr(content, "marks", ())
             if _id_text_or_none(mark) is not None
         )
-        rows.append(
-            {
-                "tick": tick,
-                "artifact_id": _id_text(getattr(artifact, "artifact_id", None)),
-                "kind": kind_text,
-                "content_revision": int(
-                    getattr(artifact, "content_revision", 0) or 0
-                ),
-                "present": bool(present),
-                "marks": marks,
-            }
+        genre = getattr(artifact, "record_genre", None)
+        genre_text = _id_text_or_none(getattr(genre, "value", genre))
+        integrity = getattr(artifact, "integrity", None)
+        integrity_text = _id_text_or_none(getattr(integrity, "value", integrity))
+        parent_id = _id_text_or_none(getattr(artifact, "parent_artifact_id", None))
+        source_id = _id_text_or_none(getattr(artifact, "source_artifact_id", None))
+        author_id = _id_text_or_none(getattr(artifact, "author_id", None))
+        created_tick = getattr(artifact, "created_tick", None)
+        copy_generation = getattr(artifact, "copy_generation", None)
+        annotation_revisions = getattr(artifact, "annotation_revisions", None)
+        lost_mark_count = getattr(artifact, "lost_mark_count", None)
+        row: dict[str, object] = {
+            "tick": tick,
+            "artifact_id": _id_text(getattr(artifact, "artifact_id", None)),
+            "kind": kind_text,
+            "content_revision": int(
+                getattr(artifact, "content_revision", 0) or 0
+            ),
+            "present": bool(present),
+            "marks": marks,
+        }
+        durable_signal = (
+            genre_text is not None
+            or parent_id is not None
+            or (
+                isinstance(copy_generation, int)
+                and not isinstance(copy_generation, bool)
+                and copy_generation > 0
+            )
+            or (integrity_text is not None and integrity_text != "intact")
+            or (
+                isinstance(annotation_revisions, int)
+                and not isinstance(annotation_revisions, bool)
+                and annotation_revisions > 0
+            )
+            or (
+                isinstance(lost_mark_count, int)
+                and not isinstance(lost_mark_count, bool)
+                and lost_mark_count > 0
+            )
         )
+        if durable_signal:
+            if genre_text is not None:
+                row["record_genre"] = genre_text
+            if parent_id is not None:
+                row["parent_artifact_id"] = parent_id
+            if source_id is not None:
+                row["source_artifact_id"] = source_id
+            if (
+                isinstance(copy_generation, int)
+                and not isinstance(copy_generation, bool)
+                and copy_generation >= 0
+            ):
+                row["copy_generation"] = copy_generation
+            if integrity_text is not None:
+                row["integrity"] = integrity_text
+            if (
+                isinstance(annotation_revisions, int)
+                and not isinstance(annotation_revisions, bool)
+                and annotation_revisions >= 0
+            ):
+                row["annotation_revisions"] = annotation_revisions
+            if (
+                isinstance(lost_mark_count, int)
+                and not isinstance(lost_mark_count, bool)
+                and lost_mark_count >= 0
+            ):
+                row["lost_mark_count"] = lost_mark_count
+            if author_id is not None:
+                row["author_id"] = author_id
+            if (
+                isinstance(created_tick, int)
+                and not isinstance(created_tick, bool)
+                and created_tick >= 0
+            ):
+                row["created_tick"] = created_tick
+        rows.append(row)
     _LOG.debug(
         "artifact_objective_rows_built artifacts=%s rows=%s present=%s",
         len(values),
@@ -848,6 +916,135 @@ def artifact_objective_rows_from_artifacts(
         present,
     )
     return tuple(rows)
+
+
+_DURABLE_EVENT_KINDS: Final[frozenset[str]] = frozenset(
+    {
+        "artifact_copied",
+        "artifact_annotated",
+        "artifact_damaged",
+        "artifact_partially_lost",
+        "artifact_destroyed",
+    }
+)
+
+
+def durable_record_event_rows_from_events(
+    events: Sequence[object],
+) -> tuple[dict[str, object], ...]:
+    """Copy durable copy/annotate/damage/destroy event rows (no mark payloads)."""
+    if isinstance(events, (str, bytes)) or not isinstance(events, Sequence):
+        raise TypeError("durable_record_event_rows_from_events: invalid_events")
+    rows: list[dict[str, object]] = []
+    for event in events:
+        details = _event_details(event)
+        kind = _id_text_or_none(getattr(details, "kind", None)) or _event_kind_name(
+            event
+        ).lower()
+        if kind not in _DURABLE_EVENT_KINDS:
+            continue
+        tick = getattr(event, "tick", None)
+        row: dict[str, object] = {
+            "kind": kind,
+            "tick": tick if type(tick) is int and not isinstance(tick, bool) else 0,
+        }
+        for field in (
+            "artifact_id",
+            "child_artifact_id",
+            "parent_artifact_id",
+            "source_artifact_id",
+            "fidelity_mode",
+            "record_genre",
+            "integrity",
+            "prior_integrity",
+            "next_integrity",
+        ):
+            token = _id_text_or_none(getattr(details, field, None))
+            if token is not None:
+                row[field] = token
+        for field in (
+            "copy_generation",
+            "content_revision",
+            "annotation_revisions",
+            "lost_mark_count",
+            "lost_mark_count_delta",
+            "marks_remaining",
+        ):
+            value = getattr(details, field, None)
+            if isinstance(value, int) and not isinstance(value, bool) and value >= 0:
+                row[field] = value
+        tombstone = getattr(details, "tombstone", None)
+        if type(tombstone) is bool:
+            row["tombstone"] = tombstone
+        rows.append(row)
+    _LOG.debug(
+        "durable_record_event_rows_built event_count=%s durable_count=%s",
+        len(events),
+        len(rows),
+    )
+    return tuple(rows)
+
+
+def death_ticks_by_body_from_events(
+    events: Sequence[object],
+) -> dict[str, int]:
+    """Public wrapper: body_id → first death tick from Died events."""
+    if isinstance(events, (str, bytes)) or not isinstance(events, Sequence):
+        raise TypeError("death_ticks_by_body_from_events: invalid_events")
+    return _death_ticks_from_events(events)
+
+
+def durable_record_harvest_from_run(
+    *,
+    durable_records_spec: object | None,
+    artifacts: Sequence[object] | Mapping[object, object] | None = None,
+    events: Sequence[object] | None = None,
+    tick: int = 0,
+    false_record_expectations: Sequence[object] | None = None,
+) -> dict[str, object] | None:
+    """Build durable harvest payload when durable_records channel is on.
+
+    Returns None when the durable object is absent. Never imports world._*.
+    """
+    if durable_records_spec is None:
+        _LOG.debug("durable_record_harvest_skip reason_code=durable_absent")
+        return None
+    tick = require_exact_nonneg_int("tick", tick)
+    record_rows = (
+        ()
+        if artifacts is None
+        else artifact_objective_rows_from_artifacts(artifacts, tick=tick)
+    )
+    event_rows = (
+        () if events is None else durable_record_event_rows_from_events(events)
+    )
+    deaths: dict[str, int] = (
+        {} if events is None else death_ticks_by_body_from_events(events)
+    )
+    if not record_rows and not event_rows:
+        _LOG.warning(
+            "durable_record_harvest_empty reason_code=durable_enabled_rows_empty "
+            "artifact_count=%s event_count=%s",
+            0 if artifacts is None else (
+                len(artifacts) if not isinstance(artifacts, Mapping) else len(artifacts)
+            ),
+            0 if events is None else len(events),
+        )
+    _LOG.debug(
+        "durable_record_harvest_built record_count=%s event_count=%s "
+        "death_count=%s source_kind=durable_records",
+        len(record_rows),
+        len(event_rows),
+        len(deaths),
+    )
+    payload: dict[str, object] = {
+        "durable_record_rows": record_rows,
+        "durable_record_event_rows": event_rows,
+        "death_ticks_by_body": deaths,
+    }
+    if false_record_expectations is not None:
+        payload["false_record_expectations"] = tuple(false_record_expectations)
+    return payload
 
 
 def artifact_memory_rows_from_traces(
