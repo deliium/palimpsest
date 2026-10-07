@@ -43,6 +43,11 @@ from analysis.durable_record_metrics import (
     compute_durable_record_lineage,
     compute_durable_record_survival,
 )
+from analysis.knowledge_repository_metrics import (
+    compute_knowledge_repository_access,
+    compute_knowledge_repository_organization,
+    compute_knowledge_repository_survival,
+)
 from analysis.historical_memory_metrics import (
     compute_historical_memory_layers,
     compute_historical_memory_queries,
@@ -162,6 +167,10 @@ class MetricComputationInputs:
     durable_record_event_rows: Sequence[object] | None = None
     death_ticks_by_body: Mapping[str, int] | None = None
     false_record_expectations: Sequence[object] | None = None
+    repository_objective_rows: Sequence[object] | None = None
+    repository_event_rows: Sequence[object] | None = None
+    founder_death_ticks: Mapping[str, int] | None = None
+    inaccessible_expectations: Sequence[object] | None = None
     territorial_presence_rows: Sequence[object] | None = None
     territorial_control_rows: Sequence[object] | None = None
     belief_convergence_claims: Sequence[object] | None = None
@@ -672,6 +681,55 @@ def assemble_metric_documents(inputs: MetricComputationInputs) -> MetricBundle:
                 false_record_expectations=false_expectations,
             ),
         )
+    if (
+        inputs.repository_objective_rows is not None
+        or inputs.repository_event_rows is not None
+    ):
+        repository_rows = tuple(inputs.repository_objective_rows or ())
+        repository_events = tuple(inputs.repository_event_rows or ())
+        founder_deaths = dict(inputs.founder_death_ticks or {})
+        inaccessible_expectations = tuple(inputs.inaccessible_expectations or ())
+        _LOG.debug(
+            "metric_assemble family_id=knowledge_repository_survival source_count=%s",
+            len(repository_rows),
+        )
+        _safe(
+            "knowledge_repository_survival",
+            lambda: compute_knowledge_repository_survival(
+                repository_rows,
+                run_id=run_id,
+                input_revision=revision,
+                founder_death_ticks=founder_deaths,
+            ),
+        )
+        _LOG.debug(
+            "metric_assemble family_id=knowledge_repository_access source_count=%s",
+            len(repository_events),
+        )
+        _safe(
+            "knowledge_repository_access",
+            lambda: compute_knowledge_repository_access(
+                repository_events,
+                run_id=run_id,
+                input_revision=revision,
+                objective_rows=repository_rows,
+                inaccessible_expectations=inaccessible_expectations,
+            ),
+        )
+        _LOG.debug(
+            "metric_assemble family_id=knowledge_repository_organization "
+            "source_count=%s",
+            len(repository_rows) + len(repository_events),
+        )
+        _safe(
+            "knowledge_repository_organization",
+            lambda: compute_knowledge_repository_organization(
+                repository_rows,
+                run_id=run_id,
+                input_revision=revision,
+                event_rows=repository_events,
+            ),
+        )
     optional_blocks = {
         "kinship_genealogy": inputs.kinship_edge_rows is not None,
         "dependency_care": (
@@ -691,6 +749,10 @@ def assemble_metric_documents(inputs: MetricComputationInputs) -> MetricBundle:
         "durable_records": (
             inputs.durable_record_rows is not None
             or inputs.durable_record_event_rows is not None
+        ),
+        "knowledge_repositories": (
+            inputs.repository_objective_rows is not None
+            or inputs.repository_event_rows is not None
         ),
         "territorial_presence": inputs.territorial_presence_rows is not None,
         "territorial_control": inputs.territorial_control_rows is not None,

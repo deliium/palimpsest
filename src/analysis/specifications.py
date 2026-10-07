@@ -50,7 +50,7 @@ __all__ = [
 ]
 
 METRIC_CATALOG_VERSION: Final[str] = "metric-catalog-v1"
-METRIC_FAMILY_COUNT: Final[int] = 59
+METRIC_FAMILY_COUNT: Final[int] = 62
 
 # Align with existing memory-drift / transmission document versions.
 _ALGO_V1: Final[str] = "1"
@@ -136,6 +136,9 @@ class MetricFamilyId(StrEnum):
     DURABLE_RECORD_LINEAGE = "durable_record_lineage"
     DURABLE_RECORD_FIDELITY = "durable_record_fidelity"
     DURABLE_RECORD_SURVIVAL = "durable_record_survival"
+    KNOWLEDGE_REPOSITORY_SURVIVAL = "knowledge_repository_survival"
+    KNOWLEDGE_REPOSITORY_ACCESS = "knowledge_repository_access"
+    KNOWLEDGE_REPOSITORY_ORGANIZATION = "knowledge_repository_organization"
 
 
 class DenominatorKind(StrEnum):
@@ -1605,6 +1608,108 @@ def _spec_durable_record_survival() -> MetricSpecification:
     )
 
 
+def _spec_knowledge_repository_survival() -> MetricSpecification:
+    return _base(
+        family_id=MetricFamilyId.KNOWLEDGE_REPOSITORY_SURVIVAL,
+        evidence_inputs=frozenset({EvidenceStage.OBJECTIVE_EVENT_STATE}),
+        population="repository_objective_harvest_rows",
+        denominator="knowledge_repositories",
+        denominator_kind=DenominatorKind.OCCURRENCE,
+        cohort_window="caller-supplied repository harvest + founder death ticks",
+        deceased_policy="founder death measured; repositories may remain",
+        zero_holding_policy="no repository rows -> availability=absent",
+        opportunity_vs_occurrence="status and orphaned-member retention counts",
+        self_edge_policy="not_applicable",
+        censoring_policy="analysis-only knowledge repositories; never cognition",
+        formulas={
+            "surviving_after_founder_death_count": (
+                "non-destroyed repos with a founder death tick >= established_tick"
+            ),
+            "orphaned_member_count": (
+                "sum member_count over surviving-after-founder-death repos"
+            ),
+        },
+        value_keys=(
+            "destroyed_count",
+            "inaccessible_count",
+            "intact_count",
+            "neglected_count",
+            "orphaned_member_count",
+            "repository_count",
+            "surviving_after_founder_death_count",
+        ),
+        empty_case="availability=absent; no_repository_objective_rows",
+    )
+
+
+def _spec_knowledge_repository_access() -> MetricSpecification:
+    return _base(
+        family_id=MetricFamilyId.KNOWLEDGE_REPOSITORY_ACCESS,
+        evidence_inputs=frozenset({EvidenceStage.OBJECTIVE_EVENT_STATE}),
+        population="repository_access_event_rows",
+        denominator="deposit_retrieve_attempts",
+        denominator_kind=DenominatorKind.OCCURRENCE,
+        cohort_window="caller-supplied repository event + objective rows",
+        deceased_policy="not_applicable",
+        zero_holding_policy="no access activity -> availability=absent",
+        opportunity_vs_occurrence="deposit/retrieve success vs deny rates",
+        self_edge_policy="not_applicable",
+        censoring_policy="analysis-only knowledge repositories; never cognition",
+        formulas={
+            "deposit_success_count": "count repository_member_deposited events",
+            "deposit_deny_count": "count deposit_denied event rows",
+            "retrieve_success_count": "count repository_member_retrieved events",
+            "retrieve_deny_count": "count retrieve_denied event rows",
+            "inaccessible_block_count": (
+                "count inaccessible block reasons / expectation hooks"
+            ),
+        },
+        value_keys=(
+            "deposit_deny_count",
+            "deposit_success_count",
+            "inaccessible_block_count",
+            "retrieve_deny_count",
+            "retrieve_success_count",
+        ),
+        empty_case="availability=absent; no_repository_access_activity",
+    )
+
+
+def _spec_knowledge_repository_organization() -> MetricSpecification:
+    return _base(
+        family_id=MetricFamilyId.KNOWLEDGE_REPOSITORY_ORGANIZATION,
+        evidence_inputs=frozenset({EvidenceStage.OBJECTIVE_EVENT_STATE}),
+        population="repository_objective_and_event_rows",
+        denominator="knowledge_repositories_or_history",
+        denominator_kind=DenominatorKind.OCCURRENCE,
+        cohort_window="caller-supplied repository harvest rows",
+        deceased_policy="not_applicable",
+        zero_holding_policy="no organization rows -> availability=absent",
+        opportunity_vs_occurrence="index coverage and neglect-driven drops",
+        self_edge_policy="not_applicable",
+        censoring_policy="analysis-only knowledge repositories; never cognition",
+        formulas={
+            "index_coverage_ratio": (
+                "index_entry_count_total / member_count_total (0 if no members)"
+            ),
+            "dangling_index_entry_count": "sum dangling_index_entry_count",
+            "neglect_index_drop_count": (
+                "sum index_entries_dropped on repository_neglected"
+            ),
+            "history_event_count": "len(repository_event_rows)",
+        },
+        value_keys=(
+            "dangling_index_entry_count",
+            "history_event_count",
+            "index_coverage_ratio",
+            "index_entry_count_total",
+            "member_count_total",
+            "neglect_index_drop_count",
+        ),
+        empty_case="availability=absent; no_repository_organization_rows",
+    )
+
+
 def _spec_historical_memory_queries() -> MetricSpecification:
     return _base(
         family_id=MetricFamilyId.HISTORICAL_MEMORY_QUERIES,
@@ -3055,6 +3160,9 @@ _BUILDERS: Final[tuple[Callable[[], MetricSpecification], ...]] = (
     _spec_durable_record_lineage,
     _spec_durable_record_fidelity,
     _spec_durable_record_survival,
+    _spec_knowledge_repository_survival,
+    _spec_knowledge_repository_access,
+    _spec_knowledge_repository_organization,
     _spec_emergent_group_formation,
     _spec_emergent_social_norms,
     _spec_persistent_social_conventions,

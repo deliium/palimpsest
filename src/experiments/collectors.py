@@ -86,6 +86,7 @@ def assemble_arm_metric_bundle(
         cultural_channel_rows_from_norm_beliefs,
         durable_record_harvest_from_run,
         historical_memory_harvest_from_run,
+        knowledge_repository_harvest_from_run,
         norm_belief_rows_from_ledgers,
     )
 
@@ -196,6 +197,24 @@ def assemble_arm_metric_bundle(
         false_record_expectations=false_expectations,
     )
 
+    repository_spec = getattr(
+        arm.assignment.runner_config, "knowledge_repositories", None
+    )
+    final_repositories = getattr(arm, "final_repositories", None)
+    if final_repositories is None:
+        final_repositories = getattr(arm.runner_result, "final_repositories", None)
+    resolution_rows = getattr(arm, "action_resolutions", None)
+    if resolution_rows is None:
+        resolution_rows = getattr(arm.runner_result, "action_resolutions", None)
+    inaccessible_expectations = getattr(arm, "inaccessible_expectations", None)
+    repository_harvest = knowledge_repository_harvest_from_run(
+        knowledge_repositories_spec=repository_spec,
+        repositories=final_repositories,
+        events=events,
+        resolutions=resolution_rows,
+        inaccessible_expectations=inaccessible_expectations,
+    )
+
     inputs = inputs_with_opt_in_metric_rows(
         inputs,
         events=events,
@@ -234,6 +253,27 @@ def assemble_arm_metric_bundle(
             if durable_harvest is None
             or "false_record_expectations" not in durable_harvest
             else tuple(durable_harvest["false_record_expectations"])  # type: ignore[arg-type]
+        ),
+        repository_objective_rows=(
+            None
+            if repository_harvest is None
+            else tuple(repository_harvest["repository_objective_rows"])  # type: ignore[arg-type]
+        ),
+        repository_event_rows=(
+            None
+            if repository_harvest is None
+            else tuple(repository_harvest["repository_event_rows"])  # type: ignore[arg-type]
+        ),
+        founder_death_ticks=(
+            None
+            if repository_harvest is None
+            else dict(repository_harvest["founder_death_ticks"])  # type: ignore[arg-type]
+        ),
+        inaccessible_expectations=(
+            None
+            if repository_harvest is None
+            or "inaccessible_expectations" not in repository_harvest
+            else tuple(repository_harvest["inaccessible_expectations"])  # type: ignore[arg-type]
         ),
     )
     return assemble_metric_documents(inputs)

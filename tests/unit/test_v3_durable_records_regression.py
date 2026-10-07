@@ -1,4 +1,4 @@
-"""Durable-records regression pins: SEMANTIC 47, commands 29, metrics 59."""
+"""Durable-records regression pins: SEMANTIC 47; commands/metrics co-owned with v3-12."""
 
 from __future__ import annotations
 
@@ -30,19 +30,23 @@ def test_semantic_event_count_is_47() -> None:
     assert "ARTIFACT_PARTIALLY_LOST" in SEMANTIC_EVENT_TYPES
 
 
-def test_agent_command_count_is_29() -> None:
+def test_agent_command_count_includes_durable_commands() -> None:
     commands = get_args(AgentCommand)
-    assert len(commands) == 29
+    assert len(commands) == 34
     assert CopyRecord in commands
     assert AnnotateRecord in commands
     assert DamageRecord in commands
 
 
-def test_metric_family_count_is_59() -> None:
-    assert METRIC_FAMILY_COUNT == 59
+def test_metric_family_count_includes_durable_and_repository() -> None:
+    assert METRIC_FAMILY_COUNT == 62
     assert MetricFamilyId.DURABLE_RECORD_LINEAGE.value == "durable_record_lineage"
     assert MetricFamilyId.DURABLE_RECORD_FIDELITY.value == "durable_record_fidelity"
     assert MetricFamilyId.DURABLE_RECORD_SURVIVAL.value == "durable_record_survival"
+    assert (
+        MetricFamilyId.KNOWLEDGE_REPOSITORY_SURVIVAL.value
+        == "knowledge_repository_survival"
+    )
 
 
 def test_alembic_head_stays_0017() -> None:

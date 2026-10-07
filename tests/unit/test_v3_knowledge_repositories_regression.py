@@ -1,9 +1,10 @@
-"""Knowledge-repositories regression pins: SEMANTIC 53 (partial Task 11)."""
+"""Knowledge-repositories regression pins: SEMANTIC 53 + metrics 62."""
 
 from __future__ import annotations
 
 import pytest
 
+from analysis.specifications import METRIC_FAMILY_COUNT, MetricFamilyId
 from observer.version import SEMANTIC_EVENT_TYPES
 from world.actions import (
     DepositRecord,
@@ -20,6 +21,19 @@ def test_semantic_event_count_is_53() -> None:
     assert len(SEMANTIC_EVENT_TYPES) == 53
     assert "REPOSITORY_ESTABLISHED" in SEMANTIC_EVENT_TYPES
     assert "REPOSITORY_NEGLECTED" in SEMANTIC_EVENT_TYPES
+
+
+def test_metric_family_count_is_62() -> None:
+    assert METRIC_FAMILY_COUNT == 62
+    assert MetricFamilyId.KNOWLEDGE_REPOSITORY_SURVIVAL.value == (
+        "knowledge_repository_survival"
+    )
+    assert MetricFamilyId.KNOWLEDGE_REPOSITORY_ACCESS.value == (
+        "knowledge_repository_access"
+    )
+    assert MetricFamilyId.KNOWLEDGE_REPOSITORY_ORGANIZATION.value == (
+        "knowledge_repository_organization"
+    )
 
 
 def test_repository_command_types_present() -> None:

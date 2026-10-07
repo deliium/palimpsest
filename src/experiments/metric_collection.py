@@ -242,6 +242,10 @@ def inputs_with_opt_in_metric_rows(
     durable_record_event_rows: Sequence[object] | None = None,
     death_ticks_by_body: Mapping[str, int] | None = None,
     false_record_expectations: Sequence[object] | None = None,
+    repository_objective_rows: Sequence[object] | None = None,
+    repository_event_rows: Sequence[object] | None = None,
+    founder_death_ticks: Mapping[str, int] | None = None,
+    inaccessible_expectations: Sequence[object] | None = None,
 ) -> MetricComputationInputs:
     """Attach opt-in family inputs from harvested evidence when present.
 
@@ -359,6 +363,24 @@ def inputs_with_opt_in_metric_rows(
             durable_record_event_rows=durable_record_event_rows,
             death_ticks_by_body=death_ticks_by_body,
             false_record_expectations=false_record_expectations,
+        )
+    if (
+        repository_objective_rows is not None
+        or repository_event_rows is not None
+    ):
+        repo_count = (
+            0 if repository_objective_rows is None else len(repository_objective_rows)
+        )
+        repo_event_count = (
+            0 if repository_event_rows is None else len(repository_event_rows)
+        )
+        attached["knowledge_repositories"] = repo_count + repo_event_count
+        updated = replace(
+            updated,
+            repository_objective_rows=repository_objective_rows,
+            repository_event_rows=repository_event_rows,
+            founder_death_ticks=founder_death_ticks,
+            inaccessible_expectations=inaccessible_expectations,
         )
 
     _LOG.debug(

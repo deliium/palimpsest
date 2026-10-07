@@ -527,19 +527,19 @@ Update (no “optional” hedges):
 
 ### Phase 5: Analysis metrics + harvest
 
-- [ ] Task 12: Implement survival / access / organization computors with exact DTO fields (`RepositorySurvivalSummary`, `RepositoryAccessSummary`, `RepositoryOrganizationSummary` — counts/histograms only, no mark payloads); duck-type harvest rows; no cognition imports. History sequences are id/tick/status only.
+- [x] Task 12: Implement survival / access / organization computors with exact DTO fields (`RepositorySurvivalSummary`, `RepositoryAccessSummary`, `RepositoryOrganizationSummary` — counts/histograms only, no mark payloads); duck-type harvest rows; no cognition imports. History sequences are id/tick/status only.
   - Deliverable: Unit tests for each family empty/non-empty shapes.
   - Files: `src/analysis/knowledge_repository_metrics.py` (new), `tests/unit/test_knowledge_repository_metrics.py`
   - Logging: DEBUG family computed counts; censoring_policy states analysis-only / never cognition
   - Depends on: 1, 8
 
-- [ ] Task 13: Register three metric families end-to-end (`MetricFamilyId`, `_spec_*`, builders, `MetricComputationInputs`, assemble/`_safe`, exports). Bump `METRIC_FAMILY_COUNT` 59→62. Do not overload listed sibling families.
+- [x] Task 13: Register three metric families end-to-end (`MetricFamilyId`, `_spec_*`, builders, `MetricComputationInputs`, assemble/`_safe`, exports). Bump `METRIC_FAMILY_COUNT` 59→62. Do not overload listed sibling families.
   - Deliverable: Specification + assemble tests; exclusion-set updates for A–E gate.
   - Files: `src/analysis/specifications.py`, `src/analysis/metric_service.py`, `src/analysis/__init__.py`, `tests/unit/test_metric_specifications.py`
   - Logging: DEBUG metric assemble family_id + source_count
   - Depends on: 12
 
-- [ ] Task 14: Harvest wiring — `repository_objective_rows_from_repositories` + event rows + founder death ticks into `MetricComputationInputs` via `experiments.composition` / collectors. Optional join when layers+v34 co-enabled (no layer label injection into repositories). Prove collectors attach rows when repository enabled.
+- [x] Task 14: Harvest wiring — `repository_objective_rows_from_repositories` + event rows + founder death ticks into `MetricComputationInputs` via `experiments.composition` / collectors. Optional join when layers+v34 co-enabled (no layer label injection into repositories). Prove collectors attach rows when repository enabled.
   - Deliverable: Harvest unit tests; no `api`↔`analysis` import violations.
   - Files: `src/experiments/composition.py`, `src/experiments/metric_collection.py`, `src/experiments/collectors.py`, `tests/unit/test_knowledge_repository_harvest.py`
   - Logging: DEBUG harvest counts by source kind; WARN when repository enabled but rows empty

@@ -54,6 +54,10 @@ __all__ = [
     "durable_record_event_rows_from_events",
     "durable_record_harvest_from_run",
     "historical_memory_harvest_from_run",
+    "knowledge_repository_harvest_from_run",
+    "repository_event_rows_from_events",
+    "repository_event_rows_from_resolutions",
+    "repository_objective_rows_from_repositories",
     "map_consolidation_audits_to_report",
     "map_recall_audits_to_dynamics_report",
     "map_snapshot_to_analysis_sources",
@@ -992,6 +996,294 @@ def death_ticks_by_body_from_events(
     if isinstance(events, (str, bytes)) or not isinstance(events, Sequence):
         raise TypeError("death_ticks_by_body_from_events: invalid_events")
     return _death_ticks_from_events(events)
+
+
+_REPOSITORY_EVENT_KINDS: Final[frozenset[str]] = frozenset(
+    {
+        "repository_established",
+        "repository_member_deposited",
+        "repository_member_retrieved",
+        "repository_maintained",
+        "repository_indexed",
+        "repository_neglected",
+    }
+)
+_REPOSITORY_DENY_COMMANDS: Final[Mapping[str, str]] = {
+    "deposit_record": "deposit_denied",
+    "retrieve_record": "retrieve_denied",
+}
+
+
+def repository_objective_rows_from_repositories(
+    repositories: Sequence[object] | Mapping[object, object],
+) -> tuple[dict[str, object], ...]:
+    """Copy objective repository rows (no cultural labels / mark payloads)."""
+    if isinstance(repositories, Mapping):
+        values: Sequence[object] = tuple(repositories.values())
+    elif isinstance(repositories, (str, bytes)) or not isinstance(
+        repositories, Sequence
+    ):
+        raise TypeError(
+            "repository_objective_rows_from_repositories: invalid_repositories"
+        )
+    else:
+        values = repositories
+    rows: list[dict[str, object]] = []
+    for repository in values:
+        repository_id = _id_text_or_none(
+            getattr(repository, "repository_id", None)
+        )
+        location_id = _id_text_or_none(getattr(repository, "location_id", None))
+        if repository_id is None or location_id is None:
+            continue
+        status = _id_text_or_none(getattr(repository, "status", None)) or "intact"
+        access_mode = (
+            _id_text_or_none(getattr(repository, "access_mode", None)) or "open"
+        )
+        members = getattr(repository, "member_artifact_ids", ())
+        if isinstance(members, (str, bytes)) or not isinstance(members, Sequence):
+            members = ()
+        member_ids = tuple(
+            token
+            for item in members
+            if (token := _id_text_or_none(item)) is not None
+        )
+        index_entries = getattr(repository, "index_entries", ())
+        if isinstance(index_entries, (str, bytes)) or not isinstance(
+            index_entries, Sequence
+        ):
+            index_entries = ()
+        index_artifact_ids: list[str] = []
+        for entry in index_entries:
+            artifact_token = _id_text_or_none(
+                getattr(entry, "artifact_id", None)
+            )
+            if artifact_token is None and isinstance(entry, Mapping):
+                artifact_token = _id_text_or_none(entry.get("artifact_id"))
+            if artifact_token is not None:
+                index_artifact_ids.append(artifact_token)
+        member_set = set(member_ids)
+        dangling = sum(
+            1 for artifact_id in index_artifact_ids if artifact_id not in member_set
+        )
+        founders_raw = getattr(repository, "founder_ids", ())
+        if isinstance(founders_raw, (str, bytes)) or not isinstance(
+            founders_raw, Sequence
+        ):
+            founders_raw = ()
+        founder_ids = tuple(
+            token
+            for item in founders_raw
+            if (token := _id_text_or_none(item)) is not None
+        )
+        established = getattr(repository, "established_tick", 0)
+        last_maintained = getattr(repository, "last_maintained_tick", 0)
+        neglect_streak = getattr(repository, "neglect_streak", 0)
+        row: dict[str, object] = {
+            "repository_id": repository_id,
+            "location_id": location_id,
+            "structure_id": _id_text_or_none(
+                getattr(repository, "structure_id", None)
+            ),
+            "status": status,
+            "access_mode": access_mode,
+            "member_count": len(member_ids),
+            "index_entry_count": len(index_artifact_ids),
+            "dangling_index_entry_count": dangling,
+            "founder_ids": founder_ids,
+            "established_tick": (
+                established
+                if type(established) is int and not isinstance(established, bool)
+                else 0
+            ),
+            "last_maintained_tick": (
+                last_maintained
+                if type(last_maintained) is int
+                and not isinstance(last_maintained, bool)
+                else 0
+            ),
+            "neglect_streak": (
+                neglect_streak
+                if type(neglect_streak) is int
+                and not isinstance(neglect_streak, bool)
+                else 0
+            ),
+        }
+        rows.append(row)
+    _LOG.debug(
+        "repository_objective_rows_built repository_count=%s rows=%s "
+        "source_kind=knowledge_repositories",
+        len(values),
+        len(rows),
+    )
+    return tuple(rows)
+
+
+def repository_event_rows_from_events(
+    events: Sequence[object],
+) -> tuple[dict[str, object], ...]:
+    """Copy repository establish/membership/access/index/neglect event rows."""
+    if isinstance(events, (str, bytes)) or not isinstance(events, Sequence):
+        raise TypeError("repository_event_rows_from_events: invalid_events")
+    rows: list[dict[str, object]] = []
+    for event in events:
+        details = _event_details(event)
+        kind = _id_text_or_none(getattr(details, "kind", None)) or _event_kind_name(
+            event
+        ).lower()
+        if kind not in _REPOSITORY_EVENT_KINDS:
+            continue
+        tick = getattr(event, "tick", None)
+        row: dict[str, object] = {
+            "event_kind": kind,
+            "kind": kind,
+            "tick": tick if type(tick) is int and not isinstance(tick, bool) else 0,
+        }
+        for field in (
+            "repository_id",
+            "artifact_id",
+            "actor_id",
+            "prior_status",
+            "next_status",
+            "mode",
+            "access_mode",
+        ):
+            token = _id_text_or_none(getattr(details, field, None))
+            if token is not None:
+                row[field] = token
+        for field in (
+            "member_count",
+            "index_entry_count",
+            "index_entries_dropped",
+            "neglect_streak",
+            "established_tick",
+            "last_maintained_tick",
+            "revision_bump",
+        ):
+            value = getattr(details, field, None)
+            if isinstance(value, int) and not isinstance(value, bool) and value >= 0:
+                row[field] = value
+        rows.append(row)
+    _LOG.debug(
+        "repository_event_rows_built event_count=%s repository_count=%s "
+        "source_kind=knowledge_repositories",
+        len(events),
+        len(rows),
+    )
+    return tuple(rows)
+
+
+def repository_event_rows_from_resolutions(
+    resolutions: Sequence[object],
+) -> tuple[dict[str, object], ...]:
+    """Synthesize deposit/retrieve deny rows from rejected action resolutions."""
+    if isinstance(resolutions, (str, bytes)) or not isinstance(resolutions, Sequence):
+        raise TypeError("repository_event_rows_from_resolutions: invalid_resolutions")
+    rows: list[dict[str, object]] = []
+    for resolution in resolutions:
+        command_kind = _id_text_or_none(
+            getattr(resolution, "command_kind", None)
+        )
+        if command_kind is None:
+            command = getattr(resolution, "command", None)
+            command_kind = _id_text_or_none(getattr(command, "kind", None))
+        if command_kind not in _REPOSITORY_DENY_COMMANDS:
+            continue
+        status_token = _id_text_or_none(getattr(resolution, "status", None))
+        if status_token != "rejected":
+            continue
+        deny_kind = _REPOSITORY_DENY_COMMANDS[command_kind]
+        tick = getattr(resolution, "tick", 0)
+        if hasattr(tick, "value"):
+            tick = getattr(tick, "value")
+        row: dict[str, object] = {
+            "event_kind": deny_kind,
+            "kind": deny_kind,
+            "tick": tick if type(tick) is int and not isinstance(tick, bool) else 0,
+        }
+        command = getattr(resolution, "command", None)
+        if command is not None:
+            for field in ("repository_id", "artifact_id"):
+                token = _id_text_or_none(getattr(command, field, None))
+                if token is not None:
+                    row[field] = token
+        actor = _id_text_or_none(getattr(resolution, "agent_id", None))
+        if actor is not None:
+            row["actor_id"] = actor
+        reason = _id_text_or_none(getattr(resolution, "reason_code", None))
+        if reason is None:
+            reason = _id_text_or_none(getattr(resolution, "reason", None))
+        if reason is not None:
+            row["reason_code"] = reason
+        rows.append(row)
+    _LOG.debug(
+        "repository_resolution_deny_rows_built resolution_count=%s deny_count=%s "
+        "source_kind=knowledge_repositories",
+        len(resolutions),
+        len(rows),
+    )
+    return tuple(rows)
+
+
+def knowledge_repository_harvest_from_run(
+    *,
+    knowledge_repositories_spec: object | None,
+    repositories: Sequence[object] | Mapping[object, object] | None = None,
+    events: Sequence[object] | None = None,
+    resolutions: Sequence[object] | None = None,
+    inaccessible_expectations: Sequence[object] | None = None,
+) -> dict[str, object] | None:
+    """Build repository harvest payload when knowledge_repositories channel is on.
+
+    Returns None when the repository object is absent. Never imports world._*.
+    """
+    if knowledge_repositories_spec is None:
+        _LOG.debug(
+            "knowledge_repository_harvest_skip reason_code=repository_absent"
+        )
+        return None
+    objective_rows = (
+        ()
+        if repositories is None
+        else repository_objective_rows_from_repositories(repositories)
+    )
+    event_rows = (
+        () if events is None else repository_event_rows_from_events(events)
+    )
+    if resolutions is not None:
+        event_rows = event_rows + repository_event_rows_from_resolutions(resolutions)
+    deaths: dict[str, int] = (
+        {} if events is None else death_ticks_by_body_from_events(events)
+    )
+    if not objective_rows and not event_rows:
+        _LOG.warning(
+            "knowledge_repository_harvest_empty "
+            "reason_code=repository_enabled_rows_empty "
+            "repository_count=%s event_count=%s",
+            0
+            if repositories is None
+            else (
+                len(repositories)
+                if not isinstance(repositories, Mapping)
+                else len(repositories)
+            ),
+            0 if events is None else len(events),
+        )
+    _LOG.debug(
+        "knowledge_repository_harvest_built repository_count=%s event_count=%s "
+        "death_count=%s source_kind=knowledge_repositories",
+        len(objective_rows),
+        len(event_rows),
+        len(deaths),
+    )
+    payload: dict[str, object] = {
+        "repository_objective_rows": objective_rows,
+        "repository_event_rows": event_rows,
+        "founder_death_ticks": deaths,
+    }
+    if inaccessible_expectations is not None:
+        payload["inaccessible_expectations"] = tuple(inaccessible_expectations)
+    return payload
 
 
 def durable_record_harvest_from_run(
