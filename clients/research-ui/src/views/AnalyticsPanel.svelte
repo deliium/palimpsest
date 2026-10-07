@@ -32,6 +32,9 @@
     'durable_record_lineage',
     'durable_record_fidelity',
     'durable_record_survival',
+    'knowledge_repository_survival',
+    'knowledge_repository_access',
+    'knowledge_repository_organization',
   ] as const
 
   const HISTORICAL_MEMORY_FAMILIES = new Set([
@@ -44,6 +47,12 @@
     'durable_record_lineage',
     'durable_record_fidelity',
     'durable_record_survival',
+  ])
+
+  const KNOWLEDGE_REPOSITORY_FAMILIES = new Set([
+    'knowledge_repository_survival',
+    'knowledge_repository_access',
+    'knowledge_repository_organization',
   ])
 
   type MetricCard = {
@@ -213,10 +222,19 @@
       const durable = catalog.items.filter((item) =>
         DURABLE_RECORD_FAMILIES.has(item.metric_family),
       )
+      const repositories = catalog.items.filter((item) =>
+        KNOWLEDGE_REPOSITORY_FAMILIES.has(item.metric_family),
+      )
       const phenomenon = catalog.items.filter((item) =>
         item.metric_family.includes('phenomenon'),
       )
-      const selected = [...preferred, ...historical, ...durable, ...phenomenon]
+      const selected = [
+        ...preferred,
+        ...historical,
+        ...durable,
+        ...repositories,
+        ...phenomenon,
+      ]
         .filter(
           (item, index, all) =>
             all.findIndex(
@@ -225,7 +243,7 @@
                 other.metric_set_id === item.metric_set_id,
             ) === index,
         )
-        .slice(0, 14)
+        .slice(0, 17)
       cards = await Promise.all(selected.map((item) => loadMetricCard(item)))
 
       if (agentId) {
@@ -276,8 +294,9 @@
   </header>
   <p class="lede">
     Metric documents and phenomenon panels are analytical results — never world facts.
-    Historical memory and durable-record lineage / fidelity / survival families are
-    researcher constructs (<code>research_inference</code>), not agent knowledge.
+    Historical memory, durable-record, and knowledge-repository survival / access /
+    organization families are researcher constructs
+    (<code>research_inference</code>), not agent knowledge.
   </p>
 
   {#if loading}

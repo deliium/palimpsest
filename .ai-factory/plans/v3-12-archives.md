@@ -571,25 +571,25 @@ Update (no “optional” hedges):
 
 ### Phase 7: Research UI + docs + regression pins
 
-- [ ] Task 18: Research UI epistemic overlays + AnalyticsPanel discovery for `knowledge_repository_survival`, `knowledge_repository_access`, `knowledge_repository_organization` (`research_inference` badge only — no subjective ledger fields, no full archive browser). Mirror Experiment AN/AM overlay pattern.
+- [x] Task 18: Research UI epistemic overlays + AnalyticsPanel discovery for `knowledge_repository_survival`, `knowledge_repository_access`, `knowledge_repository_organization` (`research_inference` badge only — no subjective ledger fields, no full archive browser). Mirror Experiment AN/AM overlay pattern.
   - Deliverable: Client unit tests for badge discovery; GraphsPanel archive browser remains absent.
   - Files: `clients/research-ui/src/epistemic.ts`, `clients/research-ui/src/epistemic.test.ts`, `clients/research-ui/src/views/AnalyticsPanel.svelte`, related client tests
   - Logging: N/A in SPA
   - Depends on: 13
 
-- [ ] Task 19: Mandatory docs via `/aif-docs` — architecture V3 seams + Downstream contract (v34 deepen, cultural `{v31..v34}`, durable gates `{v33,v34}`, write-pair V14/v11, no new flag, no LibraryInstitution), physical-simulation repository/custody/decay/inaccessible helper, analysis-metrics families + DTOs, cognition-runtime note, observer semantic types, DESCRIPTION + ARCHITECTURE artifacts.
+- [x] Task 19: Mandatory docs via `/aif-docs` — architecture V3 seams + Downstream contract (v34 deepen, cultural `{v31..v34}`, durable gates `{v33,v34}`, write-pair V14/v11, no new flag, no LibraryInstitution), physical-simulation repository/custody/decay/inaccessible helper, analysis-metrics families + DTOs, cognition-runtime note, observer semantic types, DESCRIPTION + ARCHITECTURE artifacts.
   - Deliverable: Docs mention all locked pins; no contradictions with v3-11 durable blurb.
   - Files: `docs/architecture.md`, `docs/physical-simulation.md`, `docs/analysis-metrics.md`, `docs/cognition-runtime.md`, `docs/observer.md`, `.ai-factory/DESCRIPTION.md`, `.ai-factory/ARCHITECTURE.md`
   - Logging: N/A
   - Depends on: 1, 7, 11, 13, 15, 18
 
-- [ ] Task 20: Combined-arm regression — repository + durable write-pair V14; repository + dependency_care still V14 when repository on; layers optional on v34; architecture isolation (`tests/architecture/test_v3_knowledge_repositories_isolation.py` mirroring durable dual-rep walls; no LibraryInstitution symbols).
+- [x] Task 20: Combined-arm regression — repository + durable write-pair V14; repository + dependency_care still V14 when repository on; layers optional on v34; architecture isolation (`tests/architecture/test_v3_knowledge_repositories_isolation.py` mirroring durable dual-rep walls; no LibraryInstitution symbols).
   - Deliverable: Checkpoint selector priority tests + isolation green.
   - Files: `tests/unit/test_checkpoint_schema_knowledge_repositories.py`, `tests/architecture/test_v3_knowledge_repositories_isolation.py`
   - Logging: DEBUG selected pair
   - Depends on: 7, 13
 
-- [ ] Task 21: Final regression — V1 gate + `test_v2_scientific_invariants` under V3 flags-off; `METRIC_FAMILY_COUNT=62`; command count 34; SEMANTIC 53; Alembic head `0017`; Experiment AN unchanged when repository absent; append-only DELETE still rejected; close verification pins table below for `/aif-verify`.
+- [x] Task 21: Final regression — V1 gate + `test_v2_scientific_invariants` under V3 flags-off; `METRIC_FAMILY_COUNT=62`; command count 34; SEMANTIC 53; Alembic head `0017`; Experiment AN unchanged when repository absent; append-only DELETE still rejected; close verification pins table below for `/aif-verify`.
   - Deliverable: `tests/unit/test_v3_knowledge_repositories_regression.py` green with pins; plan pins accurate.
   - Files: existing gate tests; new regression pin module; this plan file (pins only)
   - Logging: pytest output only
