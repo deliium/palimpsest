@@ -2693,11 +2693,71 @@ def historical_memory_layers_profile(
     return config
 
 
+def durable_records_profile(
+    config: SimulationRunnerConfig,
+) -> SimulationRunnerConfig:
+    """Require cultural_historical_memory + provenance + durable_records on v33.
+
+    Off-gate Experiment AN profile. Rejects unowned V3 flags.
+    """
+    from simulation.runner_models import RUNNER_SCHEMA_VERSION_V33
+
+    if config.schema_version != RUNNER_SCHEMA_VERSION_V33:
+        raise ValueError(
+            "durable records profile requires runner-config-v33 "
+            "(code=durable_records_profile_schema "
+            f"got={config.schema_version!r})"
+        )
+    if not config.v3_capability_flags.cultural_historical_memory:
+        raise ValueError(
+            "durable records profile requires cultural_historical_memory "
+            "(code=durable_records_profile_flag)"
+        )
+    if config.cultural_feature_provenance is None:
+        raise ValueError(
+            "durable records profile requires cultural_feature_provenance "
+            "(code=durable_records_profile_missing_provenance)"
+        )
+    if config.durable_records is None:
+        raise ValueError(
+            "durable records profile requires durable_records "
+            "(code=durable_records_profile_missing_durable)"
+        )
+    allowed = {
+        "generational_population",
+        "kinship_inheritance",
+        "cultural_historical_memory",
+    }
+    other = tuple(
+        name
+        for name in config.v3_capability_flags.enabled_names()
+        if name not in allowed
+    )
+    if other:
+        raise ValueError(
+            "durable records profile forbids unowned V3 flags "
+            f"(code=durable_records_profile_extra_flags flag_count={len(other)})"
+        )
+    _LOG.debug(
+        "durable_records_profile_ok schema_version=%s "
+        "default_fidelity=%s genre_count=%s cultural_flag=%s "
+        "provenance_present=%s durable_present=%s",
+        config.schema_version,
+        config.durable_records.copy_fidelity_policy.default_fidelity,
+        len(config.durable_records.enabled_genres),
+        config.v3_capability_flags.cultural_historical_memory,
+        config.cultural_feature_provenance is not None,
+        config.durable_records is not None,
+    )
+    return config
+
+
 # Off-gate V3 experiments eligible for matrix use; never on default V1 batches.
 OFF_GATE_MATRIX_EXPERIMENT_IDS: Final[frozenset[str]] = frozenset(
     {
         "experiment-al-cultural-transmission-provenance",
         "experiment-am-historical-memory-layers",
+        "experiment-an-durable-records",
     }
 )
 
@@ -3445,6 +3505,199 @@ def experiment_am_historical_memory_layers(
         )
     return _definition(
         experiment_id="experiment-am-historical-memory-layers",
+        base=base,
+        seed_matrix=matrix,
+        arms=arms,
+    )
+
+
+def experiment_an_durable_records(
+    base: SimulationRunnerConfig,
+    *,
+    seed_matrix: ExperimentSeedMatrix | None = None,
+    max_ticks: int = 10,
+) -> ExperimentDefinition:
+    """Off-gate Experiment AN for durable records on runner-config-v33."""
+    from simulation.new_agent_initialization import (
+        default_new_agent_initialization_spec,
+    )
+    from simulation.runner_models import (
+        RUNNER_SCHEMA_VERSION_V4,
+        RUNNER_SCHEMA_VERSION_V31,
+        RUNNER_SCHEMA_VERSION_V33,
+        ArtifactInterpretationMode,
+        example_cultural_feature_provenance_spec,
+        example_durable_records_spec,
+        example_population_lifecycle_spec,
+    )
+
+    matrix = seed_matrix or ExperimentSeedMatrix(seeds=(base.seed,))
+    if len(base.agents) < 2:
+        raise ValueError(
+            "experiment AN requires at least two agents on the base roster "
+            "(code=durable_records_an_roster_too_small)"
+        )
+
+    provenance = example_cultural_feature_provenance_spec()
+    lifecycle = example_population_lifecycle_spec(
+        lifespan_ticks=40,
+        max_population=max(4, len(base.agents) + 1),
+        policy_id="disabled",
+    )
+    init = default_new_agent_initialization_spec()
+
+    def _clear_v3_siblings(cfg: SimulationRunnerConfig) -> SimulationRunnerConfig:
+        return replace(
+            cfg,
+            mentorship=None,
+            developmental_learning=None,
+            dependency_care=None,
+            kinship=None,
+            historical_memory_layers=None,
+        )
+
+    def _with_interpretation(
+        cfg: SimulationRunnerConfig, *, on: bool
+    ) -> SimulationRunnerConfig:
+        mode = (
+            ArtifactInterpretationMode.DETERMINISTIC
+            if on
+            else ArtifactInterpretationMode.DISABLED
+        )
+        rebuilt = tuple(
+            replace(agent, cognition=replace(agent.cognition, artifact_interpretation_mode=mode))
+            for agent in cfg.agents
+        )
+        return replace(cfg, agents=rebuilt)
+
+    channel_off = _clear_v3_siblings(
+        replace(
+            base,
+            schema_version=RUNNER_SCHEMA_VERSION_V31,
+            mortality_mode=MortalityMode.DISABLED,
+            stop_policy=RunnerStopPolicy(max_ticks=max_ticks),
+            v3_capability_flags=V3CapabilityFlags(cultural_historical_memory=True),
+            cultural_feature_provenance=provenance,
+            durable_records=None,
+            population_lifecycle=None,
+            new_agent_initialization=None,
+        )
+    )
+    cultural_transmission_provenance_profile(channel_off)
+
+    def _v33_durable(
+        *,
+        default_fidelity: str = "perfect",
+        with_lifecycle: bool = False,
+        interpretation_on: bool = True,
+    ) -> SimulationRunnerConfig:
+        flags = V3CapabilityFlags(
+            cultural_historical_memory=True,
+            generational_population=with_lifecycle,
+        )
+        durable = example_durable_records_spec(default_fidelity=default_fidelity)
+        cfg = replace(
+            base,
+            schema_version=RUNNER_SCHEMA_VERSION_V33,
+            mortality_mode=MortalityMode.DISABLED,
+            stop_policy=RunnerStopPolicy(max_ticks=max_ticks),
+            v3_capability_flags=flags,
+            cultural_feature_provenance=provenance,
+            durable_records=durable,
+            population_lifecycle=lifecycle if with_lifecycle else None,
+            new_agent_initialization=init if with_lifecycle else None,
+            mentorship=None,
+            developmental_learning=None,
+            dependency_care=None,
+            kinship=None,
+            historical_memory_layers=None,
+            artifacts_enabled=True,
+        )
+        cfg = _with_interpretation(cfg, on=interpretation_on)
+        return durable_records_profile(cfg)
+
+    perfect = _v33_durable(default_fidelity="perfect")
+    imperfect = _v33_durable(default_fidelity="deterministic_mutation")
+    author_death = _v33_durable(default_fidelity="perfect", with_lifecycle=True)
+    false_persist = _v33_durable(default_fidelity="perfect", with_lifecycle=True)
+    damage_loss = _v33_durable(default_fidelity="perfect")
+    annotate_edit = _v33_durable(default_fidelity="perfect")
+    flags_off = _clear_v3_siblings(
+        replace(
+            base,
+            schema_version=RUNNER_SCHEMA_VERSION_V4,
+            mortality_mode=MortalityMode.DISABLED,
+            stop_policy=RunnerStopPolicy(max_ticks=max_ticks),
+            v3_capability_flags=V3CapabilityFlags(),
+            cultural_feature_provenance=None,
+            durable_records=None,
+            population_lifecycle=None,
+            new_agent_initialization=None,
+            historical_memory_layers=None,
+        )
+    )
+
+    arms = (
+        (
+            "an-channel-off",
+            "durable_records_channel_off",
+            channel_off,
+        ),
+        (
+            "an-perfect-copy",
+            "durable_records_perfect_copy",
+            perfect,
+        ),
+        (
+            "an-imperfect-copy",
+            "durable_records_imperfect_copy",
+            imperfect,
+        ),
+        (
+            "an-author-death",
+            "durable_records_author_death",
+            author_death,
+        ),
+        (
+            "an-false-persist",
+            "durable_records_false_persist",
+            false_persist,
+        ),
+        (
+            "an-damage-loss",
+            "durable_records_damage_loss",
+            damage_loss,
+        ),
+        (
+            "an-annotate-edit",
+            "durable_records_annotate_edit",
+            annotate_edit,
+        ),
+        (
+            "an-flags-off",
+            "durable_records_v3_flags_off",
+            flags_off,
+        ),
+    )
+    for arm_id, _label, config in arms:
+        _LOG.info(
+            "experiment_an_built experiment_id=experiment-an-durable-records "
+            "arm_id=%s schema_version=%s cultural_flag=%s durable_present=%s "
+            "provenance_present=%s lifecycle_present=%s default_fidelity=%s",
+            arm_id,
+            config.schema_version,
+            config.v3_capability_flags.cultural_historical_memory,
+            config.durable_records is not None,
+            config.cultural_feature_provenance is not None,
+            config.population_lifecycle is not None,
+            (
+                "-"
+                if config.durable_records is None
+                else config.durable_records.copy_fidelity_policy.default_fidelity
+            ),
+        )
+    return _definition(
+        experiment_id="experiment-an-durable-records",
         base=base,
         seed_matrix=matrix,
         arms=arms,

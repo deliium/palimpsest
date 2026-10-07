@@ -508,19 +508,19 @@ Update (no “optional” hedges):
 
 ### Phase 6: Experiment AN + matrix
 
-- [ ] Task 15: Add `durable_records_profile` and `experiment_an_durable_records` catalog entry (off V1 gate) with locked arm matrix; export from `experiments/__init__.py`. Pin schema v33 + objects + flag on on-arms.
+- [x] Task 15: Add `durable_records_profile` and `experiment_an_durable_records` catalog entry (off V1 gate) with locked arm matrix; export from `experiments/__init__.py`. Pin schema v33 + objects + flag on on-arms.
   - Deliverable: Catalog construction tests; arm ids stable.
   - Files: `src/experiments/catalog.py`, `src/experiments/__init__.py`, scenario helpers as needed, `tests/unit/test_experiment_an_durable_records.py`
   - Logging: INFO `experiment_an_built` experiment_id + arm_id + schema_version; DEBUG flag/object presence
   - Depends on: 2, 14
 
-- [ ] Task 16: Arm assertions — perfect/imperfect copy, author-death, false-persist, damage-loss, annotate-edit, channel-off, flags-off hash stability; prove tombstones absent from Observation; prove genealogy genre does not write kinship edges.
+- [x] Task 16: Arm assertions — perfect/imperfect copy, author-death, false-persist, damage-loss, annotate-edit, channel-off, flags-off hash stability; prove tombstones absent from Observation; prove genealogy genre does not write kinship edges.
   - Deliverable: Executable arm proofs with stable failure messages citing arm_id.
   - Files: `tests/unit/test_experiment_an_*.py`, flags-off hash stability extensions
   - Logging: test logs only
   - Depends on: 15
 
-- [ ] Task 17: Matrix finalize + allowlist ownership — insert `durable_records_on` **before** `historical_memory_on` (v33 highest); accept v33; widen lifecycle/init needs sets with `V33`; include AN on allowlist without default V1 batches; keep AM on v32 when durable absent; keep AL on v31 when layers/durable absent.
+- [x] Task 17: Matrix finalize + allowlist ownership — insert `durable_records_on` **before** `historical_memory_on` (v33 highest); accept v33; widen lifecycle/init needs sets with `V33`; include AN on allowlist without default V1 batches; keep AM on v32 when durable absent; keep AL on v31 when layers/durable absent.
   - Deliverable: Finalize priority tests (`durable_records_on` beats `historical_memory_on`); allowlist pin.
   - Files: `src/experiments/matrix_schema.py`, `tests/unit/test_matrix_schema_v33*.py`, matrix allowlist tests
   - Logging: DEBUG finalize selected schema_version reason (`durable_records_on` / …)
