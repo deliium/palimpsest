@@ -17,6 +17,7 @@ from world.environment import (
 from world.events import WorldEvent
 from world.models import AgentBody, Item, Location, PhysicalRules, Resource, Weather
 from world.production import Structure
+from world.repositories import KnowledgeRepository
 from world.values import round_physical
 
 _LOGGER = logging.getLogger("simulation.observer_facts")
@@ -51,6 +52,7 @@ class ObjectiveFacts:
     registrations: tuple[AgentRegistration, ...]
     structures: tuple[Structure, ...] = ()
     artifacts: tuple[InformationArtifact, ...] = ()
+    repositories: tuple[KnowledgeRepository, ...] = ()
     season: str | None = None
     temperature_bands: tuple[tuple[str, str], ...] = ()
     hazards: tuple[tuple[str, str, int], ...] = ()
@@ -72,6 +74,7 @@ class ObjectiveScene:
     registrations: tuple[AgentRegistration, ...]
     structures: tuple[Structure, ...] = ()
     artifacts: tuple[InformationArtifact, ...] = ()
+    repositories: tuple[KnowledgeRepository, ...] = ()
     season: str | None = None
     temperature_bands: tuple[tuple[str, str], ...] = ()
     hazards: tuple[tuple[str, str, int], ...] = ()
@@ -105,6 +108,7 @@ def _freeze_facts(facts: ObjectiveFacts) -> ObjectiveScene:
         registrations=tuple(facts.registrations),
         structures=tuple(facts.structures),
         artifacts=tuple(facts.artifacts),
+        repositories=tuple(facts.repositories),
         season=facts.season,
         temperature_bands=tuple(facts.temperature_bands),
         hazards=tuple(facts.hazards),
@@ -203,6 +207,7 @@ def scene_from_snapshot(
         registrations=tuple(snapshot.registrations),
         structures=tuple(snapshot.structures),
         artifacts=tuple(snapshot.artifacts),
+        repositories=tuple(snapshot.repositories),
     )
     return scene_from_facts(facts)
 

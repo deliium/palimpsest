@@ -3358,6 +3358,7 @@ _CULTURAL_FEATURE_UPTAKE_COMPOSE_KEYS: Final[set[str]] = {
     "teaching",
     "artifacts",
     "mentorship",
+    "repositories",
 }
 _CULTURAL_FEATURE_BIAS_POLICY_KEYS: Final[set[str]] = {
     "mode",
@@ -4130,6 +4131,9 @@ def _decode_cultural_feature_provenance(
                 ),
                 mentorship=_bool_field(
                     compose_raw, "mentorship", path=f"{path}.uptake_compose"
+                ),
+                repositories=_bool_field(
+                    compose_raw, "repositories", path=f"{path}.uptake_compose"
                 ),
             ),
             bias_policy=CulturalFeatureBiasPolicy(

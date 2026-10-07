@@ -2455,6 +2455,7 @@ _CULTURAL_FEATURE_UPTAKE_COMPOSE_KEYS: Final[frozenset[str]] = frozenset(
         "teaching",
         "artifacts",
         "mentorship",
+        "repositories",
     }
 )
 _CULTURAL_FEATURE_BIAS_POLICY_KEYS: Final[frozenset[str]] = frozenset(
@@ -2542,6 +2543,7 @@ class CulturalFeatureUptakeCompose:
     teaching: bool = False
     artifacts: bool = False
     mentorship: bool = False
+    repositories: bool = False
 
     def __post_init__(self) -> None:
         for name in _CULTURAL_FEATURE_UPTAKE_COMPOSE_KEYS:
@@ -2743,6 +2745,7 @@ class CulturalFeatureProvenanceSpec:
                 "naming": self.uptake_compose.naming,
                 "narrative": self.uptake_compose.narrative,
                 "norms": self.uptake_compose.norms,
+                "repositories": self.uptake_compose.repositories,
                 "teaching": self.uptake_compose.teaching,
             },
         }

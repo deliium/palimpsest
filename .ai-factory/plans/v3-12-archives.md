@@ -505,19 +505,19 @@ Update (no “optional” hedges):
 
 ### Phase 4: Perception, cognition compile, observer
 
-- [ ] Task 9: Project `ObservedRepository` per perception_mode; omit destroyed; extend inspection DTOs with objective repository rows (no cultural labels); optional `custodian_repository_id` on ObservedArtifact when meta on.
+- [x] Task 9: Project `ObservedRepository` per perception_mode; omit destroyed; extend inspection DTOs with objective repository rows (no cultural labels); optional `custodian_repository_id` on ObservedArtifact when meta on.
   - Deliverable: Perception tests for container_only vs container_and_meta; destroyed omitted from Observation but present in inspection.
   - Files: `src/world/observations.py`, `src/world/_perception.py`, `src/simulation/inspection.py`, `tests/unit/test_knowledge_repository_perception.py`
   - Logging: DEBUG observed_repository_count; never log index tokens
   - Depends on: 3, 5
 
-- [ ] Task 10: Cognition compile gates for repository commands (interpretation DETERMINISTIC + channel on); extend `CulturalFeatureUptakeCompose` with exact `repositories` key (default false) + encode/decode; prove Observation never carries library/archive/sacred labels.
+- [x] Task 10: Cognition compile gates for repository commands (interpretation DETERMINISTIC + channel on); extend `CulturalFeatureUptakeCompose` with exact `repositories` key (default false) + encode/decode; prove Observation never carries library/archive/sacred labels.
   - Deliverable: Compile allow/deny tests; cultural uptake unit test with subjective framing only; uptake key round-trip.
   - Files: `src/agents/cognition/` compile/deliberation paths, `src/agents/cognition/cultural_features.py`, `src/simulation/runner_models.py`, `src/simulation/runner_serialization.py`, `tests/unit/test_knowledge_repository_cognition_compile.py`
   - Logging: DEBUG compile_skip reason codes; cultural uptake DEBUG skips
   - Depends on: 4, 9
 
-- [ ] Task 11: Observer/presentation: extend `observer/contracts.py` + `observer/project.py` with `ObservedRepository` / objective fields; SEMANTIC map **47 → 53** in `observer/version.py`; causal debugger kind maps for six repository domain kinds; no Godot cultural chrome. Protocol stays `observer-protocol-v1`.
+- [x] Task 11: Observer/presentation: extend `observer/contracts.py` + `observer/project.py` with `ObservedRepository` / objective fields; SEMANTIC map **47 → 53** in `observer/version.py`; causal debugger kind maps for six repository domain kinds; no Godot cultural chrome. Protocol stays `observer-protocol-v1`.
   - Deliverable: SEMANTIC length pin tests; mapper coverage; presentation forbids still hold.
   - Files: `src/observer/contracts.py`, `src/observer/project.py`, `src/observer/version.py`, `src/simulation/causal_debugger.py`, `tests/unit/test_repository_observer.py`, `tests/unit/test_v3_knowledge_repositories_regression.py` (partial)
   - Logging: none beyond existing observer metadata

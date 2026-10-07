@@ -65,6 +65,7 @@ from world.observations import (
     ObservedItemPlacement,
     ObservedLocation,
     ObservedOccurrence,
+    ObservedRepository,
     ObservedResource,
     ObservedStructure,
     VisibleBody,
@@ -109,7 +110,12 @@ class PerceptionService:
     ids and structure counts, never item names.
     """
 
-    def __init__(self, *, durable_perception_mode: str | None = None) -> None:
+    def __init__(
+        self,
+        *,
+        durable_perception_mode: str | None = None,
+        repository_perception_mode: str | None = None,
+    ) -> None:
         if durable_perception_mode is not None and durable_perception_mode not in {
             "marks_and_meta",
             "marks_only",
@@ -117,7 +123,17 @@ class PerceptionService:
             raise ValueError(
                 "durable_perception_mode must be marks_and_meta, marks_only, or None"
             )
+        if (
+            repository_perception_mode is not None
+            and repository_perception_mode
+            not in {"container_and_meta", "container_only"}
+        ):
+            raise ValueError(
+                "repository_perception_mode must be container_and_meta, "
+                "container_only, or None"
+            )
         self._durable_perception_mode = durable_perception_mode
+        self._repository_perception_mode = repository_perception_mode
 
     def project(
         self,
@@ -160,6 +176,7 @@ class PerceptionService:
                 prior_events=events,
                 environmental_dynamics=environmental_dynamics,
                 durable_perception_mode=self._durable_perception_mode,
+                repository_perception_mode=self._repository_perception_mode,
             )
             for observer_id in observers
         )
@@ -174,11 +191,13 @@ def project_observations(
     prior_events: Sequence[WorldEvent] = (),
     environmental_dynamics: object | None = None,
     durable_perception_mode: str | None = None,
+    repository_perception_mode: str | None = None,
 ) -> tuple[Observation, ...]:
     """Compatibility wrapper around :class:`PerceptionService`."""
     resolved = context if context is not None else ObservationContext(tick=0)
     return PerceptionService(
-        durable_perception_mode=durable_perception_mode
+        durable_perception_mode=durable_perception_mode,
+        repository_perception_mode=repository_perception_mode,
     ).project(
         world_id=world_id,
         state=state,
@@ -198,6 +217,7 @@ def _project_one(
     prior_events: tuple[WorldEvent, ...],
     environmental_dynamics: object | None,
     durable_perception_mode: str | None = None,
+    repository_perception_mode: str | None = None,
 ) -> Observation:
     body = state.bodies[observer_id]
     location_id = body.location_id
@@ -225,6 +245,18 @@ def _project_one(
         location_id=location_id,
         include_ground=content_visible,
         durable_perception_mode=durable_perception_mode,
+        include_custodian=(
+            repository_perception_mode == "container_and_meta"
+        ),
+    )
+    repositories = (
+        _sorted_repositories(
+            state,
+            location_id=location_id,
+            perception_mode=repository_perception_mode,
+        )
+        if content_visible and repository_perception_mode is not None
+        else ()
     )
     recipes = [
         occurrence.public_facts["recipe_id"]
@@ -238,6 +270,7 @@ def _project_one(
             len(structures),
         )
     _LOG.debug("artifacts_observed count=%s", len(artifacts))
+    _LOG.debug("observed_repository_count=%s", len(repositories))
     season, band, kinds = _present_environment(
         state=state,
         location_id=location_id,
@@ -266,6 +299,7 @@ def _project_one(
         resources=(_sorted_resources(state, location_id) if content_visible else ()),
         structures=structures,
         artifacts=artifacts,
+        repositories=repositories,
         exits=_sorted_exits(state, location_id),
         visible_bodies=(
             _sorted_visible_bodies(state, location_id, observer_id, context=context)
@@ -483,6 +517,7 @@ def _sorted_artifacts(
     location_id: EntityId,
     include_ground: bool,
     durable_perception_mode: str | None = None,
+    include_custodian: bool = False,
 ) -> tuple[ObservedArtifact, ...]:
     selected: list[ObservedArtifact] = []
     for artifact_id in sorted(state.artifacts, key=lambda entity: entity.value):
@@ -493,9 +528,55 @@ def _sorted_artifacts(
             location_id=location_id,
             include_ground=include_ground,
             durable_perception_mode=durable_perception_mode,
+            include_custodian=include_custodian,
         )
         if projected is not None:
             selected.append(projected)
+    return tuple(selected)
+
+
+def _sorted_repositories(
+    state: WorldState,
+    *,
+    location_id: EntityId,
+    perception_mode: str,
+) -> tuple[ObservedRepository, ...]:
+    from world.repositories import RepositoryStatus
+
+    selected: list[ObservedRepository] = []
+    for repository_id in sorted(state.repositories, key=lambda entity: entity.value):
+        repository = state.repositories[repository_id]
+        if repository.location_id != location_id:
+            continue
+        if repository.status is RepositoryStatus.DESTROYED:
+            continue
+        if perception_mode == "container_only":
+            selected.append(
+                ObservedRepository(
+                    repository_id=repository.repository_id,
+                    location_id=repository.location_id,
+                    status=repository.status.value,
+                    member_count=len(repository.member_artifact_ids),
+                )
+            )
+            continue
+        selected.append(
+            ObservedRepository(
+                repository_id=repository.repository_id,
+                location_id=repository.location_id,
+                status=repository.status.value,
+                member_count=len(repository.member_artifact_ids),
+                access_mode=repository.access_mode.value,
+                structure_id=repository.structure_id,
+                founder_ids=repository.founder_ids,
+                index_entry_count=len(repository.index_entries),
+                last_maintained_tick=repository.last_maintained_tick,
+                neglect_streak=repository.neglect_streak,
+                index_entry_ids=tuple(
+                    entry.entry_id for entry in repository.index_entries
+                ),
+            )
+        )
     return tuple(selected)
 
 
@@ -506,6 +587,7 @@ def _project_artifact(
     location_id: EntityId,
     include_ground: bool,
     durable_perception_mode: str | None = None,
+    include_custodian: bool = False,
 ) -> ObservedArtifact | None:
     # Tombstones are inspection/analysis-only — never agent Observation.
     if artifact.integrity is RecordIntegrity.DESTROYED:
@@ -537,6 +619,9 @@ def _project_artifact(
             integrity.value if integrity is not None else "-",
             copy_generation if copy_generation is not None else "-",
         )
+    custodian = (
+        artifact.custodian_repository_id if include_custodian else None
+    )
     return ObservedArtifact(
         entity_id=artifact.artifact_id,
         kind=artifact.kind,
@@ -552,6 +637,7 @@ def _project_artifact(
         integrity=integrity,
         annotation_revisions=annotation_revisions,
         lost_mark_count=lost_mark_count,
+        custodian_repository_id=custodian,
     )
 
 

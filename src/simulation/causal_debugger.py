@@ -135,6 +135,12 @@ _DETAIL_KIND_TO_SEMANTIC_TYPE: Final[Mapping[str, str]] = {
     "agent_entered_world": "AGENT_ENTERED_WORLD",
     "agent_initialization_recorded": "AGENT_INITIALIZED",
     "lifecycle_stage_changed": "LIFECYCLE_STAGE_CHANGED",
+    "repository_established": "REPOSITORY_ESTABLISHED",
+    "repository_member_deposited": "REPOSITORY_MEMBER_DEPOSITED",
+    "repository_member_retrieved": "REPOSITORY_MEMBER_RETRIEVED",
+    "repository_maintained": "REPOSITORY_MAINTAINED",
+    "repository_indexed": "REPOSITORY_INDEXED",
+    "repository_neglected": "REPOSITORY_NEGLECTED",
 }
 
 # Semantic observer types / detail type names → cognition-trace command_kind.
@@ -172,6 +178,11 @@ _SEMANTIC_TO_COMMAND_KIND: Final[Mapping[str, str]] = {
     "ARTIFACT_ANNOTATED": "annotate_record",
     "ARTIFACT_DAMAGED": "damage_record",
     "ARTIFACT_PARTIALLY_LOST": "damage_record",
+    "REPOSITORY_ESTABLISHED": "establish_repository",
+    "REPOSITORY_MEMBER_DEPOSITED": "deposit_record",
+    "REPOSITORY_MEMBER_RETRIEVED": "retrieve_record",
+    "REPOSITORY_MAINTAINED": "maintain_repository",
+    "REPOSITORY_INDEXED": "index_repository",
 }
 
 _DETAIL_KIND_TO_COMMAND_KIND: Final[Mapping[str, str]] = {
@@ -206,6 +217,11 @@ _DETAIL_KIND_TO_COMMAND_KIND: Final[Mapping[str, str]] = {
     "artifact_annotated": "annotate_record",
     "artifact_damaged": "damage_record",
     "artifact_partially_lost": "damage_record",
+    "repository_established": "establish_repository",
+    "repository_member_deposited": "deposit_record",
+    "repository_member_retrieved": "retrieve_record",
+    "repository_maintained": "maintain_repository",
+    "repository_indexed": "index_repository",
 }
 
 # Detail class __name__ (Attacked, Moved, …) → command_kind when kind field absent.
@@ -239,6 +255,11 @@ _DETAIL_TYPE_NAME_TO_COMMAND_KIND: Final[Mapping[str, str]] = {
     "ArtifactAnnotated": "annotate_record",
     "ArtifactDamaged": "damage_record",
     "ArtifactPartiallyLost": "damage_record",
+    "RepositoryEstablished": "establish_repository",
+    "RepositoryMemberDeposited": "deposit_record",
+    "RepositoryMemberRetrieved": "retrieve_record",
+    "RepositoryMaintained": "maintain_repository",
+    "RepositoryIndexed": "index_repository",
 }
 
 # Consequence / environment semantics: no agent command to explain.
@@ -259,6 +280,7 @@ _NOT_APPLICABLE_SEMANTICS: Final[frozenset[str]] = frozenset(
         "AGENT_ENTERED_WORLD",
         "AGENT_INITIALIZED",
         "LIFECYCLE_STAGE_CHANGED",
+        "REPOSITORY_NEGLECTED",
     }
 )
 
@@ -279,6 +301,7 @@ _NOT_APPLICABLE_DETAIL_KINDS: Final[frozenset[str]] = frozenset(
         "agent_entered_world",
         "agent_initialization_recorded",
         "lifecycle_stage_changed",
+        "repository_neglected",
     }
 )
 
@@ -298,6 +321,7 @@ _NOT_APPLICABLE_DETAIL_TYPE_NAMES: Final[frozenset[str]] = frozenset(
         "AgentCreated",
         "AgentEnteredWorld",
         "LifecycleStageChanged",
+        "RepositoryNeglected",
     }
 )
 

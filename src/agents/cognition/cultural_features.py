@@ -1309,6 +1309,36 @@ def collect_cultural_feature_public_cues(
                 confidence=0.35,
             )
         )
+
+    for repository in getattr(observation, "repositories", ()) or ():
+        repo_id = getattr(repository, "repository_id", None)
+        repo_token = getattr(repo_id, "value", None)
+        if not isinstance(repo_token, str):
+            continue
+        status = getattr(repository, "status", "intact")
+        access = getattr(repository, "access_mode", None) or "container"
+        # Subjective framing only — never library/archive/sacred labels.
+        evidence = (f"repository:{repo_token}",)
+        cues.append(
+            CulturalFeatureUptakeCue(
+                feature_kind=CulturalFeatureKindId.SYMBOLIC_ASSOCIATION,
+                channel=CulturalTransmissionChannelId.OBSERVATION,
+                content_key=f"container:{repo_token}",
+                content_fingerprint=f"fp:container:{repo_token}:{status}",
+                evidence_refs=evidence,
+                confidence=0.4,
+            )
+        )
+        cues.append(
+            CulturalFeatureUptakeCue(
+                feature_kind=CulturalFeatureKindId.PRACTICE,
+                channel=CulturalTransmissionChannelId.OBSERVATION,
+                content_key=f"custody-practice:{repo_token}:{access}",
+                content_fingerprint=f"fp:custody:{repo_token}:{access}",
+                evidence_refs=evidence,
+                confidence=0.35,
+            )
+        )
     return tuple(cues)
 
 
@@ -1519,11 +1549,13 @@ def apply_cultural_feature_compose_adapters(
     norms_mode_on: bool = False,
     conventions_mode_on: bool = False,
     artifacts_mode_on: bool = False,
+    repositories_mode_on: bool = False,
     naming_keys: Sequence[tuple[str, str, str]] = (),
     narrative_keys: Sequence[tuple[str, str, str]] = (),
     norm_keys: Sequence[tuple[str, str, str]] = (),
     convention_keys: Sequence[tuple[str, str, str]] = (),
     artifact_keys: Sequence[tuple[str, str, str]] = (),
+    repository_keys: Sequence[tuple[str, str, str]] = (),
 ) -> tuple[CulturalFeatureLedger, tuple[CulturalFeatureAudit, ...]]:
     """Optional V2 mode compose adapters (opaque keys only; no peer copy)."""
     if type(ledger) is not CulturalFeatureLedger:
@@ -1693,6 +1725,27 @@ def apply_cultural_feature_compose_adapters(
         channel=CulturalTransmissionChannelId.ARTIFACT,
         rows=tuple((src, f"term-art:{key}", fp) for src, key, fp in artifact_keys),
     )
+    repositories_on = bool(getattr(compose, "repositories", False))
+    _ingest(
+        compose_bit=repositories_on,
+        mode_on=repositories_mode_on,
+        skip_code="repositories_mode_off",
+        source_mode="repositories",
+        feature_kind=CulturalFeatureKindId.SYMBOLIC_ASSOCIATION,
+        channel=CulturalTransmissionChannelId.OBSERVATION,
+        rows=repository_keys,
+    )
+    _ingest(
+        compose_bit=repositories_on,
+        mode_on=repositories_mode_on,
+        skip_code="repositories_mode_off",
+        source_mode="repositories",
+        feature_kind=CulturalFeatureKindId.PRACTICE,
+        channel=CulturalTransmissionChannelId.OBSERVATION,
+        rows=tuple(
+            (src, f"practice-repo:{key}", fp) for src, key, fp in repository_keys
+        ),
+    )
     return current, tuple(audits)
 
 
@@ -1703,6 +1756,7 @@ def collect_cultural_feature_compose_keys(
     social_norms: object | None = None,
     social_conventions: object | None = None,
     artifact_interpretations: object | None = None,
+    observation: object | None = None,
 ) -> dict[str, tuple[tuple[str, str, str], ...]]:
     """Collect opaque (source, content_key, fingerprint) rows for compose adapters."""
 
@@ -1778,7 +1832,32 @@ def collect_cultural_feature_compose_keys(
                 id_attrs=("artifact_id", "mark_id", "entity_id"),
             )
         ),
+        "repository_keys": tuple(
+            _repository_compose_keys(observation)
+        ),
     }
+
+
+def _repository_compose_keys(
+    observation: object | None,
+) -> list[tuple[str, str, str]]:
+    if observation is None:
+        return []
+    out: list[tuple[str, str, str]] = []
+    for repository in getattr(observation, "repositories", ()) or ():
+        repo_id = getattr(repository, "repository_id", None)
+        repo_token = getattr(repo_id, "value", None)
+        if not isinstance(repo_token, str):
+            continue
+        status = getattr(repository, "status", "intact")
+        out.append(
+            (
+                "public",
+                f"repository:{repo_token}",
+                f"fp:repository:{repo_token}:{status}",
+            )
+        )
+    return out
 
 
 def log_unsatisfiable_feature_kinds(
@@ -1791,6 +1870,7 @@ def log_unsatisfiable_feature_kinds(
     norms_mode_on: bool = False,
     conventions_mode_on: bool = False,
     artifacts_mode_on: bool = False,
+    repositories_mode_on: bool = False,
     teaching_mode_on: bool = False,
     mentorship_channel_on: bool = False,
 ) -> tuple[str, ...]:
@@ -1831,6 +1911,10 @@ def log_unsatisfiable_feature_kinds(
                     bool(getattr(compose, "conventions", False))
                     and conventions_mode_on
                 )
+                or (
+                    bool(getattr(compose, "repositories", False))
+                    and repositories_mode_on
+                )
                 or (bool(getattr(compose, "teaching", False)) and teaching_mode_on)
                 or (
                     bool(getattr(compose, "mentorship", False))
@@ -1862,6 +1946,10 @@ def log_unsatisfiable_feature_kinds(
             compose_ok = (
                 (bool(getattr(compose, "artifacts", False)) and artifacts_mode_on)
                 or (bool(getattr(compose, "narrative", False)) and narrative_mode_on)
+                or (
+                    bool(getattr(compose, "repositories", False))
+                    and repositories_mode_on
+                )
             )
         if not channel_ok and not compose_ok:
             unsat.append(kind.value)

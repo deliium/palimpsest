@@ -770,6 +770,7 @@ class CommandPlanner:
         artifact_interpretations: object | None = None,
         artifact_interpretation_mode: object | None = None,
         durable_records_active: bool = False,
+        knowledge_repositories_active: bool = False,
         semantic_naming: object | None = None,
         semantic_naming_mode: object | None = None,
         cultural_narratives: object | None = None,
@@ -854,9 +855,25 @@ class CommandPlanner:
             Help,
         }
         from agents.cognition.artifacts import ArtifactInterpretationMode
-        from world.actions import AnnotateRecord, CopyRecord, DamageRecord
+        from world.actions import (
+            AnnotateRecord,
+            CopyRecord,
+            DamageRecord,
+            DepositRecord,
+            EstablishRepository,
+            IndexRepository,
+            MaintainRepository,
+            RetrieveRecord,
+        )
 
         durable_command_types = {CopyRecord, AnnotateRecord, DamageRecord}
+        repository_command_types = {
+            EstablishRepository,
+            DepositRecord,
+            RetrieveRecord,
+            MaintainRepository,
+            IndexRepository,
+        }
         if artifact_interpretation_mode is ArtifactInterpretationMode.DETERMINISTIC:
             allowed_commands.add(Inscribe)
             if durable_records_active:
@@ -867,7 +884,15 @@ class CommandPlanner:
                     "command_type=%s",
                     type(command).__name__,
                 )
-        elif type(command) in durable_command_types:
+            if knowledge_repositories_active:
+                allowed_commands.update(repository_command_types)
+            elif type(command) in repository_command_types:
+                _LOG.info(
+                    "compile_skip reason_code=knowledge_repositories_inactive "
+                    "command_type=%s",
+                    type(command).__name__,
+                )
+        elif type(command) in durable_command_types | repository_command_types:
             _LOG.info(
                 "compile_skip reason_code=artifact_interpretation_disabled "
                 "command_type=%s",
@@ -1004,8 +1029,15 @@ class CommandPlanner:
             preferred=preferred_inscribe,
             inbox=inbox,
         )
-        # Re-gate durable commands after late Inscribe injection (Task 10).
+        # Re-gate durable / repository commands after late Inscribe injection.
         durable_types = {CopyRecord, AnnotateRecord, DamageRecord}
+        repository_types = {
+            EstablishRepository,
+            DepositRecord,
+            RetrieveRecord,
+            MaintainRepository,
+            IndexRepository,
+        }
         genre_inscribe = (
             type(command) is Inscribe and getattr(command, "record_genre", None) is not None
         )
@@ -1022,6 +1054,24 @@ class CommandPlanner:
                         if artifact_interpretation_mode
                         is not ArtifactInterpretationMode.DETERMINISTIC
                         else "durable_records_inactive"
+                    ),
+                    type(command).__name__,
+                )
+                command = Wait()
+                used_fallback = True
+        if type(command) in repository_types:
+            allowed = (
+                artifact_interpretation_mode is ArtifactInterpretationMode.DETERMINISTIC
+                and knowledge_repositories_active
+            )
+            if not allowed:
+                _LOG.info(
+                    "compile_skip reason_code=%s command_type=%s",
+                    (
+                        "artifact_interpretation_disabled"
+                        if artifact_interpretation_mode
+                        is not ArtifactInterpretationMode.DETERMINISTIC
+                        else "knowledge_repositories_inactive"
                     ),
                     type(command).__name__,
                 )

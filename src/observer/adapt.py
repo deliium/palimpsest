@@ -35,6 +35,12 @@ from world.events import (
     LifecycleStageChanged,
     Moved,
     NeedsApplied,
+    RepositoryEstablished,
+    RepositoryIndexed,
+    RepositoryMaintained,
+    RepositoryMemberDeposited,
+    RepositoryMemberRetrieved,
+    RepositoryNeglected,
     ResourceHarvested,
     ResourceNodeDepleted,
     ResourceNodeRecovered,
@@ -90,6 +96,7 @@ def adapt_event(event: WorldEvent) -> ObserverEvent:
     recipe_id: str | None = None
     structure_id: str | None = None
     artifact_id: str | None = None
+    repository_id: str | None = None
     season: str | None = None
     temperature_band: str | None = None
     hazard_kind: str | None = None
@@ -151,6 +158,24 @@ def adapt_event(event: WorldEvent) -> ObserverEvent:
         details, (ArtifactAnnotated, ArtifactDamaged, ArtifactPartiallyLost)
     ):
         artifact_id = _text(details.artifact_id)
+    elif isinstance(
+        details,
+        (
+            RepositoryEstablished,
+            RepositoryMemberDeposited,
+            RepositoryMemberRetrieved,
+            RepositoryMaintained,
+            RepositoryIndexed,
+            RepositoryNeglected,
+        ),
+    ):
+        repository_id = _text(details.repository_id)
+        if isinstance(
+            details, (RepositoryMemberDeposited, RepositoryMemberRetrieved)
+        ):
+            artifact_id = _text(details.artifact_id)
+        if isinstance(details, RepositoryEstablished):
+            origin = _text(details.location_id)
     elif isinstance(details, SeasonChanged):
         season = details.season.value
     elif isinstance(details, TemperatureBandChanged):
@@ -185,6 +210,7 @@ def adapt_event(event: WorldEvent) -> ObserverEvent:
         recipe_id=recipe_id,
         structure_id=structure_id,
         artifact_id=artifact_id,
+        repository_id=repository_id,
         season=season,
         temperature_band=temperature_band,
         hazard_kind=hazard_kind,

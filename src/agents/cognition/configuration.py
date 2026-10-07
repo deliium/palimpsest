@@ -990,6 +990,7 @@ def build_cognitive_loop(
     mentorship_spec: object | None = None,
     cultural_features_spec: object | None = None,
     durable_records_active: bool = False,
+    knowledge_repositories_active: bool = False,
 ) -> CognitiveLoop:
     """Assemble a ``CognitiveLoop`` from explicit policies.
 
@@ -1164,6 +1165,7 @@ def build_cognitive_loop(
         mentorship_spec=mentorship_spec,
         cultural_features_spec=cultural_features_spec,
         durable_records_active=durable_records_active,
+        knowledge_repositories_active=knowledge_repositories_active,
         territorial_claim_mode=resolved.territorial_claim_mode,
         territorial_claim_policy=resolved.territorial_claim_policy,
         group_formation_mode=resolved.group_formation_mode,

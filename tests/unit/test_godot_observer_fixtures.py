@@ -84,6 +84,16 @@ _LIFECYCLE_EVENT_NAMES = frozenset(
         "LIFECYCLE_STAGE_CHANGED",
     }
 )
+_REPOSITORY_EVENT_NAMES = frozenset(
+    {
+        "REPOSITORY_ESTABLISHED",
+        "REPOSITORY_MEMBER_DEPOSITED",
+        "REPOSITORY_MEMBER_RETRIEVED",
+        "REPOSITORY_MAINTAINED",
+        "REPOSITORY_INDEXED",
+        "REPOSITORY_NEGLECTED",
+    }
+)
 
 
 def test_event_fixtures_cover_closed_semantic_types() -> None:
@@ -92,7 +102,12 @@ def test_event_fixtures_cover_closed_semantic_types() -> None:
         name
         for name in sorted(SEMANTIC_EVENT_TYPES)
         if name
-        not in _ENVIRONMENT_EVENT_NAMES | _ARTIFACT_EVENT_NAMES | _LIFECYCLE_EVENT_NAMES
+        not in (
+            _ENVIRONMENT_EVENT_NAMES
+            | _ARTIFACT_EVENT_NAMES
+            | _LIFECYCLE_EVENT_NAMES
+            | _REPOSITORY_EVENT_NAMES
+        )
     )
     assert names == expected
     assert len(names) == 29
@@ -100,9 +115,11 @@ def test_event_fixtures_cover_closed_semantic_types() -> None:
     assert set(names) < set(SEMANTIC_EVENT_TYPES)
     assert _ARTIFACT_EVENT_NAMES < set(SEMANTIC_EVENT_TYPES)
     assert _LIFECYCLE_EVENT_NAMES < set(SEMANTIC_EVENT_TYPES)
+    assert _REPOSITORY_EVENT_NAMES < set(SEMANTIC_EVENT_TYPES)
     assert set(names).isdisjoint(_ARTIFACT_EVENT_NAMES)
     assert set(names).isdisjoint(_ENVIRONMENT_EVENT_NAMES)
     assert set(names).isdisjoint(_LIFECYCLE_EVENT_NAMES)
+    assert set(names).isdisjoint(_REPOSITORY_EVENT_NAMES)
 
 
 def test_event_fixtures_construct_observer_events() -> None:

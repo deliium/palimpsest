@@ -395,6 +395,7 @@ class ObserverArtifact:
     integrity: str | None = None
     annotation_revisions: int | None = None
     lost_mark_count: int | None = None
+    custodian_repository_id: str | None = None
 
     def __post_init__(self) -> None:
         object.__setattr__(
@@ -465,6 +466,79 @@ class ObserverArtifact:
                 "lost_mark_count",
                 _require_tick("lost_mark_count", self.lost_mark_count),
             )
+        object.__setattr__(
+            self,
+            "custodian_repository_id",
+            _optional_text(
+                "custodian_repository_id", self.custodian_repository_id
+            ),
+        )
+
+
+@dataclass(frozen=True, slots=True)
+class ObserverRepository:
+    """Objective repository container for presentation (no cultural labels)."""
+
+    repository_id: str
+    location_id: str
+    status: str
+    member_count: int
+    access_mode: str | None = None
+    structure_id: str | None = None
+    founder_ids: tuple[str, ...] | None = None
+    index_entry_count: int | None = None
+    last_maintained_tick: int | None = None
+    neglect_streak: int | None = None
+
+    def __post_init__(self) -> None:
+        object.__setattr__(
+            self,
+            "repository_id",
+            _require_text("repository_id", self.repository_id),
+        )
+        object.__setattr__(
+            self, "location_id", _require_text("location_id", self.location_id)
+        )
+        object.__setattr__(self, "status", _require_text("status", self.status))
+        object.__setattr__(
+            self, "member_count", _require_tick("member_count", self.member_count)
+        )
+        object.__setattr__(
+            self, "access_mode", _optional_text("access_mode", self.access_mode)
+        )
+        object.__setattr__(
+            self, "structure_id", _optional_text("structure_id", self.structure_id)
+        )
+        if self.founder_ids is not None:
+            if isinstance(self.founder_ids, (str, bytes)) or not isinstance(
+                self.founder_ids, Sequence
+            ):
+                _reject("founder_ids", "invalid_sequence")
+            object.__setattr__(
+                self,
+                "founder_ids",
+                tuple(
+                    _require_text("founder_ids", item) for item in self.founder_ids
+                ),
+            )
+        if self.index_entry_count is not None:
+            object.__setattr__(
+                self,
+                "index_entry_count",
+                _require_tick("index_entry_count", self.index_entry_count),
+            )
+        if self.last_maintained_tick is not None:
+            object.__setattr__(
+                self,
+                "last_maintained_tick",
+                _require_tick("last_maintained_tick", self.last_maintained_tick),
+            )
+        if self.neglect_streak is not None:
+            object.__setattr__(
+                self,
+                "neglect_streak",
+                _require_tick("neglect_streak", self.neglect_streak),
+            )
 
 
 @dataclass(frozen=True, slots=True)
@@ -524,6 +598,7 @@ class ObserverWorldState:
     weather: tuple[ObserverWeather, ...] = ()
     structures: tuple[ObserverStructure, ...] = ()
     artifacts: tuple[ObserverArtifact, ...] = ()
+    repositories: tuple[ObserverRepository, ...] = ()
     season: str | None = None
     temperature_bands: tuple[ObserverTemperatureBand, ...] = ()
     hazards: tuple[ObserverHazard, ...] = ()
@@ -538,6 +613,9 @@ class ObserverWorldState:
         weather = _typed_tuple("weather", self.weather, ObserverWeather)
         structures = _typed_tuple("structures", self.structures, ObserverStructure)
         artifacts = _typed_tuple("artifacts", self.artifacts, ObserverArtifact)
+        repositories = _typed_tuple(
+            "repositories", self.repositories, ObserverRepository
+        )
         bands = _typed_tuple(
             "temperature_bands", self.temperature_bands, ObserverTemperatureBand
         )
@@ -550,6 +628,9 @@ class ObserverWorldState:
         _unique("weather", tuple(item.location_id for item in weather))
         _unique("structures", tuple(item.structure_id for item in structures))
         _unique("artifacts", tuple(item.artifact_id for item in artifacts))
+        _unique(
+            "repositories", tuple(item.repository_id for item in repositories)
+        )
         _unique("temperature_bands", tuple(item.location_id for item in bands))
         _unique(
             "hazards",
@@ -562,6 +643,7 @@ class ObserverWorldState:
         object.__setattr__(self, "weather", weather)
         object.__setattr__(self, "structures", structures)
         object.__setattr__(self, "artifacts", artifacts)
+        object.__setattr__(self, "repositories", repositories)
         object.__setattr__(self, "season", season)
         object.__setattr__(self, "temperature_bands", bands)
         object.__setattr__(self, "hazards", hazards)
@@ -638,6 +720,7 @@ class ObserverEvent:
     recipe_id: str | None = None
     structure_id: str | None = None
     artifact_id: str | None = None
+    repository_id: str | None = None
     season: str | None = None
     temperature_band: str | None = None
     hazard_kind: str | None = None
@@ -660,6 +743,7 @@ class ObserverEvent:
         recipe_id: str | None = None,
         structure_id: str | None = None,
         artifact_id: str | None = None,
+        repository_id: str | None = None,
         season: str | None = None,
         temperature_band: str | None = None,
         hazard_kind: str | None = None,
@@ -705,6 +789,9 @@ class ObserverEvent:
         object.__setattr__(
             self, "artifact_id", _optional_text("artifact_id", artifact_id)
         )
+        object.__setattr__(
+            self, "repository_id", _optional_text("repository_id", repository_id)
+        )
         object.__setattr__(self, "season", _optional_text("season", season))
         object.__setattr__(
             self,
@@ -742,6 +829,8 @@ class ObserverEvent:
             payload["structure_id"] = self.structure_id
         if self.artifact_id is not None:
             payload["artifact_id"] = self.artifact_id
+        if self.repository_id is not None:
+            payload["repository_id"] = self.repository_id
         if self.season is not None:
             payload["season"] = self.season
         if self.temperature_band is not None:
@@ -964,6 +1053,7 @@ __all__ = [
     "ObserverPlaybackCursor",
     "ObserverPresentation",
     "ObserverRelationshipSummary",
+    "ObserverRepository",
     "ObserverResource",
     "ObserverWeather",
     "ObserverWorldState",

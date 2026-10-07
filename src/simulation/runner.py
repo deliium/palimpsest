@@ -601,6 +601,14 @@ def _durable_records_loop_kwargs(config: object) -> dict[str, object]:
     return {"durable_records_active": getattr(config, "durable_records", None) is not None}
 
 
+def _knowledge_repositories_loop_kwargs(config: object) -> dict[str, object]:
+    """Bind knowledge_repositories channel (no AgentCognitionSpec enum)."""
+    return {
+        "knowledge_repositories_active": getattr(config, "knowledge_repositories", None)
+        is not None
+    }
+
+
 def _cognition_config_for(
     spec: AgentCognitionSpec,
     *,
@@ -1725,6 +1733,7 @@ class SimulationRunner:
                     **_mentorship_loop_kwargs(config),
                     **_cultural_features_loop_kwargs(config),
                     **_durable_records_loop_kwargs(config),
+                    **_knowledge_repositories_loop_kwargs(config),
                 )
                 agent = Agent(
                     agent_id=owner,
@@ -3189,6 +3198,7 @@ class SimulationRunner:
                 **_mentorship_loop_kwargs(self._config),
                 **_cultural_features_loop_kwargs(self._config),
                 **_durable_records_loop_kwargs(self._config),
+                **_knowledge_repositories_loop_kwargs(self._config),
             )
             agent = Agent(
                 agent_id=owner,

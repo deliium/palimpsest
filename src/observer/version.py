@@ -56,6 +56,12 @@ SEMANTIC_EVENT_TYPES: Final[tuple[str, ...]] = (
     "KINSHIP_EDGE_RECORDED",
     "AGENT_FED",
     "AGENT_TRANSPORTED",
+    "REPOSITORY_ESTABLISHED",
+    "REPOSITORY_MEMBER_DEPOSITED",
+    "REPOSITORY_MEMBER_RETRIEVED",
+    "REPOSITORY_MAINTAINED",
+    "REPOSITORY_INDEXED",
+    "REPOSITORY_NEGLECTED",
 )
 
 SEMANTIC_TYPE_BY_KIND: Final[dict[str, str]] = {
@@ -106,6 +112,12 @@ SEMANTIC_TYPE_BY_KIND: Final[dict[str, str]] = {
     "kinship_edge_recorded": "KINSHIP_EDGE_RECORDED",
     "feed": "AGENT_FED",
     "transport": "AGENT_TRANSPORTED",
+    "repository_established": "REPOSITORY_ESTABLISHED",
+    "repository_member_deposited": "REPOSITORY_MEMBER_DEPOSITED",
+    "repository_member_retrieved": "REPOSITORY_MEMBER_RETRIEVED",
+    "repository_maintained": "REPOSITORY_MAINTAINED",
+    "repository_indexed": "REPOSITORY_INDEXED",
+    "repository_neglected": "REPOSITORY_NEGLECTED",
 }
 
 RELATIONSHIP_DIMENSION_CODES: Final[tuple[str, ...]] = (

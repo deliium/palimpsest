@@ -243,6 +243,7 @@ from world.observations import (
     ObservedItemPlacement,
     ObservedLocation,
     ObservedOccurrence,
+    ObservedRepository,
     ObservedResource,
     ObservedSelf,
     ObservedStructure,
@@ -2882,6 +2883,10 @@ def _encode_observation(value: Observation) -> dict[str, Any]:
         ),
         "world_id": value.world_id.value,
     }
+    if value.repositories:
+        encoded["repositories"] = [
+            _encode_observed_repository(item) for item in value.repositories
+        ]
     if value.season is not None:
         encoded["season"] = value.season.value
     if value.temperature_band is not None:
@@ -2916,6 +2921,7 @@ def _decode_observation(data: dict[str, Any], *, path: str) -> Observation:
         optional={
             "structures",
             "artifacts",
+            "repositories",
             "season",
             "temperature_band",
             "hazard_kinds",
@@ -2973,6 +2979,11 @@ def _decode_observation(data: dict[str, Any], *, path: str) -> Observation:
                 data.get("artifacts", []),
                 _decode_observed_artifact,
                 path=f"{path}.artifacts",
+            ),
+            repositories=_decode_object_list(
+                data.get("repositories", []),
+                _decode_observed_repository,
+                path=f"{path}.repositories",
             ),
             exits=_decode_object_list(
                 data["exits"], _decode_visible_exit, path=f"{path}.exits"
@@ -3066,6 +3077,8 @@ def _encode_observed_artifact(value: ObservedArtifact) -> dict[str, Any]:
         payload["annotation_revisions"] = value.annotation_revisions
     if value.lost_mark_count is not None:
         payload["lost_mark_count"] = value.lost_mark_count
+    if value.custodian_repository_id is not None:
+        payload["custodian_repository_id"] = value.custodian_repository_id.value
     return payload
 
 
@@ -3087,6 +3100,7 @@ def _decode_observed_artifact(data: dict[str, Any], *, path: str) -> ObservedArt
         "integrity",
         "annotation_revisions",
         "lost_mark_count",
+        "custodian_repository_id",
     }
     if set(data) - (base | optional) or not base.issubset(data):
         raise DomainSerializationError("invalid_fields", path)
@@ -3104,6 +3118,10 @@ def _decode_observed_artifact(data: dict[str, Any], *, path: str) -> ObservedArt
         integrity_raw = data.get("integrity")
         integrity = (
             None if integrity_raw is None else RecordIntegrity(str(integrity_raw))
+        )
+        custodian_raw = data.get("custodian_repository_id")
+        custodian_id = (
+            None if custodian_raw is None else EntityId(str(custodian_raw))
         )
         return ObservedArtifact(
             entity_id=EntityId(_str_field(data, "entity_id", path=path)),
@@ -3132,6 +3150,98 @@ def _decode_observed_artifact(data: dict[str, Any], *, path: str) -> ObservedArt
                 if "lost_mark_count" not in data
                 else _int_field(data, "lost_mark_count", path=path)
             ),
+            custodian_repository_id=custodian_id,
+        )
+    except DomainSerializationError:
+        raise
+    except (TypeError, ValueError) as exc:
+        raise DomainSerializationError("invalid_model", path) from exc
+
+
+def _encode_observed_repository(value: ObservedRepository) -> dict[str, Any]:
+    payload: dict[str, Any] = {
+        "location_id": value.location_id.value,
+        "member_count": value.member_count,
+        "repository_id": value.repository_id.value,
+        "status": value.status,
+    }
+    if value.access_mode is not None:
+        payload["access_mode"] = value.access_mode
+    if value.structure_id is not None:
+        payload["structure_id"] = value.structure_id.value
+    if value.founder_ids is not None:
+        payload["founder_ids"] = [item.value for item in value.founder_ids]
+    if value.index_entry_count is not None:
+        payload["index_entry_count"] = value.index_entry_count
+    if value.last_maintained_tick is not None:
+        payload["last_maintained_tick"] = value.last_maintained_tick
+    if value.neglect_streak is not None:
+        payload["neglect_streak"] = value.neglect_streak
+    if value.index_entry_ids is not None:
+        payload["index_entry_ids"] = list(value.index_entry_ids)
+    return payload
+
+
+def _decode_observed_repository(
+    data: dict[str, Any], *, path: str
+) -> ObservedRepository:
+    base = {"repository_id", "location_id", "status", "member_count"}
+    optional = {
+        "access_mode",
+        "structure_id",
+        "founder_ids",
+        "index_entry_count",
+        "last_maintained_tick",
+        "neglect_streak",
+        "index_entry_ids",
+    }
+    if set(data) - (base | optional) or not base.issubset(data):
+        raise DomainSerializationError("invalid_fields", path)
+    try:
+        structure_raw = data.get("structure_id")
+        structure_id = (
+            None if structure_raw is None else EntityId(str(structure_raw))
+        )
+        founders_raw = data.get("founder_ids")
+        founder_ids = None
+        if founders_raw is not None:
+            if not isinstance(founders_raw, list):
+                raise DomainSerializationError("invalid_fields", path)
+            founder_ids = tuple(EntityId(str(item)) for item in founders_raw)
+        entry_ids_raw = data.get("index_entry_ids")
+        index_entry_ids = None
+        if entry_ids_raw is not None:
+            if not isinstance(entry_ids_raw, list):
+                raise DomainSerializationError("invalid_fields", path)
+            index_entry_ids = tuple(str(item) for item in entry_ids_raw)
+        return ObservedRepository(
+            repository_id=EntityId(_str_field(data, "repository_id", path=path)),
+            location_id=EntityId(_str_field(data, "location_id", path=path)),
+            status=_str_field(data, "status", path=path),
+            member_count=_int_field(data, "member_count", path=path),
+            access_mode=(
+                None
+                if "access_mode" not in data
+                else _str_field(data, "access_mode", path=path)
+            ),
+            structure_id=structure_id,
+            founder_ids=founder_ids,
+            index_entry_count=(
+                None
+                if "index_entry_count" not in data
+                else _int_field(data, "index_entry_count", path=path)
+            ),
+            last_maintained_tick=(
+                None
+                if "last_maintained_tick" not in data
+                else _int_field(data, "last_maintained_tick", path=path)
+            ),
+            neglect_streak=(
+                None
+                if "neglect_streak" not in data
+                else _int_field(data, "neglect_streak", path=path)
+            ),
+            index_entry_ids=index_entry_ids,
         )
     except DomainSerializationError:
         raise

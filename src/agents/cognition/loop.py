@@ -194,6 +194,7 @@ class CognitiveLoop:
         "_developmental_mid_run_admit",
         "_developmental_stage_learning_rates",
         "_durable_records_active",
+        "_knowledge_repositories_active",
         "_emotional_state",
         "_epistemic_policy",
         "_futures",
@@ -287,6 +288,7 @@ class CognitiveLoop:
         mentorship_spec: object | None = None,
         cultural_features_spec: object | None = None,
         durable_records_active: bool = False,
+        knowledge_repositories_active: bool = False,
         territorial_claim_mode: object | None = None,
         territorial_claim_policy: object | None = None,
         group_formation_mode: object | None = None,
@@ -809,6 +811,13 @@ class CognitiveLoop:
         _LOG.info(
             "durable_records_bind durable_records_active=%s",
             self._durable_records_active,
+        )
+        if type(knowledge_repositories_active) is not bool:
+            raise TypeError("knowledge_repositories_active must be bool")
+        self._knowledge_repositories_active = knowledge_repositories_active
+        _LOG.info(
+            "knowledge_repositories_bind knowledge_repositories_active=%s",
+            self._knowledge_repositories_active,
         )
         from agents.cognition.production import ProductionKnowledgeMode
 
@@ -1576,6 +1585,9 @@ class CognitiveLoop:
             self._artifact_interpretation_mode
             is ArtifactInterpretationMode.DETERMINISTIC
         )
+        repositories_on = (
+            artifacts_on and self._knowledge_repositories_active
+        )
         teaching_on = (
             self._teaching_mode is CognitionTeachingInteractionMode.DETERMINISTIC
         )
@@ -1590,6 +1602,7 @@ class CognitiveLoop:
                 norms_mode_on=norms_on,
                 conventions_mode_on=convention_on,
                 artifacts_mode_on=artifacts_on,
+                repositories_mode_on=repositories_on,
                 teaching_mode_on=teaching_on,
                 mentorship_channel_on=mentorship_on,
             )
@@ -1624,6 +1637,7 @@ class CognitiveLoop:
                 social_norms=social_norms,
                 social_conventions=social_conventions,
                 artifact_interpretations=artifact_interpretations,
+                observation=observation,
             )
             ledger, adapter_audits = apply_cultural_feature_compose_adapters(
                 ledger,
@@ -1636,11 +1650,13 @@ class CognitiveLoop:
                 norms_mode_on=norms_on,
                 conventions_mode_on=convention_on,
                 artifacts_mode_on=artifacts_on,
+                repositories_mode_on=repositories_on,
                 naming_keys=compose_keys["naming_keys"],
                 narrative_keys=compose_keys["narrative_keys"],
                 norm_keys=compose_keys["norm_keys"],
                 convention_keys=compose_keys["convention_keys"],
                 artifact_keys=compose_keys["artifact_keys"],
+                repository_keys=compose_keys["repository_keys"],
             )
             audits.extend(adapter_audits)
         self._last_cultural_feature_audits = tuple(audits)
@@ -2689,6 +2705,7 @@ class CognitiveLoop:
                     artifact_interpretations=artifact_interpretations,
                     artifact_interpretation_mode=self._artifact_interpretation_mode,
                     durable_records_active=self._durable_records_active,
+                    knowledge_repositories_active=self._knowledge_repositories_active,
                     semantic_naming=semantic_naming,
                     semantic_naming_mode=self._semantic_naming_mode,
                     cultural_narratives=cultural_narratives,

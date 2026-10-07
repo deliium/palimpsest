@@ -120,4 +120,4 @@ async def test_lifecycle_on_without_developmental_learning_runs() -> None:
 
 
 def test_semantic_event_count_stays_43() -> None:
-    assert len(SEMANTIC_EVENT_TYPES) == 47
+    assert len(SEMANTIC_EVENT_TYPES) == 53

@@ -335,7 +335,16 @@ class WorldEngine:
                 None
                 if durable_records_spec is None
                 else getattr(durable_records_spec, "perception_mode", "marks_and_meta")
-            )
+            ),
+            repository_perception_mode=(
+                None
+                if knowledge_repositories_spec is None
+                else getattr(
+                    knowledge_repositories_spec,
+                    "perception_mode",
+                    "container_and_meta",
+                )
+            ),
         )
         self._last_tick_result: TickResult | None = None
         world = _materialize_world(bootstrap)
@@ -818,10 +827,6 @@ class WorldEngine:
             engine._durable_records_spec = resolved_durable
             if engine._durable_records_spec is not None and not engine._artifacts_enabled:
                 engine._artifacts_enabled = True
-            if engine._durable_records_spec is not None:
-                engine._perception = PerceptionService(
-                    durable_perception_mode=engine._durable_records_spec.perception_mode
-                )
             _LOGGER.debug(
                 "durable_records_restore codec_version=%s durable_records_active=%s",
                 snapshot.persistence_codec_version,
@@ -848,6 +853,22 @@ class WorldEngine:
                 engine._knowledge_repositories_spec is not None,
                 len(snapshot.repositories),
             )
+        if snapshot.persistence_codec_version in {"v10", "v11"}:
+            durable_mode = (
+                engine._durable_records_spec.perception_mode
+                if engine._durable_records_spec is not None
+                else None
+            )
+            repository_mode = (
+                engine._knowledge_repositories_spec.perception_mode
+                if engine._knowledge_repositories_spec is not None
+                else None
+            )
+            if durable_mode is not None or repository_mode is not None:
+                engine._perception = PerceptionService(
+                    durable_perception_mode=durable_mode,
+                    repository_perception_mode=repository_mode,
+                )
         if snapshot.persistence_codec_version in {"v8", "v9", "v10", "v11"}:
             resolved_kinship = kinship_spec
             if resolved_kinship is None:
@@ -2176,6 +2197,12 @@ class WorldEngine:
                 sorted(
                     state.artifacts.values(),
                     key=lambda item: item.artifact_id.value,
+                )
+            ),
+            repositories=tuple(
+                sorted(
+                    state.repositories.values(),
+                    key=lambda item: item.repository_id.value,
                 )
             ),
             season=season,

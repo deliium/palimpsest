@@ -23,7 +23,7 @@ _ROOT = Path(__file__).resolve().parents[2]
 
 
 def test_semantic_event_count_is_47() -> None:
-    assert len(SEMANTIC_EVENT_TYPES) == 47
+    assert len(SEMANTIC_EVENT_TYPES) == 53
     assert "ARTIFACT_COPIED" in SEMANTIC_EVENT_TYPES
     assert "ARTIFACT_ANNOTATED" in SEMANTIC_EVENT_TYPES
     assert "ARTIFACT_DAMAGED" in SEMANTIC_EVENT_TYPES

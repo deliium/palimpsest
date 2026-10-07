@@ -16,6 +16,7 @@ from observer.contracts import (
     ObserverItem,
     ObserverLocation,
     ObserverPlaybackCursor,
+    ObserverRepository,
     ObserverResource,
     ObserverStructure,
     ObserverTemperatureBand,
@@ -206,10 +207,35 @@ def project_frame(
                 and int(getattr(item, "lost_mark_count", 0) or 0) == 0
                 else int(getattr(item, "lost_mark_count", 0) or 0)
             ),
+            custodian_repository_id=(
+                None
+                if getattr(item, "custodian_repository_id", None) is None
+                else item.custodian_repository_id.value
+            ),
         )
         for item in sorted(
             scene.artifacts,
             key=lambda item: item.artifact_id.value,
+        )
+    )
+    repositories = tuple(
+        ObserverRepository(
+            repository_id=item.repository_id.value,
+            location_id=item.location_id.value,
+            status=item.status.value,
+            member_count=len(item.member_artifact_ids),
+            access_mode=item.access_mode.value,
+            structure_id=(
+                None if item.structure_id is None else item.structure_id.value
+            ),
+            founder_ids=tuple(founder.value for founder in item.founder_ids),
+            index_entry_count=len(item.index_entries),
+            last_maintained_tick=item.last_maintained_tick,
+            neglect_streak=item.neglect_streak,
+        )
+        for item in sorted(
+            scene.repositories,
+            key=lambda item: item.repository_id.value,
         )
     )
     weather = tuple(
@@ -229,6 +255,7 @@ def project_frame(
         weather=weather,
         structures=structures,
         artifacts=artifacts,
+        repositories=repositories,
         season=scene.season,
         temperature_bands=tuple(
             ObserverTemperatureBand(location_id=location_id, band=band)
@@ -285,8 +312,9 @@ def project_frame(
             "-" if not events else events[-1].domain_kind,
         )
     _LOGGER.debug(
-        "artifacts_projected count=%s event_kind=%s",
+        "artifacts_projected count=%s repositories_projected count=%s event_kind=%s",
         len(artifacts),
+        len(repositories),
         "-" if not events else events[-1].domain_kind,
     )
     return frame

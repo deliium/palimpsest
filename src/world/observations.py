@@ -17,6 +17,7 @@ resources (local quantity)   VISIBILITY_GATED (≥0.5)
 structures (local)           VISIBILITY_GATED (≥0.5)
 artifacts (ground local)       VISIBILITY_GATED (≥0.5)
 artifacts (held by self)       ALWAYS_SELF
+repositories (local)         VISIBILITY_GATED (≥0.5; omit destroyed)
 other bodies (coarse)        VISIBILITY_GATED (≥0.5)
 public occurrence facts      VISIBILITY_GATED or PARTICIPANT_ONLY
 participant occurrence detail PARTICIPANT_ONLY
@@ -100,6 +101,7 @@ __all__ = [
     "ObservedLifecycle",
     "ObservedLocation",
     "ObservedOccurrence",
+    "ObservedRepository",
     "ObservedResource",
     "ObservedSelf",
     "ObservedStructure",
@@ -580,6 +582,7 @@ class ObservedArtifact:
     integrity: RecordIntegrity | None = None
     annotation_revisions: int | None = None
     lost_mark_count: int | None = None
+    custodian_repository_id: EntityId | None = None
 
     def __post_init__(self) -> None:
         if type(self.entity_id) is not EntityId:
@@ -652,6 +655,107 @@ class ObservedArtifact:
                 raise TypeError(
                     "ObservedArtifact.lost_mark_count must be non-negative int"
                 )
+        if (
+            self.custodian_repository_id is not None
+            and type(self.custodian_repository_id) is not EntityId
+        ):
+            raise TypeError(
+                "ObservedArtifact.custodian_repository_id must be EntityId or None"
+            )
+
+
+@dataclass(frozen=True, slots=True)
+class ObservedRepository:
+    """Objective repository container visible at the observer location.
+
+    Never carries cultural frame labels (library / archive / sacred / …).
+    """
+
+    repository_id: EntityId
+    location_id: EntityId
+    status: str
+    member_count: int
+    access_mode: str | None = None
+    structure_id: EntityId | None = None
+    founder_ids: tuple[EntityId, ...] | None = None
+    index_entry_count: int | None = None
+    last_maintained_tick: int | None = None
+    neglect_streak: int | None = None
+    index_entry_ids: tuple[str, ...] | None = None
+
+    def __post_init__(self) -> None:
+        if type(self.repository_id) is not EntityId:
+            raise TypeError("ObservedRepository.repository_id must be EntityId")
+        if type(self.location_id) is not EntityId:
+            raise TypeError("ObservedRepository.location_id must be EntityId")
+        if type(self.status) is not str or not self.status:
+            raise TypeError("ObservedRepository.status must be a non-empty str")
+        object.__setattr__(
+            self,
+            "member_count",
+            require_exact_nonneg_int(
+                "ObservedRepository.member_count", self.member_count
+            ),
+        )
+        if self.access_mode is not None and (
+            type(self.access_mode) is not str or not self.access_mode
+        ):
+            raise TypeError(
+                "ObservedRepository.access_mode must be a non-empty str or None"
+            )
+        if self.structure_id is not None and type(self.structure_id) is not EntityId:
+            raise TypeError(
+                "ObservedRepository.structure_id must be EntityId or None"
+            )
+        if self.founder_ids is not None:
+            if isinstance(self.founder_ids, (str, bytes)) or not isinstance(
+                self.founder_ids, Sequence
+            ):
+                raise TypeError(
+                    "ObservedRepository.founder_ids must be a sequence or None"
+                )
+            founders = tuple(self.founder_ids)
+            for founder in founders:
+                if type(founder) is not EntityId:
+                    raise TypeError(
+                        "ObservedRepository.founder_ids entries must be EntityId"
+                    )
+            object.__setattr__(self, "founder_ids", founders)
+        if self.index_entry_count is not None:
+            object.__setattr__(
+                self,
+                "index_entry_count",
+                require_exact_nonneg_int(
+                    "ObservedRepository.index_entry_count",
+                    self.index_entry_count,
+                ),
+            )
+        if self.last_maintained_tick is not None:
+            object.__setattr__(
+                self,
+                "last_maintained_tick",
+                require_exact_nonneg_int(
+                    "ObservedRepository.last_maintained_tick",
+                    self.last_maintained_tick,
+                ),
+            )
+        if self.neglect_streak is not None:
+            object.__setattr__(
+                self,
+                "neglect_streak",
+                require_exact_nonneg_int(
+                    "ObservedRepository.neglect_streak", self.neglect_streak
+                ),
+            )
+        if self.index_entry_ids is not None:
+            if isinstance(self.index_entry_ids, (str, bytes)) or not isinstance(
+                self.index_entry_ids, Sequence
+            ):
+                raise TypeError(
+                    "ObservedRepository.index_entry_ids must be a sequence or None"
+                )
+            ids = tuple(str(item) for item in self.index_entry_ids)
+            object.__setattr__(self, "index_entry_ids", ids)
 
 
 @dataclass(frozen=True, slots=True)
@@ -985,6 +1089,7 @@ class Observation:
     resources: Sequence[ObservedResource] = field(default_factory=tuple)
     structures: Sequence[ObservedStructure] = field(default_factory=tuple)
     artifacts: Sequence[ObservedArtifact] = field(default_factory=tuple)
+    repositories: Sequence[ObservedRepository] = field(default_factory=tuple)
     exits: Sequence[VisibleExit] = field(default_factory=tuple)
     visible_bodies: Sequence[VisibleBody] = field(default_factory=tuple)
     occurrences: Sequence[ObservedOccurrence] = field(default_factory=tuple)
@@ -1046,6 +1151,15 @@ class Observation:
                 "Observation.artifacts",
                 self.artifacts,
                 model_type=ObservedArtifact,
+            ),
+        )
+        object.__setattr__(
+            self,
+            "repositories",
+            _copy_models(
+                "Observation.repositories",
+                self.repositories,
+                model_type=ObservedRepository,
             ),
         )
         object.__setattr__(

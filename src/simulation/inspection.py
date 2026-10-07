@@ -50,6 +50,8 @@ __all__ = [
     "DependencyCareInspectionDocument",
     "DependencyCareNeedRow",
     "DependencyCareActRow",
+    "KnowledgeRepositoryInspectionDocument",
+    "KnowledgeRepositoryInspectionRow",
     "MemoryKeysetCursor",
     "ObjectiveEvidenceLoader",
     "SubjectiveClaimHead",
@@ -464,6 +466,9 @@ def clamp_inspection_page_limit(
 SUBJECTIVE_CLAIMS_SCHEMA: Final[str] = "subjective-claims-v1"
 KINSHIP_INSPECTION_SCHEMA: Final[str] = "kinship-inspection-v1"
 DEPENDENCY_CARE_INSPECTION_SCHEMA: Final[str] = "dependency-care-inspection-v1"
+KNOWLEDGE_REPOSITORY_INSPECTION_SCHEMA: Final[str] = (
+    "knowledge-repository-inspection-v1"
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -525,6 +530,38 @@ class DependencyCareInspectionDocument:
     caregiving_cognition_mode: str
     need_rows: tuple[DependencyCareNeedRow, ...]
     recent_care_acts: tuple[DependencyCareActRow, ...]
+    ui_scaffold_note: str = (
+        "Consume via objective_inspection; not a cognition input"
+    )
+
+
+@dataclass(frozen=True, slots=True)
+class KnowledgeRepositoryInspectionRow:
+    """Objective repository row for research inspection (includes destroyed)."""
+
+    repository_id: str
+    location_id: str
+    status: str
+    access_mode: str
+    member_count: int
+    founder_ids: tuple[str, ...]
+    established_tick: int
+    structure_id: str | None
+    index_entry_count: int
+    last_maintained_tick: int
+    neglect_streak: int
+
+
+@dataclass(frozen=True, slots=True)
+class KnowledgeRepositoryInspectionDocument:
+    """Read-only repository projection. Outside cognition / EvidenceManifest."""
+
+    schema_version: str
+    run_id: str
+    tick: int
+    channel_active: bool
+    perception_mode: str
+    repositories: tuple[KnowledgeRepositoryInspectionRow, ...]
     ui_scaffold_note: str = (
         "Consume via objective_inspection; not a cognition input"
     )
@@ -621,6 +658,67 @@ class DetachedInspectionProjector:
             engine.run_id.value,
             engine.tick.value,
             len(edges),
+            active,
+            round((time.perf_counter() - started) * 1000, 3),
+        )
+        return document
+
+    def project_knowledge_repositories(
+        self, engine: WorldEngine
+    ) -> KnowledgeRepositoryInspectionDocument:
+        """Detached objective repository rows for research inspection."""
+        if type(engine) is not WorldEngine:
+            raise TypeError("project_knowledge_repositories requires WorldEngine")
+        started = time.perf_counter()
+        active = engine.knowledge_repositories_channel_active
+        perception_mode = "-"
+        rows: list[KnowledgeRepositoryInspectionRow] = []
+        if active:
+            from simulation.runner_models import KnowledgeRepositoriesSpec
+
+            spec = engine.knowledge_repositories_spec
+            if type(spec) is KnowledgeRepositoriesSpec:
+                perception_mode = spec.perception_mode
+            state = engine._snapshot.world.state
+            for repository_id in sorted(
+                state.repositories, key=lambda entity: entity.value
+            ):
+                repository = state.repositories[repository_id]
+                rows.append(
+                    KnowledgeRepositoryInspectionRow(
+                        repository_id=repository.repository_id.value,
+                        location_id=repository.location_id.value,
+                        status=repository.status.value,
+                        access_mode=repository.access_mode.value,
+                        member_count=len(repository.member_artifact_ids),
+                        founder_ids=tuple(
+                            founder.value for founder in repository.founder_ids
+                        ),
+                        established_tick=repository.established_tick,
+                        structure_id=(
+                            None
+                            if repository.structure_id is None
+                            else repository.structure_id.value
+                        ),
+                        index_entry_count=len(repository.index_entries),
+                        last_maintained_tick=repository.last_maintained_tick,
+                        neglect_streak=repository.neglect_streak,
+                    )
+                )
+        document = KnowledgeRepositoryInspectionDocument(
+            schema_version=KNOWLEDGE_REPOSITORY_INSPECTION_SCHEMA,
+            run_id=engine.run_id.value,
+            tick=engine.tick.value,
+            channel_active=active,
+            perception_mode=perception_mode,
+            repositories=tuple(rows),
+        )
+        _LOG.info(
+            "inspection_knowledge_repositories_projected run_id=%s tick=%s "
+            "repository_count=%s channel_active=%s duration_ms=%s",
+            engine.run_id.value,
+            engine.tick.value,
+            len(rows),
             active,
             round((time.perf_counter() - started) * 1000, 3),
         )
