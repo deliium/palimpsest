@@ -46,13 +46,18 @@ from world.events import (
     EVENT_SCHEMA_REPLAY_V10,
     EVENT_SCHEMA_REPLAY_V11,
     EVENT_SCHEMA_REPLAY_V12,
+    EVENT_SCHEMA_REPLAY_V13,
     AgentCreated,
     AgentEnteredWorld,
     AgentInitializationRecorded,
+    ArtifactAnnotated,
+    ArtifactCopied,
     ArtifactCreated,
+    ArtifactDamaged,
     ArtifactDestroyed,
     ArtifactModified,
     ArtifactMoved,
+    ArtifactPartiallyLost,
     Asked,
     Attacked,
     CraftStarted,
@@ -334,6 +339,7 @@ def _prepare_events(
             EVENT_SCHEMA_REPLAY_V10,
             EVENT_SCHEMA_REPLAY_V11,
             EVENT_SCHEMA_REPLAY_V12,
+            EVENT_SCHEMA_REPLAY_V13,
         }:
             raise ProjectionError(ProjectionErrorCode.UNSUPPORTED_SCHEMA)
     return normalized, schema_version, run_id
@@ -566,6 +572,14 @@ def _apply_event_effect(
             return _project_artifact_moved(state, event, moved_artifact), True
         case ArtifactDestroyed() as destroyed:
             return _project_artifact_destroyed(state, event, destroyed), True
+        case ArtifactCopied() as copied:
+            return _project_artifact_copied(state, event, copied), True
+        case ArtifactAnnotated() as annotated:
+            return _project_artifact_annotated(state, event, annotated), True
+        case ArtifactDamaged() as damaged:
+            return _project_artifact_damaged(state, event, damaged), True
+        case ArtifactPartiallyLost() as partial:
+            return _project_artifact_partially_lost(state, event, partial), True
         case AgentCreated() as created:
             return _project_agent_created(state, event, created)
         case AgentInitializationRecorded() as recorded:
@@ -822,7 +836,147 @@ def _project_artifact_destroyed(
     if prior is None or prior.content_revision != details.content_revision:
         raise ProjectionError(ProjectionErrorCode.TARGET_MISSING)
     artifacts = dict(state.artifacts)
-    del artifacts[details.artifact_id]
+    if details.tombstone:
+        from world.artifacts import RecordIntegrity
+
+        artifacts[details.artifact_id] = replace(
+            prior,
+            integrity=RecordIntegrity.DESTROYED,
+            location_id=None,
+            holder_id=None,
+        )
+    else:
+        del artifacts[details.artifact_id]
+    try:
+        return rebuild_world_state(state, artifacts=artifacts)
+    except ValueError as exc:
+        raise ProjectionError(ProjectionErrorCode.INVARIANT_FAILED) from exc
+
+
+def _project_artifact_copied(
+    state: WorldState,
+    event: WorldEvent,
+    details: ArtifactCopied,
+) -> WorldState:
+    from world.artifacts import DurableRecordGenre, RecordIntegrity
+
+    if details.child_artifact_id in state.artifacts:
+        raise ProjectionError(ProjectionErrorCode.PRECONDITION_FAILED)
+    parent = state.artifacts.get(details.parent_artifact_id)
+    if parent is None:
+        raise ProjectionError(ProjectionErrorCode.TARGET_MISSING)
+    if event.actor_id is None or event.actor_id not in state.bodies:
+        raise ProjectionError(ProjectionErrorCode.ACTOR_MISSING)
+    created = InformationArtifact(
+        artifact_id=details.child_artifact_id,
+        kind=parent.kind,
+        author_id=event.actor_id,
+        created_tick=event.tick,
+        content=ArtifactContent(),
+        content_revision=details.content_revision,
+        location_id=event.actor_id and state.bodies[event.actor_id].location_id,
+        holder_id=None,
+        record_genre=DurableRecordGenre(details.record_genre),
+        parent_artifact_id=details.parent_artifact_id,
+        source_artifact_id=details.source_artifact_id,
+        copy_generation=details.copy_generation,
+        integrity=RecordIntegrity.INTACT,
+    )
+    artifacts = dict(state.artifacts)
+    artifacts[details.child_artifact_id] = created
+    _LOG.debug(
+        "replay_apply detail_type=artifact_copied artifact_id=%s",
+        details.child_artifact_id.value,
+    )
+    try:
+        return rebuild_world_state(state, artifacts=artifacts)
+    except ValueError as exc:
+        raise ProjectionError(ProjectionErrorCode.INVARIANT_FAILED) from exc
+
+
+def _project_artifact_annotated(
+    state: WorldState,
+    event: WorldEvent,
+    details: ArtifactAnnotated,
+) -> WorldState:
+    del event
+    from world.artifacts import RecordIntegrity
+
+    prior = state.artifacts.get(details.artifact_id)
+    if prior is None:
+        raise ProjectionError(ProjectionErrorCode.TARGET_MISSING)
+    updated = replace(
+        prior,
+        content_revision=details.content_revision,
+        annotation_revisions=details.annotation_revisions,
+        integrity=RecordIntegrity(details.integrity),
+    )
+    artifacts = dict(state.artifacts)
+    artifacts[details.artifact_id] = updated
+    _LOG.debug(
+        "replay_apply detail_type=artifact_annotated artifact_id=%s",
+        details.artifact_id.value,
+    )
+    try:
+        return rebuild_world_state(state, artifacts=artifacts)
+    except ValueError as exc:
+        raise ProjectionError(ProjectionErrorCode.INVARIANT_FAILED) from exc
+
+
+def _project_artifact_damaged(
+    state: WorldState,
+    event: WorldEvent,
+    details: ArtifactDamaged,
+) -> WorldState:
+    del event
+    from world.artifacts import RecordIntegrity
+
+    prior = state.artifacts.get(details.artifact_id)
+    if prior is None:
+        raise ProjectionError(ProjectionErrorCode.TARGET_MISSING)
+    updated = replace(
+        prior,
+        content_revision=details.content_revision,
+        integrity=RecordIntegrity(details.next_integrity),
+        lost_mark_count=prior.lost_mark_count + details.lost_mark_count_delta,
+    )
+    artifacts = dict(state.artifacts)
+    artifacts[details.artifact_id] = updated
+    _LOG.debug(
+        "replay_apply detail_type=artifact_damaged artifact_id=%s",
+        details.artifact_id.value,
+    )
+    try:
+        return rebuild_world_state(state, artifacts=artifacts)
+    except ValueError as exc:
+        raise ProjectionError(ProjectionErrorCode.INVARIANT_FAILED) from exc
+
+
+def _project_artifact_partially_lost(
+    state: WorldState,
+    event: WorldEvent,
+    details: ArtifactPartiallyLost,
+) -> WorldState:
+    del event
+    from world.artifacts import RecordIntegrity
+
+    prior = state.artifacts.get(details.artifact_id)
+    if prior is None:
+        raise ProjectionError(ProjectionErrorCode.TARGET_MISSING)
+    marks = prior.content.marks[: details.marks_remaining]
+    updated = replace(
+        prior,
+        content=ArtifactContent(marks=marks, relations=prior.content.relations),
+        content_revision=details.content_revision,
+        integrity=RecordIntegrity(details.integrity),
+        lost_mark_count=details.lost_mark_count,
+    )
+    artifacts = dict(state.artifacts)
+    artifacts[details.artifact_id] = updated
+    _LOG.debug(
+        "replay_apply detail_type=artifact_partially_lost artifact_id=%s",
+        details.artifact_id.value,
+    )
     try:
         return rebuild_world_state(state, artifacts=artifacts)
     except ValueError as exc:
@@ -896,6 +1050,7 @@ def _project_kinship_edge_recorded(
     if event.schema_version not in {
         EVENT_SCHEMA_REPLAY_V11,
         EVENT_SCHEMA_REPLAY_V12,
+        EVENT_SCHEMA_REPLAY_V13,
     }:
         raise ProjectionError(ProjectionErrorCode.PRECONDITION_FAILED)
     return state, False

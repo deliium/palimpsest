@@ -30,10 +30,14 @@ from world.environment import (
     temperature_band,
 )
 from world.events import (
+    ArtifactAnnotated,
+    ArtifactCopied,
     ArtifactCreated,
+    ArtifactDamaged,
     ArtifactDestroyed,
     ArtifactModified,
     ArtifactMoved,
+    ArtifactPartiallyLost,
     Asked,
     CraftStarted,
     ItemCrafted,
@@ -87,6 +91,10 @@ _ARTIFACT_DETAIL_TYPES: Final[frozenset[type]] = frozenset(
         ArtifactModified,
         ArtifactMoved,
         ArtifactDestroyed,
+        ArtifactCopied,
+        ArtifactAnnotated,
+        ArtifactDamaged,
+        ArtifactPartiallyLost,
     }
 )
 
@@ -737,11 +745,42 @@ def _artifact_public_facts(event: WorldEvent) -> dict[str, object] | None:
     details = event.details
     if type(details) not in _ARTIFACT_DETAIL_TYPES:
         return None
-    return {
+    if type(details) is ArtifactCopied:
+        facts: dict[str, object] = {
+            "artifact_id": details.child_artifact_id.value,
+            "content_revision": details.content_revision,
+            "record_genre": details.record_genre,
+            "integrity": "intact",
+        }
+        return facts
+    if type(details) in {
+        ArtifactAnnotated,
+        ArtifactDamaged,
+        ArtifactPartiallyLost,
+    }:
+        integrity = getattr(details, "integrity", None)
+        if integrity is None:
+            integrity = getattr(details, "next_integrity", None)
+        return {
+            "artifact_id": details.artifact_id.value,  # type: ignore[union-attr]
+            "content_revision": details.content_revision,  # type: ignore[union-attr]
+            "integrity": integrity,
+        }
+    facts = {
         "artifact_id": details.artifact_id.value,  # type: ignore[union-attr]
         "artifact_kind": details.artifact_kind.value,  # type: ignore[union-attr]
         "content_revision": details.content_revision,  # type: ignore[union-attr]
     }
+    if type(details) is ArtifactDestroyed and (
+        details.tombstone or details.integrity is not None
+    ):
+        facts["integrity"] = (
+            details.integrity
+            if details.integrity is not None
+            else "destroyed"
+        )
+        facts["record_genre"] = None
+    return facts
 
 
 def _production_recipe_id(event: WorldEvent) -> str | None:

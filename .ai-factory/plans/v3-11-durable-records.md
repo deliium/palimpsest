@@ -442,19 +442,19 @@ Update (no “optional” hedges):
 
 ### Phase 3: Imperfect copy, events, replay
 
-- [ ] Task 6: Implement deterministic copy fidelity transforms (perfect / deterministic_mutation / lossy) using seed-derived `StreamScope` from `rng_namespace`. Mutation may drop/swap mark tokens and drop trailing relations within policy caps; never invent free-form text; never "correct" marks toward world truth.
+- [x] Task 6: Implement deterministic copy fidelity transforms (perfect / deterministic_mutation / lossy) using seed-derived `StreamScope` from `rng_namespace`. Mutation may drop/swap mark tokens and drop trailing relations within policy caps; never invent free-form text; never "correct" marks toward world truth.
   - Deliverable: Property/unit tests: perfect identity; mutation bounded; lossy reduces marks; same seed ⇒ same child content.
   - Files: `src/world/artifacts.py` or `src/world/durable_copy.py`, `tests/unit/test_durable_record_copy_fidelity.py`
   - Logging: DEBUG `durable_copy_fidelity` mode + parent_mark_count + child_mark_count + edit_counts; never log tokens
   - Depends on: 5
 
-- [ ] Task 7: Land `EVENT_SCHEMA_REPLAY_V13`, detail types with exact payload tables above, extend `ArtifactDestroyed` for tombstone, serialization encode/decode, full ACCEPTED frozenset co-land, and agreed write-pair selection in **both** `checkpoint_schema_for_production` and `engine.select_checkpoint_schema` (`durable_records_active` → V13/v10 ahead of dependency-care).
+- [x] Task 7: Land `EVENT_SCHEMA_REPLAY_V13`, detail types with exact payload tables above, extend `ArtifactDestroyed` for tombstone, serialization encode/decode, full ACCEPTED frozenset co-land, and agreed write-pair selection in **both** `checkpoint_schema_for_production` and `engine.select_checkpoint_schema` (`durable_records_active` → V13/v10 ahead of dependency-care).
   - Deliverable: Event construction + schema-gate tests; illegal on < v13; combined-arm test stub proving V13 selected when durable+dependency_care both active.
   - Files: `src/world/events.py`, `src/simulation/serialization.py`, `src/simulation/engine.py`, `src/simulation/persistence.py`, `src/simulation/compatibility.py`, `src/simulation/service.py`, `tests/unit/test_durable_record_events.py`, `tests/unit/test_durable_record_write_pair.py`
   - Logging: DEBUG event_encoded kind + schema_version; ERROR invalid_event_schema_version
   - Depends on: 2, 5, 6
 
-- [ ] Task 8: Replay/apply path for new details + tombstone rows; journal/snapshot encode of additive artifact fields on codec **v10** (`ACCEPTED_PERSISTENCE_CODEC_VERSIONS`); dual-key decode for v9 and below synthesizing durable defaults (`record_genre=None`, `integrity=intact`, `copy_generation=0`, lineage ids None).
+- [x] Task 8: Replay/apply path for new details + tombstone rows; journal/snapshot encode of additive artifact fields on codec **v10** (`ACCEPTED_PERSISTENCE_CODEC_VERSIONS`); dual-key decode for v9 and below synthesizing durable defaults (`record_genre=None`, `integrity=intact`, `copy_generation=0`, lineage ids None).
   - Deliverable: Replay golden tests for copy→annotate→damage→partial_loss→destroy; restore parity live vs restored; v9 snapshot restores with synthesized defaults.
   - Files: `src/world/_replay.py`, `src/simulation/journal.py`, `src/simulation/persistence.py`, `tests/unit/test_durable_record_replay.py`
   - Logging: DEBUG replay_apply detail_type + artifact_id; WARN skip malformed additive fields with stable code

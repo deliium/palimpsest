@@ -70,10 +70,14 @@ from world.effects import (
     ResolvedSearchEffect,
 )
 from world.events import (
+    ArtifactAnnotated,
+    ArtifactCopied,
     ArtifactCreated,
+    ArtifactDamaged,
     ArtifactDestroyed,
     ArtifactModified,
     ArtifactMoved,
+    ArtifactPartiallyLost,
     Asked,
     Attacked,
     Died,
@@ -1973,6 +1977,7 @@ def _apply_erase(
 ) -> RuleApplication:
     prior = state.artifacts[operation.artifact_id]
     artifacts = dict(state.artifacts)
+    tombstone = False
     if durable_context is not None and durable_context.tombstone_on_destroy:
         updated = replace(
             prior,
@@ -1981,6 +1986,7 @@ def _apply_erase(
             holder_id=None,
         )
         artifacts[operation.artifact_id] = updated
+        tombstone = True
         _OPS_LOG.info(
             "durable_record_destroyed artifact_id=%s genre=%s integrity=%s "
             "tombstone=%s",
@@ -1999,6 +2005,8 @@ def _apply_erase(
             artifact_id=operation.artifact_id,
             artifact_kind=prior.kind,
             content_revision=prior.content_revision,
+            tombstone=tombstone,
+            integrity=RecordIntegrity.DESTROYED.value if tombstone else None,
         ),
     )
 
@@ -2027,13 +2035,7 @@ def _apply_copy_record(
     effect = resolved.require(operation.request_id, ResolvedArtifactCopyEffect)
     assert type(effect) is ResolvedArtifactCopyEffect
     parent = state.artifacts[operation.artifact_id]
-    fidelity = (
-        operation.fidelity_override
-        if operation.fidelity_override is not None
-        else durable_context.default_fidelity
-    )
-    # Task 6 owns imperfect transforms; perfect-identity copy here.
-    child_content = parent.content
+    child_content = effect.child_content
     child_genre = parent.record_genre
     source_id = (
         parent.source_artifact_id
@@ -2069,26 +2071,30 @@ def _apply_copy_record(
         parent.artifact_id.value,
         child_genre.value if child_genre is not None else "-",
         RecordIntegrity.INTACT.value,
-        fidelity,
+        effect.fidelity_mode,
         child_generation,
     )
     _OPS_LOG.debug(
         "durable_copy_fidelity mode=%s parent_mark_count=%s child_mark_count=%s "
-        "edit_counts=0,0",
-        fidelity,
+        "edit_counts=%s,%s",
+        effect.fidelity_mode,
         len(parent.content.marks),
         len(child_content.marks),
+        effect.mark_edit_count,
+        effect.relation_edit_count,
     )
+    assert child_genre is not None
     return RuleApplication(
         result=result,
         next_state=next_state,
-        event_details=ArtifactCreated(
-            artifact_id=effect.created_artifact_id,
-            artifact_kind=parent.kind,
-            author_id=operation.actor_id,
+        event_details=ArtifactCopied(
+            child_artifact_id=effect.created_artifact_id,
+            parent_artifact_id=parent.artifact_id,
+            source_artifact_id=source_id,
+            fidelity_mode=effect.fidelity_mode,
+            copy_generation=child_generation,
             content_revision=0,
-            resulting_location_id=location_id,
-            resulting_holder_id=holder_id,
+            record_genre=child_genre.value,
         ),
     )
 
@@ -2124,12 +2130,11 @@ def _apply_annotate_record(
     return RuleApplication(
         result=result,
         next_state=next_state,
-        event_details=ArtifactModified(
+        event_details=ArtifactAnnotated(
             artifact_id=operation.artifact_id,
-            artifact_kind=updated.kind,
+            annotation_revisions=updated.annotation_revisions,
             content_revision=updated.content_revision,
-            resulting_location_id=updated.location_id,
-            resulting_holder_id=updated.holder_id,
+            integrity=updated.integrity.value,
         ),
     )
 
@@ -2144,7 +2149,8 @@ def _apply_damage_record(
     prior = state.artifacts[operation.artifact_id]
     artifacts = dict(state.artifacts)
     if operation.mode == "destroy":
-        if durable_context.tombstone_on_destroy:
+        tombstone = durable_context.tombstone_on_destroy
+        if tombstone:
             updated = replace(
                 prior,
                 integrity=RecordIntegrity.DESTROYED,
@@ -2154,7 +2160,6 @@ def _apply_damage_record(
             artifacts[operation.artifact_id] = updated
         else:
             del artifacts[operation.artifact_id]
-            updated = prior
         next_state = rebuild_world_state(state, artifacts=artifacts)
         _OPS_LOG.info(
             "durable_record_destroyed artifact_id=%s genre=%s integrity=%s "
@@ -2162,7 +2167,7 @@ def _apply_damage_record(
             operation.artifact_id.value,
             prior.record_genre.value if prior.record_genre is not None else "-",
             RecordIntegrity.DESTROYED.value,
-            durable_context.tombstone_on_destroy,
+            tombstone,
         )
         return RuleApplication(
             result=result,
@@ -2171,6 +2176,8 @@ def _apply_damage_record(
                 artifact_id=operation.artifact_id,
                 artifact_kind=prior.kind,
                 content_revision=prior.content_revision,
+                tombstone=tombstone,
+                integrity=RecordIntegrity.DESTROYED.value if tombstone else None,
             ),
         )
 
@@ -2189,7 +2196,6 @@ def _apply_damage_record(
             marks = marks[:target]
         next_integrity = RecordIntegrity.PARTIALLY_LOST
 
-    relation_drop = 0
     relations = prior.content.relations
     if operation.mode == "damage":
         relation_drop = min(durable_context.max_relation_edits, len(relations))
@@ -2214,16 +2220,26 @@ def _apply_damage_record(
         next_integrity.value,
         updated.lost_mark_count,
     )
+    if operation.mode == "damage":
+        details: EventDetails = ArtifactDamaged(
+            artifact_id=operation.artifact_id,
+            prior_integrity=prior.integrity.value,
+            next_integrity=next_integrity.value,
+            lost_mark_count_delta=lost_delta,
+            content_revision=updated.content_revision,
+        )
+    else:
+        details = ArtifactPartiallyLost(
+            artifact_id=operation.artifact_id,
+            marks_remaining=len(updated.content.marks),
+            lost_mark_count=updated.lost_mark_count,
+            content_revision=updated.content_revision,
+            integrity=next_integrity.value,
+        )
     return RuleApplication(
         result=result,
         next_state=next_state,
-        event_details=ArtifactModified(
-            artifact_id=operation.artifact_id,
-            artifact_kind=updated.kind,
-            content_revision=updated.content_revision,
-            resulting_location_id=updated.location_id,
-            resulting_holder_id=updated.holder_id,
-        ),
+        event_details=details,
     )
 
 

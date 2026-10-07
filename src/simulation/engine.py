@@ -682,10 +682,10 @@ class WorldEngine:
         engine._artifacts_enabled = (
             artifacts_enabled
             or bool(snapshot.artifacts)
-            or snapshot.persistence_codec_version in {"v5", "v6", "v7", "v8", "v9"}
+            or snapshot.persistence_codec_version in {"v5", "v6", "v7", "v8", "v9", "v10"}
             or bool(getattr(engine._bootstrap, "artifacts", ()))
         )
-        if snapshot.persistence_codec_version in {"v6", "v7", "v8", "v9"}:
+        if snapshot.persistence_codec_version in {"v6", "v7", "v8", "v9", "v10"}:
             if population_lifecycle is None and snapshot.lifecycle_records:
                 raise ValueError(
                     "codec v6/v7/v8/v9 restore requires population_lifecycle "
@@ -715,8 +715,8 @@ class WorldEngine:
                     )
                 engine._new_agent_initialization = new_agent_initialization
             elif (
-                snapshot.persistence_codec_version in {"v7", "v8", "v9"}
-                and snapshot.event_schema_version in {10, 11, 12}
+                snapshot.persistence_codec_version in {"v7", "v8", "v9", "v10"}
+                and snapshot.event_schema_version in {10, 11, 12, 13}
             ):
                 # Prefer explicit restore arg; else pull from snapshot config when v25+.
                 config_init = getattr(snapshot.config, "new_agent_initialization", None)
@@ -742,7 +742,21 @@ class WorldEngine:
         engine._dependency_care_spec = None
         engine._durable_records_spec = None
         engine._dependency_need_registers = {}
-        if snapshot.persistence_codec_version in {"v8", "v9"}:
+        if snapshot.persistence_codec_version == "v10":
+            from simulation.runner_models import DurableRecordsSpec
+
+            resolved_durable = getattr(snapshot.config, "durable_records", None)
+            if resolved_durable is not None and type(resolved_durable) is not DurableRecordsSpec:
+                raise TypeError("durable_records must be DurableRecordsSpec or None")
+            engine._durable_records_spec = resolved_durable
+            if engine._durable_records_spec is not None and not engine._artifacts_enabled:
+                engine._artifacts_enabled = True
+            _LOGGER.debug(
+                "durable_records_restore codec_version=%s durable_records_active=%s",
+                snapshot.persistence_codec_version,
+                engine._durable_records_spec is not None,
+            )
+        if snapshot.persistence_codec_version in {"v8", "v9", "v10"}:
             resolved_kinship = kinship_spec
             if resolved_kinship is None:
                 resolved_kinship = getattr(snapshot.config, "kinship", None)
@@ -800,7 +814,7 @@ class WorldEngine:
                     if type(event.details) is KinshipEdgeRecorded
                 ),
             )
-        if snapshot.persistence_codec_version == "v9":
+        if snapshot.persistence_codec_version in {"v9", "v10"}:
             from simulation.runner_models import DependencyCareSpec
             from world.dependency_care import DependencyNeedRegister
 
@@ -3538,6 +3552,12 @@ class WorldEngine:
         snap: _EngineSnapshot,
         request: ActionRequest,
     ) -> ResolvedArtifactCopyEffect:
+        from simulation.randomness import StreamScope, create_named_stream
+        from simulation.runner_models import DurableRecordsSpec
+        from world.actions import CopyRecord as CopyRecordCommand
+        from world.artifacts import ArtifactContent
+        from world.durable_copy import apply_copy_fidelity
+
         created_artifact_id = derive_entity_id(
             self._config,
             "information-artifact-copy",
@@ -3546,15 +3566,64 @@ class WorldEngine:
             f"tick:{snap.tick.value}",
             request.request_id.value,
         )
+        command = request.command
+        assert type(command) is CopyRecordCommand
+        parent = snap.world.state.artifacts.get(command.artifact_id)
+        parent_content = (
+            parent.content if parent is not None else ArtifactContent()
+        )
+        fidelity = "perfect"
+        max_mark_edits = 0
+        max_relation_edits = 0
+        rng = None
+        if type(self._durable_records_spec) is DurableRecordsSpec:
+            spec = self._durable_records_spec
+            fidelity = (
+                command.fidelity_override
+                if command.fidelity_override is not None
+                else spec.copy_fidelity_policy.default_fidelity
+            )
+            max_mark_edits = spec.copy_fidelity_policy.max_mark_edits
+            max_relation_edits = spec.copy_fidelity_policy.max_relation_edits
+            if fidelity != "perfect":
+                rng = create_named_stream(
+                    self._config,
+                    StreamScope(
+                        namespace=spec.rng_namespace,
+                        names=(
+                            self._run_id.value,
+                            self.world_id.value,
+                            f"tick:{snap.tick.value}",
+                            request.request_id.value,
+                            command.artifact_id.value,
+                            "copy_fidelity",
+                        ),
+                    ),
+                )
+        fidelity_result = apply_copy_fidelity(
+            parent_content,
+            fidelity_mode=fidelity,
+            max_mark_edits=max_mark_edits,
+            max_relation_edits=max_relation_edits,
+            rng=rng,
+        )
         _LOGGER.debug(
-            "artifact_copy_id tick=%s request_id=%s artifact_id=%s",
+            "artifact_copy_id tick=%s request_id=%s artifact_id=%s "
+            "fidelity=%s mark_edits=%s relation_edits=%s",
             snap.tick.value,
             request.request_id.value,
             created_artifact_id.value,
+            fidelity_result.fidelity_mode,
+            fidelity_result.mark_edit_count,
+            fidelity_result.relation_edit_count,
         )
         return ResolvedArtifactCopyEffect(
             request_id=request.request_id,
             created_artifact_id=created_artifact_id,
+            child_content=fidelity_result.content,
+            fidelity_mode=fidelity_result.fidelity_mode,
+            mark_edit_count=fidelity_result.mark_edit_count,
+            relation_edit_count=fidelity_result.relation_edit_count,
         )
 
     def _bind_skill_state(
@@ -4693,6 +4762,7 @@ def select_checkpoint_schema(
         EVENT_SCHEMA_REPLAY_V10,
         EVENT_SCHEMA_REPLAY_V11,
         EVENT_SCHEMA_REPLAY_V12,
+        EVENT_SCHEMA_REPLAY_V13,
     )
 
     schema_version, codec = checkpoint_schema_for_production(
@@ -4706,29 +4776,38 @@ def select_checkpoint_schema(
         durable_records_active=durable_records_active,
     )
     agreed = (
-        dependency_care_active
+        durable_records_active
+        and schema_version == EVENT_SCHEMA_REPLAY_V13
+        and codec == "v10"
+    ) or (
+        not durable_records_active
+        and dependency_care_active
         and schema_version == EVENT_SCHEMA_REPLAY_V12
         and codec == "v9"
     ) or (
-        not dependency_care_active
+        not durable_records_active
+        and not dependency_care_active
         and kinship_active
         and schema_version == EVENT_SCHEMA_REPLAY_V11
         and codec == "v8"
     ) or (
-        not dependency_care_active
+        not durable_records_active
+        and not dependency_care_active
         and not kinship_active
         and new_agent_provenance_active
         and schema_version == EVENT_SCHEMA_REPLAY_V10
         and codec == "v7"
     ) or (
-        not dependency_care_active
+        not durable_records_active
+        and not dependency_care_active
         and not kinship_active
         and not new_agent_provenance_active
         and lifecycle_active
         and schema_version == EVENT_SCHEMA_REPLAY_V9
         and codec == "v6"
     ) or (
-        not dependency_care_active
+        not durable_records_active
+        and not dependency_care_active
         and not kinship_active
         and not new_agent_provenance_active
         and not lifecycle_active
@@ -4736,7 +4815,8 @@ def select_checkpoint_schema(
         and schema_version == EVENT_SCHEMA_REPLAY_V8
         and codec == "v5"
     ) or (
-        not dependency_care_active
+        not durable_records_active
+        and not dependency_care_active
         and not kinship_active
         and not new_agent_provenance_active
         and not lifecycle_active
@@ -4745,7 +4825,8 @@ def select_checkpoint_schema(
         and schema_version == EVENT_SCHEMA_REPLAY_V7
         and codec == "v4"
     ) or (
-        not dependency_care_active
+        not durable_records_active
+        and not dependency_care_active
         and not kinship_active
         and not new_agent_provenance_active
         and not lifecycle_active
@@ -4755,7 +4836,8 @@ def select_checkpoint_schema(
         and schema_version == EVENT_SCHEMA_REPLAY_V6
         and codec == "v3"
     ) or (
-        not dependency_care_active
+        not durable_records_active
+        and not dependency_care_active
         and not kinship_active
         and not new_agent_provenance_active
         and not lifecycle_active
@@ -4776,16 +4858,31 @@ def select_checkpoint_schema(
         )
     _LOGGER.debug(
         "checkpoint_schema_selected event_schema=%s codec=%s "
-        "dependency_care_active=%s kinship_active=%s new_agent_provenance_active=%s "
-        "lifecycle_active=%s artifacts_active=%s",
+        "durable_records_active=%s dependency_care_active=%s kinship_active=%s "
+        "new_agent_provenance_active=%s lifecycle_active=%s artifacts_active=%s",
         schema_version,
         codec,
+        durable_records_active,
         dependency_care_active,
         kinship_active,
         new_agent_provenance_active,
         lifecycle_active,
         artifacts_active,
     )
+    if (
+        artifacts_active
+        and not durable_records_active
+        and not dependency_care_active
+        and not kinship_active
+        and not new_agent_provenance_active
+        and not lifecycle_active
+    ):
+        _LOGGER.debug(
+            "artifact_schema_selected event_schema=%s codec=%s artifacts_active=%s",
+            schema_version,
+            codec,
+            artifacts_active,
+        )
     if dynamics_active and not artifacts_active and not lifecycle_active:
         _LOGGER.debug(
             "environment_schema_selected schema_version=%s codec=%s",

@@ -12,6 +12,7 @@ from dataclasses import dataclass, field
 from enum import StrEnum
 from typing import Final, Literal
 
+from world.artifacts import ArtifactContent, require_artifact_content
 from world.identifiers import (
     EntityId,
     RecipeId,
@@ -283,10 +284,14 @@ class ResolvedArtifactInscribeEffect:
 
 @dataclass(frozen=True, slots=True)
 class ResolvedArtifactCopyEffect:
-    """Pre-derived artifact identity for a successful CopyRecord."""
+    """Pre-derived identity + fidelity transform for a successful CopyRecord."""
 
     request_id: RequestId
     created_artifact_id: EntityId
+    child_content: ArtifactContent
+    fidelity_mode: str
+    mark_edit_count: int = 0
+    relation_edit_count: int = 0
     kind: Literal["artifact_copy"] = field(default="artifact_copy", init=False)
 
     def __post_init__(self) -> None:
@@ -298,6 +303,23 @@ class ResolvedArtifactCopyEffect:
             raise TypeError(
                 "ResolvedArtifactCopyEffect.created_artifact_id must be EntityId"
             )
+        require_artifact_content(
+            self.child_content, field_name="ResolvedArtifactCopyEffect.child_content"
+        )
+        if type(self.fidelity_mode) is not str or not self.fidelity_mode:
+            raise TypeError("fidelity_mode must be a non-empty str")
+        if (
+            isinstance(self.mark_edit_count, bool)
+            or type(self.mark_edit_count) is not int
+            or self.mark_edit_count < 0
+        ):
+            raise TypeError("mark_edit_count must be a non-negative int")
+        if (
+            isinstance(self.relation_edit_count, bool)
+            or type(self.relation_edit_count) is not int
+            or self.relation_edit_count < 0
+        ):
+            raise TypeError("relation_edit_count must be a non-negative int")
 
 
 ResolvedActionEffect = (

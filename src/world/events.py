@@ -75,8 +75,6 @@ EVENT_SCHEMA_REPLAY_V9: Final[int] = 9
 EVENT_SCHEMA_REPLAY_V10: Final[int] = 10
 EVENT_SCHEMA_REPLAY_V11: Final[int] = 11
 EVENT_SCHEMA_REPLAY_V12: Final[int] = 12
-# Stub for runner-config-v33 durable_records write-pair documentation
-# (Task 7 owns full v13 event types / accepted-set widen).
 EVENT_SCHEMA_REPLAY_V13: Final[int] = 13
 SUPPORTED_EVENT_SCHEMA_VERSIONS: Final[frozenset[int]] = frozenset(
     {
@@ -92,6 +90,7 @@ SUPPORTED_EVENT_SCHEMA_VERSIONS: Final[frozenset[int]] = frozenset(
         EVENT_SCHEMA_REPLAY_V10,
         EVENT_SCHEMA_REPLAY_V11,
     EVENT_SCHEMA_REPLAY_V12,
+        EVENT_SCHEMA_REPLAY_V13,
     }
 )
 REPLAYABLE_EVENT_SCHEMA_VERSIONS: Final[frozenset[int]] = frozenset(
@@ -107,6 +106,7 @@ REPLAYABLE_EVENT_SCHEMA_VERSIONS: Final[frozenset[int]] = frozenset(
         EVENT_SCHEMA_REPLAY_V10,
         EVENT_SCHEMA_REPLAY_V11,
     EVENT_SCHEMA_REPLAY_V12,
+        EVENT_SCHEMA_REPLAY_V13,
     }
 )
 PHYSICAL_REPLAY_EVENT_SCHEMA_VERSIONS: Final[frozenset[int]] = frozenset(
@@ -121,6 +121,7 @@ PHYSICAL_REPLAY_EVENT_SCHEMA_VERSIONS: Final[frozenset[int]] = frozenset(
         EVENT_SCHEMA_REPLAY_V10,
         EVENT_SCHEMA_REPLAY_V11,
     EVENT_SCHEMA_REPLAY_V12,
+        EVENT_SCHEMA_REPLAY_V13,
     }
 )
 _PRODUCTION_EVENT_SCHEMAS: Final[frozenset[int]] = frozenset(
@@ -132,6 +133,7 @@ _PRODUCTION_EVENT_SCHEMAS: Final[frozenset[int]] = frozenset(
         EVENT_SCHEMA_REPLAY_V10,
         EVENT_SCHEMA_REPLAY_V11,
     EVENT_SCHEMA_REPLAY_V12,
+        EVENT_SCHEMA_REPLAY_V13,
     }
 )
 _ENVIRONMENT_EVENT_SCHEMAS: Final[frozenset[int]] = frozenset(
@@ -142,6 +144,7 @@ _ENVIRONMENT_EVENT_SCHEMAS: Final[frozenset[int]] = frozenset(
         EVENT_SCHEMA_REPLAY_V10,
         EVENT_SCHEMA_REPLAY_V11,
     EVENT_SCHEMA_REPLAY_V12,
+        EVENT_SCHEMA_REPLAY_V13,
     }
 )
 _ARTIFACT_EVENT_SCHEMAS: Final[frozenset[int]] = frozenset(
@@ -151,6 +154,7 @@ _ARTIFACT_EVENT_SCHEMAS: Final[frozenset[int]] = frozenset(
         EVENT_SCHEMA_REPLAY_V10,
         EVENT_SCHEMA_REPLAY_V11,
     EVENT_SCHEMA_REPLAY_V12,
+        EVENT_SCHEMA_REPLAY_V13,
     }
 )
 _LIFECYCLE_EVENT_SCHEMAS: Final[frozenset[int]] = frozenset(
@@ -159,6 +163,7 @@ _LIFECYCLE_EVENT_SCHEMAS: Final[frozenset[int]] = frozenset(
         EVENT_SCHEMA_REPLAY_V10,
         EVENT_SCHEMA_REPLAY_V11,
         EVENT_SCHEMA_REPLAY_V12,
+        EVENT_SCHEMA_REPLAY_V13,
     }
 )
 _NEW_AGENT_INIT_EVENT_SCHEMAS: Final[frozenset[int]] = frozenset(
@@ -166,13 +171,14 @@ _NEW_AGENT_INIT_EVENT_SCHEMAS: Final[frozenset[int]] = frozenset(
         EVENT_SCHEMA_REPLAY_V10,
         EVENT_SCHEMA_REPLAY_V11,
         EVENT_SCHEMA_REPLAY_V12,
+        EVENT_SCHEMA_REPLAY_V13,
     }
 )
 _KINSHIP_EVENT_SCHEMAS: Final[frozenset[int]] = frozenset(
-    {EVENT_SCHEMA_REPLAY_V11, EVENT_SCHEMA_REPLAY_V12}
+    {EVENT_SCHEMA_REPLAY_V11, EVENT_SCHEMA_REPLAY_V12, EVENT_SCHEMA_REPLAY_V13}
 )
 _DEPENDENCY_CARE_EVENT_SCHEMAS: Final[frozenset[int]] = frozenset(
-    {EVENT_SCHEMA_REPLAY_V12}
+    {EVENT_SCHEMA_REPLAY_V12, EVENT_SCHEMA_REPLAY_V13}
 )
 CURRENT_PHYSICAL_EVENT_SCHEMA_VERSION: Final[int] = EVENT_SCHEMA_REPLAY_V5
 _LOG: Final[logging.Logger] = logging.getLogger("world.events")
@@ -1206,6 +1212,8 @@ class ArtifactDestroyed:
     artifact_kind: ArtifactKind
     content_revision: int
     success: bool = True
+    tombstone: bool = False
+    integrity: str | None = None
     kind: Literal["artifact_destroyed"] = field(
         default="artifact_destroyed", init=False
     )
@@ -1225,6 +1233,178 @@ class ArtifactDestroyed:
         )
         if _require_success("ArtifactDestroyed.success", self.success) is not True:
             raise ValueError("ArtifactDestroyed does not emit a failure detail")
+        if type(self.tombstone) is not bool:
+            raise TypeError("ArtifactDestroyed.tombstone must be bool")
+        if self.integrity is not None:
+            if type(self.integrity) is not str or not self.integrity:
+                raise TypeError("ArtifactDestroyed.integrity must be str or None")
+            if self.tombstone and self.integrity != "destroyed":
+                raise ValueError(
+                    "ArtifactDestroyed.integrity must be 'destroyed' when tombstone"
+                )
+        elif self.tombstone:
+            object.__setattr__(self, "integrity", "destroyed")
+        _reject_presentation_fields(self.kind, self.__slots__)
+
+
+@dataclass(frozen=True, slots=True)
+class ArtifactCopied:
+    """Durable copy lineage facts (replay-v13+). Marks stay off the event."""
+
+    child_artifact_id: EntityId
+    parent_artifact_id: EntityId
+    source_artifact_id: EntityId
+    fidelity_mode: str
+    copy_generation: int
+    content_revision: int
+    record_genre: str
+    success: bool = True
+    kind: Literal["artifact_copied"] = field(default="artifact_copied", init=False)
+
+    def __post_init__(self) -> None:
+        for name in (
+            "child_artifact_id",
+            "parent_artifact_id",
+            "source_artifact_id",
+        ):
+            if type(getattr(self, name)) is not EntityId:
+                raise TypeError(f"ArtifactCopied.{name} must be EntityId")
+        if type(self.fidelity_mode) is not str or not self.fidelity_mode:
+            raise TypeError("ArtifactCopied.fidelity_mode must be a non-empty str")
+        object.__setattr__(
+            self,
+            "copy_generation",
+            require_exact_nonneg_int(
+                "ArtifactCopied.copy_generation", self.copy_generation
+            ),
+        )
+        object.__setattr__(
+            self,
+            "content_revision",
+            _require_content_revision(
+                "ArtifactCopied.content_revision", self.content_revision
+            ),
+        )
+        if type(self.record_genre) is not str or not self.record_genre:
+            raise TypeError("ArtifactCopied.record_genre must be a non-empty str")
+        if _require_success("ArtifactCopied.success", self.success) is not True:
+            raise ValueError("ArtifactCopied does not emit a failure detail")
+        _reject_presentation_fields(self.kind, self.__slots__)
+
+
+@dataclass(frozen=True, slots=True)
+class ArtifactAnnotated:
+    artifact_id: EntityId
+    annotation_revisions: int
+    content_revision: int
+    integrity: str
+    success: bool = True
+    kind: Literal["artifact_annotated"] = field(
+        default="artifact_annotated", init=False
+    )
+
+    def __post_init__(self) -> None:
+        if type(self.artifact_id) is not EntityId:
+            raise TypeError("ArtifactAnnotated.artifact_id must be EntityId")
+        object.__setattr__(
+            self,
+            "annotation_revisions",
+            require_exact_nonneg_int(
+                "ArtifactAnnotated.annotation_revisions", self.annotation_revisions
+            ),
+        )
+        object.__setattr__(
+            self,
+            "content_revision",
+            _require_content_revision(
+                "ArtifactAnnotated.content_revision", self.content_revision
+            ),
+        )
+        if type(self.integrity) is not str or not self.integrity:
+            raise TypeError("ArtifactAnnotated.integrity must be a non-empty str")
+        if _require_success("ArtifactAnnotated.success", self.success) is not True:
+            raise ValueError("ArtifactAnnotated does not emit a failure detail")
+        _reject_presentation_fields(self.kind, self.__slots__)
+
+
+@dataclass(frozen=True, slots=True)
+class ArtifactDamaged:
+    artifact_id: EntityId
+    prior_integrity: str
+    next_integrity: str
+    lost_mark_count_delta: int
+    content_revision: int
+    success: bool = True
+    kind: Literal["artifact_damaged"] = field(default="artifact_damaged", init=False)
+
+    def __post_init__(self) -> None:
+        if type(self.artifact_id) is not EntityId:
+            raise TypeError("ArtifactDamaged.artifact_id must be EntityId")
+        for name in ("prior_integrity", "next_integrity"):
+            value = getattr(self, name)
+            if type(value) is not str or not value:
+                raise TypeError(f"ArtifactDamaged.{name} must be a non-empty str")
+        object.__setattr__(
+            self,
+            "lost_mark_count_delta",
+            require_exact_nonneg_int(
+                "ArtifactDamaged.lost_mark_count_delta", self.lost_mark_count_delta
+            ),
+        )
+        object.__setattr__(
+            self,
+            "content_revision",
+            _require_content_revision(
+                "ArtifactDamaged.content_revision", self.content_revision
+            ),
+        )
+        if _require_success("ArtifactDamaged.success", self.success) is not True:
+            raise ValueError("ArtifactDamaged does not emit a failure detail")
+        _reject_presentation_fields(self.kind, self.__slots__)
+
+
+@dataclass(frozen=True, slots=True)
+class ArtifactPartiallyLost:
+    artifact_id: EntityId
+    marks_remaining: int
+    lost_mark_count: int
+    content_revision: int
+    integrity: str
+    success: bool = True
+    kind: Literal["artifact_partially_lost"] = field(
+        default="artifact_partially_lost", init=False
+    )
+
+    def __post_init__(self) -> None:
+        if type(self.artifact_id) is not EntityId:
+            raise TypeError("ArtifactPartiallyLost.artifact_id must be EntityId")
+        object.__setattr__(
+            self,
+            "marks_remaining",
+            require_exact_nonneg_int(
+                "ArtifactPartiallyLost.marks_remaining", self.marks_remaining
+            ),
+        )
+        object.__setattr__(
+            self,
+            "lost_mark_count",
+            require_exact_nonneg_int(
+                "ArtifactPartiallyLost.lost_mark_count", self.lost_mark_count
+            ),
+        )
+        object.__setattr__(
+            self,
+            "content_revision",
+            _require_content_revision(
+                "ArtifactPartiallyLost.content_revision", self.content_revision
+            ),
+        )
+        if type(self.integrity) is not str or not self.integrity:
+            raise TypeError("ArtifactPartiallyLost.integrity must be a non-empty str")
+        if _require_success(
+            "ArtifactPartiallyLost.success", self.success
+        ) is not True:
+            raise ValueError("ArtifactPartiallyLost does not emit a failure detail")
         _reject_presentation_fields(self.kind, self.__slots__)
 
 
@@ -1558,6 +1738,10 @@ EventDetails = (
     | ArtifactModified
     | ArtifactMoved
     | ArtifactDestroyed
+    | ArtifactCopied
+    | ArtifactAnnotated
+    | ArtifactDamaged
+    | ArtifactPartiallyLost
     | AgentCreated
     | AgentEnteredWorld
     | AgentInitializationRecorded
@@ -1605,6 +1789,10 @@ _DETAIL_TYPES: Final[frozenset[type]] = frozenset(
         ArtifactModified,
         ArtifactMoved,
         ArtifactDestroyed,
+        ArtifactCopied,
+        ArtifactAnnotated,
+        ArtifactDamaged,
+        ArtifactPartiallyLost,
         AgentCreated,
         AgentEnteredWorld,
         AgentInitializationRecorded,
@@ -1644,7 +1832,24 @@ _ARTIFACT_DETAIL_TYPES: Final[frozenset[type]] = frozenset(
         ArtifactModified,
         ArtifactMoved,
         ArtifactDestroyed,
+        ArtifactCopied,
+        ArtifactAnnotated,
+        ArtifactDamaged,
+        ArtifactPartiallyLost,
     }
+)
+
+_DURABLE_RECORD_DETAIL_TYPES: Final[frozenset[type]] = frozenset(
+    {
+        ArtifactCopied,
+        ArtifactAnnotated,
+        ArtifactDamaged,
+        ArtifactPartiallyLost,
+    }
+)
+
+_DURABLE_RECORD_EVENT_SCHEMAS: Final[frozenset[int]] = frozenset(
+    {EVENT_SCHEMA_REPLAY_V13}
 )
 
 _LIFECYCLE_DETAIL_TYPES: Final[frozenset[type]] = frozenset(
@@ -1721,6 +1926,13 @@ def _artifact_effect_complete(details: EventDetails) -> bool:
         case ArtifactDestroyed(success=success):
             return success is True
         case (
+            ArtifactCopied(success=success)
+            | ArtifactAnnotated(success=success)
+            | ArtifactDamaged(success=success)
+            | ArtifactPartiallyLost(success=success)
+        ):
+            return success is True
+        case (
             ArtifactCreated(
                 success=success,
                 resulting_location_id=location_id,
@@ -1751,9 +1963,18 @@ def _payload_effect_complete(details: EventDetails, *, schema_version: int) -> b
         return schema_version in _NEW_AGENT_INIT_EVENT_SCHEMAS
     if type(details) in _LIFECYCLE_DETAIL_TYPES:
         return schema_version in _LIFECYCLE_EVENT_SCHEMAS
+    if type(details) in _DURABLE_RECORD_DETAIL_TYPES:
+        if schema_version not in _DURABLE_RECORD_EVENT_SCHEMAS:
+            return False
+        return _artifact_effect_complete(details)
     if type(details) in _ARTIFACT_DETAIL_TYPES:
         if schema_version not in _ARTIFACT_EVENT_SCHEMAS:
             return False
+        if type(details) is ArtifactDestroyed and (
+            details.tombstone or details.integrity is not None
+        ):
+            if schema_version not in _DURABLE_RECORD_EVENT_SCHEMAS:
+                return False
         return _artifact_effect_complete(details)
     if type(details) in _ENVIRONMENT_DETAIL_TYPES:
         if schema_version not in _ENVIRONMENT_EVENT_SCHEMAS:
@@ -1958,7 +2179,12 @@ def target_id_for_details(details: EventDetails) -> EntityId | None:
             | ArtifactModified(artifact_id=artifact_id)
             | ArtifactMoved(artifact_id=artifact_id)
             | ArtifactDestroyed(artifact_id=artifact_id)
+            | ArtifactAnnotated(artifact_id=artifact_id)
+            | ArtifactDamaged(artifact_id=artifact_id)
+            | ArtifactPartiallyLost(artifact_id=artifact_id)
         ):
+            return artifact_id
+        case ArtifactCopied(child_artifact_id=artifact_id):
             return artifact_id
         case (
             AgentCreated(body_id=body_id)
@@ -2063,6 +2289,15 @@ class WorldEvent:
                     self.schema_version,
                 )
                 raise ValueError(EventValidationCode.INVALID_SCHEMA_VERSION.value)
+        if type(self.details) in _DURABLE_RECORD_DETAIL_TYPES:
+            if self.schema_version not in _DURABLE_RECORD_EVENT_SCHEMAS:
+                _LOG.error(
+                    "invalid_event_schema_version kind=%s schema_version=%s "
+                    "reason_code=durable_records_requires_v13",
+                    self.details.kind,
+                    self.schema_version,
+                )
+                raise ValueError(EventValidationCode.INVALID_SCHEMA_VERSION.value)
         if type(self.details) in _ARTIFACT_DETAIL_TYPES:
             if self.schema_version not in _ARTIFACT_EVENT_SCHEMAS:
                 _LOG.error(
@@ -2071,6 +2306,17 @@ class WorldEvent:
                     self.schema_version,
                 )
                 raise ValueError(EventValidationCode.INVALID_SCHEMA_VERSION.value)
+            if type(self.details) is ArtifactDestroyed and (
+                self.details.tombstone or self.details.integrity is not None
+            ):
+                if self.schema_version not in _DURABLE_RECORD_EVENT_SCHEMAS:
+                    _LOG.error(
+                        "invalid_event_schema_version kind=%s schema_version=%s "
+                        "reason_code=durable_tombstone_requires_v13",
+                        self.details.kind,
+                        self.schema_version,
+                    )
+                    raise ValueError(EventValidationCode.INVALID_SCHEMA_VERSION.value)
         if type(self.details) in _NEW_AGENT_INIT_DETAIL_TYPES:
             if self.schema_version not in _NEW_AGENT_INIT_EVENT_SCHEMAS:
                 _LOG.error(
@@ -2155,11 +2401,14 @@ class WorldEvent:
                 self.details.kind,
             )
         if type(self.details) in _ARTIFACT_DETAIL_TYPES:
+            artifact_token = getattr(self.details, "artifact_id", None)
+            if artifact_token is None:
+                artifact_token = getattr(self.details, "child_artifact_id", None)
             _LOG.debug(
                 "artifact_event_built schema_version=%s kind=%s artifact_id=%s",
                 self.schema_version,
                 self.details.kind,
-                self.details.artifact_id.value,
+                None if artifact_token is None else artifact_token.value,
             )
 
     @property
@@ -2449,7 +2698,17 @@ def build_occurrence_context(
             | ArtifactModified(artifact_id=artifact_id)
             | ArtifactMoved(artifact_id=artifact_id)
             | ArtifactDestroyed(artifact_id=artifact_id)
+            | ArtifactAnnotated(artifact_id=artifact_id)
+            | ArtifactDamaged(artifact_id=artifact_id)
+            | ArtifactPartiallyLost(artifact_id=artifact_id)
         ):
+            return OccurrenceContext(
+                origin_location_id=origin_location_id,
+                destination_location_id=destination_location_id,
+                affected_entity_ids=(artifact_id,),
+                private_recipient_ids=(),
+            )
+        case ArtifactCopied(child_artifact_id=artifact_id):
             return OccurrenceContext(
                 origin_location_id=origin_location_id,
                 destination_location_id=destination_location_id,

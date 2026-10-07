@@ -146,13 +146,19 @@ from world.events import (
     EVENT_SCHEMA_REPLAY_V9,
     EVENT_SCHEMA_REPLAY_V10,
     EVENT_SCHEMA_REPLAY_V11,
+    EVENT_SCHEMA_REPLAY_V12,
+    EVENT_SCHEMA_REPLAY_V13,
     AgentCreated,
     AgentEnteredWorld,
     AgentInitializationRecorded,
+    ArtifactAnnotated,
+    ArtifactCopied,
     ArtifactCreated,
+    ArtifactDamaged,
     ArtifactDestroyed,
     ArtifactModified,
     ArtifactMoved,
+    ArtifactPartiallyLost,
     Asked,
     Attacked,
     CraftStarted,
@@ -4367,12 +4373,89 @@ def _encode_event_details(value: object) -> dict[str, Any]:
             artifact_kind=artifact_kind,
             content_revision=content_revision,
             success=success,
+            tombstone=tombstone,
+            integrity=integrity,
         ):
-            return {
+            payload = {
                 "artifact_id": artifact_id.value,
                 "artifact_kind": artifact_kind.value,
                 "content_revision": content_revision,
                 "kind": "artifact_destroyed",
+                "success": success,
+            }
+            if tombstone or integrity is not None:
+                payload["tombstone"] = tombstone
+                if integrity is not None:
+                    payload["integrity"] = integrity
+            return payload
+        case ArtifactCopied(
+            child_artifact_id=child_artifact_id,
+            parent_artifact_id=parent_artifact_id,
+            source_artifact_id=source_artifact_id,
+            fidelity_mode=fidelity_mode,
+            copy_generation=copy_generation,
+            content_revision=content_revision,
+            record_genre=record_genre,
+            success=success,
+        ):
+            return {
+                "child_artifact_id": child_artifact_id.value,
+                "content_revision": content_revision,
+                "copy_generation": copy_generation,
+                "fidelity_mode": fidelity_mode,
+                "kind": "artifact_copied",
+                "parent_artifact_id": parent_artifact_id.value,
+                "record_genre": record_genre,
+                "source_artifact_id": source_artifact_id.value,
+                "success": success,
+            }
+        case ArtifactAnnotated(
+            artifact_id=artifact_id,
+            annotation_revisions=annotation_revisions,
+            content_revision=content_revision,
+            integrity=integrity,
+            success=success,
+        ):
+            return {
+                "annotation_revisions": annotation_revisions,
+                "artifact_id": artifact_id.value,
+                "content_revision": content_revision,
+                "integrity": integrity,
+                "kind": "artifact_annotated",
+                "success": success,
+            }
+        case ArtifactDamaged(
+            artifact_id=artifact_id,
+            prior_integrity=prior_integrity,
+            next_integrity=next_integrity,
+            lost_mark_count_delta=lost_mark_count_delta,
+            content_revision=content_revision,
+            success=success,
+        ):
+            return {
+                "artifact_id": artifact_id.value,
+                "content_revision": content_revision,
+                "kind": "artifact_damaged",
+                "lost_mark_count_delta": lost_mark_count_delta,
+                "next_integrity": next_integrity,
+                "prior_integrity": prior_integrity,
+                "success": success,
+            }
+        case ArtifactPartiallyLost(
+            artifact_id=artifact_id,
+            marks_remaining=marks_remaining,
+            lost_mark_count=lost_mark_count,
+            content_revision=content_revision,
+            integrity=integrity,
+            success=success,
+        ):
+            return {
+                "artifact_id": artifact_id.value,
+                "content_revision": content_revision,
+                "integrity": integrity,
+                "kind": "artifact_partially_lost",
+                "lost_mark_count": lost_mark_count,
+                "marks_remaining": marks_remaining,
                 "success": success,
             }
         case AgentCreated(
@@ -4667,15 +4750,108 @@ def _decode_artifact_details(
     if type(success) is not bool:
         raise DomainSerializationError("invalid_bool", f"{path}.success")
     if kind == "artifact_destroyed":
-        _require_keys(
-            fields,
-            {"artifact_id", "artifact_kind", "content_revision", "success"},
-            path=path,
-        )
+        base = {"artifact_id", "artifact_kind", "content_revision", "success"}
+        allowed = base | {"tombstone", "integrity"}
+        if set(fields) - allowed or not base.issubset(fields):
+            raise DomainSerializationError("invalid_fields", path)
+        tombstone = fields.get("tombstone", False)
+        if type(tombstone) is not bool:
+            raise DomainSerializationError("invalid_bool", f"{path}.tombstone")
+        integrity = fields.get("integrity")
+        if integrity is not None and type(integrity) is not str:
+            raise DomainSerializationError("invalid_string", f"{path}.integrity")
         return ArtifactDestroyed(
             EntityId(_str_field(fields, "artifact_id", path=path)),
             ArtifactKind(_str_field(fields, "artifact_kind", path=path)),
             _int_field(fields, "content_revision", path=path),
+            success,
+            tombstone=tombstone,
+            integrity=integrity,
+        )
+    if kind == "artifact_copied":
+        _require_keys(
+            fields,
+            {
+                "child_artifact_id",
+                "parent_artifact_id",
+                "source_artifact_id",
+                "fidelity_mode",
+                "copy_generation",
+                "content_revision",
+                "record_genre",
+                "success",
+            },
+            path=path,
+        )
+        return ArtifactCopied(
+            EntityId(_str_field(fields, "child_artifact_id", path=path)),
+            EntityId(_str_field(fields, "parent_artifact_id", path=path)),
+            EntityId(_str_field(fields, "source_artifact_id", path=path)),
+            _str_field(fields, "fidelity_mode", path=path),
+            _int_field(fields, "copy_generation", path=path),
+            _int_field(fields, "content_revision", path=path),
+            _str_field(fields, "record_genre", path=path),
+            success,
+        )
+    if kind == "artifact_annotated":
+        _require_keys(
+            fields,
+            {
+                "artifact_id",
+                "annotation_revisions",
+                "content_revision",
+                "integrity",
+                "success",
+            },
+            path=path,
+        )
+        return ArtifactAnnotated(
+            EntityId(_str_field(fields, "artifact_id", path=path)),
+            _int_field(fields, "annotation_revisions", path=path),
+            _int_field(fields, "content_revision", path=path),
+            _str_field(fields, "integrity", path=path),
+            success,
+        )
+    if kind == "artifact_damaged":
+        _require_keys(
+            fields,
+            {
+                "artifact_id",
+                "prior_integrity",
+                "next_integrity",
+                "lost_mark_count_delta",
+                "content_revision",
+                "success",
+            },
+            path=path,
+        )
+        return ArtifactDamaged(
+            EntityId(_str_field(fields, "artifact_id", path=path)),
+            _str_field(fields, "prior_integrity", path=path),
+            _str_field(fields, "next_integrity", path=path),
+            _int_field(fields, "lost_mark_count_delta", path=path),
+            _int_field(fields, "content_revision", path=path),
+            success,
+        )
+    if kind == "artifact_partially_lost":
+        _require_keys(
+            fields,
+            {
+                "artifact_id",
+                "marks_remaining",
+                "lost_mark_count",
+                "content_revision",
+                "integrity",
+                "success",
+            },
+            path=path,
+        )
+        return ArtifactPartiallyLost(
+            EntityId(_str_field(fields, "artifact_id", path=path)),
+            _int_field(fields, "marks_remaining", path=path),
+            _int_field(fields, "lost_mark_count", path=path),
+            _int_field(fields, "content_revision", path=path),
+            _str_field(fields, "integrity", path=path),
             success,
         )
     location_id: EntityId | None
@@ -5325,6 +5501,8 @@ def _decode_event_details(
                 EVENT_SCHEMA_REPLAY_V9,
                 EVENT_SCHEMA_REPLAY_V10,
                 EVENT_SCHEMA_REPLAY_V11,
+                EVENT_SCHEMA_REPLAY_V12,
+                EVENT_SCHEMA_REPLAY_V13,
             }:
                 raise DomainSerializationError("invalid_event_schema_version", path)
             return _decode_production_details(kind, fields, path=path)
@@ -5342,6 +5520,8 @@ def _decode_event_details(
                 EVENT_SCHEMA_REPLAY_V9,
                 EVENT_SCHEMA_REPLAY_V10,
                 EVENT_SCHEMA_REPLAY_V11,
+                EVENT_SCHEMA_REPLAY_V12,
+                EVENT_SCHEMA_REPLAY_V13,
             }:
                 raise DomainSerializationError("invalid_event_schema_version", path)
             return _decode_environment_details(kind, fields, path=path)
@@ -5350,13 +5530,26 @@ def _decode_event_details(
             "artifact_modified",
             "artifact_moved",
             "artifact_destroyed",
+            "artifact_copied",
+            "artifact_annotated",
+            "artifact_damaged",
+            "artifact_partially_lost",
         }:
             if schema_version not in {
                 EVENT_SCHEMA_REPLAY_V8,
                 EVENT_SCHEMA_REPLAY_V9,
                 EVENT_SCHEMA_REPLAY_V10,
                 EVENT_SCHEMA_REPLAY_V11,
+                EVENT_SCHEMA_REPLAY_V12,
+                EVENT_SCHEMA_REPLAY_V13,
             }:
+                raise DomainSerializationError("invalid_event_schema_version", path)
+            if kind in {
+                "artifact_copied",
+                "artifact_annotated",
+                "artifact_damaged",
+                "artifact_partially_lost",
+            } and schema_version != EVENT_SCHEMA_REPLAY_V13:
                 raise DomainSerializationError("invalid_event_schema_version", path)
             return _decode_artifact_details(kind, fields, path=path)
         if kind in {
@@ -5368,6 +5561,8 @@ def _decode_event_details(
                 EVENT_SCHEMA_REPLAY_V9,
                 EVENT_SCHEMA_REPLAY_V10,
                 EVENT_SCHEMA_REPLAY_V11,
+                EVENT_SCHEMA_REPLAY_V12,
+                EVENT_SCHEMA_REPLAY_V13,
             }:
                 raise DomainSerializationError("invalid_event_schema_version", path)
             return _decode_lifecycle_details(kind, fields, path=path)
@@ -5375,6 +5570,8 @@ def _decode_event_details(
             if schema_version not in {
                 EVENT_SCHEMA_REPLAY_V10,
                 EVENT_SCHEMA_REPLAY_V11,
+                EVENT_SCHEMA_REPLAY_V12,
+                EVENT_SCHEMA_REPLAY_V13,
             }:
                 raise DomainSerializationError("invalid_event_schema_version", path)
             return _decode_lifecycle_details(kind, fields, path=path)
@@ -5404,6 +5601,8 @@ def _encode_world_event(value: WorldEvent) -> dict[str, Any]:
         EVENT_SCHEMA_REPLAY_V9,
         EVENT_SCHEMA_REPLAY_V10,
         EVENT_SCHEMA_REPLAY_V11,
+                EVENT_SCHEMA_REPLAY_V12,
+                EVENT_SCHEMA_REPLAY_V13,
     }:
         raise DomainSerializationError(
             "invalid_event_schema_version",
@@ -5423,6 +5622,8 @@ def _encode_world_event(value: WorldEvent) -> dict[str, Any]:
         EVENT_SCHEMA_REPLAY_V9,
         EVENT_SCHEMA_REPLAY_V10,
         EVENT_SCHEMA_REPLAY_V11,
+                EVENT_SCHEMA_REPLAY_V12,
+                EVENT_SCHEMA_REPLAY_V13,
     }:
         raise DomainSerializationError(
             "invalid_event_schema_version",
@@ -5433,12 +5634,28 @@ def _encode_world_event(value: WorldEvent) -> dict[str, Any]:
         "artifact_modified",
         "artifact_moved",
         "artifact_destroyed",
+        "artifact_copied",
+        "artifact_annotated",
+        "artifact_damaged",
+        "artifact_partially_lost",
     } and value.schema_version not in {
         EVENT_SCHEMA_REPLAY_V8,
         EVENT_SCHEMA_REPLAY_V9,
         EVENT_SCHEMA_REPLAY_V10,
         EVENT_SCHEMA_REPLAY_V11,
+        EVENT_SCHEMA_REPLAY_V12,
+        EVENT_SCHEMA_REPLAY_V13,
     }:
+        raise DomainSerializationError(
+            "invalid_event_schema_version",
+            "$.schema_version",
+        )
+    if details_kind in {
+        "artifact_copied",
+        "artifact_annotated",
+        "artifact_damaged",
+        "artifact_partially_lost",
+    } and value.schema_version != EVENT_SCHEMA_REPLAY_V13:
         raise DomainSerializationError(
             "invalid_event_schema_version",
             "$.schema_version",
@@ -5451,6 +5668,8 @@ def _encode_world_event(value: WorldEvent) -> dict[str, Any]:
         EVENT_SCHEMA_REPLAY_V9,
         EVENT_SCHEMA_REPLAY_V10,
         EVENT_SCHEMA_REPLAY_V11,
+                EVENT_SCHEMA_REPLAY_V12,
+                EVENT_SCHEMA_REPLAY_V13,
     }:
         raise DomainSerializationError(
             "invalid_event_schema_version",
@@ -5459,6 +5678,8 @@ def _encode_world_event(value: WorldEvent) -> dict[str, Any]:
     if details_kind == "agent_initialization_recorded" and value.schema_version not in {
         EVENT_SCHEMA_REPLAY_V10,
         EVENT_SCHEMA_REPLAY_V11,
+                EVENT_SCHEMA_REPLAY_V12,
+                EVENT_SCHEMA_REPLAY_V13,
     }:
         raise DomainSerializationError(
             "invalid_event_schema_version",
@@ -5635,6 +5856,8 @@ def _decode_world_event(data: dict[str, Any], *, path: str) -> WorldEvent:
             EVENT_SCHEMA_REPLAY_V9,
             EVENT_SCHEMA_REPLAY_V10,
             EVENT_SCHEMA_REPLAY_V11,
+                EVENT_SCHEMA_REPLAY_V12,
+                EVENT_SCHEMA_REPLAY_V13,
         }:
             raise DomainSerializationError("unsupported_schema_version", path)
         actor_raw = data["actor_id"]

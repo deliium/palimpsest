@@ -50,7 +50,12 @@ from simulation.serialization import (
     _encode_resource,
     _encode_weather,
 )
-from world.artifacts import ArtifactKind, InformationArtifact
+from world.artifacts import (
+    ArtifactKind,
+    DurableRecordGenre,
+    InformationArtifact,
+    RecordIntegrity,
+)
 from world.environment import ActiveHazard, HazardKind
 from world.events import (
     EVENT_SCHEMA_REPLAY_V2,
@@ -1112,6 +1117,19 @@ def _decode_lifecycle_record(data: dict[str, Any], *, path: str) -> object:
         raise PersistenceSerializationError("invalid_model", path) from exc
 
 
+_DURABLE_ARTIFACT_KEYS: frozenset[str] = frozenset(
+    {
+        "record_genre",
+        "parent_artifact_id",
+        "source_artifact_id",
+        "copy_generation",
+        "integrity",
+        "annotation_revisions",
+        "lost_mark_count",
+    }
+)
+
+
 def _encode_information_artifact(value: InformationArtifact) -> dict[str, Any]:
     payload: dict[str, Any] = {
         "artifact_id": value.artifact_id.value,
@@ -1125,6 +1143,21 @@ def _encode_information_artifact(value: InformationArtifact) -> dict[str, Any]:
         payload["location_id"] = value.location_id.value
     if value.holder_id is not None:
         payload["holder_id"] = value.holder_id.value
+    # Codec v10 additive durable fields; omitted when all defaults (v9 decode OK).
+    if value.record_genre is not None:
+        payload["record_genre"] = value.record_genre.value
+    if value.parent_artifact_id is not None:
+        payload["parent_artifact_id"] = value.parent_artifact_id.value
+    if value.source_artifact_id is not None:
+        payload["source_artifact_id"] = value.source_artifact_id.value
+    if value.copy_generation:
+        payload["copy_generation"] = value.copy_generation
+    if value.integrity is not RecordIntegrity.INTACT:
+        payload["integrity"] = value.integrity.value
+    if value.annotation_revisions:
+        payload["annotation_revisions"] = value.annotation_revisions
+    if value.lost_mark_count:
+        payload["lost_mark_count"] = value.lost_mark_count
     return payload
 
 
@@ -1139,7 +1172,7 @@ def _decode_information_artifact(
         "content",
         "content_revision",
     }
-    allowed = base | {"location_id", "holder_id"}
+    allowed = base | {"location_id", "holder_id"} | _DURABLE_ARTIFACT_KEYS
     if set(data) - allowed or not base.issubset(data):
         raise PersistenceSerializationError("invalid_fields", path)
     location_raw = data.get("location_id")
@@ -1158,6 +1191,47 @@ def _decode_information_artifact(
         holder_id = EntityId(holder_raw)
     else:
         raise PersistenceSerializationError("invalid_string", f"{path}.holder_id")
+
+    genre_raw = data.get("record_genre")
+    record_genre: DurableRecordGenre | None
+    if genre_raw is None:
+        record_genre = None
+    elif isinstance(genre_raw, str):
+        try:
+            record_genre = DurableRecordGenre(genre_raw)
+        except ValueError as exc:
+            raise PersistenceSerializationError(
+                "invalid_string", f"{path}.record_genre"
+            ) from exc
+    else:
+        raise PersistenceSerializationError("invalid_string", f"{path}.record_genre")
+
+    def _optional_entity(key: str) -> EntityId | None:
+        raw = data.get(key)
+        if raw is None:
+            return None
+        if isinstance(raw, str):
+            return EntityId(raw)
+        raise PersistenceSerializationError("invalid_string", f"{path}.{key}")
+
+    parent_artifact_id = _optional_entity("parent_artifact_id")
+    source_artifact_id = _optional_entity("source_artifact_id")
+    copy_generation = int(data.get("copy_generation", 0))
+    integrity_raw = data.get("integrity")
+    if integrity_raw is None:
+        integrity = RecordIntegrity.INTACT
+    elif isinstance(integrity_raw, str):
+        try:
+            integrity = RecordIntegrity(integrity_raw)
+        except ValueError as exc:
+            raise PersistenceSerializationError(
+                "invalid_string", f"{path}.integrity"
+            ) from exc
+    else:
+        raise PersistenceSerializationError("invalid_string", f"{path}.integrity")
+    annotation_revisions = int(data.get("annotation_revisions", 0))
+    lost_mark_count = int(data.get("lost_mark_count", 0))
+
     try:
         return InformationArtifact(
             artifact_id=EntityId(_str_field(data, "artifact_id", path=path)),
@@ -1168,9 +1242,18 @@ def _decode_information_artifact(
             content_revision=_nonneg_int_field(data, "content_revision", path=path),
             location_id=location_id,
             holder_id=holder_id,
+            record_genre=record_genre,
+            parent_artifact_id=parent_artifact_id,
+            source_artifact_id=source_artifact_id,
+            copy_generation=copy_generation,
+            integrity=integrity,
+            annotation_revisions=annotation_revisions,
+            lost_mark_count=lost_mark_count,
         )
     except DomainSerializationError as exc:
         raise _map_domain_error(exc) from exc
+    except (TypeError, ValueError) as exc:
+        raise PersistenceSerializationError("invalid_model", path) from exc
 
 
 def _encode_active_hazard(value: ActiveHazard) -> dict[str, Any]:
