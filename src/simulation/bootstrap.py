@@ -16,6 +16,7 @@ from agents.models import AgentId
 from world.artifacts import InformationArtifact
 from world.identifiers import EntityId, WorldId, WorldRevision
 from world.models import AgentBody, Item, Location, Resource, Weather
+from world.repositories import KnowledgeRepository
 
 if TYPE_CHECKING:
     from world._state import World
@@ -92,6 +93,7 @@ class WorldBootstrap:
     weather: Sequence[Weather] = field(default_factory=tuple)
     registrations: Sequence[AgentRegistration] = field(default_factory=tuple)
     artifacts: Sequence[InformationArtifact] = field(default_factory=tuple)
+    repositories: Sequence[KnowledgeRepository] = field(default_factory=tuple)
 
     def __post_init__(self) -> None:
         if type(self.world_id) is not WorldId:
@@ -119,6 +121,11 @@ class WorldBootstrap:
             self.artifacts,
             model_type=InformationArtifact,
         )
+        repositories = _copy_models(
+            "WorldBootstrap.repositories",
+            self.repositories,
+            model_type=KnowledgeRepository,
+        )
         object.__setattr__(self, "locations", locations)
         object.__setattr__(self, "items", items)
         object.__setattr__(self, "resources", resources)
@@ -126,6 +133,7 @@ class WorldBootstrap:
         object.__setattr__(self, "weather", weather)
         object.__setattr__(self, "registrations", registrations)
         object.__setattr__(self, "artifacts", artifacts)
+        object.__setattr__(self, "repositories", repositories)
         _validate_registrations_against_models(
             locations=locations,
             items=items,
@@ -146,6 +154,7 @@ class WorldBootstrap:
                 bodies=bodies,
                 weather=weather,
                 artifacts=artifacts,
+                repositories=repositories,
             )
         except ValueError as exc:
             message = str(exc)
@@ -212,6 +221,7 @@ def _materialize_world(bootstrap: WorldBootstrap) -> World:
             bodies=bootstrap.bodies,
             weather=bootstrap.weather,
             artifacts=bootstrap.artifacts,
+            repositories=bootstrap.repositories,
         )
     except ValueError as exc:
         message = str(exc)
@@ -245,6 +255,7 @@ def _bootstrap_from_snapshot(snapshot: object) -> WorldBootstrap:
         weather=snapshot.weather,
         registrations=snapshot.registrations,
         artifacts=snapshot.artifacts,
+        repositories=snapshot.repositories,
     )
 
 

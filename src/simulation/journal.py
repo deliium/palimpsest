@@ -50,6 +50,7 @@ from simulation.serialization import (
     _encode_resource,
     _encode_weather,
 )
+from world.repositories import KnowledgeRepository, RepositoryIndexEntry, RepositoryAccessMode, RepositoryStatus
 from world.artifacts import (
     ArtifactKind,
     DurableRecordGenre,
@@ -436,6 +437,7 @@ def bind_snapshot_commit_hash(
         lifecycle_records=snapshot.lifecycle_records,
         kinship_edges=snapshot.kinship_edges,
         dependency_need_registers=snapshot.dependency_need_registers,
+        repositories=snapshot.repositories,
     )
     return WorldSnapshot(
         snapshot_id=draft.snapshot_id,
@@ -465,6 +467,7 @@ def bind_snapshot_commit_hash(
         lifecycle_records=draft.lifecycle_records,
         kinship_edges=draft.kinship_edges,
         dependency_need_registers=draft.dependency_need_registers,
+        repositories=draft.repositories,
     )
 
 
@@ -749,7 +752,7 @@ def _encode_world_snapshot(
             "weather": [_encode_weather(item) for item in value.weather],
             "world_id": value.world_id.value,
         }
-        if value.persistence_codec_version in {"v3", "v4", "v5", "v6", "v7", "v8", "v9"}:
+        if value.persistence_codec_version in {"v3", "v4", "v5", "v6", "v7", "v8", "v9", "v10", "v11"}:
             payload["structures"] = [
                 _encode_structure(item) for item in value.structures
             ]
@@ -759,27 +762,41 @@ def _encode_world_snapshot(
             payload["tool_marks"] = [
                 _encode_tool_mark(item) for item in value.tool_marks
             ]
-        if value.persistence_codec_version in {"v4", "v5", "v6", "v7", "v8", "v9"}:
+        if value.persistence_codec_version in {"v4", "v5", "v6", "v7", "v8", "v9", "v10", "v11"}:
             payload["active_hazards"] = [
                 _encode_active_hazard(item) for item in value.active_hazards
             ]
-        if value.persistence_codec_version in {"v5", "v6", "v7", "v8", "v9"}:
+        if value.persistence_codec_version in {"v5", "v6", "v7", "v8", "v9", "v10", "v11"}:
             payload["artifacts"] = [
                 _encode_information_artifact(item) for item in value.artifacts
             ]
-        if value.persistence_codec_version in {"v6", "v7", "v8", "v9"}:
+        if value.persistence_codec_version in {"v6", "v7", "v8", "v9", "v10", "v11"}:
             payload["lifecycle_records"] = [
                 _encode_lifecycle_record(item) for item in value.lifecycle_records
             ]
-        if value.persistence_codec_version in {"v8", "v9"}:
+        if value.persistence_codec_version in {"v8", "v9", "v10", "v11"}:
             payload["kinship_edges"] = [
                 _encode_kinship_edge(item) for item in value.kinship_edges
             ]
-        if value.persistence_codec_version == "v9":
+        if value.persistence_codec_version in {"v9", "v10", "v11"}:
             payload["dependency_need_registers"] = [
                 _encode_dependency_need_register(item)
                 for item in value.dependency_need_registers
             ]
+        if value.persistence_codec_version == "v11":
+            payload["repositories"] = [
+                _encode_knowledge_repository(item) for item in value.repositories
+            ]
+            custody = sum(
+                1
+                for item in value.artifacts
+                if item.custodian_repository_id is not None
+            )
+            _LOGGER.debug(
+                "repository_snapshot_encode repository_count=%s custody_count=%s",
+                len(value.repositories),
+                custody,
+            )
     except DomainSerializationError as exc:
         raise _map_domain_error(exc) from exc
     if include_integrity_hash:
@@ -810,18 +827,20 @@ def _decode_world_snapshot(data: dict[str, Any], *, path: str) -> WorldSnapshot:
         "integrity_hash",
         "predecessor_commit_hash",
     }
-    if codec in {"v3", "v4", "v5", "v6", "v7", "v8", "v9"}:
+    if codec in {"v3", "v4", "v5", "v6", "v7", "v8", "v9", "v10", "v11"}:
         keys |= {"structures", "production_jobs", "tool_marks"}
-    if codec in {"v4", "v5", "v6", "v7", "v8", "v9"}:
+    if codec in {"v4", "v5", "v6", "v7", "v8", "v9", "v10", "v11"}:
         keys.add("active_hazards")
-    if codec in {"v5", "v6", "v7", "v8", "v9"}:
+    if codec in {"v5", "v6", "v7", "v8", "v9", "v10", "v11"}:
         keys.add("artifacts")
-    if codec in {"v6", "v7", "v8", "v9"}:
+    if codec in {"v6", "v7", "v8", "v9", "v10", "v11"}:
         keys.add("lifecycle_records")
-    if codec in {"v8", "v9"}:
+    if codec in {"v8", "v9", "v10", "v11"}:
         keys.add("kinship_edges")
-    if codec == "v9":
+    if codec in {"v9", "v10", "v11"}:
         keys.add("dependency_need_registers")
+    if codec == "v11":
+        keys.add("repositories")
     _require_keys(data, keys, path=path)
     config_raw = data["config"]
     if not isinstance(config_raw, dict):
@@ -837,7 +856,7 @@ def _decode_world_snapshot(data: dict[str, Any], *, path: str) -> WorldSnapshot:
             raise PersistenceSerializationError(
                 "invalid_string", f"{path}.predecessor_commit_hash"
             )
-        return WorldSnapshot(
+        snapshot = WorldSnapshot(
             snapshot_id=SnapshotId(_str_field(data, "snapshot_id", path=path)),
             run_id=RunId(_str_field(data, "run_id", path=path)),
             world_id=WorldId(_str_field(data, "world_id", path=path)),
@@ -878,60 +897,85 @@ def _decode_world_snapshot(data: dict[str, Any], *, path: str) -> WorldSnapshot:
             structures=_decode_object_list(
                 data["structures"], _decode_structure, path=f"{path}.structures"
             )
-            if codec in {"v3", "v4", "v5", "v6", "v7", "v8", "v9"}
+            if codec in {"v3", "v4", "v5", "v6", "v7", "v8", "v9", "v10", "v11"}
             else (),
             production_jobs=_decode_object_list(
                 data["production_jobs"],
                 _decode_production_job,
                 path=f"{path}.production_jobs",
             )
-            if codec in {"v3", "v4", "v5", "v6", "v7", "v8", "v9"}
+            if codec in {"v3", "v4", "v5", "v6", "v7", "v8", "v9", "v10", "v11"}
             else (),
             tool_marks=_decode_object_list(
                 data["tool_marks"], _decode_tool_mark, path=f"{path}.tool_marks"
             )
-            if codec in {"v3", "v4", "v5", "v6", "v7", "v8", "v9"}
+            if codec in {"v3", "v4", "v5", "v6", "v7", "v8", "v9", "v10", "v11"}
             else (),
             active_hazards=_decode_object_list(
                 data["active_hazards"],
                 _decode_active_hazard,
                 path=f"{path}.active_hazards",
             )
-            if codec in {"v4", "v5", "v6", "v7", "v8", "v9"}
+            if codec in {"v4", "v5", "v6", "v7", "v8", "v9", "v10", "v11"}
             else (),
             artifacts=_decode_object_list(
                 data["artifacts"],
                 _decode_information_artifact,
                 path=f"{path}.artifacts",
             )
-            if codec in {"v5", "v6", "v7", "v8", "v9"}
+            if codec in {"v5", "v6", "v7", "v8", "v9", "v10", "v11"}
             else (),
             lifecycle_records=_decode_object_list(
                 data["lifecycle_records"],
                 _decode_lifecycle_record,
                 path=f"{path}.lifecycle_records",
             )
-            if codec in {"v6", "v7", "v8", "v9"}
+            if codec in {"v6", "v7", "v8", "v9", "v10", "v11"}
             else (),
             kinship_edges=_decode_object_list(
                 data["kinship_edges"],
                 _decode_kinship_edge,
                 path=f"{path}.kinship_edges",
             )
-            if codec in {"v8", "v9"}
+            if codec in {"v8", "v9", "v10", "v11"}
             else (),
             dependency_need_registers=_decode_object_list(
                 data["dependency_need_registers"],
                 _decode_dependency_need_register,
                 path=f"{path}.dependency_need_registers",
             )
-            if codec == "v9"
+            if codec in {"v9", "v10", "v11"}
+            else (),
+            repositories=_decode_object_list(
+                data["repositories"],
+                _decode_knowledge_repository,
+                path=f"{path}.repositories",
+            )
+            if codec == "v11"
             else (),
         )
     except PersistenceSerializationError:
         raise
     except (TypeError, ValueError) as exc:
         raise PersistenceSerializationError("malformed_id", path) from exc
+    # Dual-key ≤v10 synthesizes empty repositories; v11 logs custody counts.
+    if codec == "v11":
+        custody = sum(
+            1
+            for item in snapshot.artifacts
+            if item.custodian_repository_id is not None
+        )
+        _LOGGER.debug(
+            "repository_snapshot_decode repository_count=%s custody_count=%s",
+            len(snapshot.repositories),
+            custody,
+        )
+    else:
+        _LOGGER.debug(
+            "repository_snapshot_decode repository_count=0 "
+            "custody_count=0 synthesized_empty=true",
+        )
+    return snapshot
 
 
 _LIFECYCLE_RECORD_KEYS_BASE: Final[frozenset[str]] = frozenset(
@@ -1126,6 +1170,7 @@ _DURABLE_ARTIFACT_KEYS: frozenset[str] = frozenset(
         "integrity",
         "annotation_revisions",
         "lost_mark_count",
+        "custodian_repository_id",
     }
 )
 
@@ -1158,6 +1203,8 @@ def _encode_information_artifact(value: InformationArtifact) -> dict[str, Any]:
         payload["annotation_revisions"] = value.annotation_revisions
     if value.lost_mark_count:
         payload["lost_mark_count"] = value.lost_mark_count
+    if value.custodian_repository_id is not None:
+        payload["custodian_repository_id"] = value.custodian_repository_id.value
     return payload
 
 
@@ -1231,6 +1278,7 @@ def _decode_information_artifact(
         raise PersistenceSerializationError("invalid_string", f"{path}.integrity")
     annotation_revisions = int(data.get("annotation_revisions", 0))
     lost_mark_count = int(data.get("lost_mark_count", 0))
+    custodian_repository_id = _optional_entity("custodian_repository_id")
 
     try:
         return InformationArtifact(
@@ -1249,11 +1297,108 @@ def _decode_information_artifact(
             integrity=integrity,
             annotation_revisions=annotation_revisions,
             lost_mark_count=lost_mark_count,
+            custodian_repository_id=custodian_repository_id,
         )
     except DomainSerializationError as exc:
         raise _map_domain_error(exc) from exc
     except (TypeError, ValueError) as exc:
         raise PersistenceSerializationError("invalid_model", path) from exc
+
+
+
+def _encode_knowledge_repository(value: KnowledgeRepository) -> dict[str, Any]:
+    return {
+        "access_mode": value.access_mode.value,
+        "established_tick": value.established_tick,
+        "founder_ids": [founder.value for founder in value.founder_ids],
+        "index_entries": [
+            {
+                "artifact_id": None
+                if entry.artifact_id is None
+                else entry.artifact_id.value,
+                "entry_id": entry.entry_id,
+                "label_tokens": list(entry.label_tokens),
+                "revision": entry.revision,
+            }
+            for entry in value.index_entries
+        ],
+        "last_maintained_tick": value.last_maintained_tick,
+        "location_id": value.location_id.value,
+        "member_artifact_ids": [mid.value for mid in value.member_artifact_ids],
+        "neglect_streak": value.neglect_streak,
+        "repository_id": value.repository_id.value,
+        "status": value.status.value,
+        "structure_id": None
+        if value.structure_id is None
+        else value.structure_id.value,
+    }
+
+
+def _decode_knowledge_repository(
+    data: dict[str, Any], *, path: str
+) -> KnowledgeRepository:
+    _require_keys(
+        data,
+        {
+            "repository_id",
+            "location_id",
+            "structure_id",
+            "founder_ids",
+            "established_tick",
+            "access_mode",
+            "status",
+            "member_artifact_ids",
+            "index_entries",
+            "last_maintained_tick",
+            "neglect_streak",
+        },
+        path=path,
+    )
+    structure_raw = data["structure_id"]
+    structure_id = None if structure_raw is None else EntityId(str(structure_raw))
+    founders_raw = data["founder_ids"]
+    members_raw = data["member_artifact_ids"]
+    entries_raw = data["index_entries"]
+    if not isinstance(founders_raw, list) or not isinstance(members_raw, list):
+        raise PersistenceSerializationError("invalid_fields", path)
+    if not isinstance(entries_raw, list):
+        raise PersistenceSerializationError("invalid_fields", path)
+    entries: list[RepositoryIndexEntry] = []
+    for index, raw in enumerate(entries_raw):
+        if not isinstance(raw, dict):
+            raise PersistenceSerializationError(
+                "invalid_object", f"{path}.index_entries[{index}]"
+            )
+        art_raw = raw.get("artifact_id")
+        art_id = None if art_raw is None else EntityId(str(art_raw))
+        tokens = raw.get("label_tokens", [])
+        if not isinstance(tokens, list):
+            raise PersistenceSerializationError(
+                "invalid_fields", f"{path}.index_entries[{index}]"
+            )
+        entries.append(
+            RepositoryIndexEntry(
+                entry_id=str(raw["entry_id"]),
+                artifact_id=art_id,
+                label_tokens=tuple(str(token) for token in tokens),
+                revision=int(raw.get("revision", 0)),
+            )
+        )
+    return KnowledgeRepository(
+        repository_id=EntityId(_str_field(data, "repository_id", path=path)),
+        location_id=EntityId(_str_field(data, "location_id", path=path)),
+        founder_ids=tuple(EntityId(str(item)) for item in founders_raw),
+        established_tick=_nonneg_int_field(data, "established_tick", path=path),
+        access_mode=RepositoryAccessMode(_str_field(data, "access_mode", path=path)),
+        status=RepositoryStatus(_str_field(data, "status", path=path)),
+        structure_id=structure_id,
+        member_artifact_ids=tuple(EntityId(str(item)) for item in members_raw),
+        index_entries=tuple(entries),
+        last_maintained_tick=_nonneg_int_field(
+            data, "last_maintained_tick", path=path
+        ),
+        neglect_streak=_nonneg_int_field(data, "neglect_streak", path=path),
+    )
 
 
 def _encode_active_hazard(value: ActiveHazard) -> dict[str, Any]:

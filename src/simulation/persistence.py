@@ -38,6 +38,7 @@ from simulation.run_control import (
 )
 from world.artifacts import InformationArtifact
 from world.environment import ActiveHazard
+from world.repositories import KnowledgeRepository
 from world.events import (
     EVENT_SCHEMA_REPLAY_V2,
     EVENT_SCHEMA_REPLAY_V3,
@@ -301,6 +302,8 @@ def schema_projector_compatible(
         EVENT_SCHEMA_REPLAY_V10,
         EVENT_SCHEMA_REPLAY_V11,
         EVENT_SCHEMA_REPLAY_V12,
+        EVENT_SCHEMA_REPLAY_V13,
+        EVENT_SCHEMA_REPLAY_V14,
     }:
         return projector_version == "v2"
     return False
@@ -475,6 +478,7 @@ class WorldSnapshot:
     lifecycle_records: Sequence[object] = ()
     kinship_edges: Sequence[object] = ()
     dependency_need_registers: Sequence[object] = ()
+    repositories: Sequence[KnowledgeRepository] = ()
 
     def __post_init__(self) -> None:
         if type(self.snapshot_id) is not SnapshotId:
@@ -549,6 +553,7 @@ class WorldSnapshot:
             weather=self.weather,
             registrations=self.registrations,
             artifacts=self.artifacts,
+            repositories=self.repositories,
         )
         object.__setattr__(self, "locations", bootstrap.locations)
         object.__setattr__(self, "items", bootstrap.items)
@@ -557,6 +562,7 @@ class WorldSnapshot:
         object.__setattr__(self, "weather", bootstrap.weather)
         object.__setattr__(self, "registrations", bootstrap.registrations)
         object.__setattr__(self, "artifacts", bootstrap.artifacts)
+        object.__setattr__(self, "repositories", bootstrap.repositories)
         object.__setattr__(
             self, "structures", _copy_production_rows(self.structures, Structure)
         )
@@ -693,15 +699,37 @@ class WorldSnapshot:
                 "codec_schema_mismatch "
                 "reason_code=dependency_need_registers_require_codec_v9"
             )
-            raise ValueError("dependency_need_registers require codec v9 or v10")
+            raise ValueError(
+                "dependency_need_registers require codec v9, v10, or v11"
+            )
+        repo_rows: list[KnowledgeRepository] = []
+        for raw in self.repositories:
+            if type(raw) is not KnowledgeRepository:
+                raise TypeError("repositories entries must be KnowledgeRepository")
+            repo_rows.append(raw)
+        object.__setattr__(self, "repositories", tuple(repo_rows))
+        if self.persistence_codec_version != "v11" and repo_rows:
+            _LOG.error(
+                "codec_schema_mismatch "
+                "reason_code=repositories_require_codec_v11"
+            )
+            raise ValueError("repositories require codec v11")
         if self.persistence_codec_version in {"v6", "v7", "v8", "v9", "v10", "v11"}:
+            custody_count = sum(
+                1
+                for artifact in self.artifacts
+                if artifact.custodian_repository_id is not None
+            )
             _LOG.debug(
                 "lifecycle_snapshot_codec codec_version=%s lifecycle_record_count=%s "
-                "kinship_edge_count=%s dependency_need_register_count=%s",
+                "kinship_edge_count=%s dependency_need_register_count=%s "
+                "repository_count=%s custody_count=%s",
                 self.persistence_codec_version,
                 len(records),
                 len(kinship_rows),
                 len(need_rows),
+                len(repo_rows),
+                custody_count,
             )
 
 

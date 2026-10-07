@@ -47,6 +47,7 @@ from world.events import (
     EVENT_SCHEMA_REPLAY_V11,
     EVENT_SCHEMA_REPLAY_V12,
     EVENT_SCHEMA_REPLAY_V13,
+    EVENT_SCHEMA_REPLAY_V14,
     AgentCreated,
     AgentEnteredWorld,
     AgentInitializationRecorded,
@@ -77,6 +78,12 @@ from world.events import (
     KinshipEdgeRecorded,
     LifecycleStageChanged,
     Moved,
+    RepositoryEstablished,
+    RepositoryIndexed,
+    RepositoryMaintained,
+    RepositoryMemberDeposited,
+    RepositoryMemberRetrieved,
+    RepositoryNeglected,
     NeedsApplied,
     ResourceHarvested,
     ResourceNodeDepleted,
@@ -340,6 +347,7 @@ def _prepare_events(
             EVENT_SCHEMA_REPLAY_V11,
             EVENT_SCHEMA_REPLAY_V12,
             EVENT_SCHEMA_REPLAY_V13,
+            EVENT_SCHEMA_REPLAY_V14,
         }:
             raise ProjectionError(ProjectionErrorCode.UNSUPPORTED_SCHEMA)
     return normalized, schema_version, run_id
@@ -590,8 +598,220 @@ def _apply_event_effect(
             return _project_lifecycle_stage_changed(state, event, stage_changed)
         case KinshipEdgeRecorded() as kinship_edge:
             return _project_kinship_edge_recorded(state, event, kinship_edge)
+        case RepositoryEstablished() as established:
+            return _project_repository_established(state, event, established), True
+        case RepositoryMemberDeposited() as deposited:
+            return _project_repository_member_deposited(state, event, deposited), True
+        case RepositoryMemberRetrieved() as retrieved:
+            return _project_repository_member_retrieved(state, event, retrieved), True
+        case RepositoryMaintained() as maintained:
+            return _project_repository_maintained(state, event, maintained), True
+        case RepositoryIndexed() as indexed:
+            return _project_repository_indexed(state, event, indexed), True
+        case RepositoryNeglected() as neglected:
+            return _project_repository_neglected(state, event, neglected), True
         case _:
             raise ProjectionError(ProjectionErrorCode.PRECONDITION_FAILED)
+
+
+
+def _project_repository_established(
+    state: WorldState,
+    event: WorldEvent,
+    details: RepositoryEstablished,
+) -> WorldState:
+    del event
+    from world.repositories import KnowledgeRepository, RepositoryAccessMode, RepositoryStatus
+
+    if details.repository_id in state.repositories:
+        raise ProjectionError(ProjectionErrorCode.INVARIANT_FAILED)
+    created = KnowledgeRepository(
+        repository_id=details.repository_id,
+        location_id=details.location_id,
+        founder_ids=details.founder_ids,
+        established_tick=details.established_tick,
+        access_mode=RepositoryAccessMode(details.access_mode),
+        status=RepositoryStatus.INTACT,
+        structure_id=details.structure_id,
+        last_maintained_tick=details.established_tick,
+    )
+    repositories = dict(state.repositories)
+    repositories[details.repository_id] = created
+    _LOG.debug(
+        "replay_apply detail_type=repository_established repository_id=%s",
+        details.repository_id.value,
+    )
+    try:
+        return rebuild_world_state(state, repositories=repositories)
+    except ValueError as exc:
+        raise ProjectionError(ProjectionErrorCode.INVARIANT_FAILED) from exc
+
+
+def _project_repository_member_deposited(
+    state: WorldState,
+    event: WorldEvent,
+    details: RepositoryMemberDeposited,
+) -> WorldState:
+    del event
+    from dataclasses import replace
+
+    repository = state.repositories.get(details.repository_id)
+    artifact = state.artifacts.get(details.artifact_id)
+    if repository is None or artifact is None:
+        raise ProjectionError(ProjectionErrorCode.TARGET_MISSING)
+    updated_repo = replace(
+        repository,
+        member_artifact_ids=repository.member_artifact_ids + (details.artifact_id,),
+    )
+    updated_artifact = replace(
+        artifact,
+        holder_id=None,
+        location_id=repository.location_id,
+        custodian_repository_id=repository.repository_id,
+    )
+    artifacts = dict(state.artifacts)
+    artifacts[details.artifact_id] = updated_artifact
+    repositories = dict(state.repositories)
+    repositories[details.repository_id] = updated_repo
+    try:
+        return rebuild_world_state(
+            state, artifacts=artifacts, repositories=repositories
+        )
+    except ValueError as exc:
+        raise ProjectionError(ProjectionErrorCode.INVARIANT_FAILED) from exc
+
+
+def _project_repository_member_retrieved(
+    state: WorldState,
+    event: WorldEvent,
+    details: RepositoryMemberRetrieved,
+) -> WorldState:
+    del event
+    from dataclasses import replace
+
+    repository = state.repositories.get(details.repository_id)
+    artifact = state.artifacts.get(details.artifact_id)
+    if repository is None or artifact is None:
+        raise ProjectionError(ProjectionErrorCode.TARGET_MISSING)
+    members = tuple(
+        mid for mid in repository.member_artifact_ids if mid != details.artifact_id
+    )
+    updated_repo = replace(repository, member_artifact_ids=members)
+    if details.hold:
+        updated_artifact = replace(
+            artifact,
+            holder_id=details.actor_id,
+            location_id=None,
+            custodian_repository_id=None,
+        )
+    else:
+        updated_artifact = replace(
+            artifact,
+            holder_id=None,
+            location_id=repository.location_id,
+            custodian_repository_id=None,
+        )
+    artifacts = dict(state.artifacts)
+    artifacts[details.artifact_id] = updated_artifact
+    repositories = dict(state.repositories)
+    repositories[details.repository_id] = updated_repo
+    try:
+        return rebuild_world_state(
+            state, artifacts=artifacts, repositories=repositories
+        )
+    except ValueError as exc:
+        raise ProjectionError(ProjectionErrorCode.INVARIANT_FAILED) from exc
+
+
+def _project_repository_maintained(
+    state: WorldState,
+    event: WorldEvent,
+    details: RepositoryMaintained,
+) -> WorldState:
+    del event
+    from dataclasses import replace
+    from world.repositories import RepositoryStatus
+
+    repository = state.repositories.get(details.repository_id)
+    if repository is None:
+        raise ProjectionError(ProjectionErrorCode.TARGET_MISSING)
+    artifacts = dict(state.artifacts)
+    if details.mode == "destroy":
+        for member_id in repository.member_artifact_ids:
+            member = artifacts[member_id]
+            artifacts[member_id] = replace(
+                member,
+                custodian_repository_id=None,
+                holder_id=None,
+                location_id=repository.location_id,
+            )
+        updated = replace(
+            repository,
+            status=RepositoryStatus.DESTROYED,
+            member_artifact_ids=(),
+            last_maintained_tick=details.last_maintained_tick,
+            neglect_streak=0,
+        )
+    else:
+        updated = replace(
+            repository,
+            status=RepositoryStatus(details.next_status),
+            last_maintained_tick=details.last_maintained_tick,
+            neglect_streak=0,
+        )
+    repositories = dict(state.repositories)
+    repositories[details.repository_id] = updated
+    try:
+        return rebuild_world_state(
+            state, artifacts=artifacts, repositories=repositories
+        )
+    except ValueError as exc:
+        raise ProjectionError(ProjectionErrorCode.INVARIANT_FAILED) from exc
+
+
+def _project_repository_indexed(
+    state: WorldState,
+    event: WorldEvent,
+    details: RepositoryIndexed,
+) -> WorldState:
+    del event
+    _LOG.debug(
+        "replay_apply detail_type=repository_indexed repository_id=%s "
+        "index_entry_count=%s",
+        details.repository_id.value,
+        details.index_entry_count,
+    )
+    return state
+
+
+def _project_repository_neglected(
+    state: WorldState,
+    event: WorldEvent,
+    details: RepositoryNeglected,
+) -> WorldState:
+    del event
+    from dataclasses import replace
+    from world.repositories import RepositoryStatus
+
+    repository = state.repositories.get(details.repository_id)
+    if repository is None:
+        raise ProjectionError(ProjectionErrorCode.TARGET_MISSING)
+    entries = repository.index_entries
+    if details.index_entries_dropped and entries:
+        ordered = tuple(sorted(entries, key=lambda item: item.entry_id))
+        entries = ordered[:- details.index_entries_dropped]
+    updated = replace(
+        repository,
+        status=RepositoryStatus(details.next_status),
+        neglect_streak=details.neglect_streak,
+        index_entries=entries,
+    )
+    repositories = dict(state.repositories)
+    repositories[details.repository_id] = updated
+    try:
+        return rebuild_world_state(state, repositories=repositories)
+    except ValueError as exc:
+        raise ProjectionError(ProjectionErrorCode.INVARIANT_FAILED) from exc
 
 
 def _environment_mismatch(tick: int, kind: str) -> None:

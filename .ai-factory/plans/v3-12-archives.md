@@ -495,7 +495,7 @@ Update (no “optional” hedges):
   - Logging: DEBUG schema selected V14/v11; never log payloads
   - Depends on: 2, 5, 6
 
-- [ ] Task 8: Snapshot / checkpoint codec `v11` fields for `WorldState.repositories` map + artifact `custodian_repository_id`; dual-key decode for ≤v10 synthesizing empty repositories / `custodian_repository_id=None`. Replay/apply path for new repository details.
+- [x] Task 8: Snapshot / checkpoint codec `v11` fields for `WorldState.repositories` map + artifact `custodian_repository_id`; dual-key decode for ≤v10 synthesizing empty repositories / `custodian_repository_id=None`. Replay/apply path for new repository details.
   - Deliverable: Checkpoint restore parity tests live vs restored; v10 snapshot restores with synthesized empty repositories.
   - Files: `src/world/_replay.py`, `src/simulation/journal.py`, `src/simulation/persistence.py`, `tests/unit/test_repository_checkpoint_v11.py`, `tests/unit/test_repository_replay.py`
   - Logging: DEBUG custody_count + repository_count on encode/decode

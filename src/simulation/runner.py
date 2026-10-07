@@ -3480,28 +3480,30 @@ def _bootstrap_snapshot(engine: WorldEngine) -> WorldSnapshot:
     )
     state = engine._snapshot.world.state
     production_rows: dict[str, tuple[object, ...]] = {}
-    if codec_version in {"v3", "v4", "v5", "v6", "v7", "v8", "v9"}:
+    if codec_version in {"v3", "v4", "v5", "v6", "v7", "v8", "v9", "v10", "v11"}:
         production_rows = {
             "structures": tuple(state.structures.values()),
             "production_jobs": tuple(state.production_jobs.values()),
             "tool_marks": tuple(state.tool_marks.values()),
         }
-    if codec_version in {"v4", "v5", "v6", "v7", "v8", "v9"}:
+    if codec_version in {"v4", "v5", "v6", "v7", "v8", "v9", "v10", "v11"}:
         production_rows["active_hazards"] = tuple(state.active_hazards)
-    if codec_version in {"v5", "v6", "v7", "v8", "v9"}:
+    if codec_version in {"v5", "v6", "v7", "v8", "v9", "v10", "v11"}:
         production_rows["artifacts"] = tuple(state.artifacts.values())
-    if codec_version in {"v6", "v7", "v8", "v9"}:
+    if codec_version in {"v6", "v7", "v8", "v9", "v10", "v11"}:
         production_rows["lifecycle_records"] = tuple(engine.lifecycle_records)
-    if codec_version in {"v8", "v9"}:
+    if codec_version in {"v8", "v9", "v10", "v11"}:
         kinship_graph = engine.kinship_graph
         from world.kinship import KinshipGraph
 
         if type(kinship_graph) is KinshipGraph:
             production_rows["kinship_edges"] = kinship_graph.edges
-    if codec_version == "v9":
+    if codec_version in {"v9", "v10", "v11"}:
         production_rows["dependency_need_registers"] = tuple(
             engine._dependency_need_registers.values()
         )
+    if codec_version == "v11":
+        production_rows["repositories"] = tuple(state.repositories.values())
     draft = WorldSnapshot(
         snapshot_id=SnapshotId(f"bootstrap-{engine.run_id.value}"),
         run_id=engine.run_id,
@@ -3552,6 +3554,7 @@ def _bootstrap_snapshot(engine: WorldEngine) -> WorldSnapshot:
         lifecycle_records=draft.lifecycle_records,
         kinship_edges=getattr(draft, "kinship_edges", ()),
         dependency_need_registers=getattr(draft, "dependency_need_registers", ()),
+        repositories=getattr(draft, "repositories", ()),
     )
 
 

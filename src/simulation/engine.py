@@ -625,6 +625,7 @@ class WorldEngine:
             tool_marks=snapshot.tool_marks,
             active_hazards=snapshot.active_hazards,
             artifacts=snapshot.artifacts,
+            repositories=snapshot.repositories,
         )
         resolved_catalog = _optional_production_catalog(production_catalog)
         if snapshot.persistence_codec_version == "v3" and resolved_catalog is None:
@@ -738,10 +739,18 @@ class WorldEngine:
         engine._artifacts_enabled = (
             artifacts_enabled
             or bool(snapshot.artifacts)
-            or snapshot.persistence_codec_version in {"v5", "v6", "v7", "v8", "v9", "v10"}
+            or snapshot.persistence_codec_version
+            in {"v5", "v6", "v7", "v8", "v9", "v10", "v11"}
             or bool(getattr(engine._bootstrap, "artifacts", ()))
         )
-        if snapshot.persistence_codec_version in {"v6", "v7", "v8", "v9", "v10"}:
+        if snapshot.persistence_codec_version in {
+            "v6",
+            "v7",
+            "v8",
+            "v9",
+            "v10",
+            "v11",
+        }:
             if population_lifecycle is None and snapshot.lifecycle_records:
                 raise ValueError(
                     "codec v6/v7/v8/v9 restore requires population_lifecycle "
@@ -771,8 +780,9 @@ class WorldEngine:
                     )
                 engine._new_agent_initialization = new_agent_initialization
             elif (
-                snapshot.persistence_codec_version in {"v7", "v8", "v9", "v10"}
-                and snapshot.event_schema_version in {10, 11, 12, 13}
+                snapshot.persistence_codec_version
+                in {"v7", "v8", "v9", "v10", "v11"}
+                and snapshot.event_schema_version in {10, 11, 12, 13, 14}
             ):
                 # Prefer explicit restore arg; else pull from snapshot config when v25+.
                 config_init = getattr(snapshot.config, "new_agent_initialization", None)
@@ -799,7 +809,7 @@ class WorldEngine:
         engine._durable_records_spec = None
         engine._knowledge_repositories_spec = None
         engine._dependency_need_registers = {}
-        if snapshot.persistence_codec_version == "v10":
+        if snapshot.persistence_codec_version in {"v10", "v11"}:
             from simulation.runner_models import DurableRecordsSpec
 
             resolved_durable = getattr(snapshot.config, "durable_records", None)
@@ -817,7 +827,28 @@ class WorldEngine:
                 snapshot.persistence_codec_version,
                 engine._durable_records_spec is not None,
             )
-        if snapshot.persistence_codec_version in {"v8", "v9", "v10"}:
+        if snapshot.persistence_codec_version == "v11":
+            from simulation.runner_models import KnowledgeRepositoriesSpec
+
+            resolved_repos = getattr(snapshot.config, "knowledge_repositories", None)
+            if (
+                resolved_repos is not None
+                and type(resolved_repos) is not KnowledgeRepositoriesSpec
+            ):
+                raise TypeError(
+                    "knowledge_repositories must be KnowledgeRepositoriesSpec or None"
+                )
+            engine._knowledge_repositories_spec = resolved_repos
+            if engine._knowledge_repositories_spec is not None and not engine._artifacts_enabled:
+                engine._artifacts_enabled = True
+            _LOGGER.debug(
+                "knowledge_repositories_restore codec_version=%s "
+                "knowledge_repositories_active=%s repository_count=%s",
+                snapshot.persistence_codec_version,
+                engine._knowledge_repositories_spec is not None,
+                len(snapshot.repositories),
+            )
+        if snapshot.persistence_codec_version in {"v8", "v9", "v10", "v11"}:
             resolved_kinship = kinship_spec
             if resolved_kinship is None:
                 resolved_kinship = getattr(snapshot.config, "kinship", None)
@@ -875,7 +906,7 @@ class WorldEngine:
                     if type(event.details) is KinshipEdgeRecorded
                 ),
             )
-        if snapshot.persistence_codec_version in {"v9", "v10"}:
+        if snapshot.persistence_codec_version in {"v9", "v10", "v11"}:
             from simulation.runner_models import DependencyCareSpec
             from world.dependency_care import DependencyNeedRegister
 
