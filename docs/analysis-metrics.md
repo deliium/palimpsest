@@ -38,7 +38,7 @@ Executable formula, population, and edge-case policy for all nineteen metric fam
 | `caregiving_burden` | `caregiving_burden@1` | detached care-act rows |
 | `intergenerational_cooperation` | `intergenerational_cooperation@1` | detached care-act + kinship rows |
 
-Catalog version: `metric-catalog-v1`. Document schema: `MetricDocument` schema `1`. Closed catalog cardinality: **59** families (`METRIC_FAMILY_COUNT`). New opt-in families assemble only when their detached inputs are present.
+Catalog version: `metric-catalog-v1`. Document schema: `MetricDocument` schema `1`. Closed catalog cardinality: **65** families (`METRIC_FAMILY_COUNT`). New opt-in families assemble only when their detached inputs are present.
 
 ### Additive analysis surfaces (off the V1 gate)
 
@@ -82,7 +82,11 @@ Catalog version: `metric-catalog-v1`. Document schema: `MetricDocument` schema `
 
 `durable_record_lineage@1`, `durable_record_fidelity@1`, and `durable_record_survival@1` assemble from duck-typed durable harvest rows when `DurableRecordsSpec` is present on `runner-config-v33|v34` (deepens owned `cultural_historical_memory`; no new V3 flag). Signals are copy-tree depth / generation histograms, perfect-vs-mutated-vs-lossy rates with mark/relation edit distances, and integrity / author-death / false-record persistence counts — never mark payloads, never cognition feed, and never overloads of `external_artifact_memory@1` or historical-memory families. Experiment AN stays off the V1 gate.
 
-`knowledge_repository_survival@1`, `knowledge_repository_access@1`, and `knowledge_repository_organization@1` assemble from duck-typed repository harvest rows when `KnowledgeRepositoriesSpec` is present on `runner-config-v34` (deepens the same cultural flag; requires durable + provenance; no new V3 flag). DTOs are counts/histograms only (`RepositorySurvivalSummary`, `RepositoryAccessSummary`, `RepositoryOrganizationSummary`) — repository/status/membership/access/index history as ids and ticks, never mark payloads or cultural archive/library labels, never cognition feed, and never overloads of durable-record or historical-memory families. Experiment AO stays off the V1 gate.
+`knowledge_repository_survival@1`, `knowledge_repository_access@1`, and `knowledge_repository_organization@1` assemble from duck-typed repository harvest rows when `KnowledgeRepositoriesSpec` is present on `runner-config-v34|v35` (deepens the same cultural flag; requires durable + provenance; no new V3 flag). DTOs are counts/histograms only (`RepositorySurvivalSummary`, `RepositoryAccessSummary`, `RepositoryOrganizationSummary`) — repository/status/membership/access/index history as ids and ticks, never mark payloads or cultural archive/library labels, never cognition feed, and never overloads of durable-record or historical-memory families. Experiment AO stays off the V1 gate.
+
+### Knowledge genealogy families (off the V1 gate)
+
+`knowledge_genealogy_holders@1`, `knowledge_genealogy_lineage@1`, and `knowledge_genealogy_mutation@1` assemble from harvested `PracticalKnowledgeAudit` rows when `KnowledgeGenealogySpec` is present on `runner-config-v35` (deepens owned `cultural_historical_memory`; no new V3 flag; no write-pair). DTOs are counts/histograms only — living vs dead holders (via `death_ticks`), root/multi-parent/combination rates, mutated-hop share and mean `fingerprint_distance_q`, origin histogram — never technique payloads, never cognition feed, and never overloads of `skill_learning@1`, mentorship, cultural-feature, durable-record, or repository families. Analysis-only `KnowledgeGenealogyGraph` supports the four locked researcher queries (`who_currently_knows`, `who_taught`, `oldest_surviving_lineage_origin`, `independent_emergence_count`); cross-owner `transmitted_from` edges are analysis joins only. Experiment AP stays off the V1 gate.
 
 ### Supporting formulas (not a separate family)
 

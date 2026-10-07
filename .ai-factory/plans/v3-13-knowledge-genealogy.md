@@ -555,19 +555,19 @@ No `docs/observer.md` / `docs/physical-simulation.md` changes required (SEMANTIC
 
 ### Phase 6: Research UI + docs + regression pins
 
-- [ ] Task 16: Research UI epistemic overlays + AnalyticsPanel discovery for `knowledge_genealogy_holders`, `knowledge_genealogy_lineage`, `knowledge_genealogy_mutation`: add to `PRIORITY_FAMILIES`, new `KNOWLEDGE_GENEALOGY_FAMILIES` Set, catalog filter + `selected` group, `ANALYTICAL_OVERLAYS` + `epistemic.test.ts` expects (`research_inference` badge only — no subjective ledger fields, no full genealogy browser).
+- [x] Task 16: Research UI epistemic overlays + AnalyticsPanel discovery for `knowledge_genealogy_holders`, `knowledge_genealogy_lineage`, `knowledge_genealogy_mutation`: add to `PRIORITY_FAMILIES`, new `KNOWLEDGE_GENEALOGY_FAMILIES` Set, catalog filter + `selected` group, `ANALYTICAL_OVERLAYS` + `epistemic.test.ts` expects (`research_inference` badge only — no subjective ledger fields, no full genealogy browser).
   - Deliverable: Client unit tests for badge discovery; GraphsPanel genealogy browser remains absent.
   - Files: `clients/research-ui/src/epistemic.ts`, `clients/research-ui/src/epistemic.test.ts`, `clients/research-ui/src/views/AnalyticsPanel.svelte`
   - Logging: N/A in SPA
   - Depends on: 11
 
-- [ ] Task 17: Mandatory docs via `/aif-docs` — architecture V3 seams + Downstream contract (v35 deepen, cultural `{v31..v35}`, no new flag, no write-pair, triple representation, cross-owner analysis join, no GlobalTechniqueRegistry), cognition-runtime ledger/compose, analysis-metrics families + four queries, DESCRIPTION + ARCHITECTURE + **ROADMAP** M7 updates.
+- [x] Task 17: Mandatory docs via `/aif-docs` — architecture V3 seams + Downstream contract (v35 deepen, cultural `{v31..v35}`, no new flag, no write-pair, triple representation, cross-owner analysis join, no GlobalTechniqueRegistry), cognition-runtime ledger/compose, analysis-metrics families + four queries, DESCRIPTION + ARCHITECTURE + **ROADMAP** M7 updates.
   - Deliverable: Docs mention all locked pins; no contradictions with v3-12 repository blurb.
   - Files: `docs/architecture.md`, `docs/cognition-runtime.md`, `docs/analysis-metrics.md`, `.ai-factory/DESCRIPTION.md`, `.ai-factory/ARCHITECTURE.md`, `.ai-factory/ROADMAP.md`
   - Logging: N/A
   - Depends on: 1, 6, 9, 11, 13, 15, 16
 
-- [ ] Task 18: Final regression — V1 gate + `test_v2_scientific_invariants` under V3 flags-off; `METRIC_FAMILY_COUNT=65`; command count 34; SEMANTIC 53; Alembic head `0017`; Experiment AO unchanged when genealogy absent; write-pair unchanged for genealogy-only; `OFF_GATE_MATRIX_EXPERIMENT_IDS` contains AP; architecture isolation green; no `GlobalTechniqueRegistry`; close verification pins table below for `/aif-verify`.
+- [x] Task 18: Final regression — V1 gate + `test_v2_scientific_invariants` under V3 flags-off; `METRIC_FAMILY_COUNT=65`; command count 34; SEMANTIC 53; Alembic head `0017`; Experiment AO unchanged when genealogy absent; write-pair unchanged for genealogy-only; `OFF_GATE_MATRIX_EXPERIMENT_IDS` contains AP; architecture isolation green; no `GlobalTechniqueRegistry`; close verification pins table below for `/aif-verify`.
   - Deliverable: `tests/unit/test_v3_knowledge_genealogy_regression.py` green with pins; plan pins accurate.
   - Files: existing gate tests; new regression pin module; this plan file (pins only)
   - Logging: pytest output only

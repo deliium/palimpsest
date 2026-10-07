@@ -35,6 +35,9 @@
     'knowledge_repository_survival',
     'knowledge_repository_access',
     'knowledge_repository_organization',
+    'knowledge_genealogy_holders',
+    'knowledge_genealogy_lineage',
+    'knowledge_genealogy_mutation',
   ] as const
 
   const HISTORICAL_MEMORY_FAMILIES = new Set([
@@ -53,6 +56,12 @@
     'knowledge_repository_survival',
     'knowledge_repository_access',
     'knowledge_repository_organization',
+  ])
+
+  const KNOWLEDGE_GENEALOGY_FAMILIES = new Set([
+    'knowledge_genealogy_holders',
+    'knowledge_genealogy_lineage',
+    'knowledge_genealogy_mutation',
   ])
 
   type MetricCard = {
@@ -225,6 +234,9 @@
       const repositories = catalog.items.filter((item) =>
         KNOWLEDGE_REPOSITORY_FAMILIES.has(item.metric_family),
       )
+      const genealogy = catalog.items.filter((item) =>
+        KNOWLEDGE_GENEALOGY_FAMILIES.has(item.metric_family),
+      )
       const phenomenon = catalog.items.filter((item) =>
         item.metric_family.includes('phenomenon'),
       )
@@ -233,6 +245,7 @@
         ...historical,
         ...durable,
         ...repositories,
+        ...genealogy,
         ...phenomenon,
       ]
         .filter(
@@ -243,7 +256,7 @@
                 other.metric_set_id === item.metric_set_id,
             ) === index,
         )
-        .slice(0, 17)
+        .slice(0, 20)
       cards = await Promise.all(selected.map((item) => loadMetricCard(item)))
 
       if (agentId) {
