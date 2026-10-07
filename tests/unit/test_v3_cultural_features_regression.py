@@ -100,7 +100,7 @@ async def test_flags_off_and_channel_absent_share_trajectory_hash() -> None:
 
 
 def test_semantic_event_count_stays_43() -> None:
-    assert len(SEMANTIC_EVENT_TYPES) == 43
+    assert len(SEMANTIC_EVENT_TYPES) == 47
 
 
 def test_cultural_only_config_accepts_without_lifecycle() -> None:

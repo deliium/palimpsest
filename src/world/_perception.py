@@ -21,7 +21,7 @@ from collections.abc import Sequence
 from typing import Final
 
 from world._state import WorldState
-from world.artifacts import InformationArtifact
+from world.artifacts import InformationArtifact, RecordIntegrity
 from world.environment import (
     EnvironmentalDynamicsSpec,
     HazardKind,
@@ -109,6 +109,16 @@ class PerceptionService:
     ids and structure counts, never item names.
     """
 
+    def __init__(self, *, durable_perception_mode: str | None = None) -> None:
+        if durable_perception_mode is not None and durable_perception_mode not in {
+            "marks_and_meta",
+            "marks_only",
+        }:
+            raise ValueError(
+                "durable_perception_mode must be marks_and_meta, marks_only, or None"
+            )
+        self._durable_perception_mode = durable_perception_mode
+
     def project(
         self,
         *,
@@ -149,6 +159,7 @@ class PerceptionService:
                 context=context,
                 prior_events=events,
                 environmental_dynamics=environmental_dynamics,
+                durable_perception_mode=self._durable_perception_mode,
             )
             for observer_id in observers
         )
@@ -162,10 +173,13 @@ def project_observations(
     context: ObservationContext | None = None,
     prior_events: Sequence[WorldEvent] = (),
     environmental_dynamics: object | None = None,
+    durable_perception_mode: str | None = None,
 ) -> tuple[Observation, ...]:
     """Compatibility wrapper around :class:`PerceptionService`."""
     resolved = context if context is not None else ObservationContext(tick=0)
-    return PerceptionService().project(
+    return PerceptionService(
+        durable_perception_mode=durable_perception_mode
+    ).project(
         world_id=world_id,
         state=state,
         observer_ids=observer_ids,
@@ -183,6 +197,7 @@ def _project_one(
     context: ObservationContext,
     prior_events: tuple[WorldEvent, ...],
     environmental_dynamics: object | None,
+    durable_perception_mode: str | None = None,
 ) -> Observation:
     body = state.bodies[observer_id]
     location_id = body.location_id
@@ -209,6 +224,7 @@ def _project_one(
         observer_id=observer_id,
         location_id=location_id,
         include_ground=content_visible,
+        durable_perception_mode=durable_perception_mode,
     )
     recipes = [
         occurrence.public_facts["recipe_id"]
@@ -466,6 +482,7 @@ def _sorted_artifacts(
     observer_id: EntityId,
     location_id: EntityId,
     include_ground: bool,
+    durable_perception_mode: str | None = None,
 ) -> tuple[ObservedArtifact, ...]:
     selected: list[ObservedArtifact] = []
     for artifact_id in sorted(state.artifacts, key=lambda entity: entity.value):
@@ -475,6 +492,7 @@ def _sorted_artifacts(
             observer_id=observer_id,
             location_id=location_id,
             include_ground=include_ground,
+            durable_perception_mode=durable_perception_mode,
         )
         if projected is not None:
             selected.append(projected)
@@ -487,13 +505,38 @@ def _project_artifact(
     observer_id: EntityId,
     location_id: EntityId,
     include_ground: bool,
+    durable_perception_mode: str | None = None,
 ) -> ObservedArtifact | None:
+    # Tombstones are inspection/analysis-only — never agent Observation.
+    if artifact.integrity is RecordIntegrity.DESTROYED:
+        return None
     if artifact.holder_id == observer_id:
         placement = ObservedItemPlacement.HELD_BY_SELF
     elif include_ground and artifact.location_id == location_id:
         placement = ObservedItemPlacement.GROUND_HERE
     else:
         return None
+    genre = None
+    parent_id = None
+    source_id = None
+    copy_generation = None
+    integrity = None
+    annotation_revisions = None
+    lost_mark_count = None
+    if durable_perception_mode is not None:
+        genre = artifact.record_genre
+        if durable_perception_mode == "marks_and_meta":
+            parent_id = artifact.parent_artifact_id
+            source_id = artifact.source_artifact_id
+            copy_generation = artifact.copy_generation
+            integrity = artifact.integrity
+            annotation_revisions = artifact.annotation_revisions
+            lost_mark_count = artifact.lost_mark_count
+        _LOG.debug(
+            "observed_artifact_projected integrity=%s copy_generation=%s",
+            integrity.value if integrity is not None else "-",
+            copy_generation if copy_generation is not None else "-",
+        )
     return ObservedArtifact(
         entity_id=artifact.artifact_id,
         kind=artifact.kind,
@@ -502,6 +545,13 @@ def _project_artifact(
         content=artifact.content,
         content_revision=artifact.content_revision,
         placement=placement,
+        record_genre=genre,
+        parent_artifact_id=parent_id,
+        source_artifact_id=source_id,
+        copy_generation=copy_generation,
+        integrity=integrity,
+        annotation_revisions=annotation_revisions,
+        lost_mark_count=lost_mark_count,
     )
 
 

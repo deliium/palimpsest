@@ -193,6 +193,7 @@ class CognitiveLoop:
         "_developmental_learning_spec",
         "_developmental_mid_run_admit",
         "_developmental_stage_learning_rates",
+        "_durable_records_active",
         "_emotional_state",
         "_epistemic_policy",
         "_futures",
@@ -285,6 +286,7 @@ class CognitiveLoop:
         developmental_stage_learning_rates: object | None = None,
         mentorship_spec: object | None = None,
         cultural_features_spec: object | None = None,
+        durable_records_active: bool = False,
         territorial_claim_mode: object | None = None,
         territorial_claim_policy: object | None = None,
         group_formation_mode: object | None = None,
@@ -801,6 +803,13 @@ class CognitiveLoop:
                 True,
                 len(kinds),
             )
+        if type(durable_records_active) is not bool:
+            raise TypeError("durable_records_active must be bool")
+        self._durable_records_active = durable_records_active
+        _LOG.info(
+            "durable_records_bind durable_records_active=%s",
+            self._durable_records_active,
+        )
         from agents.cognition.production import ProductionKnowledgeMode
 
         production_mode = (
@@ -2679,6 +2688,7 @@ class CognitiveLoop:
                     social_convention_mode=self._social_convention_mode,
                     artifact_interpretations=artifact_interpretations,
                     artifact_interpretation_mode=self._artifact_interpretation_mode,
+                    durable_records_active=self._durable_records_active,
                     semantic_naming=semantic_naming,
                     semantic_naming_mode=self._semantic_naming_mode,
                     cultural_narratives=cultural_narratives,

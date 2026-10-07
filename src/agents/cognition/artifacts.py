@@ -292,8 +292,16 @@ def _interpret_artifact(
     tick: int,
     distort: bool,
 ) -> ArtifactInterpretation:
+    from world.artifacts import RecordIntegrity
+
     marks = tuple(artifact.content.marks)
     relations = [_reading_from_relation(item) for item in artifact.content.relations]
+    # Damaged / partially-lost records force private distortion (V3-11).
+    integrity = getattr(artifact, "integrity", None)
+    force_integrity = integrity is not None and integrity is not RecordIntegrity.INTACT
+    if force_integrity and not distort:
+        _LOG.debug("interpretation_distorted reason=record_integrity")
+        distort = True
     if distort:
         if relations:
             relations = relations[:-1]

@@ -388,6 +388,13 @@ class ObserverArtifact:
     holder_id: str | None = None
     marks: tuple[str, ...] = ()
     presentation: EntityPresentation | None = None
+    record_genre: str | None = None
+    parent_artifact_id: str | None = None
+    source_artifact_id: str | None = None
+    copy_generation: int | None = None
+    integrity: str | None = None
+    annotation_revisions: int | None = None
+    lost_mark_count: int | None = None
 
     def __post_init__(self) -> None:
         object.__setattr__(
@@ -424,6 +431,40 @@ class ObserverArtifact:
             EntityPresentation
         ):
             _reject("presentation", "invalid_type")
+        object.__setattr__(
+            self, "record_genre", _optional_text("record_genre", self.record_genre)
+        )
+        object.__setattr__(
+            self,
+            "parent_artifact_id",
+            _optional_text("parent_artifact_id", self.parent_artifact_id),
+        )
+        object.__setattr__(
+            self,
+            "source_artifact_id",
+            _optional_text("source_artifact_id", self.source_artifact_id),
+        )
+        if self.copy_generation is not None:
+            object.__setattr__(
+                self,
+                "copy_generation",
+                _require_tick("copy_generation", self.copy_generation),
+            )
+        object.__setattr__(
+            self, "integrity", _optional_text("integrity", self.integrity)
+        )
+        if self.annotation_revisions is not None:
+            object.__setattr__(
+                self,
+                "annotation_revisions",
+                _require_tick("annotation_revisions", self.annotation_revisions),
+            )
+        if self.lost_mark_count is not None:
+            object.__setattr__(
+                self,
+                "lost_mark_count",
+                _require_tick("lost_mark_count", self.lost_mark_count),
+            )
 
 
 @dataclass(frozen=True, slots=True)

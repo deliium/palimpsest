@@ -162,6 +162,50 @@ def project_frame(
             holder_id=None if item.holder_id is None else item.holder_id.value,
             marks=tuple(item.content.marks),
             presentation=entity_presentation(item.kind.value, item.kind.value),
+            record_genre=(
+                None
+                if getattr(item, "record_genre", None) is None
+                else item.record_genre.value
+            ),
+            parent_artifact_id=(
+                None
+                if getattr(item, "parent_artifact_id", None) is None
+                else item.parent_artifact_id.value
+            ),
+            source_artifact_id=(
+                None
+                if getattr(item, "source_artifact_id", None) is None
+                else item.source_artifact_id.value
+            ),
+            copy_generation=(
+                None
+                if getattr(item, "record_genre", None) is None
+                and getattr(item, "parent_artifact_id", None) is None
+                and int(getattr(item, "copy_generation", 0) or 0) == 0
+                else int(getattr(item, "copy_generation", 0) or 0)
+            ),
+            integrity=(
+                None
+                if getattr(item, "record_genre", None) is None
+                and getattr(item, "parent_artifact_id", None) is None
+                and int(getattr(item, "copy_generation", 0) or 0) == 0
+                and int(getattr(item, "lost_mark_count", 0) or 0) == 0
+                and getattr(getattr(item, "integrity", None), "value", "intact")
+                == "intact"
+                else getattr(getattr(item, "integrity", None), "value", None)
+            ),
+            annotation_revisions=(
+                None
+                if getattr(item, "record_genre", None) is None
+                and int(getattr(item, "annotation_revisions", 0) or 0) == 0
+                else int(getattr(item, "annotation_revisions", 0) or 0)
+            ),
+            lost_mark_count=(
+                None
+                if getattr(item, "record_genre", None) is None
+                and int(getattr(item, "lost_mark_count", 0) or 0) == 0
+                else int(getattr(item, "lost_mark_count", 0) or 0)
+            ),
         )
         for item in sorted(
             scene.artifacts,

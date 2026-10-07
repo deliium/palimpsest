@@ -11,10 +11,14 @@ from world.communications import confidence_band
 from world.events import (
     AgentCreated,
     AgentEnteredWorld,
+    ArtifactAnnotated,
+    ArtifactCopied,
     ArtifactCreated,
+    ArtifactDamaged,
     ArtifactDestroyed,
     ArtifactModified,
     ArtifactMoved,
+    ArtifactPartiallyLost,
     Asked,
     CraftStarted,
     Died,
@@ -141,6 +145,12 @@ def adapt_event(event: WorldEvent) -> ObserverEvent:
             details, (ArtifactCreated, ArtifactModified, ArtifactMoved)
         ) and details.resulting_location_id is not None:
             destination = _text(details.resulting_location_id)
+    elif isinstance(details, ArtifactCopied):
+        artifact_id = _text(details.child_artifact_id)
+    elif isinstance(
+        details, (ArtifactAnnotated, ArtifactDamaged, ArtifactPartiallyLost)
+    ):
+        artifact_id = _text(details.artifact_id)
     elif isinstance(details, SeasonChanged):
         season = details.season.value
     elif isinstance(details, TemperatureBandChanged):

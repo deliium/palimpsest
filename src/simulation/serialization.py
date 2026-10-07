@@ -2937,7 +2937,7 @@ def _decode_observed_structure(data: dict[str, Any], *, path: str) -> ObservedSt
 
 
 def _encode_observed_artifact(value: ObservedArtifact) -> dict[str, Any]:
-    return {
+    payload: dict[str, Any] = {
         "author_id": value.author_id.value,
         "content": _encode_artifact_content(value.content),
         "content_revision": value.content_revision,
@@ -2946,23 +2946,59 @@ def _encode_observed_artifact(value: ObservedArtifact) -> dict[str, Any]:
         "kind": value.kind.value,
         "placement": value.placement.value,
     }
+    if value.record_genre is not None:
+        payload["record_genre"] = value.record_genre.value
+    if value.parent_artifact_id is not None:
+        payload["parent_artifact_id"] = value.parent_artifact_id.value
+    if value.source_artifact_id is not None:
+        payload["source_artifact_id"] = value.source_artifact_id.value
+    if value.copy_generation is not None:
+        payload["copy_generation"] = value.copy_generation
+    if value.integrity is not None:
+        payload["integrity"] = value.integrity.value
+    if value.annotation_revisions is not None:
+        payload["annotation_revisions"] = value.annotation_revisions
+    if value.lost_mark_count is not None:
+        payload["lost_mark_count"] = value.lost_mark_count
+    return payload
 
 
 def _decode_observed_artifact(data: dict[str, Any], *, path: str) -> ObservedArtifact:
-    _require_keys(
-        data,
-        {
-            "entity_id",
-            "kind",
-            "author_id",
-            "created_tick",
-            "content",
-            "content_revision",
-            "placement",
-        },
-        path=path,
-    )
+    base = {
+        "entity_id",
+        "kind",
+        "author_id",
+        "created_tick",
+        "content",
+        "content_revision",
+        "placement",
+    }
+    optional = {
+        "record_genre",
+        "parent_artifact_id",
+        "source_artifact_id",
+        "copy_generation",
+        "integrity",
+        "annotation_revisions",
+        "lost_mark_count",
+    }
+    if set(data) - (base | optional) or not base.issubset(data):
+        raise DomainSerializationError("invalid_fields", path)
     try:
+        from world.artifacts import DurableRecordGenre, RecordIntegrity
+
+        genre_raw = data.get("record_genre")
+        record_genre = (
+            None if genre_raw is None else DurableRecordGenre(str(genre_raw))
+        )
+        parent_raw = data.get("parent_artifact_id")
+        parent_id = None if parent_raw is None else EntityId(str(parent_raw))
+        source_raw = data.get("source_artifact_id")
+        source_id = None if source_raw is None else EntityId(str(source_raw))
+        integrity_raw = data.get("integrity")
+        integrity = (
+            None if integrity_raw is None else RecordIntegrity(str(integrity_raw))
+        )
         return ObservedArtifact(
             entity_id=EntityId(_str_field(data, "entity_id", path=path)),
             kind=ArtifactKind(_str_field(data, "kind", path=path)),
@@ -2971,6 +3007,25 @@ def _decode_observed_artifact(data: dict[str, Any], *, path: str) -> ObservedArt
             content=_decode_artifact_content(data["content"], path=f"{path}.content"),
             content_revision=_int_field(data, "content_revision", path=path),
             placement=ObservedItemPlacement(_str_field(data, "placement", path=path)),
+            record_genre=record_genre,
+            parent_artifact_id=parent_id,
+            source_artifact_id=source_id,
+            copy_generation=(
+                None
+                if "copy_generation" not in data
+                else _int_field(data, "copy_generation", path=path)
+            ),
+            integrity=integrity,
+            annotation_revisions=(
+                None
+                if "annotation_revisions" not in data
+                else _int_field(data, "annotation_revisions", path=path)
+            ),
+            lost_mark_count=(
+                None
+                if "lost_mark_count" not in data
+                else _int_field(data, "lost_mark_count", path=path)
+            ),
         )
     except DomainSerializationError:
         raise

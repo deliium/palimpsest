@@ -326,7 +326,13 @@ class WorldEngine:
             raise TypeError("start_tick must be Tick")
         self._translator = registration_translator(bootstrap)
         self._registrations = bootstrap.registrations
-        self._perception = PerceptionService()
+        self._perception = PerceptionService(
+            durable_perception_mode=(
+                None
+                if durable_records_spec is None
+                else getattr(durable_records_spec, "perception_mode", "marks_and_meta")
+            )
+        )
         self._last_tick_result: TickResult | None = None
         world = _materialize_world(bootstrap)
         self._engine_id = derive_scoped_id(
@@ -629,6 +635,7 @@ class WorldEngine:
         engine._run_id = snapshot.run_id
         engine._translator = registration_translator(bootstrap)
         engine._registrations = bootstrap.registrations
+        # Perception mode rebound after durable_records_spec restore below.
         engine._perception = PerceptionService()
         engine._engine_id = derive_scoped_id(
             snapshot.config,
@@ -751,6 +758,10 @@ class WorldEngine:
             engine._durable_records_spec = resolved_durable
             if engine._durable_records_spec is not None and not engine._artifacts_enabled:
                 engine._artifacts_enabled = True
+            if engine._durable_records_spec is not None:
+                engine._perception = PerceptionService(
+                    durable_perception_mode=engine._durable_records_spec.perception_mode
+                )
             _LOGGER.debug(
                 "durable_records_restore codec_version=%s durable_records_active=%s",
                 snapshot.persistence_codec_version,

@@ -1075,21 +1075,33 @@ def cultural_feature_bias_futures(
 
 _FEATURE_KIND_PRIMARY_CHANNELS: Final[dict[CulturalFeatureKindId, frozenset[str]]] = {
     CulturalFeatureKindId.PRACTICE: frozenset(
-        {"observation", "imitation", "teaching", "communication"}
+        {"observation", "imitation", "teaching", "communication", "artifact"}
     ),
     CulturalFeatureKindId.NARRATIVE_ELEMENT: frozenset(
-        {"communication", "teaching", "observation"}
+        {"communication", "teaching", "observation", "artifact"}
     ),
     CulturalFeatureKindId.TERM: frozenset({"communication", "teaching", "artifact"}),
     CulturalFeatureKindId.PRODUCTION_TECHNIQUE: frozenset(
         {"observation", "imitation", "teaching"}
     ),
     CulturalFeatureKindId.SOCIAL_EXPECTATION: frozenset(
-        {"observation", "communication", "teaching"}
+        {"observation", "communication", "teaching", "artifact"}
     ),
     CulturalFeatureKindId.SYMBOLIC_ASSOCIATION: frozenset(
         {"artifact", "communication", "observation"}
     ),
+}
+
+# Durable-record genre → cultural feature kind (v3-11; never writes kinship/history).
+_DURABLE_GENRE_FEATURE_KINDS: Final[dict[str, CulturalFeatureKindId]] = {
+    "warning": CulturalFeatureKindId.SYMBOLIC_ASSOCIATION,
+    "instruction": CulturalFeatureKindId.PRACTICE,
+    "map": CulturalFeatureKindId.SYMBOLIC_ASSOCIATION,
+    "story": CulturalFeatureKindId.NARRATIVE_ELEMENT,
+    "agreement": CulturalFeatureKindId.SOCIAL_EXPECTATION,
+    "inventory_record": CulturalFeatureKindId.PRACTICE,
+    "genealogy": CulturalFeatureKindId.SYMBOLIC_ASSOCIATION,
+    "chronicle": CulturalFeatureKindId.NARRATIVE_ELEMENT,
 }
 
 _TEACHING_DOMAIN_TO_FEATURE_KINDS: Final[
@@ -1264,12 +1276,25 @@ def collect_cultural_feature_public_cues(
         author_token = getattr(author, "value", "unknown")
         kind_token = getattr(getattr(artifact, "kind", None), "value", "mark")
         evidence = (f"artifact:{entity_token}",)
+        genre = getattr(artifact, "record_genre", None)
+        genre_token = getattr(genre, "value", None)
+        feature_kind = _DURABLE_GENRE_FEATURE_KINDS.get(
+            genre_token if isinstance(genre_token, str) else "",
+            CulturalFeatureKindId.SYMBOLIC_ASSOCIATION,
+        )
+        content_prefix = (
+            f"durable:{genre_token}"
+            if isinstance(genre_token, str)
+            else "symbol"
+        )
         cues.append(
             CulturalFeatureUptakeCue(
-                feature_kind=CulturalFeatureKindId.SYMBOLIC_ASSOCIATION,
+                feature_kind=feature_kind,
                 channel=CulturalTransmissionChannelId.ARTIFACT,
-                content_key=f"symbol:{entity_token}",
-                content_fingerprint=f"fp:symbol:{entity_token}:{kind_token}",
+                content_key=f"{content_prefix}:{entity_token}",
+                content_fingerprint=(
+                    f"fp:{content_prefix}:{entity_token}:{kind_token}"
+                ),
                 evidence_refs=evidence,
                 confidence=0.4,
             )

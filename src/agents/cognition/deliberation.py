@@ -769,6 +769,7 @@ class CommandPlanner:
         social_convention_mode: object | None = None,
         artifact_interpretations: object | None = None,
         artifact_interpretation_mode: object | None = None,
+        durable_records_active: bool = False,
         semantic_naming: object | None = None,
         semantic_naming_mode: object | None = None,
         cultural_narratives: object | None = None,
@@ -853,9 +854,25 @@ class CommandPlanner:
             Help,
         }
         from agents.cognition.artifacts import ArtifactInterpretationMode
+        from world.actions import AnnotateRecord, CopyRecord, DamageRecord
 
+        durable_command_types = {CopyRecord, AnnotateRecord, DamageRecord}
         if artifact_interpretation_mode is ArtifactInterpretationMode.DETERMINISTIC:
             allowed_commands.add(Inscribe)
+            if durable_records_active:
+                allowed_commands.update(durable_command_types)
+            elif type(command) in durable_command_types:
+                _LOG.info(
+                    "compile_skip reason_code=durable_records_inactive "
+                    "command_type=%s",
+                    type(command).__name__,
+                )
+        elif type(command) in durable_command_types:
+            _LOG.info(
+                "compile_skip reason_code=artifact_interpretation_disabled "
+                "command_type=%s",
+                type(command).__name__,
+            )
         if type(command) not in allowed_commands:
             _LOG.error(
                 "planner_invalid_output",
@@ -987,6 +1004,29 @@ class CommandPlanner:
             preferred=preferred_inscribe,
             inbox=inbox,
         )
+        # Re-gate durable commands after late Inscribe injection (Task 10).
+        durable_types = {CopyRecord, AnnotateRecord, DamageRecord}
+        genre_inscribe = (
+            type(command) is Inscribe and getattr(command, "record_genre", None) is not None
+        )
+        if type(command) in durable_types or genre_inscribe:
+            allowed = (
+                artifact_interpretation_mode is ArtifactInterpretationMode.DETERMINISTIC
+                and durable_records_active
+            )
+            if not allowed:
+                _LOG.info(
+                    "compile_skip reason_code=%s command_type=%s",
+                    (
+                        "artifact_interpretation_disabled"
+                        if artifact_interpretation_mode
+                        is not ArtifactInterpretationMode.DETERMINISTIC
+                        else "durable_records_inactive"
+                    ),
+                    type(command).__name__,
+                )
+                command = Wait()
+                used_fallback = True
         command_type = type(command).__name__
 
         confidence = intention.confidence if not used_fallback else 1.0

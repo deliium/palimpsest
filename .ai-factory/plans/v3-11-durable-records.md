@@ -464,19 +464,19 @@ Update (no “optional” hedges):
 
 ### Phase 4: Perception, interpretation, observer
 
-- [ ] Task 9: Extend `ObservedArtifact` + perception projection for genre/lineage/integrity per `perception_mode`; omit destroyed tombstones from agent Observation; update frozen observation field pins.
+- [x] Task 9: Extend `ObservedArtifact` + perception projection for genre/lineage/integrity per `perception_mode`; omit destroyed tombstones from agent Observation; update frozen observation field pins.
   - Deliverable: Perception tests for marks_and_meta vs marks_only; tombstone invisible to agents; held/ground rules unchanged.
   - Files: `src/world/observations.py`, `src/world/_perception.py`, `tests/unit/test_durable_record_perception.py`, `tests/unit/test_domain_contract_evolution_policy.py`
   - Logging: DEBUG observed_artifact_projected integrity + copy_generation (no content dumps)
   - Depends on: 3, 5
 
-- [ ] Task 10: Interpretation distortion when `integrity != intact`; compile gates for new commands when mode `DETERMINISTIC` + durable on; deliberation allowlist updates; optional `agents/cognition/cultural_features.py` compose hook from durable genres (table above) when cultural channel on; prove mode `DISABLED` does not compile durable commands.
+- [x] Task 10: Interpretation distortion when `integrity != intact`; compile gates for new commands when mode `DETERMINISTIC` + durable on; deliberation allowlist updates; optional `agents/cognition/cultural_features.py` compose hook from durable genres (table above) when cultural channel on; prove mode `DISABLED` does not compile durable commands.
   - Deliverable: Unit tests for forced distortion; compile allow/deny matrix; cultural compose skips when cultural off.
   - Files: `src/agents/cognition/artifacts.py`, `src/agents/cognition/deliberation.py`, `src/agents/cognition/cultural_features.py` (compose only), `src/simulation/agent_runtime.py` / runner bind as needed, `tests/unit/test_durable_record_interpretation.py`
   - Logging: DEBUG interpretation_distorted reason=`record_integrity`; INFO compile_skip reason codes
   - Depends on: 4, 9
 
-- [ ] Task 11: Observer/presentation: extend `ObserverArtifact` in `observer/contracts.py` + `observer/project.py` with optional genre/integrity/lineage fields (objective only); SEMANTIC types **43 → 47** in `observer/version.py`; causal-debugger labels for new detail kinds; no private-reading chrome. Protocol stays `observer-protocol-v1`.
+- [x] Task 11: Observer/presentation: extend `ObserverArtifact` in `observer/contracts.py` + `observer/project.py` with optional genre/integrity/lineage fields (objective only); SEMANTIC types **43 → 47** in `observer/version.py`; causal-debugger labels for new detail kinds; no private-reading chrome. Protocol stays `observer-protocol-v1`.
   - Deliverable: Observer unit tests for new fields/types; presentation forbids still hold.
   - Files: `src/observer/contracts.py`, `src/observer/project.py`, `src/observer/version.py`, `src/simulation/causal_debugger.py`, `tests/unit/test_artifact_observer.py` (extend), semantic catalog pins
   - Logging: N/A beyond existing observer metadata logs

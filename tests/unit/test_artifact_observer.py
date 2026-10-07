@@ -23,14 +23,26 @@ from simulation.engine import WorldEngine
 from simulation.lifecycle import ActionSubmission
 from simulation.observer_facts import ObjectiveFacts, scene_from_facts
 from tests.physical_helpers import physical_config, two_location_fixture
-from world.actions import Amend, Erase, Inscribe, TransferArtifact
-from world.artifacts import ArtifactContent, ArtifactKind, InformationArtifact
+from simulation.runner_models import example_durable_records_spec
+from world.actions import Amend, CopyRecord, Erase, Inscribe, TransferArtifact
+from world.artifacts import (
+    ArtifactContent,
+    ArtifactKind,
+    DurableRecordGenre,
+    InformationArtifact,
+    RecordIntegrity,
+)
 from world.events import (
     EVENT_SCHEMA_REPLAY_V8,
+    EVENT_SCHEMA_REPLAY_V13,
+    ArtifactAnnotated,
+    ArtifactCopied,
     ArtifactCreated,
+    ArtifactDamaged,
     ArtifactDestroyed,
     ArtifactModified,
     ArtifactMoved,
+    ArtifactPartiallyLost,
     OccurrenceContext,
     WorldEvent,
     make_physical_replayable_event,
@@ -55,6 +67,12 @@ _ARTIFACT_SEMANTIC = (
     "ARTIFACT_MODIFIED",
     "ARTIFACT_MOVED",
     "ARTIFACT_DESTROYED",
+)
+_DURABLE_ARTIFACT_SEMANTIC = (
+    "ARTIFACT_COPIED",
+    "ARTIFACT_ANNOTATED",
+    "ARTIFACT_DAMAGED",
+    "ARTIFACT_PARTIALLY_LOST",
 )
 _LIFECYCLE_SEMANTIC = (
     "AGENT_CREATED",
@@ -85,7 +103,12 @@ def _cause() -> ActionCause:
     return ActionCause(request_id=RequestId("req-1"), actor_id=EntityId("body-1"))
 
 
-def _world_event(details: object, *, sequence: int = 0) -> WorldEvent:
+def _world_event(
+    details: object,
+    *,
+    sequence: int = 0,
+    schema_version: int = EVENT_SCHEMA_REPLAY_V8,
+) -> WorldEvent:
     return make_physical_replayable_event(
         event_id=EventId(f"evt-{sequence}"),
         run_id="run-1",
@@ -96,14 +119,15 @@ def _world_event(details: object, *, sequence: int = 0) -> WorldEvent:
         resulting_revision=WorldRevision(1),
         details=details,  # type: ignore[arg-type]
         occurrence=OccurrenceContext(origin_location_id=EntityId("loc-1")),
-        schema_version=EVENT_SCHEMA_REPLAY_V8,
+        schema_version=schema_version,
     )
 
 
 def test_semantic_catalog_appends_four_artifact_types() -> None:
     assert OBSERVER_PROTOCOL_VERSION == "observer-protocol-v1"
-    assert len(SEMANTIC_EVENT_TYPES) == 43
-    assert SEMANTIC_EVENT_TYPES[-11:-7] == _ARTIFACT_SEMANTIC
+    assert len(SEMANTIC_EVENT_TYPES) == 47
+    assert SEMANTIC_EVENT_TYPES[-15:-11] == _ARTIFACT_SEMANTIC
+    assert SEMANTIC_EVENT_TYPES[-11:-7] == _DURABLE_ARTIFACT_SEMANTIC
     assert SEMANTIC_EVENT_TYPES[-7:-3] == _LIFECYCLE_SEMANTIC
     assert SEMANTIC_EVENT_TYPES[-3:-2] == _KINSHIP_SEMANTIC
     assert SEMANTIC_EVENT_TYPES[-2:] == ("AGENT_FED", "AGENT_TRANSPORTED")
@@ -177,12 +201,57 @@ def test_adapt_event_maps_artifact_kinds(
             resulting_holder_id=EntityId("body-1"),
         ),
         ArtifactDestroyed(EntityId("art-1"), ArtifactKind.SIGN, 1),
+        ArtifactCopied(
+            child_artifact_id=EntityId("art-child"),
+            parent_artifact_id=EntityId("art-1"),
+            source_artifact_id=EntityId("art-1"),
+            fidelity_mode="perfect",
+            copy_generation=1,
+            content_revision=0,
+            record_genre="warning",
+        ),
+        ArtifactAnnotated(
+            artifact_id=EntityId("art-1"),
+            annotation_revisions=1,
+            content_revision=2,
+            integrity="intact",
+        ),
+        ArtifactDamaged(
+            artifact_id=EntityId("art-1"),
+            prior_integrity="intact",
+            next_integrity="damaged",
+            lost_mark_count_delta=1,
+            content_revision=3,
+        ),
+        ArtifactPartiallyLost(
+            artifact_id=EntityId("art-1"),
+            marks_remaining=0,
+            lost_mark_count=2,
+            content_revision=4,
+            integrity="partially_lost",
+        ),
     )
     with caplog.at_level(logging.DEBUG, logger="observer.adapt"):
-        adapted = [adapt_event(_world_event(item, sequence=index)) for index, item in enumerate(details)]
-    assert [item.type for item in adapted] == list(_ARTIFACT_SEMANTIC)
+        adapted = [
+            adapt_event(
+                _world_event(
+                    item,
+                    sequence=index,
+                    schema_version=(
+                        EVENT_SCHEMA_REPLAY_V13
+                        if index >= 4
+                        else EVENT_SCHEMA_REPLAY_V8
+                    ),
+                )
+            )
+            for index, item in enumerate(details)
+        ]
+    assert [item.type for item in adapted] == list(
+        _ARTIFACT_SEMANTIC + _DURABLE_ARTIFACT_SEMANTIC
+    )
     assert all(item.artifact_id is not None for item in adapted)
     assert adapted[0].public_mapping()["artifact_id"] == "art-1"
+    assert adapted[4].public_mapping()["artifact_id"] == "art-child"
     wait = ObserverEvent(
         protocol_version=OBSERVER_PROTOCOL_VERSION,
         type="AGENT_WAITED",
@@ -291,6 +360,48 @@ def test_project_frame_orders_artifacts_without_readings(
     assert presented["icon_key"] == "artifact_note"
     assert "pixels" not in dumped
     assert "sprite" not in dumped
+
+
+def test_project_frame_includes_durable_lineage_fields() -> None:
+    fixture = two_location_fixture()
+    engine = WorldEngine(
+        config=physical_config(1),
+        bootstrap=fixture.as_bootstrap(),
+        artifacts_enabled=True,
+        durable_records_spec=example_durable_records_spec(),
+    )
+    created = _act(
+        engine,
+        "agent-1",
+        Inscribe(
+            kind=ArtifactKind.RECORD,
+            content=_content("path"),
+            record_genre=DurableRecordGenre.WARNING,
+        ),
+    )
+    parent_id = next(
+        record.event.details.artifact_id
+        for record in created.events
+        if type(record.event.details) is ArtifactCreated
+    )
+    _act(engine, "agent-1", CopyRecord(artifact_id=parent_id))
+    facts = engine.detached_objective_facts()
+    frame = project_frame(scene_from_facts(facts), _LAYOUT, mode="live")
+    by_id = {item.artifact_id: item for item in frame.world.artifacts}
+    parent = by_id[parent_id.value]
+    assert parent.record_genre == "warning"
+    assert parent.integrity == "intact"
+    assert parent.copy_generation == 0
+    assert parent.source_artifact_id == parent_id.value
+    children = [item for item in frame.world.artifacts if item.parent_artifact_id]
+    assert len(children) == 1
+    child = children[0]
+    assert child.parent_artifact_id == parent_id.value
+    assert child.copy_generation == 1
+    assert child.record_genre == "warning"
+    assert child.integrity == RecordIntegrity.INTACT.value
+    assert "meaning" not in _names(child)
+    assert "interpretation" not in _names(child)
 
 
 def test_detached_facts_include_seeded_artifacts() -> None:

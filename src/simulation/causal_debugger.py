@@ -127,6 +127,10 @@ _DETAIL_KIND_TO_SEMANTIC_TYPE: Final[Mapping[str, str]] = {
     "artifact_modified": "ARTIFACT_MODIFIED",
     "artifact_moved": "ARTIFACT_MOVED",
     "artifact_destroyed": "ARTIFACT_DESTROYED",
+    "artifact_copied": "ARTIFACT_COPIED",
+    "artifact_annotated": "ARTIFACT_ANNOTATED",
+    "artifact_damaged": "ARTIFACT_DAMAGED",
+    "artifact_partially_lost": "ARTIFACT_PARTIALLY_LOST",
     "agent_created": "AGENT_CREATED",
     "agent_entered_world": "AGENT_ENTERED_WORLD",
     "agent_initialization_recorded": "AGENT_INITIALIZED",
@@ -164,6 +168,10 @@ _SEMANTIC_TO_COMMAND_KIND: Final[Mapping[str, str]] = {
     "ARTIFACT_MODIFIED": "amend",
     "ARTIFACT_MOVED": "transfer_artifact",
     "ARTIFACT_DESTROYED": "erase",
+    "ARTIFACT_COPIED": "copy_record",
+    "ARTIFACT_ANNOTATED": "annotate_record",
+    "ARTIFACT_DAMAGED": "damage_record",
+    "ARTIFACT_PARTIALLY_LOST": "damage_record",
 }
 
 _DETAIL_KIND_TO_COMMAND_KIND: Final[Mapping[str, str]] = {
@@ -194,6 +202,10 @@ _DETAIL_KIND_TO_COMMAND_KIND: Final[Mapping[str, str]] = {
     "artifact_modified": "amend",
     "artifact_moved": "transfer_artifact",
     "artifact_destroyed": "erase",
+    "artifact_copied": "copy_record",
+    "artifact_annotated": "annotate_record",
+    "artifact_damaged": "damage_record",
+    "artifact_partially_lost": "damage_record",
 }
 
 # Detail class __name__ (Attacked, Moved, …) → command_kind when kind field absent.
@@ -223,6 +235,10 @@ _DETAIL_TYPE_NAME_TO_COMMAND_KIND: Final[Mapping[str, str]] = {
     "ArtifactModified": "amend",
     "ArtifactMoved": "transfer_artifact",
     "ArtifactDestroyed": "erase",
+    "ArtifactCopied": "copy_record",
+    "ArtifactAnnotated": "annotate_record",
+    "ArtifactDamaged": "damage_record",
+    "ArtifactPartiallyLost": "damage_record",
 }
 
 # Consequence / environment semantics: no agent command to explain.

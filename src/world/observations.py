@@ -41,7 +41,15 @@ from types import MappingProxyType
 from typing import Literal
 
 from world._freeze import freeze_mapping, require_non_empty
-from world.artifacts import ArtifactContent, ArtifactKind, require_artifact_content
+from world.artifacts import (
+    ArtifactContent,
+    ArtifactKind,
+    DurableRecordGenre,
+    RecordIntegrity,
+    require_artifact_content,
+    require_durable_record_genre,
+    require_record_integrity,
+)
 from world.communications import StructuredUtterance
 from world.environment import HazardKind, Season, TemperatureBand
 from world.identifiers import (
@@ -565,6 +573,13 @@ class ObservedArtifact:
     content: ArtifactContent
     content_revision: int
     placement: ObservedItemPlacement
+    record_genre: DurableRecordGenre | None = None
+    parent_artifact_id: EntityId | None = None
+    source_artifact_id: EntityId | None = None
+    copy_generation: int | None = None
+    integrity: RecordIntegrity | None = None
+    annotation_revisions: int | None = None
+    lost_mark_count: int | None = None
 
     def __post_init__(self) -> None:
         if type(self.entity_id) is not EntityId:
@@ -594,6 +609,49 @@ class ObservedArtifact:
             raise ValueError(
                 "ObservedArtifact.placement must be ground or held-by-self"
             )
+        if self.record_genre is not None:
+            require_durable_record_genre(
+                self.record_genre, field_name="ObservedArtifact.record_genre"
+            )
+        if self.parent_artifact_id is not None and type(
+            self.parent_artifact_id
+        ) is not EntityId:
+            raise TypeError("ObservedArtifact.parent_artifact_id must be EntityId")
+        if self.source_artifact_id is not None and type(
+            self.source_artifact_id
+        ) is not EntityId:
+            raise TypeError("ObservedArtifact.source_artifact_id must be EntityId")
+        if self.copy_generation is not None:
+            if (
+                isinstance(self.copy_generation, bool)
+                or type(self.copy_generation) is not int
+                or self.copy_generation < 0
+            ):
+                raise TypeError(
+                    "ObservedArtifact.copy_generation must be non-negative int"
+                )
+        if self.integrity is not None:
+            require_record_integrity(
+                self.integrity, field_name="ObservedArtifact.integrity"
+            )
+        if self.annotation_revisions is not None:
+            if (
+                isinstance(self.annotation_revisions, bool)
+                or type(self.annotation_revisions) is not int
+                or self.annotation_revisions < 0
+            ):
+                raise TypeError(
+                    "ObservedArtifact.annotation_revisions must be non-negative int"
+                )
+        if self.lost_mark_count is not None:
+            if (
+                isinstance(self.lost_mark_count, bool)
+                or type(self.lost_mark_count) is not int
+                or self.lost_mark_count < 0
+            ):
+                raise TypeError(
+                    "ObservedArtifact.lost_mark_count must be non-negative int"
+                )
 
 
 @dataclass(frozen=True, slots=True)
