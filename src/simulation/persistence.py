@@ -185,6 +185,7 @@ def checkpoint_schema_for_production(
     new_agent_provenance_active: bool = False,
     kinship_active: bool = False,
     dependency_care_active: bool = False,
+    durable_records_active: bool = False,
 ) -> tuple[int, str]:
     """Choose the checkpoint schema for this run.
 
@@ -192,6 +193,10 @@ def checkpoint_schema_for_production(
     else new-agent provenance → ``(v10, v7)``; else lifecycle → ``(v9, v6)``;
     else artifacts → ``(v8, v5)``; else dynamics → ``(v7, v4)``; else
     production → ``(v6, v3)``; else replay-v5 / codec ``v2``.
+
+    ``durable_records_active`` is plumbed for Task 2 channel wiring; Task 7
+    owns the ``(EVENT_SCHEMA_REPLAY_V13, v10)`` priority ahead of
+    dependency-care.
     """
     if dependency_care_active:
         pair = EVENT_SCHEMA_REPLAY_V12, "v9"
@@ -211,10 +216,11 @@ def checkpoint_schema_for_production(
         pair = EVENT_SCHEMA_VERSION, PERSISTENCE_CODEC_VERSION
     _LOG.debug(
         "checkpoint_schema_selected event_schema=%s codec=%s "
-        "dependency_care_active=%s kinship_active=%s "
+        "durable_records_active=%s dependency_care_active=%s kinship_active=%s "
         "new_agent_provenance_active=%s lifecycle_active=%s artifacts_active=%s",
         pair[0],
         pair[1],
+        durable_records_active,
         dependency_care_active,
         kinship_active,
         new_agent_provenance_active,

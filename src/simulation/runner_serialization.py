@@ -56,6 +56,7 @@ from simulation.runner_models import (
     RUNNER_SCHEMA_VERSION_V30,
     RUNNER_SCHEMA_VERSION_V31,
     RUNNER_SCHEMA_VERSION_V32,
+    RUNNER_SCHEMA_VERSION_V33,
     SUPPORTED_RUNNER_SCHEMA_VERSIONS,
     AgentCognitionSpec,
     AgentRunnerSpec,
@@ -84,6 +85,11 @@ from simulation.runner_models import (
     FinalizedTickReceipt,
     GroupFormationMode,
     HistoricalMemoryLayersSpec,
+    DurableAnnotationPolicy,
+    DurableCopyFidelityPolicy,
+    DurableIntegrityPolicy,
+    DurableLineagePolicy,
+    DurableRecordsSpec,
     ImaginationMode,
     KinshipSpec,
     MemoryMode,
@@ -433,6 +439,7 @@ _SKILL_SCHEMA_VERSIONS: Final[frozenset[str]] = frozenset(
     RUNNER_SCHEMA_VERSION_V30,
     RUNNER_SCHEMA_VERSION_V31,
     RUNNER_SCHEMA_VERSION_V32,
+    RUNNER_SCHEMA_VERSION_V33,
     }
 )
 _COGNITION_SCHEMA_CONSOLIDATION: Final[frozenset[str]] = frozenset(
@@ -465,6 +472,7 @@ _COGNITION_SCHEMA_CONSOLIDATION: Final[frozenset[str]] = frozenset(
     RUNNER_SCHEMA_VERSION_V30,
     RUNNER_SCHEMA_VERSION_V31,
     RUNNER_SCHEMA_VERSION_V32,
+    RUNNER_SCHEMA_VERSION_V33,
     }
 )
 _COGNITION_SCHEMA_REFLECTION: Final[frozenset[str]] = frozenset(
@@ -496,6 +504,7 @@ _COGNITION_SCHEMA_REFLECTION: Final[frozenset[str]] = frozenset(
     RUNNER_SCHEMA_VERSION_V30,
     RUNNER_SCHEMA_VERSION_V31,
     RUNNER_SCHEMA_VERSION_V32,
+    RUNNER_SCHEMA_VERSION_V33,
     }
 )
 _COGNITION_SCHEMA_PROSPECTIVE: Final[frozenset[str]] = frozenset(
@@ -526,6 +535,7 @@ _COGNITION_SCHEMA_PROSPECTIVE: Final[frozenset[str]] = frozenset(
     RUNNER_SCHEMA_VERSION_V30,
     RUNNER_SCHEMA_VERSION_V31,
     RUNNER_SCHEMA_VERSION_V32,
+    RUNNER_SCHEMA_VERSION_V33,
     }
 )
 _COGNITION_SCHEMA_COUNTERFACTUAL: Final[frozenset[str]] = frozenset(
@@ -555,6 +565,7 @@ _COGNITION_SCHEMA_COUNTERFACTUAL: Final[frozenset[str]] = frozenset(
     RUNNER_SCHEMA_VERSION_V30,
     RUNNER_SCHEMA_VERSION_V31,
     RUNNER_SCHEMA_VERSION_V32,
+    RUNNER_SCHEMA_VERSION_V33,
     }
 )
 _COGNITION_SCHEMA_STRATEGY: Final[frozenset[str]] = frozenset(
@@ -583,6 +594,7 @@ _COGNITION_SCHEMA_STRATEGY: Final[frozenset[str]] = frozenset(
     RUNNER_SCHEMA_VERSION_V30,
     RUNNER_SCHEMA_VERSION_V31,
     RUNNER_SCHEMA_VERSION_V32,
+    RUNNER_SCHEMA_VERSION_V33,
     }
 )
 _COGNITION_SCHEMA_REPUTATION: Final[frozenset[str]] = frozenset(
@@ -610,6 +622,7 @@ _COGNITION_SCHEMA_REPUTATION: Final[frozenset[str]] = frozenset(
     RUNNER_SCHEMA_VERSION_V30,
     RUNNER_SCHEMA_VERSION_V31,
     RUNNER_SCHEMA_VERSION_V32,
+    RUNNER_SCHEMA_VERSION_V33,
     }
 )
 
@@ -902,6 +915,7 @@ def _encode_cognition(
     RUNNER_SCHEMA_VERSION_V30,
     RUNNER_SCHEMA_VERSION_V31,
     RUNNER_SCHEMA_VERSION_V32,
+    RUNNER_SCHEMA_VERSION_V33,
     }:
         payload["teaching_interaction_mode"] = value.teaching_interaction_mode.value
         for name in _TEACHING_WEIGHT_KEYS:
@@ -927,6 +941,7 @@ def _encode_cognition(
     RUNNER_SCHEMA_VERSION_V30,
     RUNNER_SCHEMA_VERSION_V31,
     RUNNER_SCHEMA_VERSION_V32,
+    RUNNER_SCHEMA_VERSION_V33,
     }:
         payload["production_knowledge_mode"] = value.production_knowledge_mode.value
         payload["production_catalog"] = _encode_production_catalog(
@@ -951,6 +966,7 @@ def _encode_cognition(
     RUNNER_SCHEMA_VERSION_V30,
     RUNNER_SCHEMA_VERSION_V31,
     RUNNER_SCHEMA_VERSION_V32,
+    RUNNER_SCHEMA_VERSION_V33,
     }:
         payload["territorial_claim_mode"] = value.territorial_claim_mode.value
     if schema_version in {
@@ -971,6 +987,7 @@ def _encode_cognition(
     RUNNER_SCHEMA_VERSION_V30,
     RUNNER_SCHEMA_VERSION_V31,
     RUNNER_SCHEMA_VERSION_V32,
+    RUNNER_SCHEMA_VERSION_V33,
     }:
         payload["group_formation_mode"] = value.group_formation_mode.value
     if schema_version in {
@@ -990,6 +1007,7 @@ def _encode_cognition(
     RUNNER_SCHEMA_VERSION_V30,
     RUNNER_SCHEMA_VERSION_V31,
     RUNNER_SCHEMA_VERSION_V32,
+    RUNNER_SCHEMA_VERSION_V33,
     }:
         payload["social_norm_mode"] = value.social_norm_mode.value
     if schema_version in {
@@ -1008,6 +1026,7 @@ def _encode_cognition(
     RUNNER_SCHEMA_VERSION_V30,
     RUNNER_SCHEMA_VERSION_V31,
     RUNNER_SCHEMA_VERSION_V32,
+    RUNNER_SCHEMA_VERSION_V33,
     }:
         payload["social_convention_mode"] = value.social_convention_mode.value
     if schema_version in {
@@ -1025,6 +1044,7 @@ def _encode_cognition(
     RUNNER_SCHEMA_VERSION_V30,
     RUNNER_SCHEMA_VERSION_V31,
     RUNNER_SCHEMA_VERSION_V32,
+    RUNNER_SCHEMA_VERSION_V33,
     }:
         payload["artifact_interpretation_mode"] = (
             value.artifact_interpretation_mode.value
@@ -1043,6 +1063,7 @@ def _encode_cognition(
     RUNNER_SCHEMA_VERSION_V30,
     RUNNER_SCHEMA_VERSION_V31,
     RUNNER_SCHEMA_VERSION_V32,
+    RUNNER_SCHEMA_VERSION_V33,
     }:
         payload["semantic_naming_mode"] = value.semantic_naming_mode.value
     if schema_version in {
@@ -1058,6 +1079,7 @@ def _encode_cognition(
     RUNNER_SCHEMA_VERSION_V30,
     RUNNER_SCHEMA_VERSION_V31,
     RUNNER_SCHEMA_VERSION_V32,
+    RUNNER_SCHEMA_VERSION_V33,
     }:
         payload["cultural_narrative_mode"] = value.cultural_narrative_mode.value
     if schema_version in {
@@ -1072,6 +1094,7 @@ def _encode_cognition(
     RUNNER_SCHEMA_VERSION_V30,
     RUNNER_SCHEMA_VERSION_V31,
     RUNNER_SCHEMA_VERSION_V32,
+    RUNNER_SCHEMA_VERSION_V33,
     }:
         payload["cognitive_budget_mode"] = value.cognitive_budget_mode.value
         limits = value.cognitive_budget_limits
@@ -1099,6 +1122,7 @@ def _encode_cognition(
         RUNNER_SCHEMA_VERSION_V30,
         RUNNER_SCHEMA_VERSION_V31,
         RUNNER_SCHEMA_VERSION_V32,
+        RUNNER_SCHEMA_VERSION_V33,
         }:
             # Full v22 keyset on v23+; DISABLED budgets encode null limit keys.
             for key in _BUDGET_LIMIT_KEYS:
@@ -1134,6 +1158,7 @@ def _decode_cognition(
     RUNNER_SCHEMA_VERSION_V30,
     RUNNER_SCHEMA_VERSION_V31,
     RUNNER_SCHEMA_VERSION_V32,
+    RUNNER_SCHEMA_VERSION_V33,
     }:
         _require_keys(data, _COGNITION_KEYS_V22, path=path)
     elif schema_version == RUNNER_SCHEMA_VERSION_V21:
@@ -1289,6 +1314,7 @@ def _decode_cognition(
     RUNNER_SCHEMA_VERSION_V30,
     RUNNER_SCHEMA_VERSION_V31,
     RUNNER_SCHEMA_VERSION_V32,
+    RUNNER_SCHEMA_VERSION_V33,
     }:
         try:
             teaching_interaction_mode = TeachingInteractionMode(
@@ -1326,6 +1352,7 @@ def _decode_cognition(
     RUNNER_SCHEMA_VERSION_V30,
     RUNNER_SCHEMA_VERSION_V31,
     RUNNER_SCHEMA_VERSION_V32,
+    RUNNER_SCHEMA_VERSION_V33,
     }:
         try:
             production_knowledge_mode = ProductionKnowledgeMode(
@@ -1364,6 +1391,7 @@ def _decode_cognition(
     RUNNER_SCHEMA_VERSION_V30,
     RUNNER_SCHEMA_VERSION_V31,
     RUNNER_SCHEMA_VERSION_V32,
+    RUNNER_SCHEMA_VERSION_V33,
     }:
         try:
             territorial_claim_mode = TerritorialClaimMode(
@@ -1393,6 +1421,7 @@ def _decode_cognition(
     RUNNER_SCHEMA_VERSION_V30,
     RUNNER_SCHEMA_VERSION_V31,
     RUNNER_SCHEMA_VERSION_V32,
+    RUNNER_SCHEMA_VERSION_V33,
     }:
         try:
             group_formation_mode = GroupFormationMode(
@@ -1421,6 +1450,7 @@ def _decode_cognition(
     RUNNER_SCHEMA_VERSION_V30,
     RUNNER_SCHEMA_VERSION_V31,
     RUNNER_SCHEMA_VERSION_V32,
+    RUNNER_SCHEMA_VERSION_V33,
     }:
         try:
             social_norm_mode = SocialNormMode(
@@ -1448,6 +1478,7 @@ def _decode_cognition(
     RUNNER_SCHEMA_VERSION_V30,
     RUNNER_SCHEMA_VERSION_V31,
     RUNNER_SCHEMA_VERSION_V32,
+    RUNNER_SCHEMA_VERSION_V33,
     }:
         try:
             social_convention_mode = SocialConventionMode(
@@ -1474,6 +1505,7 @@ def _decode_cognition(
     RUNNER_SCHEMA_VERSION_V30,
     RUNNER_SCHEMA_VERSION_V31,
     RUNNER_SCHEMA_VERSION_V32,
+    RUNNER_SCHEMA_VERSION_V33,
     }:
         try:
             artifact_interpretation_mode = ArtifactInterpretationMode(
@@ -1500,6 +1532,7 @@ def _decode_cognition(
     RUNNER_SCHEMA_VERSION_V30,
     RUNNER_SCHEMA_VERSION_V31,
     RUNNER_SCHEMA_VERSION_V32,
+    RUNNER_SCHEMA_VERSION_V33,
     }:
         try:
             semantic_naming_mode = SemanticNamingMode(
@@ -1524,6 +1557,7 @@ def _decode_cognition(
     RUNNER_SCHEMA_VERSION_V30,
     RUNNER_SCHEMA_VERSION_V31,
     RUNNER_SCHEMA_VERSION_V32,
+    RUNNER_SCHEMA_VERSION_V33,
     }:
         try:
             cultural_narrative_mode = CulturalNarrativeMode(
@@ -1549,6 +1583,7 @@ def _decode_cognition(
     RUNNER_SCHEMA_VERSION_V30,
     RUNNER_SCHEMA_VERSION_V31,
     RUNNER_SCHEMA_VERSION_V32,
+    RUNNER_SCHEMA_VERSION_V33,
     }:
         try:
             cognitive_budget_mode = CognitiveBudgetMode(
@@ -1573,6 +1608,7 @@ def _decode_cognition(
             RUNNER_SCHEMA_VERSION_V30,
             RUNNER_SCHEMA_VERSION_V31,
             RUNNER_SCHEMA_VERSION_V32,
+            RUNNER_SCHEMA_VERSION_V33,
             }
             and cognitive_budget_mode is CognitiveBudgetMode.DISABLED
         ):
@@ -1732,6 +1768,7 @@ def _encode_agent(value: AgentRunnerSpec, *, schema_version: str) -> dict[str, A
     RUNNER_SCHEMA_VERSION_V30,
     RUNNER_SCHEMA_VERSION_V31,
     RUNNER_SCHEMA_VERSION_V32,
+    RUNNER_SCHEMA_VERSION_V33,
     }:
         assert value.name is not None
         payload["name"] = value.name
@@ -2549,6 +2586,342 @@ _RUNNER_ROOT_KEYS_V32_CULTURAL_KINSHIP_ONLY_WITH_DYNAMICS: Final[set[str]] = {
     *_RUNNER_ROOT_KEYS_V31_CULTURAL_KINSHIP_ONLY_WITH_DYNAMICS,
     "historical_memory_layers",
 }
+# v33 = v32 accepted roots U durable_records (layers present)
+# v33 no-layers = v31 accepted roots U durable_records (layers absent)
+_RUNNER_ROOT_KEYS_V33_WITH_LIFECYCLE: Final[set[str]] = {
+    *_RUNNER_ROOT_KEYS_V32_WITH_LIFECYCLE,
+    "durable_records",
+}
+_RUNNER_ROOT_KEYS_V33_NO_LAYERS_WITH_LIFECYCLE: Final[set[str]] = {
+    *_RUNNER_ROOT_KEYS_V31_WITH_LIFECYCLE,
+    "durable_records",
+}
+_RUNNER_ROOT_KEYS_V33_WITH_LIFECYCLE_AND_DYNAMICS: Final[set[str]] = {
+    *_RUNNER_ROOT_KEYS_V32_WITH_LIFECYCLE_AND_DYNAMICS,
+    "durable_records",
+}
+_RUNNER_ROOT_KEYS_V33_NO_LAYERS_WITH_LIFECYCLE_AND_DYNAMICS: Final[set[str]] = {
+    *_RUNNER_ROOT_KEYS_V31_WITH_LIFECYCLE_AND_DYNAMICS,
+    "durable_records",
+}
+_RUNNER_ROOT_KEYS_V33_WITH_LIFECYCLE_NO_KINSHIP: Final[set[str]] = {
+    *_RUNNER_ROOT_KEYS_V32_WITH_LIFECYCLE_NO_KINSHIP,
+    "durable_records",
+}
+_RUNNER_ROOT_KEYS_V33_NO_LAYERS_WITH_LIFECYCLE_NO_KINSHIP: Final[set[str]] = {
+    *_RUNNER_ROOT_KEYS_V31_WITH_LIFECYCLE_NO_KINSHIP,
+    "durable_records",
+}
+_RUNNER_ROOT_KEYS_V33_WITH_LIFECYCLE_NO_KINSHIP_AND_DYNAMICS: Final[set[str]] = {
+    *_RUNNER_ROOT_KEYS_V32_WITH_LIFECYCLE_NO_KINSHIP_AND_DYNAMICS,
+    "durable_records",
+}
+_RUNNER_ROOT_KEYS_V33_NO_LAYERS_WITH_LIFECYCLE_NO_KINSHIP_AND_DYNAMICS: Final[set[str]] = {
+    *_RUNNER_ROOT_KEYS_V31_WITH_LIFECYCLE_NO_KINSHIP_AND_DYNAMICS,
+    "durable_records",
+}
+_RUNNER_ROOT_KEYS_V33_NO_DEPENDENCY_CARE: Final[set[str]] = {
+    *_RUNNER_ROOT_KEYS_V32_NO_DEPENDENCY_CARE,
+    "durable_records",
+}
+_RUNNER_ROOT_KEYS_V33_NO_LAYERS_NO_DEPENDENCY_CARE: Final[set[str]] = {
+    *_RUNNER_ROOT_KEYS_V31_NO_DEPENDENCY_CARE,
+    "durable_records",
+}
+_RUNNER_ROOT_KEYS_V33_NO_DEPENDENCY_CARE_AND_DYNAMICS: Final[set[str]] = {
+    *_RUNNER_ROOT_KEYS_V32_NO_DEPENDENCY_CARE_AND_DYNAMICS,
+    "durable_records",
+}
+_RUNNER_ROOT_KEYS_V33_NO_LAYERS_NO_DEPENDENCY_CARE_AND_DYNAMICS: Final[set[str]] = {
+    *_RUNNER_ROOT_KEYS_V31_NO_DEPENDENCY_CARE_AND_DYNAMICS,
+    "durable_records",
+}
+_RUNNER_ROOT_KEYS_V33_NO_DEPENDENCY_CARE_NO_KINSHIP: Final[set[str]] = {
+    *_RUNNER_ROOT_KEYS_V32_NO_DEPENDENCY_CARE_NO_KINSHIP,
+    "durable_records",
+}
+_RUNNER_ROOT_KEYS_V33_NO_LAYERS_NO_DEPENDENCY_CARE_NO_KINSHIP: Final[set[str]] = {
+    *_RUNNER_ROOT_KEYS_V31_NO_DEPENDENCY_CARE_NO_KINSHIP,
+    "durable_records",
+}
+_RUNNER_ROOT_KEYS_V33_NO_DEPENDENCY_CARE_NO_KINSHIP_AND_DYNAMICS: Final[set[str]] = {
+    *_RUNNER_ROOT_KEYS_V32_NO_DEPENDENCY_CARE_NO_KINSHIP_AND_DYNAMICS,
+    "durable_records",
+}
+_RUNNER_ROOT_KEYS_V33_NO_LAYERS_NO_DEPENDENCY_CARE_NO_KINSHIP_AND_DYNAMICS: Final[set[str]] = {
+    *_RUNNER_ROOT_KEYS_V31_NO_DEPENDENCY_CARE_NO_KINSHIP_AND_DYNAMICS,
+    "durable_records",
+}
+_RUNNER_ROOT_KEYS_V33_NO_DEV_WITH_LIFECYCLE: Final[set[str]] = {
+    *_RUNNER_ROOT_KEYS_V32_NO_DEV_WITH_LIFECYCLE,
+    "durable_records",
+}
+_RUNNER_ROOT_KEYS_V33_NO_LAYERS_NO_DEV_WITH_LIFECYCLE: Final[set[str]] = {
+    *_RUNNER_ROOT_KEYS_V31_NO_DEV_WITH_LIFECYCLE,
+    "durable_records",
+}
+_RUNNER_ROOT_KEYS_V33_NO_DEV_WITH_LIFECYCLE_AND_DYNAMICS: Final[set[str]] = {
+    *_RUNNER_ROOT_KEYS_V32_NO_DEV_WITH_LIFECYCLE_AND_DYNAMICS,
+    "durable_records",
+}
+_RUNNER_ROOT_KEYS_V33_NO_LAYERS_NO_DEV_WITH_LIFECYCLE_AND_DYNAMICS: Final[set[str]] = {
+    *_RUNNER_ROOT_KEYS_V31_NO_DEV_WITH_LIFECYCLE_AND_DYNAMICS,
+    "durable_records",
+}
+_RUNNER_ROOT_KEYS_V33_NO_DEV_WITH_LIFECYCLE_NO_KINSHIP: Final[set[str]] = {
+    *_RUNNER_ROOT_KEYS_V32_NO_DEV_WITH_LIFECYCLE_NO_KINSHIP,
+    "durable_records",
+}
+_RUNNER_ROOT_KEYS_V33_NO_LAYERS_NO_DEV_WITH_LIFECYCLE_NO_KINSHIP: Final[set[str]] = {
+    *_RUNNER_ROOT_KEYS_V31_NO_DEV_WITH_LIFECYCLE_NO_KINSHIP,
+    "durable_records",
+}
+_RUNNER_ROOT_KEYS_V33_NO_DEV_WITH_LIFECYCLE_NO_KINSHIP_AND_DYNAMICS: Final[set[str]] = {
+    *_RUNNER_ROOT_KEYS_V32_NO_DEV_WITH_LIFECYCLE_NO_KINSHIP_AND_DYNAMICS,
+    "durable_records",
+}
+_RUNNER_ROOT_KEYS_V33_NO_LAYERS_NO_DEV_WITH_LIFECYCLE_NO_KINSHIP_AND_DYNAMICS: Final[set[str]] = {
+    *_RUNNER_ROOT_KEYS_V31_NO_DEV_WITH_LIFECYCLE_NO_KINSHIP_AND_DYNAMICS,
+    "durable_records",
+}
+_RUNNER_ROOT_KEYS_V33_NO_DEV_NO_DEPENDENCY_CARE: Final[set[str]] = {
+    *_RUNNER_ROOT_KEYS_V32_NO_DEV_NO_DEPENDENCY_CARE,
+    "durable_records",
+}
+_RUNNER_ROOT_KEYS_V33_NO_LAYERS_NO_DEV_NO_DEPENDENCY_CARE: Final[set[str]] = {
+    *_RUNNER_ROOT_KEYS_V31_NO_DEV_NO_DEPENDENCY_CARE,
+    "durable_records",
+}
+_RUNNER_ROOT_KEYS_V33_NO_DEV_NO_DEPENDENCY_CARE_AND_DYNAMICS: Final[set[str]] = {
+    *_RUNNER_ROOT_KEYS_V32_NO_DEV_NO_DEPENDENCY_CARE_AND_DYNAMICS,
+    "durable_records",
+}
+_RUNNER_ROOT_KEYS_V33_NO_LAYERS_NO_DEV_NO_DEPENDENCY_CARE_AND_DYNAMICS: Final[set[str]] = {
+    *_RUNNER_ROOT_KEYS_V31_NO_DEV_NO_DEPENDENCY_CARE_AND_DYNAMICS,
+    "durable_records",
+}
+_RUNNER_ROOT_KEYS_V33_NO_DEV_NO_DEPENDENCY_CARE_NO_KINSHIP: Final[set[str]] = {
+    *_RUNNER_ROOT_KEYS_V32_NO_DEV_NO_DEPENDENCY_CARE_NO_KINSHIP,
+    "durable_records",
+}
+_RUNNER_ROOT_KEYS_V33_NO_LAYERS_NO_DEV_NO_DEPENDENCY_CARE_NO_KINSHIP: Final[set[str]] = {
+    *_RUNNER_ROOT_KEYS_V31_NO_DEV_NO_DEPENDENCY_CARE_NO_KINSHIP,
+    "durable_records",
+}
+_RUNNER_ROOT_KEYS_V33_NO_DEV_NO_DEPENDENCY_CARE_NO_KINSHIP_AND_DYNAMICS: Final[set[str]] = {
+    *_RUNNER_ROOT_KEYS_V32_NO_DEV_NO_DEPENDENCY_CARE_NO_KINSHIP_AND_DYNAMICS,
+    "durable_records",
+}
+_RUNNER_ROOT_KEYS_V33_NO_LAYERS_NO_DEV_NO_DEPENDENCY_CARE_NO_KINSHIP_AND_DYNAMICS: Final[set[str]] = {
+    *_RUNNER_ROOT_KEYS_V31_NO_DEV_NO_DEPENDENCY_CARE_NO_KINSHIP_AND_DYNAMICS,
+    "durable_records",
+}
+_RUNNER_ROOT_KEYS_V33_NO_MENTORSHIP_WITH_LIFECYCLE: Final[set[str]] = {
+    *_RUNNER_ROOT_KEYS_V32_NO_MENTORSHIP_WITH_LIFECYCLE,
+    "durable_records",
+}
+_RUNNER_ROOT_KEYS_V33_NO_LAYERS_NO_MENTORSHIP_WITH_LIFECYCLE: Final[set[str]] = {
+    *_RUNNER_ROOT_KEYS_V31_NO_MENTORSHIP_WITH_LIFECYCLE,
+    "durable_records",
+}
+_RUNNER_ROOT_KEYS_V33_NO_MENTORSHIP_WITH_LIFECYCLE_AND_DYNAMICS: Final[set[str]] = {
+    *_RUNNER_ROOT_KEYS_V32_NO_MENTORSHIP_WITH_LIFECYCLE_AND_DYNAMICS,
+    "durable_records",
+}
+_RUNNER_ROOT_KEYS_V33_NO_LAYERS_NO_MENTORSHIP_WITH_LIFECYCLE_AND_DYNAMICS: Final[set[str]] = {
+    *_RUNNER_ROOT_KEYS_V31_NO_MENTORSHIP_WITH_LIFECYCLE_AND_DYNAMICS,
+    "durable_records",
+}
+_RUNNER_ROOT_KEYS_V33_NO_MENTORSHIP_WITH_LIFECYCLE_NO_KINSHIP: Final[set[str]] = {
+    *_RUNNER_ROOT_KEYS_V32_NO_MENTORSHIP_WITH_LIFECYCLE_NO_KINSHIP,
+    "durable_records",
+}
+_RUNNER_ROOT_KEYS_V33_NO_LAYERS_NO_MENTORSHIP_WITH_LIFECYCLE_NO_KINSHIP: Final[set[str]] = {
+    *_RUNNER_ROOT_KEYS_V31_NO_MENTORSHIP_WITH_LIFECYCLE_NO_KINSHIP,
+    "durable_records",
+}
+_RUNNER_ROOT_KEYS_V33_NO_MENTORSHIP_WITH_LIFECYCLE_NO_KINSHIP_AND_DYNAMICS: Final[set[str]] = {
+    *_RUNNER_ROOT_KEYS_V32_NO_MENTORSHIP_WITH_LIFECYCLE_NO_KINSHIP_AND_DYNAMICS,
+    "durable_records",
+}
+_RUNNER_ROOT_KEYS_V33_NO_LAYERS_NO_MENTORSHIP_WITH_LIFECYCLE_NO_KINSHIP_AND_DYNAMICS: Final[set[str]] = {
+    *_RUNNER_ROOT_KEYS_V31_NO_MENTORSHIP_WITH_LIFECYCLE_NO_KINSHIP_AND_DYNAMICS,
+    "durable_records",
+}
+_RUNNER_ROOT_KEYS_V33_NO_MENTORSHIP_NO_DEPENDENCY_CARE: Final[set[str]] = {
+    *_RUNNER_ROOT_KEYS_V32_NO_MENTORSHIP_NO_DEPENDENCY_CARE,
+    "durable_records",
+}
+_RUNNER_ROOT_KEYS_V33_NO_LAYERS_NO_MENTORSHIP_NO_DEPENDENCY_CARE: Final[set[str]] = {
+    *_RUNNER_ROOT_KEYS_V31_NO_MENTORSHIP_NO_DEPENDENCY_CARE,
+    "durable_records",
+}
+_RUNNER_ROOT_KEYS_V33_NO_MENTORSHIP_NO_DEPENDENCY_CARE_AND_DYNAMICS: Final[set[str]] = {
+    *_RUNNER_ROOT_KEYS_V32_NO_MENTORSHIP_NO_DEPENDENCY_CARE_AND_DYNAMICS,
+    "durable_records",
+}
+_RUNNER_ROOT_KEYS_V33_NO_LAYERS_NO_MENTORSHIP_NO_DEPENDENCY_CARE_AND_DYNAMICS: Final[set[str]] = {
+    *_RUNNER_ROOT_KEYS_V31_NO_MENTORSHIP_NO_DEPENDENCY_CARE_AND_DYNAMICS,
+    "durable_records",
+}
+_RUNNER_ROOT_KEYS_V33_NO_MENTORSHIP_NO_DEPENDENCY_CARE_NO_KINSHIP: Final[set[str]] = {
+    *_RUNNER_ROOT_KEYS_V32_NO_MENTORSHIP_NO_DEPENDENCY_CARE_NO_KINSHIP,
+    "durable_records",
+}
+_RUNNER_ROOT_KEYS_V33_NO_LAYERS_NO_MENTORSHIP_NO_DEPENDENCY_CARE_NO_KINSHIP: Final[set[str]] = {
+    *_RUNNER_ROOT_KEYS_V31_NO_MENTORSHIP_NO_DEPENDENCY_CARE_NO_KINSHIP,
+    "durable_records",
+}
+_RUNNER_ROOT_KEYS_V33_NO_MENTORSHIP_NO_DEPENDENCY_CARE_NO_KINSHIP_AND_DYNAMICS: Final[set[str]] = {
+    *_RUNNER_ROOT_KEYS_V32_NO_MENTORSHIP_NO_DEPENDENCY_CARE_NO_KINSHIP_AND_DYNAMICS,
+    "durable_records",
+}
+_RUNNER_ROOT_KEYS_V33_NO_LAYERS_NO_MENTORSHIP_NO_DEPENDENCY_CARE_NO_KINSHIP_AND_DYNAMICS: Final[set[str]] = {
+    *_RUNNER_ROOT_KEYS_V31_NO_MENTORSHIP_NO_DEPENDENCY_CARE_NO_KINSHIP_AND_DYNAMICS,
+    "durable_records",
+}
+_RUNNER_ROOT_KEYS_V33_NO_MENTORSHIP_NO_DEV_WITH_LIFECYCLE: Final[set[str]] = {
+    *_RUNNER_ROOT_KEYS_V32_NO_MENTORSHIP_NO_DEV_WITH_LIFECYCLE,
+    "durable_records",
+}
+_RUNNER_ROOT_KEYS_V33_NO_LAYERS_NO_MENTORSHIP_NO_DEV_WITH_LIFECYCLE: Final[set[str]] = {
+    *_RUNNER_ROOT_KEYS_V31_NO_MENTORSHIP_NO_DEV_WITH_LIFECYCLE,
+    "durable_records",
+}
+_RUNNER_ROOT_KEYS_V33_NO_MENTORSHIP_NO_DEV_WITH_LIFECYCLE_AND_DYNAMICS: Final[set[str]] = {
+    *_RUNNER_ROOT_KEYS_V32_NO_MENTORSHIP_NO_DEV_WITH_LIFECYCLE_AND_DYNAMICS,
+    "durable_records",
+}
+_RUNNER_ROOT_KEYS_V33_NO_LAYERS_NO_MENTORSHIP_NO_DEV_WITH_LIFECYCLE_AND_DYNAMICS: Final[set[str]] = {
+    *_RUNNER_ROOT_KEYS_V31_NO_MENTORSHIP_NO_DEV_WITH_LIFECYCLE_AND_DYNAMICS,
+    "durable_records",
+}
+_RUNNER_ROOT_KEYS_V33_NO_MENTORSHIP_NO_DEV_WITH_LIFECYCLE_NO_KINSHIP: Final[set[str]] = {
+    *_RUNNER_ROOT_KEYS_V32_NO_MENTORSHIP_NO_DEV_WITH_LIFECYCLE_NO_KINSHIP,
+    "durable_records",
+}
+_RUNNER_ROOT_KEYS_V33_NO_LAYERS_NO_MENTORSHIP_NO_DEV_WITH_LIFECYCLE_NO_KINSHIP: Final[set[str]] = {
+    *_RUNNER_ROOT_KEYS_V31_NO_MENTORSHIP_NO_DEV_WITH_LIFECYCLE_NO_KINSHIP,
+    "durable_records",
+}
+_RUNNER_ROOT_KEYS_V33_NO_MENTORSHIP_NO_DEV_WITH_LIFECYCLE_NO_KINSHIP_AND_DYNAMICS: Final[set[str]] = {
+    *_RUNNER_ROOT_KEYS_V32_NO_MENTORSHIP_NO_DEV_WITH_LIFECYCLE_NO_KINSHIP_AND_DYNAMICS,
+    "durable_records",
+}
+_RUNNER_ROOT_KEYS_V33_NO_LAYERS_NO_MENTORSHIP_NO_DEV_WITH_LIFECYCLE_NO_KINSHIP_AND_DYNAMICS: Final[set[str]] = {
+    *_RUNNER_ROOT_KEYS_V31_NO_MENTORSHIP_NO_DEV_WITH_LIFECYCLE_NO_KINSHIP_AND_DYNAMICS,
+    "durable_records",
+}
+_RUNNER_ROOT_KEYS_V33_NO_MENTORSHIP_NO_DEV_NO_DEPENDENCY_CARE: Final[set[str]] = {
+    *_RUNNER_ROOT_KEYS_V32_NO_MENTORSHIP_NO_DEV_NO_DEPENDENCY_CARE,
+    "durable_records",
+}
+_RUNNER_ROOT_KEYS_V33_NO_LAYERS_NO_MENTORSHIP_NO_DEV_NO_DEPENDENCY_CARE: Final[set[str]] = {
+    *_RUNNER_ROOT_KEYS_V31_NO_MENTORSHIP_NO_DEV_NO_DEPENDENCY_CARE,
+    "durable_records",
+}
+_RUNNER_ROOT_KEYS_V33_NO_MENTORSHIP_NO_DEV_NO_DEPENDENCY_CARE_AND_DYNAMICS: Final[set[str]] = {
+    *_RUNNER_ROOT_KEYS_V32_NO_MENTORSHIP_NO_DEV_NO_DEPENDENCY_CARE_AND_DYNAMICS,
+    "durable_records",
+}
+_RUNNER_ROOT_KEYS_V33_NO_LAYERS_NO_MENTORSHIP_NO_DEV_NO_DEPENDENCY_CARE_AND_DYNAMICS: Final[set[str]] = {
+    *_RUNNER_ROOT_KEYS_V31_NO_MENTORSHIP_NO_DEV_NO_DEPENDENCY_CARE_AND_DYNAMICS,
+    "durable_records",
+}
+_RUNNER_ROOT_KEYS_V33_NO_MENTORSHIP_NO_DEV_NO_DEPENDENCY_CARE_NO_KINSHIP: Final[set[str]] = {
+    *_RUNNER_ROOT_KEYS_V32_NO_MENTORSHIP_NO_DEV_NO_DEPENDENCY_CARE_NO_KINSHIP,
+    "durable_records",
+}
+_RUNNER_ROOT_KEYS_V33_NO_LAYERS_NO_MENTORSHIP_NO_DEV_NO_DEPENDENCY_CARE_NO_KINSHIP: Final[set[str]] = {
+    *_RUNNER_ROOT_KEYS_V31_NO_MENTORSHIP_NO_DEV_NO_DEPENDENCY_CARE_NO_KINSHIP,
+    "durable_records",
+}
+_RUNNER_ROOT_KEYS_V33_NO_MENTORSHIP_NO_DEV_NO_DEPENDENCY_CARE_NO_KINSHIP_AND_DYNAMICS: Final[set[str]] = {
+    *_RUNNER_ROOT_KEYS_V32_NO_MENTORSHIP_NO_DEV_NO_DEPENDENCY_CARE_NO_KINSHIP_AND_DYNAMICS,
+    "durable_records",
+}
+_RUNNER_ROOT_KEYS_V33_NO_LAYERS_NO_MENTORSHIP_NO_DEV_NO_DEPENDENCY_CARE_NO_KINSHIP_AND_DYNAMICS: Final[set[str]] = {
+    *_RUNNER_ROOT_KEYS_V31_NO_MENTORSHIP_NO_DEV_NO_DEPENDENCY_CARE_NO_KINSHIP_AND_DYNAMICS,
+    "durable_records",
+}
+_RUNNER_ROOT_KEYS_V33_CULTURAL_ONLY: Final[set[str]] = {
+    *_RUNNER_ROOT_KEYS_V32_CULTURAL_ONLY,
+    "durable_records",
+}
+_RUNNER_ROOT_KEYS_V33_NO_LAYERS_CULTURAL_ONLY: Final[set[str]] = {
+    *_RUNNER_ROOT_KEYS_V31_CULTURAL_ONLY,
+    "durable_records",
+}
+_RUNNER_ROOT_KEYS_V33_CULTURAL_ONLY_WITH_DYNAMICS: Final[set[str]] = {
+    *_RUNNER_ROOT_KEYS_V32_CULTURAL_ONLY_WITH_DYNAMICS,
+    "durable_records",
+}
+_RUNNER_ROOT_KEYS_V33_NO_LAYERS_CULTURAL_ONLY_WITH_DYNAMICS: Final[set[str]] = {
+    *_RUNNER_ROOT_KEYS_V31_CULTURAL_ONLY_WITH_DYNAMICS,
+    "durable_records",
+}
+_RUNNER_ROOT_KEYS_V33_CULTURAL_KINSHIP_ONLY: Final[set[str]] = {
+    *_RUNNER_ROOT_KEYS_V32_CULTURAL_KINSHIP_ONLY,
+    "durable_records",
+}
+_RUNNER_ROOT_KEYS_V33_NO_LAYERS_CULTURAL_KINSHIP_ONLY: Final[set[str]] = {
+    *_RUNNER_ROOT_KEYS_V31_CULTURAL_KINSHIP_ONLY,
+    "durable_records",
+}
+_RUNNER_ROOT_KEYS_V33_CULTURAL_KINSHIP_ONLY_WITH_DYNAMICS: Final[set[str]] = {
+    *_RUNNER_ROOT_KEYS_V32_CULTURAL_KINSHIP_ONLY_WITH_DYNAMICS,
+    "durable_records",
+}
+_RUNNER_ROOT_KEYS_V33_NO_LAYERS_CULTURAL_KINSHIP_ONLY_WITH_DYNAMICS: Final[set[str]] = {
+    *_RUNNER_ROOT_KEYS_V31_CULTURAL_KINSHIP_ONLY_WITH_DYNAMICS,
+    "durable_records",
+}
+_DURABLE_RECORDS_KEYS: Final[set[str]] = {
+    "durable_records_mode",
+    "enabled_genres",
+    "copy_fidelity_policy",
+    "integrity_policy",
+    "annotation_policy",
+    "lineage_policy",
+    "perception_mode",
+    "rng_namespace",
+}
+_DURABLE_COPY_FIDELITY_KEYS: Final[set[str]] = {
+    "default_fidelity",
+    "max_mark_edits",
+    "max_relation_edits",
+    "preserve_genre",
+    "copy_requires_hold_or_colocation",
+}
+_DURABLE_INTEGRITY_KEYS: Final[set[str]] = {
+    "allow_damage",
+    "allow_partial_loss",
+    "tombstone_on_destroy",
+    "partial_loss_min_marks_remaining",
+}
+_DURABLE_ANNOTATION_KEYS: Final[set[str]] = {
+    "max_annotations_per_record",
+    "annotations_survive_author_death",
+}
+_DURABLE_LINEAGE_KEYS: Final[set[str]] = {
+    "max_copy_generation",
+    "track_source_on_edit",
+    "destroyed_parent_blocks_copy",
+}
+_DURABLE_RECORDS_FORBIDDEN_ALIASES: Final[set[str]] = {
+    "canonical_archive",
+    "true_history",
+    "society_library",
+    "verified_archive",
+    "meaning",
+    "interpretation",
+    "truth",
+    "verified",
+    "canonical_history",
+    "archive_must_persist",
+    "true_history_restored",
+}
+
 _HISTORICAL_MEMORY_LAYERS_KEYS: Final[set[str]] = {
     "mode",
     "max_communicative_hops",
@@ -3458,6 +3831,130 @@ def _decode_historical_memory_layers(
         raise RunnerSerializationError("invalid_model", path) from exc
 
 
+
+def _encode_durable_records(spec: DurableRecordsSpec) -> dict[str, Any]:
+    return spec.canonical_payload()
+
+
+def _decode_durable_records(
+    data: Mapping[str, Any], *, path: str
+) -> DurableRecordsSpec:
+    if not isinstance(data, dict):
+        raise RunnerSerializationError("invalid_object", path)
+    forbidden = set(data) & _DURABLE_RECORDS_FORBIDDEN_ALIASES
+    if forbidden:
+        _LOG.error(
+            "durable_records_forbidden_alias path=%s "
+            "reason_code=durable_records_forbidden_alias",
+            path,
+        )
+        raise RunnerSerializationError("durable_records_forbidden_alias", path)
+    _require_keys(data, _DURABLE_RECORDS_KEYS, path=path)
+    fidelity_raw = data["copy_fidelity_policy"]
+    integrity_raw = data["integrity_policy"]
+    annotation_raw = data["annotation_policy"]
+    lineage_raw = data["lineage_policy"]
+    if not isinstance(fidelity_raw, dict):
+        raise RunnerSerializationError(
+            "invalid_object", f"{path}.copy_fidelity_policy"
+        )
+    if not isinstance(integrity_raw, dict):
+        raise RunnerSerializationError("invalid_object", f"{path}.integrity_policy")
+    if not isinstance(annotation_raw, dict):
+        raise RunnerSerializationError("invalid_object", f"{path}.annotation_policy")
+    if not isinstance(lineage_raw, dict):
+        raise RunnerSerializationError("invalid_object", f"{path}.lineage_policy")
+    _require_keys(
+        fidelity_raw, _DURABLE_COPY_FIDELITY_KEYS, path=f"{path}.copy_fidelity_policy"
+    )
+    _require_keys(
+        integrity_raw, _DURABLE_INTEGRITY_KEYS, path=f"{path}.integrity_policy"
+    )
+    _require_keys(
+        annotation_raw, _DURABLE_ANNOTATION_KEYS, path=f"{path}.annotation_policy"
+    )
+    _require_keys(lineage_raw, _DURABLE_LINEAGE_KEYS, path=f"{path}.lineage_policy")
+    genres_raw = data["enabled_genres"]
+    if not isinstance(genres_raw, list):
+        raise RunnerSerializationError("invalid_array", f"{path}.enabled_genres")
+    try:
+        return DurableRecordsSpec(
+            durable_records_mode=_str_field(data, "durable_records_mode", path=path),
+            enabled_genres=tuple(
+                _str_field({"v": item}, "v", path=f"{path}.enabled_genres[{index}]")
+                for index, item in enumerate(genres_raw)
+            ),
+            copy_fidelity_policy=DurableCopyFidelityPolicy(
+                default_fidelity=_str_field(
+                    fidelity_raw, "default_fidelity", path=f"{path}.copy_fidelity_policy"
+                ),
+                max_mark_edits=_nonneg_int_field(
+                    fidelity_raw, "max_mark_edits", path=f"{path}.copy_fidelity_policy"
+                ),
+                max_relation_edits=_nonneg_int_field(
+                    fidelity_raw,
+                    "max_relation_edits",
+                    path=f"{path}.copy_fidelity_policy",
+                ),
+                preserve_genre=_bool_field(
+                    fidelity_raw, "preserve_genre", path=f"{path}.copy_fidelity_policy"
+                ),
+                copy_requires_hold_or_colocation=_bool_field(
+                    fidelity_raw,
+                    "copy_requires_hold_or_colocation",
+                    path=f"{path}.copy_fidelity_policy",
+                ),
+            ),
+            integrity_policy=DurableIntegrityPolicy(
+                allow_damage=_bool_field(
+                    integrity_raw, "allow_damage", path=f"{path}.integrity_policy"
+                ),
+                allow_partial_loss=_bool_field(
+                    integrity_raw, "allow_partial_loss", path=f"{path}.integrity_policy"
+                ),
+                tombstone_on_destroy=_bool_field(
+                    integrity_raw,
+                    "tombstone_on_destroy",
+                    path=f"{path}.integrity_policy",
+                ),
+                partial_loss_min_marks_remaining=_nonneg_int_field(
+                    integrity_raw,
+                    "partial_loss_min_marks_remaining",
+                    path=f"{path}.integrity_policy",
+                ),
+            ),
+            annotation_policy=DurableAnnotationPolicy(
+                max_annotations_per_record=_nonneg_int_field(
+                    annotation_raw,
+                    "max_annotations_per_record",
+                    path=f"{path}.annotation_policy",
+                ),
+                annotations_survive_author_death=_bool_field(
+                    annotation_raw,
+                    "annotations_survive_author_death",
+                    path=f"{path}.annotation_policy",
+                ),
+            ),
+            lineage_policy=DurableLineagePolicy(
+                max_copy_generation=_nonneg_int_field(
+                    lineage_raw, "max_copy_generation", path=f"{path}.lineage_policy"
+                ),
+                track_source_on_edit=_bool_field(
+                    lineage_raw, "track_source_on_edit", path=f"{path}.lineage_policy"
+                ),
+                destroyed_parent_blocks_copy=_bool_field(
+                    lineage_raw,
+                    "destroyed_parent_blocks_copy",
+                    path=f"{path}.lineage_policy",
+                ),
+            ),
+            perception_mode=_str_field(data, "perception_mode", path=path),
+            rng_namespace=_str_field(data, "rng_namespace", path=path),
+        )
+    except (TypeError, ValueError) as exc:
+        raise RunnerSerializationError("invalid_model", path) from exc
+
+
 def _encode_population_lifecycle(
     spec: PopulationLifecycleSpec, *, schema_version: str
 ) -> dict[str, Any]:
@@ -3942,6 +4439,7 @@ def _encode_runner_document(config: SimulationRunnerConfig) -> dict[str, Any]:
         RUNNER_SCHEMA_VERSION_V30,
         RUNNER_SCHEMA_VERSION_V31,
         RUNNER_SCHEMA_VERSION_V32,
+        RUNNER_SCHEMA_VERSION_V33,
     }:
         document["capability_flags"] = _encode_capability_flags(config.capability_flags)
     if config.schema_version in {
@@ -3974,6 +4472,7 @@ def _encode_runner_document(config: SimulationRunnerConfig) -> dict[str, Any]:
         RUNNER_SCHEMA_VERSION_V30,
         RUNNER_SCHEMA_VERSION_V31,
         RUNNER_SCHEMA_VERSION_V32,
+        RUNNER_SCHEMA_VERSION_V33,
     }:
         document["cognition_trace"] = _encode_cognition_trace(config.cognition_trace)
     if config.schema_version == RUNNER_SCHEMA_VERSION_V14 or (
@@ -3997,6 +4496,7 @@ def _encode_runner_document(config: SimulationRunnerConfig) -> dict[str, Any]:
         RUNNER_SCHEMA_VERSION_V30,
         RUNNER_SCHEMA_VERSION_V31,
         RUNNER_SCHEMA_VERSION_V32,
+        RUNNER_SCHEMA_VERSION_V33,
         }
         and config.environmental_dynamics is not None
     ):
@@ -4017,6 +4517,7 @@ def _encode_runner_document(config: SimulationRunnerConfig) -> dict[str, Any]:
     RUNNER_SCHEMA_VERSION_V30,
     RUNNER_SCHEMA_VERSION_V31,
     RUNNER_SCHEMA_VERSION_V32,
+    RUNNER_SCHEMA_VERSION_V33,
     }:
         document["v3_capability_flags"] = _encode_v3_capability_flags(
             config.v3_capability_flags
@@ -4039,6 +4540,7 @@ def _encode_runner_document(config: SimulationRunnerConfig) -> dict[str, Any]:
             RUNNER_SCHEMA_VERSION_V30,
             RUNNER_SCHEMA_VERSION_V31,
             RUNNER_SCHEMA_VERSION_V32,
+            RUNNER_SCHEMA_VERSION_V33,
         }
         and config.v3_capability_flags.generational_population
     ):
@@ -4060,6 +4562,7 @@ def _encode_runner_document(config: SimulationRunnerConfig) -> dict[str, Any]:
                     RUNNER_SCHEMA_VERSION_V30,
                     RUNNER_SCHEMA_VERSION_V31,
                     RUNNER_SCHEMA_VERSION_V32,
+                    RUNNER_SCHEMA_VERSION_V33,
                 }
                 else RUNNER_SCHEMA_VERSION_V26
             ),
@@ -4089,6 +4592,7 @@ def _encode_runner_document(config: SimulationRunnerConfig) -> dict[str, Any]:
             RUNNER_SCHEMA_VERSION_V30,
             RUNNER_SCHEMA_VERSION_V31,
             RUNNER_SCHEMA_VERSION_V32,
+            RUNNER_SCHEMA_VERSION_V33,
         }
         and config.v3_capability_flags.generational_population
     ):
@@ -4109,6 +4613,7 @@ def _encode_runner_document(config: SimulationRunnerConfig) -> dict[str, Any]:
         RUNNER_SCHEMA_VERSION_V30,
         RUNNER_SCHEMA_VERSION_V31,
         RUNNER_SCHEMA_VERSION_V32,
+        RUNNER_SCHEMA_VERSION_V33,
     }:
         if config.v3_capability_flags.kinship_inheritance:
             if config.kinship is None:
@@ -4373,6 +4878,100 @@ def _encode_runner_document(config: SimulationRunnerConfig) -> dict[str, Any]:
             config.historical_memory_layers.transition_tick_resolution,
             config.historical_memory_layers.applicability,
         )
+    if config.schema_version == RUNNER_SCHEMA_VERSION_V33:
+        if config.cultural_feature_provenance is None:
+            raise TypeError(
+                "cultural_feature_provenance must be CulturalFeatureProvenanceSpec "
+                "on runner-config-v33"
+            )
+        if config.durable_records is None:
+            raise TypeError(
+                "durable_records must be DurableRecordsSpec on runner-config-v33"
+            )
+        document["cultural_feature_provenance"] = _encode_cultural_feature_provenance(
+            config.cultural_feature_provenance
+        )
+        document["durable_records"] = _encode_durable_records(config.durable_records)
+        if config.historical_memory_layers is not None:
+            document["historical_memory_layers"] = _encode_historical_memory_layers(
+                config.historical_memory_layers
+            )
+        if config.mentorship is not None:
+            document["mentorship"] = _encode_mentorship(config.mentorship)
+            _LOG.info(
+                "runner_config_encode_mentorship schema_version=%s "
+                "content_kind_count=%s bond_policy_form_after=%s max_hop_depth=%s "
+                "mentorship_mode=%s applicability=%s",
+                config.schema_version,
+                len(config.mentorship.enabled_content_kinds),
+                config.mentorship.bond_policy.form_after_successful_acts,
+                config.mentorship.lineage_policy.max_hop_depth,
+                config.mentorship.mentorship_mode,
+                config.mentorship.applicability,
+            )
+        if config.developmental_learning is not None:
+            document["developmental_learning"] = _encode_developmental_learning(
+                config.developmental_learning
+            )
+            _LOG.info(
+                "runner_config_encode_developmental_learning schema_version=%s "
+                "enabled_domains=%s enabled_sources=%s "
+                "developmental_learning_mode=%s applicability=%s "
+                "learner_species_defaults_id=%s",
+                config.schema_version,
+                list(config.developmental_learning.enabled_domains),
+                list(config.developmental_learning.enabled_sources),
+                config.developmental_learning.developmental_learning_mode,
+                config.developmental_learning.applicability,
+                config.developmental_learning.learner_species_defaults_id,
+            )
+        if config.dependency_care is not None:
+            document["dependency_care"] = _encode_dependency_care(
+                config.dependency_care
+            )
+            _LOG.info(
+                "runner_config_encode_dependency_care schema_version=%s "
+                "enabled_needs=%s caregiving_cognition_mode=%s perception_mode=%s",
+                config.schema_version,
+                list(config.dependency_care.enabled_needs),
+                config.dependency_care.caregiving_cognition_mode,
+                config.dependency_care.perception_mode,
+            )
+        _LOG.info(
+            "runner_config_encode_cultural_feature_provenance schema_version=%s "
+            "feature_kind_count=%s channel_count=%s mutation_allowed=%s "
+            "recombination_allowed=%s applicability=%s",
+            config.schema_version,
+            len(config.cultural_feature_provenance.enabled_feature_kinds),
+            len(config.cultural_feature_provenance.enabled_provenance_channels),
+            config.cultural_feature_provenance.mutation_policy.allow_mutation,
+            config.cultural_feature_provenance.recombination_policy.allow_recombination,
+            config.cultural_feature_provenance.applicability,
+        )
+        _LOG.info(
+            "runner_config_encode_durable_records schema_version=%s "
+            "genre_count=%s default_fidelity=%s tombstone_on_destroy=%s "
+            "perception_mode=%s layers_present=%s",
+            config.schema_version,
+            len(config.durable_records.enabled_genres),
+            config.durable_records.copy_fidelity_policy.default_fidelity,
+            config.durable_records.integrity_policy.tombstone_on_destroy,
+            config.durable_records.perception_mode,
+            config.historical_memory_layers is not None,
+        )
+        if config.historical_memory_layers is not None:
+            _LOG.info(
+                "runner_config_encode_historical_memory_layers schema_version=%s "
+                "max_communicative_hops=%s witness_definition=%s "
+                "query_event_selector=%s transition_tick_resolution=%s "
+                "applicability=%s",
+                config.schema_version,
+                config.historical_memory_layers.max_communicative_hops,
+                config.historical_memory_layers.witness_definition,
+                config.historical_memory_layers.query_event_selector,
+                config.historical_memory_layers.transition_tick_resolution,
+                config.historical_memory_layers.applicability,
+            )
     if config.experiment is not None:
         document["experiment"] = {
             "condition_id": config.experiment.condition_id,
@@ -4481,7 +5080,131 @@ def decode_runner_config(payload: bytes) -> SimulationRunnerConfig:
         raise RunnerSerializationError("invalid_string", "$.schema_version")
     if schema_version not in SUPPORTED_RUNNER_SCHEMA_VERSIONS:
         raise RunnerSerializationError("unsupported_version", "$.schema_version")
-    if schema_version == RUNNER_SCHEMA_VERSION_V32:
+    if schema_version == RUNNER_SCHEMA_VERSION_V33:
+        has_lifecycle = "population_lifecycle" in data
+        has_kinship = "kinship" in data
+        has_dynamics = "environmental_dynamics" in data
+        has_dependency_care = "dependency_care" in data
+        has_developmental = "developmental_learning" in data
+        has_mentorship = "mentorship" in data
+        has_layers = "historical_memory_layers" in data
+        if has_lifecycle:
+            if has_mentorship:
+                if has_developmental:
+                    if has_dependency_care:
+                        if has_kinship:
+                            root_keys = (
+                                (_RUNNER_ROOT_KEYS_V33_WITH_LIFECYCLE_AND_DYNAMICS if has_layers else _RUNNER_ROOT_KEYS_V33_NO_LAYERS_WITH_LIFECYCLE_AND_DYNAMICS)
+                                if has_dynamics
+                                else (_RUNNER_ROOT_KEYS_V33_WITH_LIFECYCLE if has_layers else _RUNNER_ROOT_KEYS_V33_NO_LAYERS_WITH_LIFECYCLE)
+                            )
+                        else:
+                            root_keys = (
+                                (_RUNNER_ROOT_KEYS_V33_WITH_LIFECYCLE_NO_KINSHIP_AND_DYNAMICS if has_layers else _RUNNER_ROOT_KEYS_V33_NO_LAYERS_WITH_LIFECYCLE_NO_KINSHIP_AND_DYNAMICS)
+                                if has_dynamics
+                                else (_RUNNER_ROOT_KEYS_V33_WITH_LIFECYCLE_NO_KINSHIP if has_layers else _RUNNER_ROOT_KEYS_V33_NO_LAYERS_WITH_LIFECYCLE_NO_KINSHIP)
+                            )
+                    elif has_kinship:
+                        root_keys = (
+                            (_RUNNER_ROOT_KEYS_V33_NO_DEPENDENCY_CARE_AND_DYNAMICS if has_layers else _RUNNER_ROOT_KEYS_V33_NO_LAYERS_NO_DEPENDENCY_CARE_AND_DYNAMICS)
+                            if has_dynamics
+                            else (_RUNNER_ROOT_KEYS_V33_NO_DEPENDENCY_CARE if has_layers else _RUNNER_ROOT_KEYS_V33_NO_LAYERS_NO_DEPENDENCY_CARE)
+                        )
+                    else:
+                        root_keys = (
+                            (_RUNNER_ROOT_KEYS_V33_NO_DEPENDENCY_CARE_NO_KINSHIP_AND_DYNAMICS if has_layers else _RUNNER_ROOT_KEYS_V33_NO_LAYERS_NO_DEPENDENCY_CARE_NO_KINSHIP_AND_DYNAMICS)
+                            if has_dynamics
+                            else (_RUNNER_ROOT_KEYS_V33_NO_DEPENDENCY_CARE_NO_KINSHIP if has_layers else _RUNNER_ROOT_KEYS_V33_NO_LAYERS_NO_DEPENDENCY_CARE_NO_KINSHIP)
+                        )
+                elif has_dependency_care:
+                    if has_kinship:
+                        root_keys = (
+                            (_RUNNER_ROOT_KEYS_V33_NO_DEV_WITH_LIFECYCLE_AND_DYNAMICS if has_layers else _RUNNER_ROOT_KEYS_V33_NO_LAYERS_NO_DEV_WITH_LIFECYCLE_AND_DYNAMICS)
+                            if has_dynamics
+                            else (_RUNNER_ROOT_KEYS_V33_NO_DEV_WITH_LIFECYCLE if has_layers else _RUNNER_ROOT_KEYS_V33_NO_LAYERS_NO_DEV_WITH_LIFECYCLE)
+                        )
+                    else:
+                        root_keys = (
+                            (_RUNNER_ROOT_KEYS_V33_NO_DEV_WITH_LIFECYCLE_NO_KINSHIP_AND_DYNAMICS if has_layers else _RUNNER_ROOT_KEYS_V33_NO_LAYERS_NO_DEV_WITH_LIFECYCLE_NO_KINSHIP_AND_DYNAMICS)
+                            if has_dynamics
+                            else (_RUNNER_ROOT_KEYS_V33_NO_DEV_WITH_LIFECYCLE_NO_KINSHIP if has_layers else _RUNNER_ROOT_KEYS_V33_NO_LAYERS_NO_DEV_WITH_LIFECYCLE_NO_KINSHIP)
+                        )
+                elif has_kinship:
+                    root_keys = (
+                        (_RUNNER_ROOT_KEYS_V33_NO_DEV_NO_DEPENDENCY_CARE_AND_DYNAMICS if has_layers else _RUNNER_ROOT_KEYS_V33_NO_LAYERS_NO_DEV_NO_DEPENDENCY_CARE_AND_DYNAMICS)
+                        if has_dynamics
+                        else (_RUNNER_ROOT_KEYS_V33_NO_DEV_NO_DEPENDENCY_CARE if has_layers else _RUNNER_ROOT_KEYS_V33_NO_LAYERS_NO_DEV_NO_DEPENDENCY_CARE)
+                    )
+                else:
+                    root_keys = (
+                        (_RUNNER_ROOT_KEYS_V33_NO_DEV_NO_DEPENDENCY_CARE_NO_KINSHIP_AND_DYNAMICS if has_layers else _RUNNER_ROOT_KEYS_V33_NO_LAYERS_NO_DEV_NO_DEPENDENCY_CARE_NO_KINSHIP_AND_DYNAMICS)
+                        if has_dynamics
+                        else (_RUNNER_ROOT_KEYS_V33_NO_DEV_NO_DEPENDENCY_CARE_NO_KINSHIP if has_layers else _RUNNER_ROOT_KEYS_V33_NO_LAYERS_NO_DEV_NO_DEPENDENCY_CARE_NO_KINSHIP)
+                    )
+            elif has_developmental:
+                if has_dependency_care:
+                    if has_kinship:
+                        root_keys = (
+                            (_RUNNER_ROOT_KEYS_V33_NO_MENTORSHIP_WITH_LIFECYCLE_AND_DYNAMICS if has_layers else _RUNNER_ROOT_KEYS_V33_NO_LAYERS_NO_MENTORSHIP_WITH_LIFECYCLE_AND_DYNAMICS)
+                            if has_dynamics
+                            else (_RUNNER_ROOT_KEYS_V33_NO_MENTORSHIP_WITH_LIFECYCLE if has_layers else _RUNNER_ROOT_KEYS_V33_NO_LAYERS_NO_MENTORSHIP_WITH_LIFECYCLE)
+                        )
+                    else:
+                        root_keys = (
+                            (_RUNNER_ROOT_KEYS_V33_NO_MENTORSHIP_WITH_LIFECYCLE_NO_KINSHIP_AND_DYNAMICS if has_layers else _RUNNER_ROOT_KEYS_V33_NO_LAYERS_NO_MENTORSHIP_WITH_LIFECYCLE_NO_KINSHIP_AND_DYNAMICS)
+                            if has_dynamics
+                            else (_RUNNER_ROOT_KEYS_V33_NO_MENTORSHIP_WITH_LIFECYCLE_NO_KINSHIP if has_layers else _RUNNER_ROOT_KEYS_V33_NO_LAYERS_NO_MENTORSHIP_WITH_LIFECYCLE_NO_KINSHIP)  # noqa: E501
+                        )
+                elif has_kinship:
+                    root_keys = (
+                        (_RUNNER_ROOT_KEYS_V33_NO_MENTORSHIP_NO_DEPENDENCY_CARE_AND_DYNAMICS if has_layers else _RUNNER_ROOT_KEYS_V33_NO_LAYERS_NO_MENTORSHIP_NO_DEPENDENCY_CARE_AND_DYNAMICS)
+                        if has_dynamics
+                        else (_RUNNER_ROOT_KEYS_V33_NO_MENTORSHIP_NO_DEPENDENCY_CARE if has_layers else _RUNNER_ROOT_KEYS_V33_NO_LAYERS_NO_MENTORSHIP_NO_DEPENDENCY_CARE)
+                    )
+                else:
+                    root_keys = (
+                        (_RUNNER_ROOT_KEYS_V33_NO_MENTORSHIP_NO_DEPENDENCY_CARE_NO_KINSHIP_AND_DYNAMICS if has_layers else _RUNNER_ROOT_KEYS_V33_NO_LAYERS_NO_MENTORSHIP_NO_DEPENDENCY_CARE_NO_KINSHIP_AND_DYNAMICS)
+                        if has_dynamics
+                        else (_RUNNER_ROOT_KEYS_V33_NO_MENTORSHIP_NO_DEPENDENCY_CARE_NO_KINSHIP if has_layers else _RUNNER_ROOT_KEYS_V33_NO_LAYERS_NO_MENTORSHIP_NO_DEPENDENCY_CARE_NO_KINSHIP)  # noqa: E501
+                    )
+            elif has_dependency_care:
+                if has_kinship:
+                    root_keys = (
+                        (_RUNNER_ROOT_KEYS_V33_NO_MENTORSHIP_NO_DEV_WITH_LIFECYCLE_AND_DYNAMICS if has_layers else _RUNNER_ROOT_KEYS_V33_NO_LAYERS_NO_MENTORSHIP_NO_DEV_WITH_LIFECYCLE_AND_DYNAMICS)
+                        if has_dynamics
+                        else (_RUNNER_ROOT_KEYS_V33_NO_MENTORSHIP_NO_DEV_WITH_LIFECYCLE if has_layers else _RUNNER_ROOT_KEYS_V33_NO_LAYERS_NO_MENTORSHIP_NO_DEV_WITH_LIFECYCLE)
+                    )
+                else:
+                    root_keys = (
+                        (_RUNNER_ROOT_KEYS_V33_NO_MENTORSHIP_NO_DEV_WITH_LIFECYCLE_NO_KINSHIP_AND_DYNAMICS if has_layers else _RUNNER_ROOT_KEYS_V33_NO_LAYERS_NO_MENTORSHIP_NO_DEV_WITH_LIFECYCLE_NO_KINSHIP_AND_DYNAMICS)
+                        if has_dynamics
+                        else (_RUNNER_ROOT_KEYS_V33_NO_MENTORSHIP_NO_DEV_WITH_LIFECYCLE_NO_KINSHIP if has_layers else _RUNNER_ROOT_KEYS_V33_NO_LAYERS_NO_MENTORSHIP_NO_DEV_WITH_LIFECYCLE_NO_KINSHIP)  # noqa: E501
+                    )
+            elif has_kinship:
+                root_keys = (
+                    (_RUNNER_ROOT_KEYS_V33_NO_MENTORSHIP_NO_DEV_NO_DEPENDENCY_CARE_AND_DYNAMICS if has_layers else _RUNNER_ROOT_KEYS_V33_NO_LAYERS_NO_MENTORSHIP_NO_DEV_NO_DEPENDENCY_CARE_AND_DYNAMICS)
+                    if has_dynamics
+                    else (_RUNNER_ROOT_KEYS_V33_NO_MENTORSHIP_NO_DEV_NO_DEPENDENCY_CARE if has_layers else _RUNNER_ROOT_KEYS_V33_NO_LAYERS_NO_MENTORSHIP_NO_DEV_NO_DEPENDENCY_CARE)
+                )
+            else:
+                root_keys = (
+                    (_RUNNER_ROOT_KEYS_V33_NO_MENTORSHIP_NO_DEV_NO_DEPENDENCY_CARE_NO_KINSHIP_AND_DYNAMICS if has_layers else _RUNNER_ROOT_KEYS_V33_NO_LAYERS_NO_MENTORSHIP_NO_DEV_NO_DEPENDENCY_CARE_NO_KINSHIP_AND_DYNAMICS)
+                    if has_dynamics
+                    else (_RUNNER_ROOT_KEYS_V33_NO_MENTORSHIP_NO_DEV_NO_DEPENDENCY_CARE_NO_KINSHIP if has_layers else _RUNNER_ROOT_KEYS_V33_NO_LAYERS_NO_MENTORSHIP_NO_DEV_NO_DEPENDENCY_CARE_NO_KINSHIP)  # noqa: E501
+                )
+        elif has_kinship:
+            root_keys = (
+                (_RUNNER_ROOT_KEYS_V33_CULTURAL_KINSHIP_ONLY_WITH_DYNAMICS if has_layers else _RUNNER_ROOT_KEYS_V33_NO_LAYERS_CULTURAL_KINSHIP_ONLY_WITH_DYNAMICS)
+                if has_dynamics
+                else (_RUNNER_ROOT_KEYS_V33_CULTURAL_KINSHIP_ONLY if has_layers else _RUNNER_ROOT_KEYS_V33_NO_LAYERS_CULTURAL_KINSHIP_ONLY)
+            )
+        else:
+            root_keys = (
+                (_RUNNER_ROOT_KEYS_V33_CULTURAL_ONLY_WITH_DYNAMICS if has_layers else _RUNNER_ROOT_KEYS_V33_NO_LAYERS_CULTURAL_ONLY_WITH_DYNAMICS)
+                if has_dynamics
+                else (_RUNNER_ROOT_KEYS_V33_CULTURAL_ONLY if has_layers else _RUNNER_ROOT_KEYS_V33_NO_LAYERS_CULTURAL_ONLY)
+            )
+    elif schema_version == RUNNER_SCHEMA_VERSION_V32:
         has_lifecycle = "population_lifecycle" in data
         has_kinship = "kinship" in data
         has_dynamics = "environmental_dynamics" in data
@@ -5004,6 +5727,7 @@ def decode_runner_config(payload: bytes) -> SimulationRunnerConfig:
         RUNNER_SCHEMA_VERSION_V30,
         RUNNER_SCHEMA_VERSION_V31,
         RUNNER_SCHEMA_VERSION_V32,
+        RUNNER_SCHEMA_VERSION_V33,
     }:
         capability_flags = _decode_capability_flags(
             data["capability_flags"], path="$.capability_flags"
@@ -5022,6 +5746,7 @@ def decode_runner_config(payload: bytes) -> SimulationRunnerConfig:
         RUNNER_SCHEMA_VERSION_V30,
         RUNNER_SCHEMA_VERSION_V31,
         RUNNER_SCHEMA_VERSION_V32,
+        RUNNER_SCHEMA_VERSION_V33,
     }:
         v3_capability_flags = _decode_v3_capability_flags(
             data["v3_capability_flags"], path="$.v3_capability_flags"
@@ -5046,6 +5771,7 @@ def decode_runner_config(payload: bytes) -> SimulationRunnerConfig:
             RUNNER_SCHEMA_VERSION_V30,
             RUNNER_SCHEMA_VERSION_V31,
             RUNNER_SCHEMA_VERSION_V32,
+            RUNNER_SCHEMA_VERSION_V33,
         }
         and "kinship" in data
     ):
@@ -5067,6 +5793,7 @@ def decode_runner_config(payload: bytes) -> SimulationRunnerConfig:
             RUNNER_SCHEMA_VERSION_V30,
             RUNNER_SCHEMA_VERSION_V31,
             RUNNER_SCHEMA_VERSION_V32,
+            RUNNER_SCHEMA_VERSION_V33,
         }
         and "dependency_care" in data
     ):
@@ -5089,6 +5816,7 @@ def decode_runner_config(payload: bytes) -> SimulationRunnerConfig:
             RUNNER_SCHEMA_VERSION_V30,
             RUNNER_SCHEMA_VERSION_V31,
             RUNNER_SCHEMA_VERSION_V32,
+            RUNNER_SCHEMA_VERSION_V33,
         }
         and "developmental_learning" in data
     ):
@@ -5124,7 +5852,11 @@ def decode_runner_config(payload: bytes) -> SimulationRunnerConfig:
         )
     elif (
         schema_version
-        in {RUNNER_SCHEMA_VERSION_V31, RUNNER_SCHEMA_VERSION_V32}
+        in {
+            RUNNER_SCHEMA_VERSION_V31,
+            RUNNER_SCHEMA_VERSION_V32,
+            RUNNER_SCHEMA_VERSION_V33,
+        }
         and "mentorship" in data
     ):
         mentorship = _decode_mentorship(data["mentorship"], path="$.mentorship")
@@ -5147,7 +5879,11 @@ def decode_runner_config(payload: bytes) -> SimulationRunnerConfig:
             schema_version,
             False,
         )
-    if schema_version in {RUNNER_SCHEMA_VERSION_V31, RUNNER_SCHEMA_VERSION_V32}:
+    if schema_version in {
+        RUNNER_SCHEMA_VERSION_V31,
+        RUNNER_SCHEMA_VERSION_V32,
+        RUNNER_SCHEMA_VERSION_V33,
+    }:
         cultural_feature_provenance = _decode_cultural_feature_provenance(
             data["cultural_feature_provenance"],
             path="$.cultural_feature_provenance",
@@ -5171,7 +5907,10 @@ def decode_runner_config(payload: bytes) -> SimulationRunnerConfig:
             schema_version,
             False,
         )
-    if schema_version == RUNNER_SCHEMA_VERSION_V32:
+    if schema_version == RUNNER_SCHEMA_VERSION_V32 or (
+        schema_version == RUNNER_SCHEMA_VERSION_V33
+        and "historical_memory_layers" in data
+    ):
         historical_memory_layers = _decode_historical_memory_layers(
             data["historical_memory_layers"],
             path="$.historical_memory_layers",
@@ -5193,6 +5932,27 @@ def decode_runner_config(payload: bytes) -> SimulationRunnerConfig:
             schema_version,
             False,
         )
+    if schema_version == RUNNER_SCHEMA_VERSION_V33:
+        durable_records = _decode_durable_records(
+            data["durable_records"],
+            path="$.durable_records",
+        )
+        _LOG.debug(
+            "runner_config_decode_durable_records schema_version=%s "
+            "durable_records_present=%s genre_count=%s default_fidelity=%s",
+            schema_version,
+            True,
+            len(durable_records.enabled_genres),
+            durable_records.copy_fidelity_policy.default_fidelity,
+        )
+    else:
+        durable_records = None
+        _LOG.debug(
+            "runner_config_decode_durable_records_absent "
+            "schema_version=%s durable_records_present=%s",
+            schema_version,
+            False,
+        )
     if schema_version in {
         RUNNER_SCHEMA_VERSION_V24,
         RUNNER_SCHEMA_VERSION_V25,
@@ -5203,6 +5963,7 @@ def decode_runner_config(payload: bytes) -> SimulationRunnerConfig:
         RUNNER_SCHEMA_VERSION_V30,
         RUNNER_SCHEMA_VERSION_V31,
         RUNNER_SCHEMA_VERSION_V32,
+        RUNNER_SCHEMA_VERSION_V33,
     } and (
         schema_version
         not in {
@@ -5212,6 +5973,7 @@ def decode_runner_config(payload: bytes) -> SimulationRunnerConfig:
             RUNNER_SCHEMA_VERSION_V30,
             RUNNER_SCHEMA_VERSION_V31,
             RUNNER_SCHEMA_VERSION_V32,
+            RUNNER_SCHEMA_VERSION_V33,
         }
         or v3_capability_flags.generational_population
     ):
@@ -5228,6 +5990,7 @@ def decode_runner_config(payload: bytes) -> SimulationRunnerConfig:
                     RUNNER_SCHEMA_VERSION_V30,
                     RUNNER_SCHEMA_VERSION_V31,
                     RUNNER_SCHEMA_VERSION_V32,
+                    RUNNER_SCHEMA_VERSION_V33,
                 }
                 else RUNNER_SCHEMA_VERSION_V26
             ),
@@ -5253,6 +6016,7 @@ def decode_runner_config(payload: bytes) -> SimulationRunnerConfig:
             RUNNER_SCHEMA_VERSION_V30,
             RUNNER_SCHEMA_VERSION_V31,
             RUNNER_SCHEMA_VERSION_V32,
+            RUNNER_SCHEMA_VERSION_V33,
         }
         and v3_capability_flags.generational_population
     ):
@@ -5308,6 +6072,7 @@ def decode_runner_config(payload: bytes) -> SimulationRunnerConfig:
     RUNNER_SCHEMA_VERSION_V30,
     RUNNER_SCHEMA_VERSION_V31,
     RUNNER_SCHEMA_VERSION_V32,
+    RUNNER_SCHEMA_VERSION_V33,
     }:
         cognition_trace = _decode_cognition_trace(
             data["cognition_trace"], path="$.cognition_trace"
@@ -5400,6 +6165,7 @@ def decode_runner_config(payload: bytes) -> SimulationRunnerConfig:
                     RUNNER_SCHEMA_VERSION_V30,
                     RUNNER_SCHEMA_VERSION_V31,
                     RUNNER_SCHEMA_VERSION_V32,
+                    RUNNER_SCHEMA_VERSION_V33,
                     }
                     and "environmental_dynamics" in data
                 )
@@ -5413,6 +6179,7 @@ def decode_runner_config(payload: bytes) -> SimulationRunnerConfig:
             mentorship=mentorship,
             cultural_feature_provenance=cultural_feature_provenance,
             historical_memory_layers=historical_memory_layers,
+            durable_records=durable_records,
         )
     except RunnerSerializationError:
         raise

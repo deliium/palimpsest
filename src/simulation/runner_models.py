@@ -111,6 +111,7 @@ RUNNER_SCHEMA_VERSION_V29: Final[str] = "runner-config-v29"
 RUNNER_SCHEMA_VERSION_V30: Final[str] = "runner-config-v30"
 RUNNER_SCHEMA_VERSION_V31: Final[str] = "runner-config-v31"
 RUNNER_SCHEMA_VERSION_V32: Final[str] = "runner-config-v32"
+RUNNER_SCHEMA_VERSION_V33: Final[str] = "runner-config-v33"
 RUNNER_SCHEMA_VERSION: Final[str] = RUNNER_SCHEMA_VERSION_V4
 SUPPORTED_RUNNER_SCHEMA_VERSIONS: Final[frozenset[str]] = frozenset(
     {
@@ -146,6 +147,7 @@ SUPPORTED_RUNNER_SCHEMA_VERSIONS: Final[frozenset[str]] = frozenset(
         RUNNER_SCHEMA_VERSION_V30,
         RUNNER_SCHEMA_VERSION_V31,
         RUNNER_SCHEMA_VERSION_V32,
+        RUNNER_SCHEMA_VERSION_V33,
     }
 )
 RESULT_SCHEMA_VERSION_V1: Final[str] = "runner-result-v1"
@@ -684,6 +686,7 @@ _SKILL_SCHEMAS: Final[frozenset[str]] = frozenset(
     RUNNER_SCHEMA_VERSION_V30,
     RUNNER_SCHEMA_VERSION_V31,
     RUNNER_SCHEMA_VERSION_V32,
+    RUNNER_SCHEMA_VERSION_V33,
     }
 )
 
@@ -2797,7 +2800,17 @@ _HISTORICAL_MEMORY_FORBIDDEN_ALIASES: Final[frozenset[str]] = frozenset(
     }
 )
 _HISTORICAL_MEMORY_CULTURAL_SCHEMAS: Final[frozenset[str]] = frozenset(
-    {RUNNER_SCHEMA_VERSION_V31, RUNNER_SCHEMA_VERSION_V32}
+    {
+        RUNNER_SCHEMA_VERSION_V31,
+        RUNNER_SCHEMA_VERSION_V32,
+        RUNNER_SCHEMA_VERSION_V33,
+    }
+)
+_DURABLE_RECORDS_SCHEMAS: Final[frozenset[str]] = frozenset(
+    {RUNNER_SCHEMA_VERSION_V33}
+)
+_HISTORICAL_MEMORY_LAYER_SCHEMAS: Final[frozenset[str]] = frozenset(
+    {RUNNER_SCHEMA_VERSION_V32, RUNNER_SCHEMA_VERSION_V33}
 )
 
 
@@ -2939,6 +2952,301 @@ def example_historical_memory_layers_spec(
         max_communicative_hops=max_communicative_hops,
         witness_definition=witness_definition,
         applicability=applicability,
+    )
+
+
+
+
+_DURABLE_RECORD_GENRES: Final[frozenset[str]] = frozenset(
+    {
+        "warning",
+        "instruction",
+        "map",
+        "story",
+        "agreement",
+        "inventory_record",
+        "genealogy",
+        "chronicle",
+    }
+)
+_DURABLE_RECORDS_MODE: Final[frozenset[str]] = frozenset({"deterministic"})
+_DURABLE_COPY_FIDELITY: Final[frozenset[str]] = frozenset(
+    {"perfect", "deterministic_mutation", "lossy"}
+)
+_DURABLE_PERCEPTION_MODES: Final[frozenset[str]] = frozenset(
+    {"marks_and_meta", "marks_only"}
+)
+_DURABLE_RECORDS_FORBIDDEN_ALIASES: Final[frozenset[str]] = frozenset(
+    {
+        "canonical_archive",
+        "true_history",
+        "society_library",
+        "verified_archive",
+        "meaning",
+        "interpretation",
+        "truth",
+        "verified",
+        "canonical_history",
+        "archive_must_persist",
+        "true_history_restored",
+    }
+)
+
+
+@dataclass(frozen=True, slots=True)
+class DurableCopyFidelityPolicy:
+    """Exact copy_fidelity_policy object under durable_records."""
+
+    default_fidelity: str = "perfect"
+    max_mark_edits: int = 2
+    max_relation_edits: int = 1
+    preserve_genre: bool = True
+    copy_requires_hold_or_colocation: bool = True
+
+    def __post_init__(self) -> None:
+        fidelity = require_stable_id(
+            "DurableCopyFidelityPolicy.default_fidelity", self.default_fidelity
+        )
+        if fidelity not in _DURABLE_COPY_FIDELITY:
+            raise ValueError(
+                f"unknown default_fidelity {fidelity!r} "
+                "(code=durable_copy_fidelity_invalid)"
+            )
+        object.__setattr__(self, "default_fidelity", fidelity)
+        marks = require_exact_nonneg_int("max_mark_edits", self.max_mark_edits)
+        if marks > 32:
+            raise ValueError(
+                "max_mark_edits must be in [0, 32] "
+                "(code=durable_max_mark_edits_invalid)"
+            )
+        object.__setattr__(self, "max_mark_edits", marks)
+        relations = require_exact_nonneg_int(
+            "max_relation_edits", self.max_relation_edits
+        )
+        if relations > 32:
+            raise ValueError(
+                "max_relation_edits must be in [0, 32] "
+                "(code=durable_max_relation_edits_invalid)"
+            )
+        object.__setattr__(self, "max_relation_edits", relations)
+        if type(self.preserve_genre) is not bool:
+            raise TypeError("preserve_genre must be bool")
+        if type(self.copy_requires_hold_or_colocation) is not bool:
+            raise TypeError("copy_requires_hold_or_colocation must be bool")
+
+
+@dataclass(frozen=True, slots=True)
+class DurableIntegrityPolicy:
+    """Exact integrity_policy object under durable_records."""
+
+    allow_damage: bool = True
+    allow_partial_loss: bool = True
+    tombstone_on_destroy: bool = True
+    partial_loss_min_marks_remaining: int = 0
+
+    def __post_init__(self) -> None:
+        if type(self.allow_damage) is not bool:
+            raise TypeError("allow_damage must be bool")
+        if type(self.allow_partial_loss) is not bool:
+            raise TypeError("allow_partial_loss must be bool")
+        if type(self.tombstone_on_destroy) is not bool:
+            raise TypeError("tombstone_on_destroy must be bool")
+        remaining = require_exact_nonneg_int(
+            "partial_loss_min_marks_remaining",
+            self.partial_loss_min_marks_remaining,
+        )
+        object.__setattr__(self, "partial_loss_min_marks_remaining", remaining)
+
+
+@dataclass(frozen=True, slots=True)
+class DurableAnnotationPolicy:
+    """Exact annotation_policy object under durable_records."""
+
+    max_annotations_per_record: int = 8
+    annotations_survive_author_death: bool = True
+
+    def __post_init__(self) -> None:
+        max_ann = require_exact_nonneg_int(
+            "max_annotations_per_record", self.max_annotations_per_record
+        )
+        if max_ann < 1:
+            raise ValueError(
+                "max_annotations_per_record must be >= 1 "
+                "(code=durable_annotation_cap_invalid)"
+            )
+        object.__setattr__(self, "max_annotations_per_record", max_ann)
+        if type(self.annotations_survive_author_death) is not bool:
+            raise TypeError("annotations_survive_author_death must be bool")
+
+
+@dataclass(frozen=True, slots=True)
+class DurableLineagePolicy:
+    """Exact lineage_policy object under durable_records."""
+
+    max_copy_generation: int = 8
+    track_source_on_edit: bool = True
+    destroyed_parent_blocks_copy: bool = True
+
+    def __post_init__(self) -> None:
+        max_gen = require_exact_nonneg_int(
+            "max_copy_generation", self.max_copy_generation
+        )
+        if max_gen < 1:
+            raise ValueError(
+                "max_copy_generation must be >= 1 "
+                "(code=durable_copy_generation_cap_invalid)"
+            )
+        object.__setattr__(self, "max_copy_generation", max_gen)
+        if type(self.track_source_on_edit) is not bool:
+            raise TypeError("track_source_on_edit must be bool")
+        if type(self.destroyed_parent_blocks_copy) is not bool:
+            raise TypeError("destroyed_parent_blocks_copy must be bool")
+
+
+@dataclass(frozen=True, slots=True)
+class DurableRecordsSpec:
+    """Opt-in durable records channel (runner-config-v33 sibling).
+
+    Deepens owned ``cultural_historical_memory``. Absent object means durable
+    channel off. Not an ``AgentCognitionSpec`` enum.
+    """
+
+    enabled_genres: tuple[str, ...]
+    copy_fidelity_policy: DurableCopyFidelityPolicy = field(
+        default_factory=DurableCopyFidelityPolicy
+    )
+    integrity_policy: DurableIntegrityPolicy = field(
+        default_factory=DurableIntegrityPolicy
+    )
+    annotation_policy: DurableAnnotationPolicy = field(
+        default_factory=DurableAnnotationPolicy
+    )
+    lineage_policy: DurableLineagePolicy = field(default_factory=DurableLineagePolicy)
+    durable_records_mode: str = "deterministic"
+    perception_mode: str = "marks_and_meta"
+    rng_namespace: str = "durable_records"
+
+    def __post_init__(self) -> None:
+        mode = require_stable_id(
+            "DurableRecordsSpec.durable_records_mode", self.durable_records_mode
+        )
+        if mode == "disabled":
+            raise ValueError(
+                "durable_records_mode=disabled is rejected; omit the object "
+                "for off (code=durable_records_mode_invalid)"
+            )
+        if mode not in _DURABLE_RECORDS_MODE:
+            raise ValueError(
+                f"unknown durable_records_mode {mode!r} "
+                "(code=durable_records_mode_invalid)"
+            )
+        object.__setattr__(self, "durable_records_mode", mode)
+
+        if isinstance(self.enabled_genres, (str, bytes)) or not isinstance(
+            self.enabled_genres, Sequence
+        ):
+            raise TypeError("enabled_genres must be a sequence")
+        if not self.enabled_genres:
+            raise ValueError(
+                "enabled_genres must be non-empty when durable_records present "
+                "(code=durable_genres_empty)"
+            )
+        genres: list[str] = []
+        seen: set[str] = set()
+        for raw in self.enabled_genres:
+            genre = require_stable_id("DurableRecordsSpec.enabled_genres", raw)
+            if genre not in _DURABLE_RECORD_GENRES:
+                raise ValueError(
+                    f"unknown durable record genre {genre!r} "
+                    "(code=durable_genre_invalid)"
+                )
+            if genre in seen:
+                raise ValueError(
+                    f"duplicate enabled genre {genre!r} "
+                    "(code=durable_genre_duplicate)"
+                )
+            seen.add(genre)
+            genres.append(genre)
+        object.__setattr__(self, "enabled_genres", tuple(genres))
+
+        if type(self.copy_fidelity_policy) is not DurableCopyFidelityPolicy:
+            raise TypeError(
+                "copy_fidelity_policy must be DurableCopyFidelityPolicy"
+            )
+        if type(self.integrity_policy) is not DurableIntegrityPolicy:
+            raise TypeError("integrity_policy must be DurableIntegrityPolicy")
+        if type(self.annotation_policy) is not DurableAnnotationPolicy:
+            raise TypeError("annotation_policy must be DurableAnnotationPolicy")
+        if type(self.lineage_policy) is not DurableLineagePolicy:
+            raise TypeError("lineage_policy must be DurableLineagePolicy")
+
+        perception = require_stable_id(
+            "DurableRecordsSpec.perception_mode", self.perception_mode
+        )
+        if perception not in _DURABLE_PERCEPTION_MODES:
+            raise ValueError(
+                f"unknown perception_mode {perception!r} "
+                "(code=durable_perception_mode_invalid)"
+            )
+        object.__setattr__(self, "perception_mode", perception)
+        namespace = require_stable_id(
+            "DurableRecordsSpec.rng_namespace", self.rng_namespace
+        )
+        object.__setattr__(self, "rng_namespace", namespace)
+
+    def canonical_payload(self) -> dict[str, object]:
+        return {
+            "annotation_policy": {
+                "annotations_survive_author_death": (
+                    self.annotation_policy.annotations_survive_author_death
+                ),
+                "max_annotations_per_record": (
+                    self.annotation_policy.max_annotations_per_record
+                ),
+            },
+            "copy_fidelity_policy": {
+                "copy_requires_hold_or_colocation": (
+                    self.copy_fidelity_policy.copy_requires_hold_or_colocation
+                ),
+                "default_fidelity": self.copy_fidelity_policy.default_fidelity,
+                "max_mark_edits": self.copy_fidelity_policy.max_mark_edits,
+                "max_relation_edits": self.copy_fidelity_policy.max_relation_edits,
+                "preserve_genre": self.copy_fidelity_policy.preserve_genre,
+            },
+            "durable_records_mode": self.durable_records_mode,
+            "enabled_genres": list(self.enabled_genres),
+            "integrity_policy": {
+                "allow_damage": self.integrity_policy.allow_damage,
+                "allow_partial_loss": self.integrity_policy.allow_partial_loss,
+                "partial_loss_min_marks_remaining": (
+                    self.integrity_policy.partial_loss_min_marks_remaining
+                ),
+                "tombstone_on_destroy": self.integrity_policy.tombstone_on_destroy,
+            },
+            "lineage_policy": {
+                "destroyed_parent_blocks_copy": (
+                    self.lineage_policy.destroyed_parent_blocks_copy
+                ),
+                "max_copy_generation": self.lineage_policy.max_copy_generation,
+                "track_source_on_edit": self.lineage_policy.track_source_on_edit,
+            },
+            "perception_mode": self.perception_mode,
+            "rng_namespace": self.rng_namespace,
+        }
+
+
+def example_durable_records_spec(
+    *,
+    default_fidelity: str = "perfect",
+    perception_mode: str = "marks_and_meta",
+) -> DurableRecordsSpec:
+    """Reference durable records spec for tests and Experiment AN."""
+    return DurableRecordsSpec(
+        enabled_genres=tuple(sorted(_DURABLE_RECORD_GENRES)),
+        copy_fidelity_policy=DurableCopyFidelityPolicy(
+            default_fidelity=default_fidelity
+        ),
+        perception_mode=perception_mode,
     )
 
 
@@ -4581,6 +4889,7 @@ class SimulationRunnerConfig:
     mentorship: MentorshipSpec | None = None
     cultural_feature_provenance: CulturalFeatureProvenanceSpec | None = None
     historical_memory_layers: HistoricalMemoryLayersSpec | None = None
+    durable_records: DurableRecordsSpec | None = None
 
     def __post_init__(self) -> None:
         # Late import avoids circular import with new_agent_initialization.
@@ -4642,6 +4951,13 @@ class SimulationRunnerConfig:
             raise TypeError(
                 "historical_memory_layers must be "
                 "HistoricalMemoryLayersSpec or None"
+            )
+        if (
+            self.durable_records is not None
+            and type(self.durable_records) is not DurableRecordsSpec
+        ):
+            raise TypeError(
+                "durable_records must be DurableRecordsSpec or None"
             )
         if type(self.scenario) is not WorldScenarioSpec:
             raise TypeError("scenario must be WorldScenarioSpec")
@@ -4736,6 +5052,7 @@ class SimulationRunnerConfig:
             RUNNER_SCHEMA_VERSION_V30,
             RUNNER_SCHEMA_VERSION_V31,
             RUNNER_SCHEMA_VERSION_V32,
+            RUNNER_SCHEMA_VERSION_V33,
         }
         if (
             self.v3_capability_flags.generational_population
@@ -4750,7 +5067,7 @@ class SimulationRunnerConfig:
                 "generational_population requires runner-config-v24, "
                 "runner-config-v25, runner-config-v26, runner-config-v27, "
                 "runner-config-v28, runner-config-v29, runner-config-v30, "
-                "runner-config-v31, or runner-config-v32 "
+                "runner-config-v31, runner-config-v32, or runner-config-v33 "
                 "(code=generational_population_requires_v24)"
             )
         _kinship_schemas = {
@@ -4760,6 +5077,7 @@ class SimulationRunnerConfig:
             RUNNER_SCHEMA_VERSION_V30,
             RUNNER_SCHEMA_VERSION_V31,
             RUNNER_SCHEMA_VERSION_V32,
+            RUNNER_SCHEMA_VERSION_V33,
         }
         if self.v3_capability_flags.kinship_inheritance:
             if self.schema_version not in _kinship_schemas:
@@ -4801,6 +5119,7 @@ class SimulationRunnerConfig:
                 RUNNER_SCHEMA_VERSION_V30,
                 RUNNER_SCHEMA_VERSION_V31,
                 RUNNER_SCHEMA_VERSION_V32,
+                RUNNER_SCHEMA_VERSION_V33,
             }:
                 _LOGGER.error(
                     "dependency_care_requires_v28 schema_version=%s "
@@ -4849,6 +5168,7 @@ class SimulationRunnerConfig:
                 RUNNER_SCHEMA_VERSION_V30,
                 RUNNER_SCHEMA_VERSION_V31,
                 RUNNER_SCHEMA_VERSION_V32,
+                RUNNER_SCHEMA_VERSION_V33,
             }:
                 _LOGGER.error(
                     "developmental_learning_requires_v29 schema_version=%s "
@@ -4909,6 +5229,7 @@ class SimulationRunnerConfig:
                 RUNNER_SCHEMA_VERSION_V30,
                 RUNNER_SCHEMA_VERSION_V31,
                 RUNNER_SCHEMA_VERSION_V32,
+                RUNNER_SCHEMA_VERSION_V33,
             }:
                 _LOGGER.error(
                     "mentorship_requires_v30 schema_version=%s "
@@ -4988,8 +5309,8 @@ class SimulationRunnerConfig:
                     self.schema_version,
                 )
                 raise ValueError(
-                    "cultural_feature_provenance requires runner-config-v31 "
-                    "or runner-config-v32 "
+                    "cultural_feature_provenance requires runner-config-v31, "
+                    "runner-config-v32, or runner-config-v33 "
                     "(code=cultural_feature_requires_v31)"
                 )
             if not self.v3_capability_flags.cultural_historical_memory:
@@ -5025,7 +5346,8 @@ class SimulationRunnerConfig:
                 "(code=v31_requires_cultural_feature_provenance)"
             )
         elif (
-            self.schema_version != RUNNER_SCHEMA_VERSION_V32
+            self.schema_version
+            not in {RUNNER_SCHEMA_VERSION_V32, RUNNER_SCHEMA_VERSION_V33}
             and self.v3_capability_flags.cultural_historical_memory
         ):
             _LOGGER.error(
@@ -5038,7 +5360,7 @@ class SimulationRunnerConfig:
                 "(code=cultural_feature_requires_flag)"
             )
         if self.historical_memory_layers is not None:
-            if self.schema_version != RUNNER_SCHEMA_VERSION_V32:
+            if self.schema_version not in _HISTORICAL_MEMORY_LAYER_SCHEMAS:
                 _LOGGER.error(
                     "historical_memory_requires_v32 schema_version=%s "
                     "reason_code=historical_memory_requires_v32",
@@ -5046,6 +5368,7 @@ class SimulationRunnerConfig:
                 )
                 raise ValueError(
                     "historical_memory_layers requires runner-config-v32 "
+                    "or runner-config-v33 "
                     "(code=historical_memory_requires_v32)"
                 )
             if not self.v3_capability_flags.cultural_historical_memory:
@@ -5093,6 +5416,58 @@ class SimulationRunnerConfig:
                 "runner-config-v32 requires historical_memory_layers "
                 "(code=v32_requires_historical_memory_layers)"
             )
+        if self.durable_records is not None:
+            if self.schema_version not in _DURABLE_RECORDS_SCHEMAS:
+                _LOGGER.error(
+                    "durable_records_requires_v33 schema_version=%s "
+                    "reason_code=durable_records_requires_v33",
+                    self.schema_version,
+                )
+                raise ValueError(
+                    "durable_records requires runner-config-v33 "
+                    "(code=durable_records_requires_v33)"
+                )
+            if not self.v3_capability_flags.cultural_historical_memory:
+                _LOGGER.error(
+                    "durable_records_without_cultural_flag schema_version=%s "
+                    "reason_code=durable_records_without_cultural_flag",
+                    self.schema_version,
+                )
+                raise ValueError(
+                    "durable_records requires cultural_historical_memory "
+                    "(code=durable_records_without_cultural_flag)"
+                )
+            if self.cultural_feature_provenance is None:
+                _LOGGER.error(
+                    "durable_records_requires_cultural_provenance "
+                    "schema_version=%s "
+                    "reason_code=durable_records_requires_cultural_provenance",
+                    self.schema_version,
+                )
+                raise ValueError(
+                    "durable_records requires cultural_feature_provenance "
+                    "(code=durable_records_requires_cultural_provenance)"
+                )
+            _LOGGER.info(
+                "durable_records_schema_select schema_version=%s "
+                "genre_count=%s default_fidelity=%s "
+                "tombstone_on_destroy=%s perception_mode=%s",
+                self.schema_version,
+                len(self.durable_records.enabled_genres),
+                self.durable_records.copy_fidelity_policy.default_fidelity,
+                self.durable_records.integrity_policy.tombstone_on_destroy,
+                self.durable_records.perception_mode,
+            )
+        elif self.schema_version == RUNNER_SCHEMA_VERSION_V33:
+            _LOGGER.error(
+                "v33_requires_durable_records schema_version=%s "
+                "reason_code=v33_requires_durable_records",
+                self.schema_version,
+            )
+            raise ValueError(
+                "runner-config-v33 requires durable_records "
+                "(code=v33_requires_durable_records)"
+            )
         other_v3_enabled = tuple(
             name
             for name in self.v3_capability_flags.enabled_names()
@@ -5109,6 +5484,7 @@ class SimulationRunnerConfig:
             RUNNER_SCHEMA_VERSION_V30,
             RUNNER_SCHEMA_VERSION_V31,
             RUNNER_SCHEMA_VERSION_V32,
+            RUNNER_SCHEMA_VERSION_V33,
         }:
             _LOGGER.error(
                 "v3_capability_requires_v23 schema_version=%s "
@@ -5174,7 +5550,7 @@ class SimulationRunnerConfig:
                     self.schema_version,
                 )
                 raise ValueError(
-                    "cultural-only v31/v32 forbids population_lifecycle "
+                    "cultural-only v31/v32/v33 forbids population_lifecycle "
                     "(code=cultural_only_forbids_lifecycle_spec)"
                 )
             if self.new_agent_initialization is not None:
@@ -5184,7 +5560,7 @@ class SimulationRunnerConfig:
                     self.schema_version,
                 )
                 raise ValueError(
-                    "cultural-only v31/v32 forbids new_agent_initialization "
+                    "cultural-only v31/v32/v33 forbids new_agent_initialization "
                     "(code=cultural_only_forbids_new_agent_init)"
                 )
             if self.dependency_care is not None:
@@ -5212,11 +5588,14 @@ class SimulationRunnerConfig:
                     RUNNER_SCHEMA_VERSION_V30,
                     RUNNER_SCHEMA_VERSION_V31,
                     RUNNER_SCHEMA_VERSION_V32,
+                    RUNNER_SCHEMA_VERSION_V33,
                 }
                 or self.v3_capability_flags.generational_population
             )
             if requires_lifecycle and self.population_lifecycle is None:
-                if self.schema_version == RUNNER_SCHEMA_VERSION_V32:
+                if self.schema_version == RUNNER_SCHEMA_VERSION_V33:
+                    code = "v33_requires_population_lifecycle"
+                elif self.schema_version == RUNNER_SCHEMA_VERSION_V32:
                     code = "v32_requires_population_lifecycle"
                 elif self.schema_version == RUNNER_SCHEMA_VERSION_V31:
                     code = "v31_requires_population_lifecycle"
@@ -5274,6 +5653,7 @@ class SimulationRunnerConfig:
                 RUNNER_SCHEMA_VERSION_V30,
                 RUNNER_SCHEMA_VERSION_V31,
                 RUNNER_SCHEMA_VERSION_V32,
+                RUNNER_SCHEMA_VERSION_V33,
             }
         ):
             _LOGGER.error(
@@ -5297,12 +5677,15 @@ class SimulationRunnerConfig:
                 RUNNER_SCHEMA_VERSION_V30,
                 RUNNER_SCHEMA_VERSION_V31,
                 RUNNER_SCHEMA_VERSION_V32,
+                RUNNER_SCHEMA_VERSION_V33,
             }
             and self.v3_capability_flags.generational_population
         )
         if _requires_new_agent_init:
             if self.new_agent_initialization is None:
-                if self.schema_version == RUNNER_SCHEMA_VERSION_V32:
+                if self.schema_version == RUNNER_SCHEMA_VERSION_V33:
+                    code = "v33_requires_new_agent_initialization"
+                elif self.schema_version == RUNNER_SCHEMA_VERSION_V32:
                     code = "v32_requires_new_agent_initialization"
                 elif self.schema_version == RUNNER_SCHEMA_VERSION_V31:
                     code = "v31_requires_new_agent_initialization"
@@ -5433,6 +5816,7 @@ class SimulationRunnerConfig:
         RUNNER_SCHEMA_VERSION_V30,
         RUNNER_SCHEMA_VERSION_V31,
         RUNNER_SCHEMA_VERSION_V32,
+        RUNNER_SCHEMA_VERSION_V33,
         }
         if non_disabled and self.schema_version not in consolidation_schemas:
             _LOGGER.error(
@@ -5491,6 +5875,7 @@ class SimulationRunnerConfig:
         RUNNER_SCHEMA_VERSION_V30,
         RUNNER_SCHEMA_VERSION_V31,
         RUNNER_SCHEMA_VERSION_V32,
+        RUNNER_SCHEMA_VERSION_V33,
         }
         if reflecting and self.schema_version not in reflection_schemas:
             _LOGGER.error(
@@ -5549,6 +5934,7 @@ class SimulationRunnerConfig:
         RUNNER_SCHEMA_VERSION_V30,
         RUNNER_SCHEMA_VERSION_V31,
         RUNNER_SCHEMA_VERSION_V32,
+        RUNNER_SCHEMA_VERSION_V33,
         }
         if planning and self.schema_version not in prospective_schemas:
             _LOGGER.error(
@@ -5606,6 +5992,7 @@ class SimulationRunnerConfig:
         RUNNER_SCHEMA_VERSION_V30,
         RUNNER_SCHEMA_VERSION_V31,
         RUNNER_SCHEMA_VERSION_V32,
+        RUNNER_SCHEMA_VERSION_V33,
         }
         if considering and self.schema_version not in counterfactual_schemas:
             _LOGGER.error(
@@ -5662,6 +6049,7 @@ class SimulationRunnerConfig:
         RUNNER_SCHEMA_VERSION_V30,
         RUNNER_SCHEMA_VERSION_V31,
         RUNNER_SCHEMA_VERSION_V32,
+        RUNNER_SCHEMA_VERSION_V33,
         }:
             _LOGGER.error(
                 "invalid_fields path=agents.cognition.communication_strategy_mode "
@@ -5716,6 +6104,7 @@ class SimulationRunnerConfig:
         RUNNER_SCHEMA_VERSION_V30,
         RUNNER_SCHEMA_VERSION_V31,
         RUNNER_SCHEMA_VERSION_V32,
+        RUNNER_SCHEMA_VERSION_V33,
         }:
             _LOGGER.error(
                 "invalid_fields path=agents.cognition.reputation_mode "
@@ -5812,6 +6201,7 @@ class SimulationRunnerConfig:
         RUNNER_SCHEMA_VERSION_V30,
         RUNNER_SCHEMA_VERSION_V31,
         RUNNER_SCHEMA_VERSION_V32,
+        RUNNER_SCHEMA_VERSION_V33,
         }:
             _LOGGER.error(
                 "invalid_fields path=agents.cognition.teaching_interaction_mode "
@@ -5857,6 +6247,7 @@ class SimulationRunnerConfig:
         RUNNER_SCHEMA_VERSION_V30,
         RUNNER_SCHEMA_VERSION_V31,
         RUNNER_SCHEMA_VERSION_V32,
+        RUNNER_SCHEMA_VERSION_V33,
         }
         if (dynamics is not None and self.schema_version not in dynamics_schemas) or (
             self.schema_version == RUNNER_SCHEMA_VERSION_V14 and dynamics is None
@@ -5897,6 +6288,7 @@ class SimulationRunnerConfig:
         RUNNER_SCHEMA_VERSION_V30,
         RUNNER_SCHEMA_VERSION_V31,
         RUNNER_SCHEMA_VERSION_V32,
+        RUNNER_SCHEMA_VERSION_V33,
         }:
             _LOGGER.error(
                 "invalid_fields path=agents.cognition.territorial_claim_mode "
@@ -5943,6 +6335,7 @@ class SimulationRunnerConfig:
         RUNNER_SCHEMA_VERSION_V30,
         RUNNER_SCHEMA_VERSION_V31,
         RUNNER_SCHEMA_VERSION_V32,
+        RUNNER_SCHEMA_VERSION_V33,
         }:
             _LOGGER.error(
                 "invalid_fields path=agents.cognition.group_formation_mode "
@@ -5983,6 +6376,7 @@ class SimulationRunnerConfig:
         RUNNER_SCHEMA_VERSION_V30,
         RUNNER_SCHEMA_VERSION_V31,
         RUNNER_SCHEMA_VERSION_V32,
+        RUNNER_SCHEMA_VERSION_V33,
         }:
             _LOGGER.error(
                 "invalid_fields path=agents.cognition.social_norm_mode "
@@ -6026,6 +6420,7 @@ class SimulationRunnerConfig:
         RUNNER_SCHEMA_VERSION_V30,
         RUNNER_SCHEMA_VERSION_V31,
         RUNNER_SCHEMA_VERSION_V32,
+        RUNNER_SCHEMA_VERSION_V33,
         }
         if conventions_on and self.schema_version not in convention_schemas:
             _LOGGER.error(
@@ -6074,6 +6469,7 @@ class SimulationRunnerConfig:
         RUNNER_SCHEMA_VERSION_V30,
         RUNNER_SCHEMA_VERSION_V31,
         RUNNER_SCHEMA_VERSION_V32,
+        RUNNER_SCHEMA_VERSION_V33,
         }
         if artifacts_on and self.schema_version not in artifact_schemas:
             runner_log.error(
@@ -6118,6 +6514,7 @@ class SimulationRunnerConfig:
         RUNNER_SCHEMA_VERSION_V30,
         RUNNER_SCHEMA_VERSION_V31,
         RUNNER_SCHEMA_VERSION_V32,
+        RUNNER_SCHEMA_VERSION_V33,
         }
         if naming_on and self.schema_version not in naming_schemas:
             runner_log.error(
@@ -6159,6 +6556,7 @@ class SimulationRunnerConfig:
         RUNNER_SCHEMA_VERSION_V30,
         RUNNER_SCHEMA_VERSION_V31,
         RUNNER_SCHEMA_VERSION_V32,
+        RUNNER_SCHEMA_VERSION_V33,
         }
         budget_modes = tuple(
             agent.cognition.cognitive_budget_mode for agent in self.agents
@@ -6176,6 +6574,7 @@ class SimulationRunnerConfig:
         RUNNER_SCHEMA_VERSION_V30,
         RUNNER_SCHEMA_VERSION_V31,
         RUNNER_SCHEMA_VERSION_V32,
+        RUNNER_SCHEMA_VERSION_V33,
         }
         if budgets_on and self.schema_version not in budget_schemas:
             runner_log.error(
@@ -6291,6 +6690,7 @@ class SimulationRunnerConfig:
         RUNNER_SCHEMA_VERSION_V30,
         RUNNER_SCHEMA_VERSION_V31,
         RUNNER_SCHEMA_VERSION_V32,
+        RUNNER_SCHEMA_VERSION_V33,
         }:
             _LOGGER.error(
                 "invalid_fields path=agents.cognition.production_knowledge_mode "
@@ -6324,6 +6724,7 @@ class SimulationRunnerConfig:
         RUNNER_SCHEMA_VERSION_V30,
         RUNNER_SCHEMA_VERSION_V31,
         RUNNER_SCHEMA_VERSION_V32,
+        RUNNER_SCHEMA_VERSION_V33,
         }:
             from world.production import production_catalog_digest
 
@@ -6397,6 +6798,7 @@ class SimulationRunnerConfig:
         RUNNER_SCHEMA_VERSION_V30,
         RUNNER_SCHEMA_VERSION_V31,
         RUNNER_SCHEMA_VERSION_V32,
+        RUNNER_SCHEMA_VERSION_V33,
         }:
             shared_teaching = teaching_weight_tuple(self.agents[0].cognition)
             if any(

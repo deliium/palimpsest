@@ -75,6 +75,9 @@ EVENT_SCHEMA_REPLAY_V9: Final[int] = 9
 EVENT_SCHEMA_REPLAY_V10: Final[int] = 10
 EVENT_SCHEMA_REPLAY_V11: Final[int] = 11
 EVENT_SCHEMA_REPLAY_V12: Final[int] = 12
+# Stub for runner-config-v33 durable_records write-pair documentation
+# (Task 7 owns full v13 event types / accepted-set widen).
+EVENT_SCHEMA_REPLAY_V13: Final[int] = 13
 SUPPORTED_EVENT_SCHEMA_VERSIONS: Final[frozenset[int]] = frozenset(
     {
         EVENT_SCHEMA_AUDIT_V1,

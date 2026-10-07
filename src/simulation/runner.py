@@ -137,6 +137,7 @@ from simulation.runner_models import (
     RUNNER_SCHEMA_VERSION_V30,
     RUNNER_SCHEMA_VERSION_V31,
     RUNNER_SCHEMA_VERSION_V32,
+    RUNNER_SCHEMA_VERSION_V33,
     AgentCognitionSpec,
     AgentRunnerSpec,
     CognitionCounters,
@@ -1428,7 +1429,21 @@ class SimulationRunner:
                 }
             catalog = config.agents[0].cognition.production_catalog
             production_catalog = catalog if catalog.recipe_count > 0 else None
-            artifacts_active = bool(bootstrap.artifacts) or config.artifacts_enabled
+            durable_records_active = config.durable_records is not None
+            artifacts_active = (
+                bool(bootstrap.artifacts)
+                or config.artifacts_enabled
+                or durable_records_active
+            )
+            if durable_records_active and not (
+                bool(bootstrap.artifacts) or config.artifacts_enabled
+            ):
+                _LOG.debug(
+                    "durable_artifacts_enabled_for_channel "
+                    "durable_records_active=%s artifacts_enabled=%s",
+                    True,
+                    True,
+                )
             lifecycle_channel = (
                 config.v3_capability_flags.generational_population
                 and config.population_lifecycle is not None
@@ -1474,6 +1489,7 @@ class SimulationRunner:
                             RUNNER_SCHEMA_VERSION_V30,
                             RUNNER_SCHEMA_VERSION_V31,
                             RUNNER_SCHEMA_VERSION_V32,
+                            RUNNER_SCHEMA_VERSION_V33,
                         }
                         and config.new_agent_initialization is not None
                     )
@@ -1482,6 +1498,9 @@ class SimulationRunner:
                 kinship_spec=config.kinship if kinship_channel else None,
                 dependency_care_spec=(
                     config.dependency_care if dependency_care_channel else None
+                ),
+                durable_records_spec=(
+                    config.durable_records if durable_records_active else None
                 ),
                 **skill_kwargs,
                 **teaching_kwargs,
@@ -1560,6 +1579,23 @@ class SimulationRunner:
                 _LOG.debug(
                     "historical_memory_layers_skip schema_version=%s "
                     "historical_memory_layers_present=%s",
+                    config.schema_version,
+                    False,
+                )
+            if durable_records_active:
+                assert config.durable_records is not None
+                _LOG.info(
+                    "durable_records_enabled schema_version=%s genre_count=%s "
+                    "default_fidelity=%s tombstone_on_destroy=%s",
+                    config.schema_version,
+                    len(config.durable_records.enabled_genres),
+                    config.durable_records.copy_fidelity_policy.default_fidelity,
+                    config.durable_records.integrity_policy.tombstone_on_destroy,
+                )
+            else:
+                _LOG.debug(
+                    "durable_records_skip schema_version=%s "
+                    "durable_records_present=%s",
                     config.schema_version,
                     False,
                 )
@@ -3395,6 +3431,7 @@ def _bootstrap_snapshot(engine: WorldEngine) -> WorldSnapshot:
         new_agent_provenance_active=engine.new_agent_provenance_active,
         kinship_active=engine.kinship_channel_active,
         dependency_care_active=engine.dependency_care_channel_active,
+        durable_records_active=engine.durable_records_channel_active,
     )
     state = engine._snapshot.world.state
     production_rows: dict[str, tuple[object, ...]] = {}
