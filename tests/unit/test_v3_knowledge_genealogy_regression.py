@@ -8,10 +8,16 @@ from typing import get_args
 import pytest
 
 from analysis.specifications import METRIC_FAMILY_COUNT, MetricFamilyId
-from experiments import OFF_GATE_MATRIX_EXPERIMENT_IDS, experiment_ap_knowledge_genealogy
+from experiments import (
+    OFF_GATE_MATRIX_EXPERIMENT_IDS,
+    experiment_ap_knowledge_genealogy,
+)
 from observer.version import SEMANTIC_EVENT_TYPES
 from simulation.persistence import checkpoint_schema_for_production
-from simulation.runner_models import RUNNER_SCHEMA_VERSION_V34, RUNNER_SCHEMA_VERSION_V35
+from simulation.runner_models import (
+    RUNNER_SCHEMA_VERSION_V34,
+    RUNNER_SCHEMA_VERSION_V35,
+)
 from world.actions import AgentCommand
 from world.events import EVENT_SCHEMA_REPLAY_V5, EVENT_SCHEMA_REPLAY_V14
 

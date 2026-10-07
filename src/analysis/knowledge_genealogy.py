@@ -438,9 +438,10 @@ def build_knowledge_genealogy_graph(
                 )
             )
         # Owner-local parent edges.
+        known_entry_ids = {r.entry_id for r in audits}
         for parent_id in row.parent_entry_ids:
             parent_node = _entry_node_id(parent_id)
-            if parent_node not in nodes and parent_id not in {r.entry_id for r in audits}:
+            if parent_node not in nodes and parent_id not in known_entry_ids:
                 # Missing parent still gets a stub node for DAG continuity.
                 add_node(
                     KnowledgeGenealogyNode(
@@ -470,7 +471,11 @@ def build_knowledge_genealogy_graph(
             )
         # Cross-owner analysis join (never peer entry_id in live ledgers).
         peer_source = row.source_agent_id or row.teacher_agent_id
-        if peer_source and not row.parent_entry_ids and row.origin != "independent_discovery":
+        if (
+            peer_source
+            and not row.parent_entry_ids
+            and row.origin != "independent_discovery"
+        ):
             peer = _find_peer_source_entry(
                 source_agent_id=peer_source,
                 content_key=row.content_key,
@@ -570,7 +575,11 @@ def query_who_currently_knows(
             continue
         if not is_agent_living_at(agent, graph.as_of_tick, graph.death_ticks):
             continue
-        depth = 0 if node.hop_index is None else min(node.hop_index, _clamp_depth(max_query_depth))
+        depth = (
+            0
+            if node.hop_index is None
+            else min(node.hop_index, _clamp_depth(max_query_depth))
+        )
         items.append((depth, agent))
     items = sorted(set(items), key=lambda row: (row[0], row[1]))
     result = KnowledgeGenealogyQueryResult(
@@ -613,7 +622,10 @@ def query_who_taught(
             KnowledgeGenealogyEdgeKind.UNRESOLVED_TRANSMISSION,
         }:
             continue
-        target = next((n for n in graph.nodes if n.node_id == edge.target_node_id), None)
+        target = next(
+            (n for n in graph.nodes if n.node_id == edge.target_node_id),
+            None,
+        )
         if target is None or target.content_key != key:
             continue
         if kind is not None and target.kind_token != kind:
@@ -625,13 +637,21 @@ def query_who_taught(
                 target.agent_id, graph.as_of_tick, graph.death_ticks
             ):
                 continue
-        source = next((n for n in graph.nodes if n.node_id == edge.source_node_id), None)
+        source = next(
+            (n for n in graph.nodes if n.node_id == edge.source_node_id),
+            None,
+        )
         if source is None:
             continue
         teacher = source.agent_id or (
-            source.ref_token if source.kind is KnowledgeGenealogyNodeKind.HOLDER else None
+            source.ref_token
+            if source.kind is KnowledgeGenealogyNodeKind.HOLDER
+            else None
         )
-        if teacher is None and source.kind is KnowledgeGenealogyNodeKind.KNOWLEDGE_ENTRY:
+        if (
+            teacher is None
+            and source.kind is KnowledgeGenealogyNodeKind.KNOWLEDGE_ENTRY
+        ):
             teacher = source.agent_id
         if teacher is None:
             # unresolved source is holder node ref

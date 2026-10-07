@@ -133,7 +133,10 @@ def test_mutation_mean_distance_and_histogram() -> None:
         (), run_id="run-a", input_revision="rev-1"
     )
     assert empty.availability is MetricAvailability.ABSENT
-    assert KNOWLEDGE_GENEALOGY_MUTATION_METRIC_VERSION == "knowledge_genealogy_mutation@1"
+    assert (
+        KNOWLEDGE_GENEALOGY_MUTATION_METRIC_VERSION
+        == "knowledge_genealogy_mutation@1"
+    )
     audits = (
         _audit(entry_id="e1", fingerprint_distance_q=0.0),
         _audit(

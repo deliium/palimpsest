@@ -50,27 +50,27 @@ __all__ = [
     "PracticalKnowledgeKind",
     "PracticalKnowledgeLedger",
     "SubjectivePracticalKnowledge",
+    "apply_practical_knowledge_compose",
+    "apply_practical_knowledge_from_developmental",
+    "apply_practical_knowledge_from_imitation",
+    "apply_practical_knowledge_from_independent_discovery",
+    "apply_practical_knowledge_from_reconstruction",
+    "apply_practical_knowledge_from_teaching",
+    "apply_practical_knowledge_from_written_record",
+    "combine_practical_knowledge",
     "empty_practical_knowledge_ledger",
     "entry_to_audit",
+    "fingerprint_jaccard_distance",
+    "form_or_reinforce_practical_knowledge",
+    "mutate_practical_knowledge",
     "parse_knowledge_transmission_origin",
     "parse_practical_knowledge_kind",
     "practical_knowledge_content_key",
     "require_owner_practical_knowledge",
     "resolve_capability_anchor",
     "resolve_practical_knowledge_hop_index",
-    "upsert_practical_knowledge",
-    "form_or_reinforce_practical_knowledge",
-    "mutate_practical_knowledge",
-    "combine_practical_knowledge",
     "supersede_practical_knowledge",
-    "fingerprint_jaccard_distance",
-    "apply_practical_knowledge_compose",
-    "apply_practical_knowledge_from_teaching",
-    "apply_practical_knowledge_from_imitation",
-    "apply_practical_knowledge_from_written_record",
-    "apply_practical_knowledge_from_reconstruction",
-    "apply_practical_knowledge_from_developmental",
-    "apply_practical_knowledge_from_independent_discovery",
+    "upsert_practical_knowledge",
 ]
 
 
@@ -251,7 +251,9 @@ class SubjectivePracticalKnowledge:
             raise _fail("content_key", "must_use_tech_prefix")
         object.__setattr__(self, "content_key", key)
         object.__setattr__(
-            self, "content_fingerprint", _normalize_fingerprint(self.content_fingerprint)
+            self,
+            "content_fingerprint",
+            _normalize_fingerprint(self.content_fingerprint),
         )
         origin = parse_knowledge_transmission_origin(self.origin)
         object.__setattr__(self, "origin", origin)
@@ -301,7 +303,10 @@ class SubjectivePracticalKnowledge:
                 "capability_anchor",
                 require_stable_id("capability_anchor", self.capability_anchor),
             )
-        if self.source_agent_id is not None and type(self.source_agent_id) is not AgentId:
+        if (
+            self.source_agent_id is not None
+            and type(self.source_agent_id) is not AgentId
+        ):
             raise _fail("source_agent_id", "invalid_type")
         if (
             self.teacher_agent_id is not None
@@ -327,7 +332,11 @@ class SubjectivePracticalKnowledge:
                     "knowledge_genealogy_combination_requires_parents",
                 )
         elif origin is KnowledgeTransmissionOrigin.TEACHING:
-            if self.source_agent_id is None and self.teacher_agent_id is None and not refs:
+            if (
+                self.source_agent_id is None
+                and self.teacher_agent_id is None
+                and not refs
+            ):
                 raise _fail("evidence_refs", "teaching_provenance_required")
 
         acquired = require_exact_nonneg_int("acquired_tick", self.acquired_tick)
@@ -470,7 +479,9 @@ class PracticalKnowledgeAudit:
         object.__setattr__(
             self, "reason_code", require_stable_id("reason_code", self.reason_code)
         )
-        distance = _quantize_distance(_finite("fingerprint_distance_q", self.fingerprint_distance_q))
+        distance = _quantize_distance(
+            _finite("fingerprint_distance_q", self.fingerprint_distance_q)
+        )
         if distance < 0.0 or distance > 1.0:
             raise _fail("fingerprint_distance_q", "out_of_range")
         object.__setattr__(self, "fingerprint_distance_q", distance)
@@ -1407,7 +1418,10 @@ def apply_practical_knowledge_from_imitation(
     tick: int,
     imitation_compose_on: bool,
 ) -> tuple[PracticalKnowledgeLedger, tuple[PracticalKnowledgeAudit, ...]]:
-    """Uptake from colocated successful practice (never embeds peer id in content_key)."""
+    """Uptake from colocated successful practice.
+
+    Never embeds peer id in content_key.
+    """
     if type(ledger) is not PracticalKnowledgeLedger:
         raise _fail("ledger", "invalid_type")
     if not imitation_compose_on:
@@ -1427,7 +1441,11 @@ def apply_practical_knowledge_from_imitation(
         success = getattr(occurrence, "success", None)
         if other is None:
             continue
-        if success is not True and "success" not in kind_raw and "complete" not in kind_raw:
+        if (
+            success is not True
+            and "success" not in kind_raw
+            and "complete" not in kind_raw
+        ):
             continue
         kind = _kind_from_occurrence(kind_raw)
         if kind is None:
@@ -1439,7 +1457,8 @@ def apply_practical_knowledge_from_imitation(
             if event_id is not None and hasattr(event_id, "value")
             else f"occ:{tick}:{kind_raw}"
         )
-        # content_key must not embed peer id — technique token from occurrence kind only.
+        # content_key must not embed peer id — technique token from
+        # occurrence kind only.
         current, audit = _try_form(
             current,
             kind=kind,
@@ -1504,7 +1523,9 @@ def apply_practical_knowledge_from_written_record(
             genre_token = getattr(genre, "value", genre)
             if not isinstance(genre_token, str):
                 genre_token = "instruction"
-            kind = _WRITTEN_GENRE_TO_KIND.get(genre_token, PracticalKnowledgeKind.CRAFTING_PROCESS)
+            kind = _WRITTEN_GENRE_TO_KIND.get(
+                genre_token, PracticalKnowledgeKind.CRAFTING_PROCESS
+            )
             author = _agent_id_or_none(
                 getattr(entry, "author_id", None)
                 or getattr(entry, "source_agent_id", None)
@@ -1523,7 +1544,10 @@ def apply_practical_knowledge_from_written_record(
             if audit is not None:
                 audits.append(audit)
 
-        for artifact in getattr(observation, "artifacts", ()) or () if observation else ():
+        artifacts = (
+            getattr(observation, "artifacts", ()) or () if observation else ()
+        )
+        for artifact in artifacts:
             genre = getattr(artifact, "record_genre", None)
             genre_token = getattr(genre, "value", None)
             if not isinstance(genre_token, str):
@@ -1531,9 +1555,9 @@ def apply_practical_knowledge_from_written_record(
             kind = _WRITTEN_GENRE_TO_KIND.get(genre_token)
             if kind is None:
                 continue
-            aid = getattr(getattr(artifact, "artifact_id", None), "value", None) or getattr(
-                getattr(artifact, "entity_id", None), "value", None
-            )
+            aid = getattr(
+                getattr(artifact, "artifact_id", None), "value", None
+            ) or getattr(getattr(artifact, "entity_id", None), "value", None)
             if not isinstance(aid, str):
                 aid = f"art-{tick}-{genre_token}"
             author = _agent_id_or_none(getattr(artifact, "author_id", None))
@@ -1600,7 +1624,11 @@ def apply_practical_knowledge_from_reconstruction(
     audits: list[PracticalKnowledgeAudit] = []
     for occurrence in getattr(observation, "occurrences", ()) or ():
         kind_raw = str(getattr(occurrence, "kind", "")).lower()
-        if "recall" not in kind_raw and "reconstruct" not in kind_raw and "partial" not in kind_raw:
+        if (
+            "recall" not in kind_raw
+            and "reconstruct" not in kind_raw
+            and "partial" not in kind_raw
+        ):
             continue
         kind = _kind_from_occurrence(kind_raw) or PracticalKnowledgeKind.FORAGING_METHOD
         current, audit = _try_form(
@@ -1704,7 +1732,11 @@ def apply_practical_knowledge_from_independent_discovery(
         success = getattr(occurrence, "success", None)
         if other is not None:
             continue
-        if success is not True and "experiment" not in kind_raw and "discover" not in kind_raw:
+        if (
+            success is not True
+            and "experiment" not in kind_raw
+            and "discover" not in kind_raw
+        ):
             continue
         kind = _kind_from_occurrence(kind_raw)
         if kind is None:

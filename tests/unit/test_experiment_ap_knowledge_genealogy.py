@@ -147,13 +147,13 @@ def test_profile_rejects_missing_genealogy() -> None:
         durable_records=None,
         knowledge_repositories=None,
     )
-    with pytest.raises(ValueError, match="knowledge_genealogy_profile_missing_genealogy"):
+    with pytest.raises(
+        ValueError, match="knowledge_genealogy_profile_missing_genealogy"
+    ):
         knowledge_genealogy_profile(bad)  # type: ignore[arg-type]
 
 
 def test_arm_independent_discovery_holders_and_hop_zero() -> None:
-    from analysis.knowledge_genealogy_metrics import compute_knowledge_genealogy_holders
-    from analysis.models import MetricAvailability
     from agents.cognition.practical_knowledge import (
         KnowledgeTransmissionOrigin,
         PracticalKnowledgeKind,
@@ -162,11 +162,15 @@ def test_arm_independent_discovery_holders_and_hop_zero() -> None:
         form_or_reinforce_practical_knowledge,
         practical_knowledge_content_key,
     )
+    from analysis.knowledge_genealogy_metrics import compute_knowledge_genealogy_holders
+    from analysis.models import MetricAvailability
 
     arm_id = "ap-independent-discovery"
     config = _arm(experiment_ap_knowledge_genealogy(_base()), arm_id)
     assert config.knowledge_genealogy is not None, arm_id
-    assert config.knowledge_genealogy.uptake_compose.independent_discovery is True, arm_id
+    assert (
+        config.knowledge_genealogy.uptake_compose.independent_discovery is True
+    ), arm_id
     owner = AgentId("agent-a")
     ledger = form_or_reinforce_practical_knowledge(
         empty_practical_knowledge_ledger(owner),
@@ -188,10 +192,6 @@ def test_arm_independent_discovery_holders_and_hop_zero() -> None:
 
 
 def test_arm_teaching_lineage_who_taught() -> None:
-    from analysis.knowledge_genealogy import (
-        build_knowledge_genealogy_graph,
-        query_who_taught,
-    )
     from agents.cognition.practical_knowledge import (
         KnowledgeTransmissionOrigin,
         PracticalKnowledgeKind,
@@ -199,6 +199,10 @@ def test_arm_teaching_lineage_who_taught() -> None:
         entry_to_audit,
         form_or_reinforce_practical_knowledge,
         practical_knowledge_content_key,
+    )
+    from analysis.knowledge_genealogy import (
+        build_knowledge_genealogy_graph,
+        query_who_taught,
     )
 
     arm_id = "ap-teaching-lineage"
@@ -239,7 +243,6 @@ def test_arm_teaching_lineage_who_taught() -> None:
 
 
 def test_arm_multi_parent_dag_direct_ledger() -> None:
-    from analysis.knowledge_genealogy_metrics import compute_knowledge_genealogy_lineage
     from agents.cognition.practical_knowledge import (
         KnowledgeTransmissionOrigin,
         PracticalKnowledgeKind,
@@ -249,6 +252,7 @@ def test_arm_multi_parent_dag_direct_ledger() -> None:
         form_or_reinforce_practical_knowledge,
         practical_knowledge_content_key,
     )
+    from analysis.knowledge_genealogy_metrics import compute_knowledge_genealogy_lineage
 
     arm_id = "ap-multi-parent-dag"
     owner = AgentId("agent-a")
@@ -281,7 +285,10 @@ def test_arm_multi_parent_dag_direct_ledger() -> None:
         min_token_overlap=0.0,
         enabled_kinds=("foraging_method",),
     )
-    audits = tuple(entry_to_audit(row, tick=2, reason_code="combined") for row in ledger.entries)
+    audits = tuple(
+        entry_to_audit(row, tick=2, reason_code="combined")
+        for row in ledger.entries
+    )
     doc = compute_knowledge_genealogy_lineage(
         audits, run_id="run-ap", input_revision="rev-1", as_of_tick=2
     )
@@ -289,7 +296,6 @@ def test_arm_multi_parent_dag_direct_ledger() -> None:
 
 
 def test_arm_mutation_hop_direct_ledger() -> None:
-    from analysis.knowledge_genealogy_metrics import compute_knowledge_genealogy_mutation
     from agents.cognition.practical_knowledge import (
         KnowledgeTransmissionOrigin,
         PracticalKnowledgeKind,
@@ -298,6 +304,9 @@ def test_arm_mutation_hop_direct_ledger() -> None:
         form_or_reinforce_practical_knowledge,
         mutate_practical_knowledge,
         practical_knowledge_content_key,
+    )
+    from analysis.knowledge_genealogy_metrics import (
+        compute_knowledge_genealogy_mutation,
     )
 
     arm_id = "ap-mutation-hop"
@@ -343,10 +352,6 @@ def test_arm_mutation_hop_direct_ledger() -> None:
 
 
 def test_arm_dual_emergence_count() -> None:
-    from analysis.knowledge_genealogy import (
-        build_knowledge_genealogy_graph,
-        query_independent_emergence_count,
-    )
     from agents.cognition.practical_knowledge import (
         KnowledgeTransmissionOrigin,
         PracticalKnowledgeKind,
@@ -354,6 +359,10 @@ def test_arm_dual_emergence_count() -> None:
         entry_to_audit,
         form_or_reinforce_practical_knowledge,
         practical_knowledge_content_key,
+    )
+    from analysis.knowledge_genealogy import (
+        build_knowledge_genealogy_graph,
+        query_independent_emergence_count,
     )
 
     arm_id = "ap-dual-emergence"
@@ -377,11 +386,6 @@ def test_arm_dual_emergence_count() -> None:
 
 
 def test_arm_lifecycle_survival_living_filter() -> None:
-    from analysis.knowledge_genealogy import (
-        build_knowledge_genealogy_graph,
-        query_who_currently_knows,
-        query_who_taught,
-    )
     from agents.cognition.practical_knowledge import (
         KnowledgeTransmissionOrigin,
         PracticalKnowledgeKind,
@@ -389,6 +393,11 @@ def test_arm_lifecycle_survival_living_filter() -> None:
         entry_to_audit,
         form_or_reinforce_practical_knowledge,
         practical_knowledge_content_key,
+    )
+    from analysis.knowledge_genealogy import (
+        build_knowledge_genealogy_graph,
+        query_who_currently_knows,
+        query_who_taught,
     )
 
     arm_id = "ap-lifecycle-survival"

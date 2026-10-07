@@ -5,7 +5,11 @@ from __future__ import annotations
 import logging
 
 from agents.cognition.configuration import CognitionLoopConfig, build_cognitive_loop
-from agents.cognition.models import CognitiveLoopInput, InternalAgentState, SubjectiveSnapshot
+from agents.cognition.models import (
+    CognitiveLoopInput,
+    InternalAgentState,
+    SubjectiveSnapshot,
+)
 from agents.cognition.practical_knowledge import (
     KnowledgeTransmissionOrigin,
     PracticalKnowledgeAudit,

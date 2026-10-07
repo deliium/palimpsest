@@ -24,7 +24,9 @@ def _entry(
     owner: str = "agent-a",
     kind: PracticalKnowledgeKind = PracticalKnowledgeKind.FORAGING_METHOD,
     token: str = "berry-pick",
-    origin: KnowledgeTransmissionOrigin = KnowledgeTransmissionOrigin.INDEPENDENT_DISCOVERY,
+    origin: KnowledgeTransmissionOrigin = (
+        KnowledgeTransmissionOrigin.INDEPENDENT_DISCOVERY
+    ),
     parents: tuple[str, ...] = (),
     hop: int = 0,
     active: bool = True,
@@ -33,6 +35,9 @@ def _entry(
     source: AgentId | None = None,
     refs: tuple[str, ...] = (),
 ) -> SubjectivePracticalKnowledge:
+    teacher = (
+        source if origin is KnowledgeTransmissionOrigin.TEACHING else None
+    )
     return SubjectivePracticalKnowledge(
         entry_id=entry_id,
         owner_id=AgentId(owner),
@@ -41,11 +46,14 @@ def _entry(
         content_fingerprint=fingerprint,
         origin=origin,
         parent_entry_ids=parents,
-        lineage_root_id=f"root:{owner}:{kind.value}:{practical_knowledge_content_key(token)}",
+        lineage_root_id=(
+            f"root:{owner}:{kind.value}:"
+            f"{practical_knowledge_content_key(token)}"
+        ),
         hop_index=hop,
         mutated=False,
         source_agent_id=source,
-        teacher_agent_id=source if origin is KnowledgeTransmissionOrigin.TEACHING else None,
+        teacher_agent_id=teacher,
         evidence_refs=refs,
         acquired_tick=tick,
         active=active,

@@ -353,7 +353,10 @@ def compute_knowledge_genealogy_mutation(
     for origin, count in sorted(origins.items()):
         values[f"origin_{origin}_count"] = count
     # Ensure we never leak fingerprints into notes/values keys.
-    assert not any("fingerprint" in key and key != "mean_fingerprint_distance_q" for key in values)
+    assert not any(
+        "fingerprint" in key and key != "mean_fingerprint_distance_q"
+        for key in values
+    )
     return _document(
         spec,
         document_run,
