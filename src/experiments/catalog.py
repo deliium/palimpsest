@@ -2758,8 +2758,75 @@ OFF_GATE_MATRIX_EXPERIMENT_IDS: Final[frozenset[str]] = frozenset(
         "experiment-al-cultural-transmission-provenance",
         "experiment-am-historical-memory-layers",
         "experiment-an-durable-records",
+        "experiment-ao-knowledge-repositories",
     }
 )
+
+
+def knowledge_repositories_profile(
+    config: SimulationRunnerConfig,
+) -> SimulationRunnerConfig:
+    """Require cultural + provenance + durable + repositories on v34.
+
+    Off-gate Experiment AO profile. Rejects unowned V3 flags.
+    """
+    from simulation.runner_models import RUNNER_SCHEMA_VERSION_V34
+
+    if config.schema_version != RUNNER_SCHEMA_VERSION_V34:
+        raise ValueError(
+            "knowledge repositories profile requires runner-config-v34 "
+            "(code=knowledge_repositories_profile_schema "
+            f"got={config.schema_version!r})"
+        )
+    if not config.v3_capability_flags.cultural_historical_memory:
+        raise ValueError(
+            "knowledge repositories profile requires cultural_historical_memory "
+            "(code=knowledge_repositories_profile_flag)"
+        )
+    if config.cultural_feature_provenance is None:
+        raise ValueError(
+            "knowledge repositories profile requires cultural_feature_provenance "
+            "(code=knowledge_repositories_profile_missing_provenance)"
+        )
+    if config.durable_records is None:
+        raise ValueError(
+            "knowledge repositories profile requires durable_records "
+            "(code=knowledge_repositories_profile_missing_durable)"
+        )
+    if config.knowledge_repositories is None:
+        raise ValueError(
+            "knowledge repositories profile requires knowledge_repositories "
+            "(code=knowledge_repositories_profile_missing_repositories)"
+        )
+    allowed = {
+        "generational_population",
+        "kinship_inheritance",
+        "cultural_historical_memory",
+    }
+    other = tuple(
+        name
+        for name in config.v3_capability_flags.enabled_names()
+        if name not in allowed
+    )
+    if other:
+        raise ValueError(
+            "knowledge repositories profile forbids unowned V3 flags "
+            "(code=knowledge_repositories_profile_extra_flags "
+            f"flag_count={len(other)})"
+        )
+    _LOG.debug(
+        "knowledge_repositories_profile_ok schema_version=%s "
+        "access_mode=%s neglect_ticks=%s cultural_flag=%s "
+        "provenance_present=%s durable_present=%s repository_present=%s",
+        config.schema_version,
+        config.knowledge_repositories.access_policy.default_access_mode,
+        config.knowledge_repositories.maintenance_policy.neglect_ticks,
+        config.v3_capability_flags.cultural_historical_memory,
+        config.cultural_feature_provenance is not None,
+        config.durable_records is not None,
+        config.knowledge_repositories is not None,
+    )
+    return config
 
 
 def developmental_learning_profile(
@@ -3698,6 +3765,242 @@ def experiment_an_durable_records(
         )
     return _definition(
         experiment_id="experiment-an-durable-records",
+        base=base,
+        seed_matrix=matrix,
+        arms=arms,
+    )
+
+
+def experiment_ao_knowledge_repositories(
+    base: SimulationRunnerConfig,
+    *,
+    seed_matrix: ExperimentSeedMatrix | None = None,
+    max_ticks: int = 12,
+) -> ExperimentDefinition:
+    """Off-gate Experiment AO for knowledge repositories on runner-config-v34."""
+    from simulation.new_agent_initialization import (
+        default_new_agent_initialization_spec,
+    )
+    from simulation.runner_models import (
+        RUNNER_SCHEMA_VERSION_V4,
+        RUNNER_SCHEMA_VERSION_V33,
+        RUNNER_SCHEMA_VERSION_V34,
+        ArtifactInterpretationMode,
+        CulturalFeatureUptakeCompose,
+        example_cultural_feature_provenance_spec,
+        example_durable_records_spec,
+        example_knowledge_repositories_spec,
+        example_population_lifecycle_spec,
+    )
+
+    matrix = seed_matrix or ExperimentSeedMatrix(seeds=(base.seed,))
+    if len(base.agents) < 2:
+        raise ValueError(
+            "experiment AO requires at least two agents on the base roster "
+            "(code=knowledge_repositories_ao_roster_too_small)"
+        )
+
+    provenance = example_cultural_feature_provenance_spec()
+    provenance_repos = replace(
+        provenance,
+        uptake_compose=CulturalFeatureUptakeCompose(repositories=True),
+    )
+    lifecycle = example_population_lifecycle_spec(
+        lifespan_ticks=40,
+        max_population=max(4, len(base.agents) + 1),
+        policy_id="disabled",
+    )
+    init = default_new_agent_initialization_spec()
+    durable = example_durable_records_spec(default_fidelity="perfect")
+
+    def _clear_v3_siblings(cfg: SimulationRunnerConfig) -> SimulationRunnerConfig:
+        return replace(
+            cfg,
+            mentorship=None,
+            developmental_learning=None,
+            dependency_care=None,
+            kinship=None,
+            historical_memory_layers=None,
+        )
+
+    def _with_interpretation(
+        cfg: SimulationRunnerConfig, *, on: bool
+    ) -> SimulationRunnerConfig:
+        mode = (
+            ArtifactInterpretationMode.DETERMINISTIC
+            if on
+            else ArtifactInterpretationMode.DISABLED
+        )
+        rebuilt = tuple(
+            replace(
+                agent,
+                cognition=replace(agent.cognition, artifact_interpretation_mode=mode),
+            )
+            for agent in cfg.agents
+        )
+        return replace(cfg, agents=rebuilt)
+
+    channel_off = _clear_v3_siblings(
+        replace(
+            base,
+            schema_version=RUNNER_SCHEMA_VERSION_V33,
+            mortality_mode=MortalityMode.DISABLED,
+            stop_policy=RunnerStopPolicy(max_ticks=max_ticks),
+            v3_capability_flags=V3CapabilityFlags(cultural_historical_memory=True),
+            cultural_feature_provenance=provenance,
+            durable_records=durable,
+            knowledge_repositories=None,
+            population_lifecycle=None,
+            new_agent_initialization=None,
+            artifacts_enabled=True,
+        )
+    )
+    durable_records_profile(channel_off)
+
+    def _v34_repositories(
+        *,
+        with_lifecycle: bool = False,
+        interpretation_on: bool = True,
+        neglect_ticks: int = 24,
+        default_access_mode: str = "open",
+        uptake_repositories: bool = False,
+        provenance_spec: object | None = None,
+    ) -> SimulationRunnerConfig:
+        flags = V3CapabilityFlags(
+            cultural_historical_memory=True,
+            generational_population=with_lifecycle,
+        )
+        repos = example_knowledge_repositories_spec(
+            default_access_mode=default_access_mode,
+            neglect_ticks=neglect_ticks,
+        )
+        provenance_obj = (
+            provenance_spec
+            if provenance_spec is not None
+            else (
+                provenance_repos
+                if uptake_repositories
+                else provenance
+            )
+        )
+        cfg = replace(
+            base,
+            schema_version=RUNNER_SCHEMA_VERSION_V34,
+            mortality_mode=MortalityMode.DISABLED,
+            stop_policy=RunnerStopPolicy(max_ticks=max_ticks),
+            v3_capability_flags=flags,
+            cultural_feature_provenance=provenance_obj,  # type: ignore[arg-type]
+            durable_records=durable,
+            knowledge_repositories=repos,
+            population_lifecycle=lifecycle if with_lifecycle else None,
+            new_agent_initialization=init if with_lifecycle else None,
+            mentorship=None,
+            developmental_learning=None,
+            dependency_care=None,
+            kinship=None,
+            historical_memory_layers=None,
+            artifacts_enabled=True,
+        )
+        cfg = _with_interpretation(cfg, on=interpretation_on)
+        return knowledge_repositories_profile(cfg)
+
+    establish = _v34_repositories()
+    creator_death = _v34_repositories(with_lifecycle=True)
+    neglect = _v34_repositories(neglect_ticks=2)
+    inaccessible = _v34_repositories()
+    missing_index = _v34_repositories()
+    record_degrade = _v34_repositories()
+    custody_block = _v34_repositories()
+    subjective = _v34_repositories(uptake_repositories=True)
+    flags_off = _clear_v3_siblings(
+        replace(
+            base,
+            schema_version=RUNNER_SCHEMA_VERSION_V4,
+            mortality_mode=MortalityMode.DISABLED,
+            stop_policy=RunnerStopPolicy(max_ticks=max_ticks),
+            v3_capability_flags=V3CapabilityFlags(),
+            cultural_feature_provenance=None,
+            durable_records=None,
+            knowledge_repositories=None,
+            population_lifecycle=None,
+            new_agent_initialization=None,
+            historical_memory_layers=None,
+        )
+    )
+
+    arms = (
+        (
+            "ao-channel-off",
+            "knowledge_repositories_channel_off",
+            channel_off,
+        ),
+        (
+            "ao-establish-deposit",
+            "knowledge_repositories_establish_deposit",
+            establish,
+        ),
+        (
+            "ao-creator-death",
+            "knowledge_repositories_creator_death",
+            creator_death,
+        ),
+        (
+            "ao-neglect-decay",
+            "knowledge_repositories_neglect_decay",
+            neglect,
+        ),
+        (
+            "ao-inaccessible",
+            "knowledge_repositories_inaccessible",
+            inaccessible,
+        ),
+        (
+            "ao-missing-index",
+            "knowledge_repositories_missing_index",
+            missing_index,
+        ),
+        (
+            "ao-record-degrade",
+            "knowledge_repositories_record_degrade",
+            record_degrade,
+        ),
+        (
+            "ao-custody-block",
+            "knowledge_repositories_custody_block",
+            custody_block,
+        ),
+        (
+            "ao-subjective-frame",
+            "knowledge_repositories_subjective_frame",
+            subjective,
+        ),
+        (
+            "ao-flags-off",
+            "knowledge_repositories_v3_flags_off",
+            flags_off,
+        ),
+    )
+    for arm_id, _label, config in arms:
+        _LOG.info(
+            "experiment_ao_built experiment_id=experiment-ao-knowledge-repositories "
+            "arm_id=%s schema_version=%s cultural_flag=%s durable_present=%s "
+            "repository_present=%s provenance_present=%s lifecycle_present=%s "
+            "neglect_ticks=%s",
+            arm_id,
+            config.schema_version,
+            config.v3_capability_flags.cultural_historical_memory,
+            config.durable_records is not None,
+            config.knowledge_repositories is not None,
+            config.cultural_feature_provenance is not None,
+            config.population_lifecycle is not None,
+            (
+                "-"
+                if config.knowledge_repositories is None
+                else config.knowledge_repositories.maintenance_policy.neglect_ticks
+            ),
+        )
+    return _definition(
+        experiment_id="experiment-ao-knowledge-repositories",
         base=base,
         seed_matrix=matrix,
         arms=arms,

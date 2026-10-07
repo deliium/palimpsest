@@ -549,19 +549,19 @@ Update (no “optional” hedges):
 
 ### Phase 6: Experiment AO + matrix
 
-- [ ] Task 15: Add `knowledge_repositories_profile` and `experiment_ao_knowledge_repositories` catalog entry (off V1 gate) with locked arm matrix (including `ao-custody-block`); export from `experiments/__init__.py`. Pin schema v34 + objects + flag on on-arms.
+- [x] Task 15: Add `knowledge_repositories_profile` and `experiment_ao_knowledge_repositories` catalog entry (off V1 gate) with locked arm matrix (including `ao-custody-block`); export from `experiments/__init__.py`. Pin schema v34 + objects + flag on on-arms.
   - Deliverable: Catalog construction tests; arm ids stable.
   - Files: `src/experiments/catalog.py`, `src/experiments/__init__.py`, scenario helpers as needed, `tests/unit/test_experiment_ao_knowledge_repositories.py`
   - Logging: INFO `experiment_ao_built` experiment_id + arm_id + schema_version; DEBUG flag/object presence
   - Depends on: 2, 14
 
-- [ ] Task 16: Arm assertions — creator-death survival, neglect, inaccessible helper, missing-index, degrade compose, custody-block, subjective-frame (no Observation label), channel-off, flags-off hash stability.
+- [x] Task 16: Arm assertions — creator-death survival, neglect, inaccessible helper, missing-index, degrade compose, custody-block, subjective-frame (no Observation label), channel-off, flags-off hash stability.
   - Deliverable: Executable arm proofs with stable failure messages citing arm_id.
   - Files: `tests/unit/test_experiment_ao_*.py`, flags-off hash stability extensions
   - Logging: test logs only
   - Depends on: 15, 6, 10
 
-- [ ] Task 17: Matrix finalize + allowlist ownership — insert `knowledge_repositories_on` **before** `durable_records_on`; accept v34; widen lifecycle/init needs sets with `V34`; include AO on allowlist without default V1 batches; keep AN on v33 when repository absent.
+- [x] Task 17: Matrix finalize + allowlist ownership — insert `knowledge_repositories_on` **before** `durable_records_on`; accept v34; widen lifecycle/init needs sets with `V34`; include AO on allowlist without default V1 batches; keep AN on v33 when repository absent.
   - Deliverable: Finalize priority tests (`knowledge_repositories_on` beats `durable_records_on`); allowlist pin.
   - Files: `src/experiments/matrix_schema.py`, matrix allowlist modules, `tests/unit/test_matrix_schema_v34*.py`
   - Logging: DEBUG finalize selected schema_version reason (`knowledge_repositories_on` / …)
