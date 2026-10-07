@@ -112,6 +112,7 @@ _FROZEN_OBSERVATION_FIELDS: frozenset[str] = frozenset(
         "visible_bodies",
         "structures",
         "artifacts",
+        "repositories",
         "occurrences",
         "communications",
         "hour",
