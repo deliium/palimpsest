@@ -92,6 +92,7 @@ from world.actions import (
     ActionRequest,
     Attack,
     Build,
+    CopyRecord,
     Craft,
     Flee,
     Harvest,
@@ -107,6 +108,7 @@ from world.effects import (
     DeathCause,
     ResolvedActionEffect,
     ResolvedActionEffects,
+    ResolvedArtifactCopyEffect,
     ResolvedArtifactInscribeEffect,
     ResolvedAttackEffect,
     ResolvedFleeEffect,
@@ -2888,6 +2890,7 @@ class WorldEngine:
                 tick=snap.tick.value
             ),
             dependency_care_context=self._dependency_care_rule_context(),
+            durable_records_context=self._durable_records_rule_context(),
         )
         start_ledger = self._skill_ledger
         folded_ledger, skill_facts = self._fold_skill_ledger(
@@ -3497,6 +3500,11 @@ class WorldEngine:
                     snap=snap,
                     request=request,
                 )
+            elif type(command) is CopyRecord:
+                by_request[request.request_id] = self._resolve_artifact_copy_effect(
+                    snap=snap,
+                    request=request,
+                )
         return ResolvedActionEffects(by_request=by_request)
 
     def _resolve_artifact_inscribe_effect(
@@ -3520,6 +3528,31 @@ class WorldEngine:
             created_artifact_id.value,
         )
         return ResolvedArtifactInscribeEffect(
+            request_id=request.request_id,
+            created_artifact_id=created_artifact_id,
+        )
+
+    def _resolve_artifact_copy_effect(
+        self,
+        *,
+        snap: _EngineSnapshot,
+        request: ActionRequest,
+    ) -> ResolvedArtifactCopyEffect:
+        created_artifact_id = derive_entity_id(
+            self._config,
+            "information-artifact-copy",
+            self._run_id.value,
+            self.world_id.value,
+            f"tick:{snap.tick.value}",
+            request.request_id.value,
+        )
+        _LOGGER.debug(
+            "artifact_copy_id tick=%s request_id=%s artifact_id=%s",
+            snap.tick.value,
+            request.request_id.value,
+            created_artifact_id.value,
+        )
+        return ResolvedArtifactCopyEffect(
             request_id=request.request_id,
             created_artifact_id=created_artifact_id,
         )
@@ -4002,6 +4035,38 @@ class WorldEngine:
             allow_feed=policy.allow_feed,
             allow_transport=policy.allow_transport,
             require_colocated=policy.require_colocated,
+        )
+
+    def _durable_records_rule_context(self) -> object | None:
+        """Build ephemeral durable-record legality context for this tick."""
+        from simulation.runner_models import DurableRecordsSpec
+        from world.artifacts import DurableRecordsRuleContext
+
+        if type(self._durable_records_spec) is not DurableRecordsSpec:
+            return None
+        spec = self._durable_records_spec
+        return DurableRecordsRuleContext(
+            enabled_genres=frozenset(spec.enabled_genres),
+            default_fidelity=spec.copy_fidelity_policy.default_fidelity,
+            max_mark_edits=spec.copy_fidelity_policy.max_mark_edits,
+            max_relation_edits=spec.copy_fidelity_policy.max_relation_edits,
+            preserve_genre=spec.copy_fidelity_policy.preserve_genre,
+            copy_requires_hold_or_colocation=(
+                spec.copy_fidelity_policy.copy_requires_hold_or_colocation
+            ),
+            allow_damage=spec.integrity_policy.allow_damage,
+            allow_partial_loss=spec.integrity_policy.allow_partial_loss,
+            tombstone_on_destroy=spec.integrity_policy.tombstone_on_destroy,
+            partial_loss_min_marks_remaining=(
+                spec.integrity_policy.partial_loss_min_marks_remaining
+            ),
+            max_annotations_per_record=(
+                spec.annotation_policy.max_annotations_per_record
+            ),
+            max_copy_generation=spec.lineage_policy.max_copy_generation,
+            destroyed_parent_blocks_copy=(
+                spec.lineage_policy.destroyed_parent_blocks_copy
+            ),
         )
 
     def _denied_command_kinds_by_entity(
@@ -4845,6 +4910,15 @@ def _map_batch_outcome(
         "dependency_care_channel_off": ActionResolutionReason.STRUCTURAL_REJECTION,
         "dependency_care_target_invalid": ActionResolutionReason.STRUCTURAL_REJECTION,
         "dependency_care_action_disabled": ActionResolutionReason.STRUCTURAL_REJECTION,
+        "durable_records_inactive": ActionResolutionReason.STRUCTURAL_REJECTION,
+        "durable_genre_required": ActionResolutionReason.STRUCTURAL_REJECTION,
+        "durable_genre_disabled": ActionResolutionReason.STRUCTURAL_REJECTION,
+        "durable_copy_generation_cap": ActionResolutionReason.STRUCTURAL_REJECTION,
+        "durable_parent_destroyed": ActionResolutionReason.STRUCTURAL_REJECTION,
+        "durable_annotation_cap": ActionResolutionReason.STRUCTURAL_REJECTION,
+        "durable_integrity_destroyed": ActionResolutionReason.STRUCTURAL_REJECTION,
+        "durable_damage_disabled": ActionResolutionReason.STRUCTURAL_REJECTION,
+        "durable_partial_loss_disabled": ActionResolutionReason.STRUCTURAL_REJECTION,
         "resource_depleted": ActionResolutionReason.STRUCTURAL_REJECTION,
         "wrong_kind": ActionResolutionReason.STRUCTURAL_REJECTION,
         "missing_resolved_effect": ActionResolutionReason.STRUCTURAL_REJECTION,

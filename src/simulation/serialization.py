@@ -81,10 +81,13 @@ from world.actions import (
     ActionProposal,
     ActionRequest,
     Amend,
+    AnnotateRecord,
     Ask,
     Attack,
     Build,
+    CopyRecord,
     Craft,
+    DamageRecord,
     Drink,
     Drop,
     Eat,
@@ -109,7 +112,12 @@ from world.actions import (
     agent_command_tag,
     require_agent_command,
 )
-from world.artifacts import ArtifactContent, ArtifactKind, ArtifactRelation
+from world.artifacts import (
+    ArtifactContent,
+    ArtifactKind,
+    ArtifactRelation,
+    DurableRecordGenre,
+)
 from world.communications import (
     CommunicationContent,
     CommunicationId,
@@ -503,6 +511,9 @@ _COMMAND_TAGS: Final[frozenset[str]] = frozenset(
         "amend",
         "erase",
         "transfer_artifact",
+        "copy_record",
+        "annotate_record",
+        "damage_record",
     }
 )
 
@@ -2394,11 +2405,14 @@ def _encode_command(value: object) -> dict[str, Any]:
             }
         case Store(recipe_id=recipe_id, item_id=item_id):
             return {"item_id": item_id.value, "recipe_id": recipe_id.value}
-        case Inscribe(kind=kind, content=content, hold=hold):
+        case Inscribe(kind=kind, content=content, hold=hold, record_genre=record_genre):
             return {
                 "content": _encode_artifact_content(content),
                 "hold": hold,
                 "kind": kind.value,
+                "record_genre": (
+                    None if record_genre is None else record_genre.value
+                ),
             }
         case Amend(artifact_id=artifact_id, content=content):
             return {
@@ -2418,6 +2432,26 @@ def _encode_command(value: object) -> dict[str, Any]:
                 "recipient_id": (
                     None if recipient_id is None else recipient_id.value
                 ),
+            }
+        case CopyRecord(
+            artifact_id=artifact_id,
+            hold=hold,
+            fidelity_override=fidelity_override,
+        ):
+            return {
+                "artifact_id": artifact_id.value,
+                "fidelity_override": fidelity_override,
+                "hold": hold,
+            }
+        case AnnotateRecord(artifact_id=artifact_id, content=content):
+            return {
+                "artifact_id": artifact_id.value,
+                "content": _encode_artifact_content(content),
+            }
+        case DamageRecord(artifact_id=artifact_id, mode=mode):
+            return {
+                "artifact_id": artifact_id.value,
+                "mode": mode,
             }
         case _:
             raise DomainSerializationError("unsupported_type", "$")
@@ -2565,14 +2599,29 @@ def _decode_command(tag: str, data: dict[str, Any], *, path: str) -> object:
                 EntityId(_str_field(data, "item_id", path=path)),
             )
         if tag == "inscribe":
-            _require_keys(data, {"content", "hold", "kind"}, path=path)
+            _require_keys(
+                data,
+                {"content", "hold", "kind"},
+                path=path,
+                optional={"record_genre"},
+            )
             hold = data["hold"]
             if type(hold) is not bool:
                 raise DomainSerializationError("invalid_bool", f"{path}.hold")
+            genre_raw = data.get("record_genre")
+            if genre_raw is None:
+                record_genre = None
+            elif type(genre_raw) is not str:
+                raise DomainSerializationError(
+                    "invalid_string", f"{path}.record_genre"
+                )
+            else:
+                record_genre = DurableRecordGenre(genre_raw)
             return Inscribe(
                 ArtifactKind(_str_field(data, "kind", path=path)),
                 _decode_artifact_content(data["content"], path=f"{path}.content"),
                 hold,
+                record_genre,
             )
         if tag == "amend":
             _require_keys(data, {"artifact_id", "content"}, path=path)
@@ -2590,6 +2639,33 @@ def _decode_command(tag: str, data: dict[str, Any], *, path: str) -> object:
                 EntityId(_str_field(data, "artifact_id", path=path)),
                 _str_field(data, "mode", path=path),  # type: ignore[arg-type]
                 None if recipient is None else EntityId(recipient),
+            )
+        if tag == "copy_record":
+            _require_keys(data, {"artifact_id", "hold", "fidelity_override"}, path=path)
+            hold = data["hold"]
+            if type(hold) is not bool:
+                raise DomainSerializationError("invalid_bool", f"{path}.hold")
+            fidelity = data["fidelity_override"]
+            if fidelity is not None and type(fidelity) is not str:
+                raise DomainSerializationError(
+                    "invalid_string", f"{path}.fidelity_override"
+                )
+            return CopyRecord(
+                EntityId(_str_field(data, "artifact_id", path=path)),
+                hold,
+                fidelity,
+            )
+        if tag == "annotate_record":
+            _require_keys(data, {"artifact_id", "content"}, path=path)
+            return AnnotateRecord(
+                EntityId(_str_field(data, "artifact_id", path=path)),
+                _decode_artifact_content(data["content"], path=f"{path}.content"),
+            )
+        if tag == "damage_record":
+            _require_keys(data, {"artifact_id", "mode"}, path=path)
+            return DamageRecord(
+                EntityId(_str_field(data, "artifact_id", path=path)),
+                _str_field(data, "mode", path=path),  # type: ignore[arg-type]
             )
     except DomainSerializationError:
         raise

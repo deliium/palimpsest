@@ -15,9 +15,12 @@ from typing import Final, Literal, Protocol, runtime_checkable
 from world.artifacts import (
     ArtifactContent,
     ArtifactKind,
+    DurableRecordGenre,
+    artifact_kind_is_durable_capable,
     artifact_kind_is_portable,
     require_artifact_content,
     require_artifact_kind,
+    require_durable_record_genre,
 )
 from world.communications import StructuredUtterance, confidence_band
 from world.identifiers import (
@@ -319,6 +322,14 @@ class Store:
             raise TypeError("Store.item_id must be EntityId")
 
 
+_COPY_FIDELITY_OVERRIDES: Final[frozenset[str]] = frozenset(
+    {"perfect", "deterministic_mutation", "lossy"}
+)
+_DAMAGE_RECORD_MODES: Final[frozenset[str]] = frozenset(
+    {"damage", "partial_loss", "destroy"}
+)
+
+
 @dataclass(frozen=True, slots=True)
 class Inscribe:
     """Create an artifact at the actor location, or held when ``hold`` is true."""
@@ -326,6 +337,7 @@ class Inscribe:
     kind: ArtifactKind
     content: ArtifactContent
     hold: bool = False
+    record_genre: DurableRecordGenre | None = None
 
     def __post_init__(self) -> None:
         require_artifact_kind(self.kind, field_name="Inscribe.kind")
@@ -344,12 +356,25 @@ class Inscribe:
                 "invalid_artifact_hold",
             )
             raise ValueError("Inscribe.hold: invalid_artifact_hold")
+        if self.record_genre is not None:
+            require_durable_record_genre(
+                self.record_genre, field_name="Inscribe.record_genre"
+            )
+            if not artifact_kind_is_durable_capable(self.kind):
+                _ARTIFACT_LOG.error(
+                    "artifact_validation_failed field=%s reason_code=%s",
+                    "Inscribe.record_genre",
+                    "durable_genre_kind_mismatch",
+                )
+                raise ValueError("Inscribe.record_genre: durable_genre_kind_mismatch")
         _ARTIFACT_LOG.debug(
-            "inscribe_constructed kind=%s mark_count=%s relation_count=%s hold=%s",
+            "inscribe_constructed kind=%s mark_count=%s relation_count=%s hold=%s "
+            "genre=%s",
             self.kind.value,
             len(self.content.marks),
             len(self.content.relations),
             self.hold,
+            self.record_genre.value if self.record_genre is not None else "-",
         )
 
 
@@ -400,6 +425,87 @@ class TransferArtifact:
             )
 
 
+@dataclass(frozen=True, slots=True)
+class CopyRecord:
+    """Create a durable copy with parent/source lineage."""
+
+    artifact_id: EntityId
+    hold: bool = False
+    fidelity_override: str | None = None
+    kind: Literal["copy_record"] = field(default="copy_record", init=False)
+
+    def __post_init__(self) -> None:
+        if type(self.artifact_id) is not EntityId:
+            raise TypeError("CopyRecord.artifact_id must be EntityId")
+        if type(self.hold) is not bool:
+            _ARTIFACT_LOG.error(
+                "artifact_validation_failed field=%s reason_code=%s",
+                "CopyRecord.hold",
+                "invalid_artifact_hold",
+            )
+            raise ValueError("CopyRecord.hold: invalid_artifact_hold")
+        if self.fidelity_override is not None:
+            if (
+                type(self.fidelity_override) is not str
+                or self.fidelity_override not in _COPY_FIDELITY_OVERRIDES
+            ):
+                _ARTIFACT_LOG.error(
+                    "artifact_validation_failed field=%s reason_code=%s",
+                    "CopyRecord.fidelity_override",
+                    "durable_copy_fidelity_invalid",
+                )
+                raise ValueError(
+                    "CopyRecord.fidelity_override: durable_copy_fidelity_invalid"
+                )
+        _ARTIFACT_LOG.debug(
+            "command_constructed tag=copy_record hold=%s fidelity_override=%s",
+            self.hold,
+            self.fidelity_override if self.fidelity_override is not None else "-",
+        )
+
+
+@dataclass(frozen=True, slots=True)
+class AnnotateRecord:
+    """Merge annotation marks into a durable record's content."""
+
+    artifact_id: EntityId
+    content: ArtifactContent
+    kind: Literal["annotate_record"] = field(default="annotate_record", init=False)
+
+    def __post_init__(self) -> None:
+        if type(self.artifact_id) is not EntityId:
+            raise TypeError("AnnotateRecord.artifact_id must be EntityId")
+        require_artifact_content(self.content, field_name="AnnotateRecord.content")
+        _ARTIFACT_LOG.debug(
+            "command_constructed tag=annotate_record mark_count=%s",
+            len(self.content.marks),
+        )
+
+
+@dataclass(frozen=True, slots=True)
+class DamageRecord:
+    """Damage, partially lose, or destroy a durable record."""
+
+    artifact_id: EntityId
+    mode: Literal["damage", "partial_loss", "destroy"]
+    kind: Literal["damage_record"] = field(default="damage_record", init=False)
+
+    def __post_init__(self) -> None:
+        if type(self.artifact_id) is not EntityId:
+            raise TypeError("DamageRecord.artifact_id must be EntityId")
+        if self.mode not in _DAMAGE_RECORD_MODES:
+            _ARTIFACT_LOG.error(
+                "artifact_validation_failed field=%s reason_code=%s",
+                "DamageRecord.mode",
+                "durable_damage_mode_invalid",
+            )
+            raise ValueError("DamageRecord.mode: durable_damage_mode_invalid")
+        _ARTIFACT_LOG.debug(
+            "command_constructed tag=damage_record mode=%s",
+            self.mode,
+        )
+
+
 AgentCommand = (
     Move
     | Search
@@ -427,6 +533,9 @@ AgentCommand = (
     | Amend
     | Erase
     | TransferArtifact
+    | CopyRecord
+    | AnnotateRecord
+    | DamageRecord
 )
 
 _COMMAND_TYPES: Final[frozenset[type]] = frozenset(
@@ -457,6 +566,9 @@ _COMMAND_TYPES: Final[frozenset[type]] = frozenset(
         Amend,
         Erase,
         TransferArtifact,
+        CopyRecord,
+        AnnotateRecord,
+        DamageRecord,
     }
 )
 

@@ -420,19 +420,19 @@ Update (no “optional” hedges):
 
 ### Phase 2: Domain model and commands
 
-- [ ] Task 3: Add `DurableRecordGenre`, `RecordIntegrity`, and additive `InformationArtifact` fields with validation (lineage, integrity, annotation_revisions, lost_mark_count). Extend forbidden content field names. Keep V2 constructors valid when durable fields defaulted/None.
+- [x] Task 3: Add `DurableRecordGenre`, `RecordIntegrity`, and additive `InformationArtifact` fields with validation (lineage, integrity, annotation_revisions, lost_mark_count). Extend forbidden content field names. Keep V2 constructors valid when durable fields defaulted/None.
   - Deliverable: Unit tests for legal/illegal placements, genre/kind combos, lineage caps at model layer.
   - Files: `src/world/artifacts.py`, `src/world/__init__.py`, `tests/unit/test_information_artifacts.py` (extend), `tests/unit/test_durable_record_model.py`
   - Logging: DEBUG `durable_artifact_constructed` genre + integrity + copy_generation + mark_count (no token dumps)
   - Depends on: 1
 
-- [ ] Task 4: Extend `Inscribe` with optional `record_genre`; add `CopyRecord`, `AnnotateRecord`, `DamageRecord` to `AgentCommand` union; update `_COMMAND_TYPES`, `require_agent_command`, `agent_command_tag`, and domain-contract evolution pins (**26 → 29**). Extend `simulation/serialization.py` + finalization command codec paths for new command shapes (mirror Inscribe/Amend encoding).
+- [x] Task 4: Extend `Inscribe` with optional `record_genre`; add `CopyRecord`, `AnnotateRecord`, `DamageRecord` to `AgentCommand` union; update `_COMMAND_TYPES`, `require_agent_command`, `agent_command_tag`, and domain-contract evolution pins (**26 → 29**). Extend `simulation/serialization.py` + finalization command codec paths for new command shapes (mirror Inscribe/Amend encoding).
   - Deliverable: Constructor reject tests for hold/genre/mode; closed-count pin updated; command JSON round-trip tests.
   - Files: `src/world/actions.py`, `src/world/__init__.py`, `src/simulation/serialization.py`, `tests/unit/test_domain_contract_evolution_policy.py`, `tests/unit/test_durable_record_commands.py`
   - Logging: DEBUG command_constructed tags; ERROR stable reason codes
   - Depends on: 3
 
-- [ ] Task 5: Private operations/rules admit and mutate durable fields through `WorldEngine` only. Wire `COMMAND_RULE_MATRIX` / operation arms for Copy/Annotate/Damage; Inscribe genre path; Erase→tombstone when policy on. Colocation/hold/cap checks reuse artifact reason codes; add durable-specific codes (`durable_records_inactive`, `durable_genre_disabled`, `durable_copy_generation_cap`, `durable_parent_destroyed`, `durable_annotation_cap`, `durable_integrity_destroyed`).
+- [x] Task 5: Private operations/rules admit and mutate durable fields through `WorldEngine` only. Wire `COMMAND_RULE_MATRIX` / operation arms for Copy/Annotate/Damage; Inscribe genre path; Erase→tombstone when policy on. Colocation/hold/cap checks reuse artifact reason codes; add durable-specific codes (`durable_records_inactive`, `durable_genre_disabled`, `durable_copy_generation_cap`, `durable_parent_destroyed`, `durable_annotation_cap`, `durable_integrity_destroyed`).
   - Deliverable: Resolution tests for create/copy/annotate/damage/partial_loss/destroy tombstone; channel-off rejects new commands.
   - Files: `src/world/_operations.py`, `src/world/_rules.py`, `src/simulation/engine.py` (effect arms as needed), `tests/unit/test_durable_record_resolution.py`
   - Logging: INFO `durable_record_*` success with artifact_id + genre + integrity; WARN/DEBUG rejects with reason_code only

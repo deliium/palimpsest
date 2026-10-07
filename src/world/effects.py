@@ -27,6 +27,7 @@ __all__ = [
     "EventCause",
     "ResolvedActionEffect",
     "ResolvedActionEffects",
+    "ResolvedArtifactCopyEffect",
     "ResolvedArtifactInscribeEffect",
     "ResolvedAttackEffect",
     "ResolvedFleeEffect",
@@ -280,12 +281,32 @@ class ResolvedArtifactInscribeEffect:
             )
 
 
+@dataclass(frozen=True, slots=True)
+class ResolvedArtifactCopyEffect:
+    """Pre-derived artifact identity for a successful CopyRecord."""
+
+    request_id: RequestId
+    created_artifact_id: EntityId
+    kind: Literal["artifact_copy"] = field(default="artifact_copy", init=False)
+
+    def __post_init__(self) -> None:
+        if type(self.request_id) is not RequestId:
+            raise TypeError(
+                "ResolvedArtifactCopyEffect.request_id must be RequestId"
+            )
+        if type(self.created_artifact_id) is not EntityId:
+            raise TypeError(
+                "ResolvedArtifactCopyEffect.created_artifact_id must be EntityId"
+            )
+
+
 ResolvedActionEffect = (
     ResolvedSearchEffect
     | ResolvedAttackEffect
     | ResolvedFleeEffect
     | ResolvedProductionEffect
     | ResolvedArtifactInscribeEffect
+    | ResolvedArtifactCopyEffect
 )
 
 _ACTION_EFFECT_TYPES: Final[frozenset[type]] = frozenset(
@@ -295,6 +316,7 @@ _ACTION_EFFECT_TYPES: Final[frozenset[type]] = frozenset(
         ResolvedFleeEffect,
         ResolvedProductionEffect,
         ResolvedArtifactInscribeEffect,
+        ResolvedArtifactCopyEffect,
     }
 )
 

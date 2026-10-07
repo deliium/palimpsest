@@ -17,10 +17,13 @@ from typing import Final
 from world._operations import (
     ValidatedWorldOperation,
     _AmendOp,
+    _AnnotateRecordOp,
     _AskOp,
     _AttackOp,
     _BuildOp,
+    _CopyRecordOp,
     _CraftOp,
+    _DamageRecordOp,
     _DrinkOp,
     _DropOp,
     _EatOp,
@@ -45,14 +48,21 @@ from world._operations import (
 )
 from world._state import WorldState, rebuild_world_state
 from world.artifacts import (
+    MAX_ARTIFACT_MARKS,
+    MAX_ARTIFACT_RELATIONS,
     MAX_HELD_ARTIFACTS_PER_BODY,
+    ArtifactContent,
+    DurableRecordsRuleContext,
     InformationArtifact,
+    RecordIntegrity,
+    artifact_kind_is_durable_capable,
     artifact_kind_is_portable,
 )
 from world.communications import StructuredUtterance
 from world.effects import (
     DeathCause,
     ResolvedActionEffects,
+    ResolvedArtifactCopyEffect,
     ResolvedArtifactInscribeEffect,
     ResolvedAttackEffect,
     ResolvedFleeEffect,
@@ -178,6 +188,15 @@ class RuleReason(StrEnum):
     DEPENDENCY_CARE_CHANNEL_OFF = "dependency_care_channel_off"
     DEPENDENCY_CARE_TARGET_INVALID = "dependency_care_target_invalid"
     DEPENDENCY_CARE_ACTION_DISABLED = "dependency_care_action_disabled"
+    DURABLE_RECORDS_INACTIVE = "durable_records_inactive"
+    DURABLE_GENRE_REQUIRED = "durable_genre_required"
+    DURABLE_GENRE_DISABLED = "durable_genre_disabled"
+    DURABLE_COPY_GENERATION_CAP = "durable_copy_generation_cap"
+    DURABLE_PARENT_DESTROYED = "durable_parent_destroyed"
+    DURABLE_ANNOTATION_CAP = "durable_annotation_cap"
+    DURABLE_INTEGRITY_DESTROYED = "durable_integrity_destroyed"
+    DURABLE_DAMAGE_DISABLED = "durable_damage_disabled"
+    DURABLE_PARTIAL_LOSS_DISABLED = "durable_partial_loss_disabled"
 
 
 @dataclass(frozen=True, slots=True)
@@ -431,6 +450,27 @@ COMMAND_RULE_MATRIX: Final[dict[type, CommandRulePolicy]] = {
         requires_living_actor=True,
         notes="rebind portable placement: claim/deposit/give",
     ),
+    _CopyRecordOp: CommandRulePolicy(
+        disposition=RuleDisposition.MUTATE,
+        emits_event_when_applied=True,
+        mutates_state_when_applied=True,
+        requires_living_actor=True,
+        notes="durable copy with parent/source lineage; imperfect fidelity",
+    ),
+    _AnnotateRecordOp: CommandRulePolicy(
+        disposition=RuleDisposition.MUTATE,
+        emits_event_when_applied=True,
+        mutates_state_when_applied=True,
+        requires_living_actor=True,
+        notes="merge annotation marks into durable record content",
+    ),
+    _DamageRecordOp: CommandRulePolicy(
+        disposition=RuleDisposition.MUTATE,
+        emits_event_when_applied=True,
+        mutates_state_when_applied=True,
+        requires_living_actor=True,
+        notes="damage / partial_loss / destroy (tombstone optional)",
+    ),
 }
 
 _OPERATION_KIND: Final[dict[type, str]] = {
@@ -460,6 +500,9 @@ _OPERATION_KIND: Final[dict[type, str]] = {
     _AmendOp: "amend",
     _EraseOp: "erase",
     _TransferArtifactOp: "transfer_artifact",
+    _CopyRecordOp: "copy_record",
+    _AnnotateRecordOp: "annotate_record",
+    _DamageRecordOp: "damage_record",
 }
 
 _SEARCH_RESOURCE_KINDS: Final[frozenset[ResourceKind]] = frozenset(
@@ -482,6 +525,7 @@ def evaluate_operation(
     tick: int | None = None,
     effective_carry_capacity: Mapping[EntityId, int] | None = None,
     dependency_care_context: object | None = None,
+    durable_records_context: object | None = None,
 ) -> RuleResult:
     """Evaluate a validated operation against an immutable snapshot.
 
@@ -496,6 +540,7 @@ def evaluate_operation(
     ``effective_carry_capacity`` is ephemeral stage scaling — stored body
     capacity is never rewritten here.
     ``dependency_care_context`` gates Feed/Transport when the channel is on.
+    ``durable_records_context`` gates Copy/Annotate/Damage and durable Inscribe.
     """
     if type(state) is not WorldState:
         raise TypeError("evaluate_operation requires WorldState")
@@ -508,6 +553,7 @@ def evaluate_operation(
             raise TypeError("effective_carry_capacity must be a mapping")
         capacity_map = effective_carry_capacity
     care_context = _require_dependency_care_context(dependency_care_context)
+    durable_context = _require_durable_records_context(durable_records_context)
     op_type = type(operation)
     policy = COMMAND_RULE_MATRIX.get(op_type)
     if policy is None:
@@ -662,14 +708,38 @@ def evaluate_operation(
             return _evaluate_production(state, operation, kind, resolved=resolved)
         case _InscribeOp():
             return _evaluate_inscribe(
-                state, operation, kind, resolved=resolved
+                state,
+                operation,
+                kind,
+                resolved=resolved,
+                durable_context=durable_context,
             )
         case _AmendOp():
-            return _evaluate_amend(state, operation, kind)
+            return _evaluate_amend(
+                state, operation, kind, durable_context=durable_context
+            )
         case _EraseOp():
-            return _evaluate_erase(state, operation, kind)
+            return _evaluate_erase(
+                state, operation, kind, durable_context=durable_context
+            )
         case _TransferArtifactOp():
             return _evaluate_transfer_artifact(state, operation, kind)
+        case _CopyRecordOp():
+            return _evaluate_copy_record(
+                state,
+                operation,
+                kind,
+                resolved=resolved,
+                durable_context=durable_context,
+            )
+        case _AnnotateRecordOp():
+            return _evaluate_annotate_record(
+                state, operation, kind, durable_context=durable_context
+            )
+        case _DamageRecordOp():
+            return _evaluate_damage_record(
+                state, operation, kind, durable_context=durable_context
+            )
         case _WaitOp():
             return RuleResult(
                 disposition=RuleDisposition.EVENT_ONLY,
@@ -1327,7 +1397,35 @@ def _evaluate_inscribe(
     kind: str,
     *,
     resolved: ResolvedActionEffects | None,
+    durable_context: DurableRecordsRuleContext | None,
 ) -> RuleResult:
+    if operation.record_genre is not None and durable_context is None:
+        return _artifact_reject(
+            kind,
+            RuleReason.DURABLE_RECORDS_INACTIVE,
+            operation.actor_id,
+            None,
+            op="inscribe",
+        )
+    if durable_context is not None and artifact_kind_is_durable_capable(
+        operation.artifact_kind
+    ):
+        if operation.record_genre is None:
+            return _artifact_reject(
+                kind,
+                RuleReason.DURABLE_GENRE_REQUIRED,
+                operation.actor_id,
+                None,
+                op="inscribe",
+            )
+        if operation.record_genre.value not in durable_context.enabled_genres:
+            return _artifact_reject(
+                kind,
+                RuleReason.DURABLE_GENRE_DISABLED,
+                operation.actor_id,
+                None,
+                op="inscribe",
+            )
     if operation.hold:
         if not artifact_kind_is_portable(operation.artifact_kind):
             return _artifact_reject(
@@ -1373,25 +1471,286 @@ def _evaluate_inscribe(
 
 
 def _evaluate_amend(
-    state: WorldState, operation: _AmendOp, kind: str
+    state: WorldState,
+    operation: _AmendOp,
+    kind: str,
+    *,
+    durable_context: DurableRecordsRuleContext | None,
 ) -> RuleResult:
     access = _artifact_access_reject(
         state, operation.actor_id, operation.artifact_id, kind
     )
     if access is not None:
         return access
+    if durable_context is not None:
+        artifact = state.artifacts[operation.artifact_id]
+        if artifact.integrity is RecordIntegrity.DESTROYED:
+            return _artifact_reject(
+                kind,
+                RuleReason.DURABLE_INTEGRITY_DESTROYED,
+                operation.actor_id,
+                operation.artifact_id,
+                op="amend",
+            )
     return _artifact_success(kind, op="amend")
 
 
 def _evaluate_erase(
-    state: WorldState, operation: _EraseOp, kind: str
+    state: WorldState,
+    operation: _EraseOp,
+    kind: str,
+    *,
+    durable_context: DurableRecordsRuleContext | None,
 ) -> RuleResult:
     access = _artifact_access_reject(
         state, operation.actor_id, operation.artifact_id, kind
     )
     if access is not None:
         return access
+    if durable_context is not None:
+        artifact = state.artifacts[operation.artifact_id]
+        if artifact.integrity is RecordIntegrity.DESTROYED:
+            return _artifact_reject(
+                kind,
+                RuleReason.DURABLE_INTEGRITY_DESTROYED,
+                operation.actor_id,
+                operation.artifact_id,
+                op="erase",
+            )
     return _artifact_success(kind, op="erase")
+
+
+def _evaluate_copy_record(
+    state: WorldState,
+    operation: _CopyRecordOp,
+    kind: str,
+    *,
+    resolved: ResolvedActionEffects | None,
+    durable_context: DurableRecordsRuleContext | None,
+) -> RuleResult:
+    if durable_context is None:
+        return _artifact_reject(
+            kind,
+            RuleReason.DURABLE_RECORDS_INACTIVE,
+            operation.actor_id,
+            operation.artifact_id,
+            op="copy_record",
+        )
+    parent = state.artifacts.get(operation.artifact_id)
+    if parent is None:
+        return _artifact_reject(
+            kind,
+            RuleReason.UNKNOWN_ARTIFACT,
+            operation.actor_id,
+            operation.artifact_id,
+            op="copy_record",
+        )
+    if parent.integrity is RecordIntegrity.DESTROYED:
+        if durable_context.destroyed_parent_blocks_copy:
+            return _artifact_reject(
+                kind,
+                RuleReason.DURABLE_PARENT_DESTROYED,
+                operation.actor_id,
+                operation.artifact_id,
+                op="copy_record",
+            )
+    else:
+        if durable_context.copy_requires_hold_or_colocation:
+            access = _artifact_access_reject(
+                state, operation.actor_id, operation.artifact_id, kind
+            )
+            if access is not None:
+                return access
+    if parent.record_genre is None or not artifact_kind_is_durable_capable(parent.kind):
+        return _artifact_reject(
+            kind,
+            RuleReason.DURABLE_GENRE_REQUIRED,
+            operation.actor_id,
+            operation.artifact_id,
+            op="copy_record",
+        )
+    if parent.record_genre.value not in durable_context.enabled_genres:
+        return _artifact_reject(
+            kind,
+            RuleReason.DURABLE_GENRE_DISABLED,
+            operation.actor_id,
+            operation.artifact_id,
+            op="copy_record",
+        )
+    child_generation = parent.copy_generation + 1
+    if child_generation > durable_context.max_copy_generation:
+        return _artifact_reject(
+            kind,
+            RuleReason.DURABLE_COPY_GENERATION_CAP,
+            operation.actor_id,
+            operation.artifact_id,
+            op="copy_record",
+        )
+    if operation.hold:
+        if not artifact_kind_is_portable(parent.kind):
+            return _artifact_reject(
+                kind,
+                RuleReason.INVALID_ARTIFACT_HOLD,
+                operation.actor_id,
+                operation.artifact_id,
+                op="copy_record",
+            )
+        if (
+            _held_artifact_count(state, operation.actor_id)
+            >= MAX_HELD_ARTIFACTS_PER_BODY
+        ):
+            return _artifact_reject(
+                kind,
+                RuleReason.ARTIFACT_HOLD_CAP,
+                operation.actor_id,
+                operation.artifact_id,
+                op="copy_record",
+            )
+    if resolved is None:
+        return _artifact_reject(
+            kind,
+            RuleReason.MISSING_RESOLVED_EFFECT,
+            operation.actor_id,
+            operation.artifact_id,
+            op="copy_record",
+        )
+    try:
+        effect = resolved.require(operation.request_id, ResolvedArtifactCopyEffect)
+    except (TypeError, ValueError):
+        return _artifact_reject(
+            kind,
+            RuleReason.MISSING_RESOLVED_EFFECT,
+            operation.actor_id,
+            operation.artifact_id,
+            op="copy_record",
+        )
+    assert type(effect) is ResolvedArtifactCopyEffect
+    return _artifact_success(kind, op="copy_record")
+
+
+def _evaluate_annotate_record(
+    state: WorldState,
+    operation: _AnnotateRecordOp,
+    kind: str,
+    *,
+    durable_context: DurableRecordsRuleContext | None,
+) -> RuleResult:
+    if durable_context is None:
+        return _artifact_reject(
+            kind,
+            RuleReason.DURABLE_RECORDS_INACTIVE,
+            operation.actor_id,
+            operation.artifact_id,
+            op="annotate_record",
+        )
+    access = _artifact_access_reject(
+        state, operation.actor_id, operation.artifact_id, kind
+    )
+    if access is not None:
+        return access
+    artifact = state.artifacts[operation.artifact_id]
+    if artifact.integrity is RecordIntegrity.DESTROYED:
+        return _artifact_reject(
+            kind,
+            RuleReason.DURABLE_INTEGRITY_DESTROYED,
+            operation.actor_id,
+            operation.artifact_id,
+            op="annotate_record",
+        )
+    if artifact.record_genre is None or not artifact_kind_is_durable_capable(
+        artifact.kind
+    ):
+        return _artifact_reject(
+            kind,
+            RuleReason.DURABLE_GENRE_REQUIRED,
+            operation.actor_id,
+            operation.artifact_id,
+            op="annotate_record",
+        )
+    if artifact.annotation_revisions >= durable_context.max_annotations_per_record:
+        return _artifact_reject(
+            kind,
+            RuleReason.DURABLE_ANNOTATION_CAP,
+            operation.actor_id,
+            operation.artifact_id,
+            op="annotate_record",
+        )
+    merged_marks = len(artifact.content.marks) + len(operation.content.marks)
+    merged_relations = len(artifact.content.relations) + len(
+        operation.content.relations
+    )
+    if (
+        merged_marks > MAX_ARTIFACT_MARKS
+        or merged_relations > MAX_ARTIFACT_RELATIONS
+    ):
+        return _artifact_reject(
+            kind,
+            RuleReason.ARTIFACT_CONTENT_INVALID,
+            operation.actor_id,
+            operation.artifact_id,
+            op="annotate_record",
+        )
+    return _artifact_success(kind, op="annotate_record")
+
+
+def _evaluate_damage_record(
+    state: WorldState,
+    operation: _DamageRecordOp,
+    kind: str,
+    *,
+    durable_context: DurableRecordsRuleContext | None,
+) -> RuleResult:
+    if durable_context is None:
+        return _artifact_reject(
+            kind,
+            RuleReason.DURABLE_RECORDS_INACTIVE,
+            operation.actor_id,
+            operation.artifact_id,
+            op="damage_record",
+        )
+    access = _artifact_access_reject(
+        state, operation.actor_id, operation.artifact_id, kind
+    )
+    if access is not None:
+        return access
+    artifact = state.artifacts[operation.artifact_id]
+    if artifact.integrity is RecordIntegrity.DESTROYED:
+        return _artifact_reject(
+            kind,
+            RuleReason.DURABLE_INTEGRITY_DESTROYED,
+            operation.actor_id,
+            operation.artifact_id,
+            op="damage_record",
+        )
+    if artifact.record_genre is None or not artifact_kind_is_durable_capable(
+        artifact.kind
+    ):
+        return _artifact_reject(
+            kind,
+            RuleReason.DURABLE_GENRE_REQUIRED,
+            operation.actor_id,
+            operation.artifact_id,
+            op="damage_record",
+        )
+    if operation.mode == "damage" and not durable_context.allow_damage:
+        return _artifact_reject(
+            kind,
+            RuleReason.DURABLE_DAMAGE_DISABLED,
+            operation.actor_id,
+            operation.artifact_id,
+            op="damage_record",
+            mode=operation.mode,
+        )
+    if operation.mode == "partial_loss" and not durable_context.allow_partial_loss:
+        return _artifact_reject(
+            kind,
+            RuleReason.DURABLE_PARTIAL_LOSS_DISABLED,
+            operation.actor_id,
+            operation.artifact_id,
+            op="damage_record",
+            mode=operation.mode,
+        )
+    return _artifact_success(kind, op="damage_record", mode=operation.mode)
 
 
 def _evaluate_transfer_artifact(
@@ -1513,6 +1872,7 @@ def _apply_inscribe(
     result: RuleResult,
     resolved: ResolvedActionEffects | None,
     tick: int,
+    durable_context: DurableRecordsRuleContext | None,
 ) -> RuleApplication:
     if resolved is None:
         return RuleApplication(
@@ -1533,6 +1893,11 @@ def _apply_inscribe(
     actor = state.bodies[operation.actor_id]
     location_id = None if operation.hold else actor.location_id
     holder_id = operation.actor_id if operation.hold else None
+    source_id = (
+        effect.created_artifact_id
+        if durable_context is not None and operation.record_genre is not None
+        else None
+    )
     created = InformationArtifact(
         artifact_id=effect.created_artifact_id,
         kind=operation.artifact_kind,
@@ -1542,10 +1907,21 @@ def _apply_inscribe(
         content_revision=0,
         location_id=location_id,
         holder_id=holder_id,
+        record_genre=operation.record_genre,
+        source_artifact_id=source_id,
+        copy_generation=0,
+        integrity=RecordIntegrity.INTACT,
     )
     artifacts = dict(state.artifacts)
     artifacts[effect.created_artifact_id] = created
     next_state = rebuild_world_state(state, artifacts=artifacts)
+    if operation.record_genre is not None:
+        _OPS_LOG.info(
+            "durable_record_created artifact_id=%s genre=%s integrity=%s",
+            effect.created_artifact_id.value,
+            operation.record_genre.value,
+            RecordIntegrity.INTACT.value,
+        )
     return RuleApplication(
         result=result,
         next_state=next_state,
@@ -1593,10 +1969,28 @@ def _apply_erase(
     operation: _EraseOp,
     *,
     result: RuleResult,
+    durable_context: DurableRecordsRuleContext | None,
 ) -> RuleApplication:
     prior = state.artifacts[operation.artifact_id]
     artifacts = dict(state.artifacts)
-    del artifacts[operation.artifact_id]
+    if durable_context is not None and durable_context.tombstone_on_destroy:
+        updated = replace(
+            prior,
+            integrity=RecordIntegrity.DESTROYED,
+            location_id=None,
+            holder_id=None,
+        )
+        artifacts[operation.artifact_id] = updated
+        _OPS_LOG.info(
+            "durable_record_destroyed artifact_id=%s genre=%s integrity=%s "
+            "tombstone=%s",
+            operation.artifact_id.value,
+            prior.record_genre.value if prior.record_genre is not None else "-",
+            RecordIntegrity.DESTROYED.value,
+            True,
+        )
+    else:
+        del artifacts[operation.artifact_id]
     next_state = rebuild_world_state(state, artifacts=artifacts)
     return RuleApplication(
         result=result,
@@ -1605,6 +1999,230 @@ def _apply_erase(
             artifact_id=operation.artifact_id,
             artifact_kind=prior.kind,
             content_revision=prior.content_revision,
+        ),
+    )
+
+
+def _apply_copy_record(
+    state: WorldState,
+    operation: _CopyRecordOp,
+    *,
+    result: RuleResult,
+    resolved: ResolvedActionEffects | None,
+    tick: int,
+    durable_context: DurableRecordsRuleContext,
+) -> RuleApplication:
+    if resolved is None:
+        return RuleApplication(
+            result=_artifact_reject(
+                result.action_kind,
+                RuleReason.MISSING_RESOLVED_EFFECT,
+                operation.actor_id,
+                operation.artifact_id,
+                op="copy_record",
+            ),
+            next_state=state,
+            event_details=None,
+        )
+    effect = resolved.require(operation.request_id, ResolvedArtifactCopyEffect)
+    assert type(effect) is ResolvedArtifactCopyEffect
+    parent = state.artifacts[operation.artifact_id]
+    fidelity = (
+        operation.fidelity_override
+        if operation.fidelity_override is not None
+        else durable_context.default_fidelity
+    )
+    # Task 6 owns imperfect transforms; perfect-identity copy here.
+    child_content = parent.content
+    child_genre = parent.record_genre
+    source_id = (
+        parent.source_artifact_id
+        if parent.source_artifact_id is not None
+        else parent.artifact_id
+    )
+    actor = state.bodies[operation.actor_id]
+    location_id = None if operation.hold else actor.location_id
+    holder_id = operation.actor_id if operation.hold else None
+    child_generation = parent.copy_generation + 1
+    created = InformationArtifact(
+        artifact_id=effect.created_artifact_id,
+        kind=parent.kind,
+        author_id=operation.actor_id,
+        created_tick=tick,
+        content=child_content,
+        content_revision=0,
+        location_id=location_id,
+        holder_id=holder_id,
+        record_genre=child_genre,
+        parent_artifact_id=parent.artifact_id,
+        source_artifact_id=source_id,
+        copy_generation=child_generation,
+        integrity=RecordIntegrity.INTACT,
+    )
+    artifacts = dict(state.artifacts)
+    artifacts[effect.created_artifact_id] = created
+    next_state = rebuild_world_state(state, artifacts=artifacts)
+    _OPS_LOG.info(
+        "durable_record_copied artifact_id=%s parent_id=%s genre=%s "
+        "integrity=%s fidelity=%s generation=%s",
+        effect.created_artifact_id.value,
+        parent.artifact_id.value,
+        child_genre.value if child_genre is not None else "-",
+        RecordIntegrity.INTACT.value,
+        fidelity,
+        child_generation,
+    )
+    _OPS_LOG.debug(
+        "durable_copy_fidelity mode=%s parent_mark_count=%s child_mark_count=%s "
+        "edit_counts=0,0",
+        fidelity,
+        len(parent.content.marks),
+        len(child_content.marks),
+    )
+    return RuleApplication(
+        result=result,
+        next_state=next_state,
+        event_details=ArtifactCreated(
+            artifact_id=effect.created_artifact_id,
+            artifact_kind=parent.kind,
+            author_id=operation.actor_id,
+            content_revision=0,
+            resulting_location_id=location_id,
+            resulting_holder_id=holder_id,
+        ),
+    )
+
+
+def _apply_annotate_record(
+    state: WorldState,
+    operation: _AnnotateRecordOp,
+    *,
+    result: RuleResult,
+) -> RuleApplication:
+    prior = state.artifacts[operation.artifact_id]
+    merged = ArtifactContent(
+        marks=prior.content.marks + operation.content.marks,
+        relations=prior.content.relations + operation.content.relations,
+    )
+    updated = replace(
+        prior,
+        content=merged,
+        content_revision=prior.content_revision + 1,
+        annotation_revisions=prior.annotation_revisions + 1,
+    )
+    artifacts = dict(state.artifacts)
+    artifacts[operation.artifact_id] = updated
+    next_state = rebuild_world_state(state, artifacts=artifacts)
+    _OPS_LOG.info(
+        "durable_record_annotated artifact_id=%s genre=%s integrity=%s "
+        "annotation_revisions=%s",
+        operation.artifact_id.value,
+        prior.record_genre.value if prior.record_genre is not None else "-",
+        updated.integrity.value,
+        updated.annotation_revisions,
+    )
+    return RuleApplication(
+        result=result,
+        next_state=next_state,
+        event_details=ArtifactModified(
+            artifact_id=operation.artifact_id,
+            artifact_kind=updated.kind,
+            content_revision=updated.content_revision,
+            resulting_location_id=updated.location_id,
+            resulting_holder_id=updated.holder_id,
+        ),
+    )
+
+
+def _apply_damage_record(
+    state: WorldState,
+    operation: _DamageRecordOp,
+    *,
+    result: RuleResult,
+    durable_context: DurableRecordsRuleContext,
+) -> RuleApplication:
+    prior = state.artifacts[operation.artifact_id]
+    artifacts = dict(state.artifacts)
+    if operation.mode == "destroy":
+        if durable_context.tombstone_on_destroy:
+            updated = replace(
+                prior,
+                integrity=RecordIntegrity.DESTROYED,
+                location_id=None,
+                holder_id=None,
+            )
+            artifacts[operation.artifact_id] = updated
+        else:
+            del artifacts[operation.artifact_id]
+            updated = prior
+        next_state = rebuild_world_state(state, artifacts=artifacts)
+        _OPS_LOG.info(
+            "durable_record_destroyed artifact_id=%s genre=%s integrity=%s "
+            "tombstone=%s",
+            operation.artifact_id.value,
+            prior.record_genre.value if prior.record_genre is not None else "-",
+            RecordIntegrity.DESTROYED.value,
+            durable_context.tombstone_on_destroy,
+        )
+        return RuleApplication(
+            result=result,
+            next_state=next_state,
+            event_details=ArtifactDestroyed(
+                artifact_id=operation.artifact_id,
+                artifact_kind=prior.kind,
+                content_revision=prior.content_revision,
+            ),
+        )
+
+    marks = prior.content.marks
+    lost_delta = 0
+    if operation.mode == "damage":
+        drop = min(durable_context.max_mark_edits, len(marks))
+        if drop:
+            marks = marks[: len(marks) - drop]
+            lost_delta = drop
+        next_integrity = RecordIntegrity.DAMAGED
+    else:
+        target = durable_context.partial_loss_min_marks_remaining
+        if len(marks) > target:
+            lost_delta = len(marks) - target
+            marks = marks[:target]
+        next_integrity = RecordIntegrity.PARTIALLY_LOST
+
+    relation_drop = 0
+    relations = prior.content.relations
+    if operation.mode == "damage":
+        relation_drop = min(durable_context.max_relation_edits, len(relations))
+        if relation_drop:
+            relations = relations[: len(relations) - relation_drop]
+
+    updated = replace(
+        prior,
+        content=ArtifactContent(marks=marks, relations=relations),
+        content_revision=prior.content_revision + 1,
+        integrity=next_integrity,
+        lost_mark_count=prior.lost_mark_count + lost_delta,
+    )
+    artifacts[operation.artifact_id] = updated
+    next_state = rebuild_world_state(state, artifacts=artifacts)
+    _OPS_LOG.info(
+        "durable_record_%s artifact_id=%s genre=%s integrity=%s "
+        "lost_mark_count=%s",
+        operation.mode,
+        operation.artifact_id.value,
+        prior.record_genre.value if prior.record_genre is not None else "-",
+        next_integrity.value,
+        updated.lost_mark_count,
+    )
+    return RuleApplication(
+        result=result,
+        next_state=next_state,
+        event_details=ArtifactModified(
+            artifact_id=operation.artifact_id,
+            artifact_kind=updated.kind,
+            content_revision=updated.content_revision,
+            resulting_location_id=updated.location_id,
+            resulting_holder_id=updated.holder_id,
         ),
     )
 
@@ -1828,6 +2446,7 @@ def apply_operation(
     witness_resource_nodes: bool = False,
     effective_carry_capacity: Mapping[EntityId, int] | None = None,
     dependency_care_context: object | None = None,
+    durable_records_context: object | None = None,
 ) -> RuleApplication:
     """Evaluate then apply immutable physical or event-only effects.
 
@@ -1842,6 +2461,7 @@ def apply_operation(
             raise TypeError("skill_efficiency must be SkillEfficiencyOverride")
     if resolved is not None and type(resolved) is not ResolvedActionEffects:
         raise TypeError("apply_operation resolved must be ResolvedActionEffects")
+    durable_context = _require_durable_records_context(durable_records_context)
     result = evaluate_operation(
         state,
         operation,
@@ -1850,6 +2470,7 @@ def apply_operation(
         tick=tick,
         effective_carry_capacity=effective_carry_capacity,
         dependency_care_context=dependency_care_context,
+        durable_records_context=durable_context,
     )
     if result.disposition in {
         RuleDisposition.REJECT,
@@ -1885,13 +2506,36 @@ def apply_operation(
             result=result,
             resolved=resolved,
             tick=0 if tick is None else tick,
+            durable_context=durable_context,
         )
     if type(operation) is _AmendOp:
         return _apply_amend(state, operation, result=result)
     if type(operation) is _EraseOp:
-        return _apply_erase(state, operation, result=result)
+        return _apply_erase(
+            state, operation, result=result, durable_context=durable_context
+        )
     if type(operation) is _TransferArtifactOp:
         return _apply_transfer_artifact(state, operation, result=result)
+    if type(operation) is _CopyRecordOp:
+        assert durable_context is not None
+        return _apply_copy_record(
+            state,
+            operation,
+            result=result,
+            resolved=resolved,
+            tick=0 if tick is None else tick,
+            durable_context=durable_context,
+        )
+    if type(operation) is _AnnotateRecordOp:
+        return _apply_annotate_record(state, operation, result=result)
+    if type(operation) is _DamageRecordOp:
+        assert durable_context is not None
+        return _apply_damage_record(
+            state,
+            operation,
+            result=result,
+            durable_context=durable_context,
+        )
     if type(operation) is _FleeOp:
         return _apply_flee(
             state,
@@ -2559,6 +3203,18 @@ def _require_dependency_care_context(value: object | None) -> object | None:
     if type(value) is not DependencyCareRuleContext:
         raise TypeError(
             "dependency_care_context must be DependencyCareRuleContext or None"
+        )
+    return value
+
+
+def _require_durable_records_context(
+    value: object | None,
+) -> DurableRecordsRuleContext | None:
+    if value is None:
+        return None
+    if type(value) is not DurableRecordsRuleContext:
+        raise TypeError(
+            "durable_records_context must be DurableRecordsRuleContext or None"
         )
     return value
 

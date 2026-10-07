@@ -17,10 +17,13 @@ from world._state import WorldState, rebuild_world_state
 from world.actions import (
     ActionRequest,
     Amend,
+    AnnotateRecord,
     Ask,
     Attack,
     Build,
+    CopyRecord,
     Craft,
+    DamageRecord,
     Drink,
     Drop,
     Eat,
@@ -44,7 +47,11 @@ from world.actions import (
     Wait,
     require_agent_command,
 )
-from world.artifacts import ArtifactContent, ArtifactKind
+from world.artifacts import (
+    ArtifactContent,
+    ArtifactKind,
+    DurableRecordGenre,
+)
 from world.communications import StructuredUtterance
 from world.effects import ActionCause, EventCause, require_event_cause
 from world.events import (
@@ -314,6 +321,7 @@ class _InscribeOp:
     artifact_kind: ArtifactKind
     content: ArtifactContent
     hold: bool
+    record_genre: DurableRecordGenre | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -346,6 +354,37 @@ class _TransferArtifactOp:
     recipient_id: EntityId | None
 
 
+@dataclass(frozen=True, slots=True)
+class _CopyRecordOp:
+    request_id: RequestId
+    actor_id: EntityId
+    world_id: WorldId
+    base_revision: WorldRevision
+    artifact_id: EntityId
+    hold: bool
+    fidelity_override: str | None
+
+
+@dataclass(frozen=True, slots=True)
+class _AnnotateRecordOp:
+    request_id: RequestId
+    actor_id: EntityId
+    world_id: WorldId
+    base_revision: WorldRevision
+    artifact_id: EntityId
+    content: ArtifactContent
+
+
+@dataclass(frozen=True, slots=True)
+class _DamageRecordOp:
+    request_id: RequestId
+    actor_id: EntityId
+    world_id: WorldId
+    base_revision: WorldRevision
+    artifact_id: EntityId
+    mode: Literal["damage", "partial_loss", "destroy"]
+
+
 ValidatedWorldOperation = (
     _MoveOp
     | _SearchOp
@@ -373,6 +412,9 @@ ValidatedWorldOperation = (
     | _AmendOp
     | _EraseOp
     | _TransferArtifactOp
+    | _CopyRecordOp
+    | _AnnotateRecordOp
+    | _DamageRecordOp
 )
 
 _OPERATION_TYPES: Final[frozenset[type]] = frozenset(
@@ -403,6 +445,9 @@ _OPERATION_TYPES: Final[frozenset[type]] = frozenset(
         _AmendOp,
         _EraseOp,
         _TransferArtifactOp,
+        _CopyRecordOp,
+        _AnnotateRecordOp,
+        _DamageRecordOp,
     }
 )
 
@@ -674,13 +719,19 @@ def validate_action_request(
             return OperationAccepted(
                 _StoreOp(*base, recipe_id=recipe_id, item_id=item_id)
             )
-        case Inscribe(kind=artifact_kind, content=content, hold=hold):
+        case Inscribe(
+            kind=artifact_kind,
+            content=content,
+            hold=hold,
+            record_genre=record_genre,
+        ):
             return OperationAccepted(
                 _InscribeOp(
                     *base,
                     artifact_kind=artifact_kind,
                     content=content,
                     hold=hold,
+                    record_genre=record_genre,
                 )
             )
         case Amend(artifact_id=artifact_id, content=content):
@@ -699,6 +750,27 @@ def validate_action_request(
                     mode=mode,
                     recipient_id=recipient_id,
                 )
+            )
+        case CopyRecord(
+            artifact_id=artifact_id,
+            hold=hold,
+            fidelity_override=fidelity_override,
+        ):
+            return OperationAccepted(
+                _CopyRecordOp(
+                    *base,
+                    artifact_id=artifact_id,
+                    hold=hold,
+                    fidelity_override=fidelity_override,
+                )
+            )
+        case AnnotateRecord(artifact_id=artifact_id, content=content):
+            return OperationAccepted(
+                _AnnotateRecordOp(*base, artifact_id=artifact_id, content=content)
+            )
+        case DamageRecord(artifact_id=artifact_id, mode=mode):
+            return OperationAccepted(
+                _DamageRecordOp(*base, artifact_id=artifact_id, mode=mode)
             )
         case _:
             return OperationRejected(
@@ -904,6 +976,7 @@ def prepare_action_batch(
     effective_carry_capacity: Mapping[EntityId, int] | None = None,
     denied_command_kinds_by_entity: Mapping[EntityId, frozenset[str]] | None = None,
     dependency_care_context: object | None = None,
+    durable_records_context: object | None = None,
 ) -> PendingBatch:
     """Resolve ordered requests into pending effects against one evolving state.
 
@@ -967,6 +1040,14 @@ def prepare_action_batch(
         if type(care_context) is not DependencyCareRuleContext:
             raise TypeError(
                 "dependency_care_context must be DependencyCareRuleContext or None"
+            )
+    durable_context = durable_records_context
+    if durable_context is not None:
+        from world.artifacts import DurableRecordsRuleContext
+
+        if type(durable_context) is not DurableRecordsRuleContext:
+            raise TypeError(
+                "durable_records_context must be DurableRecordsRuleContext or None"
             )
     request_tuple = tuple(requests)
     resolved = resolved_effects
@@ -1043,11 +1124,23 @@ def prepare_action_batch(
             tick=tick,
             effective_carry_capacity=capacity_map,
             dependency_care_context=care_context,
+            durable_records_context=durable_context,
         )
         if start_rule.disposition is RuleDisposition.REJECT:
             if start_rule.action_kind in {"feed", "transport"}:
                 _LOG.warning(
                     "dependency_care_reject actor_id=%s kind=%s reason_code=%s",
+                    request.actor_id.value,
+                    start_rule.action_kind,
+                    start_rule.reason.value,
+                )
+            if start_rule.action_kind in {
+                "copy_record",
+                "annotate_record",
+                "damage_record",
+            }:
+                _LOG.warning(
+                    "durable_record_reject actor_id=%s kind=%s reason_code=%s",
                     request.actor_id.value,
                     start_rule.action_kind,
                     start_rule.reason.value,
@@ -1104,6 +1197,7 @@ def prepare_action_batch(
             witness_resource_nodes=witness_resource_nodes,
             effective_carry_capacity=capacity_map,
             dependency_care_context=care_context,
+            durable_records_context=durable_context,
         )
         if application.result.disposition is RuleDisposition.REJECT:
             outcomes.append(

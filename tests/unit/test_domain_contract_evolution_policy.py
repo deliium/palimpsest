@@ -16,10 +16,13 @@ import pytest
 
 from world.actions import (
     Amend,
+    AnnotateRecord,
     Ask,
     Attack,
     Build,
+    CopyRecord,
     Craft,
+    DamageRecord,
     Drink,
     Drop,
     Eat,
@@ -49,7 +52,7 @@ from world.observations import Observation
 ROOT = Path(__file__).resolve().parents[2]
 SRC = ROOT / "src"
 
-# Closed command surface. Artifacts add four variants on the same change.
+# Closed command surface. Durable records deepen artifacts to 29 commands.
 _CLOSED_COMMAND_TYPES: frozenset[type] = frozenset(
     {
         Move,
@@ -78,6 +81,9 @@ _CLOSED_COMMAND_TYPES: frozenset[type] = frozenset(
         Amend,
         Erase,
         TransferArtifact,
+        CopyRecord,
+        AnnotateRecord,
+        DamageRecord,
     }
 )
 
@@ -116,8 +122,8 @@ _PARITY_GATE = (
 )
 
 
-def test_agent_command_set_remains_closed_at_twenty_six() -> None:
-    assert len(_CLOSED_COMMAND_TYPES) == 26
+def test_agent_command_set_remains_closed_at_twenty_nine() -> None:
+    assert len(_CLOSED_COMMAND_TYPES) == 29
     from world import actions as actions_mod
 
     # Mirror the public union membership without constructing parameterized commands.
@@ -148,6 +154,9 @@ def test_agent_command_set_remains_closed_at_twenty_six() -> None:
         Amend,
         Erase,
         TransferArtifact,
+        CopyRecord,
+        AnnotateRecord,
+        DamageRecord,
     }
     assert asserted == _CLOSED_COMMAND_TYPES
     assert hasattr(actions_mod, "AgentCommand")
