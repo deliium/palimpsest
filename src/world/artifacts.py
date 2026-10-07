@@ -399,7 +399,9 @@ class InformationArtifact:
             raise _fail(
                 "InformationArtifact.source_artifact_id", "unknown_artifact"
             )
-        if isinstance(self.copy_generation, bool) or type(self.copy_generation) is not int:
+        if isinstance(self.copy_generation, bool) or (
+            type(self.copy_generation) is not int
+        ):
             raise _fail(
                 "InformationArtifact.copy_generation", "durable_copy_generation_invalid"
             )

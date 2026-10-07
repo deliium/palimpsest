@@ -11,8 +11,8 @@ from analysis.specifications import METRIC_FAMILY_COUNT, MetricFamilyId
 from observer.version import SEMANTIC_EVENT_TYPES
 from persistence.orm import AUTHORITATIVE_TABLES
 from world.actions import (
-    AnnotateRecord,
     AgentCommand,
+    AnnotateRecord,
     CopyRecord,
     DamageRecord,
 )
