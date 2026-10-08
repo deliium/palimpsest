@@ -621,6 +621,14 @@ def _knowledge_genealogy_loop_kwargs(config: object) -> dict[str, object]:
     }
 
 
+def _bounded_experimentation_loop_kwargs(config: object) -> dict[str, object]:
+    """Pass the experiment spec into the loop. Law rows stay on WorldEngine."""
+    spec = getattr(config, "bounded_experimentation", None)
+    if spec is None:
+        return {}
+    return {"bounded_experimentation_spec": spec}
+
+
 def _cognition_config_for(
     spec: AgentCognitionSpec,
     *,
@@ -1549,6 +1557,11 @@ class SimulationRunner:
                     if knowledge_repositories_active
                     else None
                 ),
+                experiment_laws=(
+                    config.bounded_experimentation.laws
+                    if config.bounded_experimentation is not None
+                    else None
+                ),
                 **skill_kwargs,
                 **teaching_kwargs,
             )
@@ -1775,6 +1788,7 @@ class SimulationRunner:
                     **_durable_records_loop_kwargs(config),
                     **_knowledge_repositories_loop_kwargs(config),
                     **_knowledge_genealogy_loop_kwargs(config),
+                    **_bounded_experimentation_loop_kwargs(config),
                 )
                 agent = Agent(
                     agent_id=owner,
@@ -3268,6 +3282,7 @@ class SimulationRunner:
                 **_durable_records_loop_kwargs(self._config),
                 **_knowledge_repositories_loop_kwargs(self._config),
                 **_knowledge_genealogy_loop_kwargs(self._config),
+                **_bounded_experimentation_loop_kwargs(self._config),
             )
             agent = Agent(
                 agent_id=owner,
@@ -3556,32 +3571,33 @@ def _bootstrap_snapshot(engine: WorldEngine) -> WorldSnapshot:
         dependency_care_active=engine.dependency_care_channel_active,
         durable_records_active=engine.durable_records_channel_active,
         knowledge_repositories_active=engine.knowledge_repositories_channel_active,
+        bounded_experimentation_active=engine.bounded_experimentation_active,
     )
     state = engine._snapshot.world.state
     production_rows: dict[str, tuple[object, ...]] = {}
-    if codec_version in {"v3", "v4", "v5", "v6", "v7", "v8", "v9", "v10", "v11"}:
+    if codec_version in {"v3", "v4", "v5", "v6", "v7", "v8", "v9", "v10", "v11", "v12"}:
         production_rows = {
             "structures": tuple(state.structures.values()),
             "production_jobs": tuple(state.production_jobs.values()),
             "tool_marks": tuple(state.tool_marks.values()),
         }
-    if codec_version in {"v4", "v5", "v6", "v7", "v8", "v9", "v10", "v11"}:
+    if codec_version in {"v4", "v5", "v6", "v7", "v8", "v9", "v10", "v11", "v12"}:
         production_rows["active_hazards"] = tuple(state.active_hazards)
-    if codec_version in {"v5", "v6", "v7", "v8", "v9", "v10", "v11"}:
+    if codec_version in {"v5", "v6", "v7", "v8", "v9", "v10", "v11", "v12"}:
         production_rows["artifacts"] = tuple(state.artifacts.values())
-    if codec_version in {"v6", "v7", "v8", "v9", "v10", "v11"}:
+    if codec_version in {"v6", "v7", "v8", "v9", "v10", "v11", "v12"}:
         production_rows["lifecycle_records"] = tuple(engine.lifecycle_records)
-    if codec_version in {"v8", "v9", "v10", "v11"}:
+    if codec_version in {"v8", "v9", "v10", "v11", "v12"}:
         kinship_graph = engine.kinship_graph
         from world.kinship import KinshipGraph
 
         if type(kinship_graph) is KinshipGraph:
             production_rows["kinship_edges"] = kinship_graph.edges
-    if codec_version in {"v9", "v10", "v11"}:
+    if codec_version in {"v9", "v10", "v11", "v12"}:
         production_rows["dependency_need_registers"] = tuple(
             engine._dependency_need_registers.values()
         )
-    if codec_version == "v11":
+    if codec_version in {"v11", "v12"}:
         production_rows["repositories"] = tuple(state.repositories.values())
     draft = WorldSnapshot(
         snapshot_id=SnapshotId(f"bootstrap-{engine.run_id.value}"),

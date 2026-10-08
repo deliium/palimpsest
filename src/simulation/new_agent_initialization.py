@@ -146,6 +146,7 @@ SUBJECTIVE_COPY_DENY_LIST: Final[frozenset[str]] = frozenset(
         "knowledge_pack",
         "parent_technique_copy",
         "knowledge_genealogy",
+        "experiment_ledger",
     }
 )
 
@@ -167,6 +168,7 @@ BLANK_SLATE_SUBJECTIVE_STORES: Final[tuple[str, ...]] = (
     "taught_content_lineage",
     "cultural_features",
     "practical_knowledge",
+    "experiment_ledger",
 )
 
 CREATION_REASON_CODES: Final[frozenset[str]] = frozenset(
@@ -837,6 +839,7 @@ class BlankSlateStoreCounts:
     taught_content_lineage: int = 0
     cultural_features: int = 0
     practical_knowledge: int = 0
+    experiment_ledger: int = 0
 
 
 def assert_blank_slate_subjective_state(

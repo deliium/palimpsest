@@ -50,6 +50,22 @@ _ROLE_BY_VALUE: Final[dict[str, MessageRole]] = {
     MessageRole.SYSTEM.value: MessageRole.SYSTEM,
     MessageRole.USER.value: MessageRole.USER,
 }
+_REGISTERED_PROMPTS: Final[frozenset[tuple[str, str]]] = frozenset(
+    {
+        ("competence", "v1"),
+        ("counterfactual", "v1"),
+        ("experiment_hypothesis", "v1"),
+        ("offline_consolidation", "v1"),
+        ("production", "v1"),
+        ("prospective", "v1"),
+        ("reconstructive_memory", "v1"),
+        ("reflection", "v1"),
+        ("structured", "v1"),
+        ("teaching", "v1"),
+        ("theory_of_mind", "v1"),
+        ("world_model", "v1"),
+    }
+)
 _RENDER_DOMAIN: Final[bytes] = b"llm.prompt.rendered.v1"
 
 
@@ -238,6 +254,8 @@ def load_prompt(name: str, version: str) -> LoadedPrompt:
     # Reject traversal/malformed segments before any filesystem join.
     safe_name = _require_segment(name, PromptReason.INVALID_NAME)
     safe_version = _require_segment(version, PromptReason.INVALID_VERSION)
+    if (safe_name, safe_version) not in _REGISTERED_PROMPTS:
+        _fail(PromptReason.PROMPT_NOT_FOUND)
 
     root = _prompts_root().joinpath(safe_name, safe_version)
     manifest_path = root.joinpath("manifest.json")

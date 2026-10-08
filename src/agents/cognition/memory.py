@@ -587,6 +587,26 @@ def build_direct_observation_memory_trace(
             )
         )
     tags = ("direct", "occurrence", occurrence.kind, occurrence.audience_role.value)
+    if occurrence.kind == "experiment_resolved":
+        facts = occurrence.public_facts
+        outcome_class = facts.get("outcome_class")
+        discovery_mode = facts.get("discovery_mode")
+        extra: list[str] = []
+        if type(outcome_class) is str and outcome_class:
+            extra.append(f"outcome_class:{outcome_class}")
+        if type(discovery_mode) is str and discovery_mode:
+            extra.append(f"discovery_mode:{discovery_mode}")
+        tags = (*tags, *tuple(extra))
+        event_value = (
+            None
+            if occurrence.provenance.source_event_id is None
+            else occurrence.provenance.source_event_id.value
+        )
+        _LOG.debug(
+            "experiment_remembered event_id=%s outcome_class=%s",
+            "-" if event_value is None else event_value,
+            outcome_class if type(outcome_class) is str else "-",
+        )
     confidence = (
         0.9
         if occurrence.success is True

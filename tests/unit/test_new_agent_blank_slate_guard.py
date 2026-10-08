@@ -47,6 +47,7 @@ def test_deny_list_covers_locked_stores() -> None:
         "knowledge_pack",
         "parent_technique_copy",
         "knowledge_genealogy",
+        "experiment_ledger",
     }
     assert required.issubset(SUBJECTIVE_COPY_DENY_LIST)
     assert tuple(BLANK_SLATE_SUBJECTIVE_STORES) == (
@@ -67,6 +68,7 @@ def test_deny_list_covers_locked_stores() -> None:
         "taught_content_lineage",
         "cultural_features",
         "practical_knowledge",
+        "experiment_ledger",
     )
 
 
@@ -93,4 +95,9 @@ def test_assert_blank_slate_fails_on_content() -> None:
         assert_blank_slate_subjective_state(
             AgentId("entrant-1"),
             BlankSlateStoreCounts(practical_knowledge=1),
+        )
+    with pytest.raises(ValueError, match="subjective_copy_forbidden"):
+        assert_blank_slate_subjective_state(
+            AgentId("entrant-1"),
+            BlankSlateStoreCounts(experiment_ledger=1),
         )

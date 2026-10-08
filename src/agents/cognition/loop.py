@@ -169,6 +169,7 @@ class CognitiveLoop:
 
     __slots__ = (
         "_artifact_interpretation_mode",
+        "_bounded_experimentation_caps",
         "_care_action_policy",
         "_caregiving_cognition_mode",
         "_cognitive_budget_mode",
@@ -199,6 +200,7 @@ class CognitiveLoop:
         "_knowledge_repositories_active",
         "_emotional_state",
         "_epistemic_policy",
+        "_experiment_ledger",
         "_futures",
         "_goal_manager",
         "_group_formation_mode",
@@ -294,6 +296,7 @@ class CognitiveLoop:
         knowledge_repositories_active: bool = False,
         knowledge_genealogy_spec: object | None = None,
         knowledge_genealogy_seed_material: object | None = None,
+        bounded_experimentation_spec: object | None = None,
         territorial_claim_mode: object | None = None,
         territorial_claim_policy: object | None = None,
         group_formation_mode: object | None = None,
@@ -858,6 +861,7 @@ class CognitiveLoop:
                 getattr(lineage, "max_entries_per_owner", None),
                 getattr(lineage, "max_hop_depth", None),
             )
+        self._bind_bounded_experimentation(bounded_experimentation_spec)
         from agents.cognition.production import ProductionKnowledgeMode
 
         production_mode = (
@@ -1223,6 +1227,75 @@ class CognitiveLoop:
             0 if updated is None else len(updated.bindings),
         )
         return updated
+
+    def _bind_bounded_experimentation(self, spec: object | None) -> None:
+        """Keep caps only. Law rows stay on the world engine."""
+        if spec is None:
+            self._bounded_experimentation_caps = None
+            self._experiment_ledger = None
+            _LOG.debug("bounded_experimentation_skipped present=False")
+            return
+        from agents.cognition.experimentation import cognition_binding_from_spec
+
+        binding = cognition_binding_from_spec(spec)
+        self._bounded_experimentation_caps = binding
+        self._experiment_ledger = None
+        _LOG.info(
+            "bounded_experimentation_enabled max_hypotheses=%s "
+            "max_trials_per_tick=%s repeat_threshold=%s "
+            "learn_into_genealogy=%s allow_provider=%s",
+            binding.max_hypotheses,
+            binding.max_trials_per_tick,
+            binding.repeat_threshold,
+            binding.learn_into_genealogy,
+            binding.allow_provider,
+        )
+
+    def experiment_ledger_for(self, owner_id: object) -> object | None:
+        """Return this owner's ledger, or None when the channel is off."""
+        if self._bounded_experimentation_caps is None:
+            return None
+        from agents.cognition.experimentation import (
+            ExperimentLedger,
+            empty_experiment_ledger,
+        )
+        from agents.models import AgentId
+
+        if type(owner_id) is not AgentId:
+            raise TypeError("owner_id must be AgentId")
+        current = self._experiment_ledger
+        if type(current) is ExperimentLedger:
+            if current.owner_id != owner_id:
+                raise ValueError("experiment_ledger owner_id mismatch")
+            return current
+        ledger = empty_experiment_ledger(
+            owner_id, self._bounded_experimentation_caps
+        )
+        self._experiment_ledger = ledger
+        return ledger
+
+    def _remember_experiments(self, loop_input: object) -> None:
+        """Score the owner's hypotheses from actor occurrences. No second writer."""
+        if self._bounded_experimentation_caps is None:
+            return
+        from agents.cognition.experimentation import score_remembered_experiment
+        from agents.models import AgentId
+
+        owner_id = getattr(loop_input, "agent_id", None)
+        if type(owner_id) is not AgentId:
+            return
+        observation = getattr(loop_input, "observation", None)
+        ledger = self.experiment_ledger_for(owner_id)
+        if ledger is None or observation is None:
+            return
+        tick = getattr(observation, "tick", 0)
+        tick_value = tick if type(tick) is int and tick >= 0 else 0
+        updated = ledger
+        for occurrence in getattr(observation, "occurrences", ()):
+            updated = score_remembered_experiment(
+                updated, occurrence, tick=tick_value
+            )
+        self._experiment_ledger = updated
 
     def mark_developmental_mid_run_admit(self) -> None:
         """Mark this loop as belonging to a mid-run admitted owner."""
@@ -3011,6 +3084,7 @@ class CognitiveLoop:
             expected_type=tuple,
         )
         assert type(updates) is tuple
+        self._remember_experiments(loop_input)
         updates = self._annotate_claim_violations(proposal, updates)
         updates = self._append_norm_trust(proposal, updates)
         consolidation = await self._plan_sleep_consolidation(

@@ -1,0 +1,21 @@
+{
+  "name": "experiment_hypothesis",
+  "version": "v1",
+  "messages": [
+    {
+      "role": "system",
+      "template": "system.txt",
+      "sha256": "e8934ab363b4d19a92f3584eb99ad0d7ee1f3c329f56d2fb3051f323028946bf"
+    },
+    {
+      "role": "user",
+      "template": "user.txt",
+      "sha256": "c7b101f44bfbee5889b9bb8b373eed2c6709f7ec29cd9f63791a14decf92063d"
+    }
+  ],
+  "variables": [
+    "schema_name",
+    "schema_json",
+    "candidate_json"
+  ]
+}

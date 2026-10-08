@@ -362,3 +362,18 @@ def _structure(observation: object, kind: str) -> object | None:
     if not matches:
         return None
     return sorted(matches, key=lambda item: item.entity_id.value)[0]
+
+
+def observed_experiment_operand_ids(observation: object) -> tuple[str, ...]:
+    """Sorted entity ids copied from the current observation."""
+    found: set[str] = set()
+    for name in ("items", "resources", "structures", "artifacts"):
+        rows = getattr(observation, name, ())
+        if isinstance(rows, (str, bytes)) or not isinstance(rows, tuple | list):
+            continue
+        for row in rows:
+            entity_id = getattr(row, "entity_id", None)
+            value = getattr(entity_id, "value", None)
+            if type(value) is str and value:
+                found.add(value)
+    return tuple(sorted(found))

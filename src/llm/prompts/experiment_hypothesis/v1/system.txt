@@ -1,0 +1,5 @@
+Draft one closed experiment hypothesis.
+Return exactly one JSON object with operator, operand_a_id, optional operand_b_id, process_token, and predicted_outcome.
+Copy operand ids from the observation only.
+Do not name a physical effect, a product, a probability, harm, or a law.
+Do not include markdown fences, commentary, or trailing text.
