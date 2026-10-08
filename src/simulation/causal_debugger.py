@@ -141,6 +141,7 @@ _DETAIL_KIND_TO_SEMANTIC_TYPE: Final[Mapping[str, str]] = {
     "repository_maintained": "REPOSITORY_MAINTAINED",
     "repository_indexed": "REPOSITORY_INDEXED",
     "repository_neglected": "REPOSITORY_NEGLECTED",
+    "experiment_resolved": "EXPERIMENT_RESOLVED",
 }
 
 # Semantic observer types / detail type names → cognition-trace command_kind.
@@ -183,6 +184,7 @@ _SEMANTIC_TO_COMMAND_KIND: Final[Mapping[str, str]] = {
     "REPOSITORY_MEMBER_RETRIEVED": "retrieve_record",
     "REPOSITORY_MAINTAINED": "maintain_repository",
     "REPOSITORY_INDEXED": "index_repository",
+    "EXPERIMENT_RESOLVED": "experiment",
 }
 
 _DETAIL_KIND_TO_COMMAND_KIND: Final[Mapping[str, str]] = {
@@ -222,6 +224,7 @@ _DETAIL_KIND_TO_COMMAND_KIND: Final[Mapping[str, str]] = {
     "repository_member_retrieved": "retrieve_record",
     "repository_maintained": "maintain_repository",
     "repository_indexed": "index_repository",
+    "experiment_resolved": "experiment",
 }
 
 # Detail class __name__ (Attacked, Moved, …) → command_kind when kind field absent.
@@ -260,6 +263,7 @@ _DETAIL_TYPE_NAME_TO_COMMAND_KIND: Final[Mapping[str, str]] = {
     "RepositoryMemberRetrieved": "retrieve_record",
     "RepositoryMaintained": "maintain_repository",
     "RepositoryIndexed": "index_repository",
+    "ExperimentResolved": "experiment",
 }
 
 # Consequence / environment semantics: no agent command to explain.

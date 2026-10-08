@@ -60,7 +60,7 @@ from world.identifiers import (
     require_stable_id,
 )
 from world.models import LifeStatus
-from world.values import WeatherCondition
+from world.values import WeatherCondition, round_physical
 
 EVENT_SCHEMA_AUDIT_V1: Final[int] = 1
 EVENT_SCHEMA_REPLAY_V2: Final[int] = 2
@@ -77,6 +77,7 @@ EVENT_SCHEMA_REPLAY_V11: Final[int] = 11
 EVENT_SCHEMA_REPLAY_V12: Final[int] = 12
 EVENT_SCHEMA_REPLAY_V13: Final[int] = 13
 EVENT_SCHEMA_REPLAY_V14: Final[int] = 14
+EVENT_SCHEMA_REPLAY_V15: Final[int] = 15
 SUPPORTED_EVENT_SCHEMA_VERSIONS: Final[frozenset[int]] = frozenset(
     {
         EVENT_SCHEMA_AUDIT_V1,
@@ -92,7 +93,7 @@ SUPPORTED_EVENT_SCHEMA_VERSIONS: Final[frozenset[int]] = frozenset(
         EVENT_SCHEMA_REPLAY_V11,
     EVENT_SCHEMA_REPLAY_V12,
         EVENT_SCHEMA_REPLAY_V13,
-        EVENT_SCHEMA_REPLAY_V14,
+        EVENT_SCHEMA_REPLAY_V14, EVENT_SCHEMA_REPLAY_V15,
     }
 )
 REPLAYABLE_EVENT_SCHEMA_VERSIONS: Final[frozenset[int]] = frozenset(
@@ -109,7 +110,7 @@ REPLAYABLE_EVENT_SCHEMA_VERSIONS: Final[frozenset[int]] = frozenset(
         EVENT_SCHEMA_REPLAY_V11,
     EVENT_SCHEMA_REPLAY_V12,
         EVENT_SCHEMA_REPLAY_V13,
-        EVENT_SCHEMA_REPLAY_V14,
+        EVENT_SCHEMA_REPLAY_V14, EVENT_SCHEMA_REPLAY_V15,
     }
 )
 PHYSICAL_REPLAY_EVENT_SCHEMA_VERSIONS: Final[frozenset[int]] = frozenset(
@@ -125,7 +126,7 @@ PHYSICAL_REPLAY_EVENT_SCHEMA_VERSIONS: Final[frozenset[int]] = frozenset(
         EVENT_SCHEMA_REPLAY_V11,
     EVENT_SCHEMA_REPLAY_V12,
         EVENT_SCHEMA_REPLAY_V13,
-        EVENT_SCHEMA_REPLAY_V14,
+        EVENT_SCHEMA_REPLAY_V14, EVENT_SCHEMA_REPLAY_V15,
     }
 )
 _PRODUCTION_EVENT_SCHEMAS: Final[frozenset[int]] = frozenset(
@@ -138,7 +139,7 @@ _PRODUCTION_EVENT_SCHEMAS: Final[frozenset[int]] = frozenset(
         EVENT_SCHEMA_REPLAY_V11,
     EVENT_SCHEMA_REPLAY_V12,
         EVENT_SCHEMA_REPLAY_V13,
-        EVENT_SCHEMA_REPLAY_V14,
+        EVENT_SCHEMA_REPLAY_V14, EVENT_SCHEMA_REPLAY_V15,
     }
 )
 _ENVIRONMENT_EVENT_SCHEMAS: Final[frozenset[int]] = frozenset(
@@ -150,7 +151,7 @@ _ENVIRONMENT_EVENT_SCHEMAS: Final[frozenset[int]] = frozenset(
         EVENT_SCHEMA_REPLAY_V11,
     EVENT_SCHEMA_REPLAY_V12,
         EVENT_SCHEMA_REPLAY_V13,
-        EVENT_SCHEMA_REPLAY_V14,
+        EVENT_SCHEMA_REPLAY_V14, EVENT_SCHEMA_REPLAY_V15,
     }
 )
 _ARTIFACT_EVENT_SCHEMAS: Final[frozenset[int]] = frozenset(
@@ -161,7 +162,7 @@ _ARTIFACT_EVENT_SCHEMAS: Final[frozenset[int]] = frozenset(
         EVENT_SCHEMA_REPLAY_V11,
     EVENT_SCHEMA_REPLAY_V12,
         EVENT_SCHEMA_REPLAY_V13,
-        EVENT_SCHEMA_REPLAY_V14,
+        EVENT_SCHEMA_REPLAY_V14, EVENT_SCHEMA_REPLAY_V15,
     }
 )
 _LIFECYCLE_EVENT_SCHEMAS: Final[frozenset[int]] = frozenset(
@@ -171,7 +172,7 @@ _LIFECYCLE_EVENT_SCHEMAS: Final[frozenset[int]] = frozenset(
         EVENT_SCHEMA_REPLAY_V11,
         EVENT_SCHEMA_REPLAY_V12,
         EVENT_SCHEMA_REPLAY_V13,
-        EVENT_SCHEMA_REPLAY_V14,
+        EVENT_SCHEMA_REPLAY_V14, EVENT_SCHEMA_REPLAY_V15,
     }
 )
 _NEW_AGENT_INIT_EVENT_SCHEMAS: Final[frozenset[int]] = frozenset(
@@ -180,7 +181,7 @@ _NEW_AGENT_INIT_EVENT_SCHEMAS: Final[frozenset[int]] = frozenset(
         EVENT_SCHEMA_REPLAY_V11,
         EVENT_SCHEMA_REPLAY_V12,
         EVENT_SCHEMA_REPLAY_V13,
-        EVENT_SCHEMA_REPLAY_V14,
+        EVENT_SCHEMA_REPLAY_V14, EVENT_SCHEMA_REPLAY_V15,
     }
 )
 _KINSHIP_EVENT_SCHEMAS: Final[frozenset[int]] = frozenset(
@@ -1919,6 +1920,81 @@ class RepositoryNeglected:
         _reject_presentation_fields(self.kind, self.__slots__)
 
 
+_EXPERIMENT_OUTCOMES: Final[frozenset[str]] = frozenset(
+    {"success", "partial_success", "failure", "harm", "unexpected"}
+)
+_EXPERIMENT_DELTAS: Final[frozenset[str]] = frozenset(
+    {
+        "none",
+        "consume_operand",
+        "emit_catalog_product",
+        "partial_emit",
+        "apply_harm_band",
+    }
+)
+_EXPERIMENT_OPERATORS: Final[frozenset[str]] = frozenset(
+    {"combine", "apply_tool", "vary_process"}
+)
+_EXPERIMENT_PROCESSES: Final[frozenset[str]] = frozenset(
+    {"harvest", "craft", "build", "repair", "store", "none"}
+)
+
+
+@dataclass(frozen=True, slots=True)
+class ExperimentResolved:
+    """Authoritative experiment outcome. Replay applies the recorded delta."""
+
+    operator: str
+    operand_a_id: EntityId
+    process_token: str
+    outcome_class: str
+    delta: str
+    discovery_mode: str
+    operand_b_id: EntityId | None = None
+    product_id: str = ""
+    health_delta: float = 0.0
+    resulting_health: float | None = None
+    created_item_id: EntityId | None = None
+    kind: Literal["experiment_resolved"] = field(
+        default="experiment_resolved", init=False
+    )
+
+    def __post_init__(self) -> None:
+        if self.operator not in _EXPERIMENT_OPERATORS:
+            raise ValueError("ExperimentResolved.operator")
+        if type(self.operand_a_id) is not EntityId:
+            raise TypeError("ExperimentResolved.operand_a_id must be EntityId")
+        if self.operand_b_id is not None and type(self.operand_b_id) is not EntityId:
+            raise TypeError("ExperimentResolved.operand_b_id must be EntityId or None")
+        if self.process_token not in _EXPERIMENT_PROCESSES:
+            raise ValueError("ExperimentResolved.process_token")
+        if self.outcome_class not in _EXPERIMENT_OUTCOMES:
+            raise ValueError("ExperimentResolved.outcome_class")
+        if self.delta not in _EXPERIMENT_DELTAS:
+            raise ValueError("ExperimentResolved.delta")
+        if self.discovery_mode not in {"deliberate", "accidental"}:
+            raise ValueError("ExperimentResolved.discovery_mode")
+        if type(self.product_id) is not str:
+            raise TypeError("ExperimentResolved.product_id must be str")
+        object.__setattr__(
+            self,
+            "health_delta",
+            round_physical(self.health_delta),
+        )
+        if self.resulting_health is not None:
+            object.__setattr__(
+                self,
+                "resulting_health",
+                round_physical(self.resulting_health),
+            )
+        if (
+            self.created_item_id is not None
+            and type(self.created_item_id) is not EntityId
+        ):
+            raise TypeError("ExperimentResolved.created_item_id must be EntityId")
+        _reject_presentation_fields(self.kind, self.__slots__)
+
+
 EventDetails = (
     Moved
     | Searched
@@ -1973,6 +2049,7 @@ EventDetails = (
     | RepositoryMaintained
     | RepositoryIndexed
     | RepositoryNeglected
+    | ExperimentResolved
 )
 
 _DETAIL_TYPES: Final[frozenset[type]] = frozenset(
@@ -2030,6 +2107,7 @@ _DETAIL_TYPES: Final[frozenset[type]] = frozenset(
         RepositoryMaintained,
         RepositoryIndexed,
         RepositoryNeglected,
+        ExperimentResolved,
     }
 )
 
@@ -2046,7 +2124,10 @@ _KNOWLEDGE_REPOSITORY_DETAIL_TYPES: Final[frozenset[type]] = frozenset(
     }
 )
 _KNOWLEDGE_REPOSITORY_EVENT_SCHEMAS: Final[frozenset[int]] = frozenset(
-    {EVENT_SCHEMA_REPLAY_V14}
+    {EVENT_SCHEMA_REPLAY_V14, EVENT_SCHEMA_REPLAY_V15}
+)
+_EXPERIMENT_EVENT_SCHEMAS: Final[frozenset[int]] = frozenset(
+    {EVENT_SCHEMA_REPLAY_V15}
 )
 
 _PRODUCTION_DETAIL_TYPES: Final[frozenset[type]] = frozenset(
@@ -2094,7 +2175,7 @@ _DURABLE_RECORD_DETAIL_TYPES: Final[frozenset[type]] = frozenset(
 )
 
 _DURABLE_RECORD_EVENT_SCHEMAS: Final[frozenset[int]] = frozenset(
-    {EVENT_SCHEMA_REPLAY_V13, EVENT_SCHEMA_REPLAY_V14}
+    {EVENT_SCHEMA_REPLAY_V13, EVENT_SCHEMA_REPLAY_V14, EVENT_SCHEMA_REPLAY_V15}
 )
 
 _LIFECYCLE_DETAIL_TYPES: Final[frozenset[type]] = frozenset(
@@ -2202,6 +2283,8 @@ def _artifact_effect_complete(details: EventDetails) -> bool:
 
 
 def _payload_effect_complete(details: EventDetails, *, schema_version: int) -> bool:
+    if type(details) is ExperimentResolved:
+        return schema_version in _EXPERIMENT_EVENT_SCHEMAS
     if type(details) in _KNOWLEDGE_REPOSITORY_DETAIL_TYPES:
         return schema_version in _KNOWLEDGE_REPOSITORY_EVENT_SCHEMAS
     if type(details) in _KINSHIP_DETAIL_TYPES:
@@ -2451,6 +2534,8 @@ def target_id_for_details(details: EventDetails) -> EntityId | None:
             | RepositoryNeglected(repository_id=repository_id)
         ):
             return repository_id
+        case ExperimentResolved(operand_a_id=operand_a_id):
+            return operand_a_id
         case _:
             raise TypeError(
                 f"{EventValidationCode.UNKNOWN_EVENT_TYPE.value}: "
@@ -2605,6 +2690,15 @@ class WorldEvent:
                 _LOG.error(
                     "invalid_event_schema_version kind=%s schema_version=%s "
                     "reason_code=dependency_care_requires_v12",
+                    self.details.kind,
+                    self.schema_version,
+                )
+                raise ValueError(EventValidationCode.INVALID_SCHEMA_VERSION.value)
+        if type(self.details) is ExperimentResolved:
+            if self.schema_version not in _EXPERIMENT_EVENT_SCHEMAS:
+                _LOG.error(
+                    "invalid_event_schema_version kind=%s schema_version=%s "
+                    "reason_code=experiment_requires_v15",
                     self.details.kind,
                     self.schema_version,
                 )
@@ -2978,6 +3072,22 @@ def build_occurrence_context(
                 origin_location_id=origin_location_id,
                 destination_location_id=destination_location_id,
                 affected_entity_ids=(artifact_id,),
+                private_recipient_ids=(),
+            )
+        case ExperimentResolved(
+            operand_a_id=operand_a_id,
+            operand_b_id=operand_b_id,
+            created_item_id=created_item_id,
+        ):
+            affected = [operand_a_id]
+            if operand_b_id is not None:
+                affected.append(operand_b_id)
+            if created_item_id is not None:
+                affected.append(created_item_id)
+            return OccurrenceContext(
+                origin_location_id=origin_location_id,
+                destination_location_id=None,
+                affected_entity_ids=tuple(affected),
                 private_recipient_ids=(),
             )
         case _:

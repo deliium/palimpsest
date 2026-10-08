@@ -93,6 +93,7 @@ from world.actions import (
     Drop,
     Eat,
     Erase,
+    Experiment,
     EstablishRepository,
     Feed,
     Flee,
@@ -153,7 +154,7 @@ from world.events import (
     EVENT_SCHEMA_REPLAY_V11,
     EVENT_SCHEMA_REPLAY_V12,
     EVENT_SCHEMA_REPLAY_V13,
-    EVENT_SCHEMA_REPLAY_V14,
+    EVENT_SCHEMA_REPLAY_V14, EVENT_SCHEMA_REPLAY_V15,
     AgentCreated,
     AgentEnteredWorld,
     AgentInitializationRecorded,
@@ -172,6 +173,7 @@ from world.events import (
     Dropped,
     Drunk,
     Eaten,
+    ExperimentResolved,
     EnvironmentalHazardEnded,
     EnvironmentalHazardStarted,
     ExposureApplied,
@@ -533,6 +535,7 @@ _COMMAND_TAGS: Final[frozenset[str]] = frozenset(
         "copy_record",
         "annotate_record",
         "damage_record",
+        "experiment",
     }
 )
 
@@ -2509,6 +2512,22 @@ def _encode_command(value: object) -> dict[str, Any]:
                 "entries": [dict(entry) for entry in entries],
                 "repository_id": repository_id.value,
             }
+        case Experiment(
+            operator=operator,
+            operand_a_id=operand_a_id,
+            process_token=process_token,
+            operand_b_id=operand_b_id,
+            hypothesis_id=hypothesis_id,
+        ):
+            payload = {
+                "hypothesis_id": hypothesis_id,
+                "operand_a_id": operand_a_id.value,
+                "operator": operator.value,
+                "process_token": process_token.value,
+            }
+            if operand_b_id is not None:
+                payload["operand_b_id"] = operand_b_id.value
+            return payload
         case _:
             raise DomainSerializationError("unsupported_type", "$")
 
@@ -2779,6 +2798,29 @@ def _decode_command(tag: str, data: dict[str, Any], *, path: str) -> object:
             return IndexRepository(
                 EntityId(_str_field(data, "repository_id", path=path)),
                 tuple(entries),
+            )
+        if tag == "experiment":
+            from world.experimentation import ExperimentOperator, ExperimentProcessToken
+
+            _require_keys(
+                data,
+                {"operator", "operand_a_id", "process_token", "hypothesis_id"},
+                path=path,
+                optional={"operand_b_id"},
+            )
+            operand_b = (
+                _optional_str(data, "operand_b_id", path=path)
+                if "operand_b_id" in data
+                else None
+            )
+            return Experiment(
+                operator=ExperimentOperator(_str_field(data, "operator", path=path)),
+                operand_a_id=EntityId(_str_field(data, "operand_a_id", path=path)),
+                process_token=ExperimentProcessToken(
+                    _str_field(data, "process_token", path=path)
+                ),
+                operand_b_id=None if operand_b is None else EntityId(operand_b),
+                hypothesis_id=_str_field(data, "hypothesis_id", path=path),
             )
     except DomainSerializationError:
         raise
@@ -4914,6 +4956,37 @@ def _encode_event_details(value: object) -> dict[str, Any]:
                 "repository_id": repository_id.value,
                 "success": success,
             }
+        case ExperimentResolved(
+            operator=operator,
+            operand_a_id=operand_a_id,
+            operand_b_id=operand_b_id,
+            process_token=process_token,
+            outcome_class=outcome_class,
+            delta=delta,
+            discovery_mode=discovery_mode,
+            product_id=product_id,
+            health_delta=health_delta,
+            resulting_health=resulting_health,
+            created_item_id=created_item_id,
+        ):
+            payload: dict[str, Any] = {
+                "delta": delta,
+                "discovery_mode": discovery_mode,
+                "health_delta": health_delta,
+                "kind": "experiment_resolved",
+                "operand_a_id": operand_a_id.value,
+                "operator": operator,
+                "outcome_class": outcome_class,
+                "process_token": process_token,
+                "product_id": product_id,
+            }
+            if operand_b_id is not None:
+                payload["operand_b_id"] = operand_b_id.value
+            if resulting_health is not None:
+                payload["resulting_health"] = resulting_health
+            if created_item_id is not None:
+                payload["created_item_id"] = created_item_id.value
+            return payload
         case _:
             raise DomainSerializationError("unsupported_type", "$")
 
@@ -5873,7 +5946,7 @@ def _decode_event_details(
                 EVENT_SCHEMA_REPLAY_V11,
                 EVENT_SCHEMA_REPLAY_V12,
                 EVENT_SCHEMA_REPLAY_V13,
-                EVENT_SCHEMA_REPLAY_V14,
+                EVENT_SCHEMA_REPLAY_V14, EVENT_SCHEMA_REPLAY_V15,
             }:
                 raise DomainSerializationError("invalid_event_schema_version", path)
             return _decode_production_details(kind, fields, path=path)
@@ -5893,7 +5966,7 @@ def _decode_event_details(
                 EVENT_SCHEMA_REPLAY_V11,
                 EVENT_SCHEMA_REPLAY_V12,
                 EVENT_SCHEMA_REPLAY_V13,
-                EVENT_SCHEMA_REPLAY_V14,
+                EVENT_SCHEMA_REPLAY_V14, EVENT_SCHEMA_REPLAY_V15,
             }:
                 raise DomainSerializationError("invalid_event_schema_version", path)
             return _decode_environment_details(kind, fields, path=path)
@@ -5914,7 +5987,7 @@ def _decode_event_details(
                 EVENT_SCHEMA_REPLAY_V11,
                 EVENT_SCHEMA_REPLAY_V12,
                 EVENT_SCHEMA_REPLAY_V13,
-                EVENT_SCHEMA_REPLAY_V14,
+                EVENT_SCHEMA_REPLAY_V14, EVENT_SCHEMA_REPLAY_V15,
             }:
                 raise DomainSerializationError("invalid_event_schema_version", path)
             if kind in {
@@ -5922,7 +5995,8 @@ def _decode_event_details(
                 "artifact_annotated",
                 "artifact_damaged",
                 "artifact_partially_lost",
-            } and schema_version not in {EVENT_SCHEMA_REPLAY_V13, EVENT_SCHEMA_REPLAY_V14}:
+            } and schema_version not in {EVENT_SCHEMA_REPLAY_V13, EVENT_SCHEMA_REPLAY_V14,
+            EVENT_SCHEMA_REPLAY_V15}:
                 raise DomainSerializationError("invalid_event_schema_version", path)
             return _decode_artifact_details(kind, fields, path=path)
         if kind in {
@@ -5936,7 +6010,7 @@ def _decode_event_details(
                 EVENT_SCHEMA_REPLAY_V11,
                 EVENT_SCHEMA_REPLAY_V12,
                 EVENT_SCHEMA_REPLAY_V13,
-                EVENT_SCHEMA_REPLAY_V14,
+                EVENT_SCHEMA_REPLAY_V14, EVENT_SCHEMA_REPLAY_V15,
             }:
                 raise DomainSerializationError("invalid_event_schema_version", path)
             return _decode_lifecycle_details(kind, fields, path=path)
@@ -5946,11 +6020,15 @@ def _decode_event_details(
                 EVENT_SCHEMA_REPLAY_V11,
                 EVENT_SCHEMA_REPLAY_V12,
                 EVENT_SCHEMA_REPLAY_V13,
-                EVENT_SCHEMA_REPLAY_V14,
+                EVENT_SCHEMA_REPLAY_V14, EVENT_SCHEMA_REPLAY_V15,
             }:
                 raise DomainSerializationError("invalid_event_schema_version", path)
             return _decode_lifecycle_details(kind, fields, path=path)
 
+        if kind == "experiment_resolved":
+            if schema_version != EVENT_SCHEMA_REPLAY_V15:
+                raise DomainSerializationError("invalid_event_schema_version", path)
+            return _decode_experiment_resolved(fields, path=path)
         if kind in {
             "repository_established",
             "repository_member_deposited",
@@ -5959,7 +6037,10 @@ def _decode_event_details(
             "repository_indexed",
             "repository_neglected",
         }:
-            if schema_version != EVENT_SCHEMA_REPLAY_V14:
+            if schema_version not in {
+                EVENT_SCHEMA_REPLAY_V14,
+                EVENT_SCHEMA_REPLAY_V15,
+            }:
                 raise DomainSerializationError("invalid_event_schema_version", path)
             return _decode_repository_details(kind, fields, path=path)
         if kind == "kinship_edge_recorded":
@@ -6114,6 +6195,54 @@ def _decode_repository_details(
     raise DomainSerializationError("unknown_type", f"{path}.kind")
 
 
+def _decode_experiment_resolved(
+    fields: dict[str, Any], *, path: str
+) -> ExperimentResolved:
+    _require_keys(
+        fields,
+        {
+            "operator",
+            "operand_a_id",
+            "process_token",
+            "outcome_class",
+            "delta",
+            "discovery_mode",
+            "product_id",
+            "health_delta",
+        },
+        path=path,
+        optional={"operand_b_id", "resulting_health", "created_item_id"},
+    )
+    operand_b = (
+        _optional_str(fields, "operand_b_id", path=path)
+        if "operand_b_id" in fields
+        else None
+    )
+    created = (
+        _optional_str(fields, "created_item_id", path=path)
+        if "created_item_id" in fields
+        else None
+    )
+    resulting = (
+        _float_field(fields, "resulting_health", path=path)
+        if "resulting_health" in fields
+        else None
+    )
+    return ExperimentResolved(
+        operator=_str_field(fields, "operator", path=path),
+        operand_a_id=EntityId(_str_field(fields, "operand_a_id", path=path)),
+        operand_b_id=None if operand_b is None else EntityId(operand_b),
+        process_token=_str_field(fields, "process_token", path=path),
+        outcome_class=_str_field(fields, "outcome_class", path=path),
+        delta=_str_field(fields, "delta", path=path),
+        discovery_mode=_str_field(fields, "discovery_mode", path=path),
+        product_id=_str_field(fields, "product_id", path=path),
+        health_delta=_float_field(fields, "health_delta", path=path),
+        resulting_health=resulting,
+        created_item_id=None if created is None else EntityId(created),
+    )
+
+
 def _encode_world_event(value: WorldEvent) -> dict[str, Any]:
     details_kind = value.details.kind
     if details_kind in {
@@ -6131,7 +6260,7 @@ def _encode_world_event(value: WorldEvent) -> dict[str, Any]:
         EVENT_SCHEMA_REPLAY_V11,
                 EVENT_SCHEMA_REPLAY_V12,
                 EVENT_SCHEMA_REPLAY_V13,
-                EVENT_SCHEMA_REPLAY_V14,
+                EVENT_SCHEMA_REPLAY_V14, EVENT_SCHEMA_REPLAY_V15,
     }:
         raise DomainSerializationError(
             "invalid_event_schema_version",
@@ -6153,7 +6282,7 @@ def _encode_world_event(value: WorldEvent) -> dict[str, Any]:
         EVENT_SCHEMA_REPLAY_V11,
                 EVENT_SCHEMA_REPLAY_V12,
                 EVENT_SCHEMA_REPLAY_V13,
-                EVENT_SCHEMA_REPLAY_V14,
+                EVENT_SCHEMA_REPLAY_V14, EVENT_SCHEMA_REPLAY_V15,
     }:
         raise DomainSerializationError(
             "invalid_event_schema_version",
@@ -6175,7 +6304,7 @@ def _encode_world_event(value: WorldEvent) -> dict[str, Any]:
         EVENT_SCHEMA_REPLAY_V11,
         EVENT_SCHEMA_REPLAY_V12,
         EVENT_SCHEMA_REPLAY_V13,
-                EVENT_SCHEMA_REPLAY_V14,
+                EVENT_SCHEMA_REPLAY_V14, EVENT_SCHEMA_REPLAY_V15,
     }:
         raise DomainSerializationError(
             "invalid_event_schema_version",
@@ -6188,7 +6317,7 @@ def _encode_world_event(value: WorldEvent) -> dict[str, Any]:
         "artifact_partially_lost",
     } and value.schema_version not in {
         EVENT_SCHEMA_REPLAY_V13,
-        EVENT_SCHEMA_REPLAY_V14,
+        EVENT_SCHEMA_REPLAY_V14, EVENT_SCHEMA_REPLAY_V15,
     }:
         raise DomainSerializationError(
             "invalid_event_schema_version",
@@ -6204,7 +6333,7 @@ def _encode_world_event(value: WorldEvent) -> dict[str, Any]:
         EVENT_SCHEMA_REPLAY_V11,
                 EVENT_SCHEMA_REPLAY_V12,
                 EVENT_SCHEMA_REPLAY_V13,
-                EVENT_SCHEMA_REPLAY_V14,
+                EVENT_SCHEMA_REPLAY_V14, EVENT_SCHEMA_REPLAY_V15,
     }:
         raise DomainSerializationError(
             "invalid_event_schema_version",
@@ -6215,7 +6344,7 @@ def _encode_world_event(value: WorldEvent) -> dict[str, Any]:
         EVENT_SCHEMA_REPLAY_V11,
                 EVENT_SCHEMA_REPLAY_V12,
                 EVENT_SCHEMA_REPLAY_V13,
-                EVENT_SCHEMA_REPLAY_V14,
+                EVENT_SCHEMA_REPLAY_V14, EVENT_SCHEMA_REPLAY_V15,
     }:
         raise DomainSerializationError(
             "invalid_event_schema_version",
@@ -6229,7 +6358,18 @@ def _encode_world_event(value: WorldEvent) -> dict[str, Any]:
         "repository_maintained",
         "repository_indexed",
         "repository_neglected",
-    } and value.schema_version != EVENT_SCHEMA_REPLAY_V14:
+    } and value.schema_version not in {
+        EVENT_SCHEMA_REPLAY_V14,
+        EVENT_SCHEMA_REPLAY_V15,
+    }:
+        raise DomainSerializationError(
+            "invalid_event_schema_version",
+            "$.schema_version",
+        )
+    if (
+        details_kind == "experiment_resolved"
+        and value.schema_version != EVENT_SCHEMA_REPLAY_V15
+    ):
         raise DomainSerializationError(
             "invalid_event_schema_version",
             "$.schema_version",
@@ -6407,7 +6547,7 @@ def _decode_world_event(data: dict[str, Any], *, path: str) -> WorldEvent:
             EVENT_SCHEMA_REPLAY_V11,
                 EVENT_SCHEMA_REPLAY_V12,
                 EVENT_SCHEMA_REPLAY_V13,
-                EVENT_SCHEMA_REPLAY_V14,
+                EVENT_SCHEMA_REPLAY_V14, EVENT_SCHEMA_REPLAY_V15,
         }:
             raise DomainSerializationError("unsupported_schema_version", path)
         actor_raw = data["actor_id"]

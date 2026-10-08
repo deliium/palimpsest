@@ -48,20 +48,20 @@ def _event(**overrides: object) -> ObserverEvent:
 
 def test_semantic_table_is_closed() -> None:
     assert tuple(SEMANTIC_TYPE_BY_KIND.values()) == SEMANTIC_EVENT_TYPES
-    assert len(SEMANTIC_EVENT_TYPES) == 53
-    assert SEMANTIC_EVENT_TYPES[-21:-17] == (
+    assert len(SEMANTIC_EVENT_TYPES) == 54
+    assert SEMANTIC_EVENT_TYPES[-22:-18] == (
         "ARTIFACT_CREATED",
         "ARTIFACT_MODIFIED",
         "ARTIFACT_MOVED",
         "ARTIFACT_DESTROYED",
     )
-    assert SEMANTIC_EVENT_TYPES[-17:-13] == (
+    assert SEMANTIC_EVENT_TYPES[-18:-14] == (
         "ARTIFACT_COPIED",
         "ARTIFACT_ANNOTATED",
         "ARTIFACT_DAMAGED",
         "ARTIFACT_PARTIALLY_LOST",
     )
-    assert SEMANTIC_EVENT_TYPES[-13:-6] == (
+    assert SEMANTIC_EVENT_TYPES[-14:-7] == (
         "AGENT_CREATED",
         "AGENT_ENTERED_WORLD",
         "AGENT_INITIALIZED",
@@ -70,13 +70,14 @@ def test_semantic_table_is_closed() -> None:
         "AGENT_FED",
         "AGENT_TRANSPORTED",
     )
-    assert SEMANTIC_EVENT_TYPES[-6:] == (
+    assert SEMANTIC_EVENT_TYPES[-7:] == (
         "REPOSITORY_ESTABLISHED",
         "REPOSITORY_MEMBER_DEPOSITED",
         "REPOSITORY_MEMBER_RETRIEVED",
         "REPOSITORY_MAINTAINED",
         "REPOSITORY_INDEXED",
         "REPOSITORY_NEGLECTED",
+        "EXPERIMENT_RESOLVED",
     )
 
 

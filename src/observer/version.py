@@ -62,6 +62,7 @@ SEMANTIC_EVENT_TYPES: Final[tuple[str, ...]] = (
     "REPOSITORY_MAINTAINED",
     "REPOSITORY_INDEXED",
     "REPOSITORY_NEGLECTED",
+    "EXPERIMENT_RESOLVED",
 )
 
 SEMANTIC_TYPE_BY_KIND: Final[dict[str, str]] = {
@@ -118,6 +119,7 @@ SEMANTIC_TYPE_BY_KIND: Final[dict[str, str]] = {
     "repository_maintained": "REPOSITORY_MAINTAINED",
     "repository_indexed": "REPOSITORY_INDEXED",
     "repository_neglected": "REPOSITORY_NEGLECTED",
+    "experiment_resolved": "EXPERIMENT_RESOLVED",
 }
 
 RELATIONSHIP_DIMENSION_CODES: Final[tuple[str, ...]] = (

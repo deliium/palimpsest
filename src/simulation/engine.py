@@ -267,6 +267,7 @@ class WorldEngine:
         "_config",
         "_engine_id",
         "_environmental_dynamics",
+        "_experiment_catalog",
         "_dependency_care_spec",
         "_dependency_need_registers",
         "_durable_records_spec",
@@ -315,6 +316,7 @@ class WorldEngine:
         dependency_care_spec: object | None = None,
         durable_records_spec: object | None = None,
         knowledge_repositories_spec: object | None = None,
+        experiment_laws: object | None = None,
     ) -> None:
         if type(config) is not SimulationRunConfig:
             raise TypeError("WorldEngine requires SimulationRunConfig")
@@ -377,6 +379,9 @@ class WorldEngine:
             teaching_entity_ids=teaching_entity_ids,
         )
         self._production_catalog = _optional_production_catalog(production_catalog)
+        self._experiment_catalog = _optional_experiment_catalog(
+            experiment_laws, self._production_catalog
+        )
         self._environmental_dynamics = _optional_environmental_dynamics(
             environmental_dynamics
         )
@@ -740,6 +745,11 @@ class WorldEngine:
             teaching_entity_ids=teaching_entity_ids,
         )
         engine._production_catalog = _optional_production_catalog(production_catalog)
+        restored_laws = getattr(snapshot.config, "bounded_experimentation", None)
+        engine._experiment_catalog = _optional_experiment_catalog(
+            None if restored_laws is None else restored_laws.laws,
+            engine._production_catalog,
+        )
         engine._environmental_dynamics = _optional_environmental_dynamics(
             environmental_dynamics
         )
@@ -749,7 +759,7 @@ class WorldEngine:
             artifacts_enabled
             or bool(snapshot.artifacts)
             or snapshot.persistence_codec_version
-            in {"v5", "v6", "v7", "v8", "v9", "v10", "v11"}
+            in {"v5", "v6", "v7", "v8", "v9", "v10", "v11", "v12"}
             or bool(getattr(engine._bootstrap, "artifacts", ()))
         )
         if snapshot.persistence_codec_version in {
@@ -759,6 +769,7 @@ class WorldEngine:
             "v9",
             "v10",
             "v11",
+            "v12",
         }:
             if population_lifecycle is None and snapshot.lifecycle_records:
                 raise ValueError(
@@ -790,7 +801,7 @@ class WorldEngine:
                 engine._new_agent_initialization = new_agent_initialization
             elif (
                 snapshot.persistence_codec_version
-                in {"v7", "v8", "v9", "v10", "v11"}
+                in {"v7", "v8", "v9", "v10", "v11", "v12"}
                 and snapshot.event_schema_version in {10, 11, 12, 13, 14}
             ):
                 # Prefer explicit restore arg; else pull from snapshot config when v25+.
@@ -818,7 +829,7 @@ class WorldEngine:
         engine._durable_records_spec = None
         engine._knowledge_repositories_spec = None
         engine._dependency_need_registers = {}
-        if snapshot.persistence_codec_version in {"v10", "v11"}:
+        if snapshot.persistence_codec_version in {"v10", "v11", "v12"}:
             from simulation.runner_models import DurableRecordsSpec
 
             resolved_durable = getattr(snapshot.config, "durable_records", None)
@@ -832,7 +843,7 @@ class WorldEngine:
                 snapshot.persistence_codec_version,
                 engine._durable_records_spec is not None,
             )
-        if snapshot.persistence_codec_version == "v11":
+        if snapshot.persistence_codec_version in {"v11", "v12"}:
             from simulation.runner_models import KnowledgeRepositoriesSpec
 
             resolved_repos = getattr(snapshot.config, "knowledge_repositories", None)
@@ -853,7 +864,7 @@ class WorldEngine:
                 engine._knowledge_repositories_spec is not None,
                 len(snapshot.repositories),
             )
-        if snapshot.persistence_codec_version in {"v10", "v11"}:
+        if snapshot.persistence_codec_version in {"v10", "v11", "v12"}:
             durable_mode = (
                 engine._durable_records_spec.perception_mode
                 if engine._durable_records_spec is not None
@@ -869,7 +880,7 @@ class WorldEngine:
                     durable_perception_mode=durable_mode,
                     repository_perception_mode=repository_mode,
                 )
-        if snapshot.persistence_codec_version in {"v8", "v9", "v10", "v11"}:
+        if snapshot.persistence_codec_version in {"v8", "v9", "v10", "v11", "v12"}:
             resolved_kinship = kinship_spec
             if resolved_kinship is None:
                 resolved_kinship = getattr(snapshot.config, "kinship", None)
@@ -927,7 +938,7 @@ class WorldEngine:
                     if type(event.details) is KinshipEdgeRecorded
                 ),
             )
-        if snapshot.persistence_codec_version in {"v9", "v10", "v11"}:
+        if snapshot.persistence_codec_version in {"v9", "v10", "v11", "v12"}:
             from simulation.runner_models import DependencyCareSpec
             from world.dependency_care import DependencyNeedRegister
 
@@ -1031,6 +1042,10 @@ class WorldEngine:
         return self._knowledge_repositories_spec is not None
 
     @property
+    def bounded_experimentation_active(self) -> bool:
+        return self._experiment_catalog is not None
+
+    @property
     def knowledge_repositories_spec(self) -> object | None:
         return self._knowledge_repositories_spec
 
@@ -1113,8 +1128,9 @@ class WorldEngine:
                 new_agent_provenance_active=self.new_agent_provenance_active,
                 kinship_active=True,
                 dependency_care_active=self.dependency_care_channel_active,
-            durable_records_active=self.durable_records_channel_active,
-            knowledge_repositories_active=self.knowledge_repositories_channel_active,
+                durable_records_active=self.durable_records_channel_active,
+                knowledge_repositories_active=self.knowledge_repositories_channel_active,
+                bounded_experimentation_active=self.bounded_experimentation_active,
             )
             snap = self._snapshot
             same_tick = [
@@ -1359,6 +1375,7 @@ class WorldEngine:
             dependency_care_active=self.dependency_care_channel_active,
             durable_records_active=self.durable_records_channel_active,
             knowledge_repositories_active=self.knowledge_repositories_channel_active,
+            bounded_experimentation_active=self.bounded_experimentation_active,
         )
         next_registrations = (*self._registrations, registration)
         self._registrations = next_registrations
@@ -3035,6 +3052,7 @@ class WorldEngine:
             dependency_care_context=self._dependency_care_rule_context(),
             durable_records_context=self._durable_records_rule_context(),
             knowledge_repositories_context=self._knowledge_repositories_rule_context(),
+            experiment_catalog=self._experiment_catalog,
         )
         start_ledger = self._skill_ledger
         folded_ledger, skill_facts = self._fold_skill_ledger(
@@ -3327,6 +3345,7 @@ class WorldEngine:
             dependency_care_active=self.dependency_care_channel_active,
             durable_records_active=self.durable_records_channel_active,
             knowledge_repositories_active=self.knowledge_repositories_channel_active,
+            bounded_experimentation_active=self.bounded_experimentation_active,
         )
         prepared = finalize_pending_batch(
             merged,
@@ -5179,6 +5198,7 @@ def select_checkpoint_schema(
     dependency_care_active: bool = False,
     durable_records_active: bool = False,
     knowledge_repositories_active: bool = False,
+    bounded_experimentation_active: bool = False,
 ) -> tuple[int, str]:
     """Return the legal event-schema and codec pair for this run."""
     from simulation.persistence import (
@@ -5195,7 +5215,7 @@ def select_checkpoint_schema(
         EVENT_SCHEMA_REPLAY_V11,
         EVENT_SCHEMA_REPLAY_V12,
         EVENT_SCHEMA_REPLAY_V13,
-        EVENT_SCHEMA_REPLAY_V14,
+        EVENT_SCHEMA_REPLAY_V14, EVENT_SCHEMA_REPLAY_V15,
     )
 
     schema_version, codec = checkpoint_schema_for_production(
@@ -5208,9 +5228,15 @@ def select_checkpoint_schema(
         dependency_care_active=dependency_care_active,
         durable_records_active=durable_records_active,
         knowledge_repositories_active=knowledge_repositories_active,
+        bounded_experimentation_active=bounded_experimentation_active,
     )
     agreed = (
-        knowledge_repositories_active
+        bounded_experimentation_active
+        and schema_version == EVENT_SCHEMA_REPLAY_V15
+        and codec == "v12"
+    ) or (
+        not bounded_experimentation_active
+        and knowledge_repositories_active
         and durable_records_active
         and schema_version == EVENT_SCHEMA_REPLAY_V14
         and codec == "v11"
@@ -5409,6 +5435,23 @@ def _optional_production_catalog(value: object | None) -> object | None:
     if value.recipe_count == 0:
         return None
     return value
+
+
+def _optional_experiment_catalog(
+    laws: object | None, production_catalog: object | None
+) -> object | None:
+    if laws is None:
+        return None
+    if production_catalog is None:
+        raise ValueError("bounded_experimentation_requires_production_catalog")
+    if not isinstance(laws, tuple) or not laws:
+        raise TypeError("experiment_laws must be a non-empty tuple or None")
+    from world._experiment_laws import catalog_from_rows
+    from world.production import ProductionCatalog
+
+    if type(production_catalog) is not ProductionCatalog:
+        raise TypeError("production_catalog must be ProductionCatalog")
+    return catalog_from_rows(laws, production_catalog)
 
 
 def _map_batch_outcome(

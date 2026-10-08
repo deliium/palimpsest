@@ -752,7 +752,9 @@ def _encode_world_snapshot(
             "weather": [_encode_weather(item) for item in value.weather],
             "world_id": value.world_id.value,
         }
-        if value.persistence_codec_version in {"v3", "v4", "v5", "v6", "v7", "v8", "v9", "v10", "v11"}:
+        if value.persistence_codec_version in {"v3", "v4", "v5", "v6", "v7", "v8", "v9", "v10", "v11",
+            "v12",
+        }:
             payload["structures"] = [
                 _encode_structure(item) for item in value.structures
             ]
@@ -762,28 +764,34 @@ def _encode_world_snapshot(
             payload["tool_marks"] = [
                 _encode_tool_mark(item) for item in value.tool_marks
             ]
-        if value.persistence_codec_version in {"v4", "v5", "v6", "v7", "v8", "v9", "v10", "v11"}:
+        if value.persistence_codec_version in {"v4", "v5", "v6", "v7", "v8", "v9", "v10", "v11",
+            "v12",
+        }:
             payload["active_hazards"] = [
                 _encode_active_hazard(item) for item in value.active_hazards
             ]
-        if value.persistence_codec_version in {"v5", "v6", "v7", "v8", "v9", "v10", "v11"}:
+        if value.persistence_codec_version in {"v5", "v6", "v7", "v8", "v9", "v10", "v11",
+            "v12",
+        }:
             payload["artifacts"] = [
                 _encode_information_artifact(item) for item in value.artifacts
             ]
-        if value.persistence_codec_version in {"v6", "v7", "v8", "v9", "v10", "v11"}:
+        if value.persistence_codec_version in {"v6", "v7", "v8", "v9", "v10", "v11",
+            "v12",
+        }:
             payload["lifecycle_records"] = [
                 _encode_lifecycle_record(item) for item in value.lifecycle_records
             ]
-        if value.persistence_codec_version in {"v8", "v9", "v10", "v11"}:
+        if value.persistence_codec_version in {"v8", "v9", "v10", "v11", "v12"}:
             payload["kinship_edges"] = [
                 _encode_kinship_edge(item) for item in value.kinship_edges
             ]
-        if value.persistence_codec_version in {"v9", "v10", "v11"}:
+        if value.persistence_codec_version in {"v9", "v10", "v11", "v12"}:
             payload["dependency_need_registers"] = [
                 _encode_dependency_need_register(item)
                 for item in value.dependency_need_registers
             ]
-        if value.persistence_codec_version == "v11":
+        if value.persistence_codec_version in {"v11", "v12"}:
             payload["repositories"] = [
                 _encode_knowledge_repository(item) for item in value.repositories
             ]
@@ -827,19 +835,19 @@ def _decode_world_snapshot(data: dict[str, Any], *, path: str) -> WorldSnapshot:
         "integrity_hash",
         "predecessor_commit_hash",
     }
-    if codec in {"v3", "v4", "v5", "v6", "v7", "v8", "v9", "v10", "v11"}:
+    if codec in {"v3", "v4", "v5", "v6", "v7", "v8", "v9", "v10", "v11", "v12"}:
         keys |= {"structures", "production_jobs", "tool_marks"}
-    if codec in {"v4", "v5", "v6", "v7", "v8", "v9", "v10", "v11"}:
+    if codec in {"v4", "v5", "v6", "v7", "v8", "v9", "v10", "v11", "v12"}:
         keys.add("active_hazards")
-    if codec in {"v5", "v6", "v7", "v8", "v9", "v10", "v11"}:
+    if codec in {"v5", "v6", "v7", "v8", "v9", "v10", "v11", "v12"}:
         keys.add("artifacts")
-    if codec in {"v6", "v7", "v8", "v9", "v10", "v11"}:
+    if codec in {"v6", "v7", "v8", "v9", "v10", "v11", "v12"}:
         keys.add("lifecycle_records")
-    if codec in {"v8", "v9", "v10", "v11"}:
+    if codec in {"v8", "v9", "v10", "v11", "v12"}:
         keys.add("kinship_edges")
-    if codec in {"v9", "v10", "v11"}:
+    if codec in {"v9", "v10", "v11", "v12"}:
         keys.add("dependency_need_registers")
-    if codec == "v11":
+    if codec in {"v11", "v12"}:
         keys.add("repositories")
     _require_keys(data, keys, path=path)
     config_raw = data["config"]
@@ -897,61 +905,61 @@ def _decode_world_snapshot(data: dict[str, Any], *, path: str) -> WorldSnapshot:
             structures=_decode_object_list(
                 data["structures"], _decode_structure, path=f"{path}.structures"
             )
-            if codec in {"v3", "v4", "v5", "v6", "v7", "v8", "v9", "v10", "v11"}
+            if codec in {"v3", "v4", "v5", "v6", "v7", "v8", "v9", "v10", "v11", "v12"}
             else (),
             production_jobs=_decode_object_list(
                 data["production_jobs"],
                 _decode_production_job,
                 path=f"{path}.production_jobs",
             )
-            if codec in {"v3", "v4", "v5", "v6", "v7", "v8", "v9", "v10", "v11"}
+            if codec in {"v3", "v4", "v5", "v6", "v7", "v8", "v9", "v10", "v11", "v12"}
             else (),
             tool_marks=_decode_object_list(
                 data["tool_marks"], _decode_tool_mark, path=f"{path}.tool_marks"
             )
-            if codec in {"v3", "v4", "v5", "v6", "v7", "v8", "v9", "v10", "v11"}
+            if codec in {"v3", "v4", "v5", "v6", "v7", "v8", "v9", "v10", "v11", "v12"}
             else (),
             active_hazards=_decode_object_list(
                 data["active_hazards"],
                 _decode_active_hazard,
                 path=f"{path}.active_hazards",
             )
-            if codec in {"v4", "v5", "v6", "v7", "v8", "v9", "v10", "v11"}
+            if codec in {"v4", "v5", "v6", "v7", "v8", "v9", "v10", "v11", "v12"}
             else (),
             artifacts=_decode_object_list(
                 data["artifacts"],
                 _decode_information_artifact,
                 path=f"{path}.artifacts",
             )
-            if codec in {"v5", "v6", "v7", "v8", "v9", "v10", "v11"}
+            if codec in {"v5", "v6", "v7", "v8", "v9", "v10", "v11", "v12"}
             else (),
             lifecycle_records=_decode_object_list(
                 data["lifecycle_records"],
                 _decode_lifecycle_record,
                 path=f"{path}.lifecycle_records",
             )
-            if codec in {"v6", "v7", "v8", "v9", "v10", "v11"}
+            if codec in {"v6", "v7", "v8", "v9", "v10", "v11", "v12"}
             else (),
             kinship_edges=_decode_object_list(
                 data["kinship_edges"],
                 _decode_kinship_edge,
                 path=f"{path}.kinship_edges",
             )
-            if codec in {"v8", "v9", "v10", "v11"}
+            if codec in {"v8", "v9", "v10", "v11", "v12"}
             else (),
             dependency_need_registers=_decode_object_list(
                 data["dependency_need_registers"],
                 _decode_dependency_need_register,
                 path=f"{path}.dependency_need_registers",
             )
-            if codec in {"v9", "v10", "v11"}
+            if codec in {"v9", "v10", "v11", "v12"}
             else (),
             repositories=_decode_object_list(
                 data["repositories"],
                 _decode_knowledge_repository,
                 path=f"{path}.repositories",
             )
-            if codec == "v11"
+            if codec in {"v11", "v12"}
             else (),
         )
     except PersistenceSerializationError:
@@ -959,7 +967,7 @@ def _decode_world_snapshot(data: dict[str, Any], *, path: str) -> WorldSnapshot:
     except (TypeError, ValueError) as exc:
         raise PersistenceSerializationError("malformed_id", path) from exc
     # Dual-key ≤v10 synthesizes empty repositories; v11 logs custody counts.
-    if codec == "v11":
+    if codec in {"v11", "v12"}:
         custody = sum(
             1
             for item in snapshot.artifacts

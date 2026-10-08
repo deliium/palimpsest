@@ -359,6 +359,8 @@ protected_modules = [
     "world._rules",
     "world._replay",
     "world._physical",
+    "world._experiment_laws",
+    "world._experiment_apply",
 ]
 allowed_importers = [
     "simulation.engine",
@@ -370,6 +372,8 @@ allowed_importers = [
     "world._rules",
     "world._replay",
     "world._physical",
+    "world._experiment_laws",
+    "world._experiment_apply",
 ]
 as_packages = true
 
@@ -615,5 +619,7 @@ forbidden_modules = [
     "world._replay",
     "world._perception",
     "world._physical",
+    "world._experiment_laws",
+    "world._experiment_apply",
 ]
 

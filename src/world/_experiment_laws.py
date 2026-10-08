@@ -167,6 +167,7 @@ class ExperimentLawCatalog:
             seen.add(law.match_key)
             rows.append(law)
         self._laws = tuple(rows)
+        self.production_catalog = production_catalog
         _LOG.debug(
             "experiment_law_catalog_built law_count=%s",
             len(self._laws),
@@ -216,3 +217,27 @@ class ExperimentLawCatalog:
             ExperimentOutcomeClass.FAILURE.value,
         )
         return _failure()
+
+
+def catalog_from_rows(
+    rows: Sequence[object], production_catalog: ProductionCatalog
+) -> ExperimentLawCatalog:
+    """Build a private catalog from closed string rows. Engine-only."""
+    laws: list[ExperimentLaw] = []
+    for row in rows:
+        laws.append(
+            ExperimentLaw(
+                operator=ExperimentOperator(getattr(row, "operator")),
+                operand_a_kind=str(getattr(row, "operand_a_kind")),
+                operand_b_kind=str(getattr(row, "operand_b_kind")),
+                process_token=ExperimentProcessToken(getattr(row, "process_token")),
+                outcome_class=ExperimentOutcomeClass(getattr(row, "outcome_class")),
+                delta=ExperimentDeltaKind(getattr(row, "delta")),
+                product_id=str(getattr(row, "product_id")),
+                harm_band=ExperimentHarmBand(getattr(row, "harm_band")),
+                public_technique_token=str(
+                    getattr(row, "public_technique_token", "")
+                ),
+            )
+        )
+    return ExperimentLawCatalog(laws, production_catalog)

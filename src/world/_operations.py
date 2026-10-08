@@ -29,6 +29,7 @@ from world.actions import (
     Drop,
     Eat,
     Erase,
+    Experiment,
     EstablishRepository,
     Feed,
     Flee,
@@ -442,6 +443,19 @@ class _IndexRepositoryOp:
     entries: tuple[Mapping[str, object], ...]
 
 
+@dataclass(frozen=True, slots=True)
+class _ExperimentOp:
+    request_id: RequestId
+    actor_id: EntityId
+    world_id: WorldId
+    base_revision: WorldRevision
+    operator: object
+    operand_a_id: EntityId
+    process_token: object
+    operand_b_id: EntityId | None
+    hypothesis_id: str
+
+
 ValidatedWorldOperation = (
     _MoveOp
     | _SearchOp
@@ -477,6 +491,7 @@ ValidatedWorldOperation = (
     | _RetrieveRecordOp
     | _MaintainRepositoryOp
     | _IndexRepositoryOp
+    | _ExperimentOp
 )
 
 _OPERATION_TYPES: Final[frozenset[type]] = frozenset(
@@ -515,6 +530,7 @@ _OPERATION_TYPES: Final[frozenset[type]] = frozenset(
         _RetrieveRecordOp,
         _MaintainRepositoryOp,
         _IndexRepositoryOp,
+        _ExperimentOp,
     }
 )
 
@@ -890,6 +906,23 @@ def validate_action_request(
                     *base, repository_id=repository_id, entries=entries
                 )
             )
+        case Experiment(
+            operator=operator,
+            operand_a_id=operand_a_id,
+            process_token=process_token,
+            operand_b_id=operand_b_id,
+            hypothesis_id=hypothesis_id,
+        ):
+            return OperationAccepted(
+                _ExperimentOp(
+                    *base,
+                    operator=operator,
+                    operand_a_id=operand_a_id,
+                    process_token=process_token,
+                    operand_b_id=operand_b_id,
+                    hypothesis_id=hypothesis_id,
+                )
+            )
         case _:
             return OperationRejected(
                 code=RejectionCode.MALFORMED_ENVELOPE, request_id=request_id
@@ -1096,6 +1129,7 @@ def prepare_action_batch(
     dependency_care_context: object | None = None,
     durable_records_context: object | None = None,
     knowledge_repositories_context: object | None = None,
+    experiment_catalog: object | None = None,
 ) -> PendingBatch:
     """Resolve ordered requests into pending effects against one evolving state.
 
@@ -1254,6 +1288,7 @@ def prepare_action_batch(
             dependency_care_context=care_context,
             durable_records_context=durable_context,
             knowledge_repositories_context=repository_context,
+            experiment_catalog=experiment_catalog,
         )
         if start_rule.disposition is RuleDisposition.REJECT:
             if start_rule.action_kind in {"feed", "transport"}:
@@ -1341,6 +1376,7 @@ def prepare_action_batch(
             dependency_care_context=care_context,
             durable_records_context=durable_context,
             knowledge_repositories_context=repository_context,
+            experiment_catalog=experiment_catalog,
         )
         if application.result.disposition is RuleDisposition.REJECT:
             outcomes.append(

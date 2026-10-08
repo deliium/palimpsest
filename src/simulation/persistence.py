@@ -52,7 +52,7 @@ from world.events import (
     EVENT_SCHEMA_REPLAY_V11,
     EVENT_SCHEMA_REPLAY_V12,
     EVENT_SCHEMA_REPLAY_V13,
-    EVENT_SCHEMA_REPLAY_V14,
+    EVENT_SCHEMA_REPLAY_V14, EVENT_SCHEMA_REPLAY_V15,
     WorldEvent,
     normalize_events,
 )
@@ -88,12 +88,12 @@ ACCEPTED_EVENT_SCHEMA_VERSIONS: Final[frozenset[int]] = frozenset(
         EVENT_SCHEMA_REPLAY_V11,
         EVENT_SCHEMA_REPLAY_V12,
         EVENT_SCHEMA_REPLAY_V13,
-        EVENT_SCHEMA_REPLAY_V14,
+        EVENT_SCHEMA_REPLAY_V14, EVENT_SCHEMA_REPLAY_V15,
     }
 )
 ACCEPTED_PROJECTOR_VERSIONS: Final[frozenset[str]] = frozenset({"v1", "v2"})
 ACCEPTED_PERSISTENCE_CODEC_VERSIONS: Final[frozenset[str]] = frozenset(
-    {"v1", "v2", "v3", "v4", "v5", "v6", "v7", "v8", "v9", "v10", "v11"}
+    {"v1", "v2", "v3", "v4", "v5", "v6", "v7", "v8", "v9", "v10", "v11", "v12"}
 )
 
 _SHA256_HEX_RE: Final[re.Pattern[str]] = re.compile(r"^[0-9a-f]{64}$")
@@ -192,6 +192,7 @@ def checkpoint_schema_for_production(
     dependency_care_active: bool = False,
     durable_records_active: bool = False,
     knowledge_repositories_active: bool = False,
+    bounded_experimentation_active: bool = False,
 ) -> tuple[int, str]:
     """Choose the checkpoint schema for this run.
 
@@ -202,7 +203,9 @@ def checkpoint_schema_for_production(
     else dynamics → ``(v7, v4)``; else production → ``(v6, v3)``; else
     replay-v5 / codec ``v2``.
     """
-    if knowledge_repositories_active and durable_records_active:
+    if bounded_experimentation_active:
+        pair = EVENT_SCHEMA_REPLAY_V15, "v12"
+    elif knowledge_repositories_active and durable_records_active:
         pair = EVENT_SCHEMA_REPLAY_V14, "v11"
     elif durable_records_active:
         pair = EVENT_SCHEMA_REPLAY_V13, "v10"
@@ -303,7 +306,7 @@ def schema_projector_compatible(
         EVENT_SCHEMA_REPLAY_V11,
         EVENT_SCHEMA_REPLAY_V12,
         EVENT_SCHEMA_REPLAY_V13,
-        EVENT_SCHEMA_REPLAY_V14,
+        EVENT_SCHEMA_REPLAY_V14, EVENT_SCHEMA_REPLAY_V15,
     }:
         return projector_version == "v2"
     return False
@@ -631,17 +634,23 @@ class WorldSnapshot:
                     "codec_schema_mismatch reason_code=codec_v11_requires_schema_14"
                 )
                 raise ValueError("codec v11 requires event schema 14")
+        elif self.persistence_codec_version == "v12":
+            if self.event_schema_version != EVENT_SCHEMA_REPLAY_V15:
+                _LOG.error(
+                    "codec_schema_mismatch reason_code=codec_v12_requires_schema_15"
+                )
+                raise ValueError("codec v12 requires event schema 15")
         elif self.structures or self.production_jobs or self.tool_marks:
             raise ValueError("production checkpoint fields require codec v3")
         if (
             self.persistence_codec_version
-            not in {"v4", "v5", "v6", "v7", "v8", "v9", "v10", "v11"}
+            not in {"v4", "v5", "v6", "v7", "v8", "v9", "v10", "v11", "v12"}
             and self.active_hazards
         ):
             raise ValueError("active_hazards require codec v4")
         if (
             self.persistence_codec_version
-            not in {"v5", "v6", "v7", "v8", "v9", "v10", "v11"}
+            not in {"v5", "v6", "v7", "v8", "v9", "v10", "v11", "v12"}
             and self.artifacts
         ):
             _LOG.error(
@@ -659,7 +668,9 @@ class WorldSnapshot:
             records.append(raw)
         object.__setattr__(self, "lifecycle_records", tuple(records))
         if (
-            self.persistence_codec_version not in {"v6", "v7", "v8", "v9", "v10", "v11"}
+            self.persistence_codec_version not in {"v6", "v7", "v8", "v9", "v10", "v11",
+                "v12",
+            }
             and records
         ):
             _LOG.error(
@@ -677,7 +688,7 @@ class WorldSnapshot:
             kinship_rows.append(raw)
         object.__setattr__(self, "kinship_edges", tuple(kinship_rows))
         if (
-            self.persistence_codec_version not in {"v8", "v9", "v10", "v11"}
+            self.persistence_codec_version not in {"v8", "v9", "v10", "v11", "v12"}
             and kinship_rows
         ):
             _LOG.error(
@@ -694,7 +705,9 @@ class WorldSnapshot:
                 )
             need_rows.append(raw)
         object.__setattr__(self, "dependency_need_registers", tuple(need_rows))
-        if self.persistence_codec_version not in {"v9", "v10", "v11"} and need_rows:
+        if self.persistence_codec_version not in {"v9", "v10", "v11",
+            "v12",
+        } and need_rows:
             _LOG.error(
                 "codec_schema_mismatch "
                 "reason_code=dependency_need_registers_require_codec_v9"
@@ -708,13 +721,15 @@ class WorldSnapshot:
                 raise TypeError("repositories entries must be KnowledgeRepository")
             repo_rows.append(raw)
         object.__setattr__(self, "repositories", tuple(repo_rows))
-        if self.persistence_codec_version != "v11" and repo_rows:
+        if self.persistence_codec_version not in {"v11", "v12"} and repo_rows:
             _LOG.error(
                 "codec_schema_mismatch "
                 "reason_code=repositories_require_codec_v11"
             )
             raise ValueError("repositories require codec v11")
-        if self.persistence_codec_version in {"v6", "v7", "v8", "v9", "v10", "v11"}:
+        if self.persistence_codec_version in {"v6", "v7", "v8", "v9", "v10", "v11",
+            "v12",
+        }:
             custody_count = sum(
                 1
                 for artifact in self.artifacts

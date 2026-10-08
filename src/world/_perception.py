@@ -40,6 +40,7 @@ from world.events import (
     ArtifactPartiallyLost,
     Asked,
     CraftStarted,
+    ExperimentResolved,
     ItemCrafted,
     ItemStored,
     ResourceHarvested,
@@ -750,6 +751,17 @@ def _project_event_window(
         )
         if role is None:
             continue
+        if type(event.details) is ExperimentResolved:
+            viewer = (
+                "actor"
+                if role is ObservationAudienceRole.ACTOR
+                else "bystander"
+            )
+            _LOG.debug(
+                "experiment_occurrence_projected viewer_role=%s outcome_class=%s",
+                viewer,
+                event.details.outcome_class,
+            )
         occurrences.append(
             ObservedOccurrence(
                 provenance=ObservationProvenance(
@@ -846,6 +858,12 @@ def _other_entity_for_role(
 
 def _success_fact(event: WorldEvent) -> bool | None:
     details = event.details
+    if type(details) is ExperimentResolved:
+        if details.outcome_class in {"success", "partial_success"}:
+            return True
+        if details.outcome_class in {"failure", "harm"}:
+            return False
+        return None
     success = getattr(details, "success", None)
     if type(success) is bool:
         return success
@@ -858,6 +876,9 @@ def _success_fact(event: WorldEvent) -> bool | None:
 def _public_facts_for_role(
     event: WorldEvent, role: ObservationAudienceRole
 ) -> dict[str, object]:
+    experiment_facts = _experiment_public_facts(event, role)
+    if experiment_facts is not None:
+        return experiment_facts
     artifact_facts = _artifact_public_facts(event)
     if artifact_facts is not None:
         # Artifact occurrences expose only identity/revision — never marks.
@@ -874,6 +895,23 @@ def _public_facts_for_role(
         facts["target_id"] = event.target_id.value
     if recipe_id is not None and role is ObservationAudienceRole.ACTOR:
         facts["recipe_id"] = recipe_id
+    return facts
+
+
+def _experiment_public_facts(
+    event: WorldEvent, role: ObservationAudienceRole
+) -> dict[str, object] | None:
+    details = event.details
+    if type(details) is not ExperimentResolved:
+        return None
+    facts: dict[str, object] = {
+        "kind": event.event_type,
+        "outcome_class": details.outcome_class,
+        "delta": details.delta,
+    }
+    if role is ObservationAudienceRole.ACTOR:
+        facts["operator"] = details.operator
+        facts["discovery_mode"] = details.discovery_mode
     return facts
 
 

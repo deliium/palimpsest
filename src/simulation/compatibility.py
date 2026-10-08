@@ -88,7 +88,11 @@ from simulation.runner_models import (
     SUPPORTED_RESULT_SCHEMA_VERSIONS,
     SUPPORTED_RUNNER_SCHEMA_VERSIONS,
 )
-from world.events import EVENT_SCHEMA_REPLAY_V13, EVENT_SCHEMA_REPLAY_V14
+from world.events import (
+    EVENT_SCHEMA_REPLAY_V13,
+    EVENT_SCHEMA_REPLAY_V14,
+    EVENT_SCHEMA_REPLAY_V15,
+)
 from simulation.subjective_serialization import SUBJECTIVE_SCHEMA_VERSION
 
 _LOG: Final[logging.Logger] = logging.getLogger("simulation.compatibility")
@@ -424,7 +428,9 @@ _MATRIX: dict[str, CompatibilityEntry] = {
             "cultural_historical_memory accepts {v31,v32,v33,v34,v35,v36}; "
             "durable_records accepts {v33,v34,v35,v36}; "
             "knowledge_repositories accepts {v34,v35,v36}; "
-            "knowledge_genealogy accepts {v35,v36}); "
+            "knowledge_genealogy accepts {v35,v36}; "
+            f"write-pair (EVENT_SCHEMA_REPLAY_V15={EVENT_SCHEMA_REPLAY_V15}, "
+            "codec v12) when bounded experimentation is active); "
             "mode allowlists that top out at v34 widen to accept v35; "
             "cultural_historical_memory accepts {v31,v32,v33,v34,v35}; "
             "durable_records accepts {v33,v34,v35}; "

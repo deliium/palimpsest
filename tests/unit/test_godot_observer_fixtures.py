@@ -94,6 +94,7 @@ _REPOSITORY_EVENT_NAMES = frozenset(
         "REPOSITORY_NEGLECTED",
     }
 )
+_EXPERIMENT_EVENT_NAMES = frozenset({"EXPERIMENT_RESOLVED"})
 
 
 def test_event_fixtures_cover_closed_semantic_types() -> None:
@@ -107,6 +108,7 @@ def test_event_fixtures_cover_closed_semantic_types() -> None:
             | _ARTIFACT_EVENT_NAMES
             | _LIFECYCLE_EVENT_NAMES
             | _REPOSITORY_EVENT_NAMES
+            | _EXPERIMENT_EVENT_NAMES
         )
     )
     assert names == expected

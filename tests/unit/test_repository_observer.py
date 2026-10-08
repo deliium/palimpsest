@@ -50,8 +50,8 @@ _EMPTY_LAYOUT = catalog_from_mapping(
 
 def test_semantic_catalog_appends_six_repository_types() -> None:
     assert OBSERVER_PROTOCOL_VERSION == "observer-protocol-v1"
-    assert len(SEMANTIC_EVENT_TYPES) == 53
-    assert SEMANTIC_EVENT_TYPES[-6:] == _REPOSITORY_SEMANTIC
+    assert len(SEMANTIC_EVENT_TYPES) == 54
+    assert SEMANTIC_EVENT_TYPES[-7:-1] == _REPOSITORY_SEMANTIC
     for name in _REPOSITORY_SEMANTIC:
         assert name in SEMANTIC_EVENT_TYPES
 

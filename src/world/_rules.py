@@ -30,6 +30,7 @@ from world._operations import (
     _EatOp,
     _EraseOp,
     _EstablishRepositoryOp,
+    _ExperimentOp,
     _FeedOp,
     _FleeOp,
     _GiveOp,
@@ -234,6 +235,7 @@ class RuleReason(StrEnum):
     REPOSITORY_MEMBER_DESTROYED = "repository_member_destroyed"
     REPOSITORY_RETRIEVE_HOLD_INVALID = "repository_retrieve_hold_invalid"
     UNKNOWN_REPOSITORY = "unknown_repository"
+    EXPERIMENT_CHANNEL_OFF = "experiment_channel_off"
 
 
 @dataclass(frozen=True, slots=True)
@@ -543,6 +545,13 @@ COMMAND_RULE_MATRIX: Final[dict[type, CommandRulePolicy]] = {
         requires_living_actor=True,
         notes="append/replace imperfect index entries",
     ),
+    _ExperimentOp: CommandRulePolicy(
+        disposition=RuleDisposition.MUTATE,
+        emits_event_when_applied=True,
+        mutates_state_when_applied=True,
+        requires_living_actor=True,
+        notes="closed law outcome; failure still emits experiment_resolved",
+    ),
 }
 
 _OPERATION_KIND: Final[dict[type, str]] = {
@@ -580,6 +589,7 @@ _OPERATION_KIND: Final[dict[type, str]] = {
     _RetrieveRecordOp: "retrieve_record",
     _MaintainRepositoryOp: "maintain_repository",
     _IndexRepositoryOp: "index_repository",
+    _ExperimentOp: "experiment",
 }
 
 _SEARCH_RESOURCE_KINDS: Final[frozenset[ResourceKind]] = frozenset(
@@ -604,6 +614,7 @@ def evaluate_operation(
     dependency_care_context: object | None = None,
     durable_records_context: object | None = None,
     knowledge_repositories_context: object | None = None,
+    experiment_catalog: object | None = None,
 ) -> RuleResult:
     """Evaluate a validated operation against an immutable snapshot.
 
@@ -869,6 +880,15 @@ def evaluate_operation(
         case _IndexRepositoryOp():
             return _evaluate_index_repository(
                 state, operation, kind, repository_context=repository_context
+            )
+        case _ExperimentOp():
+            return _evaluate_experiment(
+                state,
+                operation,
+                kind,
+                catalog=experiment_catalog,
+                rules=physical_rules,
+                tick=tick,
             )
         case _WaitOp():
             return RuleResult(
@@ -2654,6 +2674,7 @@ def apply_operation(
     dependency_care_context: object | None = None,
     durable_records_context: object | None = None,
     knowledge_repositories_context: object | None = None,
+    experiment_catalog: object | None = None,
 ) -> RuleApplication:
     """Evaluate then apply immutable physical or event-only effects.
 
@@ -2682,6 +2703,7 @@ def apply_operation(
         dependency_care_context=dependency_care_context,
         durable_records_context=durable_context,
         knowledge_repositories_context=repository_context,
+        experiment_catalog=experiment_catalog,
     )
     if result.disposition in {
         RuleDisposition.REJECT,
@@ -2772,6 +2794,15 @@ def apply_operation(
         )
     if type(operation) is _IndexRepositoryOp:
         return _apply_index_repository(state, operation, result=result)
+    if type(operation) is _ExperimentOp:
+        return _apply_experiment(
+            state,
+            operation,
+            result=result,
+            rules=physical_rules,
+            tick=0 if tick is None else tick,
+            experiment_catalog=experiment_catalog,
+        )
     if type(operation) is _FleeOp:
         return _apply_flee(
             state,
@@ -4364,6 +4395,100 @@ def _apply_index_repository(
             revision_bump=1,
         ),
     )
+
+def _evaluate_experiment(
+    state: WorldState,
+    operation: _ExperimentOp,
+    kind: str,
+    *,
+    catalog: object | None,
+    rules: PhysicalRules,
+    tick: int | None,
+) -> RuleResult:
+    from world._experiment_apply import require_experiment_catalog, resolve_experiment
+    from world.experimentation import ExperimentOperator, ExperimentProcessToken
+
+    typed = require_experiment_catalog(catalog)
+    if typed is None:
+        _OPS_LOG.debug(
+            "experiment_admission_rejected actor_id=%s reason_code=%s",
+            operation.actor_id.value,
+            RuleReason.EXPERIMENT_CHANNEL_OFF.value,
+        )
+        return _reject(kind, RuleReason.EXPERIMENT_CHANNEL_OFF)
+    if type(operation.operator) is not ExperimentOperator:
+        raise TypeError("experiment operator must be ExperimentOperator")
+    if type(operation.process_token) is not ExperimentProcessToken:
+        raise TypeError("experiment process_token must be ExperimentProcessToken")
+    application = resolve_experiment(
+        state,
+        actor_id=operation.actor_id,
+        operator=operation.operator,
+        operand_a_id=operation.operand_a_id,
+        operand_b_id=operation.operand_b_id,
+        process_token=operation.process_token,
+        hypothesis_id=operation.hypothesis_id,
+        catalog=typed,
+        rules_hunger_damage=rules.hunger_damage,
+        rules_attack_damage_min=rules.attack_damage_min,
+        tick=0 if tick is None else tick,
+        request_token=operation.request_id.value,
+        log=False,
+    )
+    if application.mutates:
+        return RuleResult(
+            disposition=RuleDisposition.MUTATE,
+            reason=RuleReason.OCCURRENCE,
+            emits_event=True,
+            mutates_state=True,
+            action_kind=kind,
+        )
+    return RuleResult(
+        disposition=RuleDisposition.EVENT_ONLY,
+        reason=RuleReason.OCCURRENCE,
+        emits_event=True,
+        mutates_state=False,
+        action_kind=kind,
+    )
+
+
+def _apply_experiment(
+    state: WorldState,
+    operation: _ExperimentOp,
+    *,
+    result: RuleResult,
+    rules: PhysicalRules,
+    tick: int,
+    experiment_catalog: object | None,
+) -> RuleApplication:
+    from world._experiment_apply import require_experiment_catalog, resolve_experiment
+    from world.experimentation import ExperimentOperator, ExperimentProcessToken
+
+    typed = require_experiment_catalog(experiment_catalog)
+    if typed is None:
+        raise ValueError("experiment apply requires a law catalog")
+    assert type(operation.operator) is ExperimentOperator
+    assert type(operation.process_token) is ExperimentProcessToken
+    application = resolve_experiment(
+        state,
+        actor_id=operation.actor_id,
+        operator=operation.operator,
+        operand_a_id=operation.operand_a_id,
+        operand_b_id=operation.operand_b_id,
+        process_token=operation.process_token,
+        hypothesis_id=operation.hypothesis_id,
+        catalog=typed,
+        rules_hunger_damage=rules.hunger_damage,
+        rules_attack_damage_min=rules.attack_damage_min,
+        tick=tick,
+        request_token=operation.request_id.value,
+    )
+    return RuleApplication(
+        result=result,
+        next_state=application.next_state,
+        event_details=application.details,
+    )
+
 
 def _require_durable_records_context(
     value: object | None,

@@ -25,8 +25,8 @@ pytestmark = pytest.mark.unit
 _ROOT = Path(__file__).resolve().parents[2]
 
 
-def test_semantic_event_count_is_53() -> None:
-    assert len(SEMANTIC_EVENT_TYPES) == 53
+def test_semantic_event_count_is_54() -> None:
+    assert len(SEMANTIC_EVENT_TYPES) == 54
     assert "REPOSITORY_ESTABLISHED" in SEMANTIC_EVENT_TYPES
     assert "REPOSITORY_MEMBER_DEPOSITED" in SEMANTIC_EVENT_TYPES
     assert "REPOSITORY_MEMBER_RETRIEVED" in SEMANTIC_EVENT_TYPES

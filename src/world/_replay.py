@@ -47,7 +47,7 @@ from world.events import (
     EVENT_SCHEMA_REPLAY_V11,
     EVENT_SCHEMA_REPLAY_V12,
     EVENT_SCHEMA_REPLAY_V13,
-    EVENT_SCHEMA_REPLAY_V14,
+    EVENT_SCHEMA_REPLAY_V14, EVENT_SCHEMA_REPLAY_V15,
     AgentCreated,
     AgentEnteredWorld,
     AgentInitializationRecorded,
@@ -68,6 +68,7 @@ from world.events import (
     Eaten,
     EnvironmentalHazardEnded,
     EnvironmentalHazardStarted,
+    ExperimentResolved,
     ExposureApplied,
     Fled,
     Fed,
@@ -347,7 +348,7 @@ def _prepare_events(
             EVENT_SCHEMA_REPLAY_V11,
             EVENT_SCHEMA_REPLAY_V12,
             EVENT_SCHEMA_REPLAY_V13,
-            EVENT_SCHEMA_REPLAY_V14,
+            EVENT_SCHEMA_REPLAY_V14, EVENT_SCHEMA_REPLAY_V15,
         }:
             raise ProjectionError(ProjectionErrorCode.UNSUPPORTED_SCHEMA)
     return normalized, schema_version, run_id
@@ -610,6 +611,10 @@ def _apply_event_effect(
             return _project_repository_indexed(state, event, indexed), True
         case RepositoryNeglected() as neglected:
             return _project_repository_neglected(state, event, neglected), True
+        case ExperimentResolved() as experiment:
+            return _project_experiment(
+                state, event, experiment, production_catalog
+            )
         case _:
             raise ProjectionError(ProjectionErrorCode.PRECONDITION_FAILED)
 
@@ -2021,6 +2026,26 @@ def _project_item_stored(
         )
     except ValueError as exc:
         raise ProjectionError(ProjectionErrorCode.INVARIANT_FAILED) from exc
+
+
+def _project_experiment(
+    state: WorldState,
+    event: WorldEvent,
+    details: ExperimentResolved,
+    catalog: ProductionCatalog | None,
+) -> tuple[WorldState, bool]:
+    from world._experiment_apply import project_experiment_resolved
+
+    try:
+        next_state = project_experiment_resolved(
+            state,
+            details,
+            actor_id=event.actor_id,
+            production_catalog=catalog,
+        )
+    except ValueError as exc:
+        raise ProjectionError(ProjectionErrorCode.INVARIANT_FAILED) from exc
+    return next_state, next_state is not state
 
 
 def _copy_body(body: AgentBody, *, inventory: tuple[EntityId, ...]) -> AgentBody:
