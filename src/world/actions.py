@@ -7,6 +7,7 @@ world validation step promotes a request to an authority-bearing operation.
 from __future__ import annotations
 
 import logging
+import re
 from collections.abc import Mapping
 from dataclasses import InitVar, dataclass, field
 from enum import StrEnum
@@ -23,6 +24,7 @@ from world.artifacts import (
     require_durable_record_genre,
 )
 from world.communications import StructuredUtterance, confidence_band
+from world.experimentation import ExperimentOperator, ExperimentProcessToken
 from world.identifiers import (
     EntityId,
     ProposalId,
@@ -34,6 +36,8 @@ from world.identifiers import (
 from world.production import require_production_command_fields
 
 _ARTIFACT_LOG: Final[logging.Logger] = logging.getLogger("world.artifacts")
+_EXPERIMENT_LOG: Final[logging.Logger] = logging.getLogger("world.actions")
+_HYPOTHESIS_ID_RE: Final[str] = r"[a-z0-9:_-]{1,64}"
 
 
 @dataclass(frozen=True, slots=True)
@@ -642,6 +646,40 @@ class IndexRepository:
         )
 
 
+@dataclass(frozen=True, slots=True)
+class Experiment:
+    """Closed experiment proposal. Predicted outcomes stay off the command."""
+
+    operator: ExperimentOperator
+    operand_a_id: EntityId
+    process_token: ExperimentProcessToken
+    operand_b_id: EntityId | None = None
+    hypothesis_id: str = ""
+    kind: Literal["experiment"] = field(default="experiment", init=False)
+
+    def __post_init__(self) -> None:
+        if type(self.operator) is not ExperimentOperator:
+            raise TypeError("Experiment.operator must be ExperimentOperator")
+        if type(self.operand_a_id) is not EntityId:
+            raise TypeError("Experiment.operand_a_id must be EntityId")
+        if self.operand_b_id is not None and type(self.operand_b_id) is not EntityId:
+            raise TypeError("Experiment.operand_b_id must be EntityId or None")
+        if type(self.process_token) is not ExperimentProcessToken:
+            raise TypeError(
+                "Experiment.process_token must be ExperimentProcessToken"
+            )
+        if type(self.hypothesis_id) is not str:
+            raise TypeError("Experiment.hypothesis_id must be str")
+        if self.hypothesis_id and re.fullmatch(
+            _HYPOTHESIS_ID_RE, self.hypothesis_id
+        ) is None:
+            raise ValueError("Experiment.hypothesis_id: experiment_hypothesis_invalid")
+        _EXPERIMENT_LOG.debug(
+            "command_constructed tag=experiment operator=%s",
+            self.operator.value,
+        )
+
+
 AgentCommand = (
     Move
     | Search
@@ -677,6 +715,7 @@ AgentCommand = (
     | RetrieveRecord
     | MaintainRepository
     | IndexRepository
+    | Experiment
 )
 
 _COMMAND_TYPES: Final[frozenset[type]] = frozenset(
@@ -715,6 +754,7 @@ _COMMAND_TYPES: Final[frozenset[type]] = frozenset(
         RetrieveRecord,
         MaintainRepository,
         IndexRepository,
+        Experiment,
     }
 )
 

@@ -68,14 +68,17 @@ from world.lifecycle_effects import StageCapabilityEffect
 from world.models import (
     AgentBody,
     Item,
+    ItemKind,
     LifeStatus,
     Location,
     PhysicalRules,
     Resource,
+    ResourceKind,
     Weather,
     non_lethal_physical_rules,
     physical_rules_fingerprint,
 )
+from world.production import ToolRole
 
 _LOGGER = logging.getLogger("simulation.runner_models")
 
@@ -114,6 +117,7 @@ RUNNER_SCHEMA_VERSION_V32: Final[str] = "runner-config-v32"
 RUNNER_SCHEMA_VERSION_V33: Final[str] = "runner-config-v33"
 RUNNER_SCHEMA_VERSION_V34: Final[str] = "runner-config-v34"
 RUNNER_SCHEMA_VERSION_V35: Final[str] = "runner-config-v35"
+RUNNER_SCHEMA_VERSION_V36: Final[str] = "runner-config-v36"
 RUNNER_SCHEMA_VERSION: Final[str] = RUNNER_SCHEMA_VERSION_V4
 SUPPORTED_RUNNER_SCHEMA_VERSIONS: Final[frozenset[str]] = frozenset(
     {
@@ -152,6 +156,7 @@ SUPPORTED_RUNNER_SCHEMA_VERSIONS: Final[frozenset[str]] = frozenset(
         RUNNER_SCHEMA_VERSION_V33,
         RUNNER_SCHEMA_VERSION_V34,
         RUNNER_SCHEMA_VERSION_V35,
+        RUNNER_SCHEMA_VERSION_V36,
     }
 )
 RESULT_SCHEMA_VERSION_V1: Final[str] = "runner-result-v1"
@@ -693,6 +698,7 @@ _SKILL_SCHEMAS: Final[frozenset[str]] = frozenset(
     RUNNER_SCHEMA_VERSION_V33,
     RUNNER_SCHEMA_VERSION_V34,
     RUNNER_SCHEMA_VERSION_V35,
+    RUNNER_SCHEMA_VERSION_V36,
     }
 )
 
@@ -2815,6 +2821,7 @@ _HISTORICAL_MEMORY_CULTURAL_SCHEMAS: Final[frozenset[str]] = frozenset(
         RUNNER_SCHEMA_VERSION_V33,
         RUNNER_SCHEMA_VERSION_V34,
         RUNNER_SCHEMA_VERSION_V35,
+        RUNNER_SCHEMA_VERSION_V36,
     }
 )
 _DURABLE_RECORDS_SCHEMAS: Final[frozenset[str]] = frozenset(
@@ -2822,6 +2829,7 @@ _DURABLE_RECORDS_SCHEMAS: Final[frozenset[str]] = frozenset(
         RUNNER_SCHEMA_VERSION_V33,
         RUNNER_SCHEMA_VERSION_V34,
         RUNNER_SCHEMA_VERSION_V35,
+        RUNNER_SCHEMA_VERSION_V36,
     }
 )
 _HISTORICAL_MEMORY_LAYER_SCHEMAS: Final[frozenset[str]] = frozenset(
@@ -2830,13 +2838,18 @@ _HISTORICAL_MEMORY_LAYER_SCHEMAS: Final[frozenset[str]] = frozenset(
         RUNNER_SCHEMA_VERSION_V33,
         RUNNER_SCHEMA_VERSION_V34,
         RUNNER_SCHEMA_VERSION_V35,
+        RUNNER_SCHEMA_VERSION_V36,
     }
 )
 _KNOWLEDGE_REPOSITORIES_SCHEMAS: Final[frozenset[str]] = frozenset(
-    {RUNNER_SCHEMA_VERSION_V34, RUNNER_SCHEMA_VERSION_V35}
+    {
+        RUNNER_SCHEMA_VERSION_V34,
+        RUNNER_SCHEMA_VERSION_V35,
+        RUNNER_SCHEMA_VERSION_V36,
+    }
 )
 _KNOWLEDGE_GENEALOGY_SCHEMAS: Final[frozenset[str]] = frozenset(
-    {RUNNER_SCHEMA_VERSION_V35}
+    {RUNNER_SCHEMA_VERSION_V35, RUNNER_SCHEMA_VERSION_V36}
 )
 
 
@@ -3948,6 +3961,403 @@ def example_knowledge_genealogy_spec(
             independent_discovery=independent_discovery,
             teaching=teaching,
         ),
+    )
+
+
+BOUNDED_EXPERIMENTATION_POLICY_ID: Final[str] = "bounded-experimentation-v1"
+_EXPERIMENT_OPERATORS: Final[frozenset[str]] = frozenset(
+    {"combine", "apply_tool", "vary_process"}
+)
+_EXPERIMENT_OUTCOME_CLASSES: Final[frozenset[str]] = frozenset(
+    {"success", "partial_success", "failure", "harm", "unexpected"}
+)
+_EXPERIMENT_PROCESS_TOKENS: Final[frozenset[str]] = frozenset(
+    {"harvest", "craft", "build", "repair", "store", "none"}
+)
+_EXPERIMENT_DELTA_KINDS: Final[frozenset[str]] = frozenset(
+    {
+        "none",
+        "consume_operand",
+        "emit_catalog_product",
+        "partial_emit",
+        "apply_harm_band",
+    }
+)
+_EXPERIMENT_HARM_BANDS: Final[frozenset[str]] = frozenset({"none", "minor", "serious"})
+_EXPERIMENT_EMIT_DELTAS: Final[frozenset[str]] = frozenset(
+    {"emit_catalog_product", "partial_emit"}
+)
+_EXPERIMENT_LAW_KEYS: Final[frozenset[str]] = frozenset(
+    {
+        "operator",
+        "operand_a_kind",
+        "operand_b_kind",
+        "process_token",
+        "outcome_class",
+        "delta",
+        "product_id",
+        "harm_band",
+        "public_technique_token",
+    }
+)
+_BOUNDED_EXPERIMENTATION_KEYS: Final[frozenset[str]] = frozenset(
+    {
+        "policy_id",
+        "max_hypotheses",
+        "max_trials_per_tick",
+        "repeat_threshold",
+        "learn_into_genealogy",
+        "allow_provider",
+        "laws",
+    }
+)
+_BOUNDED_EXPERIMENTATION_FORBIDDEN_ALIASES: Final[frozenset[str]] = frozenset(
+    {
+        "llm_physics",
+        "invented_product",
+        "true_experiment_outcome",
+        "auto_knowledge",
+        "society_laboratory",
+        "technology_tree",
+        "experiment_pack",
+        "discovery_forced",
+        "success_becomes_knowledge",
+    }
+)
+_EXPERIMENT_LAW_MAX: Final[int] = 64
+_TECHNIQUE_TOKEN_RE: Final[str] = "tech:"
+
+
+def _experiment_operand_token(field_name: str, value: object, *, allow_none: bool) -> str:
+    if type(value) is not str:
+        raise TypeError(f"{field_name} must be str")
+    if allow_none and value == "none":
+        return value
+    prefix, sep, rest = value.partition(":")
+    if sep != ":" or not rest:
+        _LOGGER.error(
+            "experiment_law_operand_unprefixed field=%s reason_code=%s",
+            field_name,
+            "experiment_law_operand_unprefixed",
+        )
+        raise ValueError(
+            f"{field_name} must be a prefixed kind token "
+            "(code=experiment_law_operand_unprefixed)"
+        )
+    if prefix == "item" and rest in {kind.value for kind in ItemKind}:
+        return value
+    if prefix == "resource" and rest in {kind.value for kind in ResourceKind}:
+        return value
+    if prefix == "tool" and rest in {role.value for role in ToolRole}:
+        return value
+    _LOGGER.error(
+        "experiment_law_operand_invalid field=%s reason_code=%s",
+        field_name,
+        "experiment_law_operand_invalid",
+    )
+    raise ValueError(
+        f"unknown operand token for {field_name} "
+        "(code=experiment_law_operand_invalid)"
+    )
+
+
+def _closed_token(field_name: str, value: object, allowed: frozenset[str], code: str) -> str:
+    token = require_stable_id(field_name, value)
+    if token not in allowed:
+        _LOGGER.error(
+            "experiment_law_token_invalid field=%s reason_code=%s",
+            field_name,
+            code,
+        )
+        raise ValueError(f"unknown {field_name} {token!r} (code={code})")
+    return token
+
+
+@dataclass(frozen=True, slots=True)
+class ExperimentLaw:
+    """One predeclared experiment law row. The engine is the only evaluator."""
+
+    operator: str
+    operand_a_kind: str
+    operand_b_kind: str
+    process_token: str
+    outcome_class: str
+    delta: str
+    product_id: str = ""
+    harm_band: str = "none"
+    public_technique_token: str = ""
+
+    def __post_init__(self) -> None:
+        operator = _closed_token(
+            "ExperimentLaw.operator",
+            self.operator,
+            _EXPERIMENT_OPERATORS,
+            "experiment_law_operator_invalid",
+        )
+        object.__setattr__(self, "operator", operator)
+        vary = operator == "vary_process"
+        operand_a = _experiment_operand_token(
+            "ExperimentLaw.operand_a_kind", self.operand_a_kind, allow_none=False
+        )
+        operand_b = _experiment_operand_token(
+            "ExperimentLaw.operand_b_kind",
+            self.operand_b_kind,
+            allow_none=vary,
+        )
+        if not vary and operand_b == "none":
+            raise ValueError(
+                "operand_b_kind none is only valid for vary_process "
+                "(code=experiment_law_operand_invalid)"
+            )
+        object.__setattr__(self, "operand_a_kind", operand_a)
+        object.__setattr__(self, "operand_b_kind", operand_b)
+        process = _closed_token(
+            "ExperimentLaw.process_token",
+            self.process_token,
+            _EXPERIMENT_PROCESS_TOKENS,
+            "experiment_law_process_invalid",
+        )
+        if vary and process == "none":
+            raise ValueError(
+                "vary_process requires a process token "
+                "(code=experiment_law_process_invalid)"
+            )
+        if not vary and process != "none":
+            raise ValueError(
+                "process_token must be none unless operator is vary_process "
+                "(code=experiment_law_process_invalid)"
+            )
+        object.__setattr__(self, "process_token", process)
+        outcome = _closed_token(
+            "ExperimentLaw.outcome_class",
+            self.outcome_class,
+            _EXPERIMENT_OUTCOME_CLASSES,
+            "experiment_law_outcome_invalid",
+        )
+        object.__setattr__(self, "outcome_class", outcome)
+        delta = _closed_token(
+            "ExperimentLaw.delta",
+            self.delta,
+            _EXPERIMENT_DELTA_KINDS,
+            "experiment_law_delta_invalid",
+        )
+        object.__setattr__(self, "delta", delta)
+        if type(self.product_id) is not str:
+            raise TypeError("product_id must be str")
+        product_id = self.product_id
+        if delta in _EXPERIMENT_EMIT_DELTAS:
+            product_id = require_stable_id("ExperimentLaw.product_id", product_id)
+        elif product_id != "":
+            raise ValueError(
+                "product_id must be empty unless delta emits a catalog product "
+                "(code=experiment_law_product_invalid)"
+            )
+        object.__setattr__(self, "product_id", product_id)
+        harm = _closed_token(
+            "ExperimentLaw.harm_band",
+            self.harm_band,
+            _EXPERIMENT_HARM_BANDS,
+            "experiment_law_harm_band_invalid",
+        )
+        if delta == "apply_harm_band" and harm == "none":
+            raise ValueError(
+                "apply_harm_band requires harm_band minor or serious "
+                "(code=experiment_law_harm_band_invalid)"
+            )
+        if delta != "apply_harm_band" and harm != "none":
+            raise ValueError(
+                "harm_band must be none unless delta is apply_harm_band "
+                "(code=experiment_law_harm_band_invalid)"
+            )
+        object.__setattr__(self, "harm_band", harm)
+        if type(self.public_technique_token) is not str:
+            raise TypeError("public_technique_token must be str")
+        token = self.public_technique_token
+        if token != "":
+            if not token.startswith(_TECHNIQUE_TOKEN_RE):
+                raise ValueError(
+                    "public_technique_token must be empty or tech:{slug} "
+                    "(code=experiment_law_technique_invalid)"
+                )
+            slug = token[len(_TECHNIQUE_TOKEN_RE) :]
+            if (
+                not slug
+                or slug != slug.strip()
+                or not all(ch.islower() or ch.isdigit() or ch == "_" for ch in slug)
+            ):
+                raise ValueError(
+                    "public_technique_token must be empty or tech:{slug} "
+                    "(code=experiment_law_technique_invalid)"
+                )
+        object.__setattr__(self, "public_technique_token", token)
+
+    @property
+    def match_key(self) -> tuple[str, str, str, str]:
+        return (
+            self.operator,
+            self.operand_a_kind,
+            self.operand_b_kind,
+            self.process_token,
+        )
+
+    def canonical_payload(self) -> dict[str, object]:
+        return {
+            "delta": self.delta,
+            "harm_band": self.harm_band,
+            "operand_a_kind": self.operand_a_kind,
+            "operand_b_kind": self.operand_b_kind,
+            "operator": self.operator,
+            "outcome_class": self.outcome_class,
+            "process_token": self.process_token,
+            "product_id": self.product_id,
+            "public_technique_token": self.public_technique_token,
+        }
+
+
+@dataclass(frozen=True, slots=True)
+class BoundedExperimentationSpec:
+    """Opt-in bounded experimentation sibling on runner-config-v36.
+
+    Absent object means the channel is off. Laws are configuration, not
+    cognition. ``learn_into_genealogy`` is not a genealogy uptake key.
+    """
+
+    laws: tuple[ExperimentLaw, ...]
+    policy_id: str = BOUNDED_EXPERIMENTATION_POLICY_ID
+    max_hypotheses: int = 8
+    max_trials_per_tick: int = 1
+    repeat_threshold: int = 2
+    learn_into_genealogy: bool = False
+    allow_provider: bool = False
+
+    def __post_init__(self) -> None:
+        policy = require_stable_id(
+            "BoundedExperimentationSpec.policy_id", self.policy_id
+        )
+        if policy != BOUNDED_EXPERIMENTATION_POLICY_ID:
+            _LOGGER.error(
+                "bounded_experimentation_policy_invalid reason_code=%s",
+                "bounded_experimentation_policy_invalid",
+            )
+            raise ValueError(
+                "policy_id must be bounded-experimentation-v1 "
+                "(code=bounded_experimentation_policy_invalid)"
+            )
+        object.__setattr__(self, "policy_id", policy)
+        if isinstance(self.laws, (str, bytes)) or not isinstance(self.laws, Sequence):
+            raise TypeError("laws must be a sequence")
+        if not self.laws:
+            _LOGGER.error(
+                "bounded_experimentation_laws_empty reason_code=%s",
+                "bounded_experimentation_laws_empty",
+            )
+            raise ValueError(
+                "laws must be non-empty (code=bounded_experimentation_laws_empty)"
+            )
+        if len(self.laws) > _EXPERIMENT_LAW_MAX:
+            raise ValueError(
+                f"laws must contain at most {_EXPERIMENT_LAW_MAX} rows "
+                "(code=bounded_experimentation_laws_overflow)"
+            )
+        rows: list[ExperimentLaw] = []
+        seen: set[tuple[str, str, str, str]] = set()
+        for law in self.laws:
+            if type(law) is not ExperimentLaw:
+                raise TypeError("laws entries must be ExperimentLaw")
+            if law.match_key in seen:
+                _LOGGER.error(
+                    "experiment_law_duplicate operator=%s reason_code=%s",
+                    law.operator,
+                    "experiment_law_duplicate",
+                )
+                raise ValueError(
+                    "duplicate experiment law match key (code=experiment_law_duplicate)"
+                )
+            seen.add(law.match_key)
+            rows.append(law)
+        object.__setattr__(self, "laws", tuple(rows))
+        max_hypotheses = require_exact_nonneg_int(
+            "max_hypotheses", self.max_hypotheses
+        )
+        if max_hypotheses < 1 or max_hypotheses > 32:
+            raise ValueError(
+                "max_hypotheses must be in [1, 32] "
+                "(code=bounded_experimentation_max_hypotheses_invalid)"
+            )
+        object.__setattr__(self, "max_hypotheses", max_hypotheses)
+        max_trials = require_exact_nonneg_int(
+            "max_trials_per_tick", self.max_trials_per_tick
+        )
+        if max_trials < 1 or max_trials > 4:
+            raise ValueError(
+                "max_trials_per_tick must be in [1, 4] "
+                "(code=bounded_experimentation_max_trials_invalid)"
+            )
+        object.__setattr__(self, "max_trials_per_tick", max_trials)
+        repeat = require_exact_nonneg_int("repeat_threshold", self.repeat_threshold)
+        if repeat < 1 or repeat > 8:
+            raise ValueError(
+                "repeat_threshold must be in [1, 8] "
+                "(code=bounded_experimentation_repeat_threshold_invalid)"
+            )
+        object.__setattr__(self, "repeat_threshold", repeat)
+        if type(self.learn_into_genealogy) is not bool:
+            raise TypeError("learn_into_genealogy must be bool")
+        if type(self.allow_provider) is not bool:
+            raise TypeError("allow_provider must be bool")
+
+    def canonical_payload(self) -> dict[str, object]:
+        return {
+            "allow_provider": self.allow_provider,
+            "laws": [law.canonical_payload() for law in self.laws],
+            "learn_into_genealogy": self.learn_into_genealogy,
+            "max_hypotheses": self.max_hypotheses,
+            "max_trials_per_tick": self.max_trials_per_tick,
+            "policy_id": self.policy_id,
+            "repeat_threshold": self.repeat_threshold,
+        }
+
+
+def example_experiment_law(**overrides: object) -> ExperimentLaw:
+    """One closed law row for tests. Defaults do not emit a product."""
+    payload: dict[str, object] = {
+        "operator": "combine",
+        "operand_a_kind": "item:material",
+        "operand_b_kind": "resource:material",
+        "process_token": "none",
+        "outcome_class": "failure",
+        "delta": "none",
+        "product_id": "",
+        "harm_band": "none",
+        "public_technique_token": "",
+    }
+    payload.update(overrides)
+    return ExperimentLaw(
+        operator=str(payload["operator"]),
+        operand_a_kind=str(payload["operand_a_kind"]),
+        operand_b_kind=str(payload["operand_b_kind"]),
+        process_token=str(payload["process_token"]),
+        outcome_class=str(payload["outcome_class"]),
+        delta=str(payload["delta"]),
+        product_id=str(payload["product_id"]),
+        harm_band=str(payload["harm_band"]),
+        public_technique_token=str(payload["public_technique_token"]),
+    )
+
+
+def example_bounded_experimentation_spec(
+    *,
+    laws: tuple[ExperimentLaw, ...] | None = None,
+    learn_into_genealogy: bool = False,
+    allow_provider: bool = False,
+    repeat_threshold: int = 2,
+) -> BoundedExperimentationSpec:
+    """Reference bounded experimentation spec for tests."""
+    return BoundedExperimentationSpec(
+        laws=laws if laws is not None else (example_experiment_law(),),
+        learn_into_genealogy=learn_into_genealogy,
+        allow_provider=allow_provider,
+        repeat_threshold=repeat_threshold,
     )
 
 
@@ -5603,6 +6013,7 @@ class SimulationRunnerConfig:
     durable_records: DurableRecordsSpec | None = None
     knowledge_repositories: KnowledgeRepositoriesSpec | None = None
     knowledge_genealogy: KnowledgeGenealogySpec | None = None
+    bounded_experimentation: BoundedExperimentationSpec | None = None
 
     def __post_init__(self) -> None:
         # Late import avoids circular import with new_agent_initialization.
@@ -5685,6 +6096,13 @@ class SimulationRunnerConfig:
         ):
             raise TypeError(
                 "knowledge_genealogy must be KnowledgeGenealogySpec or None"
+            )
+        if (
+            self.bounded_experimentation is not None
+            and type(self.bounded_experimentation) is not BoundedExperimentationSpec
+        ):
+            raise TypeError(
+                "bounded_experimentation must be BoundedExperimentationSpec or None"
             )
         if type(self.scenario) is not WorldScenarioSpec:
             raise TypeError("scenario must be WorldScenarioSpec")
@@ -5782,6 +6200,7 @@ class SimulationRunnerConfig:
             RUNNER_SCHEMA_VERSION_V33,
             RUNNER_SCHEMA_VERSION_V34,
             RUNNER_SCHEMA_VERSION_V35,
+            RUNNER_SCHEMA_VERSION_V36,
         }
         if (
             self.v3_capability_flags.generational_population
@@ -5809,6 +6228,7 @@ class SimulationRunnerConfig:
             RUNNER_SCHEMA_VERSION_V33,
             RUNNER_SCHEMA_VERSION_V34,
             RUNNER_SCHEMA_VERSION_V35,
+            RUNNER_SCHEMA_VERSION_V36,
         }
         if self.v3_capability_flags.kinship_inheritance:
             if self.schema_version not in _kinship_schemas:
@@ -5853,6 +6273,7 @@ class SimulationRunnerConfig:
                 RUNNER_SCHEMA_VERSION_V33,
                 RUNNER_SCHEMA_VERSION_V34,
                 RUNNER_SCHEMA_VERSION_V35,
+                RUNNER_SCHEMA_VERSION_V36,
             }:
                 _LOGGER.error(
                     "dependency_care_requires_v28 schema_version=%s "
@@ -5904,6 +6325,7 @@ class SimulationRunnerConfig:
                 RUNNER_SCHEMA_VERSION_V33,
                 RUNNER_SCHEMA_VERSION_V34,
                 RUNNER_SCHEMA_VERSION_V35,
+                RUNNER_SCHEMA_VERSION_V36,
             }:
                 _LOGGER.error(
                     "developmental_learning_requires_v29 schema_version=%s "
@@ -5967,6 +6389,7 @@ class SimulationRunnerConfig:
                 RUNNER_SCHEMA_VERSION_V33,
                 RUNNER_SCHEMA_VERSION_V34,
                 RUNNER_SCHEMA_VERSION_V35,
+                RUNNER_SCHEMA_VERSION_V36,
             }:
                 _LOGGER.error(
                     "mentorship_requires_v30 schema_version=%s "
@@ -6090,6 +6513,7 @@ class SimulationRunnerConfig:
                 RUNNER_SCHEMA_VERSION_V33,
                 RUNNER_SCHEMA_VERSION_V34,
                 RUNNER_SCHEMA_VERSION_V35,
+                RUNNER_SCHEMA_VERSION_V36,
             }
             and self.v3_capability_flags.cultural_historical_memory
         ):
@@ -6359,6 +6783,90 @@ class SimulationRunnerConfig:
                     "runner-config-v35 requires knowledge_genealogy "
                     "(code=v35_requires_knowledge_genealogy)"
                 )
+        if self.bounded_experimentation is not None:
+            if self.schema_version != RUNNER_SCHEMA_VERSION_V36:
+                _LOGGER.error(
+                    "bounded_experimentation_requires_v36 schema_version=%s "
+                    "reason_code=bounded_experimentation_requires_v36",
+                    self.schema_version,
+                )
+                raise ValueError(
+                    "bounded_experimentation requires runner-config-v36 "
+                    "(code=bounded_experimentation_requires_v36)"
+                )
+            if not self.v3_capability_flags.cultural_historical_memory:
+                _LOGGER.error(
+                    "bounded_experimentation_without_cultural_flag "
+                    "schema_version=%s "
+                    "reason_code=bounded_experimentation_without_cultural_flag",
+                    self.schema_version,
+                )
+                raise ValueError(
+                    "bounded_experimentation requires "
+                    "cultural_historical_memory "
+                    "(code=bounded_experimentation_without_cultural_flag)"
+                )
+            if self.cultural_feature_provenance is None:
+                _LOGGER.error(
+                    "bounded_experimentation_requires_cultural_provenance "
+                    "schema_version=%s "
+                    "reason_code=bounded_experimentation_requires_cultural_provenance",
+                    self.schema_version,
+                )
+                raise ValueError(
+                    "bounded_experimentation requires "
+                    "cultural_feature_provenance "
+                    "(code=bounded_experimentation_requires_cultural_provenance)"
+                )
+            catalog_ids = {
+                recipe.recipe_id.value
+                for agent in self.agents
+                for recipe in agent.cognition.production_catalog.recipes
+            }
+            for law in self.bounded_experimentation.laws:
+                if law.delta in _EXPERIMENT_EMIT_DELTAS and law.product_id not in catalog_ids:
+                    _LOGGER.error(
+                        "experiment_law_unknown_product schema_version=%s "
+                        "reason_code=experiment_law_unknown_product",
+                        self.schema_version,
+                    )
+                    raise ValueError(
+                        "experiment law product_id is absent from the "
+                        "production catalog (code=experiment_law_unknown_product)"
+                    )
+            _LOGGER.info(
+                "bounded_experimentation_schema_select schema_version=%s "
+                "law_count=%s max_hypotheses=%s max_trials_per_tick=%s "
+                "repeat_threshold=%s learn_into_genealogy=%s allow_provider=%s",
+                self.schema_version,
+                len(self.bounded_experimentation.laws),
+                self.bounded_experimentation.max_hypotheses,
+                self.bounded_experimentation.max_trials_per_tick,
+                self.bounded_experimentation.repeat_threshold,
+                self.bounded_experimentation.learn_into_genealogy,
+                self.bounded_experimentation.allow_provider,
+            )
+        if self.schema_version == RUNNER_SCHEMA_VERSION_V36:
+            if self.cultural_feature_provenance is None:
+                _LOGGER.error(
+                    "v36_requires_cultural_provenance schema_version=%s "
+                    "reason_code=v36_requires_cultural_provenance",
+                    self.schema_version,
+                )
+                raise ValueError(
+                    "runner-config-v36 requires cultural_feature_provenance "
+                    "(code=v36_requires_cultural_provenance)"
+                )
+            if self.bounded_experimentation is None:
+                _LOGGER.error(
+                    "v36_requires_bounded_experimentation schema_version=%s "
+                    "reason_code=v36_requires_bounded_experimentation",
+                    self.schema_version,
+                )
+                raise ValueError(
+                    "runner-config-v36 requires bounded_experimentation "
+                    "(code=v36_requires_bounded_experimentation)"
+                )
         other_v3_enabled = tuple(
             name
             for name in self.v3_capability_flags.enabled_names()
@@ -6378,6 +6886,7 @@ class SimulationRunnerConfig:
             RUNNER_SCHEMA_VERSION_V33,
             RUNNER_SCHEMA_VERSION_V34,
             RUNNER_SCHEMA_VERSION_V35,
+            RUNNER_SCHEMA_VERSION_V36,
         }:
             _LOGGER.error(
                 "v3_capability_requires_v23 schema_version=%s "
@@ -6486,6 +6995,7 @@ class SimulationRunnerConfig:
                     RUNNER_SCHEMA_VERSION_V33,
                     RUNNER_SCHEMA_VERSION_V34,
                     RUNNER_SCHEMA_VERSION_V35,
+                    RUNNER_SCHEMA_VERSION_V36,
                 }
                 or self.v3_capability_flags.generational_population
             )
@@ -6553,6 +7063,7 @@ class SimulationRunnerConfig:
                 RUNNER_SCHEMA_VERSION_V33,
                 RUNNER_SCHEMA_VERSION_V34,
                 RUNNER_SCHEMA_VERSION_V35,
+                RUNNER_SCHEMA_VERSION_V36,
             }
         ):
             _LOGGER.error(
@@ -6579,6 +7090,7 @@ class SimulationRunnerConfig:
                 RUNNER_SCHEMA_VERSION_V33,
                 RUNNER_SCHEMA_VERSION_V34,
                 RUNNER_SCHEMA_VERSION_V35,
+                RUNNER_SCHEMA_VERSION_V36,
             }
             and self.v3_capability_flags.generational_population
         )
@@ -6720,6 +7232,7 @@ class SimulationRunnerConfig:
         RUNNER_SCHEMA_VERSION_V33,
         RUNNER_SCHEMA_VERSION_V34,
         RUNNER_SCHEMA_VERSION_V35,
+        RUNNER_SCHEMA_VERSION_V36,
         }
         if non_disabled and self.schema_version not in consolidation_schemas:
             _LOGGER.error(
@@ -6781,6 +7294,7 @@ class SimulationRunnerConfig:
         RUNNER_SCHEMA_VERSION_V33,
         RUNNER_SCHEMA_VERSION_V34,
         RUNNER_SCHEMA_VERSION_V35,
+        RUNNER_SCHEMA_VERSION_V36,
         }
         if reflecting and self.schema_version not in reflection_schemas:
             _LOGGER.error(
@@ -6842,6 +7356,7 @@ class SimulationRunnerConfig:
         RUNNER_SCHEMA_VERSION_V33,
         RUNNER_SCHEMA_VERSION_V34,
         RUNNER_SCHEMA_VERSION_V35,
+        RUNNER_SCHEMA_VERSION_V36,
         }
         if planning and self.schema_version not in prospective_schemas:
             _LOGGER.error(
@@ -6902,6 +7417,7 @@ class SimulationRunnerConfig:
         RUNNER_SCHEMA_VERSION_V33,
         RUNNER_SCHEMA_VERSION_V34,
         RUNNER_SCHEMA_VERSION_V35,
+        RUNNER_SCHEMA_VERSION_V36,
         }
         if considering and self.schema_version not in counterfactual_schemas:
             _LOGGER.error(
@@ -6961,6 +7477,7 @@ class SimulationRunnerConfig:
         RUNNER_SCHEMA_VERSION_V33,
         RUNNER_SCHEMA_VERSION_V34,
         RUNNER_SCHEMA_VERSION_V35,
+        RUNNER_SCHEMA_VERSION_V36,
         }:
             _LOGGER.error(
                 "invalid_fields path=agents.cognition.communication_strategy_mode "
@@ -7018,6 +7535,7 @@ class SimulationRunnerConfig:
         RUNNER_SCHEMA_VERSION_V33,
         RUNNER_SCHEMA_VERSION_V34,
         RUNNER_SCHEMA_VERSION_V35,
+        RUNNER_SCHEMA_VERSION_V36,
         }:
             _LOGGER.error(
                 "invalid_fields path=agents.cognition.reputation_mode "
@@ -7117,6 +7635,7 @@ class SimulationRunnerConfig:
         RUNNER_SCHEMA_VERSION_V33,
         RUNNER_SCHEMA_VERSION_V34,
         RUNNER_SCHEMA_VERSION_V35,
+        RUNNER_SCHEMA_VERSION_V36,
         }:
             _LOGGER.error(
                 "invalid_fields path=agents.cognition.teaching_interaction_mode "
@@ -7165,6 +7684,7 @@ class SimulationRunnerConfig:
         RUNNER_SCHEMA_VERSION_V33,
         RUNNER_SCHEMA_VERSION_V34,
         RUNNER_SCHEMA_VERSION_V35,
+        RUNNER_SCHEMA_VERSION_V36,
         }
         if (dynamics is not None and self.schema_version not in dynamics_schemas) or (
             self.schema_version == RUNNER_SCHEMA_VERSION_V14 and dynamics is None
@@ -7208,6 +7728,7 @@ class SimulationRunnerConfig:
         RUNNER_SCHEMA_VERSION_V33,
         RUNNER_SCHEMA_VERSION_V34,
         RUNNER_SCHEMA_VERSION_V35,
+        RUNNER_SCHEMA_VERSION_V36,
         }:
             _LOGGER.error(
                 "invalid_fields path=agents.cognition.territorial_claim_mode "
@@ -7257,6 +7778,7 @@ class SimulationRunnerConfig:
         RUNNER_SCHEMA_VERSION_V33,
         RUNNER_SCHEMA_VERSION_V34,
         RUNNER_SCHEMA_VERSION_V35,
+        RUNNER_SCHEMA_VERSION_V36,
         }:
             _LOGGER.error(
                 "invalid_fields path=agents.cognition.group_formation_mode "
@@ -7300,6 +7822,7 @@ class SimulationRunnerConfig:
         RUNNER_SCHEMA_VERSION_V33,
         RUNNER_SCHEMA_VERSION_V34,
         RUNNER_SCHEMA_VERSION_V35,
+        RUNNER_SCHEMA_VERSION_V36,
         }:
             _LOGGER.error(
                 "invalid_fields path=agents.cognition.social_norm_mode "
@@ -7346,6 +7869,7 @@ class SimulationRunnerConfig:
         RUNNER_SCHEMA_VERSION_V33,
         RUNNER_SCHEMA_VERSION_V34,
         RUNNER_SCHEMA_VERSION_V35,
+        RUNNER_SCHEMA_VERSION_V36,
         }
         if conventions_on and self.schema_version not in convention_schemas:
             _LOGGER.error(
@@ -7397,6 +7921,7 @@ class SimulationRunnerConfig:
         RUNNER_SCHEMA_VERSION_V33,
         RUNNER_SCHEMA_VERSION_V34,
         RUNNER_SCHEMA_VERSION_V35,
+        RUNNER_SCHEMA_VERSION_V36,
         }
         if artifacts_on and self.schema_version not in artifact_schemas:
             runner_log.error(
@@ -7444,6 +7969,7 @@ class SimulationRunnerConfig:
         RUNNER_SCHEMA_VERSION_V33,
         RUNNER_SCHEMA_VERSION_V34,
         RUNNER_SCHEMA_VERSION_V35,
+        RUNNER_SCHEMA_VERSION_V36,
         }
         if naming_on and self.schema_version not in naming_schemas:
             runner_log.error(
@@ -7488,6 +8014,7 @@ class SimulationRunnerConfig:
         RUNNER_SCHEMA_VERSION_V33,
         RUNNER_SCHEMA_VERSION_V34,
         RUNNER_SCHEMA_VERSION_V35,
+        RUNNER_SCHEMA_VERSION_V36,
         }
         budget_modes = tuple(
             agent.cognition.cognitive_budget_mode for agent in self.agents
@@ -7508,6 +8035,7 @@ class SimulationRunnerConfig:
         RUNNER_SCHEMA_VERSION_V33,
         RUNNER_SCHEMA_VERSION_V34,
         RUNNER_SCHEMA_VERSION_V35,
+        RUNNER_SCHEMA_VERSION_V36,
         }
         if budgets_on and self.schema_version not in budget_schemas:
             runner_log.error(
@@ -7626,6 +8154,7 @@ class SimulationRunnerConfig:
         RUNNER_SCHEMA_VERSION_V33,
         RUNNER_SCHEMA_VERSION_V34,
         RUNNER_SCHEMA_VERSION_V35,
+        RUNNER_SCHEMA_VERSION_V36,
         }:
             _LOGGER.error(
                 "invalid_fields path=agents.cognition.production_knowledge_mode "
@@ -7662,6 +8191,7 @@ class SimulationRunnerConfig:
         RUNNER_SCHEMA_VERSION_V33,
         RUNNER_SCHEMA_VERSION_V34,
         RUNNER_SCHEMA_VERSION_V35,
+        RUNNER_SCHEMA_VERSION_V36,
         }:
             from world.production import production_catalog_digest
 
@@ -7738,6 +8268,7 @@ class SimulationRunnerConfig:
         RUNNER_SCHEMA_VERSION_V33,
         RUNNER_SCHEMA_VERSION_V34,
         RUNNER_SCHEMA_VERSION_V35,
+        RUNNER_SCHEMA_VERSION_V36,
         }:
             shared_teaching = teaching_weight_tuple(self.agents[0].cognition)
             if any(

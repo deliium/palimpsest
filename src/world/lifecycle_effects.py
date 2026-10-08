@@ -42,6 +42,7 @@ LIFECYCLE_DENIED_COMMAND_KINDS_ALLOWLIST: Final[frozenset[str]] = frozenset(
         "flee",
         "feed",
         "transport",
+        "experiment",
     }
 )
 

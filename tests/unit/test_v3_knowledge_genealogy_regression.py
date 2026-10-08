@@ -30,8 +30,8 @@ def test_semantic_event_count_is_53() -> None:
     assert len(SEMANTIC_EVENT_TYPES) == 53
 
 
-def test_agent_command_count_is_34() -> None:
-    assert len(get_args(AgentCommand)) == 34
+def test_agent_command_count_is_35() -> None:
+    assert len(get_args(AgentCommand)) == 35
 
 
 def test_metric_family_count_is_65() -> None:

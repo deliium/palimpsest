@@ -27,6 +27,7 @@ from world.actions import (
     Give,
     Harvest,
     Help,
+    Experiment,
     IndexRepository,
     Inscribe,
     MaintainRepository,
@@ -182,6 +183,14 @@ from world.events import (
     make_physical_replayable_event,
     make_replayable_event,
     require_replayable_event,
+)
+from world.experimentation import (
+    DiscoveryMode,
+    ExperimentDeltaKind,
+    ExperimentHarmBand,
+    ExperimentOperator,
+    ExperimentOutcomeClass,
+    ExperimentProcessToken,
 )
 from world.identifiers import (
     EntityId,
@@ -367,6 +376,7 @@ __all__ = [
     "DeclaredTransmission",
     "DependencyStatus",
     "Died",
+    "DiscoveryMode",
     "Drink",
     "Drop",
     "Dropped",
@@ -381,6 +391,12 @@ __all__ = [
     "EventDetails",
     "EventId",
     "EventValidationCode",
+    "Experiment",
+    "ExperimentDeltaKind",
+    "ExperimentHarmBand",
+    "ExperimentOperator",
+    "ExperimentOutcomeClass",
+    "ExperimentProcessToken",
     "ExposureApplied",
     "Fatigue",
     "Fed",
