@@ -132,6 +132,11 @@ def resolve_experiment(
             details.outcome_class,
             details.delta,
         )
+        _LOG.info(
+            "experiment_discovery_mode discovery_mode=%s outcome_class=%s",
+            details.discovery_mode,
+            details.outcome_class,
+        )
     return ExperimentApplication(
         details=details,
         next_state=next_state,

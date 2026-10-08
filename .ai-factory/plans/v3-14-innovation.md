@@ -385,19 +385,19 @@ Observer protocol string stays `observer-protocol-v1`. Document the additive sem
 
 ### Phase 4: Learn, teach, record, accident
 
-- [ ] Task 9: Implement `commit_experiment_learning` with `repeat_threshold`. Mint at most one `independent_discovery` practical-knowledge entry through a **new** helper when genealogy is on, `learn_into_genealogy` is true, and the repeated class is `success`, `partial_success`, or `unexpected`. Do not call `apply_practical_knowledge_from_independent_discovery` for this path. That function must skip kind `experiment_resolved` even when its `independent_discovery` compose flag is on. `failure` and `harm` never mint. Evidence refs carry event id, hypothesis id, and discovery mode. Do **not** add a key to `KnowledgeGenealogyUptakeCompose` or `_KNOWLEDGE_GENEALOGY_UPTAKE_COMPOSE_KEYS`.
+- [x] Task 9: Implement `commit_experiment_learning` with `repeat_threshold`. Mint at most one `independent_discovery` practical-knowledge entry through a **new** helper when genealogy is on, `learn_into_genealogy` is true, and the repeated class is `success`, `partial_success`, or `unexpected`. Do not call `apply_practical_knowledge_from_independent_discovery` for this path. That function must skip kind `experiment_resolved` even when its `independent_discovery` compose flag is on. `failure` and `harm` never mint. Evidence refs carry event id, hypothesis id, and discovery mode. Do **not** add a key to `KnowledgeGenealogyUptakeCompose` or `_KNOWLEDGE_GENEALOGY_UPTAKE_COMPOSE_KEYS`.
   - Deliverable: Threshold tests (1 vs 2); genealogy-off and `learn_into_genealogy=false` skip; harm skip; evidence-ref assertions; v35 uptake key set unchanged; first `experiment_resolved` does not mint when only the old scanner is on.
   - Files: `src/agents/cognition/experimentation.py`, `src/agents/cognition/practical_knowledge.py`, `src/simulation/runner_models.py`, `tests/unit/test_experiment_learn_gate.py`
   - Logging: INFO `experiment_learned` with entry id and discovery mode when minted; DEBUG `experiment_learn_skipped` with reason code (`threshold`, `channel_off`, `class_ineligible`)
   - Depends on: 5, 8
 
-- [ ] Task 10: Accidental discovery. Empty `hypothesis_id` stores engine `accidental`. Subjective overlay marks `unexpected` trials accidental when prediction is missing or unequal, without rewriting the event. Accidental success still waits on Task 9's gate. Provenance query input is the trial audit, not a world-side knowledge object.
+- [x] Task 10: Accidental discovery. Empty `hypothesis_id` stores engine `accidental`. Subjective overlay marks `unexpected` trials accidental when prediction is missing or unequal, without rewriting the event. Accidental success still waits on Task 9's gate. Provenance query input is the trial audit, not a world-side knowledge object.
   - Deliverable: Tests for empty hypothesis id, mismatched prediction, and "no knowledge row until learn".
   - Files: `src/agents/cognition/experimentation.py`, `src/world/_rules.py`, `tests/unit/test_experiment_accidental.py`
   - Logging: INFO `experiment_discovery_mode` with `deliberate|accidental` and outcome class
   - Depends on: 4, 8
 
-- [ ] Task 11: Teach and record stay explicit. If the owner has a memory trace for the experiment event, existing teaching uptake and `Inscribe` may attach `evt:{id}`. The experiment resolver must not emit `Tell` or `Inscribe`. Skip method-label teach/record when `public_technique_token` is empty. Do not copy peer experiment ledgers.
+- [x] Task 11: Teach and record stay explicit. If the owner has a memory trace for the experiment event, existing teaching uptake and `Inscribe` may attach `evt:{id}`. The experiment resolver must not emit `Tell` or `Inscribe`. Skip method-label teach/record when `public_technique_token` is empty. Do not copy peer experiment ledgers.
   - Deliverable: Tests that resolution events exclude talk/inscribe kinds; a later chosen Tell/Inscribe cites the event; empty technique token skips the label and keeps the memory trace.
   - Files: `src/agents/cognition/experimentation.py`, teaching/inscribe compose call sites, `tests/unit/test_experiment_teach_record.py`
   - Logging: DEBUG `experiment_teach_cited` / `experiment_record_cited` with event id; DEBUG `experiment_label_skipped` when the token is empty

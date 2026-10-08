@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import logging
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, replace
 from typing import Any, Final, cast
 
@@ -334,6 +334,16 @@ def score_remembered_experiment(
             updated_row.support,
             updated_row.counter,
         )
+        predicted = match.predicted_outcome
+        if outcome == ExperimentOutcomeClass.UNEXPECTED.value and (
+            predicted is None or predicted != outcome
+        ):
+            mode = DiscoveryMode.ACCIDENTAL.value
+    _LOG.info(
+        "experiment_discovery_mode discovery_mode=%s outcome_class=%s",
+        mode,
+        outcome,
+    )
     return record_trial(
         ledger,
         ExperimentTrial(
@@ -607,3 +617,153 @@ def compile_experiment_command(
     return ExperimentCompile(
         updated, command=command, hypothesis=stored
     )
+
+
+@dataclass(frozen=True, slots=True)
+class ExperimentCitation:
+    """Event citation for a later Tell or Inscribe. Not a command."""
+
+    event_ref: str
+    technique_label: str
+
+
+def _owner_remembers_event(
+    owner_id: AgentId, traces: Sequence[object], event_id: str
+) -> bool:
+    for trace in traces:
+        if getattr(trace, "owner_id", None) != owner_id:
+            continue
+        source = getattr(getattr(trace, "provenance", None), "observed_source_id", None)
+        if getattr(source, "value", None) == event_id:
+            return True
+    return False
+
+
+def cite_experiment_event(
+    owner_id: AgentId,
+    traces: Sequence[object],
+    event_id: str,
+    technique_token: str,
+    *,
+    channel: str,
+) -> ExperimentCitation | None:
+    """Cite ``evt:{id}`` only after this owner remembers the event."""
+    if type(owner_id) is not AgentId:
+        raise _fail("owner_id", "invalid_type")
+    if channel not in {"teach", "record"}:
+        raise _fail("channel", "invalid_channel")
+    if type(technique_token) is not str:
+        raise _fail("technique_token", "invalid_type")
+    if not _owner_remembers_event(owner_id, traces, event_id):
+        return None
+    label = technique_token
+    if not technique_token:
+        _LOG.debug("experiment_label_skipped event_id=%s", event_id)
+        label = ""
+    if channel == "teach":
+        _LOG.debug("experiment_teach_cited event_id=%s", event_id)
+    else:
+        _LOG.debug("experiment_record_cited event_id=%s", event_id)
+    return ExperimentCitation(event_ref=f"evt:{event_id}", technique_label=label)
+
+
+_LEARN_CLASSES: Final[frozenset[str]] = frozenset(
+    {"success", "partial_success", "unexpected"}
+)
+
+
+def _skip_learn(reason: str) -> None:
+    _LOG.debug("experiment_learn_skipped reason_code=%s", reason)
+
+
+def _repeated_class(
+    ledger: ExperimentLedger, hypothesis_id: str
+) -> tuple[str, str, str] | None:
+    """Return class, event id, and discovery mode once the threshold is met."""
+    counts: dict[str, int] = {}
+    latest: dict[str, tuple[str, str]] = {}
+    for trial in ledger.trials:
+        if trial.hypothesis_id != hypothesis_id:
+            continue
+        counts[trial.outcome_class] = counts.get(trial.outcome_class, 0) + 1
+        latest[trial.outcome_class] = (trial.event_id, trial.discovery_mode)
+    for outcome, count in counts.items():
+        if outcome not in _LEARN_CLASSES:
+            continue
+        if count >= ledger.repeat_threshold:
+            event_id, mode = latest[outcome]
+            return outcome, event_id, mode
+    return None
+
+
+def commit_experiment_learning(
+    experiment_ledger: ExperimentLedger,
+    knowledge_ledger: object,
+    *,
+    genealogy_active: bool,
+    enabled_kinds: Sequence[str],
+    tick: int,
+) -> tuple[ExperimentLedger, object]:
+    """Mint at most one practical-knowledge entry from repeated outcomes."""
+    if type(experiment_ledger) is not ExperimentLedger:
+        raise _fail("ledger", "invalid_type")
+    if type(genealogy_active) is not bool:
+        raise TypeError("genealogy_active must be bool")
+    if not genealogy_active or not experiment_ledger.learn_into_genealogy:
+        _skip_learn("channel_off")
+        return experiment_ledger, knowledge_ledger
+    eligible_waiting = False
+    for hypothesis in experiment_ledger.hypotheses:
+        repeated = _repeated_class(experiment_ledger, hypothesis.hypothesis_id)
+        if repeated is None:
+            classes = {
+                trial.outcome_class
+                for trial in experiment_ledger.trials
+                if trial.hypothesis_id == hypothesis.hypothesis_id
+            }
+            if classes & _LEARN_CLASSES:
+                eligible_waiting = True
+            continue
+        _outcome, event_id, mode = repeated
+        from agents.cognition.practical_knowledge import (
+            PracticalKnowledgeKind,
+            mint_experiment_practical_knowledge,
+        )
+
+        if hypothesis.process_token is ExperimentProcessToken.BUILD:
+            kind = PracticalKnowledgeKind.BUILDING_METHOD
+        elif hypothesis.process_token in {
+            ExperimentProcessToken.HARVEST,
+            ExperimentProcessToken.STORE,
+        }:
+            kind = PracticalKnowledgeKind.FORAGING_METHOD
+        else:
+            kind = PracticalKnowledgeKind.CRAFTING_PROCESS
+        token = f"exp-{hypothesis.operator.value}-{hypothesis.process_token.value}"
+        updated, entry_id = mint_experiment_practical_knowledge(
+            knowledge_ledger,  # type: ignore[arg-type]
+            enabled_kinds=enabled_kinds,
+            tick=tick,
+            kind=kind,
+            technique_token=token,
+            evidence_refs=(
+                f"evt:{event_id}",
+                f"hypothesis:{hypothesis.hypothesis_id}",
+                f"discovery_mode:{mode}",
+            ),
+            fingerprint=(f"cue:experiment:{_outcome}",),
+        )
+        if entry_id is None:
+            _skip_learn("channel_off")
+            return experiment_ledger, knowledge_ledger
+        _LOG.info(
+            "experiment_learned entry_id=%s discovery_mode=%s",
+            entry_id,
+            mode,
+        )
+        return experiment_ledger, updated
+    if eligible_waiting:
+        _skip_learn("threshold")
+    else:
+        _skip_learn("class_ineligible")
+    return experiment_ledger, knowledge_ledger

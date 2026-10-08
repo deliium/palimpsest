@@ -1336,6 +1336,7 @@ def apply_practical_knowledge_from_teaching(
     teaching_compose_on: bool,
     teaching_mode_on: bool,
     mentorship_channel_on: bool = False,
+    experiment_event_ref: str | None = None,
 ) -> tuple[PracticalKnowledgeLedger, tuple[PracticalKnowledgeAudit, ...]]:
     """Map teaching/mentorship public advice onto technique entries (no peer copy)."""
     if type(ledger) is not PracticalKnowledgeLedger:
@@ -1385,6 +1386,8 @@ def apply_practical_knowledge_from_teaching(
             continue
         occurrence = getattr(row, "occurrence_id", None) or "teach"
         evidence = [f"teach:{occurrence}"]
+        if experiment_event_ref:
+            evidence.append(experiment_event_ref)
         if mentorship_channel_on and teacher is not None:
             evidence.append(f"mentor:{teacher.value}")
         band = getattr(getattr(row, "band", None), "value", "unspecified")
@@ -1728,6 +1731,8 @@ def apply_practical_knowledge_from_independent_discovery(
     audits: list[PracticalKnowledgeAudit] = []
     for occurrence in getattr(observation, "occurrences", ()) or ():
         kind_raw = str(getattr(occurrence, "kind", "")).lower()
+        if kind_raw == "experiment_resolved":
+            continue
         other = getattr(occurrence, "other_entity_id", None)
         success = getattr(occurrence, "success", None)
         if other is not None:
@@ -1855,3 +1860,38 @@ def apply_practical_knowledge_compose(
     audits.extend(rows)
 
     return current, tuple(audits)
+
+
+def mint_experiment_practical_knowledge(
+    ledger: PracticalKnowledgeLedger,
+    *,
+    enabled_kinds: Sequence[str],
+    tick: int,
+    kind: PracticalKnowledgeKind,
+    technique_token: str,
+    evidence_refs: Sequence[str],
+    fingerprint: Sequence[str],
+) -> tuple[PracticalKnowledgeLedger, str | None]:
+    """Mint one independent-discovery root. Not the occurrence scanner."""
+    content_key = practical_knowledge_content_key(technique_token)
+    try:
+        updated = form_or_reinforce_practical_knowledge(
+            ledger,
+            kind=kind,
+            content_key=content_key,
+            content_fingerprint=fingerprint,
+            origin=KnowledgeTransmissionOrigin.INDEPENDENT_DISCOVERY,
+            tick=tick,
+            enabled_kinds=enabled_kinds,
+            evidence_refs=evidence_refs,
+            capability_anchor=resolve_capability_anchor(kind),
+            channel_active=True,
+        )
+    except ValueError as exc:
+        if "kind_not_enabled" in str(exc):
+            return ledger, None
+        raise
+    entry = _active_by_content_key(updated, content_key)
+    if entry is None:
+        return updated, None
+    return updated, entry.entry_id
