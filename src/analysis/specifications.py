@@ -50,7 +50,7 @@ __all__ = [
 ]
 
 METRIC_CATALOG_VERSION: Final[str] = "metric-catalog-v1"
-METRIC_FAMILY_COUNT: Final[int] = 65
+METRIC_FAMILY_COUNT: Final[int] = 68
 
 # Align with existing memory-drift / transmission document versions.
 _ALGO_V1: Final[str] = "1"
@@ -142,6 +142,9 @@ class MetricFamilyId(StrEnum):
     KNOWLEDGE_GENEALOGY_HOLDERS = "knowledge_genealogy_holders"
     KNOWLEDGE_GENEALOGY_LINEAGE = "knowledge_genealogy_lineage"
     KNOWLEDGE_GENEALOGY_MUTATION = "knowledge_genealogy_mutation"
+    BOUNDED_EXPERIMENT_TRIALS = "bounded_experiment_trials"
+    BOUNDED_EXPERIMENT_DISCOVERY = "bounded_experiment_discovery"
+    BOUNDED_EXPERIMENT_PROVENANCE = "bounded_experiment_provenance"
 
 
 class DenominatorKind(StrEnum):
@@ -1721,9 +1724,13 @@ def _spec_knowledge_genealogy_holders() -> MetricSpecification:
         denominator="active_technique_holders",
         denominator_kind=DenominatorKind.OCCURRENCE,
         cohort_window="caller-supplied practical-knowledge audits + death_ticks",
-        deceased_policy="dead holders counted separately; who_currently_knows filters living",
+        deceased_policy=(
+            "dead holders counted separately; who_currently_knows filters living"
+        ),
         zero_holding_policy="no practical-knowledge audits -> availability=absent",
-        opportunity_vs_occurrence="active holders living vs dead; mean hop; teacher coverage",
+        opportunity_vs_occurrence=(
+            "active holders living vs dead; mean hop; teacher coverage"
+        ),
         self_edge_policy="not_applicable",
         censoring_policy="analysis-only knowledge genealogy; never cognition",
         formulas={
@@ -1754,7 +1761,9 @@ def _spec_knowledge_genealogy_lineage() -> MetricSpecification:
         cohort_window="caller-supplied practical-knowledge audits",
         deceased_policy="death_ticks used for surviving-root queries only",
         zero_holding_policy="no practical-knowledge audits -> availability=absent",
-        opportunity_vs_occurrence="root counts, multi-parent share, dual emergence, unresolved joins",
+        opportunity_vs_occurrence=(
+            "root counts, multi-parent share, dual emergence, unresolved joins"
+        ),
         self_edge_policy="not_applicable",
         censoring_policy="analysis-only knowledge genealogy; never cognition",
         formulas={
@@ -1804,6 +1813,92 @@ def _spec_knowledge_genealogy_mutation() -> MetricSpecification:
         empty_case="availability=absent; no_practical_knowledge_audits",
     )
 
+
+def _spec_bounded_experiment_trials() -> MetricSpecification:
+    return _base(
+        family_id=MetricFamilyId.BOUNDED_EXPERIMENT_TRIALS,
+        evidence_inputs=frozenset({EvidenceStage.OBJECTIVE_EVENT_STATE}),
+        population="experiment_trial_audits",
+        denominator="experiment_trials",
+        denominator_kind=DenominatorKind.OCCURRENCE,
+        cohort_window="caller-supplied experiment trial harvest",
+        deceased_policy="not_applicable",
+        zero_holding_policy="spec absent or no trials -> availability=absent",
+        opportunity_vs_occurrence="counts by outcome class and operator",
+        self_edge_policy="not_applicable",
+        censoring_policy="analysis-only bounded experimentation; never cognition",
+        formulas={
+            "outcome_class_count": "trials whose outcome_class equals the class",
+            "operator_count": "trials whose operator equals the operator",
+        },
+        value_keys=(
+            "operator_apply_tool_count",
+            "operator_combine_count",
+            "operator_vary_process_count",
+            "outcome_failure_count",
+            "outcome_harm_count",
+            "outcome_partial_success_count",
+            "outcome_success_count",
+            "outcome_unexpected_count",
+            "trial_count",
+        ),
+        empty_case="availability=absent; no_experiment_trials",
+    )
+
+
+def _spec_bounded_experiment_discovery() -> MetricSpecification:
+    return _base(
+        family_id=MetricFamilyId.BOUNDED_EXPERIMENT_DISCOVERY,
+        evidence_inputs=frozenset({EvidenceStage.OBJECTIVE_EVENT_STATE}),
+        population="experiment_trial_audits",
+        denominator="experiment_trials",
+        denominator_kind=DenominatorKind.OCCURRENCE,
+        cohort_window="caller-supplied experiment trial harvest",
+        deceased_policy="not_applicable",
+        zero_holding_policy="spec absent or no trials -> availability=absent",
+        opportunity_vs_occurrence="deliberate vs accidental; unexpected share",
+        self_edge_policy="not_applicable",
+        censoring_policy="analysis-only bounded experimentation; never cognition",
+        formulas={
+            "unexpected_share": "unexpected trials / trial_count",
+        },
+        value_keys=(
+            "accidental_count",
+            "deliberate_count",
+            "trial_count",
+            "unexpected_count",
+            "unexpected_share",
+        ),
+        empty_case="availability=absent; no_experiment_trials",
+    )
+
+
+def _spec_bounded_experiment_provenance() -> MetricSpecification:
+    return _base(
+        family_id=MetricFamilyId.BOUNDED_EXPERIMENT_PROVENANCE,
+        evidence_inputs=frozenset({EvidenceStage.AGENT_VISIBLE_PROJECTION}),
+        population="learned_practical_knowledge_entries",
+        denominator="learned_entries",
+        denominator_kind=DenominatorKind.OCCURRENCE,
+        cohort_window="caller-supplied learned entries plus trial event ids",
+        deceased_policy="not_applicable",
+        zero_holding_policy="spec absent or no learned entries -> availability=absent",
+        opportunity_vs_occurrence="cited share; zero when genealogy uptake is off",
+        self_edge_policy="not_applicable",
+        censoring_policy="analysis-only bounded experimentation; never cognition",
+        formulas={
+            "provenance_share": (
+                "entries citing evt:{trial event id} / learned_entry_count; "
+                "0 when genealogy uptake is off"
+            ),
+        },
+        value_keys=(
+            "cited_entry_count",
+            "learned_entry_count",
+            "provenance_share",
+        ),
+        empty_case="availability=absent; no_learned_entries",
+    )
 
 
 def _spec_historical_memory_queries() -> MetricSpecification:
@@ -3262,6 +3357,9 @@ _BUILDERS: Final[tuple[Callable[[], MetricSpecification], ...]] = (
     _spec_knowledge_genealogy_holders,
     _spec_knowledge_genealogy_lineage,
     _spec_knowledge_genealogy_mutation,
+    _spec_bounded_experiment_trials,
+    _spec_bounded_experiment_discovery,
+    _spec_bounded_experiment_provenance,
     _spec_emergent_group_formation,
     _spec_emergent_social_norms,
     _spec_persistent_social_conventions,

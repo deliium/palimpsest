@@ -1,4 +1,4 @@
-"""Knowledge-repositories regression pins: SEMANTIC 53, commands 34, metrics 65."""
+"""Knowledge-repositories regression pins: SEMANTIC 54, commands 35, metrics 68."""
 
 from __future__ import annotations
 
@@ -15,6 +15,7 @@ from world.actions import (
     AgentCommand,
     DepositRecord,
     EstablishRepository,
+    Experiment,
     IndexRepository,
     MaintainRepository,
     RetrieveRecord,
@@ -35,9 +36,10 @@ def test_semantic_event_count_is_54() -> None:
     assert "REPOSITORY_NEGLECTED" in SEMANTIC_EVENT_TYPES
 
 
-def test_agent_command_count_is_34() -> None:
+def test_agent_command_count_is_35() -> None:
     commands = get_args(AgentCommand)
-    assert len(commands) == 34
+    assert len(commands) == 35
+    assert Experiment in commands
     assert EstablishRepository in commands
     assert DepositRecord in commands
     assert RetrieveRecord in commands
@@ -46,7 +48,7 @@ def test_agent_command_count_is_34() -> None:
 
 
 def test_metric_family_count_is_62() -> None:
-    assert METRIC_FAMILY_COUNT == 65
+    assert METRIC_FAMILY_COUNT == 68
     assert MetricFamilyId.KNOWLEDGE_REPOSITORY_SURVIVAL.value == (
         "knowledge_repository_survival"
     )

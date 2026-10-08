@@ -35,7 +35,7 @@ def test_agent_command_count_is_35() -> None:
 
 
 def test_metric_family_count_is_65() -> None:
-    assert METRIC_FAMILY_COUNT == 65
+    assert METRIC_FAMILY_COUNT == 68
     assert MetricFamilyId.KNOWLEDGE_GENEALOGY_HOLDERS.value == (
         "knowledge_genealogy_holders"
     )

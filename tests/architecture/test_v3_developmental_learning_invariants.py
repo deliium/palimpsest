@@ -82,7 +82,7 @@ def test_agent_command_count_unchanged() -> None:
 
     from world.actions import AgentCommand
 
-    assert len(typing.get_args(AgentCommand)) == 29
+    assert len(typing.get_args(AgentCommand)) == 35
 
 
 def test_alembic_head_stays_0017() -> None:

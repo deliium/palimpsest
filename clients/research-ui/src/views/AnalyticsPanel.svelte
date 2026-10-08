@@ -38,6 +38,9 @@
     'knowledge_genealogy_holders',
     'knowledge_genealogy_lineage',
     'knowledge_genealogy_mutation',
+    'bounded_experiment_trials',
+    'bounded_experiment_discovery',
+    'bounded_experiment_provenance',
   ] as const
 
   const HISTORICAL_MEMORY_FAMILIES = new Set([
@@ -62,6 +65,12 @@
     'knowledge_genealogy_holders',
     'knowledge_genealogy_lineage',
     'knowledge_genealogy_mutation',
+  ])
+
+  const BOUNDED_EXPERIMENT_FAMILIES = new Set([
+    'bounded_experiment_trials',
+    'bounded_experiment_discovery',
+    'bounded_experiment_provenance',
   ])
 
   type MetricCard = {
@@ -237,6 +246,9 @@
       const genealogy = catalog.items.filter((item) =>
         KNOWLEDGE_GENEALOGY_FAMILIES.has(item.metric_family),
       )
+      const experiments = catalog.items.filter((item) =>
+        BOUNDED_EXPERIMENT_FAMILIES.has(item.metric_family),
+      )
       const phenomenon = catalog.items.filter((item) =>
         item.metric_family.includes('phenomenon'),
       )
@@ -246,6 +258,7 @@
         ...durable,
         ...repositories,
         ...genealogy,
+        ...experiments,
         ...phenomenon,
       ]
         .filter(
@@ -256,7 +269,7 @@
                 other.metric_set_id === item.metric_set_id,
             ) === index,
         )
-        .slice(0, 20)
+        .slice(0, 24)
       cards = await Promise.all(selected.map((item) => loadMetricCard(item)))
 
       if (agentId) {
@@ -307,9 +320,10 @@
   </header>
   <p class="lede">
     Metric documents and phenomenon panels are analytical results — never world facts.
-    Historical memory, durable-record, and knowledge-repository survival / access /
-    organization families are researcher constructs
-    (<code>research_inference</code>), not agent knowledge.
+    Historical memory, durable-record, knowledge-repository, knowledge-genealogy,
+    and bounded-experiment families are researcher constructs
+    (<code>research_inference</code>), not agent knowledge. Experiment badges
+    show counts only, never law rows or hypothesis text.
   </p>
 
   {#if loading}

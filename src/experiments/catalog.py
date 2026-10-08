@@ -2760,6 +2760,7 @@ OFF_GATE_MATRIX_EXPERIMENT_IDS: Final[frozenset[str]] = frozenset(
         "experiment-an-durable-records",
         "experiment-ao-knowledge-repositories",
         "experiment-ap-knowledge-genealogy",
+        "experiment-aq-bounded-experimentation",
     }
 )
 
@@ -4310,6 +4311,265 @@ def experiment_ap_knowledge_genealogy(
         )
     return _definition(
         experiment_id="experiment-ap-knowledge-genealogy",
+        base=base,
+        seed_matrix=matrix,
+        arms=arms,
+    )
+
+
+def bounded_experimentation_profile(
+    config: SimulationRunnerConfig,
+) -> SimulationRunnerConfig:
+    """Require cultural + provenance + bounded experimentation on v36."""
+    from simulation.runner_models import RUNNER_SCHEMA_VERSION_V36
+
+    if config.schema_version != RUNNER_SCHEMA_VERSION_V36:
+        raise ValueError(
+            "bounded experimentation profile requires runner-config-v36 "
+            "(code=bounded_experimentation_profile_schema "
+            f"got={config.schema_version!r})"
+        )
+    if not config.v3_capability_flags.cultural_historical_memory:
+        raise ValueError(
+            "bounded experimentation profile requires cultural_historical_memory "
+            "(code=bounded_experimentation_profile_flag)"
+        )
+    if config.cultural_feature_provenance is None:
+        raise ValueError(
+            "bounded experimentation profile requires cultural_feature_provenance "
+            "(code=bounded_experimentation_profile_missing_provenance)"
+        )
+    if config.bounded_experimentation is None:
+        raise ValueError(
+            "bounded experimentation profile requires bounded_experimentation "
+            "(code=bounded_experimentation_profile_missing_channel)"
+        )
+    allowed = {
+        "generational_population",
+        "kinship_inheritance",
+        "cultural_historical_memory",
+    }
+    other = tuple(
+        name
+        for name in config.v3_capability_flags.enabled_names()
+        if name not in allowed
+    )
+    if other:
+        raise ValueError(
+            "bounded experimentation profile forbids unowned V3 flags "
+            "(code=bounded_experimentation_profile_extra_flags "
+            f"flag_count={len(other)})"
+        )
+    _LOG.debug(
+        "bounded_experimentation_channel_active active=%s schema_version=%s",
+        config.bounded_experimentation is not None,
+        config.schema_version,
+    )
+    return config
+
+
+def experiment_aq_bounded_experimentation(
+    base: SimulationRunnerConfig,
+    *,
+    seed_matrix: ExperimentSeedMatrix | None = None,
+    max_ticks: int = 12,
+) -> ExperimentDefinition:
+    """Off-gate Experiment AQ. Default batches do not enable it."""
+    from simulation.runner_models import (
+        RUNNER_SCHEMA_VERSION_V4,
+        RUNNER_SCHEMA_VERSION_V35,
+        RUNNER_SCHEMA_VERSION_V36,
+        ArtifactInterpretationMode,
+        example_bounded_experimentation_spec,
+        example_cultural_feature_provenance_spec,
+        example_durable_records_spec,
+        example_experiment_law,
+        example_knowledge_genealogy_spec,
+    )
+
+    matrix = seed_matrix or ExperimentSeedMatrix(seeds=(base.seed,))
+    if len(base.agents) < 2:
+        raise ValueError(
+            "experiment AQ requires at least two agents on the base roster "
+            "(code=bounded_experimentation_aq_roster_too_small)"
+        )
+    provenance = example_cultural_feature_provenance_spec()
+    genealogy = example_knowledge_genealogy_spec()
+    durable = example_durable_records_spec(default_fidelity="perfect")
+
+    def _clear(cfg: SimulationRunnerConfig) -> SimulationRunnerConfig:
+        return replace(
+            cfg,
+            mentorship=None,
+            developmental_learning=None,
+            dependency_care=None,
+            kinship=None,
+            historical_memory_layers=None,
+            population_lifecycle=None,
+            new_agent_initialization=None,
+        )
+
+    def _agents(*, teaching: bool = False) -> tuple[AgentRunnerSpec, ...]:
+        return tuple(
+            replace(
+                agent,
+                cognition=replace(
+                    agent.cognition,
+                    artifact_interpretation_mode=(
+                        ArtifactInterpretationMode.DETERMINISTIC
+                    ),
+                    teaching_interaction_mode=(
+                        TeachingInteractionMode.DETERMINISTIC
+                        if teaching
+                        else TeachingInteractionMode.DISABLED
+                    ),
+                    skill_learning_mode=(
+                        SkillLearningMode.DETERMINISTIC
+                        if teaching
+                        else SkillLearningMode.DISABLED
+                    ),
+                ),
+            )
+            for agent in base.agents
+        )
+
+    def _channel(
+        *,
+        laws: tuple[object, ...],
+        learn: bool = False,
+        allow_provider: bool = False,
+        repeat_threshold: int = 2,
+        with_genealogy: bool = False,
+        with_durable: bool = False,
+        teaching: bool = False,
+    ) -> SimulationRunnerConfig:
+        spec = example_bounded_experimentation_spec(
+            laws=laws,  # type: ignore[arg-type]
+            learn_into_genealogy=learn,
+            allow_provider=allow_provider,
+            repeat_threshold=repeat_threshold,
+        )
+        cfg = _clear(
+            replace(
+                base,
+                agents=_agents(teaching=teaching),
+                artifacts_enabled=True,
+                schema_version=RUNNER_SCHEMA_VERSION_V36,
+                mortality_mode=MortalityMode.DISABLED,
+                stop_policy=RunnerStopPolicy(max_ticks=max_ticks),
+                v3_capability_flags=V3CapabilityFlags(
+                    cultural_historical_memory=True
+                ),
+                cultural_feature_provenance=provenance,
+                bounded_experimentation=spec,
+                knowledge_genealogy=genealogy if with_genealogy else None,
+                durable_records=durable if with_durable else None,
+            )
+        )
+        return bounded_experimentation_profile(cfg)
+
+    channel_off = _clear(
+        replace(
+            base,
+            schema_version=RUNNER_SCHEMA_VERSION_V35,
+            mortality_mode=MortalityMode.DISABLED,
+            stop_policy=RunnerStopPolicy(max_ticks=max_ticks),
+            v3_capability_flags=V3CapabilityFlags(cultural_historical_memory=True),
+            cultural_feature_provenance=provenance,
+            knowledge_genealogy=genealogy,
+            bounded_experimentation=None,
+            artifacts_enabled=True,
+        )
+    )
+    knowledge_genealogy_profile(channel_off)
+    miss = (
+        example_experiment_law(
+            operand_a_kind="item:food",
+            operand_b_kind="item:food",
+        ),
+    )
+    success = (
+        example_experiment_law(
+            outcome_class="success",
+            delta="none",
+            product_id="",
+        ),
+    )
+    harm = (
+        example_experiment_law(
+            outcome_class="harm",
+            delta="apply_harm_band",
+            product_id="",
+            harm_band="minor",
+        ),
+    )
+    unexpected = (
+        example_experiment_law(
+            outcome_class="unexpected",
+            delta="none",
+            product_id="",
+        ),
+    )
+    flags_off = _clear(
+        replace(
+            base,
+            schema_version=RUNNER_SCHEMA_VERSION_V4,
+            mortality_mode=MortalityMode.DISABLED,
+            stop_policy=RunnerStopPolicy(max_ticks=max_ticks),
+            v3_capability_flags=V3CapabilityFlags(),
+            cultural_feature_provenance=None,
+            knowledge_genealogy=None,
+            bounded_experimentation=None,
+            durable_records=None,
+        )
+    )
+    arms = (
+        ("aq-channel-off", "bounded_experimentation_channel_off", channel_off),
+        (
+            "aq-failure-unlisted",
+            "bounded_experimentation_failure_unlisted",
+            _channel(laws=miss),
+        ),
+        (
+            "aq-success-not-knowledge",
+            "bounded_experimentation_success_not_knowledge",
+            _channel(laws=success),
+        ),
+        (
+            "aq-repeat-then-learn",
+            "bounded_experimentation_repeat_then_learn",
+            _channel(laws=success, learn=True, with_genealogy=True),
+        ),
+        ("aq-harm", "bounded_experimentation_harm", _channel(laws=harm)),
+        (
+            "aq-unexpected-accidental",
+            "bounded_experimentation_unexpected_accidental",
+            _channel(laws=unexpected),
+        ),
+        (
+            "aq-llm-cannot-invent",
+            "bounded_experimentation_llm_cannot_invent",
+            _channel(laws=success, allow_provider=True),
+        ),
+        (
+            "aq-teach-record",
+            "bounded_experimentation_teach_record",
+            _channel(laws=success, with_durable=True, teaching=True),
+        ),
+        ("aq-flags-off", "bounded_experimentation_v3_flags_off", flags_off),
+    )
+    for arm_id, _label, config in arms:
+        _LOG.info(
+            "experiment_arm_start arm_id=%s schema_version=%s",
+            arm_id,
+            config.schema_version,
+        )
+        _LOG.debug(
+            "bounded_experimentation_channel_active active=%s",
+            config.bounded_experimentation is not None,
+        )
+    return _definition(
+        experiment_id="experiment-aq-bounded-experimentation",
         base=base,
         seed_matrix=matrix,
         arms=arms,

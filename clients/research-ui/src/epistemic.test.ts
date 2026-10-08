@@ -45,6 +45,15 @@ describe('epistemic mapping', () => {
     expect(epistemicFromOverlayKind('knowledge_genealogy_mutation')).toBe(
       'research_inference',
     )
+    expect(epistemicFromOverlayKind('bounded_experiment_trials')).toBe(
+      'research_inference',
+    )
+    expect(epistemicFromOverlayKind('bounded_experiment_discovery')).toBe(
+      'research_inference',
+    )
+    expect(epistemicFromOverlayKind('bounded_experiment_provenance')).toBe(
+      'research_inference',
+    )
     expect(epistemicFromEvidenceClass('ANALYTICAL_INFERRED')).toBe('research_inference')
   })
 

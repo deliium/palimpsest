@@ -96,6 +96,8 @@ Manifest digests are pinned in tests. Safe string substitution only; invalid nam
 
 `llm/prompts/reflection/v1/` is the reflection selector (`reflection.selection.v1`). The payload is candidate ids, counts, and closed codes. The schema has no prose claim field. `DISABLED` and `DETERMINISTIC` never call the provider. A missing provider, `allow_provider=False`, a transport error, a schema failure, or a foreign id applies the deterministic candidate set and sets `fallback_used`. The provider never becomes an `AgentCommand` and never mutates world state. Logs on this path are `reflection_llm_start`, `reflection_llm_complete`, and `reflection_llm_rejected` with mode, counts, and `reason_code` only.
 
+`llm/prompts/experiment_hypothesis/v1` may return only a closed hypothesis draft: operator, operand ids present in the current observation, and a subjective predicted outcome. Extra physics keys (products, probabilities, harm, laws, deltas) reject the draft. The draft never becomes a law and never selects the objective outcome class.
+
 ## Local OpenAI-compatible / Ollama / vLLM
 
 V1 ships one HTTP adapter (`OpenAICompatibleProvider`) aimed at OpenAI-compatible endpoints, including local Ollama and vLLM `/v1` servers. No vendor SDKs.

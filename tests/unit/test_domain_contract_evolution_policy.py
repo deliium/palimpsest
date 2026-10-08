@@ -32,6 +32,7 @@ from world.actions import (
     Drop,
     Eat,
     Erase,
+    Experiment,
     Feed,
     Flee,
     Give,
@@ -94,6 +95,7 @@ _CLOSED_COMMAND_TYPES: frozenset[type] = frozenset(
         RetrieveRecord,
         MaintainRepository,
         IndexRepository,
+        Experiment,
     }
 )
 
@@ -133,8 +135,8 @@ _PARITY_GATE = (
 )
 
 
-def test_agent_command_set_remains_closed_at_thirty_four() -> None:
-    assert len(_CLOSED_COMMAND_TYPES) == 34
+def test_agent_command_set_remains_closed_at_thirty_five() -> None:
+    assert len(_CLOSED_COMMAND_TYPES) == 35
     from world import actions as actions_mod
 
     # Mirror the public union membership without constructing parameterized commands.
@@ -173,6 +175,7 @@ def test_agent_command_set_remains_closed_at_thirty_four() -> None:
         RetrieveRecord,
         MaintainRepository,
         IndexRepository,
+        Experiment,
     }
     assert asserted == _CLOSED_COMMAND_TYPES
     assert hasattr(actions_mod, "AgentCommand")

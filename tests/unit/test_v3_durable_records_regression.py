@@ -15,6 +15,7 @@ from world.actions import (
     AnnotateRecord,
     CopyRecord,
     DamageRecord,
+    Experiment,
 )
 
 pytestmark = pytest.mark.unit
@@ -32,14 +33,15 @@ def test_semantic_event_count_is_47() -> None:
 
 def test_agent_command_count_includes_durable_commands() -> None:
     commands = get_args(AgentCommand)
-    assert len(commands) == 34
+    assert len(commands) == 35
+    assert Experiment in commands
     assert CopyRecord in commands
     assert AnnotateRecord in commands
     assert DamageRecord in commands
 
 
 def test_metric_family_count_includes_durable_and_repository() -> None:
-    assert METRIC_FAMILY_COUNT == 65
+    assert METRIC_FAMILY_COUNT == 68
     assert MetricFamilyId.DURABLE_RECORD_LINEAGE.value == "durable_record_lineage"
     assert MetricFamilyId.DURABLE_RECORD_FIDELITY.value == "durable_record_fidelity"
     assert MetricFamilyId.DURABLE_RECORD_SURVIVAL.value == "durable_record_survival"
