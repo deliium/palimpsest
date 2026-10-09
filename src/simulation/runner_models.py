@@ -118,6 +118,7 @@ RUNNER_SCHEMA_VERSION_V33: Final[str] = "runner-config-v33"
 RUNNER_SCHEMA_VERSION_V34: Final[str] = "runner-config-v34"
 RUNNER_SCHEMA_VERSION_V35: Final[str] = "runner-config-v35"
 RUNNER_SCHEMA_VERSION_V36: Final[str] = "runner-config-v36"
+RUNNER_SCHEMA_VERSION_V37: Final[str] = "runner-config-v37"
 RUNNER_SCHEMA_VERSION: Final[str] = RUNNER_SCHEMA_VERSION_V4
 SUPPORTED_RUNNER_SCHEMA_VERSIONS: Final[frozenset[str]] = frozenset(
     {
@@ -157,6 +158,7 @@ SUPPORTED_RUNNER_SCHEMA_VERSIONS: Final[frozenset[str]] = frozenset(
         RUNNER_SCHEMA_VERSION_V34,
         RUNNER_SCHEMA_VERSION_V35,
         RUNNER_SCHEMA_VERSION_V36,
+    RUNNER_SCHEMA_VERSION_V37,
     }
 )
 RESULT_SCHEMA_VERSION_V1: Final[str] = "runner-result-v1"
@@ -699,6 +701,7 @@ _SKILL_SCHEMAS: Final[frozenset[str]] = frozenset(
     RUNNER_SCHEMA_VERSION_V34,
     RUNNER_SCHEMA_VERSION_V35,
     RUNNER_SCHEMA_VERSION_V36,
+    RUNNER_SCHEMA_VERSION_V37,
     }
 )
 
@@ -2822,6 +2825,7 @@ _HISTORICAL_MEMORY_CULTURAL_SCHEMAS: Final[frozenset[str]] = frozenset(
         RUNNER_SCHEMA_VERSION_V34,
         RUNNER_SCHEMA_VERSION_V35,
         RUNNER_SCHEMA_VERSION_V36,
+    RUNNER_SCHEMA_VERSION_V37,
     }
 )
 _DURABLE_RECORDS_SCHEMAS: Final[frozenset[str]] = frozenset(
@@ -2830,6 +2834,7 @@ _DURABLE_RECORDS_SCHEMAS: Final[frozenset[str]] = frozenset(
         RUNNER_SCHEMA_VERSION_V34,
         RUNNER_SCHEMA_VERSION_V35,
         RUNNER_SCHEMA_VERSION_V36,
+    RUNNER_SCHEMA_VERSION_V37,
     }
 )
 _HISTORICAL_MEMORY_LAYER_SCHEMAS: Final[frozenset[str]] = frozenset(
@@ -2839,6 +2844,7 @@ _HISTORICAL_MEMORY_LAYER_SCHEMAS: Final[frozenset[str]] = frozenset(
         RUNNER_SCHEMA_VERSION_V34,
         RUNNER_SCHEMA_VERSION_V35,
         RUNNER_SCHEMA_VERSION_V36,
+    RUNNER_SCHEMA_VERSION_V37,
     }
 )
 _KNOWLEDGE_REPOSITORIES_SCHEMAS: Final[frozenset[str]] = frozenset(
@@ -2846,10 +2852,15 @@ _KNOWLEDGE_REPOSITORIES_SCHEMAS: Final[frozenset[str]] = frozenset(
         RUNNER_SCHEMA_VERSION_V34,
         RUNNER_SCHEMA_VERSION_V35,
         RUNNER_SCHEMA_VERSION_V36,
+    RUNNER_SCHEMA_VERSION_V37,
     }
 )
 _KNOWLEDGE_GENEALOGY_SCHEMAS: Final[frozenset[str]] = frozenset(
-    {RUNNER_SCHEMA_VERSION_V35, RUNNER_SCHEMA_VERSION_V36}
+    {
+        RUNNER_SCHEMA_VERSION_V35,
+        RUNNER_SCHEMA_VERSION_V36,
+        RUNNER_SCHEMA_VERSION_V37,
+    }
 )
 
 
@@ -4342,6 +4353,193 @@ def example_experiment_law(**overrides: object) -> ExperimentLaw:
         product_id=str(payload["product_id"]),
         harm_band=str(payload["harm_band"]),
         public_technique_token=str(payload["public_technique_token"]),
+    )
+
+
+TECHNIQUE_LIFECYCLE_POLICY_ID: Final[str] = "technique-lifecycle-v1"
+_TECHNIQUE_LIFECYCLE_KEYS: Final[frozenset[str]] = frozenset(
+    {
+        "policy_id",
+        "diffusion_window_ticks",
+        "rare_max",
+        "rediscovery_latch_ticks",
+        "material_anchors",
+    }
+)
+_TECHNIQUE_MATERIAL_ANCHOR_KEYS: Final[frozenset[str]] = frozenset(
+    {"content_key", "recipe_id"}
+)
+_TECHNIQUE_LIFECYCLE_FORBIDDEN_ALIASES: Final[frozenset[str]] = frozenset(
+    {
+        "technology_tree",
+        "tech_unlock",
+        "civilization_tech",
+        "required_tech",
+        "unlock_prerequisite",
+        "global_technique_registry",
+        "society_technology",
+        "requires_technique",
+    }
+)
+_TECHNIQUE_ANCHOR_MAX: Final[int] = 64
+
+
+def _technique_content_key(field_name: str, value: object) -> str:
+    if type(value) is not str:
+        raise TypeError(f"{field_name} must be str")
+    if not value.startswith(_TECHNIQUE_TOKEN_RE):
+        _LOGGER.error(
+            "technique_anchor_content_key reason_code=technique_anchor_content_key"
+        )
+        raise ValueError(
+            f"{field_name} must be tech:{{token}} (code=technique_anchor_content_key)"
+        )
+    slug = value[len(_TECHNIQUE_TOKEN_RE) :]
+    if (
+        not slug
+        or slug != slug.strip()
+        or not all(ch.islower() or ch.isdigit() or ch == "_" for ch in slug)
+    ):
+        _LOGGER.error(
+            "technique_anchor_content_key reason_code=technique_anchor_content_key"
+        )
+        raise ValueError(
+            f"{field_name} must be tech:{{token}} (code=technique_anchor_content_key)"
+        )
+    return value
+
+
+@dataclass(frozen=True, slots=True)
+class TechniqueMaterialAnchor:
+    """Research join from one recipe onto one practical-knowledge content key.
+
+    Not a prerequisite and not a production-rule change.
+    """
+
+    content_key: str
+    recipe_id: str
+
+    def __post_init__(self) -> None:
+        object.__setattr__(
+            self,
+            "content_key",
+            _technique_content_key(
+                "TechniqueMaterialAnchor.content_key", self.content_key
+            ),
+        )
+        object.__setattr__(
+            self,
+            "recipe_id",
+            require_stable_id("TechniqueMaterialAnchor.recipe_id", self.recipe_id),
+        )
+
+    def canonical_payload(self) -> dict[str, object]:
+        return {"content_key": self.content_key, "recipe_id": self.recipe_id}
+
+
+@dataclass(frozen=True, slots=True)
+class TechniqueLifecycleSpec:
+    """Opt-in analysis-only technique lifecycle sibling on runner-config-v37.
+
+    Absent object means the channel is off. Thresholds are research config,
+    not world rules.
+    """
+
+    policy_id: str = TECHNIQUE_LIFECYCLE_POLICY_ID
+    diffusion_window_ticks: int = 8
+    rare_max: int = 1
+    rediscovery_latch_ticks: int = 4
+    material_anchors: tuple[TechniqueMaterialAnchor, ...] = ()
+
+    def __post_init__(self) -> None:
+        policy = require_stable_id("TechniqueLifecycleSpec.policy_id", self.policy_id)
+        if policy != TECHNIQUE_LIFECYCLE_POLICY_ID:
+            _LOGGER.error(
+                "technique_lifecycle_policy_invalid reason_code=%s",
+                "technique_lifecycle_policy_invalid",
+            )
+            raise ValueError(
+                "policy_id must be technique-lifecycle-v1 "
+                "(code=technique_lifecycle_policy_invalid)"
+            )
+        object.__setattr__(self, "policy_id", policy)
+        window = require_exact_nonneg_int(
+            "diffusion_window_ticks", self.diffusion_window_ticks
+        )
+        if window < 1 or window > 64:
+            raise ValueError(
+                "diffusion_window_ticks must be in [1, 64] "
+                "(code=technique_lifecycle_window_invalid)"
+            )
+        object.__setattr__(self, "diffusion_window_ticks", window)
+        rare = require_exact_nonneg_int("rare_max", self.rare_max)
+        if rare < 1 or rare > 4:
+            raise ValueError(
+                "rare_max must be in [1, 4] (code=technique_lifecycle_rare_max_invalid)"
+            )
+        object.__setattr__(self, "rare_max", rare)
+        latch = require_exact_nonneg_int(
+            "rediscovery_latch_ticks", self.rediscovery_latch_ticks
+        )
+        if latch < 1 or latch > 32:
+            raise ValueError(
+                "rediscovery_latch_ticks must be in [1, 32] "
+                "(code=technique_lifecycle_latch_invalid)"
+            )
+        object.__setattr__(self, "rediscovery_latch_ticks", latch)
+        if isinstance(self.material_anchors, (str, bytes)) or not isinstance(
+            self.material_anchors, Sequence
+        ):
+            raise TypeError("material_anchors must be a sequence")
+        if len(self.material_anchors) > _TECHNIQUE_ANCHOR_MAX:
+            raise ValueError(
+                f"material_anchors must contain at most {_TECHNIQUE_ANCHOR_MAX} rows "
+                "(code=technique_lifecycle_anchors_overflow)"
+            )
+        rows: list[TechniqueMaterialAnchor] = []
+        seen: set[str] = set()
+        for anchor in self.material_anchors:
+            if type(anchor) is not TechniqueMaterialAnchor:
+                raise TypeError(
+                    "material_anchors entries must be TechniqueMaterialAnchor"
+                )
+            if anchor.content_key in seen:
+                _LOGGER.error(
+                    "technique_anchor_duplicate reason_code=technique_anchor_duplicate"
+                )
+                raise ValueError(
+                    "duplicate technique anchor content_key "
+                    "(code=technique_anchor_duplicate)"
+                )
+            seen.add(anchor.content_key)
+            rows.append(anchor)
+        object.__setattr__(self, "material_anchors", tuple(rows))
+
+    def canonical_payload(self) -> dict[str, object]:
+        return {
+            "diffusion_window_ticks": self.diffusion_window_ticks,
+            "material_anchors": [
+                anchor.canonical_payload() for anchor in self.material_anchors
+            ],
+            "policy_id": self.policy_id,
+            "rare_max": self.rare_max,
+            "rediscovery_latch_ticks": self.rediscovery_latch_ticks,
+        }
+
+
+def example_technique_lifecycle_spec(
+    *,
+    material_anchors: tuple[TechniqueMaterialAnchor, ...] = (),
+    diffusion_window_ticks: int = 8,
+    rare_max: int = 1,
+    rediscovery_latch_ticks: int = 4,
+) -> TechniqueLifecycleSpec:
+    """Reference technique lifecycle spec for tests."""
+    return TechniqueLifecycleSpec(
+        material_anchors=material_anchors,
+        diffusion_window_ticks=diffusion_window_ticks,
+        rare_max=rare_max,
+        rediscovery_latch_ticks=rediscovery_latch_ticks,
     )
 
 
@@ -6014,6 +6212,7 @@ class SimulationRunnerConfig:
     knowledge_repositories: KnowledgeRepositoriesSpec | None = None
     knowledge_genealogy: KnowledgeGenealogySpec | None = None
     bounded_experimentation: BoundedExperimentationSpec | None = None
+    technique_lifecycle: TechniqueLifecycleSpec | None = None
 
     def __post_init__(self) -> None:
         # Late import avoids circular import with new_agent_initialization.
@@ -6103,6 +6302,13 @@ class SimulationRunnerConfig:
         ):
             raise TypeError(
                 "bounded_experimentation must be BoundedExperimentationSpec or None"
+            )
+        if (
+            self.technique_lifecycle is not None
+            and type(self.technique_lifecycle) is not TechniqueLifecycleSpec
+        ):
+            raise TypeError(
+                "technique_lifecycle must be TechniqueLifecycleSpec or None"
             )
         if type(self.scenario) is not WorldScenarioSpec:
             raise TypeError("scenario must be WorldScenarioSpec")
@@ -6201,6 +6407,7 @@ class SimulationRunnerConfig:
             RUNNER_SCHEMA_VERSION_V34,
             RUNNER_SCHEMA_VERSION_V35,
             RUNNER_SCHEMA_VERSION_V36,
+    RUNNER_SCHEMA_VERSION_V37,
         }
         if (
             self.v3_capability_flags.generational_population
@@ -6229,6 +6436,7 @@ class SimulationRunnerConfig:
             RUNNER_SCHEMA_VERSION_V34,
             RUNNER_SCHEMA_VERSION_V35,
             RUNNER_SCHEMA_VERSION_V36,
+    RUNNER_SCHEMA_VERSION_V37,
         }
         if self.v3_capability_flags.kinship_inheritance:
             if self.schema_version not in _kinship_schemas:
@@ -6274,6 +6482,7 @@ class SimulationRunnerConfig:
                 RUNNER_SCHEMA_VERSION_V34,
                 RUNNER_SCHEMA_VERSION_V35,
                 RUNNER_SCHEMA_VERSION_V36,
+    RUNNER_SCHEMA_VERSION_V37,
             }:
                 _LOGGER.error(
                     "dependency_care_requires_v28 schema_version=%s "
@@ -6326,6 +6535,7 @@ class SimulationRunnerConfig:
                 RUNNER_SCHEMA_VERSION_V34,
                 RUNNER_SCHEMA_VERSION_V35,
                 RUNNER_SCHEMA_VERSION_V36,
+    RUNNER_SCHEMA_VERSION_V37,
             }:
                 _LOGGER.error(
                     "developmental_learning_requires_v29 schema_version=%s "
@@ -6390,6 +6600,7 @@ class SimulationRunnerConfig:
                 RUNNER_SCHEMA_VERSION_V34,
                 RUNNER_SCHEMA_VERSION_V35,
                 RUNNER_SCHEMA_VERSION_V36,
+    RUNNER_SCHEMA_VERSION_V37,
             }:
                 _LOGGER.error(
                     "mentorship_requires_v30 schema_version=%s "
@@ -6461,6 +6672,59 @@ class SimulationRunnerConfig:
                 "runner-config-v30 requires mentorship "
                 "(code=v30_requires_mentorship)"
             )
+        if self.technique_lifecycle is not None:
+            if not self.v3_capability_flags.cultural_historical_memory:
+                _LOGGER.error(
+                    "technique_lifecycle_without_cultural_flag schema_version=%s "
+                    "reason_code=technique_lifecycle_without_cultural_flag",
+                    self.schema_version,
+                )
+                raise ValueError(
+                    "technique_lifecycle requires cultural_historical_memory "
+                    "(code=technique_lifecycle_without_cultural_flag)"
+                )
+            if self.cultural_feature_provenance is None:
+                _LOGGER.error(
+                    "technique_lifecycle_requires_cultural_provenance "
+                    "schema_version=%s "
+                    "reason_code=technique_lifecycle_requires_cultural_provenance",
+                    self.schema_version,
+                )
+                raise ValueError(
+                    "technique_lifecycle requires cultural_feature_provenance "
+                    "(code=technique_lifecycle_requires_cultural_provenance)"
+                )
+            if self.knowledge_genealogy is None:
+                _LOGGER.error(
+                    "technique_lifecycle_requires_knowledge_genealogy "
+                    "schema_version=%s "
+                    "reason_code=technique_lifecycle_requires_knowledge_genealogy",
+                    self.schema_version,
+                )
+                raise ValueError(
+                    "technique_lifecycle requires knowledge_genealogy "
+                    "(code=technique_lifecycle_requires_knowledge_genealogy)"
+                )
+            if self.schema_version != RUNNER_SCHEMA_VERSION_V37:
+                _LOGGER.error(
+                    "technique_lifecycle_requires_v37 schema_version=%s "
+                    "reason_code=technique_lifecycle_requires_v37",
+                    self.schema_version,
+                )
+                raise ValueError(
+                    "technique_lifecycle requires runner-config-v37 "
+                    "(code=technique_lifecycle_requires_v37)"
+                )
+            _LOGGER.info(
+                "technique_lifecycle_schema_select schema_version=%s "
+                "anchor_count=%s diffusion_window_ticks=%s rare_max=%s "
+                "rediscovery_latch_ticks=%s",
+                self.schema_version,
+                len(self.technique_lifecycle.material_anchors),
+                self.technique_lifecycle.diffusion_window_ticks,
+                self.technique_lifecycle.rare_max,
+                self.technique_lifecycle.rediscovery_latch_ticks,
+            )
         if self.cultural_feature_provenance is not None:
             if self.schema_version not in _HISTORICAL_MEMORY_CULTURAL_SCHEMAS:
                 _LOGGER.error(
@@ -6514,6 +6778,7 @@ class SimulationRunnerConfig:
                 RUNNER_SCHEMA_VERSION_V34,
                 RUNNER_SCHEMA_VERSION_V35,
                 RUNNER_SCHEMA_VERSION_V36,
+    RUNNER_SCHEMA_VERSION_V37,
             }
             and self.v3_capability_flags.cultural_historical_memory
         ):
@@ -6783,8 +7048,12 @@ class SimulationRunnerConfig:
                     "runner-config-v35 requires knowledge_genealogy "
                     "(code=v35_requires_knowledge_genealogy)"
                 )
+        _experiment_schemas = {
+            RUNNER_SCHEMA_VERSION_V36,
+            RUNNER_SCHEMA_VERSION_V37,
+        }
         if self.bounded_experimentation is not None:
-            if self.schema_version != RUNNER_SCHEMA_VERSION_V36:
+            if self.schema_version not in _experiment_schemas:
                 _LOGGER.error(
                     "bounded_experimentation_requires_v36 schema_version=%s "
                     "reason_code=bounded_experimentation_requires_v36",
@@ -6864,8 +7133,39 @@ class SimulationRunnerConfig:
                     self.schema_version,
                 )
                 raise ValueError(
-                    "runner-config-v36 requires bounded_experimentation "
-                    "(code=v36_requires_bounded_experimentation)"
+                "runner-config-v36 requires bounded_experimentation "
+                "(code=v36_requires_bounded_experimentation)"
+            )
+        if self.schema_version == RUNNER_SCHEMA_VERSION_V37:
+            if self.cultural_feature_provenance is None:
+                _LOGGER.error(
+                    "v37_requires_cultural_provenance schema_version=%s "
+                    "reason_code=v37_requires_cultural_provenance",
+                    self.schema_version,
+                )
+                raise ValueError(
+                    "runner-config-v37 requires cultural_feature_provenance "
+                    "(code=v37_requires_cultural_provenance)"
+                )
+            if self.knowledge_genealogy is None:
+                _LOGGER.error(
+                    "v37_requires_knowledge_genealogy schema_version=%s "
+                    "reason_code=v37_requires_knowledge_genealogy",
+                    self.schema_version,
+                )
+                raise ValueError(
+                    "runner-config-v37 requires knowledge_genealogy "
+                    "(code=v37_requires_knowledge_genealogy)"
+                )
+            if self.technique_lifecycle is None:
+                _LOGGER.error(
+                    "v37_requires_technique_lifecycle schema_version=%s "
+                    "reason_code=v37_requires_technique_lifecycle",
+                    self.schema_version,
+                )
+                raise ValueError(
+                    "runner-config-v37 requires technique_lifecycle "
+                    "(code=v37_requires_technique_lifecycle)"
                 )
         other_v3_enabled = tuple(
             name
@@ -6887,6 +7187,7 @@ class SimulationRunnerConfig:
             RUNNER_SCHEMA_VERSION_V34,
             RUNNER_SCHEMA_VERSION_V35,
             RUNNER_SCHEMA_VERSION_V36,
+    RUNNER_SCHEMA_VERSION_V37,
         }:
             _LOGGER.error(
                 "v3_capability_requires_v23 schema_version=%s "
@@ -6952,7 +7253,7 @@ class SimulationRunnerConfig:
                     self.schema_version,
                 )
                 raise ValueError(
-                    "cultural-only v31/v32/v33/v34/v35 forbids "
+                    "cultural-only v31/v32/v33/v34/v35/v36/v37 forbids "
                     "population_lifecycle "
                     "(code=cultural_only_forbids_lifecycle_spec)"
                 )
@@ -6963,7 +7264,7 @@ class SimulationRunnerConfig:
                     self.schema_version,
                 )
                 raise ValueError(
-                    "cultural-only v31/v32/v33/v34/v35 forbids "
+                    "cultural-only v31/v32/v33/v34/v35/v36/v37 forbids "
                     "new_agent_initialization "
                     "(code=cultural_only_forbids_new_agent_init)"
                 )
@@ -6996,6 +7297,7 @@ class SimulationRunnerConfig:
                     RUNNER_SCHEMA_VERSION_V34,
                     RUNNER_SCHEMA_VERSION_V35,
                     RUNNER_SCHEMA_VERSION_V36,
+    RUNNER_SCHEMA_VERSION_V37,
                 }
                 or self.v3_capability_flags.generational_population
             )
@@ -7064,6 +7366,7 @@ class SimulationRunnerConfig:
                 RUNNER_SCHEMA_VERSION_V34,
                 RUNNER_SCHEMA_VERSION_V35,
                 RUNNER_SCHEMA_VERSION_V36,
+    RUNNER_SCHEMA_VERSION_V37,
             }
         ):
             _LOGGER.error(
@@ -7091,6 +7394,7 @@ class SimulationRunnerConfig:
                 RUNNER_SCHEMA_VERSION_V34,
                 RUNNER_SCHEMA_VERSION_V35,
                 RUNNER_SCHEMA_VERSION_V36,
+    RUNNER_SCHEMA_VERSION_V37,
             }
             and self.v3_capability_flags.generational_population
         )
@@ -7233,6 +7537,7 @@ class SimulationRunnerConfig:
         RUNNER_SCHEMA_VERSION_V34,
         RUNNER_SCHEMA_VERSION_V35,
         RUNNER_SCHEMA_VERSION_V36,
+    RUNNER_SCHEMA_VERSION_V37,
         }
         if non_disabled and self.schema_version not in consolidation_schemas:
             _LOGGER.error(
@@ -7295,6 +7600,7 @@ class SimulationRunnerConfig:
         RUNNER_SCHEMA_VERSION_V34,
         RUNNER_SCHEMA_VERSION_V35,
         RUNNER_SCHEMA_VERSION_V36,
+    RUNNER_SCHEMA_VERSION_V37,
         }
         if reflecting and self.schema_version not in reflection_schemas:
             _LOGGER.error(
@@ -7357,6 +7663,7 @@ class SimulationRunnerConfig:
         RUNNER_SCHEMA_VERSION_V34,
         RUNNER_SCHEMA_VERSION_V35,
         RUNNER_SCHEMA_VERSION_V36,
+    RUNNER_SCHEMA_VERSION_V37,
         }
         if planning and self.schema_version not in prospective_schemas:
             _LOGGER.error(
@@ -7418,6 +7725,7 @@ class SimulationRunnerConfig:
         RUNNER_SCHEMA_VERSION_V34,
         RUNNER_SCHEMA_VERSION_V35,
         RUNNER_SCHEMA_VERSION_V36,
+    RUNNER_SCHEMA_VERSION_V37,
         }
         if considering and self.schema_version not in counterfactual_schemas:
             _LOGGER.error(
@@ -7478,6 +7786,7 @@ class SimulationRunnerConfig:
         RUNNER_SCHEMA_VERSION_V34,
         RUNNER_SCHEMA_VERSION_V35,
         RUNNER_SCHEMA_VERSION_V36,
+    RUNNER_SCHEMA_VERSION_V37,
         }:
             _LOGGER.error(
                 "invalid_fields path=agents.cognition.communication_strategy_mode "
@@ -7536,6 +7845,7 @@ class SimulationRunnerConfig:
         RUNNER_SCHEMA_VERSION_V34,
         RUNNER_SCHEMA_VERSION_V35,
         RUNNER_SCHEMA_VERSION_V36,
+    RUNNER_SCHEMA_VERSION_V37,
         }:
             _LOGGER.error(
                 "invalid_fields path=agents.cognition.reputation_mode "
@@ -7636,6 +7946,7 @@ class SimulationRunnerConfig:
         RUNNER_SCHEMA_VERSION_V34,
         RUNNER_SCHEMA_VERSION_V35,
         RUNNER_SCHEMA_VERSION_V36,
+    RUNNER_SCHEMA_VERSION_V37,
         }:
             _LOGGER.error(
                 "invalid_fields path=agents.cognition.teaching_interaction_mode "
@@ -7685,6 +7996,7 @@ class SimulationRunnerConfig:
         RUNNER_SCHEMA_VERSION_V34,
         RUNNER_SCHEMA_VERSION_V35,
         RUNNER_SCHEMA_VERSION_V36,
+    RUNNER_SCHEMA_VERSION_V37,
         }
         if (dynamics is not None and self.schema_version not in dynamics_schemas) or (
             self.schema_version == RUNNER_SCHEMA_VERSION_V14 and dynamics is None
@@ -7729,6 +8041,7 @@ class SimulationRunnerConfig:
         RUNNER_SCHEMA_VERSION_V34,
         RUNNER_SCHEMA_VERSION_V35,
         RUNNER_SCHEMA_VERSION_V36,
+    RUNNER_SCHEMA_VERSION_V37,
         }:
             _LOGGER.error(
                 "invalid_fields path=agents.cognition.territorial_claim_mode "
@@ -7779,6 +8092,7 @@ class SimulationRunnerConfig:
         RUNNER_SCHEMA_VERSION_V34,
         RUNNER_SCHEMA_VERSION_V35,
         RUNNER_SCHEMA_VERSION_V36,
+    RUNNER_SCHEMA_VERSION_V37,
         }:
             _LOGGER.error(
                 "invalid_fields path=agents.cognition.group_formation_mode "
@@ -7823,6 +8137,7 @@ class SimulationRunnerConfig:
         RUNNER_SCHEMA_VERSION_V34,
         RUNNER_SCHEMA_VERSION_V35,
         RUNNER_SCHEMA_VERSION_V36,
+    RUNNER_SCHEMA_VERSION_V37,
         }:
             _LOGGER.error(
                 "invalid_fields path=agents.cognition.social_norm_mode "
@@ -7870,6 +8185,7 @@ class SimulationRunnerConfig:
         RUNNER_SCHEMA_VERSION_V34,
         RUNNER_SCHEMA_VERSION_V35,
         RUNNER_SCHEMA_VERSION_V36,
+    RUNNER_SCHEMA_VERSION_V37,
         }
         if conventions_on and self.schema_version not in convention_schemas:
             _LOGGER.error(
@@ -7922,6 +8238,7 @@ class SimulationRunnerConfig:
         RUNNER_SCHEMA_VERSION_V34,
         RUNNER_SCHEMA_VERSION_V35,
         RUNNER_SCHEMA_VERSION_V36,
+    RUNNER_SCHEMA_VERSION_V37,
         }
         if artifacts_on and self.schema_version not in artifact_schemas:
             runner_log.error(
@@ -7970,6 +8287,7 @@ class SimulationRunnerConfig:
         RUNNER_SCHEMA_VERSION_V34,
         RUNNER_SCHEMA_VERSION_V35,
         RUNNER_SCHEMA_VERSION_V36,
+    RUNNER_SCHEMA_VERSION_V37,
         }
         if naming_on and self.schema_version not in naming_schemas:
             runner_log.error(
@@ -8015,6 +8333,7 @@ class SimulationRunnerConfig:
         RUNNER_SCHEMA_VERSION_V34,
         RUNNER_SCHEMA_VERSION_V35,
         RUNNER_SCHEMA_VERSION_V36,
+    RUNNER_SCHEMA_VERSION_V37,
         }
         budget_modes = tuple(
             agent.cognition.cognitive_budget_mode for agent in self.agents
@@ -8036,6 +8355,7 @@ class SimulationRunnerConfig:
         RUNNER_SCHEMA_VERSION_V34,
         RUNNER_SCHEMA_VERSION_V35,
         RUNNER_SCHEMA_VERSION_V36,
+    RUNNER_SCHEMA_VERSION_V37,
         }
         if budgets_on and self.schema_version not in budget_schemas:
             runner_log.error(
@@ -8155,6 +8475,7 @@ class SimulationRunnerConfig:
         RUNNER_SCHEMA_VERSION_V34,
         RUNNER_SCHEMA_VERSION_V35,
         RUNNER_SCHEMA_VERSION_V36,
+    RUNNER_SCHEMA_VERSION_V37,
         }:
             _LOGGER.error(
                 "invalid_fields path=agents.cognition.production_knowledge_mode "
@@ -8192,6 +8513,7 @@ class SimulationRunnerConfig:
         RUNNER_SCHEMA_VERSION_V34,
         RUNNER_SCHEMA_VERSION_V35,
         RUNNER_SCHEMA_VERSION_V36,
+    RUNNER_SCHEMA_VERSION_V37,
         }:
             from world.production import production_catalog_digest
 
@@ -8209,6 +8531,22 @@ class SimulationRunnerConfig:
                     "agents must share one production catalog "
                     "(code=production_catalog_mismatch)"
                 )
+            if self.technique_lifecycle is not None:
+                catalog_ids = {
+                    recipe.recipe_id.value for recipe in catalogs[0].recipes
+                }
+                for anchor in self.technique_lifecycle.material_anchors:
+                    if anchor.recipe_id not in catalog_ids:
+                        _LOGGER.error(
+                            "technique_anchor_unknown_recipe schema_version=%s "
+                            "reason_code=technique_anchor_unknown_recipe",
+                            self.schema_version,
+                        )
+                        raise ValueError(
+                            "technique anchor recipe_id is absent from the "
+                            "production catalog "
+                            "(code=technique_anchor_unknown_recipe)"
+                        )
             mode_count = sum(
                 mode is ProductionKnowledgeMode.DETERMINISTIC
                 for mode in production_modes
@@ -8269,6 +8607,7 @@ class SimulationRunnerConfig:
         RUNNER_SCHEMA_VERSION_V34,
         RUNNER_SCHEMA_VERSION_V35,
         RUNNER_SCHEMA_VERSION_V36,
+    RUNNER_SCHEMA_VERSION_V37,
         }:
             shared_teaching = teaching_weight_tuple(self.agents[0].cognition)
             if any(

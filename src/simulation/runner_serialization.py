@@ -19,6 +19,9 @@ from llm.factory import ProviderAdapterKind
 from llm.models import StructuredOutputMode
 from simulation.models import StochasticIdentity
 from simulation.runner_models import (
+    _BOUNDED_EXPERIMENTATION_FORBIDDEN_ALIASES,
+    _TECHNIQUE_LIFECYCLE_FORBIDDEN_ALIASES,
+    BOUNDED_EXPERIMENTATION_POLICY_ID,
     COGNITION_POLICY_VERSION,
     MORTALITY_POLICY_VERSION,
     PROVIDER_SETTINGS_VERSION,
@@ -60,10 +63,12 @@ from simulation.runner_models import (
     RUNNER_SCHEMA_VERSION_V34,
     RUNNER_SCHEMA_VERSION_V35,
     RUNNER_SCHEMA_VERSION_V36,
+    RUNNER_SCHEMA_VERSION_V37,
     SUPPORTED_RUNNER_SCHEMA_VERSIONS,
     AgentCognitionSpec,
     AgentRunnerSpec,
     ArtifactInterpretationMode,
+    BoundedExperimentationSpec,
     CognitionCounters,
     CognitionFailurePolicy,
     CognitionTraceDetail,
@@ -83,32 +88,29 @@ from simulation.runner_models import (
     DevelopmentalCognitiveBudgetCoupling,
     DevelopmentalLearningSpec,
     DriveOverrideSpec,
-    ExactReproducibilityMode,
-    ExperimentAssignmentRef,
-    FinalizedTickReceipt,
-    GroupFormationMode,
-    HistoricalMemoryLayersSpec,
     DurableAnnotationPolicy,
     DurableCopyFidelityPolicy,
     DurableIntegrityPolicy,
     DurableLineagePolicy,
     DurableRecordsSpec,
+    ExactReproducibilityMode,
+    ExperimentAssignmentRef,
+    ExperimentLaw,
+    FinalizedTickReceipt,
+    GroupFormationMode,
+    HistoricalMemoryLayersSpec,
+    ImaginationMode,
+    KinshipSpec,
+    KnowledgeGenealogyLineagePolicy,
+    KnowledgeGenealogyMutationPolicy,
+    KnowledgeGenealogyQueryPolicy,
+    KnowledgeGenealogySpec,
+    KnowledgeGenealogyUptakeCompose,
     KnowledgeRepositoriesSpec,
     KnowledgeRepositoryAccessPolicy,
     KnowledgeRepositoryCapacityPolicy,
     KnowledgeRepositoryIndexPolicy,
     KnowledgeRepositoryMaintenancePolicy,
-    KnowledgeGenealogyLineagePolicy,
-    KnowledgeGenealogyMutationPolicy,
-    KnowledgeGenealogyQueryPolicy,
-    BOUNDED_EXPERIMENTATION_POLICY_ID,
-    BoundedExperimentationSpec,
-    ExperimentLaw,
-    KnowledgeGenealogySpec,
-    _BOUNDED_EXPERIMENTATION_FORBIDDEN_ALIASES,
-    KnowledgeGenealogyUptakeCompose,
-    ImaginationMode,
-    KinshipSpec,
     MemoryMode,
     MentorshipBondPolicy,
     MentorshipLineagePolicy,
@@ -134,6 +136,8 @@ from simulation.runner_models import (
     SocialConventionMode,
     SocialNormMode,
     TeachingInteractionMode,
+    TechniqueLifecycleSpec,
+    TechniqueMaterialAnchor,
     TerritorialClaimMode,
     V2CapabilityFlags,
     V3CapabilityFlags,
@@ -460,6 +464,7 @@ _SKILL_SCHEMA_VERSIONS: Final[frozenset[str]] = frozenset(
     RUNNER_SCHEMA_VERSION_V34,
     RUNNER_SCHEMA_VERSION_V35,
     RUNNER_SCHEMA_VERSION_V36,
+    RUNNER_SCHEMA_VERSION_V37,
     }
 )
 _COGNITION_SCHEMA_CONSOLIDATION: Final[frozenset[str]] = frozenset(
@@ -496,6 +501,7 @@ _COGNITION_SCHEMA_CONSOLIDATION: Final[frozenset[str]] = frozenset(
     RUNNER_SCHEMA_VERSION_V34,
     RUNNER_SCHEMA_VERSION_V35,
     RUNNER_SCHEMA_VERSION_V36,
+    RUNNER_SCHEMA_VERSION_V37,
     }
 )
 _COGNITION_SCHEMA_REFLECTION: Final[frozenset[str]] = frozenset(
@@ -531,6 +537,7 @@ _COGNITION_SCHEMA_REFLECTION: Final[frozenset[str]] = frozenset(
     RUNNER_SCHEMA_VERSION_V34,
     RUNNER_SCHEMA_VERSION_V35,
     RUNNER_SCHEMA_VERSION_V36,
+    RUNNER_SCHEMA_VERSION_V37,
     }
 )
 _COGNITION_SCHEMA_PROSPECTIVE: Final[frozenset[str]] = frozenset(
@@ -565,6 +572,7 @@ _COGNITION_SCHEMA_PROSPECTIVE: Final[frozenset[str]] = frozenset(
     RUNNER_SCHEMA_VERSION_V34,
     RUNNER_SCHEMA_VERSION_V35,
     RUNNER_SCHEMA_VERSION_V36,
+    RUNNER_SCHEMA_VERSION_V37,
     }
 )
 _COGNITION_SCHEMA_COUNTERFACTUAL: Final[frozenset[str]] = frozenset(
@@ -598,6 +606,7 @@ _COGNITION_SCHEMA_COUNTERFACTUAL: Final[frozenset[str]] = frozenset(
     RUNNER_SCHEMA_VERSION_V34,
     RUNNER_SCHEMA_VERSION_V35,
     RUNNER_SCHEMA_VERSION_V36,
+    RUNNER_SCHEMA_VERSION_V37,
     }
 )
 _COGNITION_SCHEMA_STRATEGY: Final[frozenset[str]] = frozenset(
@@ -630,6 +639,7 @@ _COGNITION_SCHEMA_STRATEGY: Final[frozenset[str]] = frozenset(
     RUNNER_SCHEMA_VERSION_V34,
     RUNNER_SCHEMA_VERSION_V35,
     RUNNER_SCHEMA_VERSION_V36,
+    RUNNER_SCHEMA_VERSION_V37,
     }
 )
 _COGNITION_SCHEMA_REPUTATION: Final[frozenset[str]] = frozenset(
@@ -661,6 +671,7 @@ _COGNITION_SCHEMA_REPUTATION: Final[frozenset[str]] = frozenset(
     RUNNER_SCHEMA_VERSION_V34,
     RUNNER_SCHEMA_VERSION_V35,
     RUNNER_SCHEMA_VERSION_V36,
+    RUNNER_SCHEMA_VERSION_V37,
     }
 )
 
@@ -957,6 +968,7 @@ def _encode_cognition(
     RUNNER_SCHEMA_VERSION_V34,
     RUNNER_SCHEMA_VERSION_V35,
     RUNNER_SCHEMA_VERSION_V36,
+    RUNNER_SCHEMA_VERSION_V37,
     }:
         payload["teaching_interaction_mode"] = value.teaching_interaction_mode.value
         for name in _TEACHING_WEIGHT_KEYS:
@@ -986,6 +998,7 @@ def _encode_cognition(
     RUNNER_SCHEMA_VERSION_V34,
     RUNNER_SCHEMA_VERSION_V35,
     RUNNER_SCHEMA_VERSION_V36,
+    RUNNER_SCHEMA_VERSION_V37,
     }:
         payload["production_knowledge_mode"] = value.production_knowledge_mode.value
         payload["production_catalog"] = _encode_production_catalog(
@@ -1014,6 +1027,7 @@ def _encode_cognition(
     RUNNER_SCHEMA_VERSION_V34,
     RUNNER_SCHEMA_VERSION_V35,
     RUNNER_SCHEMA_VERSION_V36,
+    RUNNER_SCHEMA_VERSION_V37,
     }:
         payload["territorial_claim_mode"] = value.territorial_claim_mode.value
     if schema_version in {
@@ -1038,6 +1052,7 @@ def _encode_cognition(
     RUNNER_SCHEMA_VERSION_V34,
     RUNNER_SCHEMA_VERSION_V35,
     RUNNER_SCHEMA_VERSION_V36,
+    RUNNER_SCHEMA_VERSION_V37,
     }:
         payload["group_formation_mode"] = value.group_formation_mode.value
     if schema_version in {
@@ -1061,6 +1076,7 @@ def _encode_cognition(
     RUNNER_SCHEMA_VERSION_V34,
     RUNNER_SCHEMA_VERSION_V35,
     RUNNER_SCHEMA_VERSION_V36,
+    RUNNER_SCHEMA_VERSION_V37,
     }:
         payload["social_norm_mode"] = value.social_norm_mode.value
     if schema_version in {
@@ -1083,6 +1099,7 @@ def _encode_cognition(
     RUNNER_SCHEMA_VERSION_V34,
     RUNNER_SCHEMA_VERSION_V35,
     RUNNER_SCHEMA_VERSION_V36,
+    RUNNER_SCHEMA_VERSION_V37,
     }:
         payload["social_convention_mode"] = value.social_convention_mode.value
     if schema_version in {
@@ -1104,6 +1121,7 @@ def _encode_cognition(
     RUNNER_SCHEMA_VERSION_V34,
     RUNNER_SCHEMA_VERSION_V35,
     RUNNER_SCHEMA_VERSION_V36,
+    RUNNER_SCHEMA_VERSION_V37,
     }:
         payload["artifact_interpretation_mode"] = (
             value.artifact_interpretation_mode.value
@@ -1126,6 +1144,7 @@ def _encode_cognition(
     RUNNER_SCHEMA_VERSION_V34,
     RUNNER_SCHEMA_VERSION_V35,
     RUNNER_SCHEMA_VERSION_V36,
+    RUNNER_SCHEMA_VERSION_V37,
     }:
         payload["semantic_naming_mode"] = value.semantic_naming_mode.value
     if schema_version in {
@@ -1145,6 +1164,7 @@ def _encode_cognition(
     RUNNER_SCHEMA_VERSION_V34,
     RUNNER_SCHEMA_VERSION_V35,
     RUNNER_SCHEMA_VERSION_V36,
+    RUNNER_SCHEMA_VERSION_V37,
     }:
         payload["cultural_narrative_mode"] = value.cultural_narrative_mode.value
     if schema_version in {
@@ -1163,6 +1183,7 @@ def _encode_cognition(
     RUNNER_SCHEMA_VERSION_V34,
     RUNNER_SCHEMA_VERSION_V35,
     RUNNER_SCHEMA_VERSION_V36,
+    RUNNER_SCHEMA_VERSION_V37,
     }:
         payload["cognitive_budget_mode"] = value.cognitive_budget_mode.value
         limits = value.cognitive_budget_limits
@@ -1194,6 +1215,7 @@ def _encode_cognition(
         RUNNER_SCHEMA_VERSION_V34,
         RUNNER_SCHEMA_VERSION_V35,
         RUNNER_SCHEMA_VERSION_V36,
+    RUNNER_SCHEMA_VERSION_V37,
         }:
             # Full v22 keyset on v23+; DISABLED budgets encode null limit keys.
             for key in _BUDGET_LIMIT_KEYS:
@@ -1233,6 +1255,7 @@ def _decode_cognition(
     RUNNER_SCHEMA_VERSION_V34,
     RUNNER_SCHEMA_VERSION_V35,
     RUNNER_SCHEMA_VERSION_V36,
+    RUNNER_SCHEMA_VERSION_V37,
     }:
         _require_keys(data, _COGNITION_KEYS_V22, path=path)
     elif schema_version == RUNNER_SCHEMA_VERSION_V21:
@@ -1392,6 +1415,7 @@ def _decode_cognition(
     RUNNER_SCHEMA_VERSION_V34,
     RUNNER_SCHEMA_VERSION_V35,
     RUNNER_SCHEMA_VERSION_V36,
+    RUNNER_SCHEMA_VERSION_V37,
     }:
         try:
             teaching_interaction_mode = TeachingInteractionMode(
@@ -1433,6 +1457,7 @@ def _decode_cognition(
     RUNNER_SCHEMA_VERSION_V34,
     RUNNER_SCHEMA_VERSION_V35,
     RUNNER_SCHEMA_VERSION_V36,
+    RUNNER_SCHEMA_VERSION_V37,
     }:
         try:
             production_knowledge_mode = ProductionKnowledgeMode(
@@ -1475,6 +1500,7 @@ def _decode_cognition(
     RUNNER_SCHEMA_VERSION_V34,
     RUNNER_SCHEMA_VERSION_V35,
     RUNNER_SCHEMA_VERSION_V36,
+    RUNNER_SCHEMA_VERSION_V37,
     }:
         try:
             territorial_claim_mode = TerritorialClaimMode(
@@ -1508,6 +1534,7 @@ def _decode_cognition(
     RUNNER_SCHEMA_VERSION_V34,
     RUNNER_SCHEMA_VERSION_V35,
     RUNNER_SCHEMA_VERSION_V36,
+    RUNNER_SCHEMA_VERSION_V37,
     }:
         try:
             group_formation_mode = GroupFormationMode(
@@ -1540,6 +1567,7 @@ def _decode_cognition(
     RUNNER_SCHEMA_VERSION_V34,
     RUNNER_SCHEMA_VERSION_V35,
     RUNNER_SCHEMA_VERSION_V36,
+    RUNNER_SCHEMA_VERSION_V37,
     }:
         try:
             social_norm_mode = SocialNormMode(
@@ -1571,6 +1599,7 @@ def _decode_cognition(
     RUNNER_SCHEMA_VERSION_V34,
     RUNNER_SCHEMA_VERSION_V35,
     RUNNER_SCHEMA_VERSION_V36,
+    RUNNER_SCHEMA_VERSION_V37,
     }:
         try:
             social_convention_mode = SocialConventionMode(
@@ -1601,6 +1630,7 @@ def _decode_cognition(
     RUNNER_SCHEMA_VERSION_V34,
     RUNNER_SCHEMA_VERSION_V35,
     RUNNER_SCHEMA_VERSION_V36,
+    RUNNER_SCHEMA_VERSION_V37,
     }:
         try:
             artifact_interpretation_mode = ArtifactInterpretationMode(
@@ -1631,6 +1661,7 @@ def _decode_cognition(
     RUNNER_SCHEMA_VERSION_V34,
     RUNNER_SCHEMA_VERSION_V35,
     RUNNER_SCHEMA_VERSION_V36,
+    RUNNER_SCHEMA_VERSION_V37,
     }:
         try:
             semantic_naming_mode = SemanticNamingMode(
@@ -1659,6 +1690,7 @@ def _decode_cognition(
     RUNNER_SCHEMA_VERSION_V34,
     RUNNER_SCHEMA_VERSION_V35,
     RUNNER_SCHEMA_VERSION_V36,
+    RUNNER_SCHEMA_VERSION_V37,
     }:
         try:
             cultural_narrative_mode = CulturalNarrativeMode(
@@ -1688,6 +1720,7 @@ def _decode_cognition(
     RUNNER_SCHEMA_VERSION_V34,
     RUNNER_SCHEMA_VERSION_V35,
     RUNNER_SCHEMA_VERSION_V36,
+    RUNNER_SCHEMA_VERSION_V37,
     }:
         try:
             cognitive_budget_mode = CognitiveBudgetMode(
@@ -1716,6 +1749,7 @@ def _decode_cognition(
             RUNNER_SCHEMA_VERSION_V34,
             RUNNER_SCHEMA_VERSION_V35,
             RUNNER_SCHEMA_VERSION_V36,
+    RUNNER_SCHEMA_VERSION_V37,
             }
             and cognitive_budget_mode is CognitiveBudgetMode.DISABLED
         ):
@@ -1879,6 +1913,7 @@ def _encode_agent(value: AgentRunnerSpec, *, schema_version: str) -> dict[str, A
     RUNNER_SCHEMA_VERSION_V34,
     RUNNER_SCHEMA_VERSION_V35,
     RUNNER_SCHEMA_VERSION_V36,
+    RUNNER_SCHEMA_VERSION_V37,
     }:
         assert value.name is not None
         payload["name"] = value.name
@@ -3436,6 +3471,26 @@ def _v36_family_root_keys(data: Mapping[str, Any]) -> set[str]:
     return keys
 
 
+def _v37_family_root_keys(data: Mapping[str, Any]) -> set[str]:
+    """v36 family roots U technique_lifecycle; experimentation optional, genealogy required."""
+    keys = _v36_family_root_keys(data)
+    if "bounded_experimentation" not in data:
+        keys.discard("bounded_experimentation")
+    keys.add("knowledge_genealogy")
+    keys.add("technique_lifecycle")
+    return keys
+
+
+_TECHNIQUE_LIFECYCLE_KEYS: Final[set[str]] = {
+    "policy_id",
+    "diffusion_window_ticks",
+    "rare_max",
+    "rediscovery_latch_ticks",
+    "material_anchors",
+}
+_TECHNIQUE_MATERIAL_ANCHOR_KEYS: Final[set[str]] = {"content_key", "recipe_id"}
+
+
 _BOUNDED_EXPERIMENTATION_KEYS: Final[set[str]] = {
     "policy_id",
     "max_hypotheses",
@@ -4788,6 +4843,103 @@ def _encode_knowledge_genealogy(spec: KnowledgeGenealogySpec) -> dict[str, Any]:
     return spec.canonical_payload()
 
 
+def _encode_technique_lifecycle(spec: TechniqueLifecycleSpec) -> dict[str, Any]:
+    return spec.canonical_payload()
+
+
+def _decode_technique_lifecycle(
+    data: Mapping[str, Any], *, path: str
+) -> TechniqueLifecycleSpec:
+    if not isinstance(data, dict):
+        raise RunnerSerializationError("invalid_object", path)
+    if "mode" in data:
+        _LOG.error(
+            "technique_lifecycle_mode_invalid path=%s "
+            "reason_code=technique_lifecycle_mode_invalid",
+            path,
+        )
+        raise RunnerSerializationError("technique_lifecycle_mode_invalid", path)
+    forbidden = set(data) & _TECHNIQUE_LIFECYCLE_FORBIDDEN_ALIASES
+    if forbidden:
+        _LOG.error(
+            "technique_lifecycle_forbidden_alias path=%s "
+            "reason_code=technique_lifecycle_forbidden_alias",
+            path,
+        )
+        raise RunnerSerializationError("technique_lifecycle_forbidden_alias", path)
+    _require_keys(data, _TECHNIQUE_LIFECYCLE_KEYS, path=path)
+    anchors_raw = data["material_anchors"]
+    if not isinstance(anchors_raw, list):
+        raise RunnerSerializationError("invalid_array", f"{path}.material_anchors")
+    anchors: list[TechniqueMaterialAnchor] = []
+    for index, item in enumerate(anchors_raw):
+        item_path = f"{path}.material_anchors[{index}]"
+        if not isinstance(item, dict):
+            raise RunnerSerializationError("invalid_object", item_path)
+        if "requires_technique" in item or (
+            set(item) & _TECHNIQUE_LIFECYCLE_FORBIDDEN_ALIASES
+        ):
+            _LOG.error(
+                "technique_anchor_prerequisite_forbidden path=%s "
+                "reason_code=technique_anchor_prerequisite_forbidden",
+                item_path,
+            )
+            raise RunnerSerializationError(
+                "technique_anchor_prerequisite_forbidden", item_path
+            )
+        _require_keys(item, _TECHNIQUE_MATERIAL_ANCHOR_KEYS, path=item_path)
+        try:
+            anchors.append(
+                TechniqueMaterialAnchor(
+                    content_key=_str_field(item, "content_key", path=item_path),
+                    recipe_id=_str_field(item, "recipe_id", path=item_path),
+                )
+            )
+        except ValueError as exc:
+            code = "technique_anchor_content_key"
+            message = str(exc)
+            marker = "(code="
+            if marker in message and message.endswith(")"):
+                code = message[message.rfind(marker) + len(marker) : -1]
+            raise RunnerSerializationError(code, item_path) from exc
+    try:
+        spec = TechniqueLifecycleSpec(
+            policy_id=_str_field(data, "policy_id", path=path),
+            diffusion_window_ticks=_nonneg_int_field(
+                data, "diffusion_window_ticks", path=path
+            ),
+            rare_max=_nonneg_int_field(data, "rare_max", path=path),
+            rediscovery_latch_ticks=_nonneg_int_field(
+                data, "rediscovery_latch_ticks", path=path
+            ),
+            material_anchors=tuple(anchors),
+        )
+    except ValueError as exc:
+        code = "invalid_model"
+        message = str(exc)
+        marker = "(code="
+        if marker in message and message.endswith(")"):
+            code = message[message.rfind(marker) + len(marker) : -1]
+        _LOG.error(
+            "technique_lifecycle_invalid path=%s reason_code=%s",
+            path,
+            code,
+        )
+        raise RunnerSerializationError(code, path) from exc
+    _LOG.debug(
+        "runner_config_decode_technique_lifecycle schema_version=%s present=%s "
+        "anchor_count=%s diffusion_window_ticks=%s rare_max=%s "
+        "rediscovery_latch_ticks=%s",
+        RUNNER_SCHEMA_VERSION_V37,
+        True,
+        len(spec.material_anchors),
+        spec.diffusion_window_ticks,
+        spec.rare_max,
+        spec.rediscovery_latch_ticks,
+    )
+    return spec
+
+
 def _encode_bounded_experimentation(
     spec: BoundedExperimentationSpec,
 ) -> dict[str, Any]:
@@ -5513,6 +5665,7 @@ def _encode_runner_document(config: SimulationRunnerConfig) -> dict[str, Any]:
         RUNNER_SCHEMA_VERSION_V34,
         RUNNER_SCHEMA_VERSION_V35,
         RUNNER_SCHEMA_VERSION_V36,
+    RUNNER_SCHEMA_VERSION_V37,
     }:
         document["capability_flags"] = _encode_capability_flags(config.capability_flags)
     if config.schema_version in {
@@ -5549,6 +5702,7 @@ def _encode_runner_document(config: SimulationRunnerConfig) -> dict[str, Any]:
         RUNNER_SCHEMA_VERSION_V34,
         RUNNER_SCHEMA_VERSION_V35,
         RUNNER_SCHEMA_VERSION_V36,
+    RUNNER_SCHEMA_VERSION_V37,
     }:
         document["cognition_trace"] = _encode_cognition_trace(config.cognition_trace)
     if config.schema_version == RUNNER_SCHEMA_VERSION_V14 or (
@@ -5576,6 +5730,7 @@ def _encode_runner_document(config: SimulationRunnerConfig) -> dict[str, Any]:
         RUNNER_SCHEMA_VERSION_V34,
         RUNNER_SCHEMA_VERSION_V35,
         RUNNER_SCHEMA_VERSION_V36,
+    RUNNER_SCHEMA_VERSION_V37,
         }
         and config.environmental_dynamics is not None
     ):
@@ -5600,6 +5755,7 @@ def _encode_runner_document(config: SimulationRunnerConfig) -> dict[str, Any]:
     RUNNER_SCHEMA_VERSION_V34,
     RUNNER_SCHEMA_VERSION_V35,
     RUNNER_SCHEMA_VERSION_V36,
+    RUNNER_SCHEMA_VERSION_V37,
     }:
         document["v3_capability_flags"] = _encode_v3_capability_flags(
             config.v3_capability_flags
@@ -5626,6 +5782,7 @@ def _encode_runner_document(config: SimulationRunnerConfig) -> dict[str, Any]:
             RUNNER_SCHEMA_VERSION_V34,
         RUNNER_SCHEMA_VERSION_V35,
         RUNNER_SCHEMA_VERSION_V36,
+    RUNNER_SCHEMA_VERSION_V37,
         }
         and config.v3_capability_flags.generational_population
     ):
@@ -5651,6 +5808,7 @@ def _encode_runner_document(config: SimulationRunnerConfig) -> dict[str, Any]:
                     RUNNER_SCHEMA_VERSION_V34,
                 RUNNER_SCHEMA_VERSION_V35,
                 RUNNER_SCHEMA_VERSION_V36,
+    RUNNER_SCHEMA_VERSION_V37,
                 }
                 else RUNNER_SCHEMA_VERSION_V26
             ),
@@ -5684,6 +5842,7 @@ def _encode_runner_document(config: SimulationRunnerConfig) -> dict[str, Any]:
             RUNNER_SCHEMA_VERSION_V34,
         RUNNER_SCHEMA_VERSION_V35,
         RUNNER_SCHEMA_VERSION_V36,
+    RUNNER_SCHEMA_VERSION_V37,
         }
         and config.v3_capability_flags.generational_population
     ):
@@ -5708,6 +5867,7 @@ def _encode_runner_document(config: SimulationRunnerConfig) -> dict[str, Any]:
         RUNNER_SCHEMA_VERSION_V34,
         RUNNER_SCHEMA_VERSION_V35,
         RUNNER_SCHEMA_VERSION_V36,
+    RUNNER_SCHEMA_VERSION_V37,
     }:
         if config.v3_capability_flags.kinship_inheritance:
             if config.kinship is None:
@@ -6358,6 +6518,68 @@ def _encode_runner_document(config: SimulationRunnerConfig) -> dict[str, Any]:
             len(config.bounded_experimentation.laws),
             config.bounded_experimentation.allow_provider,
         )
+    if config.schema_version == RUNNER_SCHEMA_VERSION_V37:
+        if config.cultural_feature_provenance is None:
+            raise TypeError(
+                "cultural_feature_provenance must be CulturalFeatureProvenanceSpec "
+                "on runner-config-v37"
+            )
+        if config.knowledge_genealogy is None:
+            raise TypeError(
+                "knowledge_genealogy must be KnowledgeGenealogySpec "
+                "on runner-config-v37"
+            )
+        if config.technique_lifecycle is None:
+            raise TypeError(
+                "technique_lifecycle must be TechniqueLifecycleSpec "
+                "on runner-config-v37"
+            )
+        document["cultural_feature_provenance"] = _encode_cultural_feature_provenance(
+            config.cultural_feature_provenance
+        )
+        document["knowledge_genealogy"] = _encode_knowledge_genealogy(
+            config.knowledge_genealogy
+        )
+        document["technique_lifecycle"] = _encode_technique_lifecycle(
+            config.technique_lifecycle
+        )
+        if config.bounded_experimentation is not None:
+            document["bounded_experimentation"] = _encode_bounded_experimentation(
+                config.bounded_experimentation
+            )
+        if config.durable_records is not None:
+            document["durable_records"] = _encode_durable_records(
+                config.durable_records
+            )
+        if config.knowledge_repositories is not None:
+            document["knowledge_repositories"] = _encode_knowledge_repositories(
+                config.knowledge_repositories
+            )
+        if config.historical_memory_layers is not None:
+            document["historical_memory_layers"] = _encode_historical_memory_layers(
+                config.historical_memory_layers
+            )
+        if config.mentorship is not None:
+            document["mentorship"] = _encode_mentorship(config.mentorship)
+        if config.developmental_learning is not None:
+            document["developmental_learning"] = _encode_developmental_learning(
+                config.developmental_learning
+            )
+        if config.dependency_care is not None:
+            document["dependency_care"] = _encode_dependency_care(
+                config.dependency_care
+            )
+        _LOG.info(
+            "runner_config_encode_technique_lifecycle schema_version=%s "
+            "present=%s anchor_count=%s diffusion_window_ticks=%s rare_max=%s "
+            "rediscovery_latch_ticks=%s",
+            config.schema_version,
+            True,
+            len(config.technique_lifecycle.material_anchors),
+            config.technique_lifecycle.diffusion_window_ticks,
+            config.technique_lifecycle.rare_max,
+            config.technique_lifecycle.rediscovery_latch_ticks,
+        )
 
     if config.experiment is not None:
         document["experiment"] = {
@@ -6605,6 +6827,8 @@ def decode_runner_config(payload: bytes) -> SimulationRunnerConfig:
         root_keys = _v35_family_root_keys(data)
     elif schema_version == RUNNER_SCHEMA_VERSION_V36:
         root_keys = _v36_family_root_keys(data)
+    elif schema_version == RUNNER_SCHEMA_VERSION_V37:
+        root_keys = _v37_family_root_keys(data)
     elif schema_version == RUNNER_SCHEMA_VERSION_V32:
         has_lifecycle = "population_lifecycle" in data
         has_kinship = "kinship" in data
@@ -7132,6 +7356,7 @@ def decode_runner_config(payload: bytes) -> SimulationRunnerConfig:
         RUNNER_SCHEMA_VERSION_V34,
         RUNNER_SCHEMA_VERSION_V35,
         RUNNER_SCHEMA_VERSION_V36,
+    RUNNER_SCHEMA_VERSION_V37,
     }:
         capability_flags = _decode_capability_flags(
             data["capability_flags"], path="$.capability_flags"
@@ -7154,6 +7379,7 @@ def decode_runner_config(payload: bytes) -> SimulationRunnerConfig:
         RUNNER_SCHEMA_VERSION_V34,
         RUNNER_SCHEMA_VERSION_V35,
         RUNNER_SCHEMA_VERSION_V36,
+    RUNNER_SCHEMA_VERSION_V37,
     }:
         v3_capability_flags = _decode_v3_capability_flags(
             data["v3_capability_flags"], path="$.v3_capability_flags"
@@ -7182,6 +7408,7 @@ def decode_runner_config(payload: bytes) -> SimulationRunnerConfig:
             RUNNER_SCHEMA_VERSION_V34,
         RUNNER_SCHEMA_VERSION_V35,
         RUNNER_SCHEMA_VERSION_V36,
+    RUNNER_SCHEMA_VERSION_V37,
         }
         and "kinship" in data
     ):
@@ -7207,6 +7434,7 @@ def decode_runner_config(payload: bytes) -> SimulationRunnerConfig:
             RUNNER_SCHEMA_VERSION_V34,
         RUNNER_SCHEMA_VERSION_V35,
         RUNNER_SCHEMA_VERSION_V36,
+    RUNNER_SCHEMA_VERSION_V37,
         }
         and "dependency_care" in data
     ):
@@ -7233,6 +7461,7 @@ def decode_runner_config(payload: bytes) -> SimulationRunnerConfig:
             RUNNER_SCHEMA_VERSION_V34,
         RUNNER_SCHEMA_VERSION_V35,
         RUNNER_SCHEMA_VERSION_V36,
+    RUNNER_SCHEMA_VERSION_V37,
         }
         and "developmental_learning" in data
     ):
@@ -7275,6 +7504,7 @@ def decode_runner_config(payload: bytes) -> SimulationRunnerConfig:
             RUNNER_SCHEMA_VERSION_V34,
             RUNNER_SCHEMA_VERSION_V35,
             RUNNER_SCHEMA_VERSION_V36,
+    RUNNER_SCHEMA_VERSION_V37,
         }
         and "mentorship" in data
     ):
@@ -7305,6 +7535,7 @@ def decode_runner_config(payload: bytes) -> SimulationRunnerConfig:
         RUNNER_SCHEMA_VERSION_V34,
         RUNNER_SCHEMA_VERSION_V35,
         RUNNER_SCHEMA_VERSION_V36,
+    RUNNER_SCHEMA_VERSION_V37,
     }:
         cultural_feature_provenance = _decode_cultural_feature_provenance(
             data["cultural_feature_provenance"],
@@ -7336,6 +7567,7 @@ def decode_runner_config(payload: bytes) -> SimulationRunnerConfig:
             RUNNER_SCHEMA_VERSION_V34,
             RUNNER_SCHEMA_VERSION_V35,
             RUNNER_SCHEMA_VERSION_V36,
+    RUNNER_SCHEMA_VERSION_V37,
         }
         and "historical_memory_layers" in data
     ):
@@ -7365,7 +7597,11 @@ def decode_runner_config(payload: bytes) -> SimulationRunnerConfig:
         RUNNER_SCHEMA_VERSION_V34,
     } or (
         schema_version
-        in {RUNNER_SCHEMA_VERSION_V35, RUNNER_SCHEMA_VERSION_V36}
+        in {
+            RUNNER_SCHEMA_VERSION_V35,
+            RUNNER_SCHEMA_VERSION_V36,
+            RUNNER_SCHEMA_VERSION_V37,
+        }
         and "durable_records" in data
     ):
         durable_records = _decode_durable_records(
@@ -7390,7 +7626,11 @@ def decode_runner_config(payload: bytes) -> SimulationRunnerConfig:
         )
     if schema_version == RUNNER_SCHEMA_VERSION_V34 or (
         schema_version
-        in {RUNNER_SCHEMA_VERSION_V35, RUNNER_SCHEMA_VERSION_V36}
+        in {
+            RUNNER_SCHEMA_VERSION_V35,
+            RUNNER_SCHEMA_VERSION_V36,
+            RUNNER_SCHEMA_VERSION_V37,
+        }
         and "knowledge_repositories" in data
     ):
         knowledge_repositories = _decode_knowledge_repositories(
@@ -7414,7 +7654,10 @@ def decode_runner_config(payload: bytes) -> SimulationRunnerConfig:
             schema_version,
             False,
         )
-    if schema_version == RUNNER_SCHEMA_VERSION_V35 or (
+    if schema_version in {
+        RUNNER_SCHEMA_VERSION_V35,
+        RUNNER_SCHEMA_VERSION_V37,
+    } or (
         schema_version == RUNNER_SCHEMA_VERSION_V36
         and "knowledge_genealogy" in data
     ):
@@ -7438,12 +7681,30 @@ def decode_runner_config(payload: bytes) -> SimulationRunnerConfig:
             schema_version,
             False,
         )
-    if schema_version != RUNNER_SCHEMA_VERSION_V36:
+    if schema_version not in {
+        RUNNER_SCHEMA_VERSION_V36,
+        RUNNER_SCHEMA_VERSION_V37,
+    } or (
+        schema_version == RUNNER_SCHEMA_VERSION_V37
+        and "bounded_experimentation" not in data
+    ):
         _LOG.debug(
             "runner_config_decode_bounded_experimentation schema_version=%s "
             "present=%s law_count=%s",
             schema_version,
             False,
+            0,
+        )
+    if schema_version != RUNNER_SCHEMA_VERSION_V37:
+        _LOG.debug(
+            "runner_config_decode_technique_lifecycle schema_version=%s "
+            "present=%s anchor_count=%s diffusion_window_ticks=%s rare_max=%s "
+            "rediscovery_latch_ticks=%s",
+            schema_version,
+            False,
+            0,
+            0,
+            0,
             0,
         )
     if schema_version in {
@@ -7460,6 +7721,7 @@ def decode_runner_config(payload: bytes) -> SimulationRunnerConfig:
         RUNNER_SCHEMA_VERSION_V34,
         RUNNER_SCHEMA_VERSION_V35,
         RUNNER_SCHEMA_VERSION_V36,
+    RUNNER_SCHEMA_VERSION_V37,
     } and (
         schema_version
         not in {
@@ -7473,6 +7735,7 @@ def decode_runner_config(payload: bytes) -> SimulationRunnerConfig:
             RUNNER_SCHEMA_VERSION_V34,
         RUNNER_SCHEMA_VERSION_V35,
         RUNNER_SCHEMA_VERSION_V36,
+    RUNNER_SCHEMA_VERSION_V37,
         }
         or v3_capability_flags.generational_population
     ):
@@ -7493,6 +7756,7 @@ def decode_runner_config(payload: bytes) -> SimulationRunnerConfig:
                     RUNNER_SCHEMA_VERSION_V34,
                 RUNNER_SCHEMA_VERSION_V35,
                 RUNNER_SCHEMA_VERSION_V36,
+    RUNNER_SCHEMA_VERSION_V37,
                 }
                 else RUNNER_SCHEMA_VERSION_V26
             ),
@@ -7522,6 +7786,7 @@ def decode_runner_config(payload: bytes) -> SimulationRunnerConfig:
             RUNNER_SCHEMA_VERSION_V34,
         RUNNER_SCHEMA_VERSION_V35,
         RUNNER_SCHEMA_VERSION_V36,
+    RUNNER_SCHEMA_VERSION_V37,
         }
         and v3_capability_flags.generational_population
     ):
@@ -7581,6 +7846,7 @@ def decode_runner_config(payload: bytes) -> SimulationRunnerConfig:
     RUNNER_SCHEMA_VERSION_V34,
     RUNNER_SCHEMA_VERSION_V35,
     RUNNER_SCHEMA_VERSION_V36,
+    RUNNER_SCHEMA_VERSION_V37,
     }:
         cognition_trace = _decode_cognition_trace(
             data["cognition_trace"], path="$.cognition_trace"
@@ -7677,6 +7943,7 @@ def decode_runner_config(payload: bytes) -> SimulationRunnerConfig:
                     RUNNER_SCHEMA_VERSION_V34,
                     RUNNER_SCHEMA_VERSION_V35,
                     RUNNER_SCHEMA_VERSION_V36,
+    RUNNER_SCHEMA_VERSION_V37,
                     }
                     and "environmental_dynamics" in data
                 )
@@ -7699,6 +7966,18 @@ def decode_runner_config(payload: bytes) -> SimulationRunnerConfig:
                     path="$.bounded_experimentation",
                 )
                 if schema_version == RUNNER_SCHEMA_VERSION_V36
+                or (
+                    schema_version == RUNNER_SCHEMA_VERSION_V37
+                    and "bounded_experimentation" in data
+                )
+                else None
+            ),
+            technique_lifecycle=(
+                _decode_technique_lifecycle(
+                    data["technique_lifecycle"],
+                    path="$.technique_lifecycle",
+                )
+                if schema_version == RUNNER_SCHEMA_VERSION_V37
                 else None
             ),
         )

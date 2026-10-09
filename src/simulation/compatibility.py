@@ -85,15 +85,16 @@ from simulation.runner_models import (
     RUNNER_SCHEMA_VERSION_V34,
     RUNNER_SCHEMA_VERSION_V35,
     RUNNER_SCHEMA_VERSION_V36,
+    RUNNER_SCHEMA_VERSION_V37,
     SUPPORTED_RESULT_SCHEMA_VERSIONS,
     SUPPORTED_RUNNER_SCHEMA_VERSIONS,
 )
+from simulation.subjective_serialization import SUBJECTIVE_SCHEMA_VERSION
 from world.events import (
     EVENT_SCHEMA_REPLAY_V13,
     EVENT_SCHEMA_REPLAY_V14,
     EVENT_SCHEMA_REPLAY_V15,
 )
-from simulation.subjective_serialization import SUBJECTIVE_SCHEMA_VERSION
 
 _LOG: Final[logging.Logger] = logging.getLogger("simulation.compatibility")
 
@@ -431,6 +432,13 @@ _MATRIX: dict[str, CompatibilityEntry] = {
             "knowledge_genealogy accepts {v35,v36}; "
             f"write-pair (EVENT_SCHEMA_REPLAY_V15={EVENT_SCHEMA_REPLAY_V15}, "
             "codec v12) when bounded experimentation is active); "
+            f"writers emit {RUNNER_SCHEMA_VERSION_V37} when "
+            "technique_lifecycle is present "
+            "(requires cultural_feature_provenance + knowledge_genealogy + "
+            "cultural_historical_memory; optional bounded_experimentation / "
+            "durable_records / knowledge_repositories / "
+            "historical_memory_layers; no new write-pair; "
+            "cultural_historical_memory accepts {v31..v37}); "
             "mode allowlists that top out at v34 widen to accept v35; "
             "cultural_historical_memory accepts {v31,v32,v33,v34,v35}; "
             "durable_records accepts {v33,v34,v35}; "
@@ -717,6 +725,7 @@ _LOG.debug(
         "runner_v34": RUNNER_SCHEMA_VERSION_V34,
         "runner_v35": RUNNER_SCHEMA_VERSION_V35,
         "runner_v36": RUNNER_SCHEMA_VERSION_V36,
+        "runner_v37": RUNNER_SCHEMA_VERSION_V37,
         "observer_protocol": OBSERVER_PROTOCOL_VERSION,
         "research_ui_mount": RESEARCH_UI_MOUNT,
         "alembic_head": ALEMBIC_HEAD_REVISION,
