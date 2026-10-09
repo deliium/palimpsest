@@ -125,6 +125,7 @@ from world.events import (
     AgentCreated,
     AgentEnteredWorld,
     AgentInitializationRecorded,
+    CorpseCustodyOpened,
     Died,
     KinshipEdgeRecorded,
     LifecycleStageChanged,
@@ -279,6 +280,7 @@ class WorldEngine:
         "_new_agent_initialization",
         "_perception",
         "_population_lifecycle",
+        "_possession_succession_active",
         "_production_catalog",
         "_registrations",
         "_run_id",
@@ -317,6 +319,7 @@ class WorldEngine:
         durable_records_spec: object | None = None,
         knowledge_repositories_spec: object | None = None,
         experiment_laws: object | None = None,
+        possession_succession_active: bool = False,
     ) -> None:
         if type(config) is not SimulationRunConfig:
             raise TypeError("WorldEngine requires SimulationRunConfig")
@@ -382,6 +385,9 @@ class WorldEngine:
         self._experiment_catalog = _optional_experiment_catalog(
             experiment_laws, self._production_catalog
         )
+        if type(possession_succession_active) is not bool:
+            raise TypeError("possession_succession_active must be bool")
+        self._possession_succession_active = possession_succession_active
         self._environmental_dynamics = _optional_environmental_dynamics(
             environmental_dynamics
         )
@@ -640,6 +646,7 @@ class WorldEngine:
             active_hazards=snapshot.active_hazards,
             artifacts=snapshot.artifacts,
             repositories=snapshot.repositories,
+            corpse_custody_item_ids=frozenset(snapshot.corpse_custody_item_ids),
         )
         resolved_catalog = _optional_production_catalog(production_catalog)
         if snapshot.persistence_codec_version == "v3" and resolved_catalog is None:
@@ -750,6 +757,9 @@ class WorldEngine:
             None if restored_laws is None else restored_laws.laws,
             engine._production_catalog,
         )
+        engine._possession_succession_active = (
+            getattr(snapshot.config, "possession_succession", None) is not None
+        )
         engine._environmental_dynamics = _optional_environmental_dynamics(
             environmental_dynamics
         )
@@ -759,7 +769,7 @@ class WorldEngine:
             artifacts_enabled
             or bool(snapshot.artifacts)
             or snapshot.persistence_codec_version
-            in {"v5", "v6", "v7", "v8", "v9", "v10", "v11", "v12"}
+            in {"v5", "v6", "v7", "v8", "v9", "v10", "v11", "v12", "v13"}
             or bool(getattr(engine._bootstrap, "artifacts", ()))
         )
         if snapshot.persistence_codec_version in {
@@ -769,7 +779,7 @@ class WorldEngine:
             "v9",
             "v10",
             "v11",
-            "v12",
+            "v12", "v13",
         }:
             if population_lifecycle is None and snapshot.lifecycle_records:
                 raise ValueError(
@@ -801,7 +811,7 @@ class WorldEngine:
                 engine._new_agent_initialization = new_agent_initialization
             elif (
                 snapshot.persistence_codec_version
-                in {"v7", "v8", "v9", "v10", "v11", "v12"}
+                in {"v7", "v8", "v9", "v10", "v11", "v12", "v13"}
                 and snapshot.event_schema_version in {10, 11, 12, 13, 14}
             ):
                 # Prefer explicit restore arg; else pull from snapshot config when v25+.
@@ -829,7 +839,7 @@ class WorldEngine:
         engine._durable_records_spec = None
         engine._knowledge_repositories_spec = None
         engine._dependency_need_registers = {}
-        if snapshot.persistence_codec_version in {"v10", "v11", "v12"}:
+        if snapshot.persistence_codec_version in {"v10", "v11", "v12", "v13"}:
             from simulation.runner_models import DurableRecordsSpec
 
             resolved_durable = getattr(snapshot.config, "durable_records", None)
@@ -843,7 +853,7 @@ class WorldEngine:
                 snapshot.persistence_codec_version,
                 engine._durable_records_spec is not None,
             )
-        if snapshot.persistence_codec_version in {"v11", "v12"}:
+        if snapshot.persistence_codec_version in {"v11", "v12", "v13"}:
             from simulation.runner_models import KnowledgeRepositoriesSpec
 
             resolved_repos = getattr(snapshot.config, "knowledge_repositories", None)
@@ -864,7 +874,7 @@ class WorldEngine:
                 engine._knowledge_repositories_spec is not None,
                 len(snapshot.repositories),
             )
-        if snapshot.persistence_codec_version in {"v10", "v11", "v12"}:
+        if snapshot.persistence_codec_version in {"v10", "v11", "v12", "v13"}:
             durable_mode = (
                 engine._durable_records_spec.perception_mode
                 if engine._durable_records_spec is not None
@@ -880,7 +890,7 @@ class WorldEngine:
                     durable_perception_mode=durable_mode,
                     repository_perception_mode=repository_mode,
                 )
-        if snapshot.persistence_codec_version in {"v8", "v9", "v10", "v11", "v12"}:
+        if snapshot.persistence_codec_version in {"v8", "v9", "v10", "v11", "v12", "v13"}:
             resolved_kinship = kinship_spec
             if resolved_kinship is None:
                 resolved_kinship = getattr(snapshot.config, "kinship", None)
@@ -938,7 +948,7 @@ class WorldEngine:
                     if type(event.details) is KinshipEdgeRecorded
                 ),
             )
-        if snapshot.persistence_codec_version in {"v9", "v10", "v11", "v12"}:
+        if snapshot.persistence_codec_version in {"v9", "v10", "v11", "v12", "v13"}:
             from simulation.runner_models import DependencyCareSpec
             from world.dependency_care import DependencyNeedRegister
 
@@ -1046,6 +1056,10 @@ class WorldEngine:
         return self._experiment_catalog is not None
 
     @property
+    def possession_succession_active(self) -> bool:
+        return self._possession_succession_active
+
+    @property
     def knowledge_repositories_spec(self) -> object | None:
         return self._knowledge_repositories_spec
 
@@ -1131,6 +1145,7 @@ class WorldEngine:
                 durable_records_active=self.durable_records_channel_active,
                 knowledge_repositories_active=self.knowledge_repositories_channel_active,
                 bounded_experimentation_active=self.bounded_experimentation_active,
+                possession_succession_active=self.possession_succession_active,
             )
             snap = self._snapshot
             same_tick = [
@@ -1376,6 +1391,7 @@ class WorldEngine:
             durable_records_active=self.durable_records_channel_active,
             knowledge_repositories_active=self.knowledge_repositories_channel_active,
             bounded_experimentation_active=self.bounded_experimentation_active,
+            possession_succession_active=self.possession_succession_active,
         )
         next_registrations = (*self._registrations, registration)
         self._registrations = next_registrations
@@ -1943,6 +1959,43 @@ class WorldEngine:
                     )
                 )
                 family_ordinal += 1
+                if self.possession_succession_active:
+                    dead_body = bodies[registration.entity_id]
+                    custody = CorpseCustodyOpened(
+                        body_id=dead_body.entity_id,
+                        location_id=dead_body.location_id,
+                        item_ids=tuple(dead_body.inventory),
+                    )
+                    custody_cause = derive_system_cause_id(
+                        self._config,
+                        run_id=self._run_id,
+                        world_id=self.world_id,
+                        tick=tick,
+                        effect_family=SystemEffectFamily.LIFECYCLE.value,
+                        entity_id=registration.entity_id,
+                        family_ordinal=family_ordinal,
+                    )
+                    pending.append(
+                        PendingEvent(
+                            cause=SystemCause(
+                                custody_cause,
+                                SystemEffectFamily.LIFECYCLE,
+                                registration.entity_id,
+                                family_ordinal,
+                            ),
+                            details=custody,
+                            occurrence=build_occurrence_context(
+                                custody, origin_location_id=body.location_id
+                            ),
+                        )
+                    )
+                    family_ordinal += 1
+                    _LOGGER.info(
+                        "corpse_custody_opened body_id=%s item_count=%s",
+                        dead_body.entity_id.value,
+                        len(dead_body.inventory),
+                    )
+                    _LOGGER.debug("corpse_custody_opened_cause death_cause=lifespan")
                 lifespan_death_count += 1
 
         next_records = tuple(
@@ -3053,6 +3106,7 @@ class WorldEngine:
             durable_records_context=self._durable_records_rule_context(),
             knowledge_repositories_context=self._knowledge_repositories_rule_context(),
             experiment_catalog=self._experiment_catalog,
+            possession_succession_active=self.possession_succession_active,
         )
         start_ledger = self._skill_ledger
         folded_ledger, skill_facts = self._fold_skill_ledger(
@@ -3123,6 +3177,7 @@ class WorldEngine:
                 dependency_thirst_extra_by_entity=dep_extras["thirst"],
                 dependency_fatigue_extra_by_entity=dep_extras["fatigue"],
                 dependency_health_damage_by_entity=dep_extras["health"],
+                possession_succession_active=self.possession_succession_active,
             )
         except ValueError as exc:
             message = str(exc)
@@ -3346,6 +3401,7 @@ class WorldEngine:
             durable_records_active=self.durable_records_channel_active,
             knowledge_repositories_active=self.knowledge_repositories_channel_active,
             bounded_experimentation_active=self.bounded_experimentation_active,
+            possession_succession_active=self.possession_succession_active,
         )
         prepared = finalize_pending_batch(
             merged,
@@ -5199,6 +5255,7 @@ def select_checkpoint_schema(
     durable_records_active: bool = False,
     knowledge_repositories_active: bool = False,
     bounded_experimentation_active: bool = False,
+    possession_succession_active: bool = False,
 ) -> tuple[int, str]:
     """Return the legal event-schema and codec pair for this run."""
     from simulation.persistence import (
@@ -5216,6 +5273,7 @@ def select_checkpoint_schema(
         EVENT_SCHEMA_REPLAY_V12,
         EVENT_SCHEMA_REPLAY_V13,
         EVENT_SCHEMA_REPLAY_V14, EVENT_SCHEMA_REPLAY_V15,
+        EVENT_SCHEMA_REPLAY_V16,
     )
 
     schema_version, codec = checkpoint_schema_for_production(
@@ -5229,9 +5287,15 @@ def select_checkpoint_schema(
         durable_records_active=durable_records_active,
         knowledge_repositories_active=knowledge_repositories_active,
         bounded_experimentation_active=bounded_experimentation_active,
+        possession_succession_active=possession_succession_active,
     )
     agreed = (
-        bounded_experimentation_active
+        possession_succession_active
+        and schema_version == EVENT_SCHEMA_REPLAY_V16
+        and codec == "v13"
+    ) or (
+        not possession_succession_active
+        and bounded_experimentation_active
         and schema_version == EVENT_SCHEMA_REPLAY_V15
         and codec == "v12"
     ) or (

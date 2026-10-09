@@ -86,6 +86,7 @@ from simulation.runner_models import (
     RUNNER_SCHEMA_VERSION_V35,
     RUNNER_SCHEMA_VERSION_V36,
     RUNNER_SCHEMA_VERSION_V37,
+    RUNNER_SCHEMA_VERSION_V38,
     SUPPORTED_RESULT_SCHEMA_VERSIONS,
     SUPPORTED_RUNNER_SCHEMA_VERSIONS,
 )
@@ -94,6 +95,7 @@ from world.events import (
     EVENT_SCHEMA_REPLAY_V13,
     EVENT_SCHEMA_REPLAY_V14,
     EVENT_SCHEMA_REPLAY_V15,
+    EVENT_SCHEMA_REPLAY_V16,
 )
 
 _LOG: Final[logging.Logger] = logging.getLogger("simulation.compatibility")
@@ -439,6 +441,10 @@ _MATRIX: dict[str, CompatibilityEntry] = {
             "durable_records / knowledge_repositories / "
             "historical_memory_layers; no new write-pair; "
             "cultural_historical_memory accepts {v31..v37}); "
+            f"writers emit {RUNNER_SCHEMA_VERSION_V38} when "
+            "possession_succession is present "
+            f"(write-pair EVENT_SCHEMA_REPLAY_V16={EVENT_SCHEMA_REPLAY_V16}, "
+            "codec v13 when the channel is active; no heir table); "
             "mode allowlists that top out at v34 widen to accept v35; "
             "cultural_historical_memory accepts {v31,v32,v33,v34,v35}; "
             "durable_records accepts {v33,v34,v35}; "
@@ -726,6 +732,7 @@ _LOG.debug(
         "runner_v35": RUNNER_SCHEMA_VERSION_V35,
         "runner_v36": RUNNER_SCHEMA_VERSION_V36,
         "runner_v37": RUNNER_SCHEMA_VERSION_V37,
+        "runner_v38": RUNNER_SCHEMA_VERSION_V38,
         "observer_protocol": OBSERVER_PROTOCOL_VERSION,
         "research_ui_mount": RESEARCH_UI_MOUNT,
         "alembic_head": ALEMBIC_HEAD_REVISION,

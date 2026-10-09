@@ -141,6 +141,7 @@ class PersistentSimulationService:
             lifecycle_active=self._engine.lifecycle_channel_active,
             new_agent_provenance_active=self._engine.new_agent_provenance_active,
             bounded_experimentation_active=self._engine.bounded_experimentation_active,
+            possession_succession_active=self._engine.possession_succession_active,
         )
         production_rows: dict[str, tuple[object, ...]] = {}
         if codec_version in {"v3", "v4", "v5", "v6", "v7"}:
@@ -156,6 +157,10 @@ class PersistentSimulationService:
         if codec_version in {"v6", "v7"}:
             production_rows["lifecycle_records"] = tuple(
                 self._engine.lifecycle_records
+            )
+        if codec_version == "v13":
+            production_rows["corpse_custody_item_ids"] = tuple(
+                sorted(state.corpse_custody_item_ids, key=lambda item: item.value)
             )
         draft = WorldSnapshot(
             snapshot_id=snapshot_id,
@@ -205,6 +210,7 @@ class PersistentSimulationService:
             active_hazards=draft.active_hazards,
             artifacts=draft.artifacts,
             lifecycle_records=draft.lifecycle_records,
+            corpse_custody_item_ids=draft.corpse_custody_item_ids,
         )
 
     async def resolve_tick(

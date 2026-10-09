@@ -1,11 +1,13 @@
 """Pure autonomous physical close-of-tick step.
 
-Log-free and RNG-free. Simulation pre-resolves weather draws and supplies
-deterministic system cause IDs before finalization.
+RNG-free. Simulation pre-resolves weather draws and supplies deterministic
+system cause IDs before finalization. Corpse custody logs only when that
+channel is on.
 """
 
 from __future__ import annotations
 
+import logging
 from collections.abc import Mapping
 from dataclasses import dataclass
 
@@ -21,6 +23,7 @@ from world.environment import (
     temperature_band,
 )
 from world.events import (
+    CorpseCustodyOpened,
     Died,
     EnvironmentalHazardEnded,
     EnvironmentalHazardStarted,
@@ -38,6 +41,7 @@ from world.events import (
 )
 from world.identifiers import EntityId, require_exact_nonneg_int
 from world.models import (
+    AgentBody,
     LifeStatus,
     Location,
     PhysicalRules,
@@ -56,6 +60,8 @@ from world.values import (
     clamp_need,
     round_physical,
 )
+
+_LOG = logging.getLogger("world.physical")
 
 __all__: list[str] = [
     "PendingSystemDetail",
@@ -137,6 +143,44 @@ def _pending_system(
     )
 
 
+def _append_corpse_custody(
+    pending: list[PendingSystemDetail],
+    *,
+    body: AgentBody,
+    active: bool,
+    death_cause: DeathCause,
+    effect_family: SystemEffectFamily,
+    family_ordinals: dict[SystemEffectFamily, int],
+) -> None:
+    if not active:
+        return
+    ordinal = family_ordinals[effect_family]
+    family_ordinals[effect_family] = ordinal + 1
+    item_ids = tuple(body.inventory)
+    pending.append(
+        _pending_system(
+            effect_family=effect_family,
+            entity_id=body.entity_id,
+            family_ordinal=ordinal,
+            details=CorpseCustodyOpened(
+                body_id=body.entity_id,
+                location_id=body.location_id,
+                item_ids=item_ids,
+            ),
+            origin_location_id=body.location_id,
+        )
+    )
+    _LOG.info(
+        "corpse_custody_opened body_id=%s item_count=%s",
+        body.entity_id.value,
+        len(item_ids),
+    )
+    _LOG.debug(
+        "corpse_custody_opened_cause death_cause=%s",
+        death_cause.value,
+    )
+
+
 def apply_autonomous_physical_step(
     *,
     state: WorldState,
@@ -151,6 +195,7 @@ def apply_autonomous_physical_step(
     dependency_thirst_extra_by_entity: Mapping[EntityId, float] | None = None,
     dependency_fatigue_extra_by_entity: Mapping[EntityId, float] | None = None,
     dependency_health_damage_by_entity: Mapping[EntityId, float] | None = None,
+    possession_succession_active: bool = False,
 ) -> PendingSystemStep:
     """Apply weather, regeneration, metabolism, and exposure in canonical order.
 
@@ -175,6 +220,8 @@ def apply_autonomous_physical_step(
         system_effects = resolved
     else:
         raise TypeError("resolved must be ResolvedSystemEffects or None")
+    if type(possession_succession_active) is not bool:
+        raise TypeError("possession_succession_active must be bool")
     if environmental_dynamics is None:
         spec = None
     elif type(environmental_dynamics) is EnvironmentalDynamicsSpec:
@@ -476,6 +523,14 @@ def apply_autonomous_physical_step(
                     origin_location_id=body.location_id,
                 )
             )
+            _append_corpse_custody(
+                pending,
+                body=next_body,
+                active=possession_succession_active,
+                death_cause=DeathCause.COMBINED_NEEDS,
+                effect_family=SystemEffectFamily.COMBINED_NEEDS,
+                family_ordinals=family_ordinals,
+            )
             continue
 
         weather_offsets = rules.weather_temperature_offset
@@ -563,6 +618,31 @@ def apply_autonomous_physical_step(
                     origin_location_id=body.location_id,
                 )
             )
+            _append_corpse_custody(
+                pending,
+                body=exposed_body,
+                active=possession_succession_active,
+                death_cause=DeathCause.EXPOSURE,
+                effect_family=SystemEffectFamily.EXPOSURE,
+                family_ordinals=family_ordinals,
+            )
+
+    if possession_succession_active:
+        died_ids = {
+            detail.details.body_id
+            for detail in pending
+            if type(detail.details) is Died
+        }
+        for body_id, body in bodies.items():
+            prior = state.bodies.get(body_id)
+            became_dead = body.life_status is LifeStatus.DEAD and (
+                prior is None or prior.life_status is not LifeStatus.DEAD
+            )
+            if became_dead and body_id not in died_ids:
+                _LOG.error(
+                    "death_without_died body_id=%s reason_code=death_without_died",
+                    body_id.value,
+                )
 
     if bodies_changed:
         working = rebuild_world_state(working, bodies=bodies)

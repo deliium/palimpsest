@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 from collections.abc import Mapping, Sequence
 from types import MappingProxyType
 
@@ -19,6 +20,8 @@ from world.identifiers import (
 from world.models import AgentBody, Item, LifeStatus, Location, Resource, Weather
 from world.production import ProductionJob, Structure, ToolMark
 from world.repositories import KnowledgeRepository, index_repositories
+
+_LOG = logging.getLogger("world.state")
 
 __all__: list[str] = ["ActiveHazard", "World", "WorldState", "rebuild_world_state"]
 
@@ -38,6 +41,7 @@ def rebuild_world_state(
     active_hazards: Sequence[ActiveHazard] | None = None,
     artifacts: Mapping[EntityId, InformationArtifact] | None = None,
     repositories: Mapping[EntityId, KnowledgeRepository] | None = None,
+    corpse_custody_item_ids: frozenset[EntityId] | None = None,
 ) -> WorldState:
     """Build a new immutable snapshot with deterministic EntityId ordering."""
     if type(state) is not WorldState:
@@ -55,6 +59,11 @@ def rebuild_world_state(
     hazard_src = state.active_hazards if active_hazards is None else active_hazards
     artifact_src = state.artifacts if artifacts is None else artifacts
     repository_src = state.repositories if repositories is None else repositories
+    custody_src = (
+        state.corpse_custody_item_ids
+        if corpse_custody_item_ids is None
+        else corpse_custody_item_ids
+    )
     return WorldState(
         state.revision if revision is None else revision,
         locations=tuple(
@@ -94,7 +103,42 @@ def rebuild_world_state(
                 key=lambda value: value.repository_id.value,
             )
         ),
+        corpse_custody_item_ids=custody_src,
     )
+
+
+def _validate_corpse_custody(
+    value: frozenset[EntityId] | Sequence[EntityId],
+    *,
+    item_index: Mapping[EntityId, Item],
+    body_index: Mapping[EntityId, AgentBody],
+) -> frozenset[EntityId]:
+    if isinstance(value, (str, bytes)):
+        raise TypeError("corpse_custody_item_ids must be a set of EntityId")
+    if not isinstance(value, (frozenset, set, tuple, list)):
+        raise TypeError("corpse_custody_item_ids must be a set of EntityId")
+    copied: set[EntityId] = set()
+    for item_id in value:
+        if type(item_id) is not EntityId:
+            raise TypeError("corpse_custody_item_ids entries must be EntityId")
+        item = item_index.get(item_id)
+        if item is None or item.holder_id is None:
+            _LOG.error(
+                "corpse_custody_invalid reason_code=corpse_custody_item_unheld"
+            )
+            raise ValueError("corpse custody item must be held by a dead body")
+        holder = body_index.get(item.holder_id)
+        if (
+            holder is None
+            or holder.life_status is not LifeStatus.DEAD
+            or item_id not in holder.inventory
+        ):
+            _LOG.error(
+                "corpse_custody_invalid reason_code=corpse_custody_holder_not_dead"
+            )
+            raise ValueError("corpse custody item must be held by a dead body")
+        copied.add(item_id)
+    return frozenset(copied)
 
 
 def _index_by_entity_id[T](
@@ -123,6 +167,7 @@ class WorldState:
         "_active_hazards",
         "_artifacts",
         "_bodies",
+        "_corpse_custody_item_ids",
         "_items",
         "_locations",
         "_production_jobs",
@@ -149,6 +194,7 @@ class WorldState:
         active_hazards: Sequence[ActiveHazard] = (),
         artifacts: Sequence[InformationArtifact] = (),
         repositories: Sequence[object] = (),
+        corpse_custody_item_ids: frozenset[EntityId] | Sequence[EntityId] = frozenset(),
     ) -> None:
         if type(revision) is not WorldRevision:
             raise TypeError("WorldState.revision must be WorldRevision")
@@ -218,6 +264,15 @@ class WorldState:
         self._active_hazards = hazard_index
         self._artifacts = MappingProxyType(artifact_index)
         self._repositories = MappingProxyType(repository_index)
+        self._corpse_custody_item_ids = _validate_corpse_custody(
+            corpse_custody_item_ids,
+            item_index=item_index,
+            body_index=body_index,
+        )
+        _LOG.debug(
+            "world_state_constructed corpse_custody_count=%s",
+            len(self._corpse_custody_item_ids),
+        )
 
     @property
     def revision(self) -> WorldRevision:
@@ -266,6 +321,10 @@ class WorldState:
     @property
     def repositories(self) -> Mapping[EntityId, KnowledgeRepository]:
         return self._repositories
+
+    @property
+    def corpse_custody_item_ids(self) -> frozenset[EntityId]:
+        return self._corpse_custody_item_ids
 
 
 class World:

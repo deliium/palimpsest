@@ -1130,6 +1130,7 @@ def prepare_action_batch(
     durable_records_context: object | None = None,
     knowledge_repositories_context: object | None = None,
     experiment_catalog: object | None = None,
+    possession_succession_active: bool = False,
 ) -> PendingBatch:
     """Resolve ordered requests into pending effects against one evolving state.
 
@@ -1377,6 +1378,7 @@ def prepare_action_batch(
             durable_records_context=durable_context,
             knowledge_repositories_context=repository_context,
             experiment_catalog=experiment_catalog,
+            possession_succession_active=possession_succession_active,
         )
         if application.result.disposition is RuleDisposition.REJECT:
             outcomes.append(

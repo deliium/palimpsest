@@ -437,6 +437,7 @@ def rematerialize_snapshot(
         active_hazards=snapshot.active_hazards,
         artifacts=snapshot.artifacts,
         lifecycle_records=snapshot.lifecycle_records,
+        corpse_custody_item_ids=snapshot.corpse_custody_item_ids,
     )
     return WorldSnapshot(
         snapshot_id=draft.snapshot_id,
@@ -464,6 +465,7 @@ def rematerialize_snapshot(
         active_hazards=draft.active_hazards,
         artifacts=draft.artifacts,
         lifecycle_records=draft.lifecycle_records,
+        corpse_custody_item_ids=draft.corpse_custody_item_ids,
     )
 
 

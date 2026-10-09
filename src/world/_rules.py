@@ -95,6 +95,7 @@ from world.events import (
     ArtifactPartiallyLost,
     Asked,
     Attacked,
+    CorpseCustodyOpened,
     Died,
     Dropped,
     Drunk,
@@ -2675,6 +2676,7 @@ def apply_operation(
     durable_records_context: object | None = None,
     knowledge_repositories_context: object | None = None,
     experiment_catalog: object | None = None,
+    possession_succession_active: bool = False,
 ) -> RuleApplication:
     """Evaluate then apply immutable physical or event-only effects.
 
@@ -2719,9 +2721,16 @@ def apply_operation(
             resolved=resolved,
             witness_resource_nodes=witness_resource_nodes,
         )
+    if type(possession_succession_active) is not bool:
+        raise TypeError("possession_succession_active must be bool")
     if type(operation) is _AttackOp:
         return _apply_attack(
-            state, operation, result=result, rules=physical_rules, resolved=resolved
+            state,
+            operation,
+            result=result,
+            rules=physical_rules,
+            resolved=resolved,
+            possession_succession_active=possession_succession_active,
         )
     if type(operation) in {_HarvestOp, _CraftOp, _BuildOp, _RepairOp, _StoreOp}:
         return _apply_production(
@@ -2904,6 +2913,7 @@ def _apply_attack(
     result: RuleResult,
     rules: PhysicalRules,
     resolved: ResolvedActionEffects | None,
+    possession_succession_active: bool = False,
 ) -> RuleApplication:
     del rules
     if resolved is None:
@@ -2932,6 +2942,28 @@ def _apply_attack(
             life_status=LifeStatus.DEAD,
         )
         next_state = rebuild_world_state(state, bodies=bodies)
+        extras: tuple[EventDetails, ...] = (
+            Died(
+                body_id=operation.target_id,
+                death_cause=DeathCause.ATTACK,
+            ),
+        )
+        if possession_succession_active:
+            dead = bodies[operation.target_id]
+            extras = (
+                *extras,
+                CorpseCustodyOpened(
+                    body_id=dead.entity_id,
+                    location_id=dead.location_id,
+                    item_ids=tuple(dead.inventory),
+                ),
+            )
+            _OPS_LOG.info(
+                "corpse_custody_opened body_id=%s item_count=%s",
+                dead.entity_id.value,
+                len(dead.inventory),
+            )
+            _OPS_LOG.debug("corpse_custody_opened_cause death_cause=attack")
         return RuleApplication(
             result=result,
             next_state=next_state,
@@ -2941,12 +2973,7 @@ def _apply_attack(
                 damage=effect.damage,
                 resulting_target_health=0.0,
             ),
-            extra_event_details=(
-                Died(
-                    body_id=operation.target_id,
-                    death_cause=DeathCause.ATTACK,
-                ),
-            ),
+            extra_event_details=extras,
         )
     bodies[operation.target_id] = copy_body(target, health=Health(resulting_health))
     next_state = rebuild_world_state(state, bodies=bodies)

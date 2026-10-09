@@ -1562,6 +1562,7 @@ class SimulationRunner:
                     if config.bounded_experimentation is not None
                     else None
                 ),
+                possession_succession_active=config.possession_succession is not None,
                 **skill_kwargs,
                 **teaching_kwargs,
             )
@@ -3572,33 +3573,38 @@ def _bootstrap_snapshot(engine: WorldEngine) -> WorldSnapshot:
         durable_records_active=engine.durable_records_channel_active,
         knowledge_repositories_active=engine.knowledge_repositories_channel_active,
         bounded_experimentation_active=engine.bounded_experimentation_active,
+        possession_succession_active=engine.possession_succession_active,
     )
     state = engine._snapshot.world.state
     production_rows: dict[str, tuple[object, ...]] = {}
-    if codec_version in {"v3", "v4", "v5", "v6", "v7", "v8", "v9", "v10", "v11", "v12"}:
+    if codec_version in {"v3", "v4", "v5", "v6", "v7", "v8", "v9", "v10", "v11", "v12", "v13"}:
         production_rows = {
             "structures": tuple(state.structures.values()),
             "production_jobs": tuple(state.production_jobs.values()),
             "tool_marks": tuple(state.tool_marks.values()),
         }
-    if codec_version in {"v4", "v5", "v6", "v7", "v8", "v9", "v10", "v11", "v12"}:
+    if codec_version in {"v4", "v5", "v6", "v7", "v8", "v9", "v10", "v11", "v12", "v13"}:
         production_rows["active_hazards"] = tuple(state.active_hazards)
-    if codec_version in {"v5", "v6", "v7", "v8", "v9", "v10", "v11", "v12"}:
+    if codec_version in {"v5", "v6", "v7", "v8", "v9", "v10", "v11", "v12", "v13"}:
         production_rows["artifacts"] = tuple(state.artifacts.values())
-    if codec_version in {"v6", "v7", "v8", "v9", "v10", "v11", "v12"}:
+    if codec_version in {"v6", "v7", "v8", "v9", "v10", "v11", "v12", "v13"}:
         production_rows["lifecycle_records"] = tuple(engine.lifecycle_records)
-    if codec_version in {"v8", "v9", "v10", "v11", "v12"}:
+    if codec_version in {"v8", "v9", "v10", "v11", "v12", "v13"}:
         kinship_graph = engine.kinship_graph
         from world.kinship import KinshipGraph
 
         if type(kinship_graph) is KinshipGraph:
             production_rows["kinship_edges"] = kinship_graph.edges
-    if codec_version in {"v9", "v10", "v11", "v12"}:
+    if codec_version in {"v9", "v10", "v11", "v12", "v13"}:
         production_rows["dependency_need_registers"] = tuple(
             engine._dependency_need_registers.values()
         )
-    if codec_version in {"v11", "v12"}:
+    if codec_version in {"v11", "v12", "v13"}:
         production_rows["repositories"] = tuple(state.repositories.values())
+    if codec_version == "v13":
+        production_rows["corpse_custody_item_ids"] = tuple(
+            sorted(state.corpse_custody_item_ids, key=lambda item: item.value)
+        )
     draft = WorldSnapshot(
         snapshot_id=SnapshotId(f"bootstrap-{engine.run_id.value}"),
         run_id=engine.run_id,
@@ -3650,6 +3656,7 @@ def _bootstrap_snapshot(engine: WorldEngine) -> WorldSnapshot:
         kinship_edges=getattr(draft, "kinship_edges", ()),
         dependency_need_registers=getattr(draft, "dependency_need_registers", ()),
         repositories=getattr(draft, "repositories", ()),
+        corpse_custody_item_ids=getattr(draft, "corpse_custody_item_ids", ()),
     )
 
 

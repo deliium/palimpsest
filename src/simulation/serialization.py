@@ -155,6 +155,7 @@ from world.events import (
     EVENT_SCHEMA_REPLAY_V12,
     EVENT_SCHEMA_REPLAY_V13,
     EVENT_SCHEMA_REPLAY_V14, EVENT_SCHEMA_REPLAY_V15,
+    EVENT_SCHEMA_REPLAY_V16,
     AgentCreated,
     AgentEnteredWorld,
     AgentInitializationRecorded,
@@ -173,7 +174,10 @@ from world.events import (
     Dropped,
     Drunk,
     Eaten,
+    CorpseCustodyOpened,
     ExperimentResolved,
+    PossessionClaimAsserted,
+    TakenFromCorpse,
     EnvironmentalHazardEnded,
     EnvironmentalHazardStarted,
     ExposureApplied,
@@ -4987,6 +4991,37 @@ def _encode_event_details(value: object) -> dict[str, Any]:
             if created_item_id is not None:
                 payload["created_item_id"] = created_item_id.value
             return payload
+        case CorpseCustodyOpened(
+            body_id=body_id, location_id=location_id, item_ids=item_ids
+        ):
+            return {
+                "body_id": body_id.value,
+                "item_ids": [item.value for item in item_ids],
+                "kind": "corpse_custody_opened",
+                "location_id": location_id.value,
+            }
+        case TakenFromCorpse(
+            item_id=item_id,
+            source_body_id=source_body_id,
+            resulting_holder_id=resulting_holder_id,
+        ):
+            return {
+                "item_id": item_id.value,
+                "kind": "taken_from_corpse",
+                "resulting_holder_id": resulting_holder_id.value,
+                "source_body_id": source_body_id.value,
+            }
+        case PossessionClaimAsserted(
+            decedent_id=decedent_id, doctrine=doctrine, item_id=item_id
+        ):
+            payload = {
+                "decedent_id": decedent_id.value,
+                "doctrine": doctrine,
+                "kind": "possession_claim_asserted",
+            }
+            if item_id is not None:
+                payload["item_id"] = item_id.value
+            return payload
         case _:
             raise DomainSerializationError("unsupported_type", "$")
 
@@ -5947,6 +5982,7 @@ def _decode_event_details(
                 EVENT_SCHEMA_REPLAY_V12,
                 EVENT_SCHEMA_REPLAY_V13,
                 EVENT_SCHEMA_REPLAY_V14, EVENT_SCHEMA_REPLAY_V15,
+                EVENT_SCHEMA_REPLAY_V16,
             }:
                 raise DomainSerializationError("invalid_event_schema_version", path)
             return _decode_production_details(kind, fields, path=path)
@@ -5967,6 +6003,7 @@ def _decode_event_details(
                 EVENT_SCHEMA_REPLAY_V12,
                 EVENT_SCHEMA_REPLAY_V13,
                 EVENT_SCHEMA_REPLAY_V14, EVENT_SCHEMA_REPLAY_V15,
+                EVENT_SCHEMA_REPLAY_V16,
             }:
                 raise DomainSerializationError("invalid_event_schema_version", path)
             return _decode_environment_details(kind, fields, path=path)
@@ -5988,6 +6025,7 @@ def _decode_event_details(
                 EVENT_SCHEMA_REPLAY_V12,
                 EVENT_SCHEMA_REPLAY_V13,
                 EVENT_SCHEMA_REPLAY_V14, EVENT_SCHEMA_REPLAY_V15,
+                EVENT_SCHEMA_REPLAY_V16,
             }:
                 raise DomainSerializationError("invalid_event_schema_version", path)
             if kind in {
@@ -5995,8 +6033,12 @@ def _decode_event_details(
                 "artifact_annotated",
                 "artifact_damaged",
                 "artifact_partially_lost",
-            } and schema_version not in {EVENT_SCHEMA_REPLAY_V13, EVENT_SCHEMA_REPLAY_V14,
-            EVENT_SCHEMA_REPLAY_V15}:
+            } and schema_version not in {
+                EVENT_SCHEMA_REPLAY_V13,
+                EVENT_SCHEMA_REPLAY_V14,
+                EVENT_SCHEMA_REPLAY_V15,
+                EVENT_SCHEMA_REPLAY_V16,
+            }:
                 raise DomainSerializationError("invalid_event_schema_version", path)
             return _decode_artifact_details(kind, fields, path=path)
         if kind in {
@@ -6011,6 +6053,7 @@ def _decode_event_details(
                 EVENT_SCHEMA_REPLAY_V12,
                 EVENT_SCHEMA_REPLAY_V13,
                 EVENT_SCHEMA_REPLAY_V14, EVENT_SCHEMA_REPLAY_V15,
+                EVENT_SCHEMA_REPLAY_V16,
             }:
                 raise DomainSerializationError("invalid_event_schema_version", path)
             return _decode_lifecycle_details(kind, fields, path=path)
@@ -6021,12 +6064,24 @@ def _decode_event_details(
                 EVENT_SCHEMA_REPLAY_V12,
                 EVENT_SCHEMA_REPLAY_V13,
                 EVENT_SCHEMA_REPLAY_V14, EVENT_SCHEMA_REPLAY_V15,
+                EVENT_SCHEMA_REPLAY_V16,
             }:
                 raise DomainSerializationError("invalid_event_schema_version", path)
             return _decode_lifecycle_details(kind, fields, path=path)
 
+        if kind in {
+            "corpse_custody_opened",
+            "taken_from_corpse",
+            "possession_claim_asserted",
+        }:
+            if schema_version != EVENT_SCHEMA_REPLAY_V16:
+                raise DomainSerializationError("invalid_event_schema_version", path)
+            return _decode_possession_details(kind, fields, path=path)
         if kind == "experiment_resolved":
-            if schema_version != EVENT_SCHEMA_REPLAY_V15:
+            if schema_version not in {
+                EVENT_SCHEMA_REPLAY_V15,
+                EVENT_SCHEMA_REPLAY_V16,
+            }:
                 raise DomainSerializationError("invalid_event_schema_version", path)
             return _decode_experiment_resolved(fields, path=path)
         if kind in {
@@ -6040,6 +6095,7 @@ def _decode_event_details(
             if schema_version not in {
                 EVENT_SCHEMA_REPLAY_V14,
                 EVENT_SCHEMA_REPLAY_V15,
+                EVENT_SCHEMA_REPLAY_V16,
             }:
                 raise DomainSerializationError("invalid_event_schema_version", path)
             return _decode_repository_details(kind, fields, path=path)
@@ -6195,6 +6251,62 @@ def _decode_repository_details(
     raise DomainSerializationError("unknown_type", f"{path}.kind")
 
 
+def _decode_possession_details(
+    kind: str, fields: dict[str, Any], *, path: str
+) -> object:
+    if kind == "corpse_custody_opened":
+        _require_keys(
+            fields,
+            {"body_id", "location_id", "item_ids"},
+            path=path,
+        )
+        raw_ids = fields["item_ids"]
+        if not isinstance(raw_ids, list):
+            raise DomainSerializationError("invalid_array", f"{path}.item_ids")
+        item_ids: list[EntityId] = []
+        for index, value in enumerate(raw_ids):
+            if not isinstance(value, str):
+                raise DomainSerializationError(
+                    "invalid_string", f"{path}.item_ids[{index}]"
+                )
+            item_ids.append(EntityId(value))
+        return CorpseCustodyOpened(
+            EntityId(_str_field(fields, "body_id", path=path)),
+            EntityId(_str_field(fields, "location_id", path=path)),
+            tuple(item_ids),
+        )
+    if kind == "taken_from_corpse":
+        _require_keys(
+            fields,
+            {"item_id", "source_body_id", "resulting_holder_id"},
+            path=path,
+        )
+        return TakenFromCorpse(
+            EntityId(_str_field(fields, "item_id", path=path)),
+            EntityId(_str_field(fields, "source_body_id", path=path)),
+            EntityId(_str_field(fields, "resulting_holder_id", path=path)),
+        )
+    if kind == "possession_claim_asserted":
+        _require_keys(
+            fields,
+            {"decedent_id", "doctrine"},
+            path=path,
+            optional={"item_id"},
+        )
+        item_raw = fields.get("item_id")
+        item_id = (
+            None
+            if item_raw is None
+            else EntityId(_str_field(fields, "item_id", path=path))
+        )
+        return PossessionClaimAsserted(
+            EntityId(_str_field(fields, "decedent_id", path=path)),
+            _str_field(fields, "doctrine", path=path),
+            item_id,
+        )
+    raise DomainSerializationError("unknown_type", f"{path}.kind")
+
+
 def _decode_experiment_resolved(
     fields: dict[str, Any], *, path: str
 ) -> ExperimentResolved:
@@ -6261,6 +6373,7 @@ def _encode_world_event(value: WorldEvent) -> dict[str, Any]:
                 EVENT_SCHEMA_REPLAY_V12,
                 EVENT_SCHEMA_REPLAY_V13,
                 EVENT_SCHEMA_REPLAY_V14, EVENT_SCHEMA_REPLAY_V15,
+                EVENT_SCHEMA_REPLAY_V16,
     }:
         raise DomainSerializationError(
             "invalid_event_schema_version",
@@ -6283,6 +6396,7 @@ def _encode_world_event(value: WorldEvent) -> dict[str, Any]:
                 EVENT_SCHEMA_REPLAY_V12,
                 EVENT_SCHEMA_REPLAY_V13,
                 EVENT_SCHEMA_REPLAY_V14, EVENT_SCHEMA_REPLAY_V15,
+                EVENT_SCHEMA_REPLAY_V16,
     }:
         raise DomainSerializationError(
             "invalid_event_schema_version",
@@ -6305,6 +6419,7 @@ def _encode_world_event(value: WorldEvent) -> dict[str, Any]:
         EVENT_SCHEMA_REPLAY_V12,
         EVENT_SCHEMA_REPLAY_V13,
                 EVENT_SCHEMA_REPLAY_V14, EVENT_SCHEMA_REPLAY_V15,
+                EVENT_SCHEMA_REPLAY_V16,
     }:
         raise DomainSerializationError(
             "invalid_event_schema_version",
@@ -6318,6 +6433,7 @@ def _encode_world_event(value: WorldEvent) -> dict[str, Any]:
     } and value.schema_version not in {
         EVENT_SCHEMA_REPLAY_V13,
         EVENT_SCHEMA_REPLAY_V14, EVENT_SCHEMA_REPLAY_V15,
+        EVENT_SCHEMA_REPLAY_V16,
     }:
         raise DomainSerializationError(
             "invalid_event_schema_version",
@@ -6334,6 +6450,7 @@ def _encode_world_event(value: WorldEvent) -> dict[str, Any]:
                 EVENT_SCHEMA_REPLAY_V12,
                 EVENT_SCHEMA_REPLAY_V13,
                 EVENT_SCHEMA_REPLAY_V14, EVENT_SCHEMA_REPLAY_V15,
+                EVENT_SCHEMA_REPLAY_V16,
     }:
         raise DomainSerializationError(
             "invalid_event_schema_version",
@@ -6345,6 +6462,7 @@ def _encode_world_event(value: WorldEvent) -> dict[str, Any]:
                 EVENT_SCHEMA_REPLAY_V12,
                 EVENT_SCHEMA_REPLAY_V13,
                 EVENT_SCHEMA_REPLAY_V14, EVENT_SCHEMA_REPLAY_V15,
+                EVENT_SCHEMA_REPLAY_V16,
     }:
         raise DomainSerializationError(
             "invalid_event_schema_version",
@@ -6361,14 +6479,25 @@ def _encode_world_event(value: WorldEvent) -> dict[str, Any]:
     } and value.schema_version not in {
         EVENT_SCHEMA_REPLAY_V14,
         EVENT_SCHEMA_REPLAY_V15,
+        EVENT_SCHEMA_REPLAY_V16,
     }:
+        raise DomainSerializationError(
+            "invalid_event_schema_version",
+            "$.schema_version",
+        )
+    if details_kind in {
+        "corpse_custody_opened",
+        "taken_from_corpse",
+        "possession_claim_asserted",
+    } and value.schema_version != EVENT_SCHEMA_REPLAY_V16:
         raise DomainSerializationError(
             "invalid_event_schema_version",
             "$.schema_version",
         )
     if (
         details_kind == "experiment_resolved"
-        and value.schema_version != EVENT_SCHEMA_REPLAY_V15
+        and value.schema_version
+        not in {EVENT_SCHEMA_REPLAY_V15, EVENT_SCHEMA_REPLAY_V16}
     ):
         raise DomainSerializationError(
             "invalid_event_schema_version",
@@ -6548,6 +6677,7 @@ def _decode_world_event(data: dict[str, Any], *, path: str) -> WorldEvent:
                 EVENT_SCHEMA_REPLAY_V12,
                 EVENT_SCHEMA_REPLAY_V13,
                 EVENT_SCHEMA_REPLAY_V14, EVENT_SCHEMA_REPLAY_V15,
+                EVENT_SCHEMA_REPLAY_V16,
         }:
             raise DomainSerializationError("unsupported_schema_version", path)
         actor_raw = data["actor_id"]

@@ -78,6 +78,7 @@ EVENT_SCHEMA_REPLAY_V12: Final[int] = 12
 EVENT_SCHEMA_REPLAY_V13: Final[int] = 13
 EVENT_SCHEMA_REPLAY_V14: Final[int] = 14
 EVENT_SCHEMA_REPLAY_V15: Final[int] = 15
+EVENT_SCHEMA_REPLAY_V16: Final[int] = 16
 SUPPORTED_EVENT_SCHEMA_VERSIONS: Final[frozenset[int]] = frozenset(
     {
         EVENT_SCHEMA_AUDIT_V1,
@@ -94,6 +95,7 @@ SUPPORTED_EVENT_SCHEMA_VERSIONS: Final[frozenset[int]] = frozenset(
     EVENT_SCHEMA_REPLAY_V12,
         EVENT_SCHEMA_REPLAY_V13,
         EVENT_SCHEMA_REPLAY_V14, EVENT_SCHEMA_REPLAY_V15,
+        EVENT_SCHEMA_REPLAY_V16,
     }
 )
 REPLAYABLE_EVENT_SCHEMA_VERSIONS: Final[frozenset[int]] = frozenset(
@@ -111,6 +113,7 @@ REPLAYABLE_EVENT_SCHEMA_VERSIONS: Final[frozenset[int]] = frozenset(
     EVENT_SCHEMA_REPLAY_V12,
         EVENT_SCHEMA_REPLAY_V13,
         EVENT_SCHEMA_REPLAY_V14, EVENT_SCHEMA_REPLAY_V15,
+        EVENT_SCHEMA_REPLAY_V16,
     }
 )
 PHYSICAL_REPLAY_EVENT_SCHEMA_VERSIONS: Final[frozenset[int]] = frozenset(
@@ -127,6 +130,7 @@ PHYSICAL_REPLAY_EVENT_SCHEMA_VERSIONS: Final[frozenset[int]] = frozenset(
     EVENT_SCHEMA_REPLAY_V12,
         EVENT_SCHEMA_REPLAY_V13,
         EVENT_SCHEMA_REPLAY_V14, EVENT_SCHEMA_REPLAY_V15,
+        EVENT_SCHEMA_REPLAY_V16,
     }
 )
 _PRODUCTION_EVENT_SCHEMAS: Final[frozenset[int]] = frozenset(
@@ -140,6 +144,7 @@ _PRODUCTION_EVENT_SCHEMAS: Final[frozenset[int]] = frozenset(
     EVENT_SCHEMA_REPLAY_V12,
         EVENT_SCHEMA_REPLAY_V13,
         EVENT_SCHEMA_REPLAY_V14, EVENT_SCHEMA_REPLAY_V15,
+        EVENT_SCHEMA_REPLAY_V16,
     }
 )
 _ENVIRONMENT_EVENT_SCHEMAS: Final[frozenset[int]] = frozenset(
@@ -152,6 +157,7 @@ _ENVIRONMENT_EVENT_SCHEMAS: Final[frozenset[int]] = frozenset(
     EVENT_SCHEMA_REPLAY_V12,
         EVENT_SCHEMA_REPLAY_V13,
         EVENT_SCHEMA_REPLAY_V14, EVENT_SCHEMA_REPLAY_V15,
+        EVENT_SCHEMA_REPLAY_V16,
     }
 )
 _ARTIFACT_EVENT_SCHEMAS: Final[frozenset[int]] = frozenset(
@@ -163,6 +169,7 @@ _ARTIFACT_EVENT_SCHEMAS: Final[frozenset[int]] = frozenset(
     EVENT_SCHEMA_REPLAY_V12,
         EVENT_SCHEMA_REPLAY_V13,
         EVENT_SCHEMA_REPLAY_V14, EVENT_SCHEMA_REPLAY_V15,
+        EVENT_SCHEMA_REPLAY_V16,
     }
 )
 _LIFECYCLE_EVENT_SCHEMAS: Final[frozenset[int]] = frozenset(
@@ -173,6 +180,7 @@ _LIFECYCLE_EVENT_SCHEMAS: Final[frozenset[int]] = frozenset(
         EVENT_SCHEMA_REPLAY_V12,
         EVENT_SCHEMA_REPLAY_V13,
         EVENT_SCHEMA_REPLAY_V14, EVENT_SCHEMA_REPLAY_V15,
+        EVENT_SCHEMA_REPLAY_V16,
     }
 )
 _NEW_AGENT_INIT_EVENT_SCHEMAS: Final[frozenset[int]] = frozenset(
@@ -182,6 +190,7 @@ _NEW_AGENT_INIT_EVENT_SCHEMAS: Final[frozenset[int]] = frozenset(
         EVENT_SCHEMA_REPLAY_V12,
         EVENT_SCHEMA_REPLAY_V13,
         EVENT_SCHEMA_REPLAY_V14, EVENT_SCHEMA_REPLAY_V15,
+        EVENT_SCHEMA_REPLAY_V16,
     }
 )
 _KINSHIP_EVENT_SCHEMAS: Final[frozenset[int]] = frozenset(
@@ -1995,6 +2004,95 @@ class ExperimentResolved:
         _reject_presentation_fields(self.kind, self.__slots__)
 
 
+_POSSESSION_DOCTRINES: Final[frozenset[str]] = frozenset(
+    {
+        "children_should_inherit",
+        "group_owns",
+        "caregiver_inherits",
+        "first_claimant_owns",
+        "nobody_owns",
+    }
+)
+
+
+def _entity_id_tuple(field_name: str, value: object) -> tuple[EntityId, ...]:
+    if isinstance(value, (str, bytes)) or not isinstance(value, tuple):
+        raise TypeError(f"{field_name} must be a tuple of EntityId")
+    seen: set[str] = set()
+    copied: list[EntityId] = []
+    for item in value:
+        if type(item) is not EntityId:
+            raise TypeError(f"{field_name} entries must be EntityId")
+        if item.value in seen:
+            raise ValueError(f"duplicate {field_name}")
+        seen.add(item.value)
+        copied.append(item)
+    return tuple(copied)
+
+
+@dataclass(frozen=True, slots=True)
+class CorpseCustodyOpened:
+    """Items remain on the dead body. This is not a transfer."""
+
+    body_id: EntityId
+    location_id: EntityId
+    item_ids: tuple[EntityId, ...] = ()
+    kind: Literal["corpse_custody_opened"] = field(
+        default="corpse_custody_opened", init=False
+    )
+
+    def __post_init__(self) -> None:
+        if type(self.body_id) is not EntityId:
+            raise TypeError("CorpseCustodyOpened.body_id must be EntityId")
+        if type(self.location_id) is not EntityId:
+            raise TypeError("CorpseCustodyOpened.location_id must be EntityId")
+        object.__setattr__(
+            self,
+            "item_ids",
+            _entity_id_tuple("CorpseCustodyOpened.item_ids", self.item_ids),
+        )
+        _reject_presentation_fields(self.kind, self.__slots__)
+
+
+@dataclass(frozen=True, slots=True)
+class TakenFromCorpse:
+    """Physical take from corpse custody. Not a legitimacy ruling."""
+
+    item_id: EntityId
+    source_body_id: EntityId
+    resulting_holder_id: EntityId
+    kind: Literal["taken_from_corpse"] = field(
+        default="taken_from_corpse", init=False
+    )
+
+    def __post_init__(self) -> None:
+        for name in ("item_id", "source_body_id", "resulting_holder_id"):
+            if type(getattr(self, name)) is not EntityId:
+                raise TypeError(f"TakenFromCorpse.{name} must be EntityId")
+        _reject_presentation_fields(self.kind, self.__slots__)
+
+
+@dataclass(frozen=True, slots=True)
+class PossessionClaimAsserted:
+    """Public assertion. Does not move items."""
+
+    decedent_id: EntityId
+    doctrine: str
+    item_id: EntityId | None = None
+    kind: Literal["possession_claim_asserted"] = field(
+        default="possession_claim_asserted", init=False
+    )
+
+    def __post_init__(self) -> None:
+        if type(self.decedent_id) is not EntityId:
+            raise TypeError("PossessionClaimAsserted.decedent_id must be EntityId")
+        if self.doctrine not in _POSSESSION_DOCTRINES:
+            raise ValueError("PossessionClaimAsserted.doctrine")
+        if self.item_id is not None and type(self.item_id) is not EntityId:
+            raise TypeError("PossessionClaimAsserted.item_id must be EntityId or None")
+        _reject_presentation_fields(self.kind, self.__slots__)
+
+
 EventDetails = (
     Moved
     | Searched
@@ -2050,6 +2148,9 @@ EventDetails = (
     | RepositoryIndexed
     | RepositoryNeglected
     | ExperimentResolved
+    | CorpseCustodyOpened
+    | TakenFromCorpse
+    | PossessionClaimAsserted
 )
 
 _DETAIL_TYPES: Final[frozenset[type]] = frozenset(
@@ -2108,6 +2209,9 @@ _DETAIL_TYPES: Final[frozenset[type]] = frozenset(
         RepositoryIndexed,
         RepositoryNeglected,
         ExperimentResolved,
+        CorpseCustodyOpened,
+        TakenFromCorpse,
+        PossessionClaimAsserted,
     }
 )
 
@@ -2124,10 +2228,16 @@ _KNOWLEDGE_REPOSITORY_DETAIL_TYPES: Final[frozenset[type]] = frozenset(
     }
 )
 _KNOWLEDGE_REPOSITORY_EVENT_SCHEMAS: Final[frozenset[int]] = frozenset(
-    {EVENT_SCHEMA_REPLAY_V14, EVENT_SCHEMA_REPLAY_V15}
+    {EVENT_SCHEMA_REPLAY_V14, EVENT_SCHEMA_REPLAY_V15, EVENT_SCHEMA_REPLAY_V16}
 )
 _EXPERIMENT_EVENT_SCHEMAS: Final[frozenset[int]] = frozenset(
-    {EVENT_SCHEMA_REPLAY_V15}
+    {EVENT_SCHEMA_REPLAY_V15, EVENT_SCHEMA_REPLAY_V16}
+)
+_POSSESSION_EVENT_SCHEMAS: Final[frozenset[int]] = frozenset(
+    {EVENT_SCHEMA_REPLAY_V16}
+)
+_POSSESSION_DETAIL_TYPES: Final[frozenset[type]] = frozenset(
+    {CorpseCustodyOpened, TakenFromCorpse, PossessionClaimAsserted}
 )
 
 _PRODUCTION_DETAIL_TYPES: Final[frozenset[type]] = frozenset(
@@ -2175,7 +2285,12 @@ _DURABLE_RECORD_DETAIL_TYPES: Final[frozenset[type]] = frozenset(
 )
 
 _DURABLE_RECORD_EVENT_SCHEMAS: Final[frozenset[int]] = frozenset(
-    {EVENT_SCHEMA_REPLAY_V13, EVENT_SCHEMA_REPLAY_V14, EVENT_SCHEMA_REPLAY_V15}
+    {
+        EVENT_SCHEMA_REPLAY_V13,
+        EVENT_SCHEMA_REPLAY_V14,
+        EVENT_SCHEMA_REPLAY_V15,
+        EVENT_SCHEMA_REPLAY_V16,
+    }
 )
 
 _LIFECYCLE_DETAIL_TYPES: Final[frozenset[type]] = frozenset(
@@ -2283,6 +2398,8 @@ def _artifact_effect_complete(details: EventDetails) -> bool:
 
 
 def _payload_effect_complete(details: EventDetails, *, schema_version: int) -> bool:
+    if type(details) in _POSSESSION_DETAIL_TYPES:
+        return schema_version in _POSSESSION_EVENT_SCHEMAS
     if type(details) is ExperimentResolved:
         return schema_version in _EXPERIMENT_EVENT_SCHEMAS
     if type(details) in _KNOWLEDGE_REPOSITORY_DETAIL_TYPES:
@@ -2536,6 +2653,12 @@ def target_id_for_details(details: EventDetails) -> EntityId | None:
             return repository_id
         case ExperimentResolved(operand_a_id=operand_a_id):
             return operand_a_id
+        case CorpseCustodyOpened(body_id=body_id) | PossessionClaimAsserted(
+            decedent_id=body_id
+        ):
+            return body_id
+        case TakenFromCorpse(item_id=item_id):
+            return item_id
         case _:
             raise TypeError(
                 f"{EventValidationCode.UNKNOWN_EVENT_TYPE.value}: "
@@ -2690,6 +2813,15 @@ class WorldEvent:
                 _LOG.error(
                     "invalid_event_schema_version kind=%s schema_version=%s "
                     "reason_code=dependency_care_requires_v12",
+                    self.details.kind,
+                    self.schema_version,
+                )
+                raise ValueError(EventValidationCode.INVALID_SCHEMA_VERSION.value)
+        if type(self.details) in _POSSESSION_DETAIL_TYPES:
+            if self.schema_version not in _POSSESSION_EVENT_SCHEMAS:
+                _LOG.error(
+                    "invalid_event_schema_version kind=%s schema_version=%s "
+                    "reason_code=possession_succession_requires_v16",
                     self.details.kind,
                     self.schema_version,
                 )

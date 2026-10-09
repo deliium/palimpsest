@@ -47,7 +47,9 @@ from world.events import (
     EVENT_SCHEMA_REPLAY_V11,
     EVENT_SCHEMA_REPLAY_V12,
     EVENT_SCHEMA_REPLAY_V13,
-    EVENT_SCHEMA_REPLAY_V14, EVENT_SCHEMA_REPLAY_V15,
+    EVENT_SCHEMA_REPLAY_V14,
+    EVENT_SCHEMA_REPLAY_V15,
+    EVENT_SCHEMA_REPLAY_V16,
     AgentCreated,
     AgentEnteredWorld,
     AgentInitializationRecorded,
@@ -68,7 +70,10 @@ from world.events import (
     Eaten,
     EnvironmentalHazardEnded,
     EnvironmentalHazardStarted,
+    CorpseCustodyOpened,
     ExperimentResolved,
+    PossessionClaimAsserted,
+    TakenFromCorpse,
     ExposureApplied,
     Fled,
     Fed,
@@ -348,7 +353,9 @@ def _prepare_events(
             EVENT_SCHEMA_REPLAY_V11,
             EVENT_SCHEMA_REPLAY_V12,
             EVENT_SCHEMA_REPLAY_V13,
-            EVENT_SCHEMA_REPLAY_V14, EVENT_SCHEMA_REPLAY_V15,
+            EVENT_SCHEMA_REPLAY_V14,
+            EVENT_SCHEMA_REPLAY_V15,
+            EVENT_SCHEMA_REPLAY_V16,
         }:
             raise ProjectionError(ProjectionErrorCode.UNSUPPORTED_SCHEMA)
     return normalized, schema_version, run_id
@@ -615,6 +622,13 @@ def _apply_event_effect(
             return _project_experiment(
                 state, event, experiment, production_catalog
             )
+        case CorpseCustodyOpened() as opened:
+            return _project_corpse_custody_opened(state, opened), True
+        case TakenFromCorpse() as taken:
+            return _project_taken_from_corpse(state, event, taken), True
+        case PossessionClaimAsserted() as claimed:
+            _project_possession_claim(state, claimed)
+            return state, False
         case _:
             raise ProjectionError(ProjectionErrorCode.PRECONDITION_FAILED)
 
@@ -1756,6 +1770,95 @@ def _project_exposure(state: WorldState, details: ExposureApplied) -> WorldState
         return rebuild_world_state(state, bodies=bodies)
     except ValueError as exc:
         raise ProjectionError(ProjectionErrorCode.INVARIANT_FAILED) from exc
+
+
+def _project_corpse_custody_opened(
+    state: WorldState, details: CorpseCustodyOpened
+) -> WorldState:
+    body = state.bodies.get(details.body_id)
+    if body is None or body.life_status is not LifeStatus.DEAD:
+        raise ProjectionError(ProjectionErrorCode.PRECONDITION_FAILED)
+    if body.location_id != details.location_id:
+        raise ProjectionError(ProjectionErrorCode.PRECONDITION_FAILED)
+    if tuple(body.inventory) != details.item_ids:
+        raise ProjectionError(ProjectionErrorCode.PRECONDITION_FAILED)
+    custody = state.corpse_custody_item_ids | frozenset(details.item_ids)
+    _LOG.debug(
+        "corpse_custody_projected item_count=%s disposition=opened",
+        len(details.item_ids),
+    )
+    try:
+        return rebuild_world_state(state, corpse_custody_item_ids=custody)
+    except ValueError as exc:
+        raise ProjectionError(ProjectionErrorCode.INVARIANT_FAILED) from exc
+
+
+def _project_taken_from_corpse(
+    state: WorldState, event: WorldEvent, details: TakenFromCorpse
+) -> WorldState:
+    if event.actor_id != details.resulting_holder_id:
+        raise ProjectionError(ProjectionErrorCode.PRECONDITION_FAILED)
+    if details.item_id not in state.corpse_custody_item_ids:
+        raise ProjectionError(ProjectionErrorCode.PRECONDITION_FAILED)
+    source = state.bodies.get(details.source_body_id)
+    holder = state.bodies.get(details.resulting_holder_id)
+    item = state.items.get(details.item_id)
+    if (
+        source is None
+        or holder is None
+        or item is None
+        or source.life_status is not LifeStatus.DEAD
+        or holder.life_status is not LifeStatus.ALIVE
+        or item.holder_id != source.entity_id
+        or details.item_id not in source.inventory
+        or source.location_id != holder.location_id
+    ):
+        raise ProjectionError(ProjectionErrorCode.PRECONDITION_FAILED)
+    items = dict(state.items)
+    bodies = dict(state.bodies)
+    items[details.item_id] = copy_item(
+        item, location_id=None, holder_id=holder.entity_id
+    )
+    bodies[source.entity_id] = _copy_body(
+        source,
+        inventory=tuple(
+            owned for owned in source.inventory if owned != details.item_id
+        ),
+    )
+    bodies[holder.entity_id] = _copy_body(
+        holder, inventory=(*holder.inventory, details.item_id)
+    )
+    custody = state.corpse_custody_item_ids - {details.item_id}
+    _LOG.debug(
+        "corpse_custody_projected item_count=%s disposition=taken",
+        1,
+    )
+    try:
+        return rebuild_world_state(
+            state,
+            items=items,
+            bodies=bodies,
+            corpse_custody_item_ids=custody,
+        )
+    except ValueError as exc:
+        raise ProjectionError(ProjectionErrorCode.INVARIANT_FAILED) from exc
+
+
+def _project_possession_claim(
+    state: WorldState, details: PossessionClaimAsserted
+) -> None:
+    body = state.bodies.get(details.decedent_id)
+    if body is None or body.life_status is not LifeStatus.DEAD:
+        raise ProjectionError(ProjectionErrorCode.PRECONDITION_FAILED)
+    if (
+        details.item_id is not None
+        and details.item_id not in state.corpse_custody_item_ids
+    ):
+        raise ProjectionError(ProjectionErrorCode.PRECONDITION_FAILED)
+    _LOG.debug(
+        "corpse_custody_projected item_count=%s disposition=claimed",
+        0 if details.item_id is None else 1,
+    )
 
 
 def _project_died(state: WorldState, details: Died) -> WorldState:
