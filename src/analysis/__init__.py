@@ -394,6 +394,7 @@ from analysis.technique_lifecycle import (
     TechniqueLifecycleSnapshot,
     TechniqueLifecycleState,
     TechniqueLossCause,
+    classify_technique_lifecycle,
 )
 from analysis.territorial_concentration_metrics import (
     TERRITORIAL_CONCENTRATION_METRIC_VERSION,
@@ -597,6 +598,7 @@ __all__ = [
     "canonical_python_scalar",
     "canonicalize_community_labels",
     "claim_overlap_token",
+    "classify_technique_lifecycle",
     "closed_evidence_stages",
     "compare_fact_sets",
     "compare_metric_documents",
