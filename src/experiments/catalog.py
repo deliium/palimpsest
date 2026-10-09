@@ -2761,6 +2761,7 @@ OFF_GATE_MATRIX_EXPERIMENT_IDS: Final[frozenset[str]] = frozenset(
         "experiment-ao-knowledge-repositories",
         "experiment-ap-knowledge-genealogy",
         "experiment-aq-bounded-experimentation",
+        "experiment-ar-technique-lifecycle",
     }
 )
 
@@ -4570,6 +4571,141 @@ def experiment_aq_bounded_experimentation(
         )
     return _definition(
         experiment_id="experiment-aq-bounded-experimentation",
+        base=base,
+        seed_matrix=matrix,
+        arms=arms,
+    )
+
+
+def technique_lifecycle_profile(
+    config: SimulationRunnerConfig,
+) -> SimulationRunnerConfig:
+    """Require cultural + provenance + genealogy + lifecycle on v37."""
+    from simulation.runner_models import RUNNER_SCHEMA_VERSION_V37
+
+    if config.schema_version != RUNNER_SCHEMA_VERSION_V37:
+        raise ValueError(
+            "technique lifecycle profile requires runner-config-v37 "
+            "(code=technique_lifecycle_profile_schema "
+            f"got={config.schema_version!r})"
+        )
+    if config.technique_lifecycle is None:
+        raise ValueError(
+            "technique lifecycle profile requires technique_lifecycle "
+            "(code=technique_lifecycle_profile_missing_channel)"
+        )
+    _LOG.debug(
+        "technique_lifecycle_channel_active active=%s schema_version=%s",
+        True,
+        config.schema_version,
+    )
+    return config
+
+
+def experiment_ar_technique_lifecycle(
+    base: SimulationRunnerConfig,
+    *,
+    seed_matrix: ExperimentSeedMatrix | None = None,
+    max_ticks: int = 12,
+) -> ExperimentDefinition:
+    """Off-gate Experiment AR. Default batches do not enable it."""
+    from simulation.runner_models import (
+        RUNNER_SCHEMA_VERSION_V4,
+        RUNNER_SCHEMA_VERSION_V36,
+        RUNNER_SCHEMA_VERSION_V37,
+        example_bounded_experimentation_spec,
+        example_cultural_feature_provenance_spec,
+        example_knowledge_genealogy_spec,
+        example_technique_lifecycle_spec,
+    )
+
+    matrix = seed_matrix or ExperimentSeedMatrix(seeds=(base.seed,))
+    provenance = example_cultural_feature_provenance_spec()
+    genealogy = example_knowledge_genealogy_spec()
+    lifecycle = example_technique_lifecycle_spec()
+    experiment = example_bounded_experimentation_spec()
+
+    def _clear(cfg: SimulationRunnerConfig) -> SimulationRunnerConfig:
+        return replace(
+            cfg,
+            mentorship=None,
+            developmental_learning=None,
+            dependency_care=None,
+            kinship=None,
+            historical_memory_layers=None,
+            population_lifecycle=None,
+            new_agent_initialization=None,
+        )
+
+    def _v37(**extra: object) -> SimulationRunnerConfig:
+        cfg = _clear(
+            replace(
+                base,
+                schema_version=RUNNER_SCHEMA_VERSION_V37,
+                mortality_mode=MortalityMode.DISABLED,
+                stop_policy=RunnerStopPolicy(max_ticks=max_ticks),
+                v3_capability_flags=V3CapabilityFlags(
+                    cultural_historical_memory=True
+                ),
+                cultural_feature_provenance=provenance,
+                knowledge_genealogy=genealogy,
+                technique_lifecycle=lifecycle,
+                bounded_experimentation=None,
+                **extra,
+            )
+        )
+        return technique_lifecycle_profile(cfg)
+
+    channel_off = _clear(
+        replace(
+            base,
+            schema_version=RUNNER_SCHEMA_VERSION_V36,
+            mortality_mode=MortalityMode.DISABLED,
+            stop_policy=RunnerStopPolicy(max_ticks=max_ticks),
+            v3_capability_flags=V3CapabilityFlags(cultural_historical_memory=True),
+            cultural_feature_provenance=provenance,
+            knowledge_genealogy=genealogy,
+            bounded_experimentation=experiment,
+            technique_lifecycle=None,
+        )
+    )
+    flags_off = _clear(
+        replace(
+            base,
+            schema_version=RUNNER_SCHEMA_VERSION_V4,
+            mortality_mode=MortalityMode.DISABLED,
+            stop_policy=RunnerStopPolicy(max_ticks=max_ticks),
+            v3_capability_flags=V3CapabilityFlags(),
+            cultural_feature_provenance=None,
+            knowledge_genealogy=None,
+            bounded_experimentation=None,
+            technique_lifecycle=None,
+        )
+    )
+    arms = (
+        ("ar-channel-off", "technique_lifecycle_channel_off", channel_off),
+        ("ar-discovered-known", "technique_lifecycle_discovered_known", _v37()),
+        ("ar-diffusing", "technique_lifecycle_diffusing", _v37()),
+        ("ar-holders-died", "technique_lifecycle_holders_died", _v37()),
+        ("ar-records-destroyed", "technique_lifecycle_records_destroyed", _v37()),
+        ("ar-materials", "technique_lifecycle_materials", _v37()),
+        ("ar-teaching-failed", "technique_lifecycle_teaching_failed", _v37()),
+        ("ar-rediscovered", "technique_lifecycle_rediscovered", _v37()),
+        ("ar-not-a-tree", "technique_lifecycle_not_a_tree", _v37()),
+        ("ar-flags-off", "technique_lifecycle_v3_flags_off", flags_off),
+    )
+    for arm_id, _label, config in arms:
+        _LOG.info(
+            "experiment_arm_start arm_id=%s schema_version=%s",
+            arm_id,
+            config.schema_version,
+        )
+        _LOG.debug(
+            "technique_lifecycle_channel_active active=%s",
+            config.technique_lifecycle is not None,
+        )
+    return _definition(
+        experiment_id="experiment-ar-technique-lifecycle",
         base=base,
         seed_matrix=matrix,
         arms=arms,

@@ -149,6 +149,8 @@ uv run --frozen --python 3.12.14 pytest tests/unit/physical -q
 # PALIMPSEST_TEST_DATABASE_URL=... uv run --frozen --python 3.12.14 pytest -m integration tests/integration
 ```
 
+Resource depletion and tombstones stay physical facts. The analysis-only technique lifecycle does not add technology gates, and it does not block Harvest, Craft, or Experiment when materials are missing.
+
 ## See also
 
 - [Architecture](architecture.md)

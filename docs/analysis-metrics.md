@@ -92,6 +92,10 @@ Catalog version: `metric-catalog-v1`. Document schema: `MetricDocument` schema `
 
 `bounded_experiment_trials@1`, `bounded_experiment_discovery@1`, and `bounded_experiment_provenance@1` assemble from detached trial audits and practical-knowledge evidence refs when `BoundedExperimentationSpec` was present on `runner-config-v36`. They deepen owned `cultural_historical_memory` and do not overload genealogy, skill, cultural, durable, or repository families. Documents are counts and shares only: outcome and operator histograms, deliberate versus accidental counts, unexpected share, and the share of learned entries that cite `evt:{id}` from a harvested trial. That provenance share is zero when genealogy uptake is off. `knowledge_provenance_for_experiment(event_id)` returns holder entry ids that cite the event, or an empty tuple. Analysis does not import cognition ledgers or the private law catalog. Experiment AQ stays off the V1 gate.
 
+### Technique lifecycle families (off the V1 gate)
+
+`technique_lifecycle_state@1`, `technique_lifecycle_loss@1`, and `technique_lifecycle_diffusion@1` assemble only when `TechniqueLifecycleSpec` is present on `runner-config-v37`. They label existing practical-knowledge keys as discovered, known, diffusing, rare, locally extinct, globally lost, or rediscovered, and they attach loss causes (`holders_died`, `records_destroyed`, `materials_absent`, `teaching_chain_failed`). `technique_lineage_diffusion(content_key, as_of_tick)` returns counts and lineage root ids. These rows are research inferences. They are not agent-visible facts, and an empty harvest when the channel is off is absence, not a measured extinction. Experiment AR stays off the V1 gate.
+
 ### Supporting formulas (not a separate family)
 
 `action_resolution_rates@1` defines attempted / applied / rejected / conflicted rates **only** from `ActionResolution` evidence. Never infer rejected attempts from absent world events. Task 11 implementations reuse this shared spec beside cooperation/conflict occurrence rates.
