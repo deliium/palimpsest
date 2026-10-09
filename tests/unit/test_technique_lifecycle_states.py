@@ -9,6 +9,7 @@ from analysis.technique_lifecycle import (
     TechniqueLifecycleState,
     TechniqueLossCause,
     classify_technique_lifecycle,
+    technique_lineage_diffusion,
 )
 from simulation.runner_models import example_technique_lifecycle_spec
 
@@ -260,6 +261,18 @@ def test_rediscovery_after_loss_keeps_new_root() -> None:
     assert row.state is TechniqueLifecycleState.REDISCOVERED
     assert row.new_lineage_root_id == "root-2"
     assert row.prior_lineage_root_id == "root-1"
+    query = technique_lineage_diffusion(
+        audits,
+        content_key="tech:hafting",
+        as_of_tick=7,
+        spec=example_technique_lifecycle_spec(rediscovery_latch_ticks=4),
+        death_ticks={"agent-a": 3},
+        applied_actions=(
+            _move("agent-a", 1, "loc-1"),
+            _move("agent-c", 6, "loc-1"),
+        ),
+    )
+    assert query.new_lineage_root_id == "root-2"
 
 
 def test_dual_emergence_is_not_rediscovered() -> None:

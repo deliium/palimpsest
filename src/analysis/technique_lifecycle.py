@@ -127,6 +127,20 @@ class TechniqueGrounding:
     teaching_chain_intact: bool
 
 
+@dataclass(frozen=True, slots=True)
+class TechniqueDiffusionRow:
+    """Researcher query row. Empty root ids unless the state is rediscovered."""
+
+    content_key: str
+    as_of_tick: int
+    state: TechniqueLifecycleState
+    known_by_n: int
+    location_count: int
+    causes: frozenset[TechniqueLossCause]
+    performable: bool | None
+    prior_lineage_root_id: str
+    new_lineage_root_id: str
+
 
 def _token(value: object) -> str | None:
     if type(value) is str and value.strip() == value and value:
@@ -906,3 +920,70 @@ def _root_pair(
         None,
     )
     return prior, new_root
+
+
+def technique_lineage_diffusion(
+    audits: Sequence[object],
+    *,
+    content_key: str,
+    as_of_tick: int,
+    spec: TechniqueLifecycleSpec,
+    death_ticks: Mapping[str, int] | None = None,
+    artifact_rows: Sequence[object] = (),
+    applied_actions: Sequence[AppliedActionRow] = (),
+    mentorship_audits: Sequence[object] = (),
+    catalog: object | None = None,
+    node_rows: Sequence[object] = (),
+    item_rows: Sequence[object] = (),
+) -> TechniqueDiffusionRow:
+    """Analysis-only diffusion row. Root ids are set only after rediscovery."""
+    key = require_stable_id("content_key", content_key)
+    snapshots = classify_technique_lifecycle(
+        audits,
+        as_of_tick=as_of_tick,
+        spec=spec,
+        death_ticks=death_ticks,
+        artifact_rows=artifact_rows,
+        applied_actions=applied_actions,
+        mentorship_audits=mentorship_audits,
+        catalog=catalog,
+        node_rows=node_rows,
+        item_rows=item_rows,
+    )
+    chosen = next(
+        (row for row in snapshots if row.content_key == key and row.scope == "global"),
+        None,
+    )
+    if chosen is None:
+        raise ValueError("technique_lineage_diffusion_missing")
+    prior = ""
+    new = ""
+    if chosen.state is TechniqueLifecycleState.REDISCOVERED:
+        prior = chosen.prior_lineage_root_id or ""
+        new = chosen.new_lineage_root_id or ""
+    locations = next(
+        (
+            row.location_ids
+            for row in ground_technique_lifecycle(
+                audits,
+                as_of_tick=as_of_tick,
+                death_ticks=death_ticks,
+                artifact_rows=artifact_rows,
+                applied_actions=applied_actions,
+                mentorship_audits=mentorship_audits,
+            )
+            if row.content_key == key
+        ),
+        (),
+    )
+    return TechniqueDiffusionRow(
+        content_key=key,
+        as_of_tick=as_of_tick,
+        state=chosen.state,
+        known_by_n=chosen.known_by_n,
+        location_count=sum(place != _UNKNOWN_PLACE for place in locations),
+        causes=chosen.causes,
+        performable=chosen.performable,
+        prior_lineage_root_id=prior,
+        new_lineage_root_id=new,
+    )

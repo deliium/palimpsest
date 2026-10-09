@@ -56,13 +56,13 @@ __all__ = [
     "historical_memory_harvest_from_run",
     "knowledge_genealogy_harvest_from_run",
     "knowledge_repository_harvest_from_run",
-    "repository_event_rows_from_events",
-    "repository_event_rows_from_resolutions",
-    "repository_objective_rows_from_repositories",
     "map_consolidation_audits_to_report",
     "map_recall_audits_to_dynamics_report",
     "map_snapshot_to_analysis_sources",
     "norm_belief_rows_from_ledgers",
+    "repository_event_rows_from_events",
+    "repository_event_rows_from_resolutions",
+    "repository_objective_rows_from_repositories",
     "spatial_action_rows_from_events",
     "territorial_control_rows_from_spatial_actions",
     "territorial_presence_rows_from_spatial_actions",
@@ -907,6 +907,9 @@ def artifact_objective_rows_from_artifacts(
                 row["lost_mark_count"] = lost_mark_count
             if author_id is not None:
                 row["author_id"] = author_id
+            location_id = _id_text_or_none(getattr(artifact, "location_id", None))
+            if location_id is not None:
+                row["location_id"] = location_id
             if (
                 isinstance(created_tick, int)
                 and not isinstance(created_tick, bool)
@@ -920,6 +923,65 @@ def artifact_objective_rows_from_artifacts(
         len(rows),
         present,
     )
+    return tuple(rows)
+
+
+def technique_node_rows_from_resources(
+    resources: Sequence[object] | None,
+) -> tuple[dict[str, object], ...] | None:
+    """Detached resource-node rows. ``None`` when the lifecycle channel is off."""
+    if resources is None:
+        return None
+    rows: list[dict[str, object]] = []
+    for resource in resources:
+        name = _id_text_or_none(getattr(resource, "name", None))
+        location_id = _id_text_or_none(getattr(resource, "location_id", None))
+        quantity = getattr(resource, "quantity", None)
+        if name is None or location_id is None or isinstance(quantity, bool):
+            continue
+        if not isinstance(quantity, (int, float)):
+            continue
+        rows.append(
+            {"name": name, "location_id": location_id, "quantity": float(quantity)}
+        )
+    _LOG.debug(
+        "technique_lifecycle_harvest node_count=%s item_count=%s "
+        "artifact_location_rows=%s",
+        len(rows),
+        0,
+        0,
+    )
+    return tuple(rows)
+
+
+def technique_item_rows_from_items(
+    items: Sequence[object] | None,
+    tool_marks: Sequence[object] | None = None,
+) -> tuple[dict[str, object], ...] | None:
+    """Detached item rows including inventory on dead holders."""
+    if items is None:
+        return None
+    roles: dict[str, str] = {}
+    for mark in tool_marks or ():
+        item_id = _id_text_or_none(getattr(mark, "item_id", None))
+        role = _id_text_or_none(getattr(getattr(mark, "role", None), "value", None))
+        if role is None:
+            role = _id_text_or_none(getattr(mark, "role", None))
+        if item_id is not None and role is not None:
+            roles[item_id] = role
+    rows: list[dict[str, object]] = []
+    for item in items:
+        item_id = _id_text_or_none(getattr(item, "entity_id", None))
+        kind = getattr(item, "kind", None)
+        rows.append(
+            {
+                "item_kind": _id_text_or_none(getattr(kind, "value", kind)),
+                "name": _id_text_or_none(getattr(item, "name", None)),
+                "tool_role": roles.get(item_id or ""),
+                "location_id": _id_text_or_none(getattr(item, "location_id", None)),
+                "holder_id": _id_text_or_none(getattr(item, "holder_id", None)),
+            }
+        )
     return tuple(rows)
 
 
@@ -1196,7 +1258,7 @@ def repository_event_rows_from_resolutions(
         deny_kind = _REPOSITORY_DENY_COMMANDS[command_kind]
         tick = getattr(resolution, "tick", 0)
         if hasattr(tick, "value"):
-            tick = getattr(tick, "value")
+            tick = tick.value
         row: dict[str, object] = {
             "event_kind": deny_kind,
             "kind": deny_kind,

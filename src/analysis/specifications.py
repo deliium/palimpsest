@@ -50,7 +50,7 @@ __all__ = [
 ]
 
 METRIC_CATALOG_VERSION: Final[str] = "metric-catalog-v1"
-METRIC_FAMILY_COUNT: Final[int] = 68
+METRIC_FAMILY_COUNT: Final[int] = 71
 
 # Align with existing memory-drift / transmission document versions.
 _ALGO_V1: Final[str] = "1"
@@ -145,6 +145,9 @@ class MetricFamilyId(StrEnum):
     BOUNDED_EXPERIMENT_TRIALS = "bounded_experiment_trials"
     BOUNDED_EXPERIMENT_DISCOVERY = "bounded_experiment_discovery"
     BOUNDED_EXPERIMENT_PROVENANCE = "bounded_experiment_provenance"
+    TECHNIQUE_LIFECYCLE_STATE = "technique_lifecycle_state"
+    TECHNIQUE_LIFECYCLE_LOSS = "technique_lifecycle_loss"
+    TECHNIQUE_LIFECYCLE_DIFFUSION = "technique_lifecycle_diffusion"
 
 
 class DenominatorKind(StrEnum):
@@ -1901,6 +1904,99 @@ def _spec_bounded_experiment_provenance() -> MetricSpecification:
     )
 
 
+def _spec_technique_lifecycle_state() -> MetricSpecification:
+    return _base(
+        family_id=MetricFamilyId.TECHNIQUE_LIFECYCLE_STATE,
+        evidence_inputs=frozenset({EvidenceStage.OBJECTIVE_EVENT_STATE}),
+        population="technique_lifecycle_snapshots",
+        denominator="technique_scope_rows",
+        denominator_kind=DenominatorKind.OCCURRENCE,
+        cohort_window="as_of tick lifecycle classification",
+        deceased_policy="dead holders do not count as living knowledge",
+        zero_holding_policy="spec absent -> availability=absent",
+        opportunity_vs_occurrence="counts by closed lifecycle state",
+        self_edge_policy="not_applicable",
+        censoring_policy="analysis-only technique lifecycle; never cognition",
+        formulas={
+            "state_count": "snapshots whose state equals the state",
+            "performable_false_count": "rows with performable false",
+            "known_by_n_histogram": "known_by_n:row_count pairs, ascending n",
+        },
+        value_keys=(
+            "diffusing_count",
+            "discovered_count",
+            "globally_lost_count",
+            "known_by_n_histogram",
+            "known_by_n_mean",
+            "known_count",
+            "locally_extinct_count",
+            "performable_false_count",
+            "rare_count",
+            "rediscovered_count",
+            "row_count",
+        ),
+        empty_case="availability=absent; no_technique_lifecycle",
+    )
+
+
+def _spec_technique_lifecycle_loss() -> MetricSpecification:
+    return _base(
+        family_id=MetricFamilyId.TECHNIQUE_LIFECYCLE_LOSS,
+        evidence_inputs=frozenset({EvidenceStage.OBJECTIVE_EVENT_STATE}),
+        population="technique_lifecycle_snapshots",
+        denominator="technique_scope_rows",
+        denominator_kind=DenominatorKind.OCCURRENCE,
+        cohort_window="as_of tick lifecycle classification",
+        deceased_policy="holders_died counts deaths at or before as_of",
+        zero_holding_policy="spec absent -> availability=absent",
+        opportunity_vs_occurrence="loss-cause episode counts",
+        self_edge_policy="not_applicable",
+        censoring_policy="analysis-only technique lifecycle; never cognition",
+        formulas={
+            "cause_count": "rows whose cause set contains the cause",
+            "globally_lost_share": "globally_lost rows / row_count",
+        },
+        value_keys=(
+            "globally_lost_share",
+            "holders_died_count",
+            "materials_absent_count",
+            "records_destroyed_count",
+            "teaching_chain_failed_count",
+        ),
+        empty_case="availability=absent; no_technique_lifecycle",
+    )
+
+
+def _spec_technique_lifecycle_diffusion() -> MetricSpecification:
+    return _base(
+        family_id=MetricFamilyId.TECHNIQUE_LIFECYCLE_DIFFUSION,
+        evidence_inputs=frozenset({EvidenceStage.OBJECTIVE_EVENT_STATE}),
+        population="technique_lifecycle_snapshots",
+        denominator="global_technique_rows",
+        denominator_kind=DenominatorKind.OCCURRENCE,
+        cohort_window="as_of tick lifecycle classification",
+        deceased_policy="not_applicable",
+        zero_holding_policy="spec absent -> availability=absent",
+        opportunity_vs_occurrence="location spread, hop, rediscovery share",
+        self_edge_policy="not_applicable",
+        censoring_policy="analysis-only technique lifecycle; never cognition",
+        formulas={
+            "mean_location_spread": "mean distinct location count of global rows",
+            "mean_hop": "sum of living-holder hops / living-holder count",
+            "rediscovery_new_root_share": (
+                "rediscoveries with a new lineage root / rediscovery_count"
+            ),
+        },
+        value_keys=(
+            "mean_hop",
+            "mean_location_spread",
+            "rediscovery_count",
+            "rediscovery_new_root_share",
+        ),
+        empty_case="availability=absent; no_technique_lifecycle",
+    )
+
+
 def _spec_historical_memory_queries() -> MetricSpecification:
     return _base(
         family_id=MetricFamilyId.HISTORICAL_MEMORY_QUERIES,
@@ -3360,6 +3456,9 @@ _BUILDERS: Final[tuple[Callable[[], MetricSpecification], ...]] = (
     _spec_bounded_experiment_trials,
     _spec_bounded_experiment_discovery,
     _spec_bounded_experiment_provenance,
+    _spec_technique_lifecycle_state,
+    _spec_technique_lifecycle_loss,
+    _spec_technique_lifecycle_diffusion,
     _spec_emergent_group_formation,
     _spec_emergent_social_norms,
     _spec_persistent_social_conventions,

@@ -395,6 +395,7 @@ from analysis.technique_lifecycle import (
     TechniqueLifecycleState,
     TechniqueLossCause,
     classify_technique_lifecycle,
+    technique_lineage_diffusion,
 )
 from analysis.territorial_concentration_metrics import (
     TERRITORIAL_CONCENTRATION_METRIC_VERSION,
@@ -719,6 +720,7 @@ __all__ = [
     "summarize_repository_access",
     "summarize_repository_organization",
     "summarize_repository_survival",
+    "technique_lineage_diffusion",
     "validate_metric_catalog",
     "validate_metric_specification",
     "validate_phenomenon_mappings",

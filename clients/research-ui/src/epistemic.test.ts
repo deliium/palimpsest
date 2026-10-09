@@ -54,6 +54,15 @@ describe('epistemic mapping', () => {
     expect(epistemicFromOverlayKind('bounded_experiment_provenance')).toBe(
       'research_inference',
     )
+    expect(epistemicFromOverlayKind('technique_lifecycle_state')).toBe(
+      'research_inference',
+    )
+    expect(epistemicFromOverlayKind('technique_lifecycle_loss')).toBe(
+      'research_inference',
+    )
+    expect(epistemicFromOverlayKind('technique_lifecycle_diffusion')).toBe(
+      'research_inference',
+    )
     expect(epistemicFromEvidenceClass('ANALYTICAL_INFERRED')).toBe('research_inference')
   })
 

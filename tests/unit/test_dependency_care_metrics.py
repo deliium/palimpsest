@@ -27,7 +27,7 @@ from analysis.specifications import (
 
 def test_catalog_includes_dependency_care_families() -> None:
     specs = all_metric_specifications()
-    assert len(specs) == METRIC_FAMILY_COUNT == 68
+    assert len(specs) == METRIC_FAMILY_COUNT == 71
     assert frozenset(spec.family_id for spec in specs) == frozenset(MetricFamilyId)
     validate_metric_catalog()
     assert "feed" in COOPERATION_ACTION_KINDS

@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import Any, Final
 
 from analysis.metric_service import MetricComputationInputs, assemble_metric_documents
@@ -295,6 +295,27 @@ def assemble_arm_metric_bundle(
             else dict(genealogy_harvest["death_ticks"])  # type: ignore[arg-type]
         ),
     )
+    lifecycle_spec = getattr(
+        arm.assignment.runner_config, "technique_lifecycle", None
+    )
+    if lifecycle_spec is not None:
+        from experiments.composition import (
+            technique_item_rows_from_items,
+            technique_node_rows_from_resources,
+        )
+
+        world = getattr(arm, "final_world", None)
+        if world is None:
+            world = getattr(arm.runner_result, "final_world", None)
+        resources = None if world is None else tuple(world.resources.values())
+        items = None if world is None else tuple(world.items.values())
+        marks = None if world is None else tuple(world.tool_marks.values())
+        inputs = replace(
+            inputs,
+            technique_lifecycle_spec=lifecycle_spec,
+            technique_node_rows=technique_node_rows_from_resources(resources),
+            technique_item_rows=technique_item_rows_from_items(items, marks),
+        )
     return assemble_metric_documents(inputs)
 
 

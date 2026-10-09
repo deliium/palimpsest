@@ -43,22 +43,22 @@ from analysis.durable_record_metrics import (
     compute_durable_record_lineage,
     compute_durable_record_survival,
 )
-from analysis.knowledge_repository_metrics import (
-    compute_knowledge_repository_access,
-    compute_knowledge_repository_organization,
-    compute_knowledge_repository_survival,
-)
-from analysis.knowledge_genealogy_metrics import (
-    compute_knowledge_genealogy_holders,
-    compute_knowledge_genealogy_lineage,
-    compute_knowledge_genealogy_mutation,
-)
 from analysis.historical_memory_metrics import (
     compute_historical_memory_layers,
     compute_historical_memory_queries,
     compute_historical_memory_transitions,
 )
 from analysis.kinship_genealogy_metrics import compute_kinship_genealogy
+from analysis.knowledge_genealogy_metrics import (
+    compute_knowledge_genealogy_holders,
+    compute_knowledge_genealogy_lineage,
+    compute_knowledge_genealogy_mutation,
+)
+from analysis.knowledge_repository_metrics import (
+    compute_knowledge_repository_access,
+    compute_knowledge_repository_organization,
+    compute_knowledge_repository_survival,
+)
 from analysis.memory_drift import compute_memory_drift
 from analysis.memory_dynamics_metrics import compute_memory_dynamics
 from analysis.mentorship_metrics import (
@@ -107,6 +107,7 @@ from analysis.serialization import (
 )
 from analysis.spatial_control_metrics import compute_spatial_control
 from analysis.specifications import MetricFamilyId, metric_specification
+from analysis.technique_lifecycle_metrics import assemble_technique_lifecycle_metrics
 from analysis.territorial_concentration_metrics import compute_territorial_concentration
 from analysis.transmission_metrics import (
     compute_knowledge_diffusion,
@@ -177,6 +178,9 @@ class MetricComputationInputs:
     founder_death_ticks: Mapping[str, int] | None = None
     inaccessible_expectations: Sequence[object] | None = None
     practical_knowledge_audits: Sequence[object] | None = None
+    technique_lifecycle_spec: object | None = None
+    technique_node_rows: Sequence[object] | None = None
+    technique_item_rows: Sequence[object] | None = None
     territorial_presence_rows: Sequence[object] | None = None
     territorial_control_rows: Sequence[object] | None = None
     belief_convergence_claims: Sequence[object] | None = None
@@ -778,6 +782,52 @@ def assemble_metric_documents(inputs: MetricComputationInputs) -> MetricBundle:
                 input_revision=revision,
             ),
         )
+    if inputs.technique_lifecycle_spec is not None and (
+        inputs.practical_knowledge_audits is not None
+    ):
+        lifecycle_audits = tuple(inputs.practical_knowledge_audits)
+        node_rows = tuple(inputs.technique_node_rows or ())
+        item_rows = tuple(inputs.technique_item_rows or ())
+        artifact_rows = tuple(inputs.durable_record_rows or ())
+        _LOG.debug(
+            "technique_lifecycle_harvest node_count=%s item_count=%s "
+            "artifact_location_rows=%s",
+            len(node_rows),
+            len(item_rows),
+            sum(
+                1
+                for row in artifact_rows
+                if isinstance(row, Mapping) and row.get("location_id")
+            ),
+        )
+
+        try:
+            documents.extend(
+                assemble_technique_lifecycle_metrics(
+                    lifecycle_audits,
+                    run_id=run_id,
+                    input_revision=revision,
+                    spec=inputs.technique_lifecycle_spec,
+                    as_of_tick=window_end,
+                    death_ticks=inputs.death_ticks,
+                    artifact_rows=artifact_rows,
+                    applied_actions=inputs.applied_actions,
+                    mentorship_audits=tuple(inputs.mentorship_audits or ()),
+                    node_rows=node_rows,
+                    item_rows=item_rows,
+                )
+            )
+        except Exception:
+            _LOG.error(
+                "metric_family_failed",
+                extra={
+                    "operation": "assemble_metric_documents",
+                    "run_id": run_id,
+                    "metric_family": "technique_lifecycle",
+                    "reason_code": "calculation_failed",
+                },
+            )
+            raise
     optional_blocks = {
         "kinship_genealogy": inputs.kinship_edge_rows is not None,
         "dependency_care": (

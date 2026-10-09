@@ -41,6 +41,9 @@
     'bounded_experiment_trials',
     'bounded_experiment_discovery',
     'bounded_experiment_provenance',
+    'technique_lifecycle_state',
+    'technique_lifecycle_loss',
+    'technique_lifecycle_diffusion',
   ] as const
 
   const HISTORICAL_MEMORY_FAMILIES = new Set([
@@ -71,6 +74,12 @@
     'bounded_experiment_trials',
     'bounded_experiment_discovery',
     'bounded_experiment_provenance',
+  ])
+
+  const TECHNIQUE_LIFECYCLE_FAMILIES = new Set([
+    'technique_lifecycle_state',
+    'technique_lifecycle_loss',
+    'technique_lifecycle_diffusion',
   ])
 
   type MetricCard = {
@@ -249,6 +258,9 @@
       const experiments = catalog.items.filter((item) =>
         BOUNDED_EXPERIMENT_FAMILIES.has(item.metric_family),
       )
+      const techniques = catalog.items.filter((item) =>
+        TECHNIQUE_LIFECYCLE_FAMILIES.has(item.metric_family),
+      )
       const phenomenon = catalog.items.filter((item) =>
         item.metric_family.includes('phenomenon'),
       )
@@ -259,6 +271,7 @@
         ...repositories,
         ...genealogy,
         ...experiments,
+        ...techniques,
         ...phenomenon,
       ]
         .filter(

@@ -248,6 +248,9 @@ def inputs_with_opt_in_metric_rows(
     inaccessible_expectations: Sequence[object] | None = None,
     practical_knowledge_audits: Sequence[object] | None = None,
     death_ticks: Mapping[str, int] | None = None,
+    technique_lifecycle_spec: object | None = None,
+    technique_node_rows: Sequence[object] | None = None,
+    technique_item_rows: Sequence[object] | None = None,
 ) -> MetricComputationInputs:
     """Attach opt-in family inputs from harvested evidence when present.
 
@@ -394,6 +397,13 @@ def inputs_with_opt_in_metric_rows(
                 if death_ticks is not None
                 else updated.death_ticks
             ),
+        )
+    if technique_lifecycle_spec is not None:
+        updated = replace(
+            updated,
+            technique_lifecycle_spec=technique_lifecycle_spec,
+            technique_node_rows=technique_node_rows,
+            technique_item_rows=technique_item_rows,
         )
 
     _LOG.debug(
