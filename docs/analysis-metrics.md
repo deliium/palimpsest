@@ -96,6 +96,10 @@ Catalog version: `metric-catalog-v1`. Document schema: `MetricDocument` schema `
 
 `technique_lifecycle_state@1`, `technique_lifecycle_loss@1`, and `technique_lifecycle_diffusion@1` assemble only when `TechniqueLifecycleSpec` is present on `runner-config-v37`. They label existing practical-knowledge keys as discovered, known, diffusing, rare, locally extinct, globally lost, or rediscovered, and they attach loss causes (`holders_died`, `records_destroyed`, `materials_absent`, `teaching_chain_failed`). `technique_lineage_diffusion(content_key, as_of_tick)` returns counts and lineage root ids. These rows are research inferences. They are not agent-visible facts, and an empty harvest when the channel is off is absence, not a measured extinction. Experiment AR stays off the V1 gate.
 
+### Possession succession families (off the V1 gate)
+
+`possession_custody_outcomes@1`, `possession_claim_conflict@1`, and `inheritance_convention_distribution@1` assemble only when `possession_succession` is present. They read corpse-custody episodes. A holder is physical possession. A doctrine is a legitimacy claim. Ties are `contested`. No living support at the death location is `unformed`. A missing kinship, care, or group harvest is `not_applicable` for that doctrine, not a false heir. A parent edge does not count as a caregiver. The convention token is not written back into any ledger. An empty harvest when the channel is off is absence. Experiment AS stays off the V1 gate. Research UI badges for these three ids are `research_inference` and do not name a legal owner.
+
 ### Supporting formulas (not a separate family)
 
 `action_resolution_rates@1` defines attempted / applied / rejected / conflicted rates **only** from `ActionResolution` evidence. Never infer rejected attempts from absent world events. Task 11 implementations reuse this shared spec beside cooperation/conflict occurrence rates.

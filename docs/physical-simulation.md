@@ -151,6 +151,8 @@ uv run --frozen --python 3.12.14 pytest tests/unit/physical -q
 
 Resource depletion and tombstones stay physical facts. The analysis-only technique lifecycle does not add technology gates, and it does not block Harvest, Craft, or Experiment when materials are missing.
 
+When `possession_succession` is present on `runner-config-v38`, every existing `Died` also opens corpse custody. The items stay on the dead body at the death location. They are not deleted, dropped, or given to a child, caregiver, or group. A colocated living agent may `Take` one on a later tick: commands in the death tick run before that system step. The take changes the physical holder only. `AssertPossessionClaim` records a doctrine and does not move the item. `Give` to a dead body stays rejected. Channel off leaves the inventory on the body and still rejects a take of a held item. Experiment harm that sets health to zero does not emit `Died` and does not open custody.
+
 ## See also
 
 - [Architecture](architecture.md)
