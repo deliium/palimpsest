@@ -341,6 +341,7 @@ class WorldEngine:
                 if durable_records_spec is None
                 else getattr(durable_records_spec, "perception_mode", "marks_and_meta")
             ),
+            possession_succession_active=possession_succession_active,
             repository_perception_mode=(
                 None
                 if knowledge_repositories_spec is None
@@ -707,7 +708,12 @@ class WorldEngine:
         engine._translator = registration_translator(bootstrap)
         engine._registrations = bootstrap.registrations
         # Perception mode rebound after durable_records_spec restore below.
-        engine._perception = PerceptionService()
+        engine._possession_succession_active = (
+            getattr(snapshot.config, "possession_succession", None) is not None
+        )
+        engine._perception = PerceptionService(
+            possession_succession_active=engine._possession_succession_active,
+        )
         engine._engine_id = derive_scoped_id(
             snapshot.config,
             StreamScope(
@@ -889,6 +895,7 @@ class WorldEngine:
                 engine._perception = PerceptionService(
                     durable_perception_mode=durable_mode,
                     repository_perception_mode=repository_mode,
+                    possession_succession_active=engine._possession_succession_active,
                 )
         if snapshot.persistence_codec_version in {"v8", "v9", "v10", "v11", "v12", "v13"}:
             resolved_kinship = kinship_spec
@@ -3107,6 +3114,7 @@ class WorldEngine:
             knowledge_repositories_context=self._knowledge_repositories_rule_context(),
             experiment_catalog=self._experiment_catalog,
             possession_succession_active=self.possession_succession_active,
+            possession_succession_context=self._possession_succession_rule_context(),
         )
         start_ledger = self._skill_ledger
         folded_ledger, skill_facts = self._fold_skill_ledger(
@@ -4305,6 +4313,16 @@ class WorldEngine:
                 sorted(denied),
             )
         return result or None
+
+    def _possession_succession_rule_context(self) -> object | None:
+        """Build ephemeral corpse-take legality. None leaves that branch closed."""
+        from world.possession_succession import PossessionSuccessionRuleContext
+
+        if not self.possession_succession_active:
+            return None
+        return PossessionSuccessionRuleContext(
+            allow_corpse_take=True, allow_claim=True
+        )
 
     def _dependency_care_rule_context(self) -> object | None:
         """Build ephemeral Feed/Transport legality context for this tick."""

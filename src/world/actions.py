@@ -33,6 +33,7 @@ from world.identifiers import (
     WorldId,
     WorldRevision,
 )
+from world.possession_succession import POSSESSION_DOCTRINES
 from world.production import require_production_command_fields
 
 _ARTIFACT_LOG: Final[logging.Logger] = logging.getLogger("world.artifacts")
@@ -680,6 +681,31 @@ class Experiment:
         )
 
 
+@dataclass(frozen=True, slots=True)
+class AssertPossessionClaim:
+    """Public doctrine assertion. Does not move items or name an heir."""
+
+    decedent_id: EntityId
+    doctrine: str
+    item_id: EntityId | None = None
+    kind: Literal["assert_possession_claim"] = field(
+        default="assert_possession_claim", init=False
+    )
+
+    def __post_init__(self) -> None:
+        if type(self.decedent_id) is not EntityId:
+            raise TypeError("AssertPossessionClaim.decedent_id must be EntityId")
+        if self.doctrine not in POSSESSION_DOCTRINES:
+            raise ValueError("AssertPossessionClaim.doctrine")
+        if self.item_id is not None and type(self.item_id) is not EntityId:
+            raise TypeError("AssertPossessionClaim.item_id must be EntityId or None")
+        _EXPERIMENT_LOG.info(
+            "possession_claim_constructed doctrine=%s item_scoped=%s",
+            self.doctrine,
+            self.item_id is not None,
+        )
+
+
 AgentCommand = (
     Move
     | Search
@@ -716,6 +742,7 @@ AgentCommand = (
     | MaintainRepository
     | IndexRepository
     | Experiment
+    | AssertPossessionClaim
 )
 
 _COMMAND_TYPES: Final[frozenset[type]] = frozenset(
@@ -755,6 +782,7 @@ _COMMAND_TYPES: Final[frozenset[type]] = frozenset(
         MaintainRepository,
         IndexRepository,
         Experiment,
+        AssertPossessionClaim,
     }
 )
 

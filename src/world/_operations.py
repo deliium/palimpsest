@@ -29,6 +29,7 @@ from world.actions import (
     Drop,
     Eat,
     Erase,
+    AssertPossessionClaim,
     Experiment,
     EstablishRepository,
     Feed,
@@ -444,6 +445,17 @@ class _IndexRepositoryOp:
 
 
 @dataclass(frozen=True, slots=True)
+class _AssertPossessionClaimOp:
+    request_id: RequestId
+    actor_id: EntityId
+    world_id: WorldId
+    base_revision: WorldRevision
+    decedent_id: EntityId
+    doctrine: str
+    item_id: EntityId | None
+
+
+@dataclass(frozen=True, slots=True)
 class _ExperimentOp:
     request_id: RequestId
     actor_id: EntityId
@@ -492,6 +504,7 @@ ValidatedWorldOperation = (
     | _MaintainRepositoryOp
     | _IndexRepositoryOp
     | _ExperimentOp
+    | _AssertPossessionClaimOp
 )
 
 _OPERATION_TYPES: Final[frozenset[type]] = frozenset(
@@ -531,6 +544,7 @@ _OPERATION_TYPES: Final[frozenset[type]] = frozenset(
         _MaintainRepositoryOp,
         _IndexRepositoryOp,
         _ExperimentOp,
+        _AssertPossessionClaimOp,
     }
 )
 
@@ -906,6 +920,17 @@ def validate_action_request(
                     *base, repository_id=repository_id, entries=entries
                 )
             )
+        case AssertPossessionClaim(
+            decedent_id=decedent_id, doctrine=doctrine, item_id=item_id
+        ):
+            return OperationAccepted(
+                _AssertPossessionClaimOp(
+                    *base,
+                    decedent_id=decedent_id,
+                    doctrine=doctrine,
+                    item_id=item_id,
+                )
+            )
         case Experiment(
             operator=operator,
             operand_a_id=operand_a_id,
@@ -1131,6 +1156,7 @@ def prepare_action_batch(
     knowledge_repositories_context: object | None = None,
     experiment_catalog: object | None = None,
     possession_succession_active: bool = False,
+    possession_succession_context: object | None = None,
 ) -> PendingBatch:
     """Resolve ordered requests into pending effects against one evolving state.
 
@@ -1290,6 +1316,7 @@ def prepare_action_batch(
             durable_records_context=durable_context,
             knowledge_repositories_context=repository_context,
             experiment_catalog=experiment_catalog,
+            possession_succession_context=possession_succession_context,
         )
         if start_rule.disposition is RuleDisposition.REJECT:
             if start_rule.action_kind in {"feed", "transport"}:
@@ -1379,6 +1406,7 @@ def prepare_action_batch(
             knowledge_repositories_context=repository_context,
             experiment_catalog=experiment_catalog,
             possession_succession_active=possession_succession_active,
+            possession_succession_context=possession_succession_context,
         )
         if application.result.disposition is RuleDisposition.REJECT:
             outcomes.append(

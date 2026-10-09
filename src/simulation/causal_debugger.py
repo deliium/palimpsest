@@ -142,6 +142,9 @@ _DETAIL_KIND_TO_SEMANTIC_TYPE: Final[Mapping[str, str]] = {
     "repository_indexed": "REPOSITORY_INDEXED",
     "repository_neglected": "REPOSITORY_NEGLECTED",
     "experiment_resolved": "EXPERIMENT_RESOLVED",
+    "corpse_custody_opened": "CORPSE_CUSTODY_OPENED",
+    "taken_from_corpse": "AGENT_TOOK_FROM_CORPSE",
+    "possession_claim_asserted": "POSSESSION_CLAIM_ASSERTED",
 }
 
 # Semantic observer types / detail type names → cognition-trace command_kind.
@@ -185,6 +188,8 @@ _SEMANTIC_TO_COMMAND_KIND: Final[Mapping[str, str]] = {
     "REPOSITORY_MAINTAINED": "maintain_repository",
     "REPOSITORY_INDEXED": "index_repository",
     "EXPERIMENT_RESOLVED": "experiment",
+    "AGENT_TOOK_FROM_CORPSE": "take",
+    "POSSESSION_CLAIM_ASSERTED": "assert_possession_claim",
 }
 
 _DETAIL_KIND_TO_COMMAND_KIND: Final[Mapping[str, str]] = {
@@ -225,6 +230,8 @@ _DETAIL_KIND_TO_COMMAND_KIND: Final[Mapping[str, str]] = {
     "repository_maintained": "maintain_repository",
     "repository_indexed": "index_repository",
     "experiment_resolved": "experiment",
+    "taken_from_corpse": "take",
+    "possession_claim_asserted": "assert_possession_claim",
 }
 
 # Detail class __name__ (Attacked, Moved, …) → command_kind when kind field absent.
@@ -264,6 +271,8 @@ _DETAIL_TYPE_NAME_TO_COMMAND_KIND: Final[Mapping[str, str]] = {
     "RepositoryMaintained": "maintain_repository",
     "RepositoryIndexed": "index_repository",
     "ExperimentResolved": "experiment",
+    "TakenFromCorpse": "take",
+    "PossessionClaimAsserted": "assert_possession_claim",
 }
 
 # Consequence / environment semantics: no agent command to explain.
@@ -285,6 +294,7 @@ _NOT_APPLICABLE_SEMANTICS: Final[frozenset[str]] = frozenset(
         "AGENT_INITIALIZED",
         "LIFECYCLE_STAGE_CHANGED",
         "REPOSITORY_NEGLECTED",
+        "CORPSE_CUSTODY_OPENED",
     }
 )
 
@@ -306,6 +316,7 @@ _NOT_APPLICABLE_DETAIL_KINDS: Final[frozenset[str]] = frozenset(
         "agent_initialization_recorded",
         "lifecycle_stage_changed",
         "repository_neglected",
+        "corpse_custody_opened",
     }
 )
 
@@ -326,6 +337,7 @@ _NOT_APPLICABLE_DETAIL_TYPE_NAMES: Final[frozenset[str]] = frozenset(
         "AgentEnteredWorld",
         "LifecycleStageChanged",
         "RepositoryNeglected",
+        "CorpseCustodyOpened",
     }
 )
 

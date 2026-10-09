@@ -83,6 +83,7 @@ from world.actions import (
     Amend,
     AnnotateRecord,
     Ask,
+    AssertPossessionClaim,
     Attack,
     Build,
     CopyRecord,
@@ -540,6 +541,7 @@ _COMMAND_TAGS: Final[frozenset[str]] = frozenset(
         "annotate_record",
         "damage_record",
         "experiment",
+        "assert_possession_claim",
     }
 )
 
@@ -2516,6 +2518,16 @@ def _encode_command(value: object) -> dict[str, Any]:
                 "entries": [dict(entry) for entry in entries],
                 "repository_id": repository_id.value,
             }
+        case AssertPossessionClaim(
+            decedent_id=decedent_id, doctrine=doctrine, item_id=item_id
+        ):
+            payload = {
+                "decedent_id": decedent_id.value,
+                "doctrine": doctrine,
+            }
+            if item_id is not None:
+                payload["item_id"] = item_id.value
+            return payload
         case Experiment(
             operator=operator,
             operand_a_id=operand_a_id,
@@ -2802,6 +2814,21 @@ def _decode_command(tag: str, data: dict[str, Any], *, path: str) -> object:
             return IndexRepository(
                 EntityId(_str_field(data, "repository_id", path=path)),
                 tuple(entries),
+            )
+        if tag == "assert_possession_claim":
+            _require_keys(
+                data,
+                {"decedent_id", "doctrine"},
+                path=path,
+                optional={"item_id"},
+            )
+            item_raw = data.get("item_id")
+            return AssertPossessionClaim(
+                EntityId(_str_field(data, "decedent_id", path=path)),
+                _str_field(data, "doctrine", path=path),
+                None
+                if item_raw is None
+                else EntityId(_str_field(data, "item_id", path=path)),
             )
         if tag == "experiment":
             from world.experimentation import ExperimentOperator, ExperimentProcessToken

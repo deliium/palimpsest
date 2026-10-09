@@ -115,6 +115,6 @@ def test_distant_agent_receives_no_occurrence(
 
 
 def test_semantic_type_count_is_54_and_protocol_unchanged() -> None:
-    assert len(SEMANTIC_EVENT_TYPES) == 54
+    assert len(SEMANTIC_EVENT_TYPES) == 57
     assert "EXPERIMENT_RESOLVED" in SEMANTIC_EVENT_TYPES
     assert OBSERVER_PROTOCOL_VERSION == "observer-protocol-v1"

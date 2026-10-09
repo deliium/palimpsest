@@ -27,7 +27,7 @@ _ROOT = Path(__file__).resolve().parents[2]
 
 
 def test_semantic_event_count_is_54() -> None:
-    assert len(SEMANTIC_EVENT_TYPES) == 54
+    assert len(SEMANTIC_EVENT_TYPES) == 57
     assert "REPOSITORY_ESTABLISHED" in SEMANTIC_EVENT_TYPES
     assert "REPOSITORY_MEMBER_DEPOSITED" in SEMANTIC_EVENT_TYPES
     assert "REPOSITORY_MEMBER_RETRIEVED" in SEMANTIC_EVENT_TYPES
@@ -38,7 +38,7 @@ def test_semantic_event_count_is_54() -> None:
 
 def test_agent_command_count_is_35() -> None:
     commands = get_args(AgentCommand)
-    assert len(commands) == 35
+    assert len(commands) == 36
     assert Experiment in commands
     assert EstablishRepository in commands
     assert DepositRecord in commands

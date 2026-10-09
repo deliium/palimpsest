@@ -39,20 +39,23 @@ from world.events import (
     ArtifactMoved,
     ArtifactPartiallyLost,
     Asked,
+    CorpseCustodyOpened,
     CraftStarted,
     ExperimentResolved,
     ItemCrafted,
     ItemStored,
+    PossessionClaimAsserted,
     ResourceHarvested,
     StructureBuilt,
     StructureRepaired,
+    TakenFromCorpse,
     Talked,
     Told,
     WorldEvent,
     require_replayable_event,
 )
 from world.identifiers import EntityId, WorldId
-from world.models import Item, copy_body
+from world.models import Item, LifeStatus, copy_body
 from world.observations import (
     CONTENT_VISIBILITY_THRESHOLD,
     Observation,
@@ -116,6 +119,7 @@ class PerceptionService:
         *,
         durable_perception_mode: str | None = None,
         repository_perception_mode: str | None = None,
+        possession_succession_active: bool = False,
     ) -> None:
         if durable_perception_mode is not None and durable_perception_mode not in {
             "marks_and_meta",
@@ -133,8 +137,11 @@ class PerceptionService:
                 "repository_perception_mode must be container_and_meta, "
                 "container_only, or None"
             )
+        if type(possession_succession_active) is not bool:
+            raise TypeError("possession_succession_active must be bool")
         self._durable_perception_mode = durable_perception_mode
         self._repository_perception_mode = repository_perception_mode
+        self._possession_succession_active = possession_succession_active
 
     def project(
         self,
@@ -178,6 +185,7 @@ class PerceptionService:
                 environmental_dynamics=environmental_dynamics,
                 durable_perception_mode=self._durable_perception_mode,
                 repository_perception_mode=self._repository_perception_mode,
+                possession_succession_active=self._possession_succession_active,
             )
             for observer_id in observers
         )
@@ -219,6 +227,7 @@ def _project_one(
     environmental_dynamics: object | None,
     durable_perception_mode: str | None = None,
     repository_perception_mode: str | None = None,
+    possession_succession_active: bool = False,
 ) -> Observation:
     body = state.bodies[observer_id]
     location_id = body.location_id
@@ -296,6 +305,7 @@ def _project_one(
             observer_id=observer_id,
             location_id=location_id,
             include_ground=content_visible,
+            possession_succession_active=possession_succession_active,
         ),
         resources=(_sorted_resources(state, location_id) if content_visible else ()),
         structures=structures,
@@ -434,32 +444,56 @@ def _sorted_items(
     observer_id: EntityId,
     location_id: EntityId,
     include_ground: bool,
+    possession_succession_active: bool = False,
 ) -> tuple[ObservedItem, ...]:
     selected: list[ObservedItem] = []
+    corpse_count = 0
     for item_id in sorted(state.items, key=lambda entity: entity.value):
         item = state.items[item_id]
         projected = _project_item(
+            state,
             item,
             observer_id=observer_id,
             location_id=location_id,
             include_ground=include_ground,
+            possession_succession_active=possession_succession_active,
         )
         if projected is not None:
+            if projected.placement is ObservedItemPlacement.CORPSE_HERE:
+                corpse_count += 1
             selected.append(projected)
+    if corpse_count:
+        _LOG.debug("corpse_item_projected item_count=%s", corpse_count)
     return tuple(selected)
 
 
 def _project_item(
+    state: WorldState,
     item: Item,
     *,
     observer_id: EntityId,
     location_id: EntityId,
     include_ground: bool,
+    possession_succession_active: bool = False,
 ) -> ObservedItem | None:
     if item.holder_id == observer_id:
         placement = ObservedItemPlacement.HELD_BY_SELF
     elif include_ground and item.location_id == location_id:
         placement = ObservedItemPlacement.GROUND_HERE
+    elif (
+        possession_succession_active
+        and include_ground
+        and item.entity_id in state.corpse_custody_item_ids
+        and item.holder_id is not None
+    ):
+        holder = state.bodies.get(item.holder_id)
+        if (
+            holder is None
+            or holder.life_status is not LifeStatus.DEAD
+            or holder.location_id != location_id
+        ):
+            return None
+        placement = ObservedItemPlacement.CORPSE_HERE
     else:
         return None
     return ObservedItem(
@@ -884,6 +918,14 @@ def _public_facts_for_role(
         # Artifact occurrences expose only identity/revision — never marks.
         return {"kind": event.event_type, **artifact_facts}
     facts: dict[str, object] = {"kind": event.event_type}
+    possession_facts = _possession_public_facts(event)
+    if possession_facts is not None:
+        facts.update(possession_facts)
+        _LOG.debug(
+            "possession_occurrence kind=%s item_count=%s",
+            event.details.kind,
+            len(possession_facts["item_ids"]),
+        )
     recipe_id = _production_recipe_id(event)
     if role is ObservationAudienceRole.BYSTANDER:
         if recipe_id is not None:
@@ -896,6 +938,28 @@ def _public_facts_for_role(
     if recipe_id is not None and role is ObservationAudienceRole.ACTOR:
         facts["recipe_id"] = recipe_id
     return facts
+
+
+def _possession_public_facts(event: WorldEvent) -> dict[str, object] | None:
+    details = event.details
+    if type(details) is CorpseCustodyOpened:
+        return {
+            "decedent_id": details.body_id.value,
+            "item_ids": [item.value for item in details.item_ids],
+        }
+    if type(details) is TakenFromCorpse:
+        return {
+            "decedent_id": details.source_body_id.value,
+            "item_ids": [details.item_id.value],
+        }
+    if type(details) is PossessionClaimAsserted:
+        item_ids = [] if details.item_id is None else [details.item_id.value]
+        return {
+            "decedent_id": details.decedent_id.value,
+            "doctrine": details.doctrine,
+            "item_ids": item_ids,
+        }
+    return None
 
 
 def _experiment_public_facts(

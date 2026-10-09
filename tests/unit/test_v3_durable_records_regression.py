@@ -24,7 +24,7 @@ _ROOT = Path(__file__).resolve().parents[2]
 
 
 def test_semantic_event_count_is_47() -> None:
-    assert len(SEMANTIC_EVENT_TYPES) == 54
+    assert len(SEMANTIC_EVENT_TYPES) == 57
     assert "ARTIFACT_COPIED" in SEMANTIC_EVENT_TYPES
     assert "ARTIFACT_ANNOTATED" in SEMANTIC_EVENT_TYPES
     assert "ARTIFACT_DAMAGED" in SEMANTIC_EVENT_TYPES
@@ -33,7 +33,7 @@ def test_semantic_event_count_is_47() -> None:
 
 def test_agent_command_count_includes_durable_commands() -> None:
     commands = get_args(AgentCommand)
-    assert len(commands) == 35
+    assert len(commands) == 36
     assert Experiment in commands
     assert CopyRecord in commands
     assert AnnotateRecord in commands

@@ -95,6 +95,13 @@ _REPOSITORY_EVENT_NAMES = frozenset(
     }
 )
 _EXPERIMENT_EVENT_NAMES = frozenset({"EXPERIMENT_RESOLVED"})
+_POSSESSION_EVENT_NAMES = frozenset(
+    {
+        "CORPSE_CUSTODY_OPENED",
+        "AGENT_TOOK_FROM_CORPSE",
+        "POSSESSION_CLAIM_ASSERTED",
+    }
+)
 
 
 def test_event_fixtures_cover_closed_semantic_types() -> None:
@@ -109,6 +116,7 @@ def test_event_fixtures_cover_closed_semantic_types() -> None:
             | _LIFECYCLE_EVENT_NAMES
             | _REPOSITORY_EVENT_NAMES
             | _EXPERIMENT_EVENT_NAMES
+            | _POSSESSION_EVENT_NAMES
         )
     )
     assert names == expected

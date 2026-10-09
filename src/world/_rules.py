@@ -30,6 +30,7 @@ from world._operations import (
     _EatOp,
     _EraseOp,
     _EstablishRepositoryOp,
+    _AssertPossessionClaimOp,
     _ExperimentOp,
     _FeedOp,
     _FleeOp,
@@ -106,6 +107,7 @@ from world.events import (
     Given,
     Helped,
     Moved,
+    PossessionClaimAsserted,
     RepositoryEstablished,
     RepositoryIndexed,
     RepositoryMaintained,
@@ -114,6 +116,7 @@ from world.events import (
     Searched,
     Slept,
     Taken,
+    TakenFromCorpse,
     Talked,
     Told,
     Transported,
@@ -237,6 +240,7 @@ class RuleReason(StrEnum):
     REPOSITORY_RETRIEVE_HOLD_INVALID = "repository_retrieve_hold_invalid"
     UNKNOWN_REPOSITORY = "unknown_repository"
     EXPERIMENT_CHANNEL_OFF = "experiment_channel_off"
+    POSSESSION_SUCCESSION_CHANNEL_OFF = "possession_succession_channel_off"
 
 
 @dataclass(frozen=True, slots=True)
@@ -546,6 +550,13 @@ COMMAND_RULE_MATRIX: Final[dict[type, CommandRulePolicy]] = {
         requires_living_actor=True,
         notes="append/replace imperfect index entries",
     ),
+    _AssertPossessionClaimOp: CommandRulePolicy(
+        disposition=RuleDisposition.EVENT_ONLY,
+        emits_event_when_applied=True,
+        mutates_state_when_applied=False,
+        requires_living_actor=True,
+        notes="public possession assertion; does not move items",
+    ),
     _ExperimentOp: CommandRulePolicy(
         disposition=RuleDisposition.MUTATE,
         emits_event_when_applied=True,
@@ -590,6 +601,7 @@ _OPERATION_KIND: Final[dict[type, str]] = {
     _RetrieveRecordOp: "retrieve_record",
     _MaintainRepositoryOp: "maintain_repository",
     _IndexRepositoryOp: "index_repository",
+    _AssertPossessionClaimOp: "assert_possession_claim",
     _ExperimentOp: "experiment",
 }
 
@@ -616,6 +628,7 @@ def evaluate_operation(
     durable_records_context: object | None = None,
     knowledge_repositories_context: object | None = None,
     experiment_catalog: object | None = None,
+    possession_succession_context: object | None = None,
 ) -> RuleResult:
     """Evaluate a validated operation against an immutable snapshot.
 
@@ -647,6 +660,9 @@ def evaluate_operation(
     durable_context = _require_durable_records_context(durable_records_context)
     repository_context = _require_knowledge_repositories_context(
         knowledge_repositories_context
+    )
+    succession_context = _require_possession_succession_context(
+        possession_succession_context
     )
     op_type = type(operation)
     policy = COMMAND_RULE_MATRIX.get(op_type)
@@ -704,6 +720,7 @@ def evaluate_operation(
                 item_id,
                 kind,
                 effective_carry_capacity=capacity_map,
+                succession_context=succession_context,
             )
         case _DropOp(item_id=item_id):
             return _evaluate_drop(state, operation.actor_id, item_id, kind)
@@ -881,6 +898,10 @@ def evaluate_operation(
         case _IndexRepositoryOp():
             return _evaluate_index_repository(
                 state, operation, kind, repository_context=repository_context
+            )
+        case _AssertPossessionClaimOp():
+            return _evaluate_possession_claim(
+                state, operation, kind, succession_context=succession_context
             )
         case _ExperimentOp():
             return _evaluate_experiment(
@@ -1067,25 +1088,72 @@ def _evaluate_take(
     kind: str,
     *,
     effective_carry_capacity: Mapping[EntityId, int] | None = None,
+    succession_context: object | None = None,
 ) -> RuleResult:
     actor = state.bodies[actor_id]
     item = state.items[item_id]
-    if item.location_id is None or item.holder_id is not None:
-        return _reject(kind, RuleReason.NOT_AT_LOCATION)
-    if item.location_id != actor.location_id:
-        return _reject(kind, RuleReason.NOT_AT_LOCATION)
+    source = "ground"
+    if _is_corpse_custody_item(state, item):
+        source = "corpse"
+        assert item.holder_id is not None
+        holder = state.bodies[item.holder_id]
+        allow = (
+            succession_context is not None
+            and succession_context.allow_corpse_take
+        )
+        if not allow:
+            return _logged_take(
+                _reject(kind, RuleReason.POSSESSION_SUCCESSION_CHANNEL_OFF),
+                source=source,
+            )
+        if holder.location_id != actor.location_id:
+            return _logged_take(
+                _reject(kind, RuleReason.NOT_COLOCATED), source=source
+            )
+    else:
+        if item.location_id is None or item.holder_id is not None:
+            return _logged_take(
+                _reject(kind, RuleReason.NOT_AT_LOCATION), source=source
+            )
+        if item.location_id != actor.location_id:
+            return _logged_take(
+                _reject(kind, RuleReason.NOT_AT_LOCATION), source=source
+            )
     capacity = actor.carry_capacity.value
     if effective_carry_capacity is not None and actor_id in effective_carry_capacity:
         capacity = effective_carry_capacity[actor_id]
     if _inventory_load(state, actor) + item.load.value > capacity:
-        return _reject(kind, RuleReason.NO_CARRY_CAPACITY)
-    return RuleResult(
-        disposition=RuleDisposition.MUTATE,
-        reason=RuleReason.OCCURRENCE,
-        emits_event=True,
-        mutates_state=True,
-        action_kind=kind,
+        return _logged_take(
+            _reject(kind, RuleReason.NO_CARRY_CAPACITY), source=source
+        )
+    return _logged_take(
+        RuleResult(
+            disposition=RuleDisposition.MUTATE,
+            reason=RuleReason.OCCURRENCE,
+            emits_event=True,
+            mutates_state=True,
+            action_kind=kind,
+        ),
+        source=source,
     )
+
+
+def _is_corpse_custody_item(state: WorldState, item: Item) -> bool:
+    if item.holder_id is None or item.entity_id not in state.corpse_custody_item_ids:
+        return False
+    holder = state.bodies.get(item.holder_id)
+    return holder is not None and holder.life_status is LifeStatus.DEAD
+
+
+def _logged_take(result: RuleResult, *, source: str) -> RuleResult:
+    _OPS_LOG.debug(
+        "take_evaluated source=%s reason_code=%s",
+        source,
+        result.reason.value,
+    )
+    if result.disposition is RuleDisposition.MUTATE:
+        _OPS_LOG.info("take_evaluated source=%s", source)
+    return result
 
 
 def _evaluate_drop(
@@ -2677,6 +2745,7 @@ def apply_operation(
     knowledge_repositories_context: object | None = None,
     experiment_catalog: object | None = None,
     possession_succession_active: bool = False,
+    possession_succession_context: object | None = None,
 ) -> RuleApplication:
     """Evaluate then apply immutable physical or event-only effects.
 
@@ -2706,6 +2775,7 @@ def apply_operation(
         durable_records_context=durable_context,
         knowledge_repositories_context=repository_context,
         experiment_catalog=experiment_catalog,
+        possession_succession_context=possession_succession_context,
     )
     if result.disposition in {
         RuleDisposition.REJECT,
@@ -3073,6 +3143,13 @@ def _event_details_for(
                 ),
             )
         case _TakeOp(actor_id=actor_id, item_id=item_id):
+            item = state.items[item_id]
+            if _is_corpse_custody_item(state, item):
+                return TakenFromCorpse(
+                    item_id,
+                    source_body_id=item.holder_id,
+                    resulting_holder_id=actor_id,
+                )
             return Taken(item_id, resulting_holder_id=actor_id)
         case _DropOp(actor_id=actor_id, item_id=item_id):
             actor = state.bodies[actor_id]
@@ -3189,6 +3266,10 @@ def _event_details_for(
             return Asked(recipient_id, utterance)
         case _TellOp(recipient_id=recipient_id, utterance=utterance):
             return Told(recipient_id, utterance)
+        case _AssertPossessionClaimOp(
+            decedent_id=decedent_id, doctrine=doctrine, item_id=item_id
+        ):
+            return PossessionClaimAsserted(decedent_id, doctrine, item_id)
         case _WaitOp():
             return Waited()
         case _:
@@ -3277,8 +3358,18 @@ def _mutate_take(
     items = dict(state.items)
     bodies = dict(state.bodies)
     items[item_id] = copy_item(item, location_id=None, holder_id=actor_id)
+    custody = state.corpse_custody_item_ids
+    if _is_corpse_custody_item(state, item):
+        source = bodies[item.holder_id]
+        bodies[item.holder_id] = copy_body(
+            source,
+            inventory=tuple(owned for owned in source.inventory if owned != item_id),
+        )
+        custody = custody - {item_id}
     bodies[actor_id] = copy_body(actor, inventory=(*actor.inventory, item_id))
-    return rebuild_world_state(state, items=items, bodies=bodies)
+    return rebuild_world_state(
+        state, items=items, bodies=bodies, corpse_custody_item_ids=custody
+    )
 
 
 def _mutate_drop(
@@ -3487,6 +3578,74 @@ def _require_rules(rules: PhysicalRules | None) -> PhysicalRules:
     if type(rules) is not PhysicalRules:
         raise TypeError("rules must be PhysicalRules")
     return rules
+
+
+def _evaluate_possession_claim(
+    state: WorldState,
+    operation: _AssertPossessionClaimOp,
+    kind: str,
+    *,
+    succession_context: object | None,
+) -> RuleResult:
+    allow = succession_context is not None and succession_context.allow_claim
+    if not allow:
+        _OPS_LOG.debug(
+            "possession_claim_rejected reason_code=%s",
+            RuleReason.POSSESSION_SUCCESSION_CHANNEL_OFF.value,
+        )
+        return _reject(kind, RuleReason.POSSESSION_SUCCESSION_CHANNEL_OFF)
+    actor = state.bodies[operation.actor_id]
+    decedent = state.bodies.get(operation.decedent_id)
+    if decedent is None or decedent.life_status is not LifeStatus.DEAD:
+        _OPS_LOG.debug(
+            "possession_claim_rejected reason_code=%s",
+            RuleReason.DEAD_TARGET.value,
+        )
+        return _reject(kind, RuleReason.DEAD_TARGET)
+    if decedent.location_id != actor.location_id:
+        _OPS_LOG.debug(
+            "possession_claim_rejected reason_code=%s",
+            RuleReason.NOT_COLOCATED.value,
+        )
+        return _reject(kind, RuleReason.NOT_COLOCATED)
+    if operation.item_id is not None:
+        item = state.items.get(operation.item_id)
+        in_custody = (
+            item is not None
+            and item.entity_id in state.corpse_custody_item_ids
+            and item.holder_id == decedent.entity_id
+        )
+        if not in_custody:
+            _OPS_LOG.debug(
+                "possession_claim_rejected reason_code=%s",
+                RuleReason.NOT_AT_LOCATION.value,
+            )
+            return _reject(kind, RuleReason.NOT_AT_LOCATION)
+    _OPS_LOG.info(
+        "possession_claim_asserted doctrine=%s item_scoped=%s",
+        operation.doctrine,
+        operation.item_id is not None,
+    )
+    return RuleResult(
+        disposition=RuleDisposition.EVENT_ONLY,
+        reason=RuleReason.OCCURRENCE,
+        emits_event=True,
+        mutates_state=False,
+        action_kind=kind,
+    )
+
+
+def _require_possession_succession_context(value: object | None) -> object | None:
+    if value is None:
+        return None
+    from world.possession_succession import PossessionSuccessionRuleContext
+
+    if type(value) is not PossessionSuccessionRuleContext:
+        raise TypeError(
+            "possession_succession_context must be "
+            "PossessionSuccessionRuleContext or None"
+        )
+    return value
 
 
 def _require_dependency_care_context(value: object | None) -> object | None:

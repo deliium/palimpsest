@@ -20,6 +20,7 @@ from world.events import (
     ArtifactMoved,
     ArtifactPartiallyLost,
     Asked,
+    CorpseCustodyOpened,
     CraftStarted,
     Died,
     Dropped,
@@ -35,6 +36,7 @@ from world.events import (
     LifecycleStageChanged,
     Moved,
     NeedsApplied,
+    PossessionClaimAsserted,
     RepositoryEstablished,
     RepositoryIndexed,
     RepositoryMaintained,
@@ -50,6 +52,7 @@ from world.events import (
     StructureBuilt,
     StructureRepaired,
     Taken,
+    TakenFromCorpse,
     Talked,
     TemperatureBandChanged,
     Told,
@@ -84,6 +87,11 @@ def adapt_event(event: WorldEvent) -> ObserverEvent:
             "unknown_event_kind",
         )
         raise TypeError("unknown_event_kind")
+    _LOGGER.debug(
+        "observer_semantic_mapped kind=%s semantic=%s",
+        kind,
+        semantic,
+    )
     occurrence = event.occurrence
     origin = None if occurrence is None else _text(occurrence.origin_location_id)
     destination = (
@@ -107,8 +115,15 @@ def adapt_event(event: WorldEvent) -> ObserverEvent:
     elif isinstance(details, Fled):
         if details.destination_id is not None:
             destination = _text(details.destination_id)
-    elif isinstance(details, (Taken, Dropped, Eaten)):
+    elif isinstance(details, (Taken, Dropped, Eaten, TakenFromCorpse)):
         item_id = _text(details.item_id)
+    elif isinstance(details, CorpseCustodyOpened):
+        target_id = _text(details.body_id)
+        origin = _text(details.location_id)
+    elif isinstance(details, PossessionClaimAsserted):
+        target_id = _text(details.decedent_id)
+        if details.item_id is not None:
+            item_id = _text(details.item_id)
     elif isinstance(details, Given):
         target_id = _text(details.recipient_id)
         item_id = _text(details.item_id)

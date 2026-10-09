@@ -178,6 +178,7 @@ class ObservedItemPlacement(StrEnum):
 
     HELD_BY_SELF = "held_by_self"
     GROUND_HERE = "ground_here"
+    CORPSE_HERE = "corpse_here"
 
 
 class CoarseHealth(StrEnum):

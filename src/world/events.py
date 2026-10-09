@@ -60,6 +60,7 @@ from world.identifiers import (
     require_stable_id,
 )
 from world.models import LifeStatus
+from world.possession_succession import POSSESSION_DOCTRINES as _POSSESSION_DOCTRINES
 from world.values import WeatherCondition, round_physical
 
 EVENT_SCHEMA_AUDIT_V1: Final[int] = 1
@@ -2004,17 +2005,6 @@ class ExperimentResolved:
         _reject_presentation_fields(self.kind, self.__slots__)
 
 
-_POSSESSION_DOCTRINES: Final[frozenset[str]] = frozenset(
-    {
-        "children_should_inherit",
-        "group_owns",
-        "caregiver_inherits",
-        "first_claimant_owns",
-        "nobody_owns",
-    }
-)
-
-
 def _entity_id_tuple(field_name: str, value: object) -> tuple[EntityId, ...]:
     if isinstance(value, (str, bytes)) or not isinstance(value, tuple):
         raise TypeError(f"{field_name} must be a tuple of EntityId")
@@ -3204,6 +3194,28 @@ def build_occurrence_context(
                 origin_location_id=origin_location_id,
                 destination_location_id=destination_location_id,
                 affected_entity_ids=(artifact_id,),
+                private_recipient_ids=(),
+            )
+        case CorpseCustodyOpened(body_id=body_id, item_ids=item_ids):
+            return OccurrenceContext(
+                origin_location_id=origin_location_id,
+                destination_location_id=None,
+                affected_entity_ids=(body_id, *item_ids),
+                private_recipient_ids=(),
+            )
+        case TakenFromCorpse(item_id=item_id, source_body_id=source_body_id):
+            return OccurrenceContext(
+                origin_location_id=origin_location_id,
+                destination_location_id=None,
+                affected_entity_ids=(source_body_id, item_id),
+                private_recipient_ids=(),
+            )
+        case PossessionClaimAsserted(decedent_id=decedent_id, item_id=item_id):
+            affected = (decedent_id,) if item_id is None else (decedent_id, item_id)
+            return OccurrenceContext(
+                origin_location_id=origin_location_id,
+                destination_location_id=None,
+                affected_entity_ids=affected,
                 private_recipient_ids=(),
             )
         case ExperimentResolved(
