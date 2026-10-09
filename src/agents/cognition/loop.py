@@ -219,6 +219,7 @@ class CognitiveLoop:
         "_motivation",
         "_perception",
         "_planner",
+        "_possession_succession_active",
         "_production_allow_provider",
         "_production_knowledge_mode",
         "_prospective_policy",
@@ -294,6 +295,7 @@ class CognitiveLoop:
         cultural_features_spec: object | None = None,
         durable_records_active: bool = False,
         knowledge_repositories_active: bool = False,
+        possession_succession_active: bool = False,
         knowledge_genealogy_spec: object | None = None,
         knowledge_genealogy_seed_material: object | None = None,
         bounded_experimentation_spec: object | None = None,
@@ -827,6 +829,14 @@ class CognitiveLoop:
             "knowledge_repositories_bind knowledge_repositories_active=%s",
             self._knowledge_repositories_active,
         )
+        if type(possession_succession_active) is not bool:
+            raise TypeError("possession_succession_active must be bool")
+        self._possession_succession_active = possession_succession_active
+        if possession_succession_active:
+            _LOG.info(
+                "possession_succession_bind possession_succession_active=%s",
+                True,
+            )
         if knowledge_genealogy_spec is None:
             self._knowledge_genealogy_spec = None
             self._knowledge_genealogy_seed_material = None
@@ -1178,6 +1188,44 @@ class CognitiveLoop:
         )
         return updated
 
+    def _prepare_possession_legitimacy(
+        self, loop_input: CognitiveLoopInput
+    ) -> object | None:
+        """Refresh one owner's legitimacy ledger from public possession facts."""
+        from agents.cognition.possession_legitimacy import (
+            PossessionAlignmentContext,
+            PossessionLegitimacyLedger,
+            apply_possession_legitimacy_update,
+        )
+        from world.observations import ObservedKinshipVisible
+
+        snapshot = loop_input.snapshot
+        carried = None if snapshot is None else snapshot.possession_legitimacy
+        previous = carried if type(carried) is PossessionLegitimacyLedger else None
+        alignment = None
+        body = loop_input.observation.self_body
+        visible = None if body is None else body.kinship_visible
+        if type(visible) is ObservedKinshipVisible:
+            alignment = PossessionAlignmentContext(
+                kinship_on=True,
+                children_of={
+                    loop_input.observation.observer_id.value: visible.children
+                },
+            )
+        updated = apply_possession_legitimacy_update(
+            loop_input.observation,
+            previous,
+            owner_id=loop_input.agent_id,
+            alignment=alignment,
+        )
+        if (
+            previous is None
+            and not updated.supports
+            and not updated.claims
+            and not updated.sanctions
+        ):
+            return None
+        return updated
 
     def _prepare_semantic_naming(
         self,
@@ -2698,6 +2746,7 @@ class CognitiveLoop:
         territorial_claims = self._prepare_territorial_claims(loop_input)
         group_formation = self._prepare_group_formation(loop_input)
         social_norms = self._prepare_social_norms(loop_input)
+        possession_legitimacy = self._prepare_possession_legitimacy(loop_input)
         social_conventions = self._prepare_social_conventions(loop_input)
         artifact_interpretations = self._prepare_artifact_interpretations(loop_input)
         semantic_naming = self._prepare_semantic_naming(
@@ -2955,6 +3004,7 @@ class CognitiveLoop:
                     artifact_interpretation_mode=self._artifact_interpretation_mode,
                     durable_records_active=self._durable_records_active,
                     knowledge_repositories_active=self._knowledge_repositories_active,
+                    possession_succession_active=self._possession_succession_active,
                     semantic_naming=semantic_naming,
                     semantic_naming_mode=self._semantic_naming_mode,
                     cultural_narratives=cultural_narratives,
@@ -2997,6 +3047,7 @@ class CognitiveLoop:
             territorial_claims=territorial_claims,
             group_formation=group_formation,
             social_norms=social_norms,
+            possession_legitimacy=possession_legitimacy,
             social_conventions=social_conventions,
             artifact_interpretations=artifact_interpretations,
             semantic_naming=semantic_naming,
@@ -3166,6 +3217,7 @@ class CognitiveLoop:
             territorial_claims=proposal.territorial_claims,
             group_formation=proposal.group_formation,
             social_norms=proposal.social_norms,
+            possession_legitimacy=proposal.possession_legitimacy,
             social_conventions=proposal.social_conventions,
             artifact_interpretations=proposal.artifact_interpretations,
             semantic_naming=proposal.semantic_naming,

@@ -89,6 +89,7 @@ def assemble_arm_metric_bundle(
         knowledge_genealogy_harvest_from_run,
         knowledge_repository_harvest_from_run,
         norm_belief_rows_from_ledgers,
+        possession_channel_active,
     )
 
     ticks = int(arm.runner_result.ticks_committed)
@@ -315,6 +316,14 @@ def assemble_arm_metric_bundle(
             technique_lifecycle_spec=lifecycle_spec,
             technique_node_rows=technique_node_rows_from_resources(resources),
             technique_item_rows=technique_item_rows_from_items(items, marks),
+        )
+    if possession_channel_active(arm.assignment.runner_config):
+        inputs = replace(
+            inputs,
+            possession_succession_spec=(
+                arm.assignment.runner_config.possession_succession
+            ),
+            possession_events=tuple(events or ()),
         )
     return assemble_metric_documents(inputs)
 

@@ -50,7 +50,7 @@ __all__ = [
 ]
 
 METRIC_CATALOG_VERSION: Final[str] = "metric-catalog-v1"
-METRIC_FAMILY_COUNT: Final[int] = 71
+METRIC_FAMILY_COUNT: Final[int] = 74
 
 # Align with existing memory-drift / transmission document versions.
 _ALGO_V1: Final[str] = "1"
@@ -148,6 +148,9 @@ class MetricFamilyId(StrEnum):
     TECHNIQUE_LIFECYCLE_STATE = "technique_lifecycle_state"
     TECHNIQUE_LIFECYCLE_LOSS = "technique_lifecycle_loss"
     TECHNIQUE_LIFECYCLE_DIFFUSION = "technique_lifecycle_diffusion"
+    POSSESSION_CUSTODY_OUTCOMES = "possession_custody_outcomes"
+    POSSESSION_CLAIM_CONFLICT = "possession_claim_conflict"
+    INHERITANCE_CONVENTION_DISTRIBUTION = "inheritance_convention_distribution"
 
 
 class DenominatorKind(StrEnum):
@@ -2164,6 +2167,81 @@ def _spec_spatial_control() -> MetricSpecification:
     )
 
 
+def _spec_possession_custody_outcomes() -> MetricSpecification:
+    return _base(
+        family_id=MetricFamilyId.POSSESSION_CUSTODY_OUTCOMES,
+        evidence_inputs=frozenset({EvidenceStage.OBJECTIVE_EVENT_STATE}),
+        population="corpse_custody_episodes",
+        denominator="custody_episodes",
+        denominator_kind=DenominatorKind.OCCURRENCE,
+        cohort_window="as_of tick custody classification",
+        deceased_policy="dead bodies remain the custody location until a take",
+        zero_holding_policy="spec absent -> family omitted",
+        opportunity_vs_occurrence="item still on corpse versus taken",
+        self_edge_policy="not_applicable",
+        censoring_policy="physical holders only; doctrines are not facts",
+        formulas={
+            "episode_count": "CorpseCustodyOpened episodes at or before as_of",
+            "corpse_item_count": "episode items whose holder is still corpse",
+            "taken_item_count": "episode items whose holder is not corpse",
+            "voluntary_transfer_episode_count": "episodes with a later Given",
+        },
+        value_keys=(
+            "corpse_item_count",
+            "episode_count",
+            "taken_item_count",
+            "voluntary_transfer_episode_count",
+        ),
+        empty_case="availability=absent; no_possession_succession",
+    )
+
+
+def _spec_possession_claim_conflict() -> MetricSpecification:
+    return _base(
+        family_id=MetricFamilyId.POSSESSION_CLAIM_CONFLICT,
+        evidence_inputs=frozenset({EvidenceStage.OBJECTIVE_EVENT_STATE}),
+        population="corpse_custody_episodes",
+        denominator="custody_episodes",
+        denominator_kind=DenominatorKind.OCCURRENCE,
+        cohort_window="as_of tick custody classification",
+        deceased_policy="not_applicable",
+        zero_holding_policy="spec absent -> family omitted",
+        opportunity_vs_occurrence="conflicting assertions, no winner",
+        self_edge_policy="not_applicable",
+        censoring_policy="conflict is a count; the engine does not resolve it",
+        formulas={
+            "claim_count": "asserted claims across episodes",
+            "conflict_episode_count": "episodes whose conflict flag is true",
+            "episode_count": "CorpseCustodyOpened episodes at or before as_of",
+        },
+        value_keys=("claim_count", "conflict_episode_count", "episode_count"),
+        empty_case="availability=absent; no_possession_succession",
+    )
+
+
+def _spec_inheritance_convention_distribution() -> MetricSpecification:
+    return _base(
+        family_id=MetricFamilyId.INHERITANCE_CONVENTION_DISTRIBUTION,
+        evidence_inputs=frozenset({EvidenceStage.OBJECTIVE_EVENT_STATE}),
+        population="corpse_custody_episodes",
+        denominator="custody_episodes",
+        denominator_kind=DenominatorKind.OCCURRENCE,
+        cohort_window="as_of tick living supports at the death location",
+        deceased_policy="dead owners do not vote",
+        zero_holding_policy="spec absent -> family omitted",
+        opportunity_vs_occurrence="plurality label per episode",
+        self_edge_policy="not_applicable",
+        censoring_policy="labels stay in the metric; never written to a ledger",
+        formulas={
+            "contested_count": "episodes whose plurality is a tie",
+            "convention_histogram": "token:count pairs, ascending token",
+            "unformed_count": "episodes with no living support at the location",
+        },
+        value_keys=("contested_count", "convention_histogram", "unformed_count"),
+        empty_case="availability=absent; no_possession_succession",
+    )
+
+
 def _spec_emergent_group_formation() -> MetricSpecification:
     return _base(
         family_id=MetricFamilyId.EMERGENT_GROUP_FORMATION,
@@ -3459,6 +3537,9 @@ _BUILDERS: Final[tuple[Callable[[], MetricSpecification], ...]] = (
     _spec_technique_lifecycle_state,
     _spec_technique_lifecycle_loss,
     _spec_technique_lifecycle_diffusion,
+    _spec_possession_custody_outcomes,
+    _spec_possession_claim_conflict,
+    _spec_inheritance_convention_distribution,
     _spec_emergent_group_formation,
     _spec_emergent_social_norms,
     _spec_persistent_social_conventions,

@@ -147,6 +147,7 @@ SUBJECTIVE_COPY_DENY_LIST: Final[frozenset[str]] = frozenset(
         "parent_technique_copy",
         "knowledge_genealogy",
         "experiment_ledger",
+        "possession_legitimacy",
     }
 )
 
@@ -169,6 +170,7 @@ BLANK_SLATE_SUBJECTIVE_STORES: Final[tuple[str, ...]] = (
     "cultural_features",
     "practical_knowledge",
     "experiment_ledger",
+    "possession_legitimacy",
 )
 
 CREATION_REASON_CODES: Final[frozenset[str]] = frozenset(
@@ -840,6 +842,7 @@ class BlankSlateStoreCounts:
     cultural_features: int = 0
     practical_knowledge: int = 0
     experiment_ledger: int = 0
+    possession_legitimacy: int = 0
 
 
 def assert_blank_slate_subjective_state(
@@ -874,7 +877,7 @@ def assert_blank_slate_subjective_state(
             f"owner={owner.value!r} stores={violations!r} "
             "(code=subjective_copy_forbidden)"
         )
-    _LOG.debug(
+    _LOG.info(
         "blank_slate_asserted owner_id=%s store_count=%s",
         owner.value,
         len(BLANK_SLATE_SUBJECTIVE_STORES),

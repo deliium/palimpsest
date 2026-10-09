@@ -6833,3 +6833,204 @@ def _decode_export(data: dict[str, Any], *, path: str) -> SimulationExport:
         raise
     except (TypeError, ValueError) as exc:
         raise DomainSerializationError("invalid_model", path) from exc
+
+
+def possession_legitimacy_checkpoint_payload(
+    ledgers: Mapping[str, object], *, codec: str
+) -> dict[str, object]:
+    """Owner-id map of legitimacy ledgers. Omitted unless codec is v13."""
+    if codec != "v13":
+        return {}
+    from agents.cognition.possession_legitimacy import PossessionLegitimacyLedger
+
+    if isinstance(ledgers, (str, bytes)) or not isinstance(ledgers, Mapping):
+        raise TypeError("ledgers must be a mapping")
+    encoded: dict[str, object] = {}
+    for owner_key in sorted(ledgers):
+        ledger = ledgers[owner_key]
+        if (
+            not isinstance(owner_key, str)
+            or type(ledger) is not PossessionLegitimacyLedger
+        ):
+            raise TypeError("ledgers must map owner id to PossessionLegitimacyLedger")
+        if ledger.owner_id.value != owner_key:
+            raise ValueError("possession_legitimacy owner_id mismatch")
+        encoded[owner_key] = _encode_possession_ledger(ledger)
+    return {"possession_legitimacy": encoded}
+
+
+def decode_possession_legitimacy_checkpoint(
+    payload: Mapping[str, object], *, codec: str
+) -> dict[str, object]:
+    """Decode v13 ledgers. Older codecs have no field and yield an empty map."""
+    if codec != "v13":
+        if "possession_legitimacy" in payload:
+            raise DomainSerializationError(
+                "possession_legitimacy_requires_codec_v13", "$.possession_legitimacy"
+            )
+        return {}
+    if "possession_legitimacy" not in payload:
+        raise DomainSerializationError("invalid_fields", "$")
+    raw = payload["possession_legitimacy"]
+    if not isinstance(raw, dict):
+        raise DomainSerializationError("invalid_object", "$.possession_legitimacy")
+    from agents.cognition.possession_legitimacy import PossessionLegitimacyLedger
+    from agents.models import AgentId
+
+    decoded: dict[str, object] = {}
+    for owner_key, row in raw.items():
+        if not isinstance(owner_key, str) or not isinstance(row, dict):
+            raise DomainSerializationError(
+                "invalid_object", f"$.possession_legitimacy.{owner_key}"
+            )
+        ledger = _decode_possession_ledger(
+            row,
+            owner_id=AgentId(owner_key),
+            path=f"$.possession_legitimacy.{owner_key}",
+        )
+        if type(ledger) is not PossessionLegitimacyLedger:
+            raise DomainSerializationError("invalid_model", "$.possession_legitimacy")
+        decoded[owner_key] = ledger
+    return decoded
+
+
+def _encode_possession_ledger(ledger: object) -> dict[str, object]:
+    from agents.cognition.possession_legitimacy import PossessionLegitimacyLedger
+
+    if type(ledger) is not PossessionLegitimacyLedger:
+        raise TypeError("ledger must be PossessionLegitimacyLedger")
+    claims: list[dict[str, object]] = []
+    for note in ledger.claims:
+        row: dict[str, object] = {
+            "tick": note.tick,
+            "decedent_id": note.decedent_id.value,
+            "claimant_id": note.claimant_id.value,
+            "doctrine": note.doctrine,
+        }
+        if note.item_id is not None:
+            row["item_id"] = note.item_id.value
+        claims.append(row)
+    payload: dict[str, object] = {
+        "supports": [
+            {"doctrine": doctrine, "count": count}
+            for doctrine, count in ledger.supports
+        ],
+        "claims": claims,
+        "sanctions": [
+            {
+                "tick": note.tick,
+                "decedent_id": note.decedent_id.value,
+                "target_id": note.target_id.value,
+                "token": note.token,
+            }
+            for note in ledger.sanctions
+        ],
+    }
+    if ledger.witnessed_take_decedents:
+        payload["witnessed_take_decedents"] = list(ledger.witnessed_take_decedents)
+    return payload
+
+
+def _decode_possession_ledger(
+    data: Mapping[str, Any], *, owner_id: object, path: str
+) -> object:
+    from agents.cognition.possession_legitimacy import (
+        PossessionClaimNote,
+        PossessionLegitimacyLedger,
+        PossessionSanctionNote,
+    )
+    from world.identifiers import EntityId
+
+    _require_keys(
+        data,
+        {"supports", "claims", "sanctions"},
+        path=path,
+        optional={"witnessed_take_decedents"},
+    )
+    supports_raw = data["supports"]
+    claims_raw = data["claims"]
+    sanctions_raw = data["sanctions"]
+    if not isinstance(supports_raw, list) or not isinstance(claims_raw, list):
+        raise DomainSerializationError("invalid_array", path)
+    if not isinstance(sanctions_raw, list):
+        raise DomainSerializationError("invalid_array", path)
+    supports: list[tuple[str, int]] = []
+    for index, row in enumerate(supports_raw):
+        if not isinstance(row, dict):
+            raise DomainSerializationError(
+                "invalid_object", f"{path}.supports[{index}]"
+            )
+        _require_keys(
+            row, {"doctrine", "count"}, path=f"{path}.supports[{index}]"
+        )
+        supports.append(
+            (
+                _str_field(row, "doctrine", path=f"{path}.supports[{index}]"),
+                _int_field(row, "count", path=f"{path}.supports[{index}]"),
+            )
+        )
+    claims: list[PossessionClaimNote] = []
+    for index, row in enumerate(claims_raw):
+        if not isinstance(row, dict):
+            raise DomainSerializationError("invalid_object", f"{path}.claims[{index}]")
+        _require_keys(
+            row,
+            {"tick", "decedent_id", "claimant_id", "doctrine"},
+            path=f"{path}.claims[{index}]",
+            optional={"item_id"},
+        )
+        item_raw = row.get("item_id")
+        claims.append(
+            PossessionClaimNote(
+                _int_field(row, "tick", path=f"{path}.claims[{index}]"),
+                EntityId(
+                    _str_field(row, "decedent_id", path=f"{path}.claims[{index}]")
+                ),
+                EntityId(
+                    _str_field(row, "claimant_id", path=f"{path}.claims[{index}]")
+                ),
+                _str_field(row, "doctrine", path=f"{path}.claims[{index}]"),
+                None
+                if item_raw is None
+                else EntityId(
+                    _str_field(row, "item_id", path=f"{path}.claims[{index}]")
+                ),
+            )
+        )
+    sanctions: list[PossessionSanctionNote] = []
+    for index, row in enumerate(sanctions_raw):
+        if not isinstance(row, dict):
+            raise DomainSerializationError(
+                "invalid_object", f"{path}.sanctions[{index}]"
+            )
+        _require_keys(
+            row,
+            {"tick", "decedent_id", "target_id", "token"},
+            path=f"{path}.sanctions[{index}]",
+        )
+        sanctions.append(
+            PossessionSanctionNote(
+                _int_field(row, "tick", path=f"{path}.sanctions[{index}]"),
+                EntityId(
+                    _str_field(row, "decedent_id", path=f"{path}.sanctions[{index}]")
+                ),
+                EntityId(
+                    _str_field(row, "target_id", path=f"{path}.sanctions[{index}]")
+                ),
+                _str_field(row, "token", path=f"{path}.sanctions[{index}]"),
+            )
+        )
+    witnessed_raw = data.get("witnessed_take_decedents", [])
+    if not isinstance(witnessed_raw, list) or not all(
+        type(item) is str for item in witnessed_raw
+    ):
+        raise DomainSerializationError(
+            "invalid_array", f"{path}.witnessed_take_decedents"
+        )
+    return PossessionLegitimacyLedger(
+        owner_id,  # type: ignore[arg-type]
+        supports=tuple(supports),
+        claims=tuple(claims),
+        sanctions=tuple(sanctions),
+        witnessed_take_decedents=tuple(witnessed_raw),
+    )

@@ -771,6 +771,7 @@ class CommandPlanner:
         artifact_interpretation_mode: object | None = None,
         durable_records_active: bool = False,
         knowledge_repositories_active: bool = False,
+        possession_succession_active: bool = False,
         semantic_naming: object | None = None,
         semantic_naming_mode: object | None = None,
         cultural_narratives: object | None = None,
@@ -1077,6 +1078,23 @@ class CommandPlanner:
                 )
                 command = Wait()
                 used_fallback = True
+        if possession_succession_active:
+            from agents.cognition.possession_legitimacy import (
+                apply_possession_proposal,
+            )
+
+            ledger = (
+                None
+                if loop_input.snapshot is None
+                else loop_input.snapshot.possession_legitimacy
+            )
+            command = apply_possession_proposal(
+                command,
+                loop_input.observation,
+                ledger,
+                channel_on=True,
+                owner_id=owner,
+            )
         command_type = type(command).__name__
 
         confidence = intention.confidence if not used_fallback else 1.0

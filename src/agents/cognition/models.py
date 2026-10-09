@@ -732,6 +732,7 @@ class SubjectiveSnapshot:
     practical_knowledge: object | None = None
     declarative_advice: object | None = None
     recipe_beliefs: object | None = None
+    possession_legitimacy: object | None = None
 
     def __post_init__(self) -> None:
         if type(self.owner_id) is not AgentId:
@@ -896,6 +897,15 @@ class SubjectiveSnapshot:
             self.social_norms,
             self.owner_id,
             field_name="SubjectiveSnapshot.social_norms",
+        )
+        from agents.cognition.possession_legitimacy import (
+            require_owner_possession_legitimacy,
+        )
+
+        require_owner_possession_legitimacy(
+            self.possession_legitimacy,
+            self.owner_id,
+            field_name="SubjectiveSnapshot.possession_legitimacy",
         )
         from agents.cognition.social_conventions import require_owner_social_conventions
 
@@ -3757,6 +3767,7 @@ class CognitiveLoopProposal:
     competence_model: object | None = None
     declarative_advice: object | None = None
     recipe_beliefs: object | None = None
+    possession_legitimacy: object | None = None
 
     def __post_init__(self) -> None:
         object.__setattr__(
@@ -3831,6 +3842,15 @@ class CognitiveLoopProposal:
             self.social_norms,
             self.agent_id,
             field_name="CognitiveLoopProposal.social_norms",
+        )
+        from agents.cognition.possession_legitimacy import (
+            require_owner_possession_legitimacy,
+        )
+
+        require_owner_possession_legitimacy(
+            self.possession_legitimacy,
+            self.agent_id,
+            field_name="CognitiveLoopProposal.possession_legitimacy",
         )
         from agents.cognition.social_conventions import require_owner_social_conventions
 
@@ -3995,6 +4015,7 @@ class CognitiveLoopResult:
     declarative_advice: object | None = None
     recipe_beliefs: object | None = None
     territorial_audits: tuple[object, ...] | None = None
+    possession_legitimacy: object | None = None
 
     def __post_init__(self) -> None:
         object.__setattr__(
@@ -4045,6 +4066,15 @@ class CognitiveLoopResult:
             self.social_norms,
             self.agent_id,
             field_name="CognitiveLoopResult.social_norms",
+        )
+        from agents.cognition.possession_legitimacy import (
+            require_owner_possession_legitimacy,
+        )
+
+        require_owner_possession_legitimacy(
+            self.possession_legitimacy,
+            self.agent_id,
+            field_name="CognitiveLoopResult.possession_legitimacy",
         )
         from agents.cognition.social_conventions import require_owner_social_conventions
 

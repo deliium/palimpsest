@@ -41,7 +41,7 @@ def test_agent_command_count_includes_durable_commands() -> None:
 
 
 def test_metric_family_count_includes_durable_and_repository() -> None:
-    assert METRIC_FAMILY_COUNT == 71
+    assert METRIC_FAMILY_COUNT == 74
     assert MetricFamilyId.DURABLE_RECORD_LINEAGE.value == "durable_record_lineage"
     assert MetricFamilyId.DURABLE_RECORD_FIDELITY.value == "durable_record_fidelity"
     assert MetricFamilyId.DURABLE_RECORD_SURVIVAL.value == "durable_record_survival"

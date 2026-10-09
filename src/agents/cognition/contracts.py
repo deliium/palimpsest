@@ -166,6 +166,7 @@ class Perspective:
     competence_model: object | None = None
     declarative_advice: object | None = None
     recipe_beliefs: object | None = None
+    possession_legitimacy: object | None = None
 
     def __post_init__(self) -> None:
         if type(self.agent_id) is not AgentId:
@@ -403,6 +404,15 @@ class Perspective:
             self.agent_id,
             field_name="Perspective.recipe_beliefs",
         )
+        from agents.cognition.possession_legitimacy import (
+            require_owner_possession_legitimacy,
+        )
+
+        require_owner_possession_legitimacy(
+            self.possession_legitimacy,
+            self.agent_id,
+            field_name="Perspective.possession_legitimacy",
+        )
 
     def to_snapshot(self) -> SubjectiveSnapshot:
         """Freeze this perspective into a ``SubjectiveSnapshot``."""
@@ -440,6 +450,7 @@ class Perspective:
             competence_model=self.competence_model,
             declarative_advice=self.declarative_advice,
             recipe_beliefs=self.recipe_beliefs,
+            possession_legitimacy=self.possession_legitimacy,
         )
 
     def __repr__(self) -> str:

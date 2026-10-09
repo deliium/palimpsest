@@ -30,7 +30,7 @@ from analysis.specifications import (
 
 def test_catalog_includes_three_developmental_families() -> None:
     specs = validate_metric_catalog()
-    assert len(specs) == METRIC_FAMILY_COUNT == 71
+    assert len(specs) == METRIC_FAMILY_COUNT == 74
     assert frozenset(spec.family_id for spec in specs) == frozenset(MetricFamilyId)
     ids = {spec.family_id for spec in all_metric_specifications()}
     assert MetricFamilyId.DEVELOPMENTAL_ACQUISITION in ids

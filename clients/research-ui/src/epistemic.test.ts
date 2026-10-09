@@ -63,6 +63,15 @@ describe('epistemic mapping', () => {
     expect(epistemicFromOverlayKind('technique_lifecycle_diffusion')).toBe(
       'research_inference',
     )
+    expect(epistemicFromOverlayKind('possession_custody_outcomes')).toBe(
+      'research_inference',
+    )
+    expect(epistemicFromOverlayKind('possession_claim_conflict')).toBe(
+      'research_inference',
+    )
+    expect(epistemicFromOverlayKind('inheritance_convention_distribution')).toBe(
+      'research_inference',
+    )
     expect(epistemicFromEvidenceClass('ANALYTICAL_INFERRED')).toBe('research_inference')
   })
 

@@ -69,7 +69,7 @@ def _death_transition_harvest() -> HistoricalMemoryHarvest:
 
 def test_metric_family_count_includes_historical_memory() -> None:
     specs = all_metric_specifications()
-    assert len(specs) == METRIC_FAMILY_COUNT == 71
+    assert len(specs) == METRIC_FAMILY_COUNT == 74
     ids = {spec.family_id.value for spec in specs}
     assert {
         "historical_memory_layers",

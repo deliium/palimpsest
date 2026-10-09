@@ -97,6 +97,9 @@ from analysis.offline_consolidation_metrics import (
     OfflineConsolidationReport,
     compute_offline_consolidation,
 )
+from analysis.possession_succession_metrics import (
+    assemble_possession_succession_metrics,
+)
 from analysis.prediction_calibration_metrics import compute_prediction_calibration
 from analysis.reflection_metrics import ReflectionReport, compute_reflection
 from analysis.relationship_metrics import compute_relationship_stability
@@ -179,6 +182,9 @@ class MetricComputationInputs:
     inaccessible_expectations: Sequence[object] | None = None
     practical_knowledge_audits: Sequence[object] | None = None
     technique_lifecycle_spec: object | None = None
+    possession_succession_spec: object | None = None
+    possession_events: Sequence[object] | None = None
+    possession_ledgers: Sequence[object] | None = None
     technique_node_rows: Sequence[object] | None = None
     technique_item_rows: Sequence[object] | None = None
     territorial_presence_rows: Sequence[object] | None = None
@@ -824,6 +830,31 @@ def assemble_metric_documents(inputs: MetricComputationInputs) -> MetricBundle:
                     "operation": "assemble_metric_documents",
                     "run_id": run_id,
                     "metric_family": "technique_lifecycle",
+                    "reason_code": "calculation_failed",
+                },
+            )
+            raise
+    if inputs.possession_succession_spec is not None:
+        possession_events = tuple(inputs.possession_events or ())
+        possession_ledgers = tuple(inputs.possession_ledgers or ())
+        try:
+            documents.extend(
+                assemble_possession_succession_metrics(
+                    possession_events,  # type: ignore[arg-type]
+                    run_id=run_id,
+                    input_revision=revision,
+                    spec=inputs.possession_succession_spec,
+                    as_of_tick=window_end,
+                    ledgers=possession_ledgers,  # type: ignore[arg-type]
+                )
+            )
+        except Exception:
+            _LOG.error(
+                "metric_family_failed",
+                extra={
+                    "operation": "assemble_metric_documents",
+                    "run_id": run_id,
+                    "metric_family": "possession_succession",
                     "reason_code": "calculation_failed",
                 },
             )

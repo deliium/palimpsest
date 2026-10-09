@@ -602,6 +602,14 @@ def _durable_records_loop_kwargs(config: object) -> dict[str, object]:
     return {"durable_records_active": getattr(config, "durable_records", None) is not None}
 
 
+def _possession_succession_loop_kwargs(config: object) -> dict[str, object]:
+    """Bind possession succession (no AgentCognitionSpec enum)."""
+    return {
+        "possession_succession_active": getattr(config, "possession_succession", None)
+        is not None
+    }
+
+
 def _knowledge_repositories_loop_kwargs(config: object) -> dict[str, object]:
     """Bind knowledge_repositories channel (no AgentCognitionSpec enum)."""
     return {
@@ -1788,6 +1796,7 @@ class SimulationRunner:
                     **_cultural_features_loop_kwargs(config),
                     **_durable_records_loop_kwargs(config),
                     **_knowledge_repositories_loop_kwargs(config),
+                    **_possession_succession_loop_kwargs(config),
                     **_knowledge_genealogy_loop_kwargs(config),
                     **_bounded_experimentation_loop_kwargs(config),
                 )
@@ -3282,6 +3291,7 @@ class SimulationRunner:
                 **_cultural_features_loop_kwargs(self._config),
                 **_durable_records_loop_kwargs(self._config),
                 **_knowledge_repositories_loop_kwargs(self._config),
+                **_possession_succession_loop_kwargs(self._config),
                 **_knowledge_genealogy_loop_kwargs(self._config),
                 **_bounded_experimentation_loop_kwargs(self._config),
             )

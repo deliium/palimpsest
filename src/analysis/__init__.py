@@ -390,6 +390,11 @@ from analysis.specifications import (
     validate_metric_catalog,
     validate_metric_specification,
 )
+from analysis.possession_succession import (
+    PossessionEpisode,
+    PossessionLedgerSnapshot,
+    classify_possession_episodes,
+)
 from analysis.technique_lifecycle import (
     TechniqueLifecycleSnapshot,
     TechniqueLifecycleState,
@@ -575,6 +580,8 @@ __all__ = [
     "SupportBand",
     "SupportDirection",
     "SurvivalAgentRow",
+    "PossessionEpisode",
+    "PossessionLedgerSnapshot",
     "TechniqueLifecycleSnapshot",
     "TechniqueLifecycleState",
     "TechniqueLossCause",
@@ -599,6 +606,7 @@ __all__ = [
     "canonical_python_scalar",
     "canonicalize_community_labels",
     "claim_overlap_token",
+    "classify_possession_episodes",
     "classify_technique_lifecycle",
     "closed_evidence_stages",
     "compare_fact_sets",

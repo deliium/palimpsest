@@ -44,6 +44,9 @@
     'technique_lifecycle_state',
     'technique_lifecycle_loss',
     'technique_lifecycle_diffusion',
+    'possession_custody_outcomes',
+    'possession_claim_conflict',
+    'inheritance_convention_distribution',
   ] as const
 
   const HISTORICAL_MEMORY_FAMILIES = new Set([
@@ -80,6 +83,12 @@
     'technique_lifecycle_state',
     'technique_lifecycle_loss',
     'technique_lifecycle_diffusion',
+  ])
+
+  const POSSESSION_SUCCESSION_FAMILIES = new Set([
+    'possession_custody_outcomes',
+    'possession_claim_conflict',
+    'inheritance_convention_distribution',
   ])
 
   type MetricCard = {
@@ -261,6 +270,9 @@
       const techniques = catalog.items.filter((item) =>
         TECHNIQUE_LIFECYCLE_FAMILIES.has(item.metric_family),
       )
+      const possession = catalog.items.filter((item) =>
+        POSSESSION_SUCCESSION_FAMILIES.has(item.metric_family),
+      )
       const phenomenon = catalog.items.filter((item) =>
         item.metric_family.includes('phenomenon'),
       )
@@ -272,6 +284,7 @@
         ...genealogy,
         ...experiments,
         ...techniques,
+        ...possession,
         ...phenomenon,
       ]
         .filter(
@@ -334,9 +347,10 @@
   <p class="lede">
     Metric documents and phenomenon panels are analytical results — never world facts.
     Historical memory, durable-record, knowledge-repository, knowledge-genealogy,
-    and bounded-experiment families are researcher constructs
+    bounded-experiment, and possession-succession families are researcher constructs
     (<code>research_inference</code>), not agent knowledge. Experiment badges
-    show counts only, never law rows or hypothesis text.
+    show counts only, never law rows or hypothesis text. Possession badges
+    count holders and conflicts. They do not name a legal owner.
   </p>
 
   {#if loading}

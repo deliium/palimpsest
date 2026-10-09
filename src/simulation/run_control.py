@@ -613,6 +613,7 @@ class AgentRuntimeCheckpoint:
     decision_journal: tuple[object, ...] | None = None
     remembered_decisions: tuple[object, ...] | None = None
     identity_cursor: object | None = None
+    possession_legitimacy: object | None = None
 
     def __post_init__(self) -> None:
         if type(self.agent_id) is not AgentId:
@@ -799,6 +800,15 @@ class AgentRuntimeCheckpoint:
                     )
                 if item.owner_id != self.agent_id:
                     raise ValueError("remembered_decisions owner_id mismatch")
+        from agents.cognition.possession_legitimacy import (
+            require_owner_possession_legitimacy,
+        )
+
+        require_owner_possession_legitimacy(
+            self.possession_legitimacy,
+            self.agent_id,
+            field_name="possession_legitimacy",
+        )
 
 
 def encode_emotional_state(
