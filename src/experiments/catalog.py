@@ -2762,6 +2762,7 @@ OFF_GATE_MATRIX_EXPERIMENT_IDS: Final[frozenset[str]] = frozenset(
         "experiment-ap-knowledge-genealogy",
         "experiment-aq-bounded-experimentation",
         "experiment-ar-technique-lifecycle",
+        "experiment-as-possession-succession",
     }
 )
 
@@ -4706,6 +4707,81 @@ def experiment_ar_technique_lifecycle(
         )
     return _definition(
         experiment_id="experiment-ar-technique-lifecycle",
+        base=base,
+        seed_matrix=matrix,
+        arms=arms,
+    )
+
+
+def experiment_as_possession_succession(
+    base: SimulationRunnerConfig,
+    *,
+    seed_matrix: ExperimentSeedMatrix | None = None,
+    max_ticks: int = 4,
+) -> ExperimentDefinition:
+    """Off-gate Experiment AS. Default batches do not enable it."""
+    from simulation.runner_models import (
+        RUNNER_SCHEMA_VERSION_V38,
+        example_kinship_spec,
+        example_possession_succession_spec,
+    )
+
+    matrix = seed_matrix or ExperimentSeedMatrix(seeds=(base.seed,))
+    succession = example_possession_succession_spec()
+    parent = base.agents[0].agent_id.value
+    child = base.agents[-1].agent_id.value
+    kinship = example_kinship_spec(parent_agent_id=parent, child_agent_id=child)
+
+    def _v38(**extra: object) -> SimulationRunnerConfig:
+        flags = extra.pop("v3_capability_flags", V3CapabilityFlags())
+        kinship = extra.pop("kinship", None)
+        return replace(
+            base,
+            schema_version=RUNNER_SCHEMA_VERSION_V38,
+            mortality_mode=MortalityMode.DISABLED,
+            stop_policy=RunnerStopPolicy(max_ticks=max_ticks),
+            v3_capability_flags=flags,
+            possession_succession=succession,
+            kinship=kinship,
+            population_lifecycle=None,
+            **extra,
+        )
+
+    channel_off = replace(
+        base,
+        schema_version=RUNNER_SCHEMA_VERSION_V4,
+        mortality_mode=MortalityMode.DISABLED,
+        stop_policy=RunnerStopPolicy(max_ticks=max_ticks),
+        v3_capability_flags=V3CapabilityFlags(),
+        possession_succession=None,
+        kinship=None,
+        population_lifecycle=None,
+    )
+    arms = (
+        ("as-channel-off", "possession_succession_channel_off", channel_off),
+        ("as-custody-take", "possession_succession_custody_take", _v38()),
+        (
+            "as-no-auto-heir",
+            "possession_succession_no_auto_heir",
+            _v38(
+                v3_capability_flags=V3CapabilityFlags(kinship_inheritance=True),
+                kinship=kinship,
+            ),
+        ),
+        ("as-claim-conflict", "possession_succession_claim_conflict", _v38()),
+    )
+    for arm_id, _label, config in arms:
+        _LOG.info(
+            "experiment_arm_start arm_id=%s schema_version=%s",
+            arm_id,
+            config.schema_version,
+        )
+        _LOG.debug(
+            "possession_succession_active active=%s",
+            config.possession_succession is not None,
+        )
+    return _definition(
+        experiment_id="experiment-as-possession-succession",
         base=base,
         seed_matrix=matrix,
         arms=arms,

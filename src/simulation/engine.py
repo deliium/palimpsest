@@ -259,6 +259,30 @@ def _project_skill_prefix(
     )
 
 
+def _fold_opened_custody(state: object, events: Sequence[object]) -> object:
+    """Copy opened custody ids onto the live state.
+
+    The custody event is the record. The id set is what a later ``Take``
+    reads. Replay unions the same ids, so a second fold stays idempotent.
+    """
+    from world._state import WorldState
+
+    if type(state) is not WorldState:
+        raise TypeError("working_state must be WorldState")
+    custody = set(state.corpse_custody_item_ids)
+    changed = False
+    for event in events:
+        details = getattr(event, "details", None)
+        if type(details) is not CorpseCustodyOpened:
+            continue
+        before = len(custody)
+        custody.update(details.item_ids)
+        changed = changed or len(custody) != before
+    if not changed:
+        return state
+    return rebuild_world_state(state, corpse_custody_item_ids=frozenset(custody))
+
+
 class WorldEngine:
     """Public authority for observation and ordered tick resolution."""
 
@@ -3326,17 +3350,19 @@ class WorldEngine:
             )
             semantic_mutation = semantic_mutation or repo_mutation
 
+        opened = (
+            action_pending.pending_events
+            + tuple(production_pending)
+            + tuple(system_pending)
+            + tuple(lifecycle_pending)
+            + tuple(repository_pending)
+        )
+        working_state = _fold_opened_custody(working_state, opened)
         merged = PendingBatch(
             working_state=working_state,
             semantic_mutation=semantic_mutation,
             outcomes=action_pending.outcomes,
-            pending_events=(
-                action_pending.pending_events
-                + tuple(production_pending)
-                + tuple(system_pending)
-                + tuple(lifecycle_pending)
-                + tuple(repository_pending)
-            ),
+            pending_events=opened,
         )
 
         # Allocate one deterministic ID per pending event. Action events are
