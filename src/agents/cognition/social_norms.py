@@ -13,7 +13,7 @@ import itertools
 import logging
 import math
 from collections.abc import Mapping, Sequence
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from decimal import ROUND_HALF_UP, Decimal
 from enum import StrEnum
 from typing import Final
@@ -2373,3 +2373,46 @@ def norm_response_penalties(
     )
     ordered = tuple(sorted(penalties.items()))
     return NormResponseResult(ledger=updated, penalties=ordered)
+
+
+def note_reciprocal_commitment_evidence(
+    ledger: NormLedger,
+    left_id: AgentId,
+    right_id: AgentId,
+    *,
+    lineage: str,
+    tick: int,
+) -> NormLedger:
+    """Append one count on an existing reciprocal belief. Never creates one."""
+    if type(ledger) is not NormLedger:
+        raise TypeError("ledger must be NormLedger")
+    pair = {left_id, right_id}
+    beliefs: list[NormBelief] = []
+    found = False
+    for belief in ledger.beliefs:
+        counterparts = set(belief.counterpart_ids)
+        if (
+            belief.pattern is not NormPattern.RECIPROCAL_EXCHANGE
+            or counterparts != pair
+        ):
+            beliefs.append(belief)
+            continue
+        found = True
+        if len(belief.evidence) >= _MAX_EVIDENCE:
+            _LOG.debug("commitment_norm_dropped reason=cap_exceeded")
+            beliefs.append(belief)
+            continue
+        channel = NormEvidenceChannel.CONFORMING
+        ordinal = len(belief.evidence)
+        item = NormEvidenceItem(
+            evidence_id=norm_evidence_id(belief.belief_id, ordinal, channel, lineage),
+            ordinal=ordinal,
+            channel=channel,
+            lineage_ref=lineage,
+            tick=tick,
+        )
+        beliefs.append(replace(belief, evidence=(*belief.evidence, item)))
+        _LOG.debug("commitment_consequence channel=norm signal=reciprocal")
+    if not found:
+        return ledger
+    return replace(ledger, beliefs=tuple(beliefs))

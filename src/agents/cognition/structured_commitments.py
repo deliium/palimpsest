@@ -13,7 +13,7 @@ from dataclasses import dataclass, replace
 from typing import Final
 
 from agents.models import AgentId
-from world.identifiers import require_exact_nonneg_int
+from world.identifiers import EntityId, require_exact_nonneg_int
 from world.structured_commitments import (
     COMMITMENT_DUE_KINDS,
     COMMITMENT_KINDS,
@@ -639,6 +639,402 @@ def _apply_due(
         ):
             current = _with_status(current, row, "violated")
     return current
+
+
+def link_structured_commitment_traces(
+    ledger: StructuredCommitmentLedger, traces: tuple[object, ...]
+) -> StructuredCommitmentLedger:
+    """Attach this owner's trace ids for events the row already cites."""
+    if type(ledger) is not StructuredCommitmentLedger:
+        raise TypeError("ledger must be StructuredCommitmentLedger")
+    if isinstance(traces, (str, bytes)) or not isinstance(traces, tuple):
+        raise TypeError("traces must be a tuple")
+    by_event: dict[str, list[str]] = {}
+    for trace in traces:
+        if getattr(trace, "owner_id", None) != ledger.owner_id:
+            continue
+        source = getattr(getattr(trace, "provenance", None), "observed_source_id", None)
+        memory_id = getattr(trace, "memory_id", None)
+        if source is None or memory_id is None:
+            continue
+        by_event.setdefault(source.value, []).append(memory_id.value)
+    current = ledger
+    linked = 0
+    for row in ledger.interpretations:
+        if row.status == "forgotten":
+            continue
+        ids = list(row.memory_trace_ids)
+        for event_id in row.source_event_ids:
+            for memory_id in by_event.get(event_id, ()):
+                if memory_id not in ids:
+                    ids.append(memory_id)
+                    linked += 1
+        if tuple(ids) == row.memory_trace_ids:
+            if not ids:
+                _LOG.debug(
+                    "commitment_unlinked owner_id=%s local_id=%s",
+                    ledger.owner_id.value,
+                    row.local_id,
+                )
+            continue
+        current = replace_interpretation(
+            current, replace(row, memory_trace_ids=tuple(ids))
+        )
+    _LOG.debug("commitment_memory_linked trace_count=%s", linked)
+    return current
+
+
+def forget_structured_commitments(
+    ledger: StructuredCommitmentLedger, traces: tuple[object, ...]
+) -> StructuredCommitmentLedger:
+    """Forget a row only when every linked trace of this owner is forgotten."""
+    if type(ledger) is not StructuredCommitmentLedger:
+        raise TypeError("ledger must be StructuredCommitmentLedger")
+    if isinstance(traces, (str, bytes)) or not isinstance(traces, tuple):
+        raise TypeError("traces must be a tuple")
+    by_id: dict[str, object] = {}
+    for trace in traces:
+        if getattr(trace, "owner_id", None) != ledger.owner_id:
+            continue
+        memory_id = getattr(trace, "memory_id", None)
+        if memory_id is not None:
+            by_id[memory_id.value] = trace
+    current = ledger
+    for row in ledger.interpretations:
+        if row.status == "forgotten":
+            continue
+        if not row.memory_trace_ids:
+            _LOG.debug(
+                "commitment_unlinked owner_id=%s local_id=%s",
+                ledger.owner_id.value,
+                row.local_id,
+            )
+            continue
+        forgotten = True
+        for memory_id in row.memory_trace_ids:
+            trace = by_id.get(memory_id)
+            if trace is None:
+                continue
+            if getattr(trace, "forgotten_at_tick", None) is None:
+                forgotten = False
+                break
+        if not forgotten:
+            continue
+        remembered = CommitmentRevision(
+            row.created_tick,
+            row.debtor_id,
+            row.creditor_id,
+            row.kind,
+            row.owed_by,
+            row.item_kind,
+            row.service,
+            row.quantity,
+            row.now_item_kind,
+            row.due_kind,
+            row.due_tick,
+            row.status,
+        )
+        wiped = replace(
+            row,
+            status="forgotten",
+            kind="unspecified",
+            owed_by="unspecified",
+            item_kind="unspecified",
+            service="unspecified",
+            now_item_kind="unspecified",
+            due_kind="unspecified",
+            due_tick=None,
+            debtor_id="unspecified",
+            creditor_id="unspecified",
+            revisions=(*row.revisions, remembered),
+        )
+        _LOG.info("commitment_forgotten local_id=%s", row.local_id)
+        current = replace_interpretation(current, wiped)
+    return current
+
+
+def commitment_memory_intents(
+    owner_id: AgentId,
+    observation: object,
+    ledger: StructuredCommitmentLedger,
+    existing: tuple[object, ...] = (),
+) -> tuple[object, ...]:
+    """WRITE_MEMORY for occurrences this owner adopted and has not stored."""
+    from agents.cognition.memory import build_direct_observation_memory_trace
+    from agents.cognition.models import MemoryUpdateIntent, MemoryUpdateKind
+    from world.observations import ObservedOccurrence
+
+    if type(owner_id) is not AgentId:
+        raise TypeError("owner_id must be AgentId")
+    if type(ledger) is not StructuredCommitmentLedger:
+        raise TypeError("ledger must be StructuredCommitmentLedger")
+    if ledger.owner_id != owner_id:
+        raise ValueError("structured_commitments owner_id mismatch")
+    covered: set[str] = set()
+    for intent in existing:
+        memory = getattr(intent, "memory", None)
+        provenance = getattr(memory, "provenance", None)
+        source = getattr(provenance, "observed_source_id", None)
+        if source is not None:
+            covered.add(source.value)
+    for row in ledger.interpretations:
+        if row.memory_trace_ids:
+            covered.update(row.source_event_ids)
+    needed = {
+        event_id
+        for row in ledger.interpretations
+        if row.status != "forgotten"
+        for event_id in row.source_event_ids
+        if event_id not in covered
+    }
+    if not needed:
+        return ()
+    revision = getattr(observation, "revision", None)
+    tick = getattr(observation, "tick", 0)
+    locations = getattr(observation, "locations", ()) or ()
+    location_id = None if not locations else getattr(locations[0], "entity_id", None)
+    intents: list[MemoryUpdateIntent] = []
+    for occurrence in getattr(observation, "occurrences", ()) or ():
+        if type(occurrence) is not ObservedOccurrence:
+            continue
+        event = occurrence.provenance.source_event_id
+        if event is None or event.value not in needed:
+            continue
+        trace = build_direct_observation_memory_trace(
+            owner_id=owner_id,
+            observation_tick=tick,
+            observation_revision=revision,
+            occurrence=occurrence,
+            location_id=location_id,
+        )
+        intents.append(
+            MemoryUpdateIntent(
+                owner_id=owner_id,
+                kind=MemoryUpdateKind.WRITE_MEMORY,
+                memory=trace,
+            )
+        )
+        needed.discard(event.value)
+    return tuple(intents)
+
+
+@dataclass(frozen=True, slots=True)
+class CommitmentSocialRequest:
+    """A request into an existing social channel. Not a world command."""
+
+    channel: str
+    local_id: int
+    signal: str
+    target_id: str
+    sanction: str = "none"
+    reliability_delta: float | None = None
+
+
+def commitment_social_requests(
+    owner_entity_id: str,
+    before: StructuredCommitmentLedger | None,
+    after: StructuredCommitmentLedger,
+    *,
+    reputation_on: bool,
+    norms_on: bool,
+) -> tuple[CommitmentSocialRequest, ...]:
+    """Map local status changes onto existing social signals."""
+    if type(owner_entity_id) is not str:
+        raise TypeError("owner_entity_id must be str")
+    if before is not None and type(before) is not StructuredCommitmentLedger:
+        raise TypeError("before must be StructuredCommitmentLedger or None")
+    if type(after) is not StructuredCommitmentLedger:
+        raise TypeError("after must be StructuredCommitmentLedger")
+    if type(reputation_on) is not bool or type(norms_on) is not bool:
+        raise TypeError("channel flags must be bool")
+    prior = {}
+    if before is not None:
+        prior = {row.local_id: row for row in before.interpretations}
+    requests: list[CommitmentSocialRequest] = []
+    for row in after.interpretations:
+        previous = prior.get(row.local_id)
+        if previous is not None and previous.status == row.status:
+            continue
+        if row.status not in {"open", "fulfilled", "violated", "disputed"}:
+            continue
+        debtor = owner_entity_id == row.debtor_id
+        creditor = owner_entity_id == row.creditor_id
+        signal = ""
+        target = ""
+        sanction = "none"
+        if debtor and row.status == "open":
+            signal, target = "resource_received", row.creditor_id
+        elif debtor and row.status == "fulfilled":
+            signal, target = "resource_given", row.creditor_id
+        elif creditor and row.status == "fulfilled":
+            signal, target = "corroboration_received", row.debtor_id
+        elif creditor and row.status in {"violated", "disputed"}:
+            signal, target = "contradiction_received", row.debtor_id
+            sanction = "criticism"
+        if signal:
+            requests.append(
+                CommitmentSocialRequest(
+                    "relationship", row.local_id, signal, target, sanction
+                )
+            )
+            _LOG.debug(
+                "commitment_consequence channel=relationship signal=%s",
+                signal,
+            )
+        if sanction != "none":
+            requests.append(
+                CommitmentSocialRequest(
+                    "sanction", row.local_id, sanction, target, sanction
+                )
+            )
+            _LOG.info(
+                "commitment_sanction local_id=%s token=%s",
+                row.local_id,
+                sanction,
+            )
+        if row.status in {"fulfilled", "violated"}:
+            if reputation_on:
+                delta = 0.10 if row.status == "fulfilled" else -0.10
+                other = row.creditor_id if debtor else row.debtor_id
+                requests.append(
+                    CommitmentSocialRequest(
+                        "reputation",
+                        row.local_id,
+                        row.status,
+                        other,
+                        reliability_delta=delta,
+                    )
+                )
+                _LOG.debug(
+                    "commitment_consequence channel=reputation signal=%s",
+                    row.status,
+                )
+            else:
+                _LOG.debug("reputation_channel_off")
+        if norms_on and signal:
+            requests.append(
+                CommitmentSocialRequest("norm", row.local_id, signal, target)
+            )
+            _LOG.debug("commitment_consequence channel=norm signal=%s", signal)
+        elif signal and not norms_on:
+            _LOG.debug("norm_channel_off")
+    return tuple(requests)
+
+
+def apply_commitment_sanction(
+    ledger: StructuredCommitmentLedger, local_id: int, token: str
+) -> StructuredCommitmentLedger:
+    """Owner-update API. The updater never passes ``retaliation_considered``."""
+    if token not in COMMITMENT_SANCTION_TOKENS:
+        raise ValueError("sanction")
+    for row in ledger.interpretations:
+        if row.local_id == local_id:
+            return replace_interpretation(ledger, replace(row, sanction=token))
+    raise ValueError("local_id")
+
+
+def propose_commitment_command(
+    command: object,
+    observation: object,
+    *,
+    channel_on: bool,
+    horizon_ticks: int,
+    owner_entity_id: EntityId,
+) -> object:
+    """Optional speech after a witnessed give or proposal. Never a return Give."""
+    from world.actions import Attack, DeclareCommitment, Give
+    from world.values import ItemKind
+
+    if not channel_on:
+        return command
+    if type(owner_entity_id) is not EntityId:
+        raise TypeError("owner_entity_id must be EntityId")
+    if type(horizon_ticks) is not int or not 1 <= horizon_ticks <= 64:
+        raise ValueError("horizon_ticks")
+    tick = getattr(observation, "tick", 0)
+    for occurrence in getattr(observation, "occurrences", ()) or ():
+        if getattr(occurrence, "kind", None) != "commitment_declared":
+            continue
+        if getattr(occurrence, "other_entity_id", None) != owner_entity_id:
+            continue
+        if getattr(occurrence, "actor_id", None) == owner_entity_id:
+            continue
+        facts = getattr(occurrence, "public_facts", {})
+        if not isinstance(facts, Mapping) or facts.get("act") != "propose":
+            continue
+        actor = occurrence.actor_id
+        _LOG.info(
+            "commitment_proposal command=declare_commitment kind=%s act=accept",
+            facts.get("kind"),
+        )
+        return _declaration_from_facts(actor, facts, act="accept")
+    for occurrence in getattr(observation, "occurrences", ()) or ():
+        if getattr(occurrence, "kind", None) != "give":
+            continue
+        if getattr(occurrence, "actor_id", None) != owner_entity_id:
+            continue
+        if getattr(occurrence, "success", None) is False:
+            continue
+        facts = getattr(occurrence, "public_facts", {})
+        if not isinstance(facts, Mapping):
+            continue
+        item_kind = facts.get("item_kind")
+        other = getattr(occurrence, "other_entity_id", None)
+        if type(item_kind) is not str or other is None:
+            continue
+        try:
+            now_kind = ItemKind(item_kind)
+        except ValueError:
+            continue
+        _LOG.info(
+            "commitment_proposal command=declare_commitment "
+            "kind=future_exchange act=propose"
+        )
+        return DeclareCommitment(
+            other,
+            "future_exchange",
+            "propose",
+            "counterparty",
+            "none",
+            1,
+            "by_tick",
+            ItemKind.MATERIAL,
+            tick + horizon_ticks,
+            now_kind,
+        )
+    if type(command) is Attack or type(command) is Give:
+        return command
+    return command
+
+
+def _declaration_from_facts(
+    counterparty: EntityId, facts: Mapping[str, object], *, act: str
+):
+    from world.actions import DeclareCommitment
+    from world.values import ItemKind
+
+    def kind_of(key: str) -> ItemKind | None:
+        value = facts.get(key)
+        if type(value) is not str:
+            return None
+        try:
+            return ItemKind(value)
+        except ValueError:
+            return None
+
+    due = facts.get("due_tick")
+    return DeclareCommitment(
+        counterparty,
+        str(facts.get("kind", "promise")),
+        act,
+        str(facts.get("owed_by", "counterparty")),
+        str(facts.get("service", "none")),
+        int(facts["quantity"]) if type(facts.get("quantity")) is int else 1,
+        str(facts.get("due_kind", "none")),
+        kind_of("item_kind"),
+        due if type(due) is int else None,
+        kind_of("now_item_kind"),
+    )
 
 
 def _colocated_ids(observation: object) -> set[str]:

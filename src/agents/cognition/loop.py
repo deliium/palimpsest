@@ -174,6 +174,7 @@ class CognitiveLoop:
         "_caregiving_cognition_mode",
         "_cognitive_budget_mode",
         "_cognitive_budget_policy",
+        "_commitment_horizon_ticks",
         "_communication_strategy_mode",
         "_communication_strategy_policy",
         "_competence_policy",
@@ -195,9 +196,6 @@ class CognitiveLoop:
         "_developmental_mid_run_admit",
         "_developmental_stage_learning_rates",
         "_durable_records_active",
-        "_knowledge_genealogy_seed_material",
-        "_knowledge_genealogy_spec",
-        "_knowledge_repositories_active",
         "_emotional_state",
         "_epistemic_policy",
         "_experiment_ledger",
@@ -207,21 +205,23 @@ class CognitiveLoop:
         "_group_formation_policy",
         "_identity_mode",
         "_intention",
+        "_knowledge_genealogy_seed_material",
+        "_knowledge_genealogy_spec",
+        "_knowledge_repositories_active",
         "_last_cognitive_budget_audit",
         "_last_counterfactual_scenarios",
         "_last_cultural_feature_audits",
         "_last_developmental_audits",
         "_last_mentorship_audits",
         "_last_practical_knowledge_audits",
+        "_max_open_interpretations",
         "_memory",
         "_memory_updates",
         "_mentorship_spec",
         "_motivation",
         "_perception",
         "_planner",
-        "_max_open_interpretations",
         "_possession_succession_active",
-        "_structured_commitments_active",
         "_production_allow_provider",
         "_production_knowledge_mode",
         "_prospective_policy",
@@ -239,6 +239,7 @@ class CognitiveLoop:
         "_social_convention_policy",
         "_social_norm_mode",
         "_social_norm_policy",
+        "_structured_commitments_active",
         "_teaching_mode",
         "_teaching_policy",
         "_territorial_claim_mode",
@@ -300,6 +301,7 @@ class CognitiveLoop:
         possession_succession_active: bool = False,
         structured_commitments_active: bool = False,
         max_open_interpretations: int | None = None,
+        commitment_horizon_ticks: int = 8,
         knowledge_genealogy_spec: object | None = None,
         knowledge_genealogy_seed_material: object | None = None,
         bounded_experimentation_spec: object | None = None,
@@ -852,6 +854,11 @@ class CognitiveLoop:
             ):
                 raise TypeError("max_open_interpretations must be int or None")
             self._max_open_interpretations = max_open_interpretations
+        if type(commitment_horizon_ticks) is not int or isinstance(
+            commitment_horizon_ticks, bool
+        ):
+            raise TypeError("commitment_horizon_ticks must be int")
+        self._commitment_horizon_ticks = commitment_horizon_ticks
         if structured_commitments_active:
             _LOG.debug(
                 "structured_commitments_bind structured_commitments_active=%s "
@@ -1257,6 +1264,8 @@ class CognitiveLoop:
             StructuredCommitmentLedger,
             apply_structured_commitment_update,
             empty_structured_commitments,
+            forget_structured_commitments,
+            link_structured_commitment_traces,
         )
 
         if not self._structured_commitments_active:
@@ -1276,6 +1285,9 @@ class CognitiveLoop:
         updated = apply_structured_commitment_update(
             previous, loop_input.observation, tick=loop_input.observation.tick
         )
+        memories = () if snapshot is None else tuple(snapshot.memories)
+        updated = link_structured_commitment_traces(updated, memories)
+        updated = forget_structured_commitments(updated, memories)
         if not updated.interpretations:
             return None
         return updated
@@ -2234,6 +2246,207 @@ class CognitiveLoop:
             )
         return updates + tuple(extra)
 
+    def _append_commitment_memory(
+        self,
+        proposal: CognitiveLoopProposal,
+        updates: tuple[object, ...],
+    ) -> tuple[object, ...]:
+        """Queue WRITE_MEMORY for commitment rows this owner just adopted."""
+        from agents.cognition.structured_commitments import (
+            StructuredCommitmentLedger,
+            commitment_memory_intents,
+        )
+
+        if not self._structured_commitments_active:
+            return updates
+        ledger = proposal.structured_commitments
+        if type(ledger) is not StructuredCommitmentLedger:
+            return updates
+        extra = commitment_memory_intents(
+            proposal.agent_id,
+            proposal.loop_input.observation,
+            ledger,
+            updates,
+        )
+        return updates + extra
+
+    def _fold_commitment_consequences(
+        self,
+        loop_input: CognitiveLoopInput,
+        ledger: object | None,
+        reputation: object | None,
+        norms: object | None,
+    ) -> tuple[object | None, object | None, object | None]:
+        """Apply sanction, reliability, and norm notes. No world command."""
+        from agents.cognition.configuration import (
+            CognitionReputationMode,
+            CognitionSocialNormMode,
+        )
+        from agents.cognition.reputation import (
+            ReputationLedger,
+            note_remembered_reliability,
+        )
+        from agents.cognition.social_norms import (
+            NormLedger,
+            note_reciprocal_commitment_evidence,
+        )
+        from agents.cognition.structured_commitments import (
+            StructuredCommitmentLedger,
+            apply_commitment_sanction,
+            commitment_social_requests,
+        )
+
+        if not self._structured_commitments_active:
+            return ledger, reputation, norms
+        if type(ledger) is not StructuredCommitmentLedger:
+            return ledger, reputation, norms
+        snapshot = loop_input.snapshot
+        carried = None if snapshot is None else snapshot.structured_commitments
+        before = carried if type(carried) is StructuredCommitmentLedger else None
+        reputation_on = (
+            self._reputation_mode is CognitionReputationMode.DETERMINISTIC
+        )
+        norms_on = self._social_norm_mode is CognitionSocialNormMode.DETERMINISTIC
+        requests = commitment_social_requests(
+            loop_input.observation.observer_id.value,
+            before,
+            ledger,
+            reputation_on=reputation_on,
+            norms_on=norms_on,
+        )
+        tick = loop_input.observation.tick
+        for request in requests:
+            if request.channel == "sanction" and request.sanction != "none":
+                ledger = apply_commitment_sanction(
+                    ledger, request.local_id, request.sanction
+                )
+            elif (
+                request.channel == "reputation"
+                and request.reliability_delta is not None
+            ):
+                target = self._commitment_agent(request.target_id)
+                if target is None or type(reputation) is not ReputationLedger:
+                    _LOG.debug("commitment_reliability_dropped reason=unresolved")
+                    continue
+                reputation = note_remembered_reliability(
+                    reputation,
+                    target_id=target,
+                    delta=request.reliability_delta,
+                    lineage=(
+                        f"commitment:{request.local_id}:{request.signal}:{tick}"
+                    ),
+                    tick=tick,
+                )
+            elif request.channel == "norm":
+                target = self._commitment_agent(request.target_id)
+                if target is None or type(norms) is not NormLedger:
+                    _LOG.debug("commitment_norm_dropped reason=unresolved")
+                    continue
+                norms = note_reciprocal_commitment_evidence(
+                    norms,
+                    loop_input.agent_id,
+                    target,
+                    lineage=(
+                        f"commitment:{request.local_id}:{request.signal}:{tick}"
+                    ),
+                    tick=tick,
+                )
+        return ledger, reputation, norms
+
+    def _commitment_agent(self, entity_id: str):
+        from agents.models import AgentId
+        from world.identifiers import EntityId
+
+        resolver = getattr(self._memory_updates, "_resolve_counterpart", None)
+        if callable(resolver):
+            resolved = resolver(EntityId(entity_id))
+            return resolved if type(resolved) is AgentId else None
+        return AgentId(entity_id)
+
+    def _append_commitment_relationships(
+        self,
+        proposal: CognitiveLoopProposal,
+        updates: tuple[object, ...],
+    ) -> tuple[object, ...]:
+        """Queue relationship revisions for commitment status changes."""
+        from agents.cognition.configuration import (
+            CognitionReputationMode,
+            CognitionSocialNormMode,
+        )
+        from agents.cognition.models import MemoryUpdateIntent, MemoryUpdateKind
+        from agents.cognition.structured_commitments import (
+            StructuredCommitmentLedger,
+            commitment_social_requests,
+        )
+        from social.relationships import (
+            DEFAULT_RELATIONSHIP_POLICY,
+            RelationshipInteractionSignal,
+            RelationshipRevisionRequest,
+            RelationshipSignalKind,
+        )
+
+        if not self._structured_commitments_active:
+            return updates
+        ledger = proposal.structured_commitments
+        if type(ledger) is not StructuredCommitmentLedger:
+            return updates
+        snapshot = proposal.loop_input.snapshot
+        carried = None if snapshot is None else snapshot.structured_commitments
+        before = carried if type(carried) is StructuredCommitmentLedger else None
+        requests = commitment_social_requests(
+            proposal.loop_input.observation.observer_id.value,
+            before,
+            ledger,
+            reputation_on=(
+                self._reputation_mode is CognitionReputationMode.DETERMINISTIC
+            ),
+            norms_on=(
+                self._social_norm_mode is CognitionSocialNormMode.DETERMINISTIC
+            ),
+        )
+        owner = proposal.agent_id
+        tick = proposal.loop_input.observation.tick
+        kinds = {item.value: item for item in RelationshipSignalKind}
+        extra: list[MemoryUpdateIntent] = []
+        for request in requests:
+            if request.channel != "relationship":
+                continue
+            target = self._commitment_agent(request.target_id)
+            kind = kinds.get(request.signal)
+            if target is None or kind is None or target == owner:
+                _LOG.debug(
+                    "commitment_consequence channel=relationship signal=unresolved"
+                )
+                continue
+            material = (
+                f"{owner.value}|{target.value}|{request.local_id}|{tick}"
+            ).encode()
+            digest = hashlib.sha256(material).hexdigest()
+            extra.append(
+                MemoryUpdateIntent(
+                    owner_id=owner,
+                    kind=MemoryUpdateKind.REVISE_RELATIONSHIP,
+                    relationship_revision=RelationshipRevisionRequest(
+                        source_id=owner,
+                        target_id=target,
+                        operation_id=digest,
+                        logical_tick=tick,
+                        signals=(
+                            RelationshipInteractionSignal(
+                                counterpart_id=target,
+                                kind=kind,
+                                strength=1.0,
+                                memory_ref=digest,
+                                lineage_root_ref=digest,
+                                source_tick=tick,
+                            ),
+                        ),
+                        policy=DEFAULT_RELATIONSHIP_POLICY.as_ref(),
+                    ),
+                )
+            )
+        return updates + tuple(extra)
+
     def _annotate_claim_violations(
         self,
         proposal: CognitiveLoopProposal,
@@ -2801,6 +3014,16 @@ class CognitiveLoop:
         social_norms = self._prepare_social_norms(loop_input)
         possession_legitimacy = self._prepare_possession_legitimacy(loop_input)
         structured_commitments = self._prepare_structured_commitments(loop_input)
+        (
+            structured_commitments,
+            reputation,
+            social_norms,
+        ) = self._fold_commitment_consequences(
+            loop_input,
+            structured_commitments,
+            reputation,
+            social_norms,
+        )
         social_conventions = self._prepare_social_conventions(loop_input)
         artifact_interpretations = self._prepare_artifact_interpretations(loop_input)
         semantic_naming = self._prepare_semantic_naming(
@@ -3059,6 +3282,8 @@ class CognitiveLoop:
                     durable_records_active=self._durable_records_active,
                     knowledge_repositories_active=self._knowledge_repositories_active,
                     possession_succession_active=self._possession_succession_active,
+                    structured_commitments_active=self._structured_commitments_active,
+                    commitment_horizon_ticks=self._commitment_horizon_ticks,
                     semantic_naming=semantic_naming,
                     semantic_naming_mode=self._semantic_naming_mode,
                     cultural_narratives=cultural_narratives,
@@ -3193,6 +3418,8 @@ class CognitiveLoop:
         self._remember_experiments(loop_input)
         updates = self._annotate_claim_violations(proposal, updates)
         updates = self._append_norm_trust(proposal, updates)
+        updates = self._append_commitment_memory(proposal, updates)
+        updates = self._append_commitment_relationships(proposal, updates)
         consolidation = await self._plan_sleep_consolidation(
             proposal=proposal,
             command=command,

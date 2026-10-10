@@ -459,6 +459,75 @@ def default_reputation_policy() -> ReputationFormationPolicy:
     return ReputationFormationPolicy()
 
 
+def note_remembered_reliability(
+    ledger: ReputationLedger,
+    *,
+    target_id: AgentId,
+    delta: float,
+    lineage: str,
+    tick: int,
+) -> ReputationLedger:
+    """Append one reliability item. A full evidence cap drops the note."""
+    if type(ledger) is not ReputationLedger:
+        raise TypeError("ledger must be ReputationLedger")
+    if type(target_id) is not AgentId:
+        raise TypeError("target_id must be AgentId")
+    if delta not in {0.10, -0.10}:
+        raise ValueError("delta")
+    policy = default_reputation_policy()
+    profiles = list(ledger.profiles)
+    index = next(
+        (i for i, profile in enumerate(profiles) if profile.target_id == target_id),
+        None,
+    )
+    profile = None if index is None else profiles[index]
+    if profile is not None and len(profile.evidence) >= policy.max_evidence:
+        _LOG.debug("commitment_reliability_dropped reason=cap_exceeded")
+        return ledger
+    if profile is None and len(profiles) >= policy.max_profiles:
+        _LOG.debug("commitment_reliability_dropped reason=cap_exceeded")
+        return ledger
+    if profile is None:
+        profile = ReputationProfile(
+            profile_id=reputation_profile_id(ledger.owner_id, target_id),
+            owner_id=ledger.owner_id,
+            target_id=target_id,
+            reliability=neutral_dimension_state(),
+            harm=neutral_dimension_state(),
+            generosity=neutral_dimension_state(),
+            competence=neutral_dimension_state(),
+        )
+    evidence = (
+        *profile.evidence,
+        ReputationEvidenceItem(
+            owner_id=ledger.owner_id,
+            target_id=target_id,
+            dimension=ReputationDimension.RELIABILITY,
+            channel=ReputationChannel.REMEMBERED_INTERACTION,
+            lineage_ref=lineage,
+            source_id=ledger.owner_id,
+            pre_scale_delta=delta,
+            source_trust_band=ReputationSourceTrustBand.UNMEDIATED,
+            tick=tick,
+            policy_version=policy.version,
+            profile_id=profile.profile_id,
+            ordinal=len(profile.evidence),
+        ),
+    )
+    updated = _with_dimension(
+        profile,
+        ReputationDimension.RELIABILITY,
+        _moved_state(profile.reliability, delta),
+        evidence,
+    )
+    if index is None:
+        profiles.append(updated)
+    else:
+        profiles[index] = updated
+    _LOG.debug("commitment_consequence channel=reputation signal=%s", lineage)
+    return ReputationLedger(ledger.owner_id, tuple(profiles))
+
+
 def empty_reputation_ledger(owner_id: AgentId) -> ReputationLedger:
     """Ledger with no profiles. Disabled mode does not call this."""
     return ReputationLedger(owner_id=owner_id)

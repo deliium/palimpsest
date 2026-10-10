@@ -443,7 +443,6 @@ class AgentRuntime:
         "_offline_consolidation_audits",
         "_pending",
         "_possession_legitimacy",
-        "_structured_commitments",
         "_practical_knowledge",
         "_practical_knowledge_audits",
         "_processed_invocations",
@@ -462,6 +461,7 @@ class AgentRuntime:
         "_social_conventions",
         "_social_norms",
         "_status",
+        "_structured_commitments",
         "_subjective_state",
         "_territorial_claims",
         "_theory_of_mind",
@@ -878,6 +878,19 @@ class AgentRuntime:
             owner.value,
             len(ledger.supports),
             tick,
+        )
+
+    def _link_commitment_traces(self, writes: Sequence[object]) -> None:
+        from agents.cognition.structured_commitments import (
+            StructuredCommitmentLedger,
+            link_structured_commitment_traces,
+        )
+
+        ledger = self._structured_commitments
+        if type(ledger) is not StructuredCommitmentLedger or not writes:
+            return
+        self._structured_commitments = link_structured_commitment_traces(
+            ledger, tuple(writes)
         )
 
     def _commit_structured_commitments(self, ledger: object | None, tick: int) -> None:
@@ -3084,6 +3097,7 @@ class AgentRuntime:
                 batch_idempotent=receipt.idempotent,
                 tick=tick,
             )
+            self._link_commitment_traces(writes)
             return
 
         if belief_revisions or relationship_revisions:
@@ -3174,6 +3188,7 @@ class AgentRuntime:
                     }
                 },
             )
+            self._link_commitment_traces(writes)
             if reconsolidation_count:
                 _LOG.info(
                     "runtime_reconsolidation_committed",

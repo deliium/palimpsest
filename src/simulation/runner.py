@@ -632,6 +632,7 @@ def _structured_commitments_loop_kwargs(config: object) -> dict[str, object]:
     return {
         "structured_commitments_active": True,
         "max_open_interpretations": cap,
+        "commitment_horizon_ticks": spec.horizon_ticks,
     }
 
 

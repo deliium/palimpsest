@@ -772,6 +772,8 @@ class CommandPlanner:
         durable_records_active: bool = False,
         knowledge_repositories_active: bool = False,
         possession_succession_active: bool = False,
+        structured_commitments_active: bool = False,
+        commitment_horizon_ticks: int = 8,
         semantic_naming: object | None = None,
         semantic_naming_mode: object | None = None,
         cultural_narratives: object | None = None,
@@ -1094,6 +1096,18 @@ class CommandPlanner:
                 ledger,
                 channel_on=True,
                 owner_id=owner,
+            )
+        if structured_commitments_active:
+            from agents.cognition.structured_commitments import (
+                propose_commitment_command,
+            )
+
+            command = propose_commitment_command(
+                command,
+                loop_input.observation,
+                channel_on=True,
+                horizon_ticks=commitment_horizon_ticks,
+                owner_entity_id=loop_input.observation.observer_id,
             )
         command_type = type(command).__name__
 

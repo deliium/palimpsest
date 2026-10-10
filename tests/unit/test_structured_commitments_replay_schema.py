@@ -103,9 +103,11 @@ def test_v39_loop_kwargs_carry_cap_and_v38_does_not() -> None:
     kwargs = _structured_commitments_loop_kwargs(v39)
     assert kwargs["structured_commitments_active"] is True
     assert kwargs["max_open_interpretations"] == 8
+    assert kwargs["commitment_horizon_ticks"] == 8
     loop = build_cognitive_loop(**kwargs)
     assert loop._structured_commitments_active is True
     assert loop._max_open_interpretations == 8
+    assert loop._commitment_horizon_ticks == 8
 
     v38 = replace(
         _plain_base(),
