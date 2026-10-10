@@ -305,6 +305,7 @@ class WorldEngine:
         "_perception",
         "_population_lifecycle",
         "_possession_succession_active",
+        "_structured_commitments_active",
         "_production_catalog",
         "_registrations",
         "_run_id",
@@ -344,6 +345,7 @@ class WorldEngine:
         knowledge_repositories_spec: object | None = None,
         experiment_laws: object | None = None,
         possession_succession_active: bool = False,
+        structured_commitments_active: bool = False,
     ) -> None:
         if type(config) is not SimulationRunConfig:
             raise TypeError("WorldEngine requires SimulationRunConfig")
@@ -413,6 +415,9 @@ class WorldEngine:
         if type(possession_succession_active) is not bool:
             raise TypeError("possession_succession_active must be bool")
         self._possession_succession_active = possession_succession_active
+        if type(structured_commitments_active) is not bool:
+            raise TypeError("structured_commitments_active must be bool")
+        self._structured_commitments_active = structured_commitments_active
         self._environmental_dynamics = _optional_environmental_dynamics(
             environmental_dynamics
         )
@@ -735,6 +740,9 @@ class WorldEngine:
         engine._possession_succession_active = (
             getattr(snapshot.config, "possession_succession", None) is not None
         )
+        engine._structured_commitments_active = (
+            getattr(snapshot.config, "structured_commitments", None) is not None
+        )
         engine._perception = PerceptionService(
             possession_succession_active=engine._possession_succession_active,
         )
@@ -790,6 +798,9 @@ class WorldEngine:
         engine._possession_succession_active = (
             getattr(snapshot.config, "possession_succession", None) is not None
         )
+        engine._structured_commitments_active = (
+            getattr(snapshot.config, "structured_commitments", None) is not None
+        )
         engine._environmental_dynamics = _optional_environmental_dynamics(
             environmental_dynamics
         )
@@ -799,7 +810,7 @@ class WorldEngine:
             artifacts_enabled
             or bool(snapshot.artifacts)
             or snapshot.persistence_codec_version
-            in {"v5", "v6", "v7", "v8", "v9", "v10", "v11", "v12", "v13"}
+            in {"v5", "v6", "v7", "v8", "v9", "v10", "v11", "v12", "v13", "v14"}
             or bool(getattr(engine._bootstrap, "artifacts", ()))
         )
         if snapshot.persistence_codec_version in {
@@ -810,6 +821,7 @@ class WorldEngine:
             "v10",
             "v11",
             "v12", "v13",
+            "v14",
         }:
             if population_lifecycle is None and snapshot.lifecycle_records:
                 raise ValueError(
@@ -841,7 +853,7 @@ class WorldEngine:
                 engine._new_agent_initialization = new_agent_initialization
             elif (
                 snapshot.persistence_codec_version
-                in {"v7", "v8", "v9", "v10", "v11", "v12", "v13"}
+                in {"v7", "v8", "v9", "v10", "v11", "v12", "v13", "v14"}
                 and snapshot.event_schema_version in {10, 11, 12, 13, 14}
             ):
                 # Prefer explicit restore arg; else pull from snapshot config when v25+.
@@ -869,7 +881,7 @@ class WorldEngine:
         engine._durable_records_spec = None
         engine._knowledge_repositories_spec = None
         engine._dependency_need_registers = {}
-        if snapshot.persistence_codec_version in {"v10", "v11", "v12", "v13"}:
+        if snapshot.persistence_codec_version in {"v10", "v11", "v12", "v13", "v14"}:
             from simulation.runner_models import DurableRecordsSpec
 
             resolved_durable = getattr(snapshot.config, "durable_records", None)
@@ -883,7 +895,7 @@ class WorldEngine:
                 snapshot.persistence_codec_version,
                 engine._durable_records_spec is not None,
             )
-        if snapshot.persistence_codec_version in {"v11", "v12", "v13"}:
+        if snapshot.persistence_codec_version in {"v11", "v12", "v13", "v14"}:
             from simulation.runner_models import KnowledgeRepositoriesSpec
 
             resolved_repos = getattr(snapshot.config, "knowledge_repositories", None)
@@ -904,7 +916,7 @@ class WorldEngine:
                 engine._knowledge_repositories_spec is not None,
                 len(snapshot.repositories),
             )
-        if snapshot.persistence_codec_version in {"v10", "v11", "v12", "v13"}:
+        if snapshot.persistence_codec_version in {"v10", "v11", "v12", "v13", "v14"}:
             durable_mode = (
                 engine._durable_records_spec.perception_mode
                 if engine._durable_records_spec is not None
@@ -921,7 +933,7 @@ class WorldEngine:
                     repository_perception_mode=repository_mode,
                     possession_succession_active=engine._possession_succession_active,
                 )
-        if snapshot.persistence_codec_version in {"v8", "v9", "v10", "v11", "v12", "v13"}:
+        if snapshot.persistence_codec_version in {"v8", "v9", "v10", "v11", "v12", "v13", "v14"}:
             resolved_kinship = kinship_spec
             if resolved_kinship is None:
                 resolved_kinship = getattr(snapshot.config, "kinship", None)
@@ -979,7 +991,7 @@ class WorldEngine:
                     if type(event.details) is KinshipEdgeRecorded
                 ),
             )
-        if snapshot.persistence_codec_version in {"v9", "v10", "v11", "v12", "v13"}:
+        if snapshot.persistence_codec_version in {"v9", "v10", "v11", "v12", "v13", "v14"}:
             from simulation.runner_models import DependencyCareSpec
             from world.dependency_care import DependencyNeedRegister
 
@@ -1091,6 +1103,10 @@ class WorldEngine:
         return self._possession_succession_active
 
     @property
+    def structured_commitments_active(self) -> bool:
+        return self._structured_commitments_active
+
+    @property
     def knowledge_repositories_spec(self) -> object | None:
         return self._knowledge_repositories_spec
 
@@ -1177,6 +1193,7 @@ class WorldEngine:
                 knowledge_repositories_active=self.knowledge_repositories_channel_active,
                 bounded_experimentation_active=self.bounded_experimentation_active,
                 possession_succession_active=self.possession_succession_active,
+                structured_commitments_active=self.structured_commitments_active,
             )
             snap = self._snapshot
             same_tick = [
@@ -1423,6 +1440,7 @@ class WorldEngine:
             knowledge_repositories_active=self.knowledge_repositories_channel_active,
             bounded_experimentation_active=self.bounded_experimentation_active,
             possession_succession_active=self.possession_succession_active,
+            structured_commitments_active=self.structured_commitments_active,
         )
         next_registrations = (*self._registrations, registration)
         self._registrations = next_registrations
@@ -3436,6 +3454,7 @@ class WorldEngine:
             knowledge_repositories_active=self.knowledge_repositories_channel_active,
             bounded_experimentation_active=self.bounded_experimentation_active,
             possession_succession_active=self.possession_succession_active,
+            structured_commitments_active=self.structured_commitments_active,
         )
         prepared = finalize_pending_batch(
             merged,
@@ -5300,6 +5319,7 @@ def select_checkpoint_schema(
     knowledge_repositories_active: bool = False,
     bounded_experimentation_active: bool = False,
     possession_succession_active: bool = False,
+    structured_commitments_active: bool = False,
 ) -> tuple[int, str]:
     """Return the legal event-schema and codec pair for this run."""
     from simulation.persistence import (
@@ -5318,6 +5338,7 @@ def select_checkpoint_schema(
         EVENT_SCHEMA_REPLAY_V13,
         EVENT_SCHEMA_REPLAY_V14, EVENT_SCHEMA_REPLAY_V15,
         EVENT_SCHEMA_REPLAY_V16,
+        EVENT_SCHEMA_REPLAY_V17,
     )
 
     schema_version, codec = checkpoint_schema_for_production(
@@ -5332,13 +5353,20 @@ def select_checkpoint_schema(
         knowledge_repositories_active=knowledge_repositories_active,
         bounded_experimentation_active=bounded_experimentation_active,
         possession_succession_active=possession_succession_active,
+        structured_commitments_active=structured_commitments_active,
     )
     agreed = (
-        possession_succession_active
+        structured_commitments_active
+        and schema_version == EVENT_SCHEMA_REPLAY_V17
+        and codec == "v14"
+    ) or (
+        not structured_commitments_active
+        and possession_succession_active
         and schema_version == EVENT_SCHEMA_REPLAY_V16
         and codec == "v13"
     ) or (
-        not possession_succession_active
+        not structured_commitments_active
+        and not possession_succession_active
         and bounded_experimentation_active
         and schema_version == EVENT_SCHEMA_REPLAY_V15
         and codec == "v12"

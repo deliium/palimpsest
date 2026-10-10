@@ -80,6 +80,7 @@ EVENT_SCHEMA_REPLAY_V13: Final[int] = 13
 EVENT_SCHEMA_REPLAY_V14: Final[int] = 14
 EVENT_SCHEMA_REPLAY_V15: Final[int] = 15
 EVENT_SCHEMA_REPLAY_V16: Final[int] = 16
+EVENT_SCHEMA_REPLAY_V17: Final[int] = 17
 SUPPORTED_EVENT_SCHEMA_VERSIONS: Final[frozenset[int]] = frozenset(
     {
         EVENT_SCHEMA_AUDIT_V1,
@@ -97,6 +98,7 @@ SUPPORTED_EVENT_SCHEMA_VERSIONS: Final[frozenset[int]] = frozenset(
         EVENT_SCHEMA_REPLAY_V13,
         EVENT_SCHEMA_REPLAY_V14, EVENT_SCHEMA_REPLAY_V15,
         EVENT_SCHEMA_REPLAY_V16,
+        EVENT_SCHEMA_REPLAY_V17,
     }
 )
 REPLAYABLE_EVENT_SCHEMA_VERSIONS: Final[frozenset[int]] = frozenset(
@@ -115,6 +117,7 @@ REPLAYABLE_EVENT_SCHEMA_VERSIONS: Final[frozenset[int]] = frozenset(
         EVENT_SCHEMA_REPLAY_V13,
         EVENT_SCHEMA_REPLAY_V14, EVENT_SCHEMA_REPLAY_V15,
         EVENT_SCHEMA_REPLAY_V16,
+        EVENT_SCHEMA_REPLAY_V17,
     }
 )
 PHYSICAL_REPLAY_EVENT_SCHEMA_VERSIONS: Final[frozenset[int]] = frozenset(
@@ -132,6 +135,7 @@ PHYSICAL_REPLAY_EVENT_SCHEMA_VERSIONS: Final[frozenset[int]] = frozenset(
         EVENT_SCHEMA_REPLAY_V13,
         EVENT_SCHEMA_REPLAY_V14, EVENT_SCHEMA_REPLAY_V15,
         EVENT_SCHEMA_REPLAY_V16,
+        EVENT_SCHEMA_REPLAY_V17,
     }
 )
 _PRODUCTION_EVENT_SCHEMAS: Final[frozenset[int]] = frozenset(
@@ -146,6 +150,7 @@ _PRODUCTION_EVENT_SCHEMAS: Final[frozenset[int]] = frozenset(
         EVENT_SCHEMA_REPLAY_V13,
         EVENT_SCHEMA_REPLAY_V14, EVENT_SCHEMA_REPLAY_V15,
         EVENT_SCHEMA_REPLAY_V16,
+        EVENT_SCHEMA_REPLAY_V17,
     }
 )
 _ENVIRONMENT_EVENT_SCHEMAS: Final[frozenset[int]] = frozenset(
@@ -159,6 +164,7 @@ _ENVIRONMENT_EVENT_SCHEMAS: Final[frozenset[int]] = frozenset(
         EVENT_SCHEMA_REPLAY_V13,
         EVENT_SCHEMA_REPLAY_V14, EVENT_SCHEMA_REPLAY_V15,
         EVENT_SCHEMA_REPLAY_V16,
+        EVENT_SCHEMA_REPLAY_V17,
     }
 )
 _ARTIFACT_EVENT_SCHEMAS: Final[frozenset[int]] = frozenset(
@@ -171,6 +177,7 @@ _ARTIFACT_EVENT_SCHEMAS: Final[frozenset[int]] = frozenset(
         EVENT_SCHEMA_REPLAY_V13,
         EVENT_SCHEMA_REPLAY_V14, EVENT_SCHEMA_REPLAY_V15,
         EVENT_SCHEMA_REPLAY_V16,
+        EVENT_SCHEMA_REPLAY_V17,
     }
 )
 _LIFECYCLE_EVENT_SCHEMAS: Final[frozenset[int]] = frozenset(
@@ -182,6 +189,7 @@ _LIFECYCLE_EVENT_SCHEMAS: Final[frozenset[int]] = frozenset(
         EVENT_SCHEMA_REPLAY_V13,
         EVENT_SCHEMA_REPLAY_V14, EVENT_SCHEMA_REPLAY_V15,
         EVENT_SCHEMA_REPLAY_V16,
+        EVENT_SCHEMA_REPLAY_V17,
     }
 )
 _NEW_AGENT_INIT_EVENT_SCHEMAS: Final[frozenset[int]] = frozenset(
@@ -192,13 +200,29 @@ _NEW_AGENT_INIT_EVENT_SCHEMAS: Final[frozenset[int]] = frozenset(
         EVENT_SCHEMA_REPLAY_V13,
         EVENT_SCHEMA_REPLAY_V14, EVENT_SCHEMA_REPLAY_V15,
         EVENT_SCHEMA_REPLAY_V16,
+        EVENT_SCHEMA_REPLAY_V17,
     }
 )
 _KINSHIP_EVENT_SCHEMAS: Final[frozenset[int]] = frozenset(
-    {EVENT_SCHEMA_REPLAY_V11, EVENT_SCHEMA_REPLAY_V12, EVENT_SCHEMA_REPLAY_V13, EVENT_SCHEMA_REPLAY_V14}
+    {
+        EVENT_SCHEMA_REPLAY_V11,
+        EVENT_SCHEMA_REPLAY_V12,
+        EVENT_SCHEMA_REPLAY_V13,
+        EVENT_SCHEMA_REPLAY_V14,
+        EVENT_SCHEMA_REPLAY_V15,
+        EVENT_SCHEMA_REPLAY_V16,
+        EVENT_SCHEMA_REPLAY_V17,
+    }
 )
 _DEPENDENCY_CARE_EVENT_SCHEMAS: Final[frozenset[int]] = frozenset(
-    {EVENT_SCHEMA_REPLAY_V12, EVENT_SCHEMA_REPLAY_V13, EVENT_SCHEMA_REPLAY_V14}
+    {
+        EVENT_SCHEMA_REPLAY_V12,
+        EVENT_SCHEMA_REPLAY_V13,
+        EVENT_SCHEMA_REPLAY_V14,
+        EVENT_SCHEMA_REPLAY_V15,
+        EVENT_SCHEMA_REPLAY_V16,
+        EVENT_SCHEMA_REPLAY_V17,
+    }
 )
 CURRENT_PHYSICAL_EVENT_SCHEMA_VERSION: Final[int] = EVENT_SCHEMA_REPLAY_V5
 _LOG: Final[logging.Logger] = logging.getLogger("world.events")
@@ -2083,6 +2107,83 @@ class PossessionClaimAsserted:
         _reject_presentation_fields(self.kind, self.__slots__)
 
 
+_COMMITMENT_KINDS: Final[frozenset[str]] = frozenset(
+    {
+        "promise",
+        "future_exchange",
+        "debt",
+        "service_obligation",
+        "conditional_agreement",
+    }
+)
+_COMMITMENT_ACTS: Final[frozenset[str]] = frozenset(
+    {
+        "propose",
+        "accept",
+        "report_fulfilled",
+        "report_partial",
+        "report_violated",
+        "report_dispute",
+    }
+)
+_COMMITMENT_OWED_BY: Final[frozenset[str]] = frozenset({"self", "counterparty"})
+_COMMITMENT_SERVICES: Final[frozenset[str]] = frozenset(
+    {"none", "help", "feed", "transport"}
+)
+_COMMITMENT_DUE_KINDS: Final[frozenset[str]] = frozenset(
+    {"none", "by_tick", "when_next_colocated", "if_counterpart_gives"}
+)
+_COMMITMENT_QUANTITIES: Final[frozenset[int]] = frozenset({1, 2, 3})
+
+
+@dataclass(frozen=True, slots=True)
+class CommitmentDeclared:
+    """Public commitment speech. Does not move items or change health."""
+
+    actor_id: EntityId
+    counterparty_id: EntityId
+    commitment_kind: str
+    act: str
+    owed_by: str
+    service: str
+    quantity: int
+    due_kind: str
+    item_kind: str | None = None
+    due_tick: int | None = None
+    now_item_kind: str | None = None
+    kind: Literal["commitment_declared"] = field(
+        default="commitment_declared", init=False
+    )
+
+    def __post_init__(self) -> None:
+        if type(self.actor_id) is not EntityId:
+            raise TypeError("CommitmentDeclared.actor_id must be EntityId")
+        if type(self.counterparty_id) is not EntityId:
+            raise TypeError("CommitmentDeclared.counterparty_id must be EntityId")
+        if self.commitment_kind not in _COMMITMENT_KINDS:
+            raise ValueError("CommitmentDeclared.commitment_kind")
+        if self.act not in _COMMITMENT_ACTS:
+            raise ValueError("CommitmentDeclared.act")
+        if self.owed_by not in _COMMITMENT_OWED_BY:
+            raise ValueError("CommitmentDeclared.owed_by")
+        if self.service not in _COMMITMENT_SERVICES:
+            raise ValueError("CommitmentDeclared.service")
+        if type(self.quantity) is not int or self.quantity not in _COMMITMENT_QUANTITIES:
+            raise ValueError("CommitmentDeclared.quantity")
+        if self.due_kind not in _COMMITMENT_DUE_KINDS:
+            raise ValueError("CommitmentDeclared.due_kind")
+        if self.item_kind is not None and type(self.item_kind) is not str:
+            raise TypeError("CommitmentDeclared.item_kind must be str or None")
+        if self.now_item_kind is not None and type(self.now_item_kind) is not str:
+            raise TypeError("CommitmentDeclared.now_item_kind must be str or None")
+        if self.due_kind == "by_tick":
+            if type(self.due_tick) is not int:
+                raise ValueError("CommitmentDeclared.due_tick")
+        elif self.due_tick is not None:
+            raise ValueError("CommitmentDeclared.due_tick")
+        _reject_presentation_fields(self.kind, self.__slots__)
+
+
 EventDetails = (
     Moved
     | Searched
@@ -2141,6 +2242,7 @@ EventDetails = (
     | CorpseCustodyOpened
     | TakenFromCorpse
     | PossessionClaimAsserted
+    | CommitmentDeclared
 )
 
 _DETAIL_TYPES: Final[frozenset[type]] = frozenset(
@@ -2202,6 +2304,7 @@ _DETAIL_TYPES: Final[frozenset[type]] = frozenset(
         CorpseCustodyOpened,
         TakenFromCorpse,
         PossessionClaimAsserted,
+        CommitmentDeclared,
     }
 )
 
@@ -2218,17 +2321,24 @@ _KNOWLEDGE_REPOSITORY_DETAIL_TYPES: Final[frozenset[type]] = frozenset(
     }
 )
 _KNOWLEDGE_REPOSITORY_EVENT_SCHEMAS: Final[frozenset[int]] = frozenset(
-    {EVENT_SCHEMA_REPLAY_V14, EVENT_SCHEMA_REPLAY_V15, EVENT_SCHEMA_REPLAY_V16}
+    {
+        EVENT_SCHEMA_REPLAY_V14,
+        EVENT_SCHEMA_REPLAY_V15,
+        EVENT_SCHEMA_REPLAY_V16,
+        EVENT_SCHEMA_REPLAY_V17,
+    }
 )
 _EXPERIMENT_EVENT_SCHEMAS: Final[frozenset[int]] = frozenset(
-    {EVENT_SCHEMA_REPLAY_V15, EVENT_SCHEMA_REPLAY_V16}
+    {EVENT_SCHEMA_REPLAY_V15, EVENT_SCHEMA_REPLAY_V16, EVENT_SCHEMA_REPLAY_V17}
 )
 _POSSESSION_EVENT_SCHEMAS: Final[frozenset[int]] = frozenset(
-    {EVENT_SCHEMA_REPLAY_V16}
+    {EVENT_SCHEMA_REPLAY_V16, EVENT_SCHEMA_REPLAY_V17}
 )
 _POSSESSION_DETAIL_TYPES: Final[frozenset[type]] = frozenset(
     {CorpseCustodyOpened, TakenFromCorpse, PossessionClaimAsserted}
 )
+_COMMITMENT_EVENT_SCHEMAS: Final[frozenset[int]] = frozenset({EVENT_SCHEMA_REPLAY_V17})
+_COMMITMENT_DETAIL_TYPES: Final[frozenset[type]] = frozenset({CommitmentDeclared})
 
 _PRODUCTION_DETAIL_TYPES: Final[frozenset[type]] = frozenset(
     {
@@ -2280,6 +2390,7 @@ _DURABLE_RECORD_EVENT_SCHEMAS: Final[frozenset[int]] = frozenset(
         EVENT_SCHEMA_REPLAY_V14,
         EVENT_SCHEMA_REPLAY_V15,
         EVENT_SCHEMA_REPLAY_V16,
+        EVENT_SCHEMA_REPLAY_V17,
     }
 )
 
@@ -2388,6 +2499,8 @@ def _artifact_effect_complete(details: EventDetails) -> bool:
 
 
 def _payload_effect_complete(details: EventDetails, *, schema_version: int) -> bool:
+    if type(details) in _COMMITMENT_DETAIL_TYPES:
+        return schema_version in _COMMITMENT_EVENT_SCHEMAS
     if type(details) in _POSSESSION_DETAIL_TYPES:
         return schema_version in _POSSESSION_EVENT_SCHEMAS
     if type(details) is ExperimentResolved:
@@ -2649,6 +2762,8 @@ def target_id_for_details(details: EventDetails) -> EntityId | None:
             return body_id
         case TakenFromCorpse(item_id=item_id):
             return item_id
+        case CommitmentDeclared(counterparty_id=counterparty_id):
+            return counterparty_id
         case _:
             raise TypeError(
                 f"{EventValidationCode.UNKNOWN_EVENT_TYPE.value}: "
@@ -2803,6 +2918,15 @@ class WorldEvent:
                 _LOG.error(
                     "invalid_event_schema_version kind=%s schema_version=%s "
                     "reason_code=dependency_care_requires_v12",
+                    self.details.kind,
+                    self.schema_version,
+                )
+                raise ValueError(EventValidationCode.INVALID_SCHEMA_VERSION.value)
+        if type(self.details) in _COMMITMENT_DETAIL_TYPES:
+            if self.schema_version not in _COMMITMENT_EVENT_SCHEMAS:
+                _LOG.error(
+                    "invalid_event_schema_version kind=%s schema_version=%s "
+                    "reason_code=structured_commitments_requires_v17",
                     self.details.kind,
                     self.schema_version,
                 )
@@ -3208,6 +3332,13 @@ def build_occurrence_context(
                 origin_location_id=origin_location_id,
                 destination_location_id=None,
                 affected_entity_ids=(source_body_id, item_id),
+                private_recipient_ids=(),
+            )
+        case CommitmentDeclared(actor_id=actor_id, counterparty_id=counterparty_id):
+            return OccurrenceContext(
+                origin_location_id=origin_location_id,
+                destination_location_id=None,
+                affected_entity_ids=(actor_id, counterparty_id),
                 private_recipient_ids=(),
             )
         case PossessionClaimAsserted(decedent_id=decedent_id, item_id=item_id):

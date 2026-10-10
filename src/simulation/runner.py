@@ -610,6 +610,31 @@ def _possession_succession_loop_kwargs(config: object) -> dict[str, object]:
     }
 
 
+def _structured_commitments_loop_kwargs(config: object) -> dict[str, object]:
+    """Bind structured commitments. The world context carries horizon only."""
+    spec = getattr(config, "structured_commitments", None)
+    active = spec is not None
+    if not active:
+        _LOG.debug(
+            "structured_commitments_loop_kwargs structured_commitments_active=%s",
+            False,
+        )
+        return {
+            "structured_commitments_active": False,
+        }
+    cap = spec.max_open_interpretations
+    _LOG.debug(
+        "structured_commitments_loop_kwargs structured_commitments_active=%s "
+        "max_open_interpretations=%s",
+        True,
+        cap,
+    )
+    return {
+        "structured_commitments_active": True,
+        "max_open_interpretations": cap,
+    }
+
+
 def _knowledge_repositories_loop_kwargs(config: object) -> dict[str, object]:
     """Bind knowledge_repositories channel (no AgentCognitionSpec enum)."""
     return {
@@ -1571,6 +1596,7 @@ class SimulationRunner:
                     else None
                 ),
                 possession_succession_active=config.possession_succession is not None,
+                structured_commitments_active=config.structured_commitments is not None,
                 **skill_kwargs,
                 **teaching_kwargs,
             )
@@ -1797,6 +1823,7 @@ class SimulationRunner:
                     **_durable_records_loop_kwargs(config),
                     **_knowledge_repositories_loop_kwargs(config),
                     **_possession_succession_loop_kwargs(config),
+                    **_structured_commitments_loop_kwargs(config),
                     **_knowledge_genealogy_loop_kwargs(config),
                     **_bounded_experimentation_loop_kwargs(config),
                 )
@@ -3292,6 +3319,7 @@ class SimulationRunner:
                 **_durable_records_loop_kwargs(self._config),
                 **_knowledge_repositories_loop_kwargs(self._config),
                 **_possession_succession_loop_kwargs(self._config),
+                **_structured_commitments_loop_kwargs(self._config),
                 **_knowledge_genealogy_loop_kwargs(self._config),
                 **_bounded_experimentation_loop_kwargs(self._config),
             )
@@ -3584,6 +3612,7 @@ def _bootstrap_snapshot(engine: WorldEngine) -> WorldSnapshot:
         knowledge_repositories_active=engine.knowledge_repositories_channel_active,
         bounded_experimentation_active=engine.bounded_experimentation_active,
         possession_succession_active=engine.possession_succession_active,
+        structured_commitments_active=engine.structured_commitments_active,
     )
     state = engine._snapshot.world.state
     production_rows: dict[str, tuple[object, ...]] = {}

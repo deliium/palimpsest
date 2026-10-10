@@ -219,7 +219,9 @@ class CognitiveLoop:
         "_motivation",
         "_perception",
         "_planner",
+        "_max_open_interpretations",
         "_possession_succession_active",
+        "_structured_commitments_active",
         "_production_allow_provider",
         "_production_knowledge_mode",
         "_prospective_policy",
@@ -296,6 +298,8 @@ class CognitiveLoop:
         durable_records_active: bool = False,
         knowledge_repositories_active: bool = False,
         possession_succession_active: bool = False,
+        structured_commitments_active: bool = False,
+        max_open_interpretations: int | None = None,
         knowledge_genealogy_spec: object | None = None,
         knowledge_genealogy_seed_material: object | None = None,
         bounded_experimentation_spec: object | None = None,
@@ -836,6 +840,24 @@ class CognitiveLoop:
             _LOG.info(
                 "possession_succession_bind possession_succession_active=%s",
                 True,
+            )
+        if type(structured_commitments_active) is not bool:
+            raise TypeError("structured_commitments_active must be bool")
+        self._structured_commitments_active = structured_commitments_active
+        if max_open_interpretations is None:
+            self._max_open_interpretations = None
+        else:
+            if type(max_open_interpretations) is not int or isinstance(
+                max_open_interpretations, bool
+            ):
+                raise TypeError("max_open_interpretations must be int or None")
+            self._max_open_interpretations = max_open_interpretations
+        if structured_commitments_active:
+            _LOG.debug(
+                "structured_commitments_bind structured_commitments_active=%s "
+                "max_open_interpretations=%s",
+                True,
+                self._max_open_interpretations,
             )
         if knowledge_genealogy_spec is None:
             self._knowledge_genealogy_spec = None

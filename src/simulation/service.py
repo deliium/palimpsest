@@ -142,6 +142,7 @@ class PersistentSimulationService:
             new_agent_provenance_active=self._engine.new_agent_provenance_active,
             bounded_experimentation_active=self._engine.bounded_experimentation_active,
             possession_succession_active=self._engine.possession_succession_active,
+            structured_commitments_active=self._engine.structured_commitments_active,
         )
         production_rows: dict[str, tuple[object, ...]] = {}
         if codec_version in {"v3", "v4", "v5", "v6", "v7"}:

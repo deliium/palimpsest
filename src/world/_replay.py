@@ -50,6 +50,7 @@ from world.events import (
     EVENT_SCHEMA_REPLAY_V14,
     EVENT_SCHEMA_REPLAY_V15,
     EVENT_SCHEMA_REPLAY_V16,
+    EVENT_SCHEMA_REPLAY_V17,
     AgentCreated,
     AgentEnteredWorld,
     AgentInitializationRecorded,
@@ -72,6 +73,7 @@ from world.events import (
     EnvironmentalHazardStarted,
     CorpseCustodyOpened,
     ExperimentResolved,
+    CommitmentDeclared,
     PossessionClaimAsserted,
     TakenFromCorpse,
     ExposureApplied,
@@ -356,6 +358,7 @@ def _prepare_events(
             EVENT_SCHEMA_REPLAY_V14,
             EVENT_SCHEMA_REPLAY_V15,
             EVENT_SCHEMA_REPLAY_V16,
+            EVENT_SCHEMA_REPLAY_V17,
         }:
             raise ProjectionError(ProjectionErrorCode.UNSUPPORTED_SCHEMA)
     return normalized, schema_version, run_id
@@ -628,6 +631,9 @@ def _apply_event_effect(
             return _project_taken_from_corpse(state, event, taken), True
         case PossessionClaimAsserted() as claimed:
             _project_possession_claim(state, claimed)
+            return state, False
+        case CommitmentDeclared() as declared:
+            _project_commitment_declared(declared)
             return state, False
         case _:
             raise ProjectionError(ProjectionErrorCode.PRECONDITION_FAILED)
@@ -1842,6 +1848,15 @@ def _project_taken_from_corpse(
         )
     except ValueError as exc:
         raise ProjectionError(ProjectionErrorCode.INVARIANT_FAILED) from exc
+
+
+def _project_commitment_declared(details: CommitmentDeclared) -> None:
+    _LOG.debug(
+        "commitment_declared_projected kind=%s act=%s quantity=%s",
+        details.commitment_kind,
+        details.act,
+        details.quantity,
+    )
 
 
 def _project_possession_claim(
