@@ -72,6 +72,15 @@ describe('epistemic mapping', () => {
     expect(epistemicFromOverlayKind('inheritance_convention_distribution')).toBe(
       'research_inference',
     )
+    expect(epistemicFromOverlayKind('commitment_term_divergence')).toBe(
+      'research_inference',
+    )
+    expect(epistemicFromOverlayKind('commitment_fulfillment_status')).toBe(
+      'research_inference',
+    )
+    expect(epistemicFromOverlayKind('commitment_social_consequences')).toBe(
+      'research_inference',
+    )
     expect(epistemicFromEvidenceClass('ANALYTICAL_INFERRED')).toBe('research_inference')
   })
 

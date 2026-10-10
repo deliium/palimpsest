@@ -47,6 +47,9 @@
     'possession_custody_outcomes',
     'possession_claim_conflict',
     'inheritance_convention_distribution',
+    'commitment_term_divergence',
+    'commitment_fulfillment_status',
+    'commitment_social_consequences',
   ] as const
 
   const HISTORICAL_MEMORY_FAMILIES = new Set([
@@ -89,6 +92,12 @@
     'possession_custody_outcomes',
     'possession_claim_conflict',
     'inheritance_convention_distribution',
+  ])
+
+  const STRUCTURED_COMMITMENT_FAMILIES = new Set([
+    'commitment_term_divergence',
+    'commitment_fulfillment_status',
+    'commitment_social_consequences',
   ])
 
   type MetricCard = {
@@ -273,6 +282,9 @@
       const possession = catalog.items.filter((item) =>
         POSSESSION_SUCCESSION_FAMILIES.has(item.metric_family),
       )
+      const commitments = catalog.items.filter((item) =>
+        STRUCTURED_COMMITMENT_FAMILIES.has(item.metric_family),
+      )
       const phenomenon = catalog.items.filter((item) =>
         item.metric_family.includes('phenomenon'),
       )
@@ -285,6 +297,7 @@
         ...experiments,
         ...techniques,
         ...possession,
+        ...commitments,
         ...phenomenon,
       ]
         .filter(
@@ -350,7 +363,9 @@
     bounded-experiment, and possession-succession families are researcher constructs
     (<code>research_inference</code>), not agent knowledge. Experiment badges
     show counts only, never law rows or hypothesis text. Possession badges
-    count holders and conflicts. They do not name a legal owner.
+    count holders and conflicts. They do not name a legal owner. Commitment
+    badges count speech disagreements and owner statuses. They do not name a
+    legal debt.
   </p>
 
   {#if loading}

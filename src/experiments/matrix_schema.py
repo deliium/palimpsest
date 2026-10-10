@@ -34,6 +34,7 @@ from simulation.runner_models import (
     RUNNER_SCHEMA_VERSION_V36,
     RUNNER_SCHEMA_VERSION_V37,
     RUNNER_SCHEMA_VERSION_V38,
+    RUNNER_SCHEMA_VERSION_V39,
     ArtifactInterpretationMode,
     CognitiveBudgetMode,
     CulturalNarrativeMode,
@@ -82,6 +83,7 @@ def finalize_matrix_cell_config(
     historical_memory_on = config.historical_memory_layers is not None
     durable_records_on = config.durable_records is not None
     knowledge_repositories_on = config.knowledge_repositories is not None
+    structured_commitments_on = config.structured_commitments is not None
     possession_succession_on = config.possession_succession is not None
     technique_lifecycle_on = config.technique_lifecycle is not None
     bounded_experimentation_on = config.bounded_experimentation is not None
@@ -96,7 +98,12 @@ def finalize_matrix_cell_config(
         config.population_lifecycle is not None
         and config.population_lifecycle.has_developmental_extensions()
     )
-    if possession_succession_on:
+    if structured_commitments_on:
+        schema_version, rule = (
+            RUNNER_SCHEMA_VERSION_V39,
+            "structured_commitments_on",
+        )
+    elif possession_succession_on:
         schema_version, rule = (
             RUNNER_SCHEMA_VERSION_V38,
             "possession_succession_on",
@@ -259,6 +266,7 @@ def finalize_matrix_cell_config(
         },
     )
     if rule in {
+        "structured_commitments_on",
         "possession_succession_on",
         "technique_lifecycle_on",
         "bounded_experimentation_on",

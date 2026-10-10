@@ -2763,6 +2763,7 @@ OFF_GATE_MATRIX_EXPERIMENT_IDS: Final[frozenset[str]] = frozenset(
         "experiment-aq-bounded-experimentation",
         "experiment-ar-technique-lifecycle",
         "experiment-as-possession-succession",
+        "structured_commitments@1",
     }
 )
 
@@ -4782,6 +4783,69 @@ def experiment_as_possession_succession(
         )
     return _definition(
         experiment_id="experiment-as-possession-succession",
+        base=base,
+        seed_matrix=matrix,
+        arms=arms,
+    )
+
+
+def experiment_at_structured_commitments(
+    base: SimulationRunnerConfig,
+    *,
+    seed_matrix: ExperimentSeedMatrix | None = None,
+    max_ticks: int = 6,
+) -> ExperimentDefinition:
+    """Off-gate Experiment AT. Default batches do not enable it."""
+    from simulation.runner_models import (
+        RUNNER_SCHEMA_VERSION_V39,
+        example_structured_commitments_spec,
+    )
+
+    matrix = seed_matrix or ExperimentSeedMatrix(seeds=(base.seed,))
+    commitments = example_structured_commitments_spec()
+
+    def _v39() -> SimulationRunnerConfig:
+        return replace(
+            base,
+            schema_version=RUNNER_SCHEMA_VERSION_V39,
+            mortality_mode=MortalityMode.DISABLED,
+            stop_policy=RunnerStopPolicy(max_ticks=max_ticks),
+            v3_capability_flags=V3CapabilityFlags(),
+            structured_commitments=commitments,
+            population_lifecycle=None,
+        )
+
+    channel_off = replace(
+        base,
+        schema_version=RUNNER_SCHEMA_VERSION_V4,
+        mortality_mode=MortalityMode.DISABLED,
+        stop_policy=RunnerStopPolicy(max_ticks=max_ticks),
+        v3_capability_flags=V3CapabilityFlags(),
+        structured_commitments=None,
+        population_lifecycle=None,
+    )
+    arms = (
+        ("at-channel-off", "structured_commitments_channel_off", channel_off),
+        (
+            "at-food-now-material-later",
+            "structured_commitments_food_now_material_later",
+            _v39(),
+        ),
+        ("at-divergent-terms", "structured_commitments_divergent_terms", _v39()),
+        ("at-no-collection", "structured_commitments_no_collection", _v39()),
+    )
+    for arm_id, _label, config in arms:
+        _LOG.info(
+            "experiment_arm_start arm_id=%s schema_version=%s",
+            arm_id,
+            config.schema_version,
+        )
+        _LOG.debug(
+            "structured_commitments_active active=%s",
+            config.structured_commitments is not None,
+        )
+    return _definition(
+        experiment_id="structured_commitments@1",
         base=base,
         seed_matrix=matrix,
         arms=arms,

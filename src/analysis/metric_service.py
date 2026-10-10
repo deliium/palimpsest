@@ -100,6 +100,9 @@ from analysis.offline_consolidation_metrics import (
 from analysis.possession_succession_metrics import (
     assemble_possession_succession_metrics,
 )
+from analysis.structured_commitments_metrics import (
+    assemble_structured_commitment_metrics,
+)
 from analysis.prediction_calibration_metrics import compute_prediction_calibration
 from analysis.reflection_metrics import ReflectionReport, compute_reflection
 from analysis.relationship_metrics import compute_relationship_stability
@@ -185,6 +188,11 @@ class MetricComputationInputs:
     possession_succession_spec: object | None = None
     possession_events: Sequence[object] | None = None
     possession_ledgers: Sequence[object] | None = None
+    structured_commitments_spec: object | None = None
+    structured_commitment_events: Sequence[object] | None = None
+    structured_commitment_ledgers: Sequence[object] | None = None
+    structured_commitment_owner_ids: Sequence[str] | None = None
+    structured_commitment_consequence_counts: Mapping[str, int] | None = None
     technique_node_rows: Sequence[object] | None = None
     technique_item_rows: Sequence[object] | None = None
     territorial_presence_rows: Sequence[object] | None = None
@@ -855,6 +863,34 @@ def assemble_metric_documents(inputs: MetricComputationInputs) -> MetricBundle:
                     "operation": "assemble_metric_documents",
                     "run_id": run_id,
                     "metric_family": "possession_succession",
+                    "reason_code": "calculation_failed",
+                },
+            )
+            raise
+    if inputs.structured_commitments_spec is not None:
+        commitment_events = tuple(inputs.structured_commitment_events or ())
+        commitment_ledgers = tuple(inputs.structured_commitment_ledgers or ())
+        owner_ids = tuple(inputs.structured_commitment_owner_ids or ())
+        try:
+            documents.extend(
+                assemble_structured_commitment_metrics(
+                    commitment_events,  # type: ignore[arg-type]
+                    run_id=run_id,
+                    input_revision=revision,
+                    spec=inputs.structured_commitments_spec,
+                    as_of_tick=window_end,
+                    ledgers=commitment_ledgers,  # type: ignore[arg-type]
+                    owner_ids=owner_ids,
+                    consequence_counts=inputs.structured_commitment_consequence_counts,
+                )
+            )
+        except Exception:
+            _LOG.error(
+                "metric_family_failed",
+                extra={
+                    "operation": "assemble_metric_documents",
+                    "run_id": run_id,
+                    "metric_family": "structured_commitments",
                     "reason_code": "calculation_failed",
                 },
             )

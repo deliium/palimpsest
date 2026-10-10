@@ -395,6 +395,13 @@ from analysis.possession_succession import (
     PossessionLedgerSnapshot,
     classify_possession_episodes,
 )
+from analysis.structured_commitments import (
+    CommitmentInterpretationView,
+    CommitmentItemMove,
+    CommitmentLedgerSnapshot,
+    CommitmentSpeechView,
+    classify_commitment_speech,
+)
 from analysis.technique_lifecycle import (
     TechniqueLifecycleSnapshot,
     TechniqueLifecycleState,
@@ -442,6 +449,10 @@ __all__ = [
     "CLAIM_TRUTH_SCHEMA_VERSION",
     "COGNITIVE_BUDGET_METRIC_VERSION",
     "COMMUNICATION_STRATEGY_METRIC_VERSION",
+    "CommitmentInterpretationView",
+    "CommitmentItemMove",
+    "CommitmentLedgerSnapshot",
+    "CommitmentSpeechView",
     "COUNTERFACTUAL_REASONING_METRIC_VERSION",
     "CULTURAL_FEATURE_MUTATION_METRIC_VERSION",
     "CULTURAL_FEATURE_PROVENANCE_METRIC_VERSION",
@@ -606,6 +617,7 @@ __all__ = [
     "canonical_python_scalar",
     "canonicalize_community_labels",
     "claim_overlap_token",
+    "classify_commitment_speech",
     "classify_possession_episodes",
     "classify_technique_lifecycle",
     "closed_evidence_stages",

@@ -50,7 +50,7 @@ __all__ = [
 ]
 
 METRIC_CATALOG_VERSION: Final[str] = "metric-catalog-v1"
-METRIC_FAMILY_COUNT: Final[int] = 74
+METRIC_FAMILY_COUNT: Final[int] = 77
 
 # Align with existing memory-drift / transmission document versions.
 _ALGO_V1: Final[str] = "1"
@@ -151,6 +151,9 @@ class MetricFamilyId(StrEnum):
     POSSESSION_CUSTODY_OUTCOMES = "possession_custody_outcomes"
     POSSESSION_CLAIM_CONFLICT = "possession_claim_conflict"
     INHERITANCE_CONVENTION_DISTRIBUTION = "inheritance_convention_distribution"
+    COMMITMENT_TERM_DIVERGENCE = "commitment_term_divergence"
+    COMMITMENT_FULFILLMENT_STATUS = "commitment_fulfillment_status"
+    COMMITMENT_SOCIAL_CONSEQUENCES = "commitment_social_consequences"
 
 
 class DenominatorKind(StrEnum):
@@ -2242,6 +2245,87 @@ def _spec_inheritance_convention_distribution() -> MetricSpecification:
     )
 
 
+def _spec_commitment_term_divergence() -> MetricSpecification:
+    return _base(
+        family_id=MetricFamilyId.COMMITMENT_TERM_DIVERGENCE,
+        evidence_inputs=frozenset({EvidenceStage.OBJECTIVE_EVENT_STATE}),
+        population="commitment_speech_events",
+        denominator="propose_and_accept_speech",
+        denominator_kind=DenominatorKind.OCCURRENCE,
+        cohort_window="as_of tick commitment classification",
+        deceased_policy="not_applicable",
+        zero_holding_policy="spec absent -> family omitted",
+        opportunity_vs_occurrence="speech tokens versus owner terms",
+        self_edge_policy="not_applicable",
+        censoring_policy="divergence is a count; no true contract is elected",
+        formulas={
+            "divergent_count": "speeches whose citing owners disagree on terms",
+            "speech_count": "propose and accept events at or before as_of",
+            "unformed_count": "owners with no stored row for a speech",
+        },
+        value_keys=("divergent_count", "speech_count", "unformed_count"),
+        empty_case="availability=absent; no_structured_commitments",
+    )
+
+
+def _spec_commitment_fulfillment_status() -> MetricSpecification:
+    return _base(
+        family_id=MetricFamilyId.COMMITMENT_FULFILLMENT_STATUS,
+        evidence_inputs=frozenset({EvidenceStage.OBJECTIVE_EVENT_STATE}),
+        population="commitment_speech_events",
+        denominator="owner_status_readings",
+        denominator_kind=DenominatorKind.OCCURRENCE,
+        cohort_window="as_of tick commitment classification",
+        deceased_policy="not_applicable",
+        zero_holding_policy="spec absent -> family omitted",
+        opportunity_vs_occurrence="status histogram, not a world fact",
+        self_edge_policy="not_applicable",
+        censoring_policy="a status is an owner's reading, never a world fact",
+        formulas={
+            "forgotten_split_count": (
+                "speeches with one forgotten owner and another not"
+            ),
+            "partial_count": "citing rows whose status is partial",
+            "status_histogram": "status:count pairs, ascending status",
+        },
+        value_keys=(
+            "forgotten_split_count",
+            "partial_count",
+            "status_histogram",
+        ),
+        empty_case="availability=absent; no_structured_commitments",
+    )
+
+
+def _spec_commitment_social_consequences() -> MetricSpecification:
+    return _base(
+        family_id=MetricFamilyId.COMMITMENT_SOCIAL_CONSEQUENCES,
+        evidence_inputs=frozenset({EvidenceStage.OBJECTIVE_EVENT_STATE}),
+        population="commitment_consequence_requests",
+        denominator="requested_signals",
+        denominator_kind=DenominatorKind.OCCURRENCE,
+        cohort_window="as_of tick commitment classification",
+        deceased_policy="not_applicable",
+        zero_holding_policy="spec absent -> family omitted",
+        opportunity_vs_occurrence="request counts, not health or inventory changes",
+        self_edge_policy="not_applicable",
+        censoring_policy="a request is not enforcement and does not change health",
+        formulas={
+            "norm_request_count": "reciprocal evidence requests",
+            "relationship_request_count": "existing relationship signal requests",
+            "reputation_request_count": "reliability evidence requests",
+            "sanction_request_count": "subjective sanction token requests",
+        },
+        value_keys=(
+            "norm_request_count",
+            "relationship_request_count",
+            "reputation_request_count",
+            "sanction_request_count",
+        ),
+        empty_case="availability=absent; no_structured_commitments",
+    )
+
+
 def _spec_emergent_group_formation() -> MetricSpecification:
     return _base(
         family_id=MetricFamilyId.EMERGENT_GROUP_FORMATION,
@@ -3540,6 +3624,9 @@ _BUILDERS: Final[tuple[Callable[[], MetricSpecification], ...]] = (
     _spec_possession_custody_outcomes,
     _spec_possession_claim_conflict,
     _spec_inheritance_convention_distribution,
+    _spec_commitment_term_divergence,
+    _spec_commitment_fulfillment_status,
+    _spec_commitment_social_consequences,
     _spec_emergent_group_formation,
     _spec_emergent_social_norms,
     _spec_persistent_social_conventions,

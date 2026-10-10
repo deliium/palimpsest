@@ -931,6 +931,11 @@ def possession_channel_active(config: object) -> bool:
     return getattr(config, "possession_succession", None) is not None
 
 
+def structured_commitments_channel_active(config: object) -> bool:
+    """True only when the runner object is present. Not a collection rule."""
+    return getattr(config, "structured_commitments", None) is not None
+
+
 def technique_node_rows_from_resources(
     resources: Sequence[object] | None,
 ) -> tuple[dict[str, object], ...] | None:

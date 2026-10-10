@@ -90,6 +90,7 @@ def assemble_arm_metric_bundle(
         knowledge_repository_harvest_from_run,
         norm_belief_rows_from_ledgers,
         possession_channel_active,
+        structured_commitments_channel_active,
     )
 
     ticks = int(arm.runner_result.ticks_committed)
@@ -324,6 +325,14 @@ def assemble_arm_metric_bundle(
                 arm.assignment.runner_config.possession_succession
             ),
             possession_events=tuple(events or ()),
+        )
+    if structured_commitments_channel_active(arm.assignment.runner_config):
+        inputs = replace(
+            inputs,
+            structured_commitments_spec=(
+                arm.assignment.runner_config.structured_commitments
+            ),
+            structured_commitment_events=tuple(events or ()),
         )
     return assemble_metric_documents(inputs)
 
