@@ -38,7 +38,7 @@ Executable formula, population, and edge-case policy for all nineteen metric fam
 | `caregiving_burden` | `caregiving_burden@1` | detached care-act rows |
 | `intergenerational_cooperation` | `intergenerational_cooperation@1` | detached care-act + kinship rows |
 
-Catalog version: `metric-catalog-v1`. Document schema: `MetricDocument` schema `1`. Closed catalog cardinality: **65** families (`METRIC_FAMILY_COUNT`). New opt-in families assemble only when their detached inputs are present.
+Catalog version: `metric-catalog-v1`. Document schema: `MetricDocument` schema `1`. Closed catalog cardinality: **77** families (`METRIC_FAMILY_COUNT`). New opt-in families assemble only when their detached inputs are present.
 
 ### Additive analysis surfaces (off the V1 gate)
 
@@ -99,6 +99,10 @@ Catalog version: `metric-catalog-v1`. Document schema: `MetricDocument` schema `
 ### Possession succession families (off the V1 gate)
 
 `possession_custody_outcomes@1`, `possession_claim_conflict@1`, and `inheritance_convention_distribution@1` assemble only when `possession_succession` is present. They read corpse-custody episodes. A holder is physical possession. A doctrine is a legitimacy claim. Ties are `contested`. No living support at the death location is `unformed`. A missing kinship, care, or group harvest is `not_applicable` for that doctrine, not a false heir. A parent edge does not count as a caregiver. The convention token is not written back into any ledger. An empty harvest when the channel is off is absence. Experiment AS stays off the V1 gate. Research UI badges for these three ids are `research_inference` and do not name a legal owner.
+
+### Structured commitment families (off the V1 gate)
+
+`commitment_term_divergence@1`, `commitment_fulfillment_status@1`, and `commitment_social_consequences@1` assemble only when `structured_commitments` is present. They read speech tokens and each owner's stored terms. A missing row is `unformed`. Disagreement is `divergent`. A status histogram is not a world fact. A later `Given` is an item move, not a verdict. Consequence counts are requests, not health or inventory changes. `world_enforcement` stays false and `institution` stays `none`. An empty harvest when the channel is off is absence. Experiment AT stays off the V1 gate. Research UI badges for these three ids are `research_inference` and do not name a legal debt.
 
 ### Supporting formulas (not a separate family)
 

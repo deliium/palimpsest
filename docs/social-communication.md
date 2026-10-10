@@ -8,6 +8,8 @@ This note distinguishes **objective delivery**, **declared testimony**, **owner-
 
 Eligibility is private world policy: living sender, distinct living recipient, compatible location/range, and perception/visibility at resolution time. Delivery is recipient-private and appears on the next observation window. The world does not auto-answer `Ask`, infer truth from `Tell`, or mutate relationships.
 
+`DeclareCommitment` is a separate public speech act. Free-text `Talk` is not parsed into a promise, exchange, debt, service, or condition. The event records closed tokens. It does not move an item, change health, reject a later command, or create a world-owned agreement. A `Give` in the same tick is a separate command. Identity `COMMITMENT` stays a self-belief about the owner's own goal. Relationship `DEBT` stays a scalar. Neither is this speech act.
+
 `TeachingInteractionMode` defaults to `DISABLED`. When both the speaker and the recipient are in the run's teaching set, a delivered `Talk`, `Ask`, or `Tell` may carry exactly one closed relation: `request_instruction`, `explain`, `demonstrate`, or `practice_together`. An `explain` object is `{domain}:{band}` with band `low`, `uncertain`, or `high`. The band is the speaker's own quantized believed level: below `0.34` is `low`, below `0.67` is `uncertain`, and `0.67` and above is `high`. Belief uptake uses the owner's trust toward the speaker. A missing profile uses `0.5`. The recipient does not receive the speaker's hidden objective level, support mass, or relationship profile.
 
 ## Declared testimony (speaker-owned)
