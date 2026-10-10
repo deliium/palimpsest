@@ -614,6 +614,7 @@ class AgentRuntimeCheckpoint:
     remembered_decisions: tuple[object, ...] | None = None
     identity_cursor: object | None = None
     possession_legitimacy: object | None = None
+    structured_commitments: object | None = None
 
     def __post_init__(self) -> None:
         if type(self.agent_id) is not AgentId:
@@ -808,6 +809,15 @@ class AgentRuntimeCheckpoint:
             self.possession_legitimacy,
             self.agent_id,
             field_name="possession_legitimacy",
+        )
+        from agents.cognition.structured_commitments import (
+            require_owner_structured_commitments,
+        )
+
+        require_owner_structured_commitments(
+            self.structured_commitments,
+            self.agent_id,
+            field_name="structured_commitments",
         )
 
 

@@ -443,6 +443,7 @@ class AgentRuntime:
         "_offline_consolidation_audits",
         "_pending",
         "_possession_legitimacy",
+        "_structured_commitments",
         "_practical_knowledge",
         "_practical_knowledge_audits",
         "_processed_invocations",
@@ -567,6 +568,7 @@ class AgentRuntime:
         self._group_formation: object | None = None
         self._social_norms: object | None = None
         self._possession_legitimacy: object | None = None
+        self._structured_commitments: object | None = None
         self._social_conventions: object | None = None
         self._artifact_interpretations: object | None = None
         self._semantic_naming: object | None = None
@@ -875,6 +877,25 @@ class AgentRuntime:
             "possession_legitimacy_carried owner_id=%s support_count=%s tick=%s",
             owner.value,
             len(ledger.supports),
+            tick,
+        )
+
+    def _commit_structured_commitments(self, ledger: object | None, tick: int) -> None:
+        from agents.cognition.structured_commitments import StructuredCommitmentLedger
+
+        if ledger is None:
+            return
+        owner = self._agent.agent_id
+        if type(ledger) is not StructuredCommitmentLedger or ledger.owner_id != owner:
+            raise AgentRuntimeError(
+                AgentRuntimeErrorCode.OWNERSHIP,
+                agent_id=owner.value,
+            )
+        self._structured_commitments = ledger
+        _LOG.debug(
+            "structured_commitments_carried owner_id=%s row_count=%s tick=%s",
+            owner.value,
+            len(ledger.interpretations),
             tick,
         )
 
@@ -1726,6 +1747,7 @@ class AgentRuntime:
                 group_formation=self._group_formation,
                 social_norms=self._social_norms,
                 possession_legitimacy=self._possession_legitimacy,
+                structured_commitments=self._structured_commitments,
                 social_conventions=self._social_conventions,
                 artifact_interpretations=self._artifact_interpretations,
                 semantic_naming=self._semantic_naming,
@@ -2158,6 +2180,9 @@ class AgentRuntime:
         )
         self._commit_possession_legitimacy(
             getattr(pending.loop_result, "possession_legitimacy", None), pending.tick
+        )
+        self._commit_structured_commitments(
+            getattr(pending.loop_result, "structured_commitments", None), pending.tick
         )
         self._commit_social_conventions(
             getattr(pending.loop_result, "social_conventions", None), pending.tick
@@ -2592,6 +2617,9 @@ class AgentRuntime:
         self._possession_legitimacy = getattr(
             checkpoint, "possession_legitimacy", None
         )
+        self._structured_commitments = getattr(
+            checkpoint, "structured_commitments", None
+        )
         self._social_conventions = getattr(checkpoint, "social_conventions", None)
         self._artifact_interpretations = getattr(
             checkpoint, "artifact_interpretations", None
@@ -2681,6 +2709,7 @@ class AgentRuntime:
             remembered_decisions=self._remembered_decisions,
             identity_cursor=self._identity_cursor,
             possession_legitimacy=self._possession_legitimacy,
+            structured_commitments=self._structured_commitments,
         )
 
     async def process_observation(

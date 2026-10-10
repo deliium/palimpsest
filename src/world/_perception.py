@@ -901,6 +901,8 @@ def _audience_role(
 def _other_entity_for_role(
     event: WorldEvent, role: ObservationAudienceRole
 ) -> EntityId | None:
+    if type(event.details) is CommitmentDeclared:
+        return event.target_id
     if role in {
         ObservationAudienceRole.BYSTANDER,
         ObservationAudienceRole.WITNESS,

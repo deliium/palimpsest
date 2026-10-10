@@ -733,6 +733,7 @@ class SubjectiveSnapshot:
     declarative_advice: object | None = None
     recipe_beliefs: object | None = None
     possession_legitimacy: object | None = None
+    structured_commitments: object | None = None
 
     def __post_init__(self) -> None:
         if type(self.owner_id) is not AgentId:
@@ -906,6 +907,15 @@ class SubjectiveSnapshot:
             self.possession_legitimacy,
             self.owner_id,
             field_name="SubjectiveSnapshot.possession_legitimacy",
+        )
+        from agents.cognition.structured_commitments import (
+            require_owner_structured_commitments,
+        )
+
+        require_owner_structured_commitments(
+            self.structured_commitments,
+            self.owner_id,
+            field_name="SubjectiveSnapshot.structured_commitments",
         )
         from agents.cognition.social_conventions import require_owner_social_conventions
 
@@ -3768,6 +3778,7 @@ class CognitiveLoopProposal:
     declarative_advice: object | None = None
     recipe_beliefs: object | None = None
     possession_legitimacy: object | None = None
+    structured_commitments: object | None = None
 
     def __post_init__(self) -> None:
         object.__setattr__(
@@ -3851,6 +3862,15 @@ class CognitiveLoopProposal:
             self.possession_legitimacy,
             self.agent_id,
             field_name="CognitiveLoopProposal.possession_legitimacy",
+        )
+        from agents.cognition.structured_commitments import (
+            require_owner_structured_commitments,
+        )
+
+        require_owner_structured_commitments(
+            self.structured_commitments,
+            self.agent_id,
+            field_name="CognitiveLoopProposal.structured_commitments",
         )
         from agents.cognition.social_conventions import require_owner_social_conventions
 
@@ -4016,6 +4036,7 @@ class CognitiveLoopResult:
     recipe_beliefs: object | None = None
     territorial_audits: tuple[object, ...] | None = None
     possession_legitimacy: object | None = None
+    structured_commitments: object | None = None
 
     def __post_init__(self) -> None:
         object.__setattr__(
@@ -4075,6 +4096,15 @@ class CognitiveLoopResult:
             self.possession_legitimacy,
             self.agent_id,
             field_name="CognitiveLoopResult.possession_legitimacy",
+        )
+        from agents.cognition.structured_commitments import (
+            require_owner_structured_commitments,
+        )
+
+        require_owner_structured_commitments(
+            self.structured_commitments,
+            self.agent_id,
+            field_name="CognitiveLoopResult.structured_commitments",
         )
         from agents.cognition.social_conventions import require_owner_social_conventions
 

@@ -1249,6 +1249,37 @@ class CognitiveLoop:
             return None
         return updated
 
+    def _prepare_structured_commitments(
+        self, loop_input: CognitiveLoopInput
+    ) -> object | None:
+        """Refresh one owner's commitment ledger from that owner's observations."""
+        from agents.cognition.structured_commitments import (
+            StructuredCommitmentLedger,
+            apply_structured_commitment_update,
+            empty_structured_commitments,
+        )
+
+        if not self._structured_commitments_active:
+            snapshot = loop_input.snapshot
+            carried = None if snapshot is None else snapshot.structured_commitments
+            return carried
+        snapshot = loop_input.snapshot
+        carried = None if snapshot is None else snapshot.structured_commitments
+        previous = (
+            carried
+            if type(carried) is StructuredCommitmentLedger
+            else empty_structured_commitments(
+                loop_input.agent_id,
+                max_open_interpretations=self._max_open_interpretations or 8,
+            )
+        )
+        updated = apply_structured_commitment_update(
+            previous, loop_input.observation, tick=loop_input.observation.tick
+        )
+        if not updated.interpretations:
+            return None
+        return updated
+
     def _prepare_semantic_naming(
         self,
         loop_input: CognitiveLoopInput,
@@ -2769,6 +2800,7 @@ class CognitiveLoop:
         group_formation = self._prepare_group_formation(loop_input)
         social_norms = self._prepare_social_norms(loop_input)
         possession_legitimacy = self._prepare_possession_legitimacy(loop_input)
+        structured_commitments = self._prepare_structured_commitments(loop_input)
         social_conventions = self._prepare_social_conventions(loop_input)
         artifact_interpretations = self._prepare_artifact_interpretations(loop_input)
         semantic_naming = self._prepare_semantic_naming(
@@ -3070,6 +3102,7 @@ class CognitiveLoop:
             group_formation=group_formation,
             social_norms=social_norms,
             possession_legitimacy=possession_legitimacy,
+            structured_commitments=structured_commitments,
             social_conventions=social_conventions,
             artifact_interpretations=artifact_interpretations,
             semantic_naming=semantic_naming,
@@ -3240,6 +3273,7 @@ class CognitiveLoop:
             group_formation=proposal.group_formation,
             social_norms=proposal.social_norms,
             possession_legitimacy=proposal.possession_legitimacy,
+            structured_commitments=proposal.structured_commitments,
             social_conventions=proposal.social_conventions,
             artifact_interpretations=proposal.artifact_interpretations,
             semantic_naming=proposal.semantic_naming,

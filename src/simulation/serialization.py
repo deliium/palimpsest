@@ -7217,3 +7217,294 @@ def _decode_possession_ledger(
         sanctions=tuple(sanctions),
         witnessed_take_decedents=tuple(witnessed_raw),
     )
+
+
+def structured_commitments_checkpoint_payload(
+    ledgers: Mapping[str, object], *, codec: str
+) -> dict[str, object]:
+    """Owner-id map of commitment ledgers. Omitted unless codec is v14."""
+    if codec != "v14":
+        return {}
+    from agents.cognition.structured_commitments import StructuredCommitmentLedger
+
+    if isinstance(ledgers, (str, bytes)) or not isinstance(ledgers, Mapping):
+        raise TypeError("ledgers must be a mapping")
+    encoded: dict[str, object] = {}
+    for owner_key in sorted(ledgers):
+        ledger = ledgers[owner_key]
+        if (
+            not isinstance(owner_key, str)
+            or type(ledger) is not StructuredCommitmentLedger
+        ):
+            raise TypeError("ledgers must map owner id to StructuredCommitmentLedger")
+        if ledger.owner_id.value != owner_key:
+            raise ValueError("structured_commitments owner_id mismatch")
+        encoded[owner_key] = _encode_commitment_ledger(ledger)
+    return {"structured_commitments": encoded}
+
+
+def decode_structured_commitments_checkpoint(
+    payload: Mapping[str, object], *, codec: str
+) -> dict[str, object]:
+    """Decode v14 ledgers. Older codecs reject the key and otherwise yield empty."""
+    if codec != "v14":
+        if "structured_commitments" in payload:
+            raise DomainSerializationError(
+                "structured_commitments_requires_codec_v14",
+                "$.structured_commitments",
+            )
+        return {}
+    if "structured_commitments" not in payload:
+        raise DomainSerializationError("invalid_fields", "$")
+    raw = payload["structured_commitments"]
+    if not isinstance(raw, dict):
+        raise DomainSerializationError("invalid_object", "$.structured_commitments")
+    from agents.cognition.structured_commitments import StructuredCommitmentLedger
+    from agents.models import AgentId
+
+    decoded: dict[str, object] = {}
+    for owner_key, row in raw.items():
+        if not isinstance(owner_key, str) or not isinstance(row, dict):
+            raise DomainSerializationError(
+                "invalid_object", f"$.structured_commitments.{owner_key}"
+            )
+        ledger = _decode_commitment_ledger(
+            row,
+            owner_id=AgentId(owner_key),
+            path=f"$.structured_commitments.{owner_key}",
+        )
+        if type(ledger) is not StructuredCommitmentLedger:
+            raise DomainSerializationError("invalid_model", "$.structured_commitments")
+        decoded[owner_key] = ledger
+    return decoded
+
+
+def _encode_commitment_ledger(ledger: object) -> dict[str, object]:
+    from agents.cognition.structured_commitments import StructuredCommitmentLedger
+
+    if type(ledger) is not StructuredCommitmentLedger:
+        raise TypeError("ledger must be StructuredCommitmentLedger")
+    return {
+        "max_open_interpretations": ledger.max_open_interpretations,
+        "interpretations": [
+            _encode_commitment_row(row) for row in ledger.interpretations
+        ],
+    }
+
+
+def _encode_commitment_row(row: object) -> dict[str, object]:
+    from agents.cognition.structured_commitments import CommitmentInterpretation
+
+    if type(row) is not CommitmentInterpretation:
+        raise TypeError("row must be CommitmentInterpretation")
+    return {
+        "local_id": row.local_id,
+        "source_event_ids": list(row.source_event_ids),
+        "parties": list(row.parties),
+        "debtor_id": row.debtor_id,
+        "creditor_id": row.creditor_id,
+        "kind": row.kind,
+        "owed_by": row.owed_by,
+        "item_kind": row.item_kind,
+        "service": row.service,
+        "quantity": row.quantity,
+        "now_item_kind": row.now_item_kind,
+        "due_kind": row.due_kind,
+        "due_tick": row.due_tick,
+        "created_tick": row.created_tick,
+        "status": row.status,
+        "now_matched": row.now_matched,
+        "matched_quantity": row.matched_quantity,
+        "confidence": row.confidence,
+        "memory_trace_ids": list(row.memory_trace_ids),
+        "revisions": [
+            {
+                "tick": revision.tick,
+                "debtor_id": revision.debtor_id,
+                "creditor_id": revision.creditor_id,
+                "kind": revision.kind,
+                "owed_by": revision.owed_by,
+                "item_kind": revision.item_kind,
+                "service": revision.service,
+                "quantity": revision.quantity,
+                "now_item_kind": revision.now_item_kind,
+                "due_kind": revision.due_kind,
+                "due_tick": revision.due_tick,
+                "status": revision.status,
+            }
+            for revision in row.revisions
+        ],
+        "sanction": row.sanction,
+    }
+
+
+def _decode_commitment_ledger(
+    data: Mapping[str, object], *, owner_id: object, path: str
+) -> object:
+    from agents.cognition.structured_commitments import (
+        CommitmentInterpretation,
+        CommitmentRevision,
+        StructuredCommitmentLedger,
+    )
+
+    _require_keys(data, {"max_open_interpretations", "interpretations"}, path=path)
+    raw_rows = data["interpretations"]
+    if not isinstance(raw_rows, list):
+        raise DomainSerializationError("invalid_array", f"{path}.interpretations")
+    rows: list[CommitmentInterpretation] = []
+    for index, raw in enumerate(raw_rows):
+        if not isinstance(raw, dict):
+            raise DomainSerializationError(
+                "invalid_object", f"{path}.interpretations[{index}]"
+            )
+        row_path = f"{path}.interpretations[{index}]"
+        _require_keys(
+            raw,
+            {
+                "local_id",
+                "source_event_ids",
+                "parties",
+                "debtor_id",
+                "creditor_id",
+                "kind",
+                "owed_by",
+                "item_kind",
+                "service",
+                "quantity",
+                "now_item_kind",
+                "due_kind",
+                "due_tick",
+                "created_tick",
+                "status",
+                "now_matched",
+                "matched_quantity",
+                "confidence",
+                "memory_trace_ids",
+                "revisions",
+                "sanction",
+            },
+            path=row_path,
+        )
+        parties = raw["parties"]
+        if (
+            not isinstance(parties, list)
+            or len(parties) != 2
+            or any(type(item) is not str for item in parties)
+        ):
+            raise DomainSerializationError("invalid_array", f"{row_path}.parties")
+        revisions_raw = raw["revisions"]
+        if not isinstance(revisions_raw, list):
+            raise DomainSerializationError("invalid_array", f"{row_path}.revisions")
+        revisions: list[CommitmentRevision] = []
+        for revision_index, revision in enumerate(revisions_raw):
+            if not isinstance(revision, dict):
+                raise DomainSerializationError(
+                    "invalid_object", f"{row_path}.revisions[{revision_index}]"
+                )
+            revisions.append(
+                CommitmentRevision(
+                    _int_field(
+                        revision,
+                        "tick",
+                        path=f"{row_path}.revisions[{revision_index}]",
+                    ),
+                    _str_field(
+                        revision,
+                        "debtor_id",
+                        path=f"{row_path}.revisions[{revision_index}]",
+                    ),
+                    _str_field(
+                        revision,
+                        "creditor_id",
+                        path=f"{row_path}.revisions[{revision_index}]",
+                    ),
+                    _str_field(
+                        revision, "kind", path=f"{row_path}.revisions[{revision_index}]"
+                    ),
+                    _str_field(
+                        revision,
+                        "owed_by",
+                        path=f"{row_path}.revisions[{revision_index}]",
+                    ),
+                    _str_field(
+                        revision,
+                        "item_kind",
+                        path=f"{row_path}.revisions[{revision_index}]",
+                    ),
+                    _str_field(
+                        revision,
+                        "service",
+                        path=f"{row_path}.revisions[{revision_index}]",
+                    ),
+                    _int_field(
+                        revision,
+                        "quantity",
+                        path=f"{row_path}.revisions[{revision_index}]",
+                    ),
+                    _str_field(
+                        revision,
+                        "now_item_kind",
+                        path=f"{row_path}.revisions[{revision_index}]",
+                    ),
+                    _str_field(
+                        revision,
+                        "due_kind",
+                        path=f"{row_path}.revisions[{revision_index}]",
+                    ),
+                    revision.get("due_tick")
+                    if revision.get("due_tick") is None
+                    else _int_field(
+                        revision,
+                        "due_tick",
+                        path=f"{row_path}.revisions[{revision_index}]",
+                    ),
+                    _str_field(
+                        revision,
+                        "status",
+                        path=f"{row_path}.revisions[{revision_index}]",
+                    ),
+                )
+            )
+        source_ids = raw["source_event_ids"]
+        traces = raw["memory_trace_ids"]
+        if not isinstance(source_ids, list) or not all(
+            type(item) is str for item in source_ids
+        ):
+            raise DomainSerializationError("invalid_array", f"{row_path}.source_event_ids")
+        if not isinstance(traces, list) or not all(type(item) is str for item in traces):
+            raise DomainSerializationError(
+                "invalid_array", f"{row_path}.memory_trace_ids"
+            )
+        due_tick = raw["due_tick"]
+        rows.append(
+            CommitmentInterpretation(
+                _int_field(raw, "local_id", path=row_path),
+                tuple(source_ids),
+                (parties[0], parties[1]),
+                _str_field(raw, "debtor_id", path=row_path),
+                _str_field(raw, "creditor_id", path=row_path),
+                _str_field(raw, "kind", path=row_path),
+                _str_field(raw, "owed_by", path=row_path),
+                _str_field(raw, "item_kind", path=row_path),
+                _str_field(raw, "service", path=row_path),
+                _int_field(raw, "quantity", path=row_path),
+                _str_field(raw, "now_item_kind", path=row_path),
+                _str_field(raw, "due_kind", path=row_path),
+                None if due_tick is None else _int_field(raw, "due_tick", path=row_path),
+                _int_field(raw, "created_tick", path=row_path),
+                _str_field(raw, "status", path=row_path),
+                raw["now_matched"] is True,
+                _int_field(raw, "matched_quantity", path=row_path),
+                raw["confidence"]
+                if isinstance(raw["confidence"], (int, float))
+                else 0.0,
+                tuple(traces),
+                tuple(revisions),
+                _str_field(raw, "sanction", path=row_path),
+            )
+        )
+    return StructuredCommitmentLedger(
+        owner_id,  # type: ignore[arg-type]
+        _int_field(data, "max_open_interpretations", path=path),
+        tuple(rows),
+    )

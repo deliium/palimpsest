@@ -167,6 +167,7 @@ class Perspective:
     declarative_advice: object | None = None
     recipe_beliefs: object | None = None
     possession_legitimacy: object | None = None
+    structured_commitments: object | None = None
 
     def __post_init__(self) -> None:
         if type(self.agent_id) is not AgentId:
@@ -413,6 +414,15 @@ class Perspective:
             self.agent_id,
             field_name="Perspective.possession_legitimacy",
         )
+        from agents.cognition.structured_commitments import (
+            require_owner_structured_commitments,
+        )
+
+        require_owner_structured_commitments(
+            self.structured_commitments,
+            self.agent_id,
+            field_name="Perspective.structured_commitments",
+        )
 
     def to_snapshot(self) -> SubjectiveSnapshot:
         """Freeze this perspective into a ``SubjectiveSnapshot``."""
@@ -451,6 +461,7 @@ class Perspective:
             declarative_advice=self.declarative_advice,
             recipe_beliefs=self.recipe_beliefs,
             possession_legitimacy=self.possession_legitimacy,
+            structured_commitments=self.structured_commitments,
         )
 
     def __repr__(self) -> str:

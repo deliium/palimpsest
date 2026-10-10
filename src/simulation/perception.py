@@ -142,6 +142,7 @@ def build_perspective(
     declarative_advice: object | None = None,
     recipe_beliefs: object | None = None,
     possession_legitimacy: object | None = None,
+    structured_commitments: object | None = None,
 ) -> Perspective:
     """Pair one ``AgentId`` with exactly its registered entity observation.
 
@@ -337,6 +338,7 @@ def build_perspective(
         declarative_advice=declarative_advice,
         recipe_beliefs=recipe_beliefs,
         possession_legitimacy=possession_legitimacy,
+        structured_commitments=structured_commitments,
     )
     _ = SemanticBelief, DirectedRelationshipProfile
     emotion_kind_count = (

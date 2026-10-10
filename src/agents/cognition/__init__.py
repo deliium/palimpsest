@@ -209,6 +209,11 @@ from agents.cognition.practical_knowledge import (
     practical_knowledge_content_key,
     require_owner_practical_knowledge,
 )
+from agents.cognition.structured_commitments import (
+    StructuredCommitmentLedger,
+    empty_structured_commitments,
+    require_owner_structured_commitments,
+)
 from agents.cognition.possession_legitimacy import (
     POSSESSION_SANCTION_TOKENS,
     POSSESSION_SUPPORT_CAP,
@@ -1147,6 +1152,9 @@ __all__ = [
     "empty_developmental_knowledge_ledger",
     "empty_experiment_ledger",
     "empty_possession_legitimacy",
+    "empty_structured_commitments",
+    "StructuredCommitmentLedger",
+    "require_owner_structured_commitments",
     "apply_possession_legitimacy_update",
     "apply_possession_proposal",
     "propose_possession_command",
