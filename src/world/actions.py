@@ -34,6 +34,14 @@ from world.identifiers import (
     WorldRevision,
 )
 from world.possession_succession import POSSESSION_DOCTRINES
+from world.structured_commitments import (
+    COMMITMENT_ACTS,
+    COMMITMENT_DUE_KINDS,
+    COMMITMENT_KINDS,
+    COMMITMENT_OWED_BY,
+    COMMITMENT_SERVICES,
+)
+from world.values import ItemKind
 from world.production import require_production_command_fields
 
 _ARTIFACT_LOG: Final[logging.Logger] = logging.getLogger("world.artifacts")
@@ -706,6 +714,56 @@ class AssertPossessionClaim:
         )
 
 
+@dataclass(frozen=True, slots=True)
+class DeclareCommitment:
+    """Public commitment speech. Does not move items or schedule a transfer."""
+
+    counterparty_id: EntityId
+    commitment_kind: str
+    act: str
+    owed_by: str
+    service: str = "none"
+    quantity: int = 1
+    due_kind: str = "none"
+    item_kind: ItemKind | None = None
+    due_tick: int | None = None
+    now_item_kind: ItemKind | None = None
+    kind: Literal["declare_commitment"] = field(
+        default="declare_commitment", init=False
+    )
+
+    def __post_init__(self) -> None:
+        if type(self.counterparty_id) is not EntityId:
+            raise TypeError("DeclareCommitment.counterparty_id must be EntityId")
+        if self.commitment_kind not in COMMITMENT_KINDS:
+            raise ValueError("DeclareCommitment.commitment_kind")
+        if self.act not in COMMITMENT_ACTS:
+            raise ValueError("DeclareCommitment.act")
+        if self.owed_by not in COMMITMENT_OWED_BY:
+            raise ValueError("DeclareCommitment.owed_by")
+        if self.service not in COMMITMENT_SERVICES:
+            raise ValueError("DeclareCommitment.service")
+        if type(self.quantity) is not int or self.quantity not in {1, 2, 3}:
+            raise ValueError("DeclareCommitment.quantity")
+        if self.due_kind not in COMMITMENT_DUE_KINDS:
+            raise ValueError("DeclareCommitment.due_kind")
+        if self.item_kind is not None and type(self.item_kind) is not ItemKind:
+            raise TypeError("DeclareCommitment.item_kind must be ItemKind or None")
+        if self.now_item_kind is not None and type(self.now_item_kind) is not ItemKind:
+            raise TypeError("DeclareCommitment.now_item_kind must be ItemKind or None")
+        if self.due_kind == "by_tick":
+            if type(self.due_tick) is not int or isinstance(self.due_tick, bool):
+                raise ValueError("DeclareCommitment.due_tick")
+        elif self.due_tick is not None:
+            raise ValueError("DeclareCommitment.due_tick")
+        _EXPERIMENT_LOG.info(
+            "commitment_declared kind=%s act=%s owed_by=%s",
+            self.commitment_kind,
+            self.act,
+            self.owed_by,
+        )
+
+
 AgentCommand = (
     Move
     | Search
@@ -743,6 +801,7 @@ AgentCommand = (
     | IndexRepository
     | Experiment
     | AssertPossessionClaim
+    | DeclareCommitment
 )
 
 _COMMAND_TYPES: Final[frozenset[type]] = frozenset(
@@ -783,6 +842,7 @@ _COMMAND_TYPES: Final[frozenset[type]] = frozenset(
         IndexRepository,
         Experiment,
         AssertPossessionClaim,
+        DeclareCommitment,
     }
 )
 

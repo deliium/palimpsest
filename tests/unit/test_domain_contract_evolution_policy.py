@@ -24,6 +24,7 @@ from world.actions import (
     CopyRecord,
     Craft,
     DamageRecord,
+    DeclareCommitment,
     DepositRecord,
     Drink,
     EstablishRepository,
@@ -98,6 +99,7 @@ _CLOSED_COMMAND_TYPES: frozenset[type] = frozenset(
         IndexRepository,
         Experiment,
         AssertPossessionClaim,
+        DeclareCommitment,
     }
 )
 
@@ -138,7 +140,7 @@ _PARITY_GATE = (
 
 
 def test_agent_command_set_remains_closed_at_thirty_five() -> None:
-    assert len(_CLOSED_COMMAND_TYPES) == 36
+    assert len(_CLOSED_COMMAND_TYPES) == 37
     from world import actions as actions_mod
 
     # Mirror the public union membership without constructing parameterized commands.
@@ -179,6 +181,7 @@ def test_agent_command_set_remains_closed_at_thirty_five() -> None:
         IndexRepository,
         Experiment,
         AssertPossessionClaim,
+        DeclareCommitment,
     }
     assert asserted == _CLOSED_COMMAND_TYPES
     assert hasattr(actions_mod, "AgentCommand")

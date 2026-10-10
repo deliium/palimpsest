@@ -27,11 +27,11 @@ _ROOT = Path(__file__).resolve().parents[2]
 
 
 def test_semantic_event_count_is_54() -> None:
-    assert len(SEMANTIC_EVENT_TYPES) == 57
+    assert len(SEMANTIC_EVENT_TYPES) == 58
 
 
 def test_agent_command_count_is_35() -> None:
-    assert len(get_args(AgentCommand)) == 36
+    assert len(get_args(AgentCommand)) == 37
 
 
 def test_metric_family_count_is_65() -> None:

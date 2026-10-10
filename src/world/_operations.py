@@ -30,6 +30,7 @@ from world.actions import (
     Eat,
     Erase,
     AssertPossessionClaim,
+    DeclareCommitment,
     Experiment,
     EstablishRepository,
     Feed,
@@ -456,6 +457,24 @@ class _AssertPossessionClaimOp:
 
 
 @dataclass(frozen=True, slots=True)
+class _DeclareCommitmentOp:
+    request_id: RequestId
+    actor_id: EntityId
+    world_id: WorldId
+    base_revision: WorldRevision
+    counterparty_id: EntityId
+    commitment_kind: str
+    act: str
+    owed_by: str
+    service: str
+    quantity: int
+    due_kind: str
+    item_kind: str | None
+    due_tick: int | None
+    now_item_kind: str | None
+
+
+@dataclass(frozen=True, slots=True)
 class _ExperimentOp:
     request_id: RequestId
     actor_id: EntityId
@@ -505,6 +524,7 @@ ValidatedWorldOperation = (
     | _IndexRepositoryOp
     | _ExperimentOp
     | _AssertPossessionClaimOp
+    | _DeclareCommitmentOp
 )
 
 _OPERATION_TYPES: Final[frozenset[type]] = frozenset(
@@ -545,6 +565,7 @@ _OPERATION_TYPES: Final[frozenset[type]] = frozenset(
         _IndexRepositoryOp,
         _ExperimentOp,
         _AssertPossessionClaimOp,
+        _DeclareCommitmentOp,
     }
 )
 
@@ -931,6 +952,35 @@ def validate_action_request(
                     item_id=item_id,
                 )
             )
+        case DeclareCommitment(
+            counterparty_id=counterparty_id,
+            commitment_kind=commitment_kind,
+            act=act,
+            owed_by=owed_by,
+            service=service,
+            quantity=quantity,
+            due_kind=due_kind,
+            item_kind=item_kind,
+            due_tick=due_tick,
+            now_item_kind=now_item_kind,
+        ):
+            return OperationAccepted(
+                _DeclareCommitmentOp(
+                    *base,
+                    counterparty_id=counterparty_id,
+                    commitment_kind=commitment_kind,
+                    act=act,
+                    owed_by=owed_by,
+                    service=service,
+                    quantity=quantity,
+                    due_kind=due_kind,
+                    item_kind=None if item_kind is None else item_kind.value,
+                    due_tick=due_tick,
+                    now_item_kind=(
+                        None if now_item_kind is None else now_item_kind.value
+                    ),
+                )
+            )
         case Experiment(
             operator=operator,
             operand_a_id=operand_a_id,
@@ -1157,6 +1207,7 @@ def prepare_action_batch(
     experiment_catalog: object | None = None,
     possession_succession_active: bool = False,
     possession_succession_context: object | None = None,
+    structured_commitments_context: object | None = None,
 ) -> PendingBatch:
     """Resolve ordered requests into pending effects against one evolving state.
 
@@ -1317,6 +1368,7 @@ def prepare_action_batch(
             knowledge_repositories_context=repository_context,
             experiment_catalog=experiment_catalog,
             possession_succession_context=possession_succession_context,
+            structured_commitments_context=structured_commitments_context,
         )
         if start_rule.disposition is RuleDisposition.REJECT:
             if start_rule.action_kind in {"feed", "transport"}:
@@ -1407,6 +1459,7 @@ def prepare_action_batch(
             experiment_catalog=experiment_catalog,
             possession_succession_active=possession_succession_active,
             possession_succession_context=possession_succession_context,
+            structured_commitments_context=structured_commitments_context,
         )
         if application.result.disposition is RuleDisposition.REJECT:
             outcomes.append(

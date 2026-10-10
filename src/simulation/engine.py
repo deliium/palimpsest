@@ -306,6 +306,7 @@ class WorldEngine:
         "_population_lifecycle",
         "_possession_succession_active",
         "_structured_commitments_active",
+        "_structured_commitments_horizon",
         "_production_catalog",
         "_registrations",
         "_run_id",
@@ -346,6 +347,7 @@ class WorldEngine:
         experiment_laws: object | None = None,
         possession_succession_active: bool = False,
         structured_commitments_active: bool = False,
+        structured_commitments_horizon: int = 8,
     ) -> None:
         if type(config) is not SimulationRunConfig:
             raise TypeError("WorldEngine requires SimulationRunConfig")
@@ -368,6 +370,7 @@ class WorldEngine:
                 else getattr(durable_records_spec, "perception_mode", "marks_and_meta")
             ),
             possession_succession_active=possession_succession_active,
+            structured_commitments_active=structured_commitments_active,
             repository_perception_mode=(
                 None
                 if knowledge_repositories_spec is None
@@ -418,6 +421,11 @@ class WorldEngine:
         if type(structured_commitments_active) is not bool:
             raise TypeError("structured_commitments_active must be bool")
         self._structured_commitments_active = structured_commitments_active
+        if type(structured_commitments_horizon) is not int or isinstance(
+            structured_commitments_horizon, bool
+        ):
+            raise TypeError("structured_commitments_horizon must be int")
+        self._structured_commitments_horizon = structured_commitments_horizon
         self._environmental_dynamics = _optional_environmental_dynamics(
             environmental_dynamics
         )
@@ -743,8 +751,13 @@ class WorldEngine:
         engine._structured_commitments_active = (
             getattr(snapshot.config, "structured_commitments", None) is not None
         )
+        commitments = getattr(snapshot.config, "structured_commitments", None)
+        engine._structured_commitments_horizon = (
+            8 if commitments is None else commitments.horizon_ticks
+        )
         engine._perception = PerceptionService(
             possession_succession_active=engine._possession_succession_active,
+            structured_commitments_active=engine._structured_commitments_active,
         )
         engine._engine_id = derive_scoped_id(
             snapshot.config,
@@ -800,6 +813,10 @@ class WorldEngine:
         )
         engine._structured_commitments_active = (
             getattr(snapshot.config, "structured_commitments", None) is not None
+        )
+        commitments = getattr(snapshot.config, "structured_commitments", None)
+        engine._structured_commitments_horizon = (
+            8 if commitments is None else commitments.horizon_ticks
         )
         engine._environmental_dynamics = _optional_environmental_dynamics(
             environmental_dynamics
@@ -932,6 +949,7 @@ class WorldEngine:
                     durable_perception_mode=durable_mode,
                     repository_perception_mode=repository_mode,
                     possession_succession_active=engine._possession_succession_active,
+                    structured_commitments_active=engine._structured_commitments_active,
                 )
         if snapshot.persistence_codec_version in {"v8", "v9", "v10", "v11", "v12", "v13", "v14"}:
             resolved_kinship = kinship_spec
@@ -3157,6 +3175,7 @@ class WorldEngine:
             experiment_catalog=self._experiment_catalog,
             possession_succession_active=self.possession_succession_active,
             possession_succession_context=self._possession_succession_rule_context(),
+            structured_commitments_context=self._structured_commitments_rule_context(),
         )
         start_ledger = self._skill_ledger
         folded_ledger, skill_facts = self._fold_skill_ledger(
@@ -4358,6 +4377,17 @@ class WorldEngine:
                 sorted(denied),
             )
         return result or None
+
+    def _structured_commitments_rule_context(self) -> object | None:
+        """Horizon-only speech gate. None leaves DeclareCommitment closed."""
+        from world.structured_commitments import StructuredCommitmentsRuleContext
+
+        if not self.structured_commitments_active:
+            return None
+        return StructuredCommitmentsRuleContext(
+            allow_declare=True,
+            horizon_ticks=self._structured_commitments_horizon,
+        )
 
     def _possession_succession_rule_context(self) -> object | None:
         """Build ephemeral corpse-take legality. None leaves that branch closed."""

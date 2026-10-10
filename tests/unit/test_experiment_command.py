@@ -25,7 +25,7 @@ def _command() -> Experiment:
 
 
 def test_command_count_is_35() -> None:
-    assert len(AgentCommand.__args__) == 36  # type: ignore[attr-defined]
+    assert len(AgentCommand.__args__) == 37  # type: ignore[attr-defined]
 
 
 def test_require_accepts_experiment() -> None:

@@ -1597,6 +1597,11 @@ class SimulationRunner:
                 ),
                 possession_succession_active=config.possession_succession is not None,
                 structured_commitments_active=config.structured_commitments is not None,
+                structured_commitments_horizon=(
+                    8
+                    if config.structured_commitments is None
+                    else config.structured_commitments.horizon_ticks
+                ),
                 **skill_kwargs,
                 **teaching_kwargs,
             )

@@ -40,8 +40,10 @@ from world.events import (
     ArtifactPartiallyLost,
     Asked,
     CorpseCustodyOpened,
+    CommitmentDeclared,
     CraftStarted,
     ExperimentResolved,
+    Given,
     ItemCrafted,
     ItemStored,
     PossessionClaimAsserted,
@@ -120,6 +122,7 @@ class PerceptionService:
         durable_perception_mode: str | None = None,
         repository_perception_mode: str | None = None,
         possession_succession_active: bool = False,
+        structured_commitments_active: bool = False,
     ) -> None:
         if durable_perception_mode is not None and durable_perception_mode not in {
             "marks_and_meta",
@@ -139,9 +142,12 @@ class PerceptionService:
             )
         if type(possession_succession_active) is not bool:
             raise TypeError("possession_succession_active must be bool")
+        if type(structured_commitments_active) is not bool:
+            raise TypeError("structured_commitments_active must be bool")
         self._durable_perception_mode = durable_perception_mode
         self._repository_perception_mode = repository_perception_mode
         self._possession_succession_active = possession_succession_active
+        self._structured_commitments_active = structured_commitments_active
 
     def project(
         self,
@@ -186,6 +192,7 @@ class PerceptionService:
                 durable_perception_mode=self._durable_perception_mode,
                 repository_perception_mode=self._repository_perception_mode,
                 possession_succession_active=self._possession_succession_active,
+                structured_commitments_active=self._structured_commitments_active,
             )
             for observer_id in observers
         )
@@ -201,12 +208,14 @@ def project_observations(
     environmental_dynamics: object | None = None,
     durable_perception_mode: str | None = None,
     repository_perception_mode: str | None = None,
+    structured_commitments_active: bool = False,
 ) -> tuple[Observation, ...]:
     """Compatibility wrapper around :class:`PerceptionService`."""
     resolved = context if context is not None else ObservationContext(tick=0)
     return PerceptionService(
         durable_perception_mode=durable_perception_mode,
         repository_perception_mode=repository_perception_mode,
+        structured_commitments_active=structured_commitments_active,
     ).project(
         world_id=world_id,
         state=state,
@@ -228,6 +237,7 @@ def _project_one(
     durable_perception_mode: str | None = None,
     repository_perception_mode: str | None = None,
     possession_succession_active: bool = False,
+    structured_commitments_active: bool = False,
 ) -> Observation:
     body = state.bodies[observer_id]
     location_id = body.location_id
@@ -247,6 +257,8 @@ def _project_one(
         location_id=location_id,
         content_visible=content_visible,
         prior_events=prior_events,
+        state=state,
+        structured_commitments_active=structured_commitments_active,
     )
     structures = _sorted_structures(state, location_id) if content_visible else ()
     artifacts = _sorted_artifacts(
@@ -766,6 +778,8 @@ def _project_event_window(
     location_id: EntityId,
     content_visible: bool,
     prior_events: tuple[WorldEvent, ...],
+    state: WorldState | None = None,
+    structured_commitments_active: bool = False,
 ) -> tuple[tuple[ObservedOccurrence, ...], tuple[ObservedCommunication, ...]]:
     occurrences: list[ObservedOccurrence] = []
     communications: list[ObservedCommunication] = []
@@ -809,7 +823,12 @@ def _project_event_window(
                 other_entity_id=_other_entity_for_role(event, role),
                 destination_id=occurrence.destination_location_id,
                 success=_success_fact(event),
-                public_facts=_public_facts_for_role(event, role),
+                public_facts=_public_facts_for_role(
+                    event,
+                    role,
+                    state=state,
+                    structured_commitments_active=structured_commitments_active,
+                ),
             )
         )
     return tuple(occurrences), tuple(communications)
@@ -908,7 +927,11 @@ def _success_fact(event: WorldEvent) -> bool | None:
 
 
 def _public_facts_for_role(
-    event: WorldEvent, role: ObservationAudienceRole
+    event: WorldEvent,
+    role: ObservationAudienceRole,
+    *,
+    state: WorldState | None = None,
+    structured_commitments_active: bool = False,
 ) -> dict[str, object]:
     experiment_facts = _experiment_public_facts(event, role)
     if experiment_facts is not None:
@@ -926,6 +949,16 @@ def _public_facts_for_role(
             event.details.kind,
             len(possession_facts["item_ids"]),
         )
+    commitment_facts = _commitment_public_facts(event)
+    if commitment_facts is not None:
+        facts.update(commitment_facts)
+        _LOG.debug(
+            "commitment_occurrence kind=%s act=%s role=%s",
+            commitment_facts["kind"],
+            commitment_facts["act"],
+            role.value,
+        )
+        return facts
     recipe_id = _production_recipe_id(event)
     if role is ObservationAudienceRole.BYSTANDER:
         if recipe_id is not None:
@@ -937,7 +970,40 @@ def _public_facts_for_role(
         facts["target_id"] = event.target_id.value
     if recipe_id is not None and role is ObservationAudienceRole.ACTOR:
         facts["recipe_id"] = recipe_id
+    if structured_commitments_active and type(event.details) is Given:
+        facts.update(_given_item_facts(event, state))
+        _LOG.debug(
+            "commitment_give_facts item_kind=%s",
+            facts["item_kind"],
+        )
     return facts
+
+
+def _commitment_public_facts(event: WorldEvent) -> dict[str, object] | None:
+    details = event.details
+    if type(details) is not CommitmentDeclared:
+        return None
+    return {
+        "kind": details.commitment_kind,
+        "act": details.act,
+        "owed_by": details.owed_by,
+        "item_kind": details.item_kind,
+        "service": details.service,
+        "quantity": details.quantity,
+        "due_kind": details.due_kind,
+        "due_tick": details.due_tick,
+        "now_item_kind": details.now_item_kind,
+    }
+
+
+def _given_item_facts(
+    event: WorldEvent, state: WorldState | None
+) -> dict[str, object]:
+    details = event.details
+    assert type(details) is Given
+    item = None if state is None else state.items.get(details.item_id)
+    item_kind = "unspecified" if item is None else item.kind.value
+    return {"item_id": details.item_id.value, "item_kind": item_kind}
 
 
 def _possession_public_facts(event: WorldEvent) -> dict[str, object] | None:

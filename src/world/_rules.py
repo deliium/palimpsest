@@ -31,6 +31,7 @@ from world._operations import (
     _EraseOp,
     _EstablishRepositoryOp,
     _AssertPossessionClaimOp,
+    _DeclareCommitmentOp,
     _ExperimentOp,
     _FeedOp,
     _FleeOp,
@@ -107,6 +108,7 @@ from world.events import (
     Given,
     Helped,
     Moved,
+    CommitmentDeclared,
     PossessionClaimAsserted,
     RepositoryEstablished,
     RepositoryIndexed,
@@ -241,6 +243,10 @@ class RuleReason(StrEnum):
     UNKNOWN_REPOSITORY = "unknown_repository"
     EXPERIMENT_CHANNEL_OFF = "experiment_channel_off"
     POSSESSION_SUCCESSION_CHANNEL_OFF = "possession_succession_channel_off"
+    STRUCTURED_COMMITMENTS_CHANNEL_OFF = "structured_commitments_channel_off"
+    COMMITMENT_TERM_INVALID = "commitment_term_invalid"
+    COMMITMENT_HORIZON_INVALID = "commitment_horizon_invalid"
+    COMMITMENT_COUNTERPARTY_INVALID = "commitment_counterparty_invalid"
 
 
 @dataclass(frozen=True, slots=True)
@@ -557,6 +563,13 @@ COMMAND_RULE_MATRIX: Final[dict[type, CommandRulePolicy]] = {
         requires_living_actor=True,
         notes="public possession assertion; does not move items",
     ),
+    _DeclareCommitmentOp: CommandRulePolicy(
+        disposition=RuleDisposition.EVENT_ONLY,
+        emits_event_when_applied=True,
+        mutates_state_when_applied=False,
+        requires_living_actor=True,
+        notes="public commitment speech; does not move items",
+    ),
     _ExperimentOp: CommandRulePolicy(
         disposition=RuleDisposition.MUTATE,
         emits_event_when_applied=True,
@@ -602,6 +615,7 @@ _OPERATION_KIND: Final[dict[type, str]] = {
     _MaintainRepositoryOp: "maintain_repository",
     _IndexRepositoryOp: "index_repository",
     _AssertPossessionClaimOp: "assert_possession_claim",
+    _DeclareCommitmentOp: "declare_commitment",
     _ExperimentOp: "experiment",
 }
 
@@ -629,6 +643,7 @@ def evaluate_operation(
     knowledge_repositories_context: object | None = None,
     experiment_catalog: object | None = None,
     possession_succession_context: object | None = None,
+    structured_commitments_context: object | None = None,
 ) -> RuleResult:
     """Evaluate a validated operation against an immutable snapshot.
 
@@ -663,6 +678,9 @@ def evaluate_operation(
     )
     succession_context = _require_possession_succession_context(
         possession_succession_context
+    )
+    commitment_context = _require_structured_commitments_context(
+        structured_commitments_context
     )
     op_type = type(operation)
     policy = COMMAND_RULE_MATRIX.get(op_type)
@@ -902,6 +920,14 @@ def evaluate_operation(
         case _AssertPossessionClaimOp():
             return _evaluate_possession_claim(
                 state, operation, kind, succession_context=succession_context
+            )
+        case _DeclareCommitmentOp():
+            return _evaluate_declare_commitment(
+                state,
+                operation,
+                kind,
+                tick=tick,
+                commitment_context=commitment_context,
             )
         case _ExperimentOp():
             return _evaluate_experiment(
@@ -2746,6 +2772,7 @@ def apply_operation(
     experiment_catalog: object | None = None,
     possession_succession_active: bool = False,
     possession_succession_context: object | None = None,
+    structured_commitments_context: object | None = None,
 ) -> RuleApplication:
     """Evaluate then apply immutable physical or event-only effects.
 
@@ -2776,6 +2803,7 @@ def apply_operation(
         knowledge_repositories_context=repository_context,
         experiment_catalog=experiment_catalog,
         possession_succession_context=possession_succession_context,
+        structured_commitments_context=structured_commitments_context,
     )
     if result.disposition in {
         RuleDisposition.REJECT,
@@ -3270,6 +3298,32 @@ def _event_details_for(
             decedent_id=decedent_id, doctrine=doctrine, item_id=item_id
         ):
             return PossessionClaimAsserted(decedent_id, doctrine, item_id)
+        case _DeclareCommitmentOp(
+            actor_id=actor_id,
+            counterparty_id=counterparty_id,
+            commitment_kind=commitment_kind,
+            act=act,
+            owed_by=owed_by,
+            service=service,
+            quantity=quantity,
+            due_kind=due_kind,
+            item_kind=item_kind,
+            due_tick=due_tick,
+            now_item_kind=now_item_kind,
+        ):
+            return CommitmentDeclared(
+                actor_id,
+                counterparty_id,
+                commitment_kind,
+                act,
+                owed_by,
+                service,
+                quantity,
+                due_kind,
+                item_kind,
+                due_tick,
+                now_item_kind,
+            )
         case _WaitOp():
             return Waited()
         case _:
@@ -3633,6 +3687,101 @@ def _evaluate_possession_claim(
         mutates_state=False,
         action_kind=kind,
     )
+
+
+def _commitment_term_ok(operation: _DeclareCommitmentOp) -> bool:
+    kind = operation.commitment_kind
+    has_item = operation.item_kind is not None
+    has_service = operation.service != "none"
+    if kind == "future_exchange":
+        return has_item and operation.now_item_kind is not None
+    if kind == "service_obligation":
+        return has_service and not has_item and operation.now_item_kind is None
+    if kind in {"promise", "debt", "conditional_agreement"}:
+        return (has_item ^ has_service) and operation.now_item_kind is None
+    return False
+
+
+def _evaluate_declare_commitment(
+    state: WorldState,
+    operation: _DeclareCommitmentOp,
+    kind: str,
+    *,
+    tick: int | None,
+    commitment_context: object | None,
+) -> RuleResult:
+    if commitment_context is None or not commitment_context.allow_declare:
+        _OPS_LOG.debug(
+            "commitment_rejected reason_code=%s",
+            RuleReason.STRUCTURED_COMMITMENTS_CHANNEL_OFF.value,
+        )
+        return _reject(kind, RuleReason.STRUCTURED_COMMITMENTS_CHANNEL_OFF)
+    if operation.counterparty_id == operation.actor_id:
+        _OPS_LOG.debug(
+            "commitment_rejected reason_code=%s",
+            RuleReason.COMMITMENT_COUNTERPARTY_INVALID.value,
+        )
+        return _reject(kind, RuleReason.COMMITMENT_COUNTERPARTY_INVALID)
+    actor = state.bodies[operation.actor_id]
+    counterparty = state.bodies.get(operation.counterparty_id)
+    if counterparty is None or counterparty.life_status is not LifeStatus.ALIVE:
+        _OPS_LOG.debug(
+            "commitment_rejected reason_code=%s",
+            RuleReason.DEAD_TARGET.value,
+        )
+        return _reject(kind, RuleReason.DEAD_TARGET)
+    if counterparty.location_id != actor.location_id:
+        _OPS_LOG.debug(
+            "commitment_rejected reason_code=%s",
+            RuleReason.NOT_COLOCATED.value,
+        )
+        return _reject(kind, RuleReason.NOT_COLOCATED)
+    if not _commitment_term_ok(operation):
+        _OPS_LOG.debug(
+            "commitment_rejected reason_code=%s",
+            RuleReason.COMMITMENT_TERM_INVALID.value,
+        )
+        return _reject(kind, RuleReason.COMMITMENT_TERM_INVALID)
+    if operation.due_kind == "by_tick":
+        due = operation.due_tick
+        horizon = commitment_context.horizon_ticks
+        if (
+            tick is None
+            or type(due) is not int
+            or due < tick
+            or due > tick + horizon
+        ):
+            _OPS_LOG.debug(
+                "commitment_rejected reason_code=%s",
+                RuleReason.COMMITMENT_HORIZON_INVALID.value,
+            )
+            return _reject(kind, RuleReason.COMMITMENT_HORIZON_INVALID)
+    _OPS_LOG.info(
+        "commitment_declared kind=%s act=%s owed_by=%s",
+        operation.commitment_kind,
+        operation.act,
+        operation.owed_by,
+    )
+    return RuleResult(
+        disposition=RuleDisposition.EVENT_ONLY,
+        reason=RuleReason.OCCURRENCE,
+        emits_event=True,
+        mutates_state=False,
+        action_kind=kind,
+    )
+
+
+def _require_structured_commitments_context(value: object | None) -> object | None:
+    if value is None:
+        return None
+    from world.structured_commitments import StructuredCommitmentsRuleContext
+
+    if type(value) is not StructuredCommitmentsRuleContext:
+        raise TypeError(
+            "structured_commitments_context must be "
+            "StructuredCommitmentsRuleContext or None"
+        )
+    return value
 
 
 def _require_possession_succession_context(value: object | None) -> object | None:

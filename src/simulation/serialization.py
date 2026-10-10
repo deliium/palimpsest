@@ -87,6 +87,7 @@ from world.actions import (
     AnnotateRecord,
     Ask,
     AssertPossessionClaim,
+    DeclareCommitment,
     Attack,
     Build,
     CopyRecord,
@@ -547,6 +548,7 @@ _COMMAND_TAGS: Final[frozenset[str]] = frozenset(
         "damage_record",
         "experiment",
         "assert_possession_claim",
+        "declare_commitment",
     }
 )
 
@@ -2533,6 +2535,34 @@ def _encode_command(value: object) -> dict[str, Any]:
             if item_id is not None:
                 payload["item_id"] = item_id.value
             return payload
+        case DeclareCommitment(
+            counterparty_id=counterparty_id,
+            commitment_kind=commitment_kind,
+            act=act,
+            owed_by=owed_by,
+            service=service,
+            quantity=quantity,
+            due_kind=due_kind,
+            item_kind=item_kind,
+            due_tick=due_tick,
+            now_item_kind=now_item_kind,
+        ):
+            payload: dict[str, Any] = {
+                "act": act,
+                "commitment_kind": commitment_kind,
+                "counterparty_id": counterparty_id.value,
+                "due_kind": due_kind,
+                "owed_by": owed_by,
+                "quantity": quantity,
+                "service": service,
+            }
+            if item_kind is not None:
+                payload["item_kind"] = item_kind.value
+            if due_tick is not None:
+                payload["due_tick"] = due_tick
+            if now_item_kind is not None:
+                payload["now_item_kind"] = now_item_kind.value
+            return payload
         case Experiment(
             operator=operator,
             operand_a_id=operand_a_id,
@@ -2819,6 +2849,38 @@ def _decode_command(tag: str, data: dict[str, Any], *, path: str) -> object:
             return IndexRepository(
                 EntityId(_str_field(data, "repository_id", path=path)),
                 tuple(entries),
+            )
+        if tag == "declare_commitment":
+            from world.values import ItemKind
+
+            _require_keys(
+                data,
+                {
+                    "act",
+                    "commitment_kind",
+                    "counterparty_id",
+                    "due_kind",
+                    "owed_by",
+                    "quantity",
+                    "service",
+                },
+                path=path,
+                optional={"due_tick", "item_kind", "now_item_kind"},
+            )
+            item_raw = data.get("item_kind")
+            now_raw = data.get("now_item_kind")
+            due_raw = data.get("due_tick")
+            return DeclareCommitment(
+                EntityId(_str_field(data, "counterparty_id", path=path)),
+                _str_field(data, "commitment_kind", path=path),
+                _str_field(data, "act", path=path),
+                _str_field(data, "owed_by", path=path),
+                _str_field(data, "service", path=path),
+                _int_field(data, "quantity", path=path),
+                _str_field(data, "due_kind", path=path),
+                None if item_raw is None else ItemKind(item_raw),
+                None if due_raw is None else _int_field(data, "due_tick", path=path),
+                None if now_raw is None else ItemKind(now_raw),
             )
         if tag == "assert_possession_claim":
             _require_keys(
