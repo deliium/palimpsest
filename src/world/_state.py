@@ -20,6 +20,7 @@ from world.identifiers import (
 from world.models import AgentBody, Item, LifeStatus, Location, Resource, Weather
 from world.production import ProductionJob, Structure, ToolMark
 from world.repositories import KnowledgeRepository, index_repositories
+from world.subjective_value import ExchangeOffer
 
 _LOG = logging.getLogger("world.state")
 
@@ -42,6 +43,7 @@ def rebuild_world_state(
     artifacts: Mapping[EntityId, InformationArtifact] | None = None,
     repositories: Mapping[EntityId, KnowledgeRepository] | None = None,
     corpse_custody_item_ids: frozenset[EntityId] | None = None,
+    exchange_offers: tuple[ExchangeOffer, ...] | None = None,
 ) -> WorldState:
     """Build a new immutable snapshot with deterministic EntityId ordering."""
     if type(state) is not WorldState:
@@ -64,6 +66,7 @@ def rebuild_world_state(
         if corpse_custody_item_ids is None
         else corpse_custody_item_ids
     )
+    offer_src = state.exchange_offers if exchange_offers is None else exchange_offers
     return WorldState(
         state.revision if revision is None else revision,
         locations=tuple(
@@ -104,6 +107,7 @@ def rebuild_world_state(
             )
         ),
         corpse_custody_item_ids=custody_src,
+        exchange_offers=offer_src,
     )
 
 
@@ -141,6 +145,29 @@ def _validate_corpse_custody(
     return frozenset(copied)
 
 
+def _validate_exchange_offers(
+    value: tuple[ExchangeOffer, ...] | Sequence[ExchangeOffer],
+    *,
+    body_index: Mapping[EntityId, AgentBody],
+) -> tuple[ExchangeOffer, ...]:
+    if isinstance(value, (str, bytes)) or not isinstance(value, (tuple, list)):
+        raise TypeError("exchange_offers must be a sequence of ExchangeOffer")
+    copied: list[ExchangeOffer] = []
+    seen: set[tuple[str, str]] = set()
+    for offer in value:
+        if type(offer) is not ExchangeOffer:
+            raise TypeError("exchange_offers entries must be ExchangeOffer")
+        if offer.party_ids[0] not in body_index or offer.party_ids[1] not in body_index:
+            raise ValueError("exchange offer parties must be known bodies")
+        key = (offer.party_ids[0].value, offer.party_ids[1].value)
+        if key in seen:
+            raise ValueError("duplicate exchange offer pair")
+        seen.add(key)
+        copied.append(offer)
+    copied.sort(key=lambda row: (row.party_ids[0].value, row.party_ids[1].value))
+    return tuple(copied)
+
+
 def _index_by_entity_id[T](
     name: str,
     values: Sequence[T],
@@ -168,6 +195,7 @@ class WorldState:
         "_artifacts",
         "_bodies",
         "_corpse_custody_item_ids",
+        "_exchange_offers",
         "_items",
         "_locations",
         "_production_jobs",
@@ -195,6 +223,7 @@ class WorldState:
         artifacts: Sequence[InformationArtifact] = (),
         repositories: Sequence[object] = (),
         corpse_custody_item_ids: frozenset[EntityId] | Sequence[EntityId] = frozenset(),
+        exchange_offers: tuple[ExchangeOffer, ...] | Sequence[ExchangeOffer] = (),
     ) -> None:
         if type(revision) is not WorldRevision:
             raise TypeError("WorldState.revision must be WorldRevision")
@@ -269,9 +298,13 @@ class WorldState:
             item_index=item_index,
             body_index=body_index,
         )
+        self._exchange_offers = _validate_exchange_offers(
+            exchange_offers, body_index=body_index
+        )
         _LOG.debug(
-            "world_state_constructed corpse_custody_count=%s",
+            "world_state_constructed corpse_custody_count=%s exchange_offer_count=%s",
             len(self._corpse_custody_item_ids),
+            len(self._exchange_offers),
         )
 
     @property
@@ -325,6 +358,10 @@ class WorldState:
     @property
     def corpse_custody_item_ids(self) -> frozenset[EntityId]:
         return self._corpse_custody_item_ids
+
+    @property
+    def exchange_offers(self) -> tuple[ExchangeOffer, ...]:
+        return self._exchange_offers
 
 
 class World:

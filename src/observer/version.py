@@ -67,6 +67,9 @@ SEMANTIC_EVENT_TYPES: Final[tuple[str, ...]] = (
     "AGENT_TOOK_FROM_CORPSE",
     "POSSESSION_CLAIM_ASSERTED",
     "COMMITMENT_DECLARED",
+    "EXCHANGE_PROPOSED",
+    "EXCHANGE_WITHDRAWN",
+    "EXCHANGE_COMPLETED",
 )
 
 SEMANTIC_TYPE_BY_KIND: Final[dict[str, str]] = {
@@ -128,6 +131,9 @@ SEMANTIC_TYPE_BY_KIND: Final[dict[str, str]] = {
     "taken_from_corpse": "AGENT_TOOK_FROM_CORPSE",
     "possession_claim_asserted": "POSSESSION_CLAIM_ASSERTED",
     "commitment_declared": "COMMITMENT_DECLARED",
+    "exchange_proposed": "EXCHANGE_PROPOSED",
+    "exchange_withdrawn": "EXCHANGE_WITHDRAWN",
+    "exchange_completed": "EXCHANGE_COMPLETED",
 }
 
 RELATIONSHIP_DIMENSION_CODES: Final[tuple[str, ...]] = (

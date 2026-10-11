@@ -16,8 +16,8 @@ from world.identifiers import EntityId, EventId, RequestId, WorldId, WorldRevisi
 
 def test_declaration_exports_commitment_declared_and_protocol_stays() -> None:
     assert OBSERVER_PROTOCOL_VERSION == "observer-protocol-v1"
-    assert len(SEMANTIC_EVENT_TYPES) == 58
-    assert SEMANTIC_EVENT_TYPES[-1] == "COMMITMENT_DECLARED"
+    assert len(SEMANTIC_EVENT_TYPES) == 61
+    assert SEMANTIC_EVENT_TYPES[-4] == "COMMITMENT_DECLARED"
     event = make_physical_replayable_event(
         event_id=EventId("evt-declare"),
         run_id="run-1",

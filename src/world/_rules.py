@@ -32,6 +32,7 @@ from world._operations import (
     _EstablishRepositoryOp,
     _AssertPossessionClaimOp,
     _DeclareCommitmentOp,
+    _NegotiateExchangeOp,
     _ExperimentOp,
     _FeedOp,
     _FleeOp,
@@ -102,6 +103,9 @@ from world.events import (
     Dropped,
     Drunk,
     Eaten,
+    ExchangeCompleted,
+    ExchangeProposed,
+    ExchangeWithdrawn,
     EventDetails,
     Fed,
     Fled,
@@ -247,6 +251,13 @@ class RuleReason(StrEnum):
     COMMITMENT_TERM_INVALID = "commitment_term_invalid"
     COMMITMENT_HORIZON_INVALID = "commitment_horizon_invalid"
     COMMITMENT_COUNTERPARTY_INVALID = "commitment_counterparty_invalid"
+    SUBJECTIVE_VALUATION_CHANNEL_OFF = "subjective_valuation_channel_off"
+    EXCHANGE_OFFER_OPEN = "exchange_offer_open"
+    EXCHANGE_EMPTY_SIDE = "exchange_empty_side"
+    EXCHANGE_BUNDLE_LIMIT = "exchange_bundle_limit"
+    EXCHANGE_NO_LIVE_OFFER = "exchange_no_live_offer"
+    EXCHANGE_BUNDLE_MISMATCH = "exchange_bundle_mismatch"
+    EXCHANGE_NOT_PROPOSER = "exchange_not_proposer"
 
 
 @dataclass(frozen=True, slots=True)
@@ -563,6 +574,13 @@ COMMAND_RULE_MATRIX: Final[dict[type, CommandRulePolicy]] = {
         requires_living_actor=True,
         notes="public possession assertion; does not move items",
     ),
+    _NegotiateExchangeOp: CommandRulePolicy(
+        disposition=RuleDisposition.MUTATE,
+        emits_event_when_applied=True,
+        mutates_state_when_applied=True,
+        requires_living_actor=True,
+        notes="structured barter; accept moves named items together",
+    ),
     _DeclareCommitmentOp: CommandRulePolicy(
         disposition=RuleDisposition.EVENT_ONLY,
         emits_event_when_applied=True,
@@ -616,6 +634,7 @@ _OPERATION_KIND: Final[dict[type, str]] = {
     _IndexRepositoryOp: "index_repository",
     _AssertPossessionClaimOp: "assert_possession_claim",
     _DeclareCommitmentOp: "declare_commitment",
+    _NegotiateExchangeOp: "negotiate_exchange",
     _ExperimentOp: "experiment",
 }
 
@@ -644,6 +663,7 @@ def evaluate_operation(
     experiment_catalog: object | None = None,
     possession_succession_context: object | None = None,
     structured_commitments_context: object | None = None,
+    subjective_valuation_context: object | None = None,
 ) -> RuleResult:
     """Evaluate a validated operation against an immutable snapshot.
 
@@ -682,6 +702,7 @@ def evaluate_operation(
     commitment_context = _require_structured_commitments_context(
         structured_commitments_context
     )
+    _require_subjective_valuation_context(subjective_valuation_context)
     op_type = type(operation)
     policy = COMMAND_RULE_MATRIX.get(op_type)
     if policy is None:
@@ -920,6 +941,15 @@ def evaluate_operation(
         case _AssertPossessionClaimOp():
             return _evaluate_possession_claim(
                 state, operation, kind, succession_context=succession_context
+            )
+        case _NegotiateExchangeOp():
+            return _evaluate_negotiate_exchange(
+                state,
+                operation,
+                kind,
+                tick=0 if tick is None else tick,
+                valuation_context=subjective_valuation_context,
+                effective_carry_capacity=capacity_map,
             )
         case _DeclareCommitmentOp():
             return _evaluate_declare_commitment(
@@ -2773,6 +2803,7 @@ def apply_operation(
     possession_succession_active: bool = False,
     possession_succession_context: object | None = None,
     structured_commitments_context: object | None = None,
+    subjective_valuation_context: object | None = None,
 ) -> RuleApplication:
     """Evaluate then apply immutable physical or event-only effects.
 
@@ -2804,6 +2835,7 @@ def apply_operation(
         experiment_catalog=experiment_catalog,
         possession_succession_context=possession_succession_context,
         structured_commitments_context=structured_commitments_context,
+        subjective_valuation_context=subjective_valuation_context,
     )
     if result.disposition in {
         RuleDisposition.REJECT,
@@ -2924,7 +2956,11 @@ def apply_operation(
         return RuleApplication(result=result, next_state=state, event_details=details)
     assert result.disposition is RuleDisposition.MUTATE
     next_state = _apply_mutation(
-        state, operation, rules=physical_rules, skill_efficiency=skill_efficiency
+        state,
+        operation,
+        rules=physical_rules,
+        skill_efficiency=skill_efficiency,
+        tick=0 if tick is None else tick,
     )
     # Recompute details from next_state for resulting physiology facts where needed.
     details = _event_details_for(
@@ -3294,6 +3330,44 @@ def _event_details_for(
             return Asked(recipient_id, utterance)
         case _TellOp(recipient_id=recipient_id, utterance=utterance):
             return Told(recipient_id, utterance)
+        case _NegotiateExchangeOp(
+            actor_id=actor_id,
+            counterparty_id=counterparty_id,
+            act=act,
+            give_item_ids=give_item_ids,
+            take_item_ids=take_item_ids,
+        ):
+            if act == "withdraw":
+                return ExchangeWithdrawn(
+                    actor_id,
+                    counterparty_id,
+                    act,
+                    give_item_ids,
+                    take_item_ids,
+                )
+            if act == "accept":
+                give_kinds = tuple(
+                    state.items[item_id].kind.value for item_id in give_item_ids
+                )
+                take_kinds = tuple(
+                    state.items[item_id].kind.value for item_id in take_item_ids
+                )
+                return ExchangeCompleted(
+                    actor_id,
+                    counterparty_id,
+                    act,
+                    give_item_ids,
+                    take_item_ids,
+                    give_kinds,
+                    take_kinds,
+                )
+            return ExchangeProposed(
+                actor_id,
+                counterparty_id,
+                act,
+                give_item_ids,
+                take_item_ids,
+            )
         case _AssertPossessionClaimOp(
             decedent_id=decedent_id, doctrine=doctrine, item_id=item_id
         ):
@@ -3336,6 +3410,7 @@ def _apply_mutation(
     *,
     rules: PhysicalRules,
     skill_efficiency: object | None = None,
+    tick: int = 0,
 ) -> WorldState:
     match operation:
         case _MoveOp(actor_id=actor_id, destination_id=destination_id):
@@ -3357,6 +3432,8 @@ def _apply_mutation(
             return _mutate_drop(state, actor_id, item_id)
         case _GiveOp(actor_id=actor_id, recipient_id=recipient_id, item_id=item_id):
             return _mutate_give(state, actor_id, recipient_id, item_id)
+        case _NegotiateExchangeOp() as exchange:
+            return _mutate_negotiate_exchange(state, exchange, tick=tick)
         case _EatOp(actor_id=actor_id, item_id=item_id):
             return _mutate_eat(state, actor_id, item_id, rules=rules)
         case _DrinkOp(actor_id=actor_id, source_id=source_id):
@@ -3769,6 +3846,19 @@ def _evaluate_declare_commitment(
         mutates_state=False,
         action_kind=kind,
     )
+
+
+def _require_subjective_valuation_context(value: object | None) -> object | None:
+    if value is None:
+        return None
+    from world.subjective_value import SubjectiveValuationRuleContext
+
+    if type(value) is not SubjectiveValuationRuleContext:
+        raise TypeError(
+            "subjective_valuation_context must be "
+            "SubjectiveValuationRuleContext or None"
+        )
+    return value
 
 
 def _require_structured_commitments_context(value: object | None) -> object | None:
@@ -4835,6 +4925,171 @@ def _require_durable_records_context(
             "durable_records_context must be DurableRecordsRuleContext or None"
         )
     return value
+
+
+def _exchange_reject(kind: str, reason: RuleReason) -> RuleResult:
+    _OPS_LOG.debug("exchange_rejected reason_code=%s", reason.value)
+    return _reject(kind, reason)
+
+
+def _held_by(state: WorldState, holder_id: EntityId, item_id: EntityId) -> bool:
+    item = state.items.get(item_id)
+    body = state.bodies.get(holder_id)
+    if item is None or body is None:
+        return False
+    return item.holder_id == holder_id and item_id in body.inventory
+
+
+def _bundle_load(state: WorldState, item_ids: tuple[EntityId, ...]) -> int:
+    return sum(state.items[item_id].load.value for item_id in item_ids)
+
+
+def _carry_limit(
+    body: AgentBody, capacity_map: Mapping[EntityId, int] | None
+) -> int:
+    if capacity_map is not None and body.entity_id in capacity_map:
+        return capacity_map[body.entity_id]
+    return body.carry_capacity.value
+
+
+def _live_exchange_offer(
+    state: WorldState,
+    actor_id: EntityId,
+    counterparty_id: EntityId,
+    *,
+    tick: int,
+    horizon: int,
+):
+    from world.subjective_value import exchange_party_ids
+
+    pair = exchange_party_ids(actor_id, counterparty_id)
+    for offer in state.exchange_offers:
+        if offer.party_ids != pair:
+            continue
+        age = tick - offer.tick
+        if age < 0 or age > horizon:
+            return None
+        return offer
+    return None
+
+
+def _evaluate_negotiate_exchange(
+    state: WorldState,
+    operation: _NegotiateExchangeOp,
+    kind: str,
+    *,
+    tick: int,
+    valuation_context: object | None,
+    effective_carry_capacity: Mapping[EntityId, int] | None,
+) -> RuleResult:
+    from world.subjective_value import SubjectiveValuationRuleContext
+
+    if (
+        type(valuation_context) is not SubjectiveValuationRuleContext
+        or not valuation_context.allow_negotiate
+    ):
+        return _exchange_reject(kind, RuleReason.SUBJECTIVE_VALUATION_CHANNEL_OFF)
+    actor = state.bodies[operation.actor_id]
+    counterparty = state.bodies.get(operation.counterparty_id)
+    if (
+        counterparty is None
+        or operation.counterparty_id == operation.actor_id
+        or counterparty.location_id != actor.location_id
+    ):
+        return _exchange_reject(kind, RuleReason.NOT_COLOCATED)
+    if counterparty.life_status is LifeStatus.DEAD:
+        return _exchange_reject(kind, RuleReason.DEAD_TARGET)
+    give = operation.give_item_ids
+    take = operation.take_item_ids
+    if (
+        len(give) > valuation_context.max_bundle
+        or len(take) > valuation_context.max_bundle
+    ):
+        return _exchange_reject(kind, RuleReason.EXCHANGE_BUNDLE_LIMIT)
+    if operation.act != "withdraw" and (not give or not take):
+        return _exchange_reject(kind, RuleReason.EXCHANGE_EMPTY_SIDE)
+    if operation.act != "withdraw":
+        if any(not _held_by(state, operation.actor_id, item_id) for item_id in give):
+            return _exchange_reject(kind, RuleReason.NOT_HELD)
+        if any(
+            not _held_by(state, operation.counterparty_id, item_id) for item_id in take
+        ):
+            return _exchange_reject(kind, RuleReason.NOT_HELD)
+    live = _live_exchange_offer(
+        state,
+        operation.actor_id,
+        operation.counterparty_id,
+        tick=tick,
+        horizon=valuation_context.horizon_ticks,
+    )
+    if operation.act == "offer":
+        if live is not None:
+            return _exchange_reject(kind, RuleReason.EXCHANGE_OFFER_OPEN)
+    elif live is None:
+        return _exchange_reject(kind, RuleReason.EXCHANGE_NO_LIVE_OFFER)
+    elif operation.act == "withdraw":
+        if live.proposer_id != operation.actor_id:
+            return _exchange_reject(kind, RuleReason.EXCHANGE_NOT_PROPOSER)
+    elif operation.act == "accept":
+        if give != live.take_item_ids or take != live.give_item_ids:
+            return _exchange_reject(kind, RuleReason.EXCHANGE_BUNDLE_MISMATCH)
+        actor_after = _inventory_load(state, actor) - _bundle_load(state, give)
+        actor_after += _bundle_load(state, take)
+        other_after = _inventory_load(state, counterparty) - _bundle_load(state, take)
+        other_after += _bundle_load(state, give)
+        if actor_after > _carry_limit(actor, effective_carry_capacity):
+            return _exchange_reject(kind, RuleReason.NO_CARRY_CAPACITY)
+        if other_after > _carry_limit(counterparty, effective_carry_capacity):
+            return _exchange_reject(kind, RuleReason.NO_CARRY_CAPACITY)
+    return RuleResult(
+        disposition=RuleDisposition.MUTATE,
+        reason=RuleReason.OCCURRENCE,
+        emits_event=True,
+        mutates_state=True,
+        action_kind=kind,
+    )
+
+
+def _mutate_negotiate_exchange(
+    state: WorldState, operation: _NegotiateExchangeOp, *, tick: int
+) -> WorldState:
+    from world.subjective_value import ExchangeOffer, exchange_party_ids
+
+    pair = exchange_party_ids(operation.actor_id, operation.counterparty_id)
+    if operation.act == "accept":
+        working = state
+        for item_id in operation.give_item_ids:
+            working = _mutate_give(
+                working, operation.actor_id, operation.counterparty_id, item_id
+            )
+        for item_id in operation.take_item_ids:
+            working = _mutate_give(
+                working, operation.counterparty_id, operation.actor_id, item_id
+            )
+        kept = tuple(row for row in working.exchange_offers if row.party_ids != pair)
+        _OPS_LOG.info(
+            "exchange_completed give_len=%s take_len=%s",
+            len(operation.give_item_ids),
+            len(operation.take_item_ids),
+        )
+        return rebuild_world_state(working, exchange_offers=kept)
+    kept = tuple(row for row in state.exchange_offers if row.party_ids != pair)
+    if operation.act == "withdraw":
+        return rebuild_world_state(state, exchange_offers=kept)
+    offer = ExchangeOffer(
+        party_ids=pair,
+        proposer_id=operation.actor_id,
+        give_item_ids=operation.give_item_ids,
+        take_item_ids=operation.take_item_ids,
+        tick=tick,
+    )
+    _OPS_LOG.info(
+        "exchange_proposed act=%s give_len=%s take_len=%s",
+        operation.act,
+        len(operation.give_item_ids),
+        len(operation.take_item_ids),
+    )
+    return rebuild_world_state(state, exchange_offers=(*kept, offer))
 
 
 def _inventory_load(state: WorldState, body: AgentBody) -> int:

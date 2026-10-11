@@ -95,6 +95,7 @@ __all__ = [
     "ObservedCommunication",
     "ObservedDependencyNeed",
     "ObservedDependencyNeeds",
+    "ExchangeVisibleHolding",
     "ObservedItem",
     "ObservedItemPlacement",
     "ObservedKinshipVisible",
@@ -1077,6 +1078,26 @@ class ObservationContext:
 
 
 @dataclass(frozen=True, slots=True)
+class ExchangeVisibleHolding:
+    """Another body's held item at this location. No needs and no reservation."""
+
+    body_id: EntityId
+    item_id: EntityId
+    kind: ItemKind
+    load: ItemLoad
+
+    def __post_init__(self) -> None:
+        if type(self.body_id) is not EntityId:
+            raise TypeError("ExchangeVisibleHolding.body_id must be EntityId")
+        if type(self.item_id) is not EntityId:
+            raise TypeError("ExchangeVisibleHolding.item_id must be EntityId")
+        if type(self.kind) is not ItemKind:
+            raise TypeError("ExchangeVisibleHolding.kind must be ItemKind")
+        if type(self.load) is not ItemLoad:
+            raise TypeError("ExchangeVisibleHolding.load must be ItemLoad")
+
+
+@dataclass(frozen=True, slots=True)
 class Observation:
     """Immutable tick-scoped agent observation with redacted projections only."""
 
@@ -1102,6 +1123,7 @@ class Observation:
     season: Season | None = None
     temperature_band: TemperatureBand | None = None
     hazard_kinds: Sequence[HazardKind] | None = None
+    exchange_visible_holdings: Sequence[ExchangeVisibleHolding] | None = None
 
     def __post_init__(self) -> None:
         if type(self.world_id) is not WorldId:
@@ -1217,6 +1239,16 @@ class Observation:
         ):
             raise TypeError(
                 "Observation.weather_condition must be WeatherCondition or None"
+            )
+        if self.exchange_visible_holdings is not None:
+            object.__setattr__(
+                self,
+                "exchange_visible_holdings",
+                _copy_models(
+                    "Observation.exchange_visible_holdings",
+                    self.exchange_visible_holdings,
+                    model_type=ExchangeVisibleHolding,
+                ),
             )
         if self.season is not None and type(self.season) is not Season:
             raise TypeError("Observation.season must be Season or None")

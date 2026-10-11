@@ -240,6 +240,9 @@ class CognitiveLoop:
         "_social_norm_mode",
         "_social_norm_policy",
         "_structured_commitments_active",
+        "_subjective_valuation_active",
+        "_subjective_valuation_horizon",
+        "_subjective_valuation_max_bundle",
         "_teaching_mode",
         "_teaching_policy",
         "_territorial_claim_mode",
@@ -302,6 +305,9 @@ class CognitiveLoop:
         structured_commitments_active: bool = False,
         max_open_interpretations: int | None = None,
         commitment_horizon_ticks: int = 8,
+        subjective_valuation_active: bool = False,
+        horizon_ticks: int = 8,
+        max_bundle: int = 8,
         knowledge_genealogy_spec: object | None = None,
         knowledge_genealogy_seed_material: object | None = None,
         bounded_experimentation_spec: object | None = None,
@@ -859,6 +865,23 @@ class CognitiveLoop:
         ):
             raise TypeError("commitment_horizon_ticks must be int")
         self._commitment_horizon_ticks = commitment_horizon_ticks
+        if type(subjective_valuation_active) is not bool:
+            raise TypeError("subjective_valuation_active must be bool")
+        self._subjective_valuation_active = subjective_valuation_active
+        if type(horizon_ticks) is not int or isinstance(horizon_ticks, bool):
+            raise TypeError("horizon_ticks must be int")
+        if type(max_bundle) is not int or isinstance(max_bundle, bool):
+            raise TypeError("max_bundle must be int")
+        self._subjective_valuation_horizon = horizon_ticks
+        self._subjective_valuation_max_bundle = max_bundle
+        if subjective_valuation_active:
+            _LOG.debug(
+                "subjective_valuation_bind subjective_valuation_active=%s "
+                "horizon_ticks=%s max_bundle=%s",
+                True,
+                horizon_ticks,
+                max_bundle,
+            )
         if structured_commitments_active:
             _LOG.debug(
                 "structured_commitments_bind structured_commitments_active=%s "

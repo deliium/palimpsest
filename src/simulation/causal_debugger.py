@@ -146,6 +146,9 @@ _DETAIL_KIND_TO_SEMANTIC_TYPE: Final[Mapping[str, str]] = {
     "taken_from_corpse": "AGENT_TOOK_FROM_CORPSE",
     "possession_claim_asserted": "POSSESSION_CLAIM_ASSERTED",
     "commitment_declared": "COMMITMENT_DECLARED",
+    "exchange_proposed": "EXCHANGE_PROPOSED",
+    "exchange_withdrawn": "EXCHANGE_WITHDRAWN",
+    "exchange_completed": "EXCHANGE_COMPLETED",
 }
 
 # Semantic observer types / detail type names → cognition-trace command_kind.
@@ -192,6 +195,9 @@ _SEMANTIC_TO_COMMAND_KIND: Final[Mapping[str, str]] = {
     "AGENT_TOOK_FROM_CORPSE": "take",
     "POSSESSION_CLAIM_ASSERTED": "assert_possession_claim",
     "COMMITMENT_DECLARED": "declare_commitment",
+    "EXCHANGE_PROPOSED": "negotiate_exchange",
+    "EXCHANGE_WITHDRAWN": "negotiate_exchange",
+    "EXCHANGE_COMPLETED": "negotiate_exchange",
 }
 
 _DETAIL_KIND_TO_COMMAND_KIND: Final[Mapping[str, str]] = {
@@ -235,6 +241,9 @@ _DETAIL_KIND_TO_COMMAND_KIND: Final[Mapping[str, str]] = {
     "taken_from_corpse": "take",
     "possession_claim_asserted": "assert_possession_claim",
     "commitment_declared": "declare_commitment",
+    "exchange_proposed": "negotiate_exchange",
+    "exchange_withdrawn": "negotiate_exchange",
+    "exchange_completed": "negotiate_exchange",
 }
 
 # Detail class __name__ (Attacked, Moved, …) → command_kind when kind field absent.
@@ -277,6 +286,9 @@ _DETAIL_TYPE_NAME_TO_COMMAND_KIND: Final[Mapping[str, str]] = {
     "TakenFromCorpse": "take",
     "PossessionClaimAsserted": "assert_possession_claim",
     "CommitmentDeclared": "declare_commitment",
+    "ExchangeProposed": "negotiate_exchange",
+    "ExchangeWithdrawn": "negotiate_exchange",
+    "ExchangeCompleted": "negotiate_exchange",
 }
 
 # Consequence / environment semantics: no agent command to explain.

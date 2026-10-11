@@ -636,6 +636,29 @@ def _structured_commitments_loop_kwargs(config: object) -> dict[str, object]:
     }
 
 
+def _subjective_valuation_loop_kwargs(config: object) -> dict[str, object]:
+    """Bind private valuation. The world context carries horizon and bundle only."""
+    spec = getattr(config, "subjective_valuation", None)
+    if spec is None:
+        _LOG.debug(
+            "subjective_valuation_loop_kwargs subjective_valuation_active=%s",
+            False,
+        )
+        return {"subjective_valuation_active": False}
+    _LOG.debug(
+        "subjective_valuation_loop_kwargs subjective_valuation_active=%s "
+        "horizon_ticks=%s max_bundle=%s",
+        True,
+        spec.horizon_ticks,
+        spec.max_bundle,
+    )
+    return {
+        "subjective_valuation_active": True,
+        "horizon_ticks": spec.horizon_ticks,
+        "max_bundle": spec.max_bundle,
+    }
+
+
 def _knowledge_repositories_loop_kwargs(config: object) -> dict[str, object]:
     """Bind knowledge_repositories channel (no AgentCognitionSpec enum)."""
     return {
@@ -1603,6 +1626,17 @@ class SimulationRunner:
                     if config.structured_commitments is None
                     else config.structured_commitments.horizon_ticks
                 ),
+                subjective_valuation_active=config.subjective_valuation is not None,
+                subjective_valuation_horizon=(
+                    8
+                    if config.subjective_valuation is None
+                    else config.subjective_valuation.horizon_ticks
+                ),
+                subjective_valuation_max_bundle=(
+                    8
+                    if config.subjective_valuation is None
+                    else config.subjective_valuation.max_bundle
+                ),
                 **skill_kwargs,
                 **teaching_kwargs,
             )
@@ -1830,6 +1864,7 @@ class SimulationRunner:
                     **_knowledge_repositories_loop_kwargs(config),
                     **_possession_succession_loop_kwargs(config),
                     **_structured_commitments_loop_kwargs(config),
+                    **_subjective_valuation_loop_kwargs(config),
                     **_knowledge_genealogy_loop_kwargs(config),
                     **_bounded_experimentation_loop_kwargs(config),
                 )
@@ -3326,6 +3361,7 @@ class SimulationRunner:
                 **_knowledge_repositories_loop_kwargs(self._config),
                 **_possession_succession_loop_kwargs(self._config),
                 **_structured_commitments_loop_kwargs(self._config),
+                **_subjective_valuation_loop_kwargs(self._config),
                 **_knowledge_genealogy_loop_kwargs(self._config),
                 **_bounded_experimentation_loop_kwargs(self._config),
             )
@@ -3619,37 +3655,40 @@ def _bootstrap_snapshot(engine: WorldEngine) -> WorldSnapshot:
         bounded_experimentation_active=engine.bounded_experimentation_active,
         possession_succession_active=engine.possession_succession_active,
         structured_commitments_active=engine.structured_commitments_active,
+        subjective_valuation_active=engine.subjective_valuation_active,
     )
     state = engine._snapshot.world.state
     production_rows: dict[str, tuple[object, ...]] = {}
-    if codec_version in {"v3", "v4", "v5", "v6", "v7", "v8", "v9", "v10", "v11", "v12", "v13"}:
+    if codec_version in {"v3", "v4", "v5", "v6", "v7", "v8", "v9", "v10", "v11", "v12", "v13", "v14", "v15"}:
         production_rows = {
             "structures": tuple(state.structures.values()),
             "production_jobs": tuple(state.production_jobs.values()),
             "tool_marks": tuple(state.tool_marks.values()),
         }
-    if codec_version in {"v4", "v5", "v6", "v7", "v8", "v9", "v10", "v11", "v12", "v13"}:
+    if codec_version in {"v4", "v5", "v6", "v7", "v8", "v9", "v10", "v11", "v12", "v13", "v14", "v15"}:
         production_rows["active_hazards"] = tuple(state.active_hazards)
-    if codec_version in {"v5", "v6", "v7", "v8", "v9", "v10", "v11", "v12", "v13"}:
+    if codec_version in {"v5", "v6", "v7", "v8", "v9", "v10", "v11", "v12", "v13", "v14", "v15"}:
         production_rows["artifacts"] = tuple(state.artifacts.values())
-    if codec_version in {"v6", "v7", "v8", "v9", "v10", "v11", "v12", "v13"}:
+    if codec_version in {"v6", "v7", "v8", "v9", "v10", "v11", "v12", "v13", "v14", "v15"}:
         production_rows["lifecycle_records"] = tuple(engine.lifecycle_records)
-    if codec_version in {"v8", "v9", "v10", "v11", "v12", "v13"}:
+    if codec_version in {"v8", "v9", "v10", "v11", "v12", "v13", "v14", "v15"}:
         kinship_graph = engine.kinship_graph
         from world.kinship import KinshipGraph
 
         if type(kinship_graph) is KinshipGraph:
             production_rows["kinship_edges"] = kinship_graph.edges
-    if codec_version in {"v9", "v10", "v11", "v12", "v13"}:
+    if codec_version in {"v9", "v10", "v11", "v12", "v13", "v14", "v15"}:
         production_rows["dependency_need_registers"] = tuple(
             engine._dependency_need_registers.values()
         )
-    if codec_version in {"v11", "v12", "v13"}:
+    if codec_version in {"v11", "v12", "v13", "v14", "v15"}:
         production_rows["repositories"] = tuple(state.repositories.values())
-    if codec_version == "v13":
+    if codec_version in {"v13", "v14", "v15"}:
         production_rows["corpse_custody_item_ids"] = tuple(
             sorted(state.corpse_custody_item_ids, key=lambda item: item.value)
         )
+    if codec_version == "v15":
+        production_rows["exchange_offers"] = tuple(state.exchange_offers)
     draft = WorldSnapshot(
         snapshot_id=SnapshotId(f"bootstrap-{engine.run_id.value}"),
         run_id=engine.run_id,
@@ -3702,6 +3741,7 @@ def _bootstrap_snapshot(engine: WorldEngine) -> WorldSnapshot:
         dependency_need_registers=getattr(draft, "dependency_need_registers", ()),
         repositories=getattr(draft, "repositories", ()),
         corpse_custody_item_ids=getattr(draft, "corpse_custody_item_ids", ()),
+        exchange_offers=getattr(draft, "exchange_offers", ()),
     )
 
 

@@ -61,7 +61,7 @@ from world.identifiers import (
 )
 from world.models import LifeStatus
 from world.possession_succession import POSSESSION_DOCTRINES as _POSSESSION_DOCTRINES
-from world.values import WeatherCondition, round_physical
+from world.values import ItemKind, WeatherCondition, round_physical
 
 EVENT_SCHEMA_AUDIT_V1: Final[int] = 1
 EVENT_SCHEMA_REPLAY_V2: Final[int] = 2
@@ -81,6 +81,7 @@ EVENT_SCHEMA_REPLAY_V14: Final[int] = 14
 EVENT_SCHEMA_REPLAY_V15: Final[int] = 15
 EVENT_SCHEMA_REPLAY_V16: Final[int] = 16
 EVENT_SCHEMA_REPLAY_V17: Final[int] = 17
+EVENT_SCHEMA_REPLAY_V18: Final[int] = 18
 SUPPORTED_EVENT_SCHEMA_VERSIONS: Final[frozenset[int]] = frozenset(
     {
         EVENT_SCHEMA_AUDIT_V1,
@@ -99,6 +100,7 @@ SUPPORTED_EVENT_SCHEMA_VERSIONS: Final[frozenset[int]] = frozenset(
         EVENT_SCHEMA_REPLAY_V14, EVENT_SCHEMA_REPLAY_V15,
         EVENT_SCHEMA_REPLAY_V16,
         EVENT_SCHEMA_REPLAY_V17,
+        EVENT_SCHEMA_REPLAY_V18,
     }
 )
 REPLAYABLE_EVENT_SCHEMA_VERSIONS: Final[frozenset[int]] = frozenset(
@@ -118,6 +120,7 @@ REPLAYABLE_EVENT_SCHEMA_VERSIONS: Final[frozenset[int]] = frozenset(
         EVENT_SCHEMA_REPLAY_V14, EVENT_SCHEMA_REPLAY_V15,
         EVENT_SCHEMA_REPLAY_V16,
         EVENT_SCHEMA_REPLAY_V17,
+        EVENT_SCHEMA_REPLAY_V18,
     }
 )
 PHYSICAL_REPLAY_EVENT_SCHEMA_VERSIONS: Final[frozenset[int]] = frozenset(
@@ -136,6 +139,7 @@ PHYSICAL_REPLAY_EVENT_SCHEMA_VERSIONS: Final[frozenset[int]] = frozenset(
         EVENT_SCHEMA_REPLAY_V14, EVENT_SCHEMA_REPLAY_V15,
         EVENT_SCHEMA_REPLAY_V16,
         EVENT_SCHEMA_REPLAY_V17,
+        EVENT_SCHEMA_REPLAY_V18,
     }
 )
 _PRODUCTION_EVENT_SCHEMAS: Final[frozenset[int]] = frozenset(
@@ -151,6 +155,7 @@ _PRODUCTION_EVENT_SCHEMAS: Final[frozenset[int]] = frozenset(
         EVENT_SCHEMA_REPLAY_V14, EVENT_SCHEMA_REPLAY_V15,
         EVENT_SCHEMA_REPLAY_V16,
         EVENT_SCHEMA_REPLAY_V17,
+        EVENT_SCHEMA_REPLAY_V18,
     }
 )
 _ENVIRONMENT_EVENT_SCHEMAS: Final[frozenset[int]] = frozenset(
@@ -165,6 +170,7 @@ _ENVIRONMENT_EVENT_SCHEMAS: Final[frozenset[int]] = frozenset(
         EVENT_SCHEMA_REPLAY_V14, EVENT_SCHEMA_REPLAY_V15,
         EVENT_SCHEMA_REPLAY_V16,
         EVENT_SCHEMA_REPLAY_V17,
+        EVENT_SCHEMA_REPLAY_V18,
     }
 )
 _ARTIFACT_EVENT_SCHEMAS: Final[frozenset[int]] = frozenset(
@@ -178,6 +184,7 @@ _ARTIFACT_EVENT_SCHEMAS: Final[frozenset[int]] = frozenset(
         EVENT_SCHEMA_REPLAY_V14, EVENT_SCHEMA_REPLAY_V15,
         EVENT_SCHEMA_REPLAY_V16,
         EVENT_SCHEMA_REPLAY_V17,
+        EVENT_SCHEMA_REPLAY_V18,
     }
 )
 _LIFECYCLE_EVENT_SCHEMAS: Final[frozenset[int]] = frozenset(
@@ -190,6 +197,7 @@ _LIFECYCLE_EVENT_SCHEMAS: Final[frozenset[int]] = frozenset(
         EVENT_SCHEMA_REPLAY_V14, EVENT_SCHEMA_REPLAY_V15,
         EVENT_SCHEMA_REPLAY_V16,
         EVENT_SCHEMA_REPLAY_V17,
+        EVENT_SCHEMA_REPLAY_V18,
     }
 )
 _NEW_AGENT_INIT_EVENT_SCHEMAS: Final[frozenset[int]] = frozenset(
@@ -201,6 +209,7 @@ _NEW_AGENT_INIT_EVENT_SCHEMAS: Final[frozenset[int]] = frozenset(
         EVENT_SCHEMA_REPLAY_V14, EVENT_SCHEMA_REPLAY_V15,
         EVENT_SCHEMA_REPLAY_V16,
         EVENT_SCHEMA_REPLAY_V17,
+        EVENT_SCHEMA_REPLAY_V18,
     }
 )
 _KINSHIP_EVENT_SCHEMAS: Final[frozenset[int]] = frozenset(
@@ -212,6 +221,7 @@ _KINSHIP_EVENT_SCHEMAS: Final[frozenset[int]] = frozenset(
         EVENT_SCHEMA_REPLAY_V15,
         EVENT_SCHEMA_REPLAY_V16,
         EVENT_SCHEMA_REPLAY_V17,
+        EVENT_SCHEMA_REPLAY_V18,
     }
 )
 _DEPENDENCY_CARE_EVENT_SCHEMAS: Final[frozenset[int]] = frozenset(
@@ -222,6 +232,7 @@ _DEPENDENCY_CARE_EVENT_SCHEMAS: Final[frozenset[int]] = frozenset(
         EVENT_SCHEMA_REPLAY_V15,
         EVENT_SCHEMA_REPLAY_V16,
         EVENT_SCHEMA_REPLAY_V17,
+        EVENT_SCHEMA_REPLAY_V18,
     }
 )
 CURRENT_PHYSICAL_EVENT_SCHEMA_VERSION: Final[int] = EVENT_SCHEMA_REPLAY_V5
@@ -2184,6 +2195,140 @@ class CommitmentDeclared:
         _reject_presentation_fields(self.kind, self.__slots__)
 
 
+_EXCHANGE_PROPOSED_ACTS: Final[frozenset[str]] = frozenset({"offer", "counteroffer"})
+_EXCHANGE_ITEM_KINDS: Final[frozenset[str]] = frozenset(kind.value for kind in ItemKind)
+
+
+def _exchange_item_ids(name: str, value: object) -> tuple[EntityId, ...]:
+    return _entity_id_tuple(name, value)
+
+
+def _exchange_kinds(name: str, value: object, *, expected: int) -> tuple[str, ...]:
+    if isinstance(value, (str, bytes)) or not isinstance(value, tuple):
+        raise TypeError(f"{name} must be a tuple of item kinds")
+    if len(value) != expected:
+        raise ValueError(f"{name} length")
+    copied: list[str] = []
+    for item in value:
+        if type(item) is not str or item not in _EXCHANGE_ITEM_KINDS:
+            raise ValueError(name)
+        copied.append(item)
+    return tuple(copied)
+
+
+@dataclass(frozen=True, slots=True)
+class ExchangeProposed:
+    """Named bundles. Moves nothing."""
+
+    actor_id: EntityId
+    counterparty_id: EntityId
+    act: str
+    give_item_ids: tuple[EntityId, ...] = ()
+    take_item_ids: tuple[EntityId, ...] = ()
+    kind: Literal["exchange_proposed"] = field(
+        default="exchange_proposed", init=False
+    )
+
+    def __post_init__(self) -> None:
+        if type(self.actor_id) is not EntityId:
+            raise TypeError("ExchangeProposed.actor_id must be EntityId")
+        if type(self.counterparty_id) is not EntityId:
+            raise TypeError("ExchangeProposed.counterparty_id must be EntityId")
+        if self.actor_id == self.counterparty_id:
+            raise ValueError("ExchangeProposed parties must be distinct")
+        if self.act not in _EXCHANGE_PROPOSED_ACTS:
+            raise ValueError("ExchangeProposed.act")
+        give = _exchange_item_ids("ExchangeProposed.give_item_ids", self.give_item_ids)
+        take = _exchange_item_ids("ExchangeProposed.take_item_ids", self.take_item_ids)
+        if set(item.value for item in give) & set(item.value for item in take):
+            raise ValueError("ExchangeProposed item ids must be disjoint")
+        object.__setattr__(self, "give_item_ids", give)
+        object.__setattr__(self, "take_item_ids", take)
+        _reject_presentation_fields(self.kind, self.__slots__)
+
+
+@dataclass(frozen=True, slots=True)
+class ExchangeWithdrawn:
+    """The proposer took the live offer back. Moves nothing."""
+
+    actor_id: EntityId
+    counterparty_id: EntityId
+    act: str
+    give_item_ids: tuple[EntityId, ...] = ()
+    take_item_ids: tuple[EntityId, ...] = ()
+    kind: Literal["exchange_withdrawn"] = field(
+        default="exchange_withdrawn", init=False
+    )
+
+    def __post_init__(self) -> None:
+        if type(self.actor_id) is not EntityId:
+            raise TypeError("ExchangeWithdrawn.actor_id must be EntityId")
+        if type(self.counterparty_id) is not EntityId:
+            raise TypeError("ExchangeWithdrawn.counterparty_id must be EntityId")
+        if self.actor_id == self.counterparty_id:
+            raise ValueError("ExchangeWithdrawn parties must be distinct")
+        if self.act != "withdraw":
+            raise ValueError("ExchangeWithdrawn.act")
+        give = _exchange_item_ids("ExchangeWithdrawn.give_item_ids", self.give_item_ids)
+        take = _exchange_item_ids("ExchangeWithdrawn.take_item_ids", self.take_item_ids)
+        object.__setattr__(self, "give_item_ids", give)
+        object.__setattr__(self, "take_item_ids", take)
+        _reject_presentation_fields(self.kind, self.__slots__)
+
+
+@dataclass(frozen=True, slots=True)
+class ExchangeCompleted:
+    """Both bundles changed holders. Carries kinds, not reservations."""
+
+    actor_id: EntityId
+    counterparty_id: EntityId
+    act: str
+    give_item_ids: tuple[EntityId, ...]
+    take_item_ids: tuple[EntityId, ...]
+    give_item_kinds: tuple[str, ...]
+    take_item_kinds: tuple[str, ...]
+    kind: Literal["exchange_completed"] = field(
+        default="exchange_completed", init=False
+    )
+
+    def __post_init__(self) -> None:
+        if type(self.actor_id) is not EntityId:
+            raise TypeError("ExchangeCompleted.actor_id must be EntityId")
+        if type(self.counterparty_id) is not EntityId:
+            raise TypeError("ExchangeCompleted.counterparty_id must be EntityId")
+        if self.actor_id == self.counterparty_id:
+            raise ValueError("ExchangeCompleted parties must be distinct")
+        if self.act != "accept":
+            raise ValueError("ExchangeCompleted.act")
+        give = _exchange_item_ids("ExchangeCompleted.give_item_ids", self.give_item_ids)
+        take = _exchange_item_ids("ExchangeCompleted.take_item_ids", self.take_item_ids)
+        if not give or not take:
+            raise ValueError("ExchangeCompleted sides must be non-empty")
+        if set(item.value for item in give) & set(item.value for item in take):
+            raise ValueError("ExchangeCompleted item ids must be disjoint")
+        object.__setattr__(self, "give_item_ids", give)
+        object.__setattr__(self, "take_item_ids", take)
+        object.__setattr__(
+            self,
+            "give_item_kinds",
+            _exchange_kinds(
+                "ExchangeCompleted.give_item_kinds",
+                self.give_item_kinds,
+                expected=len(give),
+            ),
+        )
+        object.__setattr__(
+            self,
+            "take_item_kinds",
+            _exchange_kinds(
+                "ExchangeCompleted.take_item_kinds",
+                self.take_item_kinds,
+                expected=len(take),
+            ),
+        )
+        _reject_presentation_fields(self.kind, self.__slots__)
+
+
 EventDetails = (
     Moved
     | Searched
@@ -2243,6 +2388,9 @@ EventDetails = (
     | TakenFromCorpse
     | PossessionClaimAsserted
     | CommitmentDeclared
+    | ExchangeProposed
+    | ExchangeWithdrawn
+    | ExchangeCompleted
 )
 
 _DETAIL_TYPES: Final[frozenset[type]] = frozenset(
@@ -2305,6 +2453,9 @@ _DETAIL_TYPES: Final[frozenset[type]] = frozenset(
         TakenFromCorpse,
         PossessionClaimAsserted,
         CommitmentDeclared,
+        ExchangeProposed,
+        ExchangeWithdrawn,
+        ExchangeCompleted,
     }
 )
 
@@ -2326,19 +2477,26 @@ _KNOWLEDGE_REPOSITORY_EVENT_SCHEMAS: Final[frozenset[int]] = frozenset(
         EVENT_SCHEMA_REPLAY_V15,
         EVENT_SCHEMA_REPLAY_V16,
         EVENT_SCHEMA_REPLAY_V17,
+        EVENT_SCHEMA_REPLAY_V18,
     }
 )
 _EXPERIMENT_EVENT_SCHEMAS: Final[frozenset[int]] = frozenset(
-    {EVENT_SCHEMA_REPLAY_V15, EVENT_SCHEMA_REPLAY_V16, EVENT_SCHEMA_REPLAY_V17}
+    {EVENT_SCHEMA_REPLAY_V15, EVENT_SCHEMA_REPLAY_V16, EVENT_SCHEMA_REPLAY_V17, EVENT_SCHEMA_REPLAY_V18}
 )
 _POSSESSION_EVENT_SCHEMAS: Final[frozenset[int]] = frozenset(
-    {EVENT_SCHEMA_REPLAY_V16, EVENT_SCHEMA_REPLAY_V17}
+    {EVENT_SCHEMA_REPLAY_V16, EVENT_SCHEMA_REPLAY_V17, EVENT_SCHEMA_REPLAY_V18}
 )
 _POSSESSION_DETAIL_TYPES: Final[frozenset[type]] = frozenset(
     {CorpseCustodyOpened, TakenFromCorpse, PossessionClaimAsserted}
 )
-_COMMITMENT_EVENT_SCHEMAS: Final[frozenset[int]] = frozenset({EVENT_SCHEMA_REPLAY_V17})
+_COMMITMENT_EVENT_SCHEMAS: Final[frozenset[int]] = frozenset(
+    {EVENT_SCHEMA_REPLAY_V17, EVENT_SCHEMA_REPLAY_V18}
+)
 _COMMITMENT_DETAIL_TYPES: Final[frozenset[type]] = frozenset({CommitmentDeclared})
+_EXCHANGE_EVENT_SCHEMAS: Final[frozenset[int]] = frozenset({EVENT_SCHEMA_REPLAY_V18})
+_EXCHANGE_DETAIL_TYPES: Final[frozenset[type]] = frozenset(
+    {ExchangeProposed, ExchangeWithdrawn, ExchangeCompleted}
+)
 
 _PRODUCTION_DETAIL_TYPES: Final[frozenset[type]] = frozenset(
     {
@@ -2391,6 +2549,7 @@ _DURABLE_RECORD_EVENT_SCHEMAS: Final[frozenset[int]] = frozenset(
         EVENT_SCHEMA_REPLAY_V15,
         EVENT_SCHEMA_REPLAY_V16,
         EVENT_SCHEMA_REPLAY_V17,
+        EVENT_SCHEMA_REPLAY_V18,
     }
 )
 
@@ -2499,6 +2658,8 @@ def _artifact_effect_complete(details: EventDetails) -> bool:
 
 
 def _payload_effect_complete(details: EventDetails, *, schema_version: int) -> bool:
+    if type(details) in _EXCHANGE_DETAIL_TYPES:
+        return schema_version in _EXCHANGE_EVENT_SCHEMAS
     if type(details) in _COMMITMENT_DETAIL_TYPES:
         return schema_version in _COMMITMENT_EVENT_SCHEMAS
     if type(details) in _POSSESSION_DETAIL_TYPES:
@@ -2764,6 +2925,12 @@ def target_id_for_details(details: EventDetails) -> EntityId | None:
             return item_id
         case CommitmentDeclared(counterparty_id=counterparty_id):
             return counterparty_id
+        case (
+            ExchangeProposed(counterparty_id=counterparty_id)
+            | ExchangeWithdrawn(counterparty_id=counterparty_id)
+            | ExchangeCompleted(counterparty_id=counterparty_id)
+        ):
+            return counterparty_id
         case _:
             raise TypeError(
                 f"{EventValidationCode.UNKNOWN_EVENT_TYPE.value}: "
@@ -2918,6 +3085,15 @@ class WorldEvent:
                 _LOG.error(
                     "invalid_event_schema_version kind=%s schema_version=%s "
                     "reason_code=dependency_care_requires_v12",
+                    self.details.kind,
+                    self.schema_version,
+                )
+                raise ValueError(EventValidationCode.INVALID_SCHEMA_VERSION.value)
+        if type(self.details) in _EXCHANGE_DETAIL_TYPES:
+            if self.schema_version not in _EXCHANGE_EVENT_SCHEMAS:
+                _LOG.error(
+                    "invalid_event_schema_version kind=%s schema_version=%s "
+                    "reason_code=subjective_valuation_requires_v18",
                     self.details.kind,
                     self.schema_version,
                 )
@@ -3339,6 +3515,32 @@ def build_occurrence_context(
                 origin_location_id=origin_location_id,
                 destination_location_id=None,
                 affected_entity_ids=(actor_id, counterparty_id),
+                private_recipient_ids=(),
+            )
+        case (
+            ExchangeProposed(
+                actor_id=actor_id,
+                counterparty_id=counterparty_id,
+                give_item_ids=give_ids,
+                take_item_ids=take_ids,
+            )
+            | ExchangeWithdrawn(
+                actor_id=actor_id,
+                counterparty_id=counterparty_id,
+                give_item_ids=give_ids,
+                take_item_ids=take_ids,
+            )
+            | ExchangeCompleted(
+                actor_id=actor_id,
+                counterparty_id=counterparty_id,
+                give_item_ids=give_ids,
+                take_item_ids=take_ids,
+            )
+        ):
+            return OccurrenceContext(
+                origin_location_id=origin_location_id,
+                destination_location_id=None,
+                affected_entity_ids=(actor_id, counterparty_id, *give_ids, *take_ids),
                 private_recipient_ids=(),
             )
         case PossessionClaimAsserted(decedent_id=decedent_id, item_id=item_id):

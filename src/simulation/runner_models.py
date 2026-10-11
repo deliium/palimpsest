@@ -121,6 +121,7 @@ RUNNER_SCHEMA_VERSION_V36: Final[str] = "runner-config-v36"
 RUNNER_SCHEMA_VERSION_V37: Final[str] = "runner-config-v37"
 RUNNER_SCHEMA_VERSION_V38: Final[str] = "runner-config-v38"
 RUNNER_SCHEMA_VERSION_V39: Final[str] = "runner-config-v39"
+RUNNER_SCHEMA_VERSION_V40: Final[str] = "runner-config-v40"
 RUNNER_SCHEMA_VERSION: Final[str] = RUNNER_SCHEMA_VERSION_V4
 SUPPORTED_RUNNER_SCHEMA_VERSIONS: Final[frozenset[str]] = frozenset(
     {
@@ -163,6 +164,7 @@ SUPPORTED_RUNNER_SCHEMA_VERSIONS: Final[frozenset[str]] = frozenset(
     RUNNER_SCHEMA_VERSION_V37,
     RUNNER_SCHEMA_VERSION_V38,
     RUNNER_SCHEMA_VERSION_V39,
+    RUNNER_SCHEMA_VERSION_V40,
     }
 )
 RESULT_SCHEMA_VERSION_V1: Final[str] = "runner-result-v1"
@@ -708,6 +710,7 @@ _SKILL_SCHEMAS: Final[frozenset[str]] = frozenset(
     RUNNER_SCHEMA_VERSION_V37,
     RUNNER_SCHEMA_VERSION_V38,
     RUNNER_SCHEMA_VERSION_V39,
+    RUNNER_SCHEMA_VERSION_V40,
     }
 )
 
@@ -2834,6 +2837,7 @@ _HISTORICAL_MEMORY_CULTURAL_SCHEMAS: Final[frozenset[str]] = frozenset(
     RUNNER_SCHEMA_VERSION_V37,
     RUNNER_SCHEMA_VERSION_V38,
     RUNNER_SCHEMA_VERSION_V39,
+    RUNNER_SCHEMA_VERSION_V40,
     }
 )
 _DURABLE_RECORDS_SCHEMAS: Final[frozenset[str]] = frozenset(
@@ -2845,6 +2849,7 @@ _DURABLE_RECORDS_SCHEMAS: Final[frozenset[str]] = frozenset(
     RUNNER_SCHEMA_VERSION_V37,
     RUNNER_SCHEMA_VERSION_V38,
     RUNNER_SCHEMA_VERSION_V39,
+    RUNNER_SCHEMA_VERSION_V40,
     }
 )
 _HISTORICAL_MEMORY_LAYER_SCHEMAS: Final[frozenset[str]] = frozenset(
@@ -2857,6 +2862,7 @@ _HISTORICAL_MEMORY_LAYER_SCHEMAS: Final[frozenset[str]] = frozenset(
     RUNNER_SCHEMA_VERSION_V37,
     RUNNER_SCHEMA_VERSION_V38,
     RUNNER_SCHEMA_VERSION_V39,
+    RUNNER_SCHEMA_VERSION_V40,
     }
 )
 _KNOWLEDGE_REPOSITORIES_SCHEMAS: Final[frozenset[str]] = frozenset(
@@ -2867,6 +2873,7 @@ _KNOWLEDGE_REPOSITORIES_SCHEMAS: Final[frozenset[str]] = frozenset(
     RUNNER_SCHEMA_VERSION_V37,
     RUNNER_SCHEMA_VERSION_V38,
     RUNNER_SCHEMA_VERSION_V39,
+    RUNNER_SCHEMA_VERSION_V40,
     }
 )
 _KNOWLEDGE_GENEALOGY_SCHEMAS: Final[frozenset[str]] = frozenset(
@@ -2876,6 +2883,7 @@ _KNOWLEDGE_GENEALOGY_SCHEMAS: Final[frozenset[str]] = frozenset(
         RUNNER_SCHEMA_VERSION_V37,
         RUNNER_SCHEMA_VERSION_V38,
         RUNNER_SCHEMA_VERSION_V39,
+        RUNNER_SCHEMA_VERSION_V40,
     }
 )
 
@@ -4691,6 +4699,83 @@ def example_structured_commitments_spec() -> StructuredCommitmentsSpec:
     return StructuredCommitmentsSpec()
 
 
+SUBJECTIVE_VALUATION_POLICY_ID: Final[str] = "subjective-valuation-v1"
+_SUBJECTIVE_VALUATION_FORBIDDEN_ALIASES: Final[frozenset[str]] = frozenset(
+    {
+        "world_price",
+        "market_price",
+        "price_table",
+        "exchange_rate",
+        "currency",
+        "posted_price",
+        "clearing_price",
+        "numeraire",
+    }
+)
+
+
+@dataclass(frozen=True, slots=True)
+class SubjectiveValuationSpec:
+    """Opt-in private reservations and structured barter. Not a world price.
+
+    Absent object means ``NegotiateExchange`` is rejected. The engine never
+    reads valuation ledgers when it admits a command.
+    """
+
+    policy_id: str = SUBJECTIVE_VALUATION_POLICY_ID
+    horizon_ticks: int = 8
+    max_bundle: int = 8
+
+    def __post_init__(self) -> None:
+        policy = require_stable_id(
+            "SubjectiveValuationSpec.policy_id", self.policy_id
+        )
+        if policy != SUBJECTIVE_VALUATION_POLICY_ID:
+            _LOGGER.error(
+                "subjective_valuation_policy_invalid "
+                "reason_code=subjective_valuation_policy_invalid"
+            )
+            raise ValueError(
+                "policy_id must be subjective-valuation-v1 "
+                "(code=subjective_valuation_policy_invalid)"
+            )
+        object.__setattr__(self, "policy_id", policy)
+        horizon = require_exact_nonneg_int("horizon_ticks", self.horizon_ticks)
+        if horizon < 1 or horizon > 64:
+            _LOGGER.error(
+                "subjective_valuation_horizon_invalid "
+                "reason_code=subjective_valuation_horizon_invalid"
+            )
+            raise ValueError(
+                "horizon_ticks must be in [1, 64] "
+                "(code=subjective_valuation_horizon_invalid)"
+            )
+        object.__setattr__(self, "horizon_ticks", horizon)
+        bundle = require_exact_nonneg_int("max_bundle", self.max_bundle)
+        if bundle < 1 or bundle > 8:
+            _LOGGER.error(
+                "subjective_valuation_bundle_invalid "
+                "reason_code=subjective_valuation_bundle_invalid"
+            )
+            raise ValueError(
+                "max_bundle must be in [1, 8] "
+                "(code=subjective_valuation_bundle_invalid)"
+            )
+        object.__setattr__(self, "max_bundle", bundle)
+
+    def canonical_payload(self) -> dict[str, object]:
+        return {
+            "horizon_ticks": self.horizon_ticks,
+            "max_bundle": self.max_bundle,
+            "policy_id": self.policy_id,
+        }
+
+
+def example_subjective_valuation_spec() -> SubjectiveValuationSpec:
+    """Reference subjective-valuation spec for tests."""
+    return SubjectiveValuationSpec()
+
+
 def example_technique_lifecycle_spec(
     *,
     material_anchors: tuple[TechniqueMaterialAnchor, ...] = (),
@@ -6379,6 +6464,7 @@ class SimulationRunnerConfig:
     technique_lifecycle: TechniqueLifecycleSpec | None = None
     possession_succession: PossessionSuccessionSpec | None = None
     structured_commitments: StructuredCommitmentsSpec | None = None
+    subjective_valuation: SubjectiveValuationSpec | None = None
 
     def __post_init__(self) -> None:
         # Late import avoids circular import with new_agent_initialization.
@@ -6576,6 +6662,7 @@ class SimulationRunnerConfig:
     RUNNER_SCHEMA_VERSION_V37,
     RUNNER_SCHEMA_VERSION_V38,
     RUNNER_SCHEMA_VERSION_V39,
+    RUNNER_SCHEMA_VERSION_V40,
         }
         if (
             self.v3_capability_flags.generational_population
@@ -6607,6 +6694,7 @@ class SimulationRunnerConfig:
     RUNNER_SCHEMA_VERSION_V37,
     RUNNER_SCHEMA_VERSION_V38,
     RUNNER_SCHEMA_VERSION_V39,
+    RUNNER_SCHEMA_VERSION_V40,
         }
         if self.v3_capability_flags.kinship_inheritance:
             if self.schema_version not in _kinship_schemas:
@@ -6655,6 +6743,7 @@ class SimulationRunnerConfig:
     RUNNER_SCHEMA_VERSION_V37,
     RUNNER_SCHEMA_VERSION_V38,
     RUNNER_SCHEMA_VERSION_V39,
+    RUNNER_SCHEMA_VERSION_V40,
             }:
                 _LOGGER.error(
                     "dependency_care_requires_v28 schema_version=%s "
@@ -6710,6 +6799,7 @@ class SimulationRunnerConfig:
     RUNNER_SCHEMA_VERSION_V37,
     RUNNER_SCHEMA_VERSION_V38,
     RUNNER_SCHEMA_VERSION_V39,
+    RUNNER_SCHEMA_VERSION_V40,
             }:
                 _LOGGER.error(
                     "developmental_learning_requires_v29 schema_version=%s "
@@ -6777,6 +6867,7 @@ class SimulationRunnerConfig:
     RUNNER_SCHEMA_VERSION_V37,
     RUNNER_SCHEMA_VERSION_V38,
     RUNNER_SCHEMA_VERSION_V39,
+    RUNNER_SCHEMA_VERSION_V40,
             }:
                 _LOGGER.error(
                     "mentorship_requires_v30 schema_version=%s "
@@ -6885,6 +6976,7 @@ class SimulationRunnerConfig:
                 RUNNER_SCHEMA_VERSION_V37,
                 RUNNER_SCHEMA_VERSION_V38,
                 RUNNER_SCHEMA_VERSION_V39,
+                RUNNER_SCHEMA_VERSION_V40,
             }:
                 _LOGGER.error(
                     "technique_lifecycle_requires_v37 schema_version=%s "
@@ -6961,6 +7053,7 @@ class SimulationRunnerConfig:
     RUNNER_SCHEMA_VERSION_V37,
     RUNNER_SCHEMA_VERSION_V38,
     RUNNER_SCHEMA_VERSION_V39,
+    RUNNER_SCHEMA_VERSION_V40,
             }
             and self.v3_capability_flags.cultural_historical_memory
         ):
@@ -7235,6 +7328,7 @@ class SimulationRunnerConfig:
             RUNNER_SCHEMA_VERSION_V37,
             RUNNER_SCHEMA_VERSION_V38,
             RUNNER_SCHEMA_VERSION_V39,
+            RUNNER_SCHEMA_VERSION_V40,
         }
         if self.bounded_experimentation is not None:
             if self.schema_version not in _experiment_schemas:
@@ -7359,6 +7453,7 @@ class SimulationRunnerConfig:
             if self.schema_version not in {
                 RUNNER_SCHEMA_VERSION_V38,
                 RUNNER_SCHEMA_VERSION_V39,
+                RUNNER_SCHEMA_VERSION_V40,
             }:
                 _LOGGER.error(
                     "possession_succession_requires_v38 schema_version=%s "
@@ -7391,7 +7486,10 @@ class SimulationRunnerConfig:
                 raise TypeError(
                     "structured_commitments must be StructuredCommitmentsSpec or None"
                 )
-            if self.schema_version != RUNNER_SCHEMA_VERSION_V39:
+            if self.schema_version not in {
+                RUNNER_SCHEMA_VERSION_V39,
+                RUNNER_SCHEMA_VERSION_V40,
+            }:
                 _LOGGER.error(
                     "structured_commitments_requires_v39 schema_version=%s "
                     "reason_code=structured_commitments_requires_v39",
@@ -7419,6 +7517,39 @@ class SimulationRunnerConfig:
                     "runner-config-v39 requires structured_commitments "
                     "(code=v39_requires_structured_commitments)"
                 )
+        if self.subjective_valuation is not None:
+            if type(self.subjective_valuation) is not SubjectiveValuationSpec:
+                raise TypeError(
+                    "subjective_valuation must be SubjectiveValuationSpec or None"
+                )
+            if self.schema_version != RUNNER_SCHEMA_VERSION_V40:
+                _LOGGER.error(
+                    "subjective_valuation_requires_v40 schema_version=%s "
+                    "reason_code=subjective_valuation_requires_v40",
+                    self.schema_version,
+                )
+                raise ValueError(
+                    "subjective_valuation requires runner-config-v40 "
+                    "(code=subjective_valuation_requires_v40)"
+                )
+            _LOGGER.info(
+                "subjective_valuation_schema_select schema_version=%s "
+                "horizon_ticks=%s max_bundle=%s",
+                self.schema_version,
+                self.subjective_valuation.horizon_ticks,
+                self.subjective_valuation.max_bundle,
+            )
+        if self.schema_version == RUNNER_SCHEMA_VERSION_V40:
+            if self.subjective_valuation is None:
+                _LOGGER.error(
+                    "v40_requires_subjective_valuation schema_version=%s "
+                    "reason_code=v40_requires_subjective_valuation",
+                    self.schema_version,
+                )
+                raise ValueError(
+                    "runner-config-v40 requires subjective_valuation "
+                    "(code=v40_requires_subjective_valuation)"
+                )
         other_v3_enabled = tuple(
             name
             for name in self.v3_capability_flags.enabled_names()
@@ -7442,6 +7573,7 @@ class SimulationRunnerConfig:
     RUNNER_SCHEMA_VERSION_V37,
     RUNNER_SCHEMA_VERSION_V38,
     RUNNER_SCHEMA_VERSION_V39,
+    RUNNER_SCHEMA_VERSION_V40,
         }:
             _LOGGER.error(
                 "v3_capability_requires_v23 schema_version=%s "
@@ -7554,6 +7686,7 @@ class SimulationRunnerConfig:
     RUNNER_SCHEMA_VERSION_V37,
     RUNNER_SCHEMA_VERSION_V38,
     RUNNER_SCHEMA_VERSION_V39,
+    RUNNER_SCHEMA_VERSION_V40,
                 }
                 or self.v3_capability_flags.generational_population
             )
@@ -7625,6 +7758,7 @@ class SimulationRunnerConfig:
     RUNNER_SCHEMA_VERSION_V37,
     RUNNER_SCHEMA_VERSION_V38,
     RUNNER_SCHEMA_VERSION_V39,
+    RUNNER_SCHEMA_VERSION_V40,
             }
         ):
             _LOGGER.error(
@@ -7655,6 +7789,7 @@ class SimulationRunnerConfig:
     RUNNER_SCHEMA_VERSION_V37,
     RUNNER_SCHEMA_VERSION_V38,
     RUNNER_SCHEMA_VERSION_V39,
+    RUNNER_SCHEMA_VERSION_V40,
             }
             and self.v3_capability_flags.generational_population
         )
@@ -7800,6 +7935,7 @@ class SimulationRunnerConfig:
     RUNNER_SCHEMA_VERSION_V37,
     RUNNER_SCHEMA_VERSION_V38,
     RUNNER_SCHEMA_VERSION_V39,
+    RUNNER_SCHEMA_VERSION_V40,
         }
         if non_disabled and self.schema_version not in consolidation_schemas:
             _LOGGER.error(
@@ -7865,6 +8001,7 @@ class SimulationRunnerConfig:
     RUNNER_SCHEMA_VERSION_V37,
     RUNNER_SCHEMA_VERSION_V38,
     RUNNER_SCHEMA_VERSION_V39,
+    RUNNER_SCHEMA_VERSION_V40,
         }
         if reflecting and self.schema_version not in reflection_schemas:
             _LOGGER.error(
@@ -7930,6 +8067,7 @@ class SimulationRunnerConfig:
     RUNNER_SCHEMA_VERSION_V37,
     RUNNER_SCHEMA_VERSION_V38,
     RUNNER_SCHEMA_VERSION_V39,
+    RUNNER_SCHEMA_VERSION_V40,
         }
         if planning and self.schema_version not in prospective_schemas:
             _LOGGER.error(
@@ -7994,6 +8132,7 @@ class SimulationRunnerConfig:
     RUNNER_SCHEMA_VERSION_V37,
     RUNNER_SCHEMA_VERSION_V38,
     RUNNER_SCHEMA_VERSION_V39,
+    RUNNER_SCHEMA_VERSION_V40,
         }
         if considering and self.schema_version not in counterfactual_schemas:
             _LOGGER.error(
@@ -8057,6 +8196,7 @@ class SimulationRunnerConfig:
     RUNNER_SCHEMA_VERSION_V37,
     RUNNER_SCHEMA_VERSION_V38,
     RUNNER_SCHEMA_VERSION_V39,
+    RUNNER_SCHEMA_VERSION_V40,
         }:
             _LOGGER.error(
                 "invalid_fields path=agents.cognition.communication_strategy_mode "
@@ -8118,6 +8258,7 @@ class SimulationRunnerConfig:
     RUNNER_SCHEMA_VERSION_V37,
     RUNNER_SCHEMA_VERSION_V38,
     RUNNER_SCHEMA_VERSION_V39,
+    RUNNER_SCHEMA_VERSION_V40,
         }:
             _LOGGER.error(
                 "invalid_fields path=agents.cognition.reputation_mode "
@@ -8221,6 +8362,7 @@ class SimulationRunnerConfig:
     RUNNER_SCHEMA_VERSION_V37,
     RUNNER_SCHEMA_VERSION_V38,
     RUNNER_SCHEMA_VERSION_V39,
+    RUNNER_SCHEMA_VERSION_V40,
         }:
             _LOGGER.error(
                 "invalid_fields path=agents.cognition.teaching_interaction_mode "
@@ -8273,6 +8415,7 @@ class SimulationRunnerConfig:
     RUNNER_SCHEMA_VERSION_V37,
     RUNNER_SCHEMA_VERSION_V38,
     RUNNER_SCHEMA_VERSION_V39,
+    RUNNER_SCHEMA_VERSION_V40,
         }
         if (dynamics is not None and self.schema_version not in dynamics_schemas) or (
             self.schema_version == RUNNER_SCHEMA_VERSION_V14 and dynamics is None
@@ -8320,6 +8463,7 @@ class SimulationRunnerConfig:
     RUNNER_SCHEMA_VERSION_V37,
     RUNNER_SCHEMA_VERSION_V38,
     RUNNER_SCHEMA_VERSION_V39,
+    RUNNER_SCHEMA_VERSION_V40,
         }:
             _LOGGER.error(
                 "invalid_fields path=agents.cognition.territorial_claim_mode "
@@ -8373,6 +8517,7 @@ class SimulationRunnerConfig:
     RUNNER_SCHEMA_VERSION_V37,
     RUNNER_SCHEMA_VERSION_V38,
     RUNNER_SCHEMA_VERSION_V39,
+    RUNNER_SCHEMA_VERSION_V40,
         }:
             _LOGGER.error(
                 "invalid_fields path=agents.cognition.group_formation_mode "
@@ -8420,6 +8565,7 @@ class SimulationRunnerConfig:
     RUNNER_SCHEMA_VERSION_V37,
     RUNNER_SCHEMA_VERSION_V38,
     RUNNER_SCHEMA_VERSION_V39,
+    RUNNER_SCHEMA_VERSION_V40,
         }:
             _LOGGER.error(
                 "invalid_fields path=agents.cognition.social_norm_mode "
@@ -8470,6 +8616,7 @@ class SimulationRunnerConfig:
     RUNNER_SCHEMA_VERSION_V37,
     RUNNER_SCHEMA_VERSION_V38,
     RUNNER_SCHEMA_VERSION_V39,
+    RUNNER_SCHEMA_VERSION_V40,
         }
         if conventions_on and self.schema_version not in convention_schemas:
             _LOGGER.error(
@@ -8525,6 +8672,7 @@ class SimulationRunnerConfig:
     RUNNER_SCHEMA_VERSION_V37,
     RUNNER_SCHEMA_VERSION_V38,
     RUNNER_SCHEMA_VERSION_V39,
+    RUNNER_SCHEMA_VERSION_V40,
         }
         if artifacts_on and self.schema_version not in artifact_schemas:
             runner_log.error(
@@ -8576,6 +8724,7 @@ class SimulationRunnerConfig:
     RUNNER_SCHEMA_VERSION_V37,
     RUNNER_SCHEMA_VERSION_V38,
     RUNNER_SCHEMA_VERSION_V39,
+    RUNNER_SCHEMA_VERSION_V40,
         }
         if naming_on and self.schema_version not in naming_schemas:
             runner_log.error(
@@ -8624,6 +8773,7 @@ class SimulationRunnerConfig:
     RUNNER_SCHEMA_VERSION_V37,
     RUNNER_SCHEMA_VERSION_V38,
     RUNNER_SCHEMA_VERSION_V39,
+    RUNNER_SCHEMA_VERSION_V40,
         }
         budget_modes = tuple(
             agent.cognition.cognitive_budget_mode for agent in self.agents
@@ -8648,6 +8798,7 @@ class SimulationRunnerConfig:
     RUNNER_SCHEMA_VERSION_V37,
     RUNNER_SCHEMA_VERSION_V38,
     RUNNER_SCHEMA_VERSION_V39,
+    RUNNER_SCHEMA_VERSION_V40,
         }
         if budgets_on and self.schema_version not in budget_schemas:
             runner_log.error(
@@ -8770,6 +8921,7 @@ class SimulationRunnerConfig:
     RUNNER_SCHEMA_VERSION_V37,
     RUNNER_SCHEMA_VERSION_V38,
     RUNNER_SCHEMA_VERSION_V39,
+    RUNNER_SCHEMA_VERSION_V40,
         }:
             _LOGGER.error(
                 "invalid_fields path=agents.cognition.production_knowledge_mode "
@@ -8810,6 +8962,7 @@ class SimulationRunnerConfig:
     RUNNER_SCHEMA_VERSION_V37,
     RUNNER_SCHEMA_VERSION_V38,
     RUNNER_SCHEMA_VERSION_V39,
+    RUNNER_SCHEMA_VERSION_V40,
         }:
             from world.production import production_catalog_digest
 
@@ -8906,6 +9059,7 @@ class SimulationRunnerConfig:
     RUNNER_SCHEMA_VERSION_V37,
     RUNNER_SCHEMA_VERSION_V38,
     RUNNER_SCHEMA_VERSION_V39,
+    RUNNER_SCHEMA_VERSION_V40,
         }:
             shared_teaching = teaching_weight_tuple(self.agents[0].cognition)
             if any(

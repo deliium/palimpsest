@@ -31,6 +31,7 @@ from world.actions import (
     Erase,
     AssertPossessionClaim,
     DeclareCommitment,
+    NegotiateExchange,
     Experiment,
     EstablishRepository,
     Feed,
@@ -475,6 +476,18 @@ class _DeclareCommitmentOp:
 
 
 @dataclass(frozen=True, slots=True)
+class _NegotiateExchangeOp:
+    request_id: RequestId
+    actor_id: EntityId
+    world_id: WorldId
+    base_revision: WorldRevision
+    counterparty_id: EntityId
+    act: str
+    give_item_ids: tuple[EntityId, ...]
+    take_item_ids: tuple[EntityId, ...]
+
+
+@dataclass(frozen=True, slots=True)
 class _ExperimentOp:
     request_id: RequestId
     actor_id: EntityId
@@ -525,6 +538,7 @@ ValidatedWorldOperation = (
     | _ExperimentOp
     | _AssertPossessionClaimOp
     | _DeclareCommitmentOp
+    | _NegotiateExchangeOp
 )
 
 _OPERATION_TYPES: Final[frozenset[type]] = frozenset(
@@ -566,6 +580,7 @@ _OPERATION_TYPES: Final[frozenset[type]] = frozenset(
         _ExperimentOp,
         _AssertPossessionClaimOp,
         _DeclareCommitmentOp,
+        _NegotiateExchangeOp,
     }
 )
 
@@ -981,6 +996,21 @@ def validate_action_request(
                     ),
                 )
             )
+        case NegotiateExchange(
+            counterparty_id=counterparty_id,
+            act=act,
+            give_item_ids=give_item_ids,
+            take_item_ids=take_item_ids,
+        ):
+            return OperationAccepted(
+                _NegotiateExchangeOp(
+                    *base,
+                    counterparty_id=counterparty_id,
+                    act=act,
+                    give_item_ids=give_item_ids,
+                    take_item_ids=take_item_ids,
+                )
+            )
         case Experiment(
             operator=operator,
             operand_a_id=operand_a_id,
@@ -1208,6 +1238,7 @@ def prepare_action_batch(
     possession_succession_active: bool = False,
     possession_succession_context: object | None = None,
     structured_commitments_context: object | None = None,
+    subjective_valuation_context: object | None = None,
 ) -> PendingBatch:
     """Resolve ordered requests into pending effects against one evolving state.
 
@@ -1369,6 +1400,7 @@ def prepare_action_batch(
             experiment_catalog=experiment_catalog,
             possession_succession_context=possession_succession_context,
             structured_commitments_context=structured_commitments_context,
+            subjective_valuation_context=subjective_valuation_context,
         )
         if start_rule.disposition is RuleDisposition.REJECT:
             if start_rule.action_kind in {"feed", "transport"}:
@@ -1460,14 +1492,20 @@ def prepare_action_batch(
             possession_succession_active=possession_succession_active,
             possession_succession_context=possession_succession_context,
             structured_commitments_context=structured_commitments_context,
+            subjective_valuation_context=subjective_valuation_context,
         )
         if application.result.disposition is RuleDisposition.REJECT:
+            status = BatchItemStatus.CONFLICTED
+            reason = "conflict_with_prior"
+            if application.result.action_kind == "negotiate_exchange":
+                status = BatchItemStatus.REJECTED
+                reason = application.result.reason.value
             outcomes.append(
                 BatchItemOutcome(
                     ordinal=ordinal,
                     request_id=request.request_id,
-                    status=BatchItemStatus.CONFLICTED,
-                    reason="conflict_with_prior",
+                    status=status,
+                    reason=reason,
                     action_kind=application.result.action_kind,
                 )
             )

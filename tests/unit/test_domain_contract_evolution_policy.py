@@ -25,6 +25,7 @@ from world.actions import (
     Craft,
     DamageRecord,
     DeclareCommitment,
+    NegotiateExchange,
     DepositRecord,
     Drink,
     EstablishRepository,
@@ -100,6 +101,7 @@ _CLOSED_COMMAND_TYPES: frozenset[type] = frozenset(
         Experiment,
         AssertPossessionClaim,
         DeclareCommitment,
+        NegotiateExchange,
     }
 )
 
@@ -128,6 +130,7 @@ _FROZEN_OBSERVATION_FIELDS: frozenset[str] = frozenset(
         "season",
         "temperature_band",
         "hazard_kinds",
+        "exchange_visible_holdings",
     }
 )
 
@@ -140,7 +143,7 @@ _PARITY_GATE = (
 
 
 def test_agent_command_set_remains_closed_at_thirty_five() -> None:
-    assert len(_CLOSED_COMMAND_TYPES) == 37
+    assert len(_CLOSED_COMMAND_TYPES) == 38
     from world import actions as actions_mod
 
     # Mirror the public union membership without constructing parameterized commands.
@@ -182,6 +185,7 @@ def test_agent_command_set_remains_closed_at_thirty_five() -> None:
         Experiment,
         AssertPossessionClaim,
         DeclareCommitment,
+        NegotiateExchange,
     }
     assert asserted == _CLOSED_COMMAND_TYPES
     assert hasattr(actions_mod, "AgentCommand")

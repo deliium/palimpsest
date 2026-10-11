@@ -43,6 +43,9 @@ from world.events import (
     CommitmentDeclared,
     CraftStarted,
     ExperimentResolved,
+    ExchangeCompleted,
+    ExchangeProposed,
+    ExchangeWithdrawn,
     Given,
     ItemCrafted,
     ItemStored,
@@ -60,6 +63,7 @@ from world.identifiers import EntityId, WorldId
 from world.models import Item, LifeStatus, copy_body
 from world.observations import (
     CONTENT_VISIBILITY_THRESHOLD,
+    ExchangeVisibleHolding,
     Observation,
     ObservationAudienceRole,
     ObservationContext,
@@ -123,6 +127,7 @@ class PerceptionService:
         repository_perception_mode: str | None = None,
         possession_succession_active: bool = False,
         structured_commitments_active: bool = False,
+        subjective_valuation_active: bool = False,
     ) -> None:
         if durable_perception_mode is not None and durable_perception_mode not in {
             "marks_and_meta",
@@ -144,10 +149,13 @@ class PerceptionService:
             raise TypeError("possession_succession_active must be bool")
         if type(structured_commitments_active) is not bool:
             raise TypeError("structured_commitments_active must be bool")
+        if type(subjective_valuation_active) is not bool:
+            raise TypeError("subjective_valuation_active must be bool")
         self._durable_perception_mode = durable_perception_mode
         self._repository_perception_mode = repository_perception_mode
         self._possession_succession_active = possession_succession_active
         self._structured_commitments_active = structured_commitments_active
+        self._subjective_valuation_active = subjective_valuation_active
 
     def project(
         self,
@@ -193,6 +201,7 @@ class PerceptionService:
                 repository_perception_mode=self._repository_perception_mode,
                 possession_succession_active=self._possession_succession_active,
                 structured_commitments_active=self._structured_commitments_active,
+                subjective_valuation_active=self._subjective_valuation_active,
             )
             for observer_id in observers
         )
@@ -209,6 +218,7 @@ def project_observations(
     durable_perception_mode: str | None = None,
     repository_perception_mode: str | None = None,
     structured_commitments_active: bool = False,
+    subjective_valuation_active: bool = False,
 ) -> tuple[Observation, ...]:
     """Compatibility wrapper around :class:`PerceptionService`."""
     resolved = context if context is not None else ObservationContext(tick=0)
@@ -216,6 +226,7 @@ def project_observations(
         durable_perception_mode=durable_perception_mode,
         repository_perception_mode=repository_perception_mode,
         structured_commitments_active=structured_commitments_active,
+        subjective_valuation_active=subjective_valuation_active,
     ).project(
         world_id=world_id,
         state=state,
@@ -238,6 +249,7 @@ def _project_one(
     repository_perception_mode: str | None = None,
     possession_succession_active: bool = False,
     structured_commitments_active: bool = False,
+    subjective_valuation_active: bool = False,
 ) -> Observation:
     body = state.bodies[observer_id]
     location_id = body.location_id
@@ -259,6 +271,7 @@ def _project_one(
         prior_events=prior_events,
         state=state,
         structured_commitments_active=structured_commitments_active,
+        subjective_valuation_active=subjective_valuation_active,
     )
     structures = _sorted_structures(state, location_id) if content_visible else ()
     artifacts = _sorted_artifacts(
@@ -338,6 +351,11 @@ def _project_one(
         season=season,
         temperature_band=band,
         hazard_kinds=kinds,
+        exchange_visible_holdings=(
+            _exchange_visible_holdings(state, observer_id, location_id)
+            if subjective_valuation_active
+            else None
+        ),
     )
 
 
@@ -780,10 +798,16 @@ def _project_event_window(
     prior_events: tuple[WorldEvent, ...],
     state: WorldState | None = None,
     structured_commitments_active: bool = False,
+    subjective_valuation_active: bool = False,
 ) -> tuple[tuple[ObservedOccurrence, ...], tuple[ObservedCommunication, ...]]:
     occurrences: list[ObservedOccurrence] = []
     communications: list[ObservedCommunication] = []
     for event in prior_events:
+        if (
+            not subjective_valuation_active
+            and type(event.details) in {ExchangeProposed, ExchangeWithdrawn, ExchangeCompleted}
+        ):
+            continue
         occurrence = event.occurrence
         assert occurrence is not None
         if _is_communication(event):
@@ -828,6 +852,7 @@ def _project_event_window(
                     role,
                     state=state,
                     structured_commitments_active=structured_commitments_active,
+                    subjective_valuation_active=subjective_valuation_active,
                 ),
             )
         )
@@ -934,6 +959,7 @@ def _public_facts_for_role(
     *,
     state: WorldState | None = None,
     structured_commitments_active: bool = False,
+    subjective_valuation_active: bool = False,
 ) -> dict[str, object]:
     experiment_facts = _experiment_public_facts(event, role)
     if experiment_facts is not None:
@@ -942,6 +968,11 @@ def _public_facts_for_role(
     if artifact_facts is not None:
         # Artifact occurrences expose only identity/revision — never marks.
         return {"kind": event.event_type, **artifact_facts}
+    exchange_facts = _exchange_public_facts(
+        event, state, active=subjective_valuation_active, role=role
+    )
+    if exchange_facts is not None:
+        return exchange_facts
     facts: dict[str, object] = {"kind": event.event_type}
     possession_facts = _possession_public_facts(event)
     if possession_facts is not None:
@@ -996,6 +1027,76 @@ def _commitment_public_facts(event: WorldEvent) -> dict[str, object] | None:
         "due_tick": details.due_tick,
         "now_item_kind": details.now_item_kind,
     }
+
+
+def _exchange_public_facts(
+    event: WorldEvent,
+    state: WorldState | None,
+    *,
+    active: bool,
+    role: ObservationAudienceRole,
+) -> dict[str, object] | None:
+    details = event.details
+    if type(details) not in {ExchangeProposed, ExchangeWithdrawn, ExchangeCompleted}:
+        return None
+    if not active:
+        return None
+    give_ids = tuple(item.value for item in details.give_item_ids)
+    take_ids = tuple(item.value for item in details.take_item_ids)
+    if type(details) is ExchangeCompleted:
+        give_kinds = details.give_item_kinds
+        take_kinds = details.take_item_kinds
+    else:
+        give_kinds = tuple(_visible_item_kind(state, item) for item in details.give_item_ids)
+        take_kinds = tuple(_visible_item_kind(state, item) for item in details.take_item_ids)
+    _LOG.debug(
+        "exchange_occurrence act=%s role=%s give_len=%s take_len=%s",
+        details.act,
+        role.value,
+        len(give_ids),
+        len(take_ids),
+    )
+    return {
+        "kind": details.kind,
+        "act": details.act,
+        "give_item_ids": give_ids,
+        "take_item_ids": take_ids,
+        "give_item_kinds": give_kinds,
+        "take_item_kinds": take_kinds,
+    }
+
+
+def _visible_item_kind(state: WorldState | None, item_id: EntityId) -> str:
+    if state is None:
+        return ""
+    item = state.items.get(item_id)
+    if item is None:
+        return ""
+    return item.kind.value
+
+
+def _exchange_visible_holdings(
+    state: WorldState, observer_id: EntityId, location_id: EntityId
+) -> tuple[ExchangeVisibleHolding, ...]:
+    rows: list[ExchangeVisibleHolding] = []
+    for body in state.bodies.values():
+        if body.entity_id == observer_id or body.location_id != location_id:
+            continue
+        for item_id in body.inventory:
+            item = state.items.get(item_id)
+            if item is None or item.holder_id != body.entity_id:
+                continue
+            rows.append(
+                ExchangeVisibleHolding(
+                    body_id=body.entity_id,
+                    item_id=item.entity_id,
+                    kind=item.kind,
+                    load=item.load,
+                )
+            )
+    rows.sort(key=lambda row: (row.body_id.value, row.item_id.value))
+    _LOG.debug("exchange_holdings_visible holding_count=%s", len(rows))
+    return tuple(rows)
 
 
 def _given_item_facts(

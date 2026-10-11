@@ -51,6 +51,7 @@ from world.events import (
     EVENT_SCHEMA_REPLAY_V15,
     EVENT_SCHEMA_REPLAY_V16,
     EVENT_SCHEMA_REPLAY_V17,
+    EVENT_SCHEMA_REPLAY_V18,
     AgentCreated,
     AgentEnteredWorld,
     AgentInitializationRecorded,
@@ -74,6 +75,9 @@ from world.events import (
     CorpseCustodyOpened,
     ExperimentResolved,
     CommitmentDeclared,
+    ExchangeCompleted,
+    ExchangeProposed,
+    ExchangeWithdrawn,
     PossessionClaimAsserted,
     TakenFromCorpse,
     ExposureApplied,
@@ -359,6 +363,7 @@ def _prepare_events(
             EVENT_SCHEMA_REPLAY_V15,
             EVENT_SCHEMA_REPLAY_V16,
             EVENT_SCHEMA_REPLAY_V17,
+            EVENT_SCHEMA_REPLAY_V18,
         }:
             raise ProjectionError(ProjectionErrorCode.UNSUPPORTED_SCHEMA)
     return normalized, schema_version, run_id
@@ -635,6 +640,12 @@ def _apply_event_effect(
         case CommitmentDeclared() as declared:
             _project_commitment_declared(declared)
             return state, False
+        case ExchangeProposed() as proposed:
+            return _project_exchange_proposed(state, event, proposed), True
+        case ExchangeWithdrawn() as withdrawn:
+            return _project_exchange_withdrawn(state, event, withdrawn), True
+        case ExchangeCompleted() as completed:
+            return _project_exchange_completed(state, event, completed), True
         case _:
             raise ProjectionError(ProjectionErrorCode.PRECONDITION_FAILED)
 
@@ -1845,6 +1856,135 @@ def _project_taken_from_corpse(
             items=items,
             bodies=bodies,
             corpse_custody_item_ids=custody,
+        )
+    except ValueError as exc:
+        raise ProjectionError(ProjectionErrorCode.INVARIANT_FAILED) from exc
+
+
+def _without_exchange_offer(
+    state: WorldState, party_ids: tuple[EntityId, EntityId]
+) -> tuple:
+    return tuple(
+        offer for offer in state.exchange_offers if offer.party_ids != party_ids
+    )
+
+
+def _project_exchange_proposed(
+    state: WorldState, event: WorldEvent, details: ExchangeProposed
+) -> WorldState:
+    if event.schema_version != EVENT_SCHEMA_REPLAY_V18:
+        raise ProjectionError(ProjectionErrorCode.PRECONDITION_FAILED)
+    if event.actor_id != details.actor_id:
+        raise ProjectionError(ProjectionErrorCode.PRECONDITION_FAILED)
+    from world.subjective_value import ExchangeOffer, exchange_party_ids
+
+    parties = exchange_party_ids(details.actor_id, details.counterparty_id)
+    if details.actor_id not in state.bodies or details.counterparty_id not in state.bodies:
+        raise ProjectionError(ProjectionErrorCode.TARGET_MISSING)
+    offer = ExchangeOffer(
+        party_ids=parties,
+        proposer_id=details.actor_id,
+        give_item_ids=details.give_item_ids,
+        take_item_ids=details.take_item_ids,
+        tick=event.tick,
+    )
+    offers = _without_exchange_offer(state, parties) + (offer,)
+    _LOG.debug(
+        "exchange_projected act=%s give_len=%s take_len=%s",
+        details.act,
+        len(details.give_item_ids),
+        len(details.take_item_ids),
+    )
+    return rebuild_world_state(state, exchange_offers=offers)
+
+
+def _project_exchange_withdrawn(
+    state: WorldState, event: WorldEvent, details: ExchangeWithdrawn
+) -> WorldState:
+    if event.schema_version != EVENT_SCHEMA_REPLAY_V18:
+        raise ProjectionError(ProjectionErrorCode.PRECONDITION_FAILED)
+    from world.subjective_value import exchange_party_ids
+
+    parties = exchange_party_ids(details.actor_id, details.counterparty_id)
+    offers = _without_exchange_offer(state, parties)
+    _LOG.debug(
+        "exchange_projected act=%s give_len=%s take_len=%s",
+        details.act,
+        len(details.give_item_ids),
+        len(details.take_item_ids),
+    )
+    return rebuild_world_state(state, exchange_offers=offers)
+
+
+def _move_held_item(
+    items: dict,
+    bodies: dict,
+    *,
+    item_id: EntityId,
+    source_id: EntityId,
+    destination_id: EntityId,
+) -> None:
+    item = items.get(item_id)
+    source = bodies.get(source_id)
+    destination = bodies.get(destination_id)
+    if item is None or source is None or destination is None:
+        raise ProjectionError(ProjectionErrorCode.TARGET_MISSING)
+    if item.holder_id != source_id or item_id not in source.inventory:
+        raise ProjectionError(ProjectionErrorCode.PRECONDITION_FAILED)
+    items[item_id] = copy_item(item, location_id=None, holder_id=destination_id)
+    bodies[source_id] = _copy_body(
+        source, inventory=tuple(owned for owned in source.inventory if owned != item_id)
+    )
+    destination = bodies[destination_id]
+    bodies[destination_id] = _copy_body(
+        destination, inventory=(*destination.inventory, item_id)
+    )
+
+
+def _project_exchange_completed(
+    state: WorldState, event: WorldEvent, details: ExchangeCompleted
+) -> WorldState:
+    if event.schema_version != EVENT_SCHEMA_REPLAY_V18:
+        raise ProjectionError(ProjectionErrorCode.PRECONDITION_FAILED)
+    if event.actor_id != details.actor_id:
+        raise ProjectionError(ProjectionErrorCode.PRECONDITION_FAILED)
+    from world.subjective_value import exchange_party_ids
+
+    parties = exchange_party_ids(details.actor_id, details.counterparty_id)
+    items = dict(state.items)
+    bodies = dict(state.bodies)
+    for item_id, kind in zip(details.give_item_ids, details.give_item_kinds, strict=True):
+        held = items.get(item_id)
+        if held is None or held.kind.value != kind:
+            raise ProjectionError(ProjectionErrorCode.PRECONDITION_FAILED)
+        _move_held_item(
+            items,
+            bodies,
+            item_id=item_id,
+            source_id=details.actor_id,
+            destination_id=details.counterparty_id,
+        )
+    for item_id, kind in zip(details.take_item_ids, details.take_item_kinds, strict=True):
+        held = items.get(item_id)
+        if held is None or held.kind.value != kind:
+            raise ProjectionError(ProjectionErrorCode.PRECONDITION_FAILED)
+        _move_held_item(
+            items,
+            bodies,
+            item_id=item_id,
+            source_id=details.counterparty_id,
+            destination_id=details.actor_id,
+        )
+    offers = _without_exchange_offer(state, parties)
+    _LOG.debug(
+        "exchange_projected act=%s give_len=%s take_len=%s",
+        details.act,
+        len(details.give_item_ids),
+        len(details.take_item_ids),
+    )
+    try:
+        return rebuild_world_state(
+            state, items=items, bodies=bodies, exchange_offers=offers
         )
     except ValueError as exc:
         raise ProjectionError(ProjectionErrorCode.INVARIANT_FAILED) from exc

@@ -764,6 +764,57 @@ class DeclareCommitment:
         )
 
 
+_EXCHANGE_ACTS: Final[frozenset[str]] = frozenset(
+    {"offer", "counteroffer", "accept", "withdraw"}
+)
+
+
+def _exchange_id_tuple(name: str, value: tuple[EntityId, ...]) -> tuple[EntityId, ...]:
+    if isinstance(value, (str, bytes)) or not isinstance(value, tuple):
+        raise TypeError(f"{name} must be a tuple of EntityId")
+    seen: set[str] = set()
+    for item in value:
+        if type(item) is not EntityId:
+            raise TypeError(f"{name} entries must be EntityId")
+        if item.value in seen:
+            raise ValueError(f"duplicate {name}")
+        seen.add(item.value)
+    return value
+
+
+@dataclass(frozen=True, slots=True)
+class NegotiateExchange:
+    """Name both sides of a swap. Speech acts move nothing until accept."""
+
+    counterparty_id: EntityId
+    act: str
+    give_item_ids: tuple[EntityId, ...]
+    take_item_ids: tuple[EntityId, ...]
+    kind: Literal["negotiate_exchange"] = field(
+        default="negotiate_exchange", init=False
+    )
+
+    def __post_init__(self) -> None:
+        if type(self.counterparty_id) is not EntityId:
+            raise TypeError("NegotiateExchange.counterparty_id must be EntityId")
+        if self.act not in _EXCHANGE_ACTS:
+            raise ValueError("NegotiateExchange.act")
+        give = _exchange_id_tuple(
+            "NegotiateExchange.give_item_ids", self.give_item_ids
+        )
+        take = _exchange_id_tuple(
+            "NegotiateExchange.take_item_ids", self.take_item_ids
+        )
+        if set(give) & set(take):
+            raise ValueError("NegotiateExchange item ids must be disjoint")
+        _EXPERIMENT_LOG.debug(
+            "exchange_command_constructed act=%s give_len=%s take_len=%s",
+            self.act,
+            len(give),
+            len(take),
+        )
+
+
 AgentCommand = (
     Move
     | Search
@@ -802,6 +853,7 @@ AgentCommand = (
     | Experiment
     | AssertPossessionClaim
     | DeclareCommitment
+    | NegotiateExchange
 )
 
 _COMMAND_TYPES: Final[frozenset[type]] = frozenset(
@@ -843,6 +895,7 @@ _COMMAND_TYPES: Final[frozenset[type]] = frozenset(
         Experiment,
         AssertPossessionClaim,
         DeclareCommitment,
+        NegotiateExchange,
     }
 )
 
