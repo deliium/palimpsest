@@ -38,7 +38,7 @@ Executable formula, population, and edge-case policy for all nineteen metric fam
 | `caregiving_burden` | `caregiving_burden@1` | detached care-act rows |
 | `intergenerational_cooperation` | `intergenerational_cooperation@1` | detached care-act + kinship rows |
 
-Catalog version: `metric-catalog-v1`. Document schema: `MetricDocument` schema `1`. Closed catalog cardinality: **77** families (`METRIC_FAMILY_COUNT`). New opt-in families assemble only when their detached inputs are present.
+Catalog version: `metric-catalog-v1`. Document schema: `MetricDocument` schema `1`. Closed catalog cardinality: **80** families (`METRIC_FAMILY_COUNT`). New opt-in families assemble only when their detached inputs are present.
 
 ### Additive analysis surfaces (off the V1 gate)
 
@@ -103,6 +103,10 @@ Catalog version: `metric-catalog-v1`. Document schema: `MetricDocument` schema `
 ### Structured commitment families (off the V1 gate)
 
 `commitment_term_divergence@1`, `commitment_fulfillment_status@1`, and `commitment_social_consequences@1` assemble only when `structured_commitments` is present. They read speech tokens and each owner's stored terms. A missing row is `unformed`. Disagreement is `divergent`. A status histogram is not a world fact. A later `Given` is an item move, not a verdict. Consequence counts are requests, not health or inventory changes. `world_enforcement` stays false and `institution` stays `none`. An empty harvest when the channel is off is absence. Experiment AT stays off the V1 gate. Research UI badges for these three ids are `research_inference` and do not name a legal debt.
+
+### Subjective valuation families (off the V1 gate)
+
+`exchange_reservation_divergence@1`, `exchange_negotiation_path@1`, and `exchange_realized_bundles@1` assemble only when `subjective_valuation` is present. A reservation is that owner's private belief. A missing ledger is `unformed`. Two different tool reservations are `divergent`. The path counts offers, counteroffers, withdrawals, and completions. A withdrawn offer is not a transfer. `realized_bundle` stores kind counts from a completed swap, such as three food and one tool. Those counts are the items that changed hands. `institution` stays `none`. An empty harvest when the channel is off is absence. Experiment AU (`subjective_exchange@1`) stays off the V1 gate. Research UI badges for these three ids are `research_inference`. Badge copy says reservation or bundle.
 
 ### Supporting formulas (not a separate family)
 

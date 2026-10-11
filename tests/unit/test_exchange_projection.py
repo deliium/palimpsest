@@ -83,7 +83,14 @@ def test_proposed_stores_offer_and_leaves_holders() -> None:
     )
     after = project_events(
         state,
-        (_event(details, event_id="evt-offer", actor=alice.entity_id, schema=EVENT_SCHEMA_REPLAY_V18),),
+        (
+            _event(
+                details,
+                event_id="evt-offer",
+                actor=alice.entity_id,
+                schema=EVENT_SCHEMA_REPLAY_V18,
+            ),
+        ),
         expected_run_id=_RUN,
         expected_world_id=_WORLD,
     )
@@ -118,7 +125,12 @@ def test_completed_swaps_holders_and_drops_offer() -> None:
     after = project_events(
         state,
         (
-            _event(proposed, event_id="evt-offer", actor=alice.entity_id, schema=EVENT_SCHEMA_REPLAY_V18),
+            _event(
+                proposed,
+                event_id="evt-offer",
+                actor=alice.entity_id,
+                schema=EVENT_SCHEMA_REPLAY_V18,
+            ),
             _event(
                 completed,
                 event_id="evt-done",
@@ -144,8 +156,15 @@ def test_v17_rejects_exchange_kind() -> None:
         (tool.entity_id,),
         (food.entity_id,),
     )
-    with pytest.raises(ValueError, match=EventValidationCode.INVALID_SCHEMA_VERSION.value):
-        _event(details, event_id="evt-v17", actor=alice.entity_id, schema=EVENT_SCHEMA_REPLAY_V17)
+    with pytest.raises(
+        ValueError, match=EventValidationCode.INVALID_SCHEMA_VERSION.value
+    ):
+        _event(
+            details,
+            event_id="evt-v17",
+            actor=alice.entity_id,
+            schema=EVENT_SCHEMA_REPLAY_V17,
+        )
 
 
 def test_v15_snapshot_round_trips_offer_without_price() -> None:

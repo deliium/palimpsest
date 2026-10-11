@@ -7,8 +7,10 @@ from dataclasses import replace
 import pytest
 
 from agents.cognition.configuration import build_cognitive_loop
+from agents.cognition.structured_commitments import empty_structured_commitments
 from agents.models import AgentId
 from experiments.catalog import base_runner_config_from_scenario
+from simulation.bootstrap import AgentRegistration, WorldBootstrap
 from simulation.engine import WorldEngine, _bind_subjective_valuation_channel
 from simulation.models import SimulationRunConfig
 from simulation.persistence import (
@@ -27,7 +29,6 @@ from simulation.runner_models import (
     example_structured_commitments_spec,
     example_subjective_valuation_spec,
 )
-from agents.cognition.structured_commitments import empty_structured_commitments
 from simulation.serialization import (
     DomainSerializationError,
     _decode_event_details,
@@ -35,7 +36,6 @@ from simulation.serialization import (
     structured_commitments_checkpoint_payload,
 )
 from tests.simulation_helpers import alive_body, make_location, make_weather
-from simulation.bootstrap import AgentRegistration, WorldBootstrap
 from world.identifiers import EntityId, WorldId, WorldRevision
 from world.models import default_physical_rules
 

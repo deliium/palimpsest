@@ -2,6 +2,12 @@
 
 from __future__ import annotations
 
+from tests.simulation_helpers import (
+    alive_body,
+    make_item,
+    make_location,
+    make_weather,
+)
 from world._perception import project_observations
 from world._state import WorldState
 from world.effects import ActionCause
@@ -14,12 +20,6 @@ from world.events import (
 from world.identifiers import EntityId, EventId, RequestId, WorldId, WorldRevision
 from world.observations import ObservationContext
 from world.values import ItemKind
-from tests.simulation_helpers import (
-    alive_body,
-    make_item,
-    make_location,
-    make_weather,
-)
 
 
 def _scene():

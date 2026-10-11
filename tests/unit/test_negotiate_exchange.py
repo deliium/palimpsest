@@ -55,13 +55,19 @@ def _world(
         )
         for index in range(foods)
     )
-    alice = alive_body("body-a", inventory=(tool.entity_id,), carry_capacity=alice_capacity)
+    alice = alive_body(
+        "body-a", inventory=(tool.entity_id,), carry_capacity=alice_capacity
+    )
     bob = alive_body("body-b", inventory=tuple(item.entity_id for item in food))
     bodies = [alice, bob]
     items = [tool, *food]
     if extra_body:
         cara_food = make_item(
-            "food-c", name="Bread", kind=ItemKind.FOOD, location_id=None, holder_id="body-c"
+            "food-c",
+            name="Bread",
+            kind=ItemKind.FOOD,
+            location_id=None,
+            holder_id="body-c",
         )
         bodies.append(alive_body("body-c", inventory=(cara_food.entity_id,)))
         items.append(cara_food)
@@ -129,13 +135,24 @@ def test_accept_swaps_tool_and_four_food_and_drops_the_row() -> None:
     food_ids = tuple(item.entity_id for item in food)
     offered = _run(
         state,
-        (_request(_offer(tool.entity_id, food_ids), actor="body-a", request_id="r-offer"),),
+        (
+            _request(
+                _offer(tool.entity_id, food_ids),
+                actor="body-a",
+                request_id="r-offer",
+            ),
+        ),
     )
     accepted = _run(
         offered.working_state,
         (
             _request(
-                NegotiateExchange(EntityId("body-a"), "accept", food_ids, (tool.entity_id,)),
+                NegotiateExchange(
+                    EntityId("body-a"),
+                    "accept",
+                    food_ids,
+                    (tool.entity_id,),
+                ),
                 actor="body-b",
                 request_id="r-accept",
             ),
@@ -156,13 +173,24 @@ def test_failed_accept_keeps_holders_and_the_row() -> None:
     food_ids = tuple(item.entity_id for item in food)
     offered = _run(
         state,
-        (_request(_offer(tool.entity_id, food_ids), actor="body-a", request_id="r-offer"),),
+        (
+            _request(
+                _offer(tool.entity_id, food_ids),
+                actor="body-a",
+                request_id="r-offer",
+            ),
+        ),
     )
     accepted = _run(
         offered.working_state,
         (
             _request(
-                NegotiateExchange(EntityId("body-a"), "accept", food_ids, (tool.entity_id,)),
+                NegotiateExchange(
+                    EntityId("body-a"),
+                    "accept",
+                    food_ids,
+                    (tool.entity_id,),
+                ),
                 actor="body-b",
                 request_id="r-accept",
             ),
@@ -223,7 +251,9 @@ def test_channel_off_rejects_only_negotiate() -> None:
         tick=1,
         subjective_valuation_context=None,
     )
-    assert pending.outcomes[0].reason == RuleReason.SUBJECTIVE_VALUATION_CHANNEL_OFF.value
+    assert (
+        pending.outcomes[0].reason == RuleReason.SUBJECTIVE_VALUATION_CHANNEL_OFF.value
+    )
     assert pending.outcomes[1].reason == RuleReason.OCCURRENCE.value
     assert pending.working_state.exchange_offers == ()
 
@@ -233,19 +263,33 @@ def test_expired_row_is_replaced_by_the_next_offer() -> None:
     food_id = food[0].entity_id
     offered = _run(
         state,
-        (_request(_offer(tool.entity_id, (food_id,)), actor="body-a", request_id="r-offer"),),
+        (
+            _request(
+                _offer(tool.entity_id, (food_id,)),
+                actor="body-a",
+                request_id="r-offer",
+            ),
+        ),
         tick=1,
         context=_context(horizon=1),
     )
     replaced = _run(
         offered.working_state,
-        (_request(_offer(tool.entity_id, (food_id,)), actor="body-a", request_id="r-next"),),
+        (
+            _request(
+                _offer(tool.entity_id, (food_id,)),
+                actor="body-a",
+                request_id="r-next",
+            ),
+        ),
         tick=3,
         context=_context(horizon=1),
     )
     assert replaced.outcomes[0].reason == RuleReason.OCCURRENCE.value
     assert replaced.working_state.exchange_offers[0].tick == 3
-    assert all(type(event.details) is ExchangeProposed for event in replaced.pending_events)
+    assert all(
+        type(event.details) is ExchangeProposed for event in replaced.pending_events
+    )
 
 
 def test_empty_side_offer_is_rejected() -> None:
@@ -294,7 +338,10 @@ def test_second_pair_accept_fails_not_held() -> None:
         (
             _request(
                 NegotiateExchange(
-                    EntityId("body-a"), "accept", (food[0].entity_id,), (tool.entity_id,)
+                    EntityId("body-a"),
+                    "accept",
+                    (food[0].entity_id,),
+                    (tool.entity_id,),
                 ),
                 actor="body-b",
                 request_id="r-take",
@@ -324,7 +371,12 @@ def test_same_tick_accept_before_offer_does_not_match() -> None:
         state,
         (
             _request(
-                NegotiateExchange(EntityId("body-a"), "accept", (food_id,), (tool.entity_id,)),
+                NegotiateExchange(
+                    EntityId("body-a"),
+                    "accept",
+                    (food_id,),
+                    (tool.entity_id,),
+                ),
                 actor="body-b",
                 request_id="r-accept",
             ),

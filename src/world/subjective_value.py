@@ -41,7 +41,9 @@ class ExchangeOffer:
         ordered = exchange_party_ids(self.party_ids[0], self.party_ids[1])
         if ordered != self.party_ids:
             raise ValueError("ExchangeOffer.party_ids must be ordered")
-        if type(self.proposer_id) is not EntityId or self.proposer_id not in self.party_ids:
+        if type(self.proposer_id) is not EntityId or self.proposer_id not in (
+            self.party_ids
+        ):
             raise ValueError("ExchangeOffer.proposer_id must be one party")
         give = _distinct_ids("ExchangeOffer.give_item_ids", self.give_item_ids)
         take = _distinct_ids("ExchangeOffer.take_item_ids", self.take_item_ids)

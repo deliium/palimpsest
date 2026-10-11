@@ -430,7 +430,7 @@ Docs must not describe a reservation as a market price.
 
 ### Phase 5: Docs
 
-- [ ] Task 15: Docs checkpoint listed in the Docs section. Confirm Alembic head `0017`, protocol id unchanged, command count 38, semantic count 61, write pair v18/v15 only when the channel is on, codec v15 still carries v14 payloads, and `exchange_offers` has no reservation field. Run `ruff check` on the changed Python set before this commit.
+- [x] Task 15: Docs checkpoint listed in the Docs section. Confirm Alembic head `0017`, protocol id unchanged, command count 38, semantic count 61, write pair v18/v15 only when the channel is on, codec v15 still carries v14 payloads, and `exchange_offers` has no reservation field. Run `ruff check` on the changed Python set before this commit.
   - Deliverable: Doc updates; architecture isolation green; ruff clean on the changed set.
   - Files: `docs/architecture.md`, `docs/social-communication.md`, `docs/cognition-runtime.md`, `docs/analysis-metrics.md`, `.ai-factory/DESCRIPTION.md`, `.ai-factory/ARCHITECTURE.md`, `.ai-factory/ROADMAP.md`
   - Logging: none in docs; docs must say a reservation is a private belief and a completed event lists items, not a price
