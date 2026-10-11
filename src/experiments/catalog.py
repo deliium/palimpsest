@@ -2764,6 +2764,7 @@ OFF_GATE_MATRIX_EXPERIMENT_IDS: Final[frozenset[str]] = frozenset(
         "experiment-ar-technique-lifecycle",
         "experiment-as-possession-succession",
         "structured_commitments@1",
+        "subjective_exchange@1",
     }
 )
 
@@ -4846,6 +4847,69 @@ def experiment_at_structured_commitments(
         )
     return _definition(
         experiment_id="structured_commitments@1",
+        base=base,
+        seed_matrix=matrix,
+        arms=arms,
+    )
+
+
+def experiment_au_subjective_exchange(
+    base: SimulationRunnerConfig,
+    *,
+    seed_matrix: ExperimentSeedMatrix | None = None,
+    max_ticks: int = 6,
+) -> ExperimentDefinition:
+    """Off-gate Experiment AU. Default batches do not enable it."""
+    from simulation.runner_models import (
+        RUNNER_SCHEMA_VERSION_V40,
+        example_subjective_valuation_spec,
+    )
+
+    matrix = seed_matrix or ExperimentSeedMatrix(seeds=(base.seed,))
+    valuation = example_subjective_valuation_spec()
+
+    def _v40() -> SimulationRunnerConfig:
+        return replace(
+            base,
+            schema_version=RUNNER_SCHEMA_VERSION_V40,
+            mortality_mode=MortalityMode.DISABLED,
+            stop_policy=RunnerStopPolicy(max_ticks=max_ticks),
+            v3_capability_flags=V3CapabilityFlags(),
+            subjective_valuation=valuation,
+            population_lifecycle=None,
+        )
+
+    channel_off = replace(
+        base,
+        schema_version=RUNNER_SCHEMA_VERSION_V4,
+        mortality_mode=MortalityMode.DISABLED,
+        stop_policy=RunnerStopPolicy(max_ticks=max_ticks),
+        v3_capability_flags=V3CapabilityFlags(),
+        subjective_valuation=None,
+        population_lifecycle=None,
+    )
+    arms = (
+        ("au-channel-off", "subjective_exchange_channel_off", channel_off),
+        (
+            "au-divergent-reservation",
+            "subjective_exchange_divergent_reservation",
+            _v40(),
+        ),
+        ("au-agreed-swap", "subjective_exchange_agreed_swap", _v40()),
+        ("au-history", "subjective_exchange_history", _v40()),
+    )
+    for arm_id, _label, config in arms:
+        _LOG.info(
+            "experiment_arm_start arm_id=%s schema_version=%s",
+            arm_id,
+            config.schema_version,
+        )
+        _LOG.debug(
+            "subjective_valuation_active active=%s",
+            config.subjective_valuation is not None,
+        )
+    return _definition(
+        experiment_id="subjective_exchange@1",
         base=base,
         seed_matrix=matrix,
         arms=arms,

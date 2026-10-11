@@ -1266,6 +1266,7 @@ class WorldEngine:
                 bounded_experimentation_active=self.bounded_experimentation_active,
                 possession_succession_active=self.possession_succession_active,
                 structured_commitments_active=self.structured_commitments_active,
+            subjective_valuation_active=self.subjective_valuation_active,
             )
             snap = self._snapshot
             same_tick = [
@@ -1513,6 +1514,7 @@ class WorldEngine:
             bounded_experimentation_active=self.bounded_experimentation_active,
             possession_succession_active=self.possession_succession_active,
             structured_commitments_active=self.structured_commitments_active,
+            subjective_valuation_active=self.subjective_valuation_active,
         )
         next_registrations = (*self._registrations, registration)
         self._registrations = next_registrations
@@ -3529,6 +3531,7 @@ class WorldEngine:
             bounded_experimentation_active=self.bounded_experimentation_active,
             possession_succession_active=self.possession_succession_active,
             structured_commitments_active=self.structured_commitments_active,
+            subjective_valuation_active=self.subjective_valuation_active,
         )
         prepared = finalize_pending_batch(
             merged,
