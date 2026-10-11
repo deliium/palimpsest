@@ -50,7 +50,7 @@ __all__ = [
 ]
 
 METRIC_CATALOG_VERSION: Final[str] = "metric-catalog-v1"
-METRIC_FAMILY_COUNT: Final[int] = 77
+METRIC_FAMILY_COUNT: Final[int] = 80
 
 # Align with existing memory-drift / transmission document versions.
 _ALGO_V1: Final[str] = "1"
@@ -154,6 +154,9 @@ class MetricFamilyId(StrEnum):
     COMMITMENT_TERM_DIVERGENCE = "commitment_term_divergence"
     COMMITMENT_FULFILLMENT_STATUS = "commitment_fulfillment_status"
     COMMITMENT_SOCIAL_CONSEQUENCES = "commitment_social_consequences"
+    EXCHANGE_RESERVATION_DIVERGENCE = "exchange_reservation_divergence"
+    EXCHANGE_NEGOTIATION_PATH = "exchange_negotiation_path"
+    EXCHANGE_REALIZED_BUNDLES = "exchange_realized_bundles"
 
 
 class DenominatorKind(StrEnum):
@@ -2268,6 +2271,80 @@ def _spec_commitment_term_divergence() -> MetricSpecification:
     )
 
 
+def _spec_exchange_reservation_divergence() -> MetricSpecification:
+    return _base(
+        family_id=MetricFamilyId.EXCHANGE_RESERVATION_DIVERGENCE,
+        evidence_inputs=frozenset({EvidenceStage.OBJECTIVE_EVENT_STATE}),
+        population="exchange_negotiation_events",
+        denominator="owner_reservations",
+        denominator_kind=DenominatorKind.OCCURRENCE,
+        cohort_window="as_of tick exchange classification",
+        deceased_policy="not_applicable",
+        zero_holding_policy="spec absent -> family omitted",
+        opportunity_vs_occurrence="owner integers versus the spoken path",
+        self_edge_policy="not_applicable",
+        censoring_policy="a reservation is a private belief, never a posted number",
+        formulas={
+            "divergent_count": "paths whose tool reservations differ",
+            "reservations": "owner:kind:integer pairs, ascending owner",
+            "unformed_count": "owners with no stored row",
+        },
+        value_keys=("divergent_count", "reservations", "unformed_count"),
+        empty_case="availability=absent; no_subjective_valuation",
+    )
+
+
+def _spec_exchange_negotiation_path() -> MetricSpecification:
+    return _base(
+        family_id=MetricFamilyId.EXCHANGE_NEGOTIATION_PATH,
+        evidence_inputs=frozenset({EvidenceStage.OBJECTIVE_EVENT_STATE}),
+        population="exchange_negotiation_events",
+        denominator="path_tokens",
+        denominator_kind=DenominatorKind.OCCURRENCE,
+        cohort_window="as_of tick exchange classification",
+        deceased_policy="not_applicable",
+        zero_holding_policy="spec absent -> family omitted",
+        opportunity_vs_occurrence="speech and completion counts",
+        self_edge_policy="not_applicable",
+        censoring_policy="a token records what was said or what moved",
+        formulas={
+            "complete_count": "completed swaps",
+            "counteroffer_count": "counteroffers",
+            "offer_count": "offers",
+            "withdraw_count": "withdrawals",
+        },
+        value_keys=(
+            "complete_count",
+            "counteroffer_count",
+            "offer_count",
+            "withdraw_count",
+        ),
+        empty_case="availability=absent; no_subjective_valuation",
+    )
+
+
+def _spec_exchange_realized_bundles() -> MetricSpecification:
+    return _base(
+        family_id=MetricFamilyId.EXCHANGE_REALIZED_BUNDLES,
+        evidence_inputs=frozenset({EvidenceStage.OBJECTIVE_EVENT_STATE}),
+        population="exchange_completed_events",
+        denominator="moved_item_kinds",
+        denominator_kind=DenominatorKind.OCCURRENCE,
+        cohort_window="as_of tick exchange classification",
+        deceased_policy="not_applicable",
+        zero_holding_policy="spec absent -> family omitted",
+        opportunity_vs_occurrence="kind counts of items that changed holders",
+        self_edge_policy="not_applicable",
+        censoring_policy="counts stay on the row; no ratio is derived",
+        formulas={
+            "complete_count": "completed swaps",
+            "kind_counts": "kind:count pairs, ascending kind",
+        },
+        value_keys=("complete_count", "kind_counts"),
+        empty_case="availability=absent; no_subjective_valuation",
+    )
+
+
 def _spec_commitment_fulfillment_status() -> MetricSpecification:
     return _base(
         family_id=MetricFamilyId.COMMITMENT_FULFILLMENT_STATUS,
@@ -3627,6 +3704,9 @@ _BUILDERS: Final[tuple[Callable[[], MetricSpecification], ...]] = (
     _spec_commitment_term_divergence,
     _spec_commitment_fulfillment_status,
     _spec_commitment_social_consequences,
+    _spec_exchange_reservation_divergence,
+    _spec_exchange_negotiation_path,
+    _spec_exchange_realized_bundles,
     _spec_emergent_group_formation,
     _spec_emergent_social_norms,
     _spec_persistent_social_conventions,

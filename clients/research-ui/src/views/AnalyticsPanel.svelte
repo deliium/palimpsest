@@ -50,6 +50,9 @@
     'commitment_term_divergence',
     'commitment_fulfillment_status',
     'commitment_social_consequences',
+    'exchange_reservation_divergence',
+    'exchange_negotiation_path',
+    'exchange_realized_bundles',
   ] as const
 
   const HISTORICAL_MEMORY_FAMILIES = new Set([
@@ -98,6 +101,12 @@
     'commitment_term_divergence',
     'commitment_fulfillment_status',
     'commitment_social_consequences',
+  ])
+
+  const SUBJECTIVE_VALUATION_FAMILIES = new Set([
+    'exchange_reservation_divergence',
+    'exchange_negotiation_path',
+    'exchange_realized_bundles',
   ])
 
   type MetricCard = {
@@ -285,6 +294,9 @@
       const commitments = catalog.items.filter((item) =>
         STRUCTURED_COMMITMENT_FAMILIES.has(item.metric_family),
       )
+      const exchanges = catalog.items.filter((item) =>
+        SUBJECTIVE_VALUATION_FAMILIES.has(item.metric_family),
+      )
       const phenomenon = catalog.items.filter((item) =>
         item.metric_family.includes('phenomenon'),
       )
@@ -298,6 +310,7 @@
         ...techniques,
         ...possession,
         ...commitments,
+        ...exchanges,
         ...phenomenon,
       ]
         .filter(
@@ -365,7 +378,8 @@
     show counts only, never law rows or hypothesis text. Possession badges
     count holders and conflicts. They do not name a legal owner. Commitment
     badges count speech disagreements and owner statuses. They do not name a
-    legal debt.
+    legal debt. Exchange badges count private reservations and the item kinds
+    that changed hands.
   </p>
 
   {#if loading}

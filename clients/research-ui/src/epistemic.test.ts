@@ -81,6 +81,15 @@ describe('epistemic mapping', () => {
     expect(epistemicFromOverlayKind('commitment_social_consequences')).toBe(
       'research_inference',
     )
+    expect(epistemicFromOverlayKind('exchange_reservation_divergence')).toBe(
+      'research_inference',
+    )
+    expect(epistemicFromOverlayKind('exchange_negotiation_path')).toBe(
+      'research_inference',
+    )
+    expect(epistemicFromOverlayKind('exchange_realized_bundles')).toBe(
+      'research_inference',
+    )
     expect(epistemicFromEvidenceClass('ANALYTICAL_INFERRED')).toBe('research_inference')
   })
 

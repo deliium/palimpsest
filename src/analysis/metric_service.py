@@ -100,9 +100,6 @@ from analysis.offline_consolidation_metrics import (
 from analysis.possession_succession_metrics import (
     assemble_possession_succession_metrics,
 )
-from analysis.structured_commitments_metrics import (
-    assemble_structured_commitment_metrics,
-)
 from analysis.prediction_calibration_metrics import compute_prediction_calibration
 from analysis.reflection_metrics import ReflectionReport, compute_reflection
 from analysis.relationship_metrics import compute_relationship_stability
@@ -113,6 +110,10 @@ from analysis.serialization import (
 )
 from analysis.spatial_control_metrics import compute_spatial_control
 from analysis.specifications import MetricFamilyId, metric_specification
+from analysis.structured_commitments_metrics import (
+    assemble_structured_commitment_metrics,
+)
+from analysis.subjective_value_metrics import assemble_subjective_value_metrics
 from analysis.technique_lifecycle_metrics import assemble_technique_lifecycle_metrics
 from analysis.territorial_concentration_metrics import compute_territorial_concentration
 from analysis.transmission_metrics import (
@@ -193,6 +194,10 @@ class MetricComputationInputs:
     structured_commitment_ledgers: Sequence[object] | None = None
     structured_commitment_owner_ids: Sequence[str] | None = None
     structured_commitment_consequence_counts: Mapping[str, int] | None = None
+    subjective_valuation_spec: object | None = None
+    subjective_valuation_events: Sequence[object] | None = None
+    subjective_valuation_ledgers: Sequence[object] | None = None
+    subjective_valuation_owner_ids: Sequence[str] | None = None
     technique_node_rows: Sequence[object] | None = None
     technique_item_rows: Sequence[object] | None = None
     territorial_presence_rows: Sequence[object] | None = None
@@ -891,6 +896,33 @@ def assemble_metric_documents(inputs: MetricComputationInputs) -> MetricBundle:
                     "operation": "assemble_metric_documents",
                     "run_id": run_id,
                     "metric_family": "structured_commitments",
+                    "reason_code": "calculation_failed",
+                },
+            )
+            raise
+    if inputs.subjective_valuation_spec is not None:
+        valuation_events = tuple(inputs.subjective_valuation_events or ())
+        valuation_ledgers = tuple(inputs.subjective_valuation_ledgers or ())
+        valuation_owners = tuple(inputs.subjective_valuation_owner_ids or ())
+        try:
+            documents.extend(
+                assemble_subjective_value_metrics(
+                    valuation_events,  # type: ignore[arg-type]
+                    run_id=run_id,
+                    input_revision=revision,
+                    spec=inputs.subjective_valuation_spec,
+                    as_of_tick=window_end,
+                    ledgers=valuation_ledgers,  # type: ignore[arg-type]
+                    owner_ids=valuation_owners,
+                )
+            )
+        except Exception:
+            _LOG.error(
+                "metric_family_failed",
+                extra={
+                    "operation": "assemble_metric_documents",
+                    "run_id": run_id,
+                    "metric_family": "subjective_valuation",
                     "reason_code": "calculation_failed",
                 },
             )

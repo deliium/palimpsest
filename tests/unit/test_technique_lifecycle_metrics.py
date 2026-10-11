@@ -32,7 +32,7 @@ def _audit(**overrides: object) -> SimpleNamespace:
 
 
 def test_family_count_is_71() -> None:
-    assert METRIC_FAMILY_COUNT == 77
+    assert METRIC_FAMILY_COUNT == 80
     assert MetricFamilyId.TECHNIQUE_LIFECYCLE_STATE.value == "technique_lifecycle_state"
 
 

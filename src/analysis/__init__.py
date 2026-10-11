@@ -402,6 +402,12 @@ from analysis.structured_commitments import (
     CommitmentSpeechView,
     classify_commitment_speech,
 )
+from analysis.subjective_value import (
+    ExchangeLedgerSnapshot,
+    ExchangeReservation,
+    ExchangeView,
+    classify_exchange,
+)
 from analysis.technique_lifecycle import (
     TechniqueLifecycleSnapshot,
     TechniqueLifecycleState,
@@ -534,6 +540,9 @@ __all__ = [
     "DriftDelta",
     "DriftStep",
     "DurableRecordLineageSummary",
+    "ExchangeLedgerSnapshot",
+    "ExchangeReservation",
+    "ExchangeView",
     "EventSource",
     "EvidenceStage",
     "ExportSource",
@@ -618,6 +627,7 @@ __all__ = [
     "canonicalize_community_labels",
     "claim_overlap_token",
     "classify_commitment_speech",
+    "classify_exchange",
     "classify_possession_episodes",
     "classify_technique_lifecycle",
     "closed_evidence_stages",
