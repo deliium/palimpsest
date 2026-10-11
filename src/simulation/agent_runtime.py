@@ -455,6 +455,7 @@ class AgentRuntime:
         "_remembered_decisions",
         "_reputation",
         "_run_id",
+        "_scarcity_beliefs",
         "_scientific_evidence",
         "_semantic_belief_reader",
         "_semantic_naming",
@@ -463,6 +464,7 @@ class AgentRuntime:
         "_status",
         "_structured_commitments",
         "_subjective_state",
+        "_subjective_valuations",
         "_territorial_claims",
         "_theory_of_mind",
         "_translator",
@@ -569,6 +571,8 @@ class AgentRuntime:
         self._social_norms: object | None = None
         self._possession_legitimacy: object | None = None
         self._structured_commitments: object | None = None
+        self._subjective_valuations: object | None = None
+        self._scarcity_beliefs: object | None = None
         self._social_conventions: object | None = None
         self._artifact_interpretations: object | None = None
         self._semantic_naming: object | None = None
@@ -909,6 +913,37 @@ class AgentRuntime:
             "structured_commitments_carried owner_id=%s row_count=%s tick=%s",
             owner.value,
             len(ledger.interpretations),
+            tick,
+        )
+
+    def _commit_subjective_valuations(
+        self,
+        valuations: object | None,
+        scarcity: object | None,
+        tick: int,
+    ) -> None:
+        from agents.cognition.scarcity_beliefs import ScarcityBeliefLedger
+        from agents.cognition.subjective_value import SubjectiveValuationLedger
+
+        if valuations is None and scarcity is None:
+            return
+        owner = self._agent.agent_id
+        if (
+            type(valuations) is not SubjectiveValuationLedger
+            or type(scarcity) is not ScarcityBeliefLedger
+            or valuations.owner_id != owner
+            or scarcity.owner_id != owner
+        ):
+            raise AgentRuntimeError(
+                AgentRuntimeErrorCode.OWNERSHIP,
+                agent_id=owner.value,
+            )
+        self._subjective_valuations = valuations
+        self._scarcity_beliefs = scarcity
+        _LOG.debug(
+            "subjective_valuations_carried owner_id=%s kind_row_count=%s tick=%s",
+            owner.value,
+            len(valuations.kind_rows),
             tick,
         )
 
@@ -1761,6 +1796,8 @@ class AgentRuntime:
                 social_norms=self._social_norms,
                 possession_legitimacy=self._possession_legitimacy,
                 structured_commitments=self._structured_commitments,
+                subjective_valuations=self._subjective_valuations,
+                scarcity_beliefs=self._scarcity_beliefs,
                 social_conventions=self._social_conventions,
                 artifact_interpretations=self._artifact_interpretations,
                 semantic_naming=self._semantic_naming,
@@ -2196,6 +2233,11 @@ class AgentRuntime:
         )
         self._commit_structured_commitments(
             getattr(pending.loop_result, "structured_commitments", None), pending.tick
+        )
+        self._commit_subjective_valuations(
+            getattr(pending.loop_result, "subjective_valuations", None),
+            getattr(pending.loop_result, "scarcity_beliefs", None),
+            pending.tick,
         )
         self._commit_social_conventions(
             getattr(pending.loop_result, "social_conventions", None), pending.tick
@@ -2633,6 +2675,8 @@ class AgentRuntime:
         self._structured_commitments = getattr(
             checkpoint, "structured_commitments", None
         )
+        self._subjective_valuations = getattr(checkpoint, "subjective_valuations", None)
+        self._scarcity_beliefs = getattr(checkpoint, "scarcity_beliefs", None)
         self._social_conventions = getattr(checkpoint, "social_conventions", None)
         self._artifact_interpretations = getattr(
             checkpoint, "artifact_interpretations", None
@@ -2723,6 +2767,8 @@ class AgentRuntime:
             identity_cursor=self._identity_cursor,
             possession_legitimacy=self._possession_legitimacy,
             structured_commitments=self._structured_commitments,
+            subjective_valuations=self._subjective_valuations,
+            scarcity_beliefs=self._scarcity_beliefs,
         )
 
     async def process_observation(

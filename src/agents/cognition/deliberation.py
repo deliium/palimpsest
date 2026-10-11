@@ -774,6 +774,8 @@ class CommandPlanner:
         possession_succession_active: bool = False,
         structured_commitments_active: bool = False,
         commitment_horizon_ticks: int = 8,
+        subjective_valuation_active: bool = False,
+        subjective_valuation_max_bundle: int = 8,
         semantic_naming: object | None = None,
         semantic_naming_mode: object | None = None,
         cultural_narratives: object | None = None,
@@ -1107,6 +1109,24 @@ class CommandPlanner:
                 loop_input.observation,
                 channel_on=True,
                 horizon_ticks=commitment_horizon_ticks,
+                owner_entity_id=loop_input.observation.observer_id,
+            )
+        if subjective_valuation_active:
+            from agents.cognition.subjective_value import propose_exchange_command
+
+            snapshot = loop_input.snapshot
+            command = propose_exchange_command(
+                command,
+                loop_input.observation,
+                channel_on=True,
+                max_bundle=subjective_valuation_max_bundle,
+                valuations=(
+                    None if snapshot is None else snapshot.subjective_valuations
+                ),
+                relationships=None if snapshot is None else snapshot.relationships,
+                commitments=(
+                    None if snapshot is None else snapshot.structured_commitments
+                ),
                 owner_entity_id=loop_input.observation.observer_id,
             )
         command_type = type(command).__name__

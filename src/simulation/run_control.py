@@ -615,6 +615,8 @@ class AgentRuntimeCheckpoint:
     identity_cursor: object | None = None
     possession_legitimacy: object | None = None
     structured_commitments: object | None = None
+    subjective_valuations: object | None = None
+    scarcity_beliefs: object | None = None
 
     def __post_init__(self) -> None:
         if type(self.agent_id) is not AgentId:
@@ -818,6 +820,19 @@ class AgentRuntimeCheckpoint:
             self.structured_commitments,
             self.agent_id,
             field_name="structured_commitments",
+        )
+        from agents.cognition.subjective_value import require_owner_subjective_valuations
+        from agents.cognition.scarcity_beliefs import require_owner_scarcity_beliefs
+
+        require_owner_subjective_valuations(
+            self.subjective_valuations,
+            self.agent_id,
+            field_name="subjective_valuations",
+        )
+        require_owner_scarcity_beliefs(
+            self.scarcity_beliefs,
+            self.agent_id,
+            field_name="scarcity_beliefs",
         )
 
 

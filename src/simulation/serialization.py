@@ -7733,3 +7733,245 @@ def _decode_commitment_ledger(
         _int_field(data, "max_open_interpretations", path=path),
         tuple(rows),
     )
+
+
+def subjective_valuation_checkpoint_payload(
+    valuations: Mapping[str, object],
+    scarcity: Mapping[str, object],
+    *,
+    codec: str,
+) -> dict[str, object]:
+    """Owner maps of private ledgers. Present only on codec v15."""
+    if codec != "v15":
+        return {}
+    from agents.cognition.scarcity_beliefs import ScarcityBeliefLedger
+    from agents.cognition.subjective_value import SubjectiveValuationLedger
+
+    return {
+        "subjective_valuations": _encode_owner_ledgers(
+            valuations,
+            SubjectiveValuationLedger,
+            _encode_valuation_ledger,
+            field_name="subjective_valuations",
+        ),
+        "scarcity_beliefs": _encode_owner_ledgers(
+            scarcity,
+            ScarcityBeliefLedger,
+            _encode_scarcity_ledger,
+            field_name="scarcity_beliefs",
+        ),
+    }
+
+
+def decode_subjective_valuation_checkpoint(
+    payload: Mapping[str, object], *, codec: str
+) -> dict[str, dict[str, object]]:
+    """Decode v15 ledgers. Older codecs reject either key."""
+    present = [key for key in ("subjective_valuations", "scarcity_beliefs") if key in payload]
+    if codec != "v15":
+        if present:
+            raise DomainSerializationError(
+                "subjective_valuation_requires_codec_v15",
+                f"$.{present[0]}",
+            )
+        return {"subjective_valuations": {}, "scarcity_beliefs": {}}
+    from agents.cognition.scarcity_beliefs import ScarcityBeliefLedger
+    from agents.cognition.subjective_value import SubjectiveValuationLedger
+
+    return {
+        "subjective_valuations": _decode_owner_ledgers(
+            payload,
+            "subjective_valuations",
+            SubjectiveValuationLedger,
+            _decode_valuation_ledger,
+        ),
+        "scarcity_beliefs": _decode_owner_ledgers(
+            payload,
+            "scarcity_beliefs",
+            ScarcityBeliefLedger,
+            _decode_scarcity_ledger,
+        ),
+    }
+
+
+def _encode_owner_ledgers(
+    ledgers: Mapping[str, object],
+    ledger_type: type,
+    encode_one,
+    *,
+    field_name: str,
+) -> dict[str, object]:
+    if isinstance(ledgers, (str, bytes)) or not isinstance(ledgers, Mapping):
+        raise TypeError(f"{field_name} must be a mapping")
+    encoded: dict[str, object] = {}
+    for owner_key in sorted(ledgers):
+        ledger = ledgers[owner_key]
+        if not isinstance(owner_key, str) or type(ledger) is not ledger_type:
+            raise TypeError(f"{field_name} must map owner id to {ledger_type.__name__}")
+        if ledger.owner_id.value != owner_key:
+            raise ValueError(f"{field_name} owner_id mismatch")
+        encoded[owner_key] = encode_one(ledger)
+    return encoded
+
+
+def _decode_owner_ledgers(
+    payload: Mapping[str, object],
+    field_name: str,
+    ledger_type: type,
+    decode_one,
+) -> dict[str, object]:
+    if field_name not in payload:
+        raise DomainSerializationError("invalid_fields", "$")
+    raw = payload[field_name]
+    if not isinstance(raw, dict):
+        raise DomainSerializationError("invalid_object", f"$.{field_name}")
+    from agents.models import AgentId
+
+    decoded: dict[str, object] = {}
+    for owner_key, row in raw.items():
+        if not isinstance(owner_key, str) or not isinstance(row, dict):
+            raise DomainSerializationError("invalid_object", f"$.{field_name}.{owner_key}")
+        ledger = decode_one(row, owner_id=AgentId(owner_key), path=f"$.{field_name}.{owner_key}")
+        if type(ledger) is not ledger_type:
+            raise DomainSerializationError("invalid_model", f"$.{field_name}")
+        decoded[owner_key] = ledger
+    return decoded
+
+
+def _encode_valuation_ledger(ledger: object) -> dict[str, object]:
+    from agents.cognition.subjective_value import SubjectiveValuationLedger
+
+    if type(ledger) is not SubjectiveValuationLedger:
+        raise TypeError("ledger must be SubjectiveValuationLedger")
+    return {
+        "kind_rows": [_encode_valuation_row(row) for row in ledger.kind_rows],
+        "judgment_rows": [_encode_valuation_row(row) for row in ledger.judgment_rows],
+        "max_judgments": ledger.max_judgments,
+    }
+
+
+def _encode_valuation_row(row: object) -> dict[str, object]:
+    from agents.cognition.subjective_value import ValuationRow
+
+    if type(row) is not ValuationRow:
+        raise TypeError("row must be ValuationRow")
+    payload: dict[str, object] = {
+        "components": [
+            {"amount": component.amount, "token": component.token}
+            for component in row.components
+        ],
+        "item_kind": row.item_kind.value,
+        "reference_kind": row.reference_kind.value,
+        "reservation": row.reservation,
+        "tick": row.tick,
+    }
+    if row.counterparty_id is not None:
+        payload["counterparty_id"] = row.counterparty_id.value
+    return payload
+
+
+def _decode_valuation_ledger(
+    data: dict[str, object], *, owner_id: object, path: str
+) -> object:
+    from agents.cognition.subjective_value import (
+        SubjectiveValuationLedger,
+        ValuationComponent,
+        ValuationRow,
+    )
+    from world.values import ItemKind
+
+    _require_keys(
+        data, {"kind_rows", "judgment_rows", "max_judgments"}, path=path
+    )
+    if "price" in data or "world_price" in data:
+        raise DomainSerializationError("invalid_fields", path)
+    return SubjectiveValuationLedger(
+        owner_id,  # type: ignore[arg-type]
+        tuple(
+            _decode_valuation_row(row, path=f"{path}.kind_rows")
+            for row in _dict_list(data["kind_rows"], path=f"{path}.kind_rows")
+        ),
+        tuple(
+            _decode_valuation_row(row, path=f"{path}.judgment_rows")
+            for row in _dict_list(data["judgment_rows"], path=f"{path}.judgment_rows")
+        ),
+        _int_field(data, "max_judgments", path=path),
+    )
+
+
+def _decode_valuation_row(data: dict[str, object], *, path: str) -> object:
+    from agents.cognition.subjective_value import ValuationComponent, ValuationRow
+    from world.identifiers import EntityId
+    from world.values import ItemKind
+
+    _require_keys(
+        data,
+        {"components", "item_kind", "reference_kind", "reservation", "tick"},
+        path=path,
+        optional={"counterparty_id"},
+    )
+    components = tuple(
+        ValuationComponent(
+            _str_field(item, "token", path=path),
+            _int_field(item, "amount", path=path),
+        )
+        for item in _dict_list(data["components"], path=f"{path}.components")
+    )
+    counterparty = data.get("counterparty_id")
+    return ValuationRow(
+        ItemKind(_str_field(data, "item_kind", path=path)),
+        ItemKind(_str_field(data, "reference_kind", path=path)),
+        _int_field(data, "reservation", path=path),
+        components,
+        _int_field(data, "tick", path=path),
+        None if counterparty is None else EntityId(str(counterparty)),
+    )
+
+
+def _encode_scarcity_ledger(ledger: object) -> dict[str, object]:
+    from agents.cognition.scarcity_beliefs import ScarcityBeliefLedger
+
+    if type(ledger) is not ScarcityBeliefLedger:
+        raise TypeError("ledger must be ScarcityBeliefLedger")
+    return {
+        "rows": [
+            {
+                "believed_local_count": row.believed_local_count,
+                "item_kind": row.item_kind.value,
+                "location_id": row.location_id.value,
+                "tick": row.tick,
+            }
+            for row in ledger.rows
+        ]
+    }
+
+
+def _decode_scarcity_ledger(
+    data: dict[str, object], *, owner_id: object, path: str
+) -> object:
+    from agents.cognition.scarcity_beliefs import ScarcityBelief, ScarcityBeliefLedger
+    from world.identifiers import EntityId
+    from world.values import ItemKind
+
+    _require_keys(data, {"rows"}, path=path)
+    rows = tuple(
+        ScarcityBelief(
+            ItemKind(_str_field(row, "item_kind", path=path)),
+            _int_field(row, "believed_local_count", path=path),
+            EntityId(_str_field(row, "location_id", path=path)),
+            _int_field(row, "tick", path=path),
+        )
+        for row in _dict_list(data["rows"], path=f"{path}.rows")
+    )
+    return ScarcityBeliefLedger(owner_id, rows)  # type: ignore[arg-type]
+
+
+def _dict_list(value: object, *, path: str) -> list[dict[str, object]]:
+    if not isinstance(value, list):
+        raise DomainSerializationError("invalid_array", path)
+    copied: list[dict[str, object]] = []
+    for index, item in enumerate(value):
+        if not isinstance(item, dict):
+            raise DomainSerializationError("invalid_object", f"{path}[{index}]")
+        copied.append(item)
+    return copied

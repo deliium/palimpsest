@@ -164,6 +164,53 @@ def _tick_memories(
     return tuple(memories)
 
 
+def _item_kinds_named(text: str) -> frozenset[object]:
+    from world.values import ItemKind
+
+    tokens = {part.lower() for part in text.replace("-", " ").replace("_", " ").split()}
+    return frozenset(kind for kind in ItemKind if kind.value in tokens)
+
+
+def _resource_loss_kinds(world_model: object | None) -> frozenset[object]:
+    from world.values import ItemKind
+
+    if world_model is None:
+        return frozenset()
+    by_value = {kind.value: kind for kind in ItemKind}
+    found: set[ItemKind] = set()
+    for hypothesis in getattr(world_model, "hypotheses", ()):
+        values = [atom.value for atom in getattr(hypothesis, "atoms", ())]
+        if "resource_loss" not in values:
+            continue
+        for value in values:
+            kind = by_value.get(value)
+            if kind is not None:
+                found.add(kind)
+    return frozenset(found)
+
+
+def _answered_proposal(observation: object) -> tuple[object | None, object | None]:
+    from world.observations import ObservationAudienceRole
+    from world.values import ItemKind
+
+    by_value = {kind.value: kind for kind in ItemKind}
+    judgment = None
+    counterparty = None
+    for occurrence in getattr(observation, "occurrences", ()):
+        facts = getattr(occurrence, "public_facts", {})
+        if facts.get("kind") != "exchange_proposed":
+            continue
+        if occurrence.audience_role is not ObservationAudienceRole.TARGET:
+            continue
+        kinds = facts.get("give_item_kinds", ())
+        named = tuple(by_value[token] for token in kinds if token in by_value)
+        if not named or occurrence.actor_id is None:
+            continue
+        judgment = named[0]
+        counterparty = occurrence.actor_id
+    return judgment, counterparty
+
+
 class CognitiveLoop:
     """Sequential cognitive pipeline returning one closed ``AgentCommand``."""
 
@@ -1314,6 +1361,83 @@ class CognitiveLoop:
         if not updated.interpretations:
             return None
         return updated
+
+    def _prepare_subjective_valuations(
+        self,
+        loop_input: CognitiveLoopInput,
+        *,
+        world_model: object | None,
+        emotional_evaluation: object | None,
+    ) -> tuple[object | None, object | None]:
+        """Appraise this owner after observation and before deliberation."""
+        from agents.cognition.configuration import CognitionWorldModelMode
+        from agents.cognition.models import EmotionKind
+        from agents.cognition.subjective_value import refresh_owner_ledgers
+        from agents.models import GoalStatus
+        from world.observations import ObservedItemPlacement
+        from world.values import ItemKind
+
+        if not self._subjective_valuation_active:
+            return None, None
+        observation = loop_input.observation
+        snapshot = loop_input.snapshot
+        held: dict[ItemKind, int] = {}
+        ground: list[ItemKind] = []
+        for item in observation.items:
+            if item.placement is ObservedItemPlacement.HELD_BY_SELF:
+                held[item.kind] = held.get(item.kind, 0) + 1
+            elif item.placement in {
+                ObservedItemPlacement.GROUND_HERE,
+                ObservedItemPlacement.CORPSE_HERE,
+            }:
+                ground.append(item.kind)
+        other_held: list[ItemKind] = []
+        holdings = observation.exchange_visible_holdings
+        if holdings is not None:
+            other_held.extend(holding.kind for holding in holdings)
+        plan_kinds: set[ItemKind] = set()
+        goals = () if snapshot is None else snapshot.goals
+        for goal in goals:
+            if goal.status is not GoalStatus.ACTIVE:
+                continue
+            plan_kinds.update(_item_kinds_named(goal.description))
+        recipes = None if snapshot is None else snapshot.recipe_beliefs
+        beliefs = () if recipes is None else getattr(recipes, "beliefs", ())
+        for belief in beliefs:
+            recipe_id = getattr(belief, "recipe_id", None)
+            if recipe_id is not None:
+                plan_kinds.update(_item_kinds_named(recipe_id.value))
+        risk_active = False
+        intensities = getattr(emotional_evaluation, "intensities", ())
+        for intensity in intensities:
+            if intensity.kind is EmotionKind.FEAR and intensity.intensity > 0:
+                risk_active = True
+        future_kinds: frozenset[ItemKind] = frozenset()
+        if self._world_model_mode is CognitionWorldModelMode.ENABLED:
+            future_kinds = _resource_loss_kinds(world_model)
+        body = observation.self_body
+        judgment_kind, counterparty = _answered_proposal(observation)
+        max_judgments = min(32, self._subjective_valuation_max_bundle * 4)
+        return refresh_owner_ledgers(
+            owner_id=loop_input.agent_id,
+            valuations=None if snapshot is None else snapshot.subjective_valuations,
+            scarcity=None if snapshot is None else snapshot.scarcity_beliefs,
+            tick=observation.tick,
+            hunger=0 if body is None else int(body.hunger.value),
+            thirst=0 if body is None else int(body.thirst.value),
+            health=100 if body is None else int(body.health.value),
+            body_present=body is not None,
+            held_counts=held,
+            ground_kinds=tuple(ground),
+            other_held_kinds=tuple(other_held),
+            location_id=None if body is None else body.location_id,
+            plan_kinds=frozenset(plan_kinds),
+            risk_active=risk_active,
+            future_kinds=future_kinds,
+            judgment_kind=judgment_kind,
+            counterparty_id=counterparty,
+            max_judgments=max_judgments,
+        )
 
     def _prepare_semantic_naming(
         self,
@@ -3171,6 +3295,11 @@ class CognitiveLoop:
                 provider=provider,
                 tick=loop_input.observation.tick,
             )
+        subjective_valuations, scarcity_beliefs = self._prepare_subjective_valuations(
+            loop_input,
+            world_model=world_model,
+            emotional_evaluation=emotional_evaluation,
+        )
         effective_prospective = self._effective_prospective_policy(budget_ledger)
         futures = await run_stage(
             kind=ComponentKind.FUTURES,
@@ -3307,6 +3436,8 @@ class CognitiveLoop:
                     possession_succession_active=self._possession_succession_active,
                     structured_commitments_active=self._structured_commitments_active,
                     commitment_horizon_ticks=self._commitment_horizon_ticks,
+                    subjective_valuation_active=self._subjective_valuation_active,
+                    subjective_valuation_max_bundle=self._subjective_valuation_max_bundle,
                     semantic_naming=semantic_naming,
                     semantic_naming_mode=self._semantic_naming_mode,
                     cultural_narratives=cultural_narratives,
@@ -3351,6 +3482,8 @@ class CognitiveLoop:
             social_norms=social_norms,
             possession_legitimacy=possession_legitimacy,
             structured_commitments=structured_commitments,
+            subjective_valuations=subjective_valuations,
+            scarcity_beliefs=scarcity_beliefs,
             social_conventions=social_conventions,
             artifact_interpretations=artifact_interpretations,
             semantic_naming=semantic_naming,
@@ -3524,6 +3657,8 @@ class CognitiveLoop:
             social_norms=proposal.social_norms,
             possession_legitimacy=proposal.possession_legitimacy,
             structured_commitments=proposal.structured_commitments,
+            subjective_valuations=proposal.subjective_valuations,
+            scarcity_beliefs=proposal.scarcity_beliefs,
             social_conventions=proposal.social_conventions,
             artifact_interpretations=proposal.artifact_interpretations,
             semantic_naming=proposal.semantic_naming,

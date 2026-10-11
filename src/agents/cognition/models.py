@@ -734,6 +734,8 @@ class SubjectiveSnapshot:
     recipe_beliefs: object | None = None
     possession_legitimacy: object | None = None
     structured_commitments: object | None = None
+    subjective_valuations: object | None = None
+    scarcity_beliefs: object | None = None
 
     def __post_init__(self) -> None:
         if type(self.owner_id) is not AgentId:
@@ -916,6 +918,19 @@ class SubjectiveSnapshot:
             self.structured_commitments,
             self.owner_id,
             field_name="SubjectiveSnapshot.structured_commitments",
+        )
+        from agents.cognition.subjective_value import require_owner_subjective_valuations
+        from agents.cognition.scarcity_beliefs import require_owner_scarcity_beliefs
+
+        require_owner_subjective_valuations(
+            self.subjective_valuations,
+            self.owner_id,
+            field_name="SubjectiveSnapshot.subjective_valuations",
+        )
+        require_owner_scarcity_beliefs(
+            self.scarcity_beliefs,
+            self.owner_id,
+            field_name="SubjectiveSnapshot.scarcity_beliefs",
         )
         from agents.cognition.social_conventions import require_owner_social_conventions
 
@@ -3779,6 +3794,8 @@ class CognitiveLoopProposal:
     recipe_beliefs: object | None = None
     possession_legitimacy: object | None = None
     structured_commitments: object | None = None
+    subjective_valuations: object | None = None
+    scarcity_beliefs: object | None = None
 
     def __post_init__(self) -> None:
         object.__setattr__(
@@ -3871,6 +3888,19 @@ class CognitiveLoopProposal:
             self.structured_commitments,
             self.agent_id,
             field_name="CognitiveLoopProposal.structured_commitments",
+        )
+        from agents.cognition.subjective_value import require_owner_subjective_valuations
+        from agents.cognition.scarcity_beliefs import require_owner_scarcity_beliefs
+
+        require_owner_subjective_valuations(
+            self.subjective_valuations,
+            self.agent_id,
+            field_name="CognitiveLoopProposal.subjective_valuations",
+        )
+        require_owner_scarcity_beliefs(
+            self.scarcity_beliefs,
+            self.agent_id,
+            field_name="CognitiveLoopProposal.scarcity_beliefs",
         )
         from agents.cognition.social_conventions import require_owner_social_conventions
 
@@ -4037,6 +4067,8 @@ class CognitiveLoopResult:
     territorial_audits: tuple[object, ...] | None = None
     possession_legitimacy: object | None = None
     structured_commitments: object | None = None
+    subjective_valuations: object | None = None
+    scarcity_beliefs: object | None = None
 
     def __post_init__(self) -> None:
         object.__setattr__(
@@ -4105,6 +4137,19 @@ class CognitiveLoopResult:
             self.structured_commitments,
             self.agent_id,
             field_name="CognitiveLoopResult.structured_commitments",
+        )
+        from agents.cognition.subjective_value import require_owner_subjective_valuations
+        from agents.cognition.scarcity_beliefs import require_owner_scarcity_beliefs
+
+        require_owner_subjective_valuations(
+            self.subjective_valuations,
+            self.agent_id,
+            field_name="CognitiveLoopResult.subjective_valuations",
+        )
+        require_owner_scarcity_beliefs(
+            self.scarcity_beliefs,
+            self.agent_id,
+            field_name="CognitiveLoopResult.scarcity_beliefs",
         )
         from agents.cognition.social_conventions import require_owner_social_conventions
 

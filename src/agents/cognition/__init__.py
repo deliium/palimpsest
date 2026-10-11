@@ -214,6 +214,21 @@ from agents.cognition.structured_commitments import (
     empty_structured_commitments,
     require_owner_structured_commitments,
 )
+from agents.cognition.subjective_value import (
+    SubjectiveValuationLedger,
+    ValuationRow,
+    empty_subjective_valuations,
+    require_owner_subjective_valuations,
+    store_kind_valuation,
+)
+from agents.cognition.scarcity_beliefs import (
+    ScarcityBelief,
+    ScarcityBeliefLedger,
+    empty_scarcity_beliefs,
+    require_owner_scarcity_beliefs,
+    scarcity_row,
+    store_scarcity_belief,
+)
 from agents.cognition.possession_legitimacy import (
     POSSESSION_SANCTION_TOKENS,
     POSSESSION_SUPPORT_CAP,
@@ -1155,6 +1170,17 @@ __all__ = [
     "empty_structured_commitments",
     "StructuredCommitmentLedger",
     "require_owner_structured_commitments",
+    "empty_subjective_valuations",
+    "SubjectiveValuationLedger",
+    "ValuationRow",
+    "require_owner_subjective_valuations",
+    "store_kind_valuation",
+    "empty_scarcity_beliefs",
+    "ScarcityBelief",
+    "ScarcityBeliefLedger",
+    "require_owner_scarcity_beliefs",
+    "scarcity_row",
+    "store_scarcity_belief",
     "apply_possession_legitimacy_update",
     "apply_possession_proposal",
     "propose_possession_command",
