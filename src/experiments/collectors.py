@@ -343,6 +343,17 @@ def assemble_arm_metric_bundle(
             ),
             subjective_valuation_events=tuple(events or ()),
         )
+    if getattr(arm.assignment.runner_config, "resource_exchange_profile", None) is not None:
+        inputs = replace(
+            inputs,
+            resource_exchange_profile_spec=(
+                arm.assignment.runner_config.resource_exchange_profile
+            ),
+            subjective_valuation_spec=(
+                arm.assignment.runner_config.subjective_valuation
+            ),
+            subjective_valuation_events=tuple(events or ()),
+        )
     return assemble_metric_documents(inputs)
 
 

@@ -53,6 +53,9 @@
     'exchange_reservation_divergence',
     'exchange_negotiation_path',
     'exchange_realized_bundles',
+    'exchange_acceptance_share',
+    'exchange_acquisition_fate',
+    'exchange_quote_homogeneity',
   ] as const
 
   const HISTORICAL_MEMORY_FAMILIES = new Set([
@@ -108,6 +111,18 @@
     'exchange_negotiation_path',
     'exchange_realized_bundles',
   ])
+
+  const RESOURCE_EXCHANGE_PROFILE_FAMILIES = new Set([
+    'exchange_acceptance_share',
+    'exchange_acquisition_fate',
+    'exchange_quote_homogeneity',
+  ])
+
+  const RESOURCE_EXCHANGE_BADGES: Record<string, string> = {
+    exchange_acceptance_share: 'acceptance share',
+    exchange_acquisition_fate: 'acquisition fate',
+    exchange_quote_homogeneity: 'quote homogeneity',
+  }
 
   type MetricCard = {
     family: string
@@ -297,6 +312,9 @@
       const exchanges = catalog.items.filter((item) =>
         SUBJECTIVE_VALUATION_FAMILIES.has(item.metric_family),
       )
+      const exchangeFunctions = catalog.items.filter((item) =>
+        RESOURCE_EXCHANGE_PROFILE_FAMILIES.has(item.metric_family),
+      )
       const phenomenon = catalog.items.filter((item) =>
         item.metric_family.includes('phenomenon'),
       )
@@ -311,6 +329,7 @@
         ...possession,
         ...commitments,
         ...exchanges,
+        ...exchangeFunctions,
         ...phenomenon,
       ]
         .filter(
@@ -379,7 +398,8 @@
     count holders and conflicts. They do not name a legal owner. Commitment
     badges count speech disagreements and owner statuses. They do not name a
     legal debt. Exchange badges count private reservations and the item kinds
-    that changed hands.
+    that changed hands. Acceptance share, acquisition fate, and quote
+    homogeneity are counts. They do not name a currency.
   </p>
 
   {#if loading}
@@ -414,7 +434,7 @@
           {#each cards as card (card.setId + card.family)}
             <li>
               <div class="card-head">
-                <strong>{card.family}</strong>
+                <strong>{RESOURCE_EXCHANGE_BADGES[card.family] ?? card.family}</strong>
                 <EpistemicBadge epistemic="research_inference" />
               </div>
               <p class="meta">

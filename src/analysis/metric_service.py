@@ -195,6 +195,7 @@ class MetricComputationInputs:
     structured_commitment_owner_ids: Sequence[str] | None = None
     structured_commitment_consequence_counts: Mapping[str, int] | None = None
     subjective_valuation_spec: object | None = None
+    resource_exchange_profile_spec: object | None = None
     subjective_valuation_events: Sequence[object] | None = None
     subjective_valuation_ledgers: Sequence[object] | None = None
     subjective_valuation_owner_ids: Sequence[str] | None = None
@@ -923,6 +924,52 @@ def assemble_metric_documents(inputs: MetricComputationInputs) -> MetricBundle:
                     "operation": "assemble_metric_documents",
                     "run_id": run_id,
                     "metric_family": "subjective_valuation",
+                    "reason_code": "calculation_failed",
+                },
+            )
+            raise
+    if inputs.resource_exchange_profile_spec is None:
+        _LOG.info(
+            "exchange_functions_metrics_empty reason=resource_exchange_profile_absent"
+        )
+    else:
+        from analysis.exchange_functions_metrics import (
+            assemble_exchange_function_metrics,
+        )
+        from analysis.specifications import METRIC_FAMILY_COUNT, validate_metric_catalog
+
+        try:
+            catalog = validate_metric_catalog()
+        except Exception:
+            _LOG.error(
+                "metric_catalog_count_drift expected=%s",
+                METRIC_FAMILY_COUNT,
+            )
+            raise
+        if len(catalog) != 83:
+            _LOG.error(
+                "metric_catalog_count_drift expected=83 observed=%s",
+                len(catalog),
+            )
+            raise ValueError("validate_metric_catalog count drifted from 83")
+        try:
+            documents.extend(
+                assemble_exchange_function_metrics(
+                    tuple(inputs.subjective_valuation_events or ()),  # type: ignore[arg-type]
+                    run_id=run_id,
+                    input_revision=revision,
+                    spec=inputs.resource_exchange_profile_spec,
+                    as_of_tick=window_end,
+                    ledgers=tuple(inputs.subjective_valuation_ledgers or ()),
+                )
+            )
+        except Exception:
+            _LOG.error(
+                "metric_family_failed",
+                extra={
+                    "operation": "assemble_metric_documents",
+                    "run_id": run_id,
+                    "metric_family": "resource_exchange_profile",
                     "reason_code": "calculation_failed",
                 },
             )

@@ -50,7 +50,7 @@ __all__ = [
 ]
 
 METRIC_CATALOG_VERSION: Final[str] = "metric-catalog-v1"
-METRIC_FAMILY_COUNT: Final[int] = 80
+METRIC_FAMILY_COUNT: Final[int] = 83
 
 # Align with existing memory-drift / transmission document versions.
 _ALGO_V1: Final[str] = "1"
@@ -157,6 +157,9 @@ class MetricFamilyId(StrEnum):
     EXCHANGE_RESERVATION_DIVERGENCE = "exchange_reservation_divergence"
     EXCHANGE_NEGOTIATION_PATH = "exchange_negotiation_path"
     EXCHANGE_REALIZED_BUNDLES = "exchange_realized_bundles"
+    EXCHANGE_ACCEPTANCE_SHARE = "exchange_acceptance_share"
+    EXCHANGE_ACQUISITION_FATE = "exchange_acquisition_fate"
+    EXCHANGE_QUOTE_HOMOGENEITY = "exchange_quote_homogeneity"
 
 
 class DenominatorKind(StrEnum):
@@ -2345,6 +2348,104 @@ def _spec_exchange_realized_bundles() -> MetricSpecification:
     )
 
 
+def _spec_exchange_acceptance_share() -> MetricSpecification:
+    return _base(
+        family_id=MetricFamilyId.EXCHANGE_ACCEPTANCE_SHARE,
+        evidence_inputs=frozenset({EvidenceStage.OBJECTIVE_EVENT_STATE}),
+        population="exchange_completed_events",
+        denominator="completed_swap_count",
+        denominator_kind=DenominatorKind.OCCURRENCE,
+        cohort_window="as_of tick exchange classification",
+        deceased_policy="not_applicable",
+        zero_holding_policy="spec absent -> family omitted",
+        opportunity_vs_occurrence="kind presence over completed swaps",
+        self_edge_policy="not_applicable",
+        censoring_policy=(
+            "counts describe observed transfers; they do not name a money good"
+        ),
+        formulas={
+            "kind_present_count": "swaps where the kind appears",
+            "share_num": "kind_present_count",
+            "share_den": "completed swaps",
+        },
+        value_keys=(
+            "item_kind",
+            "completed_swap_count",
+            "kind_present_count",
+            "kind_received_count",
+            "giver_breadth",
+            "share_num",
+            "share_den",
+        ),
+        empty_case="availability=absent; no_resource_exchange_profile",
+    )
+
+
+def _spec_exchange_acquisition_fate() -> MetricSpecification:
+    return _base(
+        family_id=MetricFamilyId.EXCHANGE_ACQUISITION_FATE,
+        evidence_inputs=frozenset({EvidenceStage.OBJECTIVE_EVENT_STATE}),
+        population="acquired_item_ids",
+        denominator="acquired_count",
+        denominator_kind=DenominatorKind.OCCURRENCE,
+        cohort_window="as_of tick exchange classification",
+        deceased_policy="not_applicable",
+        zero_holding_policy="spec absent -> family omitted",
+        opportunity_vs_occurrence="first later fate of an acquired item",
+        self_edge_policy="not_applicable",
+        censoring_policy=(
+            "counts describe observed transfers; they do not name a money good"
+        ),
+        formulas={
+            "later_transferred_count": "acquired items later transferred",
+            "consumed_count": "acquired items later consumed",
+            "still_held_count": "acquired items with no fate",
+        },
+        value_keys=(
+            "item_kind",
+            "acquired_count",
+            "later_transferred_count",
+            "consumed_count",
+            "still_held_count",
+            "median_hold_ticks",
+        ),
+        empty_case="availability=absent; no_resource_exchange_profile",
+    )
+
+
+def _spec_exchange_quote_homogeneity() -> MetricSpecification:
+    return _base(
+        family_id=MetricFamilyId.EXCHANGE_QUOTE_HOMOGENEITY,
+        evidence_inputs=frozenset({EvidenceStage.OBJECTIVE_EVENT_STATE}),
+        population="exchange_speech_and_completion",
+        denominator="quote_den",
+        denominator_kind=DenominatorKind.OCCURRENCE,
+        cohort_window="as_of tick exchange classification",
+        deceased_policy="not_applicable",
+        zero_holding_policy="spec absent -> family omitted",
+        opportunity_vs_occurrence="homogeneous side versus the other side",
+        self_edge_policy="not_applicable",
+        censoring_policy=(
+            "counts describe observed transfers; they do not name a money good"
+        ),
+        formulas={
+            "homogeneous_side_count": "quotes whose homogeneous side is this kind",
+            "quote_num": "homogeneous_side_count",
+            "quote_den": "proposals plus completions",
+        },
+        value_keys=(
+            "item_kind",
+            "homogeneous_side_count",
+            "nonquote_count",
+            "paired_item_count_median",
+            "reference_row_count",
+            "quote_num",
+            "quote_den",
+        ),
+        empty_case="availability=absent; no_resource_exchange_profile",
+    )
+
+
 def _spec_commitment_fulfillment_status() -> MetricSpecification:
     return _base(
         family_id=MetricFamilyId.COMMITMENT_FULFILLMENT_STATUS,
@@ -3707,6 +3808,9 @@ _BUILDERS: Final[tuple[Callable[[], MetricSpecification], ...]] = (
     _spec_exchange_reservation_divergence,
     _spec_exchange_negotiation_path,
     _spec_exchange_realized_bundles,
+    _spec_exchange_acceptance_share,
+    _spec_exchange_acquisition_fate,
+    _spec_exchange_quote_homogeneity,
     _spec_emergent_group_formation,
     _spec_emergent_social_norms,
     _spec_persistent_social_conventions,

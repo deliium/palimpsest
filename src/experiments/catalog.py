@@ -2765,6 +2765,7 @@ OFF_GATE_MATRIX_EXPERIMENT_IDS: Final[frozenset[str]] = frozenset(
         "experiment-as-possession-succession",
         "structured_commitments@1",
         "subjective_exchange@1",
+        "exchange_functions@1",
     }
 )
 
@@ -4910,6 +4911,66 @@ def experiment_au_subjective_exchange(
         )
     return _definition(
         experiment_id="subjective_exchange@1",
+        base=base,
+        seed_matrix=matrix,
+        arms=arms,
+    )
+
+
+def experiment_av_exchange_functions(
+    base: SimulationRunnerConfig,
+    *,
+    seed_matrix: ExperimentSeedMatrix | None = None,
+    max_ticks: int = 6,
+) -> ExperimentDefinition:
+    """Off-gate Experiment AV. Counts are not a currency designation."""
+    from simulation.runner_models import (
+        RUNNER_SCHEMA_VERSION_V40,
+        RUNNER_SCHEMA_VERSION_V41,
+        example_resource_exchange_profile_spec,
+        example_subjective_valuation_spec,
+    )
+
+    matrix = seed_matrix or ExperimentSeedMatrix(seeds=(base.seed,))
+    valuation = example_subjective_valuation_spec()
+    profile = example_resource_exchange_profile_spec()
+
+    def _v41() -> SimulationRunnerConfig:
+        return replace(
+            base,
+            schema_version=RUNNER_SCHEMA_VERSION_V41,
+            mortality_mode=MortalityMode.DISABLED,
+            stop_policy=RunnerStopPolicy(max_ticks=max_ticks),
+            v3_capability_flags=V3CapabilityFlags(),
+            subjective_valuation=valuation,
+            resource_exchange_profile=profile,
+            population_lifecycle=None,
+        )
+
+    channel_off = replace(
+        base,
+        schema_version=RUNNER_SCHEMA_VERSION_V40,
+        mortality_mode=MortalityMode.DISABLED,
+        stop_policy=RunnerStopPolicy(max_ticks=max_ticks),
+        v3_capability_flags=V3CapabilityFlags(),
+        subjective_valuation=valuation,
+        resource_exchange_profile=None,
+        population_lifecycle=None,
+    )
+    arms = (
+        ("av-channel-off", "exchange_functions_channel_off", channel_off),
+        ("av-inert-unused", "exchange_functions_inert_unused", _v41()),
+        ("av-later-trade", "exchange_functions_later_trade", _v41()),
+        ("av-quote-kind", "exchange_functions_quote_kind", _v41()),
+    )
+    for arm_id, _label, config in arms:
+        _LOG.info(
+            "experiment_arm_start condition_id=%s profile_present=%s",
+            arm_id,
+            config.resource_exchange_profile is not None,
+        )
+    return _definition(
+        experiment_id="exchange_functions@1",
         base=base,
         seed_matrix=matrix,
         arms=arms,

@@ -78,10 +78,19 @@ const ANALYTICAL_OVERLAYS = new Set([
   'exchange_reservation_divergence',
   'exchange_negotiation_path',
   'exchange_realized_bundles',
+  'exchange_acceptance_share',
+  'exchange_acquisition_fate',
+  'exchange_quote_homogeneity',
   'metric',
   'phenomenon_panel',
   'matrix_stats',
 ])
+
+export const RESOURCE_EXCHANGE_PROFILE_FAMILIES = [
+  'exchange_acceptance_share',
+  'exchange_acquisition_fate',
+  'exchange_quote_homogeneity',
+] as const
 
 const SUBJECTIVE_OVERLAYS = new Set([
   'subjective_labels',
