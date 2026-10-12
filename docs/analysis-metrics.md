@@ -38,7 +38,7 @@ Executable formula, population, and edge-case policy for all nineteen metric fam
 | `caregiving_burden` | `caregiving_burden@1` | detached care-act rows |
 | `intergenerational_cooperation` | `intergenerational_cooperation@1` | detached care-act + kinship rows |
 
-Catalog version: `metric-catalog-v1`. Document schema: `MetricDocument` schema `1`. Closed catalog cardinality: **80** families (`METRIC_FAMILY_COUNT`). New opt-in families assemble only when their detached inputs are present.
+Catalog version: `metric-catalog-v1`. Document schema: `MetricDocument` schema `1`. Closed catalog cardinality: **83** families (`METRIC_FAMILY_COUNT`). New opt-in families assemble only when their detached inputs are present.
 
 ### Additive analysis surfaces (off the V1 gate)
 
@@ -107,6 +107,10 @@ Catalog version: `metric-catalog-v1`. Document schema: `MetricDocument` schema `
 ### Subjective valuation families (off the V1 gate)
 
 `exchange_reservation_divergence@1`, `exchange_negotiation_path@1`, and `exchange_realized_bundles@1` assemble only when `subjective_valuation` is present. A reservation is that owner's private belief. A missing ledger is `unformed`. Two different tool reservations are `divergent`. The path counts offers, counteroffers, withdrawals, and completions. A withdrawn offer is not a transfer. `realized_bundle` stores kind counts from a completed swap, such as three food and one tool. Those counts are the items that changed hands. `institution` stays `none`. An empty harvest when the channel is off is absence. Experiment AU (`subjective_exchange@1`) stays off the V1 gate. Research UI badges for these three ids are `research_inference`. Badge copy says reservation or bundle.
+
+### Exchange-function families (off the V1 gate)
+
+`exchange_acceptance_share@1`, `exchange_acquisition_fate@1`, and `exchange_quote_homogeneity@1` assemble only when `resource_exchange_profile` is present. They count completed swaps, later transfers of an acquired item, and offers whose one side is homogeneous in a kind. A missing acceptance row is not a count of zero stock. Numerators and denominators are integers, or null when the denominator is zero. No row names a kind as money. Experiment AV (`exchange_functions@1`) stays off the V1 gate. Research UI badges say acceptance share, acquisition fate, or quote homogeneity.
 
 ### Supporting formulas (not a separate family)
 
