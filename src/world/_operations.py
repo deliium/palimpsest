@@ -1387,8 +1387,16 @@ def prepare_action_batch(
             continue
 
         assert type(start_validation) is OperationAccepted
+        rule_state = starting_state
+        if str(kind) == "negotiate_exchange":
+            rule_state = working
+            _LOG.debug(
+                "[FIX] exchange_rule_state source=working_batch actor_id=%s act=%s",
+                request.actor_id.value,
+                getattr(request.command, "act", ""),
+            )
         start_rule = evaluate_operation(
-            starting_state,
+            rule_state,
             start_validation.operation,
             rules=physical_rules,
             resolved=resolved,
