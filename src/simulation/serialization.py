@@ -7446,9 +7446,9 @@ def structured_commitments_checkpoint_payload(
     ledgers: Mapping[str, object], *, codec: str
 ) -> dict[str, object]:
     """Owner-id map of commitment ledgers. Omitted unless codec is v14 or v15."""
-    if codec not in {"v14", "v15"}:
+    if codec not in {"v14", "v15", "v16"}:
         return {}
-    if codec == "v15":
+    if codec in {"v15", "v16"}:
         _LOG.debug("codec_superset codec=%s", codec)
     from agents.cognition.structured_commitments import StructuredCommitmentLedger
 
@@ -7472,7 +7472,7 @@ def decode_structured_commitments_checkpoint(
     payload: Mapping[str, object], *, codec: str
 ) -> dict[str, object]:
     """Decode v14 or v15 ledgers. Older codecs reject the key."""
-    if codec not in {"v14", "v15"}:
+    if codec not in {"v14", "v15", "v16"}:
         if "structured_commitments" in payload:
             raise DomainSerializationError(
                 "structured_commitments_requires_codec_v14",
@@ -7741,8 +7741,8 @@ def subjective_valuation_checkpoint_payload(
     *,
     codec: str,
 ) -> dict[str, object]:
-    """Owner maps of private ledgers. Present only on codec v15."""
-    if codec != "v15":
+    """Owner maps of private ledgers. Present on codec v15 and v16."""
+    if codec not in {"v15", "v16"}:
         return {}
     from agents.cognition.scarcity_beliefs import ScarcityBeliefLedger
     from agents.cognition.subjective_value import SubjectiveValuationLedger
@@ -7766,9 +7766,9 @@ def subjective_valuation_checkpoint_payload(
 def decode_subjective_valuation_checkpoint(
     payload: Mapping[str, object], *, codec: str
 ) -> dict[str, dict[str, object]]:
-    """Decode v15 ledgers. Older codecs reject either key."""
+    """Decode v15 or v16 ledgers. Older codecs reject either key."""
     present = [key for key in ("subjective_valuations", "scarcity_beliefs") if key in payload]
-    if codec != "v15":
+    if codec not in {"v15", "v16"}:
         if present:
             raise DomainSerializationError(
                 "subjective_valuation_requires_codec_v15",

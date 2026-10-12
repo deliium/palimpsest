@@ -283,6 +283,19 @@ def _fold_opened_custody(state: object, events: Sequence[object]) -> object:
     return rebuild_world_state(state, corpse_custody_item_ids=frozenset(custody))
 
 
+def _bind_resource_exchange_profile_channel(engine: object, config: object) -> None:
+    """Restore the exchange-profile channel from a config that may carry the spec."""
+    spec = getattr(config, "resource_exchange_profile", None)
+    active = spec is not None
+    engine._resource_exchange_profile_active = active
+    if active:
+        _LOGGER.debug(
+            "resource_exchange_profile_channel active=%s acceptance_window_ticks=%s",
+            True,
+            spec.acceptance_window_ticks,
+        )
+
+
 def _bind_subjective_valuation_channel(engine: object, config: object) -> None:
     """Restore the private-valuation channel from a config that may carry the spec."""
     spec = getattr(config, "subjective_valuation", None)
@@ -325,6 +338,7 @@ class WorldEngine:
         "_possession_succession_active",
         "_structured_commitments_active",
         "_structured_commitments_horizon",
+        "_resource_exchange_profile_active",
         "_subjective_valuation_active",
         "_subjective_valuation_horizon",
         "_subjective_valuation_max_bundle",
@@ -372,6 +386,7 @@ class WorldEngine:
         subjective_valuation_active: bool = False,
         subjective_valuation_horizon: int = 8,
         subjective_valuation_max_bundle: int = 8,
+        resource_exchange_profile_active: bool = False,
     ) -> None:
         if type(config) is not SimulationRunConfig:
             raise TypeError("WorldEngine requires SimulationRunConfig")
@@ -464,6 +479,9 @@ class WorldEngine:
             raise TypeError("subjective_valuation_max_bundle must be int")
         self._subjective_valuation_horizon = subjective_valuation_horizon
         self._subjective_valuation_max_bundle = subjective_valuation_max_bundle
+        if type(resource_exchange_profile_active) is not bool:
+            raise TypeError("resource_exchange_profile_active must be bool")
+        self._resource_exchange_profile_active = resource_exchange_profile_active
         if subjective_valuation_active:
             _LOGGER.debug(
                 "subjective_valuation_channel active=%s horizon_ticks=%s max_bundle=%s",
@@ -802,6 +820,7 @@ class WorldEngine:
             8 if commitments is None else commitments.horizon_ticks
         )
         _bind_subjective_valuation_channel(engine, snapshot.config)
+        _bind_resource_exchange_profile_channel(engine, snapshot.config)
         engine._perception = PerceptionService(
             possession_succession_active=engine._possession_succession_active,
             structured_commitments_active=engine._structured_commitments_active,
@@ -867,6 +886,7 @@ class WorldEngine:
             8 if commitments is None else commitments.horizon_ticks
         )
         _bind_subjective_valuation_channel(engine, snapshot.config)
+        _bind_resource_exchange_profile_channel(engine, snapshot.config)
         engine._environmental_dynamics = _optional_environmental_dynamics(
             environmental_dynamics
         )
@@ -876,7 +896,7 @@ class WorldEngine:
             artifacts_enabled
             or bool(snapshot.artifacts)
             or snapshot.persistence_codec_version
-            in {"v5", "v6", "v7", "v8", "v9", "v10", "v11", "v12", "v13", "v14", "v15"}
+            in {"v5", "v6", "v7", "v8", "v9", "v10", "v11", "v12", "v13", "v14", "v15", "v16"}
             or bool(getattr(engine._bootstrap, "artifacts", ()))
         )
         if snapshot.persistence_codec_version in {
@@ -887,7 +907,7 @@ class WorldEngine:
             "v10",
             "v11",
             "v12", "v13",
-            "v14", "v15",
+            "v14", "v15", "v16",
         }:
             if population_lifecycle is None and snapshot.lifecycle_records:
                 raise ValueError(
@@ -919,7 +939,7 @@ class WorldEngine:
                 engine._new_agent_initialization = new_agent_initialization
             elif (
                 snapshot.persistence_codec_version
-                in {"v7", "v8", "v9", "v10", "v11", "v12", "v13", "v14", "v15"}
+                in {"v7", "v8", "v9", "v10", "v11", "v12", "v13", "v14", "v15", "v16"}
                 and snapshot.event_schema_version in {10, 11, 12, 13, 14}
             ):
                 # Prefer explicit restore arg; else pull from snapshot config when v25+.
@@ -947,7 +967,7 @@ class WorldEngine:
         engine._durable_records_spec = None
         engine._knowledge_repositories_spec = None
         engine._dependency_need_registers = {}
-        if snapshot.persistence_codec_version in {"v10", "v11", "v12", "v13", "v14", "v15"}:
+        if snapshot.persistence_codec_version in {"v10", "v11", "v12", "v13", "v14", "v15", "v16"}:
             from simulation.runner_models import DurableRecordsSpec
 
             resolved_durable = getattr(snapshot.config, "durable_records", None)
@@ -961,7 +981,7 @@ class WorldEngine:
                 snapshot.persistence_codec_version,
                 engine._durable_records_spec is not None,
             )
-        if snapshot.persistence_codec_version in {"v11", "v12", "v13", "v14", "v15"}:
+        if snapshot.persistence_codec_version in {"v11", "v12", "v13", "v14", "v15", "v16"}:
             from simulation.runner_models import KnowledgeRepositoriesSpec
 
             resolved_repos = getattr(snapshot.config, "knowledge_repositories", None)
@@ -982,7 +1002,7 @@ class WorldEngine:
                 engine._knowledge_repositories_spec is not None,
                 len(snapshot.repositories),
             )
-        if snapshot.persistence_codec_version in {"v10", "v11", "v12", "v13", "v14", "v15"}:
+        if snapshot.persistence_codec_version in {"v10", "v11", "v12", "v13", "v14", "v15", "v16"}:
             durable_mode = (
                 engine._durable_records_spec.perception_mode
                 if engine._durable_records_spec is not None
@@ -1001,7 +1021,7 @@ class WorldEngine:
                     structured_commitments_active=engine._structured_commitments_active,
                     subjective_valuation_active=engine._subjective_valuation_active,
                 )
-        if snapshot.persistence_codec_version in {"v8", "v9", "v10", "v11", "v12", "v13", "v14", "v15"}:
+        if snapshot.persistence_codec_version in {"v8", "v9", "v10", "v11", "v12", "v13", "v14", "v15", "v16"}:
             resolved_kinship = kinship_spec
             if resolved_kinship is None:
                 resolved_kinship = getattr(snapshot.config, "kinship", None)
@@ -1059,7 +1079,7 @@ class WorldEngine:
                     if type(event.details) is KinshipEdgeRecorded
                 ),
             )
-        if snapshot.persistence_codec_version in {"v9", "v10", "v11", "v12", "v13", "v14", "v15"}:
+        if snapshot.persistence_codec_version in {"v9", "v10", "v11", "v12", "v13", "v14", "v15", "v16"}:
             from simulation.runner_models import DependencyCareSpec
             from world.dependency_care import DependencyNeedRegister
 
@@ -1179,6 +1199,10 @@ class WorldEngine:
         return self._subjective_valuation_active
 
     @property
+    def resource_exchange_profile_active(self) -> bool:
+        return self._resource_exchange_profile_active
+
+    @property
     def knowledge_repositories_spec(self) -> object | None:
         return self._knowledge_repositories_spec
 
@@ -1267,6 +1291,7 @@ class WorldEngine:
                 possession_succession_active=self.possession_succession_active,
                 structured_commitments_active=self.structured_commitments_active,
             subjective_valuation_active=self.subjective_valuation_active,
+                resource_exchange_profile_active=self.resource_exchange_profile_active,
             )
             snap = self._snapshot
             same_tick = [
@@ -1515,6 +1540,7 @@ class WorldEngine:
             possession_succession_active=self.possession_succession_active,
             structured_commitments_active=self.structured_commitments_active,
             subjective_valuation_active=self.subjective_valuation_active,
+                resource_exchange_profile_active=self.resource_exchange_profile_active,
         )
         next_registrations = (*self._registrations, registration)
         self._registrations = next_registrations
@@ -3532,6 +3558,7 @@ class WorldEngine:
             possession_succession_active=self.possession_succession_active,
             structured_commitments_active=self.structured_commitments_active,
             subjective_valuation_active=self.subjective_valuation_active,
+                resource_exchange_profile_active=self.resource_exchange_profile_active,
         )
         prepared = finalize_pending_batch(
             merged,
@@ -5421,6 +5448,7 @@ def select_checkpoint_schema(
     possession_succession_active: bool = False,
     structured_commitments_active: bool = False,
     subjective_valuation_active: bool = False,
+    resource_exchange_profile_active: bool = False,
 ) -> tuple[int, str]:
     """Return the legal event-schema and codec pair for this run."""
     from simulation.persistence import (
@@ -5457,9 +5485,26 @@ def select_checkpoint_schema(
         possession_succession_active=possession_succession_active,
         structured_commitments_active=structured_commitments_active,
         subjective_valuation_active=subjective_valuation_active,
+        resource_exchange_profile_active=resource_exchange_profile_active,
     )
+    if resource_exchange_profile_active and (
+        schema_version != EVENT_SCHEMA_REPLAY_V18 or codec != "v16"
+    ):
+        _LOGGER.warning(
+            "checkpoint_schema_disagrees schema_version=%s codec=%s "
+            "expected_schema=%s expected_codec=v16 "
+            "reason=resource_exchange_profile_active",
+            schema_version,
+            codec,
+            EVENT_SCHEMA_REPLAY_V18,
+        )
     agreed = (
-        subjective_valuation_active
+        resource_exchange_profile_active
+        and schema_version == EVENT_SCHEMA_REPLAY_V18
+        and codec == "v16"
+    ) or (
+        not resource_exchange_profile_active
+        and subjective_valuation_active
         and schema_version == EVENT_SCHEMA_REPLAY_V18
         and codec == "v15"
     ) or (

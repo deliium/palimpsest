@@ -144,6 +144,7 @@ class PersistentSimulationService:
             possession_succession_active=self._engine.possession_succession_active,
             structured_commitments_active=self._engine.structured_commitments_active,
             subjective_valuation_active=self._engine.subjective_valuation_active,
+            resource_exchange_profile_active=self._engine.resource_exchange_profile_active,
         )
         production_rows: dict[str, tuple[object, ...]] = {}
         if codec_version in {"v3", "v4", "v5", "v6", "v7"}:
@@ -160,11 +161,11 @@ class PersistentSimulationService:
             production_rows["lifecycle_records"] = tuple(
                 self._engine.lifecycle_records
             )
-        if codec_version in {"v13", "v14", "v15"}:
+        if codec_version in {"v13", "v14", "v15", "v16"}:
             production_rows["corpse_custody_item_ids"] = tuple(
                 sorted(state.corpse_custody_item_ids, key=lambda item: item.value)
             )
-        if codec_version == "v15":
+        if codec_version in {"v15", "v16"}:
             production_rows["exchange_offers"] = tuple(state.exchange_offers)
         draft = WorldSnapshot(
             snapshot_id=snapshot_id,
