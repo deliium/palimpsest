@@ -151,6 +151,7 @@ SUBJECTIVE_COPY_DENY_LIST: Final[frozenset[str]] = frozenset(
         "structured_commitments",
         "subjective_valuations",
         "scarcity_beliefs",
+        "acceptance_memories",
     }
 )
 
@@ -177,6 +178,7 @@ BLANK_SLATE_SUBJECTIVE_STORES: Final[tuple[str, ...]] = (
     "structured_commitments",
     "subjective_valuations",
     "scarcity_beliefs",
+    "acceptance_memories",
 )
 
 CREATION_REASON_CODES: Final[frozenset[str]] = frozenset(
@@ -852,6 +854,7 @@ class BlankSlateStoreCounts:
     structured_commitments: int = 0
     subjective_valuations: int = 0
     scarcity_beliefs: int = 0
+    acceptance_memories: int = 0
 
 
 def assert_blank_slate_subjective_state(

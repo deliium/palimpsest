@@ -776,6 +776,7 @@ class CommandPlanner:
         commitment_horizon_ticks: int = 8,
         subjective_valuation_active: bool = False,
         subjective_valuation_max_bundle: int = 8,
+        resource_exchange_profile_active: bool = False,
         semantic_naming: object | None = None,
         semantic_naming_mode: object | None = None,
         cultural_narratives: object | None = None,
@@ -1128,6 +1129,7 @@ class CommandPlanner:
                     None if snapshot is None else snapshot.structured_commitments
                 ),
                 owner_entity_id=loop_input.observation.observer_id,
+                resource_exchange_profile_active=resource_exchange_profile_active,
             )
         command_type = type(command).__name__
 

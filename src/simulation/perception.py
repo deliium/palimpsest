@@ -145,6 +145,7 @@ def build_perspective(
     structured_commitments: object | None = None,
     subjective_valuations: object | None = None,
     scarcity_beliefs: object | None = None,
+    acceptance_memories: object | None = None,
 ) -> Perspective:
     """Pair one ``AgentId`` with exactly its registered entity observation.
 
@@ -343,6 +344,7 @@ def build_perspective(
         structured_commitments=structured_commitments,
         subjective_valuations=subjective_valuations,
         scarcity_beliefs=scarcity_beliefs,
+        acceptance_memories=acceptance_memories,
     )
     _ = SemanticBelief, DirectedRelationshipProfile
     emotion_kind_count = (

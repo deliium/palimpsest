@@ -7794,6 +7794,149 @@ def decode_subjective_valuation_checkpoint(
     }
 
 
+def acceptance_memories_checkpoint_payload(
+    memories: Mapping[str, object], *, codec: str
+) -> dict[str, object]:
+    """Owner map of acceptance ledgers. Present only on codec v16."""
+    owner_count = len(memories) if isinstance(memories, Mapping) else 0
+    if codec != "v16":
+        _LOG.debug(
+            "acceptance_memories omitted codec=%s owner_count=%s",
+            codec,
+            owner_count,
+        )
+        return {}
+    if isinstance(memories, (str, bytes)) or not isinstance(memories, Mapping):
+        raise TypeError("acceptance_memories must be a mapping")
+    encoded: dict[str, object] = {}
+    for owner_key in sorted(memories):
+        ledger = memories[owner_key]
+        if not isinstance(owner_key, str):
+            raise TypeError("acceptance_memories owner id must be str")
+        if getattr(getattr(ledger, "owner_id", None), "value", None) != owner_key:
+            raise ValueError("acceptance_memories owner_id mismatch")
+        encoded[owner_key] = _encode_acceptance_ledger(ledger)
+    _LOG.debug("acceptance_memories encoded owner_count=%s", len(encoded))
+    return {"acceptance_memories": encoded}
+
+
+def decode_acceptance_memories_checkpoint(
+    payload: Mapping[str, object], *, codec: str
+) -> dict[str, object]:
+    """Decode v16 acceptance ledgers. Older codecs reject the key."""
+    if codec != "v16":
+        if "acceptance_memories" in payload:
+            _LOG.warning(
+                "acceptance_memories present on pre-v16 payload codec=%s",
+                codec,
+            )
+            raise DomainSerializationError(
+                "acceptance_memories_requires_codec_v16",
+                "$.acceptance_memories",
+            )
+        return {}
+    raw = payload.get("acceptance_memories")
+    if not isinstance(raw, dict):
+        raise DomainSerializationError("invalid_object", "$.acceptance_memories")
+    from agents.models import AgentId
+
+    decoded: dict[str, object] = {}
+    for owner_key, row in raw.items():
+        if not isinstance(owner_key, str) or not isinstance(row, dict):
+            raise DomainSerializationError(
+                "invalid_object", f"$.acceptance_memories.{owner_key}"
+            )
+        decoded[owner_key] = _decode_acceptance_ledger(
+            row,
+            owner_id=AgentId(owner_key),
+            path=f"$.acceptance_memories.{owner_key}",
+        )
+    _LOG.debug("acceptance_memories decoded owner_count=%s", len(decoded))
+    return decoded
+
+
+def _encode_acceptance_ledger(ledger: object) -> dict[str, object]:
+    from agents.cognition.acceptance_memory import AcceptanceMemoryLedger
+
+    if type(ledger) is not AcceptanceMemoryLedger:
+        raise TypeError("ledger must be AcceptanceMemoryLedger")
+    return {
+        "fingerprints": [
+            [
+                source_tick,
+                actor_id,
+                counterparty_id,
+                list(give_ids),
+                list(take_ids),
+            ]
+            for source_tick, actor_id, counterparty_id, give_ids, take_ids in ledger.fingerprints
+        ],
+        "rows": [
+            {
+                "giver_ids": list(row.giver_ids),
+                "item_kind": row.item_kind.value,
+                "received_count": row.received_count,
+                "tick": row.tick,
+            }
+            for row in ledger.rows
+        ],
+    }
+
+
+def _decode_acceptance_ledger(
+    data: Mapping[str, object], *, owner_id: object, path: str
+) -> object:
+    from agents.cognition.acceptance_memory import (
+        AcceptanceMemoryLedger,
+        AcceptanceMemoryRow,
+    )
+    from world.values import ItemKind
+
+    if "rows" not in data or "fingerprints" not in data:
+        raise DomainSerializationError("invalid_fields", path)
+    raw_rows = data["rows"]
+    raw_prints = data["fingerprints"]
+    if not isinstance(raw_rows, list) or not isinstance(raw_prints, list):
+        raise DomainSerializationError("invalid_array", path)
+    rows = []
+    for index, row in enumerate(raw_rows):
+        if not isinstance(row, dict):
+            raise DomainSerializationError("invalid_object", f"{path}.rows[{index}]")
+        givers = row.get("giver_ids")
+        if not isinstance(givers, list):
+            raise DomainSerializationError(
+                "invalid_array", f"{path}.rows[{index}].giver_ids"
+            )
+        rows.append(
+            AcceptanceMemoryRow(
+                ItemKind(str(row["item_kind"])),
+                int(row["received_count"]),
+                tuple(str(item) for item in givers),
+                int(row["tick"]),
+            )
+        )
+    fingerprints = []
+    for index, item in enumerate(raw_prints):
+        if not isinstance(item, list) or len(item) != 5:
+            raise DomainSerializationError(
+                "invalid_array", f"{path}.fingerprints[{index}]"
+            )
+        fingerprints.append(
+            (
+                int(item[0]),
+                str(item[1]),
+                str(item[2]),
+                tuple(str(part) for part in item[3]),
+                tuple(str(part) for part in item[4]),
+            )
+        )
+    return AcceptanceMemoryLedger(
+        owner_id,  # type: ignore[arg-type]
+        rows=tuple(rows),
+        fingerprints=tuple(fingerprints),
+    )
+
+
 def _encode_owner_ledgers(
     ledgers: Mapping[str, object],
     ledger_type: type,

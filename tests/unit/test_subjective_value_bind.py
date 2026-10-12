@@ -182,7 +182,7 @@ def test_channel_off_writes_neither_store() -> None:
     loop._subjective_valuation_active = False
     assert loop._prepare_subjective_valuations(
         None, world_model=None, emotional_evaluation=None
-    ) == (None, None)
+    ) == (None, None, None)
 
 
 def test_loop_result_exposes_both_ledgers() -> None:

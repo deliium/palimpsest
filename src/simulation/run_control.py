@@ -617,6 +617,7 @@ class AgentRuntimeCheckpoint:
     structured_commitments: object | None = None
     subjective_valuations: object | None = None
     scarcity_beliefs: object | None = None
+    acceptance_memories: object | None = None
 
     def __post_init__(self) -> None:
         if type(self.agent_id) is not AgentId:
@@ -833,6 +834,13 @@ class AgentRuntimeCheckpoint:
             self.scarcity_beliefs,
             self.agent_id,
             field_name="scarcity_beliefs",
+        )
+        from agents.cognition.acceptance_memory import require_owner_acceptance_memories
+
+        require_owner_acceptance_memories(
+            self.acceptance_memories,
+            self.agent_id,
+            field_name="acceptance_memories",
         )
 
 

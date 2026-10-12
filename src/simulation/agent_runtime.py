@@ -455,6 +455,7 @@ class AgentRuntime:
         "_remembered_decisions",
         "_reputation",
         "_run_id",
+        "_acceptance_memories",
         "_scarcity_beliefs",
         "_scientific_evidence",
         "_semantic_belief_reader",
@@ -573,6 +574,7 @@ class AgentRuntime:
         self._structured_commitments: object | None = None
         self._subjective_valuations: object | None = None
         self._scarcity_beliefs: object | None = None
+        self._acceptance_memories: object | None = None
         self._social_conventions: object | None = None
         self._artifact_interpretations: object | None = None
         self._semantic_naming: object | None = None
@@ -944,6 +946,25 @@ class AgentRuntime:
             "subjective_valuations_carried owner_id=%s kind_row_count=%s tick=%s",
             owner.value,
             len(valuations.kind_rows),
+            tick,
+        )
+
+    def _commit_acceptance_memories(self, ledger: object | None, tick: int) -> None:
+        from agents.cognition.acceptance_memory import AcceptanceMemoryLedger
+
+        if ledger is None:
+            return
+        owner = self._agent.agent_id
+        if type(ledger) is not AcceptanceMemoryLedger or ledger.owner_id != owner:
+            raise AgentRuntimeError(
+                AgentRuntimeErrorCode.OWNERSHIP,
+                agent_id=owner.value,
+            )
+        self._acceptance_memories = ledger
+        _LOG.debug(
+            "acceptance_memories_carried owner_id=%s row_count=%s tick=%s",
+            owner.value,
+            len(ledger.rows),
             tick,
         )
 
@@ -1798,6 +1819,7 @@ class AgentRuntime:
                 structured_commitments=self._structured_commitments,
                 subjective_valuations=self._subjective_valuations,
                 scarcity_beliefs=self._scarcity_beliefs,
+                acceptance_memories=self._acceptance_memories,
                 social_conventions=self._social_conventions,
                 artifact_interpretations=self._artifact_interpretations,
                 semantic_naming=self._semantic_naming,
@@ -2239,6 +2261,10 @@ class AgentRuntime:
             getattr(pending.loop_result, "scarcity_beliefs", None),
             pending.tick,
         )
+        self._commit_acceptance_memories(
+            getattr(pending.loop_result, "acceptance_memories", None),
+            pending.tick,
+        )
         self._commit_social_conventions(
             getattr(pending.loop_result, "social_conventions", None), pending.tick
         )
@@ -2677,6 +2703,7 @@ class AgentRuntime:
         )
         self._subjective_valuations = getattr(checkpoint, "subjective_valuations", None)
         self._scarcity_beliefs = getattr(checkpoint, "scarcity_beliefs", None)
+        self._acceptance_memories = getattr(checkpoint, "acceptance_memories", None)
         self._social_conventions = getattr(checkpoint, "social_conventions", None)
         self._artifact_interpretations = getattr(
             checkpoint, "artifact_interpretations", None
@@ -2769,6 +2796,7 @@ class AgentRuntime:
             structured_commitments=self._structured_commitments,
             subjective_valuations=self._subjective_valuations,
             scarcity_beliefs=self._scarcity_beliefs,
+            acceptance_memories=self._acceptance_memories,
         )
 
     async def process_observation(

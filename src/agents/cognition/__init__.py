@@ -214,6 +214,11 @@ from agents.cognition.structured_commitments import (
     empty_structured_commitments,
     require_owner_structured_commitments,
 )
+from agents.cognition.acceptance_memory import (
+    AcceptanceMemoryLedger,
+    empty_acceptance_memories,
+    require_owner_acceptance_memories,
+)
 from agents.cognition.subjective_value import (
     SubjectiveValuationLedger,
     ValuationRow,
@@ -1170,6 +1175,9 @@ __all__ = [
     "empty_structured_commitments",
     "StructuredCommitmentLedger",
     "require_owner_structured_commitments",
+    "empty_acceptance_memories",
+    "AcceptanceMemoryLedger",
+    "require_owner_acceptance_memories",
     "empty_subjective_valuations",
     "SubjectiveValuationLedger",
     "ValuationRow",

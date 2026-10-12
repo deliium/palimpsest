@@ -1890,6 +1890,7 @@ class SimulationRunner:
                     **_possession_succession_loop_kwargs(config),
                     **_structured_commitments_loop_kwargs(config),
                     **_subjective_valuation_loop_kwargs(config),
+                    **_resource_exchange_profile_loop_kwargs(config),
                     **_knowledge_genealogy_loop_kwargs(config),
                     **_bounded_experimentation_loop_kwargs(config),
                 )
@@ -3387,6 +3388,7 @@ class SimulationRunner:
                 **_possession_succession_loop_kwargs(self._config),
                 **_structured_commitments_loop_kwargs(self._config),
                 **_subjective_valuation_loop_kwargs(self._config),
+                **_resource_exchange_profile_loop_kwargs(self._config),
                 **_knowledge_genealogy_loop_kwargs(self._config),
                 **_bounded_experimentation_loop_kwargs(self._config),
             )

@@ -19,7 +19,15 @@ from world.values import ItemKind
 _LOG = logging.getLogger("agents.cognition.subjective_value")
 
 VALUATION_COMPONENTS: frozenset[str] = frozenset(
-    {"need", "inventory", "scarcity", "plan", "risk", "expected_future"}
+    {
+        "need",
+        "inventory",
+        "scarcity",
+        "plan",
+        "risk",
+        "expected_future",
+        "observed_acceptance",
+    }
 )
 _RESERVATION_MAX = 16
 
@@ -168,11 +176,13 @@ def appraise_reservation(
     plan_names_kind: bool = False,
     risk_active: bool = False,
     expected_future_scarcity: bool = False,
+    observed_acceptance: int | None = None,
     tick: int = 0,
 ) -> ValuationRow:
     """Integer reservation for one kind. The world never reads this number."""
     if type(item_kind) is not ItemKind:
         raise TypeError("item_kind must be ItemKind")
+    acceptance = _acceptance_component(observed_acceptance, item_kind)
     reference = reference_kind_for(hunger, thirst)
     if item_kind is reference:
         return ValuationRow(item_kind, reference, 1, (), tick)
@@ -208,6 +218,7 @@ def appraise_reservation(
         ("plan", plan),
         ("risk", risk),
         ("expected_future", future),
+        ("observed_acceptance", acceptance),
     )
     reservation = max(0, min(16, sum(amount for _token, amount in parts)))
     components = tuple(
@@ -221,6 +232,29 @@ def appraise_reservation(
         ",".join(component.token for component in components),
     )
     return row
+
+
+def _acceptance_component(value: int | None, item_kind: ItemKind) -> int:
+    if value is None:
+        _LOG.debug(
+            "valuation_acceptance_omitted item_kind=%s",
+            item_kind.value,
+        )
+        return 0
+    if type(value) is not int or isinstance(value, bool) or not 0 <= value <= 64:
+        _LOG.error(
+            "valuation_acceptance_invalid item_kind=%s received_count=%s",
+            item_kind.value,
+            value,
+        )
+        raise ValueError("observed_acceptance must be an int in [0, 64] or None")
+    if value >= 8:
+        return 3
+    if value >= 3:
+        return 2
+    if value >= 1:
+        return 1
+    return 0
 
 
 def bundle_concession(
@@ -283,6 +317,7 @@ def refresh_owner_ledgers(
     plan_kinds: frozenset[ItemKind],
     risk_active: bool,
     future_kinds: frozenset[ItemKind],
+    acceptance_counts: dict[ItemKind, int | None] | None = None,
     judgment_kind: ItemKind | None = None,
     counterparty_id: EntityId | None = None,
     max_judgments: int = 32,
@@ -320,6 +355,11 @@ def refresh_owner_ledgers(
             plan_names_kind=kind in plan_kinds,
             risk_active=risk_active,
             expected_future_scarcity=kind in future_kinds,
+            observed_acceptance=(
+                None
+                if acceptance_counts is None
+                else acceptance_counts.get(kind)
+            ),
             tick=tick,
         )
         valuations = store_kind_valuation(valuations, row)
@@ -370,6 +410,7 @@ def propose_exchange_command(
     owner_entity_id: EntityId,
     relationships: object | None = None,
     commitments: object | None = None,
+    resource_exchange_profile_active: bool = False,
 ) -> object:
     """Answer a perceived proposal. Channel off returns the ranked command."""
     from world.actions import Attack, Give, NegotiateExchange
@@ -406,6 +447,7 @@ def propose_exchange_command(
             take_ids=take_ids,
             take_kinds=take_kinds,
             max_bundle=max_bundle,
+            prefer_inert=resource_exchange_profile_active,
         )
     if type(chosen) in {Give, Attack}:
         return command
@@ -480,6 +522,7 @@ def _counter_or_withdraw(
     take_ids: tuple[EntityId, ...],
     take_kinds: tuple[ItemKind, ...],
     max_bundle: int,
+    prefer_inert: bool = False,
 ) -> object:
     from world.actions import NegotiateExchange
     from world.observations import ObservedItemPlacement
@@ -494,6 +537,10 @@ def _counter_or_withdraw(
     own_reference = _own_ids(observation, reference, ObservedItemPlacement)
     own_extra = _own_ids(observation, None, ObservedItemPlacement)
     if tool in take_kinds:
+        _LOG.debug(
+            "exchange_give_preference_skipped owner_id=%s reason=tool_side",
+            ledger.owner_id.value,
+        )
         give = tuple(
             item_id
             for item_id, kind in zip(take_ids, take_kinds, strict=True)
@@ -508,16 +555,124 @@ def _counter_or_withdraw(
             for item_id, kind in zip(give_ids, give_kinds, strict=True)
             if kind is tool
         )
-        give = own_reference[:count]
-        filled = len(take) <= max_bundle and len(give) == count and count > 0
+        if prefer_inert:
+            give, give_value = _fill_reference_give(
+                observation,
+                ledger,
+                reference=reference,
+                target=count,
+                max_bundle=max_bundle,
+                placement_type=ObservedItemPlacement,
+            )
+            filled = (
+                len(take) > 0
+                and len(give) > 0
+                and give_value >= count
+                and count > 0
+            )
+        else:
+            _LOG.debug(
+                "exchange_give_preference_skipped owner_id=%s reason=channel_off",
+                ledger.owner_id.value,
+            )
+            give = own_reference[:count]
+            filled = len(take) <= max_bundle and len(give) == count and count > 0
         nothing_else = all(item_id in give for item_id in own_extra)
     if not filled and nothing_else:
+        _LOG.debug(
+            "exchange_give_preference_skipped owner_id=%s reason=bundle_rejected",
+            ledger.owner_id.value,
+        )
         return NegotiateExchange(actor, "withdraw", (), ())
     if not filled:
+        _LOG.debug(
+            "exchange_give_preference_skipped owner_id=%s reason=bundle_rejected",
+            ledger.owner_id.value,
+        )
         return NegotiateExchange(actor, "withdraw", (), ())
     return NegotiateExchange(
         actor, "counteroffer", give[:max_bundle], take[:max_bundle]
     )
+
+
+def _fill_reference_give(
+    observation: object,
+    ledger: SubjectiveValuationLedger,
+    *,
+    reference: ItemKind,
+    target: int,
+    max_bundle: int,
+    placement_type: type,
+) -> tuple[tuple[EntityId, ...], int]:
+    """Spend remembered inert portable items, then reference items, up to the target."""
+    from world.resource_profile import physical_profile
+
+    held = placement_type.HELD_BY_SELF
+    items = sorted(
+        (
+            item
+            for item in getattr(observation, "items", ()) or ()
+            if item.placement is held
+        ),
+        key=lambda item: item.entity_id.value,
+    )
+    reservations = {row.item_kind: row.reservation for row in ledger.kind_rows}
+    chosen: list[EntityId] = []
+    value = 0
+    for item in items:
+        if len(chosen) >= max_bundle or value >= target:
+            break
+        tokens = physical_profile(item.kind, item.load)
+        component = _component_amount(ledger, item.kind, "observed_acceptance")
+        if "inert" not in tokens or "portable" not in tokens:
+            _LOG.debug(
+                "exchange_give_preference_skipped owner_id=%s item_id=%s "
+                "reason=not_inert",
+                ledger.owner_id.value,
+                item.entity_id.value,
+            )
+            continue
+        if component < 2:
+            _LOG.debug(
+                "exchange_give_preference_skipped owner_id=%s item_id=%s "
+                "reason=below_component",
+                ledger.owner_id.value,
+                item.entity_id.value,
+            )
+            continue
+        item_value = reservations.get(item.kind, 0)
+        if item_value <= 0:
+            continue
+        chosen.append(item.entity_id)
+        value += item_value
+        _LOG.debug(
+            "exchange_give_preference owner_id=%s item_id=%s item_kind=%s "
+            "acceptance_component=%s",
+            ledger.owner_id.value,
+            item.entity_id.value,
+            item.kind.value,
+            component,
+        )
+    for item in items:
+        if len(chosen) >= max_bundle or value >= target:
+            break
+        if item.kind is not reference or item.entity_id in chosen:
+            continue
+        chosen.append(item.entity_id)
+        value += 1
+    return tuple(chosen), value
+
+
+def _component_amount(
+    ledger: SubjectiveValuationLedger, kind: ItemKind, token: str
+) -> int:
+    for row in ledger.kind_rows:
+        if row.item_kind is not kind:
+            continue
+        for component in row.components:
+            if component.token == token:
+                return component.amount
+    return 0
 
 
 def _reference_kind(

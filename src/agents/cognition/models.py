@@ -736,6 +736,7 @@ class SubjectiveSnapshot:
     structured_commitments: object | None = None
     subjective_valuations: object | None = None
     scarcity_beliefs: object | None = None
+    acceptance_memories: object | None = None
 
     def __post_init__(self) -> None:
         if type(self.owner_id) is not AgentId:
@@ -931,6 +932,13 @@ class SubjectiveSnapshot:
             self.scarcity_beliefs,
             self.owner_id,
             field_name="SubjectiveSnapshot.scarcity_beliefs",
+        )
+        from agents.cognition.acceptance_memory import require_owner_acceptance_memories
+
+        require_owner_acceptance_memories(
+            self.acceptance_memories,
+            self.owner_id,
+            field_name="SubjectiveSnapshot.acceptance_memories",
         )
         from agents.cognition.social_conventions import require_owner_social_conventions
 
@@ -3796,6 +3804,7 @@ class CognitiveLoopProposal:
     structured_commitments: object | None = None
     subjective_valuations: object | None = None
     scarcity_beliefs: object | None = None
+    acceptance_memories: object | None = None
 
     def __post_init__(self) -> None:
         object.__setattr__(
@@ -3896,6 +3905,13 @@ class CognitiveLoopProposal:
             self.subjective_valuations,
             self.agent_id,
             field_name="CognitiveLoopProposal.subjective_valuations",
+        )
+        from agents.cognition.acceptance_memory import require_owner_acceptance_memories
+
+        require_owner_acceptance_memories(
+            self.acceptance_memories,
+            self.agent_id,
+            field_name="CognitiveLoopProposal.acceptance_memories",
         )
         require_owner_scarcity_beliefs(
             self.scarcity_beliefs,
@@ -4069,6 +4085,7 @@ class CognitiveLoopResult:
     structured_commitments: object | None = None
     subjective_valuations: object | None = None
     scarcity_beliefs: object | None = None
+    acceptance_memories: object | None = None
 
     def __post_init__(self) -> None:
         object.__setattr__(
@@ -4145,6 +4162,13 @@ class CognitiveLoopResult:
             self.subjective_valuations,
             self.agent_id,
             field_name="CognitiveLoopResult.subjective_valuations",
+        )
+        from agents.cognition.acceptance_memory import require_owner_acceptance_memories
+
+        require_owner_acceptance_memories(
+            self.acceptance_memories,
+            self.agent_id,
+            field_name="CognitiveLoopResult.acceptance_memories",
         )
         require_owner_scarcity_beliefs(
             self.scarcity_beliefs,

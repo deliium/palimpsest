@@ -215,6 +215,7 @@ class CognitiveLoop:
     """Sequential cognitive pipeline returning one closed ``AgentCommand``."""
 
     __slots__ = (
+        "_acceptance_window_ticks",
         "_artifact_interpretation_mode",
         "_bounded_experimentation_caps",
         "_care_action_policy",
@@ -277,6 +278,7 @@ class CognitiveLoop:
         "_reflection_selector",
         "_reputation_mode",
         "_reputation_policy",
+        "_resource_exchange_profile_active",
         "_self_state",
         "_semantic_naming_mode",
         "_semantic_naming_policy",
@@ -355,6 +357,8 @@ class CognitiveLoop:
         subjective_valuation_active: bool = False,
         horizon_ticks: int = 8,
         max_bundle: int = 8,
+        resource_exchange_profile_active: bool = False,
+        acceptance_window_ticks: int = 32,
         knowledge_genealogy_spec: object | None = None,
         knowledge_genealogy_seed_material: object | None = None,
         bounded_experimentation_spec: object | None = None,
@@ -921,6 +925,19 @@ class CognitiveLoop:
             raise TypeError("max_bundle must be int")
         self._subjective_valuation_horizon = horizon_ticks
         self._subjective_valuation_max_bundle = max_bundle
+        if type(resource_exchange_profile_active) is not bool:
+            raise TypeError("resource_exchange_profile_active must be bool")
+        if type(acceptance_window_ticks) is not int or isinstance(
+            acceptance_window_ticks, bool
+        ):
+            raise TypeError("acceptance_window_ticks must be int")
+        self._resource_exchange_profile_active = resource_exchange_profile_active
+        self._acceptance_window_ticks = acceptance_window_ticks
+        _LOG.info(
+            "resource_exchange_profile_active=%s acceptance_window_ticks=%s",
+            resource_exchange_profile_active,
+            acceptance_window_ticks,
+        )
         if subjective_valuation_active:
             _LOG.debug(
                 "subjective_valuation_bind subjective_valuation_active=%s "
@@ -1378,7 +1395,7 @@ class CognitiveLoop:
         from world.values import ItemKind
 
         if not self._subjective_valuation_active:
-            return None, None
+            return None, None, None
         observation = loop_input.observation
         snapshot = loop_input.snapshot
         held: dict[ItemKind, int] = {}
@@ -1418,7 +1435,17 @@ class CognitiveLoop:
         body = observation.self_body
         judgment_kind, counterparty = _answered_proposal(observation)
         max_judgments = min(32, self._subjective_valuation_max_bundle * 4)
-        return refresh_owner_ledgers(
+        acceptance = self._fold_acceptance_memory(
+            observation, snapshot, owner_id=loop_input.agent_id
+        )
+        acceptance_counts = None
+        if acceptance is not None:
+            from agents.cognition.acceptance_memory import received_count_for
+
+            acceptance_counts = {
+                kind: received_count_for(acceptance, kind) for kind in ItemKind
+            }
+        valuations, scarcity = refresh_owner_ledgers(
             owner_id=loop_input.agent_id,
             valuations=None if snapshot is None else snapshot.subjective_valuations,
             scarcity=None if snapshot is None else snapshot.scarcity_beliefs,
@@ -1434,10 +1461,92 @@ class CognitiveLoop:
             plan_kinds=frozenset(plan_kinds),
             risk_active=risk_active,
             future_kinds=future_kinds,
+            acceptance_counts=acceptance_counts,
             judgment_kind=judgment_kind,
             counterparty_id=counterparty,
             max_judgments=max_judgments,
         )
+        return valuations, scarcity, acceptance
+
+    def _fold_acceptance_memory(
+        self,
+        observation: object,
+        snapshot: object | None,
+        *,
+        owner_id: object,
+    ) -> object | None:
+        """Update this owner's acceptance rows from observed completions."""
+        from agents.cognition.acceptance_memory import (
+            AcceptanceMemoryLedger,
+            empty_acceptance_memories,
+            note_exchange_completed,
+        )
+        from world.values import ItemKind
+
+        if not self._resource_exchange_profile_active:
+            return None
+        from agents.models import AgentId
+
+        if type(owner_id) is not AgentId:
+            return None
+        carried = (
+            None
+            if snapshot is None
+            else getattr(snapshot, "acceptance_memories", None)
+        )
+        if type(carried) is AcceptanceMemoryLedger and carried.owner_id == owner_id:
+            ledger = carried
+        else:
+            ledger = empty_acceptance_memories(owner_id)
+        by_value = {kind.value: kind for kind in ItemKind}
+        for occurrence in getattr(observation, "occurrences", ()):
+            facts = getattr(occurrence, "public_facts", {})
+            if facts.get("kind") != "exchange_completed":
+                continue
+            provenance = getattr(occurrence, "provenance", None)
+            source_tick = getattr(provenance, "source_tick", None)
+            if type(source_tick) is not int:
+                continue
+            give_ids = tuple(str(item) for item in facts.get("give_item_ids", ()))
+            take_ids = tuple(str(item) for item in facts.get("take_item_ids", ()))
+            give_kinds = tuple(
+                by_value[token]
+                for token in facts.get("give_item_kinds", ())
+                if token in by_value
+            )
+            take_kinds = tuple(
+                by_value[token]
+                for token in facts.get("take_item_kinds", ())
+                if token in by_value
+            )
+            actor = getattr(occurrence, "actor_id", None)
+            other = getattr(occurrence, "other_entity_id", None)
+            actor_id = getattr(actor, "value", actor)
+            other_id = getattr(other, "value", other)
+            if type(actor_id) is not str or type(other_id) is not str:
+                continue
+            ledger, status = note_exchange_completed(
+                ledger,
+                observation_tick=observation.tick,
+                source_tick=source_tick,
+                window_ticks=self._acceptance_window_ticks,
+                actor_id=actor_id,
+                counterparty_id=other_id,
+                give_item_ids=give_ids,
+                take_item_ids=take_ids,
+                give_item_kinds=give_kinds,
+                take_item_kinds=take_kinds,
+            )
+            _LOG.debug(
+                "acceptance_folded owner_id=%s source_tick=%s status=%s "
+                "give_kinds=%s take_kinds=%s",
+                ledger.owner_id.value,
+                source_tick,
+                status,
+                ",".join(kind.value for kind in give_kinds),
+                ",".join(kind.value for kind in take_kinds),
+            )
+        return ledger
 
     def _prepare_semantic_naming(
         self,
@@ -3295,10 +3404,12 @@ class CognitiveLoop:
                 provider=provider,
                 tick=loop_input.observation.tick,
             )
-        subjective_valuations, scarcity_beliefs = self._prepare_subjective_valuations(
-            loop_input,
-            world_model=world_model,
-            emotional_evaluation=emotional_evaluation,
+        subjective_valuations, scarcity_beliefs, acceptance_memories = (
+            self._prepare_subjective_valuations(
+                loop_input,
+                world_model=world_model,
+                emotional_evaluation=emotional_evaluation,
+            )
         )
         effective_prospective = self._effective_prospective_policy(budget_ledger)
         futures = await run_stage(
@@ -3438,6 +3549,7 @@ class CognitiveLoop:
                     commitment_horizon_ticks=self._commitment_horizon_ticks,
                     subjective_valuation_active=self._subjective_valuation_active,
                     subjective_valuation_max_bundle=self._subjective_valuation_max_bundle,
+                    resource_exchange_profile_active=self._resource_exchange_profile_active,
                     semantic_naming=semantic_naming,
                     semantic_naming_mode=self._semantic_naming_mode,
                     cultural_narratives=cultural_narratives,
@@ -3484,6 +3596,7 @@ class CognitiveLoop:
             structured_commitments=structured_commitments,
             subjective_valuations=subjective_valuations,
             scarcity_beliefs=scarcity_beliefs,
+            acceptance_memories=acceptance_memories,
             social_conventions=social_conventions,
             artifact_interpretations=artifact_interpretations,
             semantic_naming=semantic_naming,
@@ -3659,6 +3772,7 @@ class CognitiveLoop:
             structured_commitments=proposal.structured_commitments,
             subjective_valuations=proposal.subjective_valuations,
             scarcity_beliefs=proposal.scarcity_beliefs,
+            acceptance_memories=proposal.acceptance_memories,
             social_conventions=proposal.social_conventions,
             artifact_interpretations=proposal.artifact_interpretations,
             semantic_naming=proposal.semantic_naming,
