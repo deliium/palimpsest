@@ -407,7 +407,7 @@ Scripted arms may submit commands directly. They must not set a leader field.
 
   Files: `src/analysis/specifications.py`, `src/analysis/collective_project_metrics.py`, `src/analysis/metric_service.py`, `tests/unit/test_collective_project_metrics.py`
 
-- [ ] Task 9: Add Experiment AW and the matrix finalize bit. (depends on 7, 8)
+- [x] Task 9: Add Experiment AW and the matrix finalize bit. (depends on 7, 8)
 
   Register `experiment_aw_collective_projects` (`collective_projects@1`) in `src/experiments/catalog.py` and export it from `src/experiments/__init__.py`. Arms: `aw-channel-off`, `aw-single-contributor`, `aw-two-contributors`, `aw-shortage`, `aw-abandoned`, with the assertions in the experiment table. Completion and abandonment arms set the relevant skill level to at least `1` so the `0.70` base clamps to `1.0` and `collective_project_success` is not drawn. The shortage arm must show that no draw happened. Keep the experiment off the V1 gate. In `src/experiments/matrix_schema.py`, insert `collective_projects_on` immediately before `resource_exchange_profile_on`. Add an architecture isolation test that the new modules do not introduce a leader field, do not reference `LibraryInstitution`, and do not let `src/agents` import `src/analysis`.
 
@@ -421,7 +421,7 @@ Scripted arms may submit commands directly. They must not set a leader field.
 
 ### Phase 4: Docs
 
-- [ ] Task 10: Update the downstream V3 contract. (depends on 9)
+- [x] Task 10: Update the downstream V3 contract. (depends on 9)
 
   Update `docs/architecture.md` so the write-pair priority names `(EVENT_SCHEMA_REPLAY_V19, "v17")` only while `collective_projects` is active, command count **40**, semantic count **66**, Experiment AW, and the statement that a contribution tail is not a leader. Update the V3 paragraph in `.ai-factory/DESCRIPTION.md` with the same pins. Do not rename the observer protocol. Do not claim `institutional_economy`.
 
