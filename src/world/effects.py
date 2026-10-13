@@ -67,6 +67,7 @@ class SystemEffectFamily(StrEnum):
     RESOURCE_NODE = "resource_node"
     LIFECYCLE = "lifecycle"
     KNOWLEDGE_REPOSITORY = "knowledge_repository"
+    COLLECTIVE_PROJECT = "collective_project"
 
 
 @dataclass(frozen=True, slots=True)

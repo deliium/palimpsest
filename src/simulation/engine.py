@@ -17,6 +17,7 @@ from agents.models import AgentId
 from simulation.actions import (
     PHYSICAL_PURPOSE_ATTACK_DAMAGE,
     PHYSICAL_PURPOSE_ATTACK_HIT,
+    PHYSICAL_PURPOSE_COLLECTIVE_PROJECT_SUCCESS,
     PHYSICAL_PURPOSE_FLEE_DESTINATION,
     PHYSICAL_PURPOSE_FLEE_SUCCESS,
     PHYSICAL_PURPOSE_PRODUCTION_SUCCESS,
@@ -283,6 +284,21 @@ def _fold_opened_custody(state: object, events: Sequence[object]) -> object:
     return rebuild_world_state(state, corpse_custody_item_ids=frozenset(custody))
 
 
+def _bind_collective_projects_channel(engine: object, config: object) -> None:
+    """Restore the collective-projects channel from a config that may carry the spec."""
+    spec = getattr(config, "collective_projects", None)
+    active = spec is not None
+    idle = 4 if spec is None else spec.idle_ticks
+    engine._collective_projects_active = active
+    engine._collective_projects_idle_ticks = idle
+    if active:
+        _LOGGER.debug(
+            "collective_projects_channel active=%s idle_ticks=%s",
+            True,
+            idle,
+        )
+
+
 def _bind_resource_exchange_profile_channel(engine: object, config: object) -> None:
     """Restore the exchange-profile channel from a config that may carry the spec."""
     spec = getattr(config, "resource_exchange_profile", None)
@@ -339,6 +355,8 @@ class WorldEngine:
         "_structured_commitments_active",
         "_structured_commitments_horizon",
         "_resource_exchange_profile_active",
+        "_collective_projects_active",
+        "_collective_projects_idle_ticks",
         "_subjective_valuation_active",
         "_subjective_valuation_horizon",
         "_subjective_valuation_max_bundle",
@@ -387,6 +405,8 @@ class WorldEngine:
         subjective_valuation_horizon: int = 8,
         subjective_valuation_max_bundle: int = 8,
         resource_exchange_profile_active: bool = False,
+        collective_projects_active: bool = False,
+        collective_projects_idle_ticks: int = 4,
     ) -> None:
         if type(config) is not SimulationRunConfig:
             raise TypeError("WorldEngine requires SimulationRunConfig")
@@ -411,6 +431,7 @@ class WorldEngine:
             possession_succession_active=possession_succession_active,
             structured_commitments_active=structured_commitments_active,
             subjective_valuation_active=subjective_valuation_active,
+            collective_projects_active=collective_projects_active,
             repository_perception_mode=(
                 None
                 if knowledge_repositories_spec is None
@@ -482,6 +503,22 @@ class WorldEngine:
         if type(resource_exchange_profile_active) is not bool:
             raise TypeError("resource_exchange_profile_active must be bool")
         self._resource_exchange_profile_active = resource_exchange_profile_active
+        if type(collective_projects_active) is not bool:
+            raise TypeError("collective_projects_active must be bool")
+        if type(collective_projects_idle_ticks) is not int or isinstance(
+            collective_projects_idle_ticks, bool
+        ):
+            raise TypeError("collective_projects_idle_ticks must be int")
+        if collective_projects_idle_ticks < 1 or collective_projects_idle_ticks > 64:
+            raise ValueError("collective_projects_idle_ticks must be in [1, 64]")
+        self._collective_projects_active = collective_projects_active
+        self._collective_projects_idle_ticks = collective_projects_idle_ticks
+        if collective_projects_active:
+            _LOGGER.debug(
+                "collective_projects_channel active=%s idle_ticks=%s",
+                True,
+                collective_projects_idle_ticks,
+            )
         if subjective_valuation_active:
             _LOGGER.debug(
                 "subjective_valuation_channel active=%s horizon_ticks=%s max_bundle=%s",
@@ -749,6 +786,7 @@ class WorldEngine:
             repositories=snapshot.repositories,
             corpse_custody_item_ids=frozenset(snapshot.corpse_custody_item_ids),
             exchange_offers=tuple(snapshot.exchange_offers),
+            collective_projects=tuple(snapshot.collective_projects),
         )
         resolved_catalog = _optional_production_catalog(production_catalog)
         if snapshot.persistence_codec_version == "v3" and resolved_catalog is None:
@@ -821,10 +859,12 @@ class WorldEngine:
         )
         _bind_subjective_valuation_channel(engine, snapshot.config)
         _bind_resource_exchange_profile_channel(engine, snapshot.config)
+        _bind_collective_projects_channel(engine, snapshot.config)
         engine._perception = PerceptionService(
             possession_succession_active=engine._possession_succession_active,
             structured_commitments_active=engine._structured_commitments_active,
             subjective_valuation_active=engine._subjective_valuation_active,
+            collective_projects_active=engine._collective_projects_active,
         )
         engine._engine_id = derive_scoped_id(
             snapshot.config,
@@ -887,6 +927,7 @@ class WorldEngine:
         )
         _bind_subjective_valuation_channel(engine, snapshot.config)
         _bind_resource_exchange_profile_channel(engine, snapshot.config)
+        _bind_collective_projects_channel(engine, snapshot.config)
         engine._environmental_dynamics = _optional_environmental_dynamics(
             environmental_dynamics
         )
@@ -896,7 +937,7 @@ class WorldEngine:
             artifacts_enabled
             or bool(snapshot.artifacts)
             or snapshot.persistence_codec_version
-            in {"v5", "v6", "v7", "v8", "v9", "v10", "v11", "v12", "v13", "v14", "v15", "v16"}
+            in {"v5", "v6", "v7", "v8", "v9", "v10", "v11", "v12", "v13", "v14", "v15", "v16", "v17"}
             or bool(getattr(engine._bootstrap, "artifacts", ()))
         )
         if snapshot.persistence_codec_version in {
@@ -907,8 +948,7 @@ class WorldEngine:
             "v10",
             "v11",
             "v12", "v13",
-            "v14", "v15", "v16",
-        }:
+            "v14", "v15", "v16", "v17"}:
             if population_lifecycle is None and snapshot.lifecycle_records:
                 raise ValueError(
                     "codec v6/v7/v8/v9 restore requires population_lifecycle "
@@ -939,7 +979,7 @@ class WorldEngine:
                 engine._new_agent_initialization = new_agent_initialization
             elif (
                 snapshot.persistence_codec_version
-                in {"v7", "v8", "v9", "v10", "v11", "v12", "v13", "v14", "v15", "v16"}
+                in {"v7", "v8", "v9", "v10", "v11", "v12", "v13", "v14", "v15", "v16", "v17"}
                 and snapshot.event_schema_version in {10, 11, 12, 13, 14}
             ):
                 # Prefer explicit restore arg; else pull from snapshot config when v25+.
@@ -967,7 +1007,7 @@ class WorldEngine:
         engine._durable_records_spec = None
         engine._knowledge_repositories_spec = None
         engine._dependency_need_registers = {}
-        if snapshot.persistence_codec_version in {"v10", "v11", "v12", "v13", "v14", "v15", "v16"}:
+        if snapshot.persistence_codec_version in {"v10", "v11", "v12", "v13", "v14", "v15", "v16", "v17"}:
             from simulation.runner_models import DurableRecordsSpec
 
             resolved_durable = getattr(snapshot.config, "durable_records", None)
@@ -981,7 +1021,7 @@ class WorldEngine:
                 snapshot.persistence_codec_version,
                 engine._durable_records_spec is not None,
             )
-        if snapshot.persistence_codec_version in {"v11", "v12", "v13", "v14", "v15", "v16"}:
+        if snapshot.persistence_codec_version in {"v11", "v12", "v13", "v14", "v15", "v16", "v17"}:
             from simulation.runner_models import KnowledgeRepositoriesSpec
 
             resolved_repos = getattr(snapshot.config, "knowledge_repositories", None)
@@ -1002,7 +1042,7 @@ class WorldEngine:
                 engine._knowledge_repositories_spec is not None,
                 len(snapshot.repositories),
             )
-        if snapshot.persistence_codec_version in {"v10", "v11", "v12", "v13", "v14", "v15", "v16"}:
+        if snapshot.persistence_codec_version in {"v10", "v11", "v12", "v13", "v14", "v15", "v16", "v17"}:
             durable_mode = (
                 engine._durable_records_spec.perception_mode
                 if engine._durable_records_spec is not None
@@ -1020,8 +1060,9 @@ class WorldEngine:
                     possession_succession_active=engine._possession_succession_active,
                     structured_commitments_active=engine._structured_commitments_active,
                     subjective_valuation_active=engine._subjective_valuation_active,
+                    collective_projects_active=engine._collective_projects_active,
                 )
-        if snapshot.persistence_codec_version in {"v8", "v9", "v10", "v11", "v12", "v13", "v14", "v15", "v16"}:
+        if snapshot.persistence_codec_version in {"v8", "v9", "v10", "v11", "v12", "v13", "v14", "v15", "v16", "v17"}:
             resolved_kinship = kinship_spec
             if resolved_kinship is None:
                 resolved_kinship = getattr(snapshot.config, "kinship", None)
@@ -1079,7 +1120,7 @@ class WorldEngine:
                     if type(event.details) is KinshipEdgeRecorded
                 ),
             )
-        if snapshot.persistence_codec_version in {"v9", "v10", "v11", "v12", "v13", "v14", "v15", "v16"}:
+        if snapshot.persistence_codec_version in {"v9", "v10", "v11", "v12", "v13", "v14", "v15", "v16", "v17"}:
             from simulation.runner_models import DependencyCareSpec
             from world.dependency_care import DependencyNeedRegister
 
@@ -1203,6 +1244,10 @@ class WorldEngine:
         return self._resource_exchange_profile_active
 
     @property
+    def collective_projects_active(self) -> bool:
+        return self._collective_projects_active
+
+    @property
     def knowledge_repositories_spec(self) -> object | None:
         return self._knowledge_repositories_spec
 
@@ -1292,6 +1337,7 @@ class WorldEngine:
                 structured_commitments_active=self.structured_commitments_active,
             subjective_valuation_active=self.subjective_valuation_active,
                 resource_exchange_profile_active=self.resource_exchange_profile_active,
+                collective_projects_active=self.collective_projects_active,
             )
             snap = self._snapshot
             same_tick = [
@@ -1541,6 +1587,7 @@ class WorldEngine:
             structured_commitments_active=self.structured_commitments_active,
             subjective_valuation_active=self.subjective_valuation_active,
                 resource_exchange_profile_active=self.resource_exchange_profile_active,
+                collective_projects_active=self.collective_projects_active,
         )
         next_registrations = (*self._registrations, registration)
         self._registrations = next_registrations
@@ -2424,6 +2471,12 @@ class WorldEngine:
                     key=lambda item: item.repository_id.value,
                 )
             ),
+            collective_projects=tuple(
+                sorted(
+                    state.collective_projects.values(),
+                    key=lambda item: item.project_id.value,
+                )
+            ),
             season=season,
             temperature_bands=bands,
             hazards=hazards,
@@ -3259,6 +3312,19 @@ class WorldEngine:
             possession_succession_context=self._possession_succession_rule_context(),
             structured_commitments_context=self._structured_commitments_rule_context(),
             subjective_valuation_context=self._subjective_valuation_rule_context(),
+            collective_projects_context=self._collective_projects_rule_context(),
+            collective_project_draw=(
+                (
+                    lambda request, working: self._collective_project_success(
+                        snap=snap,
+                        request=request,
+                        request_ordinals=request_ordinals,
+                        working_state=working,
+                    )
+                )
+                if self._collective_projects_active
+                else None
+            ),
         )
         start_ledger = self._skill_ledger
         folded_ledger, skill_facts = self._fold_skill_ledger(
@@ -3303,6 +3369,15 @@ class WorldEngine:
                 completion_state,
                 tick=snap.tick.value,
                 catalog=catalog,
+            )
+        abandon_details: tuple[object, ...] = ()
+        if self._collective_projects_active:
+            from world.collective_projects import abandon_idle_projects
+
+            completion_state, abandon_details = abandon_idle_projects(
+                completion_state,
+                tick=snap.tick.value,
+                idle_ticks=self._collective_projects_idle_ticks,
             )
 
         system_effects = self._resolve_system_effects(
@@ -3395,6 +3470,33 @@ class WorldEngine:
         )
 
         production_pending: list[PendingEvent] = []
+        for family_ordinal, detail in enumerate(abandon_details):
+            cause_id = derive_system_cause_id(
+                self._config,
+                run_id=self._run_id,
+                world_id=self.world_id,
+                tick=snap.tick.value,
+                effect_family=SystemEffectFamily.COLLECTIVE_PROJECT.value,
+                entity_id=detail.project_id,
+                family_ordinal=family_ordinal,
+            )
+            production_pending.append(
+                PendingEvent(
+                    cause=SystemCause(
+                        cause_id=cause_id,
+                        effect_family=SystemEffectFamily.COLLECTIVE_PROJECT,
+                        entity_id=detail.project_id,
+                        family_ordinal=family_ordinal,
+                    ),
+                    details=detail,
+                    occurrence=build_occurrence_context(
+                        detail,
+                        origin_location_id=completion_state.collective_projects[
+                            detail.project_id
+                        ].location_id,
+                    ),
+                )
+            )
         for family_ordinal, detail in enumerate(completion_details):
             if type(detail) is not ItemCrafted:
                 continue
@@ -3559,6 +3661,7 @@ class WorldEngine:
             structured_commitments_active=self.structured_commitments_active,
             subjective_valuation_active=self.subjective_valuation_active,
                 resource_exchange_profile_active=self.resource_exchange_profile_active,
+                collective_projects_active=self.collective_projects_active,
         )
         prepared = finalize_pending_batch(
             merged,
@@ -5284,6 +5387,90 @@ class WorldEngine:
             destination_index=destination_index,
         )
 
+    def _collective_projects_rule_context(self) -> object | None:
+        if not self._collective_projects_active:
+            return None
+        from world.collective_projects import CollectiveProjectsRuleContext
+
+        return CollectiveProjectsRuleContext(
+            active=True,
+            idle_ticks=self._collective_projects_idle_ticks,
+        )
+
+    def _collective_project_success(
+        self,
+        *,
+        snap: _EngineSnapshot,
+        request: ActionRequest,
+        request_ordinals: dict[RequestId, tuple[int, AgentId]],
+        working_state: object,
+    ) -> bool:
+        """Draw ``collective_project_success`` only when the chance is below 1."""
+        from world._production import adjusted_production_probability
+        from world._state import WorldState
+        from world.actions import ContributeCollectiveProject
+        from world.collective_projects import (
+            COLLECTIVE_PROJECT_BASE_PROBABILITY,
+            catalog_row,
+        )
+
+        if type(working_state) is not WorldState:
+            raise TypeError("working_state must be WorldState")
+        if type(request.command) is not ContributeCollectiveProject:
+            return True
+        project = working_state.collective_projects.get(request.command.project_id)
+        probability = COLLECTIVE_PROJECT_BASE_PROBABILITY
+        if (
+            project is not None
+            and self._skill_policy is not None
+            and self._skill_ledger is not None
+            and request.actor_id in self._skill_entity_ids
+        ):
+            domain = catalog_row(project.kind).skill_domain
+            level = self._skill_level(
+                request.actor_id,
+                domain,
+                ledger=self._skill_ledger,
+                tick=snap.tick,
+            )
+            probability = adjusted_production_probability(
+                probability,
+                level=level,
+                probability_gain=self._skill_policy.probability_gain,
+            )
+            _LOGGER.debug(
+                "skill_modifier tick=%s entity_id=%s domain=%s level=%s outcome=%s",
+                snap.tick.value,
+                request.actor_id.value,
+                domain.value,
+                level,
+                "collective_project",
+            )
+        if probability >= 1.0:
+            return True
+        ordinal, agent_id = request_ordinals[request.request_id]
+        scope = physical_action_effect_scope(
+            config=self._config,
+            run_id=self._run_id,
+            world_id=self.world_id,
+            tick=snap.tick,
+            ordinal=ordinal,
+            agent_id=agent_id,
+            purpose=PHYSICAL_PURPOSE_COLLECTIVE_PROJECT_SUCCESS,
+        )
+        success = sample_bernoulli(
+            create_named_stream(self._config, scope), probability
+        )
+        _LOGGER.debug(
+            "collective_project_success_draw tick=%s ordinal=%s "
+            "request_id=%s success=%s",
+            snap.tick.value,
+            ordinal,
+            request.request_id.value,
+            success,
+        )
+        return success
+
     def _resolve_production_effect(
         self,
         *,
@@ -5449,6 +5636,7 @@ def select_checkpoint_schema(
     structured_commitments_active: bool = False,
     subjective_valuation_active: bool = False,
     resource_exchange_profile_active: bool = False,
+    collective_projects_active: bool = False,
 ) -> tuple[int, str]:
     """Return the legal event-schema and codec pair for this run."""
     from simulation.persistence import (
@@ -5469,6 +5657,7 @@ def select_checkpoint_schema(
         EVENT_SCHEMA_REPLAY_V16,
         EVENT_SCHEMA_REPLAY_V17,
         EVENT_SCHEMA_REPLAY_V18,
+        EVENT_SCHEMA_REPLAY_V19,
     )
 
     schema_version, codec = checkpoint_schema_for_production(
@@ -5486,9 +5675,23 @@ def select_checkpoint_schema(
         structured_commitments_active=structured_commitments_active,
         subjective_valuation_active=subjective_valuation_active,
         resource_exchange_profile_active=resource_exchange_profile_active,
+        collective_projects_active=collective_projects_active,
     )
-    if resource_exchange_profile_active and (
-        schema_version != EVENT_SCHEMA_REPLAY_V18 or codec != "v16"
+    if collective_projects_active and (
+        schema_version != EVENT_SCHEMA_REPLAY_V19 or codec != "v17"
+    ):
+        _LOGGER.warning(
+            "checkpoint_schema_disagrees schema_version=%s codec=%s "
+            "expected_schema=%s expected_codec=v17 "
+            "reason=collective_projects_active",
+            schema_version,
+            codec,
+            EVENT_SCHEMA_REPLAY_V19,
+        )
+    if (
+        not collective_projects_active
+        and resource_exchange_profile_active
+        and (schema_version != EVENT_SCHEMA_REPLAY_V18 or codec != "v16")
     ):
         _LOGGER.warning(
             "checkpoint_schema_disagrees schema_version=%s codec=%s "
@@ -5499,11 +5702,17 @@ def select_checkpoint_schema(
             EVENT_SCHEMA_REPLAY_V18,
         )
     agreed = (
-        resource_exchange_profile_active
+        collective_projects_active
+        and schema_version == EVENT_SCHEMA_REPLAY_V19
+        and codec == "v17"
+    ) or (
+        not collective_projects_active
+        and resource_exchange_profile_active
         and schema_version == EVENT_SCHEMA_REPLAY_V18
         and codec == "v16"
     ) or (
-        not resource_exchange_profile_active
+        not collective_projects_active
+        and not resource_exchange_profile_active
         and subjective_valuation_active
         and schema_version == EVENT_SCHEMA_REPLAY_V18
         and codec == "v15"
@@ -5805,6 +6014,13 @@ def _map_batch_outcome(
         "structure_intact": ActionResolutionReason.STRUCTURAL_REJECTION,
         "shelter_already_present": ActionResolutionReason.STRUCTURAL_REJECTION,
         "store_already_present": ActionResolutionReason.STRUCTURAL_REJECTION,
+        "collective_projects_channel_off": ActionResolutionReason.STRUCTURAL_REJECTION,
+        "unknown_collective_project": ActionResolutionReason.STRUCTURAL_REJECTION,
+        "collective_project_location_busy": ActionResolutionReason.STRUCTURAL_REJECTION,
+        "collective_project_cap": ActionResolutionReason.STRUCTURAL_REJECTION,
+        "collective_project_store_required": ActionResolutionReason.STRUCTURAL_REJECTION,
+        "bridge_already_present": ActionResolutionReason.STRUCTURAL_REJECTION,
+        "record_site_already_present": ActionResolutionReason.STRUCTURAL_REJECTION,
         "unknown_artifact": ActionResolutionReason.STRUCTURAL_REJECTION,
         "artifact_not_portable": ActionResolutionReason.STRUCTURAL_REJECTION,
         "artifact_not_held": ActionResolutionReason.STRUCTURAL_REJECTION,

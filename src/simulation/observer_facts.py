@@ -53,6 +53,7 @@ class ObjectiveFacts:
     structures: tuple[Structure, ...] = ()
     artifacts: tuple[InformationArtifact, ...] = ()
     repositories: tuple[KnowledgeRepository, ...] = ()
+    collective_projects: tuple[object, ...] = ()
     season: str | None = None
     temperature_bands: tuple[tuple[str, str], ...] = ()
     hazards: tuple[tuple[str, str, int], ...] = ()
@@ -75,6 +76,7 @@ class ObjectiveScene:
     structures: tuple[Structure, ...] = ()
     artifacts: tuple[InformationArtifact, ...] = ()
     repositories: tuple[KnowledgeRepository, ...] = ()
+    collective_projects: tuple[object, ...] = ()
     season: str | None = None
     temperature_bands: tuple[tuple[str, str], ...] = ()
     hazards: tuple[tuple[str, str, int], ...] = ()
@@ -109,6 +111,7 @@ def _freeze_facts(facts: ObjectiveFacts) -> ObjectiveScene:
         structures=tuple(facts.structures),
         artifacts=tuple(facts.artifacts),
         repositories=tuple(facts.repositories),
+        collective_projects=tuple(facts.collective_projects),
         season=facts.season,
         temperature_bands=tuple(facts.temperature_bands),
         hazards=tuple(facts.hazards),
@@ -208,6 +211,7 @@ def scene_from_snapshot(
         structures=tuple(snapshot.structures),
         artifacts=tuple(snapshot.artifacts),
         repositories=tuple(snapshot.repositories),
+        collective_projects=tuple(snapshot.collective_projects),
     )
     return scene_from_facts(facts)
 

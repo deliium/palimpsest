@@ -39,17 +39,22 @@ from world.events import (
     ArtifactMoved,
     ArtifactPartiallyLost,
     Asked,
-    CorpseCustodyOpened,
     CommitmentDeclared,
+    CorpseCustodyOpened,
     CraftStarted,
-    ExperimentResolved,
     ExchangeCompleted,
     ExchangeProposed,
     ExchangeWithdrawn,
+    ExperimentResolved,
     Given,
     ItemCrafted,
     ItemStored,
     PossessionClaimAsserted,
+    ProjectAbandoned,
+    ProjectCompleted,
+    ProjectContributed,
+    ProjectCreated,
+    ProjectShortage,
     ResourceHarvested,
     StructureBuilt,
     StructureRepaired,
@@ -70,11 +75,13 @@ from world.observations import (
     ObservationProvenance,
     ObservationSourceKind,
     ObservedArtifact,
+    ObservedCollectiveProject,
     ObservedCommunication,
     ObservedItem,
     ObservedItemPlacement,
     ObservedLocation,
     ObservedOccurrence,
+    ObservedProjectContribution,
     ObservedRepository,
     ObservedResource,
     ObservedStructure,
@@ -128,6 +135,7 @@ class PerceptionService:
         possession_succession_active: bool = False,
         structured_commitments_active: bool = False,
         subjective_valuation_active: bool = False,
+        collective_projects_active: bool = False,
     ) -> None:
         if durable_perception_mode is not None and durable_perception_mode not in {
             "marks_and_meta",
@@ -151,11 +159,14 @@ class PerceptionService:
             raise TypeError("structured_commitments_active must be bool")
         if type(subjective_valuation_active) is not bool:
             raise TypeError("subjective_valuation_active must be bool")
+        if type(collective_projects_active) is not bool:
+            raise TypeError("collective_projects_active must be bool")
         self._durable_perception_mode = durable_perception_mode
         self._repository_perception_mode = repository_perception_mode
         self._possession_succession_active = possession_succession_active
         self._structured_commitments_active = structured_commitments_active
         self._subjective_valuation_active = subjective_valuation_active
+        self._collective_projects_active = collective_projects_active
 
     def project(
         self,
@@ -202,6 +213,7 @@ class PerceptionService:
                 possession_succession_active=self._possession_succession_active,
                 structured_commitments_active=self._structured_commitments_active,
                 subjective_valuation_active=self._subjective_valuation_active,
+                collective_projects_active=self._collective_projects_active,
             )
             for observer_id in observers
         )
@@ -219,6 +231,7 @@ def project_observations(
     repository_perception_mode: str | None = None,
     structured_commitments_active: bool = False,
     subjective_valuation_active: bool = False,
+    collective_projects_active: bool = False,
 ) -> tuple[Observation, ...]:
     """Compatibility wrapper around :class:`PerceptionService`."""
     resolved = context if context is not None else ObservationContext(tick=0)
@@ -227,6 +240,7 @@ def project_observations(
         repository_perception_mode=repository_perception_mode,
         structured_commitments_active=structured_commitments_active,
         subjective_valuation_active=subjective_valuation_active,
+        collective_projects_active=collective_projects_active,
     ).project(
         world_id=world_id,
         state=state,
@@ -250,6 +264,7 @@ def _project_one(
     possession_succession_active: bool = False,
     structured_commitments_active: bool = False,
     subjective_valuation_active: bool = False,
+    collective_projects_active: bool = False,
 ) -> Observation:
     body = state.bodies[observer_id]
     location_id = body.location_id
@@ -272,6 +287,7 @@ def _project_one(
         state=state,
         structured_commitments_active=structured_commitments_active,
         subjective_valuation_active=subjective_valuation_active,
+        collective_projects_active=collective_projects_active,
     )
     structures = _sorted_structures(state, location_id) if content_visible else ()
     artifacts = _sorted_artifacts(
@@ -306,6 +322,18 @@ def _project_one(
         )
     _LOG.debug("artifacts_observed count=%s", len(artifacts))
     _LOG.debug("observed_repository_count=%s", len(repositories))
+    if collective_projects_active and content_visible:
+        collective_projects = _sorted_collective_projects(state, location_id)
+        _LOG.debug(
+            "collective_projects_perceived location_id=%s count=%s",
+            location_id.value,
+            len(collective_projects),
+        )
+    elif collective_projects_active:
+        collective_projects = ()
+        _LOG.debug("collective_projects_hidden reason=content_hidden")
+    else:
+        collective_projects = ()
     season, band, kinds = _present_environment(
         state=state,
         location_id=location_id,
@@ -336,6 +364,7 @@ def _project_one(
         structures=structures,
         artifacts=artifacts,
         repositories=repositories,
+        collective_projects=collective_projects,
         exits=_sorted_exits(state, location_id),
         visible_bodies=(
             _sorted_visible_bodies(state, location_id, observer_id, context=context)
@@ -799,14 +828,24 @@ def _project_event_window(
     state: WorldState | None = None,
     structured_commitments_active: bool = False,
     subjective_valuation_active: bool = False,
+    collective_projects_active: bool = False,
 ) -> tuple[tuple[ObservedOccurrence, ...], tuple[ObservedCommunication, ...]]:
     occurrences: list[ObservedOccurrence] = []
     communications: list[ObservedCommunication] = []
     for event in prior_events:
         if (
             not subjective_valuation_active
-            and type(event.details) in {ExchangeProposed, ExchangeWithdrawn, ExchangeCompleted}
+            and type(event.details)
+            in {ExchangeProposed, ExchangeWithdrawn, ExchangeCompleted}
         ):
+            continue
+        if not collective_projects_active and type(event.details) in {
+            ProjectCreated,
+            ProjectContributed,
+            ProjectShortage,
+            ProjectAbandoned,
+            ProjectCompleted,
+        }:
             continue
         occurrence = event.occurrence
         assert occurrence is not None
@@ -853,6 +892,7 @@ def _project_event_window(
                     state=state,
                     structured_commitments_active=structured_commitments_active,
                     subjective_valuation_active=subjective_valuation_active,
+                    collective_projects_active=collective_projects_active,
                 ),
             )
         )
@@ -960,6 +1000,7 @@ def _public_facts_for_role(
     state: WorldState | None = None,
     structured_commitments_active: bool = False,
     subjective_valuation_active: bool = False,
+    collective_projects_active: bool = False,
 ) -> dict[str, object]:
     experiment_facts = _experiment_public_facts(event, role)
     if experiment_facts is not None:
@@ -968,6 +1009,11 @@ def _public_facts_for_role(
     if artifact_facts is not None:
         # Artifact occurrences expose only identity/revision — never marks.
         return {"kind": event.event_type, **artifact_facts}
+    project_facts = _project_public_facts(
+        event, state, active=collective_projects_active
+    )
+    if project_facts is not None:
+        return project_facts
     exchange_facts = _exchange_public_facts(
         event, state, active=subjective_valuation_active, role=role
     )
@@ -1010,6 +1056,87 @@ def _public_facts_for_role(
             facts["item_kind"],
         )
     return facts
+
+
+def _sorted_collective_projects(
+    state: WorldState, location_id: EntityId
+) -> tuple[ObservedCollectiveProject, ...]:
+    selected: list[ObservedCollectiveProject] = []
+    projects = sorted(
+        state.collective_projects.values(),
+        key=lambda item: item.project_id.value,
+    )
+    for project in projects:
+        if project.location_id != location_id:
+            continue
+        selected.append(
+            ObservedCollectiveProject(
+                project_id=project.project_id,
+                location_id=project.location_id,
+                kind=project.kind.value,
+                status=project.status.value,
+                labor_done=project.labor_done,
+                materials_done=project.materials_done,
+                contributions=tuple(
+                    ObservedProjectContribution(
+                        actor_id=row.actor_id,
+                        tick=row.tick,
+                        accepted=row.accepted,
+                        labor_delta=row.labor_delta,
+                        item_id=row.item_id,
+                    )
+                    for row in project.contributions
+                ),
+            )
+        )
+    return tuple(selected)
+
+
+def _project_public_facts(
+    event: WorldEvent, state: WorldState | None, *, active: bool
+) -> dict[str, object] | None:
+    if not active:
+        return None
+    details = event.details
+    if type(details) not in {
+        ProjectCreated,
+        ProjectContributed,
+        ProjectShortage,
+        ProjectAbandoned,
+        ProjectCompleted,
+    }:
+        return None
+    project = None
+    if state is not None:
+        project = state.collective_projects.get(details.project_id)
+    kind = getattr(details, "project_kind", None)
+    if kind is None and project is not None:
+        kind = project.kind.value
+    labor_done = getattr(details, "labor_done", None)
+    if labor_done is None and project is not None:
+        labor_done = project.labor_done
+    materials_done = getattr(details, "materials_done", None)
+    if materials_done is None and project is not None:
+        materials_done = project.materials_done
+    if type(details) is ProjectCreated:
+        status = "open"
+        labor_done = 0
+        materials_done = 0
+    elif type(details) is ProjectAbandoned:
+        status = "abandoned"
+    elif type(details) is ProjectCompleted:
+        status = "completed"
+    elif project is not None:
+        status = project.status.value
+    else:
+        status = "open"
+    return {
+        "project_id": details.project_id.value,
+        "kind": kind,
+        "labor_done": labor_done,
+        "materials_done": materials_done,
+        "status": status,
+    }
 
 
 def _commitment_public_facts(event: WorldEvent) -> dict[str, object] | None:

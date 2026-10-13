@@ -70,6 +70,11 @@ SEMANTIC_EVENT_TYPES: Final[tuple[str, ...]] = (
     "EXCHANGE_PROPOSED",
     "EXCHANGE_WITHDRAWN",
     "EXCHANGE_COMPLETED",
+    "PROJECT_CREATED",
+    "PROJECT_CONTRIBUTED",
+    "PROJECT_SHORTAGE",
+    "PROJECT_ABANDONED",
+    "PROJECT_COMPLETED",
 )
 
 SEMANTIC_TYPE_BY_KIND: Final[dict[str, str]] = {
@@ -134,6 +139,11 @@ SEMANTIC_TYPE_BY_KIND: Final[dict[str, str]] = {
     "exchange_proposed": "EXCHANGE_PROPOSED",
     "exchange_withdrawn": "EXCHANGE_WITHDRAWN",
     "exchange_completed": "EXCHANGE_COMPLETED",
+    "project_created": "PROJECT_CREATED",
+    "project_contributed": "PROJECT_CONTRIBUTED",
+    "project_shortage": "PROJECT_SHORTAGE",
+    "project_abandoned": "PROJECT_ABANDONED",
+    "project_completed": "PROJECT_COMPLETED",
 }
 
 RELATIONSHIP_DIMENSION_CODES: Final[tuple[str, ...]] = (

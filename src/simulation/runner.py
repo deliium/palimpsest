@@ -659,6 +659,19 @@ def _subjective_valuation_loop_kwargs(config: object) -> dict[str, object]:
     }
 
 
+def _collective_projects_loop_kwargs(config: object) -> dict[str, object]:
+    """Bind the work-site channel. Idle ticks stay on the engine, not the agent."""
+    spec = getattr(config, "collective_projects", None)
+    active = spec is not None
+    idle_ticks = 0 if spec is None else spec.idle_ticks
+    _LOG.info(
+        "collective_projects_active=%s idle_ticks=%s",
+        active,
+        idle_ticks,
+    )
+    return {"collective_projects_active": active}
+
+
 def _resource_exchange_profile_loop_kwargs(config: object) -> dict[str, object]:
     """Bind acceptance memory. The window stays out of the world rule context."""
     spec = getattr(config, "resource_exchange_profile", None)
@@ -1662,6 +1675,12 @@ class SimulationRunner:
                 resource_exchange_profile_active=(
                     config.resource_exchange_profile is not None
                 ),
+                collective_projects_active=config.collective_projects is not None,
+                collective_projects_idle_ticks=(
+                    4
+                    if config.collective_projects is None
+                    else config.collective_projects.idle_ticks
+                ),
                 **skill_kwargs,
                 **teaching_kwargs,
             )
@@ -1891,6 +1910,7 @@ class SimulationRunner:
                     **_structured_commitments_loop_kwargs(config),
                     **_subjective_valuation_loop_kwargs(config),
                     **_resource_exchange_profile_loop_kwargs(config),
+                    **_collective_projects_loop_kwargs(config),
                     **_knowledge_genealogy_loop_kwargs(config),
                     **_bounded_experimentation_loop_kwargs(config),
                 )
@@ -3389,6 +3409,7 @@ class SimulationRunner:
                 **_structured_commitments_loop_kwargs(self._config),
                 **_subjective_valuation_loop_kwargs(self._config),
                 **_resource_exchange_profile_loop_kwargs(self._config),
+                **_collective_projects_loop_kwargs(self._config),
                 **_knowledge_genealogy_loop_kwargs(self._config),
                 **_bounded_experimentation_loop_kwargs(self._config),
             )
@@ -3684,39 +3705,44 @@ def _bootstrap_snapshot(engine: WorldEngine) -> WorldSnapshot:
         structured_commitments_active=engine.structured_commitments_active,
         subjective_valuation_active=engine.subjective_valuation_active,
         resource_exchange_profile_active=engine.resource_exchange_profile_active,
+        collective_projects_active=engine.collective_projects_active,
     )
     state = engine._snapshot.world.state
     production_rows: dict[str, tuple[object, ...]] = {}
-    if codec_version in {"v3", "v4", "v5", "v6", "v7", "v8", "v9", "v10", "v11", "v12", "v13", "v14", "v15", "v16"}:
+    if codec_version in {"v3", "v4", "v5", "v6", "v7", "v8", "v9", "v10", "v11", "v12", "v13", "v14", "v15", "v16", "v17"}:
         production_rows = {
             "structures": tuple(state.structures.values()),
             "production_jobs": tuple(state.production_jobs.values()),
             "tool_marks": tuple(state.tool_marks.values()),
         }
-    if codec_version in {"v4", "v5", "v6", "v7", "v8", "v9", "v10", "v11", "v12", "v13", "v14", "v15", "v16"}:
+    if codec_version in {"v4", "v5", "v6", "v7", "v8", "v9", "v10", "v11", "v12", "v13", "v14", "v15", "v16", "v17"}:
         production_rows["active_hazards"] = tuple(state.active_hazards)
-    if codec_version in {"v5", "v6", "v7", "v8", "v9", "v10", "v11", "v12", "v13", "v14", "v15", "v16"}:
+    if codec_version in {"v5", "v6", "v7", "v8", "v9", "v10", "v11", "v12", "v13", "v14", "v15", "v16", "v17"}:
         production_rows["artifacts"] = tuple(state.artifacts.values())
-    if codec_version in {"v6", "v7", "v8", "v9", "v10", "v11", "v12", "v13", "v14", "v15", "v16"}:
+    if codec_version in {"v6", "v7", "v8", "v9", "v10", "v11", "v12", "v13", "v14", "v15", "v16", "v17"}:
         production_rows["lifecycle_records"] = tuple(engine.lifecycle_records)
-    if codec_version in {"v8", "v9", "v10", "v11", "v12", "v13", "v14", "v15", "v16"}:
+    if codec_version in {"v8", "v9", "v10", "v11", "v12", "v13", "v14", "v15", "v16", "v17"}:
         kinship_graph = engine.kinship_graph
         from world.kinship import KinshipGraph
 
         if type(kinship_graph) is KinshipGraph:
             production_rows["kinship_edges"] = kinship_graph.edges
-    if codec_version in {"v9", "v10", "v11", "v12", "v13", "v14", "v15", "v16"}:
+    if codec_version in {"v9", "v10", "v11", "v12", "v13", "v14", "v15", "v16", "v17"}:
         production_rows["dependency_need_registers"] = tuple(
             engine._dependency_need_registers.values()
         )
-    if codec_version in {"v11", "v12", "v13", "v14", "v15", "v16"}:
+    if codec_version in {"v11", "v12", "v13", "v14", "v15", "v16", "v17"}:
         production_rows["repositories"] = tuple(state.repositories.values())
-    if codec_version in {"v13", "v14", "v15", "v16"}:
+    if codec_version in {"v13", "v14", "v15", "v16", "v17"}:
         production_rows["corpse_custody_item_ids"] = tuple(
             sorted(state.corpse_custody_item_ids, key=lambda item: item.value)
         )
-    if codec_version in {"v15", "v16"}:
+    if codec_version in {"v15", "v16", "v17"}:
         production_rows["exchange_offers"] = tuple(state.exchange_offers)
+    if codec_version == "v17":
+        production_rows["collective_projects"] = tuple(
+            state.collective_projects.values()
+        )
     draft = WorldSnapshot(
         snapshot_id=SnapshotId(f"bootstrap-{engine.run_id.value}"),
         run_id=engine.run_id,
@@ -3770,6 +3796,7 @@ def _bootstrap_snapshot(engine: WorldEngine) -> WorldSnapshot:
         repositories=getattr(draft, "repositories", ()),
         corpse_custody_item_ids=getattr(draft, "corpse_custody_item_ids", ()),
         exchange_offers=getattr(draft, "exchange_offers", ()),
+        collective_projects=getattr(draft, "collective_projects", ()),
     )
 
 

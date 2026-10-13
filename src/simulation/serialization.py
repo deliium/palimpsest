@@ -87,20 +87,20 @@ from world.actions import (
     AnnotateRecord,
     Ask,
     AssertPossessionClaim,
-    DeclareCommitment,
-    NegotiateExchange,
     Attack,
     Build,
+    ContributeCollectiveProject,
     CopyRecord,
     Craft,
     DamageRecord,
+    DeclareCommitment,
     DepositRecord,
     Drink,
     Drop,
     Eat,
     Erase,
-    Experiment,
     EstablishRepository,
+    Experiment,
     Feed,
     Flee,
     Give,
@@ -110,10 +110,12 @@ from world.actions import (
     Inscribe,
     MaintainRepository,
     Move,
+    NegotiateExchange,
     Repair,
     RetrieveRecord,
     Search,
     Sleep,
+    StartCollectiveProject,
     Store,
     Take,
     Talk,
@@ -160,7 +162,8 @@ from world.events import (
     EVENT_SCHEMA_REPLAY_V11,
     EVENT_SCHEMA_REPLAY_V12,
     EVENT_SCHEMA_REPLAY_V13,
-    EVENT_SCHEMA_REPLAY_V14, EVENT_SCHEMA_REPLAY_V15,
+    EVENT_SCHEMA_REPLAY_V14,
+    EVENT_SCHEMA_REPLAY_V15,
     EVENT_SCHEMA_REPLAY_V16,
     EVENT_SCHEMA_REPLAY_V17,
     EVENT_SCHEMA_REPLAY_V18,
@@ -177,39 +180,38 @@ from world.events import (
     ArtifactPartiallyLost,
     Asked,
     Attacked,
+    CommitmentDeclared,
+    CorpseCustodyOpened,
     CraftStarted,
     Died,
     Dropped,
     Drunk,
     Eaten,
-    CorpseCustodyOpened,
-    ExperimentResolved,
-    CommitmentDeclared,
+    EnvironmentalHazardEnded,
+    EnvironmentalHazardStarted,
     ExchangeCompleted,
     ExchangeProposed,
     ExchangeWithdrawn,
-    PossessionClaimAsserted,
-    TakenFromCorpse,
-    EnvironmentalHazardEnded,
-    EnvironmentalHazardStarted,
+    ExperimentResolved,
     ExposureApplied,
+    Fed,
     Fled,
     Given,
     Helped,
-    Fed,
     ItemCrafted,
     ItemStored,
     KinshipEdgeRecorded,
     LifecycleStageChanged,
     Moved,
+    NeedsApplied,
+    OccurrenceContext,
+    PossessionClaimAsserted,
     RepositoryEstablished,
     RepositoryIndexed,
     RepositoryMaintained,
     RepositoryMemberDeposited,
     RepositoryMemberRetrieved,
     RepositoryNeglected,
-    NeedsApplied,
-    OccurrenceContext,
     ResourceHarvested,
     ResourceNodeDepleted,
     ResourceNodeRecovered,
@@ -220,6 +222,7 @@ from world.events import (
     StructureBuilt,
     StructureRepaired,
     Taken,
+    TakenFromCorpse,
     Talked,
     TemperatureBandChanged,
     Told,
@@ -257,11 +260,13 @@ from world.observations import (
     ObservationProvenance,
     ObservationSourceKind,
     ObservedArtifact,
+    ObservedCollectiveProject,
     ObservedCommunication,
     ObservedItem,
     ObservedItemPlacement,
     ObservedLocation,
     ObservedOccurrence,
+    ObservedProjectContribution,
     ObservedRepository,
     ObservedResource,
     ObservedSelf,
@@ -556,6 +561,8 @@ _COMMAND_TAGS: Final[frozenset[str]] = frozenset(
         "assert_possession_claim",
         "declare_commitment",
         "negotiate_exchange",
+        "start_collective_project",
+        "contribute_collective_project",
     }
 )
 
@@ -2570,6 +2577,13 @@ def _encode_command(value: object) -> dict[str, Any]:
             if now_item_kind is not None:
                 payload["now_item_kind"] = now_item_kind.value
             return payload
+        case StartCollectiveProject(project_kind=project_kind):
+            return {"project_kind": project_kind}
+        case ContributeCollectiveProject(project_id=project_id, item_id=item_id):
+            payload = {"project_id": project_id.value}
+            if item_id is not None:
+                payload["item_id"] = item_id.value
+            return payload
         case NegotiateExchange(
             counterparty_id=counterparty_id,
             act=act,
@@ -2901,6 +2915,20 @@ def _decode_command(tag: str, data: dict[str, Any], *, path: str) -> object:
                 None if due_raw is None else _int_field(data, "due_tick", path=path),
                 None if now_raw is None else ItemKind(now_raw),
             )
+        if tag == "start_collective_project":
+            _require_keys(data, {"project_kind"}, path=path)
+            return StartCollectiveProject(
+                _str_field(data, "project_kind", path=path)
+            )
+        if tag == "contribute_collective_project":
+            _require_keys(data, {"project_id"}, path=path, optional={"item_id"})
+            item_raw = data.get("item_id")
+            return ContributeCollectiveProject(
+                EntityId(_str_field(data, "project_id", path=path)),
+                None
+                if item_raw is None
+                else EntityId(_str_field(data, "item_id", path=path)),
+            )
         if tag == "negotiate_exchange":
             _require_keys(
                 data,
@@ -3058,6 +3086,13 @@ def _encode_observation(value: Observation) -> dict[str, Any]:
         encoded["repositories"] = [
             _encode_observed_repository(item) for item in value.repositories
         ]
+    if value.collective_projects:
+        encoded["collective_projects"] = [
+            _encode_observed_collective_project(item)
+            for item in value.collective_projects
+        ]
+    else:
+        _LOG.debug("collective_projects_observation_omitted reason=empty")
     if value.season is not None:
         encoded["season"] = value.season.value
     if value.temperature_band is not None:
@@ -3103,6 +3138,7 @@ def _decode_observation(data: dict[str, Any], *, path: str) -> Observation:
             "structures",
             "artifacts",
             "repositories",
+            "collective_projects",
             "season",
             "temperature_band",
             "hazard_kinds",
@@ -3166,6 +3202,11 @@ def _decode_observation(data: dict[str, Any], *, path: str) -> Observation:
                 data.get("repositories", []),
                 _decode_observed_repository,
                 path=f"{path}.repositories",
+            ),
+            collective_projects=_decode_object_list(
+                data.get("collective_projects", []),
+                _decode_observed_collective_project,
+                path=f"{path}.collective_projects",
             ),
             exits=_decode_object_list(
                 data["exits"], _decode_visible_exit, path=f"{path}.exits"
@@ -3341,6 +3382,78 @@ def _decode_observed_artifact(data: dict[str, Any], *, path: str) -> ObservedArt
         raise
     except (TypeError, ValueError) as exc:
         raise DomainSerializationError("invalid_model", path) from exc
+
+
+def _encode_observed_collective_project(
+    value: ObservedCollectiveProject,
+) -> dict[str, Any]:
+    return {
+        "contributions": [
+            {
+                "accepted": row.accepted,
+                "actor_id": row.actor_id.value,
+                "item_id": None if row.item_id is None else row.item_id.value,
+                "labor_delta": row.labor_delta,
+                "tick": row.tick,
+            }
+            for row in value.contributions
+        ],
+        "kind": value.kind,
+        "labor_done": value.labor_done,
+        "location_id": value.location_id.value,
+        "materials_done": value.materials_done,
+        "project_id": value.project_id.value,
+        "status": value.status,
+    }
+
+
+def _decode_observed_collective_project(
+    data: dict[str, Any], *, path: str
+) -> ObservedCollectiveProject:
+    required = {
+        "project_id",
+        "location_id",
+        "kind",
+        "status",
+        "labor_done",
+        "materials_done",
+        "contributions",
+    }
+    if set(data) != required:
+        raise DomainSerializationError("invalid_fields", path)
+    raw_rows = data["contributions"]
+    if not isinstance(raw_rows, list):
+        raise DomainSerializationError("invalid_array", f"{path}.contributions")
+    rows: list[ObservedProjectContribution] = []
+    for index, raw in enumerate(raw_rows):
+        row_path = f"{path}.contributions[{index}]"
+        if not isinstance(raw, dict):
+            raise DomainSerializationError("invalid_object", row_path)
+        if set(raw) != {"actor_id", "tick", "accepted", "labor_delta", "item_id"}:
+            raise DomainSerializationError("invalid_fields", row_path)
+        item_raw = raw["item_id"]
+        rows.append(
+            ObservedProjectContribution(
+                actor_id=EntityId(_str_field(raw, "actor_id", path=row_path)),
+                tick=_int_field(raw, "tick", path=row_path),
+                accepted=raw["accepted"] is True,
+                labor_delta=_int_field(raw, "labor_delta", path=row_path),
+                item_id=(
+                    None
+                    if item_raw is None
+                    else EntityId(_str_field(raw, "item_id", path=row_path))
+                ),
+            )
+        )
+    return ObservedCollectiveProject(
+        project_id=EntityId(_str_field(data, "project_id", path=path)),
+        location_id=EntityId(_str_field(data, "location_id", path=path)),
+        kind=_str_field(data, "kind", path=path),
+        status=_str_field(data, "status", path=path),
+        labor_done=_int_field(data, "labor_done", path=path),
+        materials_done=_int_field(data, "materials_done", path=path),
+        contributions=tuple(rows),
+    )
 
 
 def _encode_observed_repository(value: ObservedRepository) -> dict[str, Any]:
@@ -7446,9 +7559,9 @@ def structured_commitments_checkpoint_payload(
     ledgers: Mapping[str, object], *, codec: str
 ) -> dict[str, object]:
     """Owner-id map of commitment ledgers. Omitted unless codec is v14 or v15."""
-    if codec not in {"v14", "v15", "v16"}:
+    if codec not in {"v14", "v15", "v16", "v17"}:
         return {}
-    if codec in {"v15", "v16"}:
+    if codec in {"v15", "v16", "v17"}:
         _LOG.debug("codec_superset codec=%s", codec)
     from agents.cognition.structured_commitments import StructuredCommitmentLedger
 
@@ -7472,7 +7585,7 @@ def decode_structured_commitments_checkpoint(
     payload: Mapping[str, object], *, codec: str
 ) -> dict[str, object]:
     """Decode v14 or v15 ledgers. Older codecs reject the key."""
-    if codec not in {"v14", "v15", "v16"}:
+    if codec not in {"v14", "v15", "v16", "v17"}:
         if "structured_commitments" in payload:
             raise DomainSerializationError(
                 "structured_commitments_requires_codec_v14",
@@ -7742,7 +7855,7 @@ def subjective_valuation_checkpoint_payload(
     codec: str,
 ) -> dict[str, object]:
     """Owner maps of private ledgers. Present on codec v15 and v16."""
-    if codec not in {"v15", "v16"}:
+    if codec not in {"v15", "v16", "v17"}:
         return {}
     from agents.cognition.scarcity_beliefs import ScarcityBeliefLedger
     from agents.cognition.subjective_value import SubjectiveValuationLedger
@@ -7768,7 +7881,7 @@ def decode_subjective_valuation_checkpoint(
 ) -> dict[str, dict[str, object]]:
     """Decode v15 or v16 ledgers. Older codecs reject either key."""
     present = [key for key in ("subjective_valuations", "scarcity_beliefs") if key in payload]
-    if codec not in {"v15", "v16"}:
+    if codec not in {"v15", "v16", "v17"}:
         if present:
             raise DomainSerializationError(
                 "subjective_valuation_requires_codec_v15",
@@ -7799,7 +7912,7 @@ def acceptance_memories_checkpoint_payload(
 ) -> dict[str, object]:
     """Owner map of acceptance ledgers. Present only on codec v16."""
     owner_count = len(memories) if isinstance(memories, Mapping) else 0
-    if codec != "v16":
+    if codec not in {"v16", "v17"}:
         _LOG.debug(
             "acceptance_memories omitted codec=%s owner_count=%s",
             codec,
@@ -7824,7 +7937,7 @@ def decode_acceptance_memories_checkpoint(
     payload: Mapping[str, object], *, codec: str
 ) -> dict[str, object]:
     """Decode v16 acceptance ledgers. Older codecs reject the key."""
-    if codec != "v16":
+    if codec not in {"v16", "v17"}:
         if "acceptance_memories" in payload:
             _LOG.warning(
                 "acceptance_memories present on pre-v16 payload codec=%s",

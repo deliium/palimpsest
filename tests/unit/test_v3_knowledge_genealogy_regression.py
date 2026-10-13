@@ -27,15 +27,15 @@ _ROOT = Path(__file__).resolve().parents[2]
 
 
 def test_semantic_event_count_is_54() -> None:
-    assert len(SEMANTIC_EVENT_TYPES) == 61
+    assert len(SEMANTIC_EVENT_TYPES) == 66
 
 
 def test_agent_command_count_is_35() -> None:
-    assert len(get_args(AgentCommand)) == 38
+    assert len(get_args(AgentCommand)) == 40
 
 
 def test_metric_family_count_is_65() -> None:
-    assert METRIC_FAMILY_COUNT == 83
+    assert METRIC_FAMILY_COUNT == 86
     assert MetricFamilyId.KNOWLEDGE_GENEALOGY_HOLDERS.value == (
         "knowledge_genealogy_holders"
     )

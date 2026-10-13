@@ -323,7 +323,7 @@ Scripted arms may submit commands directly. They must not set a leader field.
 
   Files: `src/world/collective_projects.py`, `src/world/production.py`, `src/world/_state.py`, `tests/unit/test_collective_project_catalog.py`
 
-- [ ] Task 3: Admit `StartCollectiveProject` and `ContributeCollectiveProject`, including shortage and the skill draw. (depends on 2)
+- [x] Task 3: Admit `StartCollectiveProject` and `ContributeCollectiveProject`, including shortage and the skill draw. (depends on 2)
 
   Add both commands in `src/world/actions.py` and the matching operations, rules, and transitions. The opening rule and `apply_operation` both read the working batch state, as `NegotiateExchange` does. Enforce the rejection table, the one-open-project-per-location rule, the material-before-extra-labor rule, and item consumption only on an accepted hit. One `resolve_tick` test starts a project and contributes in that same tick. Another submits two material contributes when only one item is still required; the later command does not consume a second item. Draw `collective_project_success` in `src/simulation/engine.py` beside `production_success`, purpose string `collective_project_success` in `src/simulation/actions.py`, only after the attempt is structurally legal and only when the channel is on. Base probability `0.70`. Skip the draw when `adjusted_production_probability` is `1.0`. Use `SkillDomain.BUILDING` or `SkillDomain.FORAGING` from the catalog. A no-item shortage rejects before the draw. Channel off rejects both commands with `collective_projects_channel_off` and does not draw. Do not mark the actor `actor_busy` after a contribution; only an existing `ProductionJob` does that. Command count becomes 40. Update every existing `== 38` command pin in the same change, including `COMMAND_RULE_MATRIX` in `tests/unit/test_world_rules.py` and `_CLOSED_COMMAND_TYPES`. Keep the six production recipes unchanged.
 
@@ -339,7 +339,7 @@ Scripted arms may submit commands directly. They must not set a leader field.
 
 ### Phase 2: Outcomes, history, and observation
 
-- [ ] Task 4: Complete and abandon projects inside the tick. (depends on 3)
+- [x] Task 4: Complete and abandon projects inside the tick. (depends on 3)
 
   On the accepted contribution that fills both counters, set status `completed` and write the catalog result in that same resolution. Shelter, bridge, storage, and record-site insert a structure. For `winter_reserve`, pin `target_structure_id` at start to the `STORE` at that location with the lowest `entity_id`, and add 3 to that store's `stored_quantity` when it is still there. Do not emit `StructureBuilt` or `ItemStored`. At end of tick, after due production jobs, abandon each open project whose `tick - last_accepted_tick >= idle_ticks`. Shortage does not refresh that tick. Consumed items are not refunded. A unit test covers single-agent shelter completion, two agents on one storage project in one tick, shortage leaving status open, abandonment after a quiet gap, and a winter reserve that credits the lowest store id when two stores are present.
 
@@ -351,7 +351,7 @@ Scripted arms may submit commands directly. They must not set a leader field.
 
   Files: `src/world/collective_projects.py`, `src/world/_transitions.py`, `src/simulation/engine.py`, `tests/unit/test_collective_project_lifecycle.py`
 
-- [ ] Task 5: Add replay 19, codec `v17`, the five project events, and observer semantics. (depends on 4)
+- [x] Task 5: Add replay 19, codec `v17`, the five project events, and observer semantics. (depends on 4)
 
   Add `EVENT_SCHEMA_REPLAY_V19` and the five detail types in `src/world/events.py`, legal only on that schema. Each event carries an `OccurrenceContext`. Public facts are `project_id`, `kind`, `labor_done`, `materials_done`, and `status`. Fold them in `src/world/_replay.py` so a replay rebuilds status, counters, `target_structure_id`, the capped contribution tail, structures, and store quantity. `checkpoint_schema_for_production` returns `(19, "v17")` only when `collective_projects_active` is true, ahead of `(18, "v16")`. Codec `v17` stores `collective_projects` and may store `bridge` and `record_site`. `select_checkpoint_schema` is only in `src/simulation/engine.py`; its three call sites agree `(19, "v17")` first. Guard the profile disagreement warning and the profile agreement clause with `not collective_projects_active`. `runner.py` and `service.py` call `checkpoint_schema_for_production`; pass the keyword there too. Every membership set that already includes `"v16"` also includes `"v17"` in `runner.py`, `journal.py`, `serialization.py`, and `service.py`. Add the `collective_projects` snapshot rows only when `codec_version == "v17"`. Bind the engine flag from the config object. Append the five semantic types in `src/observer/version.py` (count **66**) and map them in `src/observer/adapt.py`. Update every existing `== 61` semantic pin in the same change. Add `collective_projects` to the observer scene in `src/observer/contracts.py` and `src/observer/project.py` with sorted contributor ids and no leader field. Protocol id stays `observer-protocol-v1`. If the Godot scene decoder rejects unknown keys, tolerate the new array and do not render a leader. Alembic head stays `0017`.
 
@@ -366,7 +366,7 @@ Scripted arms may submit commands directly. They must not set a leader field.
 
   Files: `src/world/events.py`, `src/world/_replay.py`, `src/simulation/serialization.py`, `src/simulation/persistence.py`, `src/simulation/engine.py`, `src/simulation/runner.py`, `src/simulation/service.py`, `src/simulation/journal.py`, `src/observer/version.py`, `src/observer/adapt.py`, `src/observer/contracts.py`, `src/observer/project.py`, `tests/unit/test_collective_project_replay_schema.py`, `tests/unit/test_collective_project_observer.py`
 
-- [ ] Task 6: Project perception onto the colocated observation. (depends on 5)
+- [x] Task 6: Project perception onto the colocated observation. (depends on 5)
 
   Add `ObservedCollectiveProject` in `src/world/observations.py` and fill it from `_perception.py` only when content at the location is visible and the channel is on. Sort by `project_id`. Include the capped contribution tail. Channel off and a hidden location yield an empty tuple. `_encode_observation` omits `collective_projects` when that tuple is empty, matching `repositories`. Project the new occurrences only while the channel is on, using the public facts from Task 5. Do not copy another location's projects. A unit test asserts a distant agent does not see the site, a colocated agent sees counters and both contributor ids, and a channel-off observation encode has no `collective_projects` key.
 
@@ -381,7 +381,7 @@ Scripted arms may submit commands directly. They must not set a leader field.
 
 ### Phase 3: Choice, measures, and the experiment
 
-- [ ] Task 7: Let a private goal opt the owner into start or contribute. (depends on 6)
+- [x] Task 7: Let a private goal opt the owner into start or contribute. (depends on 6)
 
   In `src/agents/cognition/goal_manager.py`, when `collective_projects_active` is true, append at most one `CURRENT_INTENTION` goal per visible open project outside `_TEMPLATE_REGISTRY`, with `parent_goal_id` absent, outcome `ACHIEVE_CODE`, and `outcome_code` `collective_project:<project_id>`. If `_MAX_FOCI` (8) is already full, skip that mint and do not evict an existing focus. Accept a seeded start code `collective_project:start:shared_shelter`, `bridge`, `storage`, `winter_store`, or `record_site`. Map `winter_store` to world kind `winter_reserve`. Do not put `food`, `hunger`, or `reserve` in an outcome code. Do not invent start codes from drives. Do not bump `GOAL_MODEL_VERSION`. Add `propose_collective_project_command` and call it from `CommandPlanner` / `CognitiveLoop` only while the flag is on, in the post-compile slot. The proposer emits `StartCollectiveProject` or `ContributeCollectiveProject` only when the focus matches and the attempt would be legal; otherwise it leaves the compiled command. Add deliberation selection code `collective_project_focus` without a new `ActionDirection`. Pass the flag through `_collective_projects_loop_kwargs`. No path writes a leader. A unit test seeds `collective_project:start:winter_store` and asserts `_hunger_linked` stays false for that goal.
 
@@ -395,7 +395,7 @@ Scripted arms may submit commands directly. They must not set a leader field.
 
   Files: `src/agents/cognition/goal_manager.py`, `src/agents/cognition/collective_projects.py`, `src/agents/cognition/deliberation.py`, `src/agents/cognition/loop.py`, `src/simulation/runner.py`, `tests/unit/test_collective_project_proposer.py`
 
-- [ ] Task 8: Add the three analysis families. (depends on 5)
+- [x] Task 8: Add the three analysis families. (depends on 5)
 
   Add `MetricFamilyId` members and `_BUILDERS` entries so `METRIC_FAMILY_COUNT` is **86**. Update every existing `== 83` metric pin in the same change. Assemble them from `metric_service.py` only when `collective_projects` is present, in `src/analysis/collective_project_metrics.py`. Expose the locked numerators and denominators. Do not add a `PhenomenonId` or a support band. Do not import this module from `src/agents`. Channel off logs the empty case and writes no rows.
 

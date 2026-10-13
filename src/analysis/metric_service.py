@@ -196,6 +196,8 @@ class MetricComputationInputs:
     structured_commitment_consequence_counts: Mapping[str, int] | None = None
     subjective_valuation_spec: object | None = None
     resource_exchange_profile_spec: object | None = None
+    collective_projects_spec: object | None = None
+    collective_project_events: Sequence[object] | None = None
     subjective_valuation_events: Sequence[object] | None = None
     subjective_valuation_ledgers: Sequence[object] | None = None
     subjective_valuation_owner_ids: Sequence[str] | None = None
@@ -946,12 +948,15 @@ def assemble_metric_documents(inputs: MetricComputationInputs) -> MetricBundle:
                 METRIC_FAMILY_COUNT,
             )
             raise
-        if len(catalog) != 83:
+        if len(catalog) != METRIC_FAMILY_COUNT:
             _LOG.error(
-                "metric_catalog_count_drift expected=83 observed=%s",
+                "metric_catalog_count_drift expected=%s observed=%s",
+                METRIC_FAMILY_COUNT,
                 len(catalog),
             )
-            raise ValueError("validate_metric_catalog count drifted from 83")
+            raise ValueError(
+                f"validate_metric_catalog count drifted from {METRIC_FAMILY_COUNT}"
+            )
         try:
             documents.extend(
                 assemble_exchange_function_metrics(
@@ -970,6 +975,36 @@ def assemble_metric_documents(inputs: MetricComputationInputs) -> MetricBundle:
                     "operation": "assemble_metric_documents",
                     "run_id": run_id,
                     "metric_family": "resource_exchange_profile",
+                    "reason_code": "calculation_failed",
+                },
+            )
+            raise
+    if inputs.collective_projects_spec is None:
+        logging.getLogger("analysis.collective_project_metrics").info(
+            "collective_project_metrics_empty reason=collective_projects_absent"
+        )
+    else:
+        from analysis.collective_project_metrics import (
+            assemble_collective_project_metrics,
+        )
+
+        try:
+            documents.extend(
+                assemble_collective_project_metrics(
+                    tuple(inputs.collective_project_events or ()),  # type: ignore[arg-type]
+                    run_id=run_id,
+                    input_revision=revision,
+                    spec=inputs.collective_projects_spec,
+                    as_of_tick=window_end,
+                )
+            )
+        except Exception:
+            _LOG.error(
+                "metric_family_failed",
+                extra={
+                    "operation": "assemble_metric_documents",
+                    "run_id": run_id,
+                    "metric_family": "collective_projects",
                     "reason_code": "calculation_failed",
                 },
             )

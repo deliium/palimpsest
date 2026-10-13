@@ -937,6 +937,80 @@ def _mint_focus(
     )
 
 
+def _mint_collective_project_goals(
+    goals: list[Goal],
+    observation: Observation,
+    *,
+    owner: AgentId,
+    tick: int,
+) -> list[Goal]:
+    """One private intention per visible open site. A full focus list is left alone."""
+    existing = {
+        goal.outcome.outcome_code
+        for goal in goals
+        if goal.outcome is not None and goal.outcome.outcome_code is not None
+    }
+    foci_count = sum(
+        1
+        for goal in goals
+        if goal.status is GoalStatus.ACTIVE
+        and goal.horizon is GoalHorizon.CURRENT_INTENTION
+    )
+    projects = tuple(
+        sorted(
+            (
+                item
+                for item in observation.collective_projects
+                if item.status == "open"
+            ),
+            key=lambda item: item.project_id.value,
+        )
+    )
+    minted: list[Goal] = []
+    for ordinal, project in enumerate(projects):
+        code = f"collective_project:{project.project_id.value}"
+        if code in existing:
+            continue
+        if foci_count >= _MAX_FOCI or len(goals) + len(minted) >= _MAX_BOARD_GOALS:
+            _LOG.debug(
+                "collective_project_goal_skipped reason=foci_cap owner_id=%s",
+                owner.value,
+            )
+            continue
+        focus = Goal(
+            goal_id=derive_cognition_goal_id(
+                owner_id=owner.value,
+                tick=tick,
+                parent_goal_id=None,
+                template_code="collective_project.v1",
+                ordinal=ordinal,
+            ),
+            owner_id=owner,
+            description="collective-project",
+            priority=0.5,
+            status=GoalStatus.ACTIVE,
+            outcome=GoalOutcome(
+                kind=GoalOutcomeKind.ACHIEVE_CODE,
+                outcome_code=code,
+            ),
+            horizon=GoalHorizon.CURRENT_INTENTION,
+            provenance=GoalProvenance(
+                origin_kind=GoalOriginKind.INFERRED,
+                template_code="collective_project.v1",
+            ),
+            created_tick=tick,
+        )
+        minted.append(focus)
+        existing.add(code)
+        foci_count += 1
+        _LOG.debug(
+            "collective_project_goal_minted owner_id=%s project_id=%s",
+            owner.value,
+            project.project_id.value,
+        )
+    return minted
+
+
 def _goal_serves_drives(goal: Goal, drives: frozenset[DriveKind]) -> bool:
     if not drives:
         return False
@@ -1001,8 +1075,9 @@ class PassthroughGoalManager:
         situation: SituationModel,
         self_state: SelfModel,
         memory: RetrievedMemoryContext,
+        collective_projects_active: bool = False,
     ) -> GoalBoard:
-        del situation, self_state, memory  # ownership validated via loop_input
+        del situation, self_state, memory, collective_projects_active
         owner = loop_input.agent_id
         tick = loop_input.observation.tick
         goals = _snapshot_goals(loop_input)
@@ -1050,6 +1125,7 @@ class HierarchicalGoalManager:
         situation: SituationModel,
         self_state: SelfModel,
         memory: RetrievedMemoryContext,
+        collective_projects_active: bool = False,
     ) -> GoalBoard:
         owner = loop_input.agent_id
         tick = loop_input.observation.tick
@@ -1382,6 +1458,27 @@ class HierarchicalGoalManager:
             )
             if "focus_selected" not in selection_codes:
                 selection_codes.append("focus_selected")
+
+        if collective_projects_active:
+            for minted in _mint_collective_project_goals(
+                goals_list,
+                loop_input.observation,
+                owner=owner,
+                tick=tick,
+            ):
+                goals_list.append(minted)
+                by_id[minted.goal_id] = minted
+                intents.append(
+                    _emit_transition(
+                        goal_id=minted.goal_id,
+                        owner=owner,
+                        tick=tick,
+                        from_status=GoalStatus.ACTIVE,
+                        to_status=GoalStatus.ACTIVE,
+                        reason=GoalTransitionIntentReason.FOCUS_SELECTED,
+                        resulting_goal=minted,
+                    )
+                )
 
         goals = tuple(goals_list)
         by_id = {goal.goal_id: goal for goal in goals}

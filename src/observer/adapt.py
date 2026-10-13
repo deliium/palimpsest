@@ -92,6 +92,12 @@ def adapt_event(event: WorldEvent) -> ObserverEvent:
         kind,
         semantic,
     )
+    if kind.startswith("project_"):
+        _LOGGER.debug(
+            "observer_event_adapted kind=%s semantic_type=%s",
+            kind,
+            semantic,
+        )
     occurrence = event.occurrence
     origin = None if occurrence is None else _text(occurrence.origin_location_id)
     destination = (

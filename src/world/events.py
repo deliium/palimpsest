@@ -82,6 +82,7 @@ EVENT_SCHEMA_REPLAY_V15: Final[int] = 15
 EVENT_SCHEMA_REPLAY_V16: Final[int] = 16
 EVENT_SCHEMA_REPLAY_V17: Final[int] = 17
 EVENT_SCHEMA_REPLAY_V18: Final[int] = 18
+EVENT_SCHEMA_REPLAY_V19: Final[int] = 19
 SUPPORTED_EVENT_SCHEMA_VERSIONS: Final[frozenset[int]] = frozenset(
     {
         EVENT_SCHEMA_AUDIT_V1,
@@ -101,6 +102,7 @@ SUPPORTED_EVENT_SCHEMA_VERSIONS: Final[frozenset[int]] = frozenset(
         EVENT_SCHEMA_REPLAY_V16,
         EVENT_SCHEMA_REPLAY_V17,
         EVENT_SCHEMA_REPLAY_V18,
+        EVENT_SCHEMA_REPLAY_V19,
     }
 )
 REPLAYABLE_EVENT_SCHEMA_VERSIONS: Final[frozenset[int]] = frozenset(
@@ -121,6 +123,7 @@ REPLAYABLE_EVENT_SCHEMA_VERSIONS: Final[frozenset[int]] = frozenset(
         EVENT_SCHEMA_REPLAY_V16,
         EVENT_SCHEMA_REPLAY_V17,
         EVENT_SCHEMA_REPLAY_V18,
+        EVENT_SCHEMA_REPLAY_V19,
     }
 )
 PHYSICAL_REPLAY_EVENT_SCHEMA_VERSIONS: Final[frozenset[int]] = frozenset(
@@ -2329,6 +2332,111 @@ class ExchangeCompleted:
         _reject_presentation_fields(self.kind, self.__slots__)
 
 
+@dataclass(frozen=True, slots=True)
+class ProjectCreated:
+    """A work site opened. The actor is not stored as a leader."""
+
+    project_id: EntityId
+    location_id: EntityId
+    project_kind: str
+    actor_id: EntityId
+    labor_required: int
+    materials_required: int
+    kind: Literal["project_created"] = field(default="project_created", init=False)
+
+    def __post_init__(self) -> None:
+        if type(self.project_id) is not EntityId:
+            raise TypeError("ProjectCreated.project_id must be EntityId")
+        if type(self.location_id) is not EntityId:
+            raise TypeError("ProjectCreated.location_id must be EntityId")
+        if type(self.actor_id) is not EntityId:
+            raise TypeError("ProjectCreated.actor_id must be EntityId")
+        if type(self.project_kind) is not str:
+            raise TypeError("ProjectCreated.project_kind must be str")
+        _reject_presentation_fields(self.kind, self.__slots__)
+
+
+@dataclass(frozen=True, slots=True)
+class ProjectContributed:
+    """One attempt on an open site. A miss consumes nothing."""
+
+    project_id: EntityId
+    actor_id: EntityId
+    accepted: bool
+    labor_done: int
+    materials_done: int
+    item_id: EntityId | None = None
+    kind: Literal["project_contributed"] = field(
+        default="project_contributed", init=False
+    )
+
+    def __post_init__(self) -> None:
+        if type(self.project_id) is not EntityId:
+            raise TypeError("ProjectContributed.project_id must be EntityId")
+        if type(self.actor_id) is not EntityId:
+            raise TypeError("ProjectContributed.actor_id must be EntityId")
+        if type(self.accepted) is not bool:
+            raise TypeError("ProjectContributed.accepted must be bool")
+        if self.item_id is not None and type(self.item_id) is not EntityId:
+            raise TypeError("ProjectContributed.item_id must be EntityId or None")
+        _reject_presentation_fields(self.kind, self.__slots__)
+
+
+@dataclass(frozen=True, slots=True)
+class ProjectShortage:
+    """A contribute named no item while materials were still required."""
+
+    project_id: EntityId
+    actor_id: EntityId
+    shortage_count: int
+    kind: Literal["project_shortage"] = field(default="project_shortage", init=False)
+
+    def __post_init__(self) -> None:
+        if type(self.project_id) is not EntityId:
+            raise TypeError("ProjectShortage.project_id must be EntityId")
+        if type(self.actor_id) is not EntityId:
+            raise TypeError("ProjectShortage.actor_id must be EntityId")
+        _reject_presentation_fields(self.kind, self.__slots__)
+
+
+@dataclass(frozen=True, slots=True)
+class ProjectAbandoned:
+    """Accepted work stopped. Consumed items are not returned."""
+
+    project_id: EntityId
+    idle_ticks: int
+    kind: Literal["project_abandoned"] = field(default="project_abandoned", init=False)
+
+    def __post_init__(self) -> None:
+        if type(self.project_id) is not EntityId:
+            raise TypeError("ProjectAbandoned.project_id must be EntityId")
+        _reject_presentation_fields(self.kind, self.__slots__)
+
+
+@dataclass(frozen=True, slots=True)
+class ProjectCompleted:
+    """Labor and materials both met. This is not an institution."""
+
+    project_id: EntityId
+    project_kind: str
+    structure_id: EntityId | None = None
+    stored_delta: int = 0
+    kind: Literal["project_completed"] = field(
+        default="project_completed", init=False
+    )
+
+    def __post_init__(self) -> None:
+        if type(self.project_id) is not EntityId:
+            raise TypeError("ProjectCompleted.project_id must be EntityId")
+        if type(self.project_kind) is not str:
+            raise TypeError("ProjectCompleted.project_kind must be str")
+        if self.structure_id is not None and type(self.structure_id) is not EntityId:
+            raise TypeError("ProjectCompleted.structure_id must be EntityId or None")
+        if self.stored_delta not in {0, 3}:
+            raise ValueError("ProjectCompleted.stored_delta")
+        _reject_presentation_fields(self.kind, self.__slots__)
+
+
 EventDetails = (
     Moved
     | Searched
@@ -2391,6 +2499,11 @@ EventDetails = (
     | ExchangeProposed
     | ExchangeWithdrawn
     | ExchangeCompleted
+    | ProjectCreated
+    | ProjectContributed
+    | ProjectShortage
+    | ProjectAbandoned
+    | ProjectCompleted
 )
 
 _DETAIL_TYPES: Final[frozenset[type]] = frozenset(
@@ -2456,6 +2569,11 @@ _DETAIL_TYPES: Final[frozenset[type]] = frozenset(
         ExchangeProposed,
         ExchangeWithdrawn,
         ExchangeCompleted,
+        ProjectCreated,
+        ProjectContributed,
+        ProjectShortage,
+        ProjectAbandoned,
+        ProjectCompleted,
     }
 )
 
@@ -2494,6 +2612,16 @@ _COMMITMENT_EVENT_SCHEMAS: Final[frozenset[int]] = frozenset(
 )
 _COMMITMENT_DETAIL_TYPES: Final[frozenset[type]] = frozenset({CommitmentDeclared})
 _EXCHANGE_EVENT_SCHEMAS: Final[frozenset[int]] = frozenset({EVENT_SCHEMA_REPLAY_V18})
+_PROJECT_DETAIL_TYPES: Final[frozenset[type]] = frozenset(
+    {
+        ProjectCreated,
+        ProjectContributed,
+        ProjectShortage,
+        ProjectAbandoned,
+        ProjectCompleted,
+    }
+)
+_PROJECT_EVENT_SCHEMAS: Final[frozenset[int]] = frozenset({EVENT_SCHEMA_REPLAY_V19})
 _EXCHANGE_DETAIL_TYPES: Final[frozenset[type]] = frozenset(
     {ExchangeProposed, ExchangeWithdrawn, ExchangeCompleted}
 )
@@ -2658,6 +2786,8 @@ def _artifact_effect_complete(details: EventDetails) -> bool:
 
 
 def _payload_effect_complete(details: EventDetails, *, schema_version: int) -> bool:
+    if type(details) in _PROJECT_DETAIL_TYPES:
+        return schema_version in _PROJECT_EVENT_SCHEMAS
     if type(details) in _EXCHANGE_DETAIL_TYPES:
         return schema_version in _EXCHANGE_EVENT_SCHEMAS
     if type(details) in _COMMITMENT_DETAIL_TYPES:
@@ -2931,6 +3061,12 @@ def target_id_for_details(details: EventDetails) -> EntityId | None:
             | ExchangeCompleted(counterparty_id=counterparty_id)
         ):
             return counterparty_id
+        case ProjectCreated(project_id=project_id) | ProjectContributed(
+            project_id=project_id
+        ) | ProjectShortage(project_id=project_id) | ProjectAbandoned(
+            project_id=project_id
+        ) | ProjectCompleted(project_id=project_id):
+            return project_id
         case _:
             raise TypeError(
                 f"{EventValidationCode.UNKNOWN_EVENT_TYPE.value}: "
@@ -3085,6 +3221,15 @@ class WorldEvent:
                 _LOG.error(
                     "invalid_event_schema_version kind=%s schema_version=%s "
                     "reason_code=dependency_care_requires_v12",
+                    self.details.kind,
+                    self.schema_version,
+                )
+                raise ValueError(EventValidationCode.INVALID_SCHEMA_VERSION.value)
+        if type(self.details) in _PROJECT_DETAIL_TYPES:
+            if self.schema_version not in _PROJECT_EVENT_SCHEMAS:
+                _LOG.error(
+                    "invalid_event_schema_version kind=%s schema_version=%s "
+                    "reason_code=collective_projects_requires_v19",
                     self.details.kind,
                     self.schema_version,
                 )
@@ -3565,6 +3710,19 @@ def build_occurrence_context(
                 origin_location_id=origin_location_id,
                 destination_location_id=None,
                 affected_entity_ids=tuple(affected),
+                private_recipient_ids=(),
+            )
+        case (
+            ProjectCreated(project_id=project_id)
+            | ProjectContributed(project_id=project_id)
+            | ProjectShortage(project_id=project_id)
+            | ProjectAbandoned(project_id=project_id)
+            | ProjectCompleted(project_id=project_id)
+        ):
+            return OccurrenceContext(
+                origin_location_id=origin_location_id,
+                destination_location_id=None,
+                affected_entity_ids=(project_id,),
                 private_recipient_ids=(),
             )
         case _:

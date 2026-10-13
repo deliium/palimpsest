@@ -110,6 +110,12 @@ def _quantize_unit(value: float) -> float:
     return 0.0 if quantized == 0.0 else quantized
 
 
+def _collective_project_focus(goal_board: object, observation: object) -> bool:
+    from agents.cognition.collective_projects import collective_project_focus_matches
+
+    return collective_project_focus_matches(goal_board, observation)
+
+
 class MultiCriteriaIntentionSelector:
     """Select one intention via feasibility, vetoes, Pareto, and pairwise votes."""
 
@@ -524,6 +530,10 @@ class MultiCriteriaIntentionSelector:
             focus_ids = set(goal_board.foci_ids)
             if any(effect.goal_id in focus_ids for effect in future.goal_effects):
                 selection_codes.append("goal_focus_support")
+        if goal_board is not None and _collective_project_focus(
+            goal_board, loop_input.observation
+        ):
+            selection_codes.append("collective_project_focus")
 
         result = SelectedIntention(
             owner_id=owner,
@@ -777,6 +787,7 @@ class CommandPlanner:
         subjective_valuation_active: bool = False,
         subjective_valuation_max_bundle: int = 8,
         resource_exchange_profile_active: bool = False,
+        collective_projects_active: bool = False,
         semantic_naming: object | None = None,
         semantic_naming_mode: object | None = None,
         cultural_narratives: object | None = None,
@@ -1130,6 +1141,18 @@ class CommandPlanner:
                 ),
                 owner_entity_id=loop_input.observation.observer_id,
                 resource_exchange_profile_active=resource_exchange_profile_active,
+            )
+        if collective_projects_active:
+            from agents.cognition.collective_projects import (
+                propose_collective_project_command,
+            )
+
+            command = propose_collective_project_command(
+                command,
+                loop_input.observation,
+                goal_board,
+                channel_on=True,
+                owner_id=owner,
             )
         command_type = type(command).__name__
 

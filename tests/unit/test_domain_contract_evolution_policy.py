@@ -21,31 +21,33 @@ from world.actions import (
     AssertPossessionClaim,
     Attack,
     Build,
+    ContributeCollectiveProject,
     CopyRecord,
     Craft,
     DamageRecord,
     DeclareCommitment,
-    NegotiateExchange,
     DepositRecord,
     Drink,
-    EstablishRepository,
-    IndexRepository,
-    MaintainRepository,
-    RetrieveRecord,
     Drop,
     Eat,
     Erase,
+    EstablishRepository,
     Experiment,
     Feed,
     Flee,
     Give,
     Harvest,
     Help,
+    IndexRepository,
     Inscribe,
+    MaintainRepository,
     Move,
+    NegotiateExchange,
     Repair,
+    RetrieveRecord,
     Search,
     Sleep,
+    StartCollectiveProject,
     Store,
     Take,
     Talk,
@@ -102,6 +104,8 @@ _CLOSED_COMMAND_TYPES: frozenset[type] = frozenset(
         AssertPossessionClaim,
         DeclareCommitment,
         NegotiateExchange,
+        StartCollectiveProject,
+        ContributeCollectiveProject,
     }
 )
 
@@ -121,6 +125,7 @@ _FROZEN_OBSERVATION_FIELDS: frozenset[str] = frozenset(
         "structures",
         "artifacts",
         "repositories",
+        "collective_projects",
         "occurrences",
         "communications",
         "hour",
@@ -143,7 +148,7 @@ _PARITY_GATE = (
 
 
 def test_agent_command_set_remains_closed_at_thirty_five() -> None:
-    assert len(_CLOSED_COMMAND_TYPES) == 38
+    assert len(_CLOSED_COMMAND_TYPES) == 40
     from world import actions as actions_mod
 
     # Mirror the public union membership without constructing parameterized commands.
@@ -186,6 +191,8 @@ def test_agent_command_set_remains_closed_at_thirty_five() -> None:
         AssertPossessionClaim,
         DeclareCommitment,
         NegotiateExchange,
+        StartCollectiveProject,
+        ContributeCollectiveProject,
     }
     assert asserted == _CLOSED_COMMAND_TYPES
     assert hasattr(actions_mod, "AgentCommand")

@@ -50,7 +50,7 @@ __all__ = [
 ]
 
 METRIC_CATALOG_VERSION: Final[str] = "metric-catalog-v1"
-METRIC_FAMILY_COUNT: Final[int] = 83
+METRIC_FAMILY_COUNT: Final[int] = 86
 
 # Align with existing memory-drift / transmission document versions.
 _ALGO_V1: Final[str] = "1"
@@ -160,6 +160,9 @@ class MetricFamilyId(StrEnum):
     EXCHANGE_ACCEPTANCE_SHARE = "exchange_acceptance_share"
     EXCHANGE_ACQUISITION_FATE = "exchange_acquisition_fate"
     EXCHANGE_QUOTE_HOMOGENEITY = "exchange_quote_homogeneity"
+    COLLECTIVE_PROJECT_PROGRESS = "collective_project_progress"
+    COLLECTIVE_PROJECT_CONTRIBUTION = "collective_project_contribution"
+    COLLECTIVE_PROJECT_OUTCOME = "collective_project_outcome"
 
 
 class DenominatorKind(StrEnum):
@@ -2446,6 +2449,106 @@ def _spec_exchange_quote_homogeneity() -> MetricSpecification:
     )
 
 
+def _spec_collective_project_progress() -> MetricSpecification:
+    return _base(
+        family_id=MetricFamilyId.COLLECTIVE_PROJECT_PROGRESS,
+        evidence_inputs=frozenset({EvidenceStage.OBJECTIVE_EVENT_STATE}),
+        population="collective_projects",
+        denominator="labor_required",
+        denominator_kind=DenominatorKind.OCCURRENCE,
+        cohort_window="as_of tick project events",
+        deceased_policy="not_applicable",
+        zero_holding_policy="spec absent -> family omitted",
+        opportunity_vs_occurrence="sums of labor and materials by kind",
+        self_edge_policy="not_applicable",
+        censoring_policy="counts stay on the row; no crew label is derived",
+        formulas={
+            "labor_done": "sum of latest labor counters for the kind",
+            "labor_required": "sum of required labor for the kind",
+            "materials_done": "sum of latest material counters for the kind",
+            "materials_required": "sum of required materials for the kind",
+            "labor_num": "labor_done",
+            "labor_den": "labor_required",
+            "materials_num": "materials_done",
+            "materials_den": "materials_required",
+        },
+        value_keys=(
+            "project_kind",
+            "labor_done",
+            "labor_required",
+            "materials_done",
+            "materials_required",
+            "labor_num",
+            "labor_den",
+            "materials_num",
+            "materials_den",
+        ),
+        empty_case="availability=absent; no_collective_projects",
+    )
+
+
+def _spec_collective_project_contribution() -> MetricSpecification:
+    return _base(
+        family_id=MetricFamilyId.COLLECTIVE_PROJECT_CONTRIBUTION,
+        evidence_inputs=frozenset({EvidenceStage.OBJECTIVE_EVENT_STATE}),
+        population="project_contribution_events",
+        denominator="contribution_den",
+        denominator_kind=DenominatorKind.OCCURRENCE,
+        cohort_window="as_of tick project events",
+        deceased_policy="not_applicable",
+        zero_holding_policy="spec absent -> family omitted",
+        opportunity_vs_occurrence="accepted attempts and shortages",
+        self_edge_policy="not_applicable",
+        censoring_policy="counts stay on the row; no crew label is derived",
+        formulas={
+            "distinct_contributor_count": "actors with an accepted contribution",
+            "accepted_contribution_count": "accepted contribution events",
+            "shortage_count": "shortage events",
+            "contribution_num": "accepted_contribution_count",
+            "contribution_den": "accepted contributions plus shortages",
+        },
+        value_keys=(
+            "distinct_contributor_count",
+            "accepted_contribution_count",
+            "shortage_count",
+            "contribution_num",
+            "contribution_den",
+        ),
+        empty_case="availability=absent; no_collective_projects",
+    )
+
+
+def _spec_collective_project_outcome() -> MetricSpecification:
+    return _base(
+        family_id=MetricFamilyId.COLLECTIVE_PROJECT_OUTCOME,
+        evidence_inputs=frozenset({EvidenceStage.OBJECTIVE_EVENT_STATE}),
+        population="collective_projects",
+        denominator="outcome_den",
+        denominator_kind=DenominatorKind.OCCURRENCE,
+        cohort_window="as_of tick project events",
+        deceased_policy="not_applicable",
+        zero_holding_policy="spec absent -> family omitted",
+        opportunity_vs_occurrence="terminal status counts",
+        self_edge_policy="not_applicable",
+        censoring_policy="counts stay on the row; no crew label is derived",
+        formulas={
+            "completed_count": "projects that completed",
+            "abandoned_count": "projects that were abandoned",
+            "open_count": "projects still open",
+            "outcome_num": "completed_count",
+            "outcome_den": "completed plus abandoned plus open",
+        },
+        value_keys=(
+            "completed_count",
+            "abandoned_count",
+            "open_count",
+            "outcome_num",
+            "outcome_den",
+        ),
+        empty_case="availability=absent; no_collective_projects",
+    )
+
+
 def _spec_commitment_fulfillment_status() -> MetricSpecification:
     return _base(
         family_id=MetricFamilyId.COMMITMENT_FULFILLMENT_STATUS,
@@ -3811,6 +3914,9 @@ _BUILDERS: Final[tuple[Callable[[], MetricSpecification], ...]] = (
     _spec_exchange_acceptance_share,
     _spec_exchange_acquisition_fate,
     _spec_exchange_quote_homogeneity,
+    _spec_collective_project_progress,
+    _spec_collective_project_contribution,
+    _spec_collective_project_outcome,
     _spec_emergent_group_formation,
     _spec_emergent_social_norms,
     _spec_persistent_social_conventions,

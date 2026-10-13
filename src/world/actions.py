@@ -783,6 +783,46 @@ def _exchange_id_tuple(name: str, value: tuple[EntityId, ...]) -> tuple[EntityId
 
 
 @dataclass(frozen=True, slots=True)
+class StartCollectiveProject:
+    """Open a world-owned work site. The actor does not name an id or a leader."""
+
+    project_kind: str
+    kind: Literal["start_collective_project"] = field(
+        default="start_collective_project", init=False
+    )
+
+    def __post_init__(self) -> None:
+        if type(self.project_kind) is not str or not self.project_kind:
+            raise ValueError("StartCollectiveProject.project_kind")
+        allowed = {
+            "shared_shelter",
+            "bridge",
+            "storage",
+            "winter_reserve",
+            "record_site",
+        }
+        if self.project_kind not in allowed:
+            raise ValueError("StartCollectiveProject.project_kind")
+
+
+@dataclass(frozen=True, slots=True)
+class ContributeCollectiveProject:
+    """Spend this actor's action, and sometimes one held item, on an open site."""
+
+    project_id: EntityId
+    item_id: EntityId | None = None
+    kind: Literal["contribute_collective_project"] = field(
+        default="contribute_collective_project", init=False
+    )
+
+    def __post_init__(self) -> None:
+        if type(self.project_id) is not EntityId:
+            raise TypeError("ContributeCollectiveProject.project_id must be EntityId")
+        if self.item_id is not None and type(self.item_id) is not EntityId:
+            raise TypeError("ContributeCollectiveProject.item_id must be EntityId")
+
+
+@dataclass(frozen=True, slots=True)
 class NegotiateExchange:
     """Name both sides of a swap. Speech acts move nothing until accept."""
 
@@ -854,6 +894,8 @@ AgentCommand = (
     | AssertPossessionClaim
     | DeclareCommitment
     | NegotiateExchange
+    | StartCollectiveProject
+    | ContributeCollectiveProject
 )
 
 _COMMAND_TYPES: Final[frozenset[type]] = frozenset(
@@ -896,6 +938,8 @@ _COMMAND_TYPES: Final[frozenset[type]] = frozenset(
         AssertPossessionClaim,
         DeclareCommitment,
         NegotiateExchange,
+        StartCollectiveProject,
+        ContributeCollectiveProject,
     }
 )
 

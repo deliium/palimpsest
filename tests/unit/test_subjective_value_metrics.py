@@ -26,7 +26,7 @@ from world.identifiers import EntityId, EventId, RequestId, WorldId, WorldRevisi
 
 
 def test_family_count_is_80() -> None:
-    assert METRIC_FAMILY_COUNT == 83
+    assert METRIC_FAMILY_COUNT == 86
     assert MetricFamilyId.EXCHANGE_RESERVATION_DIVERGENCE.value == (
         "exchange_reservation_divergence"
     )

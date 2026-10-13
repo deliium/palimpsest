@@ -52,6 +52,7 @@ from world.events import (
     EVENT_SCHEMA_REPLAY_V16,
     EVENT_SCHEMA_REPLAY_V17,
     EVENT_SCHEMA_REPLAY_V18,
+    EVENT_SCHEMA_REPLAY_V19,
     AgentCreated,
     AgentEnteredWorld,
     AgentInitializationRecorded,
@@ -78,6 +79,11 @@ from world.events import (
     ExchangeCompleted,
     ExchangeProposed,
     ExchangeWithdrawn,
+    ProjectAbandoned,
+    ProjectCompleted,
+    ProjectContributed,
+    ProjectCreated,
+    ProjectShortage,
     PossessionClaimAsserted,
     TakenFromCorpse,
     ExposureApplied,
@@ -364,6 +370,7 @@ def _prepare_events(
             EVENT_SCHEMA_REPLAY_V16,
             EVENT_SCHEMA_REPLAY_V17,
             EVENT_SCHEMA_REPLAY_V18,
+            EVENT_SCHEMA_REPLAY_V19,
         }:
             raise ProjectionError(ProjectionErrorCode.UNSUPPORTED_SCHEMA)
     return normalized, schema_version, run_id
@@ -646,6 +653,16 @@ def _apply_event_effect(
             return _project_exchange_withdrawn(state, event, withdrawn), True
         case ExchangeCompleted() as completed:
             return _project_exchange_completed(state, event, completed), True
+        case ProjectCreated() as created:
+            return _project_project_created(state, event, created), True
+        case ProjectContributed() as contributed:
+            return _project_project_contributed(state, event, contributed), True
+        case ProjectShortage() as shortage:
+            return _project_project_shortage(state, shortage), True
+        case ProjectAbandoned() as abandoned:
+            return _project_project_abandoned(state, abandoned), True
+        case ProjectCompleted() as completed_project:
+            return _project_project_completed(state, completed_project), True
         case _:
             raise ProjectionError(ProjectionErrorCode.PRECONDITION_FAILED)
 
@@ -2308,3 +2325,163 @@ def _project_experiment(
 
 def _copy_body(body: AgentBody, *, inventory: tuple[EntityId, ...]) -> AgentBody:
     return copy_body(body, inventory=inventory)
+
+
+def _project_project_created(
+    state: WorldState, event: WorldEvent, details: ProjectCreated
+):
+    from world.collective_projects import (
+        CollectiveProject,
+        CollectiveProjectKind,
+        CollectiveProjectStatus,
+        ProjectContribution,
+        _stores_at,
+    )
+
+    if details.project_id in state.collective_projects:
+        raise ProjectionError(ProjectionErrorCode.INVARIANT_FAILED)
+    kind = CollectiveProjectKind(details.project_kind)
+    target = None
+    if kind.value == "winter_reserve":
+        stores = _stores_at(state, details.location_id)
+        if stores:
+            target = stores[0].entity_id
+    project = CollectiveProject(
+        project_id=details.project_id,
+        location_id=details.location_id,
+        kind=kind,
+        status=CollectiveProjectStatus.OPEN,
+        labor_done=0,
+        labor_required=details.labor_required,
+        materials_done=0,
+        materials_required=details.materials_required,
+        opened_tick=event.tick,
+        last_accepted_tick=event.tick,
+        shortage_count=0,
+        contributions=(
+            ProjectContribution(
+                actor_id=details.actor_id,
+                tick=event.tick,
+                accepted=True,
+                labor_delta=0,
+            ),
+        ),
+        target_structure_id=target,
+    )
+    projects = dict(state.collective_projects)
+    projects[details.project_id] = project
+    return rebuild_world_state(state, collective_projects=projects)
+
+
+def _project_project_contributed(
+    state: WorldState, event: WorldEvent, details: ProjectContributed
+):
+    from world.collective_projects import ProjectContribution, append_contribution
+
+    project = state.collective_projects.get(details.project_id)
+    if project is None:
+        raise ProjectionError(ProjectionErrorCode.PRECONDITION_FAILED)
+    labor_delta = (
+        1 if details.accepted and details.labor_done > project.labor_done else 0
+    )
+    updated = append_contribution(
+        project,
+        ProjectContribution(
+            actor_id=details.actor_id,
+            tick=event.tick,
+            accepted=details.accepted,
+            labor_delta=labor_delta,
+            item_id=details.item_id if details.accepted else None,
+        ),
+    )
+    updated = replace(
+        updated,
+        labor_done=details.labor_done,
+        materials_done=details.materials_done,
+        last_accepted_tick=(
+            event.tick if details.accepted else project.last_accepted_tick
+        ),
+    )
+    projects = dict(state.collective_projects)
+    projects[details.project_id] = updated
+    items = None
+    bodies = None
+    if (
+        details.accepted
+        and details.item_id is not None
+        and details.item_id in state.items
+    ):
+        items = dict(state.items)
+        del items[details.item_id]
+        actor = state.bodies.get(details.actor_id)
+        if actor is not None and details.item_id in actor.inventory:
+            bodies = dict(state.bodies)
+            bodies[details.actor_id] = copy_body(
+                actor,
+                inventory=tuple(
+                    item_id for item_id in actor.inventory if item_id != details.item_id
+                ),
+            )
+    return rebuild_world_state(
+        state, items=items, bodies=bodies, collective_projects=projects
+    )
+
+
+def _project_project_shortage(state: WorldState, details: ProjectShortage):
+    from world.collective_projects import CollectiveProject
+
+    project = state.collective_projects.get(details.project_id)
+    if type(project) is not CollectiveProject:
+        raise ProjectionError(ProjectionErrorCode.PRECONDITION_FAILED)
+    projects = dict(state.collective_projects)
+    projects[details.project_id] = replace(
+        project, shortage_count=details.shortage_count
+    )
+    return rebuild_world_state(state, collective_projects=projects)
+
+
+def _project_project_abandoned(state: WorldState, details: ProjectAbandoned):
+    from world.collective_projects import CollectiveProjectStatus
+
+    project = state.collective_projects.get(details.project_id)
+    if project is None:
+        raise ProjectionError(ProjectionErrorCode.PRECONDITION_FAILED)
+    projects = dict(state.collective_projects)
+    projects[details.project_id] = replace(
+        project, status=CollectiveProjectStatus.ABANDONED
+    )
+    return rebuild_world_state(state, collective_projects=projects)
+
+
+def _project_project_completed(state: WorldState, details: ProjectCompleted):
+    from world.collective_projects import CollectiveProjectStatus, catalog_row
+    from world.production import Structure
+
+    project = state.collective_projects.get(details.project_id)
+    if project is None:
+        raise ProjectionError(ProjectionErrorCode.PRECONDITION_FAILED)
+    projects = dict(state.collective_projects)
+    projects[details.project_id] = replace(
+        project, status=CollectiveProjectStatus.COMPLETED
+    )
+    structures = None
+    row = catalog_row(project.kind)
+    if details.stored_delta == 3 and details.structure_id is not None:
+        store = state.structures.get(details.structure_id)
+        if store is not None:
+            structures = dict(state.structures)
+            structures[store.entity_id] = replace(
+                store, stored_quantity=store.stored_quantity + details.stored_delta
+            )
+    elif details.structure_id is not None and row.completion_structure_kind is not None:
+        structures = dict(state.structures)
+        structures[details.structure_id] = Structure(
+            entity_id=details.structure_id,
+            location_id=project.location_id,
+            kind=row.completion_structure_kind,
+            integrity=1.0,
+            stored_quantity=0,
+        )
+    return rebuild_world_state(
+        state, structures=structures, collective_projects=projects
+    )

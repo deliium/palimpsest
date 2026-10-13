@@ -222,6 +222,7 @@ class CognitiveLoop:
         "_caregiving_cognition_mode",
         "_cognitive_budget_mode",
         "_cognitive_budget_policy",
+        "_collective_projects_active",
         "_commitment_horizon_ticks",
         "_communication_strategy_mode",
         "_communication_strategy_policy",
@@ -359,6 +360,7 @@ class CognitiveLoop:
         max_bundle: int = 8,
         resource_exchange_profile_active: bool = False,
         acceptance_window_ticks: int = 32,
+        collective_projects_active: bool = False,
         knowledge_genealogy_spec: object | None = None,
         knowledge_genealogy_seed_material: object | None = None,
         bounded_experimentation_spec: object | None = None,
@@ -933,6 +935,9 @@ class CognitiveLoop:
             raise TypeError("acceptance_window_ticks must be int")
         self._resource_exchange_profile_active = resource_exchange_profile_active
         self._acceptance_window_ticks = acceptance_window_ticks
+        if type(collective_projects_active) is not bool:
+            raise TypeError("collective_projects_active must be bool")
+        self._collective_projects_active = collective_projects_active
         _LOG.info(
             "resource_exchange_profile_active=%s acceptance_window_ticks=%s",
             resource_exchange_profile_active,
@@ -3212,7 +3217,14 @@ class CognitiveLoop:
             ordinal=4,
             input_artifact=self_state,
             awaitable=self._goal_manager.manage(
-                loop_input, situation, self_state, memory
+                loop_input,
+                situation,
+                self_state,
+                memory,
+                **_accepted_keywords(
+                    self._goal_manager.manage,
+                    collective_projects_active=self._collective_projects_active,
+                ),
             ),
             expected_type=GoalBoard,
         )
@@ -3550,6 +3562,7 @@ class CognitiveLoop:
                     subjective_valuation_active=self._subjective_valuation_active,
                     subjective_valuation_max_bundle=self._subjective_valuation_max_bundle,
                     resource_exchange_profile_active=self._resource_exchange_profile_active,
+                    collective_projects_active=self._collective_projects_active,
                     semantic_naming=semantic_naming,
                     semantic_naming_mode=self._semantic_naming_mode,
                     cultural_narratives=cultural_narratives,
@@ -4806,6 +4819,13 @@ def _build_narrative_cue_summary(
         distorted_artifacts=tuple(distorted),
         reconstructions=tuple(reconstructions),
     )
+
+
+def _accepted_keywords(
+    method: Callable[..., object], **options: object
+) -> dict[str, object]:
+    """Pass keywords the injected callable actually accepts."""
+    return _planner_options(method, **options)
 
 
 def _planner_options(

@@ -395,7 +395,7 @@ def test_same_tick_accept_before_offer_does_not_match() -> None:
 def test_command_registry_includes_negotiate_once() -> None:
     args = get_args(AgentCommand)
     assert args.count(NegotiateExchange) == 1
-    assert len(args) == 38
+    assert len(args) == 40
 
 
 def test_command_round_trips() -> None:

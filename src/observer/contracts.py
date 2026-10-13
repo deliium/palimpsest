@@ -588,6 +588,38 @@ class ObserverHazard:
 
 
 @dataclass(frozen=True, slots=True)
+class ObserverCollectiveProject:
+    """A work site. Contributor ids are sorted. There is no leader field."""
+
+    project_id: str
+    kind: str
+    status: str
+    labor_done: int
+    materials_done: int
+    contributor_ids: tuple[str, ...] = ()
+
+    def __post_init__(self) -> None:
+        object.__setattr__(
+            self, "project_id", _require_text("project_id", self.project_id)
+        )
+        object.__setattr__(self, "kind", _require_text("kind", self.kind))
+        object.__setattr__(self, "status", _require_text("status", self.status))
+        object.__setattr__(
+            self, "labor_done", _require_tick("labor_done", self.labor_done)
+        )
+        object.__setattr__(
+            self,
+            "materials_done",
+            _require_tick("materials_done", self.materials_done),
+        )
+        object.__setattr__(
+            self,
+            "contributor_ids",
+            _typed_tuple("contributor_ids", self.contributor_ids, str),
+        )
+
+
+@dataclass(frozen=True, slots=True)
 class ObserverWorldState:
     tick: int
     revision: int
@@ -599,6 +631,7 @@ class ObserverWorldState:
     structures: tuple[ObserverStructure, ...] = ()
     artifacts: tuple[ObserverArtifact, ...] = ()
     repositories: tuple[ObserverRepository, ...] = ()
+    collective_projects: tuple[ObserverCollectiveProject, ...] = ()
     season: str | None = None
     temperature_bands: tuple[ObserverTemperatureBand, ...] = ()
     hazards: tuple[ObserverHazard, ...] = ()
@@ -615,6 +648,11 @@ class ObserverWorldState:
         artifacts = _typed_tuple("artifacts", self.artifacts, ObserverArtifact)
         repositories = _typed_tuple(
             "repositories", self.repositories, ObserverRepository
+        )
+        collective_projects = _typed_tuple(
+            "collective_projects",
+            self.collective_projects,
+            ObserverCollectiveProject,
         )
         bands = _typed_tuple(
             "temperature_bands", self.temperature_bands, ObserverTemperatureBand
@@ -644,6 +682,7 @@ class ObserverWorldState:
         object.__setattr__(self, "structures", structures)
         object.__setattr__(self, "artifacts", artifacts)
         object.__setattr__(self, "repositories", repositories)
+        object.__setattr__(self, "collective_projects", collective_projects)
         object.__setattr__(self, "season", season)
         object.__setattr__(self, "temperature_bands", bands)
         object.__setattr__(self, "hazards", hazards)

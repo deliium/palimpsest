@@ -10,6 +10,7 @@ from observer.contracts import (
     ObserverAgent,
     ObserverArtifact,
     ObserverBodyMeasures,
+    ObserverCollectiveProject,
     ObserverEvent,
     ObserverFrame,
     ObserverHazard,
@@ -238,6 +239,22 @@ def project_frame(
             key=lambda item: item.repository_id.value,
         )
     )
+    collective_projects = tuple(
+        ObserverCollectiveProject(
+            project_id=item.project_id.value,
+            kind=item.kind.value,
+            status=item.status.value,
+            labor_done=item.labor_done,
+            materials_done=item.materials_done,
+            contributor_ids=tuple(
+                sorted({row.actor_id.value for row in item.contributions})
+            ),
+        )
+        for item in sorted(
+            scene.collective_projects,
+            key=lambda item: item.project_id.value,
+        )
+    )
     weather = tuple(
         ObserverWeather(
             location_id=item.location_id.value,
@@ -256,6 +273,7 @@ def project_frame(
         structures=structures,
         artifacts=artifacts,
         repositories=repositories,
+        collective_projects=collective_projects,
         season=scene.season,
         temperature_bands=tuple(
             ObserverTemperatureBand(location_id=location_id, band=band)

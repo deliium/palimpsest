@@ -440,6 +440,7 @@ def bind_snapshot_commit_hash(
         repositories=snapshot.repositories,
         corpse_custody_item_ids=snapshot.corpse_custody_item_ids,
         exchange_offers=snapshot.exchange_offers,
+        collective_projects=snapshot.collective_projects,
     )
     return WorldSnapshot(
         snapshot_id=draft.snapshot_id,
@@ -472,6 +473,7 @@ def bind_snapshot_commit_hash(
         repositories=draft.repositories,
         corpse_custody_item_ids=draft.corpse_custody_item_ids,
         exchange_offers=draft.exchange_offers,
+        collective_projects=draft.collective_projects,
     )
 
 
@@ -757,8 +759,7 @@ def _encode_world_snapshot(
             "world_id": value.world_id.value,
         }
         if value.persistence_codec_version in {"v3", "v4", "v5", "v6", "v7", "v8", "v9", "v10", "v11",
-            "v12", "v13", "v14", "v15", "v16",
-        }:
+            "v12", "v13", "v14", "v15", "v16", "v17"}:
             payload["structures"] = [
                 _encode_structure(item) for item in value.structures
             ]
@@ -769,33 +770,30 @@ def _encode_world_snapshot(
                 _encode_tool_mark(item) for item in value.tool_marks
             ]
         if value.persistence_codec_version in {"v4", "v5", "v6", "v7", "v8", "v9", "v10", "v11",
-            "v12", "v13", "v14", "v15", "v16",
-        }:
+            "v12", "v13", "v14", "v15", "v16", "v17"}:
             payload["active_hazards"] = [
                 _encode_active_hazard(item) for item in value.active_hazards
             ]
         if value.persistence_codec_version in {"v5", "v6", "v7", "v8", "v9", "v10", "v11",
-            "v12", "v13", "v14", "v15", "v16",
-        }:
+            "v12", "v13", "v14", "v15", "v16", "v17"}:
             payload["artifacts"] = [
                 _encode_information_artifact(item) for item in value.artifacts
             ]
         if value.persistence_codec_version in {"v6", "v7", "v8", "v9", "v10", "v11",
-            "v12", "v13", "v14", "v15", "v16",
-        }:
+            "v12", "v13", "v14", "v15", "v16", "v17"}:
             payload["lifecycle_records"] = [
                 _encode_lifecycle_record(item) for item in value.lifecycle_records
             ]
-        if value.persistence_codec_version in {"v8", "v9", "v10", "v11", "v12", "v13", "v14", "v15", "v16", "v14"}:
+        if value.persistence_codec_version in {"v8", "v9", "v10", "v11", "v12", "v13", "v14", "v15", "v16", "v14", "v17"}:
             payload["kinship_edges"] = [
                 _encode_kinship_edge(item) for item in value.kinship_edges
             ]
-        if value.persistence_codec_version in {"v9", "v10", "v11", "v12", "v13", "v14", "v15", "v16", "v14"}:
+        if value.persistence_codec_version in {"v9", "v10", "v11", "v12", "v13", "v14", "v15", "v16", "v14", "v17"}:
             payload["dependency_need_registers"] = [
                 _encode_dependency_need_register(item)
                 for item in value.dependency_need_registers
             ]
-        if value.persistence_codec_version in {"v11", "v12", "v13", "v14", "v15", "v16", "v14"}:
+        if value.persistence_codec_version in {"v11", "v12", "v13", "v14", "v15", "v16", "v14", "v17"}:
             payload["repositories"] = [
                 _encode_knowledge_repository(item) for item in value.repositories
             ]
@@ -809,7 +807,7 @@ def _encode_world_snapshot(
                 len(value.repositories),
                 custody,
             )
-        if value.persistence_codec_version in {"v13", "v14", "v15", "v16"}:
+        if value.persistence_codec_version in {"v13", "v14", "v15", "v16", "v17"}:
             payload["corpse_custody_item_ids"] = sorted(
                 item.value for item in value.corpse_custody_item_ids
             )
@@ -817,7 +815,7 @@ def _encode_world_snapshot(
                 "corpse_custody_snapshot_encode corpse_custody_count=%s",
                 len(value.corpse_custody_item_ids),
             )
-        if value.persistence_codec_version in {"v15", "v16"}:
+        if value.persistence_codec_version in {"v15", "v16", "v17"}:
             payload["exchange_offers"] = [
                 {
                     "give_item_ids": [item.value for item in offer.give_item_ids],
@@ -831,6 +829,19 @@ def _encode_world_snapshot(
             _LOGGER.debug(
                 "exchange_offer_snapshot_encode offer_count=%s",
                 len(value.exchange_offers),
+            )
+        if value.persistence_codec_version == "v17":
+            payload["collective_projects"] = [
+                _encode_collective_project(item) for item in value.collective_projects
+            ]
+            logging.getLogger("simulation.serialization").debug(
+                "collective_projects encoded project_count=%s",
+                len(value.collective_projects),
+            )
+        else:
+            logging.getLogger("simulation.serialization").debug(
+                "collective_projects omitted project_count=%s",
+                len(value.collective_projects),
             )
     except DomainSerializationError as exc:
         raise _map_domain_error(exc) from exc
@@ -909,24 +920,34 @@ def _decode_world_snapshot(data: dict[str, Any], *, path: str) -> WorldSnapshot:
         "integrity_hash",
         "predecessor_commit_hash",
     }
-    if codec in {"v3", "v4", "v5", "v6", "v7", "v8", "v9", "v10", "v11", "v12", "v13", "v14", "v15", "v16", "v14"}:
+    if codec in {"v3", "v4", "v5", "v6", "v7", "v8", "v9", "v10", "v11", "v12", "v13", "v14", "v15", "v16", "v14", "v17"}:
         keys |= {"structures", "production_jobs", "tool_marks"}
-    if codec in {"v4", "v5", "v6", "v7", "v8", "v9", "v10", "v11", "v12", "v13", "v14", "v15", "v16", "v14"}:
+    if codec in {"v4", "v5", "v6", "v7", "v8", "v9", "v10", "v11", "v12", "v13", "v14", "v15", "v16", "v14", "v17"}:
         keys.add("active_hazards")
-    if codec in {"v5", "v6", "v7", "v8", "v9", "v10", "v11", "v12", "v13", "v14", "v15", "v16", "v14"}:
+    if codec in {"v5", "v6", "v7", "v8", "v9", "v10", "v11", "v12", "v13", "v14", "v15", "v16", "v14", "v17"}:
         keys.add("artifacts")
-    if codec in {"v6", "v7", "v8", "v9", "v10", "v11", "v12", "v13", "v14", "v15", "v16", "v14"}:
+    if codec in {"v6", "v7", "v8", "v9", "v10", "v11", "v12", "v13", "v14", "v15", "v16", "v14", "v17"}:
         keys.add("lifecycle_records")
-    if codec in {"v8", "v9", "v10", "v11", "v12", "v13", "v14", "v15", "v16", "v14"}:
+    if codec in {"v8", "v9", "v10", "v11", "v12", "v13", "v14", "v15", "v16", "v14", "v17"}:
         keys.add("kinship_edges")
-    if codec in {"v9", "v10", "v11", "v12", "v13", "v14", "v15", "v16", "v14"}:
+    if codec in {"v9", "v10", "v11", "v12", "v13", "v14", "v15", "v16", "v14", "v17"}:
         keys.add("dependency_need_registers")
-    if codec in {"v11", "v12", "v13", "v14", "v15", "v16", "v14"}:
+    if codec in {"v11", "v12", "v13", "v14", "v15", "v16", "v14", "v17"}:
         keys.add("repositories")
-    if codec in {"v13", "v14", "v15", "v16"}:
+    if codec in {"v13", "v14", "v15", "v16", "v17"}:
         keys.add("corpse_custody_item_ids")
-    if codec in {"v15", "v16"}:
+    if codec in {"v15", "v16", "v17"}:
         keys.add("exchange_offers")
+    if codec == "v17":
+        keys.add("collective_projects")
+    elif "collective_projects" in data:
+        raw_projects = data.get("collective_projects")
+        project_count = len(raw_projects) if isinstance(raw_projects, list) else 0
+        logging.getLogger("simulation.serialization").warning(
+            "collective_projects present on pre-v17 payload codec=%s project_count=%s",
+            codec,
+            project_count,
+        )
     _require_keys(data, keys, path=path)
     config_raw = data["config"]
     if not isinstance(config_raw, dict):
@@ -983,70 +1004,75 @@ def _decode_world_snapshot(data: dict[str, Any], *, path: str) -> WorldSnapshot:
             structures=_decode_object_list(
                 data["structures"], _decode_structure, path=f"{path}.structures"
             )
-            if codec in {"v3", "v4", "v5", "v6", "v7", "v8", "v9", "v10", "v11", "v12", "v13", "v14", "v15", "v16", "v14"}
+            if codec in {"v3", "v4", "v5", "v6", "v7", "v8", "v9", "v10", "v11", "v12", "v13", "v14", "v15", "v16", "v14", "v17"}
             else (),
             production_jobs=_decode_object_list(
                 data["production_jobs"],
                 _decode_production_job,
                 path=f"{path}.production_jobs",
             )
-            if codec in {"v3", "v4", "v5", "v6", "v7", "v8", "v9", "v10", "v11", "v12", "v13", "v14", "v15", "v16", "v14"}
+            if codec in {"v3", "v4", "v5", "v6", "v7", "v8", "v9", "v10", "v11", "v12", "v13", "v14", "v15", "v16", "v14", "v17"}
             else (),
             tool_marks=_decode_object_list(
                 data["tool_marks"], _decode_tool_mark, path=f"{path}.tool_marks"
             )
-            if codec in {"v3", "v4", "v5", "v6", "v7", "v8", "v9", "v10", "v11", "v12", "v13", "v14", "v15", "v16", "v14"}
+            if codec in {"v3", "v4", "v5", "v6", "v7", "v8", "v9", "v10", "v11", "v12", "v13", "v14", "v15", "v16", "v14", "v17"}
             else (),
             active_hazards=_decode_object_list(
                 data["active_hazards"],
                 _decode_active_hazard,
                 path=f"{path}.active_hazards",
             )
-            if codec in {"v4", "v5", "v6", "v7", "v8", "v9", "v10", "v11", "v12", "v13", "v14", "v15", "v16", "v14"}
+            if codec in {"v4", "v5", "v6", "v7", "v8", "v9", "v10", "v11", "v12", "v13", "v14", "v15", "v16", "v14", "v17"}
             else (),
             artifacts=_decode_object_list(
                 data["artifacts"],
                 _decode_information_artifact,
                 path=f"{path}.artifacts",
             )
-            if codec in {"v5", "v6", "v7", "v8", "v9", "v10", "v11", "v12", "v13", "v14", "v15", "v16", "v14"}
+            if codec in {"v5", "v6", "v7", "v8", "v9", "v10", "v11", "v12", "v13", "v14", "v15", "v16", "v14", "v17"}
             else (),
             lifecycle_records=_decode_object_list(
                 data["lifecycle_records"],
                 _decode_lifecycle_record,
                 path=f"{path}.lifecycle_records",
             )
-            if codec in {"v6", "v7", "v8", "v9", "v10", "v11", "v12", "v13", "v14", "v15", "v16", "v14"}
+            if codec in {"v6", "v7", "v8", "v9", "v10", "v11", "v12", "v13", "v14", "v15", "v16", "v14", "v17"}
             else (),
             kinship_edges=_decode_object_list(
                 data["kinship_edges"],
                 _decode_kinship_edge,
                 path=f"{path}.kinship_edges",
             )
-            if codec in {"v8", "v9", "v10", "v11", "v12", "v13", "v14", "v15", "v16", "v14"}
+            if codec in {"v8", "v9", "v10", "v11", "v12", "v13", "v14", "v15", "v16", "v14", "v17"}
             else (),
             dependency_need_registers=_decode_object_list(
                 data["dependency_need_registers"],
                 _decode_dependency_need_register,
                 path=f"{path}.dependency_need_registers",
             )
-            if codec in {"v9", "v10", "v11", "v12", "v13", "v14", "v15", "v16", "v14"}
+            if codec in {"v9", "v10", "v11", "v12", "v13", "v14", "v15", "v16", "v14", "v17"}
             else (),
             repositories=_decode_object_list(
                 data["repositories"],
                 _decode_knowledge_repository,
                 path=f"{path}.repositories",
             )
-            if codec in {"v11", "v12", "v13", "v14", "v15", "v16", "v14"}
+            if codec in {"v11", "v12", "v13", "v14", "v15", "v16", "v14", "v17"}
             else (),
             corpse_custody_item_ids=_decode_entity_id_list(
                 data["corpse_custody_item_ids"],
                 path=f"{path}.corpse_custody_item_ids",
             )
-            if codec in {"v13", "v14", "v15", "v16"}
+            if codec in {"v13", "v14", "v15", "v16", "v17"}
             else (),
             exchange_offers=_decode_exchange_offers(data["exchange_offers"], path=path)
-            if codec in {"v15", "v16"}
+            if codec in {"v15", "v16", "v17"}
+            else (),
+            collective_projects=_decode_collective_projects(
+                data["collective_projects"], path=path
+            )
+            if codec == "v17"
             else (),
         )
     except PersistenceSerializationError:
@@ -1054,7 +1080,7 @@ def _decode_world_snapshot(data: dict[str, Any], *, path: str) -> WorldSnapshot:
     except (TypeError, ValueError) as exc:
         raise PersistenceSerializationError("malformed_id", path) from exc
     # Dual-key ≤v10 synthesizes empty repositories; v11 logs custody counts.
-    if codec in {"v11", "v12", "v13", "v14", "v15", "v16", "v14"}:
+    if codec in {"v11", "v12", "v13", "v14", "v15", "v16", "v14", "v17"}:
         custody = sum(
             1
             for item in snapshot.artifacts
@@ -1517,6 +1543,139 @@ def _decode_active_hazard(data: dict[str, Any], *, path: str) -> ActiveHazard:
         _nonneg_int_field(data, "start_tick", path=path),
         _nonneg_int_field(data, "duration_ticks", path=path),
     )
+
+
+def _encode_collective_project(value: object) -> dict[str, Any]:
+    from world.collective_projects import CollectiveProject
+
+    if type(value) is not CollectiveProject:
+        raise TypeError("collective project must be CollectiveProject")
+    return {
+        "contributions": [
+            {
+                "accepted": row.accepted,
+                "actor_id": row.actor_id.value,
+                "item_id": None if row.item_id is None else row.item_id.value,
+                "labor_delta": row.labor_delta,
+                "tick": row.tick,
+            }
+            for row in value.contributions
+        ],
+        "kind": value.kind.value,
+        "labor_done": value.labor_done,
+        "labor_required": value.labor_required,
+        "last_accepted_tick": value.last_accepted_tick,
+        "location_id": value.location_id.value,
+        "materials_done": value.materials_done,
+        "materials_required": value.materials_required,
+        "opened_tick": value.opened_tick,
+        "project_id": value.project_id.value,
+        "shortage_count": value.shortage_count,
+        "status": value.status.value,
+        "target_structure_id": (
+            None
+            if value.target_structure_id is None
+            else value.target_structure_id.value
+        ),
+    }
+
+
+def _decode_collective_projects(data: object, *, path: str) -> tuple[object, ...]:
+    from world.collective_projects import (
+        CollectiveProject,
+        CollectiveProjectKind,
+        CollectiveProjectStatus,
+        ProjectContribution,
+    )
+
+    if not isinstance(data, list):
+        raise PersistenceSerializationError(
+            "invalid_array", f"{path}.collective_projects"
+        )
+    rows = []
+    for index, raw in enumerate(data):
+        item_path = f"{path}.collective_projects[{index}]"
+        if not isinstance(raw, dict):
+            raise PersistenceSerializationError("invalid_object", item_path)
+        _require_keys(
+            raw,
+            {
+                "project_id",
+                "location_id",
+                "kind",
+                "status",
+                "labor_done",
+                "labor_required",
+                "materials_done",
+                "materials_required",
+                "opened_tick",
+                "last_accepted_tick",
+                "shortage_count",
+                "target_structure_id",
+                "contributions",
+            },
+            path=item_path,
+        )
+        contributions = []
+        raw_rows = raw["contributions"]
+        if not isinstance(raw_rows, list):
+            raise PersistenceSerializationError(
+                "invalid_array", f"{item_path}.contributions"
+            )
+        for row_index, row in enumerate(raw_rows):
+            row_path = f"{item_path}.contributions[{row_index}]"
+            if not isinstance(row, dict):
+                raise PersistenceSerializationError("invalid_object", row_path)
+            _require_keys(
+                row,
+                {"actor_id", "tick", "accepted", "labor_delta", "item_id"},
+                path=row_path,
+            )
+            item_raw = row["item_id"]
+            contributions.append(
+                ProjectContribution(
+                    actor_id=EntityId(_str_field(row, "actor_id", path=row_path)),
+                    tick=_nonneg_int_field(row, "tick", path=row_path),
+                    accepted=row["accepted"] is True,
+                    labor_delta=_nonneg_int_field(row, "labor_delta", path=row_path),
+                    item_id=(
+                        None
+                        if item_raw is None
+                        else EntityId(_str_field(row, "item_id", path=row_path))
+                    ),
+                )
+            )
+        target_raw = raw["target_structure_id"]
+        rows.append(
+            CollectiveProject(
+                project_id=EntityId(_str_field(raw, "project_id", path=item_path)),
+                location_id=EntityId(_str_field(raw, "location_id", path=item_path)),
+                kind=CollectiveProjectKind(_str_field(raw, "kind", path=item_path)),
+                status=CollectiveProjectStatus(
+                    _str_field(raw, "status", path=item_path)
+                ),
+                labor_done=_nonneg_int_field(raw, "labor_done", path=item_path),
+                labor_required=_nonneg_int_field(raw, "labor_required", path=item_path),
+                materials_done=_nonneg_int_field(raw, "materials_done", path=item_path),
+                materials_required=_nonneg_int_field(
+                    raw, "materials_required", path=item_path
+                ),
+                opened_tick=_nonneg_int_field(raw, "opened_tick", path=item_path),
+                last_accepted_tick=_nonneg_int_field(
+                    raw, "last_accepted_tick", path=item_path
+                ),
+                shortage_count=_nonneg_int_field(raw, "shortage_count", path=item_path),
+                contributions=tuple(contributions),
+                target_structure_id=(
+                    None
+                    if target_raw is None
+                    else EntityId(
+                        _str_field(raw, "target_structure_id", path=item_path)
+                    )
+                ),
+            )
+        )
+    return tuple(rows)
 
 
 def _encode_structure(value: Structure) -> dict[str, Any]:

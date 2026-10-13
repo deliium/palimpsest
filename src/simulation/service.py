@@ -145,6 +145,7 @@ class PersistentSimulationService:
             structured_commitments_active=self._engine.structured_commitments_active,
             subjective_valuation_active=self._engine.subjective_valuation_active,
             resource_exchange_profile_active=self._engine.resource_exchange_profile_active,
+            collective_projects_active=self._engine.collective_projects_active,
         )
         production_rows: dict[str, tuple[object, ...]] = {}
         if codec_version in {"v3", "v4", "v5", "v6", "v7"}:
@@ -161,12 +162,16 @@ class PersistentSimulationService:
             production_rows["lifecycle_records"] = tuple(
                 self._engine.lifecycle_records
             )
-        if codec_version in {"v13", "v14", "v15", "v16"}:
+        if codec_version in {"v13", "v14", "v15", "v16", "v17"}:
             production_rows["corpse_custody_item_ids"] = tuple(
                 sorted(state.corpse_custody_item_ids, key=lambda item: item.value)
             )
-        if codec_version in {"v15", "v16"}:
+        if codec_version in {"v15", "v16", "v17"}:
             production_rows["exchange_offers"] = tuple(state.exchange_offers)
+        if codec_version == "v17":
+            production_rows["collective_projects"] = tuple(
+                state.collective_projects.values()
+            )
         draft = WorldSnapshot(
             snapshot_id=snapshot_id,
             run_id=self._engine.run_id,
@@ -217,6 +222,7 @@ class PersistentSimulationService:
             lifecycle_records=draft.lifecycle_records,
             corpse_custody_item_ids=draft.corpse_custody_item_ids,
             exchange_offers=draft.exchange_offers,
+            collective_projects=draft.collective_projects,
         )
 
     async def resolve_tick(

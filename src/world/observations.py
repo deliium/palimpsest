@@ -92,6 +92,8 @@ __all__ = [
     "ObservationProvenance",
     "ObservationSourceKind",
     "ObservedArtifact",
+    "ObservedCollectiveProject",
+    "ObservedProjectContribution",
     "ObservedCommunication",
     "ObservedDependencyNeed",
     "ObservedDependencyNeeds",
@@ -1098,6 +1100,89 @@ class ExchangeVisibleHolding:
 
 
 @dataclass(frozen=True, slots=True)
+class ObservedProjectContribution:
+    """One visible attempt. The tail is not a leader."""
+
+    actor_id: EntityId
+    tick: int
+    accepted: bool
+    labor_delta: int
+    item_id: EntityId | None = None
+
+    def __post_init__(self) -> None:
+        if type(self.actor_id) is not EntityId:
+            raise TypeError("ObservedProjectContribution.actor_id must be EntityId")
+        if type(self.accepted) is not bool:
+            raise TypeError("ObservedProjectContribution.accepted must be bool")
+        object.__setattr__(
+            self,
+            "tick",
+            require_exact_nonneg_int("ObservedProjectContribution.tick", self.tick),
+        )
+        delta = require_exact_nonneg_int(
+            "ObservedProjectContribution.labor_delta", self.labor_delta
+        )
+        if delta not in {0, 1}:
+            raise ValueError("ObservedProjectContribution.labor_delta")
+        object.__setattr__(self, "labor_delta", delta)
+        if self.item_id is not None and type(self.item_id) is not EntityId:
+            raise TypeError(
+                "ObservedProjectContribution.item_id must be EntityId or None"
+            )
+
+
+@dataclass(frozen=True, slots=True)
+class ObservedCollectiveProject:
+    """A work site at the observer's location. Contributor order is the tail."""
+
+    project_id: EntityId
+    location_id: EntityId
+    kind: str
+    status: str
+    labor_done: int
+    materials_done: int
+    contributions: tuple[ObservedProjectContribution, ...] = ()
+
+    def __post_init__(self) -> None:
+        if type(self.project_id) is not EntityId:
+            raise TypeError("ObservedCollectiveProject.project_id must be EntityId")
+        if type(self.location_id) is not EntityId:
+            raise TypeError("ObservedCollectiveProject.location_id must be EntityId")
+        if type(self.kind) is not str or not self.kind:
+            raise TypeError("ObservedCollectiveProject.kind must be a non-empty str")
+        if type(self.status) is not str or not self.status:
+            raise TypeError("ObservedCollectiveProject.status must be a non-empty str")
+        object.__setattr__(
+            self,
+            "labor_done",
+            require_exact_nonneg_int(
+                "ObservedCollectiveProject.labor_done", self.labor_done
+            ),
+        )
+        object.__setattr__(
+            self,
+            "materials_done",
+            require_exact_nonneg_int(
+                "ObservedCollectiveProject.materials_done", self.materials_done
+            ),
+        )
+        if isinstance(self.contributions, (str, bytes)) or not isinstance(
+            self.contributions, Sequence
+        ):
+            raise TypeError(
+                "ObservedCollectiveProject.contributions must be a sequence"
+            )
+        rows = tuple(self.contributions)
+        for row in rows:
+            if type(row) is not ObservedProjectContribution:
+                raise TypeError(
+                    "ObservedCollectiveProject.contributions entries must be "
+                    "ObservedProjectContribution"
+                )
+        object.__setattr__(self, "contributions", rows)
+
+
+@dataclass(frozen=True, slots=True)
 class Observation:
     """Immutable tick-scoped agent observation with redacted projections only."""
 
@@ -1112,6 +1197,9 @@ class Observation:
     structures: Sequence[ObservedStructure] = field(default_factory=tuple)
     artifacts: Sequence[ObservedArtifact] = field(default_factory=tuple)
     repositories: Sequence[ObservedRepository] = field(default_factory=tuple)
+    collective_projects: Sequence[ObservedCollectiveProject] = field(
+        default_factory=tuple
+    )
     exits: Sequence[VisibleExit] = field(default_factory=tuple)
     visible_bodies: Sequence[VisibleBody] = field(default_factory=tuple)
     occurrences: Sequence[ObservedOccurrence] = field(default_factory=tuple)
@@ -1183,6 +1271,15 @@ class Observation:
                 "Observation.repositories",
                 self.repositories,
                 model_type=ObservedRepository,
+            ),
+        )
+        object.__setattr__(
+            self,
+            "collective_projects",
+            _copy_models(
+                "Observation.collective_projects",
+                self.collective_projects,
+                model_type=ObservedCollectiveProject,
             ),
         )
         object.__setattr__(

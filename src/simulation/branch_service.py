@@ -439,6 +439,7 @@ def rematerialize_snapshot(
         lifecycle_records=snapshot.lifecycle_records,
         corpse_custody_item_ids=snapshot.corpse_custody_item_ids,
         exchange_offers=snapshot.exchange_offers,
+        collective_projects=snapshot.collective_projects,
     )
     return WorldSnapshot(
         snapshot_id=draft.snapshot_id,
@@ -468,6 +469,7 @@ def rematerialize_snapshot(
         lifecycle_records=draft.lifecycle_records,
         corpse_custody_item_ids=draft.corpse_custody_item_ids,
         exchange_offers=draft.exchange_offers,
+        collective_projects=draft.collective_projects,
     )
 
 

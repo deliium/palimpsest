@@ -31,7 +31,9 @@ from world.actions import (
     Erase,
     AssertPossessionClaim,
     DeclareCommitment,
+    ContributeCollectiveProject,
     NegotiateExchange,
+    StartCollectiveProject,
     Experiment,
     EstablishRepository,
     Feed,
@@ -476,6 +478,26 @@ class _DeclareCommitmentOp:
 
 
 @dataclass(frozen=True, slots=True)
+class _StartCollectiveProjectOp:
+    request_id: RequestId
+    actor_id: EntityId
+    world_id: WorldId
+    base_revision: WorldRevision
+    project_kind: str
+    project_id: EntityId
+
+
+@dataclass(frozen=True, slots=True)
+class _ContributeCollectiveProjectOp:
+    request_id: RequestId
+    actor_id: EntityId
+    world_id: WorldId
+    base_revision: WorldRevision
+    project_id: EntityId
+    item_id: EntityId | None
+
+
+@dataclass(frozen=True, slots=True)
 class _NegotiateExchangeOp:
     request_id: RequestId
     actor_id: EntityId
@@ -539,6 +561,8 @@ ValidatedWorldOperation = (
     | _AssertPossessionClaimOp
     | _DeclareCommitmentOp
     | _NegotiateExchangeOp
+    | _StartCollectiveProjectOp
+    | _ContributeCollectiveProjectOp
 )
 
 _OPERATION_TYPES: Final[frozenset[type]] = frozenset(
@@ -581,6 +605,8 @@ _OPERATION_TYPES: Final[frozenset[type]] = frozenset(
         _AssertPossessionClaimOp,
         _DeclareCommitmentOp,
         _NegotiateExchangeOp,
+        _StartCollectiveProjectOp,
+        _ContributeCollectiveProjectOp,
     }
 )
 
@@ -996,6 +1022,22 @@ def validate_action_request(
                     ),
                 )
             )
+        case StartCollectiveProject(project_kind=project_kind):
+            return OperationAccepted(
+                _StartCollectiveProjectOp(
+                    *base,
+                    project_kind=project_kind,
+                    project_id=EntityId(f"project-{request.request_id.value}"),
+                )
+            )
+        case ContributeCollectiveProject(project_id=project_id, item_id=item_id):
+            return OperationAccepted(
+                _ContributeCollectiveProjectOp(
+                    *base,
+                    project_id=project_id,
+                    item_id=item_id,
+                )
+            )
         case NegotiateExchange(
             counterparty_id=counterparty_id,
             act=act,
@@ -1239,6 +1281,8 @@ def prepare_action_batch(
     possession_succession_context: object | None = None,
     structured_commitments_context: object | None = None,
     subjective_valuation_context: object | None = None,
+    collective_projects_context: object | None = None,
+    collective_project_draw: object | None = None,
 ) -> PendingBatch:
     """Resolve ordered requests into pending effects against one evolving state.
 
@@ -1395,6 +1439,15 @@ def prepare_action_batch(
                 request.actor_id.value,
                 getattr(request.command, "act", ""),
             )
+        if str(kind) in {
+            "start_collective_project",
+            "contribute_collective_project",
+        }:
+            rule_state = working
+            logging.getLogger("world._rules").debug(
+                "[FIX] collective_project_rule_state actor_id=%s working_batch=true",
+                request.actor_id.value,
+            )
         start_rule = evaluate_operation(
             rule_state,
             start_validation.operation,
@@ -1409,6 +1462,7 @@ def prepare_action_batch(
             possession_succession_context=possession_succession_context,
             structured_commitments_context=structured_commitments_context,
             subjective_valuation_context=subjective_valuation_context,
+            collective_projects_context=collective_projects_context,
         )
         if start_rule.disposition is RuleDisposition.REJECT:
             if start_rule.action_kind in {"feed", "transport"}:
@@ -1484,6 +1538,23 @@ def prepare_action_batch(
         actor_efficiency = None
         if efficiency_map is not None:
             actor_efficiency = efficiency_map.get(request.actor_id)
+        collective_success = None
+        if (
+            str(kind) == "contribute_collective_project"
+            and start_rule.disposition is RuleDisposition.MUTATE
+            and collective_project_draw is not None
+        ):
+            from world.collective_projects import classify_collective_contribute
+
+            coded = classify_collective_contribute(
+                working,
+                actor_id=request.actor_id,
+                project_id=request.command.project_id,
+                item_id=request.command.item_id,
+                context=collective_projects_context,
+            )
+            if coded is None:
+                collective_success = collective_project_draw(request, working)
         application = apply_operation(
             working,
             work_validation.operation,
@@ -1501,11 +1572,17 @@ def prepare_action_batch(
             possession_succession_context=possession_succession_context,
             structured_commitments_context=structured_commitments_context,
             subjective_valuation_context=subjective_valuation_context,
+            collective_projects_context=collective_projects_context,
+            collective_project_success=collective_success,
         )
         if application.result.disposition is RuleDisposition.REJECT:
             status = BatchItemStatus.CONFLICTED
             reason = "conflict_with_prior"
-            if application.result.action_kind == "negotiate_exchange":
+            if application.result.action_kind in {
+                "negotiate_exchange",
+                "start_collective_project",
+                "contribute_collective_project",
+            }:
                 status = BatchItemStatus.REJECTED
                 reason = application.result.reason.value
             outcomes.append(

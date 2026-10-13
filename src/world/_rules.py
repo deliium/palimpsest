@@ -32,7 +32,9 @@ from world._operations import (
     _EstablishRepositoryOp,
     _AssertPossessionClaimOp,
     _DeclareCommitmentOp,
+    _ContributeCollectiveProjectOp,
     _NegotiateExchangeOp,
+    _StartCollectiveProjectOp,
     _ExperimentOp,
     _FeedOp,
     _FleeOp,
@@ -155,6 +157,7 @@ from world.values import (
 )
 
 _OPS_LOG: Final[logging.Logger] = logging.getLogger("world._operations")
+_RULES_LOG: Final[logging.Logger] = logging.getLogger("world._rules")
 
 __all__: list[str] = [
     "COMMAND_RULE_MATRIX",
@@ -252,6 +255,13 @@ class RuleReason(StrEnum):
     COMMITMENT_HORIZON_INVALID = "commitment_horizon_invalid"
     COMMITMENT_COUNTERPARTY_INVALID = "commitment_counterparty_invalid"
     SUBJECTIVE_VALUATION_CHANNEL_OFF = "subjective_valuation_channel_off"
+    COLLECTIVE_PROJECTS_CHANNEL_OFF = "collective_projects_channel_off"
+    UNKNOWN_COLLECTIVE_PROJECT = "unknown_collective_project"
+    COLLECTIVE_PROJECT_LOCATION_BUSY = "collective_project_location_busy"
+    COLLECTIVE_PROJECT_CAP = "collective_project_cap"
+    COLLECTIVE_PROJECT_STORE_REQUIRED = "collective_project_store_required"
+    BRIDGE_ALREADY_PRESENT = "bridge_already_present"
+    RECORD_SITE_ALREADY_PRESENT = "record_site_already_present"
     EXCHANGE_OFFER_OPEN = "exchange_offer_open"
     EXCHANGE_EMPTY_SIDE = "exchange_empty_side"
     EXCHANGE_BUNDLE_LIMIT = "exchange_bundle_limit"
@@ -574,6 +584,20 @@ COMMAND_RULE_MATRIX: Final[dict[type, CommandRulePolicy]] = {
         requires_living_actor=True,
         notes="public possession assertion; does not move items",
     ),
+    _StartCollectiveProjectOp: CommandRulePolicy(
+        disposition=RuleDisposition.MUTATE,
+        emits_event_when_applied=True,
+        mutates_state_when_applied=True,
+        requires_living_actor=True,
+        notes="open a shared work site; no leader is assigned",
+    ),
+    _ContributeCollectiveProjectOp: CommandRulePolicy(
+        disposition=RuleDisposition.MUTATE,
+        emits_event_when_applied=True,
+        mutates_state_when_applied=True,
+        requires_living_actor=True,
+        notes="advance an open site with labor or one held item",
+    ),
     _NegotiateExchangeOp: CommandRulePolicy(
         disposition=RuleDisposition.MUTATE,
         emits_event_when_applied=True,
@@ -635,6 +659,8 @@ _OPERATION_KIND: Final[dict[type, str]] = {
     _AssertPossessionClaimOp: "assert_possession_claim",
     _DeclareCommitmentOp: "declare_commitment",
     _NegotiateExchangeOp: "negotiate_exchange",
+    _StartCollectiveProjectOp: "start_collective_project",
+    _ContributeCollectiveProjectOp: "contribute_collective_project",
     _ExperimentOp: "experiment",
 }
 
@@ -664,6 +690,7 @@ def evaluate_operation(
     possession_succession_context: object | None = None,
     structured_commitments_context: object | None = None,
     subjective_valuation_context: object | None = None,
+    collective_projects_context: object | None = None,
 ) -> RuleResult:
     """Evaluate a validated operation against an immutable snapshot.
 
@@ -941,6 +968,13 @@ def evaluate_operation(
         case _AssertPossessionClaimOp():
             return _evaluate_possession_claim(
                 state, operation, kind, succession_context=succession_context
+            )
+        case _StartCollectiveProjectOp() | _ContributeCollectiveProjectOp():
+            return _evaluate_collective_project(
+                state,
+                operation,
+                kind,
+                context=collective_projects_context,
             )
         case _NegotiateExchangeOp():
             return _evaluate_negotiate_exchange(
@@ -2804,6 +2838,8 @@ def apply_operation(
     possession_succession_context: object | None = None,
     structured_commitments_context: object | None = None,
     subjective_valuation_context: object | None = None,
+    collective_projects_context: object | None = None,
+    collective_project_success: bool | None = None,
 ) -> RuleApplication:
     """Evaluate then apply immutable physical or event-only effects.
 
@@ -2836,6 +2872,7 @@ def apply_operation(
         possession_succession_context=possession_succession_context,
         structured_commitments_context=structured_commitments_context,
         subjective_valuation_context=subjective_valuation_context,
+        collective_projects_context=collective_projects_context,
     )
     if result.disposition in {
         RuleDisposition.REJECT,
@@ -2933,6 +2970,14 @@ def apply_operation(
         )
     if type(operation) is _IndexRepositoryOp:
         return _apply_index_repository(state, operation, result=result)
+    if type(operation) in {_StartCollectiveProjectOp, _ContributeCollectiveProjectOp}:
+        return _apply_collective_project(
+            state,
+            operation,
+            result=result,
+            tick=0 if tick is None else tick,
+            success=collective_project_success,
+        )
     if type(operation) is _ExperimentOp:
         return _apply_experiment(
             state,
@@ -4925,6 +4970,131 @@ def _require_durable_records_context(
             "durable_records_context must be DurableRecordsRuleContext or None"
         )
     return value
+
+
+def _collective_context(value: object | None):
+    from world.collective_projects import CollectiveProjectsRuleContext
+
+    if value is None:
+        return None
+    if type(value) is not CollectiveProjectsRuleContext:
+        raise TypeError(
+            "collective_projects_context must be CollectiveProjectsRuleContext or None"
+        )
+    return value
+
+
+def _evaluate_collective_project(state, operation, kind: str, *, context: object | None):
+    from world.collective_projects import (
+        classify_collective_contribute,
+        classify_collective_start,
+    )
+
+    typed = _collective_context(context)
+    if type(operation) is _StartCollectiveProjectOp:
+        reason = classify_collective_start(
+            state,
+            actor_id=operation.actor_id,
+            project_kind=operation.project_kind,
+            context=typed,
+        )
+    else:
+        reason = classify_collective_contribute(
+            state,
+            actor_id=operation.actor_id,
+            project_id=operation.project_id,
+            item_id=operation.item_id,
+            context=typed,
+        )
+    if reason is None or reason == "shortage":
+        _RULES_LOG.debug(
+            "[FIX] collective_project_rule_state actor_id=%s working_batch=true",
+            operation.actor_id.value,
+        )
+        return RuleResult(
+            disposition=RuleDisposition.MUTATE,
+            reason=RuleReason.OCCURRENCE,
+            emits_event=True,
+            mutates_state=True,
+            action_kind=kind,
+        )
+    mapped = {
+        "collective_projects_channel_off": RuleReason.COLLECTIVE_PROJECTS_CHANNEL_OFF,
+        "unknown_collective_project": RuleReason.UNKNOWN_COLLECTIVE_PROJECT,
+        "collective_project_location_busy": RuleReason.COLLECTIVE_PROJECT_LOCATION_BUSY,
+        "collective_project_cap": RuleReason.COLLECTIVE_PROJECT_CAP,
+        "collective_project_store_required": (
+            RuleReason.COLLECTIVE_PROJECT_STORE_REQUIRED
+        ),
+        "bridge_already_present": RuleReason.BRIDGE_ALREADY_PRESENT,
+        "record_site_already_present": RuleReason.RECORD_SITE_ALREADY_PRESENT,
+        "shelter_already_present": RuleReason.SHELTER_ALREADY_PRESENT,
+        "store_already_present": RuleReason.STORE_ALREADY_PRESENT,
+        "not_at_location": RuleReason.NOT_AT_LOCATION,
+        "not_held": RuleReason.NOT_HELD,
+        "wrong_kind": RuleReason.WRONG_KIND,
+    }[reason]
+    from world.collective_projects import _log_reject
+
+    _log_reject(mapped.value)
+    return _reject(kind, mapped)
+
+
+def _apply_collective_project(
+    state: WorldState,
+    operation: ValidatedWorldOperation,
+    *,
+    result: RuleResult,
+    tick: int,
+    success: bool | None,
+):
+    from world.collective_projects import (
+        mutate_collective_contribute,
+        mutate_collective_shortage,
+        mutate_collective_start,
+    )
+
+    if type(operation) is _StartCollectiveProjectOp:
+        next_state, details = mutate_collective_start(
+            state,
+            actor_id=operation.actor_id,
+            project_kind=operation.project_kind,
+            project_id=operation.project_id,
+            tick=tick,
+        )
+        return RuleApplication(
+            result=result,
+            next_state=next_state,
+            event_details=details[0],
+        )
+    if operation.item_id is None and state.collective_projects[
+        operation.project_id
+    ].materials_done < state.collective_projects[
+        operation.project_id
+    ].materials_required:
+        next_state, details = mutate_collective_shortage(
+            state,
+            actor_id=operation.actor_id,
+            project_id=operation.project_id,
+        )
+        return RuleApplication(
+            result=result, next_state=next_state, event_details=details[0]
+        )
+    drawn = True if success is None else success
+    next_state, details = mutate_collective_contribute(
+        state,
+        actor_id=operation.actor_id,
+        project_id=operation.project_id,
+        item_id=operation.item_id,
+        tick=tick,
+        success=drawn,
+    )
+    return RuleApplication(
+        result=result,
+        next_state=next_state,
+        event_details=details[0],
+        extra_event_details=details[1:],
+    )
 
 
 def _exchange_reject(kind: str, reason: RuleReason) -> RuleResult:
