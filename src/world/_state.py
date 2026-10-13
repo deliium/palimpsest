@@ -10,6 +10,10 @@ from world.artifacts import (
     MAX_HELD_ARTIFACTS_PER_BODY,
     InformationArtifact,
 )
+from world.collective_projects import (
+    MAX_COLLECTIVE_PROJECTS,
+    CollectiveProject,
+)
 from world.environment import ActiveHazard
 from world.identifiers import (
     EntityId,
@@ -44,6 +48,7 @@ def rebuild_world_state(
     repositories: Mapping[EntityId, KnowledgeRepository] | None = None,
     corpse_custody_item_ids: frozenset[EntityId] | None = None,
     exchange_offers: tuple[ExchangeOffer, ...] | None = None,
+    collective_projects: Mapping[EntityId, CollectiveProject] | None = None,
 ) -> WorldState:
     """Build a new immutable snapshot with deterministic EntityId ordering."""
     if type(state) is not WorldState:
@@ -67,6 +72,11 @@ def rebuild_world_state(
         else corpse_custody_item_ids
     )
     offer_src = state.exchange_offers if exchange_offers is None else exchange_offers
+    project_src = (
+        state.collective_projects
+        if collective_projects is None
+        else collective_projects
+    )
     return WorldState(
         state.revision if revision is None else revision,
         locations=tuple(
@@ -108,6 +118,9 @@ def rebuild_world_state(
         ),
         corpse_custody_item_ids=custody_src,
         exchange_offers=offer_src,
+        collective_projects=tuple(
+            sorted(project_src.values(), key=lambda value: value.project_id.value)
+        ),
     )
 
 
@@ -168,6 +181,29 @@ def _validate_exchange_offers(
     return tuple(copied)
 
 
+def _index_collective_projects(
+    projects: Sequence[CollectiveProject],
+    *,
+    location_index: Mapping[EntityId, object],
+) -> Mapping[EntityId, CollectiveProject]:
+    if isinstance(projects, (str, bytes)) or not isinstance(projects, (tuple, list)):
+        raise TypeError("collective_projects must be a sequence of CollectiveProject")
+    if len(projects) > MAX_COLLECTIVE_PROJECTS:
+        raise ValueError("collective_projects exceeds the cap of 32")
+    indexed: dict[EntityId, CollectiveProject] = {}
+    for project in projects:
+        if type(project) is not CollectiveProject:
+            raise TypeError("collective_projects entries must be CollectiveProject")
+        if project.location_id not in location_index:
+            raise ValueError("CollectiveProject.location_id must reference a location")
+        if project.project_id in indexed:
+            raise ValueError(
+                f"duplicate collective project id {project.project_id.value!r}"
+            )
+        indexed[project.project_id] = project
+    return MappingProxyType(indexed)
+
+
 def _index_by_entity_id[T](
     name: str,
     values: Sequence[T],
@@ -195,6 +231,7 @@ class WorldState:
         "_artifacts",
         "_bodies",
         "_corpse_custody_item_ids",
+        "_collective_projects",
         "_exchange_offers",
         "_items",
         "_locations",
@@ -224,6 +261,7 @@ class WorldState:
         repositories: Sequence[object] = (),
         corpse_custody_item_ids: frozenset[EntityId] | Sequence[EntityId] = frozenset(),
         exchange_offers: tuple[ExchangeOffer, ...] | Sequence[ExchangeOffer] = (),
+        collective_projects: Sequence[CollectiveProject] = (),
     ) -> None:
         if type(revision) is not WorldRevision:
             raise TypeError("WorldState.revision must be WorldRevision")
@@ -301,6 +339,9 @@ class WorldState:
         self._exchange_offers = _validate_exchange_offers(
             exchange_offers, body_index=body_index
         )
+        self._collective_projects = _index_collective_projects(
+            collective_projects, location_index=location_index
+        )
         _LOG.debug(
             "world_state_constructed corpse_custody_count=%s exchange_offer_count=%s",
             len(self._corpse_custody_item_ids),
@@ -362,6 +403,10 @@ class WorldState:
     @property
     def exchange_offers(self) -> tuple[ExchangeOffer, ...]:
         return self._exchange_offers
+
+    @property
+    def collective_projects(self) -> Mapping[EntityId, CollectiveProject]:
+        return self._collective_projects
 
 
 class World:

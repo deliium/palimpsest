@@ -87,6 +87,8 @@ class ToolRole(StrEnum):
 class StructureKind(StrEnum):
     SHELTER = "shelter"
     STORE = "store"
+    BRIDGE = "bridge"
+    RECORD_SITE = "record_site"
 
 
 def _fail(field_name: str, code: str) -> ValueError:
