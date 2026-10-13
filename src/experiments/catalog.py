@@ -2766,6 +2766,7 @@ OFF_GATE_MATRIX_EXPERIMENT_IDS: Final[frozenset[str]] = frozenset(
         "structured_commitments@1",
         "subjective_exchange@1",
         "exchange_functions@1",
+        "collective_projects@1",
     }
 )
 
@@ -4971,6 +4972,148 @@ def experiment_av_exchange_functions(
         )
     return _definition(
         experiment_id="exchange_functions@1",
+        base=base,
+        seed_matrix=matrix,
+        arms=arms,
+    )
+
+
+_LEADER_ALIASES: Final[frozenset[str]] = frozenset(
+    {
+        "leader",
+        "leader_id",
+        "project_leader",
+        "foreman",
+        "chief",
+        "manager",
+        "coordinator_id",
+        "crew_boss",
+        "institution",
+        "work_crew",
+        "created_by",
+    }
+)
+
+
+def note_collective_project_arm(arm: str, projects: object) -> None:
+    """Log outcome counts after a scripted arm. Counts are not a crew label."""
+    rows = tuple(projects)
+    completed = 0
+    abandoned = 0
+    shortage = 0
+    for project in rows:
+        status = getattr(project.status, "value", project.status)
+        if status == "completed":
+            completed += 1
+        elif status == "abandoned":
+            abandoned += 1
+        shortage += int(project.shortage_count)
+    _LOG.debug(
+        "collective_project_arm arm=%s completed=%s abandoned=%s shortage=%s",
+        arm,
+        completed,
+        abandoned,
+        shortage,
+    )
+
+
+def experiment_aw_collective_projects(
+    base: SimulationRunnerConfig,
+    *,
+    seed_matrix: ExperimentSeedMatrix | None = None,
+    max_ticks: int = 8,
+) -> ExperimentDefinition:
+    """Off-gate Experiment AW. A contribution tail is not a leader."""
+    from dataclasses import fields
+
+    from agents.models import (
+        Goal,
+        GoalHorizon,
+        GoalId,
+        GoalOutcome,
+        GoalOutcomeKind,
+        GoalStatus,
+    )
+    from simulation.runner_models import (
+        RUNNER_SCHEMA_VERSION_V41,
+        RUNNER_SCHEMA_VERSION_V42,
+        CollectiveProjectsSpec,
+        example_collective_projects_spec,
+        example_resource_exchange_profile_spec,
+        example_subjective_valuation_spec,
+    )
+
+    matrix = seed_matrix or ExperimentSeedMatrix(seeds=(base.seed,))
+    projects = example_collective_projects_spec()
+    short_idle = CollectiveProjectsSpec(idle_ticks=1)
+
+    def _v42(spec: CollectiveProjectsSpec) -> SimulationRunnerConfig:
+        return replace(
+            base,
+            schema_version=RUNNER_SCHEMA_VERSION_V42,
+            mortality_mode=MortalityMode.DISABLED,
+            stop_policy=RunnerStopPolicy(max_ticks=max_ticks),
+            v3_capability_flags=V3CapabilityFlags(),
+            collective_projects=spec,
+            subjective_valuation=None,
+            resource_exchange_profile=None,
+            population_lifecycle=None,
+        )
+
+    channel_off = replace(
+        base,
+        schema_version=RUNNER_SCHEMA_VERSION_V41,
+        mortality_mode=MortalityMode.DISABLED,
+        stop_policy=RunnerStopPolicy(max_ticks=max_ticks),
+        v3_capability_flags=V3CapabilityFlags(),
+        subjective_valuation=example_subjective_valuation_spec(),
+        resource_exchange_profile=example_resource_exchange_profile_spec(),
+        collective_projects=None,
+        population_lifecycle=None,
+    )
+    single = _v42(projects)
+    if single.agents:
+        owner = single.agents[0]
+        goal = Goal(
+            goal_id=GoalId("goal-shelter"),
+            owner_id=owner.agent_id,
+            description="collective-project",
+            priority=0.5,
+            status=GoalStatus.ACTIVE,
+            outcome=GoalOutcome(
+                kind=GoalOutcomeKind.ACHIEVE_CODE,
+                outcome_code="collective_project:start:shared_shelter",
+            ),
+            horizon=GoalHorizon.CURRENT_INTENTION,
+        )
+        single = replace(
+            single,
+            agents=(replace(owner, initial_goals=(goal,)), *single.agents[1:]),
+        )
+    arms = (
+        ("aw-channel-off", "collective_projects_channel_off", channel_off),
+        ("aw-single-contributor", "collective_projects_single", single),
+        ("aw-two-contributors", "collective_projects_two", _v42(projects)),
+        ("aw-shortage", "collective_projects_shortage", _v42(projects)),
+        ("aw-abandoned", "collective_projects_abandoned", _v42(short_idle)),
+    )
+    for arm_id, _label, config in arms:
+        names = {item.name for item in fields(config)}
+        if config.collective_projects is not None:
+            names.update(item.name for item in fields(config.collective_projects))
+        blocked = sorted(names & _LEADER_ALIASES)
+        if blocked:
+            _LOG.warning(
+                "collective_project_arm_forbidden arm=%s alias=%s",
+                arm_id,
+                blocked[0],
+            )
+    _LOG.info(
+        "experiment_registered experiment_id=collective_projects@1 arms=%s",
+        len(arms),
+    )
+    return _definition(
+        experiment_id="collective_projects@1",
         base=base,
         seed_matrix=matrix,
         arms=arms,

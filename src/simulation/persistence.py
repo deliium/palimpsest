@@ -755,13 +755,13 @@ class WorldSnapshot:
             raise ValueError("production checkpoint fields require codec v3")
         if (
             self.persistence_codec_version
-            not in {"v4", "v5", "v6", "v7", "v8", "v9", "v10", "v11", "v12", "v13", "v14", "v15", "v16", "v14", "v17"}
+            not in {"v4", "v5", "v6", "v7", "v8", "v9", "v10", "v11", "v12", "v13", "v14", "v15", "v16", "v17"}
             and self.active_hazards
         ):
             raise ValueError("active_hazards require codec v4")
         if (
             self.persistence_codec_version
-            not in {"v5", "v6", "v7", "v8", "v9", "v10", "v11", "v12", "v13", "v14", "v15", "v16", "v14", "v17"}
+            not in {"v5", "v6", "v7", "v8", "v9", "v10", "v11", "v12", "v13", "v14", "v15", "v16", "v17"}
             and self.artifacts
         ):
             _LOG.error(
