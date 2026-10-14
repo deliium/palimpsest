@@ -32,8 +32,11 @@ from world.actions import (
     AssertPossessionClaim,
     DeclareCommitment,
     ContributeCollectiveProject,
+    MaintainPublicGood,
     NegotiateExchange,
+    OpposePublicGood,
     StartCollectiveProject,
+    UsePublicGood,
     Experiment,
     EstablishRepository,
     Feed,
@@ -498,6 +501,34 @@ class _ContributeCollectiveProjectOp:
 
 
 @dataclass(frozen=True, slots=True)
+class _UsePublicGoodOp:
+    request_id: RequestId
+    actor_id: EntityId
+    world_id: WorldId
+    base_revision: WorldRevision
+    project_id: EntityId
+
+
+@dataclass(frozen=True, slots=True)
+class _MaintainPublicGoodOp:
+    request_id: RequestId
+    actor_id: EntityId
+    world_id: WorldId
+    base_revision: WorldRevision
+    project_id: EntityId
+    item_id: EntityId | None
+
+
+@dataclass(frozen=True, slots=True)
+class _OpposePublicGoodOp:
+    request_id: RequestId
+    actor_id: EntityId
+    world_id: WorldId
+    base_revision: WorldRevision
+    project_id: EntityId
+
+
+@dataclass(frozen=True, slots=True)
 class _NegotiateExchangeOp:
     request_id: RequestId
     actor_id: EntityId
@@ -563,6 +594,9 @@ ValidatedWorldOperation = (
     | _NegotiateExchangeOp
     | _StartCollectiveProjectOp
     | _ContributeCollectiveProjectOp
+    | _UsePublicGoodOp
+    | _MaintainPublicGoodOp
+    | _OpposePublicGoodOp
 )
 
 _OPERATION_TYPES: Final[frozenset[type]] = frozenset(
@@ -607,6 +641,9 @@ _OPERATION_TYPES: Final[frozenset[type]] = frozenset(
         _NegotiateExchangeOp,
         _StartCollectiveProjectOp,
         _ContributeCollectiveProjectOp,
+        _UsePublicGoodOp,
+        _MaintainPublicGoodOp,
+        _OpposePublicGoodOp,
     }
 )
 
@@ -1038,6 +1075,20 @@ def validate_action_request(
                     item_id=item_id,
                 )
             )
+        case UsePublicGood(project_id=project_id):
+            return OperationAccepted(
+                _UsePublicGoodOp(*base, project_id=project_id)
+            )
+        case MaintainPublicGood(project_id=project_id, item_id=item_id):
+            return OperationAccepted(
+                _MaintainPublicGoodOp(
+                    *base, project_id=project_id, item_id=item_id
+                )
+            )
+        case OpposePublicGood(project_id=project_id):
+            return OperationAccepted(
+                _OpposePublicGoodOp(*base, project_id=project_id)
+            )
         case NegotiateExchange(
             counterparty_id=counterparty_id,
             act=act,
@@ -1283,6 +1334,8 @@ def prepare_action_batch(
     subjective_valuation_context: object | None = None,
     collective_projects_context: object | None = None,
     collective_project_draw: object | None = None,
+    public_goods_context: object | None = None,
+    public_good_maintain_draw: object | None = None,
 ) -> PendingBatch:
     """Resolve ordered requests into pending effects against one evolving state.
 
@@ -1442,6 +1495,9 @@ def prepare_action_batch(
         if str(kind) in {
             "start_collective_project",
             "contribute_collective_project",
+            "use_public_good",
+            "maintain_public_good",
+            "oppose_public_good",
         }:
             rule_state = working
             logging.getLogger("world._rules").debug(
@@ -1463,6 +1519,7 @@ def prepare_action_batch(
             structured_commitments_context=structured_commitments_context,
             subjective_valuation_context=subjective_valuation_context,
             collective_projects_context=collective_projects_context,
+            public_goods_context=public_goods_context,
         )
         if start_rule.disposition is RuleDisposition.REJECT:
             if start_rule.action_kind in {"feed", "transport"}:
@@ -1555,6 +1612,25 @@ def prepare_action_batch(
             )
             if coded is None:
                 collective_success = collective_project_draw(request, working)
+        maintain_success = None
+        if (
+            str(kind) == "maintain_public_good"
+            and start_rule.disposition is RuleDisposition.MUTATE
+            and public_good_maintain_draw is not None
+        ):
+            from world.collective_projects import classify_public_good
+
+            coded_maintain = classify_public_good(
+                working,
+                actor_id=request.actor_id,
+                project_id=request.command.project_id,
+                action="maintain",
+                item_id=request.command.item_id,
+                tick=0 if tick is None else tick,
+                context=public_goods_context,
+            )
+            if coded_maintain is None:
+                maintain_success = public_good_maintain_draw(request, working)
         application = apply_operation(
             working,
             work_validation.operation,
@@ -1574,6 +1650,8 @@ def prepare_action_batch(
             subjective_valuation_context=subjective_valuation_context,
             collective_projects_context=collective_projects_context,
             collective_project_success=collective_success,
+            public_goods_context=public_goods_context,
+            public_good_maintain_success=maintain_success,
         )
         if application.result.disposition is RuleDisposition.REJECT:
             status = BatchItemStatus.CONFLICTED
@@ -1582,6 +1660,9 @@ def prepare_action_batch(
                 "negotiate_exchange",
                 "start_collective_project",
                 "contribute_collective_project",
+                "use_public_good",
+                "maintain_public_good",
+                "oppose_public_good",
             }:
                 status = BatchItemStatus.REJECTED
                 reason = application.result.reason.value

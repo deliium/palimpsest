@@ -23,6 +23,8 @@ def test_each_kind_has_locked_labor_and_materials() -> None:
         CollectiveProjectKind.STORAGE: (2, ItemKind.MATERIAL, "wood", 1),
         CollectiveProjectKind.WINTER_RESERVE: (2, ItemKind.FOOD, None, 3),
         CollectiveProjectKind.RECORD_SITE: (3, ItemKind.MATERIAL, "wood", 2),
+        CollectiveProjectKind.WELL: (3, ItemKind.MATERIAL, "stone", 2),
+        CollectiveProjectKind.WARNING_POST: (2, ItemKind.MATERIAL, "wood", 1),
     }
     assert set(COLLECTIVE_PROJECT_CATALOG) == set(expected)
     for kind, (labor, material, name, count) in expected.items():

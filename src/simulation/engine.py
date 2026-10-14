@@ -18,6 +18,7 @@ from simulation.actions import (
     PHYSICAL_PURPOSE_ATTACK_DAMAGE,
     PHYSICAL_PURPOSE_ATTACK_HIT,
     PHYSICAL_PURPOSE_COLLECTIVE_PROJECT_SUCCESS,
+    PHYSICAL_PURPOSE_PUBLIC_GOOD_MAINTAIN,
     PHYSICAL_PURPOSE_FLEE_DESTINATION,
     PHYSICAL_PURPOSE_FLEE_SUCCESS,
     PHYSICAL_PURPOSE_PRODUCTION_SUCCESS,
@@ -299,6 +300,21 @@ def _bind_collective_projects_channel(engine: object, config: object) -> None:
         )
 
 
+def _bind_public_goods_channel(engine: object, config: object) -> None:
+    """Restore the public-goods channel from a config that may carry the spec."""
+    spec = getattr(config, "public_goods", None)
+    active = spec is not None
+    decay = 0 if spec is None else spec.decay_millis
+    engine._public_goods_active = active
+    engine._public_goods_decay_millis = decay
+    if active:
+        _LOGGER.info(
+            "public_goods_active=%s decay_millis=%s",
+            True,
+            decay,
+        )
+
+
 def _bind_resource_exchange_profile_channel(engine: object, config: object) -> None:
     """Restore the exchange-profile channel from a config that may carry the spec."""
     spec = getattr(config, "resource_exchange_profile", None)
@@ -357,6 +373,8 @@ class WorldEngine:
         "_resource_exchange_profile_active",
         "_collective_projects_active",
         "_collective_projects_idle_ticks",
+        "_public_goods_active",
+        "_public_goods_decay_millis",
         "_subjective_valuation_active",
         "_subjective_valuation_horizon",
         "_subjective_valuation_max_bundle",
@@ -407,6 +425,8 @@ class WorldEngine:
         resource_exchange_profile_active: bool = False,
         collective_projects_active: bool = False,
         collective_projects_idle_ticks: int = 4,
+        public_goods_active: bool = False,
+        public_goods_decay_millis: int = 0,
     ) -> None:
         if type(config) is not SimulationRunConfig:
             raise TypeError("WorldEngine requires SimulationRunConfig")
@@ -432,6 +452,7 @@ class WorldEngine:
             structured_commitments_active=structured_commitments_active,
             subjective_valuation_active=subjective_valuation_active,
             collective_projects_active=collective_projects_active,
+            public_goods_active=public_goods_active,
             repository_perception_mode=(
                 None
                 if knowledge_repositories_spec is None
@@ -513,6 +534,24 @@ class WorldEngine:
             raise ValueError("collective_projects_idle_ticks must be in [1, 64]")
         self._collective_projects_active = collective_projects_active
         self._collective_projects_idle_ticks = collective_projects_idle_ticks
+        if type(public_goods_active) is not bool:
+            raise TypeError("public_goods_active must be bool")
+        if type(public_goods_decay_millis) is not int or isinstance(
+            public_goods_decay_millis, bool
+        ):
+            raise TypeError("public_goods_decay_millis must be int")
+        if public_goods_decay_millis < 0 or public_goods_decay_millis > 250:
+            raise ValueError("public_goods_decay_millis must be in [0, 250]")
+        if public_goods_active and not collective_projects_active:
+            raise ValueError("public_goods requires collective_projects")
+        self._public_goods_active = public_goods_active
+        self._public_goods_decay_millis = public_goods_decay_millis
+        if public_goods_active:
+            _LOGGER.info(
+                "public_goods_active=%s decay_millis=%s",
+                True,
+                public_goods_decay_millis,
+            )
         if collective_projects_active:
             _LOGGER.debug(
                 "collective_projects_channel active=%s idle_ticks=%s",
@@ -860,11 +899,13 @@ class WorldEngine:
         _bind_subjective_valuation_channel(engine, snapshot.config)
         _bind_resource_exchange_profile_channel(engine, snapshot.config)
         _bind_collective_projects_channel(engine, snapshot.config)
+        _bind_public_goods_channel(engine, snapshot.config)
         engine._perception = PerceptionService(
             possession_succession_active=engine._possession_succession_active,
             structured_commitments_active=engine._structured_commitments_active,
             subjective_valuation_active=engine._subjective_valuation_active,
             collective_projects_active=engine._collective_projects_active,
+            public_goods_active=engine._public_goods_active,
         )
         engine._engine_id = derive_scoped_id(
             snapshot.config,
@@ -928,6 +969,7 @@ class WorldEngine:
         _bind_subjective_valuation_channel(engine, snapshot.config)
         _bind_resource_exchange_profile_channel(engine, snapshot.config)
         _bind_collective_projects_channel(engine, snapshot.config)
+        _bind_public_goods_channel(engine, snapshot.config)
         engine._environmental_dynamics = _optional_environmental_dynamics(
             environmental_dynamics
         )
@@ -1248,6 +1290,10 @@ class WorldEngine:
         return self._collective_projects_active
 
     @property
+    def public_goods_active(self) -> bool:
+        return self._public_goods_active
+
+    @property
     def knowledge_repositories_spec(self) -> object | None:
         return self._knowledge_repositories_spec
 
@@ -1338,6 +1384,7 @@ class WorldEngine:
             subjective_valuation_active=self.subjective_valuation_active,
                 resource_exchange_profile_active=self.resource_exchange_profile_active,
                 collective_projects_active=self.collective_projects_active,
+                public_goods_active=self._public_goods_active,
             )
             snap = self._snapshot
             same_tick = [
@@ -1588,6 +1635,7 @@ class WorldEngine:
             subjective_valuation_active=self.subjective_valuation_active,
                 resource_exchange_profile_active=self.resource_exchange_profile_active,
                 collective_projects_active=self.collective_projects_active,
+                public_goods_active=self._public_goods_active,
         )
         next_registrations = (*self._registrations, registration)
         self._registrations = next_registrations
@@ -3313,6 +3361,19 @@ class WorldEngine:
             structured_commitments_context=self._structured_commitments_rule_context(),
             subjective_valuation_context=self._subjective_valuation_rule_context(),
             collective_projects_context=self._collective_projects_rule_context(),
+            public_goods_context=self._public_goods_rule_context(),
+            public_good_maintain_draw=(
+                (
+                    lambda request, working: self._public_good_maintain_success(
+                        snap=snap,
+                        request=request,
+                        request_ordinals=request_ordinals,
+                        working_state=working,
+                    )
+                )
+                if self._public_goods_active
+                else None
+            ),
             collective_project_draw=(
                 (
                     lambda request, working: self._collective_project_success(
@@ -3379,6 +3440,12 @@ class WorldEngine:
                 tick=snap.tick.value,
                 idle_ticks=self._collective_projects_idle_ticks,
             )
+        if self._public_goods_active and self._public_goods_decay_millis > 0:
+            from world.collective_projects import decay_linked_structures
+
+            completion_state = decay_linked_structures(
+                completion_state, decay_millis=self._public_goods_decay_millis
+            )
 
         system_effects = self._resolve_system_effects(
             snap=snap,
@@ -3405,6 +3472,7 @@ class WorldEngine:
                 dependency_fatigue_extra_by_entity=dep_extras["fatigue"],
                 dependency_health_damage_by_entity=dep_extras["health"],
                 possession_succession_active=self.possession_succession_active,
+                public_goods_active=self._public_goods_active,
             )
         except ValueError as exc:
             message = str(exc)
@@ -3662,6 +3730,7 @@ class WorldEngine:
             subjective_valuation_active=self.subjective_valuation_active,
                 resource_exchange_profile_active=self.resource_exchange_profile_active,
                 collective_projects_active=self.collective_projects_active,
+                public_goods_active=self._public_goods_active,
         )
         prepared = finalize_pending_batch(
             merged,
@@ -5467,6 +5536,75 @@ class WorldEngine:
             snap.tick.value,
             ordinal,
             request.request_id.value,
+            success,
+        )
+        return success
+
+    def _public_goods_rule_context(self) -> object | None:
+        if not self._public_goods_active:
+            return None
+        from world.collective_projects import PublicGoodsRuleContext
+
+        return PublicGoodsRuleContext(
+            active=True,
+            decay_millis=self._public_goods_decay_millis,
+        )
+
+    def _public_good_maintain_success(
+        self,
+        *,
+        snap: _EngineSnapshot,
+        request: ActionRequest,
+        request_ordinals: dict[RequestId, tuple[int, AgentId]],
+        working_state: object,
+    ) -> bool:
+        """Draw ``public_good_maintain`` only when the chance is below 1."""
+        from world._production import adjusted_production_probability
+        from world._state import WorldState
+        from world.actions import MaintainPublicGood
+        from world.collective_projects import PUBLIC_GOOD_MAINTAIN_BASE_PROBABILITY
+        from world._skills import SkillDomain
+
+        if type(working_state) is not WorldState:
+            raise TypeError("working_state must be WorldState")
+        if type(request.command) is not MaintainPublicGood:
+            return True
+        probability = PUBLIC_GOOD_MAINTAIN_BASE_PROBABILITY
+        if (
+            self._skill_policy is not None
+            and self._skill_ledger is not None
+            and request.actor_id in self._skill_entity_ids
+        ):
+            level = self._skill_level(
+                request.actor_id,
+                SkillDomain.BUILDING,
+                ledger=self._skill_ledger,
+                tick=snap.tick,
+            )
+            probability = adjusted_production_probability(
+                probability,
+                level=level,
+                probability_gain=self._skill_policy.probability_gain,
+            )
+        if probability >= 1.0:
+            return True
+        ordinal, agent_id = request_ordinals[request.request_id]
+        scope = physical_action_effect_scope(
+            config=self._config,
+            run_id=self._run_id,
+            world_id=self.world_id,
+            tick=snap.tick,
+            ordinal=ordinal,
+            agent_id=agent_id,
+            purpose=PHYSICAL_PURPOSE_PUBLIC_GOOD_MAINTAIN,
+        )
+        success = sample_bernoulli(
+            create_named_stream(self._config, scope), probability
+        )
+        _LOGGER.debug(
+            "public_good_maintain_draw tick=%s ordinal=%s success=%s",
+            snap.tick.value,
+            ordinal,
             success,
         )
         return success

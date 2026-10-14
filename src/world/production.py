@@ -89,6 +89,8 @@ class StructureKind(StrEnum):
     STORE = "store"
     BRIDGE = "bridge"
     RECORD_SITE = "record_site"
+    WELL = "well"
+    WARNING_POST = "warning_post"
 
 
 def _fail(field_name: str, code: str) -> ValueError:

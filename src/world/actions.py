@@ -800,6 +800,8 @@ class StartCollectiveProject:
             "storage",
             "winter_reserve",
             "record_site",
+            "well",
+            "warning_post",
         }
         if self.project_kind not in allowed:
             raise ValueError("StartCollectiveProject.project_kind")
@@ -820,6 +822,49 @@ class ContributeCollectiveProject:
             raise TypeError("ContributeCollectiveProject.project_id must be EntityId")
         if self.item_id is not None and type(self.item_id) is not EntityId:
             raise TypeError("ContributeCollectiveProject.item_id must be EntityId")
+
+
+@dataclass(frozen=True, slots=True)
+class UsePublicGood:
+    """Draw a rival or well benefit. Presence goods reject this command."""
+
+    project_id: EntityId
+    kind: Literal["use_public_good"] = field(default="use_public_good", init=False)
+
+    def __post_init__(self) -> None:
+        if type(self.project_id) is not EntityId:
+            raise TypeError("UsePublicGood.project_id must be EntityId")
+
+
+@dataclass(frozen=True, slots=True)
+class MaintainPublicGood:
+    """Spend a repair attempt on a completed linked structure."""
+
+    project_id: EntityId
+    item_id: EntityId | None = None
+    kind: Literal["maintain_public_good"] = field(
+        default="maintain_public_good", init=False
+    )
+
+    def __post_init__(self) -> None:
+        if type(self.project_id) is not EntityId:
+            raise TypeError("MaintainPublicGood.project_id must be EntityId")
+        if self.item_id is not None and type(self.item_id) is not EntityId:
+            raise TypeError("MaintainPublicGood.item_id must be EntityId")
+
+
+@dataclass(frozen=True, slots=True)
+class OpposePublicGood:
+    """Record opposition. A completed link also loses repair integrity."""
+
+    project_id: EntityId
+    kind: Literal["oppose_public_good"] = field(
+        default="oppose_public_good", init=False
+    )
+
+    def __post_init__(self) -> None:
+        if type(self.project_id) is not EntityId:
+            raise TypeError("OpposePublicGood.project_id must be EntityId")
 
 
 @dataclass(frozen=True, slots=True)
@@ -896,6 +941,9 @@ AgentCommand = (
     | NegotiateExchange
     | StartCollectiveProject
     | ContributeCollectiveProject
+    | UsePublicGood
+    | MaintainPublicGood
+    | OpposePublicGood
 )
 
 _COMMAND_TYPES: Final[frozenset[type]] = frozenset(
@@ -940,6 +988,9 @@ _COMMAND_TYPES: Final[frozenset[type]] = frozenset(
         NegotiateExchange,
         StartCollectiveProject,
         ContributeCollectiveProject,
+        UsePublicGood,
+        MaintainPublicGood,
+        OpposePublicGood,
     }
 )
 

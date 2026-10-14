@@ -33,7 +33,10 @@ from world._operations import (
     _AssertPossessionClaimOp,
     _DeclareCommitmentOp,
     _ContributeCollectiveProjectOp,
+    _MaintainPublicGoodOp,
     _NegotiateExchangeOp,
+    _OpposePublicGoodOp,
+    _UsePublicGoodOp,
     _StartCollectiveProjectOp,
     _ExperimentOp,
     _FeedOp,
@@ -262,6 +265,16 @@ class RuleReason(StrEnum):
     COLLECTIVE_PROJECT_STORE_REQUIRED = "collective_project_store_required"
     BRIDGE_ALREADY_PRESENT = "bridge_already_present"
     RECORD_SITE_ALREADY_PRESENT = "record_site_already_present"
+    PUBLIC_GOODS_CHANNEL_OFF = "public_goods_channel_off"
+    NOT_A_PUBLIC_GOOD = "not_a_public_good"
+    PUBLIC_GOOD_NOT_READY = "public_good_not_ready"
+    PUBLIC_GOOD_INERT = "public_good_inert"
+    PUBLIC_GOOD_EMPTY = "public_good_empty"
+    PUBLIC_GOOD_ALREADY_DRAWN = "public_good_already_drawn"
+    PUBLIC_GOOD_ALREADY_OPPOSED = "public_good_already_opposed"
+    PUBLIC_GOOD_PRESENCE_ONLY = "public_good_presence_only"
+    WELL_ALREADY_PRESENT = "well_already_present"
+    WARNING_POST_ALREADY_PRESENT = "warning_post_already_present"
     EXCHANGE_OFFER_OPEN = "exchange_offer_open"
     EXCHANGE_EMPTY_SIDE = "exchange_empty_side"
     EXCHANGE_BUNDLE_LIMIT = "exchange_bundle_limit"
@@ -598,6 +611,27 @@ COMMAND_RULE_MATRIX: Final[dict[type, CommandRulePolicy]] = {
         requires_living_actor=True,
         notes="advance an open site with labor or one held item",
     ),
+    _UsePublicGoodOp: CommandRulePolicy(
+        disposition=RuleDisposition.MUTATE,
+        emits_event_when_applied=True,
+        mutates_state_when_applied=True,
+        requires_living_actor=True,
+        notes="draw a shared store or well; no contribution test",
+    ),
+    _MaintainPublicGoodOp: CommandRulePolicy(
+        disposition=RuleDisposition.MUTATE,
+        emits_event_when_applied=True,
+        mutates_state_when_applied=True,
+        requires_living_actor=True,
+        notes="repair attempt on a completed linked structure",
+    ),
+    _OpposePublicGoodOp: CommandRulePolicy(
+        disposition=RuleDisposition.MUTATE,
+        emits_event_when_applied=True,
+        mutates_state_when_applied=True,
+        requires_living_actor=True,
+        notes="record opposition without grading the actor",
+    ),
     _NegotiateExchangeOp: CommandRulePolicy(
         disposition=RuleDisposition.MUTATE,
         emits_event_when_applied=True,
@@ -661,6 +695,9 @@ _OPERATION_KIND: Final[dict[type, str]] = {
     _NegotiateExchangeOp: "negotiate_exchange",
     _StartCollectiveProjectOp: "start_collective_project",
     _ContributeCollectiveProjectOp: "contribute_collective_project",
+    _UsePublicGoodOp: "use_public_good",
+    _MaintainPublicGoodOp: "maintain_public_good",
+    _OpposePublicGoodOp: "oppose_public_good",
     _ExperimentOp: "experiment",
 }
 
@@ -691,6 +728,7 @@ def evaluate_operation(
     structured_commitments_context: object | None = None,
     subjective_valuation_context: object | None = None,
     collective_projects_context: object | None = None,
+    public_goods_context: object | None = None,
 ) -> RuleResult:
     """Evaluate a validated operation against an immutable snapshot.
 
@@ -975,6 +1013,15 @@ def evaluate_operation(
                 operation,
                 kind,
                 context=collective_projects_context,
+                public_goods=public_goods_context,
+            )
+        case _UsePublicGoodOp() | _MaintainPublicGoodOp() | _OpposePublicGoodOp():
+            return _evaluate_public_good(
+                state,
+                operation,
+                kind,
+                tick=0 if tick is None else tick,
+                context=public_goods_context,
             )
         case _NegotiateExchangeOp():
             return _evaluate_negotiate_exchange(
@@ -2840,6 +2887,8 @@ def apply_operation(
     subjective_valuation_context: object | None = None,
     collective_projects_context: object | None = None,
     collective_project_success: bool | None = None,
+    public_goods_context: object | None = None,
+    public_good_maintain_success: bool | None = None,
 ) -> RuleApplication:
     """Evaluate then apply immutable physical or event-only effects.
 
@@ -2873,6 +2922,7 @@ def apply_operation(
         structured_commitments_context=structured_commitments_context,
         subjective_valuation_context=subjective_valuation_context,
         collective_projects_context=collective_projects_context,
+        public_goods_context=public_goods_context,
     )
     if result.disposition in {
         RuleDisposition.REJECT,
@@ -2977,6 +3027,23 @@ def apply_operation(
             result=result,
             tick=0 if tick is None else tick,
             success=collective_project_success,
+            public_goods_active=public_goods_context is not None
+            and getattr(public_goods_context, "active", False),
+            decay_millis=0
+            if public_goods_context is None
+            else int(getattr(public_goods_context, "decay_millis", 0)),
+        )
+    if type(operation) in {
+        _UsePublicGoodOp,
+        _MaintainPublicGoodOp,
+        _OpposePublicGoodOp,
+    }:
+        return _apply_public_good(
+            state,
+            operation,
+            result=result,
+            tick=0 if tick is None else tick,
+            success=public_good_maintain_success,
         )
     if type(operation) is _ExperimentOp:
         return _apply_experiment(
@@ -4984,7 +5051,9 @@ def _collective_context(value: object | None):
     return value
 
 
-def _evaluate_collective_project(state, operation, kind: str, *, context: object | None):
+def _evaluate_collective_project(
+    state, operation, kind: str, *, context: object | None, public_goods: object | None = None
+):
     from world.collective_projects import (
         classify_collective_contribute,
         classify_collective_start,
@@ -4997,6 +5066,7 @@ def _evaluate_collective_project(state, operation, kind: str, *, context: object
             actor_id=operation.actor_id,
             project_kind=operation.project_kind,
             context=typed,
+            public_goods=public_goods,
         )
     else:
         reason = classify_collective_contribute(
@@ -5030,6 +5100,9 @@ def _evaluate_collective_project(state, operation, kind: str, *, context: object
         "record_site_already_present": RuleReason.RECORD_SITE_ALREADY_PRESENT,
         "shelter_already_present": RuleReason.SHELTER_ALREADY_PRESENT,
         "store_already_present": RuleReason.STORE_ALREADY_PRESENT,
+        "well_already_present": RuleReason.WELL_ALREADY_PRESENT,
+        "warning_post_already_present": RuleReason.WARNING_POST_ALREADY_PRESENT,
+        "public_goods_channel_off": RuleReason.PUBLIC_GOODS_CHANNEL_OFF,
         "not_at_location": RuleReason.NOT_AT_LOCATION,
         "not_held": RuleReason.NOT_HELD,
         "wrong_kind": RuleReason.WRONG_KIND,
@@ -5047,6 +5120,8 @@ def _apply_collective_project(
     result: RuleResult,
     tick: int,
     success: bool | None,
+    public_goods_active: bool = False,
+    decay_millis: int = 0,
 ):
     from world.collective_projects import (
         mutate_collective_contribute,
@@ -5088,7 +5163,102 @@ def _apply_collective_project(
         item_id=operation.item_id,
         tick=tick,
         success=drawn,
+        public_goods_active=public_goods_active,
+        decay_millis=decay_millis,
     )
+    return RuleApplication(
+        result=result,
+        next_state=next_state,
+        event_details=details[0],
+        extra_event_details=details[1:],
+    )
+
+
+def _evaluate_public_good(state, operation, kind: str, *, tick: int, context: object | None):
+    from world.collective_projects import _log_public_reject, classify_public_good
+
+    if type(operation) is _UsePublicGoodOp:
+        action = "use"
+        item_id = None
+    elif type(operation) is _MaintainPublicGoodOp:
+        action = "maintain"
+        item_id = operation.item_id
+    else:
+        action = "oppose"
+        item_id = None
+    reason = classify_public_good(
+        state,
+        actor_id=operation.actor_id,
+        project_id=operation.project_id,
+        action=action,
+        item_id=item_id,
+        tick=tick,
+        context=context,
+    )
+    if reason is None:
+        return RuleResult(
+            disposition=RuleDisposition.MUTATE,
+            reason=RuleReason.OCCURRENCE,
+            emits_event=True,
+            mutates_state=True,
+            action_kind=kind,
+        )
+    mapped = {
+        "public_goods_channel_off": RuleReason.PUBLIC_GOODS_CHANNEL_OFF,
+        "unknown_collective_project": RuleReason.UNKNOWN_COLLECTIVE_PROJECT,
+        "not_a_public_good": RuleReason.NOT_A_PUBLIC_GOOD,
+        "not_at_location": RuleReason.NOT_AT_LOCATION,
+        "public_good_not_ready": RuleReason.PUBLIC_GOOD_NOT_READY,
+        "public_good_inert": RuleReason.PUBLIC_GOOD_INERT,
+        "public_good_empty": RuleReason.PUBLIC_GOOD_EMPTY,
+        "public_good_already_drawn": RuleReason.PUBLIC_GOOD_ALREADY_DRAWN,
+        "public_good_already_opposed": RuleReason.PUBLIC_GOOD_ALREADY_OPPOSED,
+        "public_good_presence_only": RuleReason.PUBLIC_GOOD_PRESENCE_ONLY,
+        "not_held": RuleReason.NOT_HELD,
+        "wrong_kind": RuleReason.WRONG_KIND,
+    }[reason]
+    _log_public_reject(mapped.value)
+    return _reject(kind, mapped)
+
+
+def _apply_public_good(
+    state: WorldState,
+    operation: ValidatedWorldOperation,
+    *,
+    result: RuleResult,
+    tick: int,
+    success: bool | None,
+):
+    from world.collective_projects import (
+        mutate_public_maintain,
+        mutate_public_oppose,
+        mutate_public_use,
+    )
+
+    if type(operation) is _UsePublicGoodOp:
+        next_state, details = mutate_public_use(
+            state,
+            actor_id=operation.actor_id,
+            project_id=operation.project_id,
+            tick=tick,
+        )
+    elif type(operation) is _MaintainPublicGoodOp:
+        drawn = True if success is None else success
+        next_state, details = mutate_public_maintain(
+            state,
+            actor_id=operation.actor_id,
+            project_id=operation.project_id,
+            item_id=operation.item_id,
+            tick=tick,
+            success=drawn,
+        )
+    else:
+        next_state, details = mutate_public_oppose(
+            state,
+            actor_id=operation.actor_id,
+            project_id=operation.project_id,
+            tick=tick,
+        )
     return RuleApplication(
         result=result,
         next_state=next_state,

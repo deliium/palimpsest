@@ -33,7 +33,7 @@ def test_semantic_event_count_is_47() -> None:
 
 def test_agent_command_count_includes_durable_commands() -> None:
     commands = get_args(AgentCommand)
-    assert len(commands) == 40
+    assert len(commands) == 43
     assert Experiment in commands
     assert CopyRecord in commands
     assert AnnotateRecord in commands

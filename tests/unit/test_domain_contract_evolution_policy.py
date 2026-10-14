@@ -40,8 +40,10 @@ from world.actions import (
     Help,
     IndexRepository,
     Inscribe,
+    MaintainPublicGood,
     MaintainRepository,
     Move,
+    OpposePublicGood,
     NegotiateExchange,
     Repair,
     RetrieveRecord,
@@ -54,6 +56,7 @@ from world.actions import (
     Tell,
     TransferArtifact,
     Transport,
+    UsePublicGood,
     Wait,
     require_agent_command,
 )
@@ -106,6 +109,9 @@ _CLOSED_COMMAND_TYPES: frozenset[type] = frozenset(
         NegotiateExchange,
         StartCollectiveProject,
         ContributeCollectiveProject,
+        UsePublicGood,
+        MaintainPublicGood,
+        OpposePublicGood,
     }
 )
 
@@ -148,7 +154,7 @@ _PARITY_GATE = (
 
 
 def test_agent_command_set_remains_closed_at_thirty_five() -> None:
-    assert len(_CLOSED_COMMAND_TYPES) == 40
+    assert len(_CLOSED_COMMAND_TYPES) == 43
     from world import actions as actions_mod
 
     # Mirror the public union membership without constructing parameterized commands.
@@ -193,6 +199,9 @@ def test_agent_command_set_remains_closed_at_thirty_five() -> None:
         NegotiateExchange,
         StartCollectiveProject,
         ContributeCollectiveProject,
+        UsePublicGood,
+        MaintainPublicGood,
+        OpposePublicGood,
     }
     assert asserted == _CLOSED_COMMAND_TYPES
     assert hasattr(actions_mod, "AgentCommand")

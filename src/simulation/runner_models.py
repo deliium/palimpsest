@@ -124,6 +124,7 @@ RUNNER_SCHEMA_VERSION_V39: Final[str] = "runner-config-v39"
 RUNNER_SCHEMA_VERSION_V40: Final[str] = "runner-config-v40"
 RUNNER_SCHEMA_VERSION_V41: Final[str] = "runner-config-v41"
 RUNNER_SCHEMA_VERSION_V42: Final[str] = "runner-config-v42"
+RUNNER_SCHEMA_VERSION_V43: Final[str] = "runner-config-v43"
 RUNNER_SCHEMA_VERSION: Final[str] = RUNNER_SCHEMA_VERSION_V4
 SUPPORTED_RUNNER_SCHEMA_VERSIONS: Final[frozenset[str]] = frozenset(
     {
@@ -169,6 +170,7 @@ SUPPORTED_RUNNER_SCHEMA_VERSIONS: Final[frozenset[str]] = frozenset(
     RUNNER_SCHEMA_VERSION_V40,
     RUNNER_SCHEMA_VERSION_V41,
     RUNNER_SCHEMA_VERSION_V42,
+    RUNNER_SCHEMA_VERSION_V43,
     }
 )
 RESULT_SCHEMA_VERSION_V1: Final[str] = "runner-result-v1"
@@ -717,6 +719,7 @@ _SKILL_SCHEMAS: Final[frozenset[str]] = frozenset(
     RUNNER_SCHEMA_VERSION_V40,
     RUNNER_SCHEMA_VERSION_V41,
     RUNNER_SCHEMA_VERSION_V42,
+    RUNNER_SCHEMA_VERSION_V43,
     }
 )
 
@@ -2846,6 +2849,7 @@ _HISTORICAL_MEMORY_CULTURAL_SCHEMAS: Final[frozenset[str]] = frozenset(
     RUNNER_SCHEMA_VERSION_V40,
     RUNNER_SCHEMA_VERSION_V41,
     RUNNER_SCHEMA_VERSION_V42,
+    RUNNER_SCHEMA_VERSION_V43,
     }
 )
 _DURABLE_RECORDS_SCHEMAS: Final[frozenset[str]] = frozenset(
@@ -2860,6 +2864,7 @@ _DURABLE_RECORDS_SCHEMAS: Final[frozenset[str]] = frozenset(
     RUNNER_SCHEMA_VERSION_V40,
     RUNNER_SCHEMA_VERSION_V41,
     RUNNER_SCHEMA_VERSION_V42,
+    RUNNER_SCHEMA_VERSION_V43,
     }
 )
 _HISTORICAL_MEMORY_LAYER_SCHEMAS: Final[frozenset[str]] = frozenset(
@@ -2875,6 +2880,7 @@ _HISTORICAL_MEMORY_LAYER_SCHEMAS: Final[frozenset[str]] = frozenset(
     RUNNER_SCHEMA_VERSION_V40,
     RUNNER_SCHEMA_VERSION_V41,
     RUNNER_SCHEMA_VERSION_V42,
+    RUNNER_SCHEMA_VERSION_V43,
     }
 )
 _KNOWLEDGE_REPOSITORIES_SCHEMAS: Final[frozenset[str]] = frozenset(
@@ -2888,6 +2894,7 @@ _KNOWLEDGE_REPOSITORIES_SCHEMAS: Final[frozenset[str]] = frozenset(
     RUNNER_SCHEMA_VERSION_V40,
     RUNNER_SCHEMA_VERSION_V41,
     RUNNER_SCHEMA_VERSION_V42,
+    RUNNER_SCHEMA_VERSION_V43,
     }
 )
 _KNOWLEDGE_GENEALOGY_SCHEMAS: Final[frozenset[str]] = frozenset(
@@ -2900,6 +2907,7 @@ _KNOWLEDGE_GENEALOGY_SCHEMAS: Final[frozenset[str]] = frozenset(
         RUNNER_SCHEMA_VERSION_V40,
         RUNNER_SCHEMA_VERSION_V41,
         RUNNER_SCHEMA_VERSION_V42,
+        RUNNER_SCHEMA_VERSION_V43,
     }
 )
 
@@ -4949,6 +4957,95 @@ def example_collective_projects_spec() -> CollectiveProjectsSpec:
     return CollectiveProjectsSpec()
 
 
+PUBLIC_GOODS_POLICY_ID: Final[str] = "public-goods-v1"
+_PUBLIC_GOODS_FORBIDDEN_ALIASES: Final[frozenset[str]] = frozenset(
+    {
+        "free_rider",
+        "freerider",
+        "free_rider_id",
+        "cheater",
+        "selfish",
+        "guilty",
+        "fair",
+        "unfair",
+        "deserved",
+        "sanction",
+        "punish",
+        "punishment",
+        "exclude",
+        "exclusion",
+        "toll",
+        "wage",
+        "membership",
+        "leader",
+        "leader_id",
+        "project_leader",
+        "foreman",
+        "chief",
+        "manager",
+        "coordinator_id",
+        "crew_boss",
+        "institution",
+        "work_crew",
+        "created_by",
+        "archive",
+        "library",
+    }
+)
+
+
+@dataclass(frozen=True, slots=True)
+class PublicGoodsSpec:
+    """Opt-in shared benefit on a finished collective project.
+
+    Absent object leaves collective projects on the v3-20 baseline. The
+    engine does not grade who benefits.
+    """
+
+    policy_id: str = PUBLIC_GOODS_POLICY_ID
+    decay_millis: int = 0
+
+    def __post_init__(self) -> None:
+        policy = require_stable_id("PublicGoodsSpec.policy_id", self.policy_id)
+        if policy != PUBLIC_GOODS_POLICY_ID:
+            _LOGGER.info(
+                "public_goods_policy_invalid reason_code=public_goods_policy_invalid"
+            )
+            _LOGGER.error(
+                "public_goods_policy_invalid reason_code=public_goods_policy_invalid"
+            )
+            raise ValueError(
+                "policy_id must be public-goods-v1 (code=public_goods_policy_invalid)"
+            )
+        object.__setattr__(self, "policy_id", policy)
+        decay = require_exact_nonneg_int("decay_millis", self.decay_millis)
+        if decay > 250:
+            _LOGGER.info(
+                "public_goods_decay_millis_invalid "
+                "reason_code=public_goods_decay_millis_invalid"
+            )
+            _LOGGER.error(
+                "public_goods_decay_millis_invalid "
+                "reason_code=public_goods_decay_millis_invalid"
+            )
+            raise ValueError(
+                "decay_millis must be in [0, 250] "
+                "(code=public_goods_decay_millis_invalid)"
+            )
+        object.__setattr__(self, "decay_millis", decay)
+
+    def canonical_payload(self) -> dict[str, object]:
+        return {
+            "decay_millis": self.decay_millis,
+            "policy_id": self.policy_id,
+        }
+
+
+def example_public_goods_spec() -> PublicGoodsSpec:
+    """Reference public-goods spec for tests."""
+    return PublicGoodsSpec()
+
+
 def example_technique_lifecycle_spec(
     *,
     material_anchors: tuple[TechniqueMaterialAnchor, ...] = (),
@@ -6640,6 +6737,7 @@ class SimulationRunnerConfig:
     subjective_valuation: SubjectiveValuationSpec | None = None
     resource_exchange_profile: ResourceExchangeProfileSpec | None = None
     collective_projects: CollectiveProjectsSpec | None = None
+    public_goods: PublicGoodsSpec | None = None
 
     def __post_init__(self) -> None:
         # Late import avoids circular import with new_agent_initialization.
@@ -6840,6 +6938,7 @@ class SimulationRunnerConfig:
     RUNNER_SCHEMA_VERSION_V40,
     RUNNER_SCHEMA_VERSION_V41,
     RUNNER_SCHEMA_VERSION_V42,
+    RUNNER_SCHEMA_VERSION_V43,
         }
         if (
             self.v3_capability_flags.generational_population
@@ -6874,6 +6973,7 @@ class SimulationRunnerConfig:
     RUNNER_SCHEMA_VERSION_V40,
     RUNNER_SCHEMA_VERSION_V41,
     RUNNER_SCHEMA_VERSION_V42,
+    RUNNER_SCHEMA_VERSION_V43,
         }
         if self.v3_capability_flags.kinship_inheritance:
             if self.schema_version not in _kinship_schemas:
@@ -6925,6 +7025,7 @@ class SimulationRunnerConfig:
     RUNNER_SCHEMA_VERSION_V40,
     RUNNER_SCHEMA_VERSION_V41,
     RUNNER_SCHEMA_VERSION_V42,
+    RUNNER_SCHEMA_VERSION_V43,
             }:
                 _LOGGER.error(
                     "dependency_care_requires_v28 schema_version=%s "
@@ -6983,6 +7084,7 @@ class SimulationRunnerConfig:
     RUNNER_SCHEMA_VERSION_V40,
     RUNNER_SCHEMA_VERSION_V41,
     RUNNER_SCHEMA_VERSION_V42,
+    RUNNER_SCHEMA_VERSION_V43,
             }:
                 _LOGGER.error(
                     "developmental_learning_requires_v29 schema_version=%s "
@@ -7053,6 +7155,7 @@ class SimulationRunnerConfig:
     RUNNER_SCHEMA_VERSION_V40,
     RUNNER_SCHEMA_VERSION_V41,
     RUNNER_SCHEMA_VERSION_V42,
+    RUNNER_SCHEMA_VERSION_V43,
             }:
                 _LOGGER.error(
                     "mentorship_requires_v30 schema_version=%s "
@@ -7164,6 +7267,7 @@ class SimulationRunnerConfig:
                 RUNNER_SCHEMA_VERSION_V40,
                 RUNNER_SCHEMA_VERSION_V41,
                 RUNNER_SCHEMA_VERSION_V42,
+                RUNNER_SCHEMA_VERSION_V43,
             }:
                 _LOGGER.error(
                     "technique_lifecycle_requires_v37 schema_version=%s "
@@ -7243,6 +7347,7 @@ class SimulationRunnerConfig:
     RUNNER_SCHEMA_VERSION_V40,
     RUNNER_SCHEMA_VERSION_V41,
     RUNNER_SCHEMA_VERSION_V42,
+    RUNNER_SCHEMA_VERSION_V43,
             }
             and self.v3_capability_flags.cultural_historical_memory
         ):
@@ -7520,6 +7625,7 @@ class SimulationRunnerConfig:
             RUNNER_SCHEMA_VERSION_V40,
             RUNNER_SCHEMA_VERSION_V41,
             RUNNER_SCHEMA_VERSION_V42,
+            RUNNER_SCHEMA_VERSION_V43,
         }
         if self.bounded_experimentation is not None:
             if self.schema_version not in _experiment_schemas:
@@ -7647,6 +7753,7 @@ class SimulationRunnerConfig:
                 RUNNER_SCHEMA_VERSION_V40,
                 RUNNER_SCHEMA_VERSION_V41,
                 RUNNER_SCHEMA_VERSION_V42,
+                RUNNER_SCHEMA_VERSION_V43,
             }:
                 _LOGGER.error(
                     "possession_succession_requires_v38 schema_version=%s "
@@ -7684,6 +7791,7 @@ class SimulationRunnerConfig:
                 RUNNER_SCHEMA_VERSION_V40,
                 RUNNER_SCHEMA_VERSION_V41,
                 RUNNER_SCHEMA_VERSION_V42,
+                RUNNER_SCHEMA_VERSION_V43,
             }:
                 _LOGGER.error(
                     "structured_commitments_requires_v39 schema_version=%s "
@@ -7721,6 +7829,7 @@ class SimulationRunnerConfig:
                 RUNNER_SCHEMA_VERSION_V40,
                 RUNNER_SCHEMA_VERSION_V41,
                 RUNNER_SCHEMA_VERSION_V42,
+                RUNNER_SCHEMA_VERSION_V43,
             }:
                 _LOGGER.error(
                     "subjective_valuation_requires_v40 schema_version=%s "
@@ -7758,6 +7867,7 @@ class SimulationRunnerConfig:
             if self.schema_version not in {
                 RUNNER_SCHEMA_VERSION_V41,
                 RUNNER_SCHEMA_VERSION_V42,
+                RUNNER_SCHEMA_VERSION_V43,
             }:
                 _LOGGER.info(
                     "resource_exchange_profile_requires_v41 schema_version=%s "
@@ -7834,7 +7944,10 @@ class SimulationRunnerConfig:
                 raise TypeError(
                     "collective_projects must be CollectiveProjectsSpec or None"
                 )
-            if self.schema_version != RUNNER_SCHEMA_VERSION_V42:
+            if self.schema_version not in {
+                RUNNER_SCHEMA_VERSION_V42,
+                RUNNER_SCHEMA_VERSION_V43,
+            }:
                 _LOGGER.info(
                     "collective_projects_requires_v42 schema_version=%s "
                     "reason_code=collective_projects_requires_v42",
@@ -7870,6 +7983,75 @@ class SimulationRunnerConfig:
                     "runner-config-v42 requires collective_projects "
                     "(code=v42_requires_collective_projects)"
                 )
+        if self.public_goods is not None:
+            if type(self.public_goods) is not PublicGoodsSpec:
+                raise TypeError("public_goods must be PublicGoodsSpec or None")
+            if self.schema_version != RUNNER_SCHEMA_VERSION_V43:
+                _LOGGER.info(
+                    "public_goods_requires_v43 schema_version=%s "
+                    "reason_code=public_goods_requires_v43",
+                    self.schema_version,
+                )
+                _LOGGER.error(
+                    "public_goods_requires_v43 schema_version=%s "
+                    "reason_code=public_goods_requires_v43",
+                    self.schema_version,
+                )
+                raise ValueError(
+                    "public_goods requires runner-config-v43 "
+                    "(code=public_goods_requires_v43)"
+                )
+            if self.collective_projects is None:
+                _LOGGER.info(
+                    "public_goods_requires_collective_projects schema_version=%s "
+                    "reason_code=public_goods_requires_collective_projects",
+                    self.schema_version,
+                )
+                _LOGGER.error(
+                    "public_goods_requires_collective_projects schema_version=%s "
+                    "reason_code=public_goods_requires_collective_projects",
+                    self.schema_version,
+                )
+                raise ValueError(
+                    "public_goods requires collective_projects "
+                    "(code=public_goods_requires_collective_projects)"
+                )
+            _LOGGER.info(
+                "public_goods_schema_select schema_version=%s decay_millis=%s",
+                self.schema_version,
+                self.public_goods.decay_millis,
+            )
+        if self.schema_version == RUNNER_SCHEMA_VERSION_V43:
+            if self.public_goods is None:
+                _LOGGER.info(
+                    "v43_requires_public_goods schema_version=%s "
+                    "reason_code=v43_requires_public_goods",
+                    self.schema_version,
+                )
+                _LOGGER.error(
+                    "v43_requires_public_goods schema_version=%s "
+                    "reason_code=v43_requires_public_goods",
+                    self.schema_version,
+                )
+                raise ValueError(
+                    "runner-config-v43 requires public_goods "
+                    "(code=v43_requires_public_goods)"
+                )
+            if self.collective_projects is None:
+                _LOGGER.info(
+                    "public_goods_requires_collective_projects schema_version=%s "
+                    "reason_code=public_goods_requires_collective_projects",
+                    self.schema_version,
+                )
+                _LOGGER.error(
+                    "public_goods_requires_collective_projects schema_version=%s "
+                    "reason_code=public_goods_requires_collective_projects",
+                    self.schema_version,
+                )
+                raise ValueError(
+                    "runner-config-v43 requires collective_projects "
+                    "(code=public_goods_requires_collective_projects)"
+                )
         other_v3_enabled = tuple(
             name
             for name in self.v3_capability_flags.enabled_names()
@@ -7896,6 +8078,7 @@ class SimulationRunnerConfig:
     RUNNER_SCHEMA_VERSION_V40,
     RUNNER_SCHEMA_VERSION_V41,
     RUNNER_SCHEMA_VERSION_V42,
+    RUNNER_SCHEMA_VERSION_V43,
         }:
             _LOGGER.error(
                 "v3_capability_requires_v23 schema_version=%s "
@@ -8011,6 +8194,7 @@ class SimulationRunnerConfig:
     RUNNER_SCHEMA_VERSION_V40,
     RUNNER_SCHEMA_VERSION_V41,
     RUNNER_SCHEMA_VERSION_V42,
+    RUNNER_SCHEMA_VERSION_V43,
                 }
                 or self.v3_capability_flags.generational_population
             )
@@ -8085,6 +8269,7 @@ class SimulationRunnerConfig:
     RUNNER_SCHEMA_VERSION_V40,
     RUNNER_SCHEMA_VERSION_V41,
     RUNNER_SCHEMA_VERSION_V42,
+    RUNNER_SCHEMA_VERSION_V43,
             }
         ):
             _LOGGER.error(
@@ -8118,6 +8303,7 @@ class SimulationRunnerConfig:
     RUNNER_SCHEMA_VERSION_V40,
     RUNNER_SCHEMA_VERSION_V41,
     RUNNER_SCHEMA_VERSION_V42,
+    RUNNER_SCHEMA_VERSION_V43,
             }
             and self.v3_capability_flags.generational_population
         )
@@ -8266,6 +8452,7 @@ class SimulationRunnerConfig:
     RUNNER_SCHEMA_VERSION_V40,
     RUNNER_SCHEMA_VERSION_V41,
     RUNNER_SCHEMA_VERSION_V42,
+    RUNNER_SCHEMA_VERSION_V43,
         }
         if non_disabled and self.schema_version not in consolidation_schemas:
             _LOGGER.error(
@@ -8334,6 +8521,7 @@ class SimulationRunnerConfig:
     RUNNER_SCHEMA_VERSION_V40,
     RUNNER_SCHEMA_VERSION_V41,
     RUNNER_SCHEMA_VERSION_V42,
+    RUNNER_SCHEMA_VERSION_V43,
         }
         if reflecting and self.schema_version not in reflection_schemas:
             _LOGGER.error(
@@ -8402,6 +8590,7 @@ class SimulationRunnerConfig:
     RUNNER_SCHEMA_VERSION_V40,
     RUNNER_SCHEMA_VERSION_V41,
     RUNNER_SCHEMA_VERSION_V42,
+    RUNNER_SCHEMA_VERSION_V43,
         }
         if planning and self.schema_version not in prospective_schemas:
             _LOGGER.error(
@@ -8469,6 +8658,7 @@ class SimulationRunnerConfig:
     RUNNER_SCHEMA_VERSION_V40,
     RUNNER_SCHEMA_VERSION_V41,
     RUNNER_SCHEMA_VERSION_V42,
+    RUNNER_SCHEMA_VERSION_V43,
         }
         if considering and self.schema_version not in counterfactual_schemas:
             _LOGGER.error(
@@ -8535,6 +8725,7 @@ class SimulationRunnerConfig:
     RUNNER_SCHEMA_VERSION_V40,
     RUNNER_SCHEMA_VERSION_V41,
     RUNNER_SCHEMA_VERSION_V42,
+    RUNNER_SCHEMA_VERSION_V43,
         }:
             _LOGGER.error(
                 "invalid_fields path=agents.cognition.communication_strategy_mode "
@@ -8599,6 +8790,7 @@ class SimulationRunnerConfig:
     RUNNER_SCHEMA_VERSION_V40,
     RUNNER_SCHEMA_VERSION_V41,
     RUNNER_SCHEMA_VERSION_V42,
+    RUNNER_SCHEMA_VERSION_V43,
         }:
             _LOGGER.error(
                 "invalid_fields path=agents.cognition.reputation_mode "
@@ -8705,6 +8897,7 @@ class SimulationRunnerConfig:
     RUNNER_SCHEMA_VERSION_V40,
     RUNNER_SCHEMA_VERSION_V41,
     RUNNER_SCHEMA_VERSION_V42,
+    RUNNER_SCHEMA_VERSION_V43,
         }:
             _LOGGER.error(
                 "invalid_fields path=agents.cognition.teaching_interaction_mode "
@@ -8760,6 +8953,7 @@ class SimulationRunnerConfig:
     RUNNER_SCHEMA_VERSION_V40,
     RUNNER_SCHEMA_VERSION_V41,
     RUNNER_SCHEMA_VERSION_V42,
+    RUNNER_SCHEMA_VERSION_V43,
         }
         if (dynamics is not None and self.schema_version not in dynamics_schemas) or (
             self.schema_version == RUNNER_SCHEMA_VERSION_V14 and dynamics is None
@@ -8810,6 +9004,7 @@ class SimulationRunnerConfig:
     RUNNER_SCHEMA_VERSION_V40,
     RUNNER_SCHEMA_VERSION_V41,
     RUNNER_SCHEMA_VERSION_V42,
+    RUNNER_SCHEMA_VERSION_V43,
         }:
             _LOGGER.error(
                 "invalid_fields path=agents.cognition.territorial_claim_mode "
@@ -8866,6 +9061,7 @@ class SimulationRunnerConfig:
     RUNNER_SCHEMA_VERSION_V40,
     RUNNER_SCHEMA_VERSION_V41,
     RUNNER_SCHEMA_VERSION_V42,
+    RUNNER_SCHEMA_VERSION_V43,
         }:
             _LOGGER.error(
                 "invalid_fields path=agents.cognition.group_formation_mode "
@@ -8916,6 +9112,7 @@ class SimulationRunnerConfig:
     RUNNER_SCHEMA_VERSION_V40,
     RUNNER_SCHEMA_VERSION_V41,
     RUNNER_SCHEMA_VERSION_V42,
+    RUNNER_SCHEMA_VERSION_V43,
         }:
             _LOGGER.error(
                 "invalid_fields path=agents.cognition.social_norm_mode "
@@ -8969,6 +9166,7 @@ class SimulationRunnerConfig:
     RUNNER_SCHEMA_VERSION_V40,
     RUNNER_SCHEMA_VERSION_V41,
     RUNNER_SCHEMA_VERSION_V42,
+    RUNNER_SCHEMA_VERSION_V43,
         }
         if conventions_on and self.schema_version not in convention_schemas:
             _LOGGER.error(
@@ -9027,6 +9225,7 @@ class SimulationRunnerConfig:
     RUNNER_SCHEMA_VERSION_V40,
     RUNNER_SCHEMA_VERSION_V41,
     RUNNER_SCHEMA_VERSION_V42,
+    RUNNER_SCHEMA_VERSION_V43,
         }
         if artifacts_on and self.schema_version not in artifact_schemas:
             runner_log.error(
@@ -9081,6 +9280,7 @@ class SimulationRunnerConfig:
     RUNNER_SCHEMA_VERSION_V40,
     RUNNER_SCHEMA_VERSION_V41,
     RUNNER_SCHEMA_VERSION_V42,
+    RUNNER_SCHEMA_VERSION_V43,
         }
         if naming_on and self.schema_version not in naming_schemas:
             runner_log.error(
@@ -9132,6 +9332,7 @@ class SimulationRunnerConfig:
     RUNNER_SCHEMA_VERSION_V40,
     RUNNER_SCHEMA_VERSION_V41,
     RUNNER_SCHEMA_VERSION_V42,
+    RUNNER_SCHEMA_VERSION_V43,
         }
         budget_modes = tuple(
             agent.cognition.cognitive_budget_mode for agent in self.agents
@@ -9159,6 +9360,7 @@ class SimulationRunnerConfig:
     RUNNER_SCHEMA_VERSION_V40,
     RUNNER_SCHEMA_VERSION_V41,
     RUNNER_SCHEMA_VERSION_V42,
+    RUNNER_SCHEMA_VERSION_V43,
         }
         if budgets_on and self.schema_version not in budget_schemas:
             runner_log.error(
@@ -9284,6 +9486,7 @@ class SimulationRunnerConfig:
     RUNNER_SCHEMA_VERSION_V40,
     RUNNER_SCHEMA_VERSION_V41,
     RUNNER_SCHEMA_VERSION_V42,
+    RUNNER_SCHEMA_VERSION_V43,
         }:
             _LOGGER.error(
                 "invalid_fields path=agents.cognition.production_knowledge_mode "
@@ -9327,6 +9530,7 @@ class SimulationRunnerConfig:
     RUNNER_SCHEMA_VERSION_V40,
     RUNNER_SCHEMA_VERSION_V41,
     RUNNER_SCHEMA_VERSION_V42,
+    RUNNER_SCHEMA_VERSION_V43,
         }:
             from world.production import production_catalog_digest
 
@@ -9426,6 +9630,7 @@ class SimulationRunnerConfig:
     RUNNER_SCHEMA_VERSION_V40,
     RUNNER_SCHEMA_VERSION_V41,
     RUNNER_SCHEMA_VERSION_V42,
+    RUNNER_SCHEMA_VERSION_V43,
         }:
             shared_teaching = teaching_weight_tuple(self.agents[0].cognition)
             if any(

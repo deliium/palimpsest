@@ -196,6 +196,7 @@ def apply_autonomous_physical_step(
     dependency_fatigue_extra_by_entity: Mapping[EntityId, float] | None = None,
     dependency_health_damage_by_entity: Mapping[EntityId, float] | None = None,
     possession_succession_active: bool = False,
+    public_goods_active: bool = False,
 ) -> PendingSystemStep:
     """Apply weather, regeneration, metabolism, and exposure in canonical order.
 
@@ -454,9 +455,14 @@ def apply_autonomous_physical_step(
         fatigue_gain = fatigue_gain + float(
             (dependency_fatigue_extra_by_entity or {}).get(body.entity_id, 0.0)
         )
-        fatigue = Fatigue(
-            clamp_need(round_physical(body.fatigue.value + fatigue_gain))
-        )
+        fatigue_value = body.fatigue.value + fatigue_gain
+        if public_goods_active:
+            from world.collective_projects import presence_relief
+
+            bridge_relief, _warning_scale = presence_relief(working, body.location_id)
+            if bridge_relief:
+                fatigue_value = max(0.0, fatigue_value - bridge_relief)
+        fatigue = Fatigue(clamp_need(round_physical(fatigue_value)))
         damage = 0.0
         if hunger.value >= 100.0:
             damage += rules.hunger_damage
@@ -566,7 +572,15 @@ def apply_autonomous_physical_step(
         ):
             exposure_damage = rules.exposure_damage
         if spec is not None and rules.exposure_damage != 0.0:
-            exposure_damage += _hazard_extra(working, spec, body.location_id)
+            hazard_extra = _hazard_extra(working, spec, body.location_id)
+            if public_goods_active and hazard_extra:
+                from world.collective_projects import presence_relief
+
+                _bridge_relief, warning_scale = presence_relief(
+                    working, body.location_id
+                )
+                hazard_extra = hazard_extra * warning_scale
+            exposure_damage += hazard_extra
         exposed_health = clamp_need(
             round_physical(next_body.health.value - exposure_damage)
         )
@@ -646,6 +660,29 @@ def apply_autonomous_physical_step(
 
     if bodies_changed:
         working = rebuild_world_state(working, bodies=bodies)
+
+    if public_goods_active:
+        from world.collective_projects import record_presence_benefits
+
+        project_rows, benefit_details = record_presence_benefits(
+            working, tick=tick_value, bodies=working.bodies
+        )
+        if project_rows is not None:
+            working = rebuild_world_state(working, collective_projects=project_rows)
+            semantic_mutation = True
+        for detail in benefit_details:
+            ordinal = family_ordinals[SystemEffectFamily.COLLECTIVE_PROJECT]
+            family_ordinals[SystemEffectFamily.COLLECTIVE_PROJECT] = ordinal + 1
+            pending.append(
+                _pending_system(
+                    effect_family=SystemEffectFamily.COLLECTIVE_PROJECT,
+                    entity_id=detail.actor_id,
+                    family_ordinal=ordinal,
+                    details=detail,
+                    origin_location_id=working.bodies[detail.actor_id].location_id,
+                )
+            )
+            semantic_mutation = True
 
     if spec is not None:
         working, ended = _end_hazards(working, tick_value, family_ordinals)

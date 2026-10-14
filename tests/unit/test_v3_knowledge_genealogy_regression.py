@@ -31,7 +31,7 @@ def test_semantic_event_count_is_54() -> None:
 
 
 def test_agent_command_count_is_35() -> None:
-    assert len(get_args(AgentCommand)) == 40
+    assert len(get_args(AgentCommand)) == 43
 
 
 def test_metric_family_count_is_65() -> None:
