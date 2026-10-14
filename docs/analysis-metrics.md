@@ -38,7 +38,7 @@ Executable formula, population, and edge-case policy for all nineteen metric fam
 | `caregiving_burden` | `caregiving_burden@1` | detached care-act rows |
 | `intergenerational_cooperation` | `intergenerational_cooperation@1` | detached care-act + kinship rows |
 
-Catalog version: `metric-catalog-v1`. Document schema: `MetricDocument` schema `1`. Closed catalog cardinality: **86** families (`METRIC_FAMILY_COUNT`). New opt-in families assemble only when their detached inputs are present.
+Catalog version: `metric-catalog-v1`. Document schema: `MetricDocument` schema `1`. Closed catalog cardinality: **91** families (`METRIC_FAMILY_COUNT`). New opt-in families assemble only when their detached inputs are present.
 
 ### Additive analysis surfaces (off the V1 gate)
 
@@ -115,6 +115,10 @@ Catalog version: `metric-catalog-v1`. Document schema: `MetricDocument` schema `
 ### Collective-project families (off the V1 gate)
 
 `collective_project_progress@1`, `collective_project_contribution@1`, and `collective_project_outcome@1` assemble only when `collective_projects` is present. Progress sums labor and materials by kind. Contribution counts distinct accepted actors, accepted attempts, and shortages. Outcome counts completed, abandoned, and still-open sites. Numerators and denominators are integers. No row names a crew or a leader. An empty harvest when the channel is off is absence. Experiment AW (`collective_projects@1`) stays off the V1 gate.
+
+### Public-good families (off the V1 gate)
+
+`public_good_contribution_inequality@1`, `public_good_benefit_distribution@1`, `public_good_maintenance_burden@1`, `public_good_free_rider_pattern@1`, and `public_good_cooperation_stability@1` assemble only when `public_goods` is present. They fold objective project and public-act events into contribution Gini, per-kind benefit counts, integrity burden, co-occurrence patterns, and quiet-gap counts. `public_good_free_rider_pattern` is a co-occurrence count only: it does not assign a role or emit a boolean. A benefit event is neither an access grant nor a moral classification. Channel off writes no rows. Experiment AX (`public_goods@1`) stays off the V1 gate.
 
 ### Supporting formulas (not a separate family)
 

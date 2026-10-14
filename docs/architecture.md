@@ -206,6 +206,12 @@ Later V3 generational plans plug into these seams only. They must not re-open Wo
 
 **Off-limits:** WorldEngine admission bypass, event immutability / `AUTHORITATIVE_TABLES`, Observation → authority type widening, Godot write authority, scripted emergence booleans, full Research UI / Godot family-tree / nursery chrome (inspection/analysis scaffolding only), Alembic `0018` by default.
 
+### V3-21 public-goods contract
+
+`public_goods` is an optional `runner-config-v43` object that requires `collective_projects`; it is not a new capability flag. Write-pair priority selects `(EVENT_SCHEMA_REPLAY_V20, "v18")` only while `public_goods` is active. Channel-off collective projects retain `(EVENT_SCHEMA_REPLAY_V19, "v17")`.
+
+The closed command count is **43**, including `UsePublicGood`, `MaintainPublicGood`, and `OpposePublicGood`. The observer semantic count is **69**, with `PUBLIC_GOOD_BENEFIT`, `PUBLIC_GOOD_MAINTAINED`, and `PUBLIC_GOOD_OPPOSED` appended after the project semantics. The protocol id remains `observer-protocol-v1`, and Alembic head remains `0017`. A benefit event is not an access grant and not a moral role. Experiment AX (`public_goods@1`) stays off the V1 gate.
+
 ### Downstream V3 plan contract
 
 Every later V3 feature plan must satisfy this checklist before merge:
