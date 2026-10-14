@@ -116,6 +116,12 @@ def _collective_project_focus(goal_board: object, observation: object) -> bool:
     return collective_project_focus_matches(goal_board, observation)
 
 
+def _public_good_focus(goal_board: object, observation: object) -> bool:
+    from agents.cognition.collective_projects import public_good_focus_matches
+
+    return public_good_focus_matches(goal_board, observation)
+
+
 class MultiCriteriaIntentionSelector:
     """Select one intention via feasibility, vetoes, Pareto, and pairwise votes."""
 
@@ -534,6 +540,10 @@ class MultiCriteriaIntentionSelector:
             goal_board, loop_input.observation
         ):
             selection_codes.append("collective_project_focus")
+        if goal_board is not None and _public_good_focus(
+            goal_board, loop_input.observation
+        ):
+            selection_codes.append("public_good_focus")
 
         result = SelectedIntention(
             owner_id=owner,
@@ -788,6 +798,7 @@ class CommandPlanner:
         subjective_valuation_max_bundle: int = 8,
         resource_exchange_profile_active: bool = False,
         collective_projects_active: bool = False,
+        public_goods_active: bool = False,
         semantic_naming: object | None = None,
         semantic_naming_mode: object | None = None,
         cultural_narratives: object | None = None,
@@ -1148,6 +1159,18 @@ class CommandPlanner:
             )
 
             command = propose_collective_project_command(
+                command,
+                loop_input.observation,
+                goal_board,
+                channel_on=True,
+                owner_id=owner,
+            )
+        if public_goods_active:
+            from agents.cognition.collective_projects import (
+                propose_public_good_command,
+            )
+
+            command = propose_public_good_command(
                 command,
                 loop_input.observation,
                 goal_board,

@@ -274,6 +274,7 @@ class CognitiveLoop:
         "_production_allow_provider",
         "_production_knowledge_mode",
         "_prospective_policy",
+        "_public_goods_active",
         "_reflection_mode",
         "_reflection_policy",
         "_reflection_selector",
@@ -361,6 +362,7 @@ class CognitiveLoop:
         resource_exchange_profile_active: bool = False,
         acceptance_window_ticks: int = 32,
         collective_projects_active: bool = False,
+        public_goods_active: bool = False,
         knowledge_genealogy_spec: object | None = None,
         knowledge_genealogy_seed_material: object | None = None,
         bounded_experimentation_spec: object | None = None,
@@ -938,6 +940,9 @@ class CognitiveLoop:
         if type(collective_projects_active) is not bool:
             raise TypeError("collective_projects_active must be bool")
         self._collective_projects_active = collective_projects_active
+        if type(public_goods_active) is not bool:
+            raise TypeError("public_goods_active must be bool")
+        self._public_goods_active = public_goods_active
         _LOG.info(
             "resource_exchange_profile_active=%s acceptance_window_ticks=%s",
             resource_exchange_profile_active,
@@ -3224,6 +3229,7 @@ class CognitiveLoop:
                 **_accepted_keywords(
                     self._goal_manager.manage,
                     collective_projects_active=self._collective_projects_active,
+                    public_goods_active=self._public_goods_active,
                 ),
             ),
             expected_type=GoalBoard,
@@ -3563,6 +3569,7 @@ class CognitiveLoop:
                     subjective_valuation_max_bundle=self._subjective_valuation_max_bundle,
                     resource_exchange_profile_active=self._resource_exchange_profile_active,
                     collective_projects_active=self._collective_projects_active,
+                    public_goods_active=self._public_goods_active,
                     semantic_naming=semantic_naming,
                     semantic_naming_mode=self._semantic_naming_mode,
                     cultural_narratives=cultural_narratives,

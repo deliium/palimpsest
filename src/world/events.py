@@ -83,6 +83,7 @@ EVENT_SCHEMA_REPLAY_V16: Final[int] = 16
 EVENT_SCHEMA_REPLAY_V17: Final[int] = 17
 EVENT_SCHEMA_REPLAY_V18: Final[int] = 18
 EVENT_SCHEMA_REPLAY_V19: Final[int] = 19
+EVENT_SCHEMA_REPLAY_V20: Final[int] = 20
 SUPPORTED_EVENT_SCHEMA_VERSIONS: Final[frozenset[int]] = frozenset(
     {
         EVENT_SCHEMA_AUDIT_V1,
@@ -103,6 +104,7 @@ SUPPORTED_EVENT_SCHEMA_VERSIONS: Final[frozenset[int]] = frozenset(
         EVENT_SCHEMA_REPLAY_V17,
         EVENT_SCHEMA_REPLAY_V18,
         EVENT_SCHEMA_REPLAY_V19,
+        EVENT_SCHEMA_REPLAY_V20,
     }
 )
 REPLAYABLE_EVENT_SCHEMA_VERSIONS: Final[frozenset[int]] = frozenset(
@@ -124,6 +126,7 @@ REPLAYABLE_EVENT_SCHEMA_VERSIONS: Final[frozenset[int]] = frozenset(
         EVENT_SCHEMA_REPLAY_V17,
         EVENT_SCHEMA_REPLAY_V18,
         EVENT_SCHEMA_REPLAY_V19,
+        EVENT_SCHEMA_REPLAY_V20,
     }
 )
 PHYSICAL_REPLAY_EVENT_SCHEMA_VERSIONS: Final[frozenset[int]] = frozenset(
@@ -143,6 +146,8 @@ PHYSICAL_REPLAY_EVENT_SCHEMA_VERSIONS: Final[frozenset[int]] = frozenset(
         EVENT_SCHEMA_REPLAY_V16,
         EVENT_SCHEMA_REPLAY_V17,
         EVENT_SCHEMA_REPLAY_V18,
+        EVENT_SCHEMA_REPLAY_V19,
+        EVENT_SCHEMA_REPLAY_V20,
     }
 )
 _PRODUCTION_EVENT_SCHEMAS: Final[frozenset[int]] = frozenset(
@@ -159,6 +164,8 @@ _PRODUCTION_EVENT_SCHEMAS: Final[frozenset[int]] = frozenset(
         EVENT_SCHEMA_REPLAY_V16,
         EVENT_SCHEMA_REPLAY_V17,
         EVENT_SCHEMA_REPLAY_V18,
+        EVENT_SCHEMA_REPLAY_V19,
+        EVENT_SCHEMA_REPLAY_V20,
     }
 )
 _ENVIRONMENT_EVENT_SCHEMAS: Final[frozenset[int]] = frozenset(
@@ -2421,6 +2428,7 @@ class ProjectCompleted:
     project_kind: str
     structure_id: EntityId | None = None
     stored_delta: int = 0
+    decay_millis: int | None = None
     kind: Literal["project_completed"] = field(
         default="project_completed", init=False
     )
@@ -2434,6 +2442,112 @@ class ProjectCompleted:
             raise TypeError("ProjectCompleted.structure_id must be EntityId or None")
         if self.stored_delta not in {0, 3}:
             raise ValueError("ProjectCompleted.stored_delta")
+        if self.decay_millis is not None and (
+            type(self.decay_millis) is not int
+            or isinstance(self.decay_millis, bool)
+            or not 0 <= self.decay_millis <= 250
+        ):
+            raise ValueError("ProjectCompleted.decay_millis")
+        _reject_presentation_fields(self.kind, self.__slots__)
+
+
+@dataclass(frozen=True, slots=True)
+class PublicGoodBenefit:
+    """A witnessed receipt. It is not an access grant."""
+
+    project_id: EntityId
+    actor_id: EntityId
+    project_kind: str
+    benefit_code: str
+    source: str
+    integrity_millis: int
+    resulting_hunger: float | None = None
+    resulting_thirst: float | None = None
+    kind: Literal["public_good_benefit"] = field(
+        default="public_good_benefit", init=False
+    )
+
+    def __post_init__(self) -> None:
+        if type(self.project_id) is not EntityId:
+            raise TypeError("PublicGoodBenefit.project_id must be EntityId")
+        if type(self.actor_id) is not EntityId:
+            raise TypeError("PublicGoodBenefit.actor_id must be EntityId")
+        if self.benefit_code not in {"shelter", "span", "draw", "warning"}:
+            raise ValueError("PublicGoodBenefit.benefit_code")
+        if self.source not in {"presence", "command"}:
+            raise ValueError("PublicGoodBenefit.source")
+        if self.resulting_hunger is not None and self.resulting_thirst is not None:
+            raise ValueError("PublicGoodBenefit.resulting_need")
+        if self.benefit_code == "draw" and (
+            (self.resulting_hunger is None) == (self.resulting_thirst is None)
+        ):
+            raise ValueError("PublicGoodBenefit.resulting_need")
+        if self.benefit_code != "draw" and (
+            self.resulting_hunger is not None or self.resulting_thirst is not None
+        ):
+            raise ValueError("PublicGoodBenefit.resulting_need")
+        if (
+            type(self.integrity_millis) is not int
+            or isinstance(self.integrity_millis, bool)
+            or not 0 <= self.integrity_millis <= 1000
+        ):
+            raise ValueError("PublicGoodBenefit.integrity_millis")
+        _reject_presentation_fields(self.kind, self.__slots__)
+
+
+@dataclass(frozen=True, slots=True)
+class PublicGoodMaintained:
+    """A repair attempt. A miss changes nothing."""
+
+    project_id: EntityId
+    actor_id: EntityId
+    accepted: bool
+    integrity_millis: int
+    kind: Literal["public_good_maintained"] = field(
+        default="public_good_maintained", init=False
+    )
+
+    def __post_init__(self) -> None:
+        if type(self.project_id) is not EntityId:
+            raise TypeError("PublicGoodMaintained.project_id must be EntityId")
+        if type(self.actor_id) is not EntityId:
+            raise TypeError("PublicGoodMaintained.actor_id must be EntityId")
+        if type(self.accepted) is not bool:
+            raise TypeError("PublicGoodMaintained.accepted must be bool")
+        if (
+            type(self.integrity_millis) is not int
+            or isinstance(self.integrity_millis, bool)
+            or not 0 <= self.integrity_millis <= 1000
+        ):
+            raise ValueError("PublicGoodMaintained.integrity_millis")
+        _reject_presentation_fields(self.kind, self.__slots__)
+
+
+@dataclass(frozen=True, slots=True)
+class PublicGoodOpposed:
+    """Opposition on an open or completed public project."""
+
+    project_id: EntityId
+    actor_id: EntityId
+    status: str
+    integrity_millis: int
+    kind: Literal["public_good_opposed"] = field(
+        default="public_good_opposed", init=False
+    )
+
+    def __post_init__(self) -> None:
+        if type(self.project_id) is not EntityId:
+            raise TypeError("PublicGoodOpposed.project_id must be EntityId")
+        if type(self.actor_id) is not EntityId:
+            raise TypeError("PublicGoodOpposed.actor_id must be EntityId")
+        if self.status not in {"open", "completed"}:
+            raise ValueError("PublicGoodOpposed.status")
+        if (
+            type(self.integrity_millis) is not int
+            or isinstance(self.integrity_millis, bool)
+            or not 0 <= self.integrity_millis <= 1000
+        ):
+            raise ValueError("PublicGoodOpposed.integrity_millis")
         _reject_presentation_fields(self.kind, self.__slots__)
 
 
@@ -2504,6 +2618,9 @@ EventDetails = (
     | ProjectShortage
     | ProjectAbandoned
     | ProjectCompleted
+    | PublicGoodBenefit
+    | PublicGoodMaintained
+    | PublicGoodOpposed
 )
 
 _DETAIL_TYPES: Final[frozenset[type]] = frozenset(
@@ -2574,6 +2691,9 @@ _DETAIL_TYPES: Final[frozenset[type]] = frozenset(
         ProjectShortage,
         ProjectAbandoned,
         ProjectCompleted,
+        PublicGoodBenefit,
+        PublicGoodMaintained,
+        PublicGoodOpposed,
     }
 )
 
@@ -2621,7 +2741,15 @@ _PROJECT_DETAIL_TYPES: Final[frozenset[type]] = frozenset(
         ProjectCompleted,
     }
 )
-_PROJECT_EVENT_SCHEMAS: Final[frozenset[int]] = frozenset({EVENT_SCHEMA_REPLAY_V19})
+_PROJECT_EVENT_SCHEMAS: Final[frozenset[int]] = frozenset(
+    {EVENT_SCHEMA_REPLAY_V19, EVENT_SCHEMA_REPLAY_V20}
+)
+_PUBLIC_GOOD_DETAIL_TYPES: Final[frozenset[type]] = frozenset(
+    {PublicGoodBenefit, PublicGoodMaintained, PublicGoodOpposed}
+)
+_PUBLIC_GOOD_EVENT_SCHEMAS: Final[frozenset[int]] = frozenset(
+    {EVENT_SCHEMA_REPLAY_V20}
+)
 _EXCHANGE_DETAIL_TYPES: Final[frozenset[type]] = frozenset(
     {ExchangeProposed, ExchangeWithdrawn, ExchangeCompleted}
 )
@@ -2786,6 +2914,8 @@ def _artifact_effect_complete(details: EventDetails) -> bool:
 
 
 def _payload_effect_complete(details: EventDetails, *, schema_version: int) -> bool:
+    if type(details) in _PUBLIC_GOOD_DETAIL_TYPES:
+        return schema_version in _PUBLIC_GOOD_EVENT_SCHEMAS
     if type(details) in _PROJECT_DETAIL_TYPES:
         return schema_version in _PROJECT_EVENT_SCHEMAS
     if type(details) in _EXCHANGE_DETAIL_TYPES:
@@ -3065,7 +3195,11 @@ def target_id_for_details(details: EventDetails) -> EntityId | None:
             project_id=project_id
         ) | ProjectShortage(project_id=project_id) | ProjectAbandoned(
             project_id=project_id
-        ) | ProjectCompleted(project_id=project_id):
+        ) | ProjectCompleted(project_id=project_id) | PublicGoodBenefit(
+            project_id=project_id
+        ) | PublicGoodMaintained(project_id=project_id) | PublicGoodOpposed(
+            project_id=project_id
+        ):
             return project_id
         case _:
             raise TypeError(
@@ -3225,12 +3359,31 @@ class WorldEvent:
                     self.schema_version,
                 )
                 raise ValueError(EventValidationCode.INVALID_SCHEMA_VERSION.value)
+        if type(self.details) in _PUBLIC_GOOD_DETAIL_TYPES:
+            if self.schema_version not in _PUBLIC_GOOD_EVENT_SCHEMAS:
+                _LOG.error(
+                    "invalid_event_schema_version kind=%s schema_version=%s "
+                    "reason_code=public_goods_requires_v20",
+                    self.details.kind,
+                    self.schema_version,
+                )
+                raise ValueError(EventValidationCode.INVALID_SCHEMA_VERSION.value)
         if type(self.details) in _PROJECT_DETAIL_TYPES:
             if self.schema_version not in _PROJECT_EVENT_SCHEMAS:
                 _LOG.error(
                     "invalid_event_schema_version kind=%s schema_version=%s "
                     "reason_code=collective_projects_requires_v19",
                     self.details.kind,
+                    self.schema_version,
+                )
+                raise ValueError(EventValidationCode.INVALID_SCHEMA_VERSION.value)
+            if (
+                type(self.details) is ProjectCompleted
+                and self.details.decay_millis is not None
+                and self.schema_version != EVENT_SCHEMA_REPLAY_V20
+            ):
+                _LOG.warning(
+                    "decay_millis rejected on pre-v20 payload schema_version=%s",
                     self.schema_version,
                 )
                 raise ValueError(EventValidationCode.INVALID_SCHEMA_VERSION.value)
@@ -3718,6 +3871,9 @@ def build_occurrence_context(
             | ProjectShortage(project_id=project_id)
             | ProjectAbandoned(project_id=project_id)
             | ProjectCompleted(project_id=project_id)
+            | PublicGoodBenefit(project_id=project_id)
+            | PublicGoodMaintained(project_id=project_id)
+            | PublicGoodOpposed(project_id=project_id)
         ):
             return OccurrenceContext(
                 origin_location_id=origin_location_id,

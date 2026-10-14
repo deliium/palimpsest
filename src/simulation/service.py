@@ -162,13 +162,13 @@ class PersistentSimulationService:
             production_rows["lifecycle_records"] = tuple(
                 self._engine.lifecycle_records
             )
-        if codec_version in {"v13", "v14", "v15", "v16", "v17"}:
+        if codec_version in {"v13", "v14", "v15", "v16", "v17", "v18"}:
             production_rows["corpse_custody_item_ids"] = tuple(
                 sorted(state.corpse_custody_item_ids, key=lambda item: item.value)
             )
-        if codec_version in {"v15", "v16", "v17"}:
+        if codec_version in {"v15", "v16", "v17", "v18"}:
             production_rows["exchange_offers"] = tuple(state.exchange_offers)
-        if codec_version == "v17":
+        if codec_version in {"v17", "v18"}:
             production_rows["collective_projects"] = tuple(
                 state.collective_projects.values()
             )

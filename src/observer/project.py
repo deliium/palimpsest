@@ -249,6 +249,12 @@ def project_frame(
             contributor_ids=tuple(
                 sorted({row.actor_id.value for row in item.contributions})
             ),
+            linked_structure_id=(
+                ""
+                if item.linked_structure_id is None
+                else item.linked_structure_id.value
+            ),
+            public_act_count=len(item.public_acts),
         )
         for item in sorted(
             scene.collective_projects,

@@ -92,7 +92,7 @@ def adapt_event(event: WorldEvent) -> ObserverEvent:
         kind,
         semantic,
     )
-    if kind.startswith("project_"):
+    if kind.startswith("project_") or kind.startswith("public_good_"):
         _LOGGER.debug(
             "observer_event_adapted kind=%s semantic_type=%s",
             kind,

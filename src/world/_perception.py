@@ -55,6 +55,9 @@ from world.events import (
     ProjectContributed,
     ProjectCreated,
     ProjectShortage,
+    PublicGoodBenefit,
+    PublicGoodMaintained,
+    PublicGoodOpposed,
     ResourceHarvested,
     StructureBuilt,
     StructureRepaired,
@@ -136,6 +139,7 @@ class PerceptionService:
         structured_commitments_active: bool = False,
         subjective_valuation_active: bool = False,
         collective_projects_active: bool = False,
+        public_goods_active: bool = False,
     ) -> None:
         if durable_perception_mode is not None and durable_perception_mode not in {
             "marks_and_meta",
@@ -161,12 +165,15 @@ class PerceptionService:
             raise TypeError("subjective_valuation_active must be bool")
         if type(collective_projects_active) is not bool:
             raise TypeError("collective_projects_active must be bool")
+        if type(public_goods_active) is not bool:
+            raise TypeError("public_goods_active must be bool")
         self._durable_perception_mode = durable_perception_mode
         self._repository_perception_mode = repository_perception_mode
         self._possession_succession_active = possession_succession_active
         self._structured_commitments_active = structured_commitments_active
         self._subjective_valuation_active = subjective_valuation_active
         self._collective_projects_active = collective_projects_active
+        self._public_goods_active = public_goods_active
 
     def project(
         self,
@@ -214,6 +221,7 @@ class PerceptionService:
                 structured_commitments_active=self._structured_commitments_active,
                 subjective_valuation_active=self._subjective_valuation_active,
                 collective_projects_active=self._collective_projects_active,
+                public_goods_active=self._public_goods_active,
             )
             for observer_id in observers
         )
@@ -232,6 +240,7 @@ def project_observations(
     structured_commitments_active: bool = False,
     subjective_valuation_active: bool = False,
     collective_projects_active: bool = False,
+    public_goods_active: bool = False,
 ) -> tuple[Observation, ...]:
     """Compatibility wrapper around :class:`PerceptionService`."""
     resolved = context if context is not None else ObservationContext(tick=0)
@@ -241,6 +250,7 @@ def project_observations(
         structured_commitments_active=structured_commitments_active,
         subjective_valuation_active=subjective_valuation_active,
         collective_projects_active=collective_projects_active,
+        public_goods_active=public_goods_active,
     ).project(
         world_id=world_id,
         state=state,
@@ -265,6 +275,7 @@ def _project_one(
     structured_commitments_active: bool = False,
     subjective_valuation_active: bool = False,
     collective_projects_active: bool = False,
+    public_goods_active: bool = False,
 ) -> Observation:
     body = state.bodies[observer_id]
     location_id = body.location_id
@@ -288,6 +299,7 @@ def _project_one(
         structured_commitments_active=structured_commitments_active,
         subjective_valuation_active=subjective_valuation_active,
         collective_projects_active=collective_projects_active,
+        public_goods_active=public_goods_active,
     )
     structures = _sorted_structures(state, location_id) if content_visible else ()
     artifacts = _sorted_artifacts(
@@ -323,15 +335,25 @@ def _project_one(
     _LOG.debug("artifacts_observed count=%s", len(artifacts))
     _LOG.debug("observed_repository_count=%s", len(repositories))
     if collective_projects_active and content_visible:
-        collective_projects = _sorted_collective_projects(state, location_id)
+        collective_projects = _sorted_collective_projects(
+            state, location_id, public_goods_active=public_goods_active
+        )
         _LOG.debug(
             "collective_projects_perceived location_id=%s count=%s",
             location_id.value,
             len(collective_projects),
         )
+        if public_goods_active:
+            _LOG.debug(
+                "public_goods_perceived location_id=%s act_count=%s",
+                location_id.value,
+                sum(len(project.public_acts) for project in collective_projects),
+            )
     elif collective_projects_active:
         collective_projects = ()
         _LOG.debug("collective_projects_hidden reason=content_hidden")
+        if public_goods_active:
+            _LOG.debug("public_goods_hidden reason=content_hidden")
     else:
         collective_projects = ()
     season, band, kinds = _present_environment(
@@ -829,6 +851,7 @@ def _project_event_window(
     structured_commitments_active: bool = False,
     subjective_valuation_active: bool = False,
     collective_projects_active: bool = False,
+    public_goods_active: bool = False,
 ) -> tuple[tuple[ObservedOccurrence, ...], tuple[ObservedCommunication, ...]]:
     occurrences: list[ObservedOccurrence] = []
     communications: list[ObservedCommunication] = []
@@ -845,6 +868,15 @@ def _project_event_window(
             ProjectShortage,
             ProjectAbandoned,
             ProjectCompleted,
+            PublicGoodBenefit,
+            PublicGoodMaintained,
+            PublicGoodOpposed,
+        }:
+            continue
+        if not public_goods_active and type(event.details) in {
+            PublicGoodBenefit,
+            PublicGoodMaintained,
+            PublicGoodOpposed,
         }:
             continue
         occurrence = event.occurrence
@@ -893,6 +925,7 @@ def _project_event_window(
                     structured_commitments_active=structured_commitments_active,
                     subjective_valuation_active=subjective_valuation_active,
                     collective_projects_active=collective_projects_active,
+                    public_goods_active=public_goods_active,
                 ),
             )
         )
@@ -1001,6 +1034,7 @@ def _public_facts_for_role(
     structured_commitments_active: bool = False,
     subjective_valuation_active: bool = False,
     collective_projects_active: bool = False,
+    public_goods_active: bool = False,
 ) -> dict[str, object]:
     experiment_facts = _experiment_public_facts(event, role)
     if experiment_facts is not None:
@@ -1010,7 +1044,10 @@ def _public_facts_for_role(
         # Artifact occurrences expose only identity/revision — never marks.
         return {"kind": event.event_type, **artifact_facts}
     project_facts = _project_public_facts(
-        event, state, active=collective_projects_active
+        event,
+        state,
+        active=collective_projects_active,
+        public_goods_active=public_goods_active,
     )
     if project_facts is not None:
         return project_facts
@@ -1059,7 +1096,7 @@ def _public_facts_for_role(
 
 
 def _sorted_collective_projects(
-    state: WorldState, location_id: EntityId
+    state: WorldState, location_id: EntityId, *, public_goods_active: bool = False
 ) -> tuple[ObservedCollectiveProject, ...]:
     selected: list[ObservedCollectiveProject] = []
     projects = sorted(
@@ -1087,13 +1124,21 @@ def _sorted_collective_projects(
                     )
                     for row in project.contributions
                 ),
+                public_acts=project.public_acts if public_goods_active else (),
+                linked_structure_id=(
+                    project.linked_structure_id if public_goods_active else None
+                ),
             )
         )
     return tuple(selected)
 
 
 def _project_public_facts(
-    event: WorldEvent, state: WorldState | None, *, active: bool
+    event: WorldEvent,
+    state: WorldState | None,
+    *,
+    active: bool,
+    public_goods_active: bool = False,
 ) -> dict[str, object] | None:
     if not active:
         return None
@@ -1104,8 +1149,44 @@ def _project_public_facts(
         ProjectShortage,
         ProjectAbandoned,
         ProjectCompleted,
+        PublicGoodBenefit,
+        PublicGoodMaintained,
+        PublicGoodOpposed,
     }:
         return None
+    if type(details) in {PublicGoodBenefit, PublicGoodMaintained, PublicGoodOpposed}:
+        if not public_goods_active:
+            return None
+        project = (
+            None
+            if state is None
+            else state.collective_projects.get(details.project_id)
+        )
+        facts: dict[str, object] = {
+            "project_id": details.project_id.value,
+            "kind": (
+                details.project_kind
+                if type(details) is PublicGoodBenefit
+                else None if project is None else project.kind.value
+            ),
+        }
+        if type(details) is PublicGoodBenefit:
+            facts["benefit_code"] = details.benefit_code
+            facts["source"] = details.source
+            if details.resulting_hunger is not None:
+                facts["resulting_hunger"] = details.resulting_hunger
+            if details.resulting_thirst is not None:
+                facts["resulting_thirst"] = details.resulting_thirst
+        elif type(details) is PublicGoodMaintained:
+            facts["accepted"] = details.accepted
+        else:
+            facts["status"] = details.status
+        _LOG.debug(
+            "public_good_occurrence_projected kind=%s project_id=%s",
+            details.kind,
+            details.project_id.value,
+        )
+        return facts
     project = None
     if state is not None:
         project = state.collective_projects.get(details.project_id)
@@ -1130,13 +1211,21 @@ def _project_public_facts(
         status = project.status.value
     else:
         status = "open"
-    return {
+    payload = {
         "project_id": details.project_id.value,
         "kind": kind,
         "labor_done": labor_done,
         "materials_done": materials_done,
         "status": status,
     }
+    if public_goods_active and type(details) is ProjectContributed:
+        from world.collective_projects import PUBLIC_GOOD_KINDS
+
+        payload["accepted"] = details.accepted
+        payload["public_good"] = (
+            project is not None and project.kind in PUBLIC_GOOD_KINDS
+        )
+    return payload
 
 
 def _commitment_public_facts(event: WorldEvent) -> dict[str, object] | None:

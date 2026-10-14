@@ -597,6 +597,8 @@ class ObserverCollectiveProject:
     labor_done: int
     materials_done: int
     contributor_ids: tuple[str, ...] = ()
+    linked_structure_id: str = ""
+    public_act_count: int = 0
 
     def __post_init__(self) -> None:
         object.__setattr__(
@@ -616,6 +618,18 @@ class ObserverCollectiveProject:
             self,
             "contributor_ids",
             _typed_tuple("contributor_ids", self.contributor_ids, str),
+        )
+        object.__setattr__(
+            self,
+            "linked_structure_id",
+            ""
+            if self.linked_structure_id == ""
+            else _require_text("linked_structure_id", self.linked_structure_id),
+        )
+        object.__setattr__(
+            self,
+            "public_act_count",
+            _require_tick("public_act_count", self.public_act_count),
         )
 
 

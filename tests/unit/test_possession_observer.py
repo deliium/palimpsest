@@ -33,7 +33,7 @@ def _event(details: object, cause: object, sequence: int):
 
 def test_new_kinds_export_new_labels_and_protocol_stays() -> None:
     assert OBSERVER_PROTOCOL_VERSION == "observer-protocol-v1"
-    assert len(SEMANTIC_EVENT_TYPES) == 66
+    assert len(SEMANTIC_EVENT_TYPES) == 69
     assert "AGENT_TOOK_ITEM" in SEMANTIC_EVENT_TYPES
     system = SystemCause(
         RequestId("cause-1"),

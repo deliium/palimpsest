@@ -672,6 +672,18 @@ def _collective_projects_loop_kwargs(config: object) -> dict[str, object]:
     return {"collective_projects_active": active}
 
 
+def _public_goods_loop_kwargs(config: object) -> dict[str, object]:
+    spec = getattr(config, "public_goods", None)
+    active = spec is not None
+    decay_millis = 0 if spec is None else spec.decay_millis
+    _LOG.info(
+        "public_goods_active=%s decay_millis=%s",
+        active,
+        decay_millis,
+    )
+    return {"public_goods_active": active}
+
+
 def _resource_exchange_profile_loop_kwargs(config: object) -> dict[str, object]:
     """Bind acceptance memory. The window stays out of the world rule context."""
     spec = getattr(config, "resource_exchange_profile", None)
@@ -1676,12 +1688,16 @@ class SimulationRunner:
                     config.resource_exchange_profile is not None
                 ),
                 collective_projects_active=config.collective_projects is not None,
-                collective_projects_idle_ticks=(
-                    4
-                    if config.collective_projects is None
-                    else config.collective_projects.idle_ticks
-                ),
-                **skill_kwargs,
+            collective_projects_idle_ticks=(
+                4
+                if config.collective_projects is None
+                else config.collective_projects.idle_ticks
+            ),
+            public_goods_active=config.public_goods is not None,
+            public_goods_decay_millis=(
+                0 if config.public_goods is None else config.public_goods.decay_millis
+            ),
+            **skill_kwargs,
                 **teaching_kwargs,
             )
             _LOG.debug(
@@ -1911,6 +1927,7 @@ class SimulationRunner:
                     **_subjective_valuation_loop_kwargs(config),
                     **_resource_exchange_profile_loop_kwargs(config),
                     **_collective_projects_loop_kwargs(config),
+                    **_public_goods_loop_kwargs(config),
                     **_knowledge_genealogy_loop_kwargs(config),
                     **_bounded_experimentation_loop_kwargs(config),
                 )
@@ -3410,6 +3427,7 @@ class SimulationRunner:
                 **_subjective_valuation_loop_kwargs(self._config),
                 **_resource_exchange_profile_loop_kwargs(self._config),
                 **_collective_projects_loop_kwargs(self._config),
+                **_public_goods_loop_kwargs(self._config),
                 **_knowledge_genealogy_loop_kwargs(self._config),
                 **_bounded_experimentation_loop_kwargs(self._config),
             )
@@ -3709,37 +3727,122 @@ def _bootstrap_snapshot(engine: WorldEngine) -> WorldSnapshot:
     )
     state = engine._snapshot.world.state
     production_rows: dict[str, tuple[object, ...]] = {}
-    if codec_version in {"v3", "v4", "v5", "v6", "v7", "v8", "v9", "v10", "v11", "v12", "v13", "v14", "v15", "v16", "v17"}:
+    if codec_version in {
+        "v3",
+        "v4",
+        "v5",
+        "v6",
+        "v7",
+        "v8",
+        "v9",
+        "v10",
+        "v11",
+        "v12",
+        "v13",
+        "v14",
+        "v15",
+        "v16",
+        "v17",
+        "v18",
+    }:
         production_rows = {
             "structures": tuple(state.structures.values()),
             "production_jobs": tuple(state.production_jobs.values()),
             "tool_marks": tuple(state.tool_marks.values()),
         }
-    if codec_version in {"v4", "v5", "v6", "v7", "v8", "v9", "v10", "v11", "v12", "v13", "v14", "v15", "v16", "v17"}:
+    if codec_version in {
+        "v4",
+        "v5",
+        "v6",
+        "v7",
+        "v8",
+        "v9",
+        "v10",
+        "v11",
+        "v12",
+        "v13",
+        "v14",
+        "v15",
+        "v16",
+        "v17",
+        "v18",
+    }:
         production_rows["active_hazards"] = tuple(state.active_hazards)
-    if codec_version in {"v5", "v6", "v7", "v8", "v9", "v10", "v11", "v12", "v13", "v14", "v15", "v16", "v17"}:
+    if codec_version in {
+        "v5",
+        "v6",
+        "v7",
+        "v8",
+        "v9",
+        "v10",
+        "v11",
+        "v12",
+        "v13",
+        "v14",
+        "v15",
+        "v16",
+        "v17",
+        "v18",
+    }:
         production_rows["artifacts"] = tuple(state.artifacts.values())
-    if codec_version in {"v6", "v7", "v8", "v9", "v10", "v11", "v12", "v13", "v14", "v15", "v16", "v17"}:
+    if codec_version in {
+        "v6",
+        "v7",
+        "v8",
+        "v9",
+        "v10",
+        "v11",
+        "v12",
+        "v13",
+        "v14",
+        "v15",
+        "v16",
+        "v17",
+        "v18",
+    }:
         production_rows["lifecycle_records"] = tuple(engine.lifecycle_records)
-    if codec_version in {"v8", "v9", "v10", "v11", "v12", "v13", "v14", "v15", "v16", "v17"}:
+    if codec_version in {
+        "v8",
+        "v9",
+        "v10",
+        "v11",
+        "v12",
+        "v13",
+        "v14",
+        "v15",
+        "v16",
+        "v17",
+        "v18",
+    }:
         kinship_graph = engine.kinship_graph
         from world.kinship import KinshipGraph
 
         if type(kinship_graph) is KinshipGraph:
             production_rows["kinship_edges"] = kinship_graph.edges
-    if codec_version in {"v9", "v10", "v11", "v12", "v13", "v14", "v15", "v16", "v17"}:
+    if codec_version in {
+        "v9",
+        "v10",
+        "v11",
+        "v12",
+        "v13",
+        "v14",
+        "v15",
+        "v16",
+        "v17",
+        "v18",
+    }:
         production_rows["dependency_need_registers"] = tuple(
             engine._dependency_need_registers.values()
         )
-    if codec_version in {"v11", "v12", "v13", "v14", "v15", "v16", "v17"}:
+    if codec_version in {"v11", "v12", "v13", "v14", "v15", "v16", "v17", "v18"}:
         production_rows["repositories"] = tuple(state.repositories.values())
-    if codec_version in {"v13", "v14", "v15", "v16", "v17"}:
+    if codec_version in {"v13", "v14", "v15", "v16", "v17", "v18"}:
         production_rows["corpse_custody_item_ids"] = tuple(
             sorted(state.corpse_custody_item_ids, key=lambda item: item.value)
         )
-    if codec_version in {"v15", "v16", "v17"}:
+    if codec_version in {"v15", "v16", "v17", "v18"}:
         production_rows["exchange_offers"] = tuple(state.exchange_offers)
-    if codec_version == "v17":
+    if codec_version in {"v17", "v18"}:
         production_rows["collective_projects"] = tuple(
             state.collective_projects.values()
         )

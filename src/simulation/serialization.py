@@ -167,6 +167,8 @@ from world.events import (
     EVENT_SCHEMA_REPLAY_V16,
     EVENT_SCHEMA_REPLAY_V17,
     EVENT_SCHEMA_REPLAY_V18,
+    EVENT_SCHEMA_REPLAY_V19,
+    EVENT_SCHEMA_REPLAY_V20,
     AgentCreated,
     AgentEnteredWorld,
     AgentInitializationRecorded,
@@ -190,6 +192,14 @@ from world.events import (
     EnvironmentalHazardEnded,
     EnvironmentalHazardStarted,
     ExchangeCompleted,
+    ProjectAbandoned,
+    ProjectCompleted,
+    ProjectContributed,
+    ProjectCreated,
+    ProjectShortage,
+    PublicGoodBenefit,
+    PublicGoodMaintained,
+    PublicGoodOpposed,
     ExchangeProposed,
     ExchangeWithdrawn,
     ExperimentResolved,
@@ -3387,7 +3397,7 @@ def _decode_observed_artifact(data: dict[str, Any], *, path: str) -> ObservedArt
 def _encode_observed_collective_project(
     value: ObservedCollectiveProject,
 ) -> dict[str, Any]:
-    return {
+    payload = {
         "contributions": [
             {
                 "accepted": row.accepted,
@@ -3405,6 +3415,19 @@ def _encode_observed_collective_project(
         "project_id": value.project_id.value,
         "status": value.status,
     }
+    if value.linked_structure_id is not None:
+        payload["linked_structure_id"] = value.linked_structure_id.value
+    if value.public_acts:
+        payload["public_acts"] = [
+            {
+                "act": row.act.value,
+                "actor_id": row.actor_id.value,
+                "source": row.source.value,
+                "tick": row.tick,
+            }
+            for row in value.public_acts
+        ]
+    return payload
 
 
 def _decode_observed_collective_project(
@@ -3419,6 +3442,10 @@ def _decode_observed_collective_project(
         "materials_done",
         "contributions",
     }
+    if "public_acts" in data:
+        required.add("public_acts")
+    if "linked_structure_id" in data:
+        required.add("linked_structure_id")
     if set(data) != required:
         raise DomainSerializationError("invalid_fields", path)
     raw_rows = data["contributions"]
@@ -3445,6 +3472,36 @@ def _decode_observed_collective_project(
                 ),
             )
         )
+    from world.collective_projects import (
+        PublicGoodAct,
+        PublicGoodActKind,
+        PublicGoodActSource,
+    )
+
+    public_acts: list[PublicGoodAct] = []
+    raw_acts = data.get("public_acts", [])
+    if not isinstance(raw_acts, list):
+        raise DomainSerializationError("invalid_array", f"{path}.public_acts")
+    for index, raw in enumerate(raw_acts):
+        row_path = f"{path}.public_acts[{index}]"
+        if not isinstance(raw, dict):
+            raise DomainSerializationError("invalid_object", row_path)
+        if set(raw) != {"actor_id", "tick", "act", "source"}:
+            raise DomainSerializationError("invalid_fields", row_path)
+        try:
+            public_acts.append(
+                PublicGoodAct(
+                    actor_id=EntityId(_str_field(raw, "actor_id", path=row_path)),
+                    tick=_int_field(raw, "tick", path=row_path),
+                    act=PublicGoodActKind(_str_field(raw, "act", path=row_path)),
+                    source=PublicGoodActSource(
+                        _str_field(raw, "source", path=row_path)
+                    ),
+                )
+            )
+        except ValueError as exc:
+            raise DomainSerializationError("invalid_model", row_path) from exc
+    linked_raw = data.get("linked_structure_id")
     return ObservedCollectiveProject(
         project_id=EntityId(_str_field(data, "project_id", path=path)),
         location_id=EntityId(_str_field(data, "location_id", path=path)),
@@ -3453,6 +3510,12 @@ def _decode_observed_collective_project(
         labor_done=_int_field(data, "labor_done", path=path),
         materials_done=_int_field(data, "materials_done", path=path),
         contributions=tuple(rows),
+        public_acts=tuple(public_acts),
+        linked_structure_id=(
+            None
+            if linked_raw is None
+            else EntityId(_str_field(data, "linked_structure_id", path=path))
+        ),
     )
 
 
@@ -5374,6 +5437,22 @@ def _encode_event_details(value: object) -> dict[str, Any]:
                 "take_item_ids": [item.value for item in take_item_ids],
                 "take_item_kinds": list(take_item_kinds),
             }
+        case ProjectCreated() as created:
+            return _encode_project_or_public_details(created)
+        case ProjectContributed() as contributed:
+            return _encode_project_or_public_details(contributed)
+        case ProjectShortage() as shortage:
+            return _encode_project_or_public_details(shortage)
+        case ProjectAbandoned() as abandoned:
+            return _encode_project_or_public_details(abandoned)
+        case ProjectCompleted() as completed_project:
+            return _encode_project_or_public_details(completed_project)
+        case PublicGoodBenefit() as benefit:
+            return _encode_project_or_public_details(benefit)
+        case PublicGoodMaintained() as maintained:
+            return _encode_project_or_public_details(maintained)
+        case PublicGoodOpposed() as opposed:
+            return _encode_project_or_public_details(opposed)
         case _:
             raise DomainSerializationError("unsupported_type", "$")
 
@@ -6500,6 +6579,35 @@ def _decode_event_details(
             if schema_version != EVENT_SCHEMA_REPLAY_V11:
                 raise DomainSerializationError("invalid_event_schema_version", path)
             return _decode_lifecycle_details(kind, fields, path=path)
+        if kind in {
+            "project_created",
+            "project_contributed",
+            "project_shortage",
+            "project_abandoned",
+            "project_completed",
+        }:
+            if schema_version not in {
+                EVENT_SCHEMA_REPLAY_V19,
+                EVENT_SCHEMA_REPLAY_V20,
+            }:
+                raise DomainSerializationError("invalid_event_schema_version", path)
+            return _decode_project_or_public_details(
+                kind, fields, path=path, schema_version=schema_version
+            )
+        if kind in {
+            "public_good_benefit",
+            "public_good_maintained",
+            "public_good_opposed",
+        }:
+            if schema_version != EVENT_SCHEMA_REPLAY_V20:
+                _LOG.warning(
+                    "public_good event rejected on pre-v20 payload kind=%s",
+                    kind,
+                )
+                raise DomainSerializationError("invalid_event_schema_version", path)
+            return _decode_project_or_public_details(
+                kind, fields, path=path, schema_version=schema_version
+            )
     except DomainSerializationError:
         raise
     except (TypeError, ValueError) as exc:
@@ -6850,6 +6958,29 @@ def _decode_experiment_resolved(
 
 def _encode_world_event(value: WorldEvent) -> dict[str, Any]:
     details_kind = value.details.kind
+    if details_kind in {
+        "project_created",
+        "project_contributed",
+        "project_shortage",
+        "project_abandoned",
+        "project_completed",
+    } and value.schema_version not in {
+        EVENT_SCHEMA_REPLAY_V19,
+        EVENT_SCHEMA_REPLAY_V20,
+    }:
+        raise DomainSerializationError(
+            "invalid_event_schema_version",
+            "$.schema_version",
+        )
+    if details_kind in {
+        "public_good_benefit",
+        "public_good_maintained",
+        "public_good_opposed",
+    } and value.schema_version != EVENT_SCHEMA_REPLAY_V20:
+        raise DomainSerializationError(
+            "invalid_event_schema_version",
+            "$.schema_version",
+        )
     if details_kind in {
         "season_changed",
         "temperature_band_changed",
@@ -7559,9 +7690,9 @@ def structured_commitments_checkpoint_payload(
     ledgers: Mapping[str, object], *, codec: str
 ) -> dict[str, object]:
     """Owner-id map of commitment ledgers. Omitted unless codec is v14 or v15."""
-    if codec not in {"v14", "v15", "v16", "v17"}:
+    if codec not in {"v14", "v15", "v16", "v17", "v18"}:
         return {}
-    if codec in {"v15", "v16", "v17"}:
+    if codec in {"v15", "v16", "v17", "v18"}:
         _LOG.debug("codec_superset codec=%s", codec)
     from agents.cognition.structured_commitments import StructuredCommitmentLedger
 
@@ -7585,7 +7716,7 @@ def decode_structured_commitments_checkpoint(
     payload: Mapping[str, object], *, codec: str
 ) -> dict[str, object]:
     """Decode v14 or v15 ledgers. Older codecs reject the key."""
-    if codec not in {"v14", "v15", "v16", "v17"}:
+    if codec not in {"v14", "v15", "v16", "v17", "v18"}:
         if "structured_commitments" in payload:
             raise DomainSerializationError(
                 "structured_commitments_requires_codec_v14",
@@ -7855,7 +7986,7 @@ def subjective_valuation_checkpoint_payload(
     codec: str,
 ) -> dict[str, object]:
     """Owner maps of private ledgers. Present on codec v15 and v16."""
-    if codec not in {"v15", "v16", "v17"}:
+    if codec not in {"v15", "v16", "v17", "v18"}:
         return {}
     from agents.cognition.scarcity_beliefs import ScarcityBeliefLedger
     from agents.cognition.subjective_value import SubjectiveValuationLedger
@@ -7881,7 +8012,7 @@ def decode_subjective_valuation_checkpoint(
 ) -> dict[str, dict[str, object]]:
     """Decode v15 or v16 ledgers. Older codecs reject either key."""
     present = [key for key in ("subjective_valuations", "scarcity_beliefs") if key in payload]
-    if codec not in {"v15", "v16", "v17"}:
+    if codec not in {"v15", "v16", "v17", "v18"}:
         if present:
             raise DomainSerializationError(
                 "subjective_valuation_requires_codec_v15",
@@ -7912,7 +8043,7 @@ def acceptance_memories_checkpoint_payload(
 ) -> dict[str, object]:
     """Owner map of acceptance ledgers. Present only on codec v16."""
     owner_count = len(memories) if isinstance(memories, Mapping) else 0
-    if codec not in {"v16", "v17"}:
+    if codec not in {"v16", "v17", "v18"}:
         _LOG.debug(
             "acceptance_memories omitted codec=%s owner_count=%s",
             codec,
@@ -7937,7 +8068,7 @@ def decode_acceptance_memories_checkpoint(
     payload: Mapping[str, object], *, codec: str
 ) -> dict[str, object]:
     """Decode v16 acceptance ledgers. Older codecs reject the key."""
-    if codec not in {"v16", "v17"}:
+    if codec not in {"v16", "v17", "v18"}:
         if "acceptance_memories" in payload:
             _LOG.warning(
                 "acceptance_memories present on pre-v16 payload codec=%s",
@@ -8231,3 +8362,57 @@ def _dict_list(value: object, *, path: str) -> list[dict[str, object]]:
             raise DomainSerializationError("invalid_object", f"{path}[{index}]")
         copied.append(item)
     return copied
+
+
+def _encode_project_or_public_details(value: object) -> dict[str, Any]:
+    payload: dict[str, Any] = {"kind": value.kind}  # type: ignore[attr-defined]
+    for name in value.__slots__:  # type: ignore[attr-defined]
+        if name == "kind":
+            continue
+        raw = getattr(value, name)
+        if raw is None and name == "decay_millis":
+            continue
+        if raw is None and name in {"resulting_hunger", "resulting_thirst", "item_id"}:
+            if name == "item_id":
+                payload[name] = None
+            continue
+        if hasattr(raw, "value") and type(raw).__name__ == "EntityId":
+            payload[name] = raw.value
+        else:
+            payload[name] = raw
+    return payload
+
+
+def _decode_project_or_public_details(
+    kind: str, fields: dict[str, Any], *, path: str, schema_version: int
+) -> object:
+    if kind == "project_completed" and "decay_millis" in fields:
+        if schema_version != EVENT_SCHEMA_REPLAY_V20:
+            _LOG.warning(
+                "decay_millis rejected on pre-v20 payload schema_version=%s",
+                schema_version,
+            )
+            raise DomainSerializationError("unknown_field", path)
+    builders = {
+        "project_created": ProjectCreated,
+        "project_contributed": ProjectContributed,
+        "project_shortage": ProjectShortage,
+        "project_abandoned": ProjectAbandoned,
+        "project_completed": ProjectCompleted,
+        "public_good_benefit": PublicGoodBenefit,
+        "public_good_maintained": PublicGoodMaintained,
+        "public_good_opposed": PublicGoodOpposed,
+    }
+    ctor = builders[kind]
+    kwargs: dict[str, Any] = {}
+    for name in ctor.__slots__:
+        if name == "kind" or name not in fields:
+            continue
+        raw = fields[name]
+        if name.endswith("_id") and raw is not None and name != "actor_id":
+            kwargs[name] = EntityId(str(raw))
+        elif name in {"actor_id", "location_id", "project_id", "structure_id", "item_id"}:
+            kwargs[name] = None if raw is None else EntityId(str(raw))
+        else:
+            kwargs[name] = raw
+    return ctor(**kwargs)

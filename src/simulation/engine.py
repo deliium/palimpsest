@@ -979,7 +979,7 @@ class WorldEngine:
             artifacts_enabled
             or bool(snapshot.artifacts)
             or snapshot.persistence_codec_version
-            in {"v5", "v6", "v7", "v8", "v9", "v10", "v11", "v12", "v13", "v14", "v15", "v16", "v17"}
+            in {"v5", "v6", "v7", "v8", "v9", "v10", "v11", "v12", "v13", "v14", "v15", "v16", "v17", "v18"}
             or bool(getattr(engine._bootstrap, "artifacts", ()))
         )
         if snapshot.persistence_codec_version in {
@@ -990,7 +990,7 @@ class WorldEngine:
             "v10",
             "v11",
             "v12", "v13",
-            "v14", "v15", "v16", "v17"}:
+            "v14", "v15", "v16", "v17", "v18"}:
             if population_lifecycle is None and snapshot.lifecycle_records:
                 raise ValueError(
                     "codec v6/v7/v8/v9 restore requires population_lifecycle "
@@ -1021,7 +1021,7 @@ class WorldEngine:
                 engine._new_agent_initialization = new_agent_initialization
             elif (
                 snapshot.persistence_codec_version
-                in {"v7", "v8", "v9", "v10", "v11", "v12", "v13", "v14", "v15", "v16", "v17"}
+                in {"v7", "v8", "v9", "v10", "v11", "v12", "v13", "v14", "v15", "v16", "v17", "v18"}
                 and snapshot.event_schema_version in {10, 11, 12, 13, 14}
             ):
                 # Prefer explicit restore arg; else pull from snapshot config when v25+.
@@ -1049,7 +1049,7 @@ class WorldEngine:
         engine._durable_records_spec = None
         engine._knowledge_repositories_spec = None
         engine._dependency_need_registers = {}
-        if snapshot.persistence_codec_version in {"v10", "v11", "v12", "v13", "v14", "v15", "v16", "v17"}:
+        if snapshot.persistence_codec_version in {"v10", "v11", "v12", "v13", "v14", "v15", "v16", "v17", "v18"}:
             from simulation.runner_models import DurableRecordsSpec
 
             resolved_durable = getattr(snapshot.config, "durable_records", None)
@@ -1063,7 +1063,7 @@ class WorldEngine:
                 snapshot.persistence_codec_version,
                 engine._durable_records_spec is not None,
             )
-        if snapshot.persistence_codec_version in {"v11", "v12", "v13", "v14", "v15", "v16", "v17"}:
+        if snapshot.persistence_codec_version in {"v11", "v12", "v13", "v14", "v15", "v16", "v17", "v18"}:
             from simulation.runner_models import KnowledgeRepositoriesSpec
 
             resolved_repos = getattr(snapshot.config, "knowledge_repositories", None)
@@ -1084,7 +1084,7 @@ class WorldEngine:
                 engine._knowledge_repositories_spec is not None,
                 len(snapshot.repositories),
             )
-        if snapshot.persistence_codec_version in {"v10", "v11", "v12", "v13", "v14", "v15", "v16", "v17"}:
+        if snapshot.persistence_codec_version in {"v10", "v11", "v12", "v13", "v14", "v15", "v16", "v17", "v18"}:
             durable_mode = (
                 engine._durable_records_spec.perception_mode
                 if engine._durable_records_spec is not None
@@ -1103,8 +1103,9 @@ class WorldEngine:
                     structured_commitments_active=engine._structured_commitments_active,
                     subjective_valuation_active=engine._subjective_valuation_active,
                     collective_projects_active=engine._collective_projects_active,
+                    public_goods_active=engine._public_goods_active,
                 )
-        if snapshot.persistence_codec_version in {"v8", "v9", "v10", "v11", "v12", "v13", "v14", "v15", "v16", "v17"}:
+        if snapshot.persistence_codec_version in {"v8", "v9", "v10", "v11", "v12", "v13", "v14", "v15", "v16", "v17", "v18"}:
             resolved_kinship = kinship_spec
             if resolved_kinship is None:
                 resolved_kinship = getattr(snapshot.config, "kinship", None)
@@ -1162,7 +1163,7 @@ class WorldEngine:
                     if type(event.details) is KinshipEdgeRecorded
                 ),
             )
-        if snapshot.persistence_codec_version in {"v9", "v10", "v11", "v12", "v13", "v14", "v15", "v16", "v17"}:
+        if snapshot.persistence_codec_version in {"v9", "v10", "v11", "v12", "v13", "v14", "v15", "v16", "v17", "v18"}:
             from simulation.runner_models import DependencyCareSpec
             from world.dependency_care import DependencyNeedRegister
 
@@ -5775,6 +5776,7 @@ def select_checkpoint_schema(
     subjective_valuation_active: bool = False,
     resource_exchange_profile_active: bool = False,
     collective_projects_active: bool = False,
+    public_goods_active: bool = False,
 ) -> tuple[int, str]:
     """Return the legal event-schema and codec pair for this run."""
     from simulation.persistence import (
@@ -5796,6 +5798,7 @@ def select_checkpoint_schema(
         EVENT_SCHEMA_REPLAY_V17,
         EVENT_SCHEMA_REPLAY_V18,
         EVENT_SCHEMA_REPLAY_V19,
+        EVENT_SCHEMA_REPLAY_V20,
     )
 
     schema_version, codec = checkpoint_schema_for_production(
@@ -5814,8 +5817,19 @@ def select_checkpoint_schema(
         subjective_valuation_active=subjective_valuation_active,
         resource_exchange_profile_active=resource_exchange_profile_active,
         collective_projects_active=collective_projects_active,
+        public_goods_active=public_goods_active,
     )
-    if collective_projects_active and (
+    if public_goods_active and (
+        schema_version != EVENT_SCHEMA_REPLAY_V20 or codec != "v18"
+    ):
+        _LOGGER.warning(
+            "checkpoint_schema_disagrees schema_version=%s codec=%s "
+            "expected_schema=%s expected_codec=v18 reason=public_goods_active",
+            schema_version,
+            codec,
+            EVENT_SCHEMA_REPLAY_V20,
+        )
+    if collective_projects_active and not public_goods_active and (
         schema_version != EVENT_SCHEMA_REPLAY_V19 or codec != "v17"
     ):
         _LOGGER.warning(
@@ -5840,7 +5854,12 @@ def select_checkpoint_schema(
             EVENT_SCHEMA_REPLAY_V18,
         )
     agreed = (
-        collective_projects_active
+        public_goods_active
+        and schema_version == EVENT_SCHEMA_REPLAY_V20
+        and codec == "v18"
+    ) or (
+        not public_goods_active
+        and collective_projects_active
         and schema_version == EVENT_SCHEMA_REPLAY_V19
         and codec == "v17"
     ) or (

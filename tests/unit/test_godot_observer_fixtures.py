@@ -108,6 +108,13 @@ _PROJECT_EVENT_NAMES = frozenset(
         "PROJECT_COMPLETED",
     }
 )
+_PUBLIC_GOOD_EVENT_NAMES = frozenset(
+    {
+        "PUBLIC_GOOD_BENEFIT",
+        "PUBLIC_GOOD_MAINTAINED",
+        "PUBLIC_GOOD_OPPOSED",
+    }
+)
 _POSSESSION_EVENT_NAMES = frozenset(
     {
         "CORPSE_CUSTODY_OPENED",
@@ -133,6 +140,7 @@ def test_event_fixtures_cover_closed_semantic_types() -> None:
             | _COMMITMENT_EVENT_NAMES
             | _EXCHANGE_EVENT_NAMES
             | _PROJECT_EVENT_NAMES
+            | _PUBLIC_GOOD_EVENT_NAMES
         )
     )
     assert names == expected

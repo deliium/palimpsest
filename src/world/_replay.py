@@ -53,6 +53,7 @@ from world.events import (
     EVENT_SCHEMA_REPLAY_V17,
     EVENT_SCHEMA_REPLAY_V18,
     EVENT_SCHEMA_REPLAY_V19,
+    EVENT_SCHEMA_REPLAY_V20,
     AgentCreated,
     AgentEnteredWorld,
     AgentInitializationRecorded,
@@ -66,6 +67,8 @@ from world.events import (
     ArtifactPartiallyLost,
     Asked,
     Attacked,
+    CommitmentDeclared,
+    CorpseCustodyOpened,
     CraftStarted,
     Died,
     Dropped,
@@ -73,22 +76,13 @@ from world.events import (
     Eaten,
     EnvironmentalHazardEnded,
     EnvironmentalHazardStarted,
-    CorpseCustodyOpened,
-    ExperimentResolved,
-    CommitmentDeclared,
     ExchangeCompleted,
     ExchangeProposed,
     ExchangeWithdrawn,
-    ProjectAbandoned,
-    ProjectCompleted,
-    ProjectContributed,
-    ProjectCreated,
-    ProjectShortage,
-    PossessionClaimAsserted,
-    TakenFromCorpse,
+    ExperimentResolved,
     ExposureApplied,
-    Fled,
     Fed,
+    Fled,
     Given,
     Helped,
     ItemCrafted,
@@ -96,13 +90,22 @@ from world.events import (
     KinshipEdgeRecorded,
     LifecycleStageChanged,
     Moved,
+    NeedsApplied,
+    PossessionClaimAsserted,
+    ProjectAbandoned,
+    ProjectCompleted,
+    ProjectContributed,
+    ProjectCreated,
+    ProjectShortage,
+    PublicGoodBenefit,
+    PublicGoodMaintained,
+    PublicGoodOpposed,
     RepositoryEstablished,
     RepositoryIndexed,
     RepositoryMaintained,
     RepositoryMemberDeposited,
     RepositoryMemberRetrieved,
     RepositoryNeglected,
-    NeedsApplied,
     ResourceHarvested,
     ResourceNodeDepleted,
     ResourceNodeRecovered,
@@ -113,6 +116,7 @@ from world.events import (
     StructureBuilt,
     StructureRepaired,
     Taken,
+    TakenFromCorpse,
     Talked,
     TemperatureBandChanged,
     Told,
@@ -242,6 +246,15 @@ def project_events(
     base_revision = state.revision
     seen_ids: set[EventId] = set()
     previous_tick: int | None = None
+    public_goods_decay_millis = next(
+        (
+            event.details.decay_millis
+            for event in normalized
+            if type(event.details) is ProjectCompleted
+            and event.details.decay_millis is not None
+        ),
+        0,
+    )
 
     for group in _group_by_tick(normalized):
         if previous_tick is not None and group.tick <= previous_tick:
@@ -258,6 +271,7 @@ def project_events(
             assign_revision=True,
             production_catalog=production_catalog,
             environmental_dynamics=environmental_dynamics,
+            public_goods_decay_millis=public_goods_decay_millis,
         )
         if schema_version == EVENT_SCHEMA_REPLAY_V6:
             _LOG.debug(
@@ -312,11 +326,20 @@ def project_event_prefix(
         expected_world_id=expected_world_id,
         base_revision=state.revision,
         seen_ids=set(),
-            schema_version=schema_version,
-            assign_revision=includes_last_event,
-            production_catalog=production_catalog,
-            environmental_dynamics=environmental_dynamics,
-        )
+        schema_version=schema_version,
+        assign_revision=includes_last_event,
+        production_catalog=production_catalog,
+        environmental_dynamics=environmental_dynamics,
+        public_goods_decay_millis=next(
+            (
+                event.details.decay_millis
+                for event in normalized
+                if type(event.details) is ProjectCompleted
+                and event.details.decay_millis is not None
+            ),
+            0,
+        ),
+    )
     return projected
 
 
@@ -371,6 +394,7 @@ def _prepare_events(
             EVENT_SCHEMA_REPLAY_V17,
             EVENT_SCHEMA_REPLAY_V18,
             EVENT_SCHEMA_REPLAY_V19,
+            EVENT_SCHEMA_REPLAY_V20,
         }:
             raise ProjectionError(ProjectionErrorCode.UNSUPPORTED_SCHEMA)
     return normalized, schema_version, run_id
@@ -404,6 +428,7 @@ def _project_tick_group(
     assign_revision: bool,
     production_catalog: ProductionCatalog | None = None,
     environmental_dynamics: object | None = None,
+    public_goods_decay_millis: int = 0,
 ) -> tuple[WorldState, WorldRevision]:
     resulting_revision = group.events[0].resulting_revision
     for event in group.events:
@@ -430,6 +455,15 @@ def _project_tick_group(
         )
         working = next_state
         mutated = mutated or changed
+
+    if schema_version == EVENT_SCHEMA_REPLAY_V20 and public_goods_decay_millis > 0:
+        decayed = _project_public_good_decay(
+            working,
+            group,
+            decay_millis=public_goods_decay_millis,
+        )
+        mutated = mutated or decayed is not working
+        working = decayed
 
     if not assign_revision:
         if working.revision != base_revision:
@@ -662,7 +696,21 @@ def _apply_event_effect(
         case ProjectAbandoned() as abandoned:
             return _project_project_abandoned(state, abandoned), True
         case ProjectCompleted() as completed_project:
-            return _project_project_completed(state, completed_project), True
+            return (
+                _project_project_completed(
+                    state, completed_project, schema_version=schema_version
+                ),
+                True,
+            )
+        case PublicGoodBenefit() as benefit:
+            return _project_public_good_benefit(state, event, benefit), True
+        case PublicGoodMaintained() as maintained:
+            return (
+                _project_public_good_integrity(state, event, maintained),
+                maintained.accepted,
+            )
+        case PublicGoodOpposed() as opposed:
+            return _project_public_good_integrity(state, event, opposed), True
         case _:
             raise ProjectionError(ProjectionErrorCode.PRECONDITION_FAILED)
 
@@ -674,7 +722,11 @@ def _project_repository_established(
     details: RepositoryEstablished,
 ) -> WorldState:
     del event
-    from world.repositories import KnowledgeRepository, RepositoryAccessMode, RepositoryStatus
+    from world.repositories import (
+        KnowledgeRepository,
+        RepositoryAccessMode,
+        RepositoryStatus,
+    )
 
     if details.repository_id in state.repositories:
         raise ProjectionError(ProjectionErrorCode.INVARIANT_FAILED)
@@ -783,6 +835,7 @@ def _project_repository_maintained(
 ) -> WorldState:
     del event
     from dataclasses import replace
+
     from world.repositories import RepositoryStatus
 
     repository = state.repositories.get(details.repository_id)
@@ -844,6 +897,7 @@ def _project_repository_neglected(
 ) -> WorldState:
     del event
     from dataclasses import replace
+
     from world.repositories import RepositoryStatus
 
     repository = state.repositories.get(details.repository_id)
@@ -2453,7 +2507,9 @@ def _project_project_abandoned(state: WorldState, details: ProjectAbandoned):
     return rebuild_world_state(state, collective_projects=projects)
 
 
-def _project_project_completed(state: WorldState, details: ProjectCompleted):
+def _project_project_completed(
+    state: WorldState, details: ProjectCompleted, *, schema_version: int
+):
     from world.collective_projects import CollectiveProjectStatus, catalog_row
     from world.production import Structure
 
@@ -2462,7 +2518,14 @@ def _project_project_completed(state: WorldState, details: ProjectCompleted):
         raise ProjectionError(ProjectionErrorCode.PRECONDITION_FAILED)
     projects = dict(state.collective_projects)
     projects[details.project_id] = replace(
-        project, status=CollectiveProjectStatus.COMPLETED
+        project,
+        status=CollectiveProjectStatus.COMPLETED,
+        linked_structure_id=(
+            details.structure_id
+            if schema_version == EVENT_SCHEMA_REPLAY_V20
+            and project.kind.value != "record_site"
+            else project.linked_structure_id
+        ),
     )
     structures = None
     row = catalog_row(project.kind)
@@ -2485,3 +2548,126 @@ def _project_project_completed(state: WorldState, details: ProjectCompleted):
     return rebuild_world_state(
         state, structures=structures, collective_projects=projects
     )
+
+
+def _project_public_good_benefit(
+    state: WorldState, event: WorldEvent, details: PublicGoodBenefit
+):
+    state = _project_public_good_integrity(state, event, details)
+    if details.benefit_code != "draw":
+        return state
+    project = state.collective_projects.get(details.project_id)
+    bodies = dict(state.bodies)
+    body = bodies.get(details.actor_id)
+    if body is not None and details.resulting_thirst is not None:
+        from world.values import Thirst
+
+        bodies[details.actor_id] = replace(
+            body, thirst=Thirst(details.resulting_thirst)
+        )
+    elif body is not None and details.resulting_hunger is not None:
+        from world.values import Hunger
+
+        bodies[details.actor_id] = replace(
+            body, hunger=Hunger(details.resulting_hunger)
+        )
+    structures = dict(state.structures)
+    if (
+        project is not None
+        and project.kind.value in {"storage", "winter_reserve"}
+        and project.linked_structure_id is not None
+        and project.linked_structure_id in structures
+    ):
+        store = structures[project.linked_structure_id]
+        structures[store.entity_id] = replace(
+            store, stored_quantity=max(0, store.stored_quantity - 1)
+        )
+    return rebuild_world_state(state, bodies=bodies, structures=structures)
+
+
+def _project_public_good_integrity(
+    state: WorldState, event: WorldEvent, details: object
+):
+    from world.collective_projects import (
+        PublicGoodAct,
+        PublicGoodActKind,
+        PublicGoodActSource,
+        append_public_act,
+    )
+
+    project = state.collective_projects.get(details.project_id)  # type: ignore[attr-defined]
+    if project is None:
+        return state
+    structures = dict(state.structures)
+    structure = (
+        None
+        if project.linked_structure_id is None
+        else structures.get(project.linked_structure_id)
+    )
+    if structure is not None:
+        structures[structure.entity_id] = replace(
+            structure, integrity=details.integrity_millis / 1000  # type: ignore[attr-defined]
+        )
+    act_kind = {
+        "public_good_benefit": PublicGoodActKind.BENEFIT
+        if getattr(details, "benefit_code", "") != "draw"
+        else PublicGoodActKind.DRAW,
+        "public_good_maintained": PublicGoodActKind.MAINTAIN,
+        "public_good_opposed": PublicGoodActKind.OPPOSE,
+    }[details.kind]  # type: ignore[attr-defined]
+    if details.kind == "public_good_maintained" and details.accepted is False:  # type: ignore[attr-defined]
+        return rebuild_world_state(state, structures=structures)
+    source = (
+        PublicGoodActSource.PRESENCE
+        if getattr(details, "source", "command") == "presence"
+        else PublicGoodActSource.COMMAND
+    )
+    projects = dict(state.collective_projects)
+    projects[project.project_id] = append_public_act(
+        project,
+        PublicGoodAct(
+            actor_id=details.actor_id,  # type: ignore[attr-defined]
+            tick=event.tick,
+            act=act_kind,
+            source=source,
+        ),
+    )
+    return rebuild_world_state(
+        state, structures=structures, collective_projects=projects
+    )
+
+
+def _project_public_good_decay(
+    state: WorldState, group: _TickGroup, *, decay_millis: int
+) -> WorldState:
+    """Apply unwitnessed end-of-tick decay once per linked structure."""
+    witnessed_structure_ids = {
+        project.linked_structure_id
+        for event in group.events
+        if type(event.details) is PublicGoodBenefit
+        and event.details.source == "presence"
+        if (project := state.collective_projects.get(event.details.project_id))
+        is not None
+        and project.linked_structure_id is not None
+    }
+    structures = dict(state.structures)
+    changed = False
+    seen_structure_ids: set[EntityId] = set()
+    for project in state.collective_projects.values():
+        structure_id = project.linked_structure_id
+        if (
+            structure_id is None
+            or structure_id in seen_structure_ids
+            or structure_id in witnessed_structure_ids
+        ):
+            continue
+        seen_structure_ids.add(structure_id)
+        structure = structures.get(structure_id)
+        if structure is None or structure.integrity <= 0:
+            continue
+        integrity = max(0.0, structure.integrity - (decay_millis / 1000))
+        structures[structure_id] = replace(structure, integrity=integrity)
+        changed = True
+    if not changed:
+        return state
+    return rebuild_world_state(state, structures=structures)

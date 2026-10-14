@@ -52,6 +52,7 @@ from world.artifacts import (
     require_record_integrity,
 )
 from world.communications import StructuredUtterance
+from world.collective_projects import PublicGoodAct
 from world.environment import HazardKind, Season, TemperatureBand
 from world.identifiers import (
     EntityId,
@@ -1142,10 +1143,23 @@ class ObservedCollectiveProject:
     labor_done: int
     materials_done: int
     contributions: tuple[ObservedProjectContribution, ...] = ()
+    public_acts: tuple[PublicGoodAct, ...] = ()
+    linked_structure_id: EntityId | None = None
 
     def __post_init__(self) -> None:
         if type(self.project_id) is not EntityId:
             raise TypeError("ObservedCollectiveProject.project_id must be EntityId")
+        if not isinstance(self.public_acts, tuple) or any(
+            type(row) is not PublicGoodAct for row in self.public_acts
+        ):
+            raise TypeError("ObservedCollectiveProject.public_acts must be a tuple")
+        if (
+            self.linked_structure_id is not None
+            and type(self.linked_structure_id) is not EntityId
+        ):
+            raise TypeError(
+                "ObservedCollectiveProject.linked_structure_id must be EntityId or None"
+            )
         if type(self.location_id) is not EntityId:
             raise TypeError("ObservedCollectiveProject.location_id must be EntityId")
         if type(self.kind) is not str or not self.kind:

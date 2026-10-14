@@ -1011,6 +1011,79 @@ def _mint_collective_project_goals(
     return minted
 
 
+def _mint_public_good_goals(
+    goals: list[Goal],
+    observation: Observation,
+    *,
+    owner: AgentId,
+    tick: int,
+) -> list[Goal]:
+    """Mint one private use intention for each visible drawable completion."""
+    existing = {
+        goal.outcome.outcome_code
+        for goal in goals
+        if goal.outcome is not None and goal.outcome.outcome_code is not None
+    }
+    foci_count = sum(
+        1
+        for goal in goals
+        if goal.status is GoalStatus.ACTIVE
+        and goal.horizon is GoalHorizon.CURRENT_INTENTION
+    )
+    projects = sorted(
+        (
+            project
+            for project in observation.collective_projects
+            if project.status == "completed"
+            and project.kind in {"well", "storage", "winter_reserve"}
+        ),
+        key=lambda project: project.project_id.value,
+    )
+    minted: list[Goal] = []
+    for ordinal, project in enumerate(projects):
+        code = f"public_good:use:{project.project_id.value}"
+        if code in existing:
+            continue
+        if foci_count >= _MAX_FOCI or len(goals) + len(minted) >= _MAX_BOARD_GOALS:
+            _LOG.debug(
+                "public_good_goal_skipped reason=foci_cap owner_id=%s",
+                owner.value,
+            )
+            continue
+        goal = Goal(
+            goal_id=derive_cognition_goal_id(
+                owner_id=owner.value,
+                tick=tick,
+                parent_goal_id=None,
+                template_code="public_good.v1",
+                ordinal=ordinal,
+            ),
+            owner_id=owner,
+            description="public-good-use",
+            priority=0.5,
+            status=GoalStatus.ACTIVE,
+            outcome=GoalOutcome(
+                kind=GoalOutcomeKind.ACHIEVE_CODE,
+                outcome_code=code,
+            ),
+            horizon=GoalHorizon.CURRENT_INTENTION,
+            provenance=GoalProvenance(
+                origin_kind=GoalOriginKind.INFERRED,
+                template_code="public_good.v1",
+            ),
+            created_tick=tick,
+        )
+        minted.append(goal)
+        existing.add(code)
+        foci_count += 1
+        _LOG.debug(
+            "public_good_goal_minted owner_id=%s project_id=%s",
+            owner.value,
+            project.project_id.value,
+        )
+    return minted
+
+
 def _goal_serves_drives(goal: Goal, drives: frozenset[DriveKind]) -> bool:
     if not drives:
         return False
@@ -1076,8 +1149,15 @@ class PassthroughGoalManager:
         self_state: SelfModel,
         memory: RetrievedMemoryContext,
         collective_projects_active: bool = False,
+        public_goods_active: bool = False,
     ) -> GoalBoard:
-        del situation, self_state, memory, collective_projects_active
+        del (
+            situation,
+            self_state,
+            memory,
+            collective_projects_active,
+            public_goods_active,
+        )
         owner = loop_input.agent_id
         tick = loop_input.observation.tick
         goals = _snapshot_goals(loop_input)
@@ -1126,6 +1206,7 @@ class HierarchicalGoalManager:
         self_state: SelfModel,
         memory: RetrievedMemoryContext,
         collective_projects_active: bool = False,
+        public_goods_active: bool = False,
     ) -> GoalBoard:
         owner = loop_input.agent_id
         tick = loop_input.observation.tick
@@ -1461,6 +1542,27 @@ class HierarchicalGoalManager:
 
         if collective_projects_active:
             for minted in _mint_collective_project_goals(
+                goals_list,
+                loop_input.observation,
+                owner=owner,
+                tick=tick,
+            ):
+                goals_list.append(minted)
+                by_id[minted.goal_id] = minted
+                intents.append(
+                    _emit_transition(
+                        goal_id=minted.goal_id,
+                        owner=owner,
+                        tick=tick,
+                        from_status=GoalStatus.ACTIVE,
+                        to_status=GoalStatus.ACTIVE,
+                        reason=GoalTransitionIntentReason.FOCUS_SELECTED,
+                        resulting_goal=minted,
+                    )
+                )
+
+        if public_goods_active:
+            for minted in _mint_public_good_goals(
                 goals_list,
                 loop_input.observation,
                 owner=owner,
