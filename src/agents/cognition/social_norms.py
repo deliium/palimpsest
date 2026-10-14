@@ -72,7 +72,16 @@ _NOTICE_REASONS: Final[frozenset[str]] = frozenset(
         "trust_revision_skipped",
     }
 )
-_KNOWN_KINDS: Final[frozenset[str]] = frozenset({"give", "sleep", "attack"})
+_KNOWN_KINDS: Final[frozenset[str]] = frozenset(
+    {
+        "give",
+        "sleep",
+        "attack",
+        "public_good_benefit",
+        "public_good_maintained",
+        "public_good_opposed",
+    }
+)
 
 
 class NormPattern(StrEnum):
@@ -82,6 +91,7 @@ class NormPattern(StrEnum):
     SHARE_UNDER_SCARCITY = "share_under_scarcity"
     SPARE_AFTER_SLEEP = "spare_after_sleep"
     RECIPROCAL_EXCHANGE = "reciprocal_exchange"
+    SHARED_UPKEEP = "shared_upkeep"
 
 
 class NormExpectation(StrEnum):
@@ -91,6 +101,7 @@ class NormExpectation(StrEnum):
     GIVE = "give"
     WITHHOLD_ATTACK = "withhold_attack"
     GIVE_AGAIN = "give_again"
+    MAINTAIN_STRUCTURE = "maintain_structure"
 
 
 class NormStatus(StrEnum):
@@ -140,6 +151,7 @@ _EXPECTATION_FOR: Final[Mapping[NormPattern, NormExpectation]] = {
     NormPattern.SHARE_UNDER_SCARCITY: NormExpectation.GIVE,
     NormPattern.SPARE_AFTER_SLEEP: NormExpectation.WITHHOLD_ATTACK,
     NormPattern.RECIPROCAL_EXCHANGE: NormExpectation.GIVE_AGAIN,
+    NormPattern.SHARED_UPKEEP: NormExpectation.MAINTAIN_STRUCTURE,
 }
 _PATTERN_TOKENS: Final[frozenset[str]] = frozenset(item.value for item in NormPattern)
 
@@ -1370,6 +1382,21 @@ def apply_norm_update(
                 seen=seen,
                 policy=active_policy,
             )
+        elif occurrence.kind in {
+            "public_good_maintained",
+            "public_good_opposed",
+            "public_good_benefit",
+        }:
+            _apply_shared_upkeep(
+                occurrence=occurrence,
+                ordinal=ordinal,
+                tick=tick,
+                identity=identity,
+                beliefs=beliefs,
+                notices=notices,
+                seen=seen,
+                policy=active_policy,
+            )
 
     _expire_windows(
         tick=tick,
@@ -1403,6 +1430,61 @@ def apply_norm_update(
         len(ledger.beliefs),
     )
     return ledger
+
+
+def _apply_shared_upkeep(
+    *,
+    occurrence: ObservedOccurrence,
+    ordinal: int,
+    tick: int,
+    identity: OwnerSafeSocialIdentity,
+    beliefs: list[_BeliefDraft],
+    notices: list[str],
+    seen: set[tuple[str, str]],
+    policy: SocialNormPolicy,
+) -> None:
+    if occurrence.kind == "public_good_benefit":
+        _LOG.debug(
+            "norm_public_good_ignored kind=%s reason=not_a_violation",
+            occurrence.kind,
+        )
+        return
+    if (
+        occurrence.kind == "public_good_maintained"
+        and occurrence.public_facts.get("accepted") is not True
+    ):
+        return
+    actor = _resolve_agent(identity, occurrence.actor_id)
+    if actor is None:
+        _notice(notices, "unresolved_entity")
+        _log_drop("unresolved_entity")
+        return
+    conforming = occurrence.kind == "public_good_maintained"
+    _record_evidence(
+        beliefs=beliefs,
+        notices=notices,
+        owner_id=identity.owner_id,
+        pattern=NormPattern.SHARED_UPKEEP,
+        counterparts=(),
+        delta=policy.conforming_delta if conforming else policy.violation_delta,
+        channel=(
+            NormEvidenceChannel.CONFORMING
+            if conforming
+            else NormEvidenceChannel.VIOLATION
+        ),
+        lineage_ref=_lineage(tick, ordinal, occurrence),
+        tick=tick,
+        actor_id=actor,
+        location_id=None,
+        window_until=None,
+        policy=policy,
+        seen=seen,
+    )
+    _LOG.debug(
+        "norm_shared_upkeep owner_id=%s sign=%s",
+        identity.owner_id.value,
+        "positive" if conforming else "negative",
+    )
 
 
 def _apply_give(
@@ -1990,6 +2072,8 @@ def _choose_response(
     policy: SocialNormPolicy,
     scarcity: bool,
 ) -> tuple[NormResponse, str | None]:
+    if belief.pattern is NormPattern.SHARED_UPKEEP:
+        return NormResponse.IGNORE, None
     if violator is not None and belief.confidence + 1e-9 >= policy.enforce_confidence:
         return NormResponse.ENFORCE, None
     uttered = (

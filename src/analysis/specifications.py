@@ -50,7 +50,7 @@ __all__ = [
 ]
 
 METRIC_CATALOG_VERSION: Final[str] = "metric-catalog-v1"
-METRIC_FAMILY_COUNT: Final[int] = 86
+METRIC_FAMILY_COUNT: Final[int] = 91
 
 # Align with existing memory-drift / transmission document versions.
 _ALGO_V1: Final[str] = "1"
@@ -163,6 +163,11 @@ class MetricFamilyId(StrEnum):
     COLLECTIVE_PROJECT_PROGRESS = "collective_project_progress"
     COLLECTIVE_PROJECT_CONTRIBUTION = "collective_project_contribution"
     COLLECTIVE_PROJECT_OUTCOME = "collective_project_outcome"
+    PUBLIC_GOOD_CONTRIBUTION_INEQUALITY = "public_good_contribution_inequality"
+    PUBLIC_GOOD_BENEFIT_DISTRIBUTION = "public_good_benefit_distribution"
+    PUBLIC_GOOD_MAINTENANCE_BURDEN = "public_good_maintenance_burden"
+    PUBLIC_GOOD_FREE_RIDER_PATTERN = "public_good_free_rider_pattern"
+    PUBLIC_GOOD_COOPERATION_STABILITY = "public_good_cooperation_stability"
 
 
 class DenominatorKind(StrEnum):
@@ -2549,6 +2554,147 @@ def _spec_collective_project_outcome() -> MetricSpecification:
     )
 
 
+def _public_good_spec(
+    family_id: MetricFamilyId,
+    *,
+    population: str,
+    denominator: str,
+    formulas: Mapping[str, str],
+    value_keys: tuple[str, ...],
+) -> MetricSpecification:
+    return _base(
+        family_id=family_id,
+        evidence_inputs=frozenset({EvidenceStage.OBJECTIVE_EVENT_STATE}),
+        population=population,
+        denominator=denominator,
+        denominator_kind=DenominatorKind.OCCURRENCE,
+        cohort_window="as_of tick public-good events",
+        deceased_policy="not_applicable",
+        zero_holding_policy="spec absent -> family omitted",
+        opportunity_vs_occurrence="objective event counts only",
+        self_edge_policy="not_applicable",
+        censoring_policy="counts remain descriptive; no agent role is derived",
+        formulas=formulas,
+        value_keys=value_keys,
+        empty_case="availability=absent; no_public_goods",
+    )
+
+
+def _spec_public_good_contribution_inequality() -> MetricSpecification:
+    return _public_good_spec(
+        MetricFamilyId.PUBLIC_GOOD_CONTRIBUTION_INEQUALITY,
+        population="actors_named_on_each_public_project",
+        denominator="recorded_actor_count",
+        formulas={
+            "contributor_count": "actors with at least one accepted labor event",
+            "recorded_actor_count": "actors named on contribution or public events",
+            "labor_sum": "accepted labor events over recorded actors",
+            "max_labor": "maximum accepted labor among contributors, else zero",
+            "min_labor": "minimum accepted labor among contributors, else zero",
+            "gini_millis": "quantized accepted-labor Gini stored as millionths",
+        },
+        value_keys=(
+            "project_id",
+            "project_kind",
+            "contributor_count",
+            "recorded_actor_count",
+            "labor_sum",
+            "max_labor",
+            "min_labor",
+            "gini_millis",
+        ),
+    )
+
+
+def _spec_public_good_benefit_distribution() -> MetricSpecification:
+    return _public_good_spec(
+        MetricFamilyId.PUBLIC_GOOD_BENEFIT_DISTRIBUTION,
+        population="public_project_kinds",
+        denominator="benefit_event_count",
+        formulas={
+            "benefit_event_count": "benefit events for the public kind",
+            "distinct_beneficiary_count": "distinct actors receiving a benefit",
+            "beneficiary_without_labor_count": "beneficiaries without accepted labor",
+            "contributor_without_benefit_count": "contributors without a benefit event",
+        },
+        value_keys=(
+            "project_kind",
+            "benefit_event_count",
+            "distinct_beneficiary_count",
+            "beneficiary_without_labor_count",
+            "contributor_without_benefit_count",
+        ),
+    )
+
+
+def _spec_public_good_maintenance_burden() -> MetricSpecification:
+    return _public_good_spec(
+        MetricFamilyId.PUBLIC_GOOD_MAINTENANCE_BURDEN,
+        population="linked_public_structures",
+        denominator="maintain_attempt_count",
+        formulas={
+            "maintain_attempt_count": "all maintenance attempts",
+            "maintain_accepted_count": "accepted maintenance attempts",
+            "oppose_count": "opposition events",
+            "decay_tick_count": "ticks with at least one applied integrity decay",
+            "integrity_millis_sum": "linked structure integrity sum at window end",
+        },
+        value_keys=(
+            "maintain_attempt_count",
+            "maintain_accepted_count",
+            "oppose_count",
+            "decay_tick_count",
+            "integrity_millis_sum",
+        ),
+    )
+
+
+def _spec_public_good_free_rider_pattern() -> MetricSpecification:
+    return _public_good_spec(
+        MetricFamilyId.PUBLIC_GOOD_FREE_RIDER_PATTERN,
+        population="actors_named_on_public_projects",
+        denominator="recorded_actor_count",
+        formulas={
+            "contribute_and_use_count": "actors with accepted labor and a benefit",
+            "contribute_low_use_count": "contributors with at most one benefit event",
+            "use_without_contribution_count": "beneficiaries without accepted labor",
+            "oppose_actor_count": "distinct actors with opposition events",
+            "maintain_actor_count": "distinct actors with maintenance events",
+        },
+        value_keys=(
+            "contribute_and_use_count",
+            "contribute_low_use_count",
+            "use_without_contribution_count",
+            "oppose_actor_count",
+            "maintain_actor_count",
+        ),
+    )
+
+
+def _spec_public_good_cooperation_stability() -> MetricSpecification:
+    return _public_good_spec(
+        MetricFamilyId.PUBLIC_GOOD_COOPERATION_STABILITY,
+        population="public_projects",
+        denominator="ticks_observed",
+        formulas={
+            "completed_public_count": "public projects completed by window end",
+            "open_public_count": "public projects still open at window end",
+            "abandoned_public_count": "public projects abandoned by window end",
+            "ticks_with_accepted_work": "ticks containing accepted public labor",
+            "ticks_observed": "inclusive ticks from zero through window end",
+            "longest_quiet_gap": "longest observed run without accepted public work",
+        },
+        value_keys=(
+            "completed_public_count",
+            "open_public_count",
+            "abandoned_public_count",
+            "ticks_with_accepted_work",
+            "ticks_observed",
+            "longest_quiet_gap",
+        ),
+    )
+
+
 def _spec_commitment_fulfillment_status() -> MetricSpecification:
     return _base(
         family_id=MetricFamilyId.COMMITMENT_FULFILLMENT_STATUS,
@@ -3917,6 +4063,11 @@ _BUILDERS: Final[tuple[Callable[[], MetricSpecification], ...]] = (
     _spec_collective_project_progress,
     _spec_collective_project_contribution,
     _spec_collective_project_outcome,
+    _spec_public_good_contribution_inequality,
+    _spec_public_good_benefit_distribution,
+    _spec_public_good_maintenance_burden,
+    _spec_public_good_free_rider_pattern,
+    _spec_public_good_cooperation_stability,
     _spec_emergent_group_formation,
     _spec_emergent_social_norms,
     _spec_persistent_social_conventions,

@@ -263,6 +263,11 @@ def test_all_metric_families_assemble(reference_outcome) -> None:
             MetricFamilyId.EMERGENT_SOCIAL_NORMS,
             MetricFamilyId.PERSISTENT_SOCIAL_CONVENTIONS,
             MetricFamilyId.EXTERNAL_ARTIFACT_MEMORY,
+            MetricFamilyId.PUBLIC_GOOD_CONTRIBUTION_INEQUALITY,
+            MetricFamilyId.PUBLIC_GOOD_BENEFIT_DISTRIBUTION,
+            MetricFamilyId.PUBLIC_GOOD_MAINTENANCE_BURDEN,
+            MetricFamilyId.PUBLIC_GOOD_FREE_RIDER_PATTERN,
+            MetricFamilyId.PUBLIC_GOOD_COOPERATION_STABILITY,
         }
     }
     assert required.issubset(produced)

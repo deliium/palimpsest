@@ -2767,6 +2767,7 @@ OFF_GATE_MATRIX_EXPERIMENT_IDS: Final[frozenset[str]] = frozenset(
         "subjective_exchange@1",
         "exchange_functions@1",
         "collective_projects@1",
+        "public_goods@1",
     }
 )
 
@@ -3702,7 +3703,12 @@ def experiment_an_durable_records(
             else ArtifactInterpretationMode.DISABLED
         )
         rebuilt = tuple(
-            replace(agent, cognition=replace(agent.cognition, artifact_interpretation_mode=mode))
+            replace(
+                agent,
+                cognition=replace(
+                    agent.cognition, artifact_interpretation_mode=mode
+                ),
+            )
             for agent in cfg.agents
         )
         return replace(cfg, agents=rebuilt)
@@ -5119,3 +5125,123 @@ def experiment_aw_collective_projects(
         arms=arms,
     )
 
+
+def note_public_good_arm(arm: str, events: object) -> None:
+    """Log objective public-act event counts after a scripted arm."""
+    benefits = 0
+    maintains = 0
+    opposes = 0
+    for event in tuple(events):
+        kind = getattr(getattr(event, "details", None), "kind", "")
+        benefits += kind == "public_good_benefit"
+        maintains += kind == "public_good_maintained"
+        opposes += kind == "public_good_opposed"
+    _LOG.debug(
+        "public_good_arm arm=%s benefits=%s maintains=%s opposes=%s",
+        arm,
+        benefits,
+        maintains,
+        opposes,
+    )
+
+
+def experiment_ax_public_goods(
+    base: SimulationRunnerConfig,
+    *,
+    seed_matrix: ExperimentSeedMatrix | None = None,
+    max_ticks: int = 8,
+) -> ExperimentDefinition:
+    """Off-gate Experiment AX for public contribution, use, and upkeep."""
+    from dataclasses import fields
+
+    from simulation.runner_models import (
+        RUNNER_SCHEMA_VERSION_V42,
+        RUNNER_SCHEMA_VERSION_V43,
+        CollectiveProjectsSpec,
+        PublicGoodsSpec,
+        example_collective_projects_spec,
+    )
+
+    matrix = seed_matrix or ExperimentSeedMatrix(seeds=(base.seed,))
+    projects = example_collective_projects_spec()
+    opposition_projects = CollectiveProjectsSpec(idle_ticks=8)
+    goods = PublicGoodsSpec(decay_millis=0)
+    maintained_goods = PublicGoodsSpec(decay_millis=250)
+
+    def _v43(
+        project_spec: CollectiveProjectsSpec = projects,
+        goods_spec: PublicGoodsSpec = goods,
+    ) -> SimulationRunnerConfig:
+        return replace(
+            base,
+            schema_version=RUNNER_SCHEMA_VERSION_V43,
+            mortality_mode=MortalityMode.DISABLED,
+            stop_policy=RunnerStopPolicy(max_ticks=max_ticks),
+            v3_capability_flags=V3CapabilityFlags(),
+            collective_projects=project_spec,
+            public_goods=goods_spec,
+            subjective_valuation=None,
+            resource_exchange_profile=None,
+            population_lifecycle=None,
+        )
+
+    channel_off = replace(
+        base,
+        schema_version=RUNNER_SCHEMA_VERSION_V42,
+        mortality_mode=MortalityMode.DISABLED,
+        stop_policy=RunnerStopPolicy(max_ticks=max_ticks),
+        v3_capability_flags=V3CapabilityFlags(),
+        collective_projects=projects,
+        public_goods=None,
+        subjective_valuation=None,
+        resource_exchange_profile=None,
+        population_lifecycle=None,
+    )
+    arms = (
+        ("ax-channel-off", "public_goods_channel_off", channel_off),
+        ("ax-contribute-and-use", "public_goods_contribute_use", _v43()),
+        ("ax-use-without-contribution", "public_goods_use_only", _v43()),
+        ("ax-contribute-low-use", "public_goods_low_use", _v43()),
+        ("ax-oppose", "public_goods_oppose", _v43(opposition_projects)),
+        ("ax-maintain", "public_goods_maintain", _v43(goods_spec=maintained_goods)),
+    )
+    forbidden_aliases = {
+        "free_rider",
+        "freerider",
+        "free_rider_id",
+        "cheater",
+        "selfish",
+        "guilty",
+        "fair",
+        "unfair",
+        "deserved",
+        "sanction",
+        "punish",
+        "punishment",
+        "exclude",
+        "exclusion",
+        "toll",
+        "wage",
+        "membership",
+    } | set(_LEADER_ALIASES)
+    for arm_id, _label, config in arms:
+        names = {item.name for item in fields(config)}
+        if config.public_goods is not None:
+            names.update(item.name for item in fields(config.public_goods))
+        blocked = sorted(names & forbidden_aliases)
+        if blocked:
+            _LOG.warning(
+                "public_good_arm_forbidden arm=%s alias=%s",
+                arm_id,
+                blocked[0],
+            )
+    _LOG.info(
+        "experiment_registered experiment_id=public_goods@1 arms=%s",
+        len(arms),
+    )
+    return _definition(
+        experiment_id="public_goods@1",
+        base=base,
+        seed_matrix=matrix,
+        arms=arms,
+    )

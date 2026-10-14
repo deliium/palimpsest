@@ -347,9 +347,15 @@ def assemble_arm_metric_bundle(
         inputs = replace(
             inputs,
             collective_projects_spec=arm.assignment.runner_config.collective_projects,
+            public_goods_spec=getattr(
+                arm.assignment.runner_config, "public_goods", None
+            ),
             collective_project_events=tuple(events or ()),
         )
-    if getattr(arm.assignment.runner_config, "resource_exchange_profile", None) is not None:
+    if (
+        getattr(arm.assignment.runner_config, "resource_exchange_profile", None)
+        is not None
+    ):
         inputs = replace(
             inputs,
             resource_exchange_profile_spec=(

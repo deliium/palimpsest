@@ -1040,6 +1040,26 @@ def apply_reputation_update(
             _drop(owner_id, resolved_tick, "ignored_kind")
             continue
         deltas = _OBSERVATION_DELTAS.get(occurrence.kind)
+        if occurrence.kind == "public_good_maintained":
+            if occurrence.public_facts.get("accepted") is True:
+                deltas = _OBSERVATION_DELTAS["help"]
+            else:
+                deltas = None
+        elif occurrence.kind == "project_contributed":
+            if (
+                occurrence.public_facts.get("accepted") is True
+                and occurrence.public_facts.get("public_good") is True
+            ):
+                deltas = _OBSERVATION_DELTAS["help"]
+            else:
+                deltas = None
+        elif occurrence.kind == "public_good_opposed":
+            deltas = _OBSERVATION_DELTAS["attack"]
+        elif occurrence.kind == "public_good_benefit":
+            _LOG.debug(
+                "reputation_public_good_ignored kind=%s reason=ignored_kind",
+                occurrence.kind,
+            )
         if deltas is None:
             _drop(owner_id, resolved_tick, "ignored_kind")
             continue
@@ -1049,6 +1069,17 @@ def apply_reputation_update(
         if target_id is None:
             _drop(owner_id, resolved_tick, "unresolved_entity")
             continue
+        if occurrence.kind in {
+            "public_good_maintained",
+            "public_good_opposed",
+            "project_contributed",
+        }:
+            _LOG.debug(
+                "reputation_public_good_applied owner_id=%s target_id=%s kind=%s",
+                owner_id.value,
+                target_id.value,
+                occurrence.kind,
+            )
         event_id = occurrence.provenance.source_event_id
         if event_id is None:
             raise _fail("lineage_ref", "invalid_lineage")

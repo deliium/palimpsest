@@ -60,6 +60,7 @@ __all__ = [
     "compute_survival",
     "compute_survival_cohort_contrast",
     "living_agent_ticks",
+    "resource_inequality_gini",
 ]
 
 SURVIVAL_COHORT_CONTRAST_METRIC_VERSION: Final[str] = "survival_cohort_contrast@1"
@@ -196,6 +197,16 @@ def _gini(values: np.ndarray) -> float:
     index = np.arange(1, n + 1, dtype=np.float64)
     numerator = 2.0 * float(np.dot(index, ordered)) - (n + 1) * total
     return numerator / (n * total)
+
+
+def resource_inequality_gini(values: Sequence[float]) -> float:
+    """Return the quantized Gini used by the resource-inequality family."""
+    vector = np.asarray(tuple(values), dtype=np.float64)
+    if vector.size == 0:
+        raise NumericalPolicyError("empty_gini")
+    if bool(np.any(vector < 0.0)):
+        raise NumericalPolicyError("negative_gini_value")
+    return _q(_gini(vector))
 
 
 def _theil_t(values: np.ndarray) -> float:

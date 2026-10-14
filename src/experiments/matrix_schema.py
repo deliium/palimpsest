@@ -38,6 +38,7 @@ from simulation.runner_models import (
     RUNNER_SCHEMA_VERSION_V40,
     RUNNER_SCHEMA_VERSION_V41,
     RUNNER_SCHEMA_VERSION_V42,
+    RUNNER_SCHEMA_VERSION_V43,
     ArtifactInterpretationMode,
     CognitiveBudgetMode,
     CulturalNarrativeMode,
@@ -86,6 +87,7 @@ def finalize_matrix_cell_config(
     historical_memory_on = config.historical_memory_layers is not None
     durable_records_on = config.durable_records is not None
     knowledge_repositories_on = config.knowledge_repositories is not None
+    public_goods_on = config.public_goods is not None
     collective_projects_on = config.collective_projects is not None
     resource_exchange_profile_on = config.resource_exchange_profile is not None
     subjective_valuation_on = config.subjective_valuation is not None
@@ -104,7 +106,12 @@ def finalize_matrix_cell_config(
         config.population_lifecycle is not None
         and config.population_lifecycle.has_developmental_extensions()
     )
-    if collective_projects_on:
+    if public_goods_on:
+        schema_version, rule = (
+            RUNNER_SCHEMA_VERSION_V43,
+            "public_goods_on",
+        )
+    elif collective_projects_on:
         schema_version, rule = (
             RUNNER_SCHEMA_VERSION_V42,
             "collective_projects_on",
@@ -287,6 +294,7 @@ def finalize_matrix_cell_config(
         },
     )
     if rule in {
+        "public_goods_on",
         "collective_projects_on",
         "resource_exchange_profile_on",
         "subjective_valuation_on",

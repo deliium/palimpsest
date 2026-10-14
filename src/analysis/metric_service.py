@@ -197,6 +197,7 @@ class MetricComputationInputs:
     subjective_valuation_spec: object | None = None
     resource_exchange_profile_spec: object | None = None
     collective_projects_spec: object | None = None
+    public_goods_spec: object | None = None
     collective_project_events: Sequence[object] | None = None
     subjective_valuation_events: Sequence[object] | None = None
     subjective_valuation_ledgers: Sequence[object] | None = None
@@ -1005,6 +1006,34 @@ def assemble_metric_documents(inputs: MetricComputationInputs) -> MetricBundle:
                     "operation": "assemble_metric_documents",
                     "run_id": run_id,
                     "metric_family": "collective_projects",
+                    "reason_code": "calculation_failed",
+                },
+            )
+            raise
+    if inputs.public_goods_spec is None:
+        logging.getLogger("analysis.public_good_metrics").info(
+            "public_good_metrics_empty reason=public_goods_absent"
+        )
+    else:
+        from analysis.public_good_metrics import assemble_public_good_metrics
+
+        try:
+            documents.extend(
+                assemble_public_good_metrics(
+                    tuple(inputs.collective_project_events or ()),  # type: ignore[arg-type]
+                    run_id=run_id,
+                    input_revision=revision,
+                    spec=inputs.public_goods_spec,
+                    as_of_tick=window_end,
+                )
+            )
+        except Exception:
+            _LOG.error(
+                "metric_family_failed",
+                extra={
+                    "operation": "assemble_metric_documents",
+                    "run_id": run_id,
+                    "metric_family": "public_goods",
                     "reason_code": "calculation_failed",
                 },
             )
