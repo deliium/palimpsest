@@ -6,6 +6,8 @@ export const RESEARCH_UI_VIEWS = [
   'agent',
   'analytics',
   'societies',
+  'contact',
+  'contact',
   'traces',
   'compare',
   'matrix',

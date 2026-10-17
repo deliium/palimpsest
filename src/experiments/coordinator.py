@@ -121,6 +121,16 @@ class ExperimentCoordinator:
                             assignment.condition_id, assignment.runner_config
                         )
                     )
+                if assignment.experiment_id == "cultural_contact@1":
+                    from experiments.cultural_contact_scenario import (
+                        cultural_contact_arbiter,
+                    )
+
+                    runner.set_intervention_arbiter(
+                        cultural_contact_arbiter(
+                            assignment.condition_id, assignment.runner_config
+                        )
+                    )
                 if assignment.experiment_id == "multiple_societies@1":
                     from experiments.multiple_societies_scenario import (
                         multiple_societies_arbiter,

@@ -2768,6 +2768,7 @@ OFF_GATE_MATRIX_EXPERIMENT_IDS: Final[frozenset[str]] = frozenset(
         "public_goods@1",
         "regional_migration@1",
         "multiple_societies@1",
+        "cultural_contact@1",
     }
 )
 
@@ -5257,6 +5258,27 @@ def experiment_ay_regional_migration(
     )
     _LOG.info(
         "experiment_registered experiment_id=regional_migration@1 arms=%s",
+        len(definition.conditions),
+    )
+    return definition
+
+
+def experiment_ba_cultural_contact(
+    base: SimulationRunnerConfig,
+    *,
+    seed_matrix: ExperimentSeedMatrix | None = None,
+    max_ticks: int = 16,
+) -> ExperimentDefinition:
+    """Off-gate Experiment BA: neutral contact and analysis-only cultural change."""
+    from experiments.cultural_contact_scenario import cultural_contact_scenario
+
+    definition = cultural_contact_scenario(
+        base=base,
+        seed_matrix=seed_matrix,
+        max_ticks=max_ticks,
+    )
+    _LOG.info(
+        "experiment_registered experiment_id=cultural_contact@1 arms=%s",
         len(definition.conditions),
     )
     return definition

@@ -66,6 +66,16 @@ async def run_one_assignment(
         assignment.runner_config,
         run_id=assignment.run_id,
     ) as runner:
+        if assignment.experiment_id == "cultural_contact@1":
+            from experiments.cultural_contact_scenario import (
+                cultural_contact_arbiter,
+            )
+
+            runner.set_intervention_arbiter(
+                cultural_contact_arbiter(
+                    assignment.condition_id, assignment.runner_config
+                )
+            )
         if assignment.experiment_id == "regional_migration@1":
             from experiments.regional_migration_scenario import (
                 regional_migration_arbiter,
