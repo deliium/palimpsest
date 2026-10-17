@@ -2767,6 +2767,7 @@ OFF_GATE_MATRIX_EXPERIMENT_IDS: Final[frozenset[str]] = frozenset(
         "collective_projects@1",
         "public_goods@1",
         "regional_migration@1",
+        "multiple_societies@1",
     }
 )
 
@@ -5256,6 +5257,27 @@ def experiment_ay_regional_migration(
     )
     _LOG.info(
         "experiment_registered experiment_id=regional_migration@1 arms=%s",
+        len(definition.conditions),
+    )
+    return definition
+
+
+def experiment_az_multiple_societies(
+    base: SimulationRunnerConfig,
+    *,
+    seed_matrix: ExperimentSeedMatrix | None = None,
+    max_ticks: int = 16,
+) -> ExperimentDefinition:
+    """Off-gate Experiment AZ: analytical candidate societies only."""
+    from experiments.multiple_societies_scenario import multiple_societies_scenario
+
+    definition = multiple_societies_scenario(
+        base=base,
+        seed_matrix=seed_matrix,
+        max_ticks=max_ticks,
+    )
+    _LOG.info(
+        "experiment_registered experiment_id=multiple_societies@1 arms=%s",
         len(definition.conditions),
     )
     return definition

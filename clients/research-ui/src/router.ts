@@ -22,6 +22,7 @@ const RUN_VIEWS = new Set<ResearchUiView>([
   'graphs',
   'agent',
   'analytics',
+  'societies',
   'traces',
   'compare',
 ])

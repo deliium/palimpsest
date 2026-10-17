@@ -29,6 +29,24 @@ from analysis.regional_population import (
     RegionalLocationRow,
     RegionalPopulationInput,
 )
+from analysis.society_divergence import (
+    SOCIETY_DIMENSIONS,
+    SocietyDigestRow,
+    SocietyDivergenceResult,
+    compute_society_divergence,
+)
+from analysis.society_emergence import (
+    SocietyEdgeRow,
+    SocietyEmissionResult,
+    SocietyResidenceRow,
+    compute_candidate_communities,
+)
+from analysis.society_isolation import (
+    SocietyEvidenceEdge,
+    SocietyIsolationResult,
+    SocietyJourneyRow,
+    compute_society_isolation,
+)
 from analysis.sources import (
     InMemoryMemoryEvidenceSource,
     InMemoryObjectiveEventSource,
@@ -83,6 +101,14 @@ __all__ = [
     "repository_event_rows_from_events",
     "repository_event_rows_from_resolutions",
     "repository_objective_rows_from_repositories",
+    "society_digest_rows_from_channel_rows",
+    "society_digest_rows_from_snapshot",
+    "society_emission_inputs_from_context",
+    "society_emission_inputs_from_snapshot",
+    "society_interaction_edges_from_events",
+    "society_journeys_from_regional_input",
+    "society_residence_rows_from_regional_input",
+    "society_trust_edges_from_relationship_rows",
     "spatial_action_rows_from_events",
     "territorial_control_rows_from_spatial_actions",
     "territorial_presence_rows_from_spatial_actions",
@@ -2133,6 +2159,407 @@ def _death_ticks_from_events(events: Sequence[object]) -> dict[str, int]:
         if agent not in deaths or tick < deaths[agent]:
             deaths[agent] = tick
     return deaths
+
+
+@dataclass(frozen=True, slots=True)
+class SocietyAnalysisInputs:
+    """Detached candidate-society lanes ready for metric assembly."""
+
+    emission: SocietyEmissionResult
+    divergence: SocietyDivergenceResult
+    isolation: SocietyIsolationResult
+    living_person_ids: tuple[str, ...]
+
+
+def society_residence_rows_from_regional_input(
+    regional_input: RegionalPopulationInput,
+    *,
+    tick: int,
+) -> tuple[SocietyResidenceRow, ...]:
+    """Project final living region assignment from detached regional facts."""
+    if type(regional_input) is not RegionalPopulationInput:
+        raise TypeError("regional_input must be RegionalPopulationInput")
+    tick = require_exact_nonneg_int("tick", tick)
+    region_by_location = {
+        row.location_id: row.region_id for row in regional_input.location_rows
+    }
+    final_region: dict[str, str] = {}
+    alive: dict[str, bool] = {}
+    for placement_row in regional_input.initial_placements:
+        alive[placement_row.body_id] = placement_row.alive
+        region = region_by_location.get(placement_row.location_id)
+        if region is not None:
+            final_region[placement_row.body_id] = region
+    for event_row in regional_input.events:
+        if (
+            event_row.kind in {"relocation", "entry"}
+            and event_row.destination_location_id
+        ):
+            region = region_by_location.get(event_row.destination_location_id)
+            if region is not None:
+                final_region[event_row.body_id] = region
+            alive.setdefault(event_row.body_id, True)
+        elif event_row.kind == "death":
+            alive[event_row.body_id] = False
+    rows = tuple(
+        SocietyResidenceRow(
+            person_id=body_id,
+            region_id=final_region[body_id],
+            first_tick=0,
+            last_tick=tick,
+        )
+        for body_id in sorted(final_region)
+        if alive.get(body_id, True)
+    )
+    _LOG.debug("society_residence_rows count=%s tick=%s", len(rows), tick)
+    return rows
+
+
+def society_journeys_from_regional_input(
+    regional_input: RegionalPopulationInput,
+) -> tuple[SocietyJourneyRow, ...]:
+    """Project completed interregional journey arrivals as audit evidence."""
+    if type(regional_input) is not RegionalPopulationInput:
+        raise TypeError("regional_input must be RegionalPopulationInput")
+    region_by_location = {
+        row.location_id: row.region_id for row in regional_input.location_rows
+    }
+    rows: list[SocietyJourneyRow] = []
+    for row in regional_input.events:
+        if row.kind != "relocation" or row.relocation_kind != "journey":
+            continue
+        origin = region_by_location.get(row.origin_location_id or "")
+        destination = region_by_location.get(row.destination_location_id or "")
+        if origin is None or destination is None or origin == destination:
+            continue
+        rows.append(
+            SocietyJourneyRow(
+                person_id=row.body_id,
+                origin_region_id=origin,
+                destination_region_id=destination,
+                arrival_tick=row.tick,
+            )
+        )
+    return tuple(rows)
+
+
+def society_interaction_edges_from_events(
+    events: Sequence[object] | None,
+) -> tuple[SocietyEdgeRow, ...]:
+    """Project communication and exchange participation edges."""
+    rows: list[SocietyEdgeRow] = []
+    for edge in _communication_edges_from_events(events or ()):
+        speaker = _id_text_or_none(getattr(edge, "speaker_id", None))
+        listener = _id_text_or_none(getattr(edge, "listener_id", None))
+        tick = getattr(edge, "at_tick", 0)
+        if isinstance(tick, bool) or type(tick) is not int:
+            tick = 0
+        if speaker and listener and speaker != listener:
+            rows.append(SocietyEdgeRow(speaker, listener, tick, lane="interaction"))
+    for event in events or ():
+        details = _event_details(event)
+        kind = _event_kind_name(event).lower()
+        raw_kind = getattr(event, "kind", None)
+        if isinstance(raw_kind, str) and raw_kind:
+            kind = raw_kind.lower()
+        if kind not in {
+            "exchangeproposed",
+            "exchangecompleted",
+            "negotiateexchange",
+            "exchangeaccepted",
+        }:
+            continue
+        tick = getattr(event, "tick", 0)
+        if isinstance(tick, bool) or type(tick) is not int:
+            tick = 0
+        source = _id_text_or_none(
+            getattr(details, "proposer_id", None)
+            or getattr(event, "actor_id", None)
+            or getattr(details, "actor_id", None)
+        )
+        target = _id_text_or_none(
+            getattr(details, "recipient_id", None)
+            or getattr(details, "partner_id", None)
+            or getattr(details, "target_id", None)
+        )
+        if source and target and source != target:
+            rows.append(SocietyEdgeRow(source, target, tick, lane="interaction"))
+    _LOG.debug("society_interaction_edges count=%s", len(rows))
+    return tuple(rows)
+
+
+def society_trust_edges_from_relationship_rows(
+    rows: Sequence[object] | None,
+) -> tuple[SocietyEdgeRow, ...]:
+    """Project latest active nonnegative trust into detached trust edges."""
+    latest: dict[tuple[str, str], object] = {}
+    for row in sorted(
+        rows or (),
+        key=lambda item: (
+            getattr(item, "source_id", ""),
+            getattr(item, "target_id", ""),
+            getattr(item, "logical_tick", 0),
+            getattr(item, "ordinal", 0),
+        ),
+    ):
+        if getattr(row, "activation_state", "active") != "active":
+            continue
+        trust = getattr(row, "trust", None)
+        if not isinstance(trust, (int, float)) or isinstance(trust, bool):
+            continue
+        if float(trust) <= 0.0:
+            continue
+        source = _id_text_or_none(getattr(row, "source_id", None))
+        target = _id_text_or_none(getattr(row, "target_id", None))
+        if source is None or target is None or source == target:
+            continue
+        latest[(source, target)] = row
+    edges: list[SocietyEdgeRow] = []
+    for (source, target), row in sorted(latest.items()):
+        tick = getattr(row, "logical_tick", 0)
+        if isinstance(tick, bool) or type(tick) is not int:
+            tick = 0
+        trust_value = getattr(row, "trust", 0.0)
+        trust_weight = 1.0
+        if isinstance(trust_value, (int, float)) and not isinstance(trust_value, bool):
+            trust_weight = max(float(trust_value), 0.0)
+        edges.append(
+            SocietyEdgeRow(
+                source,
+                target,
+                tick,
+                lane="trust",
+                weight=trust_weight,
+            )
+        )
+    _LOG.debug("society_trust_edges count=%s", len(edges))
+    return tuple(edges)
+
+
+def society_digest_rows_from_channel_rows(
+    dimension: str,
+    rows: Sequence[object] | None,
+) -> tuple[SocietyDigestRow, ...]:
+    """Project detached channel rows into opaque per-person digest rows."""
+    projected: list[SocietyDigestRow] = []
+    for row in rows or ():
+        person = _id_text_or_none(
+            getattr(row, "person_id", None)
+            or getattr(row, "agent_id", None)
+            or getattr(row, "owner_id", None)
+        )
+        token = _id_text_or_none(
+            getattr(row, "token", None)
+            or getattr(row, "digest_id_token", None)
+            or getattr(row, "head_token", None)
+            or getattr(row, "variant_fingerprint", None)
+            or getattr(row, "fingerprint", None)
+            or getattr(row, "kind_token", None)
+        )
+        if person is None or token is None:
+            continue
+        projected.append(
+            SocietyDigestRow(dimension=dimension, person_id=person, token=token)
+        )
+    return tuple(projected)
+
+
+_TAG_DIMENSION_PREFIXES: Final[dict[str, str]] = {
+    "term": "vocabulary",
+    "name": "vocabulary",
+    "vocabulary": "vocabulary",
+    "norm": "norms",
+    "habit": "conventions",
+    "convention": "conventions",
+    "technique": "technology",
+    "skill": "technology",
+    "story": "stories",
+    "narrative": "stories",
+    "project": "institutions",
+    "institution": "institutions",
+    "public_good": "institutions",
+    "trade": "trade",
+    "exchange": "trade",
+}
+
+
+def _dimension_for_token(token: str) -> str | None:
+    key = token.split(":", 1)[0].strip().lower()
+    return _TAG_DIMENSION_PREFIXES.get(key)
+
+
+def society_digest_rows_from_snapshot(
+    snapshot: PersistedAnalysisSnapshot,
+    *,
+    dimension_sources: Mapping[str, Sequence[object]] | None = None,
+) -> tuple[SocietyDigestRow, ...]:
+    """Derive opaque per-dimension digest rows from detached traces and rows."""
+    if type(snapshot) is not PersistedAnalysisSnapshot:
+        raise TypeError("snapshot must be PersistedAnalysisSnapshot")
+    rows: list[SocietyDigestRow] = []
+    for channel_dimension, source_rows in (dimension_sources or {}).items():
+        if channel_dimension not in SOCIETY_DIMENSIONS:
+            continue
+        rows.extend(
+            society_digest_rows_from_channel_rows(channel_dimension, source_rows)
+        )
+    for trace in snapshot.traces:
+        person = _id_text_or_none(
+            getattr(getattr(trace, "owner_id", None), "value", None)
+        )
+        if person is None:
+            continue
+        context = getattr(trace, "context", None)
+        tags = tuple(getattr(context, "tags", ()) or ())
+        for tag in tags:
+            token = _id_text_or_none(tag)
+            if token is None:
+                continue
+            token_dimension = _dimension_for_token(token)
+            if token_dimension is None:
+                continue
+            rows.append(
+                SocietyDigestRow(
+                    dimension=token_dimension, person_id=person, token=token
+                )
+            )
+        for entity in getattr(trace, "entities", ()) or ():
+            entity_id = getattr(entity, "entity_id", None)
+            token = _id_text_or_none(getattr(entity_id, "value", None))
+            label = _id_text_or_none(getattr(entity, "label", None))
+            if token is None or label is None:
+                continue
+            token_dimension = _dimension_for_token(label)
+            if token_dimension is None:
+                continue
+            rows.append(
+                SocietyDigestRow(
+                    dimension=token_dimension, person_id=person, token=token
+                )
+            )
+    deduped = {(row.dimension, row.person_id, row.token): row for row in rows}
+    ordered = tuple(deduped[key] for key in sorted(deduped))
+    _LOG.debug("society_digest_rows count=%s", len(ordered))
+    return ordered
+
+
+def _society_evidence_edges_from_events(
+    events: Sequence[object] | None,
+) -> tuple[SocietyEvidenceEdge, ...]:
+    edges: list[SocietyEvidenceEdge] = []
+    for index, edge in enumerate(society_interaction_edges_from_events(events)):
+        edges.append(
+            SocietyEvidenceEdge(
+                edge_id=f"evidence-{index:06d}",
+                kind="communication",
+                source_person_id=edge.source_person_id,
+                target_person_id=edge.target_person_id,
+                tick=edge.tick,
+            )
+        )
+    return tuple(edges)
+
+
+def society_emission_inputs_from_context(
+    *,
+    run_id: str,
+    input_revision: str,
+    tick: int,
+    living_person_ids: Sequence[str],
+    residence_rows: Sequence[object] | None = None,
+    interaction_edges: Sequence[object] | None = None,
+    trust_edges: Sequence[object] | None = None,
+    dimension_rows: Sequence[SocietyDigestRow] | None = None,
+    evidence_edges: Sequence[SocietyEvidenceEdge] | None = None,
+    journeys: Sequence[SocietyJourneyRow] | None = None,
+) -> SocietyAnalysisInputs:
+    """Build all three society-analysis results from detached lane rows."""
+    emission = compute_candidate_communities(
+        residence_rows,
+        interaction_edges,
+        trust_edges,
+        living_person_ids,
+        tick,
+    )
+    divergence = compute_society_divergence(emission.communities, dimension_rows or ())
+    isolation = compute_society_isolation(
+        emission.communities, evidence_edges or (), journeys or ()
+    )
+    _LOG.debug(
+        "society_analysis_context_built run_id=%s community_count=%s "
+        "singleton_count=%s dimension_present=%s cross_edges=%s journeys=%s",
+        run_id,
+        len(emission.communities),
+        len(emission.singleton_person_ids),
+        len(divergence.dimensions_present),
+        len(isolation.rows),
+        len(journeys or ()),
+    )
+    return SocietyAnalysisInputs(
+        emission=emission,
+        divergence=divergence,
+        isolation=isolation,
+        living_person_ids=tuple(sorted(living_person_ids)),
+    )
+
+
+def society_emission_inputs_from_snapshot(
+    snapshot: PersistedAnalysisSnapshot,
+    *,
+    input_revision: str,
+    tick: int | None = None,
+    manifest: EvidenceManifest | None = None,
+    dimension_rows: Sequence[SocietyDigestRow] | None = None,
+    dimension_sources: Mapping[str, Sequence[object]] | None = None,
+    trust_edges: Sequence[object] | None = None,
+    evidence_edges: Sequence[SocietyEvidenceEdge] | None = None,
+) -> SocietyAnalysisInputs | None:
+    """Compose detached snapshot evidence without persistence imports."""
+    if type(snapshot) is not PersistedAnalysisSnapshot:
+        raise TypeError("snapshot must be PersistedAnalysisSnapshot")
+    if manifest is not None:
+        snapshot = constrain_snapshot_to_manifest(snapshot, manifest)
+    context = snapshot.regional_context
+    if context is None:
+        return None
+    resolved_tick = tick
+    if resolved_tick is None:
+        resolved_tick = snapshot.objective_complete_through_boundary
+    if resolved_tick is None:
+        raise EvidenceCompositionError("society_window_end_unavailable")
+    regional_input = regional_population_input_from_snapshot(
+        snapshot,
+        input_revision=input_revision,
+        window_end=resolved_tick,
+    )
+    if regional_input is None:
+        return None
+    residence = society_residence_rows_from_regional_input(
+        regional_input, tick=resolved_tick
+    )
+    interaction = society_interaction_edges_from_events(snapshot.events)
+    journeys = society_journeys_from_regional_input(regional_input)
+    digest_rows = (
+        tuple(dimension_rows)
+        if dimension_rows is not None
+        else society_digest_rows_from_snapshot(
+            snapshot, dimension_sources=dimension_sources
+        )
+    )
+    living = tuple(sorted(row.person_id for row in residence))
+    derived_evidence = _society_evidence_edges_from_events(snapshot.events)
+    return society_emission_inputs_from_context(
+        run_id=snapshot.run_id,
+        input_revision=input_revision,
+        tick=resolved_tick,
+        living_person_ids=living,
+        residence_rows=residence,
+        interaction_edges=interaction,
+        trust_edges=trust_edges,
+        dimension_rows=digest_rows,
+        evidence_edges=tuple(derived_evidence) + tuple(evidence_edges or ()),
+        journeys=journeys,
+    )
 
 
 def _communication_edges_from_events(

@@ -177,3 +177,28 @@ uv run --frozen --python 3.12.14 pytest \
   tests/unit/test_metric_service.py \
   tests/unit/test_reference_scenario_e2e.py -q
 ```
+
+## Multiple-societies families (off the V1 gate)
+
+These families are analysis-only candidate labels. No society, community, or
+polity entity exists in the world, agents, or persistence.
+
+| Family | Version ID | Evidence stages (primary) |
+| --- | --- | --- |
+| `society_emergence` | `society_emergence@1` | living-person residence / interaction / trust lanes |
+| `society_divergence` | `society_divergence@1` | detached digest distributions per dimension |
+| `society_isolation` | `society_isolation@1` | cross-community evidence edges + arrival ticks |
+
+- `society_emergence@1` clusters the union graph with the same recorded
+  `networkx.community.greedy_modularity_communities` entry used by group
+  community metrics. Zero-edge persons remain explicit singletons; dead persons
+  are excluded. Community ids are SHA-256 derived from sorted person ids.
+- `society_divergence@1` computes symmetric pair-scoped and
+  community-vs-global-baseline Jensen–Shannon divergence for vocabulary, norms,
+  conventions, technology, stories, institutions, and trade. A missing channel
+  is `absent` for that dimension, never zero. The shared comparator lives in
+  `analysis.numerical.jensen_shannon_divergence`.
+- `society_isolation@1` classifies each cross-community evidence edge as
+  `journey_explained` when a completed arrival between the communities precedes
+  the edge's logical tick, or `unexplained` otherwise. Counts, coverage, and
+  reason codes are reported; nothing is auto-fixed.

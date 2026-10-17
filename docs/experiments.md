@@ -217,3 +217,49 @@ uv run --frozen --python 3.12.14 pytest \
 - [Physical simulation](physical-simulation.md#discrete-regional-journeys)
 - [Configuration](configuration.md#optional-regions-and-migration-runner-config-v44)
 - [Analysis metrics](analysis-metrics.md)
+
+## Experiment AZ: Multiple societies (analytical only)
+
+AZ (`multiple_societies@1`) stays off the V1 regression gate. It composes
+existing region, journey, and communication channels with deterministic
+naming, norms, conventions, narratives, artifact interpretation, subjective
+valuation, exchange, collective projects, and public goods so long-running,
+region-separated populations can be compared **after the run**. It creates no
+Nation, Country, Polity, Society, or Community entity and adds no command,
+event, perception field, or capability flag. The `runner-config-v44` channel
+admits the same cultural mode keys as `v43`; this is channel composition, not a
+new schema version.
+
+| Arm | Treatment |
+| --- | --- |
+| `az-channel-off` | Exact nonregional `runner-config-v4` baseline |
+| `az-isolated` | Two regions; co-located talk within each population, no interregional journey |
+| `az-contact` | Same world plus one explicit diagnostic visit and post-arrival cross-contact |
+
+The deterministic arbiter issues ordinary admitted commands; collectors never
+feed evidence back to agents. Detection produces at least two candidate
+communities, the isolation audit reports zero `unexplained` cross-community
+edges in the reference configuration, and per-dimension divergence documents
+are computable (missing channels stay `absent`, never zero).
+
+Reproduce:
+
+```python
+import asyncio
+from experiments.coordinator import ExperimentCoordinator
+from experiments.multiple_societies_scenario import multiple_societies_scenario
+
+definition = multiple_societies_scenario(seed=23, max_ticks=8)
+results = asyncio.run(ExperimentCoordinator(definition).run_all())
+assert len(results) == 3
+```
+
+### Analytical boundary
+
+`analysis.society_emergence` clusters living persons from detached residence,
+interaction, and trust lanes. `analysis.society_divergence` measures pair-scoped
+Jensen–Shannon divergence per dimension. `analysis.society_isolation` classifies
+cross-community evidence edges as `journey_explained` or `unexplained` using
+logical ticks. These labels are researcher output only; they never enter
+cognition, memory, prompts, admission, or observations. `unexplained > 0` is a
+finding, not an auto-remediation.

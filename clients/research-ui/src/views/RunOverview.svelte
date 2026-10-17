@@ -23,6 +23,7 @@
   import ForkComparePanel from './ForkComparePanel.svelte'
   import GraphsPanel from './GraphsPanel.svelte'
   import ObjSubjComparePanel from './ObjSubjComparePanel.svelte'
+  import SocietiesPanel from './SocietiesPanel.svelte'
 
   interface Props {
     runId: string
@@ -37,6 +38,7 @@
     { id: 'graphs', label: 'Graphs' },
     { id: 'agent', label: 'Agent' },
     { id: 'analytics', label: 'Analytics' },
+    { id: 'societies', label: 'Societies' },
     { id: 'traces', label: 'Traces' },
     { id: 'compare', label: 'Compare' },
   ]
@@ -178,6 +180,8 @@
     <GraphsPanel {runId} agentId={deepLink.agentId} eventId={deepLink.eventId} />
   {:else if view === 'analytics'}
     <AnalyticsPanel {runId} agentId={deepLink.agentId} />
+  {:else if view === 'societies'}
+    <SocietiesPanel {runId} />
   {:else if view === 'traces'}
     <DecisionTracePanel {runId} {deepLink} />
   {:else if view === 'compare'}

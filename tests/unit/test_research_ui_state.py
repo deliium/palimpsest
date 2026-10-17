@@ -92,3 +92,13 @@ def test_build_query_omits_secrets_and_default_view() -> None:
     assert "run_id=run-1" in query
     assert "view=" not in query
     assert "token" not in query
+
+
+def test_society_overlays_are_analytical_only() -> None:
+    for family in ("society_emergence", "society_divergence", "society_isolation"):
+        assert epistemic_from_overlay_kind(family) == EPISTEMIC_RESEARCH_INFERENCE
+
+
+def test_societies_is_a_run_scoped_view() -> None:
+    state = parse_research_ui_query("run_id=run-1&view=societies")
+    assert state.view == "societies"

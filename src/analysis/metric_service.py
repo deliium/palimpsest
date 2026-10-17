@@ -117,6 +117,18 @@ from analysis.serialization import (
     encode_metric_document,
     metric_document_fingerprint,
 )
+from analysis.society_divergence import (
+    SocietyDivergenceResult,
+    compute_society_divergence_metric,
+)
+from analysis.society_emergence import (
+    SocietyEmissionResult,
+    compute_society_emergence,
+)
+from analysis.society_isolation import (
+    SocietyIsolationResult,
+    compute_society_isolation_metric,
+)
 from analysis.spatial_control_metrics import compute_spatial_control
 from analysis.specifications import MetricFamilyId, metric_specification
 from analysis.structured_commitments_metrics import (
@@ -231,6 +243,10 @@ class MetricComputationInputs:
         None
     )
     regional_destination_expected_owner_count: int | None = None
+    society_emission: SocietyEmissionResult | None = None
+    society_divergence: SocietyDivergenceResult | None = None
+    society_isolation: SocietyIsolationResult | None = None
+    society_community_count: int = 0
 
 
 @dataclass(frozen=True, slots=True)
@@ -1098,6 +1114,9 @@ def assemble_metric_documents(inputs: MetricComputationInputs) -> MetricBundle:
         "prediction_calibration": inputs.prediction_calibration_rows is not None,
         "reputation": inputs.reputation_ledgers is not None,
         "survival_cohort": inputs.survival_cohort_map is not None,
+        "society_emergence": inputs.society_emission is not None,
+        "society_divergence": inputs.society_divergence is not None,
+        "society_isolation": inputs.society_isolation is not None,
     }
     _LOG.debug(
         "metric_optional_inputs",
@@ -1211,6 +1230,42 @@ def assemble_metric_documents(inputs: MetricComputationInputs) -> MetricBundle:
             ),
         ),
     )
+    if inputs.society_emission is not None:
+        emission = inputs.society_emission
+        _safe(
+            "society_emergence",
+            lambda: compute_society_emergence(
+                emission,
+                run_id=run_id,
+                input_revision=revision,
+            ),
+        )
+
+    if inputs.society_divergence is not None:
+        divergence = inputs.society_divergence
+        community_count = inputs.society_community_count
+        _safe(
+            "society_divergence",
+            lambda: compute_society_divergence_metric(
+                divergence,
+                run_id=run_id,
+                input_revision=revision,
+                community_count=community_count,
+            ),
+        )
+    if inputs.society_isolation is not None:
+        isolation = inputs.society_isolation
+        community_count = inputs.society_community_count
+        _safe(
+            "society_isolation",
+            lambda: compute_society_isolation_metric(
+                isolation,
+                run_id=run_id,
+                input_revision=revision,
+                community_count=community_count,
+            ),
+        )
+
     if inputs.regional_population is not None:
         regional_inputs = inputs.regional_population
         _safe(

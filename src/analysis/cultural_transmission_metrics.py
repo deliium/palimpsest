@@ -12,6 +12,8 @@ from collections.abc import Sequence
 from dataclasses import dataclass
 from typing import Final
 
+from analysis.numerical import jensen_shannon_divergence
+
 __all__ = [
     "CULTURAL_TRANSMISSION_METRIC_VERSION",
     "CulturalTransmissionMetricResult",
@@ -130,25 +132,12 @@ def _as_distribution(vector: tuple[float, ...]) -> tuple[float, ...] | None:
     return tuple(item / total for item in vector)
 
 
-def _kl(source: tuple[float, ...], other: tuple[float, ...]) -> float:
-    value = 0.0
-    for probability, target in zip(source, other, strict=True):
-        if probability <= 0.0:
-            continue
-        if target <= 0.0:
-            return math.inf
-        value += probability * math.log(probability / target)
-    return value
-
-
 def _js_to_mixture(
     distribution: tuple[float, ...],
     mixture: tuple[float, ...],
 ) -> float:
-    midpoint = tuple(
-        (left + right) / 2.0 for left, right in zip(distribution, mixture, strict=True)
-    )
-    return 0.5 * _kl(distribution, midpoint) + 0.5 * _kl(mixture, midpoint)
+    divergence = jensen_shannon_divergence(distribution, mixture)
+    return 0.0 if divergence is None else divergence
 
 
 def _mean_divergence(vectors: dict[str, tuple[float, ...]]) -> float | None:

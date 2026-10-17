@@ -266,3 +266,13 @@ Register roadmap milestones via `/aif-roadmap` (e.g. **M7 — V3 Generational Ar
 - [Configuration](configuration.md)
 - [Development](development.md)
 - [Persistence](persistence.md)
+
+### Analytical candidate societies
+
+`society_emergence@1`, `society_divergence@1`, and `society_isolation@1` are
+analysis-only. They consume detached event/derived rows through
+`experiments.composition`, never subjective ledger types or persistence inside
+`analysis`. Candidate community ids, divergence values, and isolation findings
+must not flow into cognition, memory formation, prompts, admission, or
+observations, and they must not create Nation/Country/Polity/Society entities.
+`unexplained` isolation edges are reported findings, not automatic fixes.

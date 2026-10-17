@@ -5,6 +5,7 @@ export const RESEARCH_UI_VIEWS = [
   'graphs',
   'agent',
   'analytics',
+  'societies',
   'traces',
   'compare',
   'matrix',
@@ -29,6 +30,7 @@ const RUN_SCOPED_VIEWS = new Set<ResearchUiView>([
   'graphs',
   'agent',
   'analytics',
+  'societies',
   'traces',
   'compare',
 ])

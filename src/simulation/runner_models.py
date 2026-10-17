@@ -9073,6 +9073,7 @@ class SimulationRunnerConfig:
             RUNNER_SCHEMA_VERSION_V41,
             RUNNER_SCHEMA_VERSION_V42,
             RUNNER_SCHEMA_VERSION_V43,
+            RUNNER_SCHEMA_VERSION_V44,
         }:
             _LOGGER.error(
                 "invalid_fields path=agents.cognition.group_formation_mode "
@@ -9124,6 +9125,7 @@ class SimulationRunnerConfig:
             RUNNER_SCHEMA_VERSION_V41,
             RUNNER_SCHEMA_VERSION_V42,
             RUNNER_SCHEMA_VERSION_V43,
+            RUNNER_SCHEMA_VERSION_V44,
         }:
             _LOGGER.error(
                 "invalid_fields path=agents.cognition.social_norm_mode "
@@ -9178,6 +9180,7 @@ class SimulationRunnerConfig:
             RUNNER_SCHEMA_VERSION_V41,
             RUNNER_SCHEMA_VERSION_V42,
             RUNNER_SCHEMA_VERSION_V43,
+            RUNNER_SCHEMA_VERSION_V44,
         }
         if conventions_on and self.schema_version not in convention_schemas:
             _LOGGER.error(
@@ -9237,6 +9240,7 @@ class SimulationRunnerConfig:
             RUNNER_SCHEMA_VERSION_V41,
             RUNNER_SCHEMA_VERSION_V42,
             RUNNER_SCHEMA_VERSION_V43,
+            RUNNER_SCHEMA_VERSION_V44,
         }
         if artifacts_on and self.schema_version not in artifact_schemas:
             runner_log.error(
@@ -9292,6 +9296,7 @@ class SimulationRunnerConfig:
             RUNNER_SCHEMA_VERSION_V41,
             RUNNER_SCHEMA_VERSION_V42,
             RUNNER_SCHEMA_VERSION_V43,
+            RUNNER_SCHEMA_VERSION_V44,
         }
         if naming_on and self.schema_version not in naming_schemas:
             runner_log.error(
@@ -9344,6 +9349,7 @@ class SimulationRunnerConfig:
             RUNNER_SCHEMA_VERSION_V41,
             RUNNER_SCHEMA_VERSION_V42,
             RUNNER_SCHEMA_VERSION_V43,
+            RUNNER_SCHEMA_VERSION_V44,
         }
         budget_modes = tuple(
             agent.cognition.cognitive_budget_mode for agent in self.agents

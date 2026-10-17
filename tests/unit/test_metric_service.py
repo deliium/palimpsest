@@ -116,3 +116,31 @@ def test_empty_inputs_produce_unknown_or_absent_not_zero_false() -> None:
             # never silently invent false correctness.
             assert "accuracy" not in doc.values or doc.values["accuracy"] is None
         assert metric_document_fingerprint(doc)
+
+
+def test_society_emergence_document_is_stable_and_absent_when_empty() -> None:
+    from analysis.models import MetricCoverage
+    from analysis.society_emergence import (
+        SocietyEmissionResult,
+        compute_society_emergence,
+    )
+
+    emission = SocietyEmissionResult(
+        communities=(),
+        singleton_person_ids=(),
+        coverage=MetricCoverage(observed=0, expected=0),
+    )
+    inputs = MetricComputationInputs(
+        run_id="run-society",
+        input_revision="rev-society",
+        window_end=4,
+        agent_ids=(),
+        society_emission=emission,
+    )
+    bundle = assemble_metric_documents(inputs)
+    docs = {doc.metric_family: doc for doc in bundle.documents}
+    assert docs["society_emergence"].availability is MetricAvailability.ABSENT
+    first = compute_society_emergence(
+        emission, run_id="run-society", input_revision="rev-society"
+    )
+    assert metric_document_fingerprint(first) in bundle.fingerprints

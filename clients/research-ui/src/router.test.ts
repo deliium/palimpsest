@@ -9,6 +9,11 @@ describe('research ui router', () => {
       runId: 'r1',
       viewHint: 'graphs',
     })
+    expect(parsePathname('/research/runs/r1/societies')).toEqual({
+      kind: 'run',
+      runId: 'r1',
+      viewHint: 'societies',
+    })
   })
 
   it('applies query deep link onto run route', () => {

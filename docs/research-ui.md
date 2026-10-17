@@ -88,3 +88,14 @@ Historical memory metric families (`historical_memory_layers`, `historical_memor
 - [Godot observer](godot-observer.md)
 - [Research causal debugger](research-causal-debugger.md)
 - [V2 benchmark suite](v2-benchmark-suite.md)
+
+## Societies view
+
+The run-scoped **Societies** tab reads the existing family-agnostic metric
+catalog and document endpoints (`GET /v1/simulations/{run_id}/metrics` and
+`.../metrics/{metric_set_id}/{metric_family}`). It renders
+`society_emergence`, `society_divergence`, and `society_isolation` documents
+under `research_inference` chrome with the `analytical_inference` epistemic
+class. Candidate communities and isolation findings are never presented as
+objective facts or agent-visible labels; no Godot/observer protocol change is
+required.

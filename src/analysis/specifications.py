@@ -50,7 +50,7 @@ __all__ = [
 ]
 
 METRIC_CATALOG_VERSION: Final[str] = "metric-catalog-v1"
-METRIC_FAMILY_COUNT: Final[int] = 94
+METRIC_FAMILY_COUNT: Final[int] = 97
 
 # Align with existing memory-drift / transmission document versions.
 _ALGO_V1: Final[str] = "1"
@@ -169,6 +169,9 @@ class MetricFamilyId(StrEnum):
     PUBLIC_GOOD_MAINTENANCE_BURDEN = "public_good_maintenance_burden"
     PUBLIC_GOOD_FREE_RIDER_PATTERN = "public_good_free_rider_pattern"
     PUBLIC_GOOD_COOPERATION_STABILITY = "public_good_cooperation_stability"
+    SOCIETY_EMERGENCE = "society_emergence"
+    SOCIETY_DIVERGENCE = "society_divergence"
+    SOCIETY_ISOLATION = "society_isolation"
 
 
 class DenominatorKind(StrEnum):
@@ -4126,6 +4129,170 @@ def _spec_cultural_similarity() -> MetricSpecification:
     )
 
 
+def _spec_society_emergence() -> MetricSpecification:
+    return _base(
+        family_id=MetricFamilyId.SOCIETY_EMERGENCE,
+        evidence_inputs=frozenset({EvidenceStage.OBJECTIVE_EVENT_STATE}),
+        population="living_persons_with_detached_residence_interaction_or_trust_evidence",
+        denominator="living_person_count",
+        denominator_kind=DenominatorKind.POPULATION_SIZE,
+        cohort_window="post-run analysis snapshot; dead persons excluded",
+        deceased_policy="dead persons leave end-state communities",
+        zero_holding_policy=(
+            "no living persons -> availability=absent; no zero inference"
+        ),
+        opportunity_vs_occurrence=(
+            "communities are analytical candidates, not an objective census"
+        ),
+        self_edge_policy="self edges are rejected before clustering",
+        censoring_policy=(
+            "zero-edge persons remain explicit singletons and coverage gaps"
+        ),
+        formulas={
+            "community_count": (
+                "canonical candidate communities with at least two persons"
+            ),
+            "singleton_count": "living persons with no lane edge",
+            "person_count": "living persons represented by communities or singletons",
+            "covered_person_count": "persons assigned to a candidate community",
+            "largest_community_share": "largest community size / person_count",
+            "residence_region_count": "distinct linked residence regions",
+        },
+        value_keys=(
+            "community_count",
+            "covered_person_count",
+            "largest_community_share",
+            "person_count",
+            "residence_region_count",
+            "singleton_count",
+        ),
+        graph_projection="union of residence-linked interaction and trust lanes",
+        community_algorithm=SUPPORTED_COMMUNITY_ALGORITHM,
+        networkx_policy=(f"{GRAPH_NODE_ORDER_POLICY}; {SUPPORTED_COMMUNITY_ALGORITHM}"),
+        empty_case="no living persons -> availability=absent",
+        one_case="single person -> availability=partial; singleton coverage gap",
+        unknown_case=(
+            "missing or unavailable lanes -> availability=unknown, absent, or "
+            "partial; never_coerce_to_zero"
+        ),
+    )
+
+
+def _spec_society_divergence() -> MetricSpecification:
+    return _base(
+        family_id=MetricFamilyId.SOCIETY_DIVERGENCE,
+        evidence_inputs=frozenset(
+            {
+                EvidenceStage.OBJECTIVE_EVENT_STATE,
+                EvidenceStage.AGENT_VISIBLE_PROJECTION,
+            }
+        ),
+        population="candidate_community_pairs_per_digest_dimension",
+        denominator="community_pairs_times_seven_dimensions",
+        denominator_kind=DenominatorKind.POPULATION_SIZE,
+        cohort_window="detached digest rows after the run",
+        deceased_policy="dead persons are excluded from end-state communities",
+        zero_holding_policy=(
+            "missing channel -> absent dimension; never coerced to zero"
+        ),
+        opportunity_vs_occurrence=(
+            "pair-scoped divergence and a community-vs-global baseline"
+        ),
+        self_edge_policy="not_applicable",
+        censoring_policy="absent or partial dimensions remain explicit",
+        formulas={
+            "dimension_mean_divergence": "mean pair-scoped Jensen-Shannon divergence",
+            "dimension_pair_count": "evaluable community pairs for the dimension",
+            "dimension_availability": "present or absent per dimension",
+            "evaluable_pair_dimension_count": "pair/dimension cells with a value",
+            "pair_dimension_count": "all pair/dimension cells",
+        },
+        value_keys=(
+            "community_count",
+            "conventions_availability",
+            "conventions_mean_divergence",
+            "conventions_pair_count",
+            "dimension_count",
+            "evaluable_pair_dimension_count",
+            "institutions_availability",
+            "institutions_mean_divergence",
+            "institutions_pair_count",
+            "norms_availability",
+            "norms_mean_divergence",
+            "norms_pair_count",
+            "pair_dimension_count",
+            "stories_availability",
+            "stories_mean_divergence",
+            "stories_pair_count",
+            "technology_availability",
+            "technology_mean_divergence",
+            "technology_pair_count",
+            "trade_availability",
+            "trade_mean_divergence",
+            "trade_pair_count",
+            "vocabulary_availability",
+            "vocabulary_mean_divergence",
+            "vocabulary_pair_count",
+        ),
+        empty_case="fewer than two communities -> availability=absent",
+        one_case="one community and no baseline value -> absent",
+        unknown_case=(
+            "no evaluable dimension -> availability=unknown; missing channels "
+            "are absent"
+        ),
+    )
+
+
+def _spec_society_isolation() -> MetricSpecification:
+    return _base(
+        family_id=MetricFamilyId.SOCIETY_ISOLATION,
+        evidence_inputs=frozenset(
+            {
+                EvidenceStage.OBJECTIVE_EVENT_STATE,
+                EvidenceStage.AGENT_VISIBLE_PROJECTION,
+            }
+        ),
+        population="cross_candidate_community_evidence_edges",
+        denominator="cross_community_evidence_edges",
+        denominator_kind=DenominatorKind.ACTIVE_EDGES,
+        cohort_window="edges ordered by logical tick against completed arrivals",
+        deceased_policy="dead persons are excluded from end-state communities",
+        zero_holding_policy="no cross edges -> availability=absent",
+        opportunity_vs_occurrence=(
+            "every cross edge is audited; unexplained is a finding, not a fix"
+        ),
+        self_edge_policy="self edges are rejected before auditing",
+        censoring_policy="missing region linkage is unexplained, never waived",
+        formulas={
+            "cross_edge_count": "cross-community evidence edges audited",
+            "explained_count": "edges preceded by an arrival between the communities",
+            "unexplained_count": "edges without a physical journey explanation",
+            "communication_count": "communication evidence edges",
+            "testimony_count": "testimony-hop evidence edges",
+            "narrative_count": "narrative-lineage evidence edges",
+            "knowledge_count": "knowledge-genealogy evidence edges",
+            "artifact_count": "artifact copy/diffusion evidence edges",
+        },
+        value_keys=(
+            "artifact_count",
+            "communication_count",
+            "community_count",
+            "cross_edge_count",
+            "explained_count",
+            "knowledge_count",
+            "narrative_count",
+            "testimony_count",
+            "unexplained_count",
+        ),
+        empty_case="no cross-community edges -> availability=absent",
+        one_case="one cross edge is audited normally",
+        unknown_case=(
+            "missing or unknown region linkage stays unexplained; never coerced "
+            "to explained or availability=unknown"
+        ),
+    )
+
+
 _BUILDERS: Final[tuple[Callable[[], MetricSpecification], ...]] = (
     _spec_resource_inequality,
     _spec_cooperation,
@@ -4221,6 +4388,9 @@ _BUILDERS: Final[tuple[Callable[[], MetricSpecification], ...]] = (
     _spec_prediction_calibration,
     _spec_belief_convergence,
     _spec_cultural_similarity,
+    _spec_society_emergence,
+    _spec_society_divergence,
+    _spec_society_isolation,
 )
 
 

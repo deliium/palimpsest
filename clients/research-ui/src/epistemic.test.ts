@@ -90,6 +90,9 @@ describe('epistemic mapping', () => {
     expect(epistemicFromOverlayKind('exchange_realized_bundles')).toBe(
       'research_inference',
     )
+    expect(epistemicFromOverlayKind('society_emergence')).toBe('research_inference')
+    expect(epistemicFromOverlayKind('society_divergence')).toBe('research_inference')
+    expect(epistemicFromOverlayKind('society_isolation')).toBe('research_inference')
     expect(epistemicFromEvidenceClass('ANALYTICAL_INFERRED')).toBe('research_inference')
   })
 

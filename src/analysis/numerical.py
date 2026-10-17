@@ -13,6 +13,7 @@ Supported runtime dependency floors (see ``pyproject.toml`` / ``uv.lock``):
 
 from __future__ import annotations
 
+import math
 from collections.abc import Iterable, Mapping, Sequence
 from decimal import ROUND_HALF_EVEN, Decimal
 from types import MappingProxyType
@@ -35,6 +36,7 @@ __all__ = [
     "SUPPORTED_COMMUNITY_ALGORITHM",
     "NumericalPolicyError",
     "canonical_python_scalar",
+    "jensen_shannon_divergence",
     "library_versions",
     "normalize_signed_zero",
     "quantize_float",
@@ -181,6 +183,54 @@ def stable_seed_tuple(*parts: int) -> tuple[int, ...]:
             raise NumericalPolicyError("invalid_seed")
         seeds.append(part)
     return tuple(seeds)
+
+
+def jensen_shannon_divergence(
+    left: Sequence[float],
+    right: Sequence[float],
+) -> float | None:
+    """Jensen-Shannon divergence of two non-negative vectors.
+
+    Inputs are normalized to probability distributions internally. A vector
+    with no mass yields ``None`` (unknown), never a coerced zero. Disjoint
+    supports are finite because the mixture has mass where both do not.
+    """
+    if len(left) != len(right):
+        raise NumericalPolicyError("vector_length_mismatch")
+    if not left:
+        return None
+    left_values = tuple(
+        require_finite(float(item), code="invalid_weight") for item in left
+    )
+    right_values = tuple(
+        require_finite(float(item), code="invalid_weight") for item in right
+    )
+    for value in (*left_values, *right_values):
+        if value < 0.0:
+            raise NumericalPolicyError("negative_weight")
+    left_total = sum(left_values)
+    right_total = sum(right_values)
+    if left_total <= 0.0 or right_total <= 0.0:
+        return None
+    probabilities = tuple(value / left_total for value in left_values)
+    targets = tuple(value / right_total for value in right_values)
+    mixture = tuple(
+        (probability + target) / 2.0
+        for probability, target in zip(probabilities, targets, strict=True)
+    )
+
+    def _kl(source: tuple[float, ...], other: tuple[float, ...]) -> float:
+        value = 0.0
+        for probability, reference in zip(source, other, strict=True):
+            if probability <= 0.0:
+                continue
+            if reference <= 0.0:
+                return math.inf
+            value += probability * math.log(probability / reference)
+        return value
+
+    divergence = 0.5 * _kl(probabilities, mixture) + 0.5 * _kl(targets, mixture)
+    return quantize_float(require_finite(divergence, code="non_finite"))
 
 
 # SciPy degenerate behavior policy (documentary constants for later metric tasks).
