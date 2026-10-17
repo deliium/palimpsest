@@ -99,3 +99,12 @@ under `research_inference` chrome with the `analytical_inference` epistemic
 class. Candidate communities and isolation findings are never presented as
 objective facts or agent-visible labels; no Godot/observer protocol change is
 required.
+
+
+## Contact view
+
+The run-scoped `contact` view lists `society_contact`, `contact_cultural_change`,
+`contact_hybrid_practice`, `contact_knowledge_transfer`,
+`contact_lexical_borrowing`, and `contact_reputation_transfer` from the generic
+metric endpoints under `research_inference` chrome. It never presents analytical
+results as agent-visible facts and adds no backend route or content payload.

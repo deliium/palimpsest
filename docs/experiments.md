@@ -263,3 +263,26 @@ cross-community evidence edges as `journey_explained` or `unexplained` using
 logical ticks. These labels are researcher output only; they never enter
 cognition, memory, prompts, admission, or observations. `unexplained > 0` is a
 finding, not an auto-remediation.
+
+
+## Experiment BA: Cultural contact
+
+`cultural_contact@1` composes the owned regions/migration substrate with a
+required neutral `cultural_contact` sibling on `runner-config-v45`. Contact
+records only objective co-presence after a qualifying cross-region relocation
+(a completed journey arrival or a successful cross-region `Fled`); it is not a
+relationship, trust update, group identity, or policy.
+
+Arms: `ba-channel-off` (v4 baseline), `ba-isolated` (contact recording enabled
+but no cross-region journeys), `ba-contact-trade`, `ba-contact-teaching`,
+`ba-contact-conflict-cooperation`, and `ba-contact-kinship` (explicit
+absent-kinship assertion). Diagnostic command fixtures exercise the analytics;
+the arbiter asserts structural evidence only (contact events, family coverage,
+cross-community interaction counts, explicit kinship availability) and never
+asserts that convergence, assimilation, war, or cooperation "succeeded".
+
+Reproduce with the standard experiment coordinator:
+
+```bash
+uv run --frozen --python 3.12.14 pytest tests/unit/test_experiment_ba.py -q
+```

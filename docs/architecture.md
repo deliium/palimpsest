@@ -210,7 +210,7 @@ Later V3 generational plans plug into these seams only. They must not re-open Wo
 
 `public_goods` is an optional `runner-config-v43` object that requires `collective_projects`; it is not a new capability flag. Write-pair priority selects `(EVENT_SCHEMA_REPLAY_V20, "v18")` only while `public_goods` is active. Channel-off collective projects retain `(EVENT_SCHEMA_REPLAY_V19, "v17")`.
 
-The closed command count is **43**, including `UsePublicGood`, `MaintainPublicGood`, and `OpposePublicGood`. The observer semantic count is **69**, with `PUBLIC_GOOD_BENEFIT`, `PUBLIC_GOOD_MAINTAINED`, and `PUBLIC_GOOD_OPPOSED` appended after the project semantics. The protocol id remains `observer-protocol-v1`, and Alembic head remains `0017`. A benefit event is not an access grant and not a moral role. Experiment AX (`public_goods@1`) stays off the V1 gate.
+The closed command count is **43**, including `UsePublicGood`, `MaintainPublicGood`, and `OpposePublicGood`. The observer semantic count is **73**, with `PUBLIC_GOOD_BENEFIT`, `PUBLIC_GOOD_MAINTAINED`, and `PUBLIC_GOOD_OPPOSED` appended after the project semantics. The protocol id remains `observer-protocol-v1`, and Alembic head remains `0017`. A benefit event is not an access grant and not a moral role. Experiment AX (`public_goods@1`) stays off the V1 gate.
 
 ### V3-22 regions and migration contract
 
@@ -276,3 +276,14 @@ analysis-only. They consume detached event/derived rows through
 must not flow into cognition, memory formation, prompts, admission, or
 observations, and they must not create Nation/Country/Polity/Society entities.
 `unexplained` isolation edges are reported findings, not automatic fixes.
+
+
+## Cultural contact boundary
+
+Contact adds one neutral objective event, `ContactRecorded`, emitted by the
+engine after a qualifying cross-region relocation. It records co-presence only:
+not a relationship, trust update, reputation claim, group identity, migration
+label, or policy. Command count stays **43**, observer semantic types are **73**,
+and metric families are **103**. Contact-active runs use `(replay-v22, codec v20)`;
+contact-off regional runs keep `(replay-v21, codec v19)`. No Alembic migration is
+required and intermarriage is unsupported.

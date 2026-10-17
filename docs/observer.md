@@ -124,3 +124,13 @@ Causal explanation of a selected event uses the separate research debugger surfa
 - [Physical simulation](physical-simulation.md#discrete-regional-journeys)
 - [Experiments](experiments.md#experiment-ay-regional-migration)
 - [Godot observer](godot-observer.md)
+
+
+## `CONTACT_RECORDED`
+
+Neutral contact is semantic type 73. Public facts expose the contact location
+and sorted participant/present IDs only; origin-region identity is omitted.
+Participants see themselves as targets and living agents already present see
+the occurrence as witnesses. Non-present agents receive nothing. The Godot
+client registers the type in `KNOWN_TYPES`, routes it as an activity event, and
+does not gain any write authority.

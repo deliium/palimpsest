@@ -168,3 +168,26 @@ unresolved failures belong to the active implementation plan.
 - [LLM providers](llm-providers.md)
 - [Configuration](configuration.md)
 - [Persistence](persistence.md)
+
+
+## Cultural-contact verification
+
+```bash
+uv run --frozen --python 3.12.14 pytest \
+  tests/unit/test_contact_contracts.py \
+  tests/unit/test_runner_config_v45.py \
+  tests/unit/test_contact_arrivals.py \
+  tests/unit/test_contact_relocations.py \
+  tests/unit/test_contact_events.py \
+  tests/unit/test_contact_checkpoint.py \
+  tests/unit/test_contact_perception.py \
+  tests/unit/test_contact_observer.py \
+  tests/unit/test_contact_memory.py \
+  tests/unit/test_society_contact.py \
+  tests/unit/test_contact_cultural_change.py \
+  tests/unit/test_contact_hybrid_practice.py \
+  tests/unit/test_contact_knowledge_transfer.py \
+  tests/unit/test_contact_lexical_borrowing.py \
+  tests/unit/test_contact_reputation_transfer.py \
+  tests/unit/test_experiment_ba.py -q
+```

@@ -74,3 +74,15 @@ Each listener builds a **fresh** `MemoryTrace` with `CommunicatedTransmissionMet
 ## Read-only analysis
 
 `SocialTransmissionAnalysisService` joins communication events with communicated traces after the fact. It reports hop counts, unique agents reached, fan-out, and per-hop structured additions/losses without feeding results back into live cognition. Logs and analysis `repr` expose IDs, counts, hops, and confidence bands — never message text, propositions, narratives, or fingerprints as payload surrogates.
+
+
+## Contact transfer semantics
+
+Trade, communication, teaching, conflict, and cooperation remain the existing
+objective events; the contact layer only conditions their counts on candidate
+communities. Story exchange is represented by shared narrative transmission roots
+and cross-community narrative merges (no narrative text enters metrics or logs).
+Lexical borrowing requires communicated evidence whose actor belongs to another
+community; labels remain owner-scoped. Reputation transfer counts only
+`communication` and `third_party_story` evidence from a different community and
+never aggregates a group reputation or writes a mean back to an owner.

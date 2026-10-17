@@ -38,7 +38,7 @@ Executable formula, population, and edge-case policy for all nineteen metric fam
 | `caregiving_burden` | `caregiving_burden@1` | detached care-act rows |
 | `intergenerational_cooperation` | `intergenerational_cooperation@1` | detached care-act + kinship rows |
 
-Catalog version: `metric-catalog-v1`. Document schema: `MetricDocument` schema `1`. Closed catalog cardinality: **91** families (`METRIC_FAMILY_COUNT`). New opt-in families assemble only when their detached inputs are present.
+Catalog version: `metric-catalog-v1`. Document schema: `MetricDocument` schema `1`. Closed catalog cardinality: **103** families (`METRIC_FAMILY_COUNT`). New opt-in families assemble only when their detached inputs are present.
 
 ### Additive analysis surfaces (off the V1 gate)
 
@@ -202,3 +202,26 @@ polity entity exists in the world, agents, or persistence.
   `journey_explained` when a completed arrival between the communities precedes
   the edge's logical tick, or `unexplained` otherwise. Counts, coverage, and
   reason codes are reported; nothing is auto-fixed.
+
+
+## Cultural contact families (`society_contact` through `contact_reputation_transfer`)
+
+Six analysis-only families connect separately developed candidate communities after a
+neutral cross-region co-presence fact:
+
+| Family | What it reports | Availability rule |
+| --- | --- | --- |
+| `society_contact@1` | Pair onset, contact/location-tick counts, cross-community person-ticks, dyadic communication/exchange/teaching/cooperation/conflict, cross-community kinship edges | Absent without a cross-community pair |
+| `contact_cultural_change@1` | Exact pre (`tick < onset`) and post (`onset <= tick <= final`) Jensen-Shannon divergence per dimension using one shared token universe per pair/dimension; convergence delta, converging/continued-divergence counts, membership stability | Partial/absent when either window or channel is missing |
+| `contact_hybrid_practice@1` | Cross-community combinations, recombined cultural beliefs, shared narrative roots, naming merges, hybridization rate, unresolved lineage | Absent without resolvable lineage |
+| `contact_knowledge_transfer@1` | Practical-knowledge transfers by channel (`teaching`, `imitation`, `written_record`, `reconstruction`, `combination`), donor→recipient pairs, mean hop, mutated transfers | Absent without a transfer channel |
+| `contact_lexical_borrowing@1` | Communicated cross-community label evidence, new adoption vs reinforcement, binding strength, unresolved actors | Absent without communicated naming evidence |
+| `contact_reputation_transfer@1` | Only `communication` / `third_party_story` cross-community evidence with `source != target`; direct observation and remembered interaction are coverage, not transfer | Absent without a reputation channel |
+
+Contact is descriptive, not causal or normative: convergence and continued
+divergence are both valid outcomes, and no threshold defines successful
+assimilation, multiculturalism, war, or cooperation. Direct/remembered
+reputation evidence is first-hand and is never counted as transfer.
+`ProjectContributed` and `PublicGoodMaintained` are collective coverage, not
+dyadic contact cooperation. Intermarriage is unsupported; cross-community
+kinship is reported only from objective parent→child edges.

@@ -206,3 +206,14 @@ remote weather, or population reaches cognition.
 - [LLM providers](llm-providers.md)
 - [Persistence](persistence.md)
 - [Development](development.md)
+
+
+## Contact ordering at relocation
+
+Contact is emitted at most once per qualifying cross-region relocation. For a
+journey it follows the committed `JourneyArrived` placement in canonical
+`(due_tick, journey_id)` order; earlier same-tick arrivals count as present. For
+a successful cross-region `Fled`, it follows the committed relocation. Same-region
+relocations, empty destinations, failed/waiting/timed-out journeys, failed flee,
+and contact-disabled runs emit nothing. The present set contains living
+non-participants only and is disjoint from the sorted participant set.

@@ -120,3 +120,15 @@ observations, seeds, or whole configurations.
 - [LLM providers](llm-providers.md)
 - [Physical simulation](physical-simulation.md)
 - [Development](development.md)
+
+
+## Optional cultural contact (`runner-config-v45`)
+
+`cultural_contact` is a required sibling only on `runner-config-v45` and has the
+exact shape `{"mode": "disabled" | "deterministic"}`. It requires
+`regions_migration` and an enabled `multi_polity_migration` flag; contact on
+pre-v45, v45 without contact, v45 without regions, and contact without the
+migration flag reject with stable safe reason codes. Absent contact keeps the
+prior highest-active schema. `mode=disabled` is accepted but emits no contact
+behaviour. Contact-active runs use the `(replay-v22, codec v20)` write pair;
+contact-off regional runs stay on `(replay-v21, codec v19)`.
