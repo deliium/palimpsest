@@ -81,6 +81,7 @@ SEMANTIC_EVENT_TYPES: Final[tuple[str, ...]] = (
     "JOURNEY_STARTED",
     "JOURNEY_ARRIVED",
     "JOURNEY_ENDED",
+    "CONTACT_RECORDED",
 )
 
 SEMANTIC_TYPE_BY_KIND: Final[dict[str, str]] = {
@@ -156,6 +157,7 @@ SEMANTIC_TYPE_BY_KIND: Final[dict[str, str]] = {
     "journey_started": "JOURNEY_STARTED",
     "journey_arrived": "JOURNEY_ARRIVED",
     "journey_ended": "JOURNEY_ENDED",
+    "contact_recorded": "CONTACT_RECORDED",
 }
 
 RELATIONSHIP_DIMENSION_CODES: Final[tuple[str, ...]] = (

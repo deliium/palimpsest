@@ -69,6 +69,7 @@ from world.events import (
     Asked,
     Attacked,
     CommitmentDeclared,
+    ContactRecorded,
     CorpseCustodyOpened,
     CraftStarted,
     Died,
@@ -573,7 +574,7 @@ def _apply_event_effect(
         case Searched(success=False) | Attacked(hit=False) | Fled(success=False):
             _validate_event_only_refs(state, event)
             return state, False
-        case Talked() | Asked() | Told() | Waited():
+        case Talked() | Asked() | Told() | Waited() | ContactRecorded():
             _validate_event_only_refs(state, event)
             return state, False
         case Taken() | Dropped() | Given():

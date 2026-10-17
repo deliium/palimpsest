@@ -1336,6 +1336,7 @@ def prepare_action_batch(
     public_goods_context: PublicGoodsRuleContext | None = None,
     public_good_maintain_draw: Callable[[ActionRequest, WorldState], bool]
     | None = None,
+    contact_enabled: bool = False,
     deferred_regional_flee_effect: (
         Callable[[ActionRequest, WorldState], ResolvedFleeEffect | None] | None
     ) = None,
@@ -1723,6 +1724,7 @@ def prepare_action_batch(
             collective_project_success=collective_success,
             public_goods_context=public_goods_context,
             public_good_maintain_success=maintain_success,
+            contact_enabled=contact_enabled,
         )
         if application.result.disposition is RuleDisposition.REJECT:
             status = BatchItemStatus.CONFLICTED

@@ -151,6 +151,7 @@ class PersistentSimulationService:
             collective_projects_active=self._engine.collective_projects_active,
             public_goods_active=self._engine.public_goods_active,
             regions_migration_active=state.regions_migration is not None,
+            cultural_contact_active=self._engine.cultural_contact_active,
         )
         production_rows: SnapshotExtensions = {}
         if codec_version in {
@@ -171,6 +172,7 @@ class PersistentSimulationService:
             "v17",
             "v18",
             "v19",
+            "v20",
         }:
             production_rows = {
                 "structures": tuple(state.structures.values()),
@@ -194,6 +196,7 @@ class PersistentSimulationService:
             "v17",
             "v18",
             "v19",
+            "v20",
         }:
             production_rows["active_hazards"] = tuple(state.active_hazards)
         if codec_version in {
@@ -212,6 +215,7 @@ class PersistentSimulationService:
             "v17",
             "v18",
             "v19",
+            "v20",
         }:
             production_rows["artifacts"] = tuple(state.artifacts.values())
         if codec_version in {
@@ -229,6 +233,7 @@ class PersistentSimulationService:
             "v17",
             "v18",
             "v19",
+            "v20",
         }:
             production_rows["lifecycle_records"] = tuple(self._engine.lifecycle_records)
         if codec_version in {
@@ -244,6 +249,7 @@ class PersistentSimulationService:
             "v17",
             "v18",
             "v19",
+            "v20",
         }:
             graph = self._engine.kinship_graph
             from world.kinship import KinshipGraph
@@ -262,6 +268,7 @@ class PersistentSimulationService:
             "v17",
             "v18",
             "v19",
+            "v20",
         }:
             production_rows["dependency_need_registers"] = tuple(
                 self._engine._dependency_need_registers.values()
@@ -276,6 +283,7 @@ class PersistentSimulationService:
             "v17",
             "v18",
             "v19",
+            "v20",
         }:
             production_rows["repositories"] = tuple(state.repositories.values())
         if codec_version in {"v13", "v14", "v15", "v16", "v17", "v18", "v19"}:

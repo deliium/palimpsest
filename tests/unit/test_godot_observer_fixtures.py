@@ -145,7 +145,7 @@ def test_event_fixtures_cover_closed_semantic_types() -> None:
         )
     )
     assert names == expected
-    assert len(names) == 32
+    assert len(names) == 33
     assert _PRODUCTION_EVENT_NAMES < set(names)
     assert set(names) < set(SEMANTIC_EVENT_TYPES)
     assert _ARTIFACT_EVENT_NAMES < set(SEMANTIC_EVENT_TYPES)

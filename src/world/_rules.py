@@ -101,6 +101,7 @@ from world.events import (
     Asked,
     Attacked,
     CommitmentDeclared,
+    ContactRecorded,
     CorpseCustodyOpened,
     Died,
     Dropped,
@@ -2946,6 +2947,7 @@ def apply_operation(
     collective_project_success: bool | None = None,
     public_goods_context: object | None = None,
     public_good_maintain_success: bool | None = None,
+    contact_enabled: bool = False,
 ) -> RuleApplication:
     """Evaluate then apply immutable physical or event-only effects.
 
@@ -3007,6 +3009,7 @@ def apply_operation(
             rules=physical_rules,
             tick=0 if tick is None else tick,
             skill_efficiency=skill_efficiency,
+            contact_enabled=contact_enabled,
         )
     if type(possession_succession_active) is not bool:
         raise TypeError("possession_succession_active must be bool")
@@ -3132,6 +3135,7 @@ def apply_operation(
             rules=physical_rules,
             resolved=resolved,
             skill_efficiency=skill_efficiency,
+            contact_enabled=contact_enabled,
         )
     details = _event_details_for(state, operation, rules=physical_rules)
     if result.disposition is RuleDisposition.EVENT_ONLY:
@@ -3169,8 +3173,10 @@ def _apply_regional_travel_command(
     rules: PhysicalRules,
     tick: int,
     skill_efficiency: object | None,
+    contact_enabled: bool = False,
 ) -> RuleApplication:
     from world._skills import SkillEfficiencyOverride
+    from world._travel import _journey_contact
 
     if state.regions_migration is None:
         raise ValueError("regional travel requires regions_migration")
@@ -3289,6 +3295,15 @@ def _apply_regional_travel_command(
         journey.journey_id,
         len(current_journeys),
     )
+    contact = (
+        _journey_contact(
+            journey=journey,
+            bodies=arrived_bodies,
+            emit_contact=True,
+        )
+        if contact_enabled
+        else None
+    )
     return RuleApplication(
         result=result,
         next_state=next_state,
@@ -3300,6 +3315,7 @@ def _apply_regional_travel_command(
                 origin_location_id=origin_id,
                 destination_location_id=destination_id,
             ),
+            *(() if contact is None else (contact,)),
         ),
     )
 
@@ -3456,6 +3472,7 @@ def _apply_flee(
     rules: PhysicalRules,
     resolved: ResolvedActionEffects | None,
     skill_efficiency: object | None = None,
+    contact_enabled: bool = False,
 ) -> RuleApplication:
     if resolved is None:
         raise ValueError("flee apply requires ResolvedActionEffects")
@@ -3497,6 +3514,16 @@ def _apply_flee(
         )
     prior = state.bodies[operation.actor_id]
     resulting = next_state.bodies[operation.actor_id]
+    contact = (
+        _flee_contact(
+            state=state,
+            next_state=next_state,
+            actor_id=operation.actor_id,
+            destination_id=destination_id,
+        )
+        if contact_enabled
+        else None
+    )
     return RuleApplication(
         result=result,
         next_state=next_state,
@@ -3507,6 +3534,53 @@ def _apply_flee(
             fatigue_delta=round_physical(resulting.fatigue.value - prior.fatigue.value),
             resulting_fatigue=resulting.fatigue.value,
         ),
+        extra_event_details=() if contact is None else (contact,),
+    )
+
+
+def _flee_contact(
+    *,
+    state: WorldState,
+    next_state: WorldState,
+    actor_id: EntityId,
+    destination_id: EntityId,
+) -> ContactRecorded | None:
+    spec = state.regions_migration
+    if spec is None:
+        return None
+    region_by_location = {
+        item.location_id: item.region_id for item in spec.location_regions
+    }
+    origin_location = state.bodies[actor_id].location_id
+    origin_region = region_by_location.get(origin_location)
+    destination_region = region_by_location.get(destination_id)
+    if origin_region is None or destination_region is None:
+        return None
+    if origin_region == destination_region:
+        return None
+    from world.models import LifeStatus
+
+    present = tuple(
+        sorted(
+            (
+                body_id
+                for body_id, body in next_state.bodies.items()
+                if body.location_id == destination_id
+                and body_id != actor_id
+                and body.life_status is not LifeStatus.DEAD
+            ),
+            key=lambda item: item.value,
+        )
+    )
+    if not present:
+        return None
+    return ContactRecorded(
+        relocation_kind="fled",
+        location_id=destination_id,
+        participant_ids=(actor_id,),
+        present_ids=present,
+        origin_region_id=origin_region,
+        destination_region_id=destination_region,
     )
 
 

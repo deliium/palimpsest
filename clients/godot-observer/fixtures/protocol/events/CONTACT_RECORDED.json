@@ -1,0 +1,11 @@
+{
+  "protocol_version": "observer-protocol-v1",
+  "type": "CONTACT_RECORDED",
+  "domain_kind": "contact_recorded",
+  "event_id": "event-contact-recorded",
+  "tick": 2,
+  "sequence": 1,
+  "actor_id": null,
+  "destination_location_id": "loc-grove",
+  "participant_body_ids": ["body-ada"]
+}

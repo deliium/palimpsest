@@ -46,7 +46,7 @@ _PROJECT_TYPES = (
 
 
 def test_semantic_catalog_counts_sixty_six() -> None:
-    assert len(SEMANTIC_EVENT_TYPES) == 72
+    assert len(SEMANTIC_EVENT_TYPES) == 73
     for name in _PROJECT_TYPES:
         assert name in SEMANTIC_EVENT_TYPES
 

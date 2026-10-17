@@ -83,7 +83,7 @@ def test_live_start_arrival_and_timeout_adapt_once_and_frames_replace_journey() 
         if row.event.details.kind == "journey_ended"
     )
     assert adapt_event(ended).type == "JOURNEY_ENDED"
-    assert len(SEMANTIC_EVENT_TYPES) == 72
+    assert len(SEMANTIC_EVENT_TYPES) == 73
 
 
 def test_channel_off_api_omits_optional_regional_fields() -> None:

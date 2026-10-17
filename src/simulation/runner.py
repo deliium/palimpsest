@@ -1748,6 +1748,10 @@ class SimulationRunner:
                     if config.public_goods is None
                     else config.public_goods.decay_millis
                 ),
+                cultural_contact_active=(
+                    config.cultural_contact is not None
+                    and config.cultural_contact.enabled
+                ),
                 skill_policy=skill_kwargs.get("skill_policy"),
                 skill_entity_ids=skill_ids or None,
                 teaching_policy=teaching_kwargs.get("teaching_policy"),
@@ -3836,6 +3840,7 @@ def _bootstrap_snapshot(engine: WorldEngine) -> WorldSnapshot:
         collective_projects_active=engine.collective_projects_active,
         public_goods_active=engine._public_goods_active,
         regions_migration_active=state.regions_migration is not None,
+        cultural_contact_active=engine.cultural_contact_active,
     )
     production_rows: SnapshotExtensions = {}
     if codec_version in {
@@ -3856,6 +3861,7 @@ def _bootstrap_snapshot(engine: WorldEngine) -> WorldSnapshot:
         "v17",
         "v18",
         "v19",
+        "v20",
     }:
         production_rows = {
             "structures": tuple(state.structures.values()),
@@ -3879,6 +3885,7 @@ def _bootstrap_snapshot(engine: WorldEngine) -> WorldSnapshot:
         "v17",
         "v18",
         "v19",
+        "v20",
     }:
         production_rows["active_hazards"] = tuple(state.active_hazards)
     if codec_version in {
@@ -3897,6 +3904,7 @@ def _bootstrap_snapshot(engine: WorldEngine) -> WorldSnapshot:
         "v17",
         "v18",
         "v19",
+        "v20",
     }:
         production_rows["artifacts"] = tuple(state.artifacts.values())
     if codec_version in {
@@ -3914,6 +3922,7 @@ def _bootstrap_snapshot(engine: WorldEngine) -> WorldSnapshot:
         "v17",
         "v18",
         "v19",
+        "v20",
     }:
         production_rows["lifecycle_records"] = tuple(engine.lifecycle_records)
     if codec_version in {
@@ -3929,6 +3938,7 @@ def _bootstrap_snapshot(engine: WorldEngine) -> WorldSnapshot:
         "v17",
         "v18",
         "v19",
+        "v20",
     }:
         kinship_graph = engine.kinship_graph
         from world.kinship import KinshipGraph
@@ -3947,6 +3957,7 @@ def _bootstrap_snapshot(engine: WorldEngine) -> WorldSnapshot:
         "v17",
         "v18",
         "v19",
+        "v20",
     }:
         production_rows["dependency_need_registers"] = tuple(
             engine._dependency_need_registers.values()

@@ -791,6 +791,7 @@ def _encode_world_snapshot(
             "v17",
             "v18",
             "v19",
+            "v20",
         }:
             payload["structures"] = [
                 _encode_structure(item) for item in value.structures
@@ -818,6 +819,7 @@ def _encode_world_snapshot(
             "v17",
             "v18",
             "v19",
+            "v20",
         }:
             payload["active_hazards"] = [
                 _encode_active_hazard(item) for item in value.active_hazards
@@ -838,6 +840,7 @@ def _encode_world_snapshot(
             "v17",
             "v18",
             "v19",
+            "v20",
         }:
             payload["artifacts"] = [
                 _encode_information_artifact(item) for item in value.artifacts
@@ -857,6 +860,7 @@ def _encode_world_snapshot(
             "v17",
             "v18",
             "v19",
+            "v20",
         }:
             payload["lifecycle_records"] = [
                 _encode_lifecycle_record(item) for item in value.lifecycle_records
@@ -874,6 +878,7 @@ def _encode_world_snapshot(
             "v17",
             "v18",
             "v19",
+            "v20",
         }:
             payload["kinship_edges"] = [
                 _encode_kinship_edge(item) for item in value.kinship_edges
@@ -890,6 +895,7 @@ def _encode_world_snapshot(
             "v17",
             "v18",
             "v19",
+            "v20",
         }:
             payload["dependency_need_registers"] = [
                 _encode_dependency_need_register(item)
@@ -905,6 +911,7 @@ def _encode_world_snapshot(
             "v17",
             "v18",
             "v19",
+            "v20",
         }:
             payload["repositories"] = [
                 _encode_knowledge_repository(item) for item in value.repositories
@@ -927,6 +934,7 @@ def _encode_world_snapshot(
             "v17",
             "v18",
             "v19",
+            "v20",
         }:
             payload["corpse_custody_item_ids"] = sorted(
                 item.value for item in value.corpse_custody_item_ids
@@ -935,7 +943,14 @@ def _encode_world_snapshot(
                 "corpse_custody_snapshot_encode corpse_custody_count=%s",
                 len(value.corpse_custody_item_ids),
             )
-        if value.persistence_codec_version in {"v15", "v16", "v17", "v18", "v19"}:
+        if value.persistence_codec_version in {
+            "v15",
+            "v16",
+            "v17",
+            "v18",
+            "v19",
+            "v20",
+        }:
             payload["exchange_offers"] = [
                 {
                     "give_item_ids": [item.value for item in offer.give_item_ids],
@@ -950,7 +965,7 @@ def _encode_world_snapshot(
                 "exchange_offer_snapshot_encode offer_count=%s",
                 len(value.exchange_offers),
             )
-        if value.persistence_codec_version in {"v17", "v18", "v19"}:
+        if value.persistence_codec_version in {"v17", "v18", "v19", "v20"}:
             payload["collective_projects"] = [
                 _encode_collective_project(
                     item, codec_version=value.persistence_codec_version
@@ -966,7 +981,7 @@ def _encode_world_snapshot(
                 "collective_projects omitted project_count=%s",
                 len(value.collective_projects),
             )
-        if value.persistence_codec_version == "v19":
+        if value.persistence_codec_version in {"v19", "v20"}:
             assert value.regions_migration is not None
             assert value.journeys is not None
             payload["regions_migration"] = value.regions_migration.canonical()
@@ -1106,7 +1121,7 @@ def _decode_journey(data: dict[str, Any], *, path: str) -> Journey:
 
 def _decode_world_snapshot(data: dict[str, Any], *, path: str) -> WorldSnapshot:
     wire_codec = data.get("persistence_codec_version")
-    codec = "v18" if wire_codec == "v19" else wire_codec
+    codec = "v18" if wire_codec in {"v19", "v20"} else wire_codec
     keys = {
         "snapshot_id",
         "run_id",
@@ -1250,7 +1265,7 @@ def _decode_world_snapshot(data: dict[str, Any], *, path: str) -> WorldSnapshot:
             codec,
             project_count,
         )
-    if wire_codec == "v19":
+    if wire_codec in {"v19", "v20"}:
         keys |= {"regions_migration", "journeys"}
     _require_keys(data, keys, path=path)
     config_raw = data["config"]
@@ -1258,7 +1273,7 @@ def _decode_world_snapshot(data: dict[str, Any], *, path: str) -> WorldSnapshot:
         raise PersistenceSerializationError("invalid_object", f"{path}.config")
     regions_migration = None
     journeys = None
-    if wire_codec == "v19":
+    if wire_codec in {"v19", "v20"}:
         from simulation.runner_serialization import (
             RunnerSerializationError,
             _decode_regions_migration,

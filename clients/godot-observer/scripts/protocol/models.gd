@@ -53,6 +53,7 @@ const KNOWN_TYPES: Array[String] = [
 	"JOURNEY_STARTED",
 	"JOURNEY_ARRIVED",
 	"JOURNEY_ENDED",
+	"CONTACT_RECORDED",
 ]
 
 const BODY_FROM_TARGET: Array[String] = [

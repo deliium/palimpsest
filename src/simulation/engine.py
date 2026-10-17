@@ -127,6 +127,7 @@ from world.events import (
     AgentCreated,
     AgentEnteredWorld,
     AgentInitializationRecorded,
+    ContactRecorded,
     CorpseCustodyOpened,
     Died,
     JourneyArrived,
@@ -134,6 +135,7 @@ from world.events import (
     JourneyStarted,
     KinshipEdgeRecorded,
     LifecycleStageChanged,
+    OccurrenceContext,
     WorldEvent,
     build_occurrence_context,
     make_physical_replayable_event,
@@ -432,6 +434,7 @@ class WorldEngine:
         "_collective_projects_active",
         "_collective_projects_idle_ticks",
         "_config",
+        "_cultural_contact_active",
         "_dependency_care_spec",
         "_dependency_need_registers",
         "_durable_records_spec",
@@ -504,6 +507,7 @@ class WorldEngine:
         collective_projects_idle_ticks: int = 4,
         public_goods_active: bool = False,
         public_goods_decay_millis: int = 0,
+        cultural_contact_active: bool = False,
     ) -> None:
         if type(config) is not SimulationRunConfig:
             raise TypeError("WorldEngine requires SimulationRunConfig")
@@ -611,6 +615,9 @@ class WorldEngine:
             raise ValueError("collective_projects_idle_ticks must be in [1, 64]")
         self._collective_projects_active = collective_projects_active
         self._collective_projects_idle_ticks = collective_projects_idle_ticks
+        if type(cultural_contact_active) is not bool:
+            raise TypeError("cultural_contact_active must be bool")
+        self._cultural_contact_active = cultural_contact_active
         if type(public_goods_active) is not bool:
             raise TypeError("public_goods_active must be bool")
         if type(public_goods_decay_millis) is not int or isinstance(
@@ -985,6 +992,8 @@ class WorldEngine:
         _bind_resource_exchange_profile_channel(engine, snapshot.config)
         _bind_collective_projects_channel(engine, snapshot.config)
         _bind_public_goods_channel(engine, snapshot.config)
+        contact = getattr(snapshot.config, "cultural_contact", None)
+        engine._cultural_contact_active = bool(contact is not None and contact.enabled)
         engine._perception = PerceptionService(
             possession_succession_active=engine._possession_succession_active,
             structured_commitments_active=engine._structured_commitments_active,
@@ -1488,6 +1497,10 @@ class WorldEngine:
         return self._collective_projects_active
 
     @property
+    def cultural_contact_active(self) -> bool:
+        return self._cultural_contact_active
+
+    @property
     def public_goods_active(self) -> bool:
         return self._public_goods_active
 
@@ -1584,6 +1597,7 @@ class WorldEngine:
                 regions_migration_active=(
                     self._snapshot.world.state.regions_migration is not None
                 ),
+                cultural_contact_active=self._cultural_contact_active,
             )
             snap = self._snapshot
             same_tick = [event for event in snap.event_history if event.tick == tick]
@@ -1828,6 +1842,7 @@ class WorldEngine:
             regions_migration_active=(
                 self._snapshot.world.state.regions_migration is not None
             ),
+            cultural_contact_active=self._cultural_contact_active,
         )
         next_registrations = (*self._registrations, registration)
         self._registrations = next_registrations
@@ -3568,6 +3583,7 @@ class WorldEngine:
             subjective_valuation_context=self._subjective_valuation_rule_context(),
             collective_projects_context=self._collective_projects_rule_context(),
             public_goods_context=self._public_goods_rule_context(),
+            contact_enabled=self._cultural_contact_active,
             public_good_maintain_draw=(
                 (
                     lambda request, working: self._public_good_maintain_success(
@@ -3639,18 +3655,32 @@ class WorldEngine:
         action_pending = pending
         from world._travel import advance_due_journeys
 
+        emit_contact = self._cultural_contact_active
         completion_state, journey_transitions = advance_due_journeys(
-            action_pending.working_state, tick=snap.tick.value
+            action_pending.working_state,
+            tick=snap.tick.value,
+            emit_contact=emit_contact,
         )
 
         def _prepare_journey_events(
-            transitions: Sequence[JourneyArrived | JourneyEnded],
+            transitions: Sequence[JourneyArrived | JourneyEnded | ContactRecorded],
             *,
             ordinal_offset: int,
         ) -> list[PendingEvent]:
             pending_events: list[PendingEvent] = []
             for ordinal, details in enumerate(transitions, start=ordinal_offset):
-                entity_id = details.participant_body_ids[0]
+                if isinstance(details, ContactRecorded):
+                    entity_id = details.participant_ids[0]
+                    occurrence = OccurrenceContext(
+                        destination_location_id=details.location_id,
+                        affected_entity_ids=tuple(details.participant_ids),
+                    )
+                else:
+                    entity_id = details.participant_body_ids[0]
+                    occurrence = build_occurrence_context(
+                        details,
+                        origin_location_id=details.origin_location_id,
+                    )
                 cause_id = derive_system_cause_id(
                     self._config,
                     run_id=self._run_id,
@@ -3669,10 +3699,7 @@ class WorldEngine:
                             family_ordinal=ordinal,
                         ),
                         details=details,
-                        occurrence=build_occurrence_context(
-                            details,
-                            origin_location_id=details.origin_location_id,
-                        ),
+                        occurrence=occurrence,
                     )
                 )
             return pending_events
@@ -4000,6 +4027,7 @@ class WorldEngine:
             collective_projects_active=self.collective_projects_active,
             public_goods_active=self._public_goods_active,
             regions_migration_active=(snap.world.state.regions_migration is not None),
+            cultural_contact_active=self._cultural_contact_active,
         )
         prepared = finalize_pending_batch(
             merged,
@@ -6048,6 +6076,7 @@ def select_checkpoint_schema(
     collective_projects_active: bool = False,
     public_goods_active: bool = False,
     regions_migration_active: bool = False,
+    cultural_contact_active: bool = False,
 ) -> tuple[int, str]:
     """Return the legal event-schema and codec pair for this run."""
     from simulation.persistence import (
@@ -6072,6 +6101,7 @@ def select_checkpoint_schema(
         EVENT_SCHEMA_REPLAY_V19,
         EVENT_SCHEMA_REPLAY_V20,
         EVENT_SCHEMA_REPLAY_V21,
+        EVENT_SCHEMA_REPLAY_V22,
     )
 
     schema_version, codec = checkpoint_schema_for_production(
@@ -6092,7 +6122,19 @@ def select_checkpoint_schema(
         collective_projects_active=collective_projects_active,
         public_goods_active=public_goods_active,
         regions_migration_active=regions_migration_active,
+        cultural_contact_active=cultural_contact_active,
     )
+    if cultural_contact_active:
+        if schema_version != EVENT_SCHEMA_REPLAY_V22 or codec != "v20":
+            _LOGGER.warning(
+                "checkpoint_schema_disagrees schema_version=%s codec=%s "
+                "expected_schema=%s expected_codec=v20 "
+                "reason=cultural_contact_active",
+                schema_version,
+                codec,
+                EVENT_SCHEMA_REPLAY_V22,
+            )
+        return schema_version, codec
     if regions_migration_active and (
         schema_version != EVENT_SCHEMA_REPLAY_V21 or codec != "v19"
     ):

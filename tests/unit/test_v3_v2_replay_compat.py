@@ -23,7 +23,7 @@ def test_event_schema_write_and_accepted_set_unchanged() -> None:
     entry = compatibility_entry("event_schema")
     assert entry.write_version == str(EVENT_SCHEMA_VERSION) == "5"
     accepted = {str(v) for v in ACCEPTED_EVENT_SCHEMA_VERSIONS}
-    assert accepted == {str(version) for version in range(2, 22)}
+    assert accepted == {str(version) for version in range(2, 23)}
 
 
 def test_legacy_runner_payloads_decode_with_v3_flags_off() -> None:

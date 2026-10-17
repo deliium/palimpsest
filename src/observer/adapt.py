@@ -20,6 +20,7 @@ from world.events import (
     ArtifactMoved,
     ArtifactPartiallyLost,
     Asked,
+    ContactRecorded,
     CorpseCustodyOpened,
     CraftStarted,
     Died,
@@ -121,7 +122,10 @@ def adapt_event(event: WorldEvent) -> ObserverEvent:
     details = event.details
     journey_view = None
     participant_body_ids: tuple[str, ...] = ()
-    if isinstance(details, (JourneyStarted, JourneyArrived, JourneyEnded)):
+    if isinstance(details, ContactRecorded):
+        participant_body_ids = tuple(item.value for item in details.participant_ids)
+        destination = details.location_id.value
+    elif isinstance(details, (JourneyStarted, JourneyArrived, JourneyEnded)):
         travel = details.journey if isinstance(details, JourneyStarted) else details
         participant_body_ids = tuple(item.value for item in travel.participant_body_ids)
         actor_id = actor_id or participant_body_ids[0]

@@ -125,7 +125,7 @@ def _world_event(
 
 def test_semantic_catalog_appends_four_artifact_types() -> None:
     assert OBSERVER_PROTOCOL_VERSION == "observer-protocol-v1"
-    assert len(SEMANTIC_EVENT_TYPES) == 72
+    assert len(SEMANTIC_EVENT_TYPES) == 73
     assert SEMANTIC_EVENT_TYPES[32:36] == _ARTIFACT_SEMANTIC
     assert SEMANTIC_EVENT_TYPES[36:40] == _DURABLE_ARTIFACT_SEMANTIC
     assert SEMANTIC_EVENT_TYPES[40:44] == _LIFECYCLE_SEMANTIC

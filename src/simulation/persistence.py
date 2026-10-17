@@ -63,6 +63,7 @@ from world.events import (
     EVENT_SCHEMA_REPLAY_V19,
     EVENT_SCHEMA_REPLAY_V20,
     EVENT_SCHEMA_REPLAY_V21,
+    EVENT_SCHEMA_REPLAY_V22,
     WorldEvent,
     normalize_events,
 )
@@ -130,6 +131,8 @@ ACCEPTED_EVENT_SCHEMA_VERSIONS: Final[frozenset[int]] = frozenset(
         EVENT_SCHEMA_REPLAY_V19,
         EVENT_SCHEMA_REPLAY_V20,
         EVENT_SCHEMA_REPLAY_V21,
+        EVENT_SCHEMA_REPLAY_V22,
+        EVENT_SCHEMA_REPLAY_V22,
     }
 )
 ACCEPTED_PROJECTOR_VERSIONS: Final[frozenset[str]] = frozenset({"v1", "v2"})
@@ -154,6 +157,7 @@ ACCEPTED_PERSISTENCE_CODEC_VERSIONS: Final[frozenset[str]] = frozenset(
         "v17",
         "v18",
         "v19",
+        "v20",
     }
 )
 
@@ -261,6 +265,7 @@ def checkpoint_schema_for_production(
     collective_projects_active: bool = False,
     public_goods_active: bool = False,
     regions_migration_active: bool = False,
+    cultural_contact_active: bool = False,
 ) -> tuple[int, str]:
     """Choose the checkpoint schema for this run.
 
@@ -271,6 +276,15 @@ def checkpoint_schema_for_production(
     else dynamics → ``(v7, v4)``; else production → ``(v6, v3)``; else
     replay-v5 / codec ``v2``.
     """
+    if cultural_contact_active:
+        pair = EVENT_SCHEMA_REPLAY_V22, "v20"
+        _LOG.info(
+            "checkpoint_schema_selected schema_version=%s codec=%s "
+            "reason=cultural_contact_active",
+            pair[0],
+            pair[1],
+        )
+        return pair
     if regions_migration_active:
         pair = EVENT_SCHEMA_REPLAY_V21, "v19"
         _LOG.info(
@@ -442,6 +456,7 @@ def schema_projector_compatible(
         EVENT_SCHEMA_REPLAY_V19,
         EVENT_SCHEMA_REPLAY_V20,
         EVENT_SCHEMA_REPLAY_V21,
+        EVENT_SCHEMA_REPLAY_V22,
     }:
         return projector_version == "v2"
     return False
@@ -701,11 +716,21 @@ class WorldSnapshot:
             journey_rows = tuple(raw_journeys)
             if any(type(item) is not Journey for item in journey_rows):
                 raise TypeError("journeys entries must be Journey")
-        if self.persistence_codec_version == "v19":
-            if self.event_schema_version != EVENT_SCHEMA_REPLAY_V21:
-                raise ValueError("codec v19 requires event schema 21")
+        if self.persistence_codec_version in {"v19", "v20"}:
+            expected = (
+                EVENT_SCHEMA_REPLAY_V21
+                if self.persistence_codec_version == "v19"
+                else EVENT_SCHEMA_REPLAY_V22
+            )
+            if self.event_schema_version != expected:
+                raise ValueError(
+                    f"codec {self.persistence_codec_version} requires event schema "
+                    f"{expected}"
+                )
             if self.regions_migration is None or journey_rows is None:
-                raise ValueError("codec v19 requires regions_migration")
+                raise ValueError(
+                    f"codec {self.persistence_codec_version} requires regions_migration"
+                )
         elif self.regions_migration is not None or journey_rows is not None:
             raise ValueError("regional migration checkpoint fields require codec v19")
         object.__setattr__(self, "journeys", journey_rows)
@@ -847,6 +872,12 @@ class WorldSnapshot:
                     "codec_schema_mismatch reason_code=codec_v19_requires_schema_21"
                 )
                 raise ValueError("codec v19 requires event schema 21")
+        elif self.persistence_codec_version == "v20":
+            if self.event_schema_version != EVENT_SCHEMA_REPLAY_V22:
+                _LOG.error(
+                    "codec_schema_mismatch reason_code=codec_v20_requires_schema_22"
+                )
+                raise ValueError("codec v20 requires event schema 22")
         elif self.persistence_codec_version == "v17":
             if self.event_schema_version != EVENT_SCHEMA_REPLAY_V19:
                 _LOG.error(
@@ -880,6 +911,7 @@ class WorldSnapshot:
                 "v17",
                 "v18",
                 "v19",
+                "v20",
             }
             and self.active_hazards
         ):
@@ -902,6 +934,7 @@ class WorldSnapshot:
                 "v17",
                 "v18",
                 "v19",
+                "v20",
             }
             and self.artifacts
         ):
@@ -934,6 +967,7 @@ class WorldSnapshot:
                 "v17",
                 "v18",
                 "v19",
+                "v20",
             }
             and records
         ):
@@ -964,6 +998,7 @@ class WorldSnapshot:
                 "v17",
                 "v18",
                 "v19",
+                "v20",
             }
             and kinship_rows
         ):
@@ -995,6 +1030,7 @@ class WorldSnapshot:
                 "v17",
                 "v18",
                 "v19",
+                "v20",
             }
             and need_rows
         ):
@@ -1021,6 +1057,7 @@ class WorldSnapshot:
                 "v17",
                 "v18",
                 "v19",
+                "v20",
             }
             and repo_rows
         ):
@@ -1038,7 +1075,7 @@ class WorldSnapshot:
         object.__setattr__(self, "corpse_custody_item_ids", tuple(custody_ids))
         if (
             self.persistence_codec_version
-            not in {"v13", "v14", "v15", "v16", "v17", "v18", "v19"}
+            not in {"v13", "v14", "v15", "v16", "v17", "v18", "v19", "v20"}
             and custody_ids
         ):
             _LOG.error(
@@ -1054,7 +1091,8 @@ class WorldSnapshot:
             offer_rows.append(raw)
         object.__setattr__(self, "exchange_offers", tuple(offer_rows))
         if (
-            self.persistence_codec_version not in {"v15", "v16", "v17", "v18", "v19"}
+            self.persistence_codec_version
+            not in {"v15", "v16", "v17", "v18", "v19", "v20"}
             and offer_rows
         ):
             _LOG.error(
@@ -1070,7 +1108,10 @@ class WorldSnapshot:
                 raise TypeError("collective_projects entries must be CollectiveProject")
             project_rows.append(raw)
         object.__setattr__(self, "collective_projects", tuple(project_rows))
-        if self.persistence_codec_version not in {"v17", "v18", "v19"} and project_rows:
+        if (
+            self.persistence_codec_version not in {"v17", "v18", "v19", "v20"}
+            and project_rows
+        ):
             _LOG.warning(
                 "collective_projects present on pre-v17 payload codec=%s "
                 "project_count=%s",
@@ -1078,7 +1119,7 @@ class WorldSnapshot:
                 len(project_rows),
             )
             raise ValueError("collective_projects require codec v17")
-        if self.persistence_codec_version not in {"v17", "v18", "v19"}:
+        if self.persistence_codec_version not in {"v17", "v18", "v19", "v20"}:
             for structure in self.structures:
                 if structure.kind in {StructureKind.BRIDGE, StructureKind.RECORD_SITE}:
                     _LOG.warning(
@@ -1087,7 +1128,7 @@ class WorldSnapshot:
                         structure.kind.value,
                     )
                     raise ValueError("bridge and record_site require codec v17")
-        if self.persistence_codec_version not in {"v18", "v19"}:
+        if self.persistence_codec_version not in {"v18", "v19", "v20"}:
             for structure in self.structures:
                 if structure.kind in {StructureKind.WELL, StructureKind.WARNING_POST}:
                     _LOG.warning(
@@ -1111,6 +1152,7 @@ class WorldSnapshot:
             "v17",
             "v18",
             "v19",
+            "v20",
         }:
             custody_count = sum(
                 1
@@ -1219,10 +1261,11 @@ class RunCreateRequest:
                 "RunCreateRequest.derivation_version", self.derivation_version
             ),
         )
-        regions_migration_checkpoint = (
-            self.event_schema_version == EVENT_SCHEMA_REPLAY_V21
-            and self.persistence_codec_version == "v19"
-        )
+        regions_migration_checkpoint = self.event_schema_version in {
+            EVENT_SCHEMA_REPLAY_V21,
+            EVENT_SCHEMA_REPLAY_V22,
+            EVENT_SCHEMA_REPLAY_V22,
+        } and self.persistence_codec_version in {"v19", "v20"}
         production_checkpoint = (
             self.event_schema_version == EVENT_SCHEMA_REPLAY_V6
             and self.persistence_codec_version == "v3"
@@ -1275,7 +1318,11 @@ class RunCreateRequest:
             self,
             "persistence_codec_version",
             (
-                "v19"
+                (
+                    "v20"
+                    if self.event_schema_version == EVENT_SCHEMA_REPLAY_V22
+                    else "v19"
+                )
                 if regions_migration_checkpoint
                 else "v7"
                 if new_agent_checkpoint

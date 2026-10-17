@@ -10,7 +10,7 @@ static func route(event: Variant, policy: Dictionary, logical: Dictionary) -> Di
 		action = "unknown"
 	else:
 		match str(event.type):
-			"JOURNEY_STARTED", "JOURNEY_ENDED", "JOURNEY_ARRIVED":
+			"JOURNEY_STARTED", "JOURNEY_ENDED", "JOURNEY_ARRIVED", "CONTACT_RECORDED":
 				# Atomic placement is already folded. Preparation is origin-local;
 				# never turn a journey or a seek into a mid-edge motion.
 				action = "activity"

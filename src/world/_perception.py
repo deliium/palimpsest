@@ -40,6 +40,7 @@ from world.events import (
     ArtifactPartiallyLost,
     Asked,
     CommitmentDeclared,
+    ContactRecorded,
     CorpseCustodyOpened,
     CraftStarted,
     ExchangeCompleted,
@@ -1115,6 +1116,14 @@ def _public_facts_for_role(
     collective_projects_active: bool = False,
     public_goods_active: bool = False,
 ) -> dict[str, object]:
+    if type(event.details) is ContactRecorded:
+        contact = event.details
+        return {
+            "kind": event.event_type,
+            "contact_location_id": contact.location_id.value,
+            "contact_participant_ids": [item.value for item in contact.participant_ids],
+            "contact_present_ids": [item.value for item in contact.present_ids],
+        }
     if type(event.details) in {JourneyStarted, JourneyArrived, JourneyEnded}:
         if role not in {
             ObservationAudienceRole.ACTOR,

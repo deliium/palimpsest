@@ -72,6 +72,7 @@ __all__ = [
 
 _LOG: Final[logging.Logger] = logging.getLogger("agents.cognition.memory")
 _DEFAULT_LIMIT: Final[int] = 8
+_CONTACT_MEMORY_ENTITY_CAP: Final[int] = 8
 DIRECT_OBSERVATION_MEMORY_POLICY_VERSION: Final[str] = "direct-observation-memory.v1"
 
 
@@ -869,6 +870,32 @@ def build_direct_observation_memory_trace(
                 label="destination",
                 entity_id=occurrence.destination_id,
             )
+        )
+    if occurrence.kind == "contact_recorded":
+        contact_ids: list[EntityId] = []
+        for field_name, _label in (
+            ("contact_participant_ids", "contact_participant"),
+            ("contact_present_ids", "contact_present"),
+        ):
+            raw = occurrence.public_facts.get(field_name)
+            if not isinstance(raw, (list, tuple)):
+                continue
+            for item in raw:
+                if type(item) is not str:
+                    continue
+                contact_ids.append(EntityId(item))
+        for index, entity_id in enumerate(contact_ids[:_CONTACT_MEMORY_ENTITY_CAP]):
+            entities.append(
+                EntityMention(
+                    mention_id=MentionId(f"e-contact-{index}"),
+                    label="contact_met",
+                    entity_id=entity_id,
+                )
+            )
+        _LOG.debug(
+            "contact_occurrence_memory_projected owner_id=%s entity_count=%s",
+            owner_id.value,
+            min(len(contact_ids), _CONTACT_MEMORY_ENTITY_CAP),
         )
     relations: list[MemoryRelation] = []
     if occurrence.actor_id is not None and occurrence.other_entity_id is not None:
