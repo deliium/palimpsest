@@ -88,6 +88,10 @@ from world.communications import (
     observation_allows_communication_target,
     origin_utterance,
 )
+from world.contact import (
+    ContactMode,
+    CulturalContactSpec,
+)
 from world.effects import (
     ActionCause,
     DeathCause,
@@ -141,6 +145,7 @@ from world.events import (
     ArtifactPartiallyLost,
     Asked,
     Attacked,
+    ContactRecorded,
     CraftStarted,
     Died,
     Dropped,
@@ -397,10 +402,13 @@ __all__ = [
     "CommunicationId",
     "CommunicationRelation",
     "CommunicationSourceBasis",
+    "ContactMode",
+    "ContactRecorded",
     "ContinuousLifecycleFactors",
     "CopyRecord",
     "Craft",
     "CraftStarted",
+    "CulturalContactSpec",
     "DamageRecord",
     "DayPhase",
     "DeathCause",

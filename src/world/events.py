@@ -32,7 +32,7 @@ import logging
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
 from enum import StrEnum
-from typing import Final, Literal
+from typing import Final, Literal, cast
 
 from world.artifacts import (
     ArtifactKind,
@@ -86,6 +86,7 @@ EVENT_SCHEMA_REPLAY_V18: Final[int] = 18
 EVENT_SCHEMA_REPLAY_V19: Final[int] = 19
 EVENT_SCHEMA_REPLAY_V20: Final[int] = 20
 EVENT_SCHEMA_REPLAY_V21: Final[int] = 21
+EVENT_SCHEMA_REPLAY_V22: Final[int] = 22
 SUPPORTED_EVENT_SCHEMA_VERSIONS: Final[frozenset[int]] = frozenset(
     {
         EVENT_SCHEMA_AUDIT_V1,
@@ -109,6 +110,7 @@ SUPPORTED_EVENT_SCHEMA_VERSIONS: Final[frozenset[int]] = frozenset(
         EVENT_SCHEMA_REPLAY_V19,
         EVENT_SCHEMA_REPLAY_V20,
         EVENT_SCHEMA_REPLAY_V21,
+        EVENT_SCHEMA_REPLAY_V22,
     }
 )
 REPLAYABLE_EVENT_SCHEMA_VERSIONS: Final[frozenset[int]] = frozenset(
@@ -133,6 +135,7 @@ REPLAYABLE_EVENT_SCHEMA_VERSIONS: Final[frozenset[int]] = frozenset(
         EVENT_SCHEMA_REPLAY_V19,
         EVENT_SCHEMA_REPLAY_V20,
         EVENT_SCHEMA_REPLAY_V21,
+        EVENT_SCHEMA_REPLAY_V22,
     }
 )
 PHYSICAL_REPLAY_EVENT_SCHEMA_VERSIONS: Final[frozenset[int]] = frozenset(
@@ -156,6 +159,7 @@ PHYSICAL_REPLAY_EVENT_SCHEMA_VERSIONS: Final[frozenset[int]] = frozenset(
         EVENT_SCHEMA_REPLAY_V19,
         EVENT_SCHEMA_REPLAY_V20,
         EVENT_SCHEMA_REPLAY_V21,
+        EVENT_SCHEMA_REPLAY_V22,
     }
 )
 _PRODUCTION_EVENT_SCHEMAS: Final[frozenset[int]] = frozenset(
@@ -176,6 +180,7 @@ _PRODUCTION_EVENT_SCHEMAS: Final[frozenset[int]] = frozenset(
         EVENT_SCHEMA_REPLAY_V19,
         EVENT_SCHEMA_REPLAY_V20,
         EVENT_SCHEMA_REPLAY_V21,
+        EVENT_SCHEMA_REPLAY_V22,
     }
 )
 _ENVIRONMENT_EVENT_SCHEMAS: Final[frozenset[int]] = frozenset(
@@ -195,6 +200,7 @@ _ENVIRONMENT_EVENT_SCHEMAS: Final[frozenset[int]] = frozenset(
         EVENT_SCHEMA_REPLAY_V19,
         EVENT_SCHEMA_REPLAY_V20,
         EVENT_SCHEMA_REPLAY_V21,
+        EVENT_SCHEMA_REPLAY_V22,
     }
 )
 _ARTIFACT_EVENT_SCHEMAS: Final[frozenset[int]] = frozenset(
@@ -213,6 +219,7 @@ _ARTIFACT_EVENT_SCHEMAS: Final[frozenset[int]] = frozenset(
         EVENT_SCHEMA_REPLAY_V19,
         EVENT_SCHEMA_REPLAY_V20,
         EVENT_SCHEMA_REPLAY_V21,
+        EVENT_SCHEMA_REPLAY_V22,
     }
 )
 _LIFECYCLE_EVENT_SCHEMAS: Final[frozenset[int]] = frozenset(
@@ -230,6 +237,7 @@ _LIFECYCLE_EVENT_SCHEMAS: Final[frozenset[int]] = frozenset(
         EVENT_SCHEMA_REPLAY_V19,
         EVENT_SCHEMA_REPLAY_V20,
         EVENT_SCHEMA_REPLAY_V21,
+        EVENT_SCHEMA_REPLAY_V22,
     }
 )
 _NEW_AGENT_INIT_EVENT_SCHEMAS: Final[frozenset[int]] = frozenset(
@@ -246,6 +254,7 @@ _NEW_AGENT_INIT_EVENT_SCHEMAS: Final[frozenset[int]] = frozenset(
         EVENT_SCHEMA_REPLAY_V19,
         EVENT_SCHEMA_REPLAY_V20,
         EVENT_SCHEMA_REPLAY_V21,
+        EVENT_SCHEMA_REPLAY_V22,
     }
 )
 _KINSHIP_EVENT_SCHEMAS: Final[frozenset[int]] = frozenset(
@@ -261,6 +270,7 @@ _KINSHIP_EVENT_SCHEMAS: Final[frozenset[int]] = frozenset(
         EVENT_SCHEMA_REPLAY_V19,
         EVENT_SCHEMA_REPLAY_V20,
         EVENT_SCHEMA_REPLAY_V21,
+        EVENT_SCHEMA_REPLAY_V22,
     }
 )
 _DEPENDENCY_CARE_EVENT_SCHEMAS: Final[frozenset[int]] = frozenset(
@@ -275,6 +285,7 @@ _DEPENDENCY_CARE_EVENT_SCHEMAS: Final[frozenset[int]] = frozenset(
         EVENT_SCHEMA_REPLAY_V19,
         EVENT_SCHEMA_REPLAY_V20,
         EVENT_SCHEMA_REPLAY_V21,
+        EVENT_SCHEMA_REPLAY_V22,
     }
 )
 CURRENT_PHYSICAL_EVENT_SCHEMA_VERSION: Final[int] = EVENT_SCHEMA_REPLAY_V5
@@ -459,6 +470,84 @@ class JourneyEnded:
             raise TypeError("JourneyEnded.destination_location_id must be EntityId")
         if self.reason not in {"participant_dead", "arrival_timeout"}:
             raise ValueError("JourneyEnded.reason")
+
+
+@dataclass(frozen=True, slots=True)
+class ContactRecorded:
+    """Neutral co-presence fact at a cross-region relocation.
+
+    No relationship, group identity, attitude, or policy is encoded here.
+    """
+
+    relocation_kind: Literal["journey_arrived", "fled", "move"]
+    location_id: EntityId
+    participant_ids: Sequence[EntityId]
+    present_ids: Sequence[EntityId]
+    origin_region_id: str
+    destination_region_id: str
+    journey_id: str | None = None
+    kind: Literal["contact_recorded"] = field(default="contact_recorded", init=False)
+
+    def __post_init__(self) -> None:
+        if self.relocation_kind not in {"journey_arrived", "fled", "move"}:
+            raise ValueError("ContactRecorded.relocation_kind: invalid_relocation_kind")
+        if self.relocation_kind == "journey_arrived":
+            if self.journey_id is None:
+                raise ValueError("ContactRecorded.journey_id: missing_journey_id")
+            object.__setattr__(
+                self,
+                "journey_id",
+                require_stable_id("ContactRecorded.journey_id", self.journey_id),
+            )
+        elif self.journey_id is not None:
+            raise ValueError("ContactRecorded.journey_id: unexpected_journey_id")
+        if type(self.location_id) is not EntityId:
+            raise TypeError("ContactRecorded.location_id must be EntityId")
+        participants = cast(
+            tuple[EntityId, ...],
+            require_ordered_unique(
+                "ContactRecorded.participant_ids",
+                self.participant_ids,
+                item_type=EntityId,
+            ),
+        )
+        present = cast(
+            tuple[EntityId, ...],
+            require_ordered_unique(
+                "ContactRecorded.present_ids",
+                self.present_ids,
+                item_type=EntityId,
+            ),
+        )
+        if not participants:
+            raise ValueError("ContactRecorded.participant_ids: empty_participants")
+        if not present:
+            raise ValueError("ContactRecorded.present_ids: empty_present")
+        if participants != tuple(sorted(participants, key=lambda item: item.value)):
+            raise ValueError("ContactRecorded.participant_ids: unsorted_participants")
+        if present != tuple(sorted(present, key=lambda item: item.value)):
+            raise ValueError("ContactRecorded.present_ids: unsorted_present")
+        if set(participants) & set(present):
+            raise ValueError("ContactRecorded.present_ids: overlapping_ids")
+        object.__setattr__(self, "participant_ids", participants)
+        object.__setattr__(self, "present_ids", present)
+        object.__setattr__(
+            self,
+            "origin_region_id",
+            require_stable_id(
+                "ContactRecorded.origin_region_id", self.origin_region_id
+            ),
+        )
+        object.__setattr__(
+            self,
+            "destination_region_id",
+            require_stable_id(
+                "ContactRecorded.destination_region_id", self.destination_region_id
+            ),
+        )
+        if self.origin_region_id == self.destination_region_id:
+            raise ValueError("ContactRecorded.origin_region_id: equal_regions")
+        _reject_presentation_fields(self.kind, self.__slots__)
 
 
 @dataclass(frozen=True, slots=True)
@@ -2668,6 +2757,7 @@ EventDetails = (
     | JourneyStarted
     | JourneyArrived
     | JourneyEnded
+    | ContactRecorded
     | Searched
     | Taken
     | Dropped
@@ -2744,6 +2834,7 @@ _DETAIL_TYPES: Final[frozenset[type]] = frozenset(
         JourneyStarted,
         JourneyArrived,
         JourneyEnded,
+        ContactRecorded,
         Searched,
         Taken,
         Dropped,
@@ -2837,6 +2928,7 @@ _KNOWLEDGE_REPOSITORY_EVENT_SCHEMAS: Final[frozenset[int]] = frozenset(
         EVENT_SCHEMA_REPLAY_V19,
         EVENT_SCHEMA_REPLAY_V20,
         EVENT_SCHEMA_REPLAY_V21,
+        EVENT_SCHEMA_REPLAY_V22,
     }
 )
 _EXPERIMENT_EVENT_SCHEMAS: Final[frozenset[int]] = frozenset(
@@ -2848,6 +2940,7 @@ _EXPERIMENT_EVENT_SCHEMAS: Final[frozenset[int]] = frozenset(
         EVENT_SCHEMA_REPLAY_V19,
         EVENT_SCHEMA_REPLAY_V20,
         EVENT_SCHEMA_REPLAY_V21,
+        EVENT_SCHEMA_REPLAY_V22,
     }
 )
 _POSSESSION_EVENT_SCHEMAS: Final[frozenset[int]] = frozenset(
@@ -2858,6 +2951,7 @@ _POSSESSION_EVENT_SCHEMAS: Final[frozenset[int]] = frozenset(
         EVENT_SCHEMA_REPLAY_V19,
         EVENT_SCHEMA_REPLAY_V20,
         EVENT_SCHEMA_REPLAY_V21,
+        EVENT_SCHEMA_REPLAY_V22,
     }
 )
 _POSSESSION_DETAIL_TYPES: Final[frozenset[type]] = frozenset(
@@ -2870,6 +2964,7 @@ _COMMITMENT_EVENT_SCHEMAS: Final[frozenset[int]] = frozenset(
         EVENT_SCHEMA_REPLAY_V19,
         EVENT_SCHEMA_REPLAY_V20,
         EVENT_SCHEMA_REPLAY_V21,
+        EVENT_SCHEMA_REPLAY_V22,
     }
 )
 _COMMITMENT_DETAIL_TYPES: Final[frozenset[type]] = frozenset({CommitmentDeclared})
@@ -2879,6 +2974,7 @@ _EXCHANGE_EVENT_SCHEMAS: Final[frozenset[int]] = frozenset(
         EVENT_SCHEMA_REPLAY_V19,
         EVENT_SCHEMA_REPLAY_V20,
         EVENT_SCHEMA_REPLAY_V21,
+        EVENT_SCHEMA_REPLAY_V22,
     }
 )
 _PROJECT_DETAIL_TYPES: Final[frozenset[type]] = frozenset(
@@ -2891,18 +2987,27 @@ _PROJECT_DETAIL_TYPES: Final[frozenset[type]] = frozenset(
     }
 )
 _PROJECT_EVENT_SCHEMAS: Final[frozenset[int]] = frozenset(
-    {EVENT_SCHEMA_REPLAY_V19, EVENT_SCHEMA_REPLAY_V20, EVENT_SCHEMA_REPLAY_V21}
+    {
+        EVENT_SCHEMA_REPLAY_V19,
+        EVENT_SCHEMA_REPLAY_V20,
+        EVENT_SCHEMA_REPLAY_V21,
+        EVENT_SCHEMA_REPLAY_V22,
+    }
 )
 _PUBLIC_GOOD_DETAIL_TYPES: Final[frozenset[type]] = frozenset(
     {PublicGoodBenefit, PublicGoodMaintained, PublicGoodOpposed}
 )
 _PUBLIC_GOOD_EVENT_SCHEMAS: Final[frozenset[int]] = frozenset(
-    {EVENT_SCHEMA_REPLAY_V20, EVENT_SCHEMA_REPLAY_V21}
+    {EVENT_SCHEMA_REPLAY_V20, EVENT_SCHEMA_REPLAY_V21, EVENT_SCHEMA_REPLAY_V22}
 )
 _JOURNEY_DETAIL_TYPES: Final[frozenset[type]] = frozenset(
     {JourneyStarted, JourneyArrived, JourneyEnded}
 )
-_JOURNEY_EVENT_SCHEMAS: Final[frozenset[int]] = frozenset({EVENT_SCHEMA_REPLAY_V21})
+_JOURNEY_EVENT_SCHEMAS: Final[frozenset[int]] = frozenset(
+    {EVENT_SCHEMA_REPLAY_V21, EVENT_SCHEMA_REPLAY_V22}
+)
+_CONTACT_DETAIL_TYPES: Final[frozenset[type]] = frozenset({ContactRecorded})
+_CONTACT_EVENT_SCHEMAS: Final[frozenset[int]] = frozenset({EVENT_SCHEMA_REPLAY_V22})
 _EXCHANGE_DETAIL_TYPES: Final[frozenset[type]] = frozenset(
     {ExchangeProposed, ExchangeWithdrawn, ExchangeCompleted}
 )
@@ -2962,6 +3067,7 @@ _DURABLE_RECORD_EVENT_SCHEMAS: Final[frozenset[int]] = frozenset(
         EVENT_SCHEMA_REPLAY_V19,
         EVENT_SCHEMA_REPLAY_V20,
         EVENT_SCHEMA_REPLAY_V21,
+        EVENT_SCHEMA_REPLAY_V22,
     }
 )
 
@@ -3081,6 +3187,8 @@ def _payload_effect_complete(details: EventDetails, *, schema_version: int) -> b
                 )
             case JourneyArrived() | JourneyEnded():
                 return True
+    if type(details) in _CONTACT_DETAIL_TYPES:
+        return schema_version in _CONTACT_EVENT_SCHEMAS
     if type(details) in _PUBLIC_GOOD_DETAIL_TYPES:
         return schema_version in _PUBLIC_GOOD_EVENT_SCHEMAS
     if type(details) in _PROJECT_DETAIL_TYPES:
@@ -3264,7 +3372,7 @@ def target_id_for_details(details: EventDetails) -> EntityId | None:
     match details:
         case Moved(destination_id=destination_id):
             return destination_id
-        case JourneyStarted() | JourneyArrived() | JourneyEnded():
+        case JourneyStarted() | JourneyArrived() | JourneyEnded() | ContactRecorded():
             return None
         case Searched(target_id=target_id):
             return target_id
@@ -3540,6 +3648,15 @@ class WorldEvent:
                     self.schema_version,
                 )
                 raise ValueError(EventValidationCode.INVALID_SCHEMA_VERSION.value)
+        if type(self.details) in _CONTACT_DETAIL_TYPES:
+            if self.schema_version not in _CONTACT_EVENT_SCHEMAS:
+                _LOG.error(
+                    "invalid_event_schema_version kind=%s schema_version=%s "
+                    "reason_code=cultural_contact_requires_v22",
+                    self.details.kind,
+                    self.schema_version,
+                )
+                raise ValueError(EventValidationCode.INVALID_SCHEMA_VERSION.value)
         if type(self.details) in _PUBLIC_GOOD_DETAIL_TYPES:
             if self.schema_version not in _PUBLIC_GOOD_EVENT_SCHEMAS:
                 _LOG.error(
@@ -3572,7 +3689,11 @@ class WorldEvent:
                 type(self.details) is ProjectCompleted
                 and self.details.decay_millis is not None
                 and self.schema_version
-                not in {EVENT_SCHEMA_REPLAY_V20, EVENT_SCHEMA_REPLAY_V21}
+                not in {
+                    EVENT_SCHEMA_REPLAY_V20,
+                    EVENT_SCHEMA_REPLAY_V21,
+                    EVENT_SCHEMA_REPLAY_V22,
+                }
             ):
                 _LOG.warning(
                     "decay_millis rejected on pre-v20 payload schema_version=%s",
@@ -3814,6 +3935,18 @@ def build_occurrence_context(
             return OccurrenceContext(
                 origin_location_id=origin_id,
                 destination_location_id=None,
+                affected_entity_ids=tuple(
+                    sorted(participant_ids, key=lambda item: item.value)
+                ),
+                private_recipient_ids=(),
+            )
+        case ContactRecorded(
+            location_id=location_id,
+            participant_ids=participant_ids,
+        ):
+            return OccurrenceContext(
+                origin_location_id=None,
+                destination_location_id=location_id,
                 affected_entity_ids=tuple(
                     sorted(participant_ids, key=lambda item: item.value)
                 ),
