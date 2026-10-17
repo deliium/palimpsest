@@ -21,6 +21,16 @@ from analysis.belief_metrics import (
     compute_belief_accuracy,
     compute_false_belief_persistence,
 )
+from analysis.contact_cultural_change import compute_contact_cultural_change_metric
+from analysis.contact_hybrid_practice import compute_contact_hybrid_practice_metric
+from analysis.contact_inputs import ContactAnalysisInputs
+from analysis.contact_knowledge_transfer import (
+    compute_contact_knowledge_transfer_metric,
+)
+from analysis.contact_lexical_borrowing import compute_contact_lexical_borrowing_metric
+from analysis.contact_reputation_transfer import (
+    compute_contact_reputation_transfer_metric,
+)
 from analysis.cultural_feature_metrics import (
     compute_cultural_feature_mutation,
     compute_cultural_feature_provenance,
@@ -117,6 +127,7 @@ from analysis.serialization import (
     encode_metric_document,
     metric_document_fingerprint,
 )
+from analysis.society_contact import compute_society_contact_metric
 from analysis.society_divergence import (
     SocietyDivergenceResult,
     compute_society_divergence_metric,
@@ -247,6 +258,7 @@ class MetricComputationInputs:
     society_divergence: SocietyDivergenceResult | None = None
     society_isolation: SocietyIsolationResult | None = None
     society_community_count: int = 0
+    contact_analysis: object | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -1117,6 +1129,7 @@ def assemble_metric_documents(inputs: MetricComputationInputs) -> MetricBundle:
         "society_emergence": inputs.society_emission is not None,
         "society_divergence": inputs.society_divergence is not None,
         "society_isolation": inputs.society_isolation is not None,
+        "contact_analysis": inputs.contact_analysis is not None,
     }
     _LOG.debug(
         "metric_optional_inputs",
@@ -1265,6 +1278,58 @@ def assemble_metric_documents(inputs: MetricComputationInputs) -> MetricBundle:
                 community_count=community_count,
             ),
         )
+
+    if inputs.contact_analysis is not None:
+        if type(inputs.contact_analysis) is ContactAnalysisInputs:
+            contact = inputs.contact_analysis
+            _safe(
+                "society_contact",
+                lambda: compute_society_contact_metric(
+                    contact.contact,
+                    run_id=run_id,
+                    input_revision=revision,
+                ),
+            )
+            _safe(
+                "contact_cultural_change",
+                lambda: compute_contact_cultural_change_metric(
+                    contact.cultural_change,
+                    run_id=run_id,
+                    input_revision=revision,
+                ),
+            )
+            _safe(
+                "contact_hybrid_practice",
+                lambda: compute_contact_hybrid_practice_metric(
+                    contact.hybrid_practice,
+                    run_id=run_id,
+                    input_revision=revision,
+                ),
+            )
+            _safe(
+                "contact_knowledge_transfer",
+                lambda: compute_contact_knowledge_transfer_metric(
+                    contact.knowledge_transfer,
+                    run_id=run_id,
+                    input_revision=revision,
+                ),
+            )
+            _safe(
+                "contact_lexical_borrowing",
+                lambda: compute_contact_lexical_borrowing_metric(
+                    contact.lexical_borrowing,
+                    run_id=run_id,
+                    input_revision=revision,
+                ),
+            )
+            _safe(
+                "contact_reputation_transfer",
+                lambda: compute_contact_reputation_transfer_metric(
+                    contact.reputation_transfer,
+                    run_id=run_id,
+                    input_revision=revision,
+                ),
+            )
 
     if inputs.regional_population is not None:
         regional_inputs = inputs.regional_population

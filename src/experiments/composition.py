@@ -15,6 +15,30 @@ if TYPE_CHECKING:
     from analysis.offline_consolidation_metrics import OfflineConsolidationReport
     from analysis.reflection_metrics import ReflectionReport
 
+from analysis.contact_cultural_change import (
+    ContactDigestRow,
+    compute_contact_cultural_change,
+)
+from analysis.contact_hybrid_practice import (
+    ContactCulturalLineageRow,
+    ContactMergeRow,
+    ContactNarrativeRootRow,
+    ContactPracticalLineageRow,
+    compute_contact_hybrid_practice,
+)
+from analysis.contact_inputs import ContactAnalysisInputs
+from analysis.contact_knowledge_transfer import (
+    ContactPracticalKnowledgeAuditRow,
+    compute_contact_knowledge_transfer,
+)
+from analysis.contact_lexical_borrowing import (
+    ContactNamingEvidenceRow,
+    compute_contact_lexical_borrowing,
+)
+from analysis.contact_reputation_transfer import (
+    ContactReputationEvidenceRow,
+    compute_contact_reputation_transfer,
+)
 from analysis.models import (
     MEMORY_DYNAMICS_METRIC_VERSION,
     MemoryDynamicsAuditRow,
@@ -29,6 +53,14 @@ from analysis.regional_population import (
     RegionalLocationRow,
     RegionalPopulationInput,
 )
+from analysis.society_contact import (
+    ContactEpisodeRow,
+    ContactInteractionRow,
+    ContactKinshipRow,
+    ContactPairRow,
+    ContactPresenceRow,
+    compute_society_contact,
+)
 from analysis.society_divergence import (
     SOCIETY_DIMENSIONS,
     SocietyDigestRow,
@@ -36,6 +68,7 @@ from analysis.society_divergence import (
     compute_society_divergence,
 )
 from analysis.society_emergence import (
+    CandidateCommunityRow,
     SocietyEdgeRow,
     SocietyEmissionResult,
     SocietyResidenceRow,
@@ -70,6 +103,7 @@ from world.events import WorldEvent
 from world.identifiers import require_exact_nonneg_int
 
 __all__ = [
+    "ContactAnalysisInputs",
     "CulturalChannelRow",
     "EvidenceCompositionError",
     "EvidenceCompositionService",
@@ -79,6 +113,12 @@ __all__ = [
     "calibration_rows_from_world_model_audits",
     "claim_rows_from_ledgers",
     "constrain_snapshot_to_manifest",
+    "contact_analysis_inputs_from_snapshot",
+    "contact_digest_rows_from_snapshot",
+    "contact_episode_rows_from_events",
+    "contact_interaction_rows_from_events",
+    "contact_kinship_rows_from_events",
+    "contact_presence_rows_from_regional_input",
     "convention_habit_rows_from_ledgers",
     "cultural_channel_rows_from_convention_habits",
     "cultural_channel_rows_from_norm_beliefs",
@@ -2559,6 +2599,582 @@ def society_emission_inputs_from_snapshot(
         dimension_rows=digest_rows,
         evidence_edges=tuple(derived_evidence) + tuple(evidence_edges or ()),
         journeys=journeys,
+    )
+
+
+def contact_episode_rows_from_events(
+    events: Sequence[object] | None,
+) -> tuple[ContactEpisodeRow, ...]:
+    rows: list[ContactEpisodeRow] = []
+    for event in events or ():
+        details = _event_details(event)
+        if details is None or getattr(details, "kind", None) != "contact_recorded":
+            continue
+        tick = getattr(event, "tick", 0)
+        if isinstance(tick, bool) or type(tick) is not int:
+            tick = 0
+        rows.append(
+            ContactEpisodeRow(
+                participant_ids=tuple(
+                    item.value for item in getattr(details, "participant_ids", ())
+                ),
+                present_ids=tuple(
+                    item.value for item in getattr(details, "present_ids", ())
+                ),
+                location_id=details.location_id.value,
+                tick=tick,
+            )
+        )
+    return tuple(rows)
+
+
+def contact_presence_rows_from_regional_input(
+    regional_input: RegionalPopulationInput,
+    *,
+    window_end: int,
+) -> tuple[ContactPresenceRow, ...]:
+    """Fold initial placement, ordered relocations, entries, and deaths by tick."""
+    if type(regional_input) is not RegionalPopulationInput:
+        raise TypeError("regional_input must be RegionalPopulationInput")
+    window_end = require_exact_nonneg_int("window_end", window_end)
+    location: dict[str, str] = {
+        row.body_id: row.location_id for row in regional_input.initial_placements
+    }
+    alive: dict[str, bool] = {
+        row.body_id: row.alive for row in regional_input.initial_placements
+    }
+    by_tick: dict[int, list[RegionalEventRow]] = {}
+    for event in regional_input.events:
+        by_tick.setdefault(event.tick, []).append(event)
+    rows: list[ContactPresenceRow] = []
+    for tick in range(window_end + 1):
+        for event in sorted(by_tick.get(tick, ()), key=lambda item: item.sequence):
+            if event.kind in {"relocation", "entry"} and event.destination_location_id:
+                location[event.body_id] = event.destination_location_id
+                alive.setdefault(event.body_id, True)
+            elif event.kind == "death":
+                alive[event.body_id] = False
+        for body_id in sorted(location):
+            if alive.get(body_id, False):
+                rows.append(ContactPresenceRow(body_id, location[body_id], tick))
+    return tuple(rows)
+
+
+def contact_interaction_rows_from_events(
+    events: Sequence[object] | None,
+    *,
+    teaching_audits: Sequence[object] | None = None,
+) -> tuple[ContactInteractionRow, ...]:
+    rows: list[ContactInteractionRow] = []
+    communication = {"talked", "asked", "told", "talk", "ask", "tell"}
+    project_members: dict[str, set[str]] = {}
+    for event in events or ():
+        details = _event_details(event)
+        if details is None:
+            continue
+        kind = _event_kind_text(event, details)
+        if kind not in {"projectcontributed", "publicgoodmaintained"}:
+            continue
+        project_id = _id_text_or_none(getattr(details, "project_id", None))
+        actor_id = _id_text_or_none(getattr(details, "actor_id", None))
+        if project_id is not None and actor_id is not None:
+            project_members.setdefault(project_id, set()).add(actor_id)
+    for event in events or ():
+        details = _event_details(event)
+        if details is None:
+            continue
+        kind = _event_kind_text(event, details)
+        tick = getattr(event, "tick", 0)
+        if isinstance(tick, bool) or type(tick) is not int:
+            tick = 0
+        actor = _id_text_or_none(getattr(event, "actor_id", None))
+        target = _id_text_or_none(getattr(event, "target_id", None))
+        if actor is None:
+            continue
+        if kind in communication and target is not None:
+            rows.append(ContactInteractionRow("communication", actor, target, tick))
+        elif kind == "exchangecompleted":
+            counterparty = _id_text_or_none(getattr(details, "counterparty_id", None))
+            if counterparty is not None:
+                rows.append(
+                    ContactInteractionRow("exchange", actor, counterparty, tick)
+                )
+        elif kind == "helped" and target is not None:
+            rows.append(ContactInteractionRow("cooperation", actor, target, tick))
+        elif kind == "attacked" and target is not None:
+            rows.append(ContactInteractionRow("conflict", actor, target, tick))
+        elif kind == "kinshipedgerecorded":
+            parent = _id_text_or_none(
+                getattr(details, "parent_id", None)
+                or getattr(details, "parent_agent_id", None)
+            )
+            child = _id_text_or_none(
+                getattr(details, "child_id", None)
+                or getattr(details, "child_agent_id", None)
+            )
+            if parent is not None and child is not None:
+                rows.append(ContactInteractionRow("kinship", parent, child, tick))
+        elif kind in {"projectcontributed", "publicgoodmaintained"}:
+            project_id = _id_text_or_none(getattr(details, "project_id", None))
+            kind_name = (
+                "collective_project_contribution"
+                if kind == "projectcontributed"
+                else "public_good_maintenance"
+            )
+            rows.append(
+                ContactInteractionRow(
+                    kind_name,
+                    actor,
+                    None,
+                    tick,
+                    participant_person_ids=tuple(
+                        sorted(project_members.get(project_id or "", set()))
+                    ),
+                )
+            )
+    for audit in teaching_audits or ():
+        teacher = _id_text_or_none(
+            getattr(audit, "teacher_agent_id", None)
+            or getattr(audit, "teacher_id", None)
+        )
+        learner = _id_text_or_none(
+            getattr(audit, "learner_agent_id", None)
+            or getattr(audit, "learner_id", None)
+            or getattr(audit, "owner_id", None)
+        )
+        tick = getattr(audit, "tick", 0)
+        if teacher and learner and type(tick) is int and not isinstance(tick, bool):
+            rows.append(ContactInteractionRow("teaching", teacher, learner, tick))
+    return tuple(rows)
+
+
+def _event_kind_text(event: object, details: object) -> str:
+    raw_kind = getattr(event, "kind", None)
+    kind = (
+        raw_kind
+        if isinstance(raw_kind, str) and raw_kind
+        else getattr(details, "kind", None)
+    )
+    return str(kind).lower()
+
+
+def contact_kinship_rows_from_events(
+    events: Sequence[object] | None,
+) -> tuple[ContactKinshipRow, ...]:
+    rows: list[ContactKinshipRow] = []
+    for event in events or ():
+        details = _event_details(event)
+        if details is None:
+            continue
+        kind = getattr(details, "kind", None)
+        if str(kind).lower() != "kinshipedgerecorded":
+            continue
+        parent = _id_text_or_none(getattr(details, "parent_id", None))
+        child = _id_text_or_none(getattr(details, "child_id", None))
+        tick = getattr(event, "tick", 0)
+        if parent and child and type(tick) is int and not isinstance(tick, bool):
+            rows.append(ContactKinshipRow(parent, child, tick))
+    return tuple(rows)
+
+
+def contact_digest_rows_from_snapshot(
+    snapshot: PersistedAnalysisSnapshot,
+    *,
+    dimension_sources: Mapping[str, Sequence[object]] | None = None,
+) -> tuple[ContactDigestRow, ...]:
+    rows: list[ContactDigestRow] = []
+    for row in society_digest_rows_from_snapshot(
+        snapshot, dimension_sources=dimension_sources
+    ):
+        rows.append(ContactDigestRow(row.dimension, row.person_id, row.token, 0))
+    for trace in snapshot.traces:
+        person = _id_text_or_none(
+            getattr(getattr(trace, "owner_id", None), "value", None)
+        )
+        tick = getattr(trace, "created_tick", 0)
+        if person is None or type(tick) is not int or isinstance(tick, bool):
+            continue
+        context = getattr(trace, "context", None)
+        for tag in tuple(getattr(context, "tags", ()) or ()):
+            dimension = _dimension_for_token(tag)
+            if dimension is not None:
+                rows.append(ContactDigestRow(dimension, person, tag, tick))
+    deduped = {(row.dimension, row.person_id, row.token, row.tick): row for row in rows}
+    return tuple(deduped[key] for key in sorted(deduped))
+
+
+def contact_onset_rows(
+    pairs: Sequence[ContactPairRow],
+) -> tuple[ContactPairRow, ...]:
+    """Shared pair/onset rows consumed by the five dependent contact families."""
+    return tuple(
+        sorted(pairs, key=lambda item: (item.community_a_id, item.community_b_id))
+    )
+
+
+def contact_onset_by_person(
+    pairs: Sequence[ContactPairRow], communities: Sequence[object]
+) -> dict[str, int]:
+    """Earliest pair onset for each person in a community pair."""
+    onsets: dict[str, int] = {}
+    members: dict[str, tuple[str, ...]] = {
+        community.community_id: tuple(community.person_ids) for community in communities
+    }
+    for pair in pairs:
+        for community_id in (pair.community_a_id, pair.community_b_id):
+            for person in members.get(community_id, ()):
+                onsets[person] = min(
+                    onsets.get(person, pair.onset_tick), pair.onset_tick
+                )
+    return onsets
+
+
+def contact_pre_communities_at_onset(
+    regional_input: RegionalPopulationInput,
+    *,
+    onset_tick: int,
+    events: Sequence[object] | None = None,
+) -> dict[str, str]:
+    """Cluster residence as of ``onset_tick - 1`` for membership stability."""
+    boundary = max(onset_tick - 1, 0)
+    presence = contact_presence_rows_from_regional_input(
+        regional_input, window_end=boundary
+    )
+    region_by_location = {
+        row.location_id: row.region_id for row in regional_input.location_rows
+    }
+    residence = tuple(
+        SocietyResidenceRow(
+            person_id=row.person_id,
+            region_id=region_by_location[row.location_id],
+            first_tick=boundary,
+            last_tick=boundary,
+        )
+        for row in presence
+        if row.location_id in region_by_location
+    )
+    interaction = tuple(
+        edge
+        for edge in society_interaction_edges_from_events(events)
+        if edge.tick <= boundary
+    )
+    living = tuple(sorted({row.person_id for row in presence}))
+    emission = compute_candidate_communities(
+        residence, interaction, None, living, boundary
+    )
+    return {
+        person: community.community_id
+        for community in emission.communities
+        for person in community.person_ids
+    }
+
+
+def naming_borrowing_rows_from_ledgers(
+    ledgers: object,
+) -> tuple[ContactNamingEvidenceRow, ...]:
+    """Export metadata-only naming evidence from detached terminology ledgers."""
+    if ledgers is None:
+        return ()
+    if isinstance(ledgers, Mapping):
+        values = tuple(ledgers.values())
+    elif isinstance(ledgers, Sequence):
+        values = tuple(ledgers)
+    else:
+        values = ()
+    rows: list[ContactNamingEvidenceRow] = []
+    for ledger in values or ():
+        for binding in getattr(ledger, "bindings", ()):
+            first_tick = getattr(binding, "first_tick", None)
+            last_tick = getattr(binding, "last_tick", None)
+            if first_tick is None:
+                continue
+            for evidence in getattr(binding, "evidence", ()):
+                actor_id = getattr(evidence, "actor_id", None)
+                rows.append(
+                    ContactNamingEvidenceRow(
+                        owner_id=binding.owner_id.value,
+                        label_token=binding.label_token,
+                        referent_kind=binding.referent_kind.value,
+                        actor_id=None if actor_id is None else actor_id.value,
+                        channel=evidence.channel.value,
+                        first_tick=first_tick,
+                        last_tick=first_tick if last_tick is None else last_tick,
+                        evidence_tick=evidence.tick,
+                        strength=float(binding.strength),
+                        transmission=binding.transmission.value,
+                    )
+                )
+    return tuple(rows)
+
+
+def reputation_evidence_rows_from_ledgers(
+    ledgers: object,
+) -> tuple[ContactReputationEvidenceRow, ...]:
+    """Export detached reputation evidence rows (no values, no group scores)."""
+    if ledgers is None:
+        return ()
+    if isinstance(ledgers, Mapping):
+        values = tuple(ledgers.values())
+    elif isinstance(ledgers, Sequence):
+        values = tuple(ledgers)
+    else:
+        values = ()
+    rows: list[ContactReputationEvidenceRow] = []
+    for ledger in values or ():
+        for profile in getattr(ledger, "profiles", ()):
+            for evidence in getattr(profile, "evidence", ()):
+                rows.append(
+                    ContactReputationEvidenceRow(
+                        owner_id=evidence.owner_id.value,
+                        target_id=evidence.target_id.value,
+                        source_id=evidence.source_id.value,
+                        dimension=evidence.dimension.value,
+                        channel=evidence.channel.value,
+                        trust_band=evidence.source_trust_band.value,
+                        tick=evidence.tick,
+                    )
+                )
+    return tuple(rows)
+
+
+def practical_lineage_rows_from_audits(
+    audits: Sequence[object] | None,
+) -> tuple[ContactPracticalLineageRow, ...]:
+    rows: list[ContactPracticalLineageRow] = []
+    for audit in audits or ():
+        owner = _id_text_or_none(
+            getattr(audit, "owner_id", None) or getattr(audit, "agent_id", None)
+        )
+        origin = _id_text_or_none(
+            getattr(audit, "origin", None) or getattr(audit, "channel", None)
+        )
+        parents = getattr(audit, "parent_person_ids", None) or getattr(
+            audit, "parent_entry_ids", None
+        )
+        tick = getattr(audit, "tick", 0)
+        if owner is None or origin is None or not parents:
+            continue
+        if type(tick) is not int or isinstance(tick, bool):
+            continue
+        rows.append(
+            ContactPracticalLineageRow(
+                owner_id=owner,
+                parent_person_ids=tuple(str(item) for item in parents),
+                origin=origin,
+                tick=tick,
+            )
+        )
+    return tuple(rows)
+
+
+def cultural_lineage_rows_from_audits(
+    audits: Sequence[object] | None,
+) -> tuple[ContactCulturalLineageRow, ...]:
+    rows: list[ContactCulturalLineageRow] = []
+    for audit in audits or ():
+        owner = _id_text_or_none(
+            getattr(audit, "owner_id", None) or getattr(audit, "agent_id", None)
+        )
+        parents = getattr(audit, "parent_person_ids", None) or getattr(
+            audit, "parent_belief_ids", None
+        )
+        tick = getattr(audit, "tick", 0)
+        recombined = getattr(audit, "recombined", False)
+        if (
+            owner is None
+            or not parents
+            or type(tick) is not int
+            or isinstance(tick, bool)
+        ):
+            continue
+        rows.append(
+            ContactCulturalLineageRow(
+                owner_id=owner,
+                parent_person_ids=tuple(str(item) for item in parents),
+                recombined=bool(recombined),
+                tick=tick,
+            )
+        )
+    return tuple(rows)
+
+
+def narrative_root_rows_from_rows(
+    rows: Sequence[object] | None,
+) -> tuple[ContactNarrativeRootRow, ...]:
+    projected: list[ContactNarrativeRootRow] = []
+    for row in rows or ():
+        person = _id_text_or_none(
+            getattr(row, "person_id", None) or getattr(row, "owner_id", None)
+        )
+        root = _id_text_or_none(
+            getattr(row, "transmission_root_id", None)
+            or getattr(row, "root_id", None)
+            or getattr(row, "token", None)
+        )
+        tick = getattr(row, "tick", 0)
+        if person and root and type(tick) is int and not isinstance(tick, bool):
+            projected.append(ContactNarrativeRootRow(person, root, tick))
+    return tuple(projected)
+
+
+def contact_analysis_inputs_from_context(
+    *,
+    run_id: str,
+    input_revision: str,
+    window_end: int,
+    communities: Sequence[CandidateCommunityRow],
+    regional_input: RegionalPopulationInput,
+    events: Sequence[object] | None = None,
+    dimension_sources: Mapping[str, Sequence[object]] | None = None,
+    practical_rows: Sequence[ContactPracticalLineageRow] = (),
+    cultural_rows: Sequence[ContactCulturalLineageRow] = (),
+    narrative_rows: Sequence[ContactNarrativeRootRow] = (),
+    merge_rows: Sequence[ContactMergeRow] = (),
+    knowledge_rows: Sequence[ContactPracticalKnowledgeAuditRow] = (),
+    naming_rows: Sequence[ContactNamingEvidenceRow] = (),
+    reputation_rows: Sequence[ContactReputationEvidenceRow] = (),
+    teaching_audits: Sequence[object] | None = None,
+) -> ContactAnalysisInputs:
+    """Build all six analyses from detached rows; shared onset by construction."""
+    presence = contact_presence_rows_from_regional_input(
+        regional_input, window_end=window_end
+    )
+    episodes = contact_episode_rows_from_events(events)
+    interactions = contact_interaction_rows_from_events(
+        events, teaching_audits=teaching_audits
+    )
+    kinship = contact_kinship_rows_from_events(events)
+    contact = compute_society_contact(
+        communities,
+        episodes=episodes,
+        presence=presence,
+        interactions=interactions,
+        kinship=kinship,
+    )
+    pairs = contact_onset_rows(contact.pairs)
+    onsets = contact_onset_by_person(pairs, communities)
+    digest: list[ContactDigestRow] = []
+    for dimension, source_rows in (dimension_sources or {}).items():
+        for row in source_rows or ():
+            person = _id_text_or_none(
+                getattr(row, "person_id", None)
+                or getattr(row, "agent_id", None)
+                or getattr(row, "owner_id", None)
+            )
+            token = _id_text_or_none(
+                getattr(row, "token", None)
+                or getattr(row, "digest_id_token", None)
+                or getattr(row, "head_token", None)
+                or getattr(row, "fingerprint", None)
+            )
+            tick = getattr(row, "tick", 0)
+            if (
+                person is not None
+                and token is not None
+                and type(tick) is int
+                and not isinstance(tick, bool)
+            ):
+                digest.append(ContactDigestRow(dimension, person, token, tick))
+    pre_communities: dict[str, str] | None = None
+    if pairs:
+        onset = min(pair.onset_tick for pair in pairs)
+        pre_communities = contact_pre_communities_at_onset(
+            regional_input, onset_tick=onset, events=events
+        )
+    cultural_change = compute_contact_cultural_change(
+        communities,
+        pairs,
+        tuple(digest),
+        final_tick=window_end,
+        pre_community_by_person=pre_communities,
+    )
+    hybrid = compute_contact_hybrid_practice(
+        communities,
+        practical=practical_rows,
+        cultural=cultural_rows,
+        narratives=narrative_rows,
+        merges=merge_rows,
+        onset_tick_by_person=onsets,
+    )
+    knowledge = compute_contact_knowledge_transfer(
+        communities, knowledge_rows, onset_tick_by_person=onsets
+    )
+    lexical = compute_contact_lexical_borrowing(
+        communities, naming_rows, onset_tick_by_person=onsets
+    )
+    reputation = compute_contact_reputation_transfer(
+        communities, reputation_rows, onset_tick_by_person=onsets
+    )
+    _LOG.info(
+        "contact_analysis_inputs run_id=%s contact_pairs=%s contact_events=%s "
+        "window_end=%s",
+        run_id,
+        len(pairs),
+        len(episodes),
+        window_end,
+    )
+    return ContactAnalysisInputs(
+        contact=contact,
+        cultural_change=cultural_change,
+        hybrid_practice=hybrid,
+        knowledge_transfer=knowledge,
+        lexical_borrowing=lexical,
+        reputation_transfer=reputation,
+    )
+
+
+def contact_analysis_inputs_from_snapshot(
+    snapshot: PersistedAnalysisSnapshot,
+    *,
+    input_revision: str,
+    dimension_sources: Mapping[str, Sequence[object]] | None = None,
+    practical_rows: Sequence[ContactPracticalLineageRow] = (),
+    cultural_rows: Sequence[ContactCulturalLineageRow] = (),
+    narrative_rows: Sequence[ContactNarrativeRootRow] = (),
+    merge_rows: Sequence[ContactMergeRow] = (),
+    knowledge_rows: Sequence[ContactPracticalKnowledgeAuditRow] = (),
+    naming_rows: Sequence[ContactNamingEvidenceRow] = (),
+    reputation_rows: Sequence[ContactReputationEvidenceRow] = (),
+    teaching_audits: Sequence[object] | None = None,
+) -> ContactAnalysisInputs | None:
+    """Compose detached contact evidence without importing persistence."""
+    if type(snapshot) is not PersistedAnalysisSnapshot:
+        raise TypeError("snapshot must be PersistedAnalysisSnapshot")
+    context = snapshot.regional_context
+    if context is None:
+        return None
+    window_end = snapshot.objective_complete_through_boundary
+    if window_end is None:
+        raise EvidenceCompositionError("contact_window_end_unavailable")
+    regional_input = regional_population_input_from_snapshot(
+        snapshot, input_revision=input_revision, window_end=window_end
+    )
+    if regional_input is None:
+        return None
+    society = society_emission_inputs_from_snapshot(
+        snapshot,
+        input_revision=input_revision,
+        tick=window_end,
+        dimension_sources=dimension_sources,
+    )
+    if society is None:
+        return None
+    return contact_analysis_inputs_from_context(
+        run_id=snapshot.run_id,
+        input_revision=input_revision,
+        window_end=window_end,
+        communities=society.emission.communities,
+        regional_input=regional_input,
+        events=snapshot.events,
+        dimension_sources=dimension_sources,
+        practical_rows=practical_rows,
+        cultural_rows=cultural_rows,
+        narrative_rows=narrative_rows,
+        merge_rows=merge_rows,
+        knowledge_rows=knowledge_rows,
+        naming_rows=naming_rows,
+        reputation_rows=reputation_rows,
+        teaching_audits=teaching_audits,
     )
 
 

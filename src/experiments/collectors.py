@@ -125,6 +125,7 @@ def assemble_arm_metric_bundle(
         ),
         reflection_report=_optional_reflection_report(reflection_report),
     )
+    regional_input = None
     events = getattr(arm, "committed_events", None)
     if events is None:
         events = getattr(arm.runner_result, "committed_events", None)
@@ -423,6 +424,83 @@ def assemble_arm_metric_bundle(
             ),
             subjective_valuation_events=tuple(events or ()),
         )
+    if regional_input is not None and events is not None:
+        from experiments.composition import (
+            contact_analysis_inputs_from_context,
+            cultural_lineage_rows_from_audits,
+            naming_borrowing_rows_from_ledgers,
+            narrative_root_rows_from_rows,
+            practical_lineage_rows_from_audits,
+            reputation_evidence_rows_from_ledgers,
+            society_digest_rows_from_channel_rows,
+            society_emission_inputs_from_context,
+            society_interaction_edges_from_events,
+            society_residence_rows_from_regional_input,
+        )
+
+        tick = max(ticks - 1, 0)
+        residence = society_residence_rows_from_regional_input(
+            regional_input, tick=tick
+        )
+        interaction = society_interaction_edges_from_events(events)
+        living = tuple(sorted(row.person_id for row in residence))
+        digest_rows = tuple(
+            row
+            for dimension, source_rows in (
+                ("vocabulary", cultural_naming),
+                ("norms", cultural_norms),
+                ("conventions", cultural_conventions),
+                ("stories", cultural_narratives),
+            )
+            for row in society_digest_rows_from_channel_rows(dimension, source_rows)
+        )
+        society = society_emission_inputs_from_context(
+            run_id=arm.assignment.run_id.value,
+            input_revision=arm.config_fingerprint[:32] or "rev-run",
+            tick=tick,
+            living_person_ids=living,
+            residence_rows=residence,
+            interaction_edges=interaction,
+            dimension_rows=digest_rows,
+            journeys=(),
+        )
+        inputs = replace(
+            inputs,
+            society_emission=society.emission,
+            society_divergence=society.divergence,
+            society_isolation=society.isolation,
+            society_community_count=len(society.emission.communities),
+        )
+        naming_ledgers = getattr(arm, "terminology_ledgers", None)
+        if naming_ledgers is None:
+            naming_ledgers = getattr(arm.runner_result, "terminology_ledgers", None)
+        contact_rows = getattr(arm, "practical_knowledge_audits", None)
+        if contact_rows is None:
+            contact_rows = getattr(
+                arm.runner_result, "practical_knowledge_audits", None
+            )
+        contact = contact_analysis_inputs_from_context(
+            run_id=arm.assignment.run_id.value,
+            input_revision=arm.config_fingerprint[:32] or "rev-run",
+            window_end=tick,
+            communities=society.emission.communities,
+            regional_input=regional_input,
+            events=events,
+            dimension_sources={
+                "vocabulary": tuple(cultural_naming or ()),
+                "norms": tuple(cultural_norms or ()),
+                "conventions": tuple(cultural_conventions or ()),
+                "stories": tuple(cultural_narratives or ()),
+            },
+            practical_rows=practical_lineage_rows_from_audits(pk_audits),
+            cultural_rows=cultural_lineage_rows_from_audits(cultural_audits),
+            narrative_rows=narrative_root_rows_from_rows(cultural_narratives),
+            knowledge_rows=(),
+            naming_rows=naming_borrowing_rows_from_ledgers(naming_ledgers),
+            reputation_rows=reputation_evidence_rows_from_ledgers(reputation_ledgers),
+            teaching_audits=teaching_audits,
+        )
+        inputs = replace(inputs, contact_analysis=contact)
     return assemble_metric_documents(inputs)
 
 

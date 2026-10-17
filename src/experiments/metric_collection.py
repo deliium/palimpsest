@@ -251,6 +251,7 @@ def inputs_with_opt_in_metric_rows(
     inaccessible_expectations: Sequence[object] | None = None,
     practical_knowledge_audits: Sequence[object] | None = None,
     death_ticks: Mapping[str, int] | None = None,
+    contact_analysis: object | None = None,
     technique_lifecycle_spec: TechniqueLifecycleSpec | None = None,
     technique_node_rows: Sequence[object] | None = None,
     technique_item_rows: Sequence[object] | None = None,
@@ -261,6 +262,8 @@ def inputs_with_opt_in_metric_rows(
     zeros). Spatial rows still follow ``inputs_with_spatial_rows``.
     """
     updated = inputs_with_spatial_rows(inputs, events, claim_ledgers=claim_ledgers)
+    if contact_analysis is not None:
+        updated = replace(updated, contact_analysis=contact_analysis)
     from experiments.composition import (
         calibration_rows_from_world_model_audits,
         territorial_control_rows_from_spatial_actions,

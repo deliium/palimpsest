@@ -50,7 +50,7 @@ __all__ = [
 ]
 
 METRIC_CATALOG_VERSION: Final[str] = "metric-catalog-v1"
-METRIC_FAMILY_COUNT: Final[int] = 97
+METRIC_FAMILY_COUNT: Final[int] = 103
 
 # Align with existing memory-drift / transmission document versions.
 _ALGO_V1: Final[str] = "1"
@@ -172,6 +172,12 @@ class MetricFamilyId(StrEnum):
     SOCIETY_EMERGENCE = "society_emergence"
     SOCIETY_DIVERGENCE = "society_divergence"
     SOCIETY_ISOLATION = "society_isolation"
+    SOCIETY_CONTACT = "society_contact"
+    CONTACT_CULTURAL_CHANGE = "contact_cultural_change"
+    CONTACT_HYBRID_PRACTICE = "contact_hybrid_practice"
+    CONTACT_KNOWLEDGE_TRANSFER = "contact_knowledge_transfer"
+    CONTACT_LEXICAL_BORROWING = "contact_lexical_borrowing"
+    CONTACT_REPUTATION_TRANSFER = "contact_reputation_transfer"
 
 
 class DenominatorKind(StrEnum):
@@ -4293,6 +4299,278 @@ def _spec_society_isolation() -> MetricSpecification:
     )
 
 
+def _spec_society_contact() -> MetricSpecification:
+    return _base(
+        family_id=MetricFamilyId.SOCIETY_CONTACT,
+        evidence_inputs=frozenset(
+            {
+                EvidenceStage.OBJECTIVE_EVENT_STATE,
+                EvidenceStage.AGENT_VISIBLE_PROJECTION,
+            }
+        ),
+        population="cross_candidate_community_contact_pairs",
+        denominator="cross_community_person_ticks",
+        denominator_kind=DenominatorKind.ACTIVE_EDGES,
+        cohort_window="contact onset through final tick per candidate-community pair",
+        deceased_policy="dead persons contribute no person-ticks after death",
+        zero_holding_policy="no contact pair -> availability=absent",
+        opportunity_vs_occurrence=(
+            "contact exposure is derived from co-presence, not attitude"
+        ),
+        self_edge_policy="same-community interactions are excluded from cross counts",
+        censoring_policy="unassigned persons are coverage gaps, never cross pairs",
+        formulas={
+            "contact_event_count": "observed neutral contact events",
+            "contact_pair_count": "distinct candidate-community pairs",
+            "contact_location_tick_count": (
+                "location ticks with cross-community co-presence"
+            ),
+            "cross_community_person_ticks": (
+                "person-ticks spent co-present across communities"
+            ),
+            "cross_community_kinship_edge_count": (
+                "objective parent->child edges across communities"
+            ),
+        },
+        value_keys=(
+            "communication_count",
+            "conflict_count",
+            "contact_event_count",
+            "contact_location_tick_count",
+            "contact_pair_count",
+            "cooperation_count",
+            "cross_community_kinship_edge_count",
+            "cross_community_person_ticks",
+            "exchange_count",
+            "teaching_count",
+            "collective_project_contribution_count",
+            "public_good_maintenance_count",
+            "unassigned_person_count",
+        ),
+        empty_case="no observed or derived contact -> availability=absent",
+        one_case="one cross pair is reported normally",
+        unknown_case=(
+            "missing channels stay absent; never fabricated as zero contact "
+            "(availability=unknown when unobservable)"
+        ),
+    )
+
+
+def _spec_contact_cultural_change() -> MetricSpecification:
+    return _base(
+        family_id=MetricFamilyId.CONTACT_CULTURAL_CHANGE,
+        evidence_inputs=frozenset({EvidenceStage.RECONSTRUCTION}),
+        population="final_candidate_community_pairs_with_contact_onset",
+        denominator="community_pairs_with_both_pre_and_post_windows",
+        denominator_kind=DenominatorKind.ACTIVE_EDGES,
+        cohort_window="pre: tick < onset; post: onset <= tick <= final_tick",
+        deceased_policy="final member ids define both windows",
+        zero_holding_policy="missing pre or post window -> partial/absent, never zero",
+        opportunity_vs_occurrence="shared token universe per pair and dimension",
+        self_edge_policy="same-community pairs are not evaluated",
+        censoring_policy="low membership stability is exposed, never hidden",
+        formulas={
+            "convergence_delta": (
+                "pre-contact divergence minus post-contact divergence"
+            ),
+            "membership_stability": (
+                "share of final members in the same pre-onset community"
+            ),
+        },
+        value_keys=(
+            *(
+                key
+                for dimension in (
+                    "vocabulary",
+                    "norms",
+                    "conventions",
+                    "technology",
+                    "stories",
+                    "institutions",
+                    "trade",
+                )
+                for key in (
+                    f"{dimension}_pre_contact_divergence",
+                    f"{dimension}_post_contact_divergence",
+                    f"{dimension}_convergence_delta",
+                    f"{dimension}_converging_pair_count",
+                    f"{dimension}_continued_divergence_pair_count",
+                )
+            ),
+            "contact_pair_count",
+            "membership_stability",
+            "coverage_pair_count",
+        ),
+        empty_case="no contact onset -> availability=absent",
+        one_case="one pair is reported with explicit windows",
+        unknown_case=(
+            "descriptive association only; never a causal claim "
+            "(availability=unknown when unobservable)"
+        ),
+    )
+
+
+def _spec_contact_hybrid_practice() -> MetricSpecification:
+    return _base(
+        family_id=MetricFamilyId.CONTACT_HYBRID_PRACTICE,
+        evidence_inputs=frozenset({EvidenceStage.RECONSTRUCTION}),
+        population="post_contact_acquired_entries_with_resolvable_lineage",
+        denominator="post_contact_acquired_entries_with_resolvable_lineage",
+        denominator_kind=DenominatorKind.ADOPTION_ELIGIBLE,
+        cohort_window="post-contact acquisitions with lineage",
+        deceased_policy="lineage rows remain evidence after death",
+        zero_holding_policy="no resolvable lineage -> availability=absent",
+        opportunity_vs_occurrence=(
+            "unresolved lineage is reported, never counted as hybrid"
+        ),
+        self_edge_policy="same-community combination is not hybrid",
+        censoring_policy="unknown donors stay unresolved",
+        formulas={
+            "hybridization_rate": "hybrid entries / entries with resolvable lineage",
+        },
+        value_keys=(
+            "hybrid_cultural_belief_count",
+            "hybrid_practical_knowledge_count",
+            "hybridization_rate",
+            "intercommunity_combination_count",
+            "narrative_merge_count",
+            "narrative_shared_root_pair_count",
+            "resolvable_lineage_entry_count",
+            "unresolved_lineage_count",
+        ),
+        empty_case="no resolvable lineage -> availability=absent",
+        one_case="a single resolvable entry is reported normally",
+        unknown_case=(
+            "unresolved provenance is never a hybrid "
+            "(availability=unknown when unobservable)"
+        ),
+    )
+
+
+def _spec_contact_knowledge_transfer() -> MetricSpecification:
+    return _base(
+        family_id=MetricFamilyId.CONTACT_KNOWLEDGE_TRANSFER,
+        evidence_inputs=frozenset({EvidenceStage.RECONSTRUCTION}),
+        population="post_contact_practical_knowledge_entries",
+        denominator="post_contact_entries_with_resolved_donor",
+        denominator_kind=DenominatorKind.ADOPTION_ELIGIBLE,
+        cohort_window="post-contact entries ordered by logical tick",
+        deceased_policy="transfer evidence remains after death",
+        zero_holding_policy="no channel evidence -> availability=absent",
+        opportunity_vs_occurrence=(
+            "same-community transfers are excluded from cross counts"
+        ),
+        self_edge_policy="self transfer is not cross-community transfer",
+        censoring_policy="unknown donor is unresolved, never zero",
+        formulas={
+            "mean_hop": "mean hop index over resolved transfers",
+        },
+        value_keys=(
+            "combination_count",
+            "donor_recipient_pair_count",
+            "fingerprint_distance_mean",
+            "imitation_count",
+            "mean_hop",
+            "mutated_transfer_count",
+            "reconstruction_count",
+            "teaching_count",
+            "total_transfer_count",
+            "unresolved_donor_count",
+            "written_record_count",
+        ),
+        empty_case="no practical-knowledge channel -> availability=absent",
+        one_case="a single transfer is reported normally",
+        unknown_case=(
+            "unknown donor stays unresolved (availability=unknown when unobservable)"
+        ),
+    )
+
+
+def _spec_contact_lexical_borrowing() -> MetricSpecification:
+    return _base(
+        family_id=MetricFamilyId.CONTACT_LEXICAL_BORROWING,
+        evidence_inputs=frozenset({EvidenceStage.RECONSTRUCTION}),
+        population="metadata_only_naming_evidence_rows",
+        denominator="communicated_evidence_rows",
+        denominator_kind=DenominatorKind.OCCURRENCE,
+        cohort_window="binding ticks with communicated evidence",
+        deceased_policy="owner-scoped labels remain after death",
+        zero_holding_policy="no communicated evidence -> availability=absent",
+        opportunity_vs_occurrence="observed-only evidence is not borrowing",
+        self_edge_policy="same-community communication is not borrowing",
+        censoring_policy="unknown actor is unresolved",
+        formulas={
+            "mean_binding_strength": "mean strength over borrowed evidence",
+        },
+        value_keys=(
+            "borrowed_label_count",
+            "borrowing_event_count",
+            "competition_count",
+            "donor_recipient_pair_count",
+            "mean_binding_strength",
+            "merge_count",
+            "new_adoption_count",
+            "reinforcement_count",
+            "unresolved_actor_count",
+        ),
+        empty_case="no communicated naming evidence -> availability=absent",
+        one_case="one communicated item is reported normally",
+        unknown_case=(
+            "labels stay owner-scoped; no shared lexicon "
+            "(availability=unknown when unobservable)"
+        ),
+    )
+
+
+def _spec_contact_reputation_transfer() -> MetricSpecification:
+    return _base(
+        family_id=MetricFamilyId.CONTACT_REPUTATION_TRANSFER,
+        evidence_inputs=frozenset({EvidenceStage.RECONSTRUCTION}),
+        population="detached_reputation_evidence_rows",
+        denominator="communication_or_third_party_story_rows",
+        denominator_kind=DenominatorKind.OCCURRENCE,
+        cohort_window="evidence rows ordered by logical tick",
+        deceased_policy="reputation evidence remains after death",
+        zero_holding_policy="no reputation channel -> availability=absent",
+        opportunity_vs_occurrence=(
+            "direct observation and remembered interaction are first-hand"
+        ),
+        self_edge_policy="source equal to target is excluded from transfer",
+        censoring_policy="unknown source is unresolved",
+        formulas={
+            "transfer_event_count": "cross-community communicated reputation evidence",
+        },
+        value_keys=(
+            "communication_channel_count",
+            "direct_observation_coverage_count",
+            "donor_recipient_pair_count",
+            "remembered_interaction_coverage_count",
+            "target_count",
+            "third_party_story_channel_count",
+            "transfer_event_count",
+            "unresolved_source_count",
+            *(
+                f"dimension_{dimension}_count"
+                for dimension in (
+                    "reliability",
+                    "harm",
+                    "generosity",
+                    "competence",
+                )
+            ),
+            *(
+                f"trust_band_{band}_count"
+                for band in ("low", "mid", "high", "unmediated")
+            ),
+        ),
+        empty_case="no reputation channel -> availability=absent",
+        one_case="one transfer row is reported normally",
+        unknown_case=(
+            "no group reputation is aggregated (availability=unknown when unobservable)"
+        ),
+    )
+
+
 _BUILDERS: Final[tuple[Callable[[], MetricSpecification], ...]] = (
     _spec_resource_inequality,
     _spec_cooperation,
@@ -4391,6 +4669,12 @@ _BUILDERS: Final[tuple[Callable[[], MetricSpecification], ...]] = (
     _spec_society_emergence,
     _spec_society_divergence,
     _spec_society_isolation,
+    _spec_society_contact,
+    _spec_contact_cultural_change,
+    _spec_contact_hybrid_practice,
+    _spec_contact_knowledge_transfer,
+    _spec_contact_lexical_borrowing,
+    _spec_contact_reputation_transfer,
 )
 
 
